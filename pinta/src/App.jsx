@@ -15,6 +15,7 @@ const App = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [submitError, setSubmitError] = useState(null);
+  const [showConfirm, setShowConfirm] = useState(false);
   
   const validateCurrentStep = useCallback((currentStep) => {
     return validateStep(currentStep, formData);
@@ -61,18 +62,38 @@ const App = () => {
   const handleSubmit = useCallback(async (e) => { 
     e.preventDefault();
     
-    // Validation finale
-    const finalErrors = validateStep(step, formData);
-    if (Object.keys(finalErrors).length > 0) {
-      setStepErrors(finalErrors);
+    // Si pas encore confirmé, afficher la modale
+    if (!showConfirm) {
+      // Validation complète de TOUTES les étapes
+      const allErrors = {};
+      for (let i = 0; i <= step; i++) {
+        const stepErrors = validateStep(i, formData);
+        Object.assign(allErrors, stepErrors);
+      }
+      
+      // Vérifier les champs obligatoires
+      if (!formData.nom?.trim() || !formData.prenom?.trim() || !formData.entreprise?.trim() || !formData.siret?.trim() || !formData.telephone?.trim()) {
+        setSubmitError('Veuillez remplir tous les champs obligatoires (étape 1)');
+        return;
+      }
+      
+      if (Object.keys(allErrors).length > 0) {
+        setStepErrors(allErrors);
+        setSubmitError('Veuillez corriger les erreurs avant de soumettre');
+        return;
+      }
+      
+      if (totalActivite !== 100) {
+        setSubmitError('La répartition d\'activité doit totaliser 100% (étape 2)');
+        return;
+      }
+      
+      // Tout est OK, demander confirmation
+      setShowConfirm(true);
       return;
     }
     
-    if (totalActivite !== 100) {
-      setSubmitError('La répartition d\'activité doit totaliser 100%');
-      return;
-    }
-    
+    // Confirmation reçue, soumettre
     setIsSubmitting(true);
     setSubmitError(null);
     
@@ -106,7 +127,7 @@ const App = () => {
     } finally {
       setIsSubmitting(false);
     }
-  }, [formData, step, totalActivite, setStepErrors, clearStorage]);
+  }, [formData, step, totalActivite, setStepErrors, clearStorage, showConfirm]);
 
   const handleReset = useCallback(() => {
     clearStorage();
@@ -126,6 +147,43 @@ const App = () => {
     );
   }
 
+  // Modale de confirmation avant envoi
+  const ConfirmModal = () => {
+    if (!showConfirm) return null;
+    
+    return (
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl">
+          <h3 className="text-xl font-bold text-slate-900 mb-4">Confirmer l'envoi ?</h3>
+          <p className="text-slate-600 mb-6">
+            Vous êtes sur le point d'envoyer le diagnostic pour <strong>{formData.entreprise}</strong>.
+          </p>
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={() => setShowConfirm(false)}
+              className="flex-1 px-4 py-3 rounded-xl border border-slate-200 font-bold text-slate-600 hover:bg-slate-50"
+            >
+              Annuler
+            </button>
+            <button
+              type="submit"
+              onClick={handleSubmit}
+              disabled={isSubmitting}
+              className="flex-1 px-4 py-3 rounded-xl bg-green-600 text-white font-bold hover:bg-green-700 flex items-center justify-center gap-2"
+            >
+              {isSubmitting ? (
+                <><Loader2 className="w-5 h-5 animate-spin" /> Envoi...</>
+              ) : (
+                <><Send className="w-5 h-5" /> Confirmer</>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   // Rendu du step actuel
   const renderStep = () => {
     const commonProps = { formData, updateFormData, errors: stepErrors };
@@ -143,6 +201,7 @@ const App = () => {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans pb-12">
+      <ConfirmModal />
       {/* Header */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-10">
         <div className="max-w-4xl mx-auto px-4 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -173,7 +232,7 @@ const App = () => {
 
       {/* Main form */}
       <main className="max-w-4xl mx-auto px-4 mt-8">
-        <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+        <form onSubmit={(e) => e.preventDefault()} className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
           <div className="p-6 md:p-10">
             {renderStep()}
           </div>
@@ -217,7 +276,8 @@ const App = () => {
                   </button>
                 ) : (
                   <button 
-                    type="submit" 
+                    type="button"
+                    onClick={handleSubmit}
                     disabled={totalActivite !== 100 || isSubmitting}
                     className={`w-full sm:w-auto flex items-center justify-center gap-2 px-12 py-4 rounded-xl font-black transition-all shadow-xl active:scale-95 focus:outline-none focus:ring-2 focus:ring-offset-2
                       ${totalActivite !== 100 || isSubmitting
