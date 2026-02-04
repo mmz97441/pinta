@@ -78,12 +78,25 @@ const App = () => {
     
     try {
       // Envoi vers Firebase Firestore
-      await addDoc(collection(db, 'diagnostics'), {
+      const firebasePromise = addDoc(collection(db, 'diagnostics'), {
         ...formData,
         createdAt: serverTimestamp(),
         status: 'pending',
         source: 'pinta-web'
       });
+      
+      // Envoi notification N8N (en parallèle, non bloquant)
+      const webhookPromise = fetch('https://delivrex.app.n8n.cloud/webhook/webhook', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...formData,
+          submittedAt: new Date().toISOString()
+        })
+      }).catch(err => console.warn('Webhook N8N non envoyé:', err));
+      
+      // Attendre Firebase (obligatoire) + webhook (best effort)
+      await Promise.all([firebasePromise, webhookPromise]);
       
       clearStorage();
       setIsSubmitted(true);
