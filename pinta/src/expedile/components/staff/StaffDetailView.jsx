@@ -1,0 +1,1147 @@
+import React, { useState } from 'react';
+import {
+  Ruler, Check, Clock, Camera, AlertTriangle, Eye, X, RotateCcw, ExternalLink,
+} from 'lucide-react';
+import { useApp } from '../../context/AppContext';
+import { BRAND, STATUTS, TRANSITIONS, PRODUITS_INTERDITS, getDestByCP } from '../../constants';
+import { eur, calcTransport, getCatTaux } from '../../utils';
+import { Ligne } from '../ui';
+
+// ── Status border color helper ───────────────────────────────────────────────
+function statusBorderColor(statut) {
+  const map = {
+    annonce: '#94A3B8',
+    receptionne: '#F59E0B',
+    mesure: '#EAB308',
+    attente_feu_vert: '#F97316',
+    autorise: '#22C55E',
+    refuse_client: '#EF4444',
+    en_preparation: '#3B82F6',
+    devis_envoye: '#D97706',
+    attente_paiement: '#D97706',
+    paye: '#10B981',
+    expedie: '#06B6D4',
+    transit: '#0EA5E9',
+    arrive: '#14B8A6',
+    livraison: '#84CC16',
+    livre: '#16A34A',
+    annule: '#9CA3AF',
+  };
+  return map[statut] || BRAND.navy;
+}
+
+// ── Status template keys for quick messages ──────────────────────────────────
+function templatesForStatut(statut) {
+  const map = {
+    annonce: ['reception', 'facture_manquante', 'libre'],
+    receptionne: ['reception', 'facture_manquante', 'libre'],
+    mesure: ['demande_feu_vert', 'facture_manquante', 'libre'],
+    attente_feu_vert: ['relance_feu_vert', 'demande_feu_vert', 'libre'],
+    autorise: ['feu_vert_recu', 'libre'],
+    en_preparation: ['libre'],
+    devis_envoye: ['devis_final', 'relance_paiement', 'libre'],
+    attente_paiement: ['relance_paiement', 'libre'],
+    paye: ['expedie', 'libre'],
+    expedie: ['expedie', 'libre'],
+    transit: ['libre'],
+    arrive: ['arrive', 'libre'],
+    livraison: ['en_livraison', 'libre'],
+    livre: ['libre'],
+  };
+  return map[statut] || ['libre'];
+}
+
+// ── Template labels (short) ──────────────────────────────────────────────────
+const TEMPLATE_LABELS = {
+  reception: 'Réceptionné',
+  facture_manquante: 'Facture manquante',
+  demande_feu_vert: 'Feu vert',
+  relance_feu_vert: 'Relancer feu vert',
+  feu_vert_recu: 'Feu vert reçu',
+  devis_final: 'Devis final',
+  relance_paiement: 'Relancer paiement',
+  expedie: 'Expédié',
+  arrive: 'Arrivé',
+  en_livraison: 'En livraison',
+  libre: 'Message libre',
+};
+
+// ── Section block wrapper ────────────────────────────────────────────────────
+function Section({ title, icon: Icon, color, children }) {
+  return (
+    <div className="rounded-2xl border bg-white" style={{ borderLeft: `4px solid ${color || BRAND.navy}` }}>
+      <div className="px-4 pt-4 pb-3 border-b border-gray-100">
+        <div className="flex items-center gap-2">
+          {Icon && <Icon size={16} style={{ color: color || BRAND.navy }} />}
+          <span className="text-sm font-bold" style={{ color: BRAND.navy }}>{title}</span>
+        </div>
+      </div>
+      <div className="p-4">{children}</div>
+    </div>
+  );
+}
+
+// ── Input field ──────────────────────────────────────────────────────────────
+function Field({ label, type = 'text', value, onChange, placeholder, min, step, unit }) {
+  return (
+    <div className="flex flex-col gap-1">
+      <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">{label}</label>
+      <div className="relative flex items-center">
+        <input
+          type={type}
+          value={value}
+          onChange={onChange}
+          placeholder={placeholder}
+          min={min}
+          step={step}
+          className="w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-sm font-medium outline-none transition-all focus:border-blue-400"
+          style={{ color: BRAND.navy, paddingRight: unit ? '2.5rem' : undefined }}
+        />
+        {unit && (
+          <span className="absolute right-3 text-xs text-gray-400 font-bold pointer-events-none">{unit}</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Action button primary ────────────────────────────────────────────────────
+function BtnPrimary({ onClick, children, disabled, color }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className="flex items-center justify-center gap-2 w-full py-3 rounded-xl text-sm font-bold transition-all active:scale-95 disabled:opacity-40"
+      style={{
+        background: color
+          ? color
+          : `linear-gradient(135deg, ${BRAND.navy}, ${BRAND.navyL})`,
+        color: 'white',
+        boxShadow: `0 2px 10px ${color || BRAND.navy}30`,
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+// ── WhatsApp button ──────────────────────────────────────────────────────────
+function BtnWA({ onClick, children }) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl text-sm font-bold transition-all active:scale-95"
+      style={{ background: '#25D366', color: 'white', boxShadow: '0 2px 8px #25D36640' }}
+    >
+      <ExternalLink size={14} />
+      {children}
+    </button>
+  );
+}
+
+// ── Dimension display row ────────────────────────────────────────────────────
+function DimsDisplay({ c }) {
+  const hasDims = c.dimL && c.dimW && c.dimH && c.poids;
+  if (!hasDims) return <p className="text-sm text-gray-400 italic">Dimensions non renseignées</p>;
+  const pv = ((c.dimL * c.dimW * c.dimH) / 5000).toFixed(2);
+  const pf = Math.max(c.poids, parseFloat(pv)).toFixed(2);
+  return (
+    <div className="space-y-0.5 text-sm">
+      <Ligne label="Dimensions" value={`${c.dimL} × ${c.dimW} × ${c.dimH} cm`} />
+      <Ligne label="Poids réel" value={`${c.poids} kg`} />
+      <Ligne label="Poids volumétrique" value={`${pv} kg`} />
+      <Ligne label="Poids facturable" value={`${pf} kg`} />
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// MAIN COMPONENT
+// ════════════════════════════════════════════════════════════════════════════
+export default function StaffDetailView() {
+  const {
+    sel,
+    selClient: cl,
+    selDest,
+    isStaff,
+    upd,
+    ask,
+    flash,
+    changerStatut,
+    revertStatut,
+    annulerColis,
+    demanderFeuVert,
+    envoyerDevis,
+    sendMsg,
+    getPreview,
+    comLog,
+    categories,
+    getTarif,
+    envois,
+    setSelId,
+  } = useApp();
+
+  // ── Local state ──────────────────────────────────────────────────────────
+  const [casierTmp, setCasierTmp] = useState('');
+  const [editCasier, setEditCasier] = useState(false);
+  const [formErr, setFormErr] = useState('');
+  const [msgPanel, setMsgPanel] = useState(false);
+  const [selTemplate, setSelTemplate] = useState('libre');
+  const [msgPreview, setMsgPreview] = useState('');
+  const [sendCanal, setSendCanal] = useState(cl?.canal || 'whatsapp');
+
+  // Local measure form
+  const [dims, setDims] = useState({ dimL: '', dimW: '', dimH: '', poids: '' });
+  // Local fin dims form
+  const [finDims, setFinDims] = useState({ finL: '', finW: '', finH: '', finP: '' });
+  // Photo simulation
+  const [photoTaken, setPhotoTaken] = useState(false);
+  // Produits interdits checklist
+  const [interdits, setInterdits] = useState([]);
+  // Devis preview mode
+  const [devisPrev, setDevisPrev] = useState(false);
+  // Envoi assignment
+  const [selEnvoi, setSelEnvoi] = useState(sel?.envoi || '');
+
+  if (!sel || !isStaff) return null;
+
+  const dest = selDest || getDestByCP(cl?.cp);
+  const tarif = getTarif(dest?.code);
+  const borderColor = statusBorderColor(sel.statut);
+  const thisComLog = comLog.filter((l) => l.colisId === sel.id);
+
+  // ── Missing invoice? ──────────────────────────────────────────────────────
+  const missingFacture = sel.factures && sel.factures.length > 0
+    ? sel.factures.some((f) => !f.valide)
+    : sel.factures?.length === 0 || !sel.factures;
+
+  // ── Computed dimensions ───────────────────────────────────────────────────
+  function calcDims(l, w, h, p) {
+    const L = parseFloat(l) || 0;
+    const W = parseFloat(w) || 0;
+    const H = parseFloat(h) || 0;
+    const P = parseFloat(p) || 0;
+    const pv = L && W && H ? (L * W * H) / 5000 : 0;
+    const pf = Math.max(P, pv);
+    const tr = pf > 0 ? calcTransport(pf, tarif) : 0;
+    return { pv: pv.toFixed(2), pf: pf.toFixed(2), tr: tr.toFixed(2) };
+  }
+
+  // ── Compute taxes from lignes + categories ────────────────────────────────
+  function calcTaxes(pf) {
+    let om = 0;
+    let omr = 0;
+    (sel.lignes || []).forEach((l) => {
+      const cat = categories.find((c) => c.id === l.cat);
+      if (cat) {
+        const ct = getCatTaux(cat, dest.code);
+        om += l.qte * l.prix * (ct.om / 100);
+        omr += l.qte * l.prix * (ct.omr / 100);
+      }
+    });
+    const tr = calcTransport(parseFloat(pf) || 0, tarif);
+    const ht = tr + om + omr;
+    const tva = ht * ((dest?.tva || 0) / 100);
+    const total = Math.round((ht + tva) * 100) / 100;
+    return { om, omr, tr, ht, tva, total };
+  }
+
+  // ── Handle template select ────────────────────────────────────────────────
+  function handleSelectTemplate(tpl) {
+    setSelTemplate(tpl);
+    const preview = getPreview(tpl, cl?.id, sel.id, sendCanal);
+    setMsgPreview(preview);
+  }
+
+  function handleSendMsg() {
+    if (!msgPreview.trim()) { flash('Le message est vide'); return; }
+    sendMsg(sel.id, cl?.id, sendCanal, selTemplate, msgPreview);
+    setMsgPanel(false);
+    setMsgPreview('');
+  }
+
+  // ── Revert / Cancel helpers ───────────────────────────────────────────────
+  function handleRevert() {
+    ask(
+      'Retour à l\'étape précédente',
+      'Cette action remet le colis à l\'étape précédente et efface les données associées. Continuer ?',
+      () => revertStatut(sel.id),
+      { danger: true, okLabel: 'Oui, revenir en arrière' },
+    );
+  }
+
+  function handleCancel() {
+    ask(
+      'Annuler ce colis',
+      `Voulez-vous vraiment annuler le colis ${sel.ref} ? Cette action est irréversible.`,
+      () => annulerColis(sel.id),
+      { danger: true, okLabel: 'Oui, annuler' },
+    );
+  }
+
+  // ── Measure validation ────────────────────────────────────────────────────
+  function handleValiderMesures() {
+    const { dimL, dimW, dimH, poids } = dims;
+    if (!dimL || !dimW || !dimH || !poids) {
+      setFormErr('Veuillez remplir toutes les dimensions et le poids.');
+      return;
+    }
+    setFormErr('');
+    upd(sel.id, {
+      dimL: parseFloat(dimL),
+      dimW: parseFloat(dimW),
+      dimH: parseFloat(dimH),
+      poids: parseFloat(poids),
+      statut: 'mesure',
+    });
+    flash('Mesures enregistrées');
+  }
+
+  // ── Reception handler ─────────────────────────────────────────────────────
+  function handleReceptionner(withWA) {
+    if (!casierTmp.trim()) {
+      setFormErr('Le numéro de casier est obligatoire.');
+      return;
+    }
+    setFormErr('');
+    upd(sel.id, {
+      statut: 'receptionne',
+      casier: casierTmp.trim(),
+      photoReception: photoTaken,
+      checkInterdits: interdits,
+    });
+    flash('Colis réceptionné');
+    if (withWA) {
+      sendMsg(sel.id, cl?.id, 'whatsapp', 'reception', null);
+    }
+  }
+
+  // ── Devis preview ─────────────────────────────────────────────────────────
+  const finPoids = parseFloat(finDims.finP) || sel.finP || 0;
+  const finL = parseFloat(finDims.finL) || sel.finL || 0;
+  const finW = parseFloat(finDims.finW) || sel.finW || 0;
+  const finH = parseFloat(finDims.finH) || sel.finH || 0;
+  const finPv = finL && finW && finH ? ((finL * finW * finH) / 5000).toFixed(2) : '0.00';
+  const finPf = Math.max(finPoids, parseFloat(finPv)).toFixed(2);
+  const devisCalc = calcTaxes(finPf);
+
+  function handleEnvoyerDevis() {
+    // Persist fin dims first if filled locally
+    const changes = {};
+    if (finDims.finL) changes.finL = parseFloat(finDims.finL);
+    if (finDims.finW) changes.finW = parseFloat(finDims.finW);
+    if (finDims.finH) changes.finH = parseFloat(finDims.finH);
+    if (finDims.finP) changes.finP = parseFloat(finDims.finP);
+    if (Object.keys(changes).length) upd(sel.id, changes);
+
+    setTimeout(() => {
+      envoyerDevis(sel.id);
+      setDevisPrev(true);
+    }, 50);
+  }
+
+  function handleConfirmDevisEnvoye() {
+    changerStatut(sel.id, 'devis_envoye');
+    sendMsg(sel.id, cl?.id, cl?.canal || 'whatsapp', 'devis_final', null);
+    setDevisPrev(false);
+  }
+
+  // ── Correction bar availability ───────────────────────────────────────────
+  const canRevert = !!sel.statut && sel.statut !== 'annule' && sel.statut !== 'livre' && sel.statut !== 'annonce';
+  const canCancel = !!sel.statut && sel.statut !== 'annule' && sel.statut !== 'livre';
+
+  // ════════════════════════════════════════════════════════════════════════
+  // RENDER STATUS BLOCKS
+  // ════════════════════════════════════════════════════════════════════════
+
+  function renderActionBlock() {
+    switch (sel.statut) {
+
+      // ── 1. ANNONCE ──────────────────────────────────────────────────────
+      case 'annonce': {
+        return (
+          <Section title="Réceptionner ce colis" icon={Camera} color={borderColor}>
+            <div className="space-y-4">
+              {/* Photo simulation */}
+              <div>
+                <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Photo de réception</p>
+                <button
+                  onClick={() => { setPhotoTaken(true); flash('Photo simulée enregistrée'); }}
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 text-sm font-bold transition-all active:scale-95"
+                  style={
+                    photoTaken
+                      ? { borderColor: '#22C55E', color: '#16A34A', background: '#F0FDF4' }
+                      : { borderColor: BRAND.navy, color: BRAND.navy, background: 'white' }
+                  }
+                >
+                  {photoTaken
+                    ? <><Check size={15} /> Photo prise</>
+                    : <><Camera size={15} /> Prendre une photo</>
+                  }
+                </button>
+              </div>
+
+              {/* Produits interdits checklist */}
+              <div>
+                <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
+                  Vérification produits interdits
+                </p>
+                <div className="space-y-1.5">
+                  {PRODUITS_INTERDITS.map((item) => {
+                    const checked = interdits.includes(item);
+                    return (
+                      <button
+                        key={item}
+                        onClick={() => setInterdits((prev) =>
+                          checked ? prev.filter((x) => x !== item) : [...prev, item],
+                        )}
+                        className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl border text-left text-sm transition-all"
+                        style={
+                          checked
+                            ? { borderColor: '#EF4444', color: '#DC2626', background: '#FEF2F2' }
+                            : { borderColor: '#E5E7EB', color: '#374151', background: '#F9FAFB' }
+                        }
+                      >
+                        <div
+                          className="w-4 h-4 rounded flex-shrink-0 flex items-center justify-center border-2"
+                          style={checked ? { background: '#EF4444', borderColor: '#EF4444' } : { borderColor: '#D1D5DB' }}
+                        >
+                          {checked && <Check size={10} color="white" />}
+                        </div>
+                        {item}
+                        {checked && <AlertTriangle size={13} className="ml-auto text-red-400" />}
+                      </button>
+                    );
+                  })}
+                </div>
+                {interdits.length > 0 && (
+                  <div className="mt-2 p-2.5 rounded-lg bg-red-50 border border-red-200">
+                    <p className="text-xs font-bold text-red-700">
+                      Attention : {interdits.length} produit(s) interdit(s) coché(s)
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Casier */}
+              <Field
+                label="Numéro de casier"
+                value={casierTmp}
+                onChange={(e) => setCasierTmp(e.target.value)}
+                placeholder="Ex : A-03"
+              />
+
+              {/* Missing invoice warning */}
+              {missingFacture && (
+                <div className="flex items-start gap-2 p-3 rounded-xl bg-amber-50 border border-amber-200">
+                  <AlertTriangle size={14} className="text-amber-500 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-xs font-bold text-amber-800">Facture manquante</p>
+                    <p className="text-xs text-amber-600 mt-0.5">
+                      Pensez à demander la facture d'origine au client pour le calcul des taxes.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {formErr && <p className="text-xs text-red-500 font-medium">{formErr}</p>}
+
+              <div className="flex flex-col gap-2">
+                <BtnPrimary onClick={() => handleReceptionner(false)}>
+                  <Check size={15} />
+                  Réceptionner
+                </BtnPrimary>
+                <BtnWA onClick={() => handleReceptionner(true)}>
+                  + WhatsApp — notifier le client
+                </BtnWA>
+              </div>
+            </div>
+          </Section>
+        );
+      }
+
+      // ── 2. RECEPTIONNE ─────────────────────────────────────────────────
+      case 'receptionne': {
+        const { pv, pf, tr } = calcDims(dims.dimL, dims.dimW, dims.dimH, dims.poids);
+        return (
+          <Section title="Mesurer ce colis" icon={Ruler} color={borderColor}>
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Longueur (cm)" type="number" min="0" step="0.5"
+                  value={dims.dimL} onChange={(e) => setDims({ ...dims, dimL: e.target.value })}
+                  placeholder="40" unit="cm" />
+                <Field label="Largeur (cm)" type="number" min="0" step="0.5"
+                  value={dims.dimW} onChange={(e) => setDims({ ...dims, dimW: e.target.value })}
+                  placeholder="30" unit="cm" />
+                <Field label="Hauteur (cm)" type="number" min="0" step="0.5"
+                  value={dims.dimH} onChange={(e) => setDims({ ...dims, dimH: e.target.value })}
+                  placeholder="20" unit="cm" />
+                <Field label="Poids réel (kg)" type="number" min="0" step="0.1"
+                  value={dims.poids} onChange={(e) => setDims({ ...dims, poids: e.target.value })}
+                  placeholder="2.5" unit="kg" />
+              </div>
+
+              {(dims.dimL || dims.dimW || dims.dimH || dims.poids) && (
+                <div className="p-3 rounded-xl bg-gray-50 border border-gray-200 space-y-0.5 text-sm">
+                  <Ligne label="Poids volumétrique" value={`${pv} kg`} />
+                  <Ligne label="Poids facturable" value={`${pf} kg`} />
+                  <Ligne label="Transport estimé" value={eur(parseFloat(tr))} />
+                </div>
+              )}
+
+              {formErr && <p className="text-xs text-red-500 font-medium">{formErr}</p>}
+
+              <BtnPrimary onClick={handleValiderMesures}>
+                <Check size={15} />
+                Valider les mesures
+              </BtnPrimary>
+            </div>
+          </Section>
+        );
+      }
+
+      // ── 3. MESURE ──────────────────────────────────────────────────────
+      case 'mesure': {
+        return (
+          <Section title="Demander le feu vert" icon={Clock} color={borderColor}>
+            <div className="space-y-4">
+              <DimsDisplay c={sel} />
+
+              {missingFacture && (
+                <div className="flex items-start gap-2 p-3 rounded-xl bg-amber-50 border border-amber-200">
+                  <AlertTriangle size={14} className="text-amber-500 flex-shrink-0 mt-0.5" />
+                  <p className="text-xs font-bold text-amber-800">Facture non encore reçue — à demander au client</p>
+                </div>
+              )}
+
+              <BtnWA
+                onClick={() => {
+                  demanderFeuVert(sel.id);
+                  sendMsg(sel.id, cl?.id, 'whatsapp', 'demande_feu_vert', null);
+                }}
+              >
+                Envoyer via WhatsApp — demander le feu vert
+              </BtnWA>
+            </div>
+          </Section>
+        );
+      }
+
+      // ── 4. ATTENTE_FEU_VERT ────────────────────────────────────────────
+      case 'attente_feu_vert': {
+        return (
+          <Section title="En attente de l'accord" icon={Clock} color={borderColor}>
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 p-3 rounded-xl bg-orange-50 border border-orange-200">
+                <Clock size={14} className="text-orange-500 flex-shrink-0" />
+                <p className="text-xs font-medium text-orange-700">
+                  En attente de la réponse du client ({cl?.nom ?? '—'})
+                </p>
+              </div>
+
+              <DimsDisplay c={sel} />
+
+              <BtnWA
+                onClick={() => sendMsg(sel.id, cl?.id, 'whatsapp', 'relance_feu_vert', null)}
+              >
+                Relancer via WhatsApp
+              </BtnWA>
+            </div>
+          </Section>
+        );
+      }
+
+      // ── 5. AUTORISE ────────────────────────────────────────────────────
+      case 'autorise': {
+        return (
+          <Section title="Client OK — Préparer le colis" icon={Check} color={borderColor}>
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 p-3 rounded-xl bg-green-50 border border-green-200">
+                <Check size={14} className="text-green-500 flex-shrink-0" />
+                <p className="text-xs font-bold text-green-700">
+                  Le client a donné son accord pour la préparation.
+                </p>
+              </div>
+
+              <DimsDisplay c={sel} />
+
+              <BtnPrimary
+                onClick={() => changerStatut(sel.id, 'en_preparation')}
+                color="#2563EB"
+              >
+                <Check size={15} />
+                Commencer la préparation
+              </BtnPrimary>
+            </div>
+          </Section>
+        );
+      }
+
+      // ── 6. EN_PREPARATION ─────────────────────────────────────────────
+      case 'en_preparation': {
+        const usedFinL = parseFloat(finDims.finL) || sel.finL || 0;
+        const usedFinW = parseFloat(finDims.finW) || sel.finW || 0;
+        const usedFinH = parseFloat(finDims.finH) || sel.finH || 0;
+        const usedFinP = parseFloat(finDims.finP) || sel.finP || 0;
+
+        const fPv = usedFinL && usedFinW && usedFinH ? ((usedFinL * usedFinW * usedFinH) / 5000) : 0;
+        const fPf = Math.max(usedFinP, fPv);
+
+        // Avant optim
+        const avPv = sel.dimL && sel.dimW && sel.dimH ? ((sel.dimL * sel.dimW * sel.dimH) / 5000) : 0;
+        const avPf = Math.max(sel.poids || 0, avPv);
+        const avTr = avPf > 0 ? calcTransport(avPf, tarif) : 0;
+        const apTr = fPf > 0 ? calcTransport(fPf, tarif) : 0;
+
+        const canPreview = usedFinL > 0 && usedFinW > 0 && usedFinH > 0 && usedFinP > 0;
+
+        return (
+          <div className="space-y-4">
+            {/* Dimensions initiales */}
+            <Section title="Dimensions initiales (réception)" icon={Ruler} color="#94A3B8">
+              <DimsDisplay c={sel} />
+            </Section>
+
+            {/* Dimensions finales */}
+            <Section title="Dimensions après optimisation" icon={Ruler} color={borderColor}>
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="Long. finale (cm)" type="number" min="0" step="0.5"
+                    value={finDims.finL}
+                    onChange={(e) => setFinDims({ ...finDims, finL: e.target.value })}
+                    placeholder={sel.finL || '38'} unit="cm" />
+                  <Field label="Larg. finale (cm)" type="number" min="0" step="0.5"
+                    value={finDims.finW}
+                    onChange={(e) => setFinDims({ ...finDims, finW: e.target.value })}
+                    placeholder={sel.finW || '28'} unit="cm" />
+                  <Field label="Haut. finale (cm)" type="number" min="0" step="0.5"
+                    value={finDims.finH}
+                    onChange={(e) => setFinDims({ ...finDims, finH: e.target.value })}
+                    placeholder={sel.finH || '18'} unit="cm" />
+                  <Field label="Poids final (kg)" type="number" min="0" step="0.1"
+                    value={finDims.finP}
+                    onChange={(e) => setFinDims({ ...finDims, finP: e.target.value })}
+                    placeholder={sel.finP || '2.0'} unit="kg" />
+                </div>
+
+                {fPf > 0 && (
+                  <div className="p-3 rounded-xl bg-blue-50 border border-blue-200 space-y-0.5 text-sm">
+                    <Ligne label="Poids volumétrique" value={`${fPv.toFixed(2)} kg`} />
+                    <Ligne label="Poids facturable" value={`${fPf.toFixed(2)} kg`} />
+                  </div>
+                )}
+
+                {/* Comparaison avant/après */}
+                {avTr > 0 && apTr > 0 && (
+                  <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200">
+                    <p className="text-xs font-bold text-emerald-700 mb-2">Comparaison optimisation</p>
+                    <div className="space-y-0.5 text-sm">
+                      <Ligne label="Transport avant" value={eur(avTr)} />
+                      <Ligne label="Transport après" value={eur(apTr)} />
+                      {avTr > apTr && (
+                        <Ligne
+                          label="Économie client"
+                          value={<span className="text-emerald-600 font-black">{eur(avTr - apTr)}</span>}
+                        />
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </Section>
+
+            {/* Catégorisation produits */}
+            {sel.lignes && sel.lignes.length > 0 && (
+              <Section title="Catégorisation des lignes" icon={Check} color={borderColor}>
+                <div className="space-y-2">
+                  {sel.lignes.map((ligne) => (
+                    <div key={ligne.id} className="p-3 rounded-xl bg-gray-50 border border-gray-200">
+                      <div className="flex items-start justify-between gap-2 mb-2">
+                        <div>
+                          <p className="text-sm font-medium text-gray-800">
+                            {ligne.desc}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            {ligne.qte} × {eur(ligne.prix)}
+                          </p>
+                        </div>
+                      </div>
+                      <select
+                        value={ligne.cat || ''}
+                        onChange={(e) => {
+                          upd(sel.id, {
+                            lignes: sel.lignes.map((l) =>
+                              l.id === ligne.id ? { ...l, cat: e.target.value } : l,
+                            ),
+                          });
+                        }}
+                        className="w-full px-3 py-1.5 rounded-lg border-2 border-gray-200 text-sm outline-none"
+                        style={{ color: BRAND.navy }}
+                      >
+                        <option value="">— Choisir une catégorie —</option>
+                        {categories.map((cat) => (
+                          <option key={cat.id} value={cat.id}>{cat.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                  ))}
+                </div>
+              </Section>
+            )}
+
+            {/* Devis preview / send */}
+            {!devisPrev ? (
+              <BtnPrimary
+                onClick={handleEnvoyerDevis}
+                disabled={!canPreview}
+                color="#2563EB"
+              >
+                <Eye size={15} />
+                Prévisualiser le devis
+              </BtnPrimary>
+            ) : (
+              <Section title="Brouillon du devis" icon={Eye} color="#2563EB">
+                <div className="space-y-3">
+                  <div className="p-3 rounded-xl bg-blue-50 border border-blue-200 space-y-0.5 text-sm">
+                    <Ligne label="Transport" value={eur(sel.devisTransport || devisCalc.tr)} />
+                    <Ligne label="OM" value={eur(sel.devisOM || devisCalc.om)} />
+                    <Ligne label="OMR" value={eur(sel.devisOMR || devisCalc.omr)} />
+                    <Ligne label="TVA" value={eur(sel.devisTVA || devisCalc.tva)} />
+                    <div className="border-t border-blue-200 pt-1 mt-1">
+                      <Ligne
+                        label="TOTAL"
+                        value={
+                          <span className="font-black text-blue-700 text-base">
+                            {eur(sel.devisTotal || devisCalc.total)}
+                          </span>
+                        }
+                      />
+                    </div>
+                    {sel.economie > 0 && (
+                      <div className="mt-1 pt-1 border-t border-blue-200">
+                        <Ligne
+                          label="Économie réalisée"
+                          value={<span className="text-emerald-600 font-bold">{eur(sel.economie)}</span>}
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex flex-col gap-2">
+                    <BtnPrimary onClick={handleConfirmDevisEnvoye} color="#16A34A">
+                      <Check size={15} />
+                      Envoyer le devis au client
+                    </BtnPrimary>
+                    <button
+                      onClick={() => setDevisPrev(false)}
+                      className="w-full py-2.5 rounded-xl border-2 border-gray-200 text-sm font-bold text-gray-600 hover:bg-gray-50 transition-colors"
+                    >
+                      Modifier
+                    </button>
+                  </div>
+                </div>
+              </Section>
+            )}
+          </div>
+        );
+      }
+
+      // ── 7. DEVIS_ENVOYE ────────────────────────────────────────────────
+      case 'devis_envoye': {
+        return (
+          <Section title="Devis envoyé — en attente client" icon={Clock} color={borderColor}>
+            <div className="space-y-4">
+              <div className="p-4 rounded-xl bg-amber-50 border border-amber-200">
+                <p className="text-xs font-bold text-amber-700 mb-1">Montant du devis</p>
+                <p className="text-2xl font-black" style={{ color: BRAND.navyD }}>
+                  {eur(sel.devisTotal)}
+                </p>
+              </div>
+              <BtnWA onClick={() => sendMsg(sel.id, cl?.id, 'whatsapp', 'devis_final', null)}>
+                Relancer via WhatsApp
+              </BtnWA>
+            </div>
+          </Section>
+        );
+      }
+
+      // ── 8. ATTENTE_PAIEMENT ────────────────────────────────────────────
+      case 'attente_paiement': {
+        return (
+          <Section title="En attente de paiement" icon={Clock} color={borderColor}>
+            <div className="space-y-4">
+              <div className="p-4 rounded-xl bg-amber-50 border border-amber-200">
+                <p className="text-xs font-bold text-amber-700 mb-1">Montant à payer</p>
+                <p className="text-2xl font-black" style={{ color: BRAND.navyD }}>
+                  {eur(sel.devisTotal)}
+                </p>
+              </div>
+              <BtnWA onClick={() => sendMsg(sel.id, cl?.id, 'whatsapp', 'relance_paiement', null)}>
+                Relancer via WhatsApp
+              </BtnWA>
+            </div>
+          </Section>
+        );
+      }
+
+      // ── 9. PAYE ────────────────────────────────────────────────────────
+      case 'paye': {
+        const availableEnvois = envois.filter((e) => e.statut !== 'parti');
+        return (
+          <Section title="Paiement reçu — Expédier" icon={Check} color={borderColor}>
+            <div className="space-y-4">
+              <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200">
+                <p className="text-xs font-bold text-emerald-700 mb-1">Paiement reçu</p>
+                <p className="text-2xl font-black text-emerald-700">
+                  {eur(sel.paiementMontant || sel.devisTotal)}
+                </p>
+              </div>
+
+              {/* Envoi assignment */}
+              <div>
+                <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wider block mb-1">
+                  Affecter à un envoi
+                </label>
+                <select
+                  value={selEnvoi}
+                  onChange={(e) => {
+                    setSelEnvoi(e.target.value);
+                    upd(sel.id, { envoi: e.target.value || null });
+                    flash(e.target.value ? 'Envoi affecté' : 'Envoi retiré');
+                  }}
+                  className="w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-sm outline-none"
+                  style={{ color: BRAND.navy }}
+                >
+                  <option value="">— Choisir un envoi —</option>
+                  {availableEnvois.map((e) => {
+                    const d = new Date(e.date + 'T00:00:00');
+                    const label = d.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' });
+                    return (
+                      <option key={e.id} value={e.id}>
+                        {label} — {e.statut}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+
+              <BtnPrimary
+                onClick={() => changerStatut(sel.id, 'expedie')}
+                disabled={!sel.envoi && !selEnvoi}
+                color="#0891B2"
+              >
+                <Check size={15} />
+                Expédier ce colis
+              </BtnPrimary>
+            </div>
+          </Section>
+        );
+      }
+
+      // ── 10. EXPEDIE / TRANSIT / ARRIVE / LIVRAISON ────────────────────
+      case 'expedie':
+      case 'transit':
+      case 'arrive':
+      case 'livraison': {
+        const nextStatuts = TRANSITIONS[sel.statut] || [];
+        const trackingSteps = [
+          { key: 'expedie', label: 'Expédié', tpl: 'expedie' },
+          { key: 'transit', label: 'En vol' },
+          { key: 'arrive', label: 'Arrivé', tpl: 'arrive' },
+          { key: 'livraison', label: 'En livraison', tpl: 'en_livraison' },
+          { key: 'livre', label: 'Livré' },
+        ];
+        const currentIdx = trackingSteps.findIndex((s) => s.key === sel.statut);
+
+        return (
+          <Section title="Suivi d'expédition" icon={Check} color={borderColor}>
+            <div className="space-y-4">
+              {/* Timeline */}
+              <div className="space-y-2">
+                {trackingSteps.map((step, idx) => {
+                  const done = idx < currentIdx;
+                  const active = idx === currentIdx;
+                  return (
+                    <div
+                      key={step.key}
+                      className="flex items-center gap-3 px-3 py-2 rounded-xl"
+                      style={{
+                        background: active ? `${borderColor}15` : done ? '#F0FDF4' : '#F9FAFB',
+                        border: active ? `1.5px solid ${borderColor}` : done ? '1.5px solid #BBF7D0' : '1.5px solid #F3F4F6',
+                      }}
+                    >
+                      <div
+                        className="w-5 h-5 rounded-full flex-shrink-0 flex items-center justify-center text-[10px]"
+                        style={{
+                          background: active ? borderColor : done ? '#22C55E' : '#E5E7EB',
+                          color: 'white',
+                        }}
+                      >
+                        {done ? <Check size={10} /> : idx + 1}
+                      </div>
+                      <span
+                        className="text-sm font-semibold"
+                        style={{ color: active ? borderColor : done ? '#16A34A' : '#9CA3AF' }}
+                      >
+                        {step.label}
+                      </span>
+                      {active && (
+                        <span
+                          className="ml-auto text-[10px] font-black px-2 py-0.5 rounded-full"
+                          style={{ background: borderColor, color: 'white' }}
+                        >
+                          EN COURS
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Next step buttons */}
+              <div className="flex flex-col gap-2">
+                {nextStatuts.map((ns) => {
+                  const step = trackingSteps.find((s) => s.key === ns);
+                  const tpl = step?.tpl;
+                  return (
+                    <BtnPrimary
+                      key={ns}
+                      onClick={() => {
+                        changerStatut(sel.id, ns);
+                        if (tpl) sendMsg(sel.id, cl?.id, cl?.canal || 'whatsapp', tpl, null);
+                      }}
+                      color={borderColor}
+                    >
+                      <Check size={15} />
+                      {STATUTS[ns]?.actionStaff || STATUTS[ns]?.label}
+                    </BtnPrimary>
+                  );
+                })}
+              </div>
+            </div>
+          </Section>
+        );
+      }
+
+      default:
+        return null;
+    }
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
+  // COMMUNICATION PANEL
+  // ════════════════════════════════════════════════════════════════════════
+  const templates = templatesForStatut(sel.statut);
+
+  // ════════════════════════════════════════════════════════════════════════
+  // FULL RENDER
+  // ════════════════════════════════════════════════════════════════════════
+  return (
+    <div className="flex flex-col gap-4 pb-24">
+
+      {/* ── Colis header card ──────────────────────────────────────────── */}
+      <div
+        className="card-elevated p-4"
+        style={{ borderLeft: `4px solid ${borderColor}` }}
+      >
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap mb-1">
+              <span
+                className="text-base font-black tracking-tight"
+                style={{ color: BRAND.navy, letterSpacing: '-0.02em' }}
+              >
+                {sel.ref}
+              </span>
+              {sel.casier && (
+                <span
+                  className="text-[10px] font-bold px-2 py-0.5 rounded"
+                  style={{ background: `${BRAND.gold}22`, color: BRAND.goldD }}
+                >
+                  {sel.casier}
+                </span>
+              )}
+              {missingFacture && (
+                <AlertTriangle size={13} className="text-amber-500 flex-shrink-0" />
+              )}
+            </div>
+            <p className="text-xs text-gray-500 truncate">{sel.desc}</p>
+            <p className="text-xs text-gray-400 mt-0.5">
+              {cl?.nom ?? '—'} · {dest?.flag} {dest?.nom}
+            </p>
+          </div>
+          <button
+            onClick={() => setSelId(null)}
+            className="flex-shrink-0 p-2 rounded-xl hover:bg-gray-100 transition-colors"
+          >
+            <X size={16} className="text-gray-400" />
+          </button>
+        </div>
+      </div>
+
+      {/* ── Action block ───────────────────────────────────────────────── */}
+      {renderActionBlock()}
+
+      {/* ── Communication panel ────────────────────────────────────────── */}
+      <div className="card-elevated">
+        <button
+          onClick={() => setMsgPanel((p) => !p)}
+          className="w-full flex items-center justify-between px-4 py-3"
+        >
+          <div className="flex items-center gap-2">
+            <ExternalLink size={15} style={{ color: BRAND.navy }} />
+            <span className="text-sm font-bold" style={{ color: BRAND.navy }}>
+              Communication
+            </span>
+            {thisComLog.length > 0 && (
+              <span
+                className="text-[10px] font-bold px-1.5 py-0.5 rounded-full"
+                style={{ background: `${BRAND.navy}15`, color: BRAND.navy }}
+              >
+                {thisComLog.length}
+              </span>
+            )}
+          </div>
+          <span className="text-xs text-gray-400">{msgPanel ? 'Fermer' : 'Ouvrir'}</span>
+        </button>
+
+        {msgPanel && (
+          <div className="px-4 pb-4 space-y-4 border-t border-gray-100">
+            {/* Canal selector */}
+            <div className="flex gap-2 mt-3">
+              {['whatsapp', 'email'].map((c) => (
+                <button
+                  key={c}
+                  onClick={() => {
+                    setSendCanal(c);
+                    if (selTemplate) {
+                      setMsgPreview(getPreview(selTemplate, cl?.id, sel.id, c));
+                    }
+                  }}
+                  className="flex-1 py-2 rounded-xl text-xs font-bold transition-all"
+                  style={
+                    sendCanal === c
+                      ? { background: BRAND.navy, color: 'white' }
+                      : { background: '#F3F4F6', color: '#6B7280' }
+                  }
+                >
+                  {c === 'whatsapp' ? 'WhatsApp' : 'Email'}
+                </button>
+              ))}
+            </div>
+
+            {/* Template quick buttons */}
+            <div>
+              <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-2">
+                Templates rapides
+              </p>
+              <div className="flex gap-1.5 flex-wrap">
+                {templates.map((tpl) => (
+                  <button
+                    key={tpl}
+                    onClick={() => handleSelectTemplate(tpl)}
+                    className="text-xs font-bold px-2.5 py-1.5 rounded-lg transition-all"
+                    style={
+                      selTemplate === tpl
+                        ? { background: BRAND.navy, color: 'white' }
+                        : { background: '#F3F4F6', color: '#374151' }
+                    }
+                  >
+                    {TEMPLATE_LABELS[tpl] || tpl}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Preview / edit */}
+            {selTemplate && (
+              <div className="space-y-2">
+                <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                  Aperçu / modification
+                </p>
+                <textarea
+                  value={msgPreview}
+                  onChange={(e) => setMsgPreview(e.target.value)}
+                  rows={6}
+                  className="w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-xs leading-relaxed outline-none resize-none transition-all focus:border-blue-400"
+                  style={{ color: BRAND.navy, fontFamily: 'monospace' }}
+                />
+                <BtnPrimary onClick={handleSendMsg}>
+                  <ExternalLink size={14} />
+                  Envoyer via {sendCanal === 'whatsapp' ? 'WhatsApp' : 'Email'}
+                </BtnPrimary>
+              </div>
+            )}
+
+            {/* Communication log */}
+            {thisComLog.length > 0 && (
+              <div>
+                <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-2">
+                  Historique
+                </p>
+                <div className="space-y-1.5">
+                  {thisComLog.map((entry) => (
+                    <div
+                      key={entry.id}
+                      className="flex items-start gap-2 p-2.5 rounded-lg bg-gray-50 border border-gray-100"
+                    >
+                      <div
+                        className="flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-black"
+                        style={{
+                          background: entry.canal === 'whatsapp' ? '#25D366' : BRAND.navy,
+                          color: 'white',
+                        }}
+                      >
+                        {entry.canal === 'whatsapp' ? 'W' : '@'}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium text-gray-700 truncate">{entry.msg}</p>
+                        <p className="text-[10px] text-gray-400 mt-0.5">
+                          {entry.date} · {entry.user}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* ── Correction bar ─────────────────────────────────────────────── */}
+      {(canRevert || canCancel) && (
+        <div
+          className="card p-3 flex gap-2"
+          style={{ borderLeft: `3px solid #EF4444` }}
+        >
+          <div className="flex-1 min-w-0">
+            <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-2">
+              Corrections
+            </p>
+            <div className="flex gap-2 flex-wrap">
+              {canRevert && (
+                <button
+                  onClick={handleRevert}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border-2 border-orange-300 text-orange-700 bg-orange-50 hover:bg-orange-100 transition-colors"
+                >
+                  <RotateCcw size={12} />
+                  Étape précédente
+                </button>
+              )}
+              {canCancel && (
+                <button
+                  onClick={handleCancel}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border-2 border-red-300 text-red-700 bg-red-50 hover:bg-red-100 transition-colors"
+                >
+                  <X size={12} />
+                  Annuler le colis
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
