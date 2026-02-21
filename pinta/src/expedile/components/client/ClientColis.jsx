@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Package, Plus, ChevronRight, AlertCircle, CreditCard, CheckCircle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Package, Plus, ChevronRight, AlertCircle, CreditCard, CheckCircle, X } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { BRAND, PHASES_CLIENT, getPhaseIndex } from '../../constants';
 import { Badge, Etapes } from '../ui';
@@ -37,23 +37,40 @@ const TABS = [
   { key: 'tous', label: 'Tous' },
 ];
 
+const FILTER_LABELS = {
+  a_traiter: 'À traiter',
+  a_payer: 'À payer',
+};
+
 export default function ClientColis({ onNewColis }) {
-  const { authCl, data, setSelId } = useApp();
+  const { authCl, data, setSelId, colisFilter, setColisFilter } = useApp();
   const [colisTab, setColisTab] = useState('actifs');
+
+  // When arriving from a stat card with a filter, force the "actifs" tab
+  useEffect(() => {
+    if (colisFilter) setColisTab('actifs');
+  }, [colisFilter]);
 
   const myColis = authCl ? data.filter((p) => p.clientId === authCl.id) : [];
 
   const actifs = myColis.filter((p) => p.statut !== 'livre' && p.statut !== 'annule');
   const livres = myColis.filter((p) => p.statut === 'livre');
 
+  // Apply sub-filter within actifs
+  const filteredActifs = colisFilter === 'a_traiter'
+    ? actifs.filter((p) => p.statut === 'attente_feu_vert' || p.statut === 'devis_envoye')
+    : colisFilter === 'a_payer'
+    ? actifs.filter((p) => p.statut === 'attente_paiement')
+    : actifs;
+
   const counts = {
-    actifs: actifs.length,
+    actifs: filteredActifs.length,
     livres: livres.length,
     tous: myColis.length,
   };
 
   const displayed =
-    colisTab === 'actifs' ? actifs :
+    colisTab === 'actifs' ? filteredActifs :
     colisTab === 'livres' ? livres :
     myColis;
 
@@ -85,7 +102,7 @@ export default function ClientColis({ onNewColis }) {
           return (
             <button
               key={tab.key}
-              onClick={() => setColisTab(tab.key)}
+              onClick={() => { setColisTab(tab.key); setColisFilter(null); }}
               className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-bold transition-all ${
                 active ? 'bg-white shadow-sm' : 'text-gray-500'
               }`}
@@ -107,6 +124,21 @@ export default function ClientColis({ onNewColis }) {
         })}
       </div>
 
+      {/* ── Active filter chip ── */}
+      {colisFilter && FILTER_LABELS[colisFilter] && (
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-gray-500">Filtre :</span>
+          <button
+            onClick={() => setColisFilter(null)}
+            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold text-white active:scale-95 transition-all"
+            style={{ backgroundColor: BRAND.navy }}
+          >
+            {FILTER_LABELS[colisFilter]}
+            <X size={12} strokeWidth={3} />
+          </button>
+        </div>
+      )}
+
       {/* ── Colis list ── */}
       {displayed.length === 0 ? (
         <div className="anim-fade flex flex-col items-center justify-center py-14 text-center">
@@ -117,14 +149,20 @@ export default function ClientColis({ onNewColis }) {
             <Package size={28} style={{ color: BRAND.navy }} strokeWidth={1.5} />
           </div>
           <p className="font-bold text-gray-700 mb-1">
-            {colisTab === 'actifs'
+            {colisFilter === 'a_traiter'
+              ? 'Aucun colis à traiter'
+              : colisFilter === 'a_payer'
+              ? 'Aucun colis à payer'
+              : colisTab === 'actifs'
               ? 'Aucun colis en cours'
               : colisTab === 'livres'
               ? 'Aucune livraison'
               : 'Aucun colis'}
           </p>
           <p className="text-xs text-gray-400 max-w-[220px]">
-            {colisTab === 'actifs'
+            {colisFilter
+              ? 'Aucun colis ne correspond à ce filtre.'
+              : colisTab === 'actifs'
               ? 'Pré-annoncez votre prochain colis pour démarrer !'
               : 'Vos colis livrés apparaîtront ici.'}
           </p>

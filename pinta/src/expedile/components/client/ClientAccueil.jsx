@@ -33,7 +33,7 @@ function ProgressBar({ statut }) {
 }
 
 export default function ClientAccueil({ onNewColis }) {
-  const { authCl, data, clients, ask, feuVertBulk, setSelId, setClientTab } = useApp();
+  const { authCl, data, clients, ask, feuVertBulk, setSelId, setClientTab, setColisFilter } = useApp();
 
   const cl = authCl;
   const dest = cl ? getDestByCP(cl.cp) : null;
@@ -95,14 +95,14 @@ export default function ClientAccueil({ onNewColis }) {
 
       {/* ── Stats grid ── */}
       <div className="grid grid-cols-3 gap-3">
-        <button onClick={() => setClientTab('colis')} className="card p-3 text-center hover:shadow-md active:scale-95 transition-all cursor-pointer">
+        <button onClick={() => { setColisFilter(null); setClientTab('colis'); }} className="card p-3 text-center hover:shadow-md active:scale-95 transition-all cursor-pointer">
           <div className="text-2xl font-black" style={{ color: BRAND.navy }}>
             {enCours.length}
           </div>
           <div className="text-[11px] text-gray-500 font-medium mt-0.5">En cours</div>
         </button>
         <button
-          onClick={() => setClientTab('colis')}
+          onClick={() => { setColisFilter('a_traiter'); setClientTab('colis'); }}
           className="card p-3 text-center hover:shadow-md active:scale-95 transition-all cursor-pointer"
           style={aTraiter.length > 0 ? { borderLeft: `3px solid ${BRAND.gold}` } : {}}
         >
@@ -115,7 +115,7 @@ export default function ClientAccueil({ onNewColis }) {
           <div className="text-[11px] text-gray-500 font-medium mt-0.5">À traiter</div>
         </button>
         <button
-          onClick={() => setClientTab('colis')}
+          onClick={() => { setColisFilter('a_payer'); setClientTab('colis'); }}
           className="card p-3 text-center hover:shadow-md active:scale-95 transition-all cursor-pointer"
           style={aPayer.length > 0 ? { borderLeft: `3px solid #f59e0b` } : {}}
         >

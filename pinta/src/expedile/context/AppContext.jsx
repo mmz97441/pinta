@@ -43,6 +43,7 @@ export function AppProvider({ children }) {
   const [toast, setToast] = useState('');
   const [page, setPage] = useState('home');
   const [clientTab, setClientTab] = useState('accueil');
+  const [colisFilter, setColisFilter] = useState(null);
   const [cfm, setCfm] = useState(null);
 
   // ── Computed ──
@@ -328,7 +329,7 @@ export function AppProvider({ children }) {
     // Notifications
     notifs, unreadNotifs, markNotifRead, markAllNotifsRead,
     // UI
-    selId, setSelId, sel, selClient, selDest, toast, page, setPage, clientTab, setClientTab, cfm, setCfm,
+    selId, setSelId, sel, selClient, selDest, toast, page, setPage, clientTab, setClientTab, colisFilter, setColisFilter, cfm, setCfm,
     // Actions
     flash, ask, closeConfirm, upd, log: log, getClient, getTarif,
     updateClient, addNewClient, deleteClient,
@@ -337,7 +338,7 @@ export function AppProvider({ children }) {
   }), [
     auth, isStaff, authCl, data, clients, categories, tarifs, envois, logs,
     comLog, sendMsg, getPreview, notifs, unreadNotifs, markNotifRead, markAllNotifsRead,
-    selId, sel, selClient, selDest, toast, page, clientTab, cfm,
+    selId, sel, selClient, selDest, toast, page, clientTab, colisFilter, cfm,
     flash, ask, closeConfirm, upd, log, getClient, getTarif,
     updateClient, addNewClient, deleteClient,
     addCategory, updateCatTaux, updateCatLabel, deleteCategory,
