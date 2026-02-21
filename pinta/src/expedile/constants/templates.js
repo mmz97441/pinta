@@ -82,6 +82,14 @@ export const MSG_TEMPLATES = {
       `Objet : Livraison en cours — ${colis.ref}\n\nBonjour ${c.nom},\n\nVotre colis ${colis.ref} est en cours de livraison.\n\nCordialement,\nL'équipe Expedîle`,
   },
 
+  facture_rejetee: {
+    label: '❌ Facture rejetée',
+    whatsapp: (c, colis) =>
+      `Bonjour ${c.nom.split(' ')[0]} 👋\n\n⚠️ La facture que vous nous avez transmise pour votre colis *${colis.ref}* (${colis.desc}) n'a pas pu être validée.\n\n📄 *Motif : ${colis._motifRejet || 'facture non conforme'}*\n\n👉 Merci de nous renvoyer une facture conforme dès que possible (photo ou PDF lisible).\n\nSans facture validée, nous ne pouvons pas calculer les taxes ni avancer sur la préparation de votre colis.\n\n_Expedîle_`,
+    email: (c, colis) =>
+      `Objet : Facture rejetée — ${colis.ref}\n\nBonjour ${c.nom},\n\nLa facture transmise pour votre colis ${colis.ref} n'a pas pu être validée.\nMotif : ${colis._motifRejet || 'facture non conforme'}.\n\nMerci de nous renvoyer une facture conforme.\n\nCordialement,\nL'équipe Expedîle`,
+  },
+
   libre: {
     label: '✍️ Message libre',
     whatsapp: (c) => `Bonjour ${c.nom.split(' ')[0]} 👋\n\n`,
