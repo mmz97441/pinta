@@ -167,8 +167,13 @@ function ColisCard({ c, client, envois, onClick, stagger }) {
             <p className="mt-0.5 text-xs text-gray-500 truncate">{c.desc}</p>
           )}
 
-          {/* Row 5: dims + tracking */}
+          {/* Row 5: reception date + dims + tracking */}
           <div className="mt-1.5 flex items-center gap-3 flex-wrap">
+            {c.dateReception && (
+              <span className="text-[10px] text-gray-400 font-medium">
+                {new Date(c.dateReception).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })}
+              </span>
+            )}
             <DimsChip c={c} />
             {hasTrack(c) && (
               <span className="text-xs text-gray-400 font-mono truncate max-w-[160px]">

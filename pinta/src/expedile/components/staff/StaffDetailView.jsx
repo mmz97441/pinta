@@ -370,13 +370,28 @@ export default function StaffDetailView() {
       return;
     }
     setFormErr('');
-    upd(sel.id, {
-      statut: 'receptionne',
+
+    // If dimensions were provided during reception, skip 'receptionne' → go straight to 'mesure'
+    const hasDims = dims.dimL && dims.dimW && dims.dimH && dims.poids;
+    const newStatut = hasDims ? 'mesure' : 'receptionne';
+
+    const changes = {
+      statut: newStatut,
       casier: casierTmp.trim(),
       photoReception: photoTaken,
       checkInterdits: interdits,
-    });
-    flash('Colis réceptionné');
+      dateReception: new Date().toISOString(),
+    };
+
+    if (hasDims) {
+      changes.dimL = parseFloat(dims.dimL);
+      changes.dimW = parseFloat(dims.dimW);
+      changes.dimH = parseFloat(dims.dimH);
+      changes.poids = parseFloat(dims.poids);
+    }
+
+    upd(sel.id, changes);
+    flash(hasDims ? 'Réceptionné + mesuré' : 'Colis réceptionné');
     if (withWA) {
       sendMsg(sel.id, cl?.id, 'whatsapp', 'reception', null);
     }
@@ -491,11 +506,32 @@ export default function StaffDetailView() {
 
               {/* Casier */}
               <Field
-                label="Numéro de casier"
+                label="Casier *"
                 value={casierTmp}
                 onChange={(e) => setCasierTmp(e.target.value)}
                 placeholder="Ex : A-03"
               />
+
+              {/* Dimensions (optional at reception — saves a step) */}
+              <div>
+                <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
+                  Mesurer maintenant <span className="normal-case font-normal text-gray-400">(facultatif — sinon à l'étape suivante)</span>
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="Longueur (cm)" type="number" min="0" step="0.5"
+                    value={dims.dimL} onChange={(e) => setDims({ ...dims, dimL: e.target.value })}
+                    placeholder="40" unit="cm" />
+                  <Field label="Largeur (cm)" type="number" min="0" step="0.5"
+                    value={dims.dimW} onChange={(e) => setDims({ ...dims, dimW: e.target.value })}
+                    placeholder="30" unit="cm" />
+                  <Field label="Hauteur (cm)" type="number" min="0" step="0.5"
+                    value={dims.dimH} onChange={(e) => setDims({ ...dims, dimH: e.target.value })}
+                    placeholder="20" unit="cm" />
+                  <Field label="Poids (kg)" type="number" min="0" step="0.1"
+                    value={dims.poids} onChange={(e) => setDims({ ...dims, poids: e.target.value })}
+                    placeholder="2.5" unit="kg" />
+                </div>
+              </div>
 
               {/* Missing invoice warning */}
               {missingFacture && (
@@ -1112,6 +1148,11 @@ export default function StaffDetailView() {
             <p className="text-xs text-gray-500 truncate">{sel.desc}</p>
             <p className="text-xs text-gray-400 mt-0.5">
               {cl?.nom ?? '—'} · {dest?.flag} {dest?.nom}
+              {sel.dateReception && (
+                <span className="ml-1.5">
+                  · Reçu le {new Date(sel.dateReception).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+                </span>
+              )}
             </p>
           </div>
           <button

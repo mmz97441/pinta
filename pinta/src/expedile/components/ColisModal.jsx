@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { X, FileText, Search, Package, ChevronRight, UserPlus, Link2, Plus } from 'lucide-react';
+import { X, FileText, Search, Package, ChevronRight, UserPlus, Link2, Plus, Ruler } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { BRAND, getDestByCP } from '../constants';
 import { uid, searchClients, waLink, trackStr } from '../utils';
@@ -14,6 +14,12 @@ const EMPTY_FORM = {
   facUploaded: false,
   facVendeur: '',
   facMontant: '',
+  // Dimensions (optional at reception)
+  dimL: '',
+  dimW: '',
+  dimH: '',
+  poids: '',
+  showDims: false,
 };
 
 const EMPTY_NEW_CLIENT = {
@@ -160,7 +166,7 @@ export default function ColisModal({ open, onClose }) {
     const cl = selectedClient;
 
     log(annonce.id, annonce.statut, 'receptionne');
-    upd(annonce.id, { statut: 'receptionne', casier: nf.casier.trim() });
+    upd(annonce.id, { statut: 'receptionne', casier: nf.casier.trim(), dateReception: new Date().toISOString() });
 
     if (sendWA && cl?.tel) {
       const msg =
@@ -218,8 +224,9 @@ export default function ColisModal({ open, onClose }) {
       window.open(waLink(cl.tel, msg), '_blank');
     }
 
+    const hasDims = nf.dimL && nf.dimW && nf.dimH && nf.poids;
     const label = sendWA ? 'réceptionné + WhatsApp envoyé' : 'réceptionné';
-    flash(`Colis ${newColis.ref} ${label} — casier ${nf.casier.trim()}`);
+    flash(`Colis ${newColis.ref} ${label}${hasDims ? ' + mesuré' : ''} — casier ${nf.casier.trim()}`);
     resetAndClose();
   };
 
@@ -249,18 +256,22 @@ export default function ColisModal({ open, onClose }) {
           ]
         : [];
 
+    // If staff provided dimensions, include them and jump to 'mesure' status
+    const hasDims = isStaff && nf.dimL && nf.dimW && nf.dimH && nf.poids;
+    const finalStatut = hasDims ? 'mesure' : statut;
+
     return {
       id: 'p_' + uid(),
       clientId,
       ref,
-      statut,
+      statut: finalStatut,
       trackings,
       desc: nf.d.trim(),
       valeur: parseFloat(nf.v) || 0,
-      dimL: null,
-      dimW: null,
-      dimH: null,
-      poids: null,
+      dimL: hasDims ? parseFloat(nf.dimL) : null,
+      dimW: hasDims ? parseFloat(nf.dimW) : null,
+      dimH: hasDims ? parseFloat(nf.dimH) : null,
+      poids: hasDims ? parseFloat(nf.poids) : null,
       dimsParColis: [],
       finL: null,
       finW: null,
@@ -280,6 +291,7 @@ export default function ColisModal({ open, onClose }) {
       messages: [],
       envoi: null,
       casier: isStaff ? nf.casier.trim() : null,
+      dateReception: isStaff ? new Date().toISOString() : null,
     };
   };
 
@@ -637,6 +649,50 @@ export default function ColisModal({ open, onClose }) {
           {/* ── Standard form fields (hidden in match mode) ── */}
           {!isMatchMode && (
             <>
+              {/* ── CASIER (staff only, MANDATORY — first field for speed) ── */}
+              {isStaff && (
+                <div>
+                  <label className={labelCls}>
+                    Casier <span className="text-red-400 ml-0.5">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ex: A-03"
+                    value={nf.casier}
+                    onChange={(e) => {
+                      setField('casier', e.target.value);
+                      if (formErr.casier) setFormErr((prev) => ({ ...prev, casier: undefined }));
+                    }}
+                    className={inputCls(formErr.casier)}
+                    autoFocus={isStaff && !!selectedClient}
+                  />
+                  {formErr.casier && (
+                    <p className="mt-1 text-xs text-red-500">{formErr.casier}</p>
+                  )}
+                </div>
+              )}
+
+              {/* ── DESCRIPTION (origin/supplier) ── */}
+              <div>
+                <label className={labelCls}>
+                  {isStaff ? 'Origine / Fournisseur' : 'Origine du colis'}
+                  {isStaff && <span className="text-red-400 ml-0.5">*</span>}
+                </label>
+                <input
+                  type="text"
+                  placeholder="Ex: Amazon, Temu, Shein, Nike…"
+                  value={nf.d}
+                  onChange={(e) => {
+                    setField('d', e.target.value);
+                    if (formErr.d) setFormErr((prev) => ({ ...prev, d: undefined }));
+                  }}
+                  className={inputCls(formErr.d)}
+                />
+                {formErr.d && (
+                  <p className="mt-1 text-xs text-red-500">{formErr.d}</p>
+                )}
+              </div>
+
               {/* ── TRACKINGS ── */}
               <div>
                 <label className={labelCls}>
@@ -675,23 +731,76 @@ export default function ColisModal({ open, onClose }) {
                 </button>
               </div>
 
-              {/* ── DESCRIPTION ── */}
-              <div>
-                <label className={labelCls}>Description du contenu</label>
-                <input
-                  type="text"
-                  placeholder="Ex: Casque Sony + Coque iPhone"
-                  value={nf.d}
-                  onChange={(e) => {
-                    setField('d', e.target.value);
-                    if (formErr.d) setFormErr((prev) => ({ ...prev, d: undefined }));
-                  }}
-                  className={inputCls(formErr.d)}
-                />
-                {formErr.d && (
-                  <p className="mt-1 text-xs text-red-500">{formErr.d}</p>
-                )}
-              </div>
+              {/* ── DIMENSIONS (staff only, optional — saves a step if filled) ── */}
+              {isStaff && (
+                <div>
+                  {!nf.showDims ? (
+                    <button
+                      type="button"
+                      onClick={() => setField('showDims', true)}
+                      className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-dashed border-gray-200 text-sm font-bold text-gray-500 hover:border-blue-300 hover:text-blue-600 transition-all"
+                    >
+                      <Ruler size={15} />
+                      Mesurer maintenant
+                      <span className="text-[10px] font-normal text-gray-400 ml-1">(sinon plus tard)</span>
+                    </button>
+                  ) : (
+                    <div className="rounded-xl border border-blue-200 bg-blue-50/50 p-3 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                          <Ruler size={13} className="text-blue-600" />
+                          <span className="text-xs font-bold text-blue-800">Dimensions</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setField('showDims', false);
+                            setField('dimL', '');
+                            setField('dimW', '');
+                            setField('dimH', '');
+                            setField('poids', '');
+                          }}
+                          className="text-[10px] font-medium text-gray-400 hover:text-gray-600"
+                        >
+                          Mesurer plus tard
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-0.5">L (cm)</label>
+                          <input type="number" min="0" step="0.5" placeholder="40"
+                            value={nf.dimL} onChange={(e) => setField('dimL', e.target.value)}
+                            className="w-full px-2.5 py-2 rounded-lg border border-gray-200 bg-white text-sm outline-none focus:border-blue-400" />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-0.5">l (cm)</label>
+                          <input type="number" min="0" step="0.5" placeholder="30"
+                            value={nf.dimW} onChange={(e) => setField('dimW', e.target.value)}
+                            className="w-full px-2.5 py-2 rounded-lg border border-gray-200 bg-white text-sm outline-none focus:border-blue-400" />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-0.5">H (cm)</label>
+                          <input type="number" min="0" step="0.5" placeholder="20"
+                            value={nf.dimH} onChange={(e) => setField('dimH', e.target.value)}
+                            className="w-full px-2.5 py-2 rounded-lg border border-gray-200 bg-white text-sm outline-none focus:border-blue-400" />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-0.5">Poids (kg)</label>
+                          <input type="number" min="0" step="0.1" placeholder="2.5"
+                            value={nf.poids} onChange={(e) => setField('poids', e.target.value)}
+                            className="w-full px-2.5 py-2 rounded-lg border border-gray-200 bg-white text-sm outline-none focus:border-blue-400" />
+                        </div>
+                      </div>
+                      {nf.dimL && nf.dimW && nf.dimH && nf.poids && (
+                        <p className="text-[10px] text-blue-700 font-medium">
+                          Poids vol. {((parseFloat(nf.dimL) * parseFloat(nf.dimW) * parseFloat(nf.dimH)) / 5000).toFixed(2)} kg
+                          · Facturable {Math.max(parseFloat(nf.poids), (parseFloat(nf.dimL) * parseFloat(nf.dimW) * parseFloat(nf.dimH)) / 5000).toFixed(2)} kg
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* ── VALEUR ── */}
               <div>
@@ -709,26 +818,6 @@ export default function ColisModal({ open, onClose }) {
                   className={inputCls(false)}
                 />
               </div>
-
-              {/* ── CASIER (staff only) ── */}
-              {isStaff && (
-                <div>
-                  <label className={labelCls}>Numéro de casier</label>
-                  <input
-                    type="text"
-                    placeholder="Ex: A-03"
-                    value={nf.casier}
-                    onChange={(e) => {
-                      setField('casier', e.target.value);
-                      if (formErr.casier) setFormErr((prev) => ({ ...prev, casier: undefined }));
-                    }}
-                    className={inputCls(formErr.casier)}
-                  />
-                  {formErr.casier && (
-                    <p className="mt-1 text-xs text-red-500">{formErr.casier}</p>
-                  )}
-                </div>
-              )}
 
               {/* ── FACTURE (client only) ── */}
               {!isStaff && (

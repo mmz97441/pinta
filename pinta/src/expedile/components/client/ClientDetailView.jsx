@@ -247,6 +247,12 @@ export default function ClientDetailView() {
               ? 'Votre colis est arrivé à l\'entrepôt. Nous sommes en train de le mesurer.'
               : 'Votre colis a été réceptionné et mesuré.'}
           </p>
+          {sel.dateReception && (
+            <p className="text-[10px] font-medium text-gray-400">
+              Reçu le {new Date(sel.dateReception).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+              {' à '}{new Date(sel.dateReception).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+            </p>
+          )}
           {sel.casier && (
             <div className="flex items-center gap-2 text-xs text-gray-600 bg-gray-50 rounded-xl px-3 py-2">
               <Package size={13} />

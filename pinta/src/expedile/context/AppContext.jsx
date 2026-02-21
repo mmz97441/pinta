@@ -180,7 +180,7 @@ export function AppProvider({ children }) {
     const c = data.find((x) => x.id === id);
     if (!c) return;
     log(id, c.statut, 'receptionne');
-    upd(id, { statut: 'receptionne', casier: casierVal.trim() });
+    upd(id, { statut: 'receptionne', casier: casierVal.trim(), dateReception: new Date().toISOString() });
     const cl = clients.find((x) => x.id === c.clientId);
     if (notifier && cl) {
       flash(`Réceptionné — email envoyé à ${cl.nom} pour le colis ${c.ref}`);
@@ -208,7 +208,7 @@ export function AppProvider({ children }) {
     if (!prev) { flash('Impossible de revenir en arrière depuis ce statut'); return; }
 
     const resetMap = {
-      receptionne: { casier: null, photoReception: false, checkInterdits: [], produitInterdit: false, dimL: null, dimW: null, dimH: null, poids: null, dimsParColis: [] },
+      receptionne: { casier: null, photoReception: false, checkInterdits: [], produitInterdit: false, dimL: null, dimW: null, dimH: null, poids: null, dimsParColis: [], dateReception: null },
       mesure: { dimL: null, dimW: null, dimH: null, poids: null, dimsParColis: [] },
       attente_feu_vert: { feuVert: null },
       autorise: { feuVert: null },
