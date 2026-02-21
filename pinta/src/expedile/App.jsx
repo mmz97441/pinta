@@ -43,7 +43,7 @@ function AppContent() {
         <ConfirmDialog />
         <DetailHeader />
 
-        <div className="max-w-xl mx-auto px-4 py-4 space-y-4">
+        <div className={`mx-auto px-4 py-4 space-y-4 ${isStaff ? 'max-w-4xl' : 'max-w-xl'}`}>
           {isStaff && <Etapes statut={sel.statut} />}
           <ColisInfo />
 
@@ -113,7 +113,7 @@ function AppContent() {
         </div>
       </div>
 
-      <div className="max-w-xl mx-auto px-4 py-4 space-y-4">
+      <div className={`mx-auto px-4 py-4 space-y-4 ${isStaff ? 'max-w-5xl' : 'max-w-xl'}`}>
         {/* Staff views */}
         {isStaff && page === 'settings' && <StaffSettings />}
         {isStaff && page === 'clients' && <StaffClients />}

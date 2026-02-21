@@ -115,3 +115,20 @@ input:focus, select:focus, textarea:focus {
 
 /* ══════════ TAB INDICATOR ══════════ */
 .tab-indicator { animation: slideIndicator .2s cubic-bezier(.22,1,.36,1) both; }
+
+/* ══════════ RESPONSIVE ══════════ */
+@media (min-width: 768px) {
+  .card:hover, .card-elevated:hover {
+    transform: translateY(-1px);
+  }
+}
+
+/* Prevent content overflow on small screens */
+* { min-width: 0; }
+
+/* Better touch targets on mobile */
+@media (max-width: 767px) {
+  button, a, select {
+    min-height: 36px;
+  }
+}

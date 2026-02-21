@@ -258,7 +258,7 @@ export default function StaffClients() {
         </div>
       )}
 
-      <div className="flex flex-col gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {filtered.map((cl) => {
           const isOpen = clEditId === cl.id;
           const colis = clientColis(cl.id);

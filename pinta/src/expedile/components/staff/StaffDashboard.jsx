@@ -447,7 +447,7 @@ export default function StaffDashboard({ onNewColis }) {
       </div>
 
       {/* ── Summary cards ────────────────────────────────────────────────── */}
-      <div className="anim-fade stagger-2 grid grid-cols-2 gap-3">
+      <div className="anim-fade stagger-2 grid grid-cols-2 lg:grid-cols-4 gap-3">
         {/* À traiter */}
         <div
           className="card p-4"
@@ -670,7 +670,7 @@ export default function StaffDashboard({ onNewColis }) {
 
         {/* Expanded: per-statut breakdown */}
         {pipeExpand && (
-          <div className="mt-3 grid grid-cols-2 gap-1.5 anim-slide-down">
+          <div className="mt-3 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-1.5 anim-slide-down">
             {Object.entries(STATUTS)
               .filter(([, s]) => s.phase > 0)
               .map(([key, s]) => {
@@ -731,7 +731,7 @@ export default function StaffDashboard({ onNewColis }) {
             <p className="text-xs text-gray-400 mt-0.5">Tous les colis sont à jour</p>
           </div>
         ) : (
-          <div className="flex flex-col gap-2">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
             {aFaire.map((c, i) => (
               <ColisCard
                 key={c.id}
@@ -763,7 +763,7 @@ export default function StaffDashboard({ onNewColis }) {
             <p className="text-sm text-amber-600 font-medium">Aucun colis en attente</p>
           </div>
         ) : (
-          <div className="flex flex-col gap-2">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
             {attente.map((c, i) => (
               <ColisCard
                 key={c.id}
@@ -795,7 +795,7 @@ export default function StaffDashboard({ onNewColis }) {
             <p className="text-sm text-emerald-600 font-medium">Aucun colis livré (sur la sélection)</p>
           </div>
         ) : (
-          <div className="flex flex-col gap-2">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
             {livres.map((c, i) => (
               <ColisCard
                 key={c.id}

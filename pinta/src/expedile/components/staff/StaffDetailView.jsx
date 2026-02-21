@@ -937,7 +937,7 @@ export default function StaffDetailView() {
   // FULL RENDER
   // ════════════════════════════════════════════════════════════════════════
   return (
-    <div className="flex flex-col gap-4 pb-24">
+    <div className="flex flex-col gap-4 pb-24 lg:pb-12">
 
       {/* ── Colis header card ──────────────────────────────────────────── */}
       <div

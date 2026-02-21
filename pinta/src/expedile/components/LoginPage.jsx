@@ -39,15 +39,16 @@ export default function LoginPage() {
 
       {/* ── Card ── */}
       <div
-        className="anim-fade-up mt-8 w-full max-w-sm rounded-2xl p-5 glass"
+        className="anim-fade-up mt-8 w-full max-w-sm md:max-w-2xl rounded-2xl p-5 glass"
         style={{
           background: 'rgba(255,255,255,0.07)',
           border: '1px solid rgba(255,255,255,0.12)',
           boxShadow: '0 8px 40px rgba(0,0,0,0.35)',
         }}
       >
+        <div className="md:grid md:grid-cols-2 md:gap-6">
         {/* ─── Équipe section ─── */}
-        <div className="mb-5">
+        <div className="mb-5 md:mb-0">
           <div className="flex items-center gap-2 mb-3">
             <Shield size={15} style={{ color: BRAND.gold }} strokeWidth={2.5} />
             <span
@@ -112,9 +113,9 @@ export default function LoginPage() {
           </div>
         </div>
 
-        {/* Separator */}
+        {/* Separator (mobile only) */}
         <div
-          className="my-4"
+          className="my-4 md:hidden"
           style={{ height: '1px', background: 'rgba(255,255,255,0.08)' }}
         />
 
@@ -204,6 +205,7 @@ export default function LoginPage() {
             })}
           </div>
         </div>
+        </div>{/* end md:grid */}
       </div>
 
       {/* ── Footer ── */}

@@ -12,8 +12,8 @@ export default function StaffSettings() {
   const [newCat, setNewCat] = useState({ label: '', taux: {} });
 
   return (
-    <div className="anim-fade">
-      <div className="flex items-center justify-between mb-4">
+    <div className="anim-fade space-y-4">
+      <div className="flex items-center justify-between">
         <div className="flex items-center gap-2.5">
           <div className="p-2 rounded-xl" style={{ backgroundColor: BRAND.navy + '10' }}>
             <CreditCard size={20} style={{ color: BRAND.navy }} />
@@ -26,7 +26,7 @@ export default function StaffSettings() {
       </div>
 
       {/* ── Départs ── */}
-      <div className="card p-5 mb-4">
+      <div className="card p-5">
         <div className="flex items-center gap-2 mb-1">
           <Plane size={18} style={{ color: BRAND.navy }} />
           <p className="font-bold text-lg">Départs (vols du vendredi soir)</p>
@@ -80,13 +80,13 @@ export default function StaffSettings() {
       </div>
 
       {/* ── Tarifs transport ── */}
-      <div className="card p-5 mb-4">
+      <div className="card p-5">
         <div className="flex items-center gap-2 mb-1">
           <CreditCard size={18} style={{ color: BRAND.navy }} />
           <p className="font-bold text-lg">Tarifs transport par destination</p>
         </div>
         <p className="text-sm text-gray-500 mb-3">Forfait de base + prix au kg — modifiable</p>
-        <div className="space-y-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {Object.values(DESTINATIONS).map((d) => {
             const t = tarifs[d.code] || { base: 0, parKg: 0 };
             return (
@@ -113,7 +113,7 @@ export default function StaffSettings() {
       </div>
 
       {/* ── Catégories taxes ── */}
-      <div className="card p-5 mb-4 anim-fade">
+      <div className="card p-5 anim-fade">
         <div className="flex items-center gap-2 mb-1">
           <FileText size={18} style={{ color: BRAND.navy }} />
           <p className="font-bold text-lg">Taxes par catégorie de produit</p>
@@ -208,7 +208,7 @@ export default function StaffSettings() {
       </div>
 
       {/* ── Infos système ── */}
-      <div className="card p-5 mb-4 anim-fade">
+      <div className="card p-5 anim-fade">
         <p className="font-bold text-lg mb-3">Informations</p>
         <div className="space-y-1 text-sm">
           <Ligne label="Formule transport" value="Forfait + Poids facturable × Prix/kg" />
