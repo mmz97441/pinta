@@ -446,99 +446,49 @@ export default function StaffDashboard({ onNewColis }) {
         )}
       </div>
 
-      {/* ── Summary cards ────────────────────────────────────────────────── */}
-      <div className="anim-fade stagger-2 grid grid-cols-2 gap-3 max-w-lg">
-        {/* À traiter */}
-        <div
-          className="card p-4"
-          style={{ borderLeft: `3px solid ${BRAND.navy}` }}
-        >
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">
-                À traiter
-              </p>
-              <p
-                className="text-3xl font-black mt-0.5 leading-none"
-                style={{ color: BRAND.navy }}
-              >
-                {totalAFaire}
-              </p>
-            </div>
-            <div
-              className="w-8 h-8 rounded-xl flex items-center justify-center"
-              style={{ background: `${BRAND.navy}12` }}
+      {/* ── Summary cards (clickable filters) ──────────────────────────── */}
+      <div className="anim-fade stagger-2 grid grid-cols-2 md:grid-cols-4 gap-3">
+        {[
+          { key: 'afaire', label: 'À traiter', count: totalAFaire, statuts: STATUTS_A_FAIRE, color: BRAND.navy, icon: CircleDot, iconBg: `${BRAND.navy}12` },
+          { key: 'attente', label: 'Att. client', count: totalAttente, statuts: STATUTS_ATTENTE, color: '#D97706', icon: Clock, iconBg: '#FEF3C7' },
+          { key: 'expedies', label: 'Prêts / Expédiés', count: totalPretExpedies, statuts: ['paye', 'expedie', 'transit', 'arrive', 'livraison', 'livre'], color: '#059669', icon: CheckCircle, iconBg: '#ECFDF5' },
+          { key: 'total', label: 'Total', count: totalAll, statuts: null, color: BRAND.gold, icon: BarChart3, iconBg: `${BRAND.gold}18` },
+        ].map((card) => {
+          const Icon = card.icon;
+          const filterKey = card.statuts ? card.statuts.join(',') : null;
+          const isActive = filterKey ? pipeFilter === filterKey : !pipeFilter;
+          return (
+            <button
+              key={card.key}
+              onClick={() => card.statuts ? togglePipeFilter(card.statuts) : setPipeFilter(null)}
+              className={`card p-4 text-left transition-all active:scale-95 ${isActive ? 'ring-2' : ''}`}
+              style={{
+                borderLeft: `3px solid ${card.color}`,
+                ...(isActive ? { ringColor: card.color, boxShadow: `0 2px 12px ${card.color}25` } : {}),
+              }}
             >
-              <CircleDot size={16} style={{ color: BRAND.navy }} />
-            </div>
-          </div>
-        </div>
-
-        {/* Att. client */}
-        <div
-          className="card p-4"
-          style={{ borderLeft: '3px solid #D97706' }}
-        >
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">
-                Att. client
-              </p>
-              <p className="text-3xl font-black mt-0.5 leading-none text-amber-600">
-                {totalAttente}
-              </p>
-            </div>
-            <div className="w-8 h-8 rounded-xl flex items-center justify-center bg-amber-50">
-              <Clock size={16} className="text-amber-600" />
-            </div>
-          </div>
-        </div>
-
-        {/* Prêts / Expédiés */}
-        <div
-          className="card p-4"
-          style={{ borderLeft: '3px solid #059669' }}
-        >
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">
-                Prêts / Expédiés
-              </p>
-              <p className="text-3xl font-black mt-0.5 leading-none text-emerald-600">
-                {totalPretExpedies}
-              </p>
-            </div>
-            <div className="w-8 h-8 rounded-xl flex items-center justify-center bg-emerald-50">
-              <CheckCircle size={16} className="text-emerald-600" />
-            </div>
-          </div>
-        </div>
-
-        {/* Total */}
-        <div
-          className="card p-4"
-          style={{ borderLeft: `3px solid ${BRAND.gold}` }}
-        >
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">
-                Total
-              </p>
-              <p
-                className="text-3xl font-black mt-0.5 leading-none"
-                style={{ color: BRAND.goldD }}
-              >
-                {totalAll}
-              </p>
-            </div>
-            <div
-              className="w-8 h-8 rounded-xl flex items-center justify-center"
-              style={{ background: `${BRAND.gold}18` }}
-            >
-              <BarChart3 size={16} style={{ color: BRAND.goldD }} />
-            </div>
-          </div>
-        </div>
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">
+                    {card.label}
+                  </p>
+                  <p
+                    className="text-3xl font-black mt-0.5 leading-none"
+                    style={{ color: card.key === 'total' ? BRAND.goldD : card.color }}
+                  >
+                    {card.count}
+                  </p>
+                </div>
+                <div
+                  className="w-8 h-8 rounded-xl flex items-center justify-center"
+                  style={{ background: card.iconBg }}
+                >
+                  <Icon size={16} style={{ color: card.key === 'total' ? BRAND.goldD : card.color }} />
+                </div>
+              </div>
+            </button>
+          );
+        })}
       </div>
 
       {/* ── Missing invoice alert ─────────────────────────────────────────── */}
