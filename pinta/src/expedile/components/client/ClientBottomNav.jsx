@@ -27,7 +27,7 @@ export default function ClientBottomNav() {
 
   return (
     <div className="fixed bottom-0 left-0 right-0 glass-nav border-t-0 z-40" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
-      <div className="flex max-w-md mx-auto">
+      <div className="flex max-w-md lg:max-w-2xl mx-auto">
         {TABS.map((tab) => {
           const active = clientTab === tab.key;
           const badge = badges[tab.key] || 0;

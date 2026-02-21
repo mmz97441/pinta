@@ -43,7 +43,7 @@ function AppContent() {
         <ConfirmDialog />
         <DetailHeader />
 
-        <div className={`mx-auto px-4 py-4 space-y-4 ${isStaff ? 'max-w-4xl' : 'max-w-xl'}`}>
+        <div className={`mx-auto px-4 py-4 space-y-4 ${isStaff ? 'max-w-7xl' : 'max-w-xl md:max-w-2xl lg:max-w-3xl'}`}>
           {isStaff && <Etapes statut={sel.statut} />}
           <ColisInfo />
 
@@ -113,7 +113,7 @@ function AppContent() {
         </div>
       </div>
 
-      <div className={`mx-auto px-4 py-4 space-y-4 ${isStaff ? 'max-w-5xl' : 'max-w-xl'}`}>
+      <div className={`mx-auto px-6 py-4 space-y-4 ${isStaff ? 'max-w-7xl' : 'max-w-xl md:max-w-2xl lg:max-w-3xl'}`}>
         {/* Staff views */}
         {isStaff && page === 'settings' && <StaffSettings />}
         {isStaff && page === 'clients' && <StaffClients />}
