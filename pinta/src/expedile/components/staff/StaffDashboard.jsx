@@ -447,7 +447,7 @@ export default function StaffDashboard({ onNewColis }) {
       </div>
 
       {/* ── Summary cards ────────────────────────────────────────────────── */}
-      <div className="anim-fade stagger-2 grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="anim-fade stagger-2 grid grid-cols-2 gap-3 max-w-lg">
         {/* À traiter */}
         <div
           className="card p-4"
