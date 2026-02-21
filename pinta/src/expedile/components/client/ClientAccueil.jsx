@@ -95,14 +95,15 @@ export default function ClientAccueil({ onNewColis }) {
 
       {/* ── Stats grid ── */}
       <div className="grid grid-cols-3 gap-3">
-        <div className="card p-3 text-center">
+        <button onClick={() => setClientTab('colis')} className="card p-3 text-center hover:shadow-md active:scale-95 transition-all cursor-pointer">
           <div className="text-2xl font-black" style={{ color: BRAND.navy }}>
             {enCours.length}
           </div>
           <div className="text-[11px] text-gray-500 font-medium mt-0.5">En cours</div>
-        </div>
-        <div
-          className="card p-3 text-center"
+        </button>
+        <button
+          onClick={() => setClientTab('colis')}
+          className="card p-3 text-center hover:shadow-md active:scale-95 transition-all cursor-pointer"
           style={aTraiter.length > 0 ? { borderLeft: `3px solid ${BRAND.gold}` } : {}}
         >
           <div
@@ -112,9 +113,10 @@ export default function ClientAccueil({ onNewColis }) {
             {aTraiter.length}
           </div>
           <div className="text-[11px] text-gray-500 font-medium mt-0.5">À traiter</div>
-        </div>
-        <div
-          className="card p-3 text-center"
+        </button>
+        <button
+          onClick={() => setClientTab('colis')}
+          className="card p-3 text-center hover:shadow-md active:scale-95 transition-all cursor-pointer"
           style={aPayer.length > 0 ? { borderLeft: `3px solid #f59e0b` } : {}}
         >
           <div
@@ -124,7 +126,7 @@ export default function ClientAccueil({ onNewColis }) {
             {aPayer.length}
           </div>
           <div className="text-[11px] text-gray-500 font-medium mt-0.5">À payer</div>
-        </div>
+        </button>
       </div>
 
       {/* ── Actions requises ── */}
@@ -194,9 +196,10 @@ export default function ClientAccueil({ onNewColis }) {
 
             {/* ── Cartes individuelles paiement ── */}
             {colisPaiement.map((p) => (
-              <div
+              <button
                 key={p.id}
-                className="card-elevated p-4 rounded-2xl"
+                onClick={() => setSelId(p.id)}
+                className="card-elevated p-4 rounded-2xl w-full text-left hover:shadow-md active:scale-[0.98] transition-all cursor-pointer"
                 style={{ borderLeft: `4px solid #f59e0b` }}
               >
                 <div className="flex items-start justify-between gap-2">
@@ -212,7 +215,7 @@ export default function ClientAccueil({ onNewColis }) {
                     Paiement requis : {eur(p.devisTotal)}
                   </div>
                 )}
-              </div>
+              </button>
             ))}
           </div>
         </div>
@@ -227,7 +230,7 @@ export default function ClientAccueil({ onNewColis }) {
           </div>
           <div className="space-y-2.5">
             {colisCours.map((p) => (
-              <div key={p.id} className="card p-4">
+              <button key={p.id} onClick={() => setSelId(p.id)} className="card p-4 w-full text-left hover:shadow-md active:scale-[0.98] transition-all cursor-pointer">
                 <div className="flex items-start justify-between gap-2 mb-1">
                   <div className="flex-1 min-w-0">
                     <p className="font-bold text-sm text-gray-900">{p.ref}</p>
@@ -236,7 +239,7 @@ export default function ClientAccueil({ onNewColis }) {
                   <Badge statut={p.statut} />
                 </div>
                 <ProgressBar statut={p.statut} />
-              </div>
+              </button>
             ))}
           </div>
         </div>
@@ -249,8 +252,9 @@ export default function ClientAccueil({ onNewColis }) {
             <CheckCircle size={15} className="text-emerald-500" />
             <h3 className="font-bold text-sm text-gray-800">Dernière livraison</h3>
           </div>
-          <div
-            className="card p-4 rounded-2xl"
+          <button
+            onClick={() => setSelId(derniereLivraison.id)}
+            className="card p-4 rounded-2xl w-full text-left hover:shadow-md active:scale-[0.98] transition-all cursor-pointer"
             style={{ borderLeft: `4px solid #10b981` }}
           >
             <div className="flex items-center justify-between">
@@ -264,7 +268,7 @@ export default function ClientAccueil({ onNewColis }) {
               <CheckCircle size={12} />
               Livré avec succès
             </div>
-          </div>
+          </button>
         </div>
       )}
 
