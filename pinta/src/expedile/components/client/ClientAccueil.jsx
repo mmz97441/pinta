@@ -1,5 +1,5 @@
 import React from 'react';
-import { Package, AlertCircle, CreditCard, Plus, CheckCircle, Clock, TrendingUp } from 'lucide-react';
+import { Package, AlertCircle, CreditCard, Plus, CheckCircle, Clock, TrendingUp, ChevronRight } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { BRAND, STATUTS, getDestByCP, PHASES_CLIENT, getPhaseIndex } from '../../constants';
 import { eur } from '../../utils';
@@ -33,7 +33,7 @@ function ProgressBar({ statut }) {
 }
 
 export default function ClientAccueil({ onNewColis }) {
-  const { authCl, data, clients } = useApp();
+  const { authCl, data, clients, ask, feuVertBulk, setSelId, setClientTab } = useApp();
 
   const cl = authCl;
   const dest = cl ? getDestByCP(cl.cp) : null;
@@ -50,9 +50,9 @@ export default function ClientAccueil({ onNewColis }) {
   const aPayer = myColis.filter((p) => p.statut === 'attente_paiement');
   const livres = myColis.filter((p) => p.statut === 'livre');
 
-  const actionsRequises = myColis.filter(
-    (p) => p.statut === 'attente_feu_vert' || p.statut === 'attente_paiement'
-  );
+  const colisAttenteFV = myColis.filter((p) => p.statut === 'attente_feu_vert');
+  const colisPaiement = myColis.filter((p) => p.statut === 'attente_paiement');
+  const actionsRequises = [...colisAttenteFV, ...colisPaiement];
 
   const colisCours = enCours.filter(
     (p) => p.statut !== 'attente_feu_vert' && p.statut !== 'attente_paiement'
@@ -138,39 +138,82 @@ export default function ClientAccueil({ onNewColis }) {
             </span>
           </div>
           <div className="space-y-2.5">
-            {actionsRequises.map((p) => {
-              const isFV = p.statut === 'attente_feu_vert';
-              const isPay = p.statut === 'attente_paiement';
-              return (
-                <div
-                  key={p.id}
-                  className="card-elevated p-4 rounded-2xl"
+            {/* ── Carte groupée feu vert ── */}
+            {colisAttenteFV.length > 0 && (
+              <div
+                className="card-elevated p-4 rounded-2xl"
+                style={{ borderLeft: `4px solid ${BRAND.gold}` }}
+              >
+                <div className="flex items-center gap-2 mb-3">
+                  <CheckCircle size={15} className="text-amber-600" />
+                  <p className="font-bold text-sm text-gray-900">
+                    {colisAttenteFV.length} colis en attente de votre accord
+                  </p>
+                </div>
+                <div className="space-y-2 mb-3">
+                  {colisAttenteFV.map((p) => (
+                    <button
+                      key={p.id}
+                      className="w-full flex items-center gap-2 text-left bg-amber-50/60 rounded-xl px-3 py-2 active:bg-amber-100 transition-colors"
+                      onClick={() => { setSelId(p.id); setClientTab('colis'); }}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <span className="font-bold text-xs text-gray-800">{p.ref}</span>
+                        <span className="text-xs text-gray-500 ml-1.5 truncate">{p.desc}</span>
+                        {p.dimL != null && (
+                          <span className="text-[10px] text-gray-400 ml-1.5">
+                            {p.dimL}×{p.dimW}×{p.dimH} cm
+                          </span>
+                        )}
+                      </div>
+                      <ChevronRight size={14} className="text-gray-400 flex-shrink-0" />
+                    </button>
+                  ))}
+                </div>
+                <button
+                  className="w-full flex items-center justify-center gap-2 py-3 rounded-xl font-bold text-white text-sm active:scale-95 transition-all"
                   style={{
-                    borderLeft: `4px solid ${isFV ? BRAND.gold : '#f59e0b'}`,
+                    background: `linear-gradient(135deg, ${BRAND.navy}, ${BRAND.navyL})`,
+                    boxShadow: `0 2px 12px rgba(27,58,75,0.2)`,
+                  }}
+                  onClick={() => {
+                    const refs = colisAttenteFV.map((p) => p.ref).join(', ');
+                    ask(
+                      'Autoriser tous les colis',
+                      `Vous confirmez autoriser la préparation de ${colisAttenteFV.length} colis ?\n\n${refs}`,
+                      () => feuVertBulk(colisAttenteFV.map((p) => p.id)),
+                      { okLabel: 'Oui, tout autoriser' }
+                    );
                   }}
                 >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1 min-w-0">
-                      <p className="font-bold text-sm text-gray-900 truncate">{p.ref}</p>
-                      <p className="text-xs text-gray-500 truncate mt-0.5">{p.desc}</p>
-                    </div>
-                    <Badge statut={p.statut} />
+                  <CheckCircle size={16} strokeWidth={2.5} />
+                  Tout autoriser ({colisAttenteFV.length})
+                </button>
+              </div>
+            )}
+
+            {/* ── Cartes individuelles paiement ── */}
+            {colisPaiement.map((p) => (
+              <div
+                key={p.id}
+                className="card-elevated p-4 rounded-2xl"
+                style={{ borderLeft: `4px solid #f59e0b` }}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold text-sm text-gray-900 truncate">{p.ref}</p>
+                    <p className="text-xs text-gray-500 truncate mt-0.5">{p.desc}</p>
                   </div>
-                  {isFV && (
-                    <div className="mt-3 flex items-center gap-1.5 text-xs font-semibold text-amber-700 bg-amber-50 rounded-xl px-3 py-2">
-                      <CheckCircle size={13} />
-                      Votre accord est attendu pour préparer ce colis
-                    </div>
-                  )}
-                  {isPay && p.devisTotal != null && (
-                    <div className="mt-3 flex items-center gap-1.5 text-xs font-semibold text-amber-800 bg-amber-50 rounded-xl px-3 py-2">
-                      <CreditCard size={13} />
-                      Paiement requis : {eur(p.devisTotal)}
-                    </div>
-                  )}
+                  <Badge statut={p.statut} />
                 </div>
-              );
-            })}
+                {p.devisTotal != null && (
+                  <div className="mt-3 flex items-center gap-1.5 text-xs font-semibold text-amber-800 bg-amber-50 rounded-xl px-3 py-2">
+                    <CreditCard size={13} />
+                    Paiement requis : {eur(p.devisTotal)}
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
         </div>
       )}

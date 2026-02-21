@@ -137,7 +137,7 @@ function PhaseStep({ phase, phaseIdx, state, open, onToggle, children }) {
 
 // ── Main component ─────────────────────────────────────────────────────────────
 export default function ClientDetailView({ onBack }) {
-  const { sel, selDest, feuVert, payer, ask, flash } = useApp();
+  const { sel, selDest, feuVert, feuVertBulk, payer, ask, flash, authCl, data } = useApp();
   const [timeOpen, setTimeOpen] = useState(null);
 
   if (!sel) return null;
@@ -151,14 +151,28 @@ export default function ClientDetailView({ onBack }) {
   };
 
   // ── Feu vert handlers ──────────────────────────────────────────────────────
+  const autresFV = authCl
+    ? data.filter((p) => p.clientId === authCl.id && p.statut === 'attente_feu_vert' && p.id !== sel.id)
+    : [];
+
   const handleFeuVert = (ok) => {
     if (ok) {
-      ask(
-        'Autoriser la préparation',
-        `Vous confirmez que le contenu de ${sel.ref} est conforme et autorisez Expedîle à le préparer pour l'expédition ?`,
-        () => feuVert(sel.id, true),
-        { okLabel: 'Oui, j\'autorise' }
-      );
+      if (autresFV.length > 0) {
+        const refs = autresFV.map((p) => p.ref).join(', ');
+        ask(
+          'Autoriser la préparation',
+          `Vous confirmez que le contenu de ${sel.ref} est conforme et autorisez Expedîle à le préparer pour l'expédition ?\n\nVous avez aussi ${autresFV.length} autre${autresFV.length > 1 ? 's' : ''} colis en attente (${refs}). Voulez-vous tout autoriser d'un coup ?`,
+          () => feuVertBulk([sel.id, ...autresFV.map((p) => p.id)]),
+          { okLabel: `Tout autoriser (${autresFV.length + 1})` }
+        );
+      } else {
+        ask(
+          'Autoriser la préparation',
+          `Vous confirmez que le contenu de ${sel.ref} est conforme et autorisez Expedîle à le préparer pour l'expédition ?`,
+          () => feuVert(sel.id, true),
+          { okLabel: 'Oui, j\'autorise' }
+        );
+      }
     } else {
       ask(
         'Refuser la préparation',

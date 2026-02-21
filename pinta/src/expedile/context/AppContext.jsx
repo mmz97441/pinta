@@ -249,6 +249,14 @@ export function AppProvider({ children }) {
     flash(ok ? 'Vous avez autorisé la préparation' : 'Vous avez refusé — le colis ne sera pas préparé');
   }, [log, upd, flash]);
 
+  const feuVertBulk = useCallback((ids) => {
+    ids.forEach((id) => {
+      log(id, 'attente_feu_vert', 'autorise');
+      upd(id, { statut: 'autorise', feuVert: 'autorise' });
+    });
+    flash(`${ids.length} colis autorisés`);
+  }, [log, upd, flash]);
+
   const envoyerDevis = useCallback((id) => {
     const c = data.find((x) => x.id === id);
     if (!c || !c.finL || !c.finW || !c.finH || !c.finP) {
@@ -325,7 +333,7 @@ export function AppProvider({ children }) {
     flash, ask, closeConfirm, upd, log: log, getClient, getTarif,
     updateClient, addNewClient, deleteClient,
     addCategory, updateCatTaux, updateCatLabel, deleteCategory,
-    receptionner, changerStatut, revertStatut, annulerColis, demanderFeuVert, feuVert, envoyerDevis, payer, envMsg,
+    receptionner, changerStatut, revertStatut, annulerColis, demanderFeuVert, feuVert, feuVertBulk, envoyerDevis, payer, envMsg,
   }), [
     auth, isStaff, authCl, data, clients, categories, tarifs, envois, logs,
     comLog, sendMsg, getPreview, notifs, unreadNotifs, markNotifRead, markAllNotifsRead,
@@ -333,7 +341,7 @@ export function AppProvider({ children }) {
     flash, ask, closeConfirm, upd, log, getClient, getTarif,
     updateClient, addNewClient, deleteClient,
     addCategory, updateCatTaux, updateCatLabel, deleteCategory,
-    receptionner, changerStatut, revertStatut, annulerColis, demanderFeuVert, feuVert, envoyerDevis, payer, envMsg,
+    receptionner, changerStatut, revertStatut, annulerColis, demanderFeuVert, feuVert, feuVertBulk, envoyerDevis, payer, envMsg,
   ]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
