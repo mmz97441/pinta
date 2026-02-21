@@ -7,12 +7,12 @@ export default function FacturesPanel() {
   const { sel, isStaff, setData, flash } = useApp();
   if (!sel || sel.factures.length === 0) return null;
 
-  const validateFacture = (factureId) => {
+  const toggleFacture = (factureId, newValide) => {
     setData((prev) => prev.map((c) => {
       if (c.id !== sel.id) return c;
-      return { ...c, factures: c.factures.map((f) => (f.id === factureId ? { ...f, valide: true } : f)) };
+      return { ...c, factures: c.factures.map((f) => (f.id === factureId ? { ...f, valide: newValide } : f)) };
     }));
-    flash('Facture validée');
+    flash(newValide ? 'Facture validée' : 'Validation annulée');
   };
 
   return (
@@ -22,11 +22,22 @@ export default function FacturesPanel() {
         <div key={f.id} className="flex justify-between items-center py-1 text-sm">
           <span>{f.vendeur} — {eur(f.montant)}</span>
           {f.valide ? (
-            <span className="text-green-600 text-xs font-bold">
-              <Check size={12} className="inline mr-0.5" />Validée
-            </span>
+            isStaff ? (
+              <button
+                onClick={() => toggleFacture(f.id, false)}
+                className="text-green-600 text-xs font-bold hover:text-red-500 transition-colors group"
+              >
+                <Check size={12} className="inline mr-0.5" />
+                <span className="group-hover:hidden">Validée</span>
+                <span className="hidden group-hover:inline">Annuler</span>
+              </button>
+            ) : (
+              <span className="text-green-600 text-xs font-bold">
+                <Check size={12} className="inline mr-0.5" />Validée
+              </span>
+            )
           ) : isStaff ? (
-            <button onClick={() => validateFacture(f.id)} className="text-slate-800 text-xs font-bold hover:underline">
+            <button onClick={() => toggleFacture(f.id, true)} className="text-slate-800 text-xs font-bold hover:underline">
               Valider
             </button>
           ) : (
