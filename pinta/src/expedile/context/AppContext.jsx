@@ -208,8 +208,8 @@ export function AppProvider({ children }) {
     if (!prev) { flash('Impossible de revenir en arrière depuis ce statut'); return; }
 
     const resetMap = {
-      receptionne: { casier: null, photoReception: false, checkInterdits: [], produitInterdit: false, dimL: null, dimW: null, dimH: null, poids: null },
-      mesure: { dimL: null, dimW: null, dimH: null, poids: null },
+      receptionne: { casier: null, photoReception: false, checkInterdits: [], produitInterdit: false, dimL: null, dimW: null, dimH: null, poids: null, dimsParColis: [] },
+      mesure: { dimL: null, dimW: null, dimH: null, poids: null, dimsParColis: [] },
       attente_feu_vert: { feuVert: null },
       autorise: { feuVert: null },
       en_preparation: { finL: null, finW: null, finH: null, finP: null },
@@ -284,10 +284,15 @@ export function AppProvider({ children }) {
     const tva = ht * (dest.tva / 100);
     const tot = Math.round((ht + tva) * 100) / 100;
 
-    // Calcul AVANT optimisation
+    // Calcul AVANT optimisation (supporte multi-colis)
     let avantTr = 0, avantTot = 0;
     if (c.dimL && c.dimW && c.dimH && c.poids) {
-      const pvBrut = (c.dimL * c.dimW * c.dimH) / 5000;
+      let pvBrut;
+      if (c.dimsParColis && c.dimsParColis.length > 1) {
+        pvBrut = c.dimsParColis.reduce((s, d) => s + (d.dimL * d.dimW * d.dimH) / 5000, 0);
+      } else {
+        pvBrut = (c.dimL * c.dimW * c.dimH) / 5000;
+      }
       const pfBrut = Math.max(c.poids, pvBrut);
       avantTr = calcTransport(pfBrut, t);
       const avantHt = avantTr + om + omr;

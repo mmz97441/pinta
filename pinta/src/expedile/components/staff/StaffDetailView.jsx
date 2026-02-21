@@ -143,6 +143,41 @@ function BtnWA({ onClick, children }) {
 function DimsDisplay({ c }) {
   const hasDims = c.dimL && c.dimW && c.dimH && c.poids;
   if (!hasDims) return <p className="text-sm text-gray-400 italic">Dimensions non renseignées</p>;
+
+  // Multi-colis display
+  if (c.dimsParColis && c.dimsParColis.length > 1) {
+    const trackings = c.trackings?.filter((t) => t) || [];
+    let totalPoids = 0, totalPv = 0;
+    c.dimsParColis.forEach((d) => {
+      totalPoids += d.poids;
+      totalPv += (d.dimL * d.dimW * d.dimH) / 5000;
+    });
+    const totalPf = Math.max(totalPoids, totalPv);
+    return (
+      <div className="space-y-3">
+        {c.dimsParColis.map((d, i) => {
+          const pv = ((d.dimL * d.dimW * d.dimH) / 5000).toFixed(2);
+          return (
+            <div key={i} className="rounded-lg bg-gray-50 p-2.5 space-y-0.5 text-sm">
+              <p className="text-[10px] font-black uppercase tracking-wider text-gray-400 mb-1">
+                Colis {i + 1}{trackings[i] ? ` — ${trackings[i]}` : ''}
+              </p>
+              <Ligne label="Dimensions" value={`${d.dimL} × ${d.dimW} × ${d.dimH} cm`} />
+              <Ligne label="Poids" value={`${d.poids} kg`} />
+              <Ligne label="Vol." value={`${pv} kg`} />
+            </div>
+          );
+        })}
+        <div className="border-t border-gray-200 pt-2 space-y-0.5 text-sm">
+          <Ligne label="Poids total" value={`${totalPoids.toFixed(2)} kg`} />
+          <Ligne label="Poids vol. total" value={`${totalPv.toFixed(2)} kg`} />
+          <Ligne label="Poids facturable" value={`${totalPf.toFixed(2)} kg`} />
+        </div>
+      </div>
+    );
+  }
+
+  // Single colis display
   const pv = ((c.dimL * c.dimW * c.dimH) / 5000).toFixed(2);
   const pf = Math.max(c.poids, parseFloat(pv)).toFixed(2);
   return (
@@ -192,6 +227,8 @@ export default function StaffDetailView() {
 
   // Local measure form
   const [dims, setDims] = useState({ dimL: '', dimW: '', dimH: '', poids: '' });
+  // Multi-colis measure form (one set per tracking)
+  const [multiDims, setMultiDims] = useState({});
   // Local fin dims form
   const [finDims, setFinDims] = useState({ finL: '', finW: '', finH: '', finP: '' });
   // Photo simulation
@@ -281,20 +318,49 @@ export default function StaffDetailView() {
 
   // ── Measure validation ────────────────────────────────────────────────────
   function handleValiderMesures() {
-    const { dimL, dimW, dimH, poids } = dims;
-    if (!dimL || !dimW || !dimH || !poids) {
-      setFormErr('Veuillez remplir toutes les dimensions et le poids.');
-      return;
+    const trackingsActive = sel.trackings?.filter((t) => t) || [];
+    const isMulti = trackingsActive.length > 1;
+
+    if (isMulti) {
+      for (let i = 0; i < trackingsActive.length; i++) {
+        const d = multiDims[i] || {};
+        if (!d.dimL || !d.dimW || !d.dimH || !d.poids) {
+          setFormErr(`Remplissez toutes les dimensions du colis ${i + 1} (${trackingsActive[i]}).`);
+          return;
+        }
+      }
+      setFormErr('');
+      const dimsParColis = trackingsActive.map((_, i) => {
+        const d = multiDims[i];
+        return { dimL: parseFloat(d.dimL), dimW: parseFloat(d.dimW), dimH: parseFloat(d.dimH), poids: parseFloat(d.poids) };
+      });
+      const totalPoids = dimsParColis.reduce((s, d) => s + d.poids, 0);
+      const maxL = Math.max(...dimsParColis.map((d) => d.dimL));
+      const maxW = Math.max(...dimsParColis.map((d) => d.dimW));
+      const maxH = Math.max(...dimsParColis.map((d) => d.dimH));
+      upd(sel.id, {
+        dimsParColis,
+        dimL: maxL, dimW: maxW, dimH: maxH,
+        poids: Math.round(totalPoids * 100) / 100,
+        statut: 'mesure',
+      });
+      flash(`Mesures enregistrées (${dimsParColis.length} colis)`);
+    } else {
+      const { dimL, dimW, dimH, poids } = dims;
+      if (!dimL || !dimW || !dimH || !poids) {
+        setFormErr('Veuillez remplir toutes les dimensions et le poids.');
+        return;
+      }
+      setFormErr('');
+      upd(sel.id, {
+        dimL: parseFloat(dimL),
+        dimW: parseFloat(dimW),
+        dimH: parseFloat(dimH),
+        poids: parseFloat(poids),
+        statut: 'mesure',
+      });
+      flash('Mesures enregistrées');
     }
-    setFormErr('');
-    upd(sel.id, {
-      dimL: parseFloat(dimL),
-      dimW: parseFloat(dimW),
-      dimH: parseFloat(dimH),
-      poids: parseFloat(poids),
-      statut: 'mesure',
-    });
-    flash('Mesures enregistrées');
   }
 
   // ── Reception handler ─────────────────────────────────────────────────────
@@ -462,6 +528,82 @@ export default function StaffDetailView() {
 
       // ── 2. RECEPTIONNE ─────────────────────────────────────────────────
       case 'receptionne': {
+        const trackingsActive = sel.trackings?.filter((t) => t) || [];
+        const isMulti = trackingsActive.length > 1;
+
+        if (isMulti) {
+          // Compute multi-colis summary
+          const allFilled = trackingsActive.every((_, i) => {
+            const d = multiDims[i] || {};
+            return d.dimL && d.dimW && d.dimH && d.poids;
+          });
+          let totalPoids = 0, totalPv = 0;
+          if (allFilled) {
+            trackingsActive.forEach((_, i) => {
+              const d = multiDims[i];
+              const L = parseFloat(d.dimL) || 0;
+              const W = parseFloat(d.dimW) || 0;
+              const H = parseFloat(d.dimH) || 0;
+              const P = parseFloat(d.poids) || 0;
+              totalPoids += P;
+              totalPv += (L * W * H) / 5000;
+            });
+          }
+          const totalPf = Math.max(totalPoids, totalPv);
+          const totalTr = totalPf > 0 ? calcTransport(totalPf, tarif) : 0;
+
+          return (
+            <Section title={`Mesurer les ${trackingsActive.length} colis`} icon={Ruler} color={borderColor}>
+              <div className="space-y-4">
+                {trackingsActive.map((tracking, idx) => {
+                  const d = multiDims[idx] || { dimL: '', dimW: '', dimH: '', poids: '' };
+                  const updateDim = (field, val) => setMultiDims((prev) => ({
+                    ...prev, [idx]: { ...prev[idx], dimL: '', dimW: '', dimH: '', poids: '', ...prev[idx], [field]: val },
+                  }));
+                  return (
+                    <div key={idx} className="rounded-xl border border-gray-200 p-3 space-y-3">
+                      <p className="text-xs font-black uppercase tracking-wider" style={{ color: BRAND.navy }}>
+                        Colis {idx + 1} — <span className="font-mono">{tracking}</span>
+                      </p>
+                      <div className="grid grid-cols-2 gap-3">
+                        <Field label="Longueur (cm)" type="number" min="0" step="0.5"
+                          value={d.dimL} onChange={(e) => updateDim('dimL', e.target.value)}
+                          placeholder="40" unit="cm" />
+                        <Field label="Largeur (cm)" type="number" min="0" step="0.5"
+                          value={d.dimW} onChange={(e) => updateDim('dimW', e.target.value)}
+                          placeholder="30" unit="cm" />
+                        <Field label="Hauteur (cm)" type="number" min="0" step="0.5"
+                          value={d.dimH} onChange={(e) => updateDim('dimH', e.target.value)}
+                          placeholder="20" unit="cm" />
+                        <Field label="Poids réel (kg)" type="number" min="0" step="0.1"
+                          value={d.poids} onChange={(e) => updateDim('poids', e.target.value)}
+                          placeholder="2.5" unit="kg" />
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {allFilled && (
+                  <div className="p-3 rounded-xl bg-gray-50 border border-gray-200 space-y-0.5 text-sm">
+                    <Ligne label="Poids total" value={`${totalPoids.toFixed(2)} kg`} />
+                    <Ligne label="Poids vol. total" value={`${totalPv.toFixed(2)} kg`} />
+                    <Ligne label="Poids facturable" value={`${totalPf.toFixed(2)} kg`} />
+                    <Ligne label="Transport estimé" value={eur(totalTr)} />
+                  </div>
+                )}
+
+                {formErr && <p className="text-xs text-red-500 font-medium">{formErr}</p>}
+
+                <BtnPrimary onClick={handleValiderMesures}>
+                  <Check size={15} />
+                  Valider les mesures ({trackingsActive.length} colis)
+                </BtnPrimary>
+              </div>
+            </Section>
+          );
+        }
+
+        // Single tracking — existing form
         const { pv, pf, tr } = calcDims(dims.dimL, dims.dimW, dims.dimH, dims.poids);
         return (
           <Section title="Mesurer ce colis" icon={Ruler} color={borderColor}>
@@ -587,8 +729,10 @@ export default function StaffDetailView() {
         const fPv = usedFinL && usedFinW && usedFinH ? ((usedFinL * usedFinW * usedFinH) / 5000) : 0;
         const fPf = Math.max(usedFinP, fPv);
 
-        // Avant optim
-        const avPv = sel.dimL && sel.dimW && sel.dimH ? ((sel.dimL * sel.dimW * sel.dimH) / 5000) : 0;
+        // Avant optim (supporte multi-colis)
+        const avPv = sel.dimsParColis && sel.dimsParColis.length > 1
+          ? sel.dimsParColis.reduce((s, d) => s + (d.dimL * d.dimW * d.dimH) / 5000, 0)
+          : sel.dimL && sel.dimW && sel.dimH ? ((sel.dimL * sel.dimW * sel.dimH) / 5000) : 0;
         const avPf = Math.max(sel.poids || 0, avPv);
         const avTr = avPf > 0 ? calcTransport(avPf, tarif) : 0;
         const apTr = fPf > 0 ? calcTransport(fPf, tarif) : 0;

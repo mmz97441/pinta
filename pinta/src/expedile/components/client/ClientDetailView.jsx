@@ -246,14 +246,28 @@ export default function ClientDetailView({ onBack }) {
               <span>Casier : <span className="font-black">{sel.casier}</span></span>
             </div>
           )}
-          {hasDims && (
+          {hasDims && sel.dimsParColis && sel.dimsParColis.length > 1 ? (
+            <div className="rounded-xl bg-gray-50 p-3 space-y-2">
+              <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">
+                Dimensions mesurées ({sel.dimsParColis.length} colis)
+              </p>
+              {sel.dimsParColis.map((d, i) => (
+                <div key={i} className="rounded-lg bg-white p-2 border border-gray-100">
+                  <p className="text-[10px] font-bold text-gray-400 mb-0.5">
+                    {sel.trackings?.filter((t) => t)[i] || `Colis ${i + 1}`}
+                  </p>
+                  <Ligne label="L × W × H" value={`${d.dimL} × ${d.dimW} × ${d.dimH} cm`} />
+                  <Ligne label="Poids" value={`${d.poids} kg`} />
+                </div>
+              ))}
+            </div>
+          ) : hasDims ? (
             <div className="rounded-xl bg-gray-50 p-3 space-y-1">
               <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">Dimensions mesurées</p>
               <Ligne label="Dimensions" value={`${sel.dimL} × ${sel.dimW} × ${sel.dimH} cm`} />
               <Ligne label="Poids" value={`${sel.poids} kg`} />
             </div>
-          )}
-          {!hasDims && (
+          ) : (
             <p className="text-xs text-amber-600 flex items-center gap-1.5 bg-amber-50 rounded-xl px-3 py-2">
               <Clock size={13} />
               Mesures en cours…
@@ -282,13 +296,28 @@ export default function ClientDetailView({ onBack }) {
                   Nous avons réceptionné et mesuré votre colis. Autorisez-nous à le préparer et l'optimiser pour l'expédition. Le devis final vous sera envoyé après la préparation.
                 </p>
               </div>
-              {sel.dimL && (
+              {sel.dimsParColis && sel.dimsParColis.length > 1 ? (
+                <div className="rounded-xl bg-gray-50 p-3 space-y-2">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">
+                    Dimensions mesurées ({sel.dimsParColis.length} colis)
+                  </p>
+                  {sel.dimsParColis.map((d, i) => (
+                    <div key={i} className="rounded-lg bg-white p-2 border border-gray-100">
+                      <p className="text-[10px] font-bold text-gray-400 mb-0.5">
+                        {sel.trackings?.filter((t) => t)[i] || `Colis ${i + 1}`}
+                      </p>
+                      <Ligne label="L × W × H" value={`${d.dimL} × ${d.dimW} × ${d.dimH} cm`} />
+                      <Ligne label="Poids" value={`${d.poids} kg`} />
+                    </div>
+                  ))}
+                </div>
+              ) : sel.dimL ? (
                 <div className="rounded-xl bg-gray-50 p-3 space-y-1">
                   <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">Dimensions mesurées</p>
                   <Ligne label="L × W × H" value={`${sel.dimL} × ${sel.dimW} × ${sel.dimH} cm`} />
                   <Ligne label="Poids" value={`${sel.poids} kg`} />
                 </div>
-              )}
+              ) : null}
               <div className="rounded-xl p-3 border border-blue-100" style={{ backgroundColor: BRAND.navy + '06' }}>
                 <p className="text-[10px] font-black uppercase tracking-widest mb-1.5" style={{ color: BRAND.navy }}>
                   Comment ça marche ?

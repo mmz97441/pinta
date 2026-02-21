@@ -41,7 +41,33 @@ export default function ColisInfo() {
       </div>
 
       {/* Dimensions */}
-      {sel.dimL && (
+      {sel.dimsParColis && sel.dimsParColis.length > 1 ? (
+        <div className="mt-3 pt-3 border-t space-y-2">
+          <p className="text-xs font-bold text-gray-400 uppercase">
+            Dimensions initiales ({sel.dimsParColis.length} colis)
+          </p>
+          {sel.dimsParColis.map((d, i) => {
+            const tracking = sel.trackings?.filter((t) => t)[i];
+            return (
+              <div key={i} className="rounded-lg bg-gray-50 p-2">
+                <p className="text-[10px] font-bold text-gray-400 mb-0.5">
+                  {tracking || `Colis ${i + 1}`}
+                </p>
+                <p className="text-sm">{d.dimL} × {d.dimW} × {d.dimH} cm · {d.poids} kg</p>
+                <p className="text-xs text-gray-400">Vol: {((d.dimL * d.dimW * d.dimH) / 5000).toFixed(2)} kg</p>
+              </div>
+            );
+          })}
+          {sel.finL && (
+            <div className="mt-1">
+              <p className="text-xs font-bold uppercase" style={{ color: BRAND.gold }}>Après optimisation</p>
+              <p className="text-sm">{sel.finL} × {sel.finW} × {sel.finH} cm</p>
+              <p className="text-sm">Poids : {sel.finP || '—'} kg</p>
+              <p className="text-xs text-gray-400">Vol: {((sel.finL * sel.finW * sel.finH) / 5000).toFixed(2)} kg</p>
+            </div>
+          )}
+        </div>
+      ) : sel.dimL ? (
         <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t">
           <div>
             <p className="text-xs font-bold text-gray-400 uppercase">Dimensions initiales</p>
@@ -58,7 +84,7 @@ export default function ColisInfo() {
             </div>
           )}
         </div>
-      )}
+      ) : null}
 
       {/* Trackings */}
       {hasTrack(sel) && (

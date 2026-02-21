@@ -261,6 +261,7 @@ export default function ColisModal({ open, onClose }) {
       dimW: null,
       dimH: null,
       poids: null,
+      dimsParColis: [],
       finL: null,
       finW: null,
       finH: null,
