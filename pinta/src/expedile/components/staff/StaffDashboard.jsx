@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import {
   Plus, Search, X, BarChart3, CircleDot, Clock, CheckCircle,
-  ChevronRight, ChevronDown, AlertTriangle, Filter, Package,
+  ChevronRight, AlertTriangle, Filter, Package,
   User, Clipboard, Ruler, Wrench, CreditCard, Plane, Star,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
@@ -16,6 +16,14 @@ const STATUTS_A_FAIRE = [
 ];
 const STATUTS_ATTENTE = ['attente_feu_vert', 'devis_envoye', 'attente_paiement'];
 const STATUTS_LIVRE = ['livre'];
+const STATUTS_PRETS_EXPEDIES = ['paye', 'expedie', 'transit', 'arrive', 'livraison', 'livre'];
+
+// ── Summary card definitions ─────────────────────────────────────────────────
+const SUMMARY_CARDS = [
+  { key: 'afaire', label: 'À traiter', statuts: STATUTS_A_FAIRE, color: BRAND.navy, icon: CircleDot },
+  { key: 'attente', label: 'Att. client', statuts: STATUTS_ATTENTE, color: '#D97706', icon: Clock },
+  { key: 'expedies', label: 'Prêts / Expédiés', statuts: STATUTS_PRETS_EXPEDIES, color: '#059669', icon: CheckCircle },
+];
 
 // ── Pipeline definition ────────────────────────────────────────────────────────
 const PIPELINE = [
@@ -217,8 +225,9 @@ export default function StaffDashboard({ onNewColis }) {
 
   const [globalSearch, setGlobalSearch] = useState('');
   const [envoiFilter, setEnvoiFilter] = useState('ALL');
+  const [activeCard, setActiveCard] = useState(null);
   const [pipeFilter, setPipeFilter] = useState(null);
-  const [pipeExpand, setPipeExpand] = useState(false);
+  const [showEnvoiFilter, setShowEnvoiFilter] = useState(false);
 
   // ── Search results ────────────────────────────────────────────────────────
   const searchResults = useMemo(
@@ -235,16 +244,23 @@ export default function StaffDashboard({ onNewColis }) {
     return data.filter((c) => c.envoi === envoiFilter);
   }, [data, envoiFilter]);
 
-  // ── Filtered pool by pipeline chip ───────────────────────────────────────
-  const pipeStatuts = useMemo(() => {
-    if (!pipeFilter) return null;
-    return pipeFilter.split(',').map((s) => s.trim());
-  }, [pipeFilter]);
+  // ── Active card definition ──────────────────────────────────────────────
+  const activeCardDef = useMemo(
+    () => SUMMARY_CARDS.find((c) => c.key === activeCard) ?? null,
+    [activeCard],
+  );
+
+  // ── Filtered pool by card + sub-filter ─────────────────────────────────
+  const filterStatuts = useMemo(() => {
+    if (pipeFilter) return pipeFilter.split(',').map((s) => s.trim());
+    if (activeCardDef) return activeCardDef.statuts;
+    return null;
+  }, [pipeFilter, activeCardDef]);
 
   const activePool = useMemo(() => {
-    if (!pipeStatuts) return envoiFiltered;
-    return envoiFiltered.filter((c) => pipeStatuts.includes(c.statut));
-  }, [envoiFiltered, pipeStatuts]);
+    if (!filterStatuts) return envoiFiltered;
+    return envoiFiltered.filter((c) => filterStatuts.includes(c.statut));
+  }, [envoiFiltered, filterStatuts]);
 
   // ── Main lists ────────────────────────────────────────────────────────────
   const aFaire = useMemo(
@@ -278,13 +294,20 @@ export default function StaffDashboard({ onNewColis }) {
     [data],
   );
 
-  // ── Pipeline counts ───────────────────────────────────────────────────────
-  const pipelineCounts = useMemo(() => {
-    return PIPELINE.map((p) => ({
-      ...p,
-      count: envoiFiltered.filter((c) => p.statuts.includes(c.statut)).length,
-    }));
-  }, [envoiFiltered]);
+  // ── Sub-pipeline chips for active card ──────────────────────────────────
+  const subPipelineChips = useMemo(() => {
+    if (!activeCardDef) return [];
+    return PIPELINE
+      .map((p) => ({
+        ...p,
+        statuts: p.statuts.filter((s) => activeCardDef.statuts.includes(s)),
+      }))
+      .filter((p) => p.statuts.length > 0)
+      .map((p) => ({
+        ...p,
+        count: envoiFiltered.filter((c) => p.statuts.includes(c.statut)).length,
+      }));
+  }, [activeCardDef, envoiFiltered]);
 
   // ── Missing invoices ──────────────────────────────────────────────────────
   const missingInvoices = useMemo(
@@ -302,7 +325,12 @@ export default function StaffDashboard({ onNewColis }) {
     setGlobalSearch('');
   };
 
-  const togglePipeFilter = (statuts) => {
+  const handleCardClick = (cardKey) => {
+    setActiveCard((prev) => (prev === cardKey ? null : cardKey));
+    setPipeFilter(null);
+  };
+
+  const toggleSubFilter = (statuts) => {
     const key = statuts.join(',');
     setPipeFilter((prev) => (prev === key ? null : key));
   };
@@ -338,29 +366,47 @@ export default function StaffDashboard({ onNewColis }) {
         </button>
       </div>
 
-      {/* ── Global search ────────────────────────────────────────────────── */}
+      {/* ── Global search + envoi filter toggle ─────────────────────────── */}
       <div className="anim-fade stagger-1 relative">
-        <div className="relative">
-          <Search
-            size={15}
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
-          />
-          <input
-            type="text"
-            value={globalSearch}
-            onChange={(e) => setGlobalSearch(e.target.value)}
-            placeholder="Rechercher client, colis, tracking…"
-            className="w-full pl-9 pr-8 py-2.5 text-sm rounded-xl border border-gray-200 bg-white outline-none transition-all"
-            style={{ color: BRAND.navy }}
-          />
-          {hasSearch && (
-            <button
-              onClick={() => setGlobalSearch('')}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-            >
-              <X size={14} />
-            </button>
-          )}
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <Search
+              size={15}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
+            />
+            <input
+              type="text"
+              value={globalSearch}
+              onChange={(e) => setGlobalSearch(e.target.value)}
+              placeholder="Rechercher client, colis, tracking…"
+              className="w-full pl-9 pr-8 py-2.5 text-sm rounded-xl border border-gray-200 bg-white outline-none transition-all"
+              style={{ color: BRAND.navy }}
+            />
+            {hasSearch && (
+              <button
+                onClick={() => setGlobalSearch('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
+          <button
+            onClick={() => setShowEnvoiFilter((p) => !p)}
+            className="relative flex items-center justify-center w-10 rounded-xl border bg-white transition-all active:scale-95"
+            style={{
+              borderColor: showEnvoiFilter ? BRAND.navy : '#E5E7EB',
+              background: showEnvoiFilter ? `${BRAND.navy}08` : 'white',
+            }}
+          >
+            <Filter size={15} style={{ color: showEnvoiFilter || envoiFilter !== 'ALL' ? BRAND.navy : '#9CA3AF' }} />
+            {envoiFilter !== 'ALL' && (
+              <span
+                className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full border-2 border-white"
+                style={{ background: BRAND.navy }}
+              />
+            )}
+          </button>
         </div>
 
         {/* Search dropdown */}
@@ -446,49 +492,94 @@ export default function StaffDashboard({ onNewColis }) {
         )}
       </div>
 
-      {/* ── Summary cards (clickable filters) ──────────────────────────── */}
-      <div className="anim-fade stagger-2 grid grid-cols-2 md:grid-cols-4 gap-3">
-        {[
-          { key: 'afaire', label: 'À traiter', count: totalAFaire, statuts: STATUTS_A_FAIRE, color: BRAND.navy, icon: CircleDot, iconBg: `${BRAND.navy}12` },
-          { key: 'attente', label: 'Att. client', count: totalAttente, statuts: STATUTS_ATTENTE, color: '#D97706', icon: Clock, iconBg: '#FEF3C7' },
-          { key: 'expedies', label: 'Prêts / Expédiés', count: totalPretExpedies, statuts: ['paye', 'expedie', 'transit', 'arrive', 'livraison', 'livre'], color: '#059669', icon: CheckCircle, iconBg: '#ECFDF5' },
-          { key: 'total', label: 'Total', count: totalAll, statuts: null, color: BRAND.gold, icon: BarChart3, iconBg: `${BRAND.gold}18` },
-        ].map((card) => {
-          const Icon = card.icon;
-          const filterKey = card.statuts ? card.statuts.join(',') : null;
-          const isActive = filterKey ? pipeFilter === filterKey : !pipeFilter;
-          return (
-            <button
-              key={card.key}
-              onClick={() => card.statuts ? togglePipeFilter(card.statuts) : setPipeFilter(null)}
-              className={`card p-4 text-left transition-all active:scale-95 ${isActive ? 'ring-2' : ''}`}
-              style={{
-                borderLeft: `3px solid ${card.color}`,
-                ...(isActive ? { ringColor: card.color, boxShadow: `0 2px 12px ${card.color}25` } : {}),
-              }}
-            >
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">
-                    {card.label}
-                  </p>
-                  <p
-                    className="text-3xl font-black mt-0.5 leading-none"
-                    style={{ color: card.key === 'total' ? BRAND.goldD : card.color }}
+      {/* ── Summary cards (primary navigation) ─────────────────────────── */}
+      <div className="anim-fade stagger-2">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {[
+            ...SUMMARY_CARDS.map((c) => ({
+              ...c,
+              count: c.key === 'afaire' ? totalAFaire : c.key === 'attente' ? totalAttente : totalPretExpedies,
+            })),
+            { key: 'total', label: 'Total', count: totalAll, color: BRAND.gold, icon: BarChart3 },
+          ].map((card) => {
+            const Icon = card.icon;
+            const isActive = card.key === 'total' ? !activeCard : activeCard === card.key;
+            const displayColor = card.key === 'total' ? BRAND.goldD : card.color;
+            return (
+              <button
+                key={card.key}
+                onClick={() => card.key === 'total' ? (setActiveCard(null), setPipeFilter(null)) : handleCardClick(card.key)}
+                className={`card p-4 text-left transition-all active:scale-95 ${isActive ? 'ring-2' : 'opacity-75 hover:opacity-100'}`}
+                style={{
+                  borderLeft: `3px solid ${card.color}`,
+                  ...(isActive
+                    ? { '--tw-ring-color': card.color, boxShadow: `0 2px 12px ${card.color}25` }
+                    : {}),
+                }}
+              >
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">
+                      {card.label}
+                    </p>
+                    <p
+                      className="text-3xl font-black mt-0.5 leading-none"
+                      style={{ color: displayColor }}
+                    >
+                      {card.count}
+                    </p>
+                  </div>
+                  <div
+                    className="w-8 h-8 rounded-xl flex items-center justify-center"
+                    style={{ background: `${card.color}12` }}
                   >
-                    {card.count}
-                  </p>
+                    <Icon size={16} style={{ color: displayColor }} />
+                  </div>
                 </div>
-                <div
-                  className="w-8 h-8 rounded-xl flex items-center justify-center"
-                  style={{ background: card.iconBg }}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* ── Sub-filter chips (appear when a card is active) ──────────── */}
+        {activeCard && subPipelineChips.length > 1 && (
+          <div className="flex gap-2 flex-wrap mt-3 anim-slide-down">
+            {subPipelineChips.map((p) => {
+              const Icon = p.icon;
+              const isActive = pipeFilter === p.statuts.join(',');
+              return (
+                <button
+                  key={p.key}
+                  onClick={() => toggleSubFilter(p.statuts)}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-bold transition-all active:scale-95"
+                  style={
+                    isActive
+                      ? { background: p.color, color: 'white', boxShadow: `0 2px 8px ${p.color}40` }
+                      : { background: `${p.color}12`, color: p.color }
+                  }
                 >
-                  <Icon size={16} style={{ color: card.key === 'total' ? BRAND.goldD : card.color }} />
-                </div>
-              </div>
-            </button>
-          );
-        })}
+                  <Icon size={11} strokeWidth={2.5} />
+                  {p.label}
+                  <span
+                    className="font-black text-[11px] ml-0.5"
+                    style={{ opacity: isActive ? 0.9 : 0.75 }}
+                  >
+                    {p.count}
+                  </span>
+                </button>
+              );
+            })}
+            {pipeFilter && (
+              <button
+                onClick={() => setPipeFilter(null)}
+                className="flex items-center gap-1 px-2 py-1.5 text-xs text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <X size={11} />
+                Tout voir
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* ── Missing invoice alert ─────────────────────────────────────────── */}
@@ -512,15 +603,9 @@ export default function StaffDashboard({ onNewColis }) {
         </div>
       )}
 
-      {/* ── Envoi filter ──────────────────────────────────────────────────── */}
-      <div className="anim-fade stagger-3">
-        <div className="flex items-center gap-2 mb-2">
-          <Filter size={13} className="text-gray-400" />
-          <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">
-            Filtrer par envoi
-          </span>
-        </div>
-        <div className="flex gap-2 overflow-x-auto pb-1">
+      {/* ── Envoi filter (collapsible) ──────────────────────────────────── */}
+      {showEnvoiFilter && (
+        <div className="anim-slide-down flex gap-2 overflow-x-auto pb-1 -mt-2">
           <button
             onClick={() => setEnvoiFilter('ALL')}
             className="flex-shrink-0 text-xs font-bold px-3 py-1.5 rounded-full transition-all"
@@ -564,201 +649,107 @@ export default function StaffDashboard({ onNewColis }) {
             </button>
           ))}
         </div>
-      </div>
-
-      {/* ── Pipeline chips ────────────────────────────────────────────────── */}
-      <div className="anim-fade stagger-4">
-        <button
-          onClick={() => setPipeExpand((p) => !p)}
-          className="flex items-center gap-1.5 mb-2.5 group"
-        >
-          <BarChart3 size={13} className="text-gray-400" />
-          <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">
-            Pipeline
-          </span>
-          {pipeFilter && (
-            <span
-              className="text-[10px] font-bold px-1.5 py-0.5 rounded-full ml-1"
-              style={{ background: `${BRAND.gold}22`, color: BRAND.goldD }}
-            >
-              filtre actif
-            </span>
-          )}
-          <ChevronDown
-            size={13}
-            className={`ml-auto text-gray-400 transition-transform ${pipeExpand ? 'rotate-180' : ''}`}
-          />
-        </button>
-
-        <div className="flex gap-2 flex-wrap">
-          {pipelineCounts.map((p) => {
-            const Icon = p.icon;
-            const isActive = pipeFilter === p.statuts.join(',');
-            return (
-              <button
-                key={p.key}
-                onClick={() => togglePipeFilter(p.statuts)}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-bold transition-all"
-                style={
-                  isActive
-                    ? { background: p.color, color: 'white', boxShadow: `0 2px 8px ${p.color}40` }
-                    : { background: `${p.color}12`, color: p.color }
-                }
-              >
-                <Icon size={11} strokeWidth={2.5} />
-                {p.label}
-                <span
-                  className="font-black text-[11px] ml-0.5"
-                  style={{ opacity: isActive ? 0.9 : 0.75 }}
-                >
-                  {p.count}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Expanded: per-statut breakdown */}
-        {pipeExpand && (
-          <div className="mt-3 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-1.5 anim-slide-down">
-            {Object.entries(STATUTS)
-              .filter(([, s]) => s.phase > 0)
-              .map(([key, s]) => {
-                const cnt = envoiFiltered.filter((c) => c.statut === key).length;
-                if (cnt === 0) return null;
-                return (
-                  <button
-                    key={key}
-                    onClick={() => togglePipeFilter([key])}
-                    className="flex items-center justify-between px-2.5 py-1.5 rounded-lg text-left transition-all"
-                    style={
-                      pipeFilter === key
-                        ? { background: BRAND.navy, color: 'white' }
-                        : { background: '#F9FAFB', border: '1px solid #F3F4F6' }
-                    }
-                  >
-                    <span
-                      className="text-[11px] font-semibold truncate"
-                      style={{ color: pipeFilter === key ? 'white' : '#374151' }}
-                    >
-                      {s.label}
-                    </span>
-                    <span
-                      className="text-[11px] font-black ml-1.5 flex-shrink-0"
-                      style={{ color: pipeFilter === key ? BRAND.gold : BRAND.navy }}
-                    >
-                      {cnt}
-                    </span>
-                  </button>
-                );
-              })}
-          </div>
-        )}
-
-        {pipeFilter && (
-          <button
-            onClick={() => setPipeFilter(null)}
-            className="mt-2 flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 transition-colors"
-          >
-            <X size={11} />
-            Effacer le filtre pipeline
-          </button>
-        )}
-      </div>
+      )}
 
       {/* ── À faire ──────────────────────────────────────────────────────── */}
-      <div className="anim-fade stagger-5">
-        <SectionHeader
-          icon={CircleDot}
-          label="À faire"
-          count={aFaire.length}
-          color={BRAND.navy}
-        />
-        {aFaire.length === 0 ? (
-          <div className="card p-6 flex flex-col items-center text-center">
-            <CheckCircle size={28} className="text-emerald-300 mb-2" />
-            <p className="text-sm font-semibold text-gray-500">Rien à traiter</p>
-            <p className="text-xs text-gray-400 mt-0.5">Tous les colis sont à jour</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-            {aFaire.map((c, i) => (
-              <ColisCard
-                key={c.id}
-                c={c}
-                client={getClient(c.clientId)}
-                envois={envois}
-                stagger={i + 1}
-                onClick={() => openColis(c.id)}
-              />
-            ))}
-          </div>
-        )}
-      </div>
+      {(aFaire.length > 0 || !activeCard) && (
+        <div className="anim-fade stagger-5">
+          <SectionHeader
+            icon={CircleDot}
+            label="À faire"
+            count={aFaire.length}
+            color={BRAND.navy}
+          />
+          {aFaire.length === 0 ? (
+            <div className="card p-6 flex flex-col items-center text-center">
+              <CheckCircle size={28} className="text-emerald-300 mb-2" />
+              <p className="text-sm font-semibold text-gray-500">Rien à traiter</p>
+              <p className="text-xs text-gray-400 mt-0.5">Tous les colis sont à jour</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              {aFaire.map((c, i) => (
+                <ColisCard
+                  key={c.id}
+                  c={c}
+                  client={getClient(c.clientId)}
+                  envois={envois}
+                  stagger={i + 1}
+                  onClick={() => openColis(c.id)}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── En attente du client ──────────────────────────────────────────── */}
-      <div className="anim-fade stagger-6">
-        <SectionHeader
-          icon={Clock}
-          label="En attente du client"
-          count={attente.length}
-          color="#D97706"
-        />
-        {attente.length === 0 ? (
-          <div
-            className="card p-4 flex items-center gap-2.5"
-            style={{ background: '#FFFBEB', borderColor: '#FCD34D40' }}
-          >
-            <Clock size={16} className="text-amber-300 flex-shrink-0" />
-            <p className="text-sm text-amber-600 font-medium">Aucun colis en attente</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-            {attente.map((c, i) => (
-              <ColisCard
-                key={c.id}
-                c={c}
-                client={getClient(c.clientId)}
-                envois={envois}
-                stagger={i + 1}
-                onClick={() => openColis(c.id)}
-              />
-            ))}
-          </div>
-        )}
-      </div>
+      {(attente.length > 0 || !activeCard) && (
+        <div className="anim-fade stagger-6">
+          <SectionHeader
+            icon={Clock}
+            label="En attente du client"
+            count={attente.length}
+            color="#D97706"
+          />
+          {attente.length === 0 ? (
+            <div
+              className="card p-4 flex items-center gap-2.5"
+              style={{ background: '#FFFBEB', borderColor: '#FCD34D40' }}
+            >
+              <Clock size={16} className="text-amber-300 flex-shrink-0" />
+              <p className="text-sm text-amber-600 font-medium">Aucun colis en attente</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              {attente.map((c, i) => (
+                <ColisCard
+                  key={c.id}
+                  c={c}
+                  client={getClient(c.clientId)}
+                  envois={envois}
+                  stagger={i + 1}
+                  onClick={() => openColis(c.id)}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── Livrés ───────────────────────────────────────────────────────── */}
-      <div className="anim-fade stagger-7">
-        <SectionHeader
-          icon={CheckCircle}
-          label="Livrés"
-          count={livres.length}
-          color="#16A34A"
-        />
-        {livres.length === 0 ? (
-          <div
-            className="card p-4 flex items-center gap-2.5"
-            style={{ background: '#F0FDF4', borderColor: '#BBF7D040' }}
-          >
-            <Star size={16} className="text-emerald-300 flex-shrink-0" />
-            <p className="text-sm text-emerald-600 font-medium">Aucun colis livré (sur la sélection)</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-            {livres.map((c, i) => (
-              <ColisCard
-                key={c.id}
-                c={c}
-                client={getClient(c.clientId)}
-                envois={envois}
-                stagger={i + 1}
-                onClick={() => openColis(c.id)}
-              />
-            ))}
-          </div>
-        )}
-      </div>
+      {(livres.length > 0 || !activeCard) && (
+        <div className="anim-fade stagger-7">
+          <SectionHeader
+            icon={CheckCircle}
+            label="Livrés"
+            count={livres.length}
+            color="#16A34A"
+          />
+          {livres.length === 0 ? (
+            <div
+              className="card p-4 flex items-center gap-2.5"
+              style={{ background: '#F0FDF4', borderColor: '#BBF7D040' }}
+            >
+              <Star size={16} className="text-emerald-300 flex-shrink-0" />
+              <p className="text-sm text-emerald-600 font-medium">Aucun colis livré (sur la sélection)</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              {livres.map((c, i) => (
+                <ColisCard
+                  key={c.id}
+                  c={c}
+                  client={getClient(c.clientId)}
+                  envois={envois}
+                  stagger={i + 1}
+                  onClick={() => openColis(c.id)}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
     </div>
   );
