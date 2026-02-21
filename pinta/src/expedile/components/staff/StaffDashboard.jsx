@@ -104,25 +104,54 @@ function DimsChip({ c }) {
   );
 }
 
+// ── Statut card colors ──────────────────────────────────────────────────────
+function statutCardStyle(statut) {
+  const map = {
+    annonce:            { bg: '#F8FAFC', border: '#94A3B8', icon: '#64748B' },
+    receptionne:        { bg: '#FFFBEB', border: '#F59E0B', icon: '#D97706' },
+    mesure:             { bg: '#FEF9C3', border: '#EAB308', icon: '#CA8A04' },
+    attente_feu_vert:   { bg: '#FFF7ED', border: '#F97316', icon: '#EA580C' },
+    autorise:           { bg: '#F0FDF4', border: '#22C55E', icon: '#16A34A' },
+    refuse_client:      { bg: '#FEF2F2', border: '#EF4444', icon: '#DC2626' },
+    en_preparation:     { bg: '#EFF6FF', border: '#3B82F6', icon: '#2563EB' },
+    devis_envoye:       { bg: '#FFFBEB', border: '#D97706', icon: '#B45309' },
+    attente_paiement:   { bg: '#FFF7ED', border: '#F97316', icon: '#EA580C' },
+    paye:               { bg: '#ECFDF5', border: '#10B981', icon: '#059669' },
+    expedie:            { bg: '#ECFEFF', border: '#06B6D4', icon: '#0891B2' },
+    transit:            { bg: '#F0F9FF', border: '#0EA5E9', icon: '#0284C7' },
+    arrive:             { bg: '#F0FDFA', border: '#14B8A6', icon: '#0D9488' },
+    livraison:          { bg: '#F7FEE7', border: '#84CC16', icon: '#65A30D' },
+    livre:              { bg: '#F0FDF4', border: '#16A34A', icon: '#15803D' },
+    annule:             { bg: '#F9FAFB', border: '#9CA3AF', icon: '#6B7280' },
+  };
+  return map[statut] || { bg: '#FFFFFF', border: BRAND.navy, icon: BRAND.navy };
+}
+
 // ── Colis card ───────────────────────────────────────────────────────────────
 function ColisCard({ c, client, envois, onClick, stagger }) {
   const StatutIco = statutIcon(c.statut);
   const envoi = envois.find((e) => e.id === c.envoi);
   const dest = getDestByCP(client?.cp);
   const missingFacture = c.factures && c.factures.some((f) => !f.valide);
+  const scs = statutCardStyle(c.statut);
 
   return (
     <button
       onClick={onClick}
-      className={`card-elevated w-full text-left p-3.5 anim-fade stagger-${Math.min(stagger, 8)} group`}
+      className={`w-full text-left p-3.5 rounded-2xl border anim-fade stagger-${Math.min(stagger, 8)} group transition-all hover:shadow-md`}
+      style={{
+        background: scs.bg,
+        borderColor: `${scs.border}40`,
+        borderLeft: `3.5px solid ${scs.border}`,
+      }}
     >
       <div className="flex items-start gap-3">
         {/* Icon col */}
         <div
           className="flex-shrink-0 mt-0.5 w-8 h-8 rounded-xl flex items-center justify-center"
-          style={{ background: `${BRAND.navy}12` }}
+          style={{ background: `${scs.border}18` }}
         >
-          <StatutIco size={16} style={{ color: BRAND.navy }} strokeWidth={2} />
+          <StatutIco size={16} style={{ color: scs.icon }} strokeWidth={2} />
         </div>
 
         {/* Main content */}
