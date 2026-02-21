@@ -45,7 +45,7 @@ function AppContent() {
 
         <div className={`mx-auto px-4 py-4 space-y-4 ${isStaff ? 'max-w-7xl' : 'max-w-xl md:max-w-2xl lg:max-w-3xl'}`}>
           {isStaff && <Etapes statut={sel.statut} />}
-          <ColisInfo />
+          {isStaff && <ColisInfo />}
 
           {/* Staff action panels */}
           {isStaff && <StaffDetailView />}

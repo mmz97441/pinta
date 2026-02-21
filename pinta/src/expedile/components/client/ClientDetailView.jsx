@@ -138,11 +138,13 @@ function PhaseStep({ phase, phaseIdx, state, open, onToggle, children }) {
 // ── Main component ─────────────────────────────────────────────────────────────
 export default function ClientDetailView({ onBack }) {
   const { sel, selDest, feuVert, feuVertBulk, payer, ask, flash, authCl, data } = useApp();
-  const [timeOpen, setTimeOpen] = useState(null);
 
   if (!sel) return null;
 
   const curPhaseIdx = getPhaseIndex(sel.statut);
+
+  // Auto-expand the active phase so the client sees the action immediately
+  const [timeOpen, setTimeOpen] = useState(curPhaseIdx);
 
   const toggleStep = (idx) => {
     const state = getPhaseState(idx, curPhaseIdx);
