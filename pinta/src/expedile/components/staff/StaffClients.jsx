@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { ArrowLeft, Users, Plus, Search, ChevronDown, Check, X } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { ArrowLeft, Users, Plus, Search, ChevronDown, Check, X, AlertTriangle, ExternalLink, Send } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { BRAND, getDestByCP } from '../../constants';
 import { uid, waLink, searchClients } from '../../utils';
@@ -59,6 +59,29 @@ function TogglePair({ value, onChange, options }) {
   );
 }
 
+// ── Validated input field ────────────────────────────────────────────────────
+function ValidatedField({ label, value, onChange, placeholder, type = 'text', mono, error, valid, hint, colSpan }) {
+  const borderColor = error ? 'border-red-400' : valid ? 'border-green-400' : 'border-gray-200';
+  const focusBorder = error ? 'focus:border-red-500' : 'focus:border-blue-300';
+  return (
+    <div className={colSpan === 2 ? 'col-span-2' : ''}>
+      <label className="text-[11px] font-bold text-gray-500 block mb-1 uppercase tracking-wide">
+        {label}
+        {valid && <Check size={10} className="inline ml-1 text-green-500" />}
+      </label>
+      <input
+        value={value}
+        onChange={onChange}
+        placeholder={placeholder}
+        type={type}
+        className={`w-full px-3 py-2 rounded-xl border-2 ${borderColor} text-sm outline-none ${focusBorder} transition-colors ${mono ? 'font-mono' : ''}`}
+      />
+      {error && <p className="text-[10px] text-red-500 font-medium mt-0.5">{error}</p>}
+      {hint && !error && <div className="mt-0.5">{hint}</div>}
+    </div>
+  );
+}
+
 // ── Main component ───────────────────────────────────────────────────────────
 export default function StaffClients() {
   const { clients, data, setPage, setSelId, updateClient, addNewClient, deleteClient, flash } = useApp();
@@ -66,12 +89,47 @@ export default function StaffClients() {
   const [clPageSearch, setClPageSearch] = useState('');
   const [clEditId, setClEditId] = useState(null);
   const [clDraft, setClDraft] = useState(emptyDraft());
+  const [isNewClient, setIsNewClient] = useState(false);
+  const [justSavedId, setJustSavedId] = useState(null);
+  const [touched, setTouched] = useState({});
 
   // ── Derived ───────────────────────────────────────────────────────────────
   const filtered = searchClients(clients, clPageSearch);
-
   const waCount = clients.filter((c) => c.canal === 'whatsapp').length;
   const proCount = clients.filter((c) => c.type === 'pro').length;
+
+  // ── Duplicate detection ────────────────────────────────────────────────────
+  const duplicates = useMemo(() => {
+    if (!clEditId || (!clDraft.nom && !clDraft.tel)) return [];
+    return clients.filter((c) => {
+      if (c.id === clEditId) return false;
+      // Check name similarity (case-insensitive, at least 3 chars match)
+      const nameLower = (clDraft.nom || '').toLowerCase().trim();
+      const cNameLower = (c.nom || '').toLowerCase().trim();
+      const nameMatch = nameLower.length >= 3 && cNameLower.length >= 3 && (
+        cNameLower.includes(nameLower) || nameLower.includes(cNameLower)
+      );
+      // Check phone match (clean digits comparison)
+      const cleanTel = (clDraft.tel || '').replace(/[\s\-+]/g, '');
+      const cCleanTel = (c.tel || '').replace(/[\s\-+]/g, '');
+      const telMatch = cleanTel.length >= 6 && cCleanTel.length >= 6 && (
+        cleanTel.endsWith(cCleanTel.slice(-8)) || cCleanTel.endsWith(cleanTel.slice(-8))
+      );
+      return nameMatch || telMatch;
+    });
+  }, [clEditId, clDraft.nom, clDraft.tel, clients]);
+
+  // ── Live validation ────────────────────────────────────────────────────────
+  const fieldErrors = useMemo(() => {
+    const errs = {};
+    if (touched.nom && (!clDraft.nom || clDraft.nom.trim().length < 2)) errs.nom = 'Min. 2 caractères';
+    if (touched.cp && clDraft.cp && !/^9[7-8]\d{3}$/.test(clDraft.cp.replace(/\s/g, ''))) errs.cp = 'Format 97xxx ou 98xxx';
+    if (touched.tel && clDraft.tel && !/^\+?\d[\d\s\-]{6,18}$/.test(clDraft.tel.replace(/\s/g, ''))) errs.tel = 'Numéro invalide';
+    if (touched.email && clDraft.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clDraft.email)) errs.email = 'Email invalide';
+    return errs;
+  }, [clDraft, touched]);
+
+  const canSave = clDraft.nom && clDraft.nom.trim().length >= 2 && Object.keys(fieldErrors).length === 0;
 
   // ── Helpers ───────────────────────────────────────────────────────────────
   function clientColis(clientId) {
@@ -94,26 +152,22 @@ export default function StaffClients() {
 
   function patchDraft(field, value) {
     setClDraft((prev) => ({ ...prev, [field]: value }));
+    setTouched((prev) => ({ ...prev, [field]: true }));
   }
 
   // ── Handlers ─────────────────────────────────────────────────────────────
   function handleNewClient() {
     const draft = emptyDraft();
     const id = addNewClient({
-      nom: '',
-      tel: '',
-      email: '',
-      ville: '',
-      cp: '',
-      adresse: '',
-      canal: 'whatsapp',
-      type: 'particulier',
-      notes: '',
+      ...draft,
       created: new Date().toISOString().slice(0, 10),
       points: 0,
     });
     setClEditId(id);
     setClDraft(draft);
+    setIsNewClient(true);
+    setJustSavedId(null);
+    setTouched({});
   }
 
   function handleEdit(cl) {
@@ -129,15 +183,36 @@ export default function StaffClients() {
       type: cl.type || 'particulier',
       notes: cl.notes || '',
     });
+    setIsNewClient(false);
+    setJustSavedId(null);
+    setTouched({});
   }
 
   function handleSave(id) {
+    if (!canSave) {
+      // Touch all fields to show errors
+      setTouched({ nom: true, tel: true, email: true, cp: true });
+      return;
+    }
     updateClient(id, clDraft);
-    setClEditId(null);
+    if (isNewClient) {
+      setJustSavedId(id);
+      setIsNewClient(false);
+    } else {
+      setClEditId(null);
+    }
   }
 
   function handleCancel() {
+    if (isNewClient) {
+      // Delete the empty client if it was just created
+      const cl = clients.find((c) => c.id === clEditId);
+      if (cl && !cl.nom) deleteClient(clEditId);
+    }
     setClEditId(null);
+    setIsNewClient(false);
+    setJustSavedId(null);
+    setTouched({});
   }
 
   function handleDelete(id) {
@@ -152,6 +227,14 @@ export default function StaffClients() {
 
   function handleOpenColis(colisId) {
     setSelId(colisId);
+  }
+
+  // ── Generate invitation WhatsApp link ──────────────────────────────────────
+  function getInvitationWALink(cl) {
+    const prenom = cl.nom ? cl.nom.split(' ')[0] : '';
+    const dest = getDestByCP(cl.cp);
+    const msg = `Bonjour ${prenom} !\n\nBienvenue chez Expedîle ! Votre espace client est prêt.\n\nVous pouvez dès maintenant pré-annoncer vos colis depuis la métropole vers ${dest.flag} ${dest.nom}.\n\nConnectez-vous ici :\nhttps://expedile.re/app\n\nÀ très vite !`;
+    return waLink(cl.tel, msg);
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -224,25 +307,17 @@ export default function StaffClients() {
       {/* ── Stats row ───────────────────────────────────────────────────── */}
       <div className="grid grid-cols-3 gap-3">
         <div className="card p-3 flex flex-col items-center">
-          <span
-            className="text-2xl font-black leading-none"
-            style={{ color: BRAND.navy }}
-          >
+          <span className="text-2xl font-black leading-none" style={{ color: BRAND.navy }}>
             {clients.length}
           </span>
           <span className="text-[11px] font-semibold text-gray-400 mt-0.5">Total</span>
         </div>
         <div className="card p-3 flex flex-col items-center">
-          <span className="text-2xl font-black leading-none text-green-600">
-            {waCount}
-          </span>
+          <span className="text-2xl font-black leading-none text-green-600">{waCount}</span>
           <span className="text-[11px] font-semibold text-gray-400 mt-0.5">WhatsApp</span>
         </div>
         <div className="card p-3 flex flex-col items-center">
-          <span
-            className="text-2xl font-black leading-none"
-            style={{ color: BRAND.goldD }}
-          >
+          <span className="text-2xl font-black leading-none" style={{ color: BRAND.goldD }}>
             {proCount}
           </span>
           <span className="text-[11px] font-semibold text-gray-400 mt-0.5">Pro</span>
@@ -266,6 +341,7 @@ export default function StaffClients() {
           const ca = clientCA(cl.id);
           const dest = getDestByCP(cl.cp);
           const hasColis = data.some((p) => p.clientId === cl.id && p.statut !== 'annule');
+          const isJustSaved = justSavedId === cl.id;
 
           return (
             <div key={cl.id} className="card overflow-hidden">
@@ -275,16 +351,11 @@ export default function StaffClients() {
                 onClick={() => (isOpen ? handleCancel() : handleEdit(cl))}
                 className="w-full text-left p-4 flex items-center gap-3"
               >
-                {/* Avatar */}
                 <Avatar nom={cl.nom} size={10} />
 
-                {/* Name + badges */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span
-                      className="text-sm font-black truncate"
-                      style={{ color: BRAND.navy }}
-                    >
+                    <span className="text-sm font-black truncate" style={{ color: BRAND.navy }}>
                       {cl.nom || <span className="italic text-gray-400">Sans nom</span>}
                     </span>
                     {cl.type === 'pro' && (
@@ -299,23 +370,14 @@ export default function StaffClients() {
                       <span className="w-2 h-2 rounded-full bg-green-500 flex-shrink-0" title="WhatsApp" />
                     )}
                   </div>
-
-                  {/* Destination + contact */}
                   <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                     <span className="text-xs">{dest.flag}</span>
-                    {cl.ville && (
-                      <span className="text-xs text-gray-500">{cl.ville}</span>
-                    )}
-                    {cl.tel && (
-                      <span className="text-xs text-gray-400 font-mono">{cl.tel}</span>
-                    )}
-                    {cl.email && (
-                      <span className="text-xs text-gray-400 truncate max-w-[140px]">{cl.email}</span>
-                    )}
+                    {cl.ville && <span className="text-xs text-gray-500">{cl.ville}</span>}
+                    {cl.tel && <span className="text-xs text-gray-400 font-mono">{cl.tel}</span>}
+                    {cl.email && <span className="text-xs text-gray-400 truncate max-w-[140px]">{cl.email}</span>}
                   </div>
                 </div>
 
-                {/* Right: colis counts + CA */}
                 <div className="flex flex-col items-end flex-shrink-0 gap-0.5">
                   <div className="flex items-center gap-1.5">
                     <span className="text-xs text-gray-400">{colis.length} colis</span>
@@ -329,103 +391,142 @@ export default function StaffClients() {
                     )}
                   </div>
                   {ca > 0 && (
-                    <span className="text-xs font-bold text-emerald-600">
-                      {ca.toFixed(2)} €
-                    </span>
+                    <span className="text-xs font-bold text-emerald-600">{ca.toFixed(2)} €</span>
                   )}
                 </div>
 
-                {/* Chevron */}
                 <ChevronDown
                   size={15}
-                  className={`flex-shrink-0 text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+                  className={`flex-shrink-0 text-gray-400 transition-transform ${isOpen || isJustSaved ? 'rotate-180' : ''}`}
                 />
               </button>
+
+              {/* ── Invitation success after save ────────────────────────── */}
+              {isJustSaved && !isOpen && (
+                <div className="border-t border-gray-100 px-4 pb-4 pt-3 space-y-3 anim-slide-down">
+                  <div className="flex items-start gap-2 p-3 rounded-xl bg-green-50 border border-green-200">
+                    <Check size={14} className="text-green-600 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-xs font-bold text-green-800">Client créé avec succès</p>
+                      <p className="text-[11px] text-green-600 mt-0.5">Envoyez-lui une invitation pour accéder à son espace.</p>
+                    </div>
+                  </div>
+
+                  {cl.tel && cl.canal === 'whatsapp' && (
+                    <a
+                      href={getInvitationWALink(cl)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex items-center justify-center gap-2 w-full py-3 rounded-xl text-sm font-bold transition-all active:scale-95"
+                      style={{ background: '#25D366', color: 'white', boxShadow: '0 2px 10px #25D36640' }}
+                      onClick={() => setTimeout(() => setJustSavedId(null), 500)}
+                    >
+                      <Send size={14} />
+                      Inviter via WhatsApp
+                    </a>
+                  )}
+
+                  {cl.email && (
+                    <a
+                      href={`mailto:${cl.email}?subject=${encodeURIComponent('Bienvenue chez Expedîle !')}&body=${encodeURIComponent(`Bonjour ${cl.nom ? cl.nom.split(' ')[0] : ''},\n\nVotre espace client Expedîle est prêt !\n\nConnectez-vous ici : https://expedile.re/app\n\nÀ très vite !\nL'équipe Expedîle`)}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl text-sm font-bold bg-blue-50 text-blue-700 border-2 border-blue-200 hover:bg-blue-100 transition-all active:scale-95"
+                      onClick={() => setTimeout(() => setJustSavedId(null), 500)}
+                    >
+                      <ExternalLink size={14} />
+                      Inviter par email
+                    </a>
+                  )}
+
+                  <button
+                    onClick={() => setJustSavedId(null)}
+                    className="w-full text-center text-xs text-gray-400 hover:text-gray-600 py-1"
+                  >
+                    Fermer
+                  </button>
+                </div>
+              )}
 
               {/* ── Edit form (expanded) ───────────────────────────────────── */}
               {isOpen && (
                 <div className="border-t border-gray-100 px-4 pb-5 pt-4 space-y-4">
 
+                  {/* Duplicate warning */}
+                  {duplicates.length > 0 && (
+                    <div className="flex items-start gap-2 p-3 rounded-xl bg-amber-50 border border-amber-200 anim-fade">
+                      <AlertTriangle size={14} className="text-amber-500 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-xs font-bold text-amber-800">Doublon possible</p>
+                        <div className="mt-1 space-y-1">
+                          {duplicates.map((dup) => (
+                            <p key={dup.id} className="text-[11px] text-amber-700">
+                              <span className="font-bold">{dup.nom}</span>
+                              {dup.tel && <span className="font-mono ml-1">{dup.tel}</span>}
+                              {dup.email && <span className="ml-1">{dup.email}</span>}
+                            </p>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Field grid */}
                   <div className="grid grid-cols-2 gap-3">
-                    {/* Nom */}
-                    <div className="col-span-2">
-                      <label className="text-[11px] font-bold text-gray-500 block mb-1 uppercase tracking-wide">
-                        Nom complet
-                      </label>
-                      <input
-                        value={clDraft.nom}
-                        onChange={(e) => patchDraft('nom', e.target.value)}
-                        placeholder="Prénom NOM"
-                        className="w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-sm outline-none focus:border-blue-300 transition-colors"
-                      />
-                    </div>
+                    <ValidatedField
+                      label="Nom complet *"
+                      value={clDraft.nom}
+                      onChange={(e) => patchDraft('nom', e.target.value)}
+                      placeholder="Prénom NOM"
+                      error={fieldErrors.nom}
+                      valid={touched.nom && clDraft.nom && clDraft.nom.trim().length >= 2 && !fieldErrors.nom}
+                      colSpan={2}
+                    />
 
-                    {/* Téléphone */}
-                    <div>
-                      <label className="text-[11px] font-bold text-gray-500 block mb-1 uppercase tracking-wide">
-                        Téléphone
-                      </label>
-                      <input
-                        value={clDraft.tel}
-                        onChange={(e) => patchDraft('tel', e.target.value)}
-                        placeholder="+262 692 …"
-                        className="w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-sm outline-none focus:border-blue-300 transition-colors font-mono"
-                      />
-                    </div>
+                    <ValidatedField
+                      label="Téléphone"
+                      value={clDraft.tel}
+                      onChange={(e) => patchDraft('tel', e.target.value)}
+                      placeholder="+262 692 …"
+                      mono
+                      error={fieldErrors.tel}
+                      valid={touched.tel && clDraft.tel && !fieldErrors.tel}
+                    />
 
-                    {/* Email */}
-                    <div>
-                      <label className="text-[11px] font-bold text-gray-500 block mb-1 uppercase tracking-wide">
-                        Email
-                      </label>
-                      <input
-                        value={clDraft.email}
-                        onChange={(e) => patchDraft('email', e.target.value)}
-                        placeholder="adresse@exemple.com"
-                        type="email"
-                        className="w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-sm outline-none focus:border-blue-300 transition-colors"
-                      />
-                    </div>
+                    <ValidatedField
+                      label="Email"
+                      value={clDraft.email}
+                      onChange={(e) => patchDraft('email', e.target.value)}
+                      placeholder="adresse@exemple.com"
+                      type="email"
+                      error={fieldErrors.email}
+                      valid={touched.email && clDraft.email && !fieldErrors.email}
+                    />
 
-                    {/* Ville */}
-                    <div>
-                      <label className="text-[11px] font-bold text-gray-500 block mb-1 uppercase tracking-wide">
-                        Ville
-                      </label>
-                      <input
-                        value={clDraft.ville}
-                        onChange={(e) => patchDraft('ville', e.target.value)}
-                        placeholder="Saint-Denis"
-                        className="w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-sm outline-none focus:border-blue-300 transition-colors"
-                      />
-                    </div>
+                    <ValidatedField
+                      label="Ville"
+                      value={clDraft.ville}
+                      onChange={(e) => patchDraft('ville', e.target.value)}
+                      placeholder="Saint-Denis"
+                    />
 
-                    {/* Code postal */}
-                    <div>
-                      <label className="text-[11px] font-bold text-gray-500 block mb-1 uppercase tracking-wide">
-                        Code postal
-                      </label>
-                      <input
-                        value={clDraft.cp}
-                        onChange={(e) => patchDraft('cp', e.target.value)}
-                        placeholder="97400"
-                        className="w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-sm outline-none focus:border-blue-300 transition-colors font-mono"
-                      />
-                      {clDraft.cp && (
-                        <p className="text-[10px] text-gray-400 mt-1 flex items-center gap-1">
+                    <ValidatedField
+                      label="Code postal"
+                      value={clDraft.cp}
+                      onChange={(e) => patchDraft('cp', e.target.value)}
+                      placeholder="97400"
+                      mono
+                      error={fieldErrors.cp}
+                      valid={touched.cp && clDraft.cp && /^9[7-8]\d{3}$/.test(clDraft.cp.replace(/\s/g, '')) && !fieldErrors.cp}
+                      hint={clDraft.cp && clDraft.cp.length >= 3 && !fieldErrors.cp ? (
+                        <p className="text-[10px] text-gray-400 flex items-center gap-1">
                           {(() => {
                             const d = getDestByCP(clDraft.cp);
-                            return (
-                              <>
-                                <span>{d.flag}</span>
-                                <span>{d.nom}</span>
-                              </>
-                            );
+                            return <><span className="text-sm">{d.flag}</span><span className="font-medium">{d.nom}</span></>;
                           })()}
                         </p>
-                      )}
-                    </div>
+                      ) : null}
+                    />
 
                     {/* Adresse de livraison */}
                     <div className="col-span-2">
@@ -490,11 +591,12 @@ export default function StaffClients() {
                   <div className="flex gap-2">
                     <button
                       onClick={() => handleSave(cl.id)}
-                      className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-bold transition-all active:scale-95"
+                      disabled={!canSave}
+                      className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-bold transition-all active:scale-95 disabled:opacity-40"
                       style={{ background: BRAND.navy, color: 'white' }}
                     >
                       <Check size={14} strokeWidth={2.5} />
-                      Enregistrer
+                      {isNewClient ? 'Créer le client' : 'Enregistrer'}
                     </button>
                     <button
                       onClick={handleCancel}
@@ -506,7 +608,7 @@ export default function StaffClients() {
                   </div>
 
                   {/* Quick action links */}
-                  {(cl.tel || cl.email) && (
+                  {!isNewClient && (cl.tel || cl.email) && (
                     <div className="flex gap-2 flex-wrap">
                       {cl.tel && cl.canal === 'whatsapp' && (
                         <a
@@ -553,17 +655,12 @@ export default function StaffClients() {
                             onClick={() => handleOpenColis(p.id)}
                             className="w-full flex items-center gap-2 text-left p-2 rounded-lg hover:bg-white transition-colors group"
                           >
-                            <span
-                              className="text-xs font-black"
-                              style={{ color: BRAND.navy }}
-                            >
+                            <span className="text-xs font-black" style={{ color: BRAND.navy }}>
                               {p.ref}
                             </span>
                             <Badge statut={p.statut} />
                             {p.desc && (
-                              <span className="text-xs text-gray-400 truncate flex-1 min-w-0">
-                                {p.desc}
-                              </span>
+                              <span className="text-xs text-gray-400 truncate flex-1 min-w-0">{p.desc}</span>
                             )}
                           </button>
                         ))}
@@ -572,7 +669,7 @@ export default function StaffClients() {
                   )}
 
                   {/* Delete button — only if no colis */}
-                  {!hasColis && (
+                  {!hasColis && !isNewClient && (
                     <button
                       onClick={() => handleDelete(cl.id)}
                       className="w-full py-2.5 rounded-xl text-xs font-bold text-red-500 border border-red-200 hover:bg-red-50 transition-colors"

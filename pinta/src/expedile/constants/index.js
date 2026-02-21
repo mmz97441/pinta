@@ -99,11 +99,11 @@ export const STAFF = [
 
 // ══════════ CLIENTS INITIAUX ══════════
 export const CLIENTS_INIT = [
-  { id: 'c1', nom: 'Flavie FONTAINE',  ville: 'Saint-Denis',  cp: '97400', tel: '+262692123456', email: 'flavie.f@gmail.com',      canal: 'whatsapp', type: 'particulier', created: '2024-11-15', points: 120 },
-  { id: 'c2', nom: 'Guillaume NICE',   ville: 'Sainte-Marie', cp: '97438', tel: '+262693456789', email: 'guillaume.n@outlook.com',  canal: 'whatsapp', type: 'particulier', created: '2025-01-08', points: 45 },
+  { id: 'c1', nom: 'Flavie FONTAINE',  ville: 'Saint-Denis',  cp: '97400', tel: '+262692123456', email: 'flavie.f@gmail.com',      canal: 'whatsapp', type: 'particulier', created: '2024-11-15', points: 120, onboarded: true },
+  { id: 'c2', nom: 'Guillaume NICE',   ville: 'Sainte-Marie', cp: '97438', tel: '+262693456789', email: 'guillaume.n@outlook.com',  canal: 'whatsapp', type: 'particulier', created: '2025-01-08', points: 45, onboarded: true },
   { id: 'c3', nom: 'Ophélie ABAR',     ville: 'Saint-Leu',    cp: '97436', tel: '+262694111222', email: 'ophelie.a@gmail.com',      canal: 'whatsapp', type: 'particulier', created: '2025-02-01', points: 10 },
-  { id: 'c4', nom: 'Stessy SINAMA',    ville: 'Le Tampon',    cp: '97430', tel: '+262692789012', email: 'stessy.s@live.fr',         canal: 'whatsapp', type: 'particulier', created: '2024-09-20', points: 210 },
-  { id: 'c5', nom: 'E-Concept Auto',   ville: 'Saint-Paul',   cp: '97460', tel: '+262692555888', email: 'contact@econcept-auto.re', canal: 'email',    type: 'pro',         created: '2024-06-10', points: 580 },
+  { id: 'c4', nom: 'Stessy SINAMA',    ville: 'Le Tampon',    cp: '97430', tel: '+262692789012', email: 'stessy.s@live.fr',         canal: 'whatsapp', type: 'particulier', created: '2024-09-20', points: 210, onboarded: true },
+  { id: 'c5', nom: 'E-Concept Auto',   ville: 'Saint-Paul',   cp: '97460', tel: '+262692555888', email: 'contact@econcept-auto.re', canal: 'email',    type: 'pro',         created: '2024-06-10', points: 580, onboarded: true },
   { id: 'c6', nom: 'Ibrahim COMBO',    ville: 'Mamoudzou',    cp: '97600', tel: '+262639123456', email: 'ibrahim.c@gmail.com',      canal: 'whatsapp', type: 'particulier', created: '2025-01-25', points: 30 },
 ];
 

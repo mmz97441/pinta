@@ -8,6 +8,7 @@ import { BRAND } from './constants';
 import { Toast, ConfirmDialog } from './components/ui';
 import LoginPage from './components/LoginPage';
 import ColisModal from './components/ColisModal';
+import OnboardingOverlay from './components/client/OnboardingOverlay';
 
 import StaffDashboard from './components/staff/StaffDashboard';
 import StaffSettings from './components/staff/StaffSettings';
@@ -29,11 +30,16 @@ import AuditLog from './components/detail/AuditLog';
 import { Etapes } from './components/ui';
 
 function AppContent() {
-  const { auth, setAuth, isStaff, sel, setSelId, page, setPage, clientTab } = useApp();
+  const { auth, setAuth, isStaff, sel, setSelId, page, setPage, clientTab, authCl, data, updateClient } = useApp();
   const [modal, setModal] = useState(false);
+  const [onboardingDismissed, setOnboardingDismissed] = useState(false);
 
   // ── Not logged in ──
   if (!auth) return <LoginPage />;
+
+  // ── Onboarding for new clients ──
+  const showOnboarding = !isStaff && authCl && !authCl.onboarded && !onboardingDismissed && !sel;
+
 
   // ── Detail view (selected colis) ──
   if (sel) {
@@ -132,6 +138,14 @@ function AppContent() {
         {/* Client views */}
         {!isStaff && (
           <div className="pb-20">
+            {showOnboarding && (
+              <OnboardingOverlay
+                onDone={() => {
+                  setOnboardingDismissed(true);
+                  if (authCl) updateClient(authCl.id, { onboarded: true }, true);
+                }}
+              />
+            )}
             {clientTab === 'accueil' && <ClientAccueil onNewColis={() => setModal(true)} />}
             {clientTab === 'colis' && <ClientColis onNewColis={() => setModal(true)} />}
             {clientTab === 'notifs' && <ClientNotifs />}
