@@ -37,26 +37,36 @@ function AppContent() {
 
   // ── Detail view (selected colis) ──
   if (sel) {
+    // Staff: full detail with header, info panels, audit log
+    if (isStaff) {
+      return (
+        <div style={{ fontFamily: "system-ui, -apple-system, 'Segoe UI', sans-serif", background: '#f6f7f8' }} className="min-h-screen">
+          <Toast />
+          <ConfirmDialog />
+          <DetailHeader />
+          <div className="max-w-7xl mx-auto px-4 py-4 space-y-4">
+            <Etapes statut={sel.statut} />
+            <ColisInfo />
+            <StaffDetailView />
+            <FacturesPanel />
+            <ChatPanel />
+            <AuditLog />
+          </div>
+        </div>
+      );
+    }
+
+    // Client: streamlined detail — no redundant header, bottom nav stays
     return (
       <div style={{ fontFamily: "system-ui, -apple-system, 'Segoe UI', sans-serif", background: '#f6f7f8' }} className="min-h-screen">
         <Toast />
         <ConfirmDialog />
-        <DetailHeader />
-
-        <div className={`mx-auto px-4 py-4 space-y-4 ${isStaff ? 'max-w-7xl' : 'max-w-xl md:max-w-2xl lg:max-w-3xl'}`}>
-          {isStaff && <Etapes statut={sel.statut} />}
-          {isStaff && <ColisInfo />}
-
-          {/* Staff action panels */}
-          {isStaff && <StaffDetailView />}
-
-          {/* Client timeline */}
-          {!isStaff && <ClientDetailView />}
-
+        <div className="max-w-xl md:max-w-2xl lg:max-w-3xl mx-auto px-4 py-4 pb-24 space-y-4">
+          <ClientDetailView />
           <FacturesPanel />
           <ChatPanel />
-          <AuditLog />
         </div>
+        <ClientBottomNav />
       </div>
     );
   }
@@ -107,9 +117,7 @@ function AppContent() {
               </button>
             </>
           )}
-          {!isStaff && (
-            <span className="text-sm text-white font-medium">{auth.u.nom.split(' ')[0]}</span>
-          )}
+          {/* Client name shown in Accueil welcome card + Profil tab — no need to duplicate here */}
         </div>
       </div>
 

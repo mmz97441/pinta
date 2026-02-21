@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import {
-  ArrowLeft, Package, Ruler, CheckCircle, Wrench, CreditCard, Plane, MapPin,
+  ArrowLeft, Package, CheckCircle, Wrench, CreditCard, Plane, MapPin,
   ChevronDown, ChevronUp, AlertCircle, ThumbsUp, ThumbsDown, RotateCcw,
   ExternalLink, Clock,
 } from 'lucide-react';
@@ -65,13 +65,15 @@ function PhaseStep({ phase, phaseIdx, state, open, onToggle, children }) {
     >
       <button
         onClick={onToggle}
-        className={`w-full flex items-center gap-3 px-4 py-3.5 text-left ${
-          isFuture ? 'opacity-50' : ''
-        }`}
+        className={`w-full flex items-center gap-3 px-4 text-left ${
+          isActive ? 'py-3.5' : isDone ? 'py-2.5' : 'py-2.5'
+        } ${isFuture ? 'opacity-40' : ''}`}
       >
-        {/* Icon circle */}
+        {/* Icon */}
         <div
-          className="flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center"
+          className={`flex-shrink-0 rounded-xl flex items-center justify-center ${
+            isActive ? 'w-9 h-9' : 'w-7 h-7'
+          }`}
           style={
             isDone
               ? { backgroundColor: '#d1fae5' }
@@ -81,10 +83,10 @@ function PhaseStep({ phase, phaseIdx, state, open, onToggle, children }) {
           }
         >
           {isDone ? (
-            <CheckCircle size={18} className="text-emerald-600" />
+            <CheckCircle size={isActive ? 18 : 15} className="text-emerald-600" />
           ) : (
             <Icon
-              size={18}
+              size={isActive ? 18 : 15}
               strokeWidth={isActive ? 2.2 : 1.8}
               style={{ color: isActive ? BRAND.navy : '#9ca3af' }}
             />
@@ -94,8 +96,12 @@ function PhaseStep({ phase, phaseIdx, state, open, onToggle, children }) {
         {/* Label */}
         <div className="flex-1 min-w-0">
           <p
-            className={`text-sm leading-snug ${
-              isDone ? 'font-semibold text-emerald-700' : isActive ? 'font-black text-gray-900' : 'font-medium text-gray-400'
+            className={`leading-snug ${
+              isDone
+                ? 'text-xs font-semibold text-emerald-700'
+                : isActive
+                ? 'text-sm font-black text-gray-900'
+                : 'text-xs font-medium text-gray-400'
             }`}
           >
             {phase.label}
@@ -105,21 +111,20 @@ function PhaseStep({ phase, phaseIdx, state, open, onToggle, children }) {
               Étape en cours
             </p>
           )}
-          {isDone && (
-            <p className="text-[10px] font-semibold text-emerald-600 mt-0.5">Terminé</p>
-          )}
         </div>
 
-        {/* Chevron (not for future) */}
+        {/* Chevron (only for done + active) */}
         {!isFuture && (
           <div
-            className="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center"
+            className={`flex-shrink-0 rounded-full flex items-center justify-center ${
+              isActive ? 'w-6 h-6' : 'w-5 h-5'
+            }`}
             style={{ backgroundColor: isActive ? BRAND.navy + '12' : '#f3f4f6' }}
           >
             {open ? (
-              <ChevronUp size={13} style={{ color: isActive ? BRAND.navy : '#9ca3af' }} />
+              <ChevronUp size={isActive ? 13 : 11} style={{ color: isActive ? BRAND.navy : '#9ca3af' }} />
             ) : (
-              <ChevronDown size={13} style={{ color: isActive ? BRAND.navy : '#9ca3af' }} />
+              <ChevronDown size={isActive ? 13 : 11} style={{ color: isActive ? BRAND.navy : '#9ca3af' }} />
             )}
           </div>
         )}
@@ -136,8 +141,8 @@ function PhaseStep({ phase, phaseIdx, state, open, onToggle, children }) {
 }
 
 // ── Main component ─────────────────────────────────────────────────────────────
-export default function ClientDetailView({ onBack }) {
-  const { sel, selDest, feuVert, feuVertBulk, payer, ask, flash, authCl, data } = useApp();
+export default function ClientDetailView() {
+  const { sel, selDest, setSelId, feuVert, feuVertBulk, payer, ask, flash, authCl, data } = useApp();
 
   if (!sel) return null;
 
@@ -164,7 +169,7 @@ export default function ClientDetailView({ onBack }) {
         ask(
           'Autoriser la préparation',
           `Vous confirmez que le contenu de ${sel.ref} est conforme et autorisez Expedîle à le préparer pour l'expédition ?\n\nVous avez aussi ${autresFV.length} autre${autresFV.length > 1 ? 's' : ''} colis en attente (${refs}). Voulez-vous tout autoriser d'un coup ?`,
-          () => feuVertBulk([sel.id, ...autresFV.map((p) => p.id)]),
+          () => { feuVertBulk([sel.id, ...autresFV.map((p) => p.id)]); setSelId(null); },
           { okLabel: `Tout autoriser (${autresFV.length + 1})` }
         );
       } else {
@@ -179,7 +184,7 @@ export default function ClientDetailView({ onBack }) {
       ask(
         'Refuser la préparation',
         `Êtes-vous sûr de vouloir refuser la préparation de ${sel.ref} ? Ce colis ne sera pas expédié.`,
-        () => feuVert(sel.id, false),
+        () => { feuVert(sel.id, false); setSelId(null); },
         { danger: true, okLabel: 'Oui, je refuse' }
       );
     }
@@ -200,7 +205,7 @@ export default function ClientDetailView({ onBack }) {
     ask(
       'Confirmer le paiement',
       `Vous allez valider le paiement de ${eur(sel.devisTotal)} pour le colis ${sel.ref}.\n\nVous serez redirigé vers notre page de paiement sécurisé.`,
-      () => payer(sel.id, sel.devisTotal),
+      () => { payer(sel.id, sel.devisTotal); },
       { okLabel: 'Procéder au paiement' }
     );
   };
@@ -581,41 +586,39 @@ export default function ClientDetailView({ onBack }) {
 
   return (
     <div className="anim-fade space-y-4">
-      {/* ── Back button + header ── */}
+      {/* ── Compact header with back ── */}
       <div className="flex items-center gap-3">
         <button
-          onClick={onBack}
+          onClick={() => setSelId(null)}
           className="flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center transition-all active:scale-90 hover:bg-gray-100"
         >
           <ArrowLeft size={18} className="text-gray-600" />
         </button>
         <div className="flex-1 min-w-0">
-          <h2 className="text-xl font-black text-gray-900 leading-none">{sel.ref}</h2>
+          <div className="flex items-center gap-2">
+            <h2 className="text-lg font-black text-gray-900 leading-none">{sel.ref}</h2>
+            <Badge statut={sel.statut} />
+          </div>
           <p className="text-xs text-gray-400 truncate mt-0.5">{sel.desc}</p>
         </div>
-        <Badge statut={sel.statut} />
       </div>
 
-      {/* ── Progress bar ── */}
+      {/* ── Progress bar (inline, no card wrapper) ── */}
       {sel.statut !== 'annule' && (
-        <div className="card p-4 rounded-2xl">
+        <div className="px-1">
           <ProgressBar statut={sel.statut} />
-          <div className="mt-3 flex items-center justify-between text-[10px] text-gray-400">
-            <span>Pré-annoncé</span>
-            <span>Livré</span>
-          </div>
         </div>
       )}
 
       {sel.statut === 'annule' && (
-        <div className="card p-4 rounded-2xl flex items-center gap-2 text-sm text-gray-500">
+        <div className="card p-3 rounded-2xl flex items-center gap-2 text-sm text-gray-500">
           <AlertCircle size={15} className="text-red-400 flex-shrink-0" />
           Ce colis a été annulé.
         </div>
       )}
 
       {/* ── Accordion timeline ── */}
-      <div className="space-y-2.5">
+      <div className="space-y-2">
         {PHASES_CLIENT.map((phase, idx) => {
           const state = getPhaseState(idx, curPhaseIdx);
           const isOpen = timeOpen === idx;
@@ -635,18 +638,8 @@ export default function ClientDetailView({ onBack }) {
         })}
       </div>
 
-      {/* ── Colis info footer ── */}
-      {(sel.valeur > 0 || hasTrack(sel)) && (
-        <div className="card p-4 rounded-2xl space-y-1">
-          <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">
-            Informations colis
-          </p>
-          {sel.valeur > 0 && <Ligne label="Valeur déclarée" value={eur(sel.valeur)} />}
-          {hasTrack(sel) && (
-            <Ligne label="Tracking" value={<span className="font-mono text-xs">{trackStr(sel)}</span>} />
-          )}
-        </div>
-      )}
+      {/* Spacer so last card isn't under bottom nav */}
+      <div className="h-2" />
     </div>
   );
 }

@@ -1,16 +1,15 @@
 import React from 'react';
-import { Bell, CheckCheck, Package } from 'lucide-react';
+import { Bell, CheckCheck, ChevronRight } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { BRAND } from '../../constants';
 
 export default function ClientNotifs() {
-  const { notifs, unreadNotifs, markNotifRead, markAllNotifsRead, setSelId, setClientTab } = useApp();
+  const { notifs, unreadNotifs, markNotifRead, markAllNotifsRead, setSelId } = useApp();
 
   const handleNotifClick = (n) => {
     markNotifRead(n.id);
     if (n.colisId) {
       setSelId(n.colisId);
-      setClientTab('colis');
     }
   };
 
@@ -92,16 +91,10 @@ export default function ClientNotifs() {
                   </span>
                 </div>
                 <p className="text-xs text-gray-500 leading-relaxed">{n.msg}</p>
-                {n.colisId && (
-                  <div
-                    className="mt-2 inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full"
-                    style={{ color: BRAND.navy, backgroundColor: BRAND.navy + '10' }}
-                  >
-                    <Package size={10} />
-                    Voir le colis
-                  </div>
-                )}
               </div>
+              {n.colisId && (
+                <ChevronRight size={14} className="flex-shrink-0 mt-1 text-gray-300" />
+              )}
             </button>
           ))}
         </div>

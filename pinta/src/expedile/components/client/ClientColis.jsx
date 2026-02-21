@@ -43,7 +43,7 @@ const FILTER_LABELS = {
 };
 
 export default function ClientColis({ onNewColis }) {
-  const { authCl, data, setSelId, colisFilter, setColisFilter } = useApp();
+  const { authCl, data, setSelId, colisFilter, setColisFilter, ask, payer } = useApp();
   const [colisTab, setColisTab] = useState('actifs');
 
   // When arriving from a stat card with a filter, force the "actifs" tab
@@ -225,11 +225,36 @@ export default function ClientColis({ onNewColis }) {
                     Votre accord est attendu
                   </div>
                 )}
-                {isPay && (
+                {isPay && p.devisTotal != null && (
+                  <div
+                    className="mt-2.5"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      ask(
+                        'Confirmer le paiement',
+                        `Valider le paiement de ${p.devisTotal.toFixed(2)} € pour ${p.ref} ?`,
+                        () => payer(p.id, p.devisTotal),
+                        { okLabel: 'Payer' }
+                      );
+                    }}
+                  >
+                    <div
+                      className="flex items-center justify-center gap-1.5 text-xs font-black py-2 rounded-xl active:scale-95 transition-all"
+                      style={{
+                        background: `linear-gradient(135deg, ${BRAND.gold}, ${BRAND.goldD})`,
+                        color: BRAND.navyD,
+                        boxShadow: `0 2px 8px rgba(232,184,75,0.25)`,
+                      }}
+                    >
+                      <CreditCard size={13} />
+                      Payer {p.devisTotal.toFixed(2)} €
+                    </div>
+                  </div>
+                )}
+                {isPay && p.devisTotal == null && (
                   <div className="mt-2.5 flex items-center gap-1.5 text-xs font-semibold text-amber-800 bg-amber-50 rounded-xl px-3 py-2">
                     <CreditCard size={13} />
                     Paiement requis
-                    {p.devisTotal != null ? ` · ${p.devisTotal.toFixed(2)} €` : ''}
                   </div>
                 )}
 
