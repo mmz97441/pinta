@@ -279,19 +279,26 @@ export default function ClientDetailView({ onBack }) {
                   Votre accord est requis
                 </p>
                 <p className="text-xs text-amber-700 leading-relaxed">
-                  Nous avons mesuré votre colis. Donnez votre accord pour que nous le préparions et calculions le devis final.
+                  Nous avons réceptionné et mesuré votre colis. Autorisez-nous à le préparer et l'optimiser pour l'expédition. Le devis final vous sera envoyé après la préparation.
                 </p>
               </div>
               {sel.dimL && (
                 <div className="rounded-xl bg-gray-50 p-3 space-y-1">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">Dimensions</p>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">Dimensions mesurées</p>
                   <Ligne label="L × W × H" value={`${sel.dimL} × ${sel.dimW} × ${sel.dimH} cm`} />
                   <Ligne label="Poids" value={`${sel.poids} kg`} />
-                  {sel.estMin != null && (
-                    <Ligne label="Estimation" value={`${sel.estMin} – ${sel.estMax} €`} />
-                  )}
                 </div>
               )}
+              <div className="rounded-xl p-3 border border-blue-100" style={{ backgroundColor: BRAND.navy + '06' }}>
+                <p className="text-[10px] font-black uppercase tracking-widest mb-1.5" style={{ color: BRAND.navy }}>
+                  Comment ça marche ?
+                </p>
+                <div className="space-y-1.5 text-xs text-gray-600 leading-relaxed">
+                  <p>1. Vous donnez votre accord ci-dessous</p>
+                  <p>2. Nous préparons et optimisons votre colis</p>
+                  <p>3. Vous recevez le devis final à payer</p>
+                </div>
+              </div>
               <div className="flex gap-2 pt-1">
                 <button
                   onClick={() => handleFeuVert(false)}
