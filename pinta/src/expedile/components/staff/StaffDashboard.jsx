@@ -379,8 +379,8 @@ export default function StaffDashboard({ onNewColis }) {
               value={globalSearch}
               onChange={(e) => setGlobalSearch(e.target.value)}
               placeholder="Rechercher client, colis, tracking…"
-              className="w-full pl-9 pr-8 py-2.5 text-sm rounded-xl border border-gray-200 bg-white outline-none transition-all"
-              style={{ color: BRAND.navy }}
+              className="w-full pl-9 pr-8 py-2.5 text-sm rounded-xl border-2 border-gray-200 outline-none transition-all focus:border-amber-400"
+              style={{ color: BRAND.navy, background: '#FFFFFF', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}
             />
             {hasSearch && (
               <button
@@ -412,8 +412,8 @@ export default function StaffDashboard({ onNewColis }) {
         {/* Search dropdown */}
         {hasSearch && (
           <div
-            className="absolute top-full left-0 right-0 mt-1.5 z-30 card-elevated overflow-hidden"
-            style={{ maxHeight: 320, overflowY: 'auto' }}
+            className="absolute top-full left-0 right-0 mt-1.5 z-30 rounded-2xl overflow-hidden"
+            style={{ maxHeight: 320, overflowY: 'auto', background: '#FFFFFF', border: '1px solid #E5E7EB', boxShadow: '0 4px 24px rgba(0,0,0,0.12)' }}
           >
             {!hasResults && (
               <p className="px-4 py-3 text-sm text-gray-400">Aucun résultat</p>
@@ -585,20 +585,30 @@ export default function StaffDashboard({ onNewColis }) {
       {/* ── Missing invoice alert ─────────────────────────────────────────── */}
       {missingInvoices.length > 0 && (
         <div
-          className="anim-fade stagger-3 flex items-start gap-2.5 p-3.5 rounded-xl"
+          className="anim-fade stagger-3 rounded-xl overflow-hidden"
           style={{
-            background: '#FEF3C720',
-            border: '1px solid #FCD34D60',
+            background: '#FEF3C7',
+            border: '1px solid #FCD34D80',
           }}
         >
-          <AlertTriangle size={15} className="text-amber-500 flex-shrink-0 mt-0.5" />
-          <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2.5 px-3.5 py-2.5">
+            <AlertTriangle size={15} className="text-amber-600 flex-shrink-0" />
             <p className="text-xs font-bold text-amber-800">
               {missingInvoices.length} colis sans facture validée
             </p>
-            <p className="text-xs text-amber-600 mt-0.5">
-              {missingInvoices.map((c) => c.ref).join(', ')}
-            </p>
+          </div>
+          <div className="flex flex-wrap gap-1.5 px-3.5 pb-3">
+            {missingInvoices.map((c) => (
+              <button
+                key={c.id}
+                onClick={() => openColis(c.id)}
+                className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1.5 rounded-lg transition-all active:scale-95 hover:bg-amber-200"
+                style={{ background: '#FFFBEB', color: '#92400E', border: '1px solid #FCD34D' }}
+              >
+                {c.ref}
+                <ChevronRight size={11} className="text-amber-500" />
+              </button>
+            ))}
           </div>
         </div>
       )}
