@@ -52,6 +52,12 @@ export default function ColisModal({ open, onClose }) {
   const [newClientForm, setNewClientForm] = useState(EMPTY_NEW_CLIENT);
   const [newClientErr, setNewClientErr] = useState({});
 
+  // ── Pre-announcements for selected client (hook must be before early return) ──
+  const pendingAnnonces = useMemo(() => {
+    if (!selectedClient) return [];
+    return data.filter((p) => p.clientId === selectedClient.id && p.statut === 'annonce');
+  }, [selectedClient, data]);
+
   if (!open) return null;
 
   // ── helpers ──────────────────────────────────────────────
@@ -88,12 +94,6 @@ export default function ColisModal({ open, onClose }) {
     setNewClientErr({});
     onClose();
   };
-
-  // ── Pre-announcements for selected client ───────────────
-  const pendingAnnonces = useMemo(() => {
-    if (!selectedClient) return [];
-    return data.filter((p) => p.clientId === selectedClient.id && p.statut === 'annonce');
-  }, [selectedClient, data]);
 
   // ── client search ─────────────────────────────────────────
   const filteredClients = clientSearchQ.trim()
