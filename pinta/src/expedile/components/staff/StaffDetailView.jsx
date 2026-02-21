@@ -371,24 +371,45 @@ export default function StaffDetailView() {
     }
     setFormErr('');
 
-    // If dimensions were provided during reception, skip 'receptionne' → go straight to 'mesure'
-    const hasDims = dims.dimL && dims.dimW && dims.dimH && dims.poids;
-    const newStatut = hasDims ? 'mesure' : 'receptionne';
+    const trackingsActive = sel.trackings?.filter((t) => t) || [];
+    const isMulti = trackingsActive.length > 1;
 
+    let hasDims = false;
     const changes = {
-      statut: newStatut,
       casier: casierTmp.trim(),
       photoReception: photoTaken,
       checkInterdits: interdits,
       dateReception: new Date().toISOString(),
     };
 
-    if (hasDims) {
+    if (isMulti) {
+      // Check if all multi-tracking dims are filled
+      const allFilled = trackingsActive.every((_, i) => {
+        const d = multiDims[i] || {};
+        return d.dimL && d.dimW && d.dimH && d.poids;
+      });
+      if (allFilled) {
+        hasDims = true;
+        const dimsParColis = trackingsActive.map((_, i) => {
+          const d = multiDims[i];
+          return { dimL: parseFloat(d.dimL), dimW: parseFloat(d.dimW), dimH: parseFloat(d.dimH), poids: parseFloat(d.poids) };
+        });
+        const totalPoids = dimsParColis.reduce((s, d) => s + d.poids, 0);
+        changes.dimsParColis = dimsParColis;
+        changes.dimL = Math.max(...dimsParColis.map((d) => d.dimL));
+        changes.dimW = Math.max(...dimsParColis.map((d) => d.dimW));
+        changes.dimH = Math.max(...dimsParColis.map((d) => d.dimH));
+        changes.poids = Math.round(totalPoids * 100) / 100;
+      }
+    } else if (dims.dimL && dims.dimW && dims.dimH && dims.poids) {
+      hasDims = true;
       changes.dimL = parseFloat(dims.dimL);
       changes.dimW = parseFloat(dims.dimW);
       changes.dimH = parseFloat(dims.dimH);
       changes.poids = parseFloat(dims.poids);
     }
+
+    changes.statut = hasDims ? 'mesure' : 'receptionne';
 
     upd(sel.id, changes);
     flash(hasDims ? 'Réceptionné + mesuré' : 'Colis réceptionné');
@@ -513,25 +534,63 @@ export default function StaffDetailView() {
               />
 
               {/* Dimensions (optional at reception — saves a step) */}
-              <div>
-                <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
-                  Mesurer maintenant <span className="normal-case font-normal text-gray-400">(facultatif — sinon à l'étape suivante)</span>
-                </p>
-                <div className="grid grid-cols-2 gap-3">
-                  <Field label="Longueur (cm)" type="number" min="0" step="0.5"
-                    value={dims.dimL} onChange={(e) => setDims({ ...dims, dimL: e.target.value })}
-                    placeholder="40" unit="cm" />
-                  <Field label="Largeur (cm)" type="number" min="0" step="0.5"
-                    value={dims.dimW} onChange={(e) => setDims({ ...dims, dimW: e.target.value })}
-                    placeholder="30" unit="cm" />
-                  <Field label="Hauteur (cm)" type="number" min="0" step="0.5"
-                    value={dims.dimH} onChange={(e) => setDims({ ...dims, dimH: e.target.value })}
-                    placeholder="20" unit="cm" />
-                  <Field label="Poids (kg)" type="number" min="0" step="0.1"
-                    value={dims.poids} onChange={(e) => setDims({ ...dims, poids: e.target.value })}
-                    placeholder="2.5" unit="kg" />
-                </div>
-              </div>
+              {(() => {
+                const trackingsActive = sel.trackings?.filter((t) => t) || [];
+                const isMulti = trackingsActive.length > 1;
+                return (
+                  <div>
+                    <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
+                      Mesurer maintenant <span className="normal-case font-normal text-gray-400">(facultatif — sinon à l'étape suivante)</span>
+                    </p>
+                    {isMulti ? (
+                      <div className="space-y-3">
+                        {trackingsActive.map((tracking, idx) => {
+                          const d = multiDims[idx] || { dimL: '', dimW: '', dimH: '', poids: '' };
+                          const updateDim = (field, val) => setMultiDims((prev) => ({
+                            ...prev, [idx]: { ...prev[idx], dimL: '', dimW: '', dimH: '', poids: '', ...prev[idx], [field]: val },
+                          }));
+                          return (
+                            <div key={idx} className="rounded-xl border border-gray-200 p-3 space-y-3">
+                              <p className="text-xs font-black uppercase tracking-wider" style={{ color: BRAND.navy }}>
+                                Colis {idx + 1} — <span className="font-mono">{tracking}</span>
+                              </p>
+                              <div className="grid grid-cols-2 gap-3">
+                                <Field label="Long. (cm)" type="number" min="0" step="0.5"
+                                  value={d.dimL} onChange={(e) => updateDim('dimL', e.target.value)}
+                                  placeholder="40" unit="cm" />
+                                <Field label="Larg. (cm)" type="number" min="0" step="0.5"
+                                  value={d.dimW} onChange={(e) => updateDim('dimW', e.target.value)}
+                                  placeholder="30" unit="cm" />
+                                <Field label="Haut. (cm)" type="number" min="0" step="0.5"
+                                  value={d.dimH} onChange={(e) => updateDim('dimH', e.target.value)}
+                                  placeholder="20" unit="cm" />
+                                <Field label="Poids (kg)" type="number" min="0" step="0.1"
+                                  value={d.poids} onChange={(e) => updateDim('poids', e.target.value)}
+                                  placeholder="2.5" unit="kg" />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-2 gap-3">
+                        <Field label="Longueur (cm)" type="number" min="0" step="0.5"
+                          value={dims.dimL} onChange={(e) => setDims({ ...dims, dimL: e.target.value })}
+                          placeholder="40" unit="cm" />
+                        <Field label="Largeur (cm)" type="number" min="0" step="0.5"
+                          value={dims.dimW} onChange={(e) => setDims({ ...dims, dimW: e.target.value })}
+                          placeholder="30" unit="cm" />
+                        <Field label="Hauteur (cm)" type="number" min="0" step="0.5"
+                          value={dims.dimH} onChange={(e) => setDims({ ...dims, dimH: e.target.value })}
+                          placeholder="20" unit="cm" />
+                        <Field label="Poids (kg)" type="number" min="0" step="0.1"
+                          value={dims.poids} onChange={(e) => setDims({ ...dims, poids: e.target.value })}
+                          placeholder="2.5" unit="kg" />
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
 
               {/* Missing invoice warning */}
               {missingFacture && (

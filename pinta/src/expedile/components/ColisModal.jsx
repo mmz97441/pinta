@@ -14,11 +14,13 @@ const EMPTY_FORM = {
   facUploaded: false,
   facVendeur: '',
   facMontant: '',
-  // Dimensions (optional at reception)
+  // Dimensions (optional at reception) — single colis
   dimL: '',
   dimW: '',
   dimH: '',
   poids: '',
+  // Multi-colis dims keyed by index: { 0: { dimL, dimW, dimH, poids }, 1: ... }
+  multiDims: {},
   showDims: false,
 };
 
@@ -256,8 +258,38 @@ export default function ColisModal({ open, onClose }) {
           ]
         : [];
 
-    // If staff provided dimensions, include them and jump to 'mesure' status
-    const hasDims = isStaff && nf.dimL && nf.dimW && nf.dimH && nf.poids;
+    // Detect multi-tracking dims
+    const isMulti = trackings.length > 1;
+    let hasDims = false;
+    let dimL = null, dimW = null, dimH = null, poids = null;
+    let dimsParColis = [];
+
+    if (isStaff && isMulti) {
+      // Check if all multi-tracking dims are filled
+      const allFilled = trackings.every((_, i) => {
+        const d = nf.multiDims[i] || {};
+        return d.dimL && d.dimW && d.dimH && d.poids;
+      });
+      if (allFilled) {
+        hasDims = true;
+        dimsParColis = trackings.map((_, i) => {
+          const d = nf.multiDims[i];
+          return { dimL: parseFloat(d.dimL), dimW: parseFloat(d.dimW), dimH: parseFloat(d.dimH), poids: parseFloat(d.poids) };
+        });
+        const totalPoids = dimsParColis.reduce((s, d) => s + d.poids, 0);
+        dimL = Math.max(...dimsParColis.map((d) => d.dimL));
+        dimW = Math.max(...dimsParColis.map((d) => d.dimW));
+        dimH = Math.max(...dimsParColis.map((d) => d.dimH));
+        poids = Math.round(totalPoids * 100) / 100;
+      }
+    } else if (isStaff && nf.dimL && nf.dimW && nf.dimH && nf.poids) {
+      hasDims = true;
+      dimL = parseFloat(nf.dimL);
+      dimW = parseFloat(nf.dimW);
+      dimH = parseFloat(nf.dimH);
+      poids = parseFloat(nf.poids);
+    }
+
     const finalStatut = hasDims ? 'mesure' : statut;
 
     return {
@@ -268,11 +300,11 @@ export default function ColisModal({ open, onClose }) {
       trackings,
       desc: nf.d.trim(),
       valeur: parseFloat(nf.v) || 0,
-      dimL: hasDims ? parseFloat(nf.dimL) : null,
-      dimW: hasDims ? parseFloat(nf.dimW) : null,
-      dimH: hasDims ? parseFloat(nf.dimH) : null,
-      poids: hasDims ? parseFloat(nf.poids) : null,
-      dimsParColis: [],
+      dimL,
+      dimW,
+      dimH,
+      poids,
+      dimsParColis,
       finL: null,
       finW: null,
       finH: null,
@@ -732,75 +764,139 @@ export default function ColisModal({ open, onClose }) {
               </div>
 
               {/* ── DIMENSIONS (staff only, optional — saves a step if filled) ── */}
-              {isStaff && (
-                <div>
-                  {!nf.showDims ? (
-                    <button
-                      type="button"
-                      onClick={() => setField('showDims', true)}
-                      className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-dashed border-gray-200 text-sm font-bold text-gray-500 hover:border-blue-300 hover:text-blue-600 transition-all"
-                    >
-                      <Ruler size={15} />
-                      Mesurer maintenant
-                      <span className="text-[10px] font-normal text-gray-400 ml-1">(sinon plus tard)</span>
-                    </button>
-                  ) : (
-                    <div className="rounded-xl border border-blue-200 bg-blue-50/50 p-3 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-1.5">
-                          <Ruler size={13} className="text-blue-600" />
-                          <span className="text-xs font-bold text-blue-800">Dimensions</span>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setField('showDims', false);
-                            setField('dimL', '');
-                            setField('dimW', '');
-                            setField('dimH', '');
-                            setField('poids', '');
-                          }}
-                          className="text-[10px] font-medium text-gray-400 hover:text-gray-600"
-                        >
-                          Mesurer plus tard
-                        </button>
+              {isStaff && (() => {
+                const activeTrackings = nf.trackings.filter((t) => t.trim());
+                const isMultiTrack = activeTrackings.length > 1;
+                const dimInputCls = "w-full px-2.5 py-2 rounded-lg border border-gray-200 bg-white text-sm outline-none focus:border-blue-400";
+                const updateMultiDim = (idx, field, val) => setNf((prev) => ({
+                  ...prev,
+                  multiDims: {
+                    ...prev.multiDims,
+                    [idx]: { ...(prev.multiDims[idx] || { dimL: '', dimW: '', dimH: '', poids: '' }), [field]: val },
+                  },
+                }));
+
+                if (!nf.showDims) {
+                  return (
+                    <div>
+                      <button
+                        type="button"
+                        onClick={() => setField('showDims', true)}
+                        className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-dashed border-gray-200 text-sm font-bold text-gray-500 hover:border-blue-300 hover:text-blue-600 transition-all"
+                      >
+                        <Ruler size={15} />
+                        Mesurer maintenant
+                        <span className="text-[10px] font-normal text-gray-400 ml-1">(sinon plus tard)</span>
+                      </button>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="rounded-xl border border-blue-200 bg-blue-50/50 p-3 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <Ruler size={13} className="text-blue-600" />
+                        <span className="text-xs font-bold text-blue-800">
+                          {isMultiTrack ? `Dimensions (${activeTrackings.length} colis)` : 'Dimensions'}
+                        </span>
                       </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setField('showDims', false);
+                          setField('dimL', '');
+                          setField('dimW', '');
+                          setField('dimH', '');
+                          setField('poids', '');
+                          setField('multiDims', {});
+                        }}
+                        className="text-[10px] font-medium text-gray-400 hover:text-gray-600"
+                      >
+                        Mesurer plus tard
+                      </button>
+                    </div>
+
+                    {isMultiTrack ? (
+                      /* ── Multi-tracking: one dim group per colis ── */
+                      <div className="space-y-3">
+                        {activeTrackings.map((tracking, idx) => {
+                          const d = nf.multiDims[idx] || { dimL: '', dimW: '', dimH: '', poids: '' };
+                          return (
+                            <div key={idx} className="rounded-lg border border-blue-100 bg-white p-2.5 space-y-2">
+                              <p className="text-[10px] font-black uppercase tracking-wider text-blue-700">
+                                Colis {idx + 1} — <span className="font-mono">{tracking}</span>
+                              </p>
+                              <div className="grid grid-cols-4 gap-1.5">
+                                <div>
+                                  <label className="text-[9px] font-bold text-gray-400 block mb-0.5">L</label>
+                                  <input type="number" min="0" step="0.5" placeholder="40"
+                                    value={d.dimL} onChange={(e) => updateMultiDim(idx, 'dimL', e.target.value)}
+                                    className={dimInputCls} />
+                                </div>
+                                <div>
+                                  <label className="text-[9px] font-bold text-gray-400 block mb-0.5">l</label>
+                                  <input type="number" min="0" step="0.5" placeholder="30"
+                                    value={d.dimW} onChange={(e) => updateMultiDim(idx, 'dimW', e.target.value)}
+                                    className={dimInputCls} />
+                                </div>
+                                <div>
+                                  <label className="text-[9px] font-bold text-gray-400 block mb-0.5">H</label>
+                                  <input type="number" min="0" step="0.5" placeholder="20"
+                                    value={d.dimH} onChange={(e) => updateMultiDim(idx, 'dimH', e.target.value)}
+                                    className={dimInputCls} />
+                                </div>
+                                <div>
+                                  <label className="text-[9px] font-bold text-gray-400 block mb-0.5">kg</label>
+                                  <input type="number" min="0" step="0.1" placeholder="2.5"
+                                    value={d.poids} onChange={(e) => updateMultiDim(idx, 'poids', e.target.value)}
+                                    className={dimInputCls} />
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      /* ── Single colis dims ── */
                       <div className="grid grid-cols-2 gap-2">
                         <div>
                           <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-0.5">L (cm)</label>
                           <input type="number" min="0" step="0.5" placeholder="40"
                             value={nf.dimL} onChange={(e) => setField('dimL', e.target.value)}
-                            className="w-full px-2.5 py-2 rounded-lg border border-gray-200 bg-white text-sm outline-none focus:border-blue-400" />
+                            className={dimInputCls} />
                         </div>
                         <div>
                           <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-0.5">l (cm)</label>
                           <input type="number" min="0" step="0.5" placeholder="30"
                             value={nf.dimW} onChange={(e) => setField('dimW', e.target.value)}
-                            className="w-full px-2.5 py-2 rounded-lg border border-gray-200 bg-white text-sm outline-none focus:border-blue-400" />
+                            className={dimInputCls} />
                         </div>
                         <div>
                           <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-0.5">H (cm)</label>
                           <input type="number" min="0" step="0.5" placeholder="20"
                             value={nf.dimH} onChange={(e) => setField('dimH', e.target.value)}
-                            className="w-full px-2.5 py-2 rounded-lg border border-gray-200 bg-white text-sm outline-none focus:border-blue-400" />
+                            className={dimInputCls} />
                         </div>
                         <div>
                           <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-0.5">Poids (kg)</label>
                           <input type="number" min="0" step="0.1" placeholder="2.5"
                             value={nf.poids} onChange={(e) => setField('poids', e.target.value)}
-                            className="w-full px-2.5 py-2 rounded-lg border border-gray-200 bg-white text-sm outline-none focus:border-blue-400" />
+                            className={dimInputCls} />
                         </div>
                       </div>
-                      {nf.dimL && nf.dimW && nf.dimH && nf.poids && (
-                        <p className="text-[10px] text-blue-700 font-medium">
-                          Poids vol. {((parseFloat(nf.dimL) * parseFloat(nf.dimW) * parseFloat(nf.dimH)) / 5000).toFixed(2)} kg
-                          · Facturable {Math.max(parseFloat(nf.poids), (parseFloat(nf.dimL) * parseFloat(nf.dimW) * parseFloat(nf.dimH)) / 5000).toFixed(2)} kg
-                        </p>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
+                    )}
+
+                    {/* Summary for single colis */}
+                    {!isMultiTrack && nf.dimL && nf.dimW && nf.dimH && nf.poids && (
+                      <p className="text-[10px] text-blue-700 font-medium">
+                        Poids vol. {((parseFloat(nf.dimL) * parseFloat(nf.dimW) * parseFloat(nf.dimH)) / 5000).toFixed(2)} kg
+                        · Facturable {Math.max(parseFloat(nf.poids), (parseFloat(nf.dimL) * parseFloat(nf.dimW) * parseFloat(nf.dimH)) / 5000).toFixed(2)} kg
+                      </p>
+                    )}
+                  </div>
+                );
+              })()}
 
               {/* ── VALEUR ── */}
               <div>
