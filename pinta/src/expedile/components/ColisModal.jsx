@@ -14,6 +14,8 @@ const EMPTY_FORM = {
   facUploaded: false,
   facVendeur: '',
   facMontant: '',
+  facFichier: null,
+  facFichierNom: '',
   // Dimensions (optional at reception) — single colis
   dimL: '',
   dimW: '',
@@ -254,6 +256,8 @@ export default function ColisModal({ open, onClose }) {
               vendeur: nf.facVendeur.trim(),
               montant: parseFloat(nf.facMontant) || 0,
               valide: false,
+              fichier: nf.facFichier || null,
+              fichierNom: nf.facFichierNom || null,
             },
           ]
         : [];
@@ -965,9 +969,46 @@ export default function ColisModal({ open, onClose }) {
                           className={inputCls(false)}
                         />
                       </div>
-                      <p className="text-xs text-gray-400">
-                        Envoyez la photo ou le PDF par WhatsApp ou email après avoir soumis la pré-annonce.
-                      </p>
+                      {/* File upload */}
+                      <div>
+                        <label className={labelCls}>Photo / PDF de la facture</label>
+                        {nf.facFichier ? (
+                          <div className="flex items-center gap-2 p-2 rounded-xl bg-green-50 border border-green-200">
+                            <img src={nf.facFichier} alt="" className="w-10 h-10 rounded-lg object-cover border border-gray-200" />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-medium text-green-800 truncate">{nf.facFichierNom}</p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => { setField('facFichier', null); setField('facFichierNom', ''); }}
+                              className="text-red-400 hover:text-red-600 p-1"
+                            >
+                              <X size={14} />
+                            </button>
+                          </div>
+                        ) : (
+                          <label className="flex items-center justify-center gap-2 w-full py-3 rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 text-sm text-gray-500 font-medium cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-all">
+                            <FileText size={16} />
+                            Choisir un fichier
+                            <input
+                              type="file"
+                              accept="image/*,.pdf"
+                              className="hidden"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (!file) return;
+                                const reader = new FileReader();
+                                reader.onload = () => {
+                                  setField('facFichier', reader.result);
+                                  setField('facFichierNom', file.name);
+                                };
+                                reader.readAsDataURL(file);
+                                e.target.value = '';
+                              }}
+                            />
+                          </label>
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>
