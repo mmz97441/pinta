@@ -298,17 +298,20 @@ export default function StaffDashboard({ onNewColis }) {
     return envoiFiltered.filter((c) => filterStatuts.includes(c.statut));
   }, [envoiFiltered, filterStatuts]);
 
-  // ── Main lists ────────────────────────────────────────────────────────────
+  // ── Main lists (sorted by statut order within each group) ────────────────
+  const sortByStatut = (list, order) =>
+    [...list].sort((a, b) => order.indexOf(a.statut) - order.indexOf(b.statut));
+
   const aFaire = useMemo(
-    () => activePool.filter((c) => STATUTS_A_FAIRE.includes(c.statut)),
+    () => sortByStatut(activePool.filter((c) => STATUTS_A_FAIRE.includes(c.statut)), STATUTS_A_FAIRE),
     [activePool],
   );
   const attente = useMemo(
-    () => activePool.filter((c) => STATUTS_ATTENTE.includes(c.statut)),
+    () => sortByStatut(activePool.filter((c) => STATUTS_ATTENTE.includes(c.statut)), STATUTS_ATTENTE),
     [activePool],
   );
   const livres = useMemo(
-    () => activePool.filter((c) => STATUTS_LIVRE.includes(c.statut)),
+    () => sortByStatut(activePool.filter((c) => STATUTS_LIVRE.includes(c.statut)), STATUTS_LIVRE),
     [activePool],
   );
 
