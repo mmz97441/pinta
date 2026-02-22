@@ -1,15 +1,46 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Plane, CreditCard, FileText, ChevronDown, Trash2, Lock } from 'lucide-react';
+import { ArrowLeft, Plane, CreditCard, FileText, ChevronDown, Trash2, Lock, MessageCircle, Send, CheckCircle, XCircle, Loader2 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { BRAND, DESTINATIONS } from '../../constants';
 import { eur, labelEnvoi, uid, getCatTaux } from '../../utils';
 import { Ligne } from '../ui';
+import { isWaConfigured, sendTemplate, sendText } from '../../services/whatsappApi';
 
 export default function StaffSettings() {
   const { setPage, envois, setEnvois, data, tarifs, setTarifs, categories, addCategory, updateCatTaux, updateCatLabel, deleteCategory, flash } = useApp();
   const [newEnvoiDate, setNewEnvoiDate] = useState('');
   const [catEditId, setCatEditId] = useState(null);
   const [newCat, setNewCat] = useState({ label: '', taux: {} });
+
+  // ── WhatsApp test ──
+  const [waTestNum, setWaTestNum] = useState('');
+  const [waTestMsg, setWaTestMsg] = useState('');
+  const [waTestMode, setWaTestMode] = useState('template'); // 'template' | 'text'
+  const [waTestStatus, setWaTestStatus] = useState(null); // null | 'sending' | 'ok' | 'error'
+  const [waTestResult, setWaTestResult] = useState('');
+
+  const handleWaTest = async () => {
+    if (!waTestNum.trim()) { flash('Entrez un numéro de téléphone'); return; }
+    setWaTestStatus('sending');
+    setWaTestResult('');
+
+    let result;
+    if (waTestMode === 'template') {
+      result = await sendTemplate(waTestNum.trim(), 'hello_world', 'en_US');
+    } else {
+      if (!waTestMsg.trim()) { flash('Entrez un message'); setWaTestStatus(null); return; }
+      result = await sendText(waTestNum.trim(), waTestMsg.trim());
+    }
+
+    if (result.ok) {
+      setWaTestStatus('ok');
+      setWaTestResult(`Message envoyé ! ID: ${result.data?.messages?.[0]?.id || '—'}`);
+      flash('✅ WhatsApp envoyé avec succès !');
+    } else {
+      setWaTestStatus('error');
+      setWaTestResult(result.error || 'Erreur inconnue');
+    }
+  };
 
   return (
     <div className="anim-fade space-y-4">
@@ -205,6 +236,161 @@ export default function StaffSettings() {
             </button>
           </div>
         </div>
+      </div>
+
+      {/* ── WhatsApp Business API ── */}
+      <div className="card p-5 anim-fade">
+        <div className="flex items-center gap-2 mb-1">
+          <MessageCircle size={18} style={{ color: '#25D366' }} />
+          <p className="font-bold text-lg">WhatsApp Business API</p>
+        </div>
+        <p className="text-sm text-gray-500 mb-4">
+          Envoyez des messages WhatsApp automatiquement aux clients via l'API Meta.
+        </p>
+
+        {/* Statut de la config */}
+        <div
+          className="flex items-center gap-2.5 p-3 rounded-xl mb-4"
+          style={{
+            background: isWaConfigured() ? '#F0FDF4' : '#FEF2F2',
+            border: `1px solid ${isWaConfigured() ? '#BBF7D0' : '#FECACA'}`,
+          }}
+        >
+          {isWaConfigured() ? (
+            <>
+              <CheckCircle size={16} className="text-green-600 flex-shrink-0" />
+              <div>
+                <p className="text-sm font-bold text-green-800">API configurée</p>
+                <p className="text-xs text-green-600">
+                  Phone ID : {import.meta.env.VITE_WA_PHONE_ID} · API {import.meta.env.VITE_WA_API_VERSION || 'v22.0'}
+                </p>
+              </div>
+            </>
+          ) : (
+            <>
+              <XCircle size={16} className="text-red-600 flex-shrink-0" />
+              <div>
+                <p className="text-sm font-bold text-red-800">API non configurée</p>
+                <p className="text-xs text-red-600">
+                  Créez un fichier <code className="bg-red-100 px-1 rounded">.env</code> avec les variables VITE_WA_PHONE_ID, VITE_WA_TOKEN, VITE_WA_WABA_ID
+                </p>
+              </div>
+            </>
+          )}
+        </div>
+
+        {isWaConfigured() && (
+          <div className="space-y-3">
+            {/* Mode de test */}
+            <div className="flex gap-2">
+              <button
+                onClick={() => setWaTestMode('template')}
+                className="flex-1 text-xs font-bold py-2 rounded-lg transition-all"
+                style={
+                  waTestMode === 'template'
+                    ? { background: '#25D366', color: 'white' }
+                    : { background: '#F3F4F6', color: '#6B7280' }
+                }
+              >
+                Template (hello_world)
+              </button>
+              <button
+                onClick={() => setWaTestMode('text')}
+                className="flex-1 text-xs font-bold py-2 rounded-lg transition-all"
+                style={
+                  waTestMode === 'text'
+                    ? { background: '#25D366', color: 'white' }
+                    : { background: '#F3F4F6', color: '#6B7280' }
+                }
+              >
+                Message libre
+              </button>
+            </div>
+
+            {/* Numéro */}
+            <div>
+              <label className="text-xs font-bold text-gray-500 block mb-1">Numéro destinataire</label>
+              <input
+                type="tel"
+                value={waTestNum}
+                onChange={(e) => setWaTestNum(e.target.value)}
+                placeholder="+262 692 59 53 78"
+                className="w-full px-3 py-2.5 rounded-xl border-2 border-gray-200 text-sm font-mono outline-none focus:border-green-400"
+              />
+            </div>
+
+            {/* Message libre */}
+            {waTestMode === 'text' && (
+              <div>
+                <label className="text-xs font-bold text-gray-500 block mb-1">Message</label>
+                <textarea
+                  value={waTestMsg}
+                  onChange={(e) => setWaTestMsg(e.target.value)}
+                  placeholder="Bonjour, ceci est un test Expedîle !"
+                  rows={3}
+                  className="w-full px-3 py-2.5 rounded-xl border-2 border-gray-200 text-sm outline-none focus:border-green-400 resize-none"
+                />
+              </div>
+            )}
+
+            {waTestMode === 'template' && (
+              <div className="p-3 rounded-xl bg-gray-50 border border-gray-200">
+                <p className="text-xs text-gray-500">
+                  <span className="font-bold">Template :</span> hello_world (en_US) — template de test fourni par Meta.
+                  Le destinataire recevra "Hello World" directement.
+                </p>
+              </div>
+            )}
+
+            {/* Bouton envoyer */}
+            <button
+              onClick={handleWaTest}
+              disabled={waTestStatus === 'sending'}
+              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold text-white transition-all active:scale-95 disabled:opacity-50"
+              style={{ background: '#25D366' }}
+            >
+              {waTestStatus === 'sending' ? (
+                <>
+                  <Loader2 size={16} className="animate-spin" />
+                  Envoi en cours…
+                </>
+              ) : (
+                <>
+                  <Send size={14} />
+                  Envoyer le test
+                </>
+              )}
+            </button>
+
+            {/* Résultat */}
+            {waTestStatus === 'ok' && (
+              <div className="flex items-center gap-2 p-3 rounded-xl bg-green-50 border border-green-200">
+                <CheckCircle size={16} className="text-green-600 flex-shrink-0" />
+                <p className="text-xs text-green-700 font-medium">{waTestResult}</p>
+              </div>
+            )}
+            {waTestStatus === 'error' && (
+              <div className="p-3 rounded-xl bg-red-50 border border-red-200">
+                <div className="flex items-center gap-2 mb-1">
+                  <XCircle size={16} className="text-red-600 flex-shrink-0" />
+                  <p className="text-xs text-red-700 font-bold">Erreur</p>
+                </div>
+                <p className="text-xs text-red-600 font-mono break-all">{waTestResult}</p>
+              </div>
+            )}
+
+            {/* Guide rapide */}
+            <div className="border-t pt-3 mt-3">
+              <p className="text-xs font-bold text-gray-700 mb-2">Guide rapide</p>
+              <div className="space-y-1.5 text-xs text-gray-500">
+                <p>1. <span className="font-medium">Template</span> = message pré-approuvé Meta. Peut être envoyé à tout moment, même si le client n'a jamais écrit.</p>
+                <p>2. <span className="font-medium">Message libre</span> = texte personnalisé. Fonctionne uniquement dans la <span className="font-medium">fenêtre de 24h</span> après le dernier message du client.</p>
+                <p>3. Si le message libre échoue (hors fenêtre 24h), l'app ouvre automatiquement <span className="font-mono">wa.me</span> en fallback.</p>
+                <p>4. Le token actuel est <span className="font-medium">temporaire</span> (expire après 24h). Pour un token permanent, créez une System User sur Meta Business Manager.</p>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ── Infos système ── */}

@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useCallback, useMemo } from
 import { STATUTS, PREV_STATUT, CATEGORIES_INIT, CLIENTS_INIT, TARIFS_DEFAUT, initEnvois, getDestByCP } from '../constants';
 import { MSG_TEMPLATES } from '../constants/templates';
 import { uid, makeData, calcTransport, getCatTaux, eur, waLink, mailtoLink, getClientDest } from '../utils';
+import { isWaConfigured, sendWhatsApp } from '../services/whatsappApi';
 
 const AppContext = createContext(null);
 
@@ -159,12 +160,23 @@ export function AppProvider({ children }) {
     const fullMsg = tpl ? (canal === 'whatsapp' ? tpl.whatsapp(c, colis) : tpl.email(c, colis)) : customMsg || '';
 
     if (canal === 'whatsapp' && c.tel) {
-      window.open(waLink(c.tel, fullMsg), '_blank');
+      if (isWaConfigured()) {
+        // ── API WhatsApp Business Cloud ──
+        sendWhatsApp(c.tel, fullMsg, {
+          onSuccess: () => flash(`✅ WhatsApp envoyé automatiquement → ${c.nom.split(' ')[0]}`),
+          onFallback: (reason) => {
+            console.warn('[WA] Fallback wa.me:', reason);
+            flash(`WhatsApp ouvert → ${c.nom.split(' ')[0]} (envoi manuel)`);
+          },
+        });
+      } else {
+        window.open(waLink(c.tel, fullMsg), '_blank');
+        flash(`WhatsApp → ${c.nom.split(' ')[0]}`);
+      }
     } else if (canal === 'email' && c.email) {
       window.open(mailtoLink(c.email, fullMsg), '_blank');
+      flash(`Email → ${c.nom.split(' ')[0]}`);
     }
-
-    flash(`${canal === 'whatsapp' ? 'WhatsApp' : 'Email'} → ${c.nom.split(' ')[0]}`);
   }, [clients, data, auth, flash]);
 
   const getPreview = useCallback((templateKey, clientId, colisId, canal) => {
