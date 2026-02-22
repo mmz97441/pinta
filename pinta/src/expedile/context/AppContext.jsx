@@ -168,6 +168,18 @@ export function AppProvider({ children }) {
         flash({ msg: `Envoi WhatsApp → ${prenom}…`, type: 'info' });
         sendWhatsApp(c.tel, fullMsg).then((res) => {
           if (res.ok) {
+            // Add to chat thread
+            setData((prev) => prev.map((p) => {
+              if (p.id !== colisId) return p;
+              return {
+                ...p,
+                messages: [...p.messages, {
+                  id: uid(), type: 'staff', auteur: auth?.u?.nom || 'Système',
+                  texte: fullMsg, statut: 'envoye',
+                  heure: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
+                }],
+              };
+            }));
             flash({ msg: `✅ WhatsApp envoyé → ${prenom}`, type: 'success' });
           } else {
             // Échec API (fenêtre 24h expirée, etc.) → bouton fallback, PAS de redirection auto
@@ -349,12 +361,41 @@ export function AppProvider({ children }) {
     flash('Paiement confirmé !');
   }, [log, upd, flash]);
 
-  const envMsg = useCallback((id, msgTxt, authInfo) => {
+  const envMsg = useCallback(async (colisId, msgTxt, authInfo, tel) => {
     if (!msgTxt.trim()) return;
+    const msgId = uid();
+    const heure = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+    const isStaffSender = authInfo.type === 'staff';
+
+    // Add message immediately (status 'envoi' for staff, null for client)
     setData((prev) => prev.map((c) => {
-      if (c.id !== id) return c;
-      return { ...c, messages: [...c.messages, { id: uid(), type: authInfo.type === 'staff' ? 'staff' : 'client', auteur: authInfo.u.nom, texte: msgTxt.trim() }] };
+      if (c.id !== colisId) return c;
+      return {
+        ...c,
+        messages: [...c.messages, {
+          id: msgId,
+          type: isStaffSender ? 'staff' : 'client',
+          auteur: authInfo.u.nom,
+          texte: msgTxt.trim(),
+          heure,
+          statut: isStaffSender && tel ? 'envoi' : null,
+        }],
+      };
     }));
+
+    // Send via WhatsApp if staff + phone available
+    if (isStaffSender && tel && isWaConfigured()) {
+      const res = await sendWhatsApp(tel, msgTxt.trim());
+      setData((prev) => prev.map((c) => {
+        if (c.id !== colisId) return c;
+        return {
+          ...c,
+          messages: c.messages.map((m) =>
+            m.id === msgId ? { ...m, statut: res.ok ? 'envoye' : 'echec' } : m,
+          ),
+        };
+      }));
+    }
   }, []);
 
   const value = useMemo(() => ({

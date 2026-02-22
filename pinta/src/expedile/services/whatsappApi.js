@@ -161,7 +161,7 @@ export async function sendWhatsApp(to, text) {
   const result = await sendText(to, text);
 
   if (result.ok) {
-    return { ok: true };
+    return { ok: true, messageId: result.data?.messages?.[0]?.id };
   } else {
     return { ok: false, error: result.error, waLink: waMeLink(to, text) };
   }
