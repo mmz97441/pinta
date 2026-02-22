@@ -1,8 +1,9 @@
-import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
+import React, { createContext, useContext, useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { STATUTS, PREV_STATUT, CATEGORIES_INIT, CLIENTS_INIT, TARIFS_DEFAUT, initEnvois, getDestByCP } from '../constants';
 import { MSG_TEMPLATES } from '../constants/templates';
 import { uid, makeData, calcTransport, getCatTaux, eur, mailtoLink, getClientDest } from '../utils';
-import { isWaConfigured, sendWhatsApp, waMeLink } from '../services/whatsappApi';
+import { isWaConfigured, sendWhatsApp, waMeLink, normalizeTel } from '../services/whatsappApi';
+import { connectWebhook } from '../services/webhookListener';
 
 const AppContext = createContext(null);
 
@@ -391,12 +392,68 @@ export function AppProvider({ children }) {
         return {
           ...c,
           messages: c.messages.map((m) =>
-            m.id === msgId ? { ...m, statut: res.ok ? 'envoye' : 'echec' } : m,
+            m.id === msgId ? { ...m, statut: res.ok ? 'envoye' : 'echec', waId: res.ok ? res.messageId : null } : m,
           ),
         };
       }));
     }
   }, []);
+
+  // ── Webhook SSE — réception messages entrants + statuts ──
+  const clientsRef = useRef(clients);
+  clientsRef.current = clients;
+
+  useEffect(() => {
+    const cleanup = connectWebhook((event) => {
+      if (event.type === 'message') {
+        // ── Message entrant du client ──
+        const fromNorm = event.from; // déjà normalisé (ex: "262692595378")
+        // Trouver le client par téléphone
+        const cl = clientsRef.current.find((c) => c.tel && normalizeTel(c.tel) === fromNorm);
+        if (!cl) {
+          console.warn('[Webhook] Aucun client trouvé pour', fromNorm);
+          return;
+        }
+        // Trouver le colis actif le plus récent de ce client
+        setData((prev) => {
+          const activeColis = prev.filter(
+            (p) => p.clientId === cl.id && p.statut !== 'annule' && p.statut !== 'livre',
+          );
+          if (activeColis.length === 0) return prev;
+          const targetId = activeColis[activeColis.length - 1].id;
+          return prev.map((p) => {
+            if (p.id !== targetId) return p;
+            return {
+              ...p,
+              messages: [...p.messages, {
+                id: uid(),
+                type: 'client',
+                auteur: event.name || cl.nom,
+                texte: event.text,
+                heure: new Date(parseInt(event.timestamp, 10) * 1000)
+                  .toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
+                waId: event.waId,
+              }],
+            };
+          });
+        });
+        // Notification flash
+        flash({ msg: `💬 ${event.name || cl.nom} : ${event.text.slice(0, 60)}`, type: 'info', duration: 4000 });
+      } else if (event.type === 'status') {
+        // ── Mise à jour statut (sent → delivered → read) ──
+        const statusMap = { sent: 'envoye', delivered: 'distribue', read: 'lu', failed: 'echec' };
+        const newStatut = statusMap[event.status];
+        if (!newStatut) return;
+        setData((prev) => prev.map((p) => ({
+          ...p,
+          messages: p.messages.map((m) =>
+            m.waId === event.waId ? { ...m, statut: newStatut } : m,
+          ),
+        })));
+      }
+    });
+    return cleanup;
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const value = useMemo(() => ({
     // Auth

@@ -8,4 +8,18 @@ export default defineConfig({
       '@': '/src',
     },
   },
+  server: {
+    proxy: {
+      '/webhook': 'http://localhost:3001',
+      '/api/events': {
+        target: 'http://localhost:3001',
+        // SSE nécessite pas de buffering
+        configure: (proxy) => {
+          proxy.on('proxyRes', (proxyRes) => {
+            proxyRes.headers['cache-control'] = 'no-cache';
+          });
+        },
+      },
+    },
+  },
 })

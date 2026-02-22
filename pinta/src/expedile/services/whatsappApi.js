@@ -24,7 +24,7 @@ export function isWaConfigured() {
  * Ex: "+262 692 12 34 56" → "262692123456"
  *     "0692123456"        → "262692123456"
  */
-function normalizeTel(tel) {
+export function normalizeTel(tel) {
   let cleaned = tel.replace(/[^0-9+]/g, '');
   // Si commence par +, on enlève le +
   if (cleaned.startsWith('+')) cleaned = cleaned.slice(1);
