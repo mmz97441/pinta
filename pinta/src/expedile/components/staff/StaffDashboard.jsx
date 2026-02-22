@@ -3,6 +3,7 @@ import {
   Plus, Search, X, BarChart3, CircleDot, Clock, CheckCircle,
   ChevronRight, AlertTriangle, Filter, Package,
   User, Clipboard, Ruler, Wrench, CreditCard, Plane, Star,
+  Hash, Layers,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { BRAND, STATUTS, STATUT_ENVOI, getDestByCP } from '../../constants';
@@ -262,6 +263,7 @@ export default function StaffDashboard({ onNewColis }) {
   const [activeCard, setActiveCard] = useState(null);
   const [pipeFilter, setPipeFilter] = useState(null);
   const [showEnvoiFilter, setShowEnvoiFilter] = useState(false);
+  const [viewMode, setViewMode] = useState('status'); // 'status' | 'numero'
 
   // ── Search results ────────────────────────────────────────────────────────
   const searchResults = useMemo(
@@ -342,6 +344,13 @@ export default function StaffDashboard({ onNewColis }) {
         count: envoiFiltered.filter((c) => p.statuts.includes(c.statut)).length,
       }));
   }, [activeCardDef, envoiFiltered]);
+
+  // ── Sorted flat list for "numero" view mode ─────────────────────────────
+  const sortedByNumero = useMemo(() => {
+    return [...activePool]
+      .filter((c) => c.statut !== 'annule')
+      .sort((a, b) => a.ref.localeCompare(b.ref, 'fr', { numeric: true }));
+  }, [activePool]);
 
   // ── Missing invoices ──────────────────────────────────────────────────────
   const missingInvoices = useMemo(
@@ -695,92 +704,161 @@ export default function StaffDashboard({ onNewColis }) {
         </div>
       )}
 
-      {/* ── À faire ──────────────────────────────────────────────────────── */}
-      {(aFaire.length > 0 || !activeCard) && (
+      {/* ── View mode toggle ─────────────────────────────────────────────── */}
+      <div className="anim-fade stagger-4 flex items-center gap-1 self-end">
+        <div
+          className="inline-flex rounded-xl overflow-hidden border"
+          style={{ borderColor: '#E5E7EB' }}
+        >
+          <button
+            onClick={() => setViewMode('status')}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold transition-all"
+            style={
+              viewMode === 'status'
+                ? { background: BRAND.navy, color: 'white' }
+                : { background: 'white', color: '#6B7280' }
+            }
+          >
+            <Layers size={12} strokeWidth={2.5} />
+            Statut
+          </button>
+          <button
+            onClick={() => setViewMode('numero')}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold transition-all"
+            style={
+              viewMode === 'numero'
+                ? { background: BRAND.navy, color: 'white' }
+                : { background: 'white', color: '#6B7280' }
+            }
+          >
+            <Hash size={12} strokeWidth={2.5} />
+            N° Colis
+          </button>
+        </div>
+      </div>
+
+      {/* ── View: par statut (grouped) ────────────────────────────────── */}
+      {viewMode === 'status' && (
+        <>
+          {/* À faire */}
+          {(aFaire.length > 0 || !activeCard) && (
+            <div className="anim-fade stagger-5">
+              <SectionHeader
+                icon={CircleDot}
+                label="À faire"
+                count={aFaire.length}
+                color={BRAND.navy}
+              />
+              {aFaire.length === 0 ? (
+                <div className="card p-6 flex flex-col items-center text-center">
+                  <CheckCircle size={28} className="text-emerald-300 mb-2" />
+                  <p className="text-sm font-semibold text-gray-500">Rien à traiter</p>
+                  <p className="text-xs text-gray-400 mt-0.5">Tous les colis sont à jour</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  {aFaire.map((c, i) => (
+                    <ColisCard
+                      key={c.id}
+                      c={c}
+                      client={getClient(c.clientId)}
+                      envois={envois}
+                      stagger={i + 1}
+                      onClick={() => openColis(c.id)}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* En attente du client */}
+          {(attente.length > 0 || !activeCard) && (
+            <div className="anim-fade stagger-6">
+              <SectionHeader
+                icon={Clock}
+                label="En attente du client"
+                count={attente.length}
+                color="#D97706"
+              />
+              {attente.length === 0 ? (
+                <div
+                  className="card p-4 flex items-center gap-2.5"
+                  style={{ background: '#FFFBEB', borderColor: '#FCD34D40' }}
+                >
+                  <Clock size={16} className="text-amber-300 flex-shrink-0" />
+                  <p className="text-sm text-amber-600 font-medium">Aucun colis en attente</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  {attente.map((c, i) => (
+                    <ColisCard
+                      key={c.id}
+                      c={c}
+                      client={getClient(c.clientId)}
+                      envois={envois}
+                      stagger={i + 1}
+                      onClick={() => openColis(c.id)}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Livrés */}
+          {(livres.length > 0 || !activeCard) && (
+            <div className="anim-fade stagger-7">
+              <SectionHeader
+                icon={CheckCircle}
+                label="Livrés"
+                count={livres.length}
+                color="#16A34A"
+              />
+              {livres.length === 0 ? (
+                <div
+                  className="card p-4 flex items-center gap-2.5"
+                  style={{ background: '#F0FDF4', borderColor: '#BBF7D040' }}
+                >
+                  <Star size={16} className="text-emerald-300 flex-shrink-0" />
+                  <p className="text-sm text-emerald-600 font-medium">Aucun colis livré (sur la sélection)</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  {livres.map((c, i) => (
+                    <ColisCard
+                      key={c.id}
+                      c={c}
+                      client={getClient(c.clientId)}
+                      envois={envois}
+                      stagger={i + 1}
+                      onClick={() => openColis(c.id)}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* ── View: par numéro de colis (flat sorted) ──────────────────────── */}
+      {viewMode === 'numero' && (
         <div className="anim-fade stagger-5">
           <SectionHeader
-            icon={CircleDot}
-            label="À faire"
-            count={aFaire.length}
+            icon={Hash}
+            label="Tous les colis"
+            count={sortedByNumero.length}
             color={BRAND.navy}
           />
-          {aFaire.length === 0 ? (
+          {sortedByNumero.length === 0 ? (
             <div className="card p-6 flex flex-col items-center text-center">
-              <CheckCircle size={28} className="text-emerald-300 mb-2" />
-              <p className="text-sm font-semibold text-gray-500">Rien à traiter</p>
-              <p className="text-xs text-gray-400 mt-0.5">Tous les colis sont à jour</p>
+              <Package size={28} className="text-gray-300 mb-2" />
+              <p className="text-sm font-semibold text-gray-500">Aucun colis</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-              {aFaire.map((c, i) => (
-                <ColisCard
-                  key={c.id}
-                  c={c}
-                  client={getClient(c.clientId)}
-                  envois={envois}
-                  stagger={i + 1}
-                  onClick={() => openColis(c.id)}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ── En attente du client ──────────────────────────────────────────── */}
-      {(attente.length > 0 || !activeCard) && (
-        <div className="anim-fade stagger-6">
-          <SectionHeader
-            icon={Clock}
-            label="En attente du client"
-            count={attente.length}
-            color="#D97706"
-          />
-          {attente.length === 0 ? (
-            <div
-              className="card p-4 flex items-center gap-2.5"
-              style={{ background: '#FFFBEB', borderColor: '#FCD34D40' }}
-            >
-              <Clock size={16} className="text-amber-300 flex-shrink-0" />
-              <p className="text-sm text-amber-600 font-medium">Aucun colis en attente</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-              {attente.map((c, i) => (
-                <ColisCard
-                  key={c.id}
-                  c={c}
-                  client={getClient(c.clientId)}
-                  envois={envois}
-                  stagger={i + 1}
-                  onClick={() => openColis(c.id)}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ── Livrés ───────────────────────────────────────────────────────── */}
-      {(livres.length > 0 || !activeCard) && (
-        <div className="anim-fade stagger-7">
-          <SectionHeader
-            icon={CheckCircle}
-            label="Livrés"
-            count={livres.length}
-            color="#16A34A"
-          />
-          {livres.length === 0 ? (
-            <div
-              className="card p-4 flex items-center gap-2.5"
-              style={{ background: '#F0FDF4', borderColor: '#BBF7D040' }}
-            >
-              <Star size={16} className="text-emerald-300 flex-shrink-0" />
-              <p className="text-sm text-emerald-600 font-medium">Aucun colis livré (sur la sélection)</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-              {livres.map((c, i) => (
+              {sortedByNumero.map((c, i) => (
                 <ColisCard
                   key={c.id}
                   c={c}
