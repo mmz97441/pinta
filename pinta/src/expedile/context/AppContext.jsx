@@ -1,8 +1,8 @@
 import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
 import { STATUTS, PREV_STATUT, CATEGORIES_INIT, CLIENTS_INIT, TARIFS_DEFAUT, initEnvois, getDestByCP } from '../constants';
 import { MSG_TEMPLATES } from '../constants/templates';
-import { uid, makeData, calcTransport, getCatTaux, eur, waLink, mailtoLink, getClientDest } from '../utils';
-import { isWaConfigured, sendWhatsApp } from '../services/whatsappApi';
+import { uid, makeData, calcTransport, getCatTaux, eur, mailtoLink, getClientDest } from '../utils';
+import { isWaConfigured, sendWhatsApp, waMeLink } from '../services/whatsappApi';
 
 const AppContext = createContext(null);
 
@@ -61,9 +61,11 @@ export function AppProvider({ children }) {
   const unreadNotifs = useMemo(() => notifs.filter((n) => !n.lu).length, [notifs]);
 
   // ── Flash messages ──
+  // Accepts string OR rich object { msg, type, action: { label, onClick }, duration }
   const flash = useCallback((m) => {
     setToast(m);
-    setTimeout(() => setToast(''), 2200);
+    const dur = (typeof m === 'object' && m.action) ? 6000 : (typeof m === 'object' && m.duration) ? m.duration : 2200;
+    setTimeout(() => setToast(''), dur);
   }, []);
 
   // ── Confirm dialog ──
@@ -161,17 +163,36 @@ export function AppProvider({ children }) {
 
     if (canal === 'whatsapp' && c.tel) {
       if (isWaConfigured()) {
-        // ── API WhatsApp Business Cloud ──
-        sendWhatsApp(c.tel, fullMsg, {
-          onSuccess: () => flash(`✅ WhatsApp envoyé automatiquement → ${c.nom.split(' ')[0]}`),
-          onFallback: (reason) => {
-            console.warn('[WA] Fallback wa.me:', reason);
-            flash(`WhatsApp ouvert → ${c.nom.split(' ')[0]} (envoi manuel)`);
-          },
+        // ── API WhatsApp Business Cloud — envoi direct, pas de redirection ──
+        const prenom = c.nom.split(' ')[0];
+        flash({ msg: `Envoi WhatsApp → ${prenom}…`, type: 'info' });
+        sendWhatsApp(c.tel, fullMsg).then((res) => {
+          if (res.ok) {
+            flash({ msg: `✅ WhatsApp envoyé → ${prenom}`, type: 'success' });
+          } else {
+            // Échec API (fenêtre 24h expirée, etc.) → bouton fallback, PAS de redirection auto
+            const link = res.waLink;
+            flash({
+              msg: `⚠️ Envoi auto impossible → ${prenom}\n(${res.error || 'fenêtre 24h expirée'})`,
+              type: 'warning',
+              action: link ? {
+                label: 'Ouvrir WhatsApp manuellement',
+                onClick: () => window.open(link, '_blank'),
+              } : null,
+            });
+          }
         });
       } else {
-        window.open(waLink(c.tel, fullMsg), '_blank');
-        flash(`WhatsApp → ${c.nom.split(' ')[0]}`);
+        // API non configurée → bouton wa.me, pas de redirection auto
+        const link = waMeLink(c.tel, fullMsg);
+        flash({
+          msg: `API WhatsApp non configurée`,
+          type: 'warning',
+          action: {
+            label: 'Ouvrir WhatsApp',
+            onClick: () => window.open(link, '_blank'),
+          },
+        });
       }
     } else if (canal === 'email' && c.email) {
       window.open(mailtoLink(c.email, fullMsg), '_blank');
@@ -346,7 +367,7 @@ export function AppProvider({ children }) {
     // Notifications
     notifs, unreadNotifs, markNotifRead, markAllNotifsRead,
     // UI
-    selId, setSelId, sel, selClient, selDest, toast, page, setPage, clientTab, setClientTab, colisFilter, setColisFilter, cfm, setCfm,
+    selId, setSelId, sel, selClient, selDest, toast, setToast, page, setPage, clientTab, setClientTab, colisFilter, setColisFilter, cfm, setCfm,
     // Actions
     flash, ask, closeConfirm, upd, log: log, getClient, getTarif,
     updateClient, addNewClient, deleteClient,
@@ -355,7 +376,7 @@ export function AppProvider({ children }) {
   }), [
     auth, isStaff, authCl, data, clients, categories, tarifs, envois, logs,
     comLog, sendMsg, getPreview, notifs, unreadNotifs, markNotifRead, markAllNotifsRead,
-    selId, sel, selClient, selDest, toast, page, clientTab, colisFilter, cfm,
+    selId, sel, selClient, selDest, toast, setToast, page, clientTab, colisFilter, cfm,
     flash, ask, closeConfirm, upd, log, getClient, getTarif,
     updateClient, addNewClient, deleteClient,
     addCategory, updateCatTaux, updateCatLabel, deleteCategory,

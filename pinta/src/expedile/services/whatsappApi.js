@@ -139,29 +139,30 @@ export async function sendText(to, text) {
 }
 
 /**
- * Envoie un message WhatsApp — essaie l'API d'abord, fallback wa.me si ça échoue.
- *
- * @param {string} to      - Numéro destinataire
- * @param {string} text    - Corps du message
- * @param {object} options - { onSuccess, onFallback, onError }
+ * Construit un lien wa.me (fallback manuel uniquement).
  */
-export async function sendWhatsApp(to, text, { onSuccess, onFallback, onError } = {}) {
+export function waMeLink(to, text) {
+  return `https://wa.me/${normalizeTel(to)}?text=${encodeURIComponent(text)}`;
+}
+
+/**
+ * Envoie un message WhatsApp via l'API — SANS redirection automatique.
+ * Retourne { ok, error?, waLink? } pour que l'appelant gère l'affichage.
+ *
+ * @param {string} to   - Numéro destinataire
+ * @param {string} text - Corps du message
+ * @returns {{ ok: boolean, error?: string, waLink?: string }}
+ */
+export async function sendWhatsApp(to, text) {
   if (!isWaConfigured()) {
-    // Pas configuré → fallback wa.me direct
-    const waUrl = `https://wa.me/${normalizeTel(to)}?text=${encodeURIComponent(text)}`;
-    window.open(waUrl, '_blank');
-    onFallback?.('API non configurée, ouverture wa.me');
-    return;
+    return { ok: false, error: 'API non configurée', waLink: waMeLink(to, text) };
   }
 
   const result = await sendText(to, text);
 
   if (result.ok) {
-    onSuccess?.(result.data);
+    return { ok: true };
   } else {
-    // Si erreur (hors fenêtre 24h, etc.) → fallback wa.me
-    const waUrl = `https://wa.me/${normalizeTel(to)}?text=${encodeURIComponent(text)}`;
-    window.open(waUrl, '_blank');
-    onFallback?.(result.error);
+    return { ok: false, error: result.error, waLink: waMeLink(to, text) };
   }
 }
