@@ -1,9 +1,28 @@
 import { getDestByCP } from './index';
 import { eur } from '../utils';
 
+// ══════════════════════════════════════════════════════════════════════════════
+// MSG_TEMPLATES — chaque entrée contient :
+//   label     : libellé affiché dans l'UI
+//   whatsapp  : texte complet pour prévisualisation / fallback wa.me
+//   email     : texte email
+//   meta      : (optionnel) mapping vers un template Meta approuvé
+//               → { name, lang, params(client, colis) }
+//
+// ⚠️  Pour que les notifications partent SANS fenêtre 24h, il faut :
+//     1. Créer le template correspondant sur Meta Business → WhatsApp → Templates
+//     2. Renseigner `meta.name` ici avec le nom exact du template Meta
+//     3. Les params doivent correspondre aux {{1}}, {{2}}, etc. du template
+// ══════════════════════════════════════════════════════════════════════════════
+
 export const MSG_TEMPLATES = {
   reception: {
     label: '📦 Colis réceptionné',
+    meta: {
+      name: 'colis_reception',       // ← nom du template à créer sur Meta
+      lang: 'fr',
+      params: (c, colis) => [c.nom.split(' ')[0], colis.ref, colis.desc || ''],
+    },
     whatsapp: (c, colis) =>
       `Bonjour ${c.nom.split(' ')[0]} 👋\n\nVotre colis *${colis.ref}* est bien arrivé à notre entrepôt de Paris !\n\n📦 Contenu : ${colis.desc}\n${colis.trackings?.length ? `🔍 Tracking : ${colis.trackings.join(', ')}\n` : ''}\nNous allons le mesurer et peser. On revient vers vous rapidement pour la suite.\n\n_Expedîle — Paris → ${getDestByCP(c.cp).nom}_`,
     email: (c, colis) =>
@@ -12,6 +31,11 @@ export const MSG_TEMPLATES = {
 
   facture_manquante: {
     label: '📄 Facture manquante',
+    meta: {
+      name: 'facture_manquante',
+      lang: 'fr',
+      params: (c, colis) => [c.nom.split(' ')[0], colis.ref],
+    },
     whatsapp: (c, colis) =>
       `Bonjour ${c.nom.split(' ')[0]} 👋\n\n⚠️ Il nous manque la *facture d'origine* pour votre colis *${colis.ref}* (${colis.desc}).\n\nSans cette facture, nous ne pourrons pas calculer les taxes (Octroi de Mer) ni établir le devis.\n\n👉 Merci de nous l'envoyer par retour de message (photo ou PDF).\n\n_Expedîle_`,
     email: (c, colis) =>
@@ -20,6 +44,16 @@ export const MSG_TEMPLATES = {
 
   demande_feu_vert: {
     label: '🟢 Demande de feu vert',
+    meta: {
+      name: 'demande_feu_vert',
+      lang: 'fr',
+      params: (c, colis) => [
+        c.nom.split(' ')[0],
+        colis.ref,
+        colis.dimL ? `${colis.dimL}x${colis.dimW}x${colis.dimH} cm` : '',
+        colis.poids ? `${colis.poids} kg` : '',
+      ],
+    },
     whatsapp: (c, colis) =>
       `Bonjour ${c.nom.split(' ')[0]} 👋\n\nVotre colis *${colis.ref}* a été réceptionné et mesuré à notre entrepôt de Paris.\n\n📦 ${colis.desc}\n📐 ${colis.dimL ? `${colis.dimL}×${colis.dimW}×${colis.dimH} cm` : ''} — ⚖️ ${colis.poids || '?'} kg\n\n👉 *Avez-vous l'accord pour qu'on prépare et optimise votre colis pour l'envoi ?*\n\n✅ Répondez *OUI* pour autoriser la préparation\n❌ Répondez *NON* pour annuler\n\n${colis.factures?.length > 0 ? '' : "📄 *Important* : pensez à nous envoyer la facture d'achat d'origine pour le calcul des taxes (OM / OMR).\n\n"}💡 Le devis final vous sera envoyé après la préparation et l'optimisation de votre colis.\n\n_Expedîle_`,
     email: (c, colis) =>
@@ -28,6 +62,11 @@ export const MSG_TEMPLATES = {
 
   feu_vert_recu: {
     label: '✅ Feu vert confirmé',
+    meta: {
+      name: 'feu_vert_confirme',
+      lang: 'fr',
+      params: (c, colis) => [c.nom.split(' ')[0], colis.ref],
+    },
     whatsapp: (c, colis) =>
       `Bonjour ${c.nom.split(' ')[0]} 👋\n\nMerci pour votre accord ! ✅\n\nVotre colis *${colis.ref}* va être préparé et optimisé par notre équipe.\n\nVous recevrez le devis final dès que c'est prêt.\n\n_Expedîle_`,
     email: (c, colis) =>
@@ -36,6 +75,17 @@ export const MSG_TEMPLATES = {
 
   devis_final: {
     label: '💳 Devis final',
+    meta: {
+      name: 'devis_final',
+      lang: 'fr',
+      params: (c, colis) => [
+        c.nom.split(' ')[0],
+        colis.ref,
+        eur(colis.devisTotal),
+        eur(colis.devisTransport),
+        eur((colis.devisOM || 0) + (colis.devisOMR || 0)),
+      ],
+    },
     whatsapp: (c, colis) =>
       `Bonjour ${c.nom.split(' ')[0]} 👋\n\nLe devis final pour votre colis *${colis.ref}* est prêt !\n\n📦 ${colis.desc}\n\n💰 *Total : ${eur(colis.devisTotal)}*\n  • Transport : ${eur(colis.devisTransport)}\n  • Taxes : ${eur((colis.devisOM || 0) + (colis.devisOMR || 0))}\n  • TVA : ${eur(colis.devisTVA)}\n${colis.economie > 0 ? `\n✅ *Économie grâce à l'optimisation : ${eur(colis.economie)}*\n(Sans optimisation : ${eur(colis.avantOptimTotal)})\n` : ''}\n👉 Vous pouvez payer directement sur votre espace client ou nous répondre pour toute question.\n\n_Expedîle_`,
     email: (c, colis) =>
@@ -44,6 +94,11 @@ export const MSG_TEMPLATES = {
 
   relance_feu_vert: {
     label: '⏰ Relance feu vert',
+    meta: {
+      name: 'relance_feu_vert',
+      lang: 'fr',
+      params: (c, colis) => [c.nom.split(' ')[0], colis.ref],
+    },
     whatsapp: (c, colis) =>
       `Bonjour ${c.nom.split(' ')[0]} 👋\n\nPetit rappel : votre colis *${colis.ref}* (${colis.desc}) attend toujours votre accord pour la préparation.\n\n✅ *OUI* pour autoriser la préparation\n❌ *NON* pour annuler\n\n${colis.factures?.length > 0 ? '' : "📄 N'oubliez pas de nous envoyer la facture d'achat d'origine.\n\n"}⚠️ Des frais de stockage peuvent s'appliquer après 14 jours.\n\n_Expedîle_`,
     email: (c, colis) =>
@@ -52,6 +107,11 @@ export const MSG_TEMPLATES = {
 
   relance_paiement: {
     label: '⏰ Relance paiement',
+    meta: {
+      name: 'relance_paiement',
+      lang: 'fr',
+      params: (c, colis) => [c.nom.split(' ')[0], colis.ref, eur(colis.devisTotal)],
+    },
     whatsapp: (c, colis) =>
       `Bonjour ${c.nom.split(' ')[0]} 👋\n\nPetit rappel : le devis pour *${colis.ref}* est en attente de paiement.\n\n💰 Montant : *${eur(colis.devisTotal)}*\n\n👉 Payez sur votre espace client pour déclencher l'expédition.\n\n_Expedîle_`,
     email: (c, colis) =>
@@ -60,6 +120,11 @@ export const MSG_TEMPLATES = {
 
   expedie: {
     label: '✈️ Colis expédié',
+    meta: {
+      name: 'colis_expedie',
+      lang: 'fr',
+      params: (c, colis) => [c.nom.split(' ')[0], colis.ref, getDestByCP(c.cp).nom],
+    },
     whatsapp: (c, colis) =>
       `Bonjour ${c.nom.split(' ')[0]} 👋\n\n✈️ Votre colis *${colis.ref}* a été expédié depuis Paris !\n\n📦 ${colis.desc}\n🎯 Destination : ${getDestByCP(c.cp).nom}\n\nVous serez notifié(e) dès l'arrivée.\n\n_Expedîle_`,
     email: (c, colis) =>
@@ -68,6 +133,11 @@ export const MSG_TEMPLATES = {
 
   arrive: {
     label: '📍 Arrivé à destination',
+    meta: {
+      name: 'colis_arrive',
+      lang: 'fr',
+      params: (c, colis) => [c.nom.split(' ')[0], colis.ref, getDestByCP(c.cp).nom],
+    },
     whatsapp: (c, colis) =>
       `Bonjour ${c.nom.split(' ')[0]} 👋\n\n📍 Votre colis *${colis.ref}* est arrivé à ${getDestByCP(c.cp).nom} !\n\nNous organisons la livraison, vous serez prévenu(e) du créneau.\n\n_Expedîle_`,
     email: (c, colis) =>
@@ -76,6 +146,11 @@ export const MSG_TEMPLATES = {
 
   en_livraison: {
     label: '🚚 En livraison',
+    meta: {
+      name: 'en_livraison',
+      lang: 'fr',
+      params: (c, colis) => [c.nom.split(' ')[0], colis?.ref || ''],
+    },
     whatsapp: (c) =>
       `Bonjour ${c.nom.split(' ')[0]} 👋\n\n🚚 Votre colis est en cours de livraison aujourd'hui !\n\nMerci de rester disponible. Le livreur vous contactera si besoin.\n\n_Expedîle_`,
     email: (c, colis) =>
@@ -84,6 +159,11 @@ export const MSG_TEMPLATES = {
 
   facture_rejetee: {
     label: '❌ Facture rejetée',
+    meta: {
+      name: 'facture_rejetee',
+      lang: 'fr',
+      params: (c, colis) => [c.nom.split(' ')[0], colis.ref],
+    },
     whatsapp: (c, colis) =>
       `Bonjour ${c.nom.split(' ')[0]} 👋\n\n⚠️ La facture que vous nous avez transmise pour votre colis *${colis.ref}* (${colis.desc}) n'a pas pu être validée.\n\n📄 *Motif : ${colis._motifRejet || 'facture non conforme'}*\n\n👉 Merci de nous renvoyer une facture conforme dès que possible (photo ou PDF lisible).\n\nSans facture validée, nous ne pouvons pas calculer les taxes ni avancer sur la préparation de votre colis.\n\n_Expedîle_`,
     email: (c, colis) =>
@@ -92,6 +172,7 @@ export const MSG_TEMPLATES = {
 
   libre: {
     label: '✍️ Message libre',
+    // Pas de meta → texte libre uniquement (fenêtre 24h)
     whatsapp: (c) => `Bonjour ${c.nom.split(' ')[0]} 👋\n\n`,
     email: (c) => `Objet : \n\nBonjour ${c.nom},\n\n\n\nCordialement,\nL'équipe Expedîle`,
   },

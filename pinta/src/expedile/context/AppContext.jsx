@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useCallback, useMemo, useEf
 import { STATUTS, PREV_STATUT, CATEGORIES_INIT, CLIENTS_INIT, TARIFS_DEFAUT, initEnvois, getDestByCP } from '../constants';
 import { MSG_TEMPLATES } from '../constants/templates';
 import { uid, makeData, calcTransport, getCatTaux, eur, mailtoLink, getClientDest } from '../utils';
-import { isWaConfigured, sendWhatsApp, waMeLink, normalizeTel } from '../services/whatsappApi';
+import { isWaConfigured, sendWhatsApp, sendNotification, waMeLink, normalizeTel } from '../services/whatsappApi';
 import { connectWebhook } from '../services/webhookListener';
 
 const AppContext = createContext(null);
@@ -164,11 +164,18 @@ export function AppProvider({ children }) {
 
     if (canal === 'whatsapp' && c.tel) {
       if (isWaConfigured()) {
-        // ── API WhatsApp Business Cloud — envoi direct, pas de redirection ──
+        // ── API WhatsApp Business Cloud — template Meta + fallback texte ──
         const prenom = c.nom.split(' ')[0];
+        // Préparer les infos template Meta si disponibles
+        const metaInfo = tpl?.meta ? {
+          name: tpl.meta.name,
+          lang: tpl.meta.lang || 'fr',
+          params: tpl.meta.params ? tpl.meta.params(c, colis || {}) : [],
+        } : null;
         flash({ msg: `Envoi WhatsApp → ${prenom}…`, type: 'info' });
-        sendWhatsApp(c.tel, fullMsg).then((res) => {
+        sendNotification(c.tel, fullMsg, metaInfo).then((res) => {
           if (res.ok) {
+            const methodLabel = res.method === 'template' ? 'template' : 'texte';
             // Add to chat thread
             setData((prev) => prev.map((p) => {
               if (p.id !== colisId) return p;
@@ -176,17 +183,17 @@ export function AppProvider({ children }) {
                 ...p,
                 messages: [...p.messages, {
                   id: uid(), type: 'staff', auteur: auth?.u?.nom || 'Système',
-                  texte: fullMsg, statut: 'envoye',
+                  texte: fullMsg, statut: 'envoye', waId: res.messageId || null,
                   heure: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
                 }],
               };
             }));
-            flash({ msg: `✅ WhatsApp envoyé → ${prenom}`, type: 'success' });
+            flash({ msg: `WhatsApp envoyé (${methodLabel}) → ${prenom}`, type: 'success' });
           } else {
-            // Échec API (fenêtre 24h expirée, etc.) → bouton fallback, PAS de redirection auto
+            // Échec API → bouton fallback, PAS de redirection auto
             const link = res.waLink;
             flash({
-              msg: `⚠️ Envoi auto impossible → ${prenom}\n(${res.error || 'fenêtre 24h expirée'})`,
+              msg: `Envoi auto impossible → ${prenom}\n(${res.error || 'fenêtre 24h expirée'})`,
               type: 'warning',
               action: link ? {
                 label: 'Ouvrir WhatsApp manuellement',
