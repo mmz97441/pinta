@@ -759,7 +759,7 @@ export default function StaffDashboard({ onNewColis }) {
                   <p className="text-xs text-gray-400 mt-0.5">Tous les colis sont à jour</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
                   {aFaire.map((c, i) => (
                     <ColisCard
                       key={c.id}
@@ -793,7 +793,7 @@ export default function StaffDashboard({ onNewColis }) {
                   <p className="text-sm text-amber-600 font-medium">Aucun colis en attente</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
                   {attente.map((c, i) => (
                     <ColisCard
                       key={c.id}
@@ -827,7 +827,7 @@ export default function StaffDashboard({ onNewColis }) {
                   <p className="text-sm text-emerald-600 font-medium">Aucun colis livré (sur la sélection)</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
                   {livres.map((c, i) => (
                     <ColisCard
                       key={c.id}
@@ -860,7 +860,7 @@ export default function StaffDashboard({ onNewColis }) {
               <p className="text-sm font-semibold text-gray-500">Aucun colis</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
               {sortedByNumero.map((c, i) => (
                 <ColisCard
                   key={c.id}

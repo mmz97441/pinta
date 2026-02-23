@@ -50,7 +50,7 @@ function AppContent() {
           <Toast />
           <ConfirmDialog />
           <DetailHeader />
-          <div className="max-w-7xl mx-auto px-4 py-4 space-y-4">
+          <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-4 space-y-4">
             <Etapes statut={sel.statut} />
             <ColisInfo />
             <StaffDetailView />
@@ -67,7 +67,7 @@ function AppContent() {
       <div style={{ fontFamily: "system-ui, -apple-system, 'Segoe UI', sans-serif", background: '#f6f7f8' }} className="min-h-screen">
         <Toast />
         <ConfirmDialog />
-        <div className="max-w-xl md:max-w-2xl lg:max-w-3xl mx-auto px-4 py-4 pb-24 space-y-4">
+        <div className="max-w-xl md:max-w-3xl lg:max-w-5xl xl:max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4 pb-24 space-y-4">
           <ClientDetailView />
           <FacturesPanel />
           <ChatPanel />
@@ -127,7 +127,7 @@ function AppContent() {
         </div>
       </div>
 
-      <div className={`mx-auto px-6 py-4 space-y-4 ${isStaff ? 'max-w-7xl' : 'max-w-xl md:max-w-2xl lg:max-w-3xl'}`}>
+      <div className={`mx-auto px-4 sm:px-6 lg:px-8 py-4 space-y-4 ${isStaff ? 'max-w-[1600px]' : 'max-w-xl md:max-w-3xl lg:max-w-5xl xl:max-w-6xl'}`}>
         {/* Staff views */}
         {isStaff && page === 'settings' && <StaffSettings />}
         {isStaff && page === 'clients' && <StaffClients />}

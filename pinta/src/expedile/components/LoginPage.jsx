@@ -39,7 +39,7 @@ export default function LoginPage() {
 
       {/* ── Card ── */}
       <div
-        className="anim-fade-up mt-8 w-full max-w-sm md:max-w-2xl rounded-2xl p-5 glass"
+        className="anim-fade-up mt-8 w-full max-w-sm md:max-w-2xl lg:max-w-3xl rounded-2xl p-5 md:p-8 glass"
         style={{
           background: 'rgba(255,255,255,0.07)',
           border: '1px solid rgba(255,255,255,0.12)',

@@ -244,7 +244,7 @@ export default function ClientProfil() {
 
       {/* ── 2. Stats ── */}
       <Section title="Statistiques">
-        <div className="grid grid-cols-2 gap-0 divide-x divide-y divide-gray-50">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-0 divide-x divide-y lg:divide-y-0 divide-gray-50">
           {[
             { label: 'Colis total', value: myColis.length, icon: Package },
             { label: 'En cours', value: enCours, icon: TrendingUp },
