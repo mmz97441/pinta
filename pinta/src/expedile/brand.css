@@ -297,30 +297,47 @@ button { touch-action: manipulation; }
 
 /* ══════════ PRINT STYLES ══════════ */
 @media print {
-  /* Hide everything except labels */
-  body > * { display: none !important; }
-  body > #root { display: block !important; }
-  #root > * { display: none !important; }
+  /* Hide everything visually (but keep in DOM so children can override) */
+  body * {
+    visibility: hidden;
+  }
 
+  /* Show only the print overlay and all its descendants */
+  .print-overlay,
+  .print-overlay * {
+    visibility: visible;
+  }
+
+  /* Position overlay at page top, remove backdrop */
   .print-overlay {
-    position: static !important;
+    position: absolute !important;
+    top: 0;
+    left: 0;
+    width: 100%;
     background: none !important;
     padding: 0 !important;
-    display: block !important;
   }
+
   .print-container {
     border-radius: 0 !important;
     padding: 0 !important;
     max-width: none !important;
     box-shadow: none !important;
   }
-  .no-print { display: none !important; }
+
+  /* Hide toolbar in print */
+  .no-print,
+  .no-print * {
+    display: none !important;
+    visibility: hidden !important;
+  }
 
   .labels-grid {
     display: grid !important;
     grid-template-columns: repeat(2, 1fr) !important;
     gap: 12px !important;
   }
+
   .label-card {
     border: 2px solid #000 !important;
     break-inside: avoid !important;
