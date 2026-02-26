@@ -1,5 +1,20 @@
 import React, { useEffect } from 'react';
+import { QRCodeSVG } from 'qrcode.react';
 import { BRAND } from '../../constants';
+
+// QR code value = the colis ref (scannable to open the colis fiche)
+// Format: "EXP:EXP-0001" — the app can parse this to navigate to the colis
+function ColisQR({ colisRef, size = 64 }) {
+  return (
+    <QRCodeSVG
+      value={`EXP:${colisRef}`}
+      size={size}
+      level="M"
+      bgColor="transparent"
+      fgColor="#1B3A4B"
+    />
+  );
+}
 
 // Format étiquette 10×15 cm — 2 par ligne sur A4
 function Label({ colis, client, dest, envoi }) {
@@ -27,10 +42,18 @@ function Label({ colis, client, dest, envoi }) {
         <span className="label-ref">{colis.ref}</span>
       </div>
 
-      {/* Destination */}
-      <div className="label-dest">
-        <span className="label-dest-flag">{dest?.flag || ''}</span>
-        <span className="label-dest-name">{dest?.nom || '—'}</span>
+      {/* QR + Destination row */}
+      <div className="label-qr-row">
+        <div className="label-qr">
+          <ColisQR colisRef={colis.ref} size={72} />
+        </div>
+        <div className="label-dest-block">
+          <span className="label-dest-flag">{dest?.flag || ''}</span>
+          <span className="label-dest-name">{dest?.nom || '—'}</span>
+          {colis.casier && (
+            <span className="label-casier-tag">{colis.casier}</span>
+          )}
+        </div>
       </div>
 
       {/* Client info */}
@@ -47,10 +70,6 @@ function Label({ colis, client, dest, envoi }) {
         <div className="label-row">
           <span className="label-lbl">Colis</span>
           <span className="label-val">{colis.desc || '—'}</span>
-        </div>
-        <div className="label-row">
-          <span className="label-lbl">Casier</span>
-          <span className="label-val label-val-bold">{colis.casier || '—'}</span>
         </div>
         <div className="label-row">
           <span className="label-lbl">Dims</span>
