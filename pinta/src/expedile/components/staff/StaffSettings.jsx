@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
 import { ArrowLeft, Plane, CreditCard, FileText, ChevronDown, Trash2, Lock, MessageCircle, Send, CheckCircle, XCircle, Loader2 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { BRAND, DESTINATIONS } from '../../constants';
+import { BRAND, DESTINATIONS, JOURS_SEMAINE } from '../../constants';
 import { eur, labelEnvoi, uid, getCatTaux } from '../../utils';
 import { Ligne } from '../ui';
 import { isWaConfigured, sendTemplate, sendText } from '../../services/whatsappApi';
 
 export default function StaffSettings() {
-  const { setPage, envois, setEnvois, data, tarifs, setTarifs, categories, addCategory, updateCatTaux, updateCatLabel, deleteCategory, flash } = useApp();
+  const { setPage, envois, setEnvois, data, tarifs, setTarifs, categories, addCategory, updateCatTaux, updateCatLabel, deleteCategory, flash, cutoff, setCutoff } = useApp();
   const [newEnvoiDate, setNewEnvoiDate] = useState('');
   const [catEditId, setCatEditId] = useState(null);
   const [newCat, setNewCat] = useState({ label: '', taux: {} });
@@ -89,6 +89,45 @@ export default function StaffSettings() {
               </div>
             );
           })}
+        </div>
+
+        {/* Cutoff config */}
+        <div className="border-t pt-4 mb-4">
+          <p className="text-sm font-bold text-gray-700 mb-1">Cutoff auto-affectation</p>
+          <p className="text-xs text-gray-500 mb-3">
+            Les colis avec feu vert reçu avant ce cutoff sont automatiquement affectés au prochain vol.
+          </p>
+          <div className="flex gap-3">
+            <div className="flex-1">
+              <label className="text-xs font-bold text-gray-500 block mb-1">Jour</label>
+              <select
+                value={cutoff.day}
+                onChange={(e) => setCutoff((prev) => ({ ...prev, day: Number(e.target.value) }))}
+                className="w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-sm outline-none"
+                style={{ color: BRAND.navy }}
+              >
+                {JOURS_SEMAINE.map((j, i) => (
+                  <option key={i} value={i}>{j}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex-1">
+              <label className="text-xs font-bold text-gray-500 block mb-1">Heure</label>
+              <select
+                value={cutoff.hour}
+                onChange={(e) => setCutoff((prev) => ({ ...prev, hour: Number(e.target.value) }))}
+                className="w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-sm outline-none"
+                style={{ color: BRAND.navy }}
+              >
+                {Array.from({ length: 24 }, (_, i) => (
+                  <option key={i} value={i}>{i.toString().padStart(2, '0')}:00</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <p className="text-xs text-gray-400 mt-2">
+            Actuel : {JOURS_SEMAINE[cutoff.day]} {cutoff.hour}h00
+          </p>
         </div>
 
         <div className="border-t pt-4">

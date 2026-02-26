@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useMemo, useEffect, useRef } from 'react';
-import { STATUTS, PREV_STATUT, CATEGORIES_INIT, CLIENTS_INIT, TARIFS_DEFAUT, initEnvois, getDestByCP } from '../constants';
+import { STATUTS, PREV_STATUT, CATEGORIES_INIT, CLIENTS_INIT, TARIFS_DEFAUT, initEnvois, getDestByCP, CUTOFF_DEFAULT } from '../constants';
 import { MSG_TEMPLATES } from '../constants/templates';
 import { uid, makeData, calcTransport, getCatTaux, eur, mailtoLink, getClientDest } from '../utils';
 import { isWaConfigured, sendWhatsApp, sendNotification, waMeLink, normalizeTel } from '../services/whatsappApi';
@@ -24,6 +24,7 @@ export function AppProvider({ children }) {
   const [tarifs, setTarifs] = useState(TARIFS_DEFAUT);
   const [envois, setEnvois] = useState(initEnvois);
   const [logs, setLogs] = useState([]);
+  const [cutoff, setCutoff] = useState(CUTOFF_DEFAULT);
 
   // ── Communication ──
   const [comLog, setComLog] = useState([
@@ -227,6 +228,34 @@ export function AppProvider({ children }) {
     return canal === 'whatsapp' ? MSG_TEMPLATES[templateKey].whatsapp(c, colis || {}) : MSG_TEMPLATES[templateKey].email(c, colis || {});
   }, [clients, data]);
 
+  // ── Auto-affectation helpers ──
+  const getNextDeparture = useCallback(() => {
+    return envois.find((e) => e.statut === 'prochain' || e.statut === 'en_cours')
+      || envois.find((e) => e.statut === 'planifie');
+  }, [envois]);
+
+  const isBeforeCutoff = useCallback(() => {
+    const now = new Date();
+    const nextDep = getNextDeparture();
+    if (!nextDep) return false;
+    const depDate = new Date(nextDep.date + 'T00:00:00');
+    // Cutoff = cutoff.day jours avant le départ à cutoff.hour heures
+    // Ex: départ vendredi (5), cutoff mercredi (3) 17h → 2 jours avant
+    const cutoffDate = new Date(depDate);
+    const daysDiff = (depDate.getDay() - cutoff.day + 7) % 7 || 7;
+    cutoffDate.setDate(depDate.getDate() - daysDiff);
+    cutoffDate.setHours(cutoff.hour, 0, 0, 0);
+    return now < cutoffDate;
+  }, [getNextDeparture, cutoff]);
+
+  const autoAffectEnvoi = useCallback((colisId) => {
+    if (!isBeforeCutoff()) return null;
+    const dep = getNextDeparture();
+    if (!dep) return null;
+    upd(colisId, { envoi: dep.id });
+    return dep;
+  }, [isBeforeCutoff, getNextDeparture, upd]);
+
   // ── Colis actions ──
   const receptionner = useCallback((id, casierVal, notifier) => {
     if (!casierVal?.trim()) { flash('Numéro de casier obligatoire'); return; }
@@ -300,16 +329,29 @@ export function AppProvider({ children }) {
     const ns = ok ? 'autorise' : 'refuse_client';
     log(id, 'attente_feu_vert', ns);
     upd(id, { statut: ns, feuVert: ok ? 'autorise' : 'refuse' });
-    flash(ok ? 'Vous avez autorisé la préparation' : 'Vous avez refusé — le colis ne sera pas préparé');
-  }, [log, upd, flash]);
+    if (ok) {
+      const dep = autoAffectEnvoi(id);
+      if (dep) {
+        const d = new Date(dep.date + 'T00:00:00');
+        const lbl = d.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' });
+        flash(`Autorisé — affecté au vol du ${lbl}`);
+      } else {
+        flash('Vous avez autorisé la préparation');
+      }
+    } else {
+      flash('Vous avez refusé — le colis ne sera pas préparé');
+    }
+  }, [log, upd, flash, autoAffectEnvoi]);
 
   const feuVertBulk = useCallback((ids) => {
+    let autoCount = 0;
     ids.forEach((id) => {
       log(id, 'attente_feu_vert', 'autorise');
       upd(id, { statut: 'autorise', feuVert: 'autorise' });
+      if (autoAffectEnvoi(id)) autoCount++;
     });
-    flash(`${ids.length} colis autorisés`);
-  }, [log, upd, flash]);
+    flash(`${ids.length} colis autorisés${autoCount > 0 ? ` — ${autoCount} affecté(s) au prochain vol` : ''}`);
+  }, [log, upd, flash, autoAffectEnvoi]);
 
   const envoyerDevis = useCallback((id) => {
     const c = data.find((x) => x.id === id);
@@ -366,8 +408,18 @@ export function AppProvider({ children }) {
   const payer = useCallback((id, mt) => {
     log(id, 'attente_paiement', 'paye');
     upd(id, { statut: 'paye', paiementMontant: mt });
+    const c = data.find((x) => x.id === id);
+    if (!c?.envoi) {
+      const dep = autoAffectEnvoi(id);
+      if (dep) {
+        const d = new Date(dep.date + 'T00:00:00');
+        const lbl = d.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' });
+        flash(`Paiement confirmé — affecté au vol du ${lbl}`);
+        return;
+      }
+    }
     flash('Paiement confirmé !');
-  }, [log, upd, flash]);
+  }, [log, upd, data, flash, autoAffectEnvoi]);
 
   const envMsg = useCallback(async (colisId, msgTxt, authInfo, tel) => {
     if (!msgTxt.trim()) return;
@@ -478,6 +530,7 @@ export function AppProvider({ children }) {
     updateClient, addNewClient, deleteClient,
     addCategory, updateCatTaux, updateCatLabel, deleteCategory,
     receptionner, changerStatut, revertStatut, annulerColis, demanderFeuVert, feuVert, feuVertBulk, envoyerDevis, payer, envMsg,
+    cutoff, setCutoff, getNextDeparture,
   }), [
     auth, isStaff, authCl, data, clients, categories, tarifs, envois, logs,
     comLog, sendMsg, getPreview, notifs, unreadNotifs, markNotifRead, markAllNotifsRead,
@@ -486,6 +539,7 @@ export function AppProvider({ children }) {
     updateClient, addNewClient, deleteClient,
     addCategory, updateCatTaux, updateCatLabel, deleteCategory,
     receptionner, changerStatut, revertStatut, annulerColis, demanderFeuVert, feuVert, feuVertBulk, envoyerDevis, payer, envMsg,
+    cutoff, setCutoff, getNextDeparture,
   ]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

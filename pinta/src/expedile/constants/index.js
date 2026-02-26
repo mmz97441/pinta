@@ -143,6 +143,10 @@ export function getPhaseIndex(statut) {
   return 0;
 }
 
+// ══════════ CUTOFF DÉPARTS ══════════
+export const CUTOFF_DEFAULT = { day: 3, hour: 17 }; // mercredi 17h
+export const JOURS_SEMAINE = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
+
 // ══════════ PRODUITS INTERDITS ══════════
 export const PRODUITS_INTERDITS = [
   'Batteries lithium',

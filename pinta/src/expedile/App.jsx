@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Settings, Users, LogOut } from 'lucide-react';
+import { Settings, Users, LogOut, Plane } from 'lucide-react';
 import './brand.css';
 
 import { AppProvider, useApp } from './context/AppContext';
@@ -14,6 +14,7 @@ import StaffDashboard from './components/staff/StaffDashboard';
 import StaffSettings from './components/staff/StaffSettings';
 import StaffClients from './components/staff/StaffClients';
 import StaffDetailView from './components/staff/StaffDetailView';
+import StaffEnvois from './components/staff/StaffEnvois';
 
 import ClientAccueil from './components/client/ClientAccueil';
 import ClientColis from './components/client/ClientColis';
@@ -103,6 +104,13 @@ function AppContent() {
           {isStaff && (
             <>
               <button
+                onClick={() => { setPage(page === 'envois' ? 'home' : 'envois'); setSelId(null); }}
+                className={`p-2 rounded-xl transition-all ${page === 'envois' ? 'bg-white bg-opacity-20 text-white' : 'text-gray-400 hover:text-white hover:bg-white hover:bg-opacity-10'}`}
+                title="Envois"
+              >
+                <Plane size={18} />
+              </button>
+              <button
                 onClick={() => { setPage(page === 'clients' ? 'home' : 'clients'); setSelId(null); }}
                 className={`p-2 rounded-xl transition-all ${page === 'clients' ? 'bg-white bg-opacity-20 text-white' : 'text-gray-400 hover:text-white hover:bg-white hover:bg-opacity-10'}`}
               >
@@ -131,7 +139,8 @@ function AppContent() {
         {/* Staff views */}
         {isStaff && page === 'settings' && <StaffSettings />}
         {isStaff && page === 'clients' && <StaffClients />}
-        {isStaff && page !== 'settings' && page !== 'clients' && (
+        {isStaff && page === 'envois' && <StaffEnvois />}
+        {isStaff && page !== 'settings' && page !== 'clients' && page !== 'envois' && (
           <StaffDashboard onNewColis={() => setModal(true)} />
         )}
 
