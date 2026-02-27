@@ -928,18 +928,9 @@ export default function StaffDetailView() {
               </Section>
             )}
 
-            {/* Devis preview / send */}
-            {!devisPrev ? (
-              <BtnPrimary
-                onClick={handleEnvoyerDevis}
-                disabled={!canPreview}
-                color="#2563EB"
-              >
-                <Eye size={15} />
-                Prévisualiser le devis
-              </BtnPrimary>
-            ) : (
-              <Section title="Brouillon du devis" icon={Eye} color="#2563EB">
+            {/* Devis — shown inline as soon as dimensions are filled */}
+            {canPreview && (
+              <Section title="Devis estimé" icon={Eye} color="#2563EB">
                 <div className="space-y-3">
                   <div className="p-3 rounded-xl bg-blue-50 border border-blue-200 space-y-0.5 text-sm">
                     <Ligne label="Transport" value={eur(sel.devisTransport || devisCalc.tr)} />
@@ -966,18 +957,10 @@ export default function StaffDetailView() {
                     )}
                   </div>
 
-                  <div className="flex flex-col gap-2">
-                    <BtnPrimary onClick={handleConfirmDevisEnvoye} color="#16A34A">
-                      <Check size={15} />
-                      Envoyer le devis au client
-                    </BtnPrimary>
-                    <button
-                      onClick={() => setDevisPrev(false)}
-                      className="w-full py-2.5 rounded-xl border-2 border-gray-200 text-sm font-bold text-gray-600 hover:bg-gray-50 transition-colors"
-                    >
-                      Modifier
-                    </button>
-                  </div>
+                  <BtnPrimary onClick={() => { handleEnvoyerDevis(); handleConfirmDevisEnvoye(); }} color="#16A34A">
+                    <Check size={15} />
+                    Envoyer le devis au client
+                  </BtnPrimary>
                 </div>
               </Section>
             )}
