@@ -18,12 +18,12 @@ function ProgressBar({ statut }) {
           {pct}%
         </span>
       </div>
-      <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+      <div className="h-1 bg-gray-100 rounded-full overflow-hidden">
         <div
           className="h-full rounded-full transition-all duration-500"
           style={{
             width: `${pct}%`,
-            background: `linear-gradient(90deg, ${BRAND.navy}, ${BRAND.navyL})`,
+            background: BRAND.navy,
           }}
         />
       </div>
@@ -81,37 +81,34 @@ export default function ClientColis({ onNewColis }) {
     <div className="anim-fade space-y-4">
       {/* ── Header ── */}
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-black text-gray-900">Mes colis</h2>
+        <h2 className="text-lg font-black text-gray-900">Mes colis</h2>
         <button
           onClick={onNewColis}
-          className="flex items-center gap-1.5 px-3 py-2 rounded-xl font-bold text-sm text-white active:scale-95 transition-all"
-          style={{
-            background: `linear-gradient(135deg, ${BRAND.navy}, ${BRAND.navyL})`,
-            boxShadow: `0 2px 10px rgba(27,58,75,0.25)`,
-          }}
+          className="flex items-center gap-1.5 px-3 py-2 rounded-lg font-bold text-[13px] text-white active:scale-95 transition-all"
+          style={{ background: BRAND.navy }}
         >
-          <Plus size={15} strokeWidth={2.5} />
+          <Plus size={13} strokeWidth={2.5} />
           Pré-annoncer
         </button>
       </div>
 
       {/* ── Sub-tabs ── */}
-      <div className="flex gap-1.5 bg-gray-100 rounded-2xl p-1">
+      <div className="flex gap-1 bg-gray-100 rounded-lg p-0.5">
         {TABS.map((tab) => {
           const active = colisTab === tab.key;
           return (
             <button
               key={tab.key}
               onClick={() => { setColisTab(tab.key); setColisFilter(null); }}
-              className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-bold transition-all ${
-                active ? 'bg-white shadow-sm' : 'text-gray-500'
+              className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md text-[12px] font-bold transition-all ${
+                active ? 'bg-white shadow-sm' : 'text-gray-400'
               }`}
               style={active ? { color: BRAND.navy } : {}}
             >
               {tab.label}
               {counts[tab.key] > 0 && (
                 <span
-                  className={`px-1.5 py-0.5 rounded-full text-[10px] font-black leading-none ${
+                  className={`px-1.5 py-0.5 rounded-md text-[10px] font-bold leading-none ${
                     active ? 'text-white' : 'bg-gray-200 text-gray-500'
                   }`}
                   style={active ? { backgroundColor: BRAND.navy } : {}}
@@ -189,11 +186,14 @@ export default function ClientColis({ onNewColis }) {
               <button
                 key={p.id}
                 onClick={() => setSelId(p.id)}
-                className={`anim-fade w-full text-left ${action ? 'card-elevated' : 'card'} p-4 rounded-2xl`}
+                className="anim-fade w-full text-left rounded-xl p-3.5"
                 style={{
-                  ...(isFV ? { borderLeft: `4px solid ${BRAND.gold}` } : {}),
-                  ...(isPay ? { borderLeft: `4px solid #f59e0b` } : {}),
-                  ...(isLivre ? { borderLeft: `4px solid #10b981` } : {}),
+                  background: 'white',
+                  border: '1px solid #E5E7EB',
+                  ...(isFV ? { borderLeft: `3px solid ${BRAND.gold}` } : {}),
+                  ...(isPay ? { borderLeft: `3px solid #F59E0B` } : {}),
+                  ...(isLivre ? { borderLeft: `3px solid #10B981` } : {}),
+                  boxShadow: action ? '0 1px 4px rgba(0,0,0,0.06)' : '0 1px 2px rgba(0,0,0,0.03)',
                   animationDelay: `${i * 0.04}s`,
                 }}
               >
@@ -203,10 +203,13 @@ export default function ClientColis({ onNewColis }) {
                       <p className="font-black text-sm text-gray-900">{p.ref}</p>
                       {action && (
                         <span
-                          className="text-[9px] font-black px-1.5 py-0.5 rounded-full text-white"
-                          style={{ backgroundColor: isFV ? BRAND.goldD : '#d97706' }}
+                          className="text-[9px] font-bold px-1.5 py-0.5 rounded-md"
+                          style={{
+                            background: isFV ? `${BRAND.gold}20` : '#FEF3C7',
+                            color: isFV ? BRAND.goldD : '#92400E',
+                          }}
                         >
-                          ACTION
+                          Action requise
                         </span>
                       )}
                     </div>
@@ -263,11 +266,11 @@ export default function ClientColis({ onNewColis }) {
                   <ProgressBar statut={p.statut} />
                 )}
 
-                {/* Livré celebration */}
+                {/* Livré */}
                 {isLivre && (
-                  <div className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-emerald-700">
-                    <CheckCircle size={12} />
-                    Livré avec succès 🎉
+                  <div className="mt-2 flex items-center gap-1.5 text-[11px] font-semibold text-emerald-600">
+                    <CheckCircle size={11} />
+                    Livré
                   </div>
                 )}
 

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Package, AlertCircle, CreditCard, Plus, CheckCircle, Clock, TrendingUp, ChevronRight } from 'lucide-react';
+import { Package, AlertCircle, CreditCard, Plus, CheckCircle, Clock, ChevronRight } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { BRAND, STATUTS, getDestByCP, PHASES_CLIENT, getPhaseIndex } from '../../constants';
 import { eur } from '../../utils';
@@ -19,12 +19,12 @@ function ProgressBar({ statut }) {
           {pct}%
         </span>
       </div>
-      <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+      <div className="h-1 bg-gray-100 rounded-full overflow-hidden">
         <div
           className="h-full rounded-full transition-all duration-500"
           style={{
             width: `${pct}%`,
-            background: `linear-gradient(90deg, ${BRAND.navy}, ${BRAND.navyL})`,
+            background: BRAND.navy,
           }}
         />
       </div>
@@ -64,157 +64,171 @@ export default function ClientAccueil({ onNewColis }) {
     <div className="anim-fade space-y-4">
       {/* ── Welcome card ── */}
       <div
-        className="rounded-2xl p-5 text-white relative overflow-hidden"
+        className="rounded-xl p-4 text-white relative overflow-hidden"
         style={{
-          background: `linear-gradient(135deg, ${BRAND.navy} 0%, ${BRAND.navyL} 60%, ${BRAND.navyD} 100%)`,
-          boxShadow: `0 4px 24px rgba(27,58,75,0.25)`,
+          background: BRAND.navy,
         }}
       >
-        {/* Decorative circle */}
-        <div
-          className="absolute -top-6 -right-6 w-32 h-32 rounded-full opacity-10"
-          style={{ background: BRAND.gold }}
-        />
-        <div
-          className="absolute -bottom-8 -right-8 w-24 h-24 rounded-full opacity-5"
-          style={{ background: BRAND.goldL }}
-        />
-
-        <p className="text-xs font-bold uppercase tracking-widest mb-1" style={{ color: BRAND.goldL }}>
-          Bienvenue
-        </p>
-        <h2 className="text-2xl font-black leading-tight mb-1">
-          Bonjour {firstName} 👋
-        </h2>
-        {dest && (
-          <p className="text-sm font-medium" style={{ color: 'rgba(255,255,255,0.7)' }}>
-            {dest.flag} {dest.nom}
-          </p>
-        )}
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-widest mb-0.5" style={{ color: BRAND.goldL, opacity: 0.8 }}>
+              Bonjour
+            </p>
+            <h2 className="text-lg font-black leading-tight">
+              {firstName}
+            </h2>
+            {dest && (
+              <p className="text-[11px] font-medium mt-0.5" style={{ color: 'rgba(255,255,255,0.55)' }}>
+                {dest.flag} {dest.nom}
+              </p>
+            )}
+          </div>
+          <button
+            onClick={onNewColis}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] font-bold transition-all active:scale-95"
+            style={{
+              background: 'rgba(255,255,255,0.12)',
+              color: 'white',
+              border: '1px solid rgba(255,255,255,0.15)',
+            }}
+          >
+            <Plus size={13} strokeWidth={2.5} />
+            Nouveau colis
+          </button>
+        </div>
       </div>
 
-      {/* ── Stats grid ── */}
-      <div className="grid grid-cols-3 gap-3">
-        <button onClick={() => { setColisFilter(null); setClientTab('colis'); }} className="card p-3 text-center hover:shadow-md active:scale-95 transition-all cursor-pointer">
-          <div className="text-2xl font-black" style={{ color: BRAND.navy }}>
-            {enCours.length}
-          </div>
-          <div className="text-[11px] text-gray-500 font-medium mt-0.5">En cours</div>
-        </button>
-        <button
-          onClick={() => { setColisFilter('a_traiter'); setClientTab('colis'); }}
-          className="card p-3 text-center hover:shadow-md active:scale-95 transition-all cursor-pointer"
-          style={aTraiter.length > 0 ? { borderLeft: `3px solid ${BRAND.gold}` } : {}}
-        >
-          <div
-            className="text-2xl font-black"
-            style={{ color: aTraiter.length > 0 ? BRAND.goldD : BRAND.navy }}
+      {/* ── Stats bar ── */}
+      <div
+        className="rounded-xl overflow-hidden"
+        style={{ background: 'white', border: '1px solid #E5E7EB', boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}
+      >
+        <div className="grid grid-cols-3">
+          <button
+            onClick={() => { setColisFilter(null); setClientTab('colis'); }}
+            className="text-center py-3 px-2 transition-all active:bg-gray-50"
+            style={{ borderRight: '1px solid #F3F4F6' }}
           >
-            {aTraiter.length}
-          </div>
-          <div className="text-[11px] text-gray-500 font-medium mt-0.5">À traiter</div>
-        </button>
-        <button
-          onClick={() => { setColisFilter('a_payer'); setClientTab('colis'); }}
-          className="card p-3 text-center hover:shadow-md active:scale-95 transition-all cursor-pointer"
-          style={aPayer.length > 0 ? { borderLeft: `3px solid #f59e0b` } : {}}
-        >
-          <div
-            className="text-2xl font-black"
-            style={{ color: aPayer.length > 0 ? '#b45309' : BRAND.navy }}
+            <p className="text-xl font-black leading-none" style={{ color: BRAND.navy }}>
+              {enCours.length}
+            </p>
+            <p className="text-[10px] text-gray-400 font-semibold mt-1 uppercase tracking-wider">En cours</p>
+          </button>
+          <button
+            onClick={() => { setColisFilter('a_traiter'); setClientTab('colis'); }}
+            className="text-center py-3 px-2 transition-all active:bg-gray-50"
+            style={{ borderRight: '1px solid #F3F4F6' }}
           >
-            {aPayer.length}
-          </div>
-          <div className="text-[11px] text-gray-500 font-medium mt-0.5">À payer</div>
-        </button>
+            <p
+              className="text-xl font-black leading-none"
+              style={{ color: aTraiter.length > 0 ? BRAND.goldD : '#D1D5DB' }}
+            >
+              {aTraiter.length}
+            </p>
+            <p className="text-[10px] text-gray-400 font-semibold mt-1 uppercase tracking-wider">
+              {aTraiter.length > 0 ? 'À traiter' : 'À traiter'}
+            </p>
+          </button>
+          <button
+            onClick={() => { setColisFilter('a_payer'); setClientTab('colis'); }}
+            className="text-center py-3 px-2 transition-all active:bg-gray-50"
+          >
+            <p
+              className="text-xl font-black leading-none"
+              style={{ color: aPayer.length > 0 ? '#D97706' : '#D1D5DB' }}
+            >
+              {aPayer.length}
+            </p>
+            <p className="text-[10px] text-gray-400 font-semibold mt-1 uppercase tracking-wider">À payer</p>
+          </button>
+        </div>
       </div>
 
       {/* ── Actions requises ── */}
       {actionsRequises.length > 0 && (
         <div className="anim-fade">
           <div className="flex items-center gap-2 mb-2">
-            <AlertCircle size={15} style={{ color: '#d97706' }} />
-            <h3 className="font-bold text-sm text-gray-800">Actions requises</h3>
-            <span className="ml-auto text-xs font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">
+            <AlertCircle size={14} style={{ color: '#D97706' }} />
+            <h3 className="font-bold text-[13px] text-gray-800">Actions requises</h3>
+            <span className="ml-auto text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-700">
               {actionsRequises.length}
             </span>
           </div>
-          <div className="space-y-2.5">
-            {/* ── Carte groupée feu vert ── */}
+          <div className="space-y-2">
+            {/* ── Feu vert groupé ── */}
             {colisAttenteFV.length > 0 && (
               <div
-                className="card-elevated p-4 rounded-2xl"
-                style={{ borderLeft: `4px solid ${BRAND.gold}` }}
+                className="rounded-xl overflow-hidden"
+                style={{ background: 'white', border: '1px solid #E5E7EB', borderLeft: `3px solid ${BRAND.gold}` }}
               >
-                <div className="flex items-center gap-2 mb-3">
-                  <CheckCircle size={15} className="text-amber-600" />
-                  <p className="font-bold text-sm text-gray-900">
+                <div className="px-3.5 py-2.5">
+                  <p className="font-bold text-[13px] text-gray-800">
                     {colisAttenteFV.length} colis en attente de votre accord
                   </p>
                 </div>
-                <div className="space-y-2 mb-3">
+                <div className="px-3.5 space-y-1 pb-2">
                   {colisAttenteFV.map((p) => (
                     <button
                       key={p.id}
-                      className="w-full flex items-center gap-2 text-left bg-amber-50/60 rounded-xl px-3 py-2 active:bg-amber-100 transition-colors"
+                      className="w-full flex items-center gap-2 text-left rounded-lg px-2.5 py-2 active:bg-gray-50 transition-colors"
+                      style={{ background: '#FAFAFA' }}
                       onClick={() => { setSelId(p.id); setClientTab('colis'); }}
                     >
                       <div className="flex-1 min-w-0">
-                        <span className="font-bold text-xs text-gray-800">{p.ref}</span>
-                        <span className="text-xs text-gray-500 ml-1.5 truncate">{p.desc}</span>
+                        <span className="font-bold text-[12px] text-gray-800">{p.ref}</span>
+                        <span className="text-[11px] text-gray-500 ml-1.5 truncate">{p.desc}</span>
                         {p.dimL != null && (
                           <span className="text-[10px] text-gray-400 ml-1.5">
-                            {p.dimL}×{p.dimW}×{p.dimH} cm
+                            {p.dimL}x{p.dimW}x{p.dimH} cm
                           </span>
                         )}
                       </div>
-                      <ChevronRight size={14} className="text-gray-400 flex-shrink-0" />
+                      <ChevronRight size={13} className="text-gray-300 flex-shrink-0" />
                     </button>
                   ))}
                 </div>
-                <button
-                  className="w-full flex items-center justify-center gap-2 py-3 rounded-xl font-bold text-white text-sm active:scale-95 transition-all"
-                  style={{
-                    background: `linear-gradient(135deg, ${BRAND.navy}, ${BRAND.navyL})`,
-                    boxShadow: `0 2px 12px rgba(27,58,75,0.2)`,
-                  }}
-                  onClick={() => {
-                    const refs = colisAttenteFV.map((p) => p.ref).join(', ');
-                    ask(
-                      'Autoriser tous les colis',
-                      `Vous confirmez autoriser la préparation de ${colisAttenteFV.length} colis ?\n\n${refs}`,
-                      () => feuVertBulk(colisAttenteFV.map((p) => p.id)),
-                      { okLabel: 'Oui, tout autoriser' }
-                    );
-                  }}
-                >
-                  <CheckCircle size={16} strokeWidth={2.5} />
-                  Tout autoriser ({colisAttenteFV.length})
-                </button>
+                <div className="px-3.5 pb-3.5">
+                  <button
+                    className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg font-bold text-white text-[13px] active:scale-95 transition-all"
+                    style={{ background: BRAND.navy }}
+                    onClick={() => {
+                      const refs = colisAttenteFV.map((p) => p.ref).join(', ');
+                      ask(
+                        'Autoriser tous les colis',
+                        `Vous confirmez autoriser la préparation de ${colisAttenteFV.length} colis ?\n\n${refs}`,
+                        () => feuVertBulk(colisAttenteFV.map((p) => p.id)),
+                        { okLabel: 'Oui, tout autoriser' }
+                      );
+                    }}
+                  >
+                    <CheckCircle size={14} strokeWidth={2.5} />
+                    Tout autoriser ({colisAttenteFV.length})
+                  </button>
+                </div>
               </div>
             )}
 
-            {/* ── Cartes individuelles paiement ── */}
+            {/* ── Paiement ── */}
             {colisPaiement.map((p) => (
               <div
                 key={p.id}
-                className="card-elevated rounded-2xl overflow-hidden"
-                style={{ borderLeft: `4px solid #f59e0b` }}
+                className="rounded-xl overflow-hidden"
+                style={{ background: 'white', border: '1px solid #E5E7EB', borderLeft: '3px solid #F59E0B' }}
               >
                 <button
                   onClick={() => setSelId(p.id)}
-                  className="w-full text-left p-4 active:bg-gray-50 transition-colors"
+                  className="w-full text-left px-3.5 py-2.5 active:bg-gray-50 transition-colors"
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1 min-w-0">
-                      <p className="font-bold text-sm text-gray-900 truncate">{p.ref}</p>
-                      <p className="text-xs text-gray-500 truncate mt-0.5">{p.desc}</p>
+                      <p className="font-bold text-[13px] text-gray-800 truncate">{p.ref}</p>
+                      <p className="text-[11px] text-gray-500 truncate mt-0.5">{p.desc}</p>
                     </div>
                     <Badge statut={p.statut} />
                   </div>
                 </button>
                 {p.devisTotal != null && (
-                  <div className="px-4 pb-4">
+                  <div className="px-3.5 pb-3.5">
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
@@ -225,11 +239,10 @@ export default function ClientAccueil({ onNewColis }) {
                           { okLabel: 'Payer' }
                         );
                       }}
-                      className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl font-black text-sm active:scale-95 transition-all"
+                      className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg font-bold text-[13px] active:scale-95 transition-all"
                       style={{
-                        background: `linear-gradient(135deg, ${BRAND.gold}, ${BRAND.goldD})`,
+                        background: BRAND.gold,
                         color: BRAND.navyD,
-                        boxShadow: `0 2px 10px rgba(232,184,75,0.3)`,
                       }}
                     >
                       <CreditCard size={14} />
@@ -247,16 +260,21 @@ export default function ClientAccueil({ onNewColis }) {
       {colisCours.length > 0 && (
         <div className="anim-fade">
           <div className="flex items-center gap-2 mb-2">
-            <Package size={15} style={{ color: BRAND.navy }} />
-            <h3 className="font-bold text-sm text-gray-800">Colis en cours</h3>
+            <Package size={14} style={{ color: BRAND.navy }} />
+            <h3 className="font-bold text-[13px] text-gray-800">Colis en cours</h3>
           </div>
-          <div className="space-y-2.5">
+          <div className="space-y-2">
             {colisCours.map((p) => (
-              <button key={p.id} onClick={() => setSelId(p.id)} className="card p-4 w-full text-left hover:shadow-md active:scale-[0.98] transition-all cursor-pointer">
+              <button
+                key={p.id}
+                onClick={() => setSelId(p.id)}
+                className="w-full text-left rounded-xl p-3.5 active:scale-[0.98] transition-all"
+                style={{ background: 'white', border: '1px solid #E5E7EB', boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}
+              >
                 <div className="flex items-start justify-between gap-2 mb-1">
                   <div className="flex-1 min-w-0">
-                    <p className="font-bold text-sm text-gray-900">{p.ref}</p>
-                    <p className="text-xs text-gray-500 truncate">{p.desc}</p>
+                    <p className="font-bold text-[13px] text-gray-800">{p.ref}</p>
+                    <p className="text-[11px] text-gray-500 truncate">{p.desc}</p>
                   </div>
                   <Badge statut={p.statut} />
                 </div>
@@ -271,24 +289,23 @@ export default function ClientAccueil({ onNewColis }) {
       {derniereLivraison && (
         <div className="anim-fade">
           <div className="flex items-center gap-2 mb-2">
-            <CheckCircle size={15} className="text-emerald-500" />
-            <h3 className="font-bold text-sm text-gray-800">Dernière livraison</h3>
+            <CheckCircle size={14} className="text-emerald-500" />
+            <h3 className="font-bold text-[13px] text-gray-800">Dernière livraison</h3>
           </div>
           <button
             onClick={() => setSelId(derniereLivraison.id)}
-            className="card p-4 rounded-2xl w-full text-left hover:shadow-md active:scale-[0.98] transition-all cursor-pointer"
-            style={{ borderLeft: `4px solid #10b981` }}
+            className="w-full text-left rounded-xl p-3.5 active:scale-[0.98] transition-all"
+            style={{ background: 'white', border: '1px solid #E5E7EB', borderLeft: '3px solid #10B981' }}
           >
             <div className="flex items-center justify-between">
               <div>
-                <p className="font-bold text-sm text-gray-900">{derniereLivraison.ref}</p>
-                <p className="text-xs text-gray-500 mt-0.5">{derniereLivraison.desc}</p>
+                <p className="font-bold text-[13px] text-gray-800">{derniereLivraison.ref}</p>
+                <p className="text-[11px] text-gray-500 mt-0.5">{derniereLivraison.desc}</p>
               </div>
-              <span className="text-2xl">🎉</span>
-            </div>
-            <div className="mt-2 flex items-center gap-1 text-xs text-emerald-700 font-semibold">
-              <CheckCircle size={12} />
-              Livré avec succès
+              <div className="flex items-center gap-1 text-[11px] text-emerald-600 font-semibold">
+                <CheckCircle size={12} />
+                Livré
+              </div>
             </div>
           </button>
         </div>
@@ -297,20 +314,24 @@ export default function ClientAccueil({ onNewColis }) {
       {/* ── Pré-annoncer (if no active colis) ── */}
       {enCours.length === 0 && (
         <div className="anim-fade-up">
-          <button
-            onClick={onNewColis}
-            className="w-full flex items-center justify-center gap-2 py-4 rounded-2xl font-bold text-white text-sm active:scale-95 transition-all"
-            style={{
-              background: `linear-gradient(135deg, ${BRAND.navy}, ${BRAND.navyL})`,
-              boxShadow: `0 4px 16px rgba(27,58,75,0.25)`,
-            }}
+          <div
+            className="rounded-xl py-10 flex flex-col items-center text-center"
+            style={{ background: '#F9FAFB', border: '1px dashed #E5E7EB' }}
           >
-            <Plus size={18} strokeWidth={2.5} />
-            Pré-annoncer un colis
-          </button>
-          <p className="text-center text-xs text-gray-400 mt-2">
-            Informez-nous de votre commande avant qu'elle n'arrive à Paris
-          </p>
+            <Package size={24} style={{ color: '#D1D5DB' }} className="mb-2" />
+            <p className="text-[13px] font-semibold text-gray-500 mb-1">Aucun colis en cours</p>
+            <p className="text-[11px] text-gray-400 mb-4 max-w-[240px]">
+              Informez-nous de votre commande avant qu'elle n'arrive à Paris
+            </p>
+            <button
+              onClick={onNewColis}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg font-bold text-[13px] text-white active:scale-95 transition-all"
+              style={{ background: BRAND.navy }}
+            >
+              <Plus size={14} strokeWidth={2.5} />
+              Pré-annoncer un colis
+            </button>
+          </div>
         </div>
       )}
     </div>

@@ -24,7 +24,7 @@ export const STATUTS = {
   transit:            { label: 'En vol',                      labelClient: null,                            couleur: 'bg-sky-200 text-sky-800',        phase: 5, actionStaff: "Confirmer arrivée",               actionClient: null },
   arrive:             { label: 'Arrivé destination',          labelClient: null,                            couleur: 'bg-teal-200 text-teal-800',      phase: 5, actionStaff: 'Lancer la livraison',             actionClient: null },
   livraison:          { label: 'En cours de livraison',       labelClient: null,                            couleur: 'bg-lime-200 text-lime-800',      phase: 5, actionStaff: 'Confirmer livraison',             actionClient: null },
-  livre:              { label: 'Livré ✓',                     labelClient: null,                            couleur: 'bg-green-300 text-green-900',    phase: 5, actionStaff: null,                              actionClient: null },
+  livre:              { label: 'Livré',                        labelClient: null,                            couleur: 'bg-green-300 text-green-900',    phase: 5, actionStaff: null,                              actionClient: null },
   annule:             { label: 'Annulé',                      labelClient: null,                            couleur: 'bg-gray-200 text-gray-500',      phase: 0, actionStaff: null,                              actionClient: null },
 };
 

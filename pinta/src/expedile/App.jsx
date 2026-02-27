@@ -87,51 +87,63 @@ function AppContent() {
 
       {/* Header */}
       <div
-        className="glass-dark border-b border-white border-opacity-5 px-4 py-3.5 flex items-center justify-between sticky top-0 z-20"
-        style={{ background: 'linear-gradient(135deg, rgba(18,42,54,0.98), rgba(27,58,75,0.98))' }}
+        className="px-4 py-3 flex items-center justify-between sticky top-0 z-20"
+        style={{ background: BRAND.navy }}
       >
-        <div className="flex items-center gap-2.5">
-          <b className="text-lg text-white tracking-tight">
+        <div className="flex items-center gap-2">
+          <b className="text-[15px] text-white tracking-tight" style={{ letterSpacing: '-0.02em' }}>
             EXPÉD<span style={{ color: BRAND.gold }}>ÎLE</span>
           </b>
           {isStaff && (
-            <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-white bg-opacity-15 text-white tracking-wider">
+            <span className="text-[9px] px-1.5 py-0.5 rounded-md font-bold tracking-wider" style={{ background: 'rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.7)' }}>
               STAFF
             </span>
           )}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">
           {isStaff && (
             <>
               <button
                 onClick={() => { setPage(page === 'envois' ? 'home' : 'envois'); setSelId(null); }}
-                className={`p-2 rounded-xl transition-all ${page === 'envois' ? 'bg-white bg-opacity-20 text-white' : 'text-gray-400 hover:text-white hover:bg-white hover:bg-opacity-10'}`}
+                className="p-2 rounded-lg transition-all"
+                style={{
+                  background: page === 'envois' ? 'rgba(255,255,255,0.15)' : 'transparent',
+                  color: page === 'envois' ? 'white' : 'rgba(255,255,255,0.45)',
+                }}
                 title="Envois"
               >
-                <Plane size={18} />
+                <Plane size={16} />
               </button>
               <button
                 onClick={() => { setPage(page === 'clients' ? 'home' : 'clients'); setSelId(null); }}
-                className={`p-2 rounded-xl transition-all ${page === 'clients' ? 'bg-white bg-opacity-20 text-white' : 'text-gray-400 hover:text-white hover:bg-white hover:bg-opacity-10'}`}
+                className="p-2 rounded-lg transition-all"
+                style={{
+                  background: page === 'clients' ? 'rgba(255,255,255,0.15)' : 'transparent',
+                  color: page === 'clients' ? 'white' : 'rgba(255,255,255,0.45)',
+                }}
               >
-                <Users size={18} />
+                <Users size={16} />
               </button>
               <button
                 onClick={() => { setPage(page === 'settings' ? 'home' : 'settings'); setSelId(null); }}
-                className={`p-2 rounded-xl transition-all ${page === 'settings' ? 'bg-white bg-opacity-20 text-white' : 'text-gray-400 hover:text-white hover:bg-white hover:bg-opacity-10'}`}
+                className="p-2 rounded-lg transition-all"
+                style={{
+                  background: page === 'settings' ? 'rgba(255,255,255,0.15)' : 'transparent',
+                  color: page === 'settings' ? 'white' : 'rgba(255,255,255,0.45)',
+                }}
               >
-                <Settings size={18} />
+                <Settings size={16} />
               </button>
-              <span className="text-sm text-gray-300 ml-1">{auth.u.nom.split(' ')[0]}</span>
+              <span className="text-[12px] font-medium ml-1" style={{ color: 'rgba(255,255,255,0.5)' }}>{auth.u.nom.split(' ')[0]}</span>
               <button
                 onClick={() => { setAuth(null); setSelId(null); setPage('home'); }}
-                className="p-2 rounded-xl text-red-400 hover:text-red-300 hover:bg-white hover:bg-opacity-10 transition-all"
+                className="p-2 rounded-lg transition-all"
+                style={{ color: 'rgba(255,255,255,0.35)' }}
               >
-                <LogOut size={16} />
+                <LogOut size={14} />
               </button>
             </>
           )}
-          {/* Client name shown in Accueil welcome card + Profil tab — no need to duplicate here */}
         </div>
       </div>
 
