@@ -99,12 +99,12 @@ export const STAFF = [
 
 // ══════════ CLIENTS INITIAUX ══════════
 export const CLIENTS_INIT = [
-  { id: 'c1', nom: 'Flavie FONTAINE',  ville: 'Saint-Denis',  cp: '97400', tel: '+262692123456', email: 'flavie.f@gmail.com',      canal: 'whatsapp', type: 'particulier', created: '2024-11-15', points: 120, onboarded: true },
-  { id: 'c2', nom: 'Guillaume NICE',   ville: 'Sainte-Marie', cp: '97438', tel: '+262692595378', email: 'guillaume.n@outlook.com',  canal: 'whatsapp', type: 'particulier', created: '2025-01-08', points: 45, onboarded: true },
-  { id: 'c3', nom: 'Ophélie ABAR',     ville: 'Saint-Leu',    cp: '97436', tel: '+262694111222', email: 'ophelie.a@gmail.com',      canal: 'whatsapp', type: 'particulier', created: '2025-02-01', points: 10 },
-  { id: 'c4', nom: 'Stessy SINAMA',    ville: 'Le Tampon',    cp: '97430', tel: '+262692789012', email: 'stessy.s@live.fr',         canal: 'whatsapp', type: 'particulier', created: '2024-09-20', points: 210, onboarded: true },
-  { id: 'c5', nom: 'E-Concept Auto',   ville: 'Saint-Paul',   cp: '97460', tel: '+262692555888', email: 'contact@econcept-auto.re', canal: 'email',    type: 'pro',         created: '2024-06-10', points: 580, onboarded: true },
-  { id: 'c6', nom: 'Ibrahim COMBO',    ville: 'Mamoudzou',    cp: '97600', tel: '+262639123456', email: 'ibrahim.c@gmail.com',      canal: 'whatsapp', type: 'particulier', created: '2025-01-25', points: 30 },
+  { id: 'c1', nom: 'Flavie FONTAINE',  ville: 'Saint-Denis',  cp: '97400', adresse: '12 rue Maréchal Leclerc, Appt 3B',       tel: '+262692123456', email: 'flavie.f@gmail.com',      canal: 'whatsapp', type: 'particulier', created: '2024-11-15', points: 120, onboarded: true },
+  { id: 'c2', nom: 'Guillaume NICE',   ville: 'Sainte-Marie', cp: '97438', adresse: '8 chemin des Flamboyants',                tel: '+262692595378', email: 'guillaume.n@outlook.com',  canal: 'whatsapp', type: 'particulier', created: '2025-01-08', points: 45, onboarded: true },
+  { id: 'c3', nom: 'Ophélie ABAR',     ville: 'Saint-Leu',    cp: '97436', adresse: '45 rue du Général de Gaulle',             tel: '+262694111222', email: 'ophelie.a@gmail.com',      canal: 'whatsapp', type: 'particulier', created: '2025-02-01', points: 10 },
+  { id: 'c4', nom: 'Stessy SINAMA',    ville: 'Le Tampon',    cp: '97430', adresse: '3 résidence Les Jacarandas, Bât C',       tel: '+262692789012', email: 'stessy.s@live.fr',         canal: 'whatsapp', type: 'particulier', created: '2024-09-20', points: 210, onboarded: true },
+  { id: 'c5', nom: 'E-Concept Auto',   ville: 'Saint-Paul',   cp: '97460', adresse: 'ZI n°3, 22 rue des Artisans',             tel: '+262692555888', email: 'contact@econcept-auto.re', canal: 'email',    type: 'pro',         created: '2024-06-10', points: 580, onboarded: true },
+  { id: 'c6', nom: 'Ibrahim COMBO',    ville: 'Mamoudzou',    cp: '97600', adresse: 'Quartier Cavani, rue du Commerce',        tel: '+262639123456', email: 'ibrahim.c@gmail.com',      canal: 'whatsapp', type: 'particulier', created: '2025-01-25', points: 30 },
 ];
 
 // ══════════ ENVOIS ══════════
@@ -146,6 +146,65 @@ export function getPhaseIndex(statut) {
 // ══════════ CUTOFF DÉPARTS ══════════
 export const CUTOFF_DEFAULT = { day: 3, hour: 17 }; // mercredi 17h
 export const JOURS_SEMAINE = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
+
+// ══════════ SECTEURS LIVRAISON (RÉUNION) ══════════
+// Couleur fixe par secteur — ne change jamais
+export const SECTEURS = {
+  N: { label: 'Nord',  lettre: 'N', color: '#2563EB', bg: '#DBEAFE' },
+  S: { label: 'Sud',   lettre: 'S', color: '#DC2626', bg: '#FEE2E2' },
+  E: { label: 'Est',   lettre: 'E', color: '#059669', bg: '#D1FAE5' },
+  O: { label: 'Ouest', lettre: 'O', color: '#D97706', bg: '#FEF3C7' },
+};
+
+// CP → Secteur pour La Réunion (974xx)
+const CP_SECTEUR_974 = {
+  '97400': 'N', // Saint-Denis
+  '97490': 'N', // Sainte-Clotilde
+  '97438': 'N', // Sainte-Marie
+  '97441': 'N', // Sainte-Suzanne
+  '97440': 'E', // Saint-André
+  '97412': 'E', // Bras-Panon
+  '97470': 'E', // Saint-Benoît
+  '97439': 'E', // Sainte-Rose
+  '97431': 'E', // Plaine-des-Palmistes
+  '97433': 'E', // Salazie
+  '97410': 'S', // Saint-Pierre
+  '97430': 'S', // Le Tampon
+  '97432': 'S', // Ravine des Cabris
+  '97418': 'S', // Le Tampon (Plaine des Cafres)
+  '97480': 'S', // Saint-Joseph
+  '97442': 'S', // Saint-Philippe
+  '97414': 'S', // Entre-Deux
+  '97413': 'S', // Cilaos
+  '97450': 'S', // Saint-Louis
+  '97427': 'S', // L'Étang-Salé
+  '97425': 'S', // Les Avirons
+  '97460': 'O', // Saint-Paul
+  '97434': 'O', // Saint-Gilles-les-Bains
+  '97435': 'O', // Saint-Gilles-les-Hauts
+  '97436': 'O', // Saint-Leu
+  '97424': 'O', // Piton Saint-Leu
+  '97426': 'O', // Trois-Bassins
+  '97420': 'O', // Le Port
+  '97422': 'O', // La Possession
+};
+
+export function getSecteur(cp) {
+  if (!cp) return null;
+  const s = String(cp);
+  // Exact match first
+  if (CP_SECTEUR_974[s]) return SECTEURS[CP_SECTEUR_974[s]];
+  // Réunion fallback: try closest match
+  if (s.startsWith('974')) {
+    // Default by range
+    const num = parseInt(s, 10);
+    if (num <= 97441) return SECTEURS.N;
+    if (num <= 97470) return SECTEURS.E;
+    return SECTEURS.S;
+  }
+  // Other DOM-TOM: no sector
+  return null;
+}
 
 // ══════════ PRODUITS INTERDITS ══════════
 export const PRODUITS_INTERDITS = [

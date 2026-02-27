@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
-import { BRAND } from '../../constants';
+import { BRAND, getSecteur } from '../../constants';
 
 // QR code value = the colis ref (scannable to open the colis fiche)
 // Format: "EXP:EXP-0001" — the app can parse this to navigate to the colis
@@ -34,18 +34,31 @@ function Label({ colis, client, dest, envoi }) {
       ? `${colis.dimL}×${colis.dimW}×${colis.dimH}`
       : '—';
 
+  const secteur = getSecteur(client?.cp);
+
   return (
-    <div className="label-card">
+    <div
+      className="label-card"
+      style={secteur ? { borderColor: secteur.color } : {}}
+    >
       {/* Header bar */}
-      <div className="label-header">
+      <div className="label-header" style={secteur ? { borderBottomColor: secteur.color } : {}}>
         <span className="label-logo">EXPEDILE</span>
         <span className="label-ref">{colis.ref}</span>
       </div>
 
-      {/* QR + Destination row */}
-      <div className="label-qr-row">
+      {/* Sector + Destination row */}
+      <div className="label-sector-row">
+        {secteur && (
+          <div
+            className="label-sector-badge"
+            style={{ background: secteur.color, color: 'white' }}
+          >
+            {secteur.lettre}
+          </div>
+        )}
         <div className="label-qr">
-          <ColisQR colisRef={colis.ref} size={72} />
+          <ColisQR colisRef={colis.ref} size={68} />
         </div>
         <div className="label-dest-block">
           <span className="label-dest-flag">{dest?.flag || ''}</span>
@@ -56,11 +69,22 @@ function Label({ colis, client, dest, envoi }) {
         </div>
       </div>
 
-      {/* Client info */}
+      {/* Client info — full address */}
       <div className="label-client">
         <div className="label-client-name">{client?.nom || '—'}</div>
+        {client?.adresse && (
+          <div className="label-client-addr">{client.adresse}</div>
+        )}
         <div className="label-client-addr">
           {client?.cp || ''} {client?.ville || ''}
+          {secteur && (
+            <span
+              className="label-sector-inline"
+              style={{ background: secteur.bg, color: secteur.color, borderColor: secteur.color }}
+            >
+              {secteur.lettre} — {secteur.label}
+            </span>
+          )}
         </div>
         {client?.tel && <div className="label-client-tel">{client.tel}</div>}
       </div>
@@ -77,7 +101,7 @@ function Label({ colis, client, dest, envoi }) {
         </div>
         <div className="label-row">
           <span className="label-lbl">Poids fact.</span>
-          <span className="label-val">{pf} kg</span>
+          <span className="label-val label-val-bold">{pf} kg</span>
         </div>
       </div>
 
