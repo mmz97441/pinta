@@ -236,7 +236,7 @@ export default function StaffDetailView() {
   // Produits interdits checklist
   const [interdits, setInterdits] = useState([]);
   // Devis preview mode
-  const [devisPrev, setDevisPrev] = useState(false);
+
   // Envoi assignment
   const [selEnvoi, setSelEnvoi] = useState(sel?.envoi || '');
 
@@ -427,7 +427,7 @@ export default function StaffDetailView() {
   const finPf = Math.max(finPoids, parseFloat(finPv)).toFixed(2);
   const devisCalc = calcTaxes(finPf);
 
-  function handleEnvoyerDevis() {
+  function handleSendDevis() {
     // Persist fin dims first if filled locally
     const changes = {};
     if (finDims.finL) changes.finL = parseFloat(finDims.finL);
@@ -438,14 +438,9 @@ export default function StaffDetailView() {
 
     setTimeout(() => {
       envoyerDevis(sel.id);
-      setDevisPrev(true);
+      changerStatut(sel.id, 'devis_envoye');
+      sendMsg(sel.id, cl?.id, cl?.canal || 'whatsapp', 'devis_final', null);
     }, 50);
-  }
-
-  function handleConfirmDevisEnvoye() {
-    changerStatut(sel.id, 'devis_envoye');
-    sendMsg(sel.id, cl?.id, cl?.canal || 'whatsapp', 'devis_final', null);
-    setDevisPrev(false);
   }
 
   // ── Correction bar availability ───────────────────────────────────────────
@@ -836,10 +831,21 @@ export default function StaffDetailView() {
 
         return (
           <div className="space-y-4">
-            {/* Dimensions initiales */}
-            <Section title="Dimensions initiales (réception)" icon={Ruler} color="#94A3B8">
-              <DimsDisplay c={sel} />
-            </Section>
+            {/* Dimensions initiales — collapsed by default (staff already knows them) */}
+            <details className="group">
+              <summary
+                className="flex items-center gap-2 cursor-pointer text-[12px] font-semibold text-gray-400 hover:text-gray-600 transition-colors py-1"
+              >
+                <Ruler size={11} className="text-gray-400" />
+                Dimensions initiales (réception)
+                <span className="text-[10px] ml-auto group-open:hidden">
+                  {sel.dimL && sel.dimW && sel.dimH ? `${sel.dimL}×${sel.dimW}×${sel.dimH} cm` : '—'}
+                </span>
+              </summary>
+              <div className="mt-1">
+                <DimsDisplay c={sel} />
+              </div>
+            </details>
 
             {/* Dimensions finales */}
             <Section title="Dimensions après optimisation" icon={Ruler} color={borderColor}>
@@ -957,7 +963,7 @@ export default function StaffDetailView() {
                     )}
                   </div>
 
-                  <BtnPrimary onClick={() => { handleEnvoyerDevis(); handleConfirmDevisEnvoye(); }} color="#16A34A">
+                  <BtnPrimary onClick={handleSendDevis} color="#16A34A">
                     <Check size={15} />
                     Envoyer le devis au client
                   </BtnPrimary>

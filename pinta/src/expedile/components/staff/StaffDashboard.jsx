@@ -128,6 +128,26 @@ function statutCardStyle(statut) {
   return map[statut] || { bg: '#FFFFFF', border: BRAND.navy, icon: BRAND.navy };
 }
 
+// ── Next action hint per statut ──────────────────────────────────────────────
+function nextActionLabel(statut) {
+  const map = {
+    annonce: 'Réceptionner',
+    receptionne: 'Mesurer',
+    mesure: 'Demander feu vert',
+    attente_feu_vert: 'Att. client',
+    autorise: 'Préparer',
+    en_preparation: 'Envoyer devis',
+    devis_envoye: 'Att. paiement',
+    attente_paiement: 'Att. paiement',
+    paye: 'Expédier',
+    expedie: 'Suivi transit',
+    transit: 'Att. arrivée',
+    arrive: 'Planifier livraison',
+    livraison: 'Livrer',
+  };
+  return map[statut] || null;
+}
+
 // ── Colis card ───────────────────────────────────────────────────────────────
 function ColisCard({ c, client, envois, onClick, stagger }) {
   const StatutIco = statutIcon(c.statut);
@@ -207,6 +227,15 @@ function ColisCard({ c, client, envois, onClick, stagger }) {
                 style={{ background: `${BRAND.navy}10`, color: BRAND.navy }}
               >
                 {labelEnvoi(envoi)}
+              </span>
+            )}
+            {/* Next action hint */}
+            {nextActionLabel(c.statut) && (
+              <span
+                className="text-[9px] font-bold px-1.5 py-0.5 rounded"
+                style={{ background: `${scs.border}12`, color: scs.icon }}
+              >
+                {nextActionLabel(c.statut)}
               </span>
             )}
           </div>
@@ -323,19 +352,20 @@ export default function StaffDashboard({ onNewColis }) {
     [data],
   );
 
-  // ── Sub-pipeline chips for active card ──────────────────────────────────
-  const subPipelineChips = useMemo(() => {
-    if (!activeCardDef) return [];
-    return PIPELINE
-      .map((p) => ({
-        ...p,
-        statuts: p.statuts.filter((s) => activeCardDef.statuts.includes(s)),
-      }))
-      .filter((p) => p.statuts.length > 0)
-      .map((p) => ({
-        ...p,
-        count: envoiFiltered.filter((c) => p.statuts.includes(c.statut)).length,
-      }));
+  // ── Pipeline chips (always visible, scoped to active card if set) ─────
+  const pipelineChips = useMemo(() => {
+    const base = activeCardDef
+      ? PIPELINE
+          .map((p) => ({
+            ...p,
+            statuts: p.statuts.filter((s) => activeCardDef.statuts.includes(s)),
+          }))
+          .filter((p) => p.statuts.length > 0)
+      : PIPELINE;
+    return base.map((p) => ({
+      ...p,
+      count: envoiFiltered.filter((c) => p.statuts.includes(c.statut)).length,
+    }));
   }, [activeCardDef, envoiFiltered]);
 
   // ── Sorted flat list for "numero" view mode ─────────────────────────────
@@ -498,41 +528,39 @@ export default function StaffDashboard({ onNewColis }) {
           </div>
         </div>
 
-        {/* ── Sub-filter chips (appear when a card is active) ──────────── */}
-        {activeCard && subPipelineChips.length > 1 && (
-          <div className="flex gap-1.5 flex-wrap mt-2.5 anim-slide-down">
-            {subPipelineChips.map((p) => {
-              const PIcon = p.icon;
-              const isActive = pipeFilter === p.statuts.join(',');
-              return (
-                <button
-                  key={p.key}
-                  onClick={() => toggleSubFilter(p.statuts)}
-                  className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-bold transition-all active:scale-95"
-                  style={
-                    isActive
-                      ? { background: p.color, color: 'white', boxShadow: `0 1px 6px ${p.color}30` }
-                      : { background: `${p.color}10`, color: p.color }
-                  }
-                >
-                  <PIcon size={10} strokeWidth={2.5} />
-                  {p.label}
-                  <span className="font-black ml-0.5" style={{ opacity: isActive ? 0.9 : 0.6 }}>
-                    {p.count}
-                  </span>
-                </button>
-              );
-            })}
-            {pipeFilter && (
+        {/* ── Pipeline chips (always visible for quick 1-click filtering) ── */}
+        <div className="flex gap-1.5 flex-wrap mt-2.5">
+          {pipelineChips.map((p) => {
+            const PIcon = p.icon;
+            const isActive = pipeFilter === p.statuts.join(',');
+            return (
               <button
-                onClick={() => setPipeFilter(null)}
-                className="flex items-center gap-0.5 px-1.5 py-1 text-[11px] text-gray-400 hover:text-gray-600 transition-colors"
+                key={p.key}
+                onClick={() => toggleSubFilter(p.statuts)}
+                className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-bold transition-all active:scale-95"
+                style={
+                  isActive
+                    ? { background: p.color, color: 'white', boxShadow: `0 1px 6px ${p.color}30` }
+                    : { background: `${p.color}10`, color: p.color }
+                }
               >
-                <X size={10} />
+                <PIcon size={10} strokeWidth={2.5} />
+                {p.label}
+                <span className="font-black ml-0.5" style={{ opacity: isActive ? 0.9 : 0.6 }}>
+                  {p.count}
+                </span>
               </button>
-            )}
-          </div>
-        )}
+            );
+          })}
+          {pipeFilter && (
+            <button
+              onClick={() => setPipeFilter(null)}
+              className="flex items-center gap-0.5 px-1.5 py-1 text-[11px] text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              <X size={10} />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* ── Search + filter bar ─────────────────────────────────────────── */}

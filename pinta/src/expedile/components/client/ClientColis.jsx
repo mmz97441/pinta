@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Package, Plus, ChevronRight, AlertCircle, CreditCard, CheckCircle, X } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { BRAND, PHASES_CLIENT, getPhaseIndex } from '../../constants';
-import { Badge, Etapes } from '../ui';
+import { Badge } from '../ui';
 
 function ProgressBar({ statut }) {
   const idx = getPhaseIndex(statut);
@@ -261,7 +261,7 @@ export default function ClientColis({ onNewColis }) {
                   </div>
                 )}
 
-                {/* Progress bar for non-terminal statuts */}
+                {/* Progress bar — visible in all tabs for active colis */}
                 {!isLivre && p.statut !== 'annule' && !action && (
                   <ProgressBar statut={p.statut} />
                 )}
@@ -271,13 +271,6 @@ export default function ClientColis({ onNewColis }) {
                   <div className="mt-2 flex items-center gap-1.5 text-[11px] font-semibold text-emerald-600">
                     <CheckCircle size={11} />
                     Livré
-                  </div>
-                )}
-
-                {/* Etapes for non-action colis in "En cours" */}
-                {!action && !isLivre && p.statut !== 'annule' && colisTab === 'tous' && (
-                  <div className="mt-3 pt-3 border-t border-gray-50">
-                    <Etapes statut={p.statut} />
                   </div>
                 )}
               </button>

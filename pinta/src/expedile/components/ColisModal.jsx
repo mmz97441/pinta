@@ -73,6 +73,16 @@ export default function ColisModal({ open, onClose }) {
   const setField = (key, val) => setNf((prev) => ({ ...prev, [key]: val }));
 
   const setTracking = (idx, val) => {
+    // Support pasting multiple trackings separated by newlines/commas/spaces
+    const parts = val.split(/[\n,;]+/).map((s) => s.trim()).filter(Boolean);
+    if (parts.length > 1) {
+      setNf((prev) => {
+        const trackings = [...prev.trackings];
+        trackings.splice(idx, 1, ...parts);
+        return { ...prev, trackings };
+      });
+      return;
+    }
     setNf((prev) => {
       const trackings = [...prev.trackings];
       trackings[idx] = val;
@@ -887,98 +897,85 @@ export default function ColisModal({ open, onClose }) {
                 />
               </div>
 
-              {/* ── FACTURE (client only) ── */}
+              {/* ── FACTURE (client only — always visible, no checkbox gate) ── */}
               {!isStaff && (
-                <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 p-4">
-                  <div className="flex items-start gap-3 mb-3">
+                <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 p-4 space-y-3">
+                  <div className="flex items-start gap-3">
                     <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center">
                       <FileText size={15} className="text-blue-600" />
                     </div>
                     <div className="flex-1">
                       <p className="text-sm font-semibold text-gray-800">Facture d'origine</p>
                       <p className="text-xs text-gray-500 mt-0.5">
-                        Joindre la facture permet de calculer les taxes (Octroi de Mer) plus rapidement.
+                        Joindre la facture accélère le calcul des taxes.
                       </p>
                     </div>
                   </div>
 
-                  {/* Toggle uploaded */}
-                  <label className="flex items-center gap-2 cursor-pointer mb-3">
-                    <input
-                      type="checkbox"
-                      checked={nf.facUploaded}
-                      onChange={(e) => setField('facUploaded', e.target.checked)}
-                      className="w-4 h-4 rounded accent-blue-600 cursor-pointer"
-                    />
-                    <span className="text-sm text-gray-700">J'ai une facture à transmettre</span>
-                  </label>
-
-                  {nf.facUploaded && (
-                    <div className="space-y-3 pt-1">
-                      <div>
-                        <label className={labelCls}>Vendeur / Boutique</label>
-                        <input
-                          type="text"
-                          placeholder="Ex: Amazon, Fnac, Nike…"
-                          value={nf.facVendeur}
-                          onChange={(e) => setField('facVendeur', e.target.value)}
-                          className={inputCls(false)}
-                        />
-                      </div>
-                      <div>
-                        <label className={labelCls}>Montant de la facture (€)</label>
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          placeholder="Ex: 89.99"
-                          value={nf.facMontant}
-                          onChange={(e) => setField('facMontant', e.target.value)}
-                          className={inputCls(false)}
-                        />
-                      </div>
-                      {/* File upload */}
-                      <div>
-                        <label className={labelCls}>Photo / PDF de la facture</label>
-                        {nf.facFichier ? (
-                          <div className="flex items-center gap-2 p-2 rounded-xl bg-green-50 border border-green-200">
-                            <img src={nf.facFichier} alt="" className="w-10 h-10 rounded-lg object-cover border border-gray-200" />
-                            <div className="flex-1 min-w-0">
-                              <p className="text-xs font-medium text-green-800 truncate">{nf.facFichierNom}</p>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => { setField('facFichier', null); setField('facFichierNom', ''); }}
-                              className="text-red-400 hover:text-red-600 p-1"
-                            >
-                              <X size={14} />
-                            </button>
-                          </div>
-                        ) : (
-                          <label className="flex items-center justify-center gap-2 w-full py-3 rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 text-sm text-gray-500 font-medium cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-all">
-                            <FileText size={16} />
-                            Choisir un fichier
-                            <input
-                              type="file"
-                              accept="image/*,.pdf"
-                              className="hidden"
-                              onChange={(e) => {
-                                const file = e.target.files?.[0];
-                                if (!file) return;
-                                const reader = new FileReader();
-                                reader.onload = () => {
-                                  setField('facFichier', reader.result);
-                                  setField('facFichierNom', file.name);
-                                };
-                                reader.readAsDataURL(file);
-                                e.target.value = '';
-                              }}
-                            />
-                          </label>
-                        )}
-                      </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className={labelCls}>Vendeur</label>
+                      <input
+                        type="text"
+                        placeholder="Amazon, Fnac…"
+                        value={nf.facVendeur}
+                        onChange={(e) => setField('facVendeur', e.target.value)}
+                        className={inputCls(false)}
+                      />
                     </div>
-                  )}
+                    <div>
+                      <label className={labelCls}>Montant (€)</label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        placeholder="89.99"
+                        value={nf.facMontant}
+                        onChange={(e) => setField('facMontant', e.target.value)}
+                        className={inputCls(false)}
+                      />
+                    </div>
+                  </div>
+                  {/* File upload */}
+                  <div>
+                    {nf.facFichier ? (
+                      <div className="flex items-center gap-2 p-2 rounded-xl bg-green-50 border border-green-200">
+                        <img src={nf.facFichier} alt="" className="w-10 h-10 rounded-lg object-cover border border-gray-200" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-medium text-green-800 truncate">{nf.facFichierNom}</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => { setField('facFichier', null); setField('facFichierNom', ''); }}
+                          className="text-red-400 hover:text-red-600 p-1"
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                    ) : (
+                      <label className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl border-2 border-dashed border-gray-300 bg-white text-sm text-gray-500 font-medium cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-all">
+                        <FileText size={14} />
+                        Joindre la facture
+                        <input
+                          type="file"
+                          accept="image/*,.pdf"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+                            const reader = new FileReader();
+                            reader.onload = () => {
+                              setField('facFichier', reader.result);
+                              setField('facFichierNom', file.name);
+                              setField('facUploaded', true);
+                            };
+                            reader.readAsDataURL(file);
+                            e.target.value = '';
+                          }}
+                        />
+                      </label>
+                    )}
+                  </div>
                 </div>
               )}
             </>
