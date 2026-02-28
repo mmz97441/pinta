@@ -279,9 +279,21 @@ export function AppProvider({ children }) {
     if (ns === 'expedie' && !c.paiementMontant) { flash("Le client n'a pas encore payé"); return; }
     if (ns === 'expedie' && !c.envoi) { flash("Affectez le colis à un envoi d'abord"); return; }
     log(id, c.statut, ns);
-    upd(id, { statut: ns });
+    const changes = { statut: ns };
+    // Record expedition date when marking as expedie
+    if (ns === 'expedie') changes.dateExpedition = new Date().toISOString();
+    upd(id, changes);
+    // Award loyalty points on delivery
+    if (ns === 'livre' && c.clientId) {
+      const pts = c.poidsFact ? Math.round(c.poidsFact * 10) : 10; // 10 pts per kg, min 10
+      setClients((prev) => prev.map((cl) =>
+        cl.id === c.clientId ? { ...cl, points: (cl.points || 0) + pts } : cl
+      ));
+      flash(`${STATUTS[ns].label} — +${pts} pts fidélité`);
+      return;
+    }
     flash(STATUTS[ns].label);
-  }, [data, log, upd, flash]);
+  }, [data, log, upd, flash, setClients]);
 
   const revertStatut = useCallback((id) => {
     const c = data.find((x) => x.id === id);

@@ -23,6 +23,7 @@ function statusBorderColor(statut) {
     expedie: '#06B6D4',
     transit: '#0EA5E9',
     arrive: '#14B8A6',
+    dedouanement: '#7C3AED',
     livraison: '#84CC16',
     livre: '#16A34A',
     annule: '#9CA3AF',
@@ -45,6 +46,7 @@ function templatesForStatut(statut) {
     expedie: ['expedie', 'libre'],
     transit: ['libre'],
     arrive: ['arrive', 'libre'],
+    dedouanement: ['libre'],
     livraison: ['en_livraison', 'libre'],
     livre: ['libre'],
   };
@@ -1070,12 +1072,14 @@ export default function StaffDetailView() {
       case 'expedie':
       case 'transit':
       case 'arrive':
+      case 'dedouanement':
       case 'livraison': {
         const nextStatuts = TRANSITIONS[sel.statut] || [];
         const trackingSteps = [
           { key: 'expedie', label: 'Expédié', tpl: 'expedie' },
           { key: 'transit', label: 'En vol' },
           { key: 'arrive', label: 'Arrivé', tpl: 'arrive' },
+          { key: 'dedouanement', label: 'Dédouanement' },
           { key: 'livraison', label: 'En livraison', tpl: 'en_livraison' },
           { key: 'livre', label: 'Livré' },
         ];

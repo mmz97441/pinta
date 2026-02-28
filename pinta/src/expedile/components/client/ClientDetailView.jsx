@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import {
   ArrowLeft, Package, CheckCircle, Wrench, CreditCard, Plane, MapPin,
   ChevronDown, ChevronUp, AlertCircle, ThumbsUp, ThumbsDown, RotateCcw,
-  ExternalLink, Clock,
+  ExternalLink, Clock, Shield,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { BRAND, PHASES_CLIENT, getPhaseIndex } from '../../constants';
@@ -10,7 +10,7 @@ import { eur, trackStr, hasTrack } from '../../utils';
 import { Badge, Ligne } from '../ui';
 
 // ── Phase icons ────────────────────────────────────────────────────────────────
-const PHASE_ICONS = [Package, Package, CheckCircle, Wrench, CreditCard, Plane, MapPin];
+const PHASE_ICONS = [Package, Package, CheckCircle, Wrench, CreditCard, Plane, Shield, MapPin];
 
 // ── Phase state helper ─────────────────────────────────────────────────────────
 function getPhaseState(phaseIdx, curPhaseIdx) {
@@ -142,7 +142,7 @@ function PhaseStep({ phase, phaseIdx, state, open, onToggle, children }) {
 
 // ── Main component ─────────────────────────────────────────────────────────────
 export default function ClientDetailView() {
-  const { sel, selDest, setSelId, feuVert, feuVertBulk, payer, ask, flash, authCl, data } = useApp();
+  const { sel, selDest, setSelId, feuVert, feuVertBulk, payer, ask, flash, authCl, data, envois } = useApp();
 
   if (!sel) return null;
 
@@ -510,6 +510,7 @@ export default function ClientDetailView() {
 
     // Phase 5 – Expédition
     if (phaseIdx === 5) {
+      const envoi = sel.envoi ? envois.find((e) => e.id === sel.envoi) : null;
       return (
         <div className="space-y-2">
           <p className="text-xs text-gray-500 leading-relaxed">
@@ -519,6 +520,17 @@ export default function ClientDetailView() {
               ? 'Votre colis est en vol vers votre destination !'
               : 'Votre colis est en route.'}
           </p>
+          {sel.dateExpedition && (
+            <p className="text-[10px] font-medium text-gray-400">
+              Expédié le {new Date(sel.dateExpedition).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+            </p>
+          )}
+          {envoi && (
+            <div className="flex items-center gap-2 text-xs text-gray-600 bg-gray-50 rounded-xl px-3 py-2">
+              <Plane size={13} />
+              <span>Vol du <span className="font-black">{new Date(envoi.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })}</span></span>
+            </div>
+          )}
           {sel.statut === 'transit' && (
             <div
               className="flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold text-white"
@@ -544,20 +556,41 @@ export default function ClientDetailView() {
       );
     }
 
-    // Phase 6 – Livraison
+    // Phase 6 – Dédouanement
     if (phaseIdx === 6) {
-      const isLivre = sel.statut === 'livre';
-      const isEnLivraison = sel.statut === 'livraison';
       const isArrive = sel.statut === 'arrive';
+      const isDedouanement = sel.statut === 'dedouanement';
 
       return (
         <div className="space-y-3">
           {isArrive && (
             <div className="flex items-center gap-2 text-xs font-semibold text-teal-700 bg-teal-50 rounded-xl px-3 py-2">
               <MapPin size={13} />
-              Colis arrivé à destination — livraison en cours de planification
+              Colis arrivé à destination — en attente de dédouanement
             </div>
           )}
+          {isDedouanement && (
+            <div className="flex items-center gap-2 text-xs font-semibold text-purple-700 bg-purple-50 rounded-xl px-3 py-2">
+              <Shield size={13} />
+              Dédouanement en cours — formalités douanières en traitement
+            </div>
+          )}
+          {!isArrive && !isDedouanement && (
+            <p className="text-xs text-gray-500 leading-relaxed">
+              Les formalités douanières ont été réalisées pour votre colis.
+            </p>
+          )}
+        </div>
+      );
+    }
+
+    // Phase 7 – Livraison
+    if (phaseIdx === 7) {
+      const isLivre = sel.statut === 'livre';
+      const isEnLivraison = sel.statut === 'livraison';
+
+      return (
+        <div className="space-y-3">
           {isEnLivraison && (
             <div className="flex items-center gap-2 text-xs font-semibold text-lime-700 bg-lime-50 rounded-xl px-3 py-2">
               <MapPin size={13} />
@@ -577,10 +610,10 @@ export default function ClientDetailView() {
               </div>
             </div>
           )}
-          {!isLivre && !isEnLivraison && !isArrive && (
+          {!isLivre && !isEnLivraison && (
             <p className="text-xs text-gray-400 flex items-center gap-1.5 bg-gray-50 rounded-xl px-3 py-2">
               <Clock size={13} />
-              La livraison sera programmée à l'arrivée du colis
+              La livraison sera programmée après le dédouanement
             </p>
           )}
         </div>

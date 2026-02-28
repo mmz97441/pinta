@@ -17,6 +17,7 @@ const BADGE_STYLE = {
   expedie:          { bg: '#CFFAFE', text: '#155E75', dot: '#06B6D4' },
   transit:          { bg: '#E0F2FE', text: '#075985', dot: '#0EA5E9' },
   arrive:           { bg: '#CCFBF1', text: '#115E59', dot: '#14B8A6' },
+  dedouanement:     { bg: '#EDE9FE', text: '#5B21B6', dot: '#7C3AED' },
   livraison:        { bg: '#D1FAE5', text: '#065F46', dot: '#10B981' },
   livre:            { bg: '#DCFCE7', text: '#14532D', dot: '#16A34A' },
   annule:           { bg: '#F3F4F6', text: '#6B7280', dot: '#9CA3AF' },

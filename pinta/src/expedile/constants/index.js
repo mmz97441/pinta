@@ -22,7 +22,8 @@ export const STATUTS = {
   paye:               { label: 'Payé',                        labelClient: null,                            couleur: 'bg-emerald-200 text-emerald-800',phase: 4, actionStaff: 'Expédier ce colis',               actionClient: null },
   expedie:            { label: 'Expédié',                     labelClient: null,                            couleur: 'bg-cyan-200 text-cyan-800',      phase: 5, actionStaff: 'Marquer en transit',              actionClient: null },
   transit:            { label: 'En vol',                      labelClient: null,                            couleur: 'bg-sky-200 text-sky-800',        phase: 5, actionStaff: "Confirmer arrivée",               actionClient: null },
-  arrive:             { label: 'Arrivé destination',          labelClient: null,                            couleur: 'bg-teal-200 text-teal-800',      phase: 5, actionStaff: 'Lancer la livraison',             actionClient: null },
+  arrive:             { label: 'Arrivé destination',          labelClient: null,                            couleur: 'bg-teal-200 text-teal-800',      phase: 5, actionStaff: 'Lancer le dédouanement',         actionClient: null },
+  dedouanement:       { label: 'En dédouanement',              labelClient: 'En cours de dédouanement',      couleur: 'bg-purple-200 text-purple-800',  phase: 5, actionStaff: 'Planifier la livraison',          actionClient: null },
   livraison:          { label: 'En cours de livraison',       labelClient: null,                            couleur: 'bg-lime-200 text-lime-800',      phase: 5, actionStaff: 'Confirmer livraison',             actionClient: null },
   livre:              { label: 'Livré',                        labelClient: null,                            couleur: 'bg-green-300 text-green-900',    phase: 5, actionStaff: null,                              actionClient: null },
   annule:             { label: 'Annulé',                      labelClient: null,                            couleur: 'bg-gray-200 text-gray-500',      phase: 0, actionStaff: null,                              actionClient: null },
@@ -41,7 +42,8 @@ export const TRANSITIONS = {
   paye: ['expedie'],
   expedie: ['transit'],
   transit: ['arrive'],
-  arrive: ['livraison'],
+  arrive: ['dedouanement'],
+  dedouanement: ['livraison'],
   livraison: ['livre'],
   livre: [],
   annule: [],
@@ -56,6 +58,7 @@ export const PREV_STATUT = {
   devis_envoye: 'en_preparation',
   attente_paiement: 'devis_envoye',
   paye: 'attente_paiement',
+  dedouanement: 'arrive',
 };
 
 // ══════════ DESTINATIONS DOM-TOM ══════════
@@ -98,13 +101,20 @@ export const STAFF = [
 ];
 
 // ══════════ CLIENTS INITIAUX ══════════
+// ══════════ FORFAITS ══════════
+export const FORFAITS = {
+  freemium:    { label: 'Freemium',     color: '#64748b', bg: '#f1f5f9' },
+  premium:     { label: 'Premium',      color: '#C99A2E', bg: '#fef9ec' },
+  vip_premium: { label: 'VIP Premium',  color: '#1B3A4B', bg: '#E8F4F8' },
+};
+
 export const CLIENTS_INIT = [
-  { id: 'c1', nom: 'Flavie FONTAINE',  ville: 'Saint-Denis',  cp: '97400', adresse: '12 rue Maréchal Leclerc, Appt 3B',       tel: '+262692123456', email: 'flavie.f@gmail.com',      canal: 'whatsapp', type: 'particulier', created: '2024-11-15', points: 120, onboarded: true },
-  { id: 'c2', nom: 'Guillaume NICE',   ville: 'Sainte-Marie', cp: '97438', adresse: '8 chemin des Flamboyants',                tel: '+262692595378', email: 'guillaume.n@outlook.com',  canal: 'whatsapp', type: 'particulier', created: '2025-01-08', points: 45, onboarded: true },
-  { id: 'c3', nom: 'Ophélie ABAR',     ville: 'Saint-Leu',    cp: '97436', adresse: '45 rue du Général de Gaulle',             tel: '+262694111222', email: 'ophelie.a@gmail.com',      canal: 'whatsapp', type: 'particulier', created: '2025-02-01', points: 10 },
-  { id: 'c4', nom: 'Stessy SINAMA',    ville: 'Le Tampon',    cp: '97430', adresse: '3 résidence Les Jacarandas, Bât C',       tel: '+262692789012', email: 'stessy.s@live.fr',         canal: 'whatsapp', type: 'particulier', created: '2024-09-20', points: 210, onboarded: true },
-  { id: 'c5', nom: 'E-Concept Auto',   ville: 'Saint-Paul',   cp: '97460', adresse: 'ZI n°3, 22 rue des Artisans',             tel: '+262692555888', email: 'contact@econcept-auto.re', canal: 'email',    type: 'pro',         created: '2024-06-10', points: 580, onboarded: true },
-  { id: 'c6', nom: 'Ibrahim COMBO',    ville: 'Mamoudzou',    cp: '97600', adresse: 'Quartier Cavani, rue du Commerce',        tel: '+262639123456', email: 'ibrahim.c@gmail.com',      canal: 'whatsapp', type: 'particulier', created: '2025-01-25', points: 30 },
+  { id: 'c1', nom: 'Flavie FONTAINE',  ville: 'Saint-Denis',  cp: '97400', adresse: '12 rue Maréchal Leclerc, Appt 3B',       tel: '+262692123456', email: 'flavie.f@gmail.com',      canal: 'whatsapp', type: 'particulier', forfait: 'premium',     dateFinAbo: '2026-06-15', created: '2024-11-15', points: 120, onboarded: true },
+  { id: 'c2', nom: 'Guillaume NICE',   ville: 'Sainte-Marie', cp: '97438', adresse: '8 chemin des Flamboyants',                tel: '+262692595378', email: 'guillaume.n@outlook.com',  canal: 'whatsapp', type: 'particulier', forfait: 'freemium',    dateFinAbo: null,         created: '2025-01-08', points: 45, onboarded: true },
+  { id: 'c3', nom: 'Ophélie ABAR',     ville: 'Saint-Leu',    cp: '97436', adresse: '45 rue du Général de Gaulle',             tel: '+262694111222', email: 'ophelie.a@gmail.com',      canal: 'whatsapp', type: 'particulier', forfait: 'freemium',    dateFinAbo: null,         created: '2025-02-01', points: 10 },
+  { id: 'c4', nom: 'Stessy SINAMA',    ville: 'Le Tampon',    cp: '97430', adresse: '3 résidence Les Jacarandas, Bât C',       tel: '+262692789012', email: 'stessy.s@live.fr',         canal: 'whatsapp', type: 'particulier', forfait: 'premium',     dateFinAbo: '2026-03-10', created: '2024-09-20', points: 210, onboarded: true },
+  { id: 'c5', nom: 'E-Concept Auto',   ville: 'Saint-Paul',   cp: '97460', adresse: 'ZI n°3, 22 rue des Artisans',             tel: '+262692555888', email: 'contact@econcept-auto.re', canal: 'email',    type: 'pro',         forfait: 'vip_premium', dateFinAbo: '2026-12-31', created: '2024-06-10', points: 580, onboarded: true },
+  { id: 'c6', nom: 'Ibrahim COMBO',    ville: 'Mamoudzou',    cp: '97600', adresse: 'Quartier Cavani, rue du Commerce',        tel: '+262639123456', email: 'ibrahim.c@gmail.com',      canal: 'whatsapp', type: 'particulier', forfait: 'freemium',    dateFinAbo: null,         created: '2025-01-25', points: 30 },
 ];
 
 // ══════════ ENVOIS ══════════
@@ -133,7 +143,8 @@ export const PHASES_CLIENT = [
   { key: 'preparation', label: 'Préparation',       statuts: ['en_preparation'] },
   { key: 'devis',       label: 'Devis & Paiement',  statuts: ['devis_envoye', 'attente_paiement', 'litige_devis', 'paye'] },
   { key: 'expedition',  label: 'Expédition',        statuts: ['expedie', 'transit'] },
-  { key: 'livraison',   label: 'Livraison',         statuts: ['arrive', 'livraison', 'livre'] },
+  { key: 'douane',      label: 'Dédouanement',      statuts: ['arrive', 'dedouanement'] },
+  { key: 'livraison',   label: 'Livraison',         statuts: ['livraison', 'livre'] },
 ];
 
 export function getPhaseIndex(statut) {

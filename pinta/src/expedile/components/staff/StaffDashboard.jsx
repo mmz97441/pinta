@@ -6,7 +6,7 @@ import {
   Hash, Layers,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { BRAND, STATUTS, STATUT_ENVOI, getDestByCP } from '../../constants';
+import { BRAND, STATUTS, STATUT_ENVOI, getDestByCP, FORFAITS } from '../../constants';
 import { eur, labelEnvoi, trackStr, trackCount, hasTrack, searchGlobal } from '../../utils';
 import { Badge } from '../ui';
 
@@ -142,7 +142,8 @@ function nextActionLabel(statut) {
     paye: 'Expédier',
     expedie: 'Suivi transit',
     transit: 'Att. arrivée',
-    arrive: 'Planifier livraison',
+    arrive: 'Dédouaner',
+    dedouanement: 'Planifier livraison',
     livraison: 'Livrer',
   };
   return map[statut] || null;
@@ -199,10 +200,13 @@ function ColisCard({ c, client, envois, onClick, stagger }) {
             )}
           </div>
 
-          {/* Row 2: client + dest */}
+          {/* Row 2: client + type + dest */}
           <div className="mt-1 flex items-center gap-1.5">
             <User size={10} className="text-gray-400 flex-shrink-0" />
             <span className="text-xs text-gray-600 font-medium truncate">{client?.nom ?? '—'}</span>
+            {client?.type === 'pro' && (
+              <span className="text-[8px] font-black px-1 py-0.5 rounded" style={{ background: '#DBEAFE', color: '#1D4ED8' }}>PRO</span>
+            )}
             {dest && (
               <span className="text-xs text-gray-400 flex-shrink-0">{dest.flag}</span>
             )}
@@ -351,6 +355,22 @@ export default function StaffDashboard({ onNewColis }) {
     () => data.filter((c) => c.statut !== 'annule').length,
     [data],
   );
+
+  // ── Subscription expiration alerts (< 30 days) ──────────────────────────
+  const expiringAbos = useMemo(() => {
+    const now = new Date();
+    const limit = new Date();
+    limit.setDate(now.getDate() + 30);
+    return clients.filter((c) => {
+      if (!c.dateFinAbo || c.forfait === 'freemium') return false;
+      const d = new Date(c.dateFinAbo + 'T00:00:00');
+      return d <= limit;
+    }).map((c) => {
+      const d = new Date(c.dateFinAbo + 'T00:00:00');
+      const diff = Math.ceil((d - now) / (1000 * 60 * 60 * 24));
+      return { ...c, joursRestants: diff };
+    }).sort((a, b) => a.joursRestants - b.joursRestants);
+  }, [clients]);
 
   // ── Pipeline chips (always visible, scoped to active card if set) ─────
   const pipelineChips = useMemo(() => {
@@ -710,6 +730,40 @@ export default function StaffDashboard({ onNewColis }) {
                 {c.ref}
               </button>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Subscription expiration alert ─────────────────────────────── */}
+      {expiringAbos.length > 0 && (
+        <div
+          className="anim-fade stagger-4 flex items-start gap-2 px-3 py-2 rounded-lg"
+          style={{ background: '#FFF1F2', border: '1px solid #FECDD3' }}
+        >
+          <AlertTriangle size={13} className="text-rose-500 flex-shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <span className="text-[12px] font-semibold text-rose-700">
+              Abonnement{expiringAbos.length > 1 ? 's' : ''} bientôt expiré{expiringAbos.length > 1 ? 's' : ''}
+            </span>
+            <div className="flex gap-2 flex-wrap mt-1">
+              {expiringAbos.map((c) => {
+                const f = FORFAITS[c.forfait];
+                const expired = c.joursRestants <= 0;
+                return (
+                  <span
+                    key={c.id}
+                    className="text-[11px] font-bold px-1.5 py-0.5 rounded"
+                    style={{
+                      background: expired ? '#FEE2E2' : '#FFF7ED',
+                      color: expired ? '#DC2626' : '#C2410C',
+                    }}
+                  >
+                    {c.nom.split(' ')[0]} · {f?.label}
+                    {expired ? ' (expiré)' : ` (${c.joursRestants}j)`}
+                  </span>
+                );
+              })}
+            </div>
           </div>
         </div>
       )}
