@@ -279,7 +279,7 @@ function SectionHeader({ icon: Icon, label, count, color, right }) {
 
 // ── Main component ───────────────────────────────────────────────────────────
 export default function StaffDashboard({ onNewColis }) {
-  const { data, clients, envois, setSelId, getClient, isStaff, page } = useApp();
+  const { data, clients, envois, setSelId, getClient, isStaff, page, setPage } = useApp();
 
   const [globalSearch, setGlobalSearch] = useState('');
   const [envoiFilter, setEnvoiFilter] = useState('ALL');
@@ -644,11 +644,10 @@ export default function StaffDashboard({ onNewColis }) {
                   </span>
                 </div>
                 {searchResults.clients.map((cl) => {
-                  const firstColis = data.find((p) => p.clientId === cl.id && p.statut !== 'annule');
                   return (
                     <button
                       key={cl.id}
-                      onClick={() => firstColis ? openColis(firstColis.id) : setGlobalSearch('')}
+                      onClick={() => { setGlobalSearch(''); setPage('clients'); }}
                       className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-gray-50 transition-colors text-left"
                     >
                       <div
@@ -753,11 +752,10 @@ export default function StaffDashboard({ onNewColis }) {
               {expiringAbos.map((c) => {
                 const f = FORFAITS[c.forfait];
                 const expired = c.joursRestants <= 0;
-                const firstColis = data.find((p) => p.clientId === c.id && p.statut !== 'annule');
                 return (
                   <button
                     key={c.id}
-                    onClick={() => firstColis ? openColis(firstColis.id) : setGlobalSearch(c.nom)}
+                    onClick={() => setPage('clients')}
                     className="text-[11px] font-bold px-1.5 py-0.5 rounded transition-all hover:opacity-80 active:scale-95 cursor-pointer"
                     style={{
                       background: expired ? '#FEE2E2' : '#FFF7ED',
