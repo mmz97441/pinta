@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import {
-  Plane, Printer, Package, User, Plus, ChevronDown, ChevronUp,
-  FileText, CheckCircle, AlertTriangle, Eye, Download, Compass,
+  Plane, Printer, Package, Plus, ChevronDown, ChevronUp,
+  FileText, CheckCircle, AlertTriangle, Eye, Download,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { BRAND, STATUT_ENVOI, getDestByCP, JOURS_SEMAINE, getSecteur, SECTEURS } from '../../constants';
@@ -44,9 +44,219 @@ function InvoiceViewer({ facture, onClose }) {
   );
 }
 
-// ── Preparation view for a single envoi ──────────────────────────────────────
+// ── Helper: format dimensions ────────────────────────────────────────────────
+function fmtDims(c) {
+  const L = c.finL || c.dimL;
+  const W = c.finW || c.dimW;
+  const H = c.finH || c.dimH;
+  if (!L || !W || !H) return '—';
+  return `${L}×${W}×${H}`;
+}
+
+// ── Helper: CSV export for an envoi ──────────────────────────────────────────
+function exportCSV(envoi, colisList, clients) {
+  const label = labelEnvoi(envoi);
+  const sep = ';';
+  const headers = ['Ref', 'Client', 'Destination', 'Dimensions (cm)', 'Poids (kg)', 'Transport', 'Octroi mer', 'OMR', 'TVA', 'Total devis', 'Payé'];
+  const lines = [headers.join(sep)];
+
+  const totals = { poids: 0, transport: 0, om: 0, omr: 0, tva: 0, total: 0, paye: 0 };
+
+  colisList.forEach((c) => {
+    const cl = clients.find((x) => x.id === c.clientId);
+    const dest = getDestByCP(cl?.cp);
+    const poids = c.finP || c.poids || 0;
+    const transport = c.devisTransport || 0;
+    const om = c.devisOM || 0;
+    const omr = c.devisOMR || 0;
+    const tva = c.devisTVA || 0;
+    const total = c.devisTotal || 0;
+    const paye = c.paiementMontant || 0;
+
+    totals.poids += poids;
+    totals.transport += transport;
+    totals.om += om;
+    totals.omr += omr;
+    totals.tva += tva;
+    totals.total += total;
+    totals.paye += paye;
+
+    lines.push([
+      c.ref,
+      `"${(cl?.nom || '—').replace(/"/g, '""')}"`,
+      dest.nom,
+      fmtDims(c),
+      poids.toFixed(2),
+      transport.toFixed(2),
+      om.toFixed(2),
+      omr.toFixed(2),
+      tva.toFixed(2),
+      total.toFixed(2),
+      paye.toFixed(2),
+    ].join(sep));
+  });
+
+  // Totals row
+  lines.push([
+    'TOTAUX', '', '', '',
+    totals.poids.toFixed(2),
+    totals.transport.toFixed(2),
+    totals.om.toFixed(2),
+    totals.omr.toFixed(2),
+    totals.tva.toFixed(2),
+    totals.total.toFixed(2),
+    totals.paye.toFixed(2),
+  ].join(sep));
+
+  const bom = '\uFEFF';
+  const blob = new Blob([bom + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `envoi-${label.replace(/[^a-zA-Z0-9]/g, '-')}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ── Detail & pricing view ────────────────────────────────────────────────────
+function EnvoiDetail({ envoi, colisList, clients, onOpenColis }) {
+  const totals = { poids: 0, transport: 0, om: 0, omr: 0, tva: 0, total: 0, paye: 0 };
+  const rows = colisList.map((c) => {
+    const cl = clients.find((x) => x.id === c.clientId);
+    const dest = getDestByCP(cl?.cp);
+    const poids = c.finP || c.poids || 0;
+    const transport = c.devisTransport || 0;
+    const om = c.devisOM || 0;
+    const omr = c.devisOMR || 0;
+    const tva = c.devisTVA || 0;
+    const total = c.devisTotal || 0;
+    const paye = c.paiementMontant || 0;
+
+    totals.poids += poids;
+    totals.transport += transport;
+    totals.om += om;
+    totals.omr += omr;
+    totals.tva += tva;
+    totals.total += total;
+    totals.paye += paye;
+
+    return { c, cl, dest, poids, transport, om, omr, tva, total, paye };
+  });
+
+  const thCls = 'text-[9px] font-bold text-gray-400 uppercase tracking-wider px-2 py-1.5 text-right whitespace-nowrap';
+  const tdCls = 'text-[11px] font-mono px-2 py-2 text-right whitespace-nowrap';
+
+  return (
+    <div className="border-t px-2 pb-4 pt-3">
+      {/* Export button */}
+      <div className="flex justify-end px-2 mb-2">
+        <button
+          onClick={() => exportCSV(envoi, colisList, clients)}
+          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all hover:opacity-90 active:scale-95"
+          style={{ background: '#F0FDF4', color: '#15803D', border: '1px solid #BBF7D0' }}
+        >
+          <Download size={12} />
+          Exporter CSV
+        </button>
+      </div>
+
+      {/* Scrollable table */}
+      <div className="overflow-x-auto rounded-lg" style={{ border: '1px solid #E5E7EB' }}>
+        <table className="w-full min-w-[700px]">
+          <thead>
+            <tr style={{ background: '#F9FAFB' }}>
+              <th className="text-[9px] font-bold text-gray-400 uppercase tracking-wider px-2 py-1.5 text-left whitespace-nowrap">Ref / Client</th>
+              <th className="text-[9px] font-bold text-gray-400 uppercase tracking-wider px-2 py-1.5 text-left whitespace-nowrap">Dest.</th>
+              <th className={thCls}>Dimensions</th>
+              <th className={thCls}>Poids</th>
+              <th className={thCls}>Transport</th>
+              <th className={thCls}>OM</th>
+              <th className={thCls}>OMR</th>
+              <th className={thCls}>TVA</th>
+              <th className={thCls}>Total</th>
+              <th className={thCls}>Payé</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(({ c, cl, dest, poids, transport, om, omr, tva, total, paye }) => {
+              const secteur = getSecteur(cl?.cp);
+              return (
+                <tr
+                  key={c.id}
+                  className="border-t border-gray-100 hover:bg-blue-50/40 cursor-pointer transition-colors"
+                  onClick={() => onOpenColis(c.id)}
+                >
+                  <td className="px-2 py-2">
+                    <div className="flex items-center gap-1.5">
+                      {secteur && (
+                        <span
+                          className="flex-shrink-0 w-5 h-5 rounded flex items-center justify-center text-[9px] font-black text-white"
+                          style={{ background: secteur.color }}
+                        >
+                          {secteur.lettre}
+                        </span>
+                      )}
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[11px] font-bold" style={{ color: BRAND.navy }}>{c.ref}</span>
+                          <Badge statut={c.statut} />
+                        </div>
+                        <span className="text-[10px] text-gray-500 truncate block">{cl?.nom || '—'}</span>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="text-[11px] px-2 py-2 whitespace-nowrap">
+                    {dest.flag} {dest.label}
+                  </td>
+                  <td className={tdCls}>{fmtDims(c)}</td>
+                  <td className={tdCls}>{poids ? poids.toFixed(1) + ' kg' : '—'}</td>
+                  <td className={tdCls}>{transport ? eur(transport) : '—'}</td>
+                  <td className={tdCls}>{om ? eur(om) : '—'}</td>
+                  <td className={tdCls}>{omr ? eur(omr) : '—'}</td>
+                  <td className={tdCls}>{tva ? eur(tva) : '—'}</td>
+                  <td className="text-[11px] font-bold font-mono px-2 py-2 text-right whitespace-nowrap" style={{ color: BRAND.navy }}>
+                    {total ? eur(total) : '—'}
+                  </td>
+                  <td className={`text-[11px] font-bold font-mono px-2 py-2 text-right whitespace-nowrap ${paye ? 'text-emerald-600' : 'text-gray-300'}`}>
+                    {paye ? eur(paye) : '—'}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+          {/* Totals row */}
+          <tfoot>
+            <tr className="border-t-2 border-gray-300" style={{ background: '#F9FAFB' }}>
+              <td className="px-2 py-2">
+                <span className="text-[11px] font-black uppercase" style={{ color: BRAND.navy }}>
+                  Totaux ({colisList.length} colis)
+                </span>
+              </td>
+              <td />
+              <td />
+              <td className="text-[11px] font-bold font-mono px-2 py-2 text-right" style={{ color: BRAND.navy }}>
+                {totals.poids.toFixed(1)} kg
+              </td>
+              <td className="text-[11px] font-bold font-mono px-2 py-2 text-right">{totals.transport ? eur(totals.transport) : '—'}</td>
+              <td className="text-[11px] font-bold font-mono px-2 py-2 text-right">{totals.om ? eur(totals.om) : '—'}</td>
+              <td className="text-[11px] font-bold font-mono px-2 py-2 text-right">{totals.omr ? eur(totals.omr) : '—'}</td>
+              <td className="text-[11px] font-bold font-mono px-2 py-2 text-right">{totals.tva ? eur(totals.tva) : '—'}</td>
+              <td className="text-[12px] font-black font-mono px-2 py-2 text-right" style={{ color: BRAND.navy }}>
+                {totals.total ? eur(totals.total) : '—'}
+              </td>
+              <td className="text-[12px] font-black font-mono px-2 py-2 text-right text-emerald-600">
+                {totals.paye ? eur(totals.paye) : '—'}
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ── Preparation / factures view ──────────────────────────────────────────────
 function EnvoiPreparation({ colisList, clients, onOpenColis, onViewInvoice }) {
-  // Group by destination
   const byDest = {};
   colisList.forEach((c) => {
     const cl = clients.find((x) => x.id === c.clientId);
@@ -88,7 +298,6 @@ function EnvoiPreparation({ colisList, clients, onOpenColis, onViewInvoice }) {
         </div>
       </div>
 
-      {/* Alert if some invoices not validated */}
       {facturesValides < totalFactures && (
         <div className="flex items-center gap-2 px-3 py-2 rounded-lg" style={{ background: '#FFFBEB', border: '1px solid #FDE68A' }}>
           <AlertTriangle size={13} className="text-amber-500 flex-shrink-0" />
@@ -98,7 +307,6 @@ function EnvoiPreparation({ colisList, clients, onOpenColis, onViewInvoice }) {
         </div>
       )}
 
-      {/* Colis table with invoices */}
       <div className="space-y-2">
         {Object.values(byDest).map(({ dest, items }) => (
           <div key={dest.code}>
@@ -116,7 +324,6 @@ function EnvoiPreparation({ colisList, clients, onOpenColis, onViewInvoice }) {
                   className="rounded-lg mb-1.5 overflow-hidden"
                   style={{ background: 'white', border: '1px solid #E5E7EB' }}
                 >
-                  {/* Colis row */}
                   <button
                     onClick={() => onOpenColis(c.id)}
                     className="w-full flex items-center gap-2.5 px-3 py-2.5 text-left hover:bg-gray-50 transition-colors"
@@ -148,7 +355,6 @@ function EnvoiPreparation({ colisList, clients, onOpenColis, onViewInvoice }) {
                     {!facturesOk && <AlertTriangle size={13} className="text-amber-500 flex-shrink-0" />}
                   </button>
 
-                  {/* Invoices for this colis */}
                   {c.factures && c.factures.length > 0 && (
                     <div className="border-t px-3 py-2 space-y-1" style={{ background: '#FAFAFA' }}>
                       {c.factures.map((f) => (
@@ -193,11 +399,12 @@ function EnvoiPreparation({ colisList, clients, onOpenColis, onViewInvoice }) {
   );
 }
 
-// ── Envoi card (enhanced with preparation view) ──────────────────────────────
+// ── Envoi card ───────────────────────────────────────────────────────────────
 function EnvoiCard({ envoi, colisList, clients, onPrintAll, onPrintOne, onOpenColis, expanded, onToggle, onViewInvoice }) {
-  const [viewMode, setViewMode] = useState('preparation'); // 'list' | 'preparation'
+  const [viewMode, setViewMode] = useState('detail'); // 'detail' | 'preparation' | 'list'
 
   const totalPoids = colisList.reduce((s, c) => s + (c.finP || c.poids || 0), 0);
+  const totalDevis = colisList.reduce((s, c) => s + (c.devisTotal || 0), 0);
 
   const byDest = {};
   colisList.forEach((c) => {
@@ -206,14 +413,11 @@ function EnvoiCard({ envoi, colisList, clients, onPrintAll, onPrintOne, onOpenCo
     byDest[d.code] = (byDest[d.code] || 0) + 1;
   });
 
-  // Count sectors
   const bySecteur = {};
   colisList.forEach((c) => {
     const cl = clients.find((x) => x.id === c.clientId);
     const s = getSecteur(cl?.cp);
-    if (s) {
-      bySecteur[s.lettre] = (bySecteur[s.lettre] || 0) + 1;
-    }
+    if (s) bySecteur[s.lettre] = (bySecteur[s.lettre] || 0) + 1;
   });
 
   const statColor = {
@@ -226,69 +430,73 @@ function EnvoiCard({ envoi, colisList, clients, onPrintAll, onPrintOne, onOpenCo
   return (
     <div
       className="rounded-xl overflow-hidden anim-fade"
-      style={{ background: 'white', border: '1px solid #E5E7EB', borderLeft: `3px solid ${statColor}` }}
+      style={{ background: 'white', border: '1px solid #E5E7EB' }}
     >
-      {/* Header */}
+      {/* Colored header banner */}
       <button
         onClick={onToggle}
-        className="w-full flex items-center justify-between p-3.5 text-left"
+        className="w-full text-left"
       >
-        <div className="flex items-center gap-2.5">
-          <div
-            className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-            style={{ background: `${statColor}12` }}
-          >
-            <Plane size={15} style={{ color: statColor }} />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="font-bold text-[13px]" style={{ color: BRAND.navy }}>
-                {labelEnvoi(envoi)}
-              </span>
-              <span
-                className="text-[10px] font-bold px-1.5 py-0.5 rounded-md"
-                style={{ background: `${statColor}12`, color: statColor }}
+        <div className="px-4 py-3" style={{ background: `${statColor}0D` }}>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div
+                className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
+                style={{ background: `${statColor}1A` }}
               >
-                {STATUT_ENVOI[envoi.statut]}
-              </span>
-            </div>
-            <div className="flex items-center gap-2.5 mt-0.5">
-              <span className="text-[11px] text-gray-500">{colisList.length} colis</span>
-              <span className="text-[11px] text-gray-400">{totalPoids.toFixed(1)} kg</span>
-              {Object.entries(byDest).map(([code, cnt]) => {
-                const d = getDestByCP(code + '00');
-                return (
-                  <span key={code} className="text-[11px] text-gray-400">{d.flag} {cnt}</span>
-                );
-              })}
-              {/* Sector badges */}
-              {Object.entries(bySecteur).map(([lettre, cnt]) => {
-                const s = SECTEURS[lettre];
-                return (
-                  <span
-                    key={lettre}
-                    className="text-[9px] font-bold px-1 py-0.5 rounded"
-                    style={{ background: s.bg, color: s.color }}
-                  >
-                    {lettre} {cnt}
+                <Plane size={18} style={{ color: statColor }} />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="font-black text-[15px]" style={{ color: BRAND.navy }}>
+                    {labelEnvoi(envoi)}
                   </span>
-                );
-              })}
+                  <span
+                    className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                    style={{ background: `${statColor}1A`, color: statColor }}
+                  >
+                    {STATUT_ENVOI[envoi.statut]}
+                  </span>
+                </div>
+                <div className="flex items-center gap-3 mt-0.5">
+                  <span className="text-[12px] font-bold" style={{ color: BRAND.navy }}>{colisList.length} colis</span>
+                  <span className="text-[12px] text-gray-500">{totalPoids.toFixed(1)} kg</span>
+                  {totalDevis > 0 && (
+                    <span className="text-[12px] font-bold" style={{ color: BRAND.navy }}>{eur(totalDevis)}</span>
+                  )}
+                  {Object.entries(byDest).map(([code, cnt]) => {
+                    const d = getDestByCP(code + '00');
+                    return <span key={code} className="text-[11px] text-gray-400">{d.flag} {cnt}</span>;
+                  })}
+                  {Object.entries(bySecteur).map(([lettre, cnt]) => {
+                    const s = SECTEURS[lettre];
+                    return (
+                      <span
+                        key={lettre}
+                        className="text-[9px] font-bold px-1 py-0.5 rounded"
+                        style={{ background: s.bg, color: s.color }}
+                      >
+                        {lettre} {cnt}
+                      </span>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {colisList.length > 0 && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); onPrintAll(); }}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-bold text-white transition-all hover:opacity-90 active:scale-95"
+                  style={{ background: BRAND.navy }}
+                >
+                  <Printer size={12} />
+                  Étiquettes
+                </button>
+              )}
+              {expanded ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
             </div>
           </div>
-        </div>
-        <div className="flex items-center gap-2">
-          {colisList.length > 0 && (
-            <button
-              onClick={(e) => { e.stopPropagation(); onPrintAll(); }}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-bold text-white transition-all hover:opacity-90 active:scale-95"
-              style={{ background: BRAND.navy }}
-            >
-              <Printer size={12} />
-              Étiquettes
-            </button>
-          )}
-          {expanded ? <ChevronUp size={14} className="text-gray-400" /> : <ChevronDown size={14} className="text-gray-400" />}
         </div>
       </button>
 
@@ -296,7 +504,17 @@ function EnvoiCard({ envoi, colisList, clients, onPrintAll, onPrintOne, onOpenCo
       {expanded && (
         <>
           {/* View mode tabs */}
-          <div className="flex gap-1 mx-3.5 mb-0 bg-gray-100 rounded-md p-0.5">
+          <div className="flex gap-1 mx-3.5 mt-2 mb-0 bg-gray-100 rounded-md p-0.5">
+            <button
+              onClick={() => setViewMode('detail')}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded text-[11px] font-bold transition-all ${
+                viewMode === 'detail' ? 'bg-white shadow-sm' : 'text-gray-400'
+              }`}
+              style={viewMode === 'detail' ? { color: BRAND.navy } : {}}
+            >
+              <Download size={11} />
+              Détail & Prix
+            </button>
             <button
               onClick={() => setViewMode('preparation')}
               className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded text-[11px] font-bold transition-all ${
@@ -305,7 +523,7 @@ function EnvoiCard({ envoi, colisList, clients, onPrintAll, onPrintOne, onOpenCo
               style={viewMode === 'preparation' ? { color: BRAND.navy } : {}}
             >
               <FileText size={11} />
-              Préparation & Factures
+              Factures
             </button>
             <button
               onClick={() => setViewMode('list')}
@@ -315,11 +533,18 @@ function EnvoiCard({ envoi, colisList, clients, onPrintAll, onPrintOne, onOpenCo
               style={viewMode === 'list' ? { color: BRAND.navy } : {}}
             >
               <Package size={11} />
-              Liste colis
+              Liste
             </button>
           </div>
 
-          {viewMode === 'preparation' ? (
+          {viewMode === 'detail' ? (
+            <EnvoiDetail
+              envoi={envoi}
+              colisList={colisList}
+              clients={clients}
+              onOpenColis={onOpenColis}
+            />
+          ) : viewMode === 'preparation' ? (
             <EnvoiPreparation
               colisList={colisList}
               clients={clients}
@@ -405,7 +630,7 @@ export default function StaffEnvois() {
     }));
   }, [envois, data]);
 
-  // Colis not assigned to any envoi (payés or autorisés without envoi)
+  // Colis not assigned to any envoi
   const unassigned = useMemo(() => {
     return data.filter(
       (c) => !c.envoi && c.statut !== 'annule' && c.statut !== 'livre' &&
@@ -440,7 +665,6 @@ export default function StaffEnvois() {
 
   const cutoffLabel = `${JOURS_SEMAINE[cutoff.day]} ${cutoff.hour}h00`;
 
-  // Next departure info
   const nextDep = envois.find((e) => e.statut === 'prochain' || e.statut === 'en_cours');
   const nextDepColis = nextDep ? data.filter((c) => c.envoi === nextDep.id && c.statut !== 'annule') : [];
 
