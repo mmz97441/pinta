@@ -11,18 +11,29 @@ export default function ConfirmDialog() {
         <p className="text-lg font-black text-gray-900 mb-2">{cfm.title}</p>
         <p className="text-sm text-gray-600 mb-6 whitespace-pre-line">{cfm.msg}</p>
         <div className="flex gap-3">
-          <button
-            onClick={closeConfirm}
-            className="flex-1 py-3 rounded-xl font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 active:scale-95 transition-all"
-          >
-            Annuler
-          </button>
-          <button
-            onClick={() => { cfm.onOk(); closeConfirm(); }}
-            className={`flex-1 py-3 rounded-xl font-bold text-white active:scale-95 transition-all ${cfm.danger ? 'bg-red-600 hover:bg-red-700' : 'bg-emerald-600 hover:bg-emerald-700'}`}
-          >
-            {cfm.okLabel || 'Confirmer'}
-          </button>
+          {cfm.onOk ? (
+            <>
+              <button
+                onClick={closeConfirm}
+                className="flex-1 py-3 rounded-xl font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 active:scale-95 transition-all"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={() => { cfm.onOk(); closeConfirm(); }}
+                className={`flex-1 py-3 rounded-xl font-bold text-white active:scale-95 transition-all ${cfm.danger ? 'bg-red-600 hover:bg-red-700' : 'bg-emerald-600 hover:bg-emerald-700'}`}
+              >
+                {cfm.okLabel || 'Confirmer'}
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={closeConfirm}
+              className="flex-1 py-3 rounded-xl font-bold text-white bg-gray-700 hover:bg-gray-800 active:scale-95 transition-all"
+            >
+              {cfm.okLabel || 'OK'}
+            </button>
+          )}
         </div>
       </div>
     </div>

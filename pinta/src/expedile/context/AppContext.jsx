@@ -26,6 +26,26 @@ export function AppProvider({ children }) {
   const [logs, setLogs] = useState([]);
   const [cutoff, setCutoff] = useState(CUTOFF_DEFAULT);
 
+  // ── Auto-generate next Friday departure if none planned ──
+  useEffect(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const hasFuture = envois.some((e) => {
+      if (e.statut === 'parti') return false;
+      const d = new Date(e.date + 'T00:00:00');
+      return d >= today && (e.statut === 'planifie' || e.statut === 'prochain');
+    });
+    if (hasFuture) return;
+    // Find next Friday from today
+    const next = new Date(today);
+    const dow = next.getDay(); // 0=Sun
+    const daysUntilFri = (5 - dow + 7) % 7 || 7;
+    next.setDate(next.getDate() + daysUntilFri);
+    const iso = next.toISOString().slice(0, 10);
+    if (envois.find((e) => e.date === iso)) return;
+    setEnvois((prev) => [...prev, { id: uid(), date: iso, statut: 'planifie' }].sort((a, b) => a.date.localeCompare(b.date)));
+  }, [envois]);
+
   // ── Communication ──
   const [comLog, setComLog] = useState([
     { id: 'com1', colisId: 'p1', clientId: 'c1', canal: 'whatsapp', template: 'reception', msg: 'Colis réceptionné', date: '08/02 14:30', user: 'Sophie Martin' },
@@ -274,6 +294,17 @@ export function AppProvider({ children }) {
   const changerStatut = useCallback((id, ns) => {
     const c = data.find((x) => x.id === id);
     if (!c) return;
+    // Block billing if client subscription expired
+    if (ns === 'devis_envoye') {
+      const cl = clients.find((x) => x.id === c.clientId);
+      if (cl?.dateFinAbo && cl.forfait !== 'freemium') {
+        const exp = new Date(cl.dateFinAbo + 'T23:59:59');
+        if (exp < new Date()) {
+          flash(`Abonnement de ${cl.nom} expiré depuis le ${new Date(cl.dateFinAbo).toLocaleDateString('fr-FR')}. Renouvelez avant de facturer.`);
+          return 'abo_expire';
+        }
+      }
+    }
     if (ns === 'en_preparation' && c.feuVert !== 'autorise') { flash("Le client n'a pas encore donné son accord"); return; }
     if (ns === 'devis_envoye' && c.factures.length === 0) { flash("Il manque la facture d'origine"); return; }
     if (ns === 'expedie' && !c.paiementMontant) { flash("Le client n'a pas encore payé"); return; }

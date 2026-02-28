@@ -430,6 +430,20 @@ export default function StaffDetailView() {
   const devisCalc = calcTaxes(finPf);
 
   function handleSendDevis() {
+    // Check subscription before billing
+    if (cl?.dateFinAbo && cl.forfait !== 'freemium') {
+      const exp = new Date(cl.dateFinAbo + 'T23:59:59');
+      if (exp < new Date()) {
+        ask(
+          'Abonnement expiré',
+          `L'abonnement ${cl.forfait === 'vip_premium' ? 'VIP Premium' : 'Premium'} de ${cl.nom} a expiré le ${new Date(cl.dateFinAbo).toLocaleDateString('fr-FR')}.\n\nVeuillez renouveler l'abonnement du client avant d'envoyer un devis.`,
+          null,
+          { okLabel: 'Compris' },
+        );
+        return;
+      }
+    }
+
     // Persist fin dims first if filled locally
     const changes = {};
     if (finDims.finL) changes.finL = parseFloat(finDims.finL);

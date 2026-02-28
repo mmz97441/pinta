@@ -665,9 +665,6 @@ export default function StaffEnvois() {
 
   const cutoffLabel = `${JOURS_SEMAINE[cutoff.day]} ${cutoff.hour}h00`;
 
-  const nextDep = envois.find((e) => e.statut === 'prochain' || e.statut === 'en_cours');
-  const nextDepColis = nextDep ? data.filter((c) => c.envoi === nextDep.id && c.statut !== 'annule') : [];
-
   if (printItems) {
     return <LabelPrint items={printItems} onClose={() => setPrintItems(null)} />;
   }
@@ -686,36 +683,6 @@ export default function StaffEnvois() {
           <p className="text-[11px] text-gray-400">Cutoff : {cutoffLabel}</p>
         </div>
       </div>
-
-      {/* Next departure summary */}
-      {nextDep && (
-        <div
-          className="rounded-xl p-3.5"
-          style={{ background: 'white', border: '1px solid #E5E7EB' }}
-        >
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Prochain vol</p>
-              <p className="font-bold text-base" style={{ color: BRAND.navy }}>
-                {labelEnvoi(nextDep)}
-              </p>
-              <p className="text-[12px] text-gray-500 mt-0.5">
-                {nextDepColis.length} colis · {nextDepColis.reduce((s, c) => s + (c.finP || c.poids || 0), 0).toFixed(1)} kg
-              </p>
-            </div>
-            {nextDepColis.length > 0 && (
-              <button
-                onClick={() => handlePrintAll(nextDep.id)}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] font-bold text-white transition-all hover:opacity-90 active:scale-95"
-                style={{ background: BRAND.navy }}
-              >
-                <Printer size={13} />
-                Imprimer les étiquettes
-              </button>
-            )}
-          </div>
-        </div>
-      )}
 
       {/* Unassigned colis warning */}
       {unassigned.length > 0 && (
