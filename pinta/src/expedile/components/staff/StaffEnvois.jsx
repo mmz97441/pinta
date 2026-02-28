@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import {
-  ArrowLeft, Plane, Printer, Package, User, Plus, ChevronDown, ChevronUp,
+  Plane, Printer, Package, User, Plus, ChevronDown, ChevronUp,
   FileText, CheckCircle, AlertTriangle, Eye, Download, Compass,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
@@ -390,7 +390,7 @@ function EnvoiCard({ envoi, colisList, clients, onPrintAll, onPrintOne, onOpenCo
 }
 
 export default function StaffEnvois() {
-  const { setPage, setSelId, data, clients, envois, setEnvois, cutoff, flash } = useApp();
+  const { setSelId, data, clients, envois, setEnvois, cutoff, flash } = useApp();
   const [expandedId, setExpandedId] = useState(null);
   const [printItems, setPrintItems] = useState(null);
   const [newEnvoiDate, setNewEnvoiDate] = useState('');
@@ -455,21 +455,12 @@ export default function StaffEnvois() {
       )}
 
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Plane size={18} style={{ color: BRAND.navy }} />
-          <div>
-            <p className="font-bold text-lg" style={{ color: BRAND.navy }}>Envois</p>
-            <p className="text-[11px] text-gray-400">Cutoff : {cutoffLabel}</p>
-          </div>
+      <div className="flex items-center gap-2">
+        <Plane size={18} style={{ color: BRAND.navy }} />
+        <div>
+          <p className="font-bold text-lg" style={{ color: BRAND.navy }}>Envois</p>
+          <p className="text-[11px] text-gray-400">Cutoff : {cutoffLabel}</p>
         </div>
-        <button
-          onClick={() => setPage('home')}
-          className="flex items-center gap-1 text-[12px] font-bold px-2.5 py-1.5 rounded-lg hover:bg-gray-100 transition-colors"
-          style={{ color: BRAND.navy }}
-        >
-          <ArrowLeft size={14} />Retour
-        </button>
       </div>
 
       {/* Next departure summary */}

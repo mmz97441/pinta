@@ -8,6 +8,10 @@
 .brand-bd       { border-color: #1B3A4B; }
 .brand-bd-gold  { border-color: #E8B84B; }
 
+/* Hide scrollbar but keep scrolling */
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+
 /* ══════════ ANIMATIONS ══════════ */
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(6px); }
