@@ -111,7 +111,7 @@ const INPUT_CLS = (err) =>
 const LABEL_CLS = 'block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1';
 
 export default function ClientProfil() {
-  const { authCl, data, clients, updateClient, setAuth, flash, ask } = useApp();
+  const { authCl, data, clients, updateClient, setAuth, flash, ask, setSelId } = useApp();
 
   const cl = authCl;
   const dest = cl ? getDestByCP(cl.cp) : null;
@@ -153,7 +153,7 @@ export default function ClientProfil() {
   // ── Documents ───────────────────────────────────────────────────────────────
   const allDevis = myColis.filter((p) => p.devisTotal != null);
   const allFactures = myColis.flatMap((p) =>
-    (p.factures || []).map((f) => ({ ...f, colisRef: p.ref }))
+    (p.factures || []).map((f) => ({ ...f, colisRef: p.ref, colisId: p.id }))
   );
 
   // ── Edit handlers ────────────────────────────────────────────────────────────
@@ -430,7 +430,11 @@ export default function ClientProfil() {
               <p className="px-4 py-6 text-xs text-gray-400 text-center">Aucun devis disponible</p>
             ) : (
               allDevis.map((p) => (
-                <div key={p.id} className="flex items-center gap-3 px-4 py-3">
+                <button
+                  key={p.id}
+                  onClick={() => setSelId(p.id)}
+                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors text-left active:scale-[0.98]"
+                >
                   <div
                     className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0"
                     style={{ backgroundColor: BRAND.navy + '10' }}
@@ -444,7 +448,8 @@ export default function ClientProfil() {
                   <span className="font-black text-sm" style={{ color: BRAND.navy }}>
                     {eur(p.devisTotal)}
                   </span>
-                </div>
+                  <ChevronRight size={12} className="text-gray-300 flex-shrink-0" />
+                </button>
               ))
             )
           )}
@@ -453,7 +458,11 @@ export default function ClientProfil() {
               <p className="px-4 py-6 text-xs text-gray-400 text-center">Aucune facture disponible</p>
             ) : (
               allFactures.map((f) => (
-                <div key={f.id} className="flex items-center gap-3 px-4 py-3">
+                <button
+                  key={f.id}
+                  onClick={() => setSelId(f.colisId)}
+                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors text-left active:scale-[0.98]"
+                >
                   <div
                     className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0"
                     style={{ backgroundColor: f.valide ? '#ecfdf5' : '#fef9ec' }}
@@ -473,7 +482,8 @@ export default function ClientProfil() {
                       {f.valide ? 'Validée' : 'En attente'}
                     </p>
                   </div>
-                </div>
+                  <ChevronRight size={12} className="text-gray-300 flex-shrink-0" />
+                </button>
               ))
             )
           )}

@@ -643,29 +643,33 @@ export default function StaffDashboard({ onNewColis }) {
                     Clients
                   </span>
                 </div>
-                {searchResults.clients.map((cl) => (
-                  <button
-                    key={cl.id}
-                    onClick={() => setGlobalSearch('')}
-                    className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-gray-50 transition-colors text-left"
-                  >
-                    <div
-                      className="w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center text-[10px] font-black"
-                      style={{
-                        background: BRAND.navy,
-                        color: BRAND.goldL,
-                      }}
+                {searchResults.clients.map((cl) => {
+                  const firstColis = data.find((p) => p.clientId === cl.id && p.statut !== 'annule');
+                  return (
+                    <button
+                      key={cl.id}
+                      onClick={() => firstColis ? openColis(firstColis.id) : setGlobalSearch('')}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-gray-50 transition-colors text-left"
                     >
-                      {cl.nom.charAt(0)}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[13px] font-semibold text-gray-800 truncate">{cl.nom}</p>
-                      <p className="text-[11px] text-gray-400 truncate">
-                        {cl.ville} · {getDestByCP(cl.cp).flag} {getDestByCP(cl.cp).label}
-                      </p>
-                    </div>
-                  </button>
-                ))}
+                      <div
+                        className="w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center text-[10px] font-black"
+                        style={{
+                          background: BRAND.navy,
+                          color: BRAND.goldL,
+                        }}
+                      >
+                        {cl.nom.charAt(0)}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[13px] font-semibold text-gray-800 truncate">{cl.nom}</p>
+                        <p className="text-[11px] text-gray-400 truncate">
+                          {cl.ville} · {getDestByCP(cl.cp).flag} {getDestByCP(cl.cp).label}
+                        </p>
+                      </div>
+                      <ChevronRight size={12} className="text-gray-300 flex-shrink-0" />
+                    </button>
+                  );
+                })}
               </div>
             )}
 
@@ -749,10 +753,12 @@ export default function StaffDashboard({ onNewColis }) {
               {expiringAbos.map((c) => {
                 const f = FORFAITS[c.forfait];
                 const expired = c.joursRestants <= 0;
+                const firstColis = data.find((p) => p.clientId === c.id && p.statut !== 'annule');
                 return (
-                  <span
+                  <button
                     key={c.id}
-                    className="text-[11px] font-bold px-1.5 py-0.5 rounded"
+                    onClick={() => firstColis ? openColis(firstColis.id) : setGlobalSearch(c.nom)}
+                    className="text-[11px] font-bold px-1.5 py-0.5 rounded transition-all hover:opacity-80 active:scale-95 cursor-pointer"
                     style={{
                       background: expired ? '#FEE2E2' : '#FFF7ED',
                       color: expired ? '#DC2626' : '#C2410C',
@@ -760,7 +766,7 @@ export default function StaffDashboard({ onNewColis }) {
                   >
                     {c.nom.split(' ')[0]} · {f?.label}
                     {expired ? ' (expiré)' : ` (${c.joursRestants}j)`}
-                  </span>
+                  </button>
                 );
               })}
             </div>
