@@ -10,20 +10,20 @@ export const BRAND = {
 
 // ══════════ STATUTS COLIS ══════════
 export const STATUTS = {
-  annonce:            { label: 'Annoncé par le client',       labelClient: 'Pré-annoncé',                   couleur: 'bg-slate-200 text-slate-700',    phase: 1, actionStaff: 'Réceptionner ce colis',          actionClient: null },
+  annonce:            { label: 'Annoncé par le client',       labelClient: 'Enregistré',                    couleur: 'bg-slate-200 text-slate-700',    phase: 1, actionStaff: 'Réceptionner ce colis',          actionClient: null },
   receptionne:        { label: 'Réceptionné',                 labelClient: null,                            couleur: 'bg-amber-200 text-amber-800',    phase: 1, actionStaff: 'Mesurer ce colis',               actionClient: null },
   mesure:             { label: 'Mesuré à réception',          labelClient: 'Mesuré',                        couleur: 'bg-yellow-200 text-yellow-800',  phase: 1, actionStaff: 'Demander le feu vert',            actionClient: null },
-  attente_feu_vert:   { label: "En attente d'accord client",  labelClient: 'Votre accord est attendu',      couleur: 'bg-orange-200 text-orange-800',  phase: 2, actionStaff: 'En attente du client',            actionClient: 'Donner votre accord' },
-  autorise:           { label: 'Autorisation reçue',          labelClient: 'Accord donné',                  couleur: 'bg-green-200 text-green-800',    phase: 2, actionStaff: 'Préparer ce colis',               actionClient: null },
+  attente_feu_vert:   { label: "En attente d'accord client",  labelClient: 'On attend votre réponse',       couleur: 'bg-orange-200 text-orange-800',  phase: 2, actionStaff: 'En attente du client',            actionClient: 'Répondre' },
+  autorise:           { label: 'Autorisation reçue',          labelClient: 'Accepté',                       couleur: 'bg-green-200 text-green-800',    phase: 2, actionStaff: 'Préparer ce colis',               actionClient: null },
   refuse_client:      { label: 'Refusé par le client',        labelClient: 'Refusé',                        couleur: 'bg-red-200 text-red-700',        phase: 2, actionStaff: 'Traiter le refus',                actionClient: null },
   en_preparation:     { label: 'En cours de préparation',     labelClient: null,                            couleur: 'bg-blue-200 text-blue-800',      phase: 3, actionStaff: 'Finaliser et envoyer le devis',   actionClient: null },
-  devis_envoye:       { label: 'Devis envoyé',                labelClient: 'Devis reçu',                    couleur: 'bg-amber-200 text-amber-900',    phase: 4, actionStaff: 'En attente validation client',    actionClient: 'Valider le devis' },
+  devis_envoye:       { label: 'Devis envoyé',                labelClient: 'Prix reçu',                     couleur: 'bg-amber-200 text-amber-900',    phase: 4, actionStaff: 'En attente validation client',    actionClient: 'Valider le devis' },
   attente_paiement:   { label: 'En attente de paiement',      labelClient: 'En attente de votre paiement',  couleur: 'bg-amber-200 text-amber-900',    phase: 4, actionStaff: 'En attente paiement',             actionClient: 'Payer' },
   paye:               { label: 'Payé',                        labelClient: null,                            couleur: 'bg-emerald-200 text-emerald-800',phase: 4, actionStaff: 'Expédier ce colis',               actionClient: null },
   expedie:            { label: 'Expédié',                     labelClient: null,                            couleur: 'bg-cyan-200 text-cyan-800',      phase: 5, actionStaff: 'Marquer en transit',              actionClient: null },
   transit:            { label: 'En vol',                      labelClient: null,                            couleur: 'bg-sky-200 text-sky-800',        phase: 5, actionStaff: "Confirmer arrivée",               actionClient: null },
   arrive:             { label: 'Arrivé destination',          labelClient: null,                            couleur: 'bg-teal-200 text-teal-800',      phase: 5, actionStaff: 'Lancer le dédouanement',         actionClient: null },
-  dedouanement:       { label: 'En dédouanement',              labelClient: 'En cours de dédouanement',      couleur: 'bg-purple-200 text-purple-800',  phase: 5, actionStaff: 'Planifier la livraison',          actionClient: null },
+  dedouanement:       { label: 'En dédouanement',              labelClient: 'Vérification en cours',         couleur: 'bg-purple-200 text-purple-800',  phase: 5, actionStaff: 'Planifier la livraison',          actionClient: null },
   livraison:          { label: 'En cours de livraison',       labelClient: null,                            couleur: 'bg-lime-200 text-lime-800',      phase: 5, actionStaff: 'Confirmer livraison',             actionClient: null },
   livre:              { label: 'Livré',                        labelClient: null,                            couleur: 'bg-green-300 text-green-900',    phase: 5, actionStaff: null,                              actionClient: null },
   annule:             { label: 'Annulé',                      labelClient: null,                            couleur: 'bg-gray-200 text-gray-500',      phase: 0, actionStaff: null,                              actionClient: null },
@@ -103,7 +103,7 @@ export const STAFF = [
 // ══════════ CLIENTS INITIAUX ══════════
 // ══════════ FORFAITS ══════════
 export const FORFAITS = {
-  freemium:    { label: 'Freemium',     color: '#64748b', bg: '#f1f5f9' },
+  freemium:    { label: 'Gratuit',      color: '#64748b', bg: '#f1f5f9' },
   premium:     { label: 'Premium',      color: '#C99A2E', bg: '#fef9ec' },
   vip_premium: { label: 'VIP Premium',  color: '#1B3A4B', bg: '#E8F4F8' },
 };
@@ -137,13 +137,13 @@ export const STATUT_ENVOI = {
 
 // ══════════ PHASES CLIENT (timeline) ══════════
 export const PHASES_CLIENT = [
-  { key: 'annonce',     label: 'Pré-annoncé',       statuts: ['annonce'] },
+  { key: 'annonce',     label: 'Enregistré',        statuts: ['annonce'] },
   { key: 'reception',   label: 'Réceptionné',       statuts: ['receptionne', 'mesure'] },
-  { key: 'feu_vert',    label: 'Votre accord',      statuts: ['attente_feu_vert', 'autorise'] },
+  { key: 'feu_vert',    label: 'Votre réponse',     statuts: ['attente_feu_vert', 'autorise'] },
   { key: 'preparation', label: 'Préparation',       statuts: ['en_preparation'] },
-  { key: 'devis',       label: 'Devis & Paiement',  statuts: ['devis_envoye', 'attente_paiement', 'litige_devis', 'paye'] },
+  { key: 'devis',       label: 'Prix & Paiement',   statuts: ['devis_envoye', 'attente_paiement', 'litige_devis', 'paye'] },
   { key: 'expedition',  label: 'Expédition',        statuts: ['expedie', 'transit'] },
-  { key: 'douane',      label: 'Dédouanement',      statuts: ['arrive', 'dedouanement'] },
+  { key: 'douane',      label: "Contrôle à l'arrivée", statuts: ['arrive', 'dedouanement'] },
   { key: 'livraison',   label: 'Livraison',         statuts: ['livraison', 'livre'] },
 ];
 

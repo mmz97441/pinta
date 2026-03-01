@@ -6,7 +6,7 @@ import { BRAND } from '../../constants';
 const TABS = [
   { key: 'accueil', Icon: Home,    label: 'Accueil' },
   { key: 'colis',   Icon: Package, label: 'Colis' },
-  { key: 'notifs',  Icon: Bell,    label: 'Notifs' },
+  { key: 'notifs',  Icon: Bell,    label: 'Messages' },
   { key: 'profil',  Icon: User,    label: 'Profil' },
 ];
 
@@ -43,13 +43,13 @@ export default function ClientBottomNav() {
               >
                 <tab.Icon size={21} style={active ? { color: BRAND.navy } : {}} strokeWidth={active ? 2.2 : 1.5} />
                 {badge > 0 && (
-                  <span className="absolute -top-0.5 -right-1.5 min-w-[16px] h-[16px] px-0.5 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center shadow-sm">
+                  <span className="absolute -top-0.5 -right-1.5 min-w-[16px] h-[16px] px-0.5 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center shadow-sm">
                     {badge}
                   </span>
                 )}
               </div>
               <span
-                className={`text-[10px] mt-0.5 transition-all ${active ? 'font-bold' : 'font-medium'}`}
+                className={`text-[11px] mt-0.5 transition-all ${active ? 'font-bold' : 'font-medium'}`}
                 style={active ? { color: BRAND.navy } : {}}
               >
                 {tab.label}

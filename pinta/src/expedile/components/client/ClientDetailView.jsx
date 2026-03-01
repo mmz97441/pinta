@@ -107,7 +107,7 @@ function PhaseStep({ phase, phaseIdx, state, open, onToggle, children }) {
             {phase.label}
           </p>
           {isActive && (
-            <p className="text-[10px] font-semibold mt-0.5" style={{ color: BRAND.gold }}>
+            <p className="text-xs font-semibold mt-0.5" style={{ color: BRAND.gold }}>
               Étape en cours
             </p>
           )}
@@ -167,23 +167,23 @@ export default function ClientDetailView() {
       if (autresFV.length > 0) {
         const refs = autresFV.map((p) => p.ref).join(', ');
         ask(
-          'Autoriser la préparation',
-          `Vous confirmez que le contenu de ${sel.ref} est conforme et autorisez Expedîle à le préparer pour l'expédition ?\n\nVous avez aussi ${autresFV.length} autre${autresFV.length > 1 ? 's' : ''} colis en attente (${refs}). Voulez-vous tout autoriser d'un coup ?`,
+          'Confirmer',
+          `On prépare ${sel.ref} pour l'envoi ?\n\nVous avez aussi ${autresFV.length} autre${autresFV.length > 1 ? 's' : ''} colis en attente (${refs}). On prépare tout d'un coup ?`,
           () => { feuVertBulk([sel.id, ...autresFV.map((p) => p.id)]); setSelId(null); },
-          { okLabel: `Tout autoriser (${autresFV.length + 1})` }
+          { okLabel: `Oui pour tous (${autresFV.length + 1})` }
         );
       } else {
         ask(
-          'Autoriser la préparation',
-          `Vous confirmez que le contenu de ${sel.ref} est conforme et autorisez Expedîle à le préparer pour l'expédition ?`,
+          'Confirmer',
+          `On prépare ${sel.ref} pour l'envoi, d'accord ?`,
           () => feuVert(sel.id, true),
-          { okLabel: 'Oui, j\'autorise' }
+          { okLabel: 'Oui, c\'est bon' }
         );
       }
     } else {
       ask(
-        'Refuser la préparation',
-        `Êtes-vous sûr de vouloir refuser la préparation de ${sel.ref} ? Ce colis ne sera pas expédié.`,
+        'Refuser',
+        `Vous êtes sûr de ne pas vouloir envoyer ${sel.ref} ? Ce colis ne sera pas expédié.`,
         () => { feuVert(sel.id, false); setSelId(null); },
         { danger: true, okLabel: 'Oui, je refuse' }
       );
@@ -192,9 +192,9 @@ export default function ClientDetailView() {
 
   const handleRevoke = () => {
     ask(
-      'Révoquer l\'accord',
-      'Vous souhaitez annuler votre autorisation. Contactez-nous rapidement si la préparation n\'a pas encore commencé.',
-      () => flash('Contactez le support pour révoquer votre accord.'),
+      'Annuler ma réponse',
+      'Vous souhaitez changer d\'avis. Contactez-nous vite si la préparation n\'a pas encore commencé.',
+      () => flash('Contactez le support pour annuler.'),
       { okLabel: 'Contacter le support' }
     );
   };
@@ -204,9 +204,9 @@ export default function ClientDetailView() {
     if (!sel.devisTotal) return;
     ask(
       'Confirmer le paiement',
-      `Vous allez valider le paiement de ${eur(sel.devisTotal)} pour le colis ${sel.ref}.\n\nVous serez redirigé vers notre page de paiement sécurisé.`,
+      `Vous allez payer ${eur(sel.devisTotal)} pour le colis ${sel.ref}.`,
       () => { payer(sel.id, sel.devisTotal); },
-      { okLabel: 'Procéder au paiement' }
+      { okLabel: 'Payer' }
     );
   };
 
@@ -219,7 +219,7 @@ export default function ClientDetailView() {
       return (
         <div className="space-y-3">
           <p className="text-xs text-gray-500 leading-relaxed">
-            Votre pré-annonce a bien été enregistrée. Nous attendons la réception physique de votre colis dans notre entrepôt parisien.
+            Votre colis a bien été enregistré. Nous attendons sa réception dans notre entrepôt parisien.
           </p>
           {sel.desc && (
             <div className="rounded-xl p-3 text-xs" style={{ backgroundColor: BRAND.navy + '08' }}>
@@ -229,7 +229,7 @@ export default function ClientDetailView() {
           )}
           {hasTrack(sel) && (
             <div className="rounded-xl bg-gray-50 p-3">
-              <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">Tracking</p>
+              <p className="text-xs font-black uppercase tracking-widest text-gray-400 mb-1">Numéro de suivi</p>
               <p className="text-xs font-mono text-gray-700 break-all">{trackStr(sel)}</p>
             </div>
           )}
@@ -248,7 +248,7 @@ export default function ClientDetailView() {
               : 'Votre colis a été réceptionné et mesuré.'}
           </p>
           {sel.dateReception && (
-            <p className="text-[10px] font-medium text-gray-400">
+            <p className="text-xs font-medium text-gray-400">
               Reçu le {new Date(sel.dateReception).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
               {' à '}{new Date(sel.dateReception).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
             </p>
@@ -261,12 +261,12 @@ export default function ClientDetailView() {
           )}
           {hasDims && sel.dimsParColis && sel.dimsParColis.length > 1 ? (
             <div className="rounded-xl bg-gray-50 p-3 space-y-2">
-              <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">
+              <p className="text-xs font-black uppercase tracking-widest text-gray-400 mb-1">
                 Dimensions mesurées ({sel.dimsParColis.length} colis)
               </p>
               {sel.dimsParColis.map((d, i) => (
                 <div key={i} className="rounded-lg bg-white p-2 border border-gray-100">
-                  <p className="text-[10px] font-bold text-gray-400 mb-0.5">
+                  <p className="text-xs font-bold text-gray-400 mb-0.5">
                     {sel.trackings?.filter((t) => t)[i] || `Colis ${i + 1}`}
                   </p>
                   <Ligne label="L × W × H" value={`${d.dimL} × ${d.dimW} × ${d.dimH} cm`} />
@@ -276,7 +276,7 @@ export default function ClientDetailView() {
             </div>
           ) : hasDims ? (
             <div className="rounded-xl bg-gray-50 p-3 space-y-1">
-              <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">Dimensions mesurées</p>
+              <p className="text-xs font-black uppercase tracking-widest text-gray-400 mb-2">Dimensions mesurées</p>
               <Ligne label="Dimensions" value={`${sel.dimL} × ${sel.dimW} × ${sel.dimH} cm`} />
               <Ligne label="Poids" value={`${sel.poids} kg`} />
             </div>
@@ -303,20 +303,20 @@ export default function ClientDetailView() {
               <div className="rounded-xl p-3 bg-amber-50 border border-amber-100">
                 <p className="text-xs font-bold text-amber-800 mb-1 flex items-center gap-1.5">
                   <AlertCircle size={13} />
-                  Votre accord est requis
+                  On a besoin de votre réponse
                 </p>
                 <p className="text-xs text-amber-700 leading-relaxed">
-                  Nous avons réceptionné et mesuré votre colis. Autorisez-nous à le préparer et l'optimiser pour l'expédition. Le devis final vous sera envoyé après la préparation.
+                  On a reçu et mesuré votre colis. Dites-nous si on peut le préparer pour l'envoi. Le prix vous sera envoyé après la préparation.
                 </p>
               </div>
               {sel.dimsParColis && sel.dimsParColis.length > 1 ? (
                 <div className="rounded-xl bg-gray-50 p-3 space-y-2">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">
+                  <p className="text-xs font-black uppercase tracking-widest text-gray-400 mb-1">
                     Dimensions mesurées ({sel.dimsParColis.length} colis)
                   </p>
                   {sel.dimsParColis.map((d, i) => (
                     <div key={i} className="rounded-lg bg-white p-2 border border-gray-100">
-                      <p className="text-[10px] font-bold text-gray-400 mb-0.5">
+                      <p className="text-xs font-bold text-gray-400 mb-0.5">
                         {sel.trackings?.filter((t) => t)[i] || `Colis ${i + 1}`}
                       </p>
                       <Ligne label="L × W × H" value={`${d.dimL} × ${d.dimW} × ${d.dimH} cm`} />
@@ -326,19 +326,19 @@ export default function ClientDetailView() {
                 </div>
               ) : sel.dimL ? (
                 <div className="rounded-xl bg-gray-50 p-3 space-y-1">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">Dimensions mesurées</p>
+                  <p className="text-xs font-black uppercase tracking-widest text-gray-400 mb-2">Dimensions mesurées</p>
                   <Ligne label="L × W × H" value={`${sel.dimL} × ${sel.dimW} × ${sel.dimH} cm`} />
                   <Ligne label="Poids" value={`${sel.poids} kg`} />
                 </div>
               ) : null}
               <div className="rounded-xl p-3 border border-blue-100" style={{ backgroundColor: BRAND.navy + '06' }}>
-                <p className="text-[10px] font-black uppercase tracking-widest mb-1.5" style={{ color: BRAND.navy }}>
+                <p className="text-xs font-black uppercase tracking-widest mb-1.5" style={{ color: BRAND.navy }}>
                   Comment ça marche ?
                 </p>
                 <div className="space-y-1.5 text-xs text-gray-600 leading-relaxed">
-                  <p>1. Vous donnez votre accord ci-dessous</p>
-                  <p>2. Nous préparons et optimisons votre colis</p>
-                  <p>3. Vous recevez le devis final à payer</p>
+                  <p>1. Vous dites oui ou non ci-dessous</p>
+                  <p>2. On prépare votre colis pour l'envoi</p>
+                  <p>3. Vous recevez le prix final à payer</p>
                 </div>
               </div>
               <div className="flex gap-2 pt-1">
@@ -355,7 +355,7 @@ export default function ClientDetailView() {
                   style={{ background: `linear-gradient(135deg, ${BRAND.navy}, ${BRAND.navyL})` }}
                 >
                   <ThumbsUp size={15} />
-                  Oui, j'autorise la préparation
+                  Oui, c'est bon !
                 </button>
               </div>
             </>
@@ -365,10 +365,10 @@ export default function ClientDetailView() {
               <div className="rounded-xl p-3 bg-emerald-50 border border-emerald-100">
                 <p className="text-xs font-bold text-emerald-700 flex items-center gap-1.5 mb-1">
                   <CheckCircle size={13} />
-                  Accord donné
+                  Accepté
                 </p>
                 <p className="text-xs text-emerald-600 leading-relaxed">
-                  Vous avez autorisé la préparation de ce colis. Expedîle va le préparer pour l'expédition.
+                  Vous avez dit oui ! Expedîle va préparer votre colis pour l'envoi.
                 </p>
               </div>
               <button
@@ -376,7 +376,7 @@ export default function ClientDetailView() {
                 className="flex items-center gap-1.5 text-xs font-semibold text-gray-400 hover:text-red-500 transition-colors"
               >
                 <RotateCcw size={11} />
-                Révoquer mon accord
+                Annuler ma réponse
               </button>
             </>
           )}
@@ -387,7 +387,7 @@ export default function ClientDetailView() {
                 Préparation refusée
               </p>
               <p className="text-xs text-red-600 mt-1 leading-relaxed">
-                Vous avez refusé la préparation. Contactez-nous pour toute question.
+                Vous avez dit non. Contactez-nous si vous avez des questions.
               </p>
             </div>
           )}
@@ -401,13 +401,13 @@ export default function ClientDetailView() {
         <div className="space-y-2">
           <p className="text-xs text-gray-500 leading-relaxed">
             {curPhaseIdx === 3
-              ? 'Votre colis est en cours de préparation et d\'optimisation dans notre entrepôt.'
+              ? 'Votre colis est en cours de préparation dans notre entrepôt.'
               : 'La préparation est terminée.'}
           </p>
           {curPhaseIdx === 3 && (
             <div className="flex items-center gap-2 text-xs text-blue-700 bg-blue-50 rounded-xl px-3 py-2">
               <Wrench size={13} />
-              Traitement en cours — nous vous informerons dès que le devis est prêt
+              Traitement en cours — on vous prévient dès que le prix est prêt
             </div>
           )}
           {sel.casier && (
@@ -432,21 +432,21 @@ export default function ClientDetailView() {
           {hasDevis && (
             <div className="rounded-xl border border-gray-100 overflow-hidden">
               <div
-                className="px-3 py-2 text-[10px] font-black uppercase tracking-widest"
+                className="px-3 py-2 text-xs font-black uppercase tracking-widest"
                 style={{ backgroundColor: BRAND.navy + '08', color: BRAND.navy }}
               >
-                Détail du devis
+                Détail du prix
               </div>
               <div className="p-3 space-y-1">
                 {sel.avantOptimTransport != null && sel.avantOptimTransport !== sel.devisTransport && (
                   <>
                     <div className="flex justify-between text-xs mb-1">
-                      <span className="text-gray-400 line-through">Transport brut</span>
+                      <span className="text-gray-400 line-through">Transport avant réduction</span>
                       <span className="text-gray-400 line-through">{eur(sel.avantOptimTransport)}</span>
                     </div>
                   </>
                 )}
-                <Ligne label="Transport optimisé" value={eur(sel.devisTransport)} />
+                <Ligne label="Transport" value={eur(sel.devisTransport)} />
                 {sel.devisOM != null && sel.devisOM > 0 && (
                   <Ligne label="Octroi de Mer" value={eur(sel.devisOM)} />
                 )}
@@ -464,7 +464,7 @@ export default function ClientDetailView() {
                     </span>
                   </div>
                   {sel.economie != null && sel.economie > 0 && (
-                    <div className="mt-1.5 text-[10px] font-bold text-emerald-600 bg-emerald-50 rounded-lg px-2.5 py-1.5 flex items-center gap-1">
+                    <div className="mt-1.5 text-xs font-bold text-emerald-600 bg-emerald-50 rounded-lg px-2.5 py-1.5 flex items-center gap-1">
                       <span>Économie réalisée : {eur(sel.economie)}</span>
                     </div>
                   )}
@@ -501,7 +501,7 @@ export default function ClientDetailView() {
           {!hasDevis && !isPaye && (
             <p className="text-xs text-gray-400 flex items-center gap-1.5 bg-gray-50 rounded-xl px-3 py-2">
               <Clock size={13} />
-              Le devis sera disponible prochainement
+              Le prix sera disponible prochainement
             </p>
           )}
         </div>
@@ -521,7 +521,7 @@ export default function ClientDetailView() {
               : 'Votre colis est en route.'}
           </p>
           {sel.dateExpedition && (
-            <p className="text-[10px] font-medium text-gray-400">
+            <p className="text-xs font-medium text-gray-400">
               Expédié le {new Date(sel.dateExpedition).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
             </p>
           )}
@@ -566,18 +566,18 @@ export default function ClientDetailView() {
           {isArrive && (
             <div className="flex items-center gap-2 text-xs font-semibold text-teal-700 bg-teal-50 rounded-xl px-3 py-2">
               <MapPin size={13} />
-              Colis arrivé à destination — en attente de dédouanement
+              Colis arrivé à destination — en attente de contrôle
             </div>
           )}
           {isDedouanement && (
             <div className="flex items-center gap-2 text-xs font-semibold text-purple-700 bg-purple-50 rounded-xl px-3 py-2">
               <Shield size={13} />
-              Dédouanement en cours — formalités douanières en traitement
+              Contrôle en cours — vérification à l'arrivée
             </div>
           )}
           {!isArrive && !isDedouanement && (
             <p className="text-xs text-gray-500 leading-relaxed">
-              Les formalités douanières ont été réalisées pour votre colis.
+              Le contrôle à l'arrivée est terminé pour votre colis.
             </p>
           )}
         </div>
@@ -613,7 +613,7 @@ export default function ClientDetailView() {
           {!isLivre && !isEnLivraison && (
             <p className="text-xs text-gray-400 flex items-center gap-1.5 bg-gray-50 rounded-xl px-3 py-2">
               <Clock size={13} />
-              La livraison sera programmée après le dédouanement
+              La livraison sera programmée après le contrôle à l'arrivée
             </p>
           )}
         </div>

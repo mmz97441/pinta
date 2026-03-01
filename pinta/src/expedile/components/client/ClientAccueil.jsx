@@ -12,10 +12,10 @@ function ProgressBar({ statut }) {
   return (
     <div className="mt-2">
       <div className="flex justify-between items-center mb-1">
-        <span className="text-[10px] text-gray-400 font-medium">
+        <span className="text-xs text-gray-400 font-medium">
           {PHASES_CLIENT[idx]?.label}
         </span>
-        <span className="text-[10px] font-bold" style={{ color: BRAND.navy }}>
+        <span className="text-xs font-bold" style={{ color: BRAND.navy }}>
           {pct}%
         </span>
       </div>
@@ -71,7 +71,7 @@ export default function ClientAccueil({ onNewColis }) {
       >
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-widest mb-0.5" style={{ color: BRAND.goldL, opacity: 0.8 }}>
+            <p className="text-xs font-bold uppercase tracking-widest mb-0.5" style={{ color: BRAND.goldL, opacity: 0.8 }}>
               Bonjour
             </p>
             <h2 className="text-lg font-black leading-tight">
@@ -112,7 +112,7 @@ export default function ClientAccueil({ onNewColis }) {
             <p className="text-xl font-black leading-none" style={{ color: BRAND.navy }}>
               {enCours.length}
             </p>
-            <p className="text-[10px] text-gray-400 font-semibold mt-1 uppercase tracking-wider">En cours</p>
+            <p className="text-xs text-gray-400 font-semibold mt-1 uppercase tracking-wider">En cours</p>
           </button>
           <button
             onClick={() => { setColisFilter('a_traiter'); setClientTab('colis'); }}
@@ -125,7 +125,7 @@ export default function ClientAccueil({ onNewColis }) {
             >
               {aTraiter.length}
             </p>
-            <p className="text-[10px] text-gray-400 font-semibold mt-1 uppercase tracking-wider">
+            <p className="text-xs text-gray-400 font-semibold mt-1 uppercase tracking-wider">
               {aTraiter.length > 0 ? 'À traiter' : 'À traiter'}
             </p>
           </button>
@@ -139,7 +139,7 @@ export default function ClientAccueil({ onNewColis }) {
             >
               {aPayer.length}
             </p>
-            <p className="text-[10px] text-gray-400 font-semibold mt-1 uppercase tracking-wider">À payer</p>
+            <p className="text-xs text-gray-400 font-semibold mt-1 uppercase tracking-wider">À payer</p>
           </button>
         </div>
       </div>
@@ -149,8 +149,8 @@ export default function ClientAccueil({ onNewColis }) {
         <div className="anim-fade">
           <div className="flex items-center gap-2 mb-2">
             <AlertCircle size={14} style={{ color: '#D97706' }} />
-            <h3 className="font-bold text-[13px] text-gray-800">Actions requises</h3>
-            <span className="ml-auto text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-700">
+            <h3 className="font-bold text-[13px] text-gray-800">À faire</h3>
+            <span className="ml-auto text-xs font-bold px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-700">
               {actionsRequises.length}
             </span>
           </div>
@@ -163,7 +163,7 @@ export default function ClientAccueil({ onNewColis }) {
               >
                 <div className="px-3.5 py-2.5">
                   <p className="font-bold text-[13px] text-gray-800">
-                    {colisAttenteFV.length} colis en attente de votre accord
+                    {colisAttenteFV.length} colis en attente de votre réponse
                   </p>
                 </div>
                 <div className="px-3.5 space-y-1 pb-2">
@@ -178,7 +178,7 @@ export default function ClientAccueil({ onNewColis }) {
                         <span className="font-bold text-[12px] text-gray-800">{p.ref}</span>
                         <span className="text-[11px] text-gray-500 ml-1.5 truncate">{p.desc}</span>
                         {p.dimL != null && (
-                          <span className="text-[10px] text-gray-400 ml-1.5">
+                          <span className="text-xs text-gray-400 ml-1.5">
                             {p.dimL}x{p.dimW}x{p.dimH} cm
                           </span>
                         )}
@@ -194,15 +194,15 @@ export default function ClientAccueil({ onNewColis }) {
                     onClick={() => {
                       const refs = colisAttenteFV.map((p) => p.ref).join(', ');
                       ask(
-                        'Autoriser tous les colis',
-                        `Vous confirmez autoriser la préparation de ${colisAttenteFV.length} colis ?\n\n${refs}`,
+                        'Confirmer',
+                        `On prépare vos ${colisAttenteFV.length} colis, d'accord ?\n\n${refs}`,
                         () => feuVertBulk(colisAttenteFV.map((p) => p.id)),
-                        { okLabel: 'Oui, tout autoriser' }
+                        { okLabel: 'Oui pour tous' }
                       );
                     }}
                   >
                     <CheckCircle size={14} strokeWidth={2.5} />
-                    Tout autoriser ({colisAttenteFV.length})
+                    Oui pour tous ({colisAttenteFV.length})
                   </button>
                 </div>
               </div>
@@ -329,7 +329,7 @@ export default function ClientAccueil({ onNewColis }) {
               style={{ background: BRAND.navy }}
             >
               <Plus size={14} strokeWidth={2.5} />
-              Pré-annoncer un colis
+              Ajouter un colis
             </button>
           </div>
         </div>

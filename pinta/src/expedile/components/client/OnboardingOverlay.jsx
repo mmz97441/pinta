@@ -5,8 +5,8 @@ import { BRAND } from '../../constants';
 const STEPS = [
   {
     icon: Package,
-    title: 'Pré-annoncez vos achats',
-    desc: 'Passez commande chez Amazon, Nike, Temu, Shein… et ajoutez simplement le numéro de suivi dans l\'app. On attend votre colis à Paris.',
+    title: 'Ajoutez vos achats',
+    desc: 'Vous commandez chez Amazon, Nike, Temu, Shein… et vous ajoutez le numéro de suivi dans l\'app. On s\'occupe du reste !',
     color: BRAND.navy,
     illustration: (
       <div className="flex items-center justify-center gap-3 my-4">
@@ -20,17 +20,17 @@ const STEPS = [
   },
   {
     icon: Ruler,
-    title: 'On optimise pour vous',
-    desc: 'Dès la réception à Paris, on mesure, on regroupe et on optimise vos colis pour réduire le volume et donc le prix du transport.',
+    title: 'On réduit la taille pour vous',
+    desc: 'Quand votre colis arrive à Paris, on le mesure et on le prépare au mieux pour que le transport coûte moins cher.',
     color: '#F59E0B',
     illustration: (
       <div className="flex items-center justify-center my-4">
         <div className="flex items-end gap-2">
-          <div className="w-12 h-16 rounded-lg border-2 border-dashed border-amber-300 bg-amber-50 flex items-center justify-center text-amber-600 text-[10px] font-bold">
+          <div className="w-12 h-16 rounded-lg border-2 border-dashed border-amber-300 bg-amber-50 flex items-center justify-center text-amber-600 text-xs font-bold">
             Avant
           </div>
           <ChevronRight size={16} className="text-gray-300 mb-6" />
-          <div className="w-10 h-12 rounded-lg border-2 border-green-400 bg-green-50 flex items-center justify-center text-green-600 text-[10px] font-bold">
+          <div className="w-10 h-12 rounded-lg border-2 border-green-400 bg-green-50 flex items-center justify-center text-green-600 text-xs font-bold">
             Après
           </div>
         </div>
@@ -40,7 +40,7 @@ const STEPS = [
   {
     icon: Plane,
     title: 'Réception chez vous',
-    desc: 'Votre colis est expédié vers La Réunion, Mayotte ou les Antilles. Suivi en temps réel jusqu\'à la livraison à votre porte.',
+    desc: 'Votre colis est envoyé vers La Réunion, Mayotte ou les Antilles. Vous pouvez suivre où il est jusqu\'à la livraison chez vous.',
     color: '#22C55E',
     illustration: (
       <div className="flex items-center justify-center gap-2 my-4">
@@ -92,7 +92,7 @@ export default function OnboardingOverlay({ onDone }) {
           </div>
 
           {/* Step counter */}
-          <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">
+          <p className="text-xs font-black uppercase tracking-widest text-gray-400 mb-2">
             Étape {step + 1} sur {STEPS.length}
           </p>
 

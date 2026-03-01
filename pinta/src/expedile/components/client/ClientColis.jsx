@@ -11,10 +11,10 @@ function ProgressBar({ statut }) {
   return (
     <div className="mt-2">
       <div className="flex justify-between items-center mb-1">
-        <span className="text-[10px] text-gray-400 font-medium">
+        <span className="text-xs text-gray-400 font-medium">
           {PHASES_CLIENT[idx]?.label}
         </span>
-        <span className="text-[10px] font-bold" style={{ color: BRAND.navy }}>
+        <span className="text-xs font-bold" style={{ color: BRAND.navy }}>
           {pct}%
         </span>
       </div>
@@ -88,7 +88,7 @@ export default function ClientColis({ onNewColis }) {
           style={{ background: BRAND.navy }}
         >
           <Plus size={13} strokeWidth={2.5} />
-          Pré-annoncer
+          Nouveau colis
         </button>
       </div>
 
@@ -108,7 +108,7 @@ export default function ClientColis({ onNewColis }) {
               {tab.label}
               {counts[tab.key] > 0 && (
                 <span
-                  className={`px-1.5 py-0.5 rounded-md text-[10px] font-bold leading-none ${
+                  className={`px-1.5 py-0.5 rounded-md text-xs font-bold leading-none ${
                     active ? 'text-white' : 'bg-gray-200 text-gray-500'
                   }`}
                   style={active ? { backgroundColor: BRAND.navy } : {}}
@@ -160,7 +160,7 @@ export default function ClientColis({ onNewColis }) {
             {colisFilter
               ? 'Aucun colis ne correspond à ce filtre.'
               : colisTab === 'actifs'
-              ? 'Pré-annoncez votre prochain colis pour démarrer !'
+              ? 'Ajoutez votre prochain colis pour démarrer !'
               : 'Vos colis livrés apparaîtront ici.'}
           </p>
           {colisTab === 'actifs' && (
@@ -170,7 +170,7 @@ export default function ClientColis({ onNewColis }) {
               style={{ background: `linear-gradient(135deg, ${BRAND.navy}, ${BRAND.navyL})` }}
             >
               <Plus size={15} strokeWidth={2.5} />
-              Pré-annoncer un colis
+              Ajouter un colis
             </button>
           )}
         </div>
@@ -203,13 +203,13 @@ export default function ClientColis({ onNewColis }) {
                       <p className="font-black text-sm text-gray-900">{p.ref}</p>
                       {action && (
                         <span
-                          className="text-[9px] font-bold px-1.5 py-0.5 rounded-md"
+                          className="text-xs font-bold px-1.5 py-0.5 rounded-md"
                           style={{
                             background: isFV ? `${BRAND.gold}20` : '#FEF3C7',
                             color: isFV ? BRAND.goldD : '#92400E',
                           }}
                         >
-                          Action requise
+                          À faire
                         </span>
                       )}
                     </div>
@@ -225,7 +225,7 @@ export default function ClientColis({ onNewColis }) {
                 {isFV && (
                   <div className="mt-2.5 flex items-center gap-1.5 text-xs font-semibold text-amber-700 bg-amber-50 rounded-xl px-3 py-2">
                     <AlertCircle size={13} />
-                    Votre accord est attendu
+                    On attend votre réponse
                   </div>
                 )}
                 {isPay && p.devisTotal != null && (
@@ -257,7 +257,7 @@ export default function ClientColis({ onNewColis }) {
                 {isPay && p.devisTotal == null && (
                   <div className="mt-2.5 flex items-center gap-1.5 text-xs font-semibold text-amber-800 bg-amber-50 rounded-xl px-3 py-2">
                     <CreditCard size={13} />
-                    Paiement requis
+                    À payer
                   </div>
                 )}
 

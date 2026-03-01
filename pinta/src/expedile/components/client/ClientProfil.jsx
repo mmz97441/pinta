@@ -12,7 +12,7 @@ import { eur, fmtMembreDep, validateProfile } from '../../utils';
 const TIERS = [
   {
     key: 'freemium',
-    label: 'Freemium',
+    label: 'Gratuit',
     minPts: 0,
     maxPts: 200,
     color: '#64748b',
@@ -97,7 +97,7 @@ function SettingRow({ icon: Icon, label, sub, children, danger, onClick }) {
 }
 
 const DOC_TABS = [
-  { key: 'devis', label: 'Devis' },
+  { key: 'devis', label: 'Prix' },
   { key: 'factures', label: 'Factures' },
 ];
 
@@ -221,7 +221,7 @@ export default function ClientProfil() {
             <h2 className="text-xl font-black leading-tight truncate">{cl.nom}</h2>
             <div className="flex items-center gap-2 mt-1">
               <span
-                className="text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wide"
+                className="text-xs font-black px-2 py-0.5 rounded-full uppercase tracking-wide"
                 style={{ backgroundColor: tier.color + '30', color: tier.color === BRAND.navy ? BRAND.goldL : 'white' }}
               >
                 {tier.label}
@@ -235,7 +235,7 @@ export default function ClientProfil() {
                 {dest.flag} {dest.nom}
               </p>
             )}
-            <p className="text-[10px] mt-0.5" style={{ color: 'rgba(255,255,255,0.45)' }}>
+            <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.45)' }}>
               {fmtMembreDep(cl.created)}
             </p>
           </div>
@@ -259,7 +259,7 @@ export default function ClientProfil() {
                 <Icon size={15} style={{ color: BRAND.navy }} />
               </div>
               <div className="text-xl font-black" style={{ color: BRAND.navy }}>{value}</div>
-              <div className="text-[10px] text-gray-400 font-medium mt-0.5">{label}</div>
+              <div className="text-xs text-gray-400 font-medium mt-0.5">{label}</div>
             </div>
           ))}
         </div>
@@ -269,7 +269,7 @@ export default function ClientProfil() {
             style={{ backgroundColor: '#ecfdf5' }}
           >
             <span className="text-emerald-600 font-black text-sm">{eur(totalEco)}</span>
-            <span className="text-xs text-emerald-700">économisés grâce à l'optimisation Expedîle</span>
+            <span className="text-xs text-emerald-700">économisés grâce à Expedîle</span>
           </div>
         )}
       </Section>
@@ -287,7 +287,7 @@ export default function ClientProfil() {
 
           {nextTier && (
             <div>
-              <div className="flex justify-between text-[10px] text-gray-400 mb-1.5">
+              <div className="flex justify-between text-xs text-gray-400 mb-1.5">
                 <span>{pts} / {nextTier.minPts} pts pour {nextTier.label}</span>
                 <span className="font-bold">{pctToNext}%</span>
               </div>
@@ -300,7 +300,7 @@ export default function ClientProfil() {
                   }}
                 />
               </div>
-              <p className="text-[10px] text-gray-400 mt-1">
+              <p className="text-xs text-gray-400 mt-1">
                 Encore {nextTier.minPts - pts} pts pour atteindre {nextTier.label}
               </p>
             </div>
@@ -315,7 +315,7 @@ export default function ClientProfil() {
           )}
 
           <div>
-            <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">Vos avantages</p>
+            <p className="text-xs font-black uppercase tracking-widest text-gray-400 mb-2">Vos avantages</p>
             <ul className="space-y-1.5">
               {tier.avantages.map((av) => (
                 <li key={av} className="flex items-center gap-2 text-xs text-gray-700">
@@ -427,7 +427,7 @@ export default function ClientProfil() {
         <div className="divide-y divide-gray-50">
           {docFilter === 'devis' && (
             allDevis.length === 0 ? (
-              <p className="px-4 py-6 text-xs text-gray-400 text-center">Aucun devis disponible</p>
+              <p className="px-4 py-6 text-xs text-gray-400 text-center">Aucun prix disponible</p>
             ) : (
               allDevis.map((p) => (
                 <button
@@ -476,7 +476,7 @@ export default function ClientProfil() {
                   <div className="text-right">
                     <p className="font-black text-sm text-gray-800">{eur(f.montant)}</p>
                     <p
-                      className="text-[9px] font-bold"
+                      className="text-xs font-bold"
                       style={{ color: f.valide ? '#059669' : '#d97706' }}
                     >
                       {f.valide ? 'Validée' : 'En attente'}
@@ -528,9 +528,9 @@ export default function ClientProfil() {
           />
           <SettingRow
             icon={Download}
-            label="Exporter mes données"
-            sub="Télécharger un fichier CSV"
-            onClick={() => flash('Export en cours de préparation…')}
+            label="Télécharger mes infos"
+            sub="Télécharger en fichier"
+            onClick={() => flash('Téléchargement en cours de préparation…')}
           />
           <SettingRow
             icon={HelpCircle}

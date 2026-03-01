@@ -249,7 +249,7 @@ export default function ColisModal({ open, onClose }) {
     const clientId = authCl?.id;
     const newColis = buildColis(clientId, 'annonce');
     setData((prev) => [...prev, newColis]);
-    flash(`Pré-annonce ${newColis.ref} enregistrée`);
+    flash(`Colis ${newColis.ref} enregistré`);
     resetAndClose();
   };
 
@@ -370,7 +370,7 @@ export default function ColisModal({ open, onClose }) {
                 ? isMatchMode
                   ? 'Rattacher une pré-annonce'
                   : 'Réceptionner un colis'
-                : 'Pré-annoncer un colis'}
+                : 'Ajouter un colis'}
             </h2>
             {isStaff && isMatchMode && (
               <p className="text-xs text-gray-400 mt-0.5">
@@ -470,7 +470,7 @@ export default function ColisModal({ open, onClose }) {
                               </div>
                               {annonces.length > 0 && (
                                 <span
-                                  className="flex-shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-full"
+                                  className="flex-shrink-0 text-xs font-bold px-1.5 py-0.5 rounded-full"
                                   style={{ background: `${BRAND.gold}25`, color: BRAND.goldD }}
                                 >
                                   {annonces.length} annonce{annonces.length > 1 ? 's' : ''}
@@ -584,7 +584,7 @@ export default function ColisModal({ open, onClose }) {
                 {newClientErr.tel && <p className="mt-1 text-xs text-red-500">{newClientErr.tel}</p>}
               </div>
               <div>
-                <label className={labelCls}>Email <span className="normal-case text-gray-400 font-normal">(facultatif)</span></label>
+                <label className={labelCls}>Email <span className="normal-case text-gray-400 font-normal">(pas obligatoire)</span></label>
                 <input
                   type="email"
                   placeholder="jean.dupont@gmail.com"
@@ -610,7 +610,7 @@ export default function ColisModal({ open, onClose }) {
                 <span className="text-xs font-bold" style={{ color: BRAND.goldD }}>
                   {pendingAnnonces.length} pré-annonce{pendingAnnonces.length > 1 ? 's' : ''} en attente
                 </span>
-                <span className="ml-auto text-[10px] text-gray-400">
+                <span className="ml-auto text-xs text-gray-400">
                   Cliquez pour rattacher
                 </span>
               </div>
@@ -645,7 +645,7 @@ export default function ColisModal({ open, onClose }) {
                         </div>
                         <p className="text-xs text-gray-600 truncate mt-0.5">{a.desc}</p>
                         {a.trackings?.some((t) => t) && (
-                          <p className="text-[10px] text-gray-400 font-mono mt-0.5 truncate">
+                          <p className="text-xs text-gray-400 font-mono mt-0.5 truncate">
                             {trackStr(a)}
                           </p>
                         )}
@@ -662,7 +662,7 @@ export default function ColisModal({ open, onClose }) {
               </div>
               {!matchedAnnonce && (
                 <div className="px-4 py-2 border-t border-gray-100 bg-gray-50">
-                  <p className="text-[10px] text-gray-400 text-center">
+                  <p className="text-xs text-gray-400 text-center">
                     Ou remplissez le formulaire ci-dessous pour une réception à l'aveugle
                   </p>
                 </div>
@@ -741,8 +741,8 @@ export default function ColisModal({ open, onClose }) {
               {/* ── TRACKINGS ── */}
               <div>
                 <label className={labelCls}>
-                  Numéros de tracking
-                  <span className="ml-1 normal-case text-gray-400 font-normal">(facultatif)</span>
+                  Numéros de suivi
+                  <span className="ml-1 normal-case text-gray-400 font-normal">(pas obligatoire)</span>
                 </label>
                 <div className="space-y-2">
                   {nf.trackings.map((t, idx) => (
@@ -772,7 +772,7 @@ export default function ColisModal({ open, onClose }) {
                   onClick={addTracking}
                   className="mt-2 text-xs font-semibold text-blue-500 hover:text-blue-700 transition-colors"
                 >
-                  + Ajouter un tracking
+                  + Ajouter un numéro
                 </button>
               </div>
 
@@ -795,7 +795,7 @@ export default function ColisModal({ open, onClose }) {
                       <span className="flex items-center gap-1.5">
                         <Ruler size={11} />
                         {isMultiTrack ? `Dimensions (${activeTrackings.length} colis)` : 'Dimensions'}
-                        <span className="normal-case text-gray-400 font-normal">(facultatif)</span>
+                        <span className="normal-case text-gray-400 font-normal">(pas obligatoire)</span>
                       </span>
                     </label>
 
@@ -806,30 +806,30 @@ export default function ColisModal({ open, onClose }) {
                           const d = nf.multiDims[idx] || { dimL: '', dimW: '', dimH: '', poids: '' };
                           return (
                             <div key={idx} className="rounded-lg border border-gray-200 bg-gray-50 p-2.5 space-y-1.5">
-                              <p className="text-[10px] font-bold uppercase tracking-wider text-gray-500">
+                              <p className="text-xs font-bold uppercase tracking-wider text-gray-500">
                                 Colis {idx + 1} — <span className="font-mono text-gray-400">{tracking}</span>
                               </p>
                               <div className="grid grid-cols-4 gap-1.5">
                                 <div>
-                                  <label className="text-[9px] font-bold text-gray-400 block mb-0.5">L (cm)</label>
+                                  <label className="text-xs font-bold text-gray-400 block mb-0.5">Long.</label>
                                   <input type="number" min="0" step="0.5" placeholder="40"
                                     value={d.dimL} onChange={(e) => updateMultiDim(idx, 'dimL', e.target.value)}
                                     className={dimInputCls} />
                                 </div>
                                 <div>
-                                  <label className="text-[9px] font-bold text-gray-400 block mb-0.5">l (cm)</label>
+                                  <label className="text-xs font-bold text-gray-400 block mb-0.5">Larg.</label>
                                   <input type="number" min="0" step="0.5" placeholder="30"
                                     value={d.dimW} onChange={(e) => updateMultiDim(idx, 'dimW', e.target.value)}
                                     className={dimInputCls} />
                                 </div>
                                 <div>
-                                  <label className="text-[9px] font-bold text-gray-400 block mb-0.5">H (cm)</label>
+                                  <label className="text-xs font-bold text-gray-400 block mb-0.5">Haut.</label>
                                   <input type="number" min="0" step="0.5" placeholder="20"
                                     value={d.dimH} onChange={(e) => updateMultiDim(idx, 'dimH', e.target.value)}
                                     className={dimInputCls} />
                                 </div>
                                 <div>
-                                  <label className="text-[9px] font-bold text-gray-400 block mb-0.5">kg</label>
+                                  <label className="text-xs font-bold text-gray-400 block mb-0.5">Poids</label>
                                   <input type="number" min="0" step="0.1" placeholder="2.5"
                                     value={d.poids} onChange={(e) => updateMultiDim(idx, 'poids', e.target.value)}
                                     className={dimInputCls} />
@@ -843,25 +843,25 @@ export default function ColisModal({ open, onClose }) {
                       /* ── Single colis dims — compact 4-column grid ── */
                       <div className="grid grid-cols-4 gap-2">
                         <div>
-                          <label className="text-[9px] font-bold text-gray-400 block mb-0.5">L (cm)</label>
+                          <label className="text-xs font-bold text-gray-400 block mb-0.5">Long.</label>
                           <input type="number" min="0" step="0.5" placeholder="40"
                             value={nf.dimL} onChange={(e) => setField('dimL', e.target.value)}
                             className={dimInputCls} />
                         </div>
                         <div>
-                          <label className="text-[9px] font-bold text-gray-400 block mb-0.5">l (cm)</label>
+                          <label className="text-xs font-bold text-gray-400 block mb-0.5">Larg.</label>
                           <input type="number" min="0" step="0.5" placeholder="30"
                             value={nf.dimW} onChange={(e) => setField('dimW', e.target.value)}
                             className={dimInputCls} />
                         </div>
                         <div>
-                          <label className="text-[9px] font-bold text-gray-400 block mb-0.5">H (cm)</label>
+                          <label className="text-xs font-bold text-gray-400 block mb-0.5">Haut.</label>
                           <input type="number" min="0" step="0.5" placeholder="20"
                             value={nf.dimH} onChange={(e) => setField('dimH', e.target.value)}
                             className={dimInputCls} />
                         </div>
                         <div>
-                          <label className="text-[9px] font-bold text-gray-400 block mb-0.5">Poids (kg)</label>
+                          <label className="text-xs font-bold text-gray-400 block mb-0.5">Poids</label>
                           <input type="number" min="0" step="0.1" placeholder="2.5"
                             value={nf.poids} onChange={(e) => setField('poids', e.target.value)}
                             className={dimInputCls} />
@@ -871,7 +871,7 @@ export default function ColisModal({ open, onClose }) {
 
                     {/* Live weight summary */}
                     {!isMultiTrack && nf.dimL && nf.dimW && nf.dimH && nf.poids && (
-                      <p className="text-[10px] text-gray-500 font-medium mt-1.5">
+                      <p className="text-xs text-gray-500 font-medium mt-1.5">
                         Vol. {((parseFloat(nf.dimL) * parseFloat(nf.dimW) * parseFloat(nf.dimH)) / 5000).toFixed(2)} kg
                         · Facturable <strong style={{ color: BRAND.navy }}>{Math.max(parseFloat(nf.poids), (parseFloat(nf.dimL) * parseFloat(nf.dimW) * parseFloat(nf.dimH)) / 5000).toFixed(2)} kg</strong>
                       </p>
@@ -883,8 +883,8 @@ export default function ColisModal({ open, onClose }) {
               {/* ── VALEUR ── */}
               <div>
                 <label className={labelCls}>
-                  Valeur déclarée
-                  <span className="ml-1 normal-case text-gray-400 font-normal">(€, facultatif)</span>
+                  Valeur du colis
+                  <span className="ml-1 normal-case text-gray-400 font-normal">(€, pas obligatoire)</span>
                 </label>
                 <input
                   type="number"
@@ -905,9 +905,9 @@ export default function ColisModal({ open, onClose }) {
                       <FileText size={15} className="text-blue-600" />
                     </div>
                     <div className="flex-1">
-                      <p className="text-sm font-semibold text-gray-800">Facture d'origine</p>
+                      <p className="text-sm font-semibold text-gray-800">Facture d'achat</p>
                       <p className="text-xs text-gray-500 mt-0.5">
-                        Joindre la facture accélère le calcul des taxes.
+                        Ajouter la facture aide à calculer les taxes plus vite.
                       </p>
                     </div>
                   </div>
@@ -924,7 +924,7 @@ export default function ColisModal({ open, onClose }) {
                       />
                     </div>
                     <div>
-                      <label className={labelCls}>Montant (€)</label>
+                      <label className={labelCls}>Prix (€)</label>
                       <input
                         type="number"
                         min="0"
@@ -955,7 +955,7 @@ export default function ColisModal({ open, onClose }) {
                     ) : (
                       <label className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl border-2 border-dashed border-gray-300 bg-white text-sm text-gray-500 font-medium cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-all">
                         <FileText size={14} />
-                        Joindre la facture
+                        Ajouter la facture
                         <input
                           type="file"
                           accept="image/*,.pdf"
@@ -1052,7 +1052,7 @@ export default function ColisModal({ open, onClose }) {
                 onClick={handleAnnonce}
                 className="flex-1 py-2.5 rounded-xl font-bold text-sm text-white bg-blue-600 hover:bg-blue-700 active:scale-95 transition-all"
               >
-                Envoyer ma pré-annonce
+                Envoyer
               </button>
             </div>
           )}
