@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
 import {
   ArrowLeft, Package, CheckCircle, Wrench, CreditCard, Plane, MapPin,
-  ChevronDown, ChevronUp, AlertCircle, ThumbsUp, ThumbsDown, RotateCcw,
+  ChevronDown, ChevronUp, ChevronRight, AlertCircle, ThumbsUp, ThumbsDown, RotateCcw,
   ExternalLink, Clock,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { BRAND, PHASES_CLIENT, getPhaseIndex } from '../../constants';
 import { eur, trackStr, hasTrack } from '../../utils';
-import { Badge, Ligne } from '../ui';
+import { Badge, Ligne, ProgressBar } from '../ui';
 
 // ── Phase icons ────────────────────────────────────────────────────────────────
 const PHASE_ICONS = [Package, Package, CheckCircle, Wrench, CreditCard, Plane, MapPin];
@@ -17,30 +17,6 @@ function getPhaseState(phaseIdx, curPhaseIdx) {
   if (phaseIdx < curPhaseIdx) return 'done';
   if (phaseIdx === curPhaseIdx) return 'active';
   return 'future';
-}
-
-// ── Progress bar ───────────────────────────────────────────────────────────────
-function ProgressBar({ statut }) {
-  const idx = getPhaseIndex(statut);
-  const total = PHASES_CLIENT.length - 1;
-  const pct = Math.round((idx / total) * 100);
-  return (
-    <div>
-      <div className="flex justify-between items-center mb-1.5">
-        <span className="text-xs text-gray-400 font-medium">Progression</span>
-        <span className="text-xs font-black" style={{ color: BRAND.navy }}>{pct}%</span>
-      </div>
-      <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-        <div
-          className="h-full rounded-full transition-all duration-700"
-          style={{
-            width: `${pct}%`,
-            background: `linear-gradient(90deg, ${BRAND.navy}, ${BRAND.navyL})`,
-          }}
-        />
-      </div>
-    </div>
-  );
 }
 
 // ── Phase accordion step ───────────────────────────────────────────────────────
@@ -612,7 +588,7 @@ export default function ClientDetailView() {
       {/* ── Progress bar (inline, no card wrapper) ── */}
       {sel.statut !== 'annule' && (
         <div className="px-1">
-          <ProgressBar statut={sel.statut} />
+          <ProgressBar statut={sel.statut} size="md" labelText="Progression" />
         </div>
       )}
 
@@ -623,10 +599,11 @@ export default function ClientDetailView() {
         </div>
       )}
 
-      {/* ── Accordion timeline ── */}
+      {/* ── Accordion timeline (done + active phases) ── */}
       <div className="space-y-2">
         {PHASES_CLIENT.map((phase, idx) => {
           const state = getPhaseState(idx, curPhaseIdx);
+          if (state === 'future') return null;
           const isOpen = timeOpen === idx;
 
           return (
@@ -643,6 +620,29 @@ export default function ClientDetailView() {
           );
         })}
       </div>
+
+      {/* ── Future phases (compact list) ── */}
+      {curPhaseIdx < PHASES_CLIENT.length - 1 && (
+        <div className="card rounded-2xl p-3">
+          <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">
+            Prochaines étapes
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {PHASES_CLIENT.slice(curPhaseIdx + 1).map((phase, i) => {
+              const Icon = PHASE_ICONS[curPhaseIdx + 1 + i] || Package;
+              return (
+                <div key={phase.key} className="flex items-center gap-1.5 text-xs text-gray-400 font-medium">
+                  <Icon size={12} strokeWidth={1.5} />
+                  <span>{phase.label}</span>
+                  {i < PHASES_CLIENT.length - curPhaseIdx - 2 && (
+                    <ChevronRight size={10} className="text-gray-300" />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Spacer so last card isn't under bottom nav */}
       <div className="h-2" />

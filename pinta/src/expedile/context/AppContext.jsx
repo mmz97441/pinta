@@ -300,7 +300,7 @@ export function AppProvider({ children }) {
     const ns = ok ? 'autorise' : 'refuse_client';
     log(id, 'attente_feu_vert', ns);
     upd(id, { statut: ns, feuVert: ok ? 'autorise' : 'refuse' });
-    flash(ok ? 'Vous avez autorisé la préparation' : 'Vous avez refusé — le colis ne sera pas préparé');
+    flash({ msg: ok ? 'Vous avez autorisé la préparation' : 'Vous avez refusé — le colis ne sera pas préparé', type: ok ? 'success' : 'warning', duration: 4000 });
   }, [log, upd, flash]);
 
   const feuVertBulk = useCallback((ids) => {
@@ -308,7 +308,7 @@ export function AppProvider({ children }) {
       log(id, 'attente_feu_vert', 'autorise');
       upd(id, { statut: 'autorise', feuVert: 'autorise' });
     });
-    flash(`${ids.length} colis autorisés`);
+    flash({ msg: `${ids.length} colis autorisés`, type: 'success', duration: 4000 });
   }, [log, upd, flash]);
 
   const envoyerDevis = useCallback((id) => {
@@ -366,7 +366,7 @@ export function AppProvider({ children }) {
   const payer = useCallback((id, mt) => {
     log(id, 'attente_paiement', 'paye');
     upd(id, { statut: 'paye', paiementMontant: mt });
-    flash('Paiement confirmé !');
+    flash({ msg: 'Paiement confirmé !', type: 'success', duration: 5000 });
   }, [log, upd, flash]);
 
   const envMsg = useCallback(async (colisId, msgTxt, authInfo, tel) => {

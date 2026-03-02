@@ -157,7 +157,7 @@ function ColisCard({ c, client, envois, onClick, stagger }) {
 
         {/* Main content */}
         <div className="flex-1 min-w-0">
-          {/* Row 1: ref + badge */}
+          {/* Row 1: ref + casier + badge */}
           <div className="flex items-center gap-2 flex-wrap">
             <span
               className="text-xs font-black tracking-tight"
@@ -173,48 +173,49 @@ function ColisCard({ c, client, envois, onClick, stagger }) {
                 {c.casier}
               </span>
             )}
+            <Badge statut={c.statut} />
             {missingFacture && (
               <AlertTriangle size={12} className="text-amber-500 flex-shrink-0" />
             )}
           </div>
 
-          {/* Row 2: badge statut */}
-          <div className="mt-1">
-            <Badge statut={c.statut} />
-          </div>
-
-          {/* Row 3: client + dest */}
+          {/* Row 2: client + dest + description */}
           <div className="mt-1.5 flex items-center gap-1.5">
             <User size={11} className="text-gray-400 flex-shrink-0" />
             <span className="text-xs text-gray-600 font-medium truncate">{client?.nom ?? '—'}</span>
             {dest && (
               <span className="text-xs text-gray-400 flex-shrink-0">{dest.flag}</span>
             )}
+            {c.desc && (
+              <>
+                <span className="text-gray-300">·</span>
+                <span className="text-xs text-gray-500 truncate">{c.desc}</span>
+              </>
+            )}
           </div>
 
-          {/* Row 4: description */}
-          {c.desc && (
-            <p className="mt-0.5 text-xs text-gray-500 truncate">{c.desc}</p>
-          )}
-
-          {/* Row 5: reception date + dims + tracking */}
-          <div className="mt-1.5 flex items-center gap-3 flex-wrap">
+          {/* Row 3: metadata (date · dims · tracking · envoi) */}
+          <div className="mt-2 flex items-center gap-1.5 flex-wrap text-[10px] text-gray-400">
             {c.dateReception && (
-              <span className="text-[10px] text-gray-400 font-medium">
+              <span className="font-medium">
                 {new Date(c.dateReception).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })}
               </span>
             )}
+            {c.dateReception && (c.dimL || hasTrack(c) || envoi) && <span>·</span>}
             <DimsChip c={c} />
             {hasTrack(c) && (
-              <span className="text-xs text-gray-400 font-mono truncate max-w-[160px]">
-                {trackCount(c) > 1
-                  ? `${trackCount(c)} trackings`
-                  : trackStr(c)}
-              </span>
+              <>
+                <span>·</span>
+                <span className="font-mono truncate max-w-[140px]">
+                  {trackCount(c) > 1
+                    ? `${trackCount(c)} trackings`
+                    : trackStr(c)}
+                </span>
+              </>
             )}
             {envoi && (
               <span
-                className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
+                className="font-semibold px-1.5 py-0.5 rounded-full"
                 style={{ background: `${BRAND.navy}10`, color: BRAND.navy }}
               >
                 {labelEnvoi(envoi)}
@@ -264,6 +265,7 @@ export default function StaffDashboard({ onNewColis }) {
   const [pipeFilter, setPipeFilter] = useState(null);
   const [showEnvoiFilter, setShowEnvoiFilter] = useState(false);
   const [viewMode, setViewMode] = useState('status'); // 'status' | 'numero'
+  const [showAllMissing, setShowAllMissing] = useState(false);
 
   // ── Search results ────────────────────────────────────────────────────────
   const searchResults = useMemo(
@@ -394,7 +396,7 @@ export default function StaffDashboard({ onNewColis }) {
           >
             Tableau de bord
           </h1>
-          <p className="text-xs text-gray-400 mt-0.5 font-medium">
+          <p className="text-xs text-gray-500 mt-0.5 font-medium">
             {totalAll} colis actifs
           </p>
         </div>
@@ -407,8 +409,8 @@ export default function StaffDashboard({ onNewColis }) {
             boxShadow: `0 2px 12px ${BRAND.gold}40`,
           }}
         >
-          <Plus size={15} strokeWidth={2.5} />
-          Réceptionner
+          <Package size={15} strokeWidth={2.5} />
+          Nouveau colis
         </button>
       </div>
 
@@ -438,6 +440,7 @@ export default function StaffDashboard({ onNewColis }) {
             )}
           </div>
           <button
+            aria-label="Filtrer par envoi"
             onClick={() => setShowEnvoiFilter((p) => !p)}
             className="relative flex items-center justify-center w-10 rounded-xl border bg-white transition-all active:scale-95"
             style={{
@@ -455,11 +458,19 @@ export default function StaffDashboard({ onNewColis }) {
           </button>
         </div>
 
+        {/* Search backdrop */}
+        {hasSearch && (
+          <div
+            className="fixed inset-0 z-20"
+            onClick={() => setGlobalSearch('')}
+          />
+        )}
+
         {/* Search dropdown */}
         {hasSearch && (
           <div
             className="absolute top-full left-0 right-0 mt-1.5 z-30 rounded-2xl overflow-hidden"
-            style={{ maxHeight: 320, overflowY: 'auto', background: '#FFFFFF', border: '1px solid #E5E7EB', boxShadow: '0 4px 24px rgba(0,0,0,0.12)' }}
+            style={{ maxHeight: 320, overflowY: 'auto', background: '#FFFFFF', border: '1px solid #E5E7EB', boxShadow: '0 8px 32px rgba(0,0,0,0.16)' }}
           >
             {!hasResults && (
               <p className="px-4 py-3 text-sm text-gray-400">Aucun résultat</p>
@@ -555,17 +566,21 @@ export default function StaffDashboard({ onNewColis }) {
               <button
                 key={card.key}
                 onClick={() => card.key === 'total' ? (setActiveCard(null), setPipeFilter(null)) : handleCardClick(card.key)}
-                className={`card p-4 text-left transition-all active:scale-95 ${isActive ? 'ring-2' : 'opacity-75 hover:opacity-100'}`}
+                className={`card p-4 text-left transition-all active:scale-95 ${isActive ? 'ring-2' : 'opacity-60 hover:opacity-90'}`}
                 style={{
-                  borderLeft: `3px solid ${card.color}`,
+                  borderLeft: `4px solid ${isActive ? card.color : card.color + '60'}`,
                   ...(isActive
-                    ? { '--tw-ring-color': card.color, boxShadow: `0 2px 12px ${card.color}25` }
+                    ? {
+                        '--tw-ring-color': card.color,
+                        boxShadow: `0 2px 12px ${card.color}25`,
+                        background: `${card.color}06`,
+                      }
                     : {}),
                 }}
               >
                 <div className="flex items-start justify-between">
                   <div>
-                    <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">
+                    <p className={`text-[11px] font-bold uppercase tracking-wider ${isActive ? 'text-gray-700' : 'text-gray-500'}`}>
                       {card.label}
                     </p>
                     <p
@@ -577,7 +592,7 @@ export default function StaffDashboard({ onNewColis }) {
                   </div>
                   <div
                     className="w-8 h-8 rounded-xl flex items-center justify-center"
-                    style={{ background: `${card.color}12` }}
+                    style={{ background: isActive ? `${card.color}20` : `${card.color}12` }}
                   >
                     <Icon size={16} style={{ color: displayColor }} />
                   </div>
@@ -644,7 +659,7 @@ export default function StaffDashboard({ onNewColis }) {
             </p>
           </div>
           <div className="flex flex-wrap gap-1.5 px-3.5 pb-3">
-            {missingInvoices.map((c) => (
+            {(showAllMissing ? missingInvoices : missingInvoices.slice(0, 5)).map((c) => (
               <button
                 key={c.id}
                 onClick={() => openColis(c.id)}
@@ -655,6 +670,15 @@ export default function StaffDashboard({ onNewColis }) {
                 <ChevronRight size={11} className="text-amber-500" />
               </button>
             ))}
+            {!showAllMissing && missingInvoices.length > 5 && (
+              <button
+                onClick={() => setShowAllMissing(true)}
+                className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1.5 rounded-lg transition-all active:scale-95 hover:bg-amber-200"
+                style={{ color: '#92400E' }}
+              >
+                +{missingInvoices.length - 5} autres
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -708,33 +732,36 @@ export default function StaffDashboard({ onNewColis }) {
       )}
 
       {/* ── View mode toggle ─────────────────────────────────────────────── */}
-      <div className="anim-fade stagger-4 flex items-center gap-1 self-end">
+      <div className="anim-fade stagger-4 flex items-center justify-between">
+        <p className="text-xs font-semibold text-gray-500">
+          {activePool.filter((c) => c.statut !== 'annule').length} colis affichés
+        </p>
         <div
           className="inline-flex rounded-xl overflow-hidden border"
           style={{ borderColor: '#E5E7EB' }}
         >
           <button
             onClick={() => setViewMode('status')}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold transition-all"
+            className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold transition-all"
             style={
               viewMode === 'status'
                 ? { background: BRAND.navy, color: 'white' }
                 : { background: 'white', color: '#6B7280' }
             }
           >
-            <Layers size={12} strokeWidth={2.5} />
+            <Layers size={13} strokeWidth={2.5} />
             Statut
           </button>
           <button
             onClick={() => setViewMode('numero')}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold transition-all"
+            className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold transition-all"
             style={
               viewMode === 'numero'
                 ? { background: BRAND.navy, color: 'white' }
                 : { background: 'white', color: '#6B7280' }
             }
           >
-            <Hash size={12} strokeWidth={2.5} />
+            <Hash size={13} strokeWidth={2.5} />
             N° Colis
           </button>
         </div>

@@ -103,12 +103,14 @@ function AppContent() {
           {isStaff && (
             <>
               <button
+                aria-label="Gestion des clients"
                 onClick={() => { setPage(page === 'clients' ? 'home' : 'clients'); setSelId(null); }}
                 className={`p-2 rounded-xl transition-all ${page === 'clients' ? 'bg-white bg-opacity-20 text-white' : 'text-gray-400 hover:text-white hover:bg-white hover:bg-opacity-10'}`}
               >
                 <Users size={18} />
               </button>
               <button
+                aria-label="Paramètres"
                 onClick={() => { setPage(page === 'settings' ? 'home' : 'settings'); setSelId(null); }}
                 className={`p-2 rounded-xl transition-all ${page === 'settings' ? 'bg-white bg-opacity-20 text-white' : 'text-gray-400 hover:text-white hover:bg-white hover:bg-opacity-10'}`}
               >
@@ -116,6 +118,7 @@ function AppContent() {
               </button>
               <span className="text-sm text-gray-300 ml-1">{auth.u.nom.split(' ')[0]}</span>
               <button
+                aria-label="Se déconnecter"
                 onClick={() => { setAuth(null); setSelId(null); setPage('home'); }}
                 className="p-2 rounded-xl text-red-400 hover:text-red-300 hover:bg-white hover:bg-opacity-10 transition-all"
               >
@@ -123,7 +126,21 @@ function AppContent() {
               </button>
             </>
           )}
-          {/* Client name shown in Accueil welcome card + Profil tab — no need to duplicate here */}
+          {!isStaff && authCl && (
+            <button
+              aria-label="Mon profil"
+              onClick={() => { setSelId(null); }}
+              className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl text-white hover:bg-white hover:bg-opacity-10 transition-all"
+            >
+              <span className="text-sm font-medium text-gray-300">{authCl.nom.split(' ')[0]}</span>
+              <div
+                className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-black flex-shrink-0"
+                style={{ background: `linear-gradient(135deg, ${BRAND.gold}, ${BRAND.goldD})`, color: BRAND.navyD }}
+              >
+                {authCl.nom.charAt(0).toUpperCase()}
+              </div>
+            </button>
+          )}
         </div>
       </div>
 

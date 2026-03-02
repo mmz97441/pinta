@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import {
   User, Package, CheckCircle, CreditCard, TrendingUp, Star, Bell,
   Lock, Download, HelpCircle, LogOut, Trash2, Edit3, X, ChevronRight,
-  FileText, Receipt, Save,
+  FileText, Receipt, Save, BookOpen,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { BRAND, getDestByCP } from '../../constants';
@@ -111,7 +111,7 @@ const INPUT_CLS = (err) =>
 const LABEL_CLS = 'block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1';
 
 export default function ClientProfil() {
-  const { authCl, data, clients, updateClient, setAuth, flash, ask } = useApp();
+  const { authCl, data, clients, updateClient, setAuth, flash, ask, setSelId, setClientTab } = useApp();
 
   const cl = authCl;
   const dest = cl ? getDestByCP(cl.cp) : null;
@@ -430,7 +430,11 @@ export default function ClientProfil() {
               <p className="px-4 py-6 text-xs text-gray-400 text-center">Aucun devis disponible</p>
             ) : (
               allDevis.map((p) => (
-                <div key={p.id} className="flex items-center gap-3 px-4 py-3">
+                <button
+                  key={p.id}
+                  onClick={() => setSelId(p.id)}
+                  className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 active:bg-gray-100 transition-colors"
+                >
                   <div
                     className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0"
                     style={{ backgroundColor: BRAND.navy + '10' }}
@@ -441,10 +445,16 @@ export default function ClientProfil() {
                     <p className="text-sm font-semibold text-gray-800">{p.ref}</p>
                     <p className="text-xs text-gray-400 truncate">{p.desc}</p>
                   </div>
-                  <span className="font-black text-sm" style={{ color: BRAND.navy }}>
-                    {eur(p.devisTotal)}
-                  </span>
-                </div>
+                  <div className="text-right flex-shrink-0">
+                    <span className="font-black text-sm" style={{ color: BRAND.navy }}>
+                      {eur(p.devisTotal)}
+                    </span>
+                    <p className="text-[9px] font-bold" style={{ color: p.paiementMontant ? '#059669' : '#d97706' }}>
+                      {p.paiementMontant ? 'Payé' : 'En attente'}
+                    </p>
+                  </div>
+                  <ChevronRight size={14} className="text-gray-300 flex-shrink-0" />
+                </button>
               ))
             )
           )}
@@ -510,17 +520,44 @@ export default function ClientProfil() {
             </button>
           </div>
 
+          <div className="flex items-center gap-3 px-4 py-3.5 opacity-50 cursor-default">
+            <div
+              className="flex-shrink-0 w-8 h-8 rounded-xl flex items-center justify-center"
+              style={{ backgroundColor: '#f3f4f6' }}
+            >
+              <Lock size={16} className="text-gray-400" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-semibold text-gray-500">Changer le mot de passe</p>
+                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-400 uppercase">Bientôt</span>
+              </div>
+              <p className="text-xs text-gray-400 mt-0.5">Sécurisez votre compte</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 px-4 py-3.5 opacity-50 cursor-default">
+            <div
+              className="flex-shrink-0 w-8 h-8 rounded-xl flex items-center justify-center"
+              style={{ backgroundColor: '#f3f4f6' }}
+            >
+              <Download size={16} className="text-gray-400" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-semibold text-gray-500">Exporter mes données</p>
+                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-400 uppercase">Bientôt</span>
+              </div>
+              <p className="text-xs text-gray-400 mt-0.5">Télécharger un fichier CSV</p>
+            </div>
+          </div>
           <SettingRow
-            icon={Lock}
-            label="Changer le mot de passe"
-            sub="Sécurisez votre compte"
-            onClick={() => flash('Fonctionnalité bientôt disponible')}
-          />
-          <SettingRow
-            icon={Download}
-            label="Exporter mes données"
-            sub="Télécharger un fichier CSV"
-            onClick={() => flash('Export en cours de préparation…')}
+            icon={BookOpen}
+            label="Revoir le tutoriel"
+            sub="Redécouvrir Expédîle"
+            onClick={() => {
+              if (cl) updateClient(cl.id, { onboarded: false }, true);
+              flash('Le tutoriel apparaîtra à votre prochaine visite sur l\'accueil');
+            }}
           />
           <SettingRow
             icon={HelpCircle}

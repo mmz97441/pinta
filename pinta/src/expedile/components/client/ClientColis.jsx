@@ -1,35 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Package, Plus, ChevronRight, AlertCircle, CreditCard, CheckCircle, X } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { BRAND, PHASES_CLIENT, getPhaseIndex } from '../../constants';
-import { Badge, Etapes } from '../ui';
-
-function ProgressBar({ statut }) {
-  const idx = getPhaseIndex(statut);
-  const total = PHASES_CLIENT.length - 1;
-  const pct = Math.round((idx / total) * 100);
-  return (
-    <div className="mt-2">
-      <div className="flex justify-between items-center mb-1">
-        <span className="text-[10px] text-gray-400 font-medium">
-          {PHASES_CLIENT[idx]?.label}
-        </span>
-        <span className="text-[10px] font-bold" style={{ color: BRAND.navy }}>
-          {pct}%
-        </span>
-      </div>
-      <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-        <div
-          className="h-full rounded-full transition-all duration-500"
-          style={{
-            width: `${pct}%`,
-            background: `linear-gradient(90deg, ${BRAND.navy}, ${BRAND.navyL})`,
-          }}
-        />
-      </div>
-    </div>
-  );
-}
+import { BRAND } from '../../constants';
+import { Badge, Etapes, ProgressBar } from '../ui';
 
 const TABS = [
   { key: 'actifs', label: 'En cours' },
@@ -226,28 +199,36 @@ export default function ClientColis({ onNewColis }) {
                   </div>
                 )}
                 {isPay && p.devisTotal != null && (
-                  <div
-                    className="mt-2.5"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      ask(
-                        'Confirmer le paiement',
-                        `Valider le paiement de ${p.devisTotal.toFixed(2)} € pour ${p.ref} ?`,
-                        () => payer(p.id, p.devisTotal),
-                        { okLabel: 'Payer' }
-                      );
-                    }}
-                  >
+                  <div className="mt-3 pt-2.5 border-t border-gray-100">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-gray-500">Montant dû</span>
+                      <span className="text-sm font-black" style={{ color: BRAND.navy }}>
+                        {p.devisTotal.toFixed(2)} €
+                      </span>
+                    </div>
                     <div
-                      className="flex items-center justify-center gap-1.5 text-xs font-black py-2 rounded-xl active:scale-95 transition-all"
-                      style={{
-                        background: `linear-gradient(135deg, ${BRAND.gold}, ${BRAND.goldD})`,
-                        color: BRAND.navyD,
-                        boxShadow: `0 2px 8px rgba(232,184,75,0.25)`,
+                      className="mt-2"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        ask(
+                          'Confirmer le paiement',
+                          `Valider le paiement de ${p.devisTotal.toFixed(2)} € pour ${p.ref} ?`,
+                          () => payer(p.id, p.devisTotal),
+                          { okLabel: 'Payer' }
+                        );
                       }}
                     >
-                      <CreditCard size={13} />
-                      Payer {p.devisTotal.toFixed(2)} €
+                      <div
+                        className="flex items-center justify-center gap-1.5 text-xs font-black py-2.5 rounded-xl active:scale-95 transition-all"
+                        style={{
+                          background: `linear-gradient(135deg, ${BRAND.gold}, ${BRAND.goldD})`,
+                          color: BRAND.navyD,
+                          boxShadow: `0 2px 8px rgba(232,184,75,0.25)`,
+                        }}
+                      >
+                        <CreditCard size={13} />
+                        Payer
+                      </div>
                     </div>
                   </div>
                 )}

@@ -1,36 +1,9 @@
 import React from 'react';
 import { Package, AlertCircle, CreditCard, Plus, CheckCircle, Clock, TrendingUp, ChevronRight } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { BRAND, STATUTS, getDestByCP, PHASES_CLIENT, getPhaseIndex } from '../../constants';
+import { BRAND, STATUTS, getDestByCP } from '../../constants';
 import { eur } from '../../utils';
-import { Badge } from '../ui';
-
-function ProgressBar({ statut }) {
-  const idx = getPhaseIndex(statut);
-  const total = PHASES_CLIENT.length - 1;
-  const pct = Math.round((idx / total) * 100);
-  return (
-    <div className="mt-2">
-      <div className="flex justify-between items-center mb-1">
-        <span className="text-[10px] text-gray-400 font-medium">
-          {PHASES_CLIENT[idx]?.label}
-        </span>
-        <span className="text-[10px] font-bold" style={{ color: BRAND.navy }}>
-          {pct}%
-        </span>
-      </div>
-      <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-        <div
-          className="h-full rounded-full transition-all duration-500"
-          style={{
-            width: `${pct}%`,
-            background: `linear-gradient(90deg, ${BRAND.navy}, ${BRAND.navyL})`,
-          }}
-        />
-      </div>
-    </div>
-  );
-}
+import { Badge, ProgressBar } from '../ui';
 
 export default function ClientAccueil({ onNewColis }) {
   const { authCl, data, clients, ask, feuVertBulk, payer, setSelId, setClientTab, setColisFilter } = useApp();
@@ -251,7 +224,7 @@ export default function ClientAccueil({ onNewColis }) {
             <h3 className="font-bold text-sm text-gray-800">Colis en cours</h3>
           </div>
           <div className="space-y-2.5">
-            {colisCours.map((p) => (
+            {colisCours.slice(0, 3).map((p) => (
               <button key={p.id} onClick={() => setSelId(p.id)} className="card p-4 w-full text-left hover:shadow-md active:scale-[0.98] transition-all cursor-pointer">
                 <div className="flex items-start justify-between gap-2 mb-1">
                   <div className="flex-1 min-w-0">
@@ -263,6 +236,16 @@ export default function ClientAccueil({ onNewColis }) {
                 <ProgressBar statut={p.statut} />
               </button>
             ))}
+            {colisCours.length > 3 && (
+              <button
+                onClick={() => { setColisFilter(null); setClientTab('colis'); }}
+                className="w-full flex items-center justify-center gap-1.5 py-2.5 text-xs font-bold rounded-xl active:scale-95 transition-all"
+                style={{ color: BRAND.navy, backgroundColor: BRAND.navy + '08' }}
+              >
+                Voir les {colisCours.length} colis en cours
+                <ChevronRight size={13} />
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -296,21 +279,47 @@ export default function ClientAccueil({ onNewColis }) {
 
       {/* ── Pré-annoncer (if no active colis) ── */}
       {enCours.length === 0 && (
-        <div className="anim-fade-up">
+        <div className="anim-fade-up card p-6 rounded-2xl text-center space-y-4">
+          <div
+            className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto"
+            style={{ backgroundColor: BRAND.navy + '10' }}
+          >
+            <Package size={28} style={{ color: BRAND.navy }} strokeWidth={1.5} />
+          </div>
+          <div>
+            <p className="font-black text-gray-800 text-base">Envoyez vos achats chez vous</p>
+            <p className="text-xs text-gray-500 mt-1 max-w-[280px] mx-auto leading-relaxed">
+              {dest ? `De Paris vers ${dest.flag} ${dest.nom}` : 'De la métropole vers les DOM-TOM'} — on s'occupe de tout.
+            </p>
+          </div>
+          <div className="space-y-2 text-left max-w-[260px] mx-auto">
+            {[
+              { step: '1', text: 'Pré-annoncez votre commande' },
+              { step: '2', text: 'On réceptionne et optimise le colis' },
+              { step: '3', text: 'Livraison chez vous' },
+            ].map(({ step, text }) => (
+              <div key={step} className="flex items-center gap-3">
+                <div
+                  className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black flex-shrink-0"
+                  style={{ backgroundColor: BRAND.navy + '12', color: BRAND.navy }}
+                >
+                  {step}
+                </div>
+                <span className="text-xs text-gray-600 font-medium">{text}</span>
+              </div>
+            ))}
+          </div>
           <button
             onClick={onNewColis}
-            className="w-full flex items-center justify-center gap-2 py-4 rounded-2xl font-bold text-white text-sm active:scale-95 transition-all"
+            className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-bold text-white text-sm active:scale-95 transition-all"
             style={{
               background: `linear-gradient(135deg, ${BRAND.navy}, ${BRAND.navyL})`,
               boxShadow: `0 4px 16px rgba(27,58,75,0.25)`,
             }}
           >
-            <Plus size={18} strokeWidth={2.5} />
+            <Plus size={16} strokeWidth={2.5} />
             Pré-annoncer un colis
           </button>
-          <p className="text-center text-xs text-gray-400 mt-2">
-            Informez-nous de votre commande avant qu'elle n'arrive à Paris
-          </p>
         </div>
       )}
     </div>

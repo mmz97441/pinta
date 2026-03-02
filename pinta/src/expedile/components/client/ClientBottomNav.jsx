@@ -26,14 +26,17 @@ export default function ClientBottomNav() {
   };
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 glass-nav border-t-0 z-40" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
-      <div className="flex max-w-xl md:max-w-3xl lg:max-w-5xl xl:max-w-6xl mx-auto">
+    <nav className="fixed bottom-0 left-0 right-0 glass-nav border-t-0 z-40" aria-label="Navigation principale" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+      <div className="flex max-w-xl md:max-w-3xl lg:max-w-5xl xl:max-w-6xl mx-auto" role="tablist">
         {TABS.map((tab) => {
           const active = clientTab === tab.key;
           const badge = badges[tab.key] || 0;
           return (
             <button
               key={tab.key}
+              role="tab"
+              aria-selected={active}
+              aria-label={`${tab.label}${badge > 0 ? ` (${badge} actions)` : ''}`}
               onClick={() => { setClientTab(tab.key); setSelId(null); }}
               className={`flex-1 flex flex-col items-center py-2 relative transition-all duration-200 ${active ? '' : 'text-gray-400'}`}
             >
@@ -61,6 +64,6 @@ export default function ClientBottomNav() {
           );
         })}
       </div>
-    </div>
+    </nav>
   );
 }
