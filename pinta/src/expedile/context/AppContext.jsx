@@ -4,6 +4,8 @@ import { MSG_TEMPLATES } from '../constants/templates';
 import { uid, makeData, calcTransport, getCatTaux, eur, mailtoLink, getClientDest } from '../utils';
 import { isWaConfigured, sendWhatsApp, sendNotification, waMeLink, normalizeTel } from '../services/whatsappApi';
 import { connectWebhook } from '../services/webhookListener';
+import * as sb from '../lib/supabaseData';
+import { supabase } from '../lib/supabase';
 
 const AppContext = createContext(null);
 
@@ -17,28 +19,92 @@ export function AppProvider({ children }) {
   // ── Auth ──
   const [auth, setAuth] = useState(null);
 
-  // ── Core data ──
+  // ── Core data (initialized with mock, replaced by Supabase on load) ──
   const [data, setData] = useState(makeData);
   const [clients, setClients] = useState(CLIENTS_INIT);
   const [categories, setCategories] = useState(CATEGORIES_INIT);
   const [tarifs, setTarifs] = useState(TARIFS_DEFAUT);
   const [envois, setEnvois] = useState(initEnvois);
   const [logs, setLogs] = useState([]);
+  const [sbReady, setSbReady] = useState(false);
 
   // ── Communication ──
-  const [comLog, setComLog] = useState([
-    { id: 'com1', colisId: 'p1', clientId: 'c1', canal: 'whatsapp', template: 'reception', msg: 'Colis réceptionné', date: '08/02 14:30', user: 'Sophie Martin' },
-    { id: 'com2', colisId: 'p1', clientId: 'c1', canal: 'whatsapp', template: 'demande_feu_vert', msg: 'Demande de feu vert envoyée', date: '08/02 16:00', user: 'Sophie Martin' },
-    { id: 'com3', colisId: 'p7', clientId: 'c1', canal: 'whatsapp', template: 'devis_final', msg: 'Devis final 54,67€ envoyé', date: '07/02 11:00', user: 'Marie Dupont' },
-  ]);
+  const [comLog, setComLog] = useState([]);
 
   // ── Notifications (client) ──
-  const [notifs, setNotifs] = useState([
-    { id: 'n1', date: '09/02 08:30', titre: 'Colis réceptionné', msg: 'Votre colis EXP-0001 est arrivé à Paris', lu: false, colisId: 'p1' },
-    { id: 'n2', date: '08/02 16:00', titre: 'Accord requis', msg: 'Votre colis EXP-0001 a été mesuré. Donnez votre feu vert pour la préparation !', lu: false, colisId: 'p1' },
-    { id: 'n3', date: '07/02 14:20', titre: 'Devis à payer', msg: 'Le devis final de EXP-0008 est de 54,67€', lu: true, colisId: 'p7' },
-    { id: 'n4', date: '06/02 09:15', titre: 'Colis réceptionné', msg: 'Votre colis EXP-0004 a bien été réceptionné', lu: true, colisId: 'p4' },
-  ]);
+  const [notifs, setNotifs] = useState([]);
+
+  // ── Load data from Supabase on mount ──
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        const [colisData, clientsData, envoisData, catsData, tarifsData] = await Promise.all([
+          sb.fetchColis(),
+          sb.fetchClients(),
+          sb.fetchEnvois(),
+          sb.fetchCategories(),
+          sb.fetchTarifs(),
+        ]);
+        if (cancelled) return;
+        if (colisData.length > 0 || clientsData.length > 0) {
+          setData(colisData);
+          setClients(clientsData);
+          setEnvois(envoisData);
+          setCategories(catsData);
+          setTarifs(tarifsData);
+          setSbReady(true);
+          console.log('[Supabase] Données chargées :', colisData.length, 'colis,', clientsData.length, 'clients');
+        } else {
+          console.log('[Supabase] Base vide — mode démo avec données mock');
+        }
+      } catch (err) {
+        console.warn('[Supabase] Connexion impossible — mode démo', err.message);
+      }
+    }
+    load();
+    return () => { cancelled = true; };
+  }, []);
+
+  // ── Realtime subscriptions ──
+  useEffect(() => {
+    if (!sbReady) return;
+
+    const colisSub = sb.subscribeColis((payload) => {
+      if (payload.eventType === 'UPDATE') {
+        // Refetch the updated colis to get full data with relations
+        sb.fetchColis().then(setData).catch(console.error);
+      } else if (payload.eventType === 'INSERT') {
+        sb.fetchColis().then(setData).catch(console.error);
+      }
+    });
+
+    const msgSub = sb.subscribeMessages((payload) => {
+      if (payload.eventType === 'INSERT') {
+        const newMsg = payload.new;
+        setData((prev) => prev.map((c) => {
+          if (c.id !== newMsg.colis_id) return c;
+          return {
+            ...c,
+            messages: [...c.messages, {
+              id: newMsg.id,
+              type: newMsg.type,
+              auteur: newMsg.auteur_nom || 'Système',
+              texte: newMsg.texte,
+              heure: new Date(newMsg.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
+              statut: newMsg.statut,
+              waId: newMsg.wa_id,
+            }],
+          };
+        }));
+      }
+    });
+
+    return () => {
+      supabase.removeChannel(colisSub);
+      supabase.removeChannel(msgSub);
+    };
+  }, [sbReady]);
 
   // ── UI state ──
   const [selId, setSelId] = useState(null);
@@ -78,8 +144,13 @@ export function AppProvider({ children }) {
 
   // ── Data helpers ──
   const upd = useCallback((id, changes) => {
+    // Optimistic local update
     setData((prev) => prev.map((c) => (c.id === id ? { ...c, ...changes } : c)));
-  }, []);
+    // Persist to Supabase (fire and forget, realtime will sync)
+    if (sbReady) {
+      sb.updateColis(id, changes).catch((err) => console.error('[Supabase] upd error:', err.message));
+    }
+  }, [sbReady]);
 
   const log = useCallback((id, oldStatut, newStatut) => {
     setLogs((prev) => [...prev, { id: uid(), cid: id, o: oldStatut, n: newStatut, w: auth?.u?.nom || '?' }]);
@@ -91,8 +162,9 @@ export function AppProvider({ children }) {
   // ── Client CRUD ──
   const updateClient = useCallback((id, changes, silent) => {
     setClients((prev) => prev.map((c) => (c.id === id ? { ...c, ...changes } : c)));
+    if (sbReady) sb.updateClient(id, changes).catch(console.error);
     if (!silent) flash('Client mis à jour');
-  }, [flash]);
+  }, [flash, sbReady]);
 
   const addNewClient = useCallback((cl) => {
     const id = 'cl_' + uid();
@@ -139,11 +211,13 @@ export function AppProvider({ children }) {
   // ── Notifications ──
   const markNotifRead = useCallback((nid) => {
     setNotifs((prev) => prev.map((n) => (n.id === nid ? { ...n, lu: true } : n)));
-  }, []);
+    if (sbReady) sb.markNotifRead(nid).catch(console.error);
+  }, [sbReady]);
 
   const markAllNotifsRead = useCallback(() => {
     setNotifs((prev) => prev.map((n) => ({ ...n, lu: true })));
-  }, []);
+    if (sbReady && auth?.u?.id) sb.markAllNotifsRead(auth.u.id).catch(console.error);
+  }, [sbReady, auth]);
 
   // ── Communication ──
   const sendMsg = useCallback((colisId, clientId, canal, templateKey, customMsg) => {
