@@ -8,7 +8,7 @@ import {
 import { useApp } from '../../context/AppContext';
 import { BRAND, STATUTS, STATUT_ENVOI, getDestByCP } from '../../constants';
 import { eur, labelEnvoi, trackStr, trackCount, hasTrack, searchGlobal } from '../../utils';
-import { Badge } from '../ui';
+import { Badge, ViewToggle } from '../ui';
 
 // ── Statut groups ──────────────────────────────────────────────────────────────
 const STATUTS_A_FAIRE = [
@@ -255,6 +255,112 @@ function SectionHeader({ icon: Icon, label, count, color }) {
   );
 }
 
+// ── Colis table row (for column view) ────────────────────────────────────────
+function ColisTableRow({ c, client, envois, onClick, stagger }) {
+  const envoi = envois.find((e) => e.id === c.envoi);
+  const dest = client ? getDestByCP(client.cp) : null;
+  const hasDims = c.dimL && c.dimW && c.dimH && c.poids;
+  const scs = statutCardStyle(c.statut);
+
+  return (
+    <tr
+      onClick={onClick}
+      className="anim-fade border-b border-gray-50 last:border-b-0 cursor-pointer transition-colors hover:bg-gray-50 active:bg-gray-100"
+      style={{
+        animationDelay: `${stagger * 0.03}s`,
+        borderLeft: `3px solid ${scs.border}`,
+      }}
+    >
+      <td className="px-4 py-3">
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-gray-600 font-medium truncate max-w-[140px]">{client?.nom ?? '—'}</span>
+          {dest && <span className="text-xs flex-shrink-0">{dest.flag}</span>}
+        </div>
+      </td>
+      <td className="px-4 py-3">
+        <div className="flex items-center gap-2">
+          <span className="font-black text-sm text-gray-900">{c.ref}</span>
+          {c.casier && (
+            <span
+              className="text-[10px] font-bold px-1.5 py-0.5 rounded"
+              style={{ background: `${BRAND.gold}22`, color: BRAND.goldD }}
+            >
+              {c.casier}
+            </span>
+          )}
+        </div>
+        {c.desc && <span className="text-xs text-gray-500 truncate block max-w-[160px]">{c.desc}</span>}
+      </td>
+      <td className="px-4 py-3">
+        <Badge statut={c.statut} />
+      </td>
+      <td className="px-4 py-3 text-right">
+        {c.devisTotal != null ? (
+          <span className="text-sm font-bold" style={{ color: BRAND.navy }}>{eur(c.devisTotal)}</span>
+        ) : (
+          <span className="text-xs text-gray-300">—</span>
+        )}
+      </td>
+      <td className="px-4 py-3">
+        {hasDims ? (
+          <span className="text-xs text-gray-500 font-mono">{c.dimL}×{c.dimW}×{c.dimH} cm · {c.poids} kg</span>
+        ) : (
+          <span className="text-xs text-gray-400 italic">—</span>
+        )}
+      </td>
+      <td className="px-4 py-3">
+        {envoi ? (
+          <span
+            className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
+            style={{ background: `${BRAND.navy}10`, color: BRAND.navy }}
+          >
+            {labelEnvoi(envoi)}
+          </span>
+        ) : (
+          <span className="text-xs text-gray-300">—</span>
+        )}
+      </td>
+      <td className="pr-3 py-3">
+        <ChevronRight size={14} className="text-gray-300" />
+      </td>
+    </tr>
+  );
+}
+
+function ColisTable({ items, getClient, envois, openColis }) {
+  return (
+    <div className="card rounded-2xl overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="w-full text-left">
+          <thead>
+            <tr className="border-b border-gray-100" style={{ backgroundColor: BRAND.navy + '08' }}>
+              <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-gray-500">Client</th>
+              <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-gray-500">N° Colis</th>
+              <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-gray-500">Statut</th>
+              <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-gray-500 text-right">Montant</th>
+              <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-gray-500">Dimensions</th>
+              <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-gray-500">Envoi</th>
+              <th className="w-8"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((c, i) => (
+              <ColisTableRow
+                key={c.id}
+                c={c}
+                client={getClient(c.clientId)}
+                envois={envois}
+                stagger={i}
+                onClick={() => openColis(c.id)}
+              />
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 // ── Main component ───────────────────────────────────────────────────────────
 export default function StaffDashboard({ onNewColis }) {
   const { data, clients, envois, setSelId, getClient, isStaff, page } = useApp();
@@ -265,6 +371,7 @@ export default function StaffDashboard({ onNewColis }) {
   const [pipeFilter, setPipeFilter] = useState(null);
   const [showEnvoiFilter, setShowEnvoiFilter] = useState(false);
   const [viewMode, setViewMode] = useState('status'); // 'status' | 'numero'
+  const [displayMode, setDisplayMode] = useState('cards'); // 'cards' | 'columns'
   const [showAllMissing, setShowAllMissing] = useState(false);
 
   // ── Search results ────────────────────────────────────────────────────────
@@ -736,34 +843,37 @@ export default function StaffDashboard({ onNewColis }) {
         <p className="text-xs font-semibold text-gray-500">
           {activePool.filter((c) => c.statut !== 'annule').length} colis affichés
         </p>
-        <div
-          className="inline-flex rounded-xl overflow-hidden border"
-          style={{ borderColor: '#E5E7EB' }}
-        >
-          <button
-            onClick={() => setViewMode('status')}
-            className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold transition-all"
-            style={
-              viewMode === 'status'
-                ? { background: BRAND.navy, color: 'white' }
-                : { background: 'white', color: '#6B7280' }
-            }
+        <div className="flex items-center gap-2">
+          <ViewToggle value={displayMode} onChange={setDisplayMode} />
+          <div
+            className="inline-flex rounded-xl overflow-hidden border"
+            style={{ borderColor: '#E5E7EB' }}
           >
-            <Layers size={13} strokeWidth={2.5} />
-            Statut
-          </button>
-          <button
-            onClick={() => setViewMode('numero')}
-            className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold transition-all"
-            style={
-              viewMode === 'numero'
-                ? { background: BRAND.navy, color: 'white' }
-                : { background: 'white', color: '#6B7280' }
-            }
-          >
-            <Hash size={13} strokeWidth={2.5} />
-            N° Colis
-          </button>
+            <button
+              onClick={() => setViewMode('status')}
+              className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold transition-all"
+              style={
+                viewMode === 'status'
+                  ? { background: BRAND.navy, color: 'white' }
+                  : { background: 'white', color: '#6B7280' }
+              }
+            >
+              <Layers size={13} strokeWidth={2.5} />
+              Statut
+            </button>
+            <button
+              onClick={() => setViewMode('numero')}
+              className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold transition-all"
+              style={
+                viewMode === 'numero'
+                  ? { background: BRAND.navy, color: 'white' }
+                  : { background: 'white', color: '#6B7280' }
+              }
+            >
+              <Hash size={13} strokeWidth={2.5} />
+              N° Colis
+            </button>
+          </div>
         </div>
       </div>
 
@@ -785,6 +895,8 @@ export default function StaffDashboard({ onNewColis }) {
                   <p className="text-sm font-semibold text-gray-500">Rien à traiter</p>
                   <p className="text-xs text-gray-400 mt-0.5">Tous les colis sont à jour</p>
                 </div>
+              ) : displayMode === 'columns' ? (
+                <ColisTable items={aFaire} getClient={getClient} envois={envois} openColis={openColis} />
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
                   {aFaire.map((c, i) => (
@@ -819,6 +931,8 @@ export default function StaffDashboard({ onNewColis }) {
                   <Clock size={16} className="text-amber-300 flex-shrink-0" />
                   <p className="text-sm text-amber-600 font-medium">Aucun colis en attente</p>
                 </div>
+              ) : displayMode === 'columns' ? (
+                <ColisTable items={attente} getClient={getClient} envois={envois} openColis={openColis} />
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
                   {attente.map((c, i) => (
@@ -853,6 +967,8 @@ export default function StaffDashboard({ onNewColis }) {
                   <Star size={16} className="text-emerald-300 flex-shrink-0" />
                   <p className="text-sm text-emerald-600 font-medium">Aucun colis livré (sur la sélection)</p>
                 </div>
+              ) : displayMode === 'columns' ? (
+                <ColisTable items={livres} getClient={getClient} envois={envois} openColis={openColis} />
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
                   {livres.map((c, i) => (
@@ -886,6 +1002,8 @@ export default function StaffDashboard({ onNewColis }) {
               <Package size={28} className="text-gray-300 mb-2" />
               <p className="text-sm font-semibold text-gray-500">Aucun colis</p>
             </div>
+          ) : displayMode === 'columns' ? (
+            <ColisTable items={sortedByNumero} getClient={getClient} envois={envois} openColis={openColis} />
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
               {sortedByNumero.map((c, i) => (

@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Package, Plus, ChevronRight, AlertCircle, CreditCard, CheckCircle, X, LayoutGrid, List } from 'lucide-react';
+import { Package, Plus, ChevronRight, AlertCircle, CreditCard, CheckCircle, X } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { BRAND, STATUTS } from '../../constants';
-import { Badge, Etapes, ProgressBar } from '../ui';
+import { BRAND } from '../../constants';
+import { Badge, Etapes, ProgressBar, ViewToggle } from '../ui';
 
 const TABS = [
   { key: 'actifs', label: 'En cours' },
@@ -57,25 +57,7 @@ export default function ClientColis({ onNewColis }) {
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-black text-gray-900">Mes colis</h2>
         <div className="flex items-center gap-2">
-          {/* View toggle */}
-          <div className="flex bg-gray-100 rounded-xl p-0.5">
-            <button
-              onClick={() => setViewMode('cards')}
-              className={`p-1.5 rounded-lg transition-all ${viewMode === 'cards' ? 'bg-white shadow-sm' : 'text-gray-400'}`}
-              style={viewMode === 'cards' ? { color: BRAND.navy } : {}}
-              title="Vue cartes"
-            >
-              <LayoutGrid size={16} strokeWidth={2} />
-            </button>
-            <button
-              onClick={() => setViewMode('columns')}
-              className={`p-1.5 rounded-lg transition-all ${viewMode === 'columns' ? 'bg-white shadow-sm' : 'text-gray-400'}`}
-              style={viewMode === 'columns' ? { color: BRAND.navy } : {}}
-              title="Vue colonnes"
-            >
-              <List size={16} strokeWidth={2} />
-            </button>
-          </div>
+          <ViewToggle value={viewMode} onChange={setViewMode} />
           <button
             onClick={onNewColis}
             className="flex items-center gap-1.5 px-3 py-2 rounded-xl font-bold text-sm text-white active:scale-95 transition-all"

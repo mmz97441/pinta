@@ -1,12 +1,13 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Package, AlertCircle, CreditCard, Plus, CheckCircle, Clock, TrendingUp, ChevronRight } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { BRAND, STATUTS, getDestByCP } from '../../constants';
 import { eur } from '../../utils';
-import { Badge, ProgressBar } from '../ui';
+import { Badge, ProgressBar, ViewToggle } from '../ui';
 
 export default function ClientAccueil({ onNewColis }) {
   const { authCl, data, clients, ask, feuVertBulk, payer, setSelId, setClientTab, setColisFilter } = useApp();
+  const [viewMode, setViewMode] = useState('cards');
 
   const cl = authCl;
   const dest = cl ? getDestByCP(cl.cp) : null;
@@ -222,31 +223,91 @@ export default function ClientAccueil({ onNewColis }) {
           <div className="flex items-center gap-2 mb-2">
             <Package size={15} style={{ color: BRAND.navy }} />
             <h3 className="font-bold text-sm text-gray-800">Colis en cours</h3>
+            <div className="ml-auto">
+              <ViewToggle value={viewMode} onChange={setViewMode} />
+            </div>
           </div>
-          <div className="space-y-2.5">
-            {colisCours.slice(0, 3).map((p) => (
-              <button key={p.id} onClick={() => setSelId(p.id)} className="card p-4 w-full text-left hover:shadow-md active:scale-[0.98] transition-all cursor-pointer">
-                <div className="flex items-start justify-between gap-2 mb-1">
-                  <div className="flex-1 min-w-0">
-                    <p className="font-bold text-sm text-gray-900">{p.ref}</p>
-                    <p className="text-xs text-gray-500 truncate">{p.desc}</p>
+
+          {viewMode === 'cards' ? (
+            <div className="space-y-2.5">
+              {colisCours.slice(0, 3).map((p) => (
+                <button key={p.id} onClick={() => setSelId(p.id)} className="card p-4 w-full text-left hover:shadow-md active:scale-[0.98] transition-all cursor-pointer">
+                  <div className="flex items-start justify-between gap-2 mb-1">
+                    <div className="flex-1 min-w-0">
+                      <p className="font-bold text-sm text-gray-900">{p.ref}</p>
+                      <p className="text-xs text-gray-500 truncate">{p.desc}</p>
+                    </div>
+                    <Badge statut={p.statut} />
                   </div>
-                  <Badge statut={p.statut} />
-                </div>
-                <ProgressBar statut={p.statut} />
-              </button>
-            ))}
-            {colisCours.length > 3 && (
-              <button
-                onClick={() => { setColisFilter(null); setClientTab('colis'); }}
-                className="w-full flex items-center justify-center gap-1.5 py-2.5 text-xs font-bold rounded-xl active:scale-95 transition-all"
-                style={{ color: BRAND.navy, backgroundColor: BRAND.navy + '08' }}
-              >
-                Voir les {colisCours.length} colis en cours
-                <ChevronRight size={13} />
-              </button>
-            )}
-          </div>
+                  <ProgressBar statut={p.statut} />
+                </button>
+              ))}
+              {colisCours.length > 3 && (
+                <button
+                  onClick={() => { setColisFilter(null); setClientTab('colis'); }}
+                  className="w-full flex items-center justify-center gap-1.5 py-2.5 text-xs font-bold rounded-xl active:scale-95 transition-all"
+                  style={{ color: BRAND.navy, backgroundColor: BRAND.navy + '08' }}
+                >
+                  Voir les {colisCours.length} colis en cours
+                  <ChevronRight size={13} />
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="card rounded-2xl overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="border-b border-gray-100" style={{ backgroundColor: BRAND.navy + '08' }}>
+                      <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-gray-500">N° Colis</th>
+                      <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-gray-500">Description</th>
+                      <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-gray-500">Statut</th>
+                      <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-gray-500 text-right">Montant</th>
+                      <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-gray-500">Dimensions</th>
+                      <th className="w-8"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {colisCours.map((p, i) => (
+                      <tr
+                        key={p.id}
+                        onClick={() => setSelId(p.id)}
+                        className="anim-fade border-b border-gray-50 last:border-b-0 cursor-pointer transition-colors hover:bg-gray-50 active:bg-gray-100"
+                        style={{ animationDelay: `${i * 0.03}s` }}
+                      >
+                        <td className="px-4 py-3">
+                          <span className="font-black text-sm text-gray-900">{p.ref}</span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="text-xs text-gray-600 truncate block max-w-[180px]">{p.desc}</span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <Badge statut={p.statut} />
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          {p.devisTotal != null ? (
+                            <span className="text-sm font-bold" style={{ color: BRAND.navy }}>{p.devisTotal.toFixed(2)} €</span>
+                          ) : (
+                            <span className="text-xs text-gray-300">—</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          {p.dimL != null ? (
+                            <span className="text-xs text-gray-500 font-mono">{p.dimL}×{p.dimW}×{p.dimH} cm · {p.poids} kg</span>
+                          ) : (
+                            <span className="text-xs text-gray-300">—</span>
+                          )}
+                        </td>
+                        <td className="pr-3 py-3">
+                          <ChevronRight size={14} className="text-gray-300" />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
