@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import {
   Plus, Search, X, BarChart3, CircleDot, Clock, CheckCircle,
   ChevronRight, AlertTriangle, Filter, Package,
-  User, Clipboard, Ruler, Wrench, CreditCard, Plane, Star,
+  User, Ruler, Wrench, CreditCard, Plane, Star,
   Hash, Layers,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
@@ -12,7 +12,7 @@ import { Badge, ViewToggle } from '../ui';
 
 // ── Statut groups ──────────────────────────────────────────────────────────────
 const STATUTS_A_FAIRE = [
-  'annonce', 'receptionne', 'mesure', 'autorise',
+  'receptionne', 'mesure', 'autorise',
   'en_preparation', 'paye', 'expedie', 'transit', 'arrive', 'livraison',
 ];
 const STATUTS_ATTENTE = ['attente_feu_vert', 'devis_envoye', 'attente_paiement'];
@@ -35,7 +35,7 @@ const PIPELINE = [
     key: 'reception',
     label: 'Réception',
     icon: Package,
-    statuts: ['annonce', 'receptionne', 'mesure'],
+    statuts: ['receptionne', 'mesure'],
     color: BRAND.navy,
   },
   {
@@ -78,7 +78,6 @@ const PIPELINE = [
 // ── Icon per statut ─────────────────────────────────────────────────────────
 function statutIcon(statut) {
   const map = {
-    annonce: Clipboard,
     receptionne: Package,
     mesure: Ruler,
     attente_feu_vert: Clock,
@@ -111,7 +110,6 @@ function DimsChip({ c }) {
 // ── Statut card colors ──────────────────────────────────────────────────────
 function statutCardStyle(statut) {
   const map = {
-    annonce:            { bg: '#F8FAFC', border: '#94A3B8', icon: '#64748B' },
     receptionne:        { bg: '#FFFBEB', border: '#F59E0B', icon: '#D97706' },
     mesure:             { bg: '#FEF9C3', border: '#EAB308', icon: '#CA8A04' },
     attente_feu_vert:   { bg: '#FFF7ED', border: '#F97316', icon: '#EA580C' },

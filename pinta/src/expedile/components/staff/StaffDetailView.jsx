@@ -10,7 +10,6 @@ import { Ligne } from '../ui';
 // ── Status border color helper ───────────────────────────────────────────────
 function statusBorderColor(statut) {
   const map = {
-    annonce: '#94A3B8',
     receptionne: '#F59E0B',
     mesure: '#EAB308',
     attente_feu_vert: '#F97316',
@@ -33,7 +32,6 @@ function statusBorderColor(statut) {
 // ── Status template keys for quick messages ──────────────────────────────────
 function templatesForStatut(statut) {
   const map = {
-    annonce: ['reception', 'facture_manquante', 'libre'],
     receptionne: ['reception', 'facture_manquante', 'libre'],
     mesure: ['demande_feu_vert', 'facture_manquante', 'libre'],
     attente_feu_vert: ['relance_feu_vert', 'demande_feu_vert', 'libre'],
@@ -449,7 +447,7 @@ export default function StaffDetailView() {
   }
 
   // ── Correction bar availability ───────────────────────────────────────────
-  const canRevert = !!sel.statut && sel.statut !== 'annule' && sel.statut !== 'livre' && sel.statut !== 'annonce';
+  const canRevert = !!sel.statut && sel.statut !== 'annule' && sel.statut !== 'livre';
   const canCancel = !!sel.statut && sel.statut !== 'annule' && sel.statut !== 'livre';
 
   // ════════════════════════════════════════════════════════════════════════
@@ -459,169 +457,7 @@ export default function StaffDetailView() {
   function renderActionBlock() {
     switch (sel.statut) {
 
-      // ── 1. ANNONCE ──────────────────────────────────────────────────────
-      case 'annonce': {
-        return (
-          <Section title="Réceptionner ce colis" icon={Camera} color={borderColor}>
-            <div className="space-y-4">
-              {/* Photo simulation */}
-              <div>
-                <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Photo de réception</p>
-                <button
-                  onClick={() => { setPhotoTaken(true); flash('Photo simulée enregistrée'); }}
-                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 text-sm font-bold transition-all active:scale-95"
-                  style={
-                    photoTaken
-                      ? { borderColor: '#22C55E', color: '#16A34A', background: '#F0FDF4' }
-                      : { borderColor: BRAND.navy, color: BRAND.navy, background: 'white' }
-                  }
-                >
-                  {photoTaken
-                    ? <><Check size={15} /> Photo prise</>
-                    : <><Camera size={15} /> Prendre une photo</>
-                  }
-                </button>
-              </div>
-
-              {/* Produits interdits checklist */}
-              <div>
-                <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
-                  Vérification produits interdits
-                </p>
-                <div className="space-y-1.5">
-                  {PRODUITS_INTERDITS.map((item) => {
-                    const checked = interdits.includes(item);
-                    return (
-                      <button
-                        key={item}
-                        onClick={() => setInterdits((prev) =>
-                          checked ? prev.filter((x) => x !== item) : [...prev, item],
-                        )}
-                        className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl border text-left text-sm transition-all"
-                        style={
-                          checked
-                            ? { borderColor: '#EF4444', color: '#DC2626', background: '#FEF2F2' }
-                            : { borderColor: '#E5E7EB', color: '#374151', background: '#F9FAFB' }
-                        }
-                      >
-                        <div
-                          className="w-4 h-4 rounded flex-shrink-0 flex items-center justify-center border-2"
-                          style={checked ? { background: '#EF4444', borderColor: '#EF4444' } : { borderColor: '#D1D5DB' }}
-                        >
-                          {checked && <Check size={10} color="white" />}
-                        </div>
-                        {item}
-                        {checked && <AlertTriangle size={13} className="ml-auto text-red-400" />}
-                      </button>
-                    );
-                  })}
-                </div>
-                {interdits.length > 0 && (
-                  <div className="mt-2 p-2.5 rounded-lg bg-red-50 border border-red-200">
-                    <p className="text-xs font-bold text-red-700">
-                      Attention : {interdits.length} produit(s) interdit(s) coché(s)
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              {/* Casier */}
-              <Field
-                label="Casier *"
-                value={casierTmp}
-                onChange={(e) => setCasierTmp(e.target.value)}
-                placeholder="Ex : A-03"
-              />
-
-              {/* Dimensions (optional at reception — saves a step) */}
-              {(() => {
-                const trackingsActive = sel.trackings?.filter((t) => t) || [];
-                const isMulti = trackingsActive.length > 1;
-                return (
-                  <div>
-                    <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
-                      Mesurer maintenant <span className="normal-case font-normal text-gray-400">(facultatif — sinon à l'étape suivante)</span>
-                    </p>
-                    {isMulti ? (
-                      <div className="space-y-3">
-                        {trackingsActive.map((tracking, idx) => {
-                          const d = multiDims[idx] || { dimL: '', dimW: '', dimH: '', poids: '' };
-                          const updateDim = (field, val) => setMultiDims((prev) => ({
-                            ...prev, [idx]: { ...prev[idx], dimL: '', dimW: '', dimH: '', poids: '', ...prev[idx], [field]: val },
-                          }));
-                          return (
-                            <div key={idx} className="rounded-xl border border-gray-200 p-3 space-y-3">
-                              <p className="text-xs font-black uppercase tracking-wider" style={{ color: BRAND.navy }}>
-                                Colis {idx + 1} — <span className="font-mono">{tracking}</span>
-                              </p>
-                              <div className="grid grid-cols-2 gap-3">
-                                <Field label="Long. (cm)" type="number" min="0" step="0.5"
-                                  value={d.dimL} onChange={(e) => updateDim('dimL', e.target.value)}
-                                  placeholder="40" unit="cm" />
-                                <Field label="Larg. (cm)" type="number" min="0" step="0.5"
-                                  value={d.dimW} onChange={(e) => updateDim('dimW', e.target.value)}
-                                  placeholder="30" unit="cm" />
-                                <Field label="Haut. (cm)" type="number" min="0" step="0.5"
-                                  value={d.dimH} onChange={(e) => updateDim('dimH', e.target.value)}
-                                  placeholder="20" unit="cm" />
-                                <Field label="Poids (kg)" type="number" min="0" step="0.1"
-                                  value={d.poids} onChange={(e) => updateDim('poids', e.target.value)}
-                                  placeholder="2.5" unit="kg" />
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    ) : (
-                      <div className="grid grid-cols-2 gap-3">
-                        <Field label="Longueur (cm)" type="number" min="0" step="0.5"
-                          value={dims.dimL} onChange={(e) => setDims({ ...dims, dimL: e.target.value })}
-                          placeholder="40" unit="cm" />
-                        <Field label="Largeur (cm)" type="number" min="0" step="0.5"
-                          value={dims.dimW} onChange={(e) => setDims({ ...dims, dimW: e.target.value })}
-                          placeholder="30" unit="cm" />
-                        <Field label="Hauteur (cm)" type="number" min="0" step="0.5"
-                          value={dims.dimH} onChange={(e) => setDims({ ...dims, dimH: e.target.value })}
-                          placeholder="20" unit="cm" />
-                        <Field label="Poids (kg)" type="number" min="0" step="0.1"
-                          value={dims.poids} onChange={(e) => setDims({ ...dims, poids: e.target.value })}
-                          placeholder="2.5" unit="kg" />
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
-
-              {/* Missing invoice warning */}
-              {missingFacture && (
-                <div className="flex items-start gap-2 p-3 rounded-xl bg-amber-50 border border-amber-200">
-                  <AlertTriangle size={14} className="text-amber-500 flex-shrink-0 mt-0.5" />
-                  <div>
-                    <p className="text-xs font-bold text-amber-800">Facture manquante</p>
-                    <p className="text-xs text-amber-600 mt-0.5">
-                      Pensez à demander la facture d'origine au client pour le calcul des taxes.
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {formErr && <p className="text-xs text-red-500 font-medium">{formErr}</p>}
-
-              <div className="flex flex-col gap-2">
-                <BtnPrimary onClick={() => handleReceptionner(false)}>
-                  <Check size={15} />
-                  Réceptionner
-                </BtnPrimary>
-                <BtnWA onClick={() => handleReceptionner(true)}>
-                  + WhatsApp — notifier le client
-                </BtnWA>
-              </div>
-            </div>
-          </Section>
-        );
-      }
-
-      // ── 2. RECEPTIONNE ─────────────────────────────────────────────────
+      // ── 1. RECEPTIONNE ─────────────────────────────────────────────────
       case 'receptionne': {
         const trackingsActive = sel.trackings?.filter((t) => t) || [];
         const isMulti = trackingsActive.length > 1;

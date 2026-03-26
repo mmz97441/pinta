@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Package, Plus, ChevronRight, AlertCircle, CreditCard, CheckCircle, X } from 'lucide-react';
+import { Package, ChevronRight, AlertCircle, CreditCard, CheckCircle, X } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { BRAND } from '../../constants';
 import { eur } from '../../utils';
@@ -16,7 +16,7 @@ const FILTER_LABELS = {
   a_payer: 'À payer',
 };
 
-export default function ClientColis({ onNewColis }) {
+export default function ClientColis() {
   const { authCl, data, setSelId, colisFilter, setColisFilter, ask, payer } = useApp();
   const [colisTab, setColisTab] = useState('actifs');
   const [viewMode, setViewMode] = useState('cards'); // 'cards' | 'columns'
@@ -57,20 +57,7 @@ export default function ClientColis({ onNewColis }) {
       {/* ── Header ── */}
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-black text-gray-900">Mes colis</h2>
-        <div className="flex items-center gap-2">
-          <ViewToggle value={viewMode} onChange={setViewMode} />
-          <button
-            onClick={onNewColis}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl font-bold text-sm text-white active:scale-95 transition-all"
-            style={{
-              background: `linear-gradient(135deg, ${BRAND.navy}, ${BRAND.navyL})`,
-              boxShadow: `0 2px 10px rgba(27,58,75,0.25)`,
-            }}
-          >
-            <Plus size={15} strokeWidth={2.5} />
-            Pré-annoncer
-          </button>
-        </div>
+        <ViewToggle value={viewMode} onChange={setViewMode} />
       </div>
 
       {/* ── Sub-tabs ── */}
@@ -141,19 +128,9 @@ export default function ClientColis({ onNewColis }) {
             {colisFilter
               ? 'Aucun colis ne correspond à ce filtre.'
               : colisTab === 'actifs'
-              ? 'Pré-annoncez votre prochain colis pour démarrer !'
+              ? 'Aucun colis en cours pour le moment.'
               : 'Vos colis livrés apparaîtront ici.'}
           </p>
-          {colisTab === 'actifs' && (
-            <button
-              onClick={onNewColis}
-              className="mt-5 flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm text-white active:scale-95 transition-all"
-              style={{ background: `linear-gradient(135deg, ${BRAND.navy}, ${BRAND.navyL})` }}
-            >
-              <Plus size={15} strokeWidth={2.5} />
-              Pré-annoncer un colis
-            </button>
-          )}
         </div>
       ) : viewMode === 'cards' ? (
         /* ── Vue Cartes ── */

@@ -190,36 +190,13 @@ export default function ClientDetailView() {
   const phaseContent = (phaseIdx) => {
     const phase = PHASES_CLIENT[phaseIdx];
 
-    // Phase 0 – Annonce
+    // Phase 0 – Réception
     if (phaseIdx === 0) {
-      return (
-        <div className="space-y-3">
-          <p className="text-xs text-gray-500 leading-relaxed">
-            Votre pré-annonce a bien été enregistrée. Nous attendons la réception physique de votre colis dans notre entrepôt parisien.
-          </p>
-          {sel.desc && (
-            <div className="rounded-xl p-3 text-xs" style={{ backgroundColor: BRAND.navy + '08' }}>
-              <span className="font-bold text-gray-600">Description : </span>
-              <span className="text-gray-700">{sel.desc}</span>
-            </div>
-          )}
-          {hasTrack(sel) && (
-            <div className="rounded-xl bg-gray-50 p-3">
-              <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">Tracking</p>
-              <p className="text-xs font-mono text-gray-700 break-all">{trackStr(sel)}</p>
-            </div>
-          )}
-        </div>
-      );
-    }
-
-    // Phase 1 – Réception
-    if (phaseIdx === 1) {
       const hasDims = sel.dimL && sel.dimW && sel.dimH && sel.poids;
       return (
         <div className="space-y-3">
           <p className="text-xs text-gray-500 leading-relaxed">
-            {curPhaseIdx === 1
+            {curPhaseIdx === 0
               ? 'Votre colis est arrivé à l\'entrepôt. Nous sommes en train de le mesurer.'
               : 'Votre colis a été réceptionné et mesuré.'}
           </p>
@@ -267,7 +244,7 @@ export default function ClientDetailView() {
     }
 
     // Phase 2 – Accord (feu vert)
-    if (phaseIdx === 2) {
+    if (phaseIdx === 1) {
       const isFV = sel.statut === 'attente_feu_vert';
       const isAutorise = sel.statut === 'autorise' || (sel.feuVert === 'autorise');
       const isRefuse = sel.statut === 'refuse_client';
@@ -372,7 +349,7 @@ export default function ClientDetailView() {
     }
 
     // Phase 3 – Préparation
-    if (phaseIdx === 3) {
+    if (phaseIdx === 2) {
       return (
         <div className="space-y-2">
           <p className="text-xs text-gray-500 leading-relaxed">
@@ -397,7 +374,7 @@ export default function ClientDetailView() {
     }
 
     // Phase 4 – Devis & Paiement
-    if (phaseIdx === 4) {
+    if (phaseIdx === 3) {
       const isPay = sel.statut === 'attente_paiement';
       const isDevis = sel.statut === 'devis_envoye';
       const isPaye = sel.paiementMontant != null;
@@ -485,7 +462,7 @@ export default function ClientDetailView() {
     }
 
     // Phase 5 – Expédition
-    if (phaseIdx === 5) {
+    if (phaseIdx === 4) {
       return (
         <div className="space-y-2">
           <p className="text-xs text-gray-500 leading-relaxed">
@@ -521,7 +498,7 @@ export default function ClientDetailView() {
     }
 
     // Phase 6 – Livraison
-    if (phaseIdx === 6) {
+    if (phaseIdx === 5) {
       const isLivre = sel.statut === 'livre';
       const isEnLivraison = sel.statut === 'livraison';
       const isArrive = sel.statut === 'arrive';

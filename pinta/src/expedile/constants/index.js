@@ -10,7 +10,6 @@ export const BRAND = {
 
 // ══════════ STATUTS COLIS ══════════
 export const STATUTS = {
-  annonce:            { label: 'Annoncé par le client',       labelClient: 'Pré-annoncé',                   couleur: 'bg-slate-200 text-slate-700',    phase: 1, actionStaff: 'Réceptionner ce colis',          actionClient: null },
   receptionne:        { label: 'Réceptionné',                 labelClient: null,                            couleur: 'bg-amber-200 text-amber-800',    phase: 1, actionStaff: 'Mesurer ce colis',               actionClient: null },
   mesure:             { label: 'Mesuré à réception',          labelClient: 'Mesuré',                        couleur: 'bg-yellow-200 text-yellow-800',  phase: 1, actionStaff: 'Demander le feu vert',            actionClient: null },
   attente_feu_vert:   { label: "En attente d'accord client",  labelClient: 'Votre accord est attendu',      couleur: 'bg-orange-200 text-orange-800',  phase: 2, actionStaff: 'En attente du client',            actionClient: 'Donner votre accord' },
@@ -29,7 +28,6 @@ export const STATUTS = {
 };
 
 export const TRANSITIONS = {
-  annonce: ['receptionne'],
   receptionne: ['mesure'],
   mesure: ['attente_feu_vert'],
   attente_feu_vert: ['autorise', 'refuse_client'],
@@ -48,7 +46,6 @@ export const TRANSITIONS = {
 };
 
 export const PREV_STATUT = {
-  receptionne: 'annonce',
   mesure: 'receptionne',
   attente_feu_vert: 'mesure',
   autorise: 'attente_feu_vert',
@@ -127,7 +124,6 @@ export const STATUT_ENVOI = {
 
 // ══════════ PHASES CLIENT (timeline) ══════════
 export const PHASES_CLIENT = [
-  { key: 'annonce',     label: 'Pré-annoncé',       statuts: ['annonce'] },
   { key: 'reception',   label: 'Réceptionné',       statuts: ['receptionne', 'mesure'] },
   { key: 'feu_vert',    label: 'Votre accord',      statuts: ['attente_feu_vert', 'autorise'] },
   { key: 'preparation', label: 'Préparation',       statuts: ['en_preparation'] },

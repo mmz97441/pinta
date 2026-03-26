@@ -5,8 +5,8 @@ import { BRAND } from '../../constants';
 const STEPS = [
   {
     icon: Package,
-    title: 'Pré-annoncez vos achats',
-    desc: 'Passez commande chez Amazon, Nike, Temu, Shein… et ajoutez simplement le numéro de suivi dans l\'app. On attend votre colis à Paris.',
+    title: 'Faites vos achats en ligne',
+    desc: 'Passez commande chez Amazon, Nike, Temu, Shein… et faites livrer à notre entrepôt de Paris. On réceptionne votre colis pour vous.',
     color: BRAND.navy,
     illustration: (
       <div className="flex items-center justify-center gap-3 my-4">

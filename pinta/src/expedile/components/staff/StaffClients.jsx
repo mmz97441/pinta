@@ -233,7 +233,7 @@ export default function StaffClients() {
   function getInvitationWALink(cl) {
     const prenom = cl.nom ? cl.nom.split(' ')[0] : '';
     const dest = getDestByCP(cl.cp);
-    const msg = `Bonjour ${prenom} !\n\nBienvenue chez Expedîle ! Votre espace client est prêt.\n\nVous pouvez dès maintenant pré-annoncer vos colis depuis la métropole vers ${dest.flag} ${dest.nom}.\n\nConnectez-vous ici :\nhttps://expedile.re/app\n\nÀ très vite !`;
+    const msg = `Bonjour ${prenom} !\n\nBienvenue chez Expedîle ! Votre espace client est prêt.\n\nVous pouvez dès maintenant suivre vos colis depuis la métropole vers ${dest.flag} ${dest.nom}.\n\nConnectez-vous ici :\nhttps://expedile.re/app\n\nÀ très vite !`;
     return waLink(cl.tel, msg);
   }
 

@@ -37,7 +37,7 @@ export function AppProvider({ children }) {
     { id: 'n1', date: '09/02 08:30', titre: 'Colis réceptionné', msg: 'Votre colis EXP-0001 est arrivé à Paris', lu: false, colisId: 'p1' },
     { id: 'n2', date: '08/02 16:00', titre: 'Accord requis', msg: 'Votre colis EXP-0001 a été mesuré. Donnez votre feu vert pour la préparation !', lu: false, colisId: 'p1' },
     { id: 'n3', date: '07/02 14:20', titre: 'Devis à payer', msg: 'Le devis final de EXP-0008 est de 54,67€', lu: true, colisId: 'p7' },
-    { id: 'n4', date: '06/02 09:15', titre: 'Colis pré-annoncé', msg: 'Votre pré-annonce EXP-0004 a bien été enregistrée', lu: true, colisId: 'p4' },
+    { id: 'n4', date: '06/02 09:15', titre: 'Colis réceptionné', msg: 'Votre colis EXP-0004 a bien été réceptionné', lu: true, colisId: 'p4' },
   ]);
 
   // ── UI state ──

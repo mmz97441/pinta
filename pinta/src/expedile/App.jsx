@@ -163,8 +163,8 @@ function AppContent() {
                 }}
               />
             )}
-            {clientTab === 'accueil' && <ClientAccueil onNewColis={() => setModal(true)} />}
-            {clientTab === 'colis' && <ClientColis onNewColis={() => setModal(true)} />}
+            {clientTab === 'accueil' && <ClientAccueil />}
+            {clientTab === 'colis' && <ClientColis />}
             {clientTab === 'notifs' && <ClientNotifs />}
             {clientTab === 'profil' && <ClientProfil />}
             <ClientBottomNav />

@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
-import { Package, AlertCircle, CreditCard, Plus, CheckCircle, Clock, TrendingUp, ChevronRight } from 'lucide-react';
+import { Package, AlertCircle, CreditCard, CheckCircle, Clock, TrendingUp, ChevronRight } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { BRAND, STATUTS, getDestByCP } from '../../constants';
 import { eur } from '../../utils';
 import { Badge, ProgressBar, ViewToggle } from '../ui';
 
-export default function ClientAccueil({ onNewColis }) {
+export default function ClientAccueil() {
   const { authCl, data, clients, ask, feuVertBulk, payer, setSelId, setClientTab, setColisFilter } = useApp();
   const [viewMode, setViewMode] = useState('cards');
 
@@ -359,51 +359,6 @@ export default function ClientAccueil({ onNewColis }) {
         </div>
       )}
 
-      {/* ── Pré-annoncer (if no active colis) ── */}
-      {enCours.length === 0 && (
-        <div className="anim-fade-up card p-6 rounded-2xl text-center space-y-4">
-          <div
-            className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto"
-            style={{ backgroundColor: BRAND.navy + '10' }}
-          >
-            <Package size={28} style={{ color: BRAND.navy }} strokeWidth={1.5} />
-          </div>
-          <div>
-            <p className="font-black text-gray-800 text-base">Envoyez vos achats chez vous</p>
-            <p className="text-xs text-gray-500 mt-1 max-w-[280px] mx-auto leading-relaxed">
-              {dest ? `De Paris vers ${dest.flag} ${dest.nom}` : 'De la métropole vers les DOM-TOM'} — on s'occupe de tout.
-            </p>
-          </div>
-          <div className="space-y-2 text-left max-w-[260px] mx-auto">
-            {[
-              { step: '1', text: 'Pré-annoncez votre commande' },
-              { step: '2', text: 'On réceptionne et optimise le colis' },
-              { step: '3', text: 'Livraison chez vous' },
-            ].map(({ step, text }) => (
-              <div key={step} className="flex items-center gap-3">
-                <div
-                  className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black flex-shrink-0"
-                  style={{ backgroundColor: BRAND.navy + '12', color: BRAND.navy }}
-                >
-                  {step}
-                </div>
-                <span className="text-xs text-gray-600 font-medium">{text}</span>
-              </div>
-            ))}
-          </div>
-          <button
-            onClick={onNewColis}
-            className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-bold text-white text-sm active:scale-95 transition-all"
-            style={{
-              background: `linear-gradient(135deg, ${BRAND.navy}, ${BRAND.navyL})`,
-              boxShadow: `0 4px 16px rgba(27,58,75,0.25)`,
-            }}
-          >
-            <Plus size={16} strokeWidth={2.5} />
-            Pré-annoncer un colis
-          </button>
-        </div>
-      )}
     </div>
   );
 }

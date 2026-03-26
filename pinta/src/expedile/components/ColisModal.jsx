@@ -1,9 +1,8 @@
-import React, { useState, useMemo } from 'react';
-import { X, FileText, Search, Package, ChevronRight, UserPlus, Link2, Plus, Ruler } from 'lucide-react';
+import React, { useState } from 'react';
+import { X, FileText, Search, UserPlus, Ruler } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { BRAND, getDestByCP } from '../constants';
-import { uid, searchClients, waLink, trackStr } from '../utils';
-import { Badge } from './ui';
+import { uid, searchClients, waLink } from '../utils';
 
 const EMPTY_FORM = {
   trackings: [''],
@@ -56,17 +55,10 @@ export default function ColisModal({ open, onClose }) {
   const [clientSearchOpen, setClientSearchOpen] = useState(false);
   const [selectedClient, setSelectedClient] = useState(null);
 
-  // ── Hybrid system state ──
-  const [matchedAnnonce, setMatchedAnnonce] = useState(null);
+  // ── State ──
   const [newClientMode, setNewClientMode] = useState(false);
   const [newClientForm, setNewClientForm] = useState(EMPTY_NEW_CLIENT);
   const [newClientErr, setNewClientErr] = useState({});
-
-  // ── Pre-announcements for selected client (hook must be before early return) ──
-  const pendingAnnonces = useMemo(() => {
-    if (!selectedClient) return [];
-    return data.filter((p) => p.clientId === selectedClient.id && p.statut === 'annonce');
-  }, [selectedClient, data]);
 
   if (!open) return null;
 
@@ -98,7 +90,6 @@ export default function ColisModal({ open, onClose }) {
     setClientSearchQ('');
     setClientSearchOpen(false);
     setSelectedClient(null);
-    setMatchedAnnonce(null);
     setNewClientMode(false);
     setNewClientForm(EMPTY_NEW_CLIENT);
     setNewClientErr({});
@@ -114,24 +105,8 @@ export default function ColisModal({ open, onClose }) {
     setSelectedClient(cl);
     setClientSearchQ(cl.nom);
     setClientSearchOpen(false);
-    setMatchedAnnonce(null);
     setNewClientMode(false);
     setFormErr((prev) => ({ ...prev, client: undefined }));
-  };
-
-  // ── Match a pre-announcement ────────────────────────────
-  const handleSelectAnnonce = (annonce) => {
-    if (matchedAnnonce?.id === annonce.id) {
-      setMatchedAnnonce(null);
-    } else {
-      setMatchedAnnonce(annonce);
-      setNf((prev) => ({
-        ...prev,
-        d: annonce.desc,
-        v: annonce.valeur ? String(annonce.valeur) : '',
-        trackings: annonce.trackings && annonce.trackings.length > 0 ? annonce.trackings : [''],
-      }));
-    }
   };
 
   // ── New client inline ─────────────────────────────────────
@@ -151,7 +126,7 @@ export default function ColisModal({ open, onClose }) {
     const errs = {};
     if (isStaff) {
       if (!selectedClient && !newClientMode) errs.client = 'Sélectionnez un client';
-      if (!matchedAnnonce && !nf.d.trim()) errs.d = 'Description requise';
+      if (!nf.d.trim()) errs.d = 'Description requise';
       if (!nf.casier.trim()) errs.casier = 'Numéro de casier requis';
     } else {
       if (!nf.d.trim()) errs.d = 'Description requise';
@@ -160,34 +135,7 @@ export default function ColisModal({ open, onClose }) {
     return Object.keys(errs).length === 0;
   };
 
-  // ── submit: staff matches a pre-announcement ──────────────
-  const handleMatchReception = (sendWA) => {
-    if (!nf.casier.trim()) {
-      setFormErr({ casier: 'Numéro de casier requis' });
-      return;
-    }
-    const annonce = matchedAnnonce;
-    const cl = selectedClient;
-
-    log(annonce.id, annonce.statut, 'receptionne');
-    upd(annonce.id, { statut: 'receptionne', casier: nf.casier.trim(), dateReception: new Date().toISOString() });
-
-    if (sendWA && cl?.tel) {
-      const msg =
-        `Bonjour ${cl.nom.split(' ')[0]} 👋\n\nVotre colis pré-annoncé *${annonce.ref}* est bien arrivé à notre entrepôt de Paris !\n\n` +
-        `📦 Contenu : ${annonce.desc}\n` +
-        (annonce.trackings?.some((t) => t)
-          ? `🔍 Tracking : ${annonce.trackings.filter((t) => t).join(', ')}\n`
-          : '') +
-        `\nVotre pré-annonce a bien été rattachée. Nous allons le mesurer et peser. On revient vers vous rapidement !\n\n_Expedîle_`;
-      window.open(waLink(cl.tel, msg), '_blank');
-    }
-
-    flash(`${annonce.ref} rattaché et réceptionné — casier ${nf.casier.trim()}`);
-    resetAndClose();
-  };
-
-  // ── submit: staff new colis (blind reception) ──────────────
+  // ── submit: staff new colis (reception) ──────────────
   const handleReceptionner = (sendWA) => {
     // If in new client mode, create client first
     let clientId;
@@ -231,16 +179,6 @@ export default function ColisModal({ open, onClose }) {
     const hasDims = nf.dimL && nf.dimW && nf.dimH && nf.poids;
     const label = sendWA ? 'réceptionné + WhatsApp envoyé' : 'réceptionné';
     flash(`Colis ${newColis.ref} ${label}${hasDims ? ' + mesuré' : ''} — casier ${nf.casier.trim()}`);
-    resetAndClose();
-  };
-
-  // ── submit (client) ───────────────────────────────────────
-  const handleAnnonce = () => {
-    if (!validate()) return;
-    const clientId = authCl?.id;
-    const newColis = buildColis(clientId, 'annonce');
-    setData((prev) => [...prev, newColis]);
-    flash(`Pré-annonce ${newColis.ref} enregistrée`);
     resetAndClose();
   };
 
@@ -341,7 +279,7 @@ export default function ColisModal({ open, onClose }) {
 
   const labelCls = 'block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1';
 
-  const isMatchMode = isStaff && matchedAnnonce;
+  const isMatchMode = false;
 
   // ─────────────────────────────────────────────────────────
   return (
@@ -357,17 +295,8 @@ export default function ColisModal({ open, onClose }) {
         <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-gray-100">
           <div>
             <h2 className="text-lg font-black text-gray-900">
-              {isStaff
-                ? isMatchMode
-                  ? 'Rattacher une pré-annonce'
-                  : 'Réceptionner un colis'
-                : 'Pré-annoncer un colis'}
+              Réceptionner un colis
             </h2>
-            {isStaff && isMatchMode && (
-              <p className="text-xs text-gray-400 mt-0.5">
-                Le colis physique sera rattaché à la pré-annonce {matchedAnnonce.ref}
-              </p>
-            )}
           </div>
           <button
             onClick={resetAndClose}
@@ -398,7 +327,6 @@ export default function ColisModal({ open, onClose }) {
                     onChange={(e) => {
                       setClientSearchQ(e.target.value);
                       setSelectedClient(null);
-                      setMatchedAnnonce(null);
                       setClientSearchOpen(true);
                     }}
                     onFocus={() => setClientSearchOpen(true)}
@@ -436,7 +364,6 @@ export default function ColisModal({ open, onClose }) {
                       <>
                         {filteredClients.map((cl) => {
                           const dest = getDestByCP(cl.cp);
-                          const annonces = data.filter((p) => p.clientId === cl.id && p.statut === 'annonce');
                           return (
                             <button
                               key={cl.id}
@@ -459,14 +386,6 @@ export default function ColisModal({ open, onClose }) {
                                   <span>{cl.ville}</span>
                                 </div>
                               </div>
-                              {annonces.length > 0 && (
-                                <span
-                                  className="flex-shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-full"
-                                  style={{ background: `${BRAND.gold}25`, color: BRAND.goldD }}
-                                >
-                                  {annonces.length} annonce{annonces.length > 1 ? 's' : ''}
-                                </span>
-                              )}
                             </button>
                           );
                         })}
@@ -587,103 +506,8 @@ export default function ColisModal({ open, onClose }) {
             </div>
           )}
 
-          {/* ── PRE-ANNOUNCEMENTS FOR SELECTED CLIENT (staff only) ── */}
-          {isStaff && selectedClient && pendingAnnonces.length > 0 && (
-            <div
-              className="rounded-xl border overflow-hidden"
-              style={{ borderColor: `${BRAND.gold}60` }}
-            >
-              <div
-                className="px-4 py-2.5 flex items-center gap-2"
-                style={{ background: `${BRAND.gold}15` }}
-              >
-                <Link2 size={13} style={{ color: BRAND.goldD }} />
-                <span className="text-xs font-bold" style={{ color: BRAND.goldD }}>
-                  {pendingAnnonces.length} pré-annonce{pendingAnnonces.length > 1 ? 's' : ''} en attente
-                </span>
-                <span className="ml-auto text-[10px] text-gray-400">
-                  Cliquez pour rattacher
-                </span>
-              </div>
-              <div className="divide-y divide-gray-100">
-                {pendingAnnonces.map((a) => {
-                  const isSelected = matchedAnnonce?.id === a.id;
-                  return (
-                    <button
-                      key={a.id}
-                      type="button"
-                      className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-all ${
-                        isSelected
-                          ? 'bg-blue-50 ring-2 ring-inset ring-blue-400'
-                          : 'hover:bg-gray-50'
-                      }`}
-                      onClick={() => handleSelectAnnonce(a)}
-                    >
-                      <div
-                        className="flex-shrink-0 w-8 h-8 rounded-xl flex items-center justify-center"
-                        style={{
-                          background: isSelected ? BRAND.navy : `${BRAND.navy}10`,
-                        }}
-                      >
-                        <Package size={14} style={{ color: isSelected ? 'white' : BRAND.navy }} />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-black" style={{ color: BRAND.navy }}>
-                            {a.ref}
-                          </span>
-                          <Badge statut={a.statut} />
-                        </div>
-                        <p className="text-xs text-gray-600 truncate mt-0.5">{a.desc}</p>
-                        {a.trackings?.some((t) => t) && (
-                          <p className="text-[10px] text-gray-400 font-mono mt-0.5 truncate">
-                            {trackStr(a)}
-                          </p>
-                        )}
-                      </div>
-                      <ChevronRight
-                        size={14}
-                        className={`flex-shrink-0 transition-colors ${
-                          isSelected ? 'text-blue-500' : 'text-gray-300'
-                        }`}
-                      />
-                    </button>
-                  );
-                })}
-              </div>
-              {!matchedAnnonce && (
-                <div className="px-4 py-2 border-t border-gray-100 bg-gray-50">
-                  <p className="text-[10px] text-gray-400 text-center">
-                    Ou remplissez le formulaire ci-dessous pour une réception à l'aveugle
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* ── Match mode: just need casier ── */}
-          {isMatchMode && (
-            <div>
-              <label className={labelCls}>Numéro de casier</label>
-              <input
-                type="text"
-                placeholder="Ex: A-03"
-                value={nf.casier}
-                onChange={(e) => {
-                  setField('casier', e.target.value);
-                  if (formErr.casier) setFormErr((prev) => ({ ...prev, casier: undefined }));
-                }}
-                className={inputCls(formErr.casier)}
-                autoFocus
-              />
-              {formErr.casier && (
-                <p className="mt-1 text-xs text-red-500">{formErr.casier}</p>
-              )}
-            </div>
-          )}
-
-          {/* ── Standard form fields (hidden in match mode) ── */}
-          {!isMatchMode && (
+          {/* ── Form fields ── */}
+          {(
             <>
               {/* ── CASIER (staff only, MANDATORY — first field for speed) ── */}
               {isStaff && (
@@ -1019,78 +843,29 @@ export default function ColisModal({ open, onClose }) {
 
         {/* ── Footer / Actions ── */}
         <div className="px-5 py-4 border-t border-gray-100 bg-white">
-          {isStaff ? (
-            isMatchMode ? (
-              /* ── Match mode footer ── */
-              <div className="flex gap-3">
-                <button
-                  type="button"
-                  onClick={() => setMatchedAnnonce(null)}
-                  className="flex-shrink-0 px-4 py-2.5 rounded-xl font-semibold text-sm text-gray-600 bg-gray-100 hover:bg-gray-200 active:scale-95 transition-all"
-                >
-                  Retour
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleMatchReception(false)}
-                  className="flex-1 py-2.5 rounded-xl font-bold text-sm text-white active:scale-95 transition-all flex items-center justify-center gap-1.5"
-                  style={{ background: BRAND.navy }}
-                >
-                  <Link2 size={14} />
-                  Rattacher
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleMatchReception(true)}
-                  className="flex-1 py-2.5 rounded-xl font-bold text-sm text-white bg-green-600 hover:bg-green-700 active:scale-95 transition-all"
-                >
-                  + WhatsApp
-                </button>
-              </div>
-            ) : (
-              /* ── Normal / blind reception footer ── */
-              <div className="flex gap-3">
-                <button
-                  type="button"
-                  onClick={resetAndClose}
-                  className="flex-shrink-0 px-4 py-2.5 rounded-xl font-semibold text-sm text-gray-600 bg-gray-100 hover:bg-gray-200 active:scale-95 transition-all"
-                >
-                  Annuler
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleReceptionner(false)}
-                  className="flex-1 py-2.5 rounded-xl font-bold text-sm text-white bg-blue-600 hover:bg-blue-700 active:scale-95 transition-all"
-                >
-                  Réceptionner
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleReceptionner(true)}
-                  className="flex-1 py-2.5 rounded-xl font-bold text-sm text-white bg-green-600 hover:bg-green-700 active:scale-95 transition-all"
-                >
-                  + WhatsApp
-                </button>
-              </div>
-            )
-          ) : (
-            <div className="flex gap-3">
-              <button
-                type="button"
-                onClick={resetAndClose}
-                className="flex-shrink-0 px-4 py-2.5 rounded-xl font-semibold text-sm text-gray-600 bg-gray-100 hover:bg-gray-200 active:scale-95 transition-all"
-              >
-                Annuler
-              </button>
-              <button
-                type="button"
-                onClick={handleAnnonce}
-                className="flex-1 py-2.5 rounded-xl font-bold text-sm text-white bg-blue-600 hover:bg-blue-700 active:scale-95 transition-all"
-              >
-                Envoyer ma pré-annonce
-              </button>
-            </div>
-          )}
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={resetAndClose}
+              className="flex-shrink-0 px-4 py-2.5 rounded-xl font-semibold text-sm text-gray-600 bg-gray-100 hover:bg-gray-200 active:scale-95 transition-all"
+            >
+              Annuler
+            </button>
+            <button
+              type="button"
+              onClick={() => handleReceptionner(false)}
+              className="flex-1 py-2.5 rounded-xl font-bold text-sm text-white bg-blue-600 hover:bg-blue-700 active:scale-95 transition-all"
+            >
+              Réceptionner
+            </button>
+            <button
+              type="button"
+              onClick={() => handleReceptionner(true)}
+              className="flex-1 py-2.5 rounded-xl font-bold text-sm text-white bg-green-600 hover:bg-green-700 active:scale-95 transition-all"
+            >
+              + WhatsApp
+            </button>
+          </div>
         </div>
       </div>
     </div>
