@@ -424,16 +424,19 @@ export default function ColisModal({ open, onClose }) {
                 <p className="mt-1 text-xs text-red-500">{formErr.client}</p>
               )}
 
-              {/* ── COLIS ACTIFS DU CLIENT SÉLECTIONNÉ ── */}
+              {/* ── COLIS REGROUPABLES DU CLIENT SÉLECTIONNÉ ── */}
               {selectedClient && (() => {
-                const activeColis = data.filter(
-                  (c) => c.clientId === selectedClient.id && c.statut !== 'livre' && c.statut !== 'annule'
+                // Seulement les colis encore regroupables physiquement en entrepôt
+                // (pas ceux déjà préparés, en attente de paiement, expédiés, etc.)
+                const STATUTS_REGROUPABLES = ['receptionne', 'mesure', 'attente_feu_vert', 'autorise'];
+                const regroupables = data.filter(
+                  (c) => c.clientId === selectedClient.id && STATUTS_REGROUPABLES.includes(c.statut)
                 );
-                if (activeColis.length === 0) return null;
+                if (regroupables.length === 0) return null;
 
                 // Group by casier
                 const byCasier = {};
-                activeColis.forEach((c) => {
+                regroupables.forEach((c) => {
                   const k = c.casier || 'Sans casier';
                   if (!byCasier[k]) byCasier[k] = [];
                   byCasier[k].push(c);
@@ -447,7 +450,7 @@ export default function ColisModal({ open, onClose }) {
                     <div className="flex items-center gap-2">
                       <Package size={14} style={{ color: BRAND.goldD }} />
                       <span className="text-xs font-bold" style={{ color: BRAND.goldD }}>
-                        {activeColis.length} colis déjà en entrepôt pour {selectedClient.nom.split(' ')[0]}
+                        {regroupables.length} colis regroupable{regroupables.length > 1 ? 's' : ''} en entrepôt pour {selectedClient.nom.split(' ')[0]}
                       </span>
                     </div>
                     <div className="space-y-1.5">
