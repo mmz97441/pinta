@@ -20,10 +20,13 @@ const STATUTS_LIVRE = ['livre'];
 const STATUTS_PRETS_EXPEDIES = ['paye', 'expedie', 'transit', 'arrive', 'livraison', 'livre'];
 
 // ── Summary card definitions ─────────────────────────────────────────────────
+const STATUTS_FEU_VERT = ['autorise', 'en_preparation'];
+
 const SUMMARY_CARDS = [
   { key: 'afaire', label: 'À traiter', statuts: STATUTS_A_FAIRE, color: BRAND.navy, icon: CircleDot },
   { key: 'attente', label: 'Att. client', statuts: STATUTS_ATTENTE, color: '#D97706', icon: Clock },
-  { key: 'expedies', label: 'Prêts / Expédiés', statuts: STATUTS_PRETS_EXPEDIES, color: '#059669', icon: CheckCircle },
+  { key: 'feuvert', label: 'Feu vert', statuts: STATUTS_FEU_VERT, color: '#65A30D', icon: CheckCircle },
+  { key: 'expedies', label: 'Prêts / Expédiés', statuts: STATUTS_PRETS_EXPEDIES, color: '#059669', icon: Plane },
 ];
 
 // ── Pipeline definition ────────────────────────────────────────────────────────
@@ -261,6 +264,9 @@ function ColisTableRow({ c, client, envois, onClick, stagger }) {
   const dest = client ? getDestByCP(client.cp) : null;
   const hasDims = c.dimL && c.dimW && c.dimH && c.poids;
   const scs = statutCardStyle(c.statut);
+  const taxes = (c.devisOM != null || c.devisOMR != null || c.devisTVA != null)
+    ? ((c.devisOM || 0) + (c.devisOMR || 0) + (c.devisTVA || 0))
+    : null;
 
   return (
     <tr
@@ -271,47 +277,61 @@ function ColisTableRow({ c, client, envois, onClick, stagger }) {
         borderLeft: `3px solid ${scs.border}`,
       }}
     >
-      <td className="px-4 py-3">
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-gray-600 font-medium truncate max-w-[140px]">{client?.nom ?? '—'}</span>
+      <td className="px-3 py-2.5">
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs text-gray-600 font-medium truncate max-w-[120px]">{client?.nom ?? '—'}</span>
           {dest && <span className="text-xs flex-shrink-0">{dest.flag}</span>}
         </div>
       </td>
-      <td className="px-4 py-3">
-        <div className="flex items-center gap-2">
-          <span className="font-black text-sm text-gray-900">{c.ref}</span>
+      <td className="px-3 py-2.5">
+        <div className="flex items-center gap-1.5">
+          <span className="font-black text-xs text-gray-900">{c.ref}</span>
           {c.casier && (
             <span
-              className="text-[10px] font-bold px-1.5 py-0.5 rounded"
+              className="text-[9px] font-bold px-1 py-0.5 rounded"
               style={{ background: `${BRAND.gold}22`, color: BRAND.goldD }}
             >
               {c.casier}
             </span>
           )}
         </div>
-        {c.desc && <span className="text-xs text-gray-500 truncate block max-w-[160px]">{c.desc}</span>}
+        {c.desc && <span className="text-[11px] text-gray-500 truncate block max-w-[130px]">{c.desc}</span>}
       </td>
-      <td className="px-4 py-3">
+      <td className="px-3 py-2.5">
         <Badge statut={c.statut} />
       </td>
-      <td className="px-4 py-3 text-right">
+      <td className="px-3 py-2.5">
+        {hasDims ? (
+          <span className="text-[11px] text-gray-500 font-mono whitespace-nowrap">{c.dimL}×{c.dimW}×{c.dimH} cm · {c.poids} kg</span>
+        ) : (
+          <span className="text-xs text-gray-300">—</span>
+        )}
+      </td>
+      <td className="px-3 py-2.5 text-right">
+        {c.devisTransport != null ? (
+          <span className="text-xs font-semibold text-gray-700">{eur(c.devisTransport)}</span>
+        ) : (
+          <span className="text-xs text-gray-300">—</span>
+        )}
+      </td>
+      <td className="px-3 py-2.5 text-right">
+        {taxes != null ? (
+          <span className="text-xs text-gray-600">{eur(taxes)}</span>
+        ) : (
+          <span className="text-xs text-gray-300">—</span>
+        )}
+      </td>
+      <td className="px-3 py-2.5 text-right">
         {c.devisTotal != null ? (
           <span className="text-sm font-bold" style={{ color: BRAND.navy }}>{eur(c.devisTotal)}</span>
         ) : (
           <span className="text-xs text-gray-300">—</span>
         )}
       </td>
-      <td className="px-4 py-3">
-        {hasDims ? (
-          <span className="text-xs text-gray-500 font-mono">{c.dimL}×{c.dimW}×{c.dimH} cm · {c.poids} kg</span>
-        ) : (
-          <span className="text-xs text-gray-400 italic">—</span>
-        )}
-      </td>
-      <td className="px-4 py-3">
+      <td className="px-3 py-2.5">
         {envoi ? (
           <span
-            className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
+            className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full whitespace-nowrap"
             style={{ background: `${BRAND.navy}10`, color: BRAND.navy }}
           >
             {labelEnvoi(envoi)}
@@ -320,7 +340,7 @@ function ColisTableRow({ c, client, envois, onClick, stagger }) {
           <span className="text-xs text-gray-300">—</span>
         )}
       </td>
-      <td className="pr-3 py-3">
+      <td className="pr-2 py-2.5">
         <ChevronRight size={14} className="text-gray-300" />
       </td>
     </tr>
@@ -331,15 +351,17 @@ function ColisTable({ items, getClient, envois, openColis }) {
   return (
     <div className="card rounded-2xl overflow-hidden">
       <div className="overflow-x-auto">
-        <table className="w-full text-left">
+        <table className="w-full text-left text-sm">
           <thead>
             <tr className="border-b border-gray-100" style={{ backgroundColor: BRAND.navy + '08' }}>
-              <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-gray-500">Client</th>
-              <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-gray-500">N° Colis</th>
-              <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-gray-500">Statut</th>
-              <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-gray-500 text-right">Montant</th>
-              <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-gray-500">Dimensions</th>
-              <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-gray-500">Envoi</th>
+              <th className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-wider text-gray-500">Client</th>
+              <th className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-wider text-gray-500">N° Colis</th>
+              <th className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-wider text-gray-500">Statut</th>
+              <th className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-wider text-gray-500">Dimensions</th>
+              <th className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-wider text-gray-500 text-right">Transport</th>
+              <th className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-wider text-gray-500 text-right">Taxes</th>
+              <th className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-wider text-gray-500 text-right">Total</th>
+              <th className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-wider text-gray-500">Envoi</th>
               <th className="w-8"></th>
             </tr>
           </thead>
@@ -431,6 +453,10 @@ export default function StaffDashboard({ onNewColis }) {
   );
   const totalAttente = useMemo(
     () => data.filter((c) => STATUTS_ATTENTE.includes(c.statut)).length,
+    [data],
+  );
+  const totalFeuVert = useMemo(
+    () => data.filter((c) => STATUTS_FEU_VERT.includes(c.statut)).length,
     [data],
   );
   const totalPretExpedies = useMemo(
@@ -658,11 +684,14 @@ export default function StaffDashboard({ onNewColis }) {
 
       {/* ── Summary cards (primary navigation) ─────────────────────────── */}
       <div className="anim-fade stagger-2">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
           {[
             ...SUMMARY_CARDS.map((c) => ({
               ...c,
-              count: c.key === 'afaire' ? totalAFaire : c.key === 'attente' ? totalAttente : totalPretExpedies,
+              count: c.key === 'afaire' ? totalAFaire
+                : c.key === 'attente' ? totalAttente
+                : c.key === 'feuvert' ? totalFeuVert
+                : totalPretExpedies,
             })),
             { key: 'total', label: 'Total', count: totalAll, color: BRAND.gold, icon: BarChart3 },
           ].map((card) => {

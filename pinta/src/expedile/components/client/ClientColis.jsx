@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Package, Plus, ChevronRight, AlertCircle, CreditCard, CheckCircle, X } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { BRAND } from '../../constants';
+import { eur } from '../../utils';
 import { Badge, Etapes, ProgressBar, ViewToggle } from '../ui';
 
 const TABS = [
@@ -271,14 +272,17 @@ export default function ClientColis({ onNewColis }) {
         /* ── Vue Colonnes (tableau) ── */
         <div className="anim-fade card rounded-2xl overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-left">
+            <table className="w-full text-left text-sm">
               <thead>
                 <tr className="border-b border-gray-100" style={{ backgroundColor: BRAND.navy + '08' }}>
-                  <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-gray-500">Référence</th>
-                  <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-gray-500">Description</th>
-                  <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-gray-500">Statut</th>
-                  <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-gray-500 text-right">Montant</th>
-                  <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-gray-500 text-center">Action</th>
+                  <th className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-wider text-gray-500">Référence</th>
+                  <th className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-wider text-gray-500">Description</th>
+                  <th className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-wider text-gray-500">Statut</th>
+                  <th className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-wider text-gray-500">Dimensions</th>
+                  <th className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-wider text-gray-500 text-right">Transport</th>
+                  <th className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-wider text-gray-500 text-right">Taxes</th>
+                  <th className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-wider text-gray-500 text-right">Total</th>
+                  <th className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-wider text-gray-500 text-center">Action</th>
                   <th className="w-8"></th>
                 </tr>
               </thead>
@@ -288,6 +292,9 @@ export default function ClientColis({ onNewColis }) {
                   const isLivre = p.statut === 'livre';
                   const isFV = p.statut === 'attente_feu_vert';
                   const isPay = p.statut === 'attente_paiement';
+                  const taxes = (p.devisOM != null || p.devisOMR != null || p.devisTVA != null)
+                    ? ((p.devisOM || 0) + (p.devisOMR || 0) + (p.devisTVA || 0))
+                    : null;
 
                   return (
                     <tr
@@ -302,12 +309,12 @@ export default function ClientColis({ onNewColis }) {
                       }}
                     >
                       {/* Référence */}
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <span className="font-black text-sm text-gray-900">{p.ref}</span>
+                      <td className="px-3 py-2.5">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-black text-xs text-gray-900">{p.ref}</span>
                           {action && (
                             <span
-                              className="text-[9px] font-black px-1.5 py-0.5 rounded-full text-white"
+                              className="text-[9px] font-black px-1 py-0.5 rounded-full text-white"
                               style={{ backgroundColor: isFV ? BRAND.goldD : '#d97706' }}
                             >
                               ACTION
@@ -317,23 +324,50 @@ export default function ClientColis({ onNewColis }) {
                       </td>
 
                       {/* Description */}
-                      <td className="px-4 py-3">
-                        <span className="text-xs text-gray-600 truncate block max-w-[200px]">{p.desc}</span>
+                      <td className="px-3 py-2.5">
+                        <span className="text-xs text-gray-600 truncate block max-w-[160px]">{p.desc}</span>
                       </td>
 
                       {/* Statut */}
-                      <td className="px-4 py-3">
+                      <td className="px-3 py-2.5">
                         <Badge statut={p.statut} />
                       </td>
 
-                      {/* Montant */}
-                      <td className="px-4 py-3 text-right">
+                      {/* Dimensions */}
+                      <td className="px-3 py-2.5">
+                        {p.dimL != null ? (
+                          <span className="text-[11px] text-gray-500 font-mono whitespace-nowrap">{p.dimL}×{p.dimW}×{p.dimH} cm · {p.poids} kg</span>
+                        ) : (
+                          <span className="text-xs text-gray-300">—</span>
+                        )}
+                      </td>
+
+                      {/* Transport */}
+                      <td className="px-3 py-2.5 text-right">
+                        {p.devisTransport != null ? (
+                          <span className="text-xs font-semibold text-gray-700">{eur(p.devisTransport)}</span>
+                        ) : (
+                          <span className="text-xs text-gray-300">—</span>
+                        )}
+                      </td>
+
+                      {/* Taxes (OM + OMR + TVA) */}
+                      <td className="px-3 py-2.5 text-right">
+                        {taxes != null ? (
+                          <span className="text-xs text-gray-600">{eur(taxes)}</span>
+                        ) : (
+                          <span className="text-xs text-gray-300">—</span>
+                        )}
+                      </td>
+
+                      {/* Total */}
+                      <td className="px-3 py-2.5 text-right">
                         {p.devisTotal != null ? (
                           <span className="text-sm font-bold" style={{ color: BRAND.navy }}>
-                            {p.devisTotal.toFixed(2)} €
+                            {eur(p.devisTotal)}
                           </span>
                         ) : p.estMin != null && p.estMax != null ? (
-                          <span className="text-xs text-gray-400">
+                          <span className="text-[11px] text-gray-400">
                             ~{p.estMin}–{p.estMax} €
                           </span>
                         ) : (
@@ -342,11 +376,11 @@ export default function ClientColis({ onNewColis }) {
                       </td>
 
                       {/* Action rapide */}
-                      <td className="px-4 py-3 text-center">
+                      <td className="px-3 py-2.5 text-center">
                         {isFV && (
                           <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700">
                             <AlertCircle size={12} />
-                            Accord attendu
+                            Accord
                           </span>
                         )}
                         {isPay && p.devisTotal != null && (
@@ -360,7 +394,7 @@ export default function ClientColis({ onNewColis }) {
                                 { okLabel: 'Payer' }
                               );
                             }}
-                            className="inline-flex items-center gap-1 text-[11px] font-black px-2.5 py-1 rounded-lg active:scale-95 transition-all"
+                            className="inline-flex items-center gap-1 text-[11px] font-black px-2 py-1 rounded-lg active:scale-95 transition-all"
                             style={{
                               background: `linear-gradient(135deg, ${BRAND.gold}, ${BRAND.goldD})`,
                               color: BRAND.navyD,
@@ -373,7 +407,7 @@ export default function ClientColis({ onNewColis }) {
                         {isPay && p.devisTotal == null && (
                           <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-800">
                             <CreditCard size={12} />
-                            Paiement requis
+                            Paiement
                           </span>
                         )}
                         {isLivre && (
@@ -385,7 +419,7 @@ export default function ClientColis({ onNewColis }) {
                       </td>
 
                       {/* Chevron */}
-                      <td className="pr-3 py-3">
+                      <td className="pr-2 py-2.5">
                         <ChevronRight size={14} className="text-gray-300" />
                       </td>
                     </tr>

@@ -256,53 +256,74 @@ export default function ClientAccueil({ onNewColis }) {
           ) : (
             <div className="card rounded-2xl overflow-hidden">
               <div className="overflow-x-auto">
-                <table className="w-full text-left">
+                <table className="w-full text-left text-sm">
                   <thead>
                     <tr className="border-b border-gray-100" style={{ backgroundColor: BRAND.navy + '08' }}>
-                      <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-gray-500">N° Colis</th>
-                      <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-gray-500">Description</th>
-                      <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-gray-500">Statut</th>
-                      <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-gray-500 text-right">Montant</th>
-                      <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-gray-500">Dimensions</th>
+                      <th className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-wider text-gray-500">N° Colis</th>
+                      <th className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-wider text-gray-500">Description</th>
+                      <th className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-wider text-gray-500">Statut</th>
+                      <th className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-wider text-gray-500">Dimensions</th>
+                      <th className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-wider text-gray-500 text-right">Transport</th>
+                      <th className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-wider text-gray-500 text-right">Taxes</th>
+                      <th className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-wider text-gray-500 text-right">Total</th>
                       <th className="w-8"></th>
                     </tr>
                   </thead>
                   <tbody>
-                    {colisCours.map((p, i) => (
-                      <tr
-                        key={p.id}
-                        onClick={() => setSelId(p.id)}
-                        className="anim-fade border-b border-gray-50 last:border-b-0 cursor-pointer transition-colors hover:bg-gray-50 active:bg-gray-100"
-                        style={{ animationDelay: `${i * 0.03}s` }}
-                      >
-                        <td className="px-4 py-3">
-                          <span className="font-black text-sm text-gray-900">{p.ref}</span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className="text-xs text-gray-600 truncate block max-w-[180px]">{p.desc}</span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <Badge statut={p.statut} />
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          {p.devisTotal != null ? (
-                            <span className="text-sm font-bold" style={{ color: BRAND.navy }}>{p.devisTotal.toFixed(2)} €</span>
-                          ) : (
-                            <span className="text-xs text-gray-300">—</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3">
-                          {p.dimL != null ? (
-                            <span className="text-xs text-gray-500 font-mono">{p.dimL}×{p.dimW}×{p.dimH} cm · {p.poids} kg</span>
-                          ) : (
-                            <span className="text-xs text-gray-300">—</span>
-                          )}
-                        </td>
-                        <td className="pr-3 py-3">
-                          <ChevronRight size={14} className="text-gray-300" />
-                        </td>
-                      </tr>
-                    ))}
+                    {colisCours.map((p, i) => {
+                      const taxes = (p.devisOM != null || p.devisOMR != null || p.devisTVA != null)
+                        ? ((p.devisOM || 0) + (p.devisOMR || 0) + (p.devisTVA || 0))
+                        : null;
+                      return (
+                        <tr
+                          key={p.id}
+                          onClick={() => setSelId(p.id)}
+                          className="anim-fade border-b border-gray-50 last:border-b-0 cursor-pointer transition-colors hover:bg-gray-50 active:bg-gray-100"
+                          style={{ animationDelay: `${i * 0.03}s` }}
+                        >
+                          <td className="px-3 py-2.5">
+                            <span className="font-black text-xs text-gray-900">{p.ref}</span>
+                          </td>
+                          <td className="px-3 py-2.5">
+                            <span className="text-xs text-gray-600 truncate block max-w-[150px]">{p.desc}</span>
+                          </td>
+                          <td className="px-3 py-2.5">
+                            <Badge statut={p.statut} />
+                          </td>
+                          <td className="px-3 py-2.5">
+                            {p.dimL != null ? (
+                              <span className="text-[11px] text-gray-500 font-mono whitespace-nowrap">{p.dimL}×{p.dimW}×{p.dimH} cm · {p.poids} kg</span>
+                            ) : (
+                              <span className="text-xs text-gray-300">—</span>
+                            )}
+                          </td>
+                          <td className="px-3 py-2.5 text-right">
+                            {p.devisTransport != null ? (
+                              <span className="text-xs font-semibold text-gray-700">{eur(p.devisTransport)}</span>
+                            ) : (
+                              <span className="text-xs text-gray-300">—</span>
+                            )}
+                          </td>
+                          <td className="px-3 py-2.5 text-right">
+                            {taxes != null ? (
+                              <span className="text-xs text-gray-600">{eur(taxes)}</span>
+                            ) : (
+                              <span className="text-xs text-gray-300">—</span>
+                            )}
+                          </td>
+                          <td className="px-3 py-2.5 text-right">
+                            {p.devisTotal != null ? (
+                              <span className="text-sm font-bold" style={{ color: BRAND.navy }}>{eur(p.devisTotal)}</span>
+                            ) : (
+                              <span className="text-xs text-gray-300">—</span>
+                            )}
+                          </td>
+                          <td className="pr-2 py-2.5">
+                            <ChevronRight size={14} className="text-gray-300" />
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
