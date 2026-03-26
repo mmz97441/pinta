@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
-import { X, FileText, Search, UserPlus, Ruler } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { X, FileText, Search, UserPlus, Ruler, Package, MapPin } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { BRAND, getDestByCP } from '../constants';
+import { BRAND, STATUTS, getDestByCP } from '../constants';
 import { uid, searchClients, waLink } from '../utils';
+import { Badge } from './ui';
 
 const EMPTY_FORM = {
   trackings: [''],
@@ -422,6 +423,62 @@ export default function ColisModal({ open, onClose }) {
               {formErr.client && (
                 <p className="mt-1 text-xs text-red-500">{formErr.client}</p>
               )}
+
+              {/* ── COLIS ACTIFS DU CLIENT SÉLECTIONNÉ ── */}
+              {selectedClient && (() => {
+                const activeColis = data.filter(
+                  (c) => c.clientId === selectedClient.id && c.statut !== 'livre' && c.statut !== 'annule'
+                );
+                if (activeColis.length === 0) return null;
+
+                // Group by casier
+                const byCasier = {};
+                activeColis.forEach((c) => {
+                  const k = c.casier || 'Sans casier';
+                  if (!byCasier[k]) byCasier[k] = [];
+                  byCasier[k].push(c);
+                });
+
+                return (
+                  <div
+                    className="mt-2 rounded-xl border p-3 space-y-2"
+                    style={{ borderColor: BRAND.gold + '60', background: BRAND.gold + '08' }}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Package size={14} style={{ color: BRAND.goldD }} />
+                      <span className="text-xs font-bold" style={{ color: BRAND.goldD }}>
+                        {activeColis.length} colis déjà en entrepôt pour {selectedClient.nom.split(' ')[0]}
+                      </span>
+                    </div>
+                    <div className="space-y-1.5">
+                      {Object.entries(byCasier).map(([casier, colis]) => (
+                        <div key={casier} className="flex items-start gap-2">
+                          <div className="flex items-center gap-1 flex-shrink-0 mt-0.5">
+                            <MapPin size={11} style={{ color: BRAND.navy }} />
+                            <span className="text-[11px] font-bold" style={{ color: BRAND.navy }}>
+                              {casier}
+                            </span>
+                          </div>
+                          <div className="flex flex-wrap gap-1.5">
+                            {colis.map((c) => (
+                              <span
+                                key={c.id}
+                                className="inline-flex items-center gap-1.5 text-[11px] px-2 py-1 rounded-lg bg-white border border-gray-100"
+                              >
+                                <span className="font-bold text-gray-800">{c.ref}</span>
+                                <Badge statut={c.statut} />
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="text-[10px] text-gray-500 mt-1">
+                      💡 Vous pouvez utiliser le même casier pour regrouper les colis de ce client.
+                    </p>
+                  </div>
+                );
+              })()}
             </div>
           )}
 
