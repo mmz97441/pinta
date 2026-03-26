@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Package, Plus, ChevronRight, AlertCircle, CreditCard, CheckCircle, X } from 'lucide-react';
+import { Package, Plus, ChevronRight, AlertCircle, CreditCard, CheckCircle, X, LayoutGrid, List } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { BRAND } from '../../constants';
+import { BRAND, STATUTS } from '../../constants';
 import { Badge, Etapes, ProgressBar } from '../ui';
 
 const TABS = [
@@ -18,6 +18,7 @@ const FILTER_LABELS = {
 export default function ClientColis({ onNewColis }) {
   const { authCl, data, setSelId, colisFilter, setColisFilter, ask, payer } = useApp();
   const [colisTab, setColisTab] = useState('actifs');
+  const [viewMode, setViewMode] = useState('cards'); // 'cards' | 'columns'
 
   // When arriving from a stat card with a filter, force the "actifs" tab
   useEffect(() => {
@@ -55,17 +56,38 @@ export default function ClientColis({ onNewColis }) {
       {/* ── Header ── */}
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-black text-gray-900">Mes colis</h2>
-        <button
-          onClick={onNewColis}
-          className="flex items-center gap-1.5 px-3 py-2 rounded-xl font-bold text-sm text-white active:scale-95 transition-all"
-          style={{
-            background: `linear-gradient(135deg, ${BRAND.navy}, ${BRAND.navyL})`,
-            boxShadow: `0 2px 10px rgba(27,58,75,0.25)`,
-          }}
-        >
-          <Plus size={15} strokeWidth={2.5} />
-          Pré-annoncer
-        </button>
+        <div className="flex items-center gap-2">
+          {/* View toggle */}
+          <div className="flex bg-gray-100 rounded-xl p-0.5">
+            <button
+              onClick={() => setViewMode('cards')}
+              className={`p-1.5 rounded-lg transition-all ${viewMode === 'cards' ? 'bg-white shadow-sm' : 'text-gray-400'}`}
+              style={viewMode === 'cards' ? { color: BRAND.navy } : {}}
+              title="Vue cartes"
+            >
+              <LayoutGrid size={16} strokeWidth={2} />
+            </button>
+            <button
+              onClick={() => setViewMode('columns')}
+              className={`p-1.5 rounded-lg transition-all ${viewMode === 'columns' ? 'bg-white shadow-sm' : 'text-gray-400'}`}
+              style={viewMode === 'columns' ? { color: BRAND.navy } : {}}
+              title="Vue colonnes"
+            >
+              <List size={16} strokeWidth={2} />
+            </button>
+          </div>
+          <button
+            onClick={onNewColis}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl font-bold text-sm text-white active:scale-95 transition-all"
+            style={{
+              background: `linear-gradient(135deg, ${BRAND.navy}, ${BRAND.navyL})`,
+              boxShadow: `0 2px 10px rgba(27,58,75,0.25)`,
+            }}
+          >
+            <Plus size={15} strokeWidth={2.5} />
+            Pré-annoncer
+          </button>
+        </div>
       </div>
 
       {/* ── Sub-tabs ── */}
@@ -150,7 +172,8 @@ export default function ClientColis({ onNewColis }) {
             </button>
           )}
         </div>
-      ) : (
+      ) : viewMode === 'cards' ? (
+        /* ── Vue Cartes ── */
         <div className="space-y-3">
           {displayed.map((p, i) => {
             const action = needsAction(p);
@@ -261,6 +284,134 @@ export default function ClientColis({ onNewColis }) {
               </button>
             );
           })}
+        </div>
+      ) : (
+        /* ── Vue Colonnes (tableau) ── */
+        <div className="anim-fade card rounded-2xl overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
+              <thead>
+                <tr className="border-b border-gray-100" style={{ backgroundColor: BRAND.navy + '08' }}>
+                  <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-gray-500">Référence</th>
+                  <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-gray-500">Description</th>
+                  <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-gray-500">Statut</th>
+                  <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-gray-500 text-right">Montant</th>
+                  <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-gray-500 text-center">Action</th>
+                  <th className="w-8"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {displayed.map((p, i) => {
+                  const action = needsAction(p);
+                  const isLivre = p.statut === 'livre';
+                  const isFV = p.statut === 'attente_feu_vert';
+                  const isPay = p.statut === 'attente_paiement';
+
+                  return (
+                    <tr
+                      key={p.id}
+                      onClick={() => setSelId(p.id)}
+                      className="anim-fade border-b border-gray-50 last:border-b-0 cursor-pointer transition-colors hover:bg-gray-50 active:bg-gray-100"
+                      style={{
+                        animationDelay: `${i * 0.03}s`,
+                        ...(isFV ? { borderLeft: `3px solid ${BRAND.gold}` } : {}),
+                        ...(isPay ? { borderLeft: `3px solid #f59e0b` } : {}),
+                        ...(isLivre ? { borderLeft: `3px solid #10b981` } : {}),
+                      }}
+                    >
+                      {/* Référence */}
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <span className="font-black text-sm text-gray-900">{p.ref}</span>
+                          {action && (
+                            <span
+                              className="text-[9px] font-black px-1.5 py-0.5 rounded-full text-white"
+                              style={{ backgroundColor: isFV ? BRAND.goldD : '#d97706' }}
+                            >
+                              ACTION
+                            </span>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* Description */}
+                      <td className="px-4 py-3">
+                        <span className="text-xs text-gray-600 truncate block max-w-[200px]">{p.desc}</span>
+                      </td>
+
+                      {/* Statut */}
+                      <td className="px-4 py-3">
+                        <Badge statut={p.statut} />
+                      </td>
+
+                      {/* Montant */}
+                      <td className="px-4 py-3 text-right">
+                        {p.devisTotal != null ? (
+                          <span className="text-sm font-bold" style={{ color: BRAND.navy }}>
+                            {p.devisTotal.toFixed(2)} €
+                          </span>
+                        ) : p.estMin != null && p.estMax != null ? (
+                          <span className="text-xs text-gray-400">
+                            ~{p.estMin}–{p.estMax} €
+                          </span>
+                        ) : (
+                          <span className="text-xs text-gray-300">—</span>
+                        )}
+                      </td>
+
+                      {/* Action rapide */}
+                      <td className="px-4 py-3 text-center">
+                        {isFV && (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700">
+                            <AlertCircle size={12} />
+                            Accord attendu
+                          </span>
+                        )}
+                        {isPay && p.devisTotal != null && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              ask(
+                                'Confirmer le paiement',
+                                `Valider le paiement de ${p.devisTotal.toFixed(2)} € pour ${p.ref} ?`,
+                                () => payer(p.id, p.devisTotal),
+                                { okLabel: 'Payer' }
+                              );
+                            }}
+                            className="inline-flex items-center gap-1 text-[11px] font-black px-2.5 py-1 rounded-lg active:scale-95 transition-all"
+                            style={{
+                              background: `linear-gradient(135deg, ${BRAND.gold}, ${BRAND.goldD})`,
+                              color: BRAND.navyD,
+                            }}
+                          >
+                            <CreditCard size={11} />
+                            Payer
+                          </button>
+                        )}
+                        {isPay && p.devisTotal == null && (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-800">
+                            <CreditCard size={12} />
+                            Paiement requis
+                          </span>
+                        )}
+                        {isLivre && (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700">
+                            <CheckCircle size={12} />
+                            Livré
+                          </span>
+                        )}
+                      </td>
+
+                      {/* Chevron */}
+                      <td className="pr-3 py-3">
+                        <ChevronRight size={14} className="text-gray-300" />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>
