@@ -3,11 +3,11 @@ import {
   Plus, Search, X, BarChart3, CircleDot, Clock, CheckCircle,
   ChevronRight, AlertTriangle, Filter, Package,
   User, Ruler, Wrench, CreditCard, Plane, Star,
-  Hash, Layers,
+  Hash, Layers, CalendarDays,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { BRAND, STATUTS, STATUT_ENVOI, getDestByCP } from '../../constants';
-import { eur, labelEnvoi, trackStr, trackCount, hasTrack, searchGlobal } from '../../utils';
+import { eur, labelEnvoi, trackStr, trackCount, hasTrack, searchGlobal, fuzzy } from '../../utils';
 import { Badge, ViewToggle } from '../ui';
 
 // ── Statut groups ──────────────────────────────────────────────────────────────
@@ -345,26 +345,31 @@ function ColisTableRow({ c, client, envois, onClick, stagger }) {
   );
 }
 
-function ColisTable({ items, getClient, envois, openColis }) {
+const TH = 'px-3 py-2.5 text-[10px] font-bold uppercase tracking-wider text-gray-500';
+
+function ColisTable({ items, getClient, envois, openColis, filterFn }) {
+  const filtered = filterFn ? filterFn(items) : items;
   return (
     <div className="card rounded-2xl overflow-hidden">
       <div className="overflow-x-auto">
         <table className="w-full text-left text-sm">
           <thead>
             <tr className="border-b border-gray-100" style={{ backgroundColor: BRAND.navy + '08' }}>
-              <th className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-wider text-gray-500">Client</th>
-              <th className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-wider text-gray-500">N° Colis</th>
-              <th className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-wider text-gray-500">Statut</th>
-              <th className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-wider text-gray-500">Dimensions</th>
-              <th className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-wider text-gray-500 text-right">Transport</th>
-              <th className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-wider text-gray-500 text-right">Taxes</th>
-              <th className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-wider text-gray-500 text-right">Total</th>
-              <th className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-wider text-gray-500">Envoi</th>
+              <th className={TH}>Client</th>
+              <th className={TH}>N° Colis</th>
+              <th className={TH}>Statut</th>
+              <th className={TH}>Dimensions</th>
+              <th className={`${TH} text-right`}>Transport</th>
+              <th className={`${TH} text-right`}>Taxes</th>
+              <th className={`${TH} text-right`}>Total</th>
+              <th className={TH}>Envoi</th>
               <th className="w-8"></th>
             </tr>
           </thead>
           <tbody>
-            {items.map((c, i) => (
+            {filtered.length === 0 ? (
+              <tr><td colSpan={9} className="px-4 py-6 text-center text-sm text-gray-400">Aucun résultat</td></tr>
+            ) : filtered.map((c, i) => (
               <ColisTableRow
                 key={c.id}
                 c={c}
@@ -391,7 +396,8 @@ export default function StaffDashboard({ onNewColis }) {
   const [pipeFilter, setPipeFilter] = useState(null);
   const [showEnvoiFilter, setShowEnvoiFilter] = useState(false);
   const [viewMode, setViewMode] = useState('status'); // 'status' | 'numero'
-  const [displayMode, setDisplayMode] = useState('cards'); // 'cards' | 'columns'
+  const [displayMode, setDisplayMode] = useState('columns'); // 'cards' | 'columns'
+  const [tableSearch, setTableSearch] = useState('');
   const [showAllMissing, setShowAllMissing] = useState(false);
 
   // ── Search results ────────────────────────────────────────────────────────
@@ -487,6 +493,48 @@ export default function StaffDashboard({ onNewColis }) {
       .filter((c) => c.statut !== 'annule')
       .sort((a, b) => a.ref.localeCompare(b.ref, 'fr', { numeric: true }));
   }, [activePool]);
+
+  // ── Grouped by envoi for "envoi" view mode ─────────────────────────────
+  const groupedByEnvoi = useMemo(() => {
+    const pool = activePool.filter((c) => c.statut !== 'annule');
+    const groups = [];
+    const byEnvoi = {};
+    const sansEnvoi = [];
+
+    pool.forEach((c) => {
+      if (c.envoi) {
+        if (!byEnvoi[c.envoi]) byEnvoi[c.envoi] = [];
+        byEnvoi[c.envoi].push(c);
+      } else {
+        sansEnvoi.push(c);
+      }
+    });
+
+    // Sort envois by date (most recent first)
+    const sortedEnvois = [...envois]
+      .filter((e) => byEnvoi[e.id])
+      .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+
+    sortedEnvois.forEach((e) => {
+      groups.push({ envoi: e, colis: byEnvoi[e.id] });
+    });
+
+    if (sansEnvoi.length > 0) {
+      groups.push({ envoi: null, colis: sansEnvoi });
+    }
+
+    return groups;
+  }, [activePool, envois]);
+
+  // ── Table search filter ────────────────────────────────────────────────
+  const filterByTableSearch = useMemo(() => {
+    if (!tableSearch.trim()) return null;
+    return (list) => list.filter((c) => {
+      const cl = getClient(c.clientId);
+      const txt = `${c.ref} ${c.desc || ''} ${cl?.nom || ''} ${c.casier || ''} ${c.trackings?.join(' ') || ''}`;
+      return fuzzy(txt, tableSearch);
+    });
+  }, [tableSearch, getClient]);
 
   // ── Missing invoices ──────────────────────────────────────────────────────
   const missingInvoices = useMemo(
@@ -865,43 +913,83 @@ export default function StaffDashboard({ onNewColis }) {
         </div>
       )}
 
-      {/* ── View mode toggle ─────────────────────────────────────────────── */}
-      <div className="anim-fade stagger-4 flex items-center justify-between">
-        <p className="text-xs font-semibold text-gray-500">
-          {activePool.filter((c) => c.statut !== 'annule').length} colis affichés
-        </p>
-        <div className="flex items-center gap-2">
-          <ViewToggle value={displayMode} onChange={setDisplayMode} />
-          <div
-            className="inline-flex rounded-xl overflow-hidden border"
-            style={{ borderColor: '#E5E7EB' }}
-          >
-            <button
-              onClick={() => setViewMode('status')}
-              className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold transition-all"
-              style={
-                viewMode === 'status'
-                  ? { background: BRAND.navy, color: 'white' }
-                  : { background: 'white', color: '#6B7280' }
-              }
+      {/* ── View mode toggle + table search ─────────────────────────────── */}
+      <div className="anim-fade stagger-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <p className="text-xs font-semibold text-gray-500">
+            {activePool.filter((c) => c.statut !== 'annule').length} colis affichés
+          </p>
+          <div className="flex items-center gap-2">
+            <ViewToggle value={displayMode} onChange={setDisplayMode} />
+            <div
+              className="inline-flex rounded-xl overflow-hidden border"
+              style={{ borderColor: '#E5E7EB' }}
             >
-              <Layers size={13} strokeWidth={2.5} />
-              Statut
-            </button>
-            <button
-              onClick={() => setViewMode('numero')}
-              className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold transition-all"
-              style={
-                viewMode === 'numero'
-                  ? { background: BRAND.navy, color: 'white' }
-                  : { background: 'white', color: '#6B7280' }
-              }
-            >
-              <Hash size={13} strokeWidth={2.5} />
-              N° Colis
-            </button>
+              <button
+                onClick={() => setViewMode('status')}
+                className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold transition-all"
+                style={
+                  viewMode === 'status'
+                    ? { background: BRAND.navy, color: 'white' }
+                    : { background: 'white', color: '#6B7280' }
+                }
+              >
+                <Layers size={13} strokeWidth={2.5} />
+                Statut
+              </button>
+              <button
+                onClick={() => setViewMode('numero')}
+                className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold transition-all"
+                style={
+                  viewMode === 'numero'
+                    ? { background: BRAND.navy, color: 'white' }
+                    : { background: 'white', color: '#6B7280' }
+                }
+              >
+                <Hash size={13} strokeWidth={2.5} />
+                N° Colis
+              </button>
+              <button
+                onClick={() => setViewMode('envoi')}
+                className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold transition-all"
+                style={
+                  viewMode === 'envoi'
+                    ? { background: BRAND.navy, color: 'white' }
+                    : { background: 'white', color: '#6B7280' }
+                }
+              >
+                <CalendarDays size={13} strokeWidth={2.5} />
+                Envoi
+              </button>
+            </div>
           </div>
         </div>
+
+        {/* ── Table search bar ── */}
+        {displayMode === 'columns' && (
+          <div className="relative">
+            <Search
+              size={14}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
+            />
+            <input
+              type="text"
+              value={tableSearch}
+              onChange={(e) => setTableSearch(e.target.value)}
+              placeholder="Filtrer les colis (ref, client, description, casier…)"
+              className="w-full pl-9 pr-8 py-2 text-sm rounded-xl border border-gray-200 outline-none transition-all focus:border-amber-400 bg-white"
+              style={{ color: BRAND.navy }}
+            />
+            {tableSearch && (
+              <button
+                onClick={() => setTableSearch('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* ── View: par statut (grouped) ────────────────────────────────── */}
@@ -923,7 +1011,7 @@ export default function StaffDashboard({ onNewColis }) {
                   <p className="text-xs text-gray-400 mt-0.5">Tous les colis sont à jour</p>
                 </div>
               ) : displayMode === 'columns' ? (
-                <ColisTable items={aFaire} getClient={getClient} envois={envois} openColis={openColis} />
+                <ColisTable filterFn={filterByTableSearch} items={aFaire} getClient={getClient} envois={envois} openColis={openColis} />
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
                   {aFaire.map((c, i) => (
@@ -959,7 +1047,7 @@ export default function StaffDashboard({ onNewColis }) {
                   <p className="text-sm text-amber-600 font-medium">Aucun colis en attente</p>
                 </div>
               ) : displayMode === 'columns' ? (
-                <ColisTable items={attente} getClient={getClient} envois={envois} openColis={openColis} />
+                <ColisTable filterFn={filterByTableSearch} items={attente} getClient={getClient} envois={envois} openColis={openColis} />
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
                   {attente.map((c, i) => (
@@ -995,7 +1083,7 @@ export default function StaffDashboard({ onNewColis }) {
                   <p className="text-sm text-emerald-600 font-medium">Aucun colis livré (sur la sélection)</p>
                 </div>
               ) : displayMode === 'columns' ? (
-                <ColisTable items={livres} getClient={getClient} envois={envois} openColis={openColis} />
+                <ColisTable filterFn={filterByTableSearch} items={livres} getClient={getClient} envois={envois} openColis={openColis} />
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
                   {livres.map((c, i) => (
@@ -1030,7 +1118,7 @@ export default function StaffDashboard({ onNewColis }) {
               <p className="text-sm font-semibold text-gray-500">Aucun colis</p>
             </div>
           ) : displayMode === 'columns' ? (
-            <ColisTable items={sortedByNumero} getClient={getClient} envois={envois} openColis={openColis} />
+            <ColisTable filterFn={filterByTableSearch} items={sortedByNumero} getClient={getClient} envois={envois} openColis={openColis} />
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
               {sortedByNumero.map((c, i) => (
@@ -1045,6 +1133,81 @@ export default function StaffDashboard({ onNewColis }) {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* ── View: par date d'envoi (grouped) ──────────────────────────── */}
+      {viewMode === 'envoi' && (
+        <div className="space-y-5">
+          {groupedByEnvoi.length === 0 ? (
+            <div className="card p-6 flex flex-col items-center text-center anim-fade">
+              <Package size={28} className="text-gray-300 mb-2" />
+              <p className="text-sm font-semibold text-gray-500">Aucun colis</p>
+            </div>
+          ) : groupedByEnvoi.map((group, gi) => {
+            const e = group.envoi;
+            return (
+              <div key={e ? e.id : 'sans-envoi'} className="anim-fade" style={{ animationDelay: `${gi * 0.06}s` }}>
+                {/* Group header */}
+                <div className="flex items-center gap-2.5 mb-2.5">
+                  <div
+                    className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
+                    style={{ background: e ? `${BRAND.navy}15` : '#F3F4F6' }}
+                  >
+                    {e ? (
+                      <Plane size={14} style={{ color: BRAND.navy }} strokeWidth={2} />
+                    ) : (
+                      <Package size={14} className="text-gray-400" strokeWidth={2} />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-bold text-gray-800">
+                        {e ? labelEnvoi(e) : 'Sans envoi'}
+                      </span>
+                      {e && (
+                        <span
+                          className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                          style={{ background: `${BRAND.navy}12`, color: BRAND.navy }}
+                        >
+                          {e.ref || STATUT_ENVOI[e.statut]}
+                        </span>
+                      )}
+                      {e && STATUT_ENVOI[e.statut] && (
+                        <span className="text-[10px] text-gray-400 font-medium">
+                          {STATUT_ENVOI[e.statut]}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <span
+                    className="text-xs font-bold px-2 py-0.5 rounded-full"
+                    style={{ background: e ? `${BRAND.navy}12` : '#F3F4F6', color: e ? BRAND.navy : '#9CA3AF' }}
+                  >
+                    {group.colis.length}
+                  </span>
+                </div>
+
+                {/* Group content */}
+                {displayMode === 'columns' ? (
+                  <ColisTable filterFn={filterByTableSearch} items={group.colis} getClient={getClient} envois={envois} openColis={openColis} />
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                    {group.colis.map((c, i) => (
+                      <ColisCard
+                        key={c.id}
+                        c={c}
+                        client={getClient(c.clientId)}
+                        envois={envois}
+                        stagger={i + 1}
+                        onClick={() => openColis(c.id)}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
 
