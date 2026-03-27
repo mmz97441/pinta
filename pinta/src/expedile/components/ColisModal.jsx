@@ -163,6 +163,15 @@ export default function ColisModal({ open, onClose }) {
       cl = selectedClient;
     }
 
+    // ── Subscription expiry check ──
+    if (cl && cl.abonnement && cl.abonnement !== 'freemium' && cl.abonnementFin) {
+      const fin = new Date(cl.abonnementFin);
+      if (fin < new Date()) {
+        setFormErr({ client: "L'abonnement de ce client a expiré. Renouvellement nécessaire avant de réceptionner un colis." });
+        return;
+      }
+    }
+
     const newColis = buildColis(clientId, 'receptionne');
     setData((prev) => [...prev, newColis]);
 

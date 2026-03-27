@@ -21,6 +21,7 @@ function statusBorderColor(statut) {
     paye: '#10B981',
     expedie: '#06B6D4',
     transit: '#0EA5E9',
+    dedouanement: '#8B5CF6',
     arrive: '#14B8A6',
     livraison: '#84CC16',
     livre: '#16A34A',
@@ -1091,7 +1092,30 @@ export default function StaffDetailView() {
         );
       }
 
-      // ── 10. EXPEDIE / TRANSIT / ARRIVE / LIVRAISON ────────────────────
+      // ── 10a. DEDOUANEMENT ─────────────────────────────────────────────
+      case 'dedouanement': {
+        return (
+          <Section title="En dédouanement" icon={Clock} color={borderColor}>
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 p-3 rounded-xl bg-violet-50 border border-violet-200">
+                <Clock size={14} className="text-violet-500 flex-shrink-0" />
+                <p className="text-xs font-medium text-violet-700">
+                  Le colis est en cours de dédouanement à destination.
+                </p>
+              </div>
+              <BtnPrimary
+                onClick={() => changerStatut(sel.id, 'arrive')}
+                color="#14B8A6"
+              >
+                <Check size={15} />
+                Confirmer l'arrivée à destination
+              </BtnPrimary>
+            </div>
+          </Section>
+        );
+      }
+
+      // ── 10b. EXPEDIE / TRANSIT / ARRIVE / LIVRAISON ────────────────────
       case 'expedie':
       case 'transit':
       case 'arrive':
@@ -1100,6 +1124,7 @@ export default function StaffDetailView() {
         const trackingSteps = [
           { key: 'expedie', label: 'Expédié', tpl: 'expedie' },
           { key: 'transit', label: 'En vol' },
+          { key: 'dedouanement', label: 'Dédouanement' },
           { key: 'arrive', label: 'Arrivé', tpl: 'arrive' },
           { key: 'livraison', label: 'En livraison', tpl: 'en_livraison' },
           { key: 'livre', label: 'Livré' },
@@ -1153,23 +1178,45 @@ export default function StaffDetailView() {
 
               {/* Next step buttons */}
               <div className="flex flex-col gap-2">
-                {nextStatuts.map((ns) => {
-                  const step = trackingSteps.find((s) => s.key === ns);
-                  const tpl = step?.tpl;
-                  return (
+                {sel.statut === 'transit' ? (
+                  <>
                     <BtnPrimary
-                      key={ns}
+                      onClick={() => changerStatut(sel.id, 'dedouanement')}
+                      color="#8B5CF6"
+                    >
+                      <Clock size={15} />
+                      Passer en dédouanement
+                    </BtnPrimary>
+                    <BtnPrimary
                       onClick={() => {
-                        changerStatut(sel.id, ns);
-                        if (tpl) sendMsg(sel.id, cl?.id, cl?.canal || 'whatsapp', tpl, null);
+                        changerStatut(sel.id, 'arrive');
+                        sendMsg(sel.id, cl?.id, cl?.canal || 'whatsapp', 'arrive', null);
                       }}
-                      color={borderColor}
+                      color="#14B8A6"
                     >
                       <Check size={15} />
-                      {STATUTS[ns]?.actionStaff || STATUTS[ns]?.label}
+                      Arrivé directement (sans dédouanement)
                     </BtnPrimary>
-                  );
-                })}
+                  </>
+                ) : (
+                  nextStatuts.map((ns) => {
+                    const step = trackingSteps.find((s) => s.key === ns);
+                    const tpl = step?.tpl;
+                    return (
+                      <BtnPrimary
+                        key={ns}
+                        onClick={() => {
+                          changerStatut(sel.id, ns);
+                          if (tpl) sendMsg(sel.id, cl?.id, cl?.canal || 'whatsapp', tpl, null);
+                        }}
+                        color={borderColor}
+                      >
+                        <Check size={15} />
+                        {STATUTS[ns]?.actionStaff || STATUTS[ns]?.label}
+                      </BtnPrimary>
+                    );
+                  })
+                )}
               </div>
             </div>
           </Section>

@@ -6,7 +6,7 @@ import {
   Hash, Layers, CalendarDays,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { BRAND, STATUTS, STATUT_ENVOI, getDestByCP } from '../../constants';
+import { BRAND, STATUTS, STATUT_ENVOI, ABONNEMENTS, getDestByCP } from '../../constants';
 import { eur, labelEnvoi, trackStr, trackCount, hasTrack, searchGlobal, fuzzy } from '../../utils';
 import { Badge, ViewToggle } from '../ui';
 
@@ -65,7 +65,7 @@ const PIPELINE = [
     key: 'expedition',
     label: 'Expédition',
     icon: Plane,
-    statuts: ['expedie', 'transit', 'arrive', 'livraison'],
+    statuts: ['expedie', 'transit', 'dedouanement', 'arrive', 'livraison'],
     color: '#0891B2',
   },
   {
@@ -91,6 +91,7 @@ function statutIcon(statut) {
     paye: CreditCard,
     expedie: Plane,
     transit: Plane,
+    dedouanement: Clock,
     arrive: CircleDot,
     livraison: CircleDot,
     livre: CheckCircle,
@@ -123,6 +124,7 @@ function statutCardStyle(statut) {
     paye:               { bg: '#EEF2FF', border: '#6366F1', icon: '#4F46E5' },
     expedie:            { bg: '#ECFEFF', border: '#06B6D4', icon: '#0891B2' },
     transit:            { bg: '#F0F9FF', border: '#0EA5E9', icon: '#0284C7' },
+    dedouanement:       { bg: '#EDE9FE', border: '#8B5CF6', icon: '#7C3AED' },
     arrive:             { bg: '#F0FDFA', border: '#14B8A6', icon: '#0D9488' },
     livraison:          { bg: '#ECFDF5', border: '#10B981', icon: '#059669' },
     livre:              { bg: '#F0FDF4', border: '#16A34A', icon: '#15803D' },
@@ -564,6 +566,18 @@ export default function StaffDashboard({ onNewColis }) {
     [data],
   );
 
+  // ── Expiring subscriptions ─────────────────────────────────────────────
+  const expiringClients = useMemo(() => {
+    const now = new Date();
+    const in7days = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+    return clients.filter((cl) => {
+      if (!cl.abonnement || cl.abonnement === 'freemium') return false;
+      if (!cl.abonnementFin) return false;
+      const fin = new Date(cl.abonnementFin);
+      return fin <= in7days;
+    });
+  }, [clients]);
+
   // ── Handlers ─────────────────────────────────────────────────────────────
   const openColis = (id) => {
     setSelId(id);
@@ -880,6 +894,46 @@ export default function StaffDashboard({ onNewColis }) {
                 +{missingInvoices.length - 5} autres
               </button>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Expiring subscriptions alert ───────────────────────────────── */}
+      {expiringClients.length > 0 && (
+        <div
+          className="anim-fade stagger-4 rounded-xl overflow-hidden"
+          style={{
+            background: '#EDE9FE',
+            border: '1px solid #C4B5FD80',
+          }}
+        >
+          <div className="flex items-center gap-2.5 px-3.5 py-2.5">
+            <Clock size={15} className="text-violet-600 flex-shrink-0" />
+            <p className="text-xs font-bold text-violet-800">
+              {expiringClients.length} abonnement{expiringClients.length > 1 ? 's' : ''}{' '}
+              {expiringClients.every((cl) => new Date(cl.abonnementFin) < new Date())
+                ? 'expiré(s)'
+                : 'expirent bientôt'}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-1.5 px-3.5 pb-3">
+            {expiringClients.map((cl) => (
+              <button
+                key={cl.id}
+                className="inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1.5 rounded-lg transition-all active:scale-95 hover:bg-violet-200"
+                style={{ background: '#F5F3FF', color: '#5B21B6', border: '1px solid #C4B5FD' }}
+              >
+                {cl.nom}
+                {ABONNEMENTS[cl.abonnement] && (
+                  <span
+                    className="text-[10px] font-bold px-1.5 py-0.5 rounded"
+                    style={{ background: '#DDD6FE', color: '#6D28D9' }}
+                  >
+                    {ABONNEMENTS[cl.abonnement].label}
+                  </span>
+                )}
+              </button>
+            ))}
           </div>
         </div>
       )}
