@@ -276,7 +276,7 @@ export default function StaffClients() {
           }}
         >
           <Plus size={14} strokeWidth={2.5} />
-          Nouveau
+          Nouveau client
         </button>
       </div>
 

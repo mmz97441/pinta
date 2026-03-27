@@ -6,11 +6,12 @@ import { uid, searchClients, waLink } from '../utils';
 import { Badge } from './ui';
 
 const EMPTY_FORM = {
-  trackings: [''],
+  trackingLines: [{ fournisseur: '', tracking: '' }],
   d: '',
   v: '',
   c: '',
   casier: '',
+  notesReception: '',
   facUploaded: false,
   facVendeur: '',
   facMontant: '',
@@ -66,22 +67,23 @@ export default function ColisModal({ open, onClose }) {
   // ── helpers ──────────────────────────────────────────────
   const setField = (key, val) => setNf((prev) => ({ ...prev, [key]: val }));
 
-  const setTracking = (idx, val) => {
+  const setTracking = (idx, field, val) => {
     setNf((prev) => {
-      const trackings = [...prev.trackings];
-      trackings[idx] = val;
-      return { ...prev, trackings };
+      const trackingLines = prev.trackingLines.map((line, i) =>
+        i === idx ? { ...line, [field]: val } : line
+      );
+      return { ...prev, trackingLines };
     });
   };
 
   const addTracking = () => {
-    setNf((prev) => ({ ...prev, trackings: [...prev.trackings, ''] }));
+    setNf((prev) => ({ ...prev, trackingLines: [...prev.trackingLines, { fournisseur: '', tracking: '' }] }));
   };
 
   const removeTracking = (idx) => {
     setNf((prev) => {
-      const trackings = prev.trackings.filter((_, i) => i !== idx);
-      return { ...prev, trackings: trackings.length > 0 ? trackings : [''] };
+      const trackingLines = prev.trackingLines.filter((_, i) => i !== idx);
+      return { ...prev, trackingLines: trackingLines.length > 0 ? trackingLines : [{ fournisseur: '', tracking: '' }] };
     });
   };
 
@@ -195,7 +197,10 @@ export default function ColisModal({ open, onClose }) {
   // ── build colis object ────────────────────────────────────
   const buildColis = (clientId, statut) => {
     const ref = nextRef(data);
-    const trackings = nf.trackings.map((t) => t.trim()).filter((t) => t);
+    const trackings = nf.trackingLines.map((t) => t.tracking.trim()).filter((t) => t);
+    const trackingsDetail = nf.trackingLines
+      .filter((t) => t.tracking.trim())
+      .map((t) => ({ number: t.tracking.trim(), fournisseur: t.fournisseur.trim() }));
     const factures =
       !isStaff && nf.facUploaded && nf.facVendeur.trim()
         ? [
@@ -250,7 +255,9 @@ export default function ColisModal({ open, onClose }) {
       ref,
       statut: finalStatut,
       trackings,
-      desc: nf.d.trim(),
+      trackingsDetail,
+      desc: nf.d.trim() || (nf.trackingLines[0]?.fournisseur?.trim() || ''),
+      notesReception: nf.notesReception.trim() || null,
       valeur: parseFloat(nf.v) || 0,
       dimL,
       dimW,
@@ -629,16 +636,23 @@ export default function ColisModal({ open, onClose }) {
                   <span className="ml-1 normal-case text-gray-400 font-normal">(facultatif)</span>
                 </label>
                 <div className="space-y-2">
-                  {nf.trackings.map((t, idx) => (
+                  {nf.trackingLines.map((line, idx) => (
                     <div key={idx} className="flex items-center gap-2">
                       <input
                         type="text"
-                        placeholder={`Ex: AMZ-882939`}
-                        value={t}
-                        onChange={(e) => setTracking(idx, e.target.value)}
+                        placeholder="Amazon, Zara..."
+                        value={line.fournisseur}
+                        onChange={(e) => setTracking(idx, 'fournisseur', e.target.value)}
+                        className="w-2/5 rounded-xl border border-gray-200 bg-gray-50 focus:border-blue-400 focus:bg-white px-3 py-2.5 text-sm outline-none transition-colors"
+                      />
+                      <input
+                        type="text"
+                        placeholder="LP123456FR"
+                        value={line.tracking}
+                        onChange={(e) => setTracking(idx, 'tracking', e.target.value)}
                         className="flex-1 rounded-xl border border-gray-200 bg-gray-50 focus:border-blue-400 focus:bg-white px-3 py-2.5 text-sm outline-none transition-colors font-mono"
                       />
-                      {nf.trackings.length > 1 && (
+                      {nf.trackingLines.length > 1 && (
                         <button
                           type="button"
                           onClick={() => removeTracking(idx)}
@@ -660,9 +674,26 @@ export default function ColisModal({ open, onClose }) {
                 </button>
               </div>
 
+              {/* ── NOTES DE RECEPTION (staff) ── */}
+              {isStaff && (
+                <div>
+                  <label className={labelCls}>
+                    Notes de réception
+                    <span className="ml-1 normal-case text-gray-400 font-normal">(facultatif)</span>
+                  </label>
+                  <textarea
+                    placeholder="Ex: Carton abimé, scotch arraché, colis ouvert..."
+                    value={nf.notesReception}
+                    onChange={(e) => setField('notesReception', e.target.value)}
+                    rows={2}
+                    className="w-full rounded-xl border-2 border-amber-300 bg-amber-50 focus:border-amber-400 focus:bg-white px-3 py-2.5 text-sm outline-none transition-colors"
+                  />
+                </div>
+              )}
+
               {/* ── DIMENSIONS (staff only, optional — saves a step if filled) ── */}
               {isStaff && (() => {
-                const activeTrackings = nf.trackings.filter((t) => t.trim());
+                const activeTrackings = nf.trackingLines.filter((t) => t.tracking.trim()).map((t) => t.tracking.trim());
                 const isMultiTrack = activeTrackings.length > 1;
                 const dimInputCls = "w-full px-2.5 py-2 rounded-lg border border-gray-200 bg-white text-sm outline-none focus:border-blue-400";
                 const updateMultiDim = (idx, field, val) => setNf((prev) => ({

@@ -3,7 +3,7 @@ import {
   Ruler, Check, Clock, Camera, AlertTriangle, Eye, X, RotateCcw, ExternalLink, Mail, Plus,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { BRAND, STATUTS, TRANSITIONS, PRODUITS_INTERDITS, getDestByCP } from '../../constants';
+import { BRAND, STATUTS, TRANSITIONS, PRODUITS_INTERDITS, TAGS_PREPARATION, getDestByCP } from '../../constants';
 import { eur, calcTransport, getCatTaux } from '../../utils';
 import { Ligne } from '../ui';
 
@@ -254,6 +254,13 @@ export default function StaffDetailView() {
   const [selEnvoi, setSelEnvoi] = useState(sel?.envoi || '');
   // Add tracking
   const [newTracking, setNewTracking] = useState('');
+  const [newFournisseur, setNewFournisseur] = useState('');
+  // Tags préparation
+  const [selTags, setSelTags] = useState(sel?.tagsPreparation || []);
+  // Frais divers
+  const [fraisDivers, setFraisDivers] = useState(sel?.fraisDivers || []);
+  const [newFraisLibelle, setNewFraisLibelle] = useState('');
+  const [newFraisMontant, setNewFraisMontant] = useState('');
 
   if (!sel || !isStaff) return null;
 
@@ -341,9 +348,12 @@ export default function StaffDetailView() {
     if (existing.includes(t)) { setFormErr('Ce tracking est déjà rattaché'); return; }
     setFormErr('');
     const updated = [...existing, t];
+    const existingDetail = sel.trackingsDetail || [];
+    const updatedDetail = [...existingDetail, { number: t, fournisseur: newFournisseur.trim() }];
     // Reset to receptionne since we have a new unmeasured carton
     upd(sel.id, {
       trackings: updated,
+      trackingsDetail: updatedDetail,
       nbColis: updated.length,
       // Reset dims since they need to be re-measured with the new carton
       statut: 'receptionne',
@@ -351,6 +361,7 @@ export default function StaffDetailView() {
       dimsParColis: [],
     });
     setNewTracking('');
+    setNewFournisseur('');
     flash(`Carton ajouté — ${sel.ref} a maintenant ${updated.length} colis`);
   }
 
@@ -569,9 +580,16 @@ export default function StaffDetailView() {
                   <div className="flex gap-2">
                     <input
                       type="text"
+                      value={newFournisseur}
+                      onChange={(e) => setNewFournisseur(e.target.value)}
+                      placeholder="Fournisseur"
+                      className="w-1/3 px-3 py-2 rounded-lg border border-gray-200 bg-gray-50 text-xs outline-none focus:border-blue-400 focus:bg-white transition-colors"
+                    />
+                    <input
+                      type="text"
                       value={newTracking}
                       onChange={(e) => setNewTracking(e.target.value)}
-                      placeholder="N° tracking du nouveau carton"
+                      placeholder="N° tracking"
                       className="flex-1 px-3 py-2 rounded-lg border border-gray-200 bg-gray-50 text-xs outline-none focus:border-blue-400 focus:bg-white transition-colors"
                     />
                     <button
@@ -856,6 +874,44 @@ export default function StaffDetailView() {
                 </p>
               </div>
             )}
+            {/* Tags de préparation */}
+            <div className="space-y-2">
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Tags de préparation</p>
+              <div className="flex flex-wrap gap-1.5">
+                {TAGS_PREPARATION.map((tag) => {
+                  const active = selTags.includes(tag);
+                  return (
+                    <button
+                      key={tag}
+                      onClick={() => {
+                        const next = active ? selTags.filter(t => t !== tag) : [...selTags, tag];
+                        setSelTags(next);
+                        upd(sel.id, { tagsPreparation: next });
+                      }}
+                      className={`px-2.5 py-1 rounded-full text-[11px] font-bold transition-all ${
+                        active ? 'text-white' : 'bg-gray-100 text-gray-600'
+                      }`}
+                      style={active ? { background: BRAND.navy } : {}}
+                    >
+                      {tag}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Commentaire de préparation */}
+            <div className="space-y-1">
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Commentaire de préparation</p>
+              <textarea
+                value={sel.commentairePreparation || ''}
+                onChange={(e) => upd(sel.id, { commentairePreparation: e.target.value })}
+                placeholder="Spécificités pour ce colis (visible sur le bon de préparation)..."
+                rows={2}
+                className="w-full px-3 py-2 rounded-xl border border-gray-200 bg-gray-50 text-xs outline-none resize-none focus:border-blue-400 focus:bg-white transition-colors"
+              />
+            </div>
+
             {/* Dimensions finales */}
             <Section title="Dimensions après optimisation" icon={Ruler} color={borderColor}>
               <div className="space-y-4">
@@ -943,6 +999,61 @@ export default function StaffDetailView() {
               </Section>
             )}
 
+            {/* Frais divers */}
+            <div className="space-y-2">
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Frais divers</p>
+
+              {/* Existing frais */}
+              {fraisDivers.map((f, i) => (
+                <div key={i} className="flex items-center gap-2 text-xs">
+                  <span className="flex-1 text-gray-700">{f.libelle}</span>
+                  <span className="font-bold" style={{ color: BRAND.navy }}>{f.montant.toFixed(2)} &euro;</span>
+                  <button
+                    onClick={() => {
+                      const next = fraisDivers.filter((_, j) => j !== i);
+                      setFraisDivers(next);
+                      upd(sel.id, { fraisDivers: next });
+                    }}
+                    className="text-gray-300 hover:text-red-500"
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              ))}
+
+              {/* Add new */}
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={newFraisLibelle}
+                  onChange={(e) => setNewFraisLibelle(e.target.value)}
+                  placeholder="Libellé (enlèvement, douane...)"
+                  className="flex-1 px-2 py-1.5 rounded-lg border border-gray-200 bg-gray-50 text-xs outline-none focus:border-blue-400"
+                />
+                <input
+                  type="number"
+                  value={newFraisMontant}
+                  onChange={(e) => setNewFraisMontant(e.target.value)}
+                  placeholder="€"
+                  className="w-20 px-2 py-1.5 rounded-lg border border-gray-200 bg-gray-50 text-xs outline-none focus:border-blue-400 text-right"
+                />
+                <button
+                  onClick={() => {
+                    if (!newFraisLibelle.trim() || !newFraisMontant) return;
+                    const next = [...fraisDivers, { libelle: newFraisLibelle.trim(), montant: parseFloat(newFraisMontant) || 0 }];
+                    setFraisDivers(next);
+                    upd(sel.id, { fraisDivers: next });
+                    setNewFraisLibelle('');
+                    setNewFraisMontant('');
+                  }}
+                  className="px-2 py-1.5 rounded-lg text-xs font-bold"
+                  style={{ background: `${BRAND.navy}10`, color: BRAND.navy }}
+                >
+                  + Ajouter
+                </button>
+              </div>
+            </div>
+
             {/* Devis preview / send */}
             {!devisPrev ? (
               <BtnPrimary
@@ -961,12 +1072,15 @@ export default function StaffDetailView() {
                     <Ligne label="OM" value={eur(sel.devisOM || devisCalc.om)} />
                     <Ligne label="OMR" value={eur(sel.devisOMR || devisCalc.omr)} />
                     <Ligne label="TVA" value={eur(sel.devisTVA || devisCalc.tva)} />
+                    {fraisDivers.length > 0 && (
+                      <Ligne label="Frais divers" value={eur(fraisDivers.reduce((s, f) => s + f.montant, 0))} />
+                    )}
                     <div className="border-t border-blue-200 pt-1 mt-1">
                       <Ligne
                         label="TOTAL"
                         value={
                           <span className="font-black text-blue-700 text-base">
-                            {eur(sel.devisTotal || devisCalc.total)}
+                            {eur((sel.devisTotal || devisCalc.total) + fraisDivers.reduce((s, f) => s + f.montant, 0))}
                           </span>
                         }
                       />

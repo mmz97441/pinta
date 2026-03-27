@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import {
   Plus, Search, X, BarChart3, CircleDot, Clock, CheckCircle, Check,
   ChevronRight, AlertTriangle, Filter, Package,
-  User, Ruler, Wrench, CreditCard, Plane, Star,
+  User, UserPlus, Ruler, Wrench, CreditCard, Plane, Star,
   Hash, Layers, CalendarDays,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
@@ -611,18 +611,28 @@ export default function StaffDashboard({ onNewColis }) {
             {totalAll} colis actifs
           </p>
         </div>
-        <button
-          onClick={onNewColis}
-          className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-bold transition-all active:scale-95"
-          style={{
-            background: `linear-gradient(135deg, ${BRAND.gold}, ${BRAND.goldD})`,
-            color: BRAND.navyD,
-            boxShadow: `0 2px 12px ${BRAND.gold}40`,
-          }}
-        >
-          <Package size={15} strokeWidth={2.5} />
-          Nouveau colis
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={onNewColis}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-bold transition-all active:scale-95 border-2"
+            style={{ borderColor: BRAND.navy, color: BRAND.navy, background: 'white' }}
+          >
+            <UserPlus size={15} strokeWidth={2.5} />
+            Nouveau client
+          </button>
+          <button
+            onClick={onNewColis}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-bold transition-all active:scale-95"
+            style={{
+              background: `linear-gradient(135deg, ${BRAND.gold}, ${BRAND.goldD})`,
+              color: BRAND.navyD,
+              boxShadow: `0 2px 12px ${BRAND.gold}40`,
+            }}
+          >
+            <Package size={15} strokeWidth={2.5} />
+            Nouveau colis
+          </button>
+        </div>
       </div>
 
       {/* ── Global search + envoi filter toggle ─────────────────────────── */}
