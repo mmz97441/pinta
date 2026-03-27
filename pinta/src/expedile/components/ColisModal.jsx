@@ -414,7 +414,7 @@ export default function ColisModal({ open, onClose }) {
           {isStaff && !newClientMode && (
             <div>
               <label className={labelCls}>Client</label>
-              <div className="relative">
+              <div>
                 <div className="relative">
                   <Search
                     size={15}
@@ -427,21 +427,24 @@ export default function ColisModal({ open, onClose }) {
                     onChange={(e) => {
                       setClientSearchQ(e.target.value);
                       setSelectedClient(null);
+                      setMode(null);
                       setClientSearchOpen(true);
                     }}
-                    onFocus={() => setClientSearchOpen(true)}
+                    onFocus={() => { if (!selectedClient) setClientSearchOpen(true); }}
                     className={`w-full rounded-xl border pl-9 pr-3 py-2.5 text-sm outline-none transition-colors ${
                       formErr.client
                         ? 'border-red-400 bg-red-50 focus:border-red-500'
+                        : selectedClient
+                        ? 'border-green-400 bg-green-50'
                         : 'border-gray-200 bg-gray-50 focus:border-blue-400 focus:bg-white'
                     }`}
                     autoComplete="off"
                   />
                 </div>
 
-                {/* Dropdown */}
-                {clientSearchOpen && (
-                  <div className="absolute z-10 left-0 right-0 top-full mt-1 bg-white rounded-xl border border-gray-200 shadow-xl overflow-hidden max-h-64 overflow-y-auto">
+                {/* Client list — inline (not absolute dropdown) */}
+                {clientSearchOpen && !selectedClient && (
+                  <div className="mt-1 bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden max-h-52 overflow-y-auto">
                     {filteredClients.length === 0 && clientSearchQ.trim() ? (
                       <div className="px-4 py-3 text-center">
                         <p className="text-sm text-gray-400 mb-2">Aucun client trouvé</p>
