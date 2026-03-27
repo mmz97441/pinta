@@ -57,9 +57,9 @@ export default function ColisModal({ open, onClose }) {
   const [clientSearchOpen, setClientSearchOpen] = useState(false);
   const [selectedClient, setSelectedClient] = useState(null);
 
-  // ── Mode: null = choix client, 'rattacher' = ajouter à EXP existant, 'nouveau' = créer EXP ──
-  const [mode, setMode] = useState(null); // null | 'rattacher' | 'nouveau'
-  const [rattacherTarget, setRattacherTarget] = useState(null); // colis existant sélectionné
+  // ── Mode: null = choix (ou auto-nouveau si pas de regroupables), 'rattacher', 'nouveau' ──
+  const [mode, setMode] = useState(null);
+  const [rattacherTarget, setRattacherTarget] = useState(null);
 
   // ── State ──
   const [newClientMode, setNewClientMode] = useState(false);
@@ -110,12 +110,28 @@ export default function ColisModal({ open, onClose }) {
     ? searchClients(clients, clientSearchQ)
     : clients.slice(0, 8);
 
+  const STATUTS_REGROUPABLES = ['receptionne', 'mesure', 'attente_feu_vert', 'autorise'];
+
+  const regroupables = selectedClient
+    ? data.filter((c) => c.clientId === selectedClient.id && STATUTS_REGROUPABLES.includes(c.statut))
+    : [];
+
   const handleSelectClient = (cl) => {
     setSelectedClient(cl);
     setClientSearchQ(cl.nom);
     setClientSearchOpen(false);
     setNewClientMode(false);
     setFormErr((prev) => ({ ...prev, client: undefined }));
+    // Reset mode — will show choice if regroupables, else auto-nouveau
+    setMode(null);
+    setRattacherTarget(null);
+    // Check regroupables for this client immediately
+    const hasRegroupables = data.some(
+      (c) => c.clientId === cl.id && STATUTS_REGROUPABLES.includes(c.statut)
+    );
+    if (!hasRegroupables) {
+      setMode('nouveau');
+    }
   };
 
   // ── New client inline ─────────────────────────────────────
@@ -507,19 +523,8 @@ export default function ColisModal({ open, onClose }) {
                 <p className="mt-1 text-xs text-red-500">{formErr.client}</p>
               )}
 
-              {/* ── CHOIX : RATTACHER OU NOUVEAU (quand le client a des colis regroupables) ── */}
-              {selectedClient && !mode && (() => {
-                const STATUTS_REGROUPABLES = ['receptionne', 'mesure', 'attente_feu_vert', 'autorise'];
-                const regroupables = data.filter(
-                  (c) => c.clientId === selectedClient.id && STATUTS_REGROUPABLES.includes(c.statut)
-                );
-                if (regroupables.length === 0) {
-                  // Pas de colis regroupables → passer directement en mode nouveau
-                  if (!mode) setTimeout(() => setMode('nouveau'), 0);
-                  return null;
-                }
-
-                return (
+              {/* ── CHOIX : RATTACHER OU NOUVEAU ── */}
+              {selectedClient && !mode && regroupables.length > 0 && (
                   <div className="mt-2 space-y-3">
                     <div
                       className="rounded-xl border p-3 space-y-3"
@@ -581,18 +586,7 @@ export default function ColisModal({ open, onClose }) {
                       Créer une nouvelle expédition (nouveau EXP)
                     </button>
                   </div>
-                );
-              })()}
-
-              {/* Auto-set mode to 'nouveau' if no regroupables */}
-              {selectedClient && !mode && (() => {
-                const STATUTS_REGROUPABLES = ['receptionne', 'mesure', 'attente_feu_vert', 'autorise'];
-                const hasRegroupables = data.some(
-                  (c) => c.clientId === selectedClient.id && STATUTS_REGROUPABLES.includes(c.statut)
-                );
-                if (!hasRegroupables && !mode) setTimeout(() => setMode('nouveau'), 0);
-                return null;
-              })()}
+              )}
             </div>
           )}
 
