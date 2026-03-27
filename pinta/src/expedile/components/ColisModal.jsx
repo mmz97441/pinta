@@ -231,6 +231,23 @@ export default function ColisModal({ open, onClose }) {
     const newColis = buildColis(clientId, 'receptionne');
     setData((prev) => [...prev, newColis]);
 
+    // Auto-group: move all other active colis of this client to the same casier
+    if (nf.casier.trim()) {
+      const newCasier = nf.casier.trim();
+      data.forEach((c) => {
+        if (c.clientId === clientId && c.id !== newColis.id
+            && c.statut !== 'livre' && c.statut !== 'annule'
+            && c.casier !== newCasier) {
+          const oldCasier = c.casier;
+          const historique = c.casierHistorique || [];
+          if (oldCasier) {
+            historique.push({ casier: oldCasier, date: new Date().toISOString() });
+          }
+          upd(c.id, { casier: newCasier, casierHistorique: historique });
+        }
+      });
+    }
+
     if (sendWA && cl?.tel) {
       const msg =
         `Bonjour ${cl.nom.split(' ')[0]} 👋\n\nVotre colis *${newColis.ref}* est bien arrivé à notre entrepôt de Paris !\n\n` +
@@ -242,7 +259,10 @@ export default function ColisModal({ open, onClose }) {
       window.open(waLink(cl.tel, msg), '_blank');
     }
 
-    const hasDims = nf.dimL && nf.dimW && nf.dimH && nf.poids;
+    const hasDims = nf.trackingLines.every((_, i) => {
+      const d = nf.multiDims[i] || {};
+      return d.dimL && d.dimW && d.dimH && d.poids;
+    });
     const label = sendWA ? 'réceptionné + WhatsApp envoyé' : 'réceptionné';
     flash(`Colis ${newColis.ref} ${label}${hasDims ? ' + mesuré' : ''} — casier ${nf.casier.trim()}`);
     resetAndClose();
@@ -269,21 +289,20 @@ export default function ColisModal({ open, onClose }) {
           ]
         : [];
 
-    // Detect multi-tracking dims
-    const isMulti = trackings.length > 1;
+    // Detect per-carton dims (always use multiDims keyed by trackingLine index)
     let hasDims = false;
     let dimL = null, dimW = null, dimH = null, poids = null;
     let dimsParColis = [];
 
-    if (isStaff && isMulti) {
-      // Check if all multi-tracking dims are filled
-      const allFilled = trackings.every((_, i) => {
+    if (isStaff) {
+      const lineCount = nf.trackingLines.length;
+      const allFilled = Array.from({ length: lineCount }, (_, i) => i).every((i) => {
         const d = nf.multiDims[i] || {};
         return d.dimL && d.dimW && d.dimH && d.poids;
       });
       if (allFilled) {
         hasDims = true;
-        dimsParColis = trackings.map((_, i) => {
+        dimsParColis = Array.from({ length: lineCount }, (_, i) => {
           const d = nf.multiDims[i];
           return { dimL: parseFloat(d.dimL), dimW: parseFloat(d.dimW), dimH: parseFloat(d.dimH), poids: parseFloat(d.poids) };
         });
@@ -293,12 +312,6 @@ export default function ColisModal({ open, onClose }) {
         dimH = Math.max(...dimsParColis.map((d) => d.dimH));
         poids = Math.round(totalPoids * 100) / 100;
       }
-    } else if (isStaff && nf.dimL && nf.dimW && nf.dimH && nf.poids) {
-      hasDims = true;
-      dimL = parseFloat(nf.dimL);
-      dimW = parseFloat(nf.dimW);
-      dimH = parseFloat(nf.dimH);
-      poids = parseFloat(nf.poids);
     }
 
     const finalStatut = hasDims ? 'mesure' : statut;
@@ -312,7 +325,7 @@ export default function ColisModal({ open, onClose }) {
       trackingsDetail,
       desc: nf.d.trim() || (nf.trackingLines[0]?.fournisseur?.trim() || ''),
       notesReception: nf.notesReception.trim() || null,
-      valeur: parseFloat(nf.v) || 0,
+      valeur: null,
       dimL,
       dimW,
       dimH,
@@ -834,8 +847,6 @@ export default function ColisModal({ open, onClose }) {
 
               {/* ── DIMENSIONS (staff only, optional — saves a step if filled) ── */}
               {isStaff && (() => {
-                const activeTrackings = nf.trackingLines.filter((t) => t.tracking.trim()).map((t) => t.tracking.trim());
-                const isMultiTrack = activeTrackings.length > 1;
                 const dimInputCls = "w-full px-2.5 py-2 rounded-lg border border-gray-200 bg-white text-sm outline-none focus:border-blue-400";
                 const updateMultiDim = (idx, field, val) => setNf((prev) => ({
                   ...prev,
@@ -867,7 +878,7 @@ export default function ColisModal({ open, onClose }) {
                       <div className="flex items-center gap-1.5">
                         <Ruler size={13} className="text-blue-600" />
                         <span className="text-xs font-bold text-blue-800">
-                          {isMultiTrack ? `Dimensions (${activeTrackings.length} colis)` : 'Dimensions'}
+                          Dimensions ({nf.trackingLines.length} colis)
                         </span>
                       </div>
                       <button
@@ -886,103 +897,49 @@ export default function ColisModal({ open, onClose }) {
                       </button>
                     </div>
 
-                    {isMultiTrack ? (
-                      /* ── Multi-tracking: one dim group per colis ── */
-                      <div className="space-y-3">
-                        {activeTrackings.map((tracking, idx) => {
-                          const d = nf.multiDims[idx] || { dimL: '', dimW: '', dimH: '', poids: '' };
-                          return (
-                            <div key={idx} className="rounded-lg border border-blue-100 bg-white p-2.5 space-y-2">
-                              <p className="text-[10px] font-black uppercase tracking-wider text-blue-700">
-                                Colis {idx + 1} — <span className="font-mono">{tracking}</span>
-                              </p>
-                              <div className="grid grid-cols-4 gap-1.5">
-                                <div>
-                                  <label className="text-[9px] font-bold text-gray-400 block mb-0.5">L</label>
-                                  <input type="number" min="0" step="0.5" placeholder="40"
-                                    value={d.dimL} onChange={(e) => updateMultiDim(idx, 'dimL', e.target.value)}
-                                    className={dimInputCls} />
-                                </div>
-                                <div>
-                                  <label className="text-[9px] font-bold text-gray-400 block mb-0.5">l</label>
-                                  <input type="number" min="0" step="0.5" placeholder="30"
-                                    value={d.dimW} onChange={(e) => updateMultiDim(idx, 'dimW', e.target.value)}
-                                    className={dimInputCls} />
-                                </div>
-                                <div>
-                                  <label className="text-[9px] font-bold text-gray-400 block mb-0.5">H</label>
-                                  <input type="number" min="0" step="0.5" placeholder="20"
-                                    value={d.dimH} onChange={(e) => updateMultiDim(idx, 'dimH', e.target.value)}
-                                    className={dimInputCls} />
-                                </div>
-                                <div>
-                                  <label className="text-[9px] font-bold text-gray-400 block mb-0.5">kg</label>
-                                  <input type="number" min="0" step="0.1" placeholder="2.5"
-                                    value={d.poids} onChange={(e) => updateMultiDim(idx, 'poids', e.target.value)}
-                                    className={dimInputCls} />
-                                </div>
+                    {/* ── Per-carton dims (always one block per tracking line) ── */}
+                    <div className="space-y-3">
+                      {nf.trackingLines.map((line, idx) => {
+                        const d = nf.multiDims[idx] || { dimL: '', dimW: '', dimH: '', poids: '' };
+                        const label = line.fournisseur.trim() || ('Tracking ' + (idx + 1));
+                        return (
+                          <div key={idx} className="rounded-lg border border-blue-100 bg-white p-2.5 space-y-2">
+                            <p className="text-[10px] font-black uppercase tracking-wider text-blue-700">
+                              Colis {idx + 1} — {label}
+                            </p>
+                            <div className="grid grid-cols-4 gap-1.5">
+                              <div>
+                                <label className="text-[9px] font-bold text-gray-400 block mb-0.5">L</label>
+                                <input type="number" min="0" step="0.5" placeholder="40"
+                                  value={d.dimL} onChange={(e) => updateMultiDim(idx, 'dimL', e.target.value)}
+                                  className={dimInputCls} />
+                              </div>
+                              <div>
+                                <label className="text-[9px] font-bold text-gray-400 block mb-0.5">l</label>
+                                <input type="number" min="0" step="0.5" placeholder="30"
+                                  value={d.dimW} onChange={(e) => updateMultiDim(idx, 'dimW', e.target.value)}
+                                  className={dimInputCls} />
+                              </div>
+                              <div>
+                                <label className="text-[9px] font-bold text-gray-400 block mb-0.5">H</label>
+                                <input type="number" min="0" step="0.5" placeholder="20"
+                                  value={d.dimH} onChange={(e) => updateMultiDim(idx, 'dimH', e.target.value)}
+                                  className={dimInputCls} />
+                              </div>
+                              <div>
+                                <label className="text-[9px] font-bold text-gray-400 block mb-0.5">kg</label>
+                                <input type="number" min="0" step="0.1" placeholder="2.5"
+                                  value={d.poids} onChange={(e) => updateMultiDim(idx, 'poids', e.target.value)}
+                                  className={dimInputCls} />
                               </div>
                             </div>
-                          );
-                        })}
-                      </div>
-                    ) : (
-                      /* ── Single colis dims ── */
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-0.5">L (cm)</label>
-                          <input type="number" min="0" step="0.5" placeholder="40"
-                            value={nf.dimL} onChange={(e) => setField('dimL', e.target.value)}
-                            className={dimInputCls} />
-                        </div>
-                        <div>
-                          <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-0.5">l (cm)</label>
-                          <input type="number" min="0" step="0.5" placeholder="30"
-                            value={nf.dimW} onChange={(e) => setField('dimW', e.target.value)}
-                            className={dimInputCls} />
-                        </div>
-                        <div>
-                          <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-0.5">H (cm)</label>
-                          <input type="number" min="0" step="0.5" placeholder="20"
-                            value={nf.dimH} onChange={(e) => setField('dimH', e.target.value)}
-                            className={dimInputCls} />
-                        </div>
-                        <div>
-                          <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-0.5">Poids (kg)</label>
-                          <input type="number" min="0" step="0.1" placeholder="2.5"
-                            value={nf.poids} onChange={(e) => setField('poids', e.target.value)}
-                            className={dimInputCls} />
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Summary for single colis */}
-                    {!isMultiTrack && nf.dimL && nf.dimW && nf.dimH && nf.poids && (
-                      <p className="text-[10px] text-blue-700 font-medium">
-                        Poids vol. {((parseFloat(nf.dimL) * parseFloat(nf.dimW) * parseFloat(nf.dimH)) / 5000).toFixed(2)} kg
-                        · Facturable {Math.max(parseFloat(nf.poids), (parseFloat(nf.dimL) * parseFloat(nf.dimW) * parseFloat(nf.dimH)) / 5000).toFixed(2)} kg
-                      </p>
-                    )}
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 );
               })()}
-
-              {/* ── VALEUR ── */}
-              <div>
-                <label className={labelCls}>
-                  Valeur déclarée
-                  <span className="ml-1 normal-case text-gray-400 font-normal">(€, facultatif)</span>
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  placeholder="Ex: 89.99"
-                  value={nf.v}
-                  onChange={(e) => setField('v', e.target.value)}
-                  className={inputCls(false)}
-                />
-              </div>
 
               {/* ── FACTURE (client only) ── */}
               {!isStaff && (
