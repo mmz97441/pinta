@@ -62,7 +62,14 @@ export default function ColisInfo() {
         {cl && (
           <div className="text-right">
             <p className="text-xs font-bold text-gray-400">Client</p>
-            <p className="text-sm">{cl.nom}</p>
+            <p className="text-sm">
+              {cl.nom}
+              {cl.points > 0 && cl.type === 'particulier' && (
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 ml-1">
+                  {cl.points} pts
+                </span>
+              )}
+            </p>
             {selDest && (
               <p className="text-xs mt-0.5">
                 <span className="px-1.5 py-0.5 rounded-full bg-gray-100 font-medium">{selDest.flag} {selDest.nom}</span>

@@ -439,9 +439,26 @@ export function AppProvider({ children }) {
 
   const payer = useCallback((id, mt) => {
     log(id, 'attente_paiement', 'paye');
-    upd(id, { statut: 'paye', paiementMontant: mt });
+    upd(id, { statut: 'paye', paiementMontant: mt, paiementDate: new Date().toISOString() });
+
+    // Programme fidélité : 10€ de transport = 1 point (particuliers uniquement)
+    const colis = data.find((c) => c.id === id);
+    if (colis) {
+      const cl = clients.find((c) => c.id === colis.clientId);
+      if (cl && cl.type === 'particulier') {
+        const transport = colis.devisTransport || 0;
+        const points = Math.floor(transport / 10);
+        if (points > 0) {
+          const newPoints = (cl.points || 0) + points;
+          updateClient(cl.id, { points: newPoints }, true);
+          flash({ msg: `Paiement confirmé ! +${points} point${points > 1 ? 's' : ''} fidélité`, type: 'success', duration: 5000 });
+          return;
+        }
+      }
+    }
+
     flash({ msg: 'Paiement confirmé !', type: 'success', duration: 5000 });
-  }, [log, upd, flash]);
+  }, [log, upd, flash, data, clients, updateClient]);
 
   const envMsg = useCallback(async (colisId, msgTxt, authInfo, tel) => {
     if (!msgTxt.trim()) return;

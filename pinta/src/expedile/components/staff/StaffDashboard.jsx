@@ -3,13 +3,15 @@ import {
   Plus, Search, X, BarChart3, CircleDot, Clock, CheckCircle, Check,
   ChevronRight, AlertTriangle, Filter, Package, Download,
   User, UserPlus, Ruler, Wrench, CreditCard, Plane, Star,
-  Hash, Layers, CalendarDays,
+  Hash, Layers, CalendarDays, FileSpreadsheet,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { BRAND, STATUTS, STATUT_ENVOI, ABONNEMENTS, getDestByCP } from '../../constants';
 import { eur, labelEnvoi, trackStr, trackCount, hasTrack, searchGlobal, fuzzy } from '../../utils';
 import { Badge, ViewToggle } from '../ui';
 import { exportColisExcel } from '../../utils/exportExcel';
+import { exportFactureCommerciale } from '../../utils/exportFactureCommerciale';
+import { exportDAUData } from '../../utils/exportDAU';
 
 // ── Statut groups ──────────────────────────────────────────────────────────────
 const STATUTS_A_FAIRE = [
@@ -405,7 +407,7 @@ function ColisTable({ items, getClient, envois, openColis, filterFn }) {
 
 // ── Main component ───────────────────────────────────────────────────────────
 export default function StaffDashboard({ onNewColis }) {
-  const { data, clients, envois, setSelId, getClient, isStaff, page } = useApp();
+  const { data, clients, envois, setSelId, getClient, isStaff, page, flash } = useApp();
 
   const [globalSearch, setGlobalSearch] = useState('');
   const [envoiFilter, setEnvoiFilter] = useState('ALL');
@@ -1000,9 +1002,22 @@ export default function StaffDashboard({ onNewColis }) {
       {/* ── View mode toggle + table search ─────────────────────────────── */}
       <div className="anim-fade stagger-4 space-y-3">
         <div className="flex items-center justify-between">
-          <p className="text-xs font-semibold text-gray-500">
-            {activePool.filter((c) => c.statut !== 'annule').length} colis affichés
-          </p>
+          <div className="flex items-center gap-3">
+            <p className="text-xs font-semibold text-gray-500">
+              {activePool.filter((c) => c.statut !== 'annule').length} colis affichés
+            </p>
+            <button
+              onClick={() => {
+                const toExport = activePool.filter((c) => c.statut !== 'annule');
+                exportColisExcel(toExport, clients);
+                flash(`${toExport.length} colis exportés`);
+              }}
+              className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+            >
+              <Download size={12} />
+              Export Excel
+            </button>
+          </div>
           <div className="flex items-center gap-2">
             <ViewToggle value={displayMode} onChange={setDisplayMode} />
             <div
