@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import {
-  Plus, Search, X, BarChart3, CircleDot, Clock, CheckCircle,
+  Plus, Search, X, BarChart3, CircleDot, Clock, CheckCircle, Check,
   ChevronRight, AlertTriangle, Filter, Package,
   User, Ruler, Wrench, CreditCard, Plane, Star,
   Hash, Layers, CalendarDays,
@@ -20,12 +20,14 @@ const STATUTS_LIVRE = ['livre'];
 const STATUTS_PRETS_EXPEDIES = ['paye', 'expedie', 'transit', 'arrive', 'livraison', 'livre'];
 
 // ── Summary card definitions ─────────────────────────────────────────────────
-const STATUTS_FEU_VERT = ['autorise', 'en_preparation'];
+const STATUTS_FEU_VERT_OK = ['autorise', 'en_preparation'];
+const STATUTS_ATTENTE_FV = ['attente_feu_vert'];
 
 const SUMMARY_CARDS = [
   { key: 'afaire', label: 'À traiter', statuts: STATUTS_A_FAIRE, color: BRAND.navy, icon: CircleDot },
-  { key: 'attente', label: 'Att. client', statuts: STATUTS_ATTENTE, color: '#D97706', icon: Clock },
-  { key: 'feuvert', label: 'Feu vert', statuts: STATUTS_FEU_VERT, color: '#65A30D', icon: CheckCircle },
+  { key: 'attente_fv', label: 'Att. feu vert', statuts: ['attente_feu_vert'], color: '#F97316', icon: Clock },
+  { key: 'attente_paie', label: 'Att. paiement', statuts: ['devis_envoye', 'attente_paiement'], color: '#D97706', icon: CreditCard },
+  { key: 'feuvert', label: 'Feu vert OK', statuts: STATUTS_FEU_VERT_OK, color: '#65A30D', icon: CheckCircle },
   { key: 'expedies', label: 'Prêts / Expédiés', statuts: STATUTS_PRETS_EXPEDIES, color: '#059669', icon: Plane },
 ];
 
@@ -296,6 +298,17 @@ function ColisTableRow({ c, client, envois, onClick, stagger }) {
         {c.desc && <span className="text-[11px] text-gray-500 truncate block max-w-[130px]">{c.desc}</span>}
       </td>
       <td className="px-3 py-2.5">
+        {c.factures && c.factures.length > 0 ? (
+          c.factures.every((f) => f.valide) ? (
+            <Check size={14} className="text-green-500" />
+          ) : (
+            <AlertTriangle size={14} className="text-amber-500" />
+          )
+        ) : (
+          <span className="text-[10px] font-bold text-red-500">Manquante</span>
+        )}
+      </td>
+      <td className="px-3 py-2.5">
         <Badge statut={c.statut} />
       </td>
       <td className="px-3 py-2.5">
@@ -357,6 +370,7 @@ function ColisTable({ items, getClient, envois, openColis, filterFn }) {
             <tr className="border-b border-gray-100" style={{ backgroundColor: BRAND.navy + '08' }}>
               <th className={TH}>Client</th>
               <th className={TH}>N° Colis</th>
+              <th className={TH}>Facture</th>
               <th className={TH}>Statut</th>
               <th className={TH}>Dimensions</th>
               <th className={`${TH} text-right`}>Transport</th>
@@ -368,7 +382,7 @@ function ColisTable({ items, getClient, envois, openColis, filterFn }) {
           </thead>
           <tbody>
             {filtered.length === 0 ? (
-              <tr><td colSpan={9} className="px-4 py-6 text-center text-sm text-gray-400">Aucun résultat</td></tr>
+              <tr><td colSpan={10} className="px-4 py-6 text-center text-sm text-gray-400">Aucun résultat</td></tr>
             ) : filtered.map((c, i) => (
               <ColisTableRow
                 key={c.id}
@@ -455,12 +469,16 @@ export default function StaffDashboard({ onNewColis }) {
     () => data.filter((c) => STATUTS_A_FAIRE.includes(c.statut)).length,
     [data],
   );
-  const totalAttente = useMemo(
-    () => data.filter((c) => STATUTS_ATTENTE.includes(c.statut)).length,
+  const totalAttenteFV = useMemo(
+    () => data.filter((c) => STATUTS_ATTENTE_FV.includes(c.statut)).length,
+    [data],
+  );
+  const totalAttentePaie = useMemo(
+    () => data.filter((c) => ['devis_envoye', 'attente_paiement'].includes(c.statut)).length,
     [data],
   );
   const totalFeuVert = useMemo(
-    () => data.filter((c) => STATUTS_FEU_VERT.includes(c.statut)).length,
+    () => data.filter((c) => STATUTS_FEU_VERT_OK.includes(c.statut)).length,
     [data],
   );
   const totalPretExpedies = useMemo(
@@ -730,12 +748,13 @@ export default function StaffDashboard({ onNewColis }) {
 
       {/* ── Summary cards (primary navigation) ─────────────────────────── */}
       <div className="anim-fade stagger-2">
-        <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
+        <div className="grid grid-cols-3 md:grid-cols-7 gap-3">
           {[
             ...SUMMARY_CARDS.map((c) => ({
               ...c,
               count: c.key === 'afaire' ? totalAFaire
-                : c.key === 'attente' ? totalAttente
+                : c.key === 'attente_fv' ? totalAttenteFV
+                : c.key === 'attente_paie' ? totalAttentePaie
                 : c.key === 'feuvert' ? totalFeuVert
                 : totalPretExpedies,
             })),

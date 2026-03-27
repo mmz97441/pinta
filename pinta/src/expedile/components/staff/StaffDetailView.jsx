@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import {
-  Ruler, Check, Clock, Camera, AlertTriangle, Eye, X, RotateCcw, ExternalLink,
+  Ruler, Check, Clock, Camera, AlertTriangle, Eye, X, RotateCcw, ExternalLink, Mail,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { BRAND, STATUTS, TRANSITIONS, PRODUITS_INTERDITS, getDestByCP } from '../../constants';
@@ -132,6 +132,20 @@ function BtnWA({ onClick, children }) {
       style={{ background: '#25D366', color: 'white', boxShadow: '0 2px 8px #25D36640' }}
     >
       <ExternalLink size={14} />
+      {children}
+    </button>
+  );
+}
+
+// ── Email button ────────────────────────────────────────────────────────────
+function BtnEmail({ onClick, children }) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl text-sm font-bold transition-all active:scale-95"
+      style={{ background: `linear-gradient(135deg, ${BRAND.navy}, ${BRAND.navyL})`, color: 'white', boxShadow: '0 2px 8px rgba(27,58,75,0.25)' }}
+    >
+      <Mail size={14} />
       {children}
     </button>
   );
@@ -581,9 +595,31 @@ export default function StaffDetailView() {
               <DimsDisplay c={sel} />
 
               {missingFacture && (
-                <div className="flex items-start gap-2 p-3 rounded-xl bg-amber-50 border border-amber-200">
-                  <AlertTriangle size={14} className="text-amber-500 flex-shrink-0 mt-0.5" />
-                  <p className="text-xs font-bold text-amber-800">Facture non encore reçue — à demander au client</p>
+                <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 space-y-2">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle size={14} className="text-amber-500 flex-shrink-0 mt-0.5" />
+                    <p className="text-xs font-bold text-amber-800">
+                      ⚠️ Facture d'achat manquante — Sans cette facture, le calcul des taxes (OM/OMR) sera impossible.
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => sendMsg(sel.id, cl?.id, 'whatsapp', 'demande_facture', null)}
+                      className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[11px] font-bold transition-all active:scale-95"
+                      style={{ background: '#25D366', color: 'white' }}
+                    >
+                      <ExternalLink size={11} />
+                      Demander par WhatsApp
+                    </button>
+                    <button
+                      onClick={() => sendMsg(sel.id, cl?.id, 'email', 'demande_facture', null)}
+                      className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[11px] font-bold transition-all active:scale-95"
+                      style={{ background: BRAND.navy, color: 'white' }}
+                    >
+                      <Mail size={11} />
+                      Demander par email
+                    </button>
+                  </div>
                 </div>
               )}
 
@@ -595,6 +631,15 @@ export default function StaffDetailView() {
               >
                 Envoyer via WhatsApp — demander le feu vert
               </BtnWA>
+
+              <BtnEmail
+                onClick={() => {
+                  demanderFeuVert(sel.id);
+                  sendMsg(sel.id, cl?.id, 'email', 'demande_feu_vert', null);
+                }}
+              >
+                Envoyer par email — demander le feu vert
+              </BtnEmail>
             </div>
           </Section>
         );
@@ -614,11 +659,46 @@ export default function StaffDetailView() {
 
               <DimsDisplay c={sel} />
 
+              {missingFacture && (
+                <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 space-y-2">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle size={14} className="text-amber-500 flex-shrink-0 mt-0.5" />
+                    <p className="text-xs font-bold text-amber-800">
+                      ⚠️ Facture d'achat manquante — Sans cette facture, le calcul des taxes (OM/OMR) sera impossible.
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => sendMsg(sel.id, cl?.id, 'whatsapp', 'demande_facture', null)}
+                      className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[11px] font-bold transition-all active:scale-95"
+                      style={{ background: '#25D366', color: 'white' }}
+                    >
+                      <ExternalLink size={11} />
+                      Demander par WhatsApp
+                    </button>
+                    <button
+                      onClick={() => sendMsg(sel.id, cl?.id, 'email', 'demande_facture', null)}
+                      className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[11px] font-bold transition-all active:scale-95"
+                      style={{ background: BRAND.navy, color: 'white' }}
+                    >
+                      <Mail size={11} />
+                      Demander par email
+                    </button>
+                  </div>
+                </div>
+              )}
+
               <BtnWA
                 onClick={() => sendMsg(sel.id, cl?.id, 'whatsapp', 'relance_feu_vert', null)}
               >
                 Relancer via WhatsApp
               </BtnWA>
+
+              <BtnEmail
+                onClick={() => sendMsg(sel.id, cl?.id, 'email', 'relance_feu_vert', null)}
+              >
+                Relancer par email
+              </BtnEmail>
             </div>
           </Section>
         );
@@ -635,6 +715,15 @@ export default function StaffDetailView() {
                   Le client a donné son accord pour la préparation.
                 </p>
               </div>
+
+              {missingFacture && (
+                <div className="flex items-start gap-2 p-3 rounded-xl bg-amber-50 border border-amber-300">
+                  <AlertTriangle size={14} className="text-amber-600 flex-shrink-0 mt-0.5" />
+                  <p className="text-xs font-bold text-amber-800">
+                    Attention : la facture d'achat n'est pas encore validée. Sans elle, le devis final ne pourra pas être calculé après la préparation.
+                  </p>
+                </div>
+              )}
 
               <DimsDisplay c={sel} />
 
@@ -672,6 +761,14 @@ export default function StaffDetailView() {
 
         return (
           <div className="space-y-4">
+            {missingFacture && (
+              <div className="flex items-start gap-2 p-3 rounded-xl bg-red-50 border border-red-300">
+                <X size={14} className="text-red-600 flex-shrink-0 mt-0.5" />
+                <p className="text-xs font-bold text-red-800">
+                  🚫 Facture d'achat non validée — Le devis ne pourra pas être calculé. Demandez la facture au client avant de finaliser.
+                </p>
+              </div>
+            )}
             {/* Dimensions initiales */}
             <Section title="Dimensions initiales (réception)" icon={Ruler} color="#94A3B8">
               <DimsDisplay c={sel} />
