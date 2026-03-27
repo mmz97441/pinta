@@ -1097,170 +1097,46 @@ export default function StaffDetailView() {
   // ════════════════════════════════════════════════════════════════════════
   // FULL RENDER
   // ════════════════════════════════════════════════════════════════════════
+  const [showCorrections, setShowCorrections] = useState(false);
+
   return (
-    <div className="flex flex-col gap-4 pb-24 lg:pb-12">
+    <div className="flex flex-col gap-4 pb-24 lg:pb-4">
 
       {/* ── Action block ───────────────────────────────────────────────── */}
       {renderActionBlock()}
 
-      {/* ── Communication panel ────────────────────────────────────────── */}
-      <div className="card-elevated">
-        <button
-          onClick={() => setMsgPanel((p) => !p)}
-          className="w-full flex items-center justify-between px-4 py-3"
-        >
-          <div className="flex items-center gap-2">
-            <ExternalLink size={15} style={{ color: BRAND.navy }} />
-            <span className="text-sm font-bold" style={{ color: BRAND.navy }}>
-              Communication
-            </span>
-            {thisComLog.length > 0 && (
-              <span
-                className="text-[10px] font-bold px-1.5 py-0.5 rounded-full"
-                style={{ background: `${BRAND.navy}15`, color: BRAND.navy }}
-              >
-                {thisComLog.length}
-              </span>
-            )}
-          </div>
-          <span className="text-xs text-gray-400">{msgPanel ? 'Fermer' : 'Ouvrir'}</span>
-        </button>
-
-        {msgPanel && (
-          <div className="px-4 pb-4 space-y-4 border-t border-gray-100">
-            {/* Canal selector */}
-            <div className="flex gap-2 mt-3">
-              {['whatsapp', 'email'].map((c) => (
-                <button
-                  key={c}
-                  onClick={() => {
-                    setSendCanal(c);
-                    if (selTemplate) {
-                      setMsgPreview(getPreview(selTemplate, cl?.id, sel.id, c));
-                    }
-                  }}
-                  className="flex-1 py-2 rounded-xl text-xs font-bold transition-all"
-                  style={
-                    sendCanal === c
-                      ? { background: BRAND.navy, color: 'white' }
-                      : { background: '#F3F4F6', color: '#6B7280' }
-                  }
-                >
-                  {c === 'whatsapp' ? 'WhatsApp' : 'Email'}
-                </button>
-              ))}
-            </div>
-
-            {/* Template quick buttons */}
-            <div>
-              <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-2">
-                Templates rapides
-              </p>
-              <div className="flex gap-1.5 flex-wrap">
-                {templates.map((tpl) => (
-                  <button
-                    key={tpl}
-                    onClick={() => handleSelectTemplate(tpl)}
-                    className="text-xs font-bold px-2.5 py-1.5 rounded-lg transition-all"
-                    style={
-                      selTemplate === tpl
-                        ? { background: BRAND.navy, color: 'white' }
-                        : { background: '#F3F4F6', color: '#374151' }
-                    }
-                  >
-                    {TEMPLATE_LABELS[tpl] || tpl}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Preview / edit */}
-            {selTemplate && (
-              <div className="space-y-2">
-                <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
-                  Aperçu / modification
-                </p>
-                <textarea
-                  value={msgPreview}
-                  onChange={(e) => setMsgPreview(e.target.value)}
-                  rows={6}
-                  className="w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-xs leading-relaxed outline-none resize-none transition-all focus:border-blue-400"
-                  style={{ color: BRAND.navy, fontFamily: 'monospace' }}
-                />
-                <BtnPrimary onClick={handleSendMsg}>
-                  <ExternalLink size={14} />
-                  Envoyer via {sendCanal === 'whatsapp' ? 'WhatsApp' : 'Email'}
-                </BtnPrimary>
-              </div>
-            )}
-
-            {/* Communication log */}
-            {thisComLog.length > 0 && (
-              <div>
-                <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-2">
-                  Historique
-                </p>
-                <div className="space-y-1.5">
-                  {thisComLog.map((entry) => (
-                    <div
-                      key={entry.id}
-                      className="flex items-start gap-2 p-2.5 rounded-lg bg-gray-50 border border-gray-100"
-                    >
-                      <div
-                        className="flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-black"
-                        style={{
-                          background: entry.canal === 'whatsapp' ? '#25D366' : BRAND.navy,
-                          color: 'white',
-                        }}
-                      >
-                        {entry.canal === 'whatsapp' ? 'W' : '@'}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-medium text-gray-700 truncate">{entry.msg}</p>
-                        <p className="text-[10px] text-gray-400 mt-0.5">
-                          {entry.date} · {entry.user}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* ── Correction bar ─────────────────────────────────────────────── */}
+      {/* ── Corrections (collapsible, discreet) ──────────────────────── */}
       {(canRevert || canCancel) && (
-        <div
-          className="card p-3 flex gap-2"
-          style={{ borderLeft: `3px solid #EF4444` }}
-        >
-          <div className="flex-1 min-w-0">
-            <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-2">
-              Corrections
-            </p>
-            <div className="flex gap-2 flex-wrap">
+        <div>
+          <button
+            onClick={() => setShowCorrections((p) => !p)}
+            className="flex items-center gap-1.5 text-[11px] text-gray-400 hover:text-gray-600 transition-colors"
+          >
+            <RotateCcw size={11} />
+            {showCorrections ? 'Masquer les corrections' : 'Corrections'}
+          </button>
+          {showCorrections && (
+            <div className="flex gap-2 flex-wrap mt-2 anim-fade">
               {canRevert && (
                 <button
                   onClick={handleRevert}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border-2 border-orange-300 text-orange-700 bg-orange-50 hover:bg-orange-100 transition-colors"
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border border-orange-200 text-orange-600 bg-orange-50 hover:bg-orange-100 transition-colors"
                 >
-                  <RotateCcw size={12} />
+                  <RotateCcw size={11} />
                   Étape précédente
                 </button>
               )}
               {canCancel && (
                 <button
                   onClick={handleCancel}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border-2 border-red-300 text-red-700 bg-red-50 hover:bg-red-100 transition-colors"
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border border-red-200 text-red-500 bg-red-50 hover:bg-red-100 transition-colors"
                 >
-                  <X size={12} />
+                  <X size={11} />
                   Annuler le colis
                 </button>
               )}
             </div>
-          </div>
+          )}
         </div>
       )}
     </div>

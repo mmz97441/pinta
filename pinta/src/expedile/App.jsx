@@ -55,9 +55,11 @@ function AppContent() {
 
             {/* Two-panel layout: infos left / actions right on desktop */}
             <div className="flex flex-col lg:flex-row gap-4">
-              {/* Actions — first on mobile, right on desktop */}
-              <div className="w-full lg:w-[420px] lg:flex-shrink-0 lg:order-2 space-y-4">
-                <StaffDetailView />
+              {/* Actions — first on mobile, right sticky on desktop */}
+              <div className="w-full lg:w-[420px] lg:flex-shrink-0 lg:order-2">
+                <div className="lg:sticky lg:top-4 space-y-4">
+                  <StaffDetailView />
+                </div>
               </div>
 
               {/* Infos — second on mobile, left on desktop */}

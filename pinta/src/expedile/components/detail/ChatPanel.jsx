@@ -25,13 +25,14 @@ function MsgStatut({ statut }) {
 export default function ChatPanel() {
   const { sel, selClient, isStaff, auth, envMsg } = useApp();
   const [msgTxt, setMsgTxt] = useState('');
+  const hasMsg = sel?.messages?.length > 0;
   const [expanded, setExpanded] = useState(false);
   const scrollRef = useRef(null);
 
-  // Auto-expand when there are messages, auto-scroll to bottom
+  // Auto-expand only when there are messages
   useEffect(() => {
-    if (sel?.messages?.length > 0) setExpanded(true);
-  }, [sel?.messages?.length]);
+    setExpanded(hasMsg);
+  }, [hasMsg]);
 
   useEffect(() => {
     if (scrollRef.current) {
