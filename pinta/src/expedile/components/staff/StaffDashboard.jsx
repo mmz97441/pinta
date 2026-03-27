@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import {
   Plus, Search, X, BarChart3, CircleDot, Clock, CheckCircle, Check,
-  ChevronRight, AlertTriangle, Filter, Package,
+  ChevronRight, AlertTriangle, Filter, Package, Download,
   User, UserPlus, Ruler, Wrench, CreditCard, Plane, Star,
   Hash, Layers, CalendarDays,
 } from 'lucide-react';
@@ -9,6 +9,7 @@ import { useApp } from '../../context/AppContext';
 import { BRAND, STATUTS, STATUT_ENVOI, ABONNEMENTS, getDestByCP } from '../../constants';
 import { eur, labelEnvoi, trackStr, trackCount, hasTrack, searchGlobal, fuzzy } from '../../utils';
 import { Badge, ViewToggle } from '../ui';
+import { exportColisExcel } from '../../utils/exportExcel';
 
 // ── Statut groups ──────────────────────────────────────────────────────────────
 const STATUTS_A_FAIRE = [
