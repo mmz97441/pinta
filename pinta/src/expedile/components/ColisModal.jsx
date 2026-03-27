@@ -443,7 +443,6 @@ export default function ColisModal({ open, onClose }) {
               {/* ── COLIS REGROUPABLES DU CLIENT SÉLECTIONNÉ ── */}
               {selectedClient && (() => {
                 // Seulement les colis encore regroupables physiquement en entrepôt
-                // (pas ceux déjà préparés, en attente de paiement, expédiés, etc.)
                 const STATUTS_REGROUPABLES = ['receptionne', 'mesure', 'attente_feu_vert', 'autorise'];
                 const regroupables = data.filter(
                   (c) => c.clientId === selectedClient.id && STATUTS_REGROUPABLES.includes(c.statut)
@@ -458,9 +457,58 @@ export default function ColisModal({ open, onClose }) {
                   byCasier[k].push(c);
                 });
 
+                const handleRattacher = (existingColis) => {
+                  // Récupérer le tracking + fournisseur saisis dans le formulaire
+                  const lines = nf.trackingLines || [{ fournisseur: '', tracking: '' }];
+                  const newTrackings = lines.filter((l) => l.tracking.trim());
+
+                  if (newTrackings.length === 0) {
+                    setFormErr({ tracking: 'Saisissez au moins un tracking à rattacher' });
+                    return;
+                  }
+
+                  // Ajouter les trackings au colis existant
+                  const existingTrackings = existingColis.trackings?.filter((t) => t) || [];
+                  const existingDetail = existingColis.trackingsDetail || [];
+
+                  const updatedTrackings = [
+                    ...existingTrackings,
+                    ...newTrackings.map((l) => l.tracking.trim()),
+                  ];
+                  const updatedDetail = [
+                    ...existingDetail,
+                    ...newTrackings.map((l) => ({ number: l.tracking.trim(), fournisseur: l.fournisseur.trim() })),
+                  ];
+
+                  // Remettre en receptionne si mesuré (il faut re-mesurer avec le nouveau carton)
+                  const changes = {
+                    trackings: updatedTrackings,
+                    trackingsDetail: updatedDetail,
+                    nbColis: updatedTrackings.length,
+                  };
+
+                  if (existingColis.statut === 'mesure') {
+                    changes.statut = 'receptionne';
+                    changes.dimL = null;
+                    changes.dimW = null;
+                    changes.dimH = null;
+                    changes.poids = null;
+                    changes.dimsParColis = [];
+                  }
+
+                  // Mettre à jour le casier si un nouveau est saisi
+                  if (nf.casier?.trim()) {
+                    changes.casier = nf.casier.trim();
+                  }
+
+                  upd(existingColis.id, changes);
+                  flash(`Carton rattaché à ${existingColis.ref} — ${updatedTrackings.length} colis au total`);
+                  resetAndClose();
+                };
+
                 return (
                   <div
-                    className="mt-2 rounded-xl border p-3 space-y-2"
+                    className="mt-2 rounded-xl border p-3 space-y-2.5"
                     style={{ borderColor: BRAND.gold + '60', background: BRAND.gold + '08' }}
                   >
                     <div className="flex items-center gap-2">
@@ -471,29 +519,39 @@ export default function ColisModal({ open, onClose }) {
                     </div>
                     <div className="space-y-1.5">
                       {Object.entries(byCasier).map(([casier, colis]) => (
-                        <div key={casier} className="flex items-start gap-2">
-                          <div className="flex items-center gap-1 flex-shrink-0 mt-0.5">
+                        <div key={casier} className="space-y-1">
+                          <div className="flex items-center gap-1">
                             <MapPin size={11} style={{ color: BRAND.navy }} />
                             <span className="text-[11px] font-bold" style={{ color: BRAND.navy }}>
                               {casier}
                             </span>
                           </div>
-                          <div className="flex flex-wrap gap-1.5">
+                          <div className="space-y-1 pl-4">
                             {colis.map((c) => (
-                              <span
+                              <div
                                 key={c.id}
-                                className="inline-flex items-center gap-1.5 text-[11px] px-2 py-1 rounded-lg bg-white border border-gray-100"
+                                className="flex items-center gap-2"
                               >
-                                <span className="font-bold text-gray-800">{c.ref}</span>
-                                <Badge statut={c.statut} />
-                              </span>
+                                <span className="inline-flex items-center gap-1.5 text-[11px] px-2 py-1 rounded-lg bg-white border border-gray-100">
+                                  <span className="font-bold text-gray-800">{c.ref}</span>
+                                  <Badge statut={c.statut} />
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRattacher(c)}
+                                  className="text-[10px] font-bold px-2 py-1 rounded-lg transition-all active:scale-95"
+                                  style={{ background: BRAND.navy, color: 'white' }}
+                                >
+                                  Rattacher ici
+                                </button>
+                              </div>
                             ))}
                           </div>
                         </div>
                       ))}
                     </div>
-                    <p className="text-[10px] text-gray-500 mt-1">
-                      💡 Vous pouvez utiliser le même casier pour regrouper les colis de ce client.
+                    <p className="text-[10px] text-gray-500">
+                      💡 Cliquez « Rattacher ici » pour ajouter le carton à un colis existant, ou « Réceptionner » en bas pour créer un nouveau EXP.
                     </p>
                   </div>
                 );
