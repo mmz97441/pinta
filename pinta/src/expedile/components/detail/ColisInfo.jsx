@@ -87,73 +87,93 @@ export default function ColisInfo() {
         )}
       </div>
 
-      {/* Dimensions */}
-      {sel.dimsParColis && sel.dimsParColis.length > 1 ? (
-        <div className="mt-3 pt-3 border-t space-y-2">
-          <p className="text-xs font-bold text-gray-400 uppercase">
-            Dimensions initiales ({sel.dimsParColis.length} colis)
-          </p>
-          {sel.dimsParColis.map((d, i) => {
-            const tracking = sel.trackings?.filter((t) => t)[i];
-            return (
-              <div key={i} className="rounded-lg bg-gray-50 p-2">
-                <p className="text-[10px] font-bold text-gray-400 mb-0.5">
-                  {tracking || `Colis ${i + 1}`}
-                </p>
-                <p className="text-sm">{d.dimL} × {d.dimW} × {d.dimH} cm · {d.poids} kg</p>
-                <p className="text-xs text-gray-400">Vol: {((d.dimL * d.dimW * d.dimH) / 5000).toFixed(2)} kg</p>
-              </div>
-            );
-          })}
-          {sel.finL && (
-            <div className="mt-1">
-              <p className="text-xs font-bold uppercase" style={{ color: BRAND.gold }}>Après optimisation</p>
-              <p className="text-sm">{sel.finL} × {sel.finW} × {sel.finH} cm</p>
-              <p className="text-sm">Poids : {sel.finP || '—'} kg</p>
-              <p className="text-xs text-gray-400">Vol: {((sel.finL * sel.finW * sel.finH) / 5000).toFixed(2)} kg</p>
-            </div>
-          )}
-        </div>
-      ) : sel.dimL ? (
-        <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t">
-          <div>
-            <p className="text-xs font-bold text-gray-400 uppercase">Dimensions initiales</p>
-            <p className="text-sm">{sel.dimL} × {sel.dimW} × {sel.dimH} cm</p>
-            <p className="text-sm">Poids : {sel.poids || '—'} kg</p>
-            <p className="text-xs text-gray-400">Vol: {((sel.dimL * sel.dimW * sel.dimH) / 5000).toFixed(2)} kg</p>
-          </div>
-          {sel.finL && (
-            <div>
-              <p className="text-xs font-bold uppercase" style={{ color: BRAND.gold }}>Après optimisation</p>
-              <p className="text-sm">{sel.finL} × {sel.finW} × {sel.finH} cm</p>
-              <p className="text-sm">Poids : {sel.finP || '—'} kg</p>
-              <p className="text-xs text-gray-400">Vol: {((sel.finL * sel.finW * sel.finH) / 5000).toFixed(2)} kg</p>
-            </div>
-          )}
-        </div>
-      ) : null}
+      {/* ── Cartons (trackings + dimensions combinés) ── */}
+      {(() => {
+        const trackings = sel.trackings?.filter((t) => t) || [];
+        const details = sel.trackingsDetail || [];
+        const dimsPC = sel.dimsParColis || [];
+        const nbCartons = Math.max(trackings.length, details.length, dimsPC.length);
 
-      {/* Trackings — rich format if trackingsDetail exists */}
-      {hasTrack(sel) && (
-        <div className="mt-2 pt-2 border-t">
-          <p className="text-xs font-bold text-gray-400 uppercase mb-1">
-            N° de suivi origine{trackCount(sel) > 1 ? ` (${trackCount(sel)} colis)` : ''}
-          </p>
-          {sel.trackingsDetail && sel.trackingsDetail.length > 0 ? (
-            sel.trackingsDetail.map((td, i) => (
-              <p key={i} className="text-xs font-mono text-gray-500">
-                {td.fournisseur ? (
-                  <><span className="font-sans font-semibold text-gray-700">{td.fournisseur}</span> — {td.number}</>
-                ) : td.number}
-              </p>
-            ))
-          ) : (
-            sel.trackings.filter((t) => t).map((t, i) => (
-              <p key={i} className="text-xs font-mono text-gray-500">{t}</p>
-            ))
-          )}
-        </div>
-      )}
+        if (nbCartons === 0 && !sel.dimL) return null;
+
+        // Build carton list
+        const cartons = [];
+        for (let i = 0; i < Math.max(nbCartons, 1); i++) {
+          const td = details[i];
+          const tracking = td?.number || trackings[i] || null;
+          const fournisseur = td?.fournisseur || null;
+          const dims = dimsPC[i] || (i === 0 && nbCartons <= 1 ? { dimL: sel.dimL, dimW: sel.dimW, dimH: sel.dimH, poids: sel.poids } : null);
+          cartons.push({ tracking, fournisseur, dims });
+        }
+
+        const hasDims = cartons.some((c) => c.dims?.dimL);
+        const totalPoids = cartons.reduce((s, c) => s + (c.dims?.poids || 0), 0);
+        const totalPv = cartons.reduce((s, c) => {
+          if (!c.dims?.dimL) return s;
+          return s + (c.dims.dimL * c.dims.dimW * c.dims.dimH) / 5000;
+        }, 0);
+
+        return (
+          <div className="mt-3 pt-3 border-t space-y-2">
+            <p className="text-xs font-bold text-gray-400 uppercase">
+              {nbCartons > 1 ? `${nbCartons} cartons` : '1 carton'}
+            </p>
+            {cartons.map((c, i) => (
+              <div key={i} className="rounded-lg bg-gray-50 p-2.5 space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-gray-400">
+                    Carton {i + 1}
+                  </span>
+                  {c.fournisseur && (
+                    <span className="text-[11px] font-semibold text-gray-700">{c.fournisseur}</span>
+                  )}
+                </div>
+                {c.tracking && (
+                  <p className="text-xs font-mono text-gray-500">{c.tracking}</p>
+                )}
+                {c.dims?.dimL ? (
+                  <p className="text-xs text-gray-600">
+                    {c.dims.dimL} × {c.dims.dimW} × {c.dims.dimH} cm · {c.dims.poids} kg
+                    <span className="text-gray-400 ml-1">
+                      (vol: {((c.dims.dimL * c.dims.dimW * c.dims.dimH) / 5000).toFixed(2)} kg)
+                    </span>
+                  </p>
+                ) : (
+                  <p className="text-[11px] text-gray-400 italic">Dimensions non mesurées</p>
+                )}
+              </div>
+            ))}
+
+            {/* Totaux si multi-cartons avec dimensions */}
+            {nbCartons > 1 && hasDims && (
+              <div className="rounded-lg border border-gray-200 p-2 space-y-0.5">
+                <p className="text-[10px] font-bold text-gray-500 uppercase">Totaux</p>
+                <div className="flex justify-between text-xs text-gray-600">
+                  <span>Poids total</span>
+                  <span className="font-semibold">{totalPoids.toFixed(2)} kg</span>
+                </div>
+                <div className="flex justify-between text-xs text-gray-600">
+                  <span>Vol. total</span>
+                  <span className="font-semibold">{totalPv.toFixed(2)} kg</span>
+                </div>
+                <div className="flex justify-between text-xs font-bold" style={{ color: BRAND.navy }}>
+                  <span>Poids facturable</span>
+                  <span>{Math.max(totalPoids, totalPv).toFixed(2)} kg</span>
+                </div>
+              </div>
+            )}
+
+            {/* Dimensions après optimisation */}
+            {sel.finL && (
+              <div className="rounded-lg border p-2 space-y-0.5" style={{ borderColor: BRAND.gold + '40', background: BRAND.gold + '08' }}>
+                <p className="text-[10px] font-bold uppercase" style={{ color: BRAND.goldD }}>Après optimisation</p>
+                <p className="text-xs">{sel.finL} × {sel.finW} × {sel.finH} cm · {sel.finP} kg</p>
+                <p className="text-xs text-gray-400">Vol: {((sel.finL * sel.finW * sel.finH) / 5000).toFixed(2)} kg</p>
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Casier */}
       {(sel.casier || isStaff) && (
