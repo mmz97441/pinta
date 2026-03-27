@@ -2,46 +2,140 @@ import { getDestByCP } from './index';
 import { eur, trackStr } from '../utils';
 
 // ══════════════════════════════════════════════════════════════════════════════
-// MSG_TEMPLATES — chaque entrée contient :
-//   label     : libellé affiché dans l'UI
-//   whatsapp  : texte complet pour prévisualisation / fallback wa.me
-//   email     : texte email
-//   meta      : (optionnel) mapping vers un template Meta approuvé
-//               → { name, lang, params(client, colis) }
-//
-// ⚠️  Pour que les notifications partent SANS fenêtre 24h, il faut :
-//     1. Créer le template correspondant sur Meta Business → WhatsApp → Templates
-//     2. Renseigner `meta.name` ici avec le nom exact du template Meta
-//     3. Les params doivent correspondre aux {{1}}, {{2}}, etc. du template
+// MSG_TEMPLATES — Messages professionnels et informatifs
 // ══════════════════════════════════════════════════════════════════════════════
 
+// Helper : liste des cartons avec fournisseur
+function cartonsList(colis) {
+  if (colis.trackingsDetail?.length > 0) {
+    return colis.trackingsDetail
+      .map((td, i) => `  ${i + 1}. ${td.fournisseur || 'Colis'} — ${td.number}`)
+      .join('\n');
+  }
+  if (colis.trackings?.length > 0) {
+    return colis.trackings.filter((t) => t).map((t, i) => `  ${i + 1}. ${t}`).join('\n');
+  }
+  return '';
+}
+
+function dimsText(colis) {
+  if (!colis.dimL) return '';
+  return `${colis.dimL} × ${colis.dimW} × ${colis.dimH} cm — ${colis.poids} kg`;
+}
+
+function nbCartonsText(colis) {
+  const n = colis.trackings?.filter((t) => t).length || 1;
+  return n > 1 ? `${n} cartons` : '1 carton';
+}
+
 export const MSG_TEMPLATES = {
+  // ═══════════════════════════════════════════════════════════════
+  // 📦 RÉCEPTION
+  // ═══════════════════════════════════════════════════════════════
   reception: {
     label: '📦 Colis réceptionné',
     meta: {
-      name: 'colis_reception',       // ← nom du template à créer sur Meta
+      name: 'colis_reception',
       lang: 'fr',
-      params: (c, colis) => [c.nom.split(' ')[0], trackStr(colis) || colis.ref, colis.desc || ''],
+      params: (c, colis) => [c.nom.split(' ')[0], colis.ref, colis.desc || ''],
     },
-    whatsapp: (c, colis) =>
-      `Bonjour ${c.nom.split(' ')[0]} 👋\n\nVotre colis *${colis.ref}* est bien arrivé à notre entrepôt de Paris !\n\n📦 Contenu : ${colis.desc}\n${colis.trackings?.length ? `🔍 Tracking : ${colis.trackings.join(', ')}\n` : ''}\nNous allons le mesurer et peser. On revient vers vous rapidement pour la suite.\n\n_Expedîle — Paris → ${getDestByCP(c.cp).nom}_`,
-    email: (c, colis) =>
-      `Objet : Votre colis ${colis.ref} est arrivé à Paris\n\nBonjour ${c.nom},\n\nNous confirmons la réception de votre colis ${colis.ref} (${colis.desc}) à notre entrepôt de Paris.\n\nNous procédons à la mesure et au pesage. Nous vous recontacterons pour la suite.\n\nCordialement,\nL'équipe Expedîle`,
+    whatsapp: (c, colis) => {
+      const dest = getDestByCP(c.cp);
+      const cartonsInfo = cartonsList(colis);
+      return `Bonjour ${c.nom.split(' ')[0]} 👋
+
+Bonne nouvelle ! Votre colis *${colis.ref}* est bien arrivé à notre entrepôt de Paris 🎉
+
+📦 *Contenu :* ${colis.desc}
+${cartonsInfo ? `📋 *${nbCartonsText(colis)} :*\n${cartonsInfo}\n` : ''}🎯 *Destination :* ${dest.flag} ${dest.nom}
+
+📐 *Prochaine étape :* Nous allons mesurer et peser votre colis. Vous recevrez les dimensions et une demande d'accord pour lancer la préparation.
+
+💡 En attendant, pensez à nous envoyer la *facture d'achat* si ce n'est pas déjà fait — elle est nécessaire pour le calcul des taxes.
+
+À très vite !
+_L'équipe Expedîle — Paris → ${dest.nom}_`;
+    },
+    email: (c, colis) => {
+      const dest = getDestByCP(c.cp);
+      const cartonsInfo = cartonsList(colis);
+      return `Objet : 📦 Votre colis ${colis.ref} est bien arrivé à Paris !
+
+Bonjour ${c.nom},
+
+Nous avons le plaisir de vous confirmer la réception de votre colis à notre entrepôt de Paris.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📦 Référence : ${colis.ref}
+📋 Contenu : ${colis.desc}
+${cartonsInfo ? `📦 ${nbCartonsText(colis)} :\n${cartonsInfo}\n` : ''}🎯 Destination : ${dest.flag} ${dest.nom}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Prochaines étapes :
+1. Mesure et pesage de votre colis
+2. Demande de votre accord pour la préparation
+3. Optimisation de l'emballage
+4. Envoi du devis final
+
+💡 Important : Si vous ne l'avez pas encore fait, merci de nous transmettre la facture d'achat d'origine. Elle est indispensable pour le calcul des taxes (Octroi de Mer).
+
+N'hésitez pas à nous contacter pour toute question.
+
+Cordialement,
+L'équipe Expedîle
+Paris → ${dest.nom}`;
+    },
   },
 
+  // ═══════════════════════════════════════════════════════════════
+  // 📄 FACTURE MANQUANTE
+  // ═══════════════════════════════════════════════════════════════
   facture_manquante: {
     label: '📄 Facture manquante',
     meta: {
       name: 'facture_manquante',
       lang: 'fr',
-      params: (c, colis) => [c.nom.split(' ')[0], trackStr(colis) || colis.ref],
+      params: (c, colis) => [c.nom.split(' ')[0], colis.ref],
     },
     whatsapp: (c, colis) =>
-      `Bonjour ${c.nom.split(' ')[0]} 👋\n\n⚠️ Il nous manque la *facture d'origine* pour votre colis *${colis.ref}* (${colis.desc}).\n\nSans cette facture, nous ne pourrons pas calculer les taxes (Octroi de Mer) ni établir le devis.\n\n👉 Merci de nous l'envoyer par retour de message (photo ou PDF).\n\n_Expedîle_`,
+      `Bonjour ${c.nom.split(' ')[0]} 👋
+
+Pour avancer sur votre colis *${colis.ref}* (${colis.desc}), nous avons besoin de la *facture d'achat d'origine*.
+
+📄 *Pourquoi ?* La facture nous permet de :
+  • Calculer les taxes douanières (Octroi de Mer)
+  • Établir la déclaration en douane
+  • Vous proposer le devis final
+
+👉 Envoyez-nous simplement une *photo* ou un *PDF* de la facture en réponse à ce message.
+
+⏱️ Sans cette facture, nous ne pouvons malheureusement pas finaliser le traitement de votre colis.
+
+Merci d'avance !
+_L'équipe Expedîle_`,
     email: (c, colis) =>
-      `Objet : Facture manquante pour ${colis.ref}\n\nBonjour ${c.nom},\n\nPour traiter votre colis ${colis.ref}, nous avons besoin de la facture d'achat d'origine afin de calculer les taxes (Octroi de Mer).\n\nMerci de nous la transmettre en réponse à cet email.\n\nCordialement,\nL'équipe Expedîle`,
+      `Objet : 📄 Facture requise pour votre colis ${colis.ref}
+
+Bonjour ${c.nom},
+
+Pour poursuivre le traitement de votre colis ${colis.ref} (${colis.desc}), nous avons besoin de la facture d'achat d'origine.
+
+Cette facture est indispensable pour :
+• Le calcul des taxes douanières (Octroi de Mer / OMR)
+• L'établissement de la déclaration en douane
+• La finalisation de votre devis
+
+Merci de nous la transmettre en réponse à cet email (photo ou PDF lisible).
+
+Sans ce document, le traitement de votre colis ne pourra pas avancer.
+
+Cordialement,
+L'équipe Expedîle`,
   },
 
+  // ═══════════════════════════════════════════════════════════════
+  // 🟢 DEMANDE DE FEU VERT
+  // ═══════════════════════════════════════════════════════════════
   demande_feu_vert: {
     label: '🟢 Demande de feu vert',
     meta: {
@@ -49,30 +143,116 @@ export const MSG_TEMPLATES = {
       lang: 'fr',
       params: (c, colis) => [
         c.nom.split(' ')[0],
-        trackStr(colis) || colis.ref,
+        colis.ref,
         colis.dimL ? `${colis.dimL}x${colis.dimW}x${colis.dimH} cm` : '',
         colis.poids ? `${colis.poids} kg` : '',
       ],
     },
-    whatsapp: (c, colis) =>
-      `Bonjour ${c.nom.split(' ')[0]} 👋\n\nVotre colis *${colis.ref}* a été réceptionné et mesuré à notre entrepôt de Paris.\n\n📦 ${colis.desc}\n📐 ${colis.dimL ? `${colis.dimL}×${colis.dimW}×${colis.dimH} cm` : ''} — ⚖️ ${colis.poids || '?'} kg\n\n👉 *Avez-vous l'accord pour qu'on prépare et optimise votre colis pour l'envoi ?*\n\n✅ Répondez *OUI* pour autoriser la préparation\n❌ Répondez *NON* pour annuler\n\n${colis.factures?.length > 0 ? '' : "📄 *Important* : pensez à nous envoyer la facture d'achat d'origine pour le calcul des taxes (OM / OMR).\n\n"}💡 Le devis final vous sera envoyé après la préparation et l'optimisation de votre colis.\n\n_Expedîle_`,
-    email: (c, colis) =>
-      `Objet : Votre accord est nécessaire — ${colis.ref}\n\nBonjour ${c.nom},\n\nVotre colis ${colis.ref} (${colis.desc}) a été réceptionné et mesuré à notre entrepôt.\nDimensions : ${colis.dimL ? `${colis.dimL}×${colis.dimW}×${colis.dimH} cm` : '—'} — Poids : ${colis.poids || '—'} kg\n\nNous avons besoin de votre accord pour préparer et optimiser votre colis.\n${colis.factures?.length > 0 ? '' : "\nImportant : merci de nous transmettre la facture d'achat d'origine pour le calcul des taxes.\n"}\nLe devis final sera établi après la préparation.\n\nCordialement,\nL'équipe Expedîle`,
+    whatsapp: (c, colis) => {
+      const dest = getDestByCP(c.cp);
+      const hasMulti = (colis.trackings?.filter((t) => t).length || 0) > 1;
+      return `Bonjour ${c.nom.split(' ')[0]} 👋
+
+Votre colis *${colis.ref}* a été réceptionné et mesuré à notre entrepôt de Paris ✅
+
+📦 *${colis.desc}*
+${hasMulti ? `📋 *${nbCartonsText(colis)}*\n` : ''}📐 *Dimensions :* ${dimsText(colis) || 'en cours de mesure'}
+⚖️ *Poids volumétrique :* ${colis.dimL ? ((colis.dimL * colis.dimW * colis.dimH) / 5000).toFixed(2) + ' kg' : '—'}
+🎯 *Destination :* ${dest.flag} ${dest.nom}
+
+${colis.estMin && colis.estMax ? `💰 *Estimation :* entre ${eur(colis.estMin)} et ${eur(colis.estMax)}\n(Le montant exact sera calculé après optimisation de l'emballage)\n` : ''}
+🔔 *Votre accord est nécessaire pour continuer :*
+
+✅ Répondez *OUI* → Nous préparons et optimisons votre colis
+❌ Répondez *NON* → Le colis ne sera pas préparé
+
+${colis.factures?.length > 0 ? '' : `📄 *Rappel :* N'oubliez pas de nous envoyer la facture d'achat pour le calcul des taxes.\n`}
+💡 *Comment ça marche ensuite ?*
+1. Nous optimisons l'emballage (souvent plus petit = moins cher !)
+2. Vous recevez le devis final détaillé
+3. Après paiement, votre colis part dans le prochain envoi
+
+_Expedîle — Paris → ${dest.nom}_`;
+    },
+    email: (c, colis) => {
+      const dest = getDestByCP(c.cp);
+      return `Objet : 🔔 Votre accord est nécessaire — Colis ${colis.ref}
+
+Bonjour ${c.nom},
+
+Votre colis a été réceptionné et mesuré à notre entrepôt de Paris.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📦 Référence : ${colis.ref}
+📋 Contenu : ${colis.desc}
+📐 Dimensions : ${dimsText(colis) || 'en cours de mesure'}
+⚖️ Poids volumétrique : ${colis.dimL ? ((colis.dimL * colis.dimW * colis.dimH) / 5000).toFixed(2) + ' kg' : '—'}
+🎯 Destination : ${dest.flag} ${dest.nom}
+${colis.estMin && colis.estMax ? `💰 Estimation : entre ${eur(colis.estMin)} et ${eur(colis.estMax)}\n` : ''}━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Nous avons besoin de votre accord pour préparer et optimiser votre colis.
+
+Comment ça fonctionne :
+1. ✅ Vous nous donnez votre accord
+2. 📦 Nous optimisons l'emballage (réduction du volume = économies sur le transport)
+3. 💳 Vous recevez le devis final détaillé
+4. ✈️ Après paiement, expédition dans le prochain envoi
+
+${colis.factures?.length > 0 ? '' : `Important : Merci de nous transmettre la facture d'achat d'origine pour le calcul des taxes douanières.\n`}
+Répondez simplement à cet email pour nous donner votre accord.
+
+Cordialement,
+L'équipe Expedîle
+Paris → ${dest.nom}`;
+    },
   },
 
+  // ═══════════════════════════════════════════════════════════════
+  // ✅ FEU VERT CONFIRMÉ
+  // ═══════════════════════════════════════════════════════════════
   feu_vert_recu: {
     label: '✅ Feu vert confirmé',
     meta: {
       name: 'feu_vert_confirme',
       lang: 'fr',
-      params: (c, colis) => [c.nom.split(' ')[0], trackStr(colis) || colis.ref],
+      params: (c, colis) => [c.nom.split(' ')[0], colis.ref],
     },
     whatsapp: (c, colis) =>
-      `Bonjour ${c.nom.split(' ')[0]} 👋\n\nMerci pour votre accord ! ✅\n\nVotre colis *${colis.ref}* va être préparé et optimisé par notre équipe.\n\nVous recevrez le devis final dès que c'est prêt.\n\n_Expedîle_`,
+      `Bonjour ${c.nom.split(' ')[0]} 👋
+
+Merci pour votre accord ! ✅
+
+Votre colis *${colis.ref}* (${colis.desc}) est maintenant entre les mains de notre équipe de préparation.
+
+📦 *Ce que nous faisons :*
+  • Optimisation de l'emballage
+  • Réduction du volume quand c'est possible
+  • Préparation pour l'expédition
+
+⏱️ Vous recevrez le devis final détaillé dès que la préparation sera terminée.
+
+_L'équipe Expedîle_`,
     email: (c, colis) =>
-      `Objet : Accord reçu — ${colis.ref} en préparation\n\nBonjour ${c.nom},\n\nNous avons bien reçu votre accord pour le colis ${colis.ref}. Notre équipe va procéder à la préparation.\n\nCordialement,\nL'équipe Expedîle`,
+      `Objet : ✅ Accord reçu — ${colis.ref} en préparation
+
+Bonjour ${c.nom},
+
+Merci ! Nous avons bien reçu votre accord pour le colis ${colis.ref} (${colis.desc}).
+
+Notre équipe va maintenant :
+• Optimiser l'emballage pour réduire le volume
+• Préparer votre colis pour l'expédition
+• Calculer le devis final
+
+Vous recevrez le devis détaillé dès que la préparation sera terminée.
+
+Cordialement,
+L'équipe Expedîle`,
   },
 
+  // ═══════════════════════════════════════════════════════════════
+  // 💳 DEVIS FINAL
+  // ═══════════════════════════════════════════════════════════════
   devis_final: {
     label: '💳 Devis final',
     meta: {
@@ -80,100 +260,367 @@ export const MSG_TEMPLATES = {
       lang: 'fr',
       params: (c, colis) => [
         c.nom.split(' ')[0],
-        trackStr(colis) || colis.ref,
+        colis.ref,
         eur(colis.devisTotal),
         eur(colis.devisTransport),
         eur((colis.devisOM || 0) + (colis.devisOMR || 0)),
       ],
     },
-    whatsapp: (c, colis) =>
-      `Bonjour ${c.nom.split(' ')[0]} 👋\n\nLe devis final pour votre colis *${colis.ref}* est prêt !\n\n📦 ${colis.desc}\n\n💰 *Total : ${eur(colis.devisTotal)}*\n  • Transport : ${eur(colis.devisTransport)}\n  • Taxes : ${eur((colis.devisOM || 0) + (colis.devisOMR || 0))}\n  • TVA : ${eur(colis.devisTVA)}\n${colis.economie > 0 ? `\n✅ *Économie grâce à l'optimisation : ${eur(colis.economie)}*\n(Sans optimisation : ${eur(colis.avantOptimTotal)})\n` : ''}\n👉 Vous pouvez payer directement sur votre espace client ou nous répondre pour toute question.\n\n_Expedîle_`,
-    email: (c, colis) =>
-      `Objet : Devis final — ${colis.ref} : ${eur(colis.devisTotal)}\n\nBonjour ${c.nom},\n\nVoici le devis final pour votre colis ${colis.ref} :\n- Transport : ${eur(colis.devisTransport)}\n- Taxes : ${eur((colis.devisOM || 0) + (colis.devisOMR || 0))}\n- TVA : ${eur(colis.devisTVA)}\n- TOTAL : ${eur(colis.devisTotal)}\n${colis.economie > 0 ? `\nGrâce à l'optimisation de votre colis, vous économisez ${eur(colis.economie)} (prix sans optimisation : ${eur(colis.avantOptimTotal)}).\n` : ''}\nCordialement,\nL'équipe Expedîle`,
+    whatsapp: (c, colis) => {
+      const dest = getDestByCP(c.cp);
+      const taxes = (colis.devisOM || 0) + (colis.devisOMR || 0);
+      const pf = colis.poidsFact || colis.finP || colis.poids || 0;
+      return `Bonjour ${c.nom.split(' ')[0]} 👋
+
+Le devis final pour votre colis *${colis.ref}* est prêt ! 📋
+
+📦 *${colis.desc}*
+🎯 *Destination :* ${dest.flag} ${dest.nom}
+${colis.finL ? `📐 *Dimensions optimisées :* ${colis.finL}×${colis.finW}×${colis.finH} cm\n` : ''}⚖️ *Poids facturable :* ${pf} kg
+
+━━━━━━━━━━━━━━━━
+💰 *DÉTAIL DU DEVIS*
+━━━━━━━━━━━━━━━━
+🚀 Transport : *${eur(colis.devisTransport)}*
+🏛️ Taxes (OM/OMR) : *${eur(taxes)}*
+📊 TVA (${dest.tva}%) : *${eur(colis.devisTVA)}*
+━━━━━━━━━━━━━━━━
+💰 *TOTAL : ${eur(colis.devisTotal)}*
+━━━━━━━━━━━━━━━━
+${colis.economie > 0 ? `\n✅ *Vous économisez ${eur(colis.economie)}* grâce à l'optimisation de l'emballage !\n(Sans optimisation, le montant aurait été de ${eur(colis.avantOptimTotal)})\n` : ''}
+👉 *Pour déclencher l'expédition :*
+Vous pouvez payer directement sur votre espace client ou nous contacter.
+
+❓ Une question sur le devis ? Répondez simplement à ce message.
+
+_L'équipe Expedîle — Paris → ${dest.nom}_`;
+    },
+    email: (c, colis) => {
+      const dest = getDestByCP(c.cp);
+      const taxes = (colis.devisOM || 0) + (colis.devisOMR || 0);
+      const pf = colis.poidsFact || colis.finP || colis.poids || 0;
+      return `Objet : 💳 Devis final — ${colis.ref} : ${eur(colis.devisTotal)}
+
+Bonjour ${c.nom},
+
+Le devis final pour votre colis est prêt.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📦 VOTRE COLIS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Référence : ${colis.ref}
+Contenu : ${colis.desc}
+Destination : ${dest.flag} ${dest.nom}
+${colis.finL ? `Dimensions optimisées : ${colis.finL} × ${colis.finW} × ${colis.finH} cm\n` : ''}Poids facturable : ${pf} kg
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+💰 DÉTAIL DU DEVIS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🚀 Transport ........................ ${eur(colis.devisTransport)}
+🏛️ Octroi de Mer (OM) .............. ${eur(colis.devisOM)}
+🏛️ Octroi de Mer Régional (OMR) .... ${eur(colis.devisOMR)}
+📊 TVA (${dest.tva}%) ..................... ${eur(colis.devisTVA)}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+💰 TOTAL                              ${eur(colis.devisTotal)}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+${colis.economie > 0 ? `\n✅ Économie réalisée : ${eur(colis.economie)}\nGrâce à l'optimisation de l'emballage, vous économisez par rapport au tarif standard (${eur(colis.avantOptimTotal)}).\n` : ''}
+Pour déclencher l'expédition, vous pouvez régler ce montant :
+• Sur votre espace client en ligne
+• Par virement bancaire
+• En nous contactant directement
+
+Une question ? Répondez simplement à cet email.
+
+Cordialement,
+L'équipe Expedîle
+Paris → ${dest.nom}`;
+    },
   },
 
+  // ═══════════════════════════════════════════════════════════════
+  // ⏰ RELANCE FEU VERT
+  // ═══════════════════════════════════════════════════════════════
   relance_feu_vert: {
     label: '⏰ Relance feu vert',
     meta: {
       name: 'relance_feu_vert',
       lang: 'fr',
-      params: (c, colis) => [c.nom.split(' ')[0], trackStr(colis) || colis.ref],
+      params: (c, colis) => [c.nom.split(' ')[0], colis.ref],
     },
     whatsapp: (c, colis) =>
-      `Bonjour ${c.nom.split(' ')[0]} 👋\n\nPetit rappel : votre colis *${colis.ref}* (${colis.desc}) attend toujours votre accord pour la préparation.\n\n✅ *OUI* pour autoriser la préparation\n❌ *NON* pour annuler\n\n${colis.factures?.length > 0 ? '' : "📄 N'oubliez pas de nous envoyer la facture d'achat d'origine.\n\n"}⚠️ Des frais de stockage peuvent s'appliquer après 14 jours.\n\n_Expedîle_`,
+      `Bonjour ${c.nom.split(' ')[0]} 👋
+
+Petit rappel amical 😊 Votre colis *${colis.ref}* (${colis.desc}) attend toujours votre accord pour la préparation.
+
+📐 *Dimensions :* ${dimsText(colis) || '—'}
+
+✅ Répondez *OUI* pour autoriser la préparation
+❌ Répondez *NON* pour annuler
+
+${colis.factures?.length > 0 ? '' : `📄 *Rappel :* Nous attendons aussi la facture d'achat pour le calcul des taxes.\n`}
+⚠️ *Bon à savoir :* Des frais de stockage peuvent s'appliquer après 14 jours de stockage en entrepôt.
+
+_L'équipe Expedîle_`,
     email: (c, colis) =>
-      `Objet : Rappel — En attente de votre accord pour ${colis.ref}\n\nBonjour ${c.nom},\n\nVotre colis ${colis.ref} est toujours en attente de votre accord pour la préparation.\n${colis.factures?.length > 0 ? '' : "\nRappel : merci de nous transmettre la facture d'achat d'origine.\n"}\nCordialement,\nL'équipe Expedîle`,
+      `Objet : ⏰ Rappel — En attente de votre accord pour ${colis.ref}
+
+Bonjour ${c.nom},
+
+Nous nous permettons de vous relancer : votre colis ${colis.ref} (${colis.desc}) est toujours en attente de votre accord pour la préparation.
+
+Dimensions mesurées : ${dimsText(colis) || '—'}
+
+Pour rappel, votre accord nous permet de :
+• Optimiser l'emballage
+• Préparer l'expédition
+• Vous envoyer le devis final
+${colis.factures?.length > 0 ? '' : `\nNous attendons également la facture d'achat d'origine.\n`}
+Note : Des frais de stockage peuvent s'appliquer après 14 jours.
+
+Répondez simplement à cet email pour nous donner votre accord.
+
+Cordialement,
+L'équipe Expedîle`,
   },
 
+  // ═══════════════════════════════════════════════════════════════
+  // ⏰ RELANCE PAIEMENT
+  // ═══════════════════════════════════════════════════════════════
   relance_paiement: {
     label: '⏰ Relance paiement',
     meta: {
       name: 'relance_paiement',
       lang: 'fr',
-      params: (c, colis) => [c.nom.split(' ')[0], trackStr(colis) || colis.ref, eur(colis.devisTotal)],
+      params: (c, colis) => [c.nom.split(' ')[0], colis.ref, eur(colis.devisTotal)],
     },
-    whatsapp: (c, colis) =>
-      `Bonjour ${c.nom.split(' ')[0]} 👋\n\nPetit rappel : le devis pour *${colis.ref}* est en attente de paiement.\n\n💰 Montant : *${eur(colis.devisTotal)}*\n\n👉 Payez sur votre espace client pour déclencher l'expédition.\n\n_Expedîle_`,
-    email: (c, colis) =>
-      `Objet : Rappel paiement — ${colis.ref}\n\nBonjour ${c.nom},\n\nLe paiement de ${eur(colis.devisTotal)} pour le colis ${colis.ref} est en attente.\n\nCordialement,\nL'équipe Expedîle`,
+    whatsapp: (c, colis) => {
+      const dest = getDestByCP(c.cp);
+      return `Bonjour ${c.nom.split(' ')[0]} 👋
+
+Votre colis *${colis.ref}* (${colis.desc}) est prêt à partir ! ✈️
+
+💰 *Montant à régler : ${eur(colis.devisTotal)}*
+
+🎯 Destination : ${dest.flag} ${dest.nom}
+
+👉 Dès réception de votre paiement, votre colis sera inclus dans le prochain envoi.
+
+Vous pouvez payer :
+  • Sur votre espace client
+  • Par virement bancaire
+  • En nous contactant
+
+❓ Un souci ? Répondez à ce message, nous sommes là pour vous aider.
+
+_L'équipe Expedîle_`;
+    },
+    email: (c, colis) => {
+      const dest = getDestByCP(c.cp);
+      return `Objet : ⏰ Rappel paiement — ${colis.ref} (${eur(colis.devisTotal)})
+
+Bonjour ${c.nom},
+
+Votre colis ${colis.ref} (${colis.desc}) est prêt et n'attend plus que votre paiement pour être expédié vers ${dest.flag} ${dest.nom}.
+
+Montant à régler : ${eur(colis.devisTotal)}
+
+Dès réception de votre paiement, votre colis sera intégré au prochain envoi.
+
+Moyens de paiement :
+• En ligne sur votre espace client
+• Par virement bancaire
+• En nous contactant directement
+
+N'hésitez pas à nous écrire si vous avez des questions.
+
+Cordialement,
+L'équipe Expedîle`;
+    },
   },
 
+  // ═══════════════════════════════════════════════════════════════
+  // ✈️ EXPÉDIÉ
+  // ═══════════════════════════════════════════════════════════════
   expedie: {
     label: '✈️ Colis expédié',
     meta: {
       name: 'colis_expedie',
       lang: 'fr',
-      params: (c, colis) => [c.nom.split(' ')[0], trackStr(colis) || colis.ref, getDestByCP(c.cp).nom],
+      params: (c, colis) => [c.nom.split(' ')[0], colis.ref, getDestByCP(c.cp).nom],
     },
-    whatsapp: (c, colis) =>
-      `Bonjour ${c.nom.split(' ')[0]} 👋\n\n✈️ Votre colis *${colis.ref}* a été expédié depuis Paris !\n\n📦 ${colis.desc}\n🎯 Destination : ${getDestByCP(c.cp).nom}\n\nVous serez notifié(e) dès l'arrivée.\n\n_Expedîle_`,
-    email: (c, colis) =>
-      `Objet : Colis expédié — ${colis.ref}\n\nBonjour ${c.nom},\n\nVotre colis ${colis.ref} a été expédié depuis notre entrepôt de Paris.\n\nCordialement,\nL'équipe Expedîle`,
+    whatsapp: (c, colis) => {
+      const dest = getDestByCP(c.cp);
+      return `Bonjour ${c.nom.split(' ')[0]} 👋
+
+✈️ *Votre colis est en route !*
+
+📦 *${colis.ref}* — ${colis.desc}
+🎯 *Destination :* ${dest.flag} ${dest.nom}
+📅 *Expédié le :* ${new Date().toLocaleDateString('fr-FR')}
+
+Vous serez notifié(e) à chaque étape :
+  ✈️ Transit → 🏛️ Dédouanement → 📍 Arrivée → 🚚 Livraison
+
+Bonne réception !
+_L'équipe Expedîle — Paris → ${dest.nom}_`;
+    },
+    email: (c, colis) => {
+      const dest = getDestByCP(c.cp);
+      return `Objet : ✈️ Votre colis ${colis.ref} est en route vers ${dest.nom} !
+
+Bonjour ${c.nom},
+
+Excellente nouvelle ! Votre colis a été expédié depuis notre entrepôt de Paris.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📦 Référence : ${colis.ref}
+📋 Contenu : ${colis.desc}
+🎯 Destination : ${dest.flag} ${dest.nom}
+📅 Date d'expédition : ${new Date().toLocaleDateString('fr-FR')}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Vous recevrez une notification à chaque étape :
+1. ✈️ Transit
+2. 🏛️ Dédouanement
+3. 📍 Arrivée à destination
+4. 🚚 Livraison
+
+Cordialement,
+L'équipe Expedîle
+Paris → ${dest.nom}`;
+    },
   },
 
+  // ═══════════════════════════════════════════════════════════════
+  // 📍 ARRIVÉ
+  // ═══════════════════════════════════════════════════════════════
   arrive: {
     label: '📍 Arrivé à destination',
     meta: {
       name: 'colis_arrive',
       lang: 'fr',
-      params: (c, colis) => [c.nom.split(' ')[0], trackStr(colis) || colis.ref, getDestByCP(c.cp).nom],
+      params: (c, colis) => [c.nom.split(' ')[0], colis.ref, getDestByCP(c.cp).nom],
     },
-    whatsapp: (c, colis) =>
-      `Bonjour ${c.nom.split(' ')[0]} 👋\n\n📍 Votre colis *${colis.ref}* est arrivé à ${getDestByCP(c.cp).nom} !\n\nNous organisons la livraison, vous serez prévenu(e) du créneau.\n\n_Expedîle_`,
-    email: (c, colis) =>
-      `Objet : Colis arrivé à ${getDestByCP(c.cp).nom} — ${colis.ref}\n\nBonjour ${c.nom},\n\nVotre colis ${colis.ref} est bien arrivé. La livraison sera planifiée prochainement.\n\nCordialement,\nL'équipe Expedîle`,
+    whatsapp: (c, colis) => {
+      const dest = getDestByCP(c.cp);
+      return `Bonjour ${c.nom.split(' ')[0]} 👋
+
+📍 *Votre colis est arrivé à ${dest.nom} !*
+
+📦 *${colis.ref}* — ${colis.desc}
+
+🚚 Nous organisons maintenant la livraison. Vous serez prévenu(e) du créneau de livraison.
+
+Merci de vous assurer d'être disponible ou de nous indiquer une personne de contact.
+
+_L'équipe Expedîle_`;
+    },
+    email: (c, colis) => {
+      const dest = getDestByCP(c.cp);
+      return `Objet : 📍 Votre colis ${colis.ref} est arrivé à ${dest.nom} !
+
+Bonjour ${c.nom},
+
+Votre colis ${colis.ref} (${colis.desc}) est bien arrivé à ${dest.nom}.
+
+Nous organisons la livraison dans les meilleurs délais. Vous serez prévenu(e) du créneau de livraison.
+
+Merci de vous assurer d'être disponible ou de nous indiquer une personne habilitée à réceptionner le colis.
+
+Cordialement,
+L'équipe Expedîle`;
+    },
   },
 
+  // ═══════════════════════════════════════════════════════════════
+  // 🚚 EN LIVRAISON
+  // ═══════════════════════════════════════════════════════════════
   en_livraison: {
     label: '🚚 En livraison',
     meta: {
       name: 'en_livraison',
       lang: 'fr',
-      params: (c, colis) => [c.nom.split(' ')[0], (colis && trackStr(colis)) || colis?.ref || ''],
+      params: (c, colis) => [c.nom.split(' ')[0], colis?.ref || ''],
     },
-    whatsapp: (c) =>
-      `Bonjour ${c.nom.split(' ')[0]} 👋\n\n🚚 Votre colis est en cours de livraison aujourd'hui !\n\nMerci de rester disponible. Le livreur vous contactera si besoin.\n\n_Expedîle_`,
+    whatsapp: (c, colis) =>
+      `Bonjour ${c.nom.split(' ')[0]} 👋
+
+🚚 *Votre colis ${colis?.ref || ''} est en cours de livraison !*
+
+📦 ${colis?.desc || 'Votre colis'}
+
+Le livreur est en route. Merci de rester disponible.
+
+📞 En cas d'absence, le livreur vous contactera pour reprogrammer.
+
+_L'équipe Expedîle_`,
     email: (c, colis) =>
-      `Objet : Livraison en cours — ${colis.ref}\n\nBonjour ${c.nom},\n\nVotre colis ${colis.ref} est en cours de livraison.\n\nCordialement,\nL'équipe Expedîle`,
+      `Objet : 🚚 Livraison en cours — ${colis?.ref || 'Votre colis'}
+
+Bonjour ${c.nom},
+
+Votre colis ${colis?.ref || ''} (${colis?.desc || ''}) est en cours de livraison aujourd'hui.
+
+Le livreur est en route vers votre adresse. Merci de rester disponible.
+
+En cas d'absence, le livreur vous contactera pour convenir d'un nouveau créneau.
+
+Cordialement,
+L'équipe Expedîle`,
   },
 
+  // ═══════════════════════════════════════════════════════════════
+  // ❌ FACTURE REJETÉE
+  // ═══════════════════════════════════════════════════════════════
   facture_rejetee: {
     label: '❌ Facture rejetée',
     meta: {
       name: 'facture_rejetee',
       lang: 'fr',
-      params: (c, colis) => [c.nom.split(' ')[0], trackStr(colis) || colis.ref],
+      params: (c, colis) => [c.nom.split(' ')[0], colis.ref],
     },
     whatsapp: (c, colis) =>
-      `Bonjour ${c.nom.split(' ')[0]} 👋\n\n⚠️ La facture que vous nous avez transmise pour votre colis *${colis.ref}* (${colis.desc}) n'a pas pu être validée.\n\n📄 *Motif : ${colis._motifRejet || 'facture non conforme'}*\n\n👉 Merci de nous renvoyer une facture conforme dès que possible (photo ou PDF lisible).\n\nSans facture validée, nous ne pouvons pas calculer les taxes ni avancer sur la préparation de votre colis.\n\n_Expedîle_`,
+      `Bonjour ${c.nom.split(' ')[0]} 👋
+
+⚠️ La facture transmise pour votre colis *${colis.ref}* (${colis.desc}) n'a pas pu être validée.
+
+📄 *Motif :* ${colis._motifRejet || 'Document non conforme ou illisible'}
+
+👉 Merci de nous renvoyer une facture conforme :
+  • Photo ou PDF lisible
+  • Avec le détail des articles et les montants
+  • Au nom de l'acheteur
+
+Sans facture validée, nous ne pouvons pas calculer les taxes ni avancer sur votre colis.
+
+_L'équipe Expedîle_`,
     email: (c, colis) =>
-      `Objet : Facture rejetée — ${colis.ref}\n\nBonjour ${c.nom},\n\nLa facture transmise pour votre colis ${colis.ref} n'a pas pu être validée.\nMotif : ${colis._motifRejet || 'facture non conforme'}.\n\nMerci de nous renvoyer une facture conforme.\n\nCordialement,\nL'équipe Expedîle`,
+      `Objet : ⚠️ Facture non validée — ${colis.ref}
+
+Bonjour ${c.nom},
+
+La facture que vous nous avez transmise pour votre colis ${colis.ref} (${colis.desc}) n'a malheureusement pas pu être validée.
+
+Motif : ${colis._motifRejet || 'Document non conforme ou illisible'}
+
+Pour que nous puissions poursuivre le traitement, merci de nous renvoyer :
+• Une facture lisible (photo nette ou PDF)
+• Avec le détail des articles achetés et les montants
+• Au nom de l'acheteur
+
+Cordialement,
+L'équipe Expedîle`,
   },
 
+  // ═══════════════════════════════════════════════════════════════
+  // ✍️ MESSAGE LIBRE
+  // ═══════════════════════════════════════════════════════════════
   libre: {
     label: '✍️ Message libre',
-    // Pas de meta → texte libre uniquement (fenêtre 24h)
     whatsapp: (c) => `Bonjour ${c.nom.split(' ')[0]} 👋\n\n`,
     email: (c) => `Objet : \n\nBonjour ${c.nom},\n\n\n\nCordialement,\nL'équipe Expedîle`,
   },
 };
+
+export const TEMPLATE_LABELS = {};
+Object.entries(MSG_TEMPLATES).forEach(([k, v]) => { TEMPLATE_LABELS[k] = v.label; });
