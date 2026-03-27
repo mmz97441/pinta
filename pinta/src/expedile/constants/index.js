@@ -20,7 +20,8 @@ export const STATUTS = {
   attente_paiement:   { label: 'En attente de paiement',      labelClient: 'En attente de votre paiement',  couleur: 'bg-amber-200 text-amber-900',    phase: 4, actionStaff: 'En attente paiement',             actionClient: 'Payer' },
   paye:               { label: 'Payé',                        labelClient: null,                            couleur: 'bg-emerald-200 text-emerald-800',phase: 4, actionStaff: 'Expédier ce colis',               actionClient: null },
   expedie:            { label: 'Expédié',                     labelClient: null,                            couleur: 'bg-cyan-200 text-cyan-800',      phase: 5, actionStaff: 'Marquer en transit',              actionClient: null },
-  transit:            { label: 'En vol',                      labelClient: null,                            couleur: 'bg-sky-200 text-sky-800',        phase: 5, actionStaff: "Confirmer arrivée",               actionClient: null },
+  transit:            { label: 'En vol',                      labelClient: null,                            couleur: 'bg-sky-200 text-sky-800',        phase: 5, actionStaff: 'Dédouanement ou arrivée',       actionClient: null },
+  dedouanement:       { label: 'En dédouanement',              labelClient: 'En cours de dédouanement',      couleur: 'bg-violet-200 text-violet-800',  phase: 5, actionStaff: 'Confirmer arrivée',              actionClient: null },
   arrive:             { label: 'Arrivé destination',          labelClient: null,                            couleur: 'bg-teal-200 text-teal-800',      phase: 5, actionStaff: 'Lancer la livraison',             actionClient: null },
   livraison:          { label: 'En cours de livraison',       labelClient: null,                            couleur: 'bg-lime-200 text-lime-800',      phase: 5, actionStaff: 'Confirmer livraison',             actionClient: null },
   livre:              { label: 'Livré ✓',                     labelClient: null,                            couleur: 'bg-green-300 text-green-900',    phase: 5, actionStaff: null,                              actionClient: null },
@@ -38,7 +39,8 @@ export const TRANSITIONS = {
   attente_paiement: ['paye'],
   paye: ['expedie'],
   expedie: ['transit'],
-  transit: ['arrive'],
+  transit: ['dedouanement', 'arrive'],
+  dedouanement: ['arrive'],
   arrive: ['livraison'],
   livraison: ['livre'],
   livre: [],
@@ -128,7 +130,7 @@ export const PHASES_CLIENT = [
   { key: 'feu_vert',    label: 'Votre accord',      statuts: ['attente_feu_vert', 'autorise'] },
   { key: 'preparation', label: 'Préparation',       statuts: ['en_preparation'] },
   { key: 'devis',       label: 'Devis & Paiement',  statuts: ['devis_envoye', 'attente_paiement', 'litige_devis', 'paye'] },
-  { key: 'expedition',  label: 'Expédition',        statuts: ['expedie', 'transit'] },
+  { key: 'expedition',  label: 'Expédition',        statuts: ['expedie', 'transit', 'dedouanement'] },
   { key: 'livraison',   label: 'Livraison',         statuts: ['arrive', 'livraison', 'livre'] },
 ];
 
@@ -138,6 +140,25 @@ export function getPhaseIndex(statut) {
   }
   return 0;
 }
+
+// ══════════ ABONNEMENTS ══════════
+export const ABONNEMENTS = {
+  freemium:         { label: 'Freemium',          prix: 0,    periode: null,    couleur: 'bg-gray-200 text-gray-700',      icon: '🆓' },
+  premium_mensuel:  { label: 'Premium Mensuel',   prix: 13,   periode: 'mois',  couleur: 'bg-blue-200 text-blue-800',      icon: '🚀' },
+  premium_annuel:   { label: 'Premium Annuel',    prix: 69,   periode: 'an',    couleur: 'bg-indigo-200 text-indigo-800',  icon: '🚀' },
+  vip:              { label: 'VIP Annuel',         prix: 149,  periode: 'an',    couleur: 'bg-amber-200 text-amber-800',    icon: '👑' },
+};
+
+// ══════════ TAGS PRÉPARATION ══════════
+export const TAGS_PREPARATION = [
+  'Fragile',
+  'Batterie lithium',
+  'Liquide',
+  'Volumineux',
+  'Valeur élevée',
+  'Sur-emballage requis',
+  'Hors gabarit',
+];
 
 // ══════════ PRODUITS INTERDITS ══════════
 export const PRODUITS_INTERDITS = [
