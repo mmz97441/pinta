@@ -57,6 +57,10 @@ export default function ColisModal({ open, onClose }) {
   const [clientSearchOpen, setClientSearchOpen] = useState(false);
   const [selectedClient, setSelectedClient] = useState(null);
 
+  // ── Mode: null = choix client, 'rattacher' = ajouter à EXP existant, 'nouveau' = créer EXP ──
+  const [mode, setMode] = useState(null); // null | 'rattacher' | 'nouveau'
+  const [rattacherTarget, setRattacherTarget] = useState(null); // colis existant sélectionné
+
   // ── State ──
   const [newClientMode, setNewClientMode] = useState(false);
   const [newClientForm, setNewClientForm] = useState(EMPTY_NEW_CLIENT);
@@ -93,6 +97,8 @@ export default function ColisModal({ open, onClose }) {
     setClientSearchQ('');
     setClientSearchOpen(false);
     setSelectedClient(null);
+    setMode(null);
+    setRattacherTarget(null);
     setNewClientMode(false);
     setNewClientForm(EMPTY_NEW_CLIENT);
     setNewClientErr({});
@@ -136,6 +142,54 @@ export default function ColisModal({ open, onClose }) {
     }
     setFormErr(errs);
     return Object.keys(errs).length === 0;
+  };
+
+  // ── submit: rattacher à un EXP existant ──────────────
+  const handleRattacher = () => {
+    if (!rattacherTarget) return;
+    const lines = nf.trackingLines || [{ fournisseur: '', tracking: '' }];
+    const newTrackings = lines.filter((l) => l.tracking.trim());
+
+    if (newTrackings.length === 0 && !nf.casier.trim()) {
+      setFormErr({ tracking: 'Saisissez au moins un tracking ou un casier' });
+      return;
+    }
+
+    const existing = rattacherTarget;
+    const existingTrackings = existing.trackings?.filter((t) => t) || [];
+    const existingDetail = existing.trackingsDetail || [];
+
+    const updatedTrackings = [
+      ...existingTrackings,
+      ...newTrackings.map((l) => l.tracking.trim()),
+    ];
+    const updatedDetail = [
+      ...existingDetail,
+      ...newTrackings.map((l) => ({ number: l.tracking.trim(), fournisseur: l.fournisseur.trim() })),
+    ];
+
+    const changes = {
+      trackings: updatedTrackings,
+      trackingsDetail: updatedDetail,
+      nbColis: updatedTrackings.length,
+    };
+
+    // Remettre en receptionne si mesuré (il faut re-mesurer)
+    if (existing.statut === 'mesure') {
+      changes.statut = 'receptionne';
+      changes.dimL = null;
+      changes.dimW = null;
+      changes.dimH = null;
+      changes.poids = null;
+      changes.dimsParColis = [];
+    }
+
+    if (nf.casier?.trim()) changes.casier = nf.casier.trim();
+    if (nf.notesReception?.trim()) changes.notesReception = (existing.notesReception ? existing.notesReception + '\n' : '') + nf.notesReception.trim();
+
+    upd(existing.id, changes);
+    flash(`Carton rattaché à ${existing.ref} — ${updatedTrackings.length} colis au total`);
+    resetAndClose();
   };
 
   // ── submit: staff new colis (reception) ──────────────
@@ -440,121 +494,91 @@ export default function ColisModal({ open, onClose }) {
                 <p className="mt-1 text-xs text-red-500">{formErr.client}</p>
               )}
 
-              {/* ── COLIS REGROUPABLES DU CLIENT SÉLECTIONNÉ ── */}
-              {selectedClient && (() => {
-                // Seulement les colis encore regroupables physiquement en entrepôt
+              {/* ── CHOIX : RATTACHER OU NOUVEAU (quand le client a des colis regroupables) ── */}
+              {selectedClient && !mode && (() => {
                 const STATUTS_REGROUPABLES = ['receptionne', 'mesure', 'attente_feu_vert', 'autorise'];
                 const regroupables = data.filter(
                   (c) => c.clientId === selectedClient.id && STATUTS_REGROUPABLES.includes(c.statut)
                 );
-                if (regroupables.length === 0) return null;
-
-                // Group by casier
-                const byCasier = {};
-                regroupables.forEach((c) => {
-                  const k = c.casier || 'Sans casier';
-                  if (!byCasier[k]) byCasier[k] = [];
-                  byCasier[k].push(c);
-                });
-
-                const handleRattacher = (existingColis) => {
-                  // Récupérer le tracking + fournisseur saisis dans le formulaire
-                  const lines = nf.trackingLines || [{ fournisseur: '', tracking: '' }];
-                  const newTrackings = lines.filter((l) => l.tracking.trim());
-
-                  if (newTrackings.length === 0) {
-                    setFormErr({ tracking: 'Saisissez au moins un tracking à rattacher' });
-                    return;
-                  }
-
-                  // Ajouter les trackings au colis existant
-                  const existingTrackings = existingColis.trackings?.filter((t) => t) || [];
-                  const existingDetail = existingColis.trackingsDetail || [];
-
-                  const updatedTrackings = [
-                    ...existingTrackings,
-                    ...newTrackings.map((l) => l.tracking.trim()),
-                  ];
-                  const updatedDetail = [
-                    ...existingDetail,
-                    ...newTrackings.map((l) => ({ number: l.tracking.trim(), fournisseur: l.fournisseur.trim() })),
-                  ];
-
-                  // Remettre en receptionne si mesuré (il faut re-mesurer avec le nouveau carton)
-                  const changes = {
-                    trackings: updatedTrackings,
-                    trackingsDetail: updatedDetail,
-                    nbColis: updatedTrackings.length,
-                  };
-
-                  if (existingColis.statut === 'mesure') {
-                    changes.statut = 'receptionne';
-                    changes.dimL = null;
-                    changes.dimW = null;
-                    changes.dimH = null;
-                    changes.poids = null;
-                    changes.dimsParColis = [];
-                  }
-
-                  // Mettre à jour le casier si un nouveau est saisi
-                  if (nf.casier?.trim()) {
-                    changes.casier = nf.casier.trim();
-                  }
-
-                  upd(existingColis.id, changes);
-                  flash(`Carton rattaché à ${existingColis.ref} — ${updatedTrackings.length} colis au total`);
-                  resetAndClose();
-                };
+                if (regroupables.length === 0) {
+                  // Pas de colis regroupables → passer directement en mode nouveau
+                  if (!mode) setTimeout(() => setMode('nouveau'), 0);
+                  return null;
+                }
 
                 return (
-                  <div
-                    className="mt-2 rounded-xl border p-3 space-y-2.5"
-                    style={{ borderColor: BRAND.gold + '60', background: BRAND.gold + '08' }}
-                  >
-                    <div className="flex items-center gap-2">
-                      <Package size={14} style={{ color: BRAND.goldD }} />
-                      <span className="text-xs font-bold" style={{ color: BRAND.goldD }}>
-                        {regroupables.length} colis regroupable{regroupables.length > 1 ? 's' : ''} en entrepôt pour {selectedClient.nom.split(' ')[0]}
-                      </span>
-                    </div>
-                    <div className="space-y-1.5">
-                      {Object.entries(byCasier).map(([casier, colis]) => (
-                        <div key={casier} className="space-y-1">
-                          <div className="flex items-center gap-1">
-                            <MapPin size={11} style={{ color: BRAND.navy }} />
-                            <span className="text-[11px] font-bold" style={{ color: BRAND.navy }}>
-                              {casier}
-                            </span>
-                          </div>
-                          <div className="space-y-1 pl-4">
-                            {colis.map((c) => (
-                              <div
-                                key={c.id}
-                                className="flex items-center gap-2"
-                              >
-                                <span className="inline-flex items-center gap-1.5 text-[11px] px-2 py-1 rounded-lg bg-white border border-gray-100">
-                                  <span className="font-bold text-gray-800">{c.ref}</span>
-                                  <Badge statut={c.statut} />
-                                </span>
-                                <button
-                                  type="button"
-                                  onClick={() => handleRattacher(c)}
-                                  className="text-[10px] font-bold px-2 py-1 rounded-lg transition-all active:scale-95"
-                                  style={{ background: BRAND.navy, color: 'white' }}
-                                >
-                                  Rattacher ici
-                                </button>
+                  <div className="mt-2 space-y-3">
+                    <div
+                      className="rounded-xl border p-3 space-y-3"
+                      style={{ borderColor: BRAND.gold + '60', background: BRAND.gold + '08' }}
+                    >
+                      <div className="flex items-center gap-2">
+                        <Package size={14} style={{ color: BRAND.goldD }} />
+                        <span className="text-xs font-bold" style={{ color: BRAND.goldD }}>
+                          Ce client a {regroupables.length} colis en entrepôt
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-600">
+                        Ce carton fait partie d'une expédition existante ?
+                      </p>
+                      <div className="space-y-2">
+                        {regroupables.map((c) => (
+                          <button
+                            key={c.id}
+                            type="button"
+                            onClick={() => { setMode('rattacher'); setRattacherTarget(c); }}
+                            className="w-full flex items-center gap-3 p-3 rounded-xl bg-white border border-gray-200 hover:border-blue-400 hover:bg-blue-50 transition-all text-left active:scale-[0.98]"
+                          >
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="font-black text-sm" style={{ color: BRAND.navy }}>{c.ref}</span>
+                                {c.casier && (
+                                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ background: `${BRAND.gold}22`, color: BRAND.goldD }}>
+                                    {c.casier}
+                                  </span>
+                                )}
+                                <Badge statut={c.statut} />
                               </div>
-                            ))}
-                          </div>
-                        </div>
-                      ))}
+                              <p className="text-xs text-gray-500 truncate mt-0.5">{c.desc}</p>
+                              {c.trackings?.filter((t) => t).length > 0 && (
+                                <p className="text-[10px] text-gray-400 mt-0.5">
+                                  {c.trackings.filter((t) => t).length} carton{c.trackings.filter((t) => t).length > 1 ? 's' : ''} déjà rattaché{c.trackings.filter((t) => t).length > 1 ? 's' : ''}
+                                </p>
+                              )}
+                            </div>
+                            <span className="text-xs font-bold px-3 py-1.5 rounded-lg flex-shrink-0" style={{ background: BRAND.navy, color: 'white' }}>
+                              Ajouter ici
+                            </span>
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                    <p className="text-[10px] text-gray-500">
-                      💡 Cliquez « Rattacher ici » pour ajouter le carton à un colis existant, ou « Réceptionner » en bas pour créer un nouveau EXP.
-                    </p>
+
+                    <div className="relative flex items-center gap-3">
+                      <div className="flex-1 border-t border-gray-200" />
+                      <span className="text-[10px] font-bold text-gray-400 uppercase">ou</span>
+                      <div className="flex-1 border-t border-gray-200" />
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setMode('nouveau')}
+                      className="w-full py-3 rounded-xl border-2 border-dashed border-gray-300 text-sm font-bold text-gray-500 hover:border-gray-400 hover:text-gray-700 transition-all active:scale-[0.98]"
+                    >
+                      Créer une nouvelle expédition (nouveau EXP)
+                    </button>
                   </div>
                 );
+              })()}
+
+              {/* Auto-set mode to 'nouveau' if no regroupables */}
+              {selectedClient && !mode && (() => {
+                const STATUTS_REGROUPABLES = ['receptionne', 'mesure', 'attente_feu_vert', 'autorise'];
+                const hasRegroupables = data.some(
+                  (c) => c.clientId === selectedClient.id && STATUTS_REGROUPABLES.includes(c.statut)
+                );
+                if (!hasRegroupables && !mode) setTimeout(() => setMode('nouveau'), 0);
+                return null;
               })()}
             </div>
           )}
@@ -640,8 +664,67 @@ export default function ColisModal({ open, onClose }) {
             </div>
           )}
 
-          {/* ── Form fields ── */}
-          {(
+          {/* ── RATTACHER MODE: formulaire simplifié ── */}
+          {mode === 'rattacher' && rattacherTarget && (
+            <>
+              <div className="rounded-xl border p-3" style={{ borderColor: BRAND.navy + '30', background: BRAND.navy + '06' }}>
+                <div className="flex items-center gap-2 mb-1">
+                  <Package size={14} style={{ color: BRAND.navy }} />
+                  <span className="text-xs font-bold" style={{ color: BRAND.navy }}>
+                    Ajouter un carton à {rattacherTarget.ref}
+                  </span>
+                  <button type="button" onClick={() => { setMode(null); setRattacherTarget(null); }} className="ml-auto text-[10px] text-gray-400 hover:text-gray-600">
+                    Changer
+                  </button>
+                </div>
+                <p className="text-[11px] text-gray-500">{rattacherTarget.desc} · Casier {rattacherTarget.casier || '—'}</p>
+              </div>
+
+              {/* Tracking + fournisseur */}
+              <div>
+                <label className={labelCls}>Nouveau carton</label>
+                {nf.trackingLines.map((line, idx) => (
+                  <div key={idx} className="flex gap-2 mb-2">
+                    <input
+                      type="text"
+                      placeholder="Fournisseur (Amazon, Zara...)"
+                      value={line.fournisseur}
+                      onChange={(e) => setTracking(idx, 'fournisseur', e.target.value)}
+                      className="flex-1 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm outline-none focus:border-blue-400 focus:bg-white"
+                    />
+                    <input
+                      type="text"
+                      placeholder="N° tracking"
+                      value={line.tracking}
+                      onChange={(e) => setTracking(idx, 'tracking', e.target.value)}
+                      className="flex-1 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm outline-none focus:border-blue-400 focus:bg-white"
+                    />
+                    {nf.trackingLines.length > 1 && (
+                      <button type="button" onClick={() => removeTracking(idx)} className="text-gray-300 hover:text-red-500 px-1"><X size={14} /></button>
+                    )}
+                  </div>
+                ))}
+                <button type="button" onClick={addTracking} className="text-xs font-bold" style={{ color: BRAND.navy }}>+ Ajouter un tracking</button>
+              </div>
+
+              {/* Casier optionnel (si on veut changer) */}
+              <div>
+                <label className={labelCls}>Casier (laisser vide pour garder {rattacherTarget.casier || 'l\'actuel'})</label>
+                <input
+                  type="text"
+                  placeholder={rattacherTarget.casier || 'Ex: A-03'}
+                  value={nf.casier}
+                  onChange={(e) => setField('casier', e.target.value.toUpperCase())}
+                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm outline-none focus:border-blue-400 focus:bg-white"
+                />
+              </div>
+
+              {formErr.tracking && <p className="text-xs text-red-500">{formErr.tracking}</p>}
+            </>
+          )}
+
+          {/* ── NOUVEAU MODE: formulaire complet ── */}
+          {mode === 'nouveau' && (
             <>
               {/* ── CASIER (staff only, MANDATORY — first field for speed) ── */}
               {isStaff && (
@@ -1000,31 +1083,47 @@ export default function ColisModal({ open, onClose }) {
         </div>
 
         {/* ── Footer / Actions ── */}
-        <div className="px-5 py-4 border-t border-gray-100 bg-white">
-          <div className="flex gap-3">
-            <button
-              type="button"
-              onClick={resetAndClose}
-              className="flex-shrink-0 px-4 py-2.5 rounded-xl font-semibold text-sm text-gray-600 bg-gray-100 hover:bg-gray-200 active:scale-95 transition-all"
-            >
-              Annuler
-            </button>
-            <button
-              type="button"
-              onClick={() => handleReceptionner(false)}
-              className="flex-1 py-2.5 rounded-xl font-bold text-sm text-white bg-blue-600 hover:bg-blue-700 active:scale-95 transition-all"
-            >
-              Réceptionner
-            </button>
-            <button
-              type="button"
-              onClick={() => handleReceptionner(true)}
-              className="flex-1 py-2.5 rounded-xl font-bold text-sm text-white bg-green-600 hover:bg-green-700 active:scale-95 transition-all"
-            >
-              + WhatsApp
-            </button>
+        {mode && (
+          <div className="px-5 py-4 border-t border-gray-100 bg-white">
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={mode === 'rattacher' ? () => { setMode(null); setRattacherTarget(null); } : resetAndClose}
+                className="flex-shrink-0 px-4 py-2.5 rounded-xl font-semibold text-sm text-gray-600 bg-gray-100 hover:bg-gray-200 active:scale-95 transition-all"
+              >
+                {mode === 'rattacher' ? 'Retour' : 'Annuler'}
+              </button>
+
+              {mode === 'rattacher' ? (
+                <button
+                  type="button"
+                  onClick={handleRattacher}
+                  className="flex-1 py-2.5 rounded-xl font-bold text-sm text-white active:scale-95 transition-all"
+                  style={{ background: `linear-gradient(135deg, ${BRAND.navy}, ${BRAND.navyL})` }}
+                >
+                  Rattacher à {rattacherTarget?.ref}
+                </button>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => handleReceptionner(false)}
+                    className="flex-1 py-2.5 rounded-xl font-bold text-sm text-white bg-blue-600 hover:bg-blue-700 active:scale-95 transition-all"
+                  >
+                    Réceptionner
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleReceptionner(true)}
+                    className="flex-1 py-2.5 rounded-xl font-bold text-sm text-white bg-green-600 hover:bg-green-700 active:scale-95 transition-all"
+                  >
+                    + WhatsApp
+                  </button>
+                </>
+              )}
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );
