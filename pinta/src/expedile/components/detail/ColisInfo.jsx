@@ -17,7 +17,7 @@ export default function ColisInfo() {
         <div>
           <p className="text-xs font-bold text-gray-400 uppercase">Contenu</p>
           <p className="font-medium">{sel.desc}</p>
-          <p className="text-xs text-gray-500">Valeur déclarée : {eur(sel.valeur)}</p>
+          {sel.valeur > 0 && <p className="text-xs text-gray-500">Valeur déclarée : {eur(sel.valeur)}</p>}
         </div>
         {cl && (
           <div className="text-right">

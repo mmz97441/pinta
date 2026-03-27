@@ -52,11 +52,22 @@ function AppContent() {
           <DetailHeader />
           <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-4 space-y-4">
             <Etapes statut={sel.statut} />
-            <ColisInfo />
-            <StaffDetailView />
-            <FacturesPanel />
-            <ChatPanel />
-            <AuditLog />
+
+            {/* Two-panel layout: infos left / actions right on desktop */}
+            <div className="flex flex-col lg:flex-row gap-4">
+              {/* Actions — first on mobile, right on desktop */}
+              <div className="w-full lg:w-[420px] lg:flex-shrink-0 lg:order-2 space-y-4">
+                <StaffDetailView />
+              </div>
+
+              {/* Infos — second on mobile, left on desktop */}
+              <div className="flex-1 lg:order-1 space-y-4 min-w-0">
+                <ColisInfo />
+                <FacturesPanel />
+                <ChatPanel />
+                <AuditLog />
+              </div>
+            </div>
           </div>
         </div>
       );

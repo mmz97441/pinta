@@ -592,8 +592,6 @@ export default function StaffDetailView() {
         return (
           <Section title="Demander le feu vert" icon={Clock} color={borderColor}>
             <div className="space-y-4">
-              <DimsDisplay c={sel} />
-
               {missingFacture && (
                 <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 space-y-2">
                   <div className="flex items-start gap-2">
@@ -656,8 +654,6 @@ export default function StaffDetailView() {
                   En attente de la réponse du client ({cl?.nom ?? '—'})
                 </p>
               </div>
-
-              <DimsDisplay c={sel} />
 
               {missingFacture && (
                 <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 space-y-2">
@@ -725,8 +721,6 @@ export default function StaffDetailView() {
                 </div>
               )}
 
-              <DimsDisplay c={sel} />
-
               <BtnPrimary
                 onClick={() => changerStatut(sel.id, 'en_preparation')}
                 color="#2563EB"
@@ -769,11 +763,6 @@ export default function StaffDetailView() {
                 </p>
               </div>
             )}
-            {/* Dimensions initiales */}
-            <Section title="Dimensions initiales (réception)" icon={Ruler} color="#94A3B8">
-              <DimsDisplay c={sel} />
-            </Section>
-
             {/* Dimensions finales */}
             <Section title="Dimensions après optimisation" icon={Ruler} color={borderColor}>
               <div className="space-y-4">
@@ -1110,51 +1099,6 @@ export default function StaffDetailView() {
   // ════════════════════════════════════════════════════════════════════════
   return (
     <div className="flex flex-col gap-4 pb-24 lg:pb-12">
-
-      {/* ── Colis header card ──────────────────────────────────────────── */}
-      <div
-        className="card-elevated p-4"
-        style={{ borderLeft: `4px solid ${borderColor}` }}
-      >
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap mb-1">
-              <span
-                className="text-base font-black tracking-tight"
-                style={{ color: BRAND.navy, letterSpacing: '-0.02em' }}
-              >
-                {sel.ref}
-              </span>
-              {sel.casier && (
-                <span
-                  className="text-[10px] font-bold px-2 py-0.5 rounded"
-                  style={{ background: `${BRAND.gold}22`, color: BRAND.goldD }}
-                >
-                  {sel.casier}
-                </span>
-              )}
-              {missingFacture && (
-                <AlertTriangle size={13} className="text-amber-500 flex-shrink-0" />
-              )}
-            </div>
-            <p className="text-xs text-gray-500 truncate">{sel.desc}</p>
-            <p className="text-xs text-gray-400 mt-0.5">
-              {cl?.nom ?? '—'} · {dest?.flag} {dest?.nom}
-              {sel.dateReception && (
-                <span className="ml-1.5">
-                  · Reçu le {new Date(sel.dateReception).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' })}
-                </span>
-              )}
-            </p>
-          </div>
-          <button
-            onClick={() => setSelId(null)}
-            className="flex-shrink-0 p-2 rounded-xl hover:bg-gray-100 transition-colors"
-          >
-            <X size={16} className="text-gray-400" />
-          </button>
-        </div>
-      </div>
 
       {/* ── Action block ───────────────────────────────────────────────── */}
       {renderActionBlock()}
