@@ -101,6 +101,7 @@ function mapCategorie(row, tauxRows) {
     id: row.id,
     label: row.label,
     custom: row.custom,
+    codeHs: row.code_hs || '',
     taux,
   };
 }

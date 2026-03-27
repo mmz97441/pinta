@@ -407,7 +407,7 @@ function ColisTable({ items, getClient, envois, openColis, filterFn }) {
 
 // ── Main component ───────────────────────────────────────────────────────────
 export default function StaffDashboard({ onNewColis }) {
-  const { data, clients, envois, setSelId, getClient, isStaff, page, flash } = useApp();
+  const { data, clients, envois, categories, setSelId, getClient, isStaff, page, flash } = useApp();
 
   const [globalSearch, setGlobalSearch] = useState('');
   const [envoiFilter, setEnvoiFilter] = useState('ALL');
@@ -1285,6 +1285,36 @@ export default function StaffDashboard({ onNewColis }) {
                   >
                     {group.colis.length}
                   </span>
+                  {e && (
+                    <button
+                      onClick={(ev) => {
+                        ev.stopPropagation();
+                        const nb = exportFactureCommerciale(e, group.colis, clients, categories);
+                        flash(`Facture commerciale ${e.ref} — ${nb} articles exportés`);
+                      }}
+                      className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-semibold transition-all active:scale-95 hover:bg-gray-100"
+                      style={{ color: BRAND.navy }}
+                      title="Télécharger la facture commerciale"
+                    >
+                      <FileSpreadsheet size={12} />
+                      Facture COM
+                    </button>
+                  )}
+                  {e && (
+                    <button
+                      onClick={(ev) => {
+                        ev.stopPropagation();
+                        const nb = exportDAUData(e, group.colis, clients, categories);
+                        flash(`Données DAU ${e.ref} — ${nb} codes HS exportés`);
+                      }}
+                      className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-semibold transition-all active:scale-95 hover:bg-gray-100"
+                      style={{ color: '#8B5CF6' }}
+                      title="Données pour la déclaration douanière"
+                    >
+                      <FileSpreadsheet size={12} />
+                      DAU
+                    </button>
+                  )}
                 </div>
 
                 {/* Group content */}
