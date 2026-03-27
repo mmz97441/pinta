@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import {
-  Ruler, Check, Clock, Camera, AlertTriangle, Eye, X, RotateCcw, ExternalLink, Mail,
+  Ruler, Check, Clock, Camera, AlertTriangle, Eye, X, RotateCcw, ExternalLink, Mail, Plus,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { BRAND, STATUTS, TRANSITIONS, PRODUITS_INTERDITS, getDestByCP } from '../../constants';
@@ -251,6 +251,8 @@ export default function StaffDetailView() {
   const [devisPrev, setDevisPrev] = useState(false);
   // Envoi assignment
   const [selEnvoi, setSelEnvoi] = useState(sel?.envoi || '');
+  // Add tracking
+  const [newTracking, setNewTracking] = useState('');
 
   if (!sel || !isStaff) return null;
 
@@ -326,6 +328,29 @@ export default function StaffDetailView() {
       () => annulerColis(sel.id),
       { danger: true, okLabel: 'Oui, annuler' },
     );
+  }
+
+  // ── Add tracking (new carton to existing EXP) ────────────────────────────
+  const canAddTracking = sel.statut === 'receptionne' || sel.statut === 'mesure';
+
+  function handleAddTracking() {
+    const t = newTracking.trim().toUpperCase();
+    if (!t) { setFormErr('Saisissez un numéro de tracking'); return; }
+    const existing = sel.trackings?.filter((x) => x) || [];
+    if (existing.includes(t)) { setFormErr('Ce tracking est déjà rattaché'); return; }
+    setFormErr('');
+    const updated = [...existing, t];
+    // Reset to receptionne since we have a new unmeasured carton
+    upd(sel.id, {
+      trackings: updated,
+      nbColis: updated.length,
+      // Reset dims since they need to be re-measured with the new carton
+      statut: 'receptionne',
+      dimL: null, dimW: null, dimH: null, poids: null,
+      dimsParColis: [],
+    });
+    setNewTracking('');
+    flash(`Carton ajouté — ${sel.ref} a maintenant ${updated.length} colis`);
   }
 
   // ── Measure validation ────────────────────────────────────────────────────
@@ -537,6 +562,28 @@ export default function StaffDetailView() {
                   </div>
                 )}
 
+                {/* Ajouter un carton */}
+                <div className="pt-2 border-t border-gray-100">
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Ajouter un carton</p>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={newTracking}
+                      onChange={(e) => setNewTracking(e.target.value)}
+                      placeholder="N° tracking du nouveau carton"
+                      className="flex-1 px-3 py-2 rounded-lg border border-gray-200 bg-gray-50 text-xs outline-none focus:border-blue-400 focus:bg-white transition-colors"
+                    />
+                    <button
+                      onClick={handleAddTracking}
+                      className="flex items-center gap-1 px-3 py-2 rounded-lg text-xs font-bold transition-all active:scale-95"
+                      style={{ background: `${BRAND.navy}10`, color: BRAND.navy }}
+                    >
+                      <Plus size={13} />
+                      Ajouter
+                    </button>
+                  </div>
+                </div>
+
                 {formErr && <p className="text-xs text-red-500 font-medium">{formErr}</p>}
 
                 <BtnPrimary onClick={handleValiderMesures}>
@@ -575,6 +622,28 @@ export default function StaffDetailView() {
                   <Ligne label="Transport estimé" value={eur(parseFloat(tr))} />
                 </div>
               )}
+
+              {/* Ajouter un carton */}
+              <div className="pt-2 border-t border-gray-100">
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Ajouter un carton à ce colis</p>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newTracking}
+                    onChange={(e) => setNewTracking(e.target.value)}
+                    placeholder="N° tracking du nouveau carton"
+                    className="flex-1 px-3 py-2 rounded-lg border border-gray-200 bg-gray-50 text-xs outline-none focus:border-blue-400 focus:bg-white transition-colors"
+                  />
+                  <button
+                    onClick={handleAddTracking}
+                    className="flex items-center gap-1 px-3 py-2 rounded-lg text-xs font-bold transition-all active:scale-95"
+                    style={{ background: `${BRAND.navy}10`, color: BRAND.navy }}
+                  >
+                    <Plus size={13} />
+                    Ajouter
+                  </button>
+                </div>
+              </div>
 
               {formErr && <p className="text-xs text-red-500 font-medium">{formErr}</p>}
 
@@ -620,6 +689,29 @@ export default function StaffDetailView() {
                   </div>
                 </div>
               )}
+
+              {/* Ajouter un carton (remet en receptionne pour re-mesurer) */}
+              <div className="pt-2 border-t border-gray-100">
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Ajouter un carton</p>
+                <p className="text-[10px] text-gray-400 mb-2">Les mesures seront à refaire avec le nouveau carton.</p>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newTracking}
+                    onChange={(e) => setNewTracking(e.target.value)}
+                    placeholder="N° tracking du nouveau carton"
+                    className="flex-1 px-3 py-2 rounded-lg border border-gray-200 bg-gray-50 text-xs outline-none focus:border-blue-400 focus:bg-white transition-colors"
+                  />
+                  <button
+                    onClick={handleAddTracking}
+                    className="flex items-center gap-1 px-3 py-2 rounded-lg text-xs font-bold transition-all active:scale-95"
+                    style={{ background: `${BRAND.navy}10`, color: BRAND.navy }}
+                  >
+                    <Plus size={13} />
+                    Ajouter
+                  </button>
+                </div>
+              </div>
 
               <BtnWA
                 onClick={() => {

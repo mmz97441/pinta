@@ -26,8 +26,8 @@ const STATUTS_ATTENTE_FV = ['attente_feu_vert'];
 const SUMMARY_CARDS = [
   { key: 'afaire', label: 'À traiter', statuts: STATUTS_A_FAIRE, color: BRAND.navy, icon: CircleDot },
   { key: 'attente_fv', label: 'Att. feu vert', statuts: ['attente_feu_vert'], color: '#F97316', icon: Clock },
-  { key: 'attente_paie', label: 'Att. paiement', statuts: ['devis_envoye', 'attente_paiement'], color: '#D97706', icon: CreditCard },
   { key: 'feuvert', label: 'Feu vert OK', statuts: STATUTS_FEU_VERT_OK, color: '#65A30D', icon: CheckCircle },
+  { key: 'attente_paie', label: 'Att. paiement', statuts: ['devis_envoye', 'attente_paiement'], color: '#D97706', icon: CreditCard },
   { key: 'expedies', label: 'Prêts / Expédiés', statuts: STATUTS_PRETS_EXPEDIES, color: '#059669', icon: Plane },
 ];
 
