@@ -9,6 +9,8 @@ import { isWaConfigured, sendTemplate, sendText } from '../../services/whatsappA
 export default function StaffSettings() {
   const { setPage, envois, setEnvois, data, tarifs, setTarifs, categories, addCategory, updateCatTaux, updateCatLabel, deleteCategory, flash } = useApp();
   const [newEnvoiDate, setNewEnvoiDate] = useState('');
+  const [jourEnvoi, setJourEnvoi] = useState(5); // 0=Dim, 1=Lun, ... 5=Ven, 6=Sam
+  const [nbSemaines, setNbSemaines] = useState(4);
   const [catEditId, setCatEditId] = useState(null);
   const [newCat, setNewCat] = useState({ label: '', taux: {} });
 
@@ -60,24 +62,94 @@ export default function StaffSettings() {
       <div className="card p-5">
         <div className="flex items-center gap-2 mb-1">
           <Plane size={18} style={{ color: BRAND.navy }} />
-          <p className="font-bold text-lg">Départs (vols du vendredi soir)</p>
+          <p className="font-bold text-lg">Planning des départs</p>
         </div>
-        <p className="text-sm text-gray-500 mb-4">Gérez les départs hebdomadaires. Par défaut, un départ chaque vendredi soir.</p>
+        <p className="text-sm text-gray-500 mb-4">Pré-générez les prochains départs automatiquement.</p>
 
+        {/* Auto-generate */}
+        <div className="rounded-xl border-2 border-dashed border-gray-200 p-4 mb-4 space-y-3">
+          <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Génération automatique</p>
+          <div className="flex gap-3 items-end flex-wrap">
+            <div>
+              <label className="text-[11px] font-semibold text-gray-500 block mb-1">Jour de départ</label>
+              <select
+                value={jourEnvoi}
+                onChange={(e) => setJourEnvoi(parseInt(e.target.value))}
+                className="px-3 py-2 rounded-xl border-2 border-gray-200 text-sm font-semibold"
+                style={{ color: BRAND.navy }}
+              >
+                <option value={1}>Lundi</option>
+                <option value={2}>Mardi</option>
+                <option value={3}>Mercredi</option>
+                <option value={4}>Jeudi</option>
+                <option value={5}>Vendredi</option>
+                <option value={6}>Samedi</option>
+                <option value={0}>Dimanche</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-[11px] font-semibold text-gray-500 block mb-1">Semaines à planifier</label>
+              <select
+                value={nbSemaines}
+                onChange={(e) => setNbSemaines(parseInt(e.target.value))}
+                className="px-3 py-2 rounded-xl border-2 border-gray-200 text-sm font-semibold"
+                style={{ color: BRAND.navy }}
+              >
+                <option value={2}>2 semaines</option>
+                <option value={3}>3 semaines</option>
+                <option value={4}>4 semaines</option>
+                <option value={6}>6 semaines</option>
+                <option value={8}>8 semaines</option>
+              </select>
+            </div>
+            <button
+              onClick={() => {
+                // Find next occurrence of the chosen day
+                const today = new Date();
+                let next = new Date(today);
+                const diff = (jourEnvoi - today.getDay() + 7) % 7;
+                next.setDate(today.getDate() + (diff === 0 ? 7 : diff));
+
+                let added = 0;
+                for (let w = 0; w < nbSemaines; w++) {
+                  const d = new Date(next);
+                  d.setDate(next.getDate() + w * 7);
+                  const dateStr = d.toISOString().slice(0, 10);
+                  if (!envois.find((e) => e.date === dateStr)) {
+                    setEnvois((p) => [...p, { id: uid(), date: dateStr, statut: 'planifie' }]);
+                    added++;
+                  }
+                }
+                setEnvois((p) => [...p].sort((a, b) => a.date.localeCompare(b.date)));
+                flash(added > 0 ? `${added} départ${added > 1 ? 's' : ''} ajouté${added > 1 ? 's' : ''}` : 'Tous les départs existent déjà');
+              }}
+              className="px-4 py-2 rounded-xl text-sm font-bold text-white active:scale-95 transition-all"
+              style={{ background: `linear-gradient(135deg, ${BRAND.navy}, ${BRAND.navyL})` }}
+            >
+              Générer les {nbSemaines} prochains départs
+            </button>
+          </div>
+        </div>
+
+        {/* Existing envois */}
         <div className="space-y-2 mb-4">
+          {envois.length === 0 && (
+            <p className="text-sm text-gray-400 text-center py-4">Aucun départ planifié</p>
+          )}
           {envois.map((e) => {
             const count = data.filter((c) => c.envoi === e.id).length;
             return (
               <div key={e.id} className="flex items-center gap-2 p-3 bg-gray-50 rounded-xl">
                 <div className="flex-1">
                   <p className="font-bold text-sm">{labelEnvoi(e)}</p>
-                  <p className="text-xs text-gray-500">{`${e.statut} · ${count} colis affectés`}</p>
+                  <p className="text-xs text-gray-500">{`${count} colis affectés`}</p>
                 </div>
                 <select value={e.statut} onChange={(ev) => setEnvois((p) => p.map((x) => (x.id === e.id ? { ...x, statut: ev.target.value } : x)))} className="px-2 py-1 rounded-lg border text-xs">
                   <option value="planifie">○ Planifié</option>
                   <option value="prochain">● Prochain</option>
                   <option value="en_cours">● En cours</option>
                   <option value="parti">✈ Parti</option>
+                  <option value="arrive">✓ Arrivé</option>
                 </select>
                 {count === 0 ? (
                   <button onClick={() => { setEnvois((p) => p.filter((x) => x.id !== e.id)); flash('Départ supprimé'); }} className="text-red-400 hover:text-red-600 p-1.5 rounded-lg hover:bg-red-50 transition-colors">
@@ -91,19 +163,18 @@ export default function StaffSettings() {
           })}
         </div>
 
+        {/* Manual add */}
         <div className="border-t pt-4">
-          <p className="text-sm font-bold text-gray-700 mb-2">Ajouter un départ</p>
+          <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Ou ajouter un départ manuellement</p>
           <div className="flex gap-2">
-            <input type="date" value={newEnvoiDate} onChange={(e) => setNewEnvoiDate(e.target.value)} className="flex-1 px-3 py-2 rounded-xl border-2 border-gray-200 text-sm" />
+            <input type="date" value={newEnvoiDate} onChange={(e) => setNewEnvoiDate(e.target.value)} className="flex-1 px-3 py-2 rounded-xl border border-gray-200 text-sm" />
             <button onClick={() => {
               if (!newEnvoiDate) { flash('Choisissez une date'); return; }
-              const d = new Date(newEnvoiDate + 'T00:00:00');
-              if (d.getDay() !== 5) flash('Les départs sont normalement le vendredi. Ajouté quand même.');
               if (envois.find((e) => e.date === newEnvoiDate)) { flash('Ce départ existe déjà'); return; }
               setEnvois((p) => [...p, { id: uid(), date: newEnvoiDate, statut: 'planifie' }].sort((a, b) => a.date.localeCompare(b.date)));
               setNewEnvoiDate('');
               flash('Départ ajouté');
-            }} style={{ backgroundColor: BRAND.navy }} className="px-4 py-2 text-white rounded-xl text-sm font-bold hover:opacity-90">
+            }} className="px-4 py-2 rounded-xl text-sm font-bold text-gray-600 border border-gray-200 hover:bg-gray-50">
               + Ajouter
             </button>
           </div>
