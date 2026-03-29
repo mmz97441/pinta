@@ -18,6 +18,41 @@ function cartonsList(colis) {
   return '';
 }
 
+// Helper : résumé complet des cartons pour le devis
+function devisCartonsDetail(colis, mode) {
+  const details = colis.trackingsDetail || [];
+  const trackings = colis.trackings?.filter((t) => t) || [];
+  const dimsPC = colis.dimsParColis || [];
+  const nb = Math.max(details.length, trackings.length, 1);
+  const bold = mode === 'whatsapp' ? '*' : '';
+
+  if (nb <= 1 && details.length <= 1) {
+    // Single carton — simple
+    const td = details[0];
+    const fournisseur = td?.fournisseur || '';
+    const tracking = td?.number || trackings[0] || '';
+    let line = `📦 ${bold}1 carton${bold}`;
+    if (fournisseur) line += ` — ${fournisseur}`;
+    if (tracking) line += ` (${tracking})`;
+    return line;
+  }
+
+  // Multi-cartons — détail par carton
+  const lines = [`📦 ${bold}${nb} cartons regroupés${bold} :`];
+  for (let i = 0; i < nb; i++) {
+    const td = details[i];
+    const fournisseur = td?.fournisseur || '';
+    const tracking = td?.number || trackings[i] || '';
+    const dims = dimsPC[i];
+    let line = `  ${i + 1}. `;
+    if (fournisseur) line += `${fournisseur}`;
+    if (tracking) line += fournisseur ? ` (${tracking})` : tracking;
+    if (dims?.dimL) line += ` — ${dims.dimL}×${dims.dimW}×${dims.dimH} cm, ${dims.poids} kg`;
+    lines.push(line);
+  }
+  return lines.join('\n');
+}
+
 function dimsText(colis) {
   if (!colis.dimL) return '';
   return `${colis.dimL} × ${colis.dimW} × ${colis.dimH} cm — ${colis.poids} kg`;
@@ -270,28 +305,32 @@ L'équipe Expedîle`,
       const dest = getDestByCP(c.cp);
       const taxes = (colis.devisOM || 0) + (colis.devisOMR || 0);
       const pf = colis.poidsFact || colis.finP || colis.poids || 0;
+      const cartonsInfo = devisCartonsDetail(colis, 'whatsapp');
+      const dimsBrutes = colis.dimL ? `${colis.dimL}×${colis.dimW}×${colis.dimH} cm — ${colis.poids} kg` : null;
+      const dimsFinales = colis.finL ? `${colis.finL}×${colis.finW}×${colis.finH} cm — ${colis.finP} kg` : null;
       return `Bonjour ${c.nom.split(' ')[0]} 👋
 
-Le devis final pour votre colis *${colis.ref}* est prêt ! 📋
+Le devis final pour votre expédition *${colis.ref}* est prêt ! 📋
 
-📦 *${colis.desc}*
 🎯 *Destination :* ${dest.flag} ${dest.nom}
-${colis.finL ? `📐 *Dimensions optimisées :* ${colis.finL}×${colis.finW}×${colis.finH} cm\n` : ''}⚖️ *Poids facturable :* ${pf} kg
 
+${cartonsInfo}
+${dimsBrutes && dimsFinales ? `\n📐 *Dimensions à réception :* ${dimsBrutes}\n📐 *Après optimisation :* ${dimsFinales}\n` : dimsFinales ? `\n📐 *Dimensions :* ${dimsFinales}\n` : dimsBrutes ? `\n📐 *Dimensions :* ${dimsBrutes}\n` : ''}⚖️ *Poids facturable :* ${pf} kg
+${colis.lignes?.length > 0 ? `\n📋 *Contenu déclaré :*\n${colis.lignes.map((l) => `  • ${l.desc} × ${l.qte} — ${eur(l.prix * l.qte)}`).join('\n')}\n` : ''}
 ━━━━━━━━━━━━━━━━
 💰 *DÉTAIL DU DEVIS*
 ━━━━━━━━━━━━━━━━
 🚀 Transport : *${eur(colis.devisTransport)}*
-🏛️ Taxes (OM/OMR) : *${eur(taxes)}*
+🏛️ Taxes (OM + OMR) : *${eur(taxes)}*
 📊 TVA (${dest.tva}%) : *${eur(colis.devisTVA)}*
-━━━━━━━━━━━━━━━━
+${colis.fraisDivers?.length > 0 ? colis.fraisDivers.map((f) => `📎 ${f.libelle} : *${eur(f.montant)}*`).join('\n') + '\n' : ''}━━━━━━━━━━━━━━━━
 💰 *TOTAL : ${eur(colis.devisTotal)}*
 ━━━━━━━━━━━━━━━━
-${colis.economie > 0 ? `\n✅ *Vous économisez ${eur(colis.economie)}* grâce à l'optimisation de l'emballage !\n(Sans optimisation, le montant aurait été de ${eur(colis.avantOptimTotal)})\n` : ''}
+${colis.economie > 0 ? `\n✅ *Vous économisez ${eur(colis.economie)}* grâce à l'optimisation !\n(Sans optimisation : ${eur(colis.avantOptimTotal)})\n` : ''}
 👉 *Pour déclencher l'expédition :*
-Vous pouvez payer directement sur votre espace client ou nous contacter.
+Payez sur votre espace client ou contactez-nous.
 
-❓ Une question sur le devis ? Répondez simplement à ce message.
+❓ Une question ? Répondez à ce message.
 
 _L'équipe Expedîle — Paris → ${dest.nom}_`;
     },
@@ -299,20 +338,26 @@ _L'équipe Expedîle — Paris → ${dest.nom}_`;
       const dest = getDestByCP(c.cp);
       const taxes = (colis.devisOM || 0) + (colis.devisOMR || 0);
       const pf = colis.poidsFact || colis.finP || colis.poids || 0;
+      const nb = Math.max((colis.trackingsDetail || []).length, (colis.trackings?.filter((t) => t) || []).length, 1);
+      const cartonsInfo = devisCartonsDetail(colis, 'email');
+      const dimsBrutes = colis.dimL ? `${colis.dimL} × ${colis.dimW} × ${colis.dimH} cm — ${colis.poids} kg` : null;
+      const dimsFinales = colis.finL ? `${colis.finL} × ${colis.finW} × ${colis.finH} cm — ${colis.finP} kg` : null;
       return `Objet : 💳 Devis final — ${colis.ref} : ${eur(colis.devisTotal)}
 
 Bonjour ${c.nom},
 
-Le devis final pour votre colis est prêt.
+Le devis final pour votre expédition est prêt.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📦 VOTRE COLIS
+📦 VOTRE EXPÉDITION
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Référence : ${colis.ref}
-Contenu : ${colis.desc}
 Destination : ${dest.flag} ${dest.nom}
-${colis.finL ? `Dimensions optimisées : ${colis.finL} × ${colis.finW} × ${colis.finH} cm\n` : ''}Poids facturable : ${pf} kg
 
+${cartonsInfo}
+${dimsBrutes && dimsFinales ? `\nDimensions à réception : ${dimsBrutes}\nAprès optimisation :    ${dimsFinales}\n` : dimsFinales ? `\nDimensions : ${dimsFinales}\n` : dimsBrutes ? `\nDimensions : ${dimsBrutes}\n` : ''}
+Poids facturable : ${pf} kg
+${colis.lignes?.length > 0 ? `\nContenu déclaré :\n${colis.lignes.map((l) => `  • ${l.desc} × ${l.qte} — ${eur(l.prix * l.qte)}`).join('\n')}\n` : ''}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 💰 DÉTAIL DU DEVIS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -320,16 +365,16 @@ ${colis.finL ? `Dimensions optimisées : ${colis.finL} × ${colis.finW} × ${col
 🏛️ Octroi de Mer (OM) .............. ${eur(colis.devisOM)}
 🏛️ Octroi de Mer Régional (OMR) .... ${eur(colis.devisOMR)}
 📊 TVA (${dest.tva}%) ..................... ${eur(colis.devisTVA)}
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+${colis.fraisDivers?.length > 0 ? colis.fraisDivers.map((f) => `📎 ${f.libelle} ..................... ${eur(f.montant)}`).join('\n') + '\n' : ''}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 💰 TOTAL                              ${eur(colis.devisTotal)}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-${colis.economie > 0 ? `\n✅ Économie réalisée : ${eur(colis.economie)}\nGrâce à l'optimisation de l'emballage, vous économisez par rapport au tarif standard (${eur(colis.avantOptimTotal)}).\n` : ''}
-Pour déclencher l'expédition, vous pouvez régler ce montant :
+${colis.economie > 0 ? `\n✅ Économie réalisée : ${eur(colis.economie)}\nGrâce à l'optimisation, vous économisez par rapport\naux dimensions d'origine (${eur(colis.avantOptimTotal)}).\n` : ''}
+Pour déclencher l'expédition, réglez ce montant :
 • Sur votre espace client en ligne
 • Par virement bancaire
-• En nous contactant directement
+• En nous contactant
 
-Une question ? Répondez simplement à cet email.
+Une question ? Répondez à cet email.
 
 Cordialement,
 L'équipe Expedîle
