@@ -566,13 +566,23 @@ export default function StaffDashboard({ onNewColis }) {
     });
   }, [tableSearch, getClient]);
 
-  // ── Missing invoices ──────────────────────────────────────────────────────
+  // ── Missing invoices (all active colis without validated facture) ──────────
   const missingInvoices = useMemo(
-    () => data.filter((c) =>
-      c.statut !== 'annule' &&
-      c.factures &&
-      c.factures.some((f) => !f.valide)
-    ),
+    () => data.filter((c) => {
+      if (c.statut === 'annule' || c.statut === 'livre') return false;
+      const hasValid = c.factures && c.factures.length > 0 && c.factures.some((f) => f.valide);
+      return !hasValid;
+    }),
+    [data],
+  );
+
+  // ── Colis en feu vert SANS facture (relance prioritaire) ─────────────────
+  const feuVertSansFacture = useMemo(
+    () => data.filter((c) => {
+      if (!['attente_feu_vert', 'autorise', 'en_preparation'].includes(c.statut)) return false;
+      const hasValid = c.factures && c.factures.length > 0 && c.factures.some((f) => f.valide);
+      return !hasValid;
+    }),
     [data],
   );
 
@@ -914,6 +924,43 @@ export default function StaffDashboard({ onNewColis }) {
                 +{missingInvoices.length - 5} autres
               </button>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Feu vert SANS facture — relance prioritaire ──────────────── */}
+      {feuVertSansFacture.length > 0 && (
+        <div
+          className="anim-fade stagger-3 rounded-xl overflow-hidden"
+          style={{ background: '#FEF2F2', border: '1px solid #FECACA' }}
+        >
+          <div className="flex items-center gap-2.5 px-3.5 py-2.5">
+            <AlertTriangle size={15} className="text-red-500 flex-shrink-0" />
+            <div className="flex-1">
+              <p className="text-xs font-bold text-red-800">
+                {feuVertSansFacture.length} colis en feu vert sans facture — relance nécessaire
+              </p>
+              <p className="text-[10px] text-red-600 mt-0.5">
+                Sans facture, le calcul des taxes (OM/OMR) et les formalités douanières sont impossibles.
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-1.5 px-3.5 pb-3">
+            {feuVertSansFacture.map((c) => {
+              const cl = getClient(c.clientId);
+              return (
+                <button
+                  key={c.id}
+                  onClick={() => openColis(c.id)}
+                  className="inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1.5 rounded-lg transition-all active:scale-95 hover:bg-red-100"
+                  style={{ background: '#FFF5F5', color: '#991B1B', border: '1px solid #FECACA' }}
+                >
+                  <span>{c.ref}</span>
+                  <span className="font-normal text-red-500">{cl?.nom?.split(' ')[0] || ''}</span>
+                  <ChevronRight size={11} className="text-red-400" />
+                </button>
+              );
+            })}
           </div>
         </div>
       )}
