@@ -76,6 +76,10 @@ function mapClient(row) {
     notes: row.notes,
     onboarded: row.onboarded || false,
     created: row.created_at,
+    abonnement: row.abonnement || 'freemium',
+    abonnementDebut: row.abonnement_debut,
+    abonnementFin: row.abonnement_fin,
+    methode_paiement: row.methode_paiement,
   };
 }
 
@@ -320,6 +324,10 @@ export async function updateClient(id, changes) {
     nom: 'nom', prenom: 'prenom', ville: 'ville', cp: 'cp',
     tel: 'tel', email: 'email', canal: 'canal', type: 'type',
     points: 'points', notes: 'notes', onboarded: 'onboarded',
+    abonnement: 'abonnement',
+    abonnementDebut: 'abonnement_debut',
+    abonnementFin: 'abonnement_fin',
+    methodePaiement: 'methode_paiement',
   };
   for (const [key, val] of Object.entries(changes)) {
     snakeChanges[map[key] || key] = val;

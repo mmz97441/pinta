@@ -732,23 +732,31 @@ export default function StaffDetailView() {
                 </div>
               </div>
 
-              <BtnWA
-                onClick={() => {
-                  demanderFeuVert(sel.id);
-                  sendMsg(sel.id, cl?.id, 'whatsapp', 'demande_feu_vert', null);
-                }}
-              >
-                Envoyer via WhatsApp — demander le feu vert
-              </BtnWA>
+              {missingFacture ? (
+                <div className="p-3 rounded-xl bg-gray-100 border border-gray-200 text-center">
+                  <p className="text-xs font-bold text-gray-400">Facture requise pour demander le feu vert</p>
+                </div>
+              ) : (
+                <>
+                  <BtnWA
+                    onClick={() => {
+                      demanderFeuVert(sel.id);
+                      sendMsg(sel.id, cl?.id, 'whatsapp', 'demande_feu_vert', null);
+                    }}
+                  >
+                    Envoyer via WhatsApp — demander le feu vert
+                  </BtnWA>
 
-              <BtnEmail
-                onClick={() => {
-                  demanderFeuVert(sel.id);
-                  sendMsg(sel.id, cl?.id, 'email', 'demande_feu_vert', null);
-                }}
-              >
-                Envoyer par email — demander le feu vert
-              </BtnEmail>
+                  <BtnEmail
+                    onClick={() => {
+                      demanderFeuVert(sel.id);
+                      sendMsg(sel.id, cl?.id, 'email', 'demande_feu_vert', null);
+                    }}
+                  >
+                    Envoyer par email — demander le feu vert
+                  </BtnEmail>
+                </>
+              )}
             </div>
           </Section>
         );

@@ -3,7 +3,7 @@ import {
   Plus, Search, X, BarChart3, CircleDot, Clock, CheckCircle, Check,
   ChevronRight, AlertTriangle, Filter, Package, Download,
   User, UserPlus, Ruler, Wrench, CreditCard, Plane, Star,
-  Hash, Layers, CalendarDays, FileSpreadsheet,
+  Hash, Layers, CalendarDays, FileSpreadsheet, FileText,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { BRAND, STATUTS, STATUT_ENVOI, ABONNEMENTS, getDestByCP } from '../../constants';
@@ -12,6 +12,7 @@ import { Badge, ViewToggle } from '../ui';
 import { exportColisExcel } from '../../utils/exportExcel';
 import { exportFactureCommerciale } from '../../utils/exportFactureCommerciale';
 import { exportDAUData } from '../../utils/exportDAU';
+import { exportFactureCommerciPDF } from '../../utils/exportFactureCommerciPDF';
 
 // ── Statut groups ──────────────────────────────────────────────────────────────
 const STATUTS_A_FAIRE = [
@@ -418,6 +419,12 @@ export default function StaffDashboard({ onNewColis }) {
   const [displayMode, setDisplayMode] = useState('columns'); // 'cards' | 'columns'
   const [tableSearch, setTableSearch] = useState('');
   const [showAllMissing, setShowAllMissing] = useState(false);
+  const [showExportPanel, setShowExportPanel] = useState(false);
+  const [exportCols, setExportCols] = useState({
+    client: true, statut: true, description: true, dims: true, poids: true,
+    transport: true, taxes: true, total: true, dateReception: true, casier: true,
+    envoi: true, fournisseurs: true,
+  });
 
   // ── Search results ────────────────────────────────────────────────────────
   const searchResults = useMemo(
@@ -1006,17 +1013,80 @@ export default function StaffDashboard({ onNewColis }) {
             <p className="text-xs font-semibold text-gray-500">
               {activePool.filter((c) => c.statut !== 'annule').length} colis affichés
             </p>
-            <button
-              onClick={() => {
-                const toExport = activePool.filter((c) => c.statut !== 'annule');
-                exportColisExcel(toExport, clients);
-                flash(`${toExport.length} colis exportés`);
-              }}
-              className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
-            >
-              <Download size={12} />
-              Export Excel
-            </button>
+            <div className="relative">
+              <button
+                onClick={() => setShowExportPanel((v) => !v)}
+                className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+              >
+                <Download size={12} />
+                Export Excel
+              </button>
+              {showExportPanel && (
+                <div className="absolute top-full left-0 mt-1 z-50 bg-white rounded-xl shadow-lg border border-gray-200 p-3 w-64 space-y-2">
+                  <div className="flex items-center justify-between mb-1">
+                    <p className="text-[11px] font-bold text-gray-600 uppercase tracking-wide">Colonnes</p>
+                    <button
+                      onClick={() => {
+                        const allOn = Object.values(exportCols).every(Boolean);
+                        const next = {};
+                        Object.keys(exportCols).forEach((k) => { next[k] = !allOn; });
+                        setExportCols(next);
+                      }}
+                      className="text-[10px] font-bold text-blue-600 hover:underline"
+                    >
+                      {Object.values(exportCols).every(Boolean) ? 'Tout désélectionner' : 'Tout sélectionner'}
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-1">
+                    {[
+                      { key: 'client', label: 'Client' },
+                      { key: 'statut', label: 'Statut' },
+                      { key: 'description', label: 'Description' },
+                      { key: 'dims', label: 'Dimensions' },
+                      { key: 'poids', label: 'Poids' },
+                      { key: 'transport', label: 'Transport' },
+                      { key: 'taxes', label: 'Taxes' },
+                      { key: 'total', label: 'Total' },
+                      { key: 'dateReception', label: 'Date réception' },
+                      { key: 'casier', label: 'Casier' },
+                      { key: 'envoi', label: 'Envoi' },
+                      { key: 'fournisseurs', label: 'Fournisseurs' },
+                    ].map(({ key, label }) => (
+                      <label key={key} className="flex items-center gap-1.5 text-[11px] text-gray-700 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={exportCols[key]}
+                          onChange={() => setExportCols((prev) => ({ ...prev, [key]: !prev[key] }))}
+                          className="rounded"
+                        />
+                        {label}
+                      </label>
+                    ))}
+                  </div>
+                  <div className="flex gap-2 pt-1">
+                    <button
+                      onClick={() => {
+                        const toExport = activePool.filter((c) => c.statut !== 'annule');
+                        exportColisExcel(toExport, clients, exportCols);
+                        flash(`${toExport.length} colis exportés`);
+                        setShowExportPanel(false);
+                      }}
+                      className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg text-xs font-bold text-white transition-all active:scale-95"
+                      style={{ background: BRAND.navy }}
+                    >
+                      <Download size={12} />
+                      Télécharger
+                    </button>
+                    <button
+                      onClick={() => setShowExportPanel(false)}
+                      className="px-3 py-1.5 rounded-lg text-xs font-bold text-gray-500 bg-gray-100 hover:bg-gray-200 transition-colors"
+                    >
+                      Fermer
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
           <div className="flex items-center gap-2">
             <ViewToggle value={displayMode} onChange={setDisplayMode} />
@@ -1298,6 +1368,21 @@ export default function StaffDashboard({ onNewColis }) {
                     >
                       <FileSpreadsheet size={12} />
                       Facture COM
+                    </button>
+                  )}
+                  {e && (
+                    <button
+                      onClick={(ev) => {
+                        ev.stopPropagation();
+                        const nb = exportFactureCommerciPDF(e, group.colis, clients, categories);
+                        flash(`PDF facture commerciale ${e.ref} — ${nb} articles`);
+                      }}
+                      className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-semibold transition-all active:scale-95 hover:bg-gray-100"
+                      style={{ color: '#DC2626' }}
+                      title="Télécharger en PDF"
+                    >
+                      <FileText size={12} />
+                      PDF
                     </button>
                   )}
                   {e && (

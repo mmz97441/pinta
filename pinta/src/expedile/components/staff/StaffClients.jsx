@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { ArrowLeft, Users, Plus, Search, ChevronDown, Check, X, AlertTriangle, ExternalLink, Send } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { BRAND, getDestByCP } from '../../constants';
+import { BRAND, ABONNEMENTS, getDestByCP } from '../../constants';
 import { uid, waLink, searchClients } from '../../utils';
 import { Badge } from '../ui';
 
@@ -376,6 +376,22 @@ export default function StaffClients() {
                     {cl.tel && <span className="text-xs text-gray-400 font-mono">{cl.tel}</span>}
                     {cl.email && <span className="text-xs text-gray-400 truncate max-w-[140px]">{cl.email}</span>}
                   </div>
+                  {cl.abonnement && (
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${ABONNEMENTS[cl.abonnement]?.couleur || 'bg-gray-200 text-gray-600'}`}>
+                        {ABONNEMENTS[cl.abonnement]?.label || cl.abonnement}
+                      </span>
+                      {cl.abonnementFin && (
+                        <span className={`text-[10px] font-semibold ${
+                          new Date(cl.abonnementFin) < new Date() ? 'text-red-600' :
+                          new Date(cl.abonnementFin) < new Date(Date.now() + 30*86400000) ? 'text-orange-600' :
+                          'text-green-600'
+                        }`}>
+                          {new Date(cl.abonnementFin) < new Date() ? 'Expiré' : `Fin: ${new Date(cl.abonnementFin).toLocaleDateString('fr-FR')}`}
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex flex-col items-end flex-shrink-0 gap-0.5">

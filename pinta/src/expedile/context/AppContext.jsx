@@ -383,6 +383,12 @@ export function AppProvider({ children }) {
       flash('Renseignez toutes les dimensions et le poids');
       return;
     }
+    // Bloquer si aucune facture validée
+    const hasValidFacture = c.factures && c.factures.length > 0 && c.factures.some((f) => f.valide);
+    if (!hasValidFacture) {
+      flash({ msg: 'Facture d\'achat manquante ou non validée. Impossible de demander le feu vert sans facture.', type: 'warning', duration: 5000 });
+      return;
+    }
     log(id, c.statut, 'attente_feu_vert');
     upd(id, { statut: 'attente_feu_vert', feuVert: 'en_attente' });
     flash('Demande de feu vert envoyée au client');

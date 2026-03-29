@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Edit3, Check, X, ChevronDown, ChevronUp, ClipboardList } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { BRAND } from '../../constants';
+import { BRAND, ABONNEMENTS } from '../../constants';
 import { eur, hasTrack, trackStr, trackCount, waLink } from '../../utils';
 
 export default function ColisInfo() {
@@ -70,6 +70,11 @@ export default function ColisInfo() {
                 </span>
               )}
             </p>
+            {cl.abonnement && (
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${ABONNEMENTS[cl.abonnement]?.couleur || 'bg-gray-200 text-gray-600'}`}>
+                {ABONNEMENTS[cl.abonnement]?.label || cl.abonnement}
+              </span>
+            )}
             {selDest && (
               <p className="text-xs mt-0.5">
                 <span className="px-1.5 py-0.5 rounded-full bg-gray-100 font-medium">{selDest.flag} {selDest.nom}</span>

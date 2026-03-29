@@ -330,6 +330,41 @@ export default function ClientProfil() {
         </div>
       </Section>
 
+      {/* ── 3b. Récompenses disponibles ── */}
+      <Section title="Récompenses disponibles">
+        <div className="p-4 space-y-3">
+          {[
+            { minPts: 50, label: '-5\u20AC sur le prochain envoi', icon: '🎁' },
+            { minPts: 100, label: '-15\u20AC sur le prochain envoi', icon: '🎉' },
+            { minPts: 200, label: 'Livraison offerte', icon: '🚚' },
+          ].map((reward) => {
+            const available = pts >= reward.minPts;
+            return (
+              <div
+                key={reward.minPts}
+                className={`flex items-center gap-3 p-3 rounded-xl border ${available ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200 opacity-60'}`}
+              >
+                <span className="text-lg flex-shrink-0">{reward.icon}</span>
+                <div className="flex-1 min-w-0">
+                  <p className={`text-sm font-bold ${available ? 'text-green-800' : 'text-gray-500'}`}>
+                    {reward.label}
+                  </p>
+                  <p className={`text-[10px] font-medium ${available ? 'text-green-600' : 'text-gray-400'}`}>
+                    {available ? 'Disponible' : `${reward.minPts - pts} pts restants`}
+                  </p>
+                </div>
+                <span className={`text-xs font-black px-2 py-0.5 rounded-full ${available ? 'bg-green-200 text-green-800' : 'bg-gray-200 text-gray-500'}`}>
+                  {reward.minPts} pts
+                </span>
+              </div>
+            );
+          })}
+          <p className="text-[10px] text-gray-400 text-center mt-2">
+            Les points expirent après 12 mois d'inactivité.
+          </p>
+        </div>
+      </Section>
+
       {/* ── 4. My information ── */}
       <Section title="Mes informations">
         {profEdit ? (
