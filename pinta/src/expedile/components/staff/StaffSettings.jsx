@@ -4,6 +4,7 @@ import { useApp } from '../../context/AppContext';
 import { BRAND, DESTINATIONS } from '../../constants';
 import { eur, labelEnvoi, uid, getCatTaux } from '../../utils';
 import { Ligne } from '../ui';
+import TemplateEditor from './TemplateEditor';
 import { isWaConfigured, sendTemplate, sendText } from '../../services/whatsappApi';
 
 export default function StaffSettings() {
@@ -475,6 +476,16 @@ export default function StaffSettings() {
           <Ligne label="Relances feu vert" value="J+2, J+5, J+7" />
           <Ligne label="Relances paiement" value="J+3, J+7, J+14" />
         </div>
+      </div>
+
+      {/* ── Templates de messages ── */}
+      <div className="card p-5">
+        <div className="flex items-center gap-2 mb-1">
+          <MessageCircle size={18} style={{ color: BRAND.navy }} />
+          <p className="font-bold text-lg">Templates de messages</p>
+        </div>
+        <p className="text-sm text-gray-500 mb-4">Personnalisez les messages envoyés aux clients (WhatsApp et email). Cliquez sur une variable pour l'insérer.</p>
+        <TemplateEditor />
       </div>
     </div>
   );
