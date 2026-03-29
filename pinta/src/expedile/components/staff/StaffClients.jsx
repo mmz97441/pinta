@@ -1,9 +1,10 @@
 import React, { useState, useMemo } from 'react';
-import { ArrowLeft, Users, Plus, Search, ChevronDown, Check, X, AlertTriangle, ExternalLink, Send } from 'lucide-react';
+import { ArrowLeft, Users, Plus, Search, ChevronDown, Check, X, AlertTriangle, ExternalLink, Send, Download, FileSpreadsheet } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { BRAND, ABONNEMENTS, getDestByCP } from '../../constants';
 import { uid, waLink, searchClients } from '../../utils';
 import { Badge } from '../ui';
+import { exportRecapProExcel } from '../../utils/exportRecapPro';
 
 // ── Empty draft ──────────────────────────────────────────────────────────────
 const emptyDraft = () => ({
@@ -92,6 +93,11 @@ export default function StaffClients() {
   const [isNewClient, setIsNewClient] = useState(false);
   const [justSavedId, setJustSavedId] = useState(null);
   const [touched, setTouched] = useState({});
+  const [billingOpenId, setBillingOpenId] = useState(null);
+  const [billingMonth, setBillingMonth] = useState(new Date().getMonth());
+  const [billingYear, setBillingYear] = useState(new Date().getFullYear());
+
+  const MOIS_LABELS = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
 
   // ── Derived ───────────────────────────────────────────────────────────────
   const filtered = searchClients(clients, clPageSearch);
@@ -148,6 +154,17 @@ export default function StaffClients() {
     return data
       .filter((p) => p.clientId === clientId && p.paiementMontant)
       .reduce((sum, p) => sum + (p.paiementMontant || 0), 0);
+  }
+
+  function getProBillingData(clientId, month, year) {
+    return data.filter((c) => {
+      if (c.clientId !== clientId) return false;
+      if (!['paye', 'expedie', 'transit', 'dedouanement', 'arrive', 'livraison', 'livre'].includes(c.statut)) return false;
+      const date = c.paiementDate || c.dateReception;
+      if (!date) return false;
+      const d = new Date(date);
+      return d.getMonth() === month && d.getFullYear() === year;
+    });
   }
 
   function patchDraft(field, value) {
@@ -364,6 +381,11 @@ export default function StaffClients() {
                         style={{ background: `${BRAND.gold}30`, color: BRAND.goldD }}
                       >
                         PRO
+                      </span>
+                    )}
+                    {cl.type === 'pro' && (
+                      <span className="text-[10px] font-semibold text-indigo-500">
+                        {cl.methodePaiement === '30_jours' ? '30j' : 'Fin de mois'}
                       </span>
                     )}
                     {cl.canal === 'whatsapp' && (
@@ -681,6 +703,80 @@ export default function StaffClients() {
                           </button>
                         ))}
                       </div>
+                    </div>
+                  )}
+
+                  {/* Pro billing section */}
+                  {cl.type === 'pro' && !isNewClient && (
+                    <div className="rounded-xl border overflow-hidden" style={{ borderColor: '#A5B4FC', background: '#EEF2FF' }}>
+                      <button
+                        onClick={() => setBillingOpenId(billingOpenId === cl.id ? null : cl.id)}
+                        className="w-full flex items-center gap-2 px-3 py-2.5 text-left"
+                      >
+                        <FileSpreadsheet size={13} className="text-indigo-600 flex-shrink-0" />
+                        <span className="text-xs font-bold text-indigo-800 flex-1">
+                          Facturation
+                          {cl.methodePaiement === '30_jours' ? ' — Paiement 30 jours' : ' — Fin de mois'}
+                        </span>
+                        <ChevronDown
+                          size={13}
+                          className={`text-indigo-400 transition-transform ${billingOpenId === cl.id ? 'rotate-180' : ''}`}
+                        />
+                      </button>
+                      {billingOpenId === cl.id && (
+                        <div className="px-3 pb-3 pt-1 space-y-2.5 border-t" style={{ borderColor: '#C7D2FE' }}>
+                          {/* Month/year selector */}
+                          <div className="flex gap-2">
+                            <select
+                              value={billingMonth}
+                              onChange={(e) => setBillingMonth(Number(e.target.value))}
+                              className="flex-1 text-xs font-semibold px-2 py-1.5 rounded-lg border border-indigo-200 bg-white text-indigo-800 outline-none"
+                            >
+                              {MOIS_LABELS.map((m, i) => (
+                                <option key={i} value={i}>{m}</option>
+                              ))}
+                            </select>
+                            <select
+                              value={billingYear}
+                              onChange={(e) => setBillingYear(Number(e.target.value))}
+                              className="text-xs font-semibold px-2 py-1.5 rounded-lg border border-indigo-200 bg-white text-indigo-800 outline-none"
+                            >
+                              {[new Date().getFullYear() - 1, new Date().getFullYear(), new Date().getFullYear() + 1].map((y) => (
+                                <option key={y} value={y}>{y}</option>
+                              ))}
+                            </select>
+                          </div>
+                          {/* Summary */}
+                          {(() => {
+                            const billingColis = getProBillingData(cl.id, billingMonth, billingYear);
+                            const total = billingColis.reduce((s, c) => s + (c.devisTotal || 0), 0);
+                            return (
+                              <div className="flex items-center gap-3 px-2.5 py-2 rounded-lg" style={{ background: '#F5F3FF' }}>
+                                <div className="flex-1">
+                                  <p className="text-[11px] font-bold text-indigo-700">
+                                    {billingColis.length} colis
+                                  </p>
+                                  <p className="text-sm font-black text-indigo-900">
+                                    {total.toFixed(2)} €
+                                  </p>
+                                </div>
+                                <button
+                                  onClick={() => {
+                                    const count = exportRecapProExcel(cl, data, billingMonth, billingYear);
+                                    if (count > 0) flash(`Récap exporté : ${count} colis`);
+                                    else flash('Aucun colis pour cette période');
+                                  }}
+                                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all active:scale-95 hover:bg-indigo-200"
+                                  style={{ background: '#E0E7FF', color: '#3730A3', border: '1px solid #A5B4FC' }}
+                                >
+                                  <Download size={11} />
+                                  Excel
+                                </button>
+                              </div>
+                            );
+                          })()}
+                        </div>
+                      )}
                     </div>
                   )}
 

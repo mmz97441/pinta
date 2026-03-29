@@ -13,6 +13,7 @@ import { exportColisExcel } from '../../utils/exportExcel';
 import { exportFactureCommerciale } from '../../utils/exportFactureCommerciale';
 import { exportDAUData } from '../../utils/exportDAU';
 import { exportFactureCommerciPDF } from '../../utils/exportFactureCommerciPDF';
+import { exportRecapProExcel } from '../../utils/exportRecapPro';
 import KPIDashboard from './KPIDashboard';
 
 // ── Statut groups ──────────────────────────────────────────────────────────────
@@ -600,6 +601,32 @@ export default function StaffDashboard({ onNewColis }) {
     });
   }, [clients]);
 
+  // ── Pro client billing data ─────────────────────────────────────────────
+  const MOIS_LABELS = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+  const proClients = useMemo(() => {
+    const now = new Date();
+    const month = now.getMonth();
+    const year = now.getFullYear();
+    return clients
+      .filter((cl) => cl.type === 'pro')
+      .map((cl) => {
+        const myColis = data.filter((c) => {
+          if (c.clientId !== cl.id) return false;
+          if (!['paye', 'expedie', 'transit', 'dedouanement', 'arrive', 'livraison', 'livre'].includes(c.statut)) return false;
+          const date = c.paiementDate || c.dateReception;
+          if (!date) return false;
+          const d = new Date(date);
+          return d.getMonth() === month && d.getFullYear() === year;
+        });
+        return {
+          ...cl,
+          colisCount: myColis.length,
+          totalTTC: myColis.reduce((s, c) => s + (c.devisTotal || 0), 0),
+        };
+      })
+      .filter((cl) => cl.colisCount > 0);
+  }, [clients, data]);
+
   // ── Handlers ─────────────────────────────────────────────────────────────
   const openColis = (id) => {
     setSelId(id);
@@ -1026,6 +1053,82 @@ export default function StaffDashboard({ onNewColis }) {
                 )}
               </button>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Facturation Pro ─────────────────────────────────────────────── */}
+      {proClients.length > 0 && (
+        <div
+          className="anim-fade stagger-4 rounded-xl overflow-hidden"
+          style={{
+            background: '#EEF2FF',
+            border: '1px solid #818CF840',
+          }}
+        >
+          <div className="flex items-center gap-2.5 px-3.5 py-2.5">
+            <FileSpreadsheet size={15} className="text-indigo-600 flex-shrink-0" />
+            <p className="text-xs font-bold text-indigo-800">
+              Facturation Pro — {MOIS_LABELS[new Date().getMonth()]} {new Date().getFullYear()}
+            </p>
+          </div>
+          <div className="px-3.5 pb-3 space-y-2">
+            {proClients.map((cl) => (
+              <div
+                key={cl.id}
+                className="flex items-center gap-2.5 p-2.5 rounded-lg"
+                style={{ background: '#F5F3FF', border: '1px solid #C7D2FE' }}
+              >
+                <div
+                  className="w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-black"
+                  style={{
+                    background: `linear-gradient(135deg, ${BRAND.navyL}, ${BRAND.navy})`,
+                    color: BRAND.goldL,
+                  }}
+                >
+                  {(cl.nom || '?').charAt(0).toUpperCase()}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-bold text-indigo-900 truncate">{cl.nom}</p>
+                  <p className="text-[10px] text-indigo-600">
+                    {cl.colisCount} colis · {cl.totalTTC.toFixed(2)} €
+                    {cl.methodePaiement === '30_jours'
+                      ? ' · Paiement 30j'
+                      : ' · Fin de mois'}
+                  </p>
+                </div>
+                <button
+                  onClick={() => {
+                    const now = new Date();
+                    const count = exportRecapProExcel(cl, data, now.getMonth(), now.getFullYear());
+                    if (count > 0) flash(`Récap exporté : ${count} colis`);
+                    else flash('Aucun colis pour cette période');
+                  }}
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all active:scale-95 hover:bg-indigo-200"
+                  style={{ background: '#E0E7FF', color: '#3730A3', border: '1px solid #A5B4FC' }}
+                >
+                  <Download size={11} />
+                  Récap
+                </button>
+              </div>
+            ))}
+            {proClients.length > 1 && (
+              <button
+                onClick={() => {
+                  const now = new Date();
+                  let totalCount = 0;
+                  proClients.forEach((cl) => {
+                    totalCount += exportRecapProExcel(cl, data, now.getMonth(), now.getFullYear());
+                  });
+                  flash(`${totalCount} colis exportés pour ${proClients.length} clients pro`);
+                }}
+                className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold transition-all active:scale-95 hover:bg-indigo-200"
+                style={{ background: '#E0E7FF', color: '#3730A3', border: '1px solid #A5B4FC' }}
+              >
+                <Download size={12} />
+                Exporter tout ({proClients.length} clients)
+              </button>
+            )}
           </div>
         </div>
       )}
