@@ -306,8 +306,10 @@ L'équipe Expedîle`,
       const taxes = (colis.devisOM || 0) + (colis.devisOMR || 0);
       const pf = colis.poidsFact || colis.finP || colis.poids || 0;
       const cartonsInfo = devisCartonsDetail(colis, 'whatsapp');
-      const dimsBrutes = colis.dimL ? `${colis.dimL}×${colis.dimW}×${colis.dimH} cm — ${colis.poids} kg` : null;
-      const dimsFinales = colis.finL ? `${colis.finL}×${colis.finW}×${colis.finH} cm — ${colis.finP} kg` : null;
+      // Poids vol. avant optimisation (somme des cartons)
+      const pvAvant = colis.dimL ? ((colis.dimL * colis.dimW * colis.dimH) / 5000) : 0;
+      // Poids vol. après optimisation
+      const pvApres = colis.finL ? ((colis.finL * colis.finW * colis.finH) / 5000) : 0;
       return `Bonjour ${c.nom.split(' ')[0]} 👋
 
 Le devis final pour votre expédition *${colis.ref}* est prêt ! 📋
@@ -315,7 +317,8 @@ Le devis final pour votre expédition *${colis.ref}* est prêt ! 📋
 🎯 *Destination :* ${dest.flag} ${dest.nom}
 
 ${cartonsInfo}
-${dimsBrutes && dimsFinales ? `\n📐 *Dimensions à réception :* ${dimsBrutes}\n📐 *Après optimisation :* ${dimsFinales}\n` : dimsFinales ? `\n📐 *Dimensions :* ${dimsFinales}\n` : dimsBrutes ? `\n📐 *Dimensions :* ${dimsBrutes}\n` : ''}⚖️ *Poids facturable :* ${pf} kg
+${pvAvant > 0 ? `\n📐 *Poids volumétrique total avant optimisation :* ${pvAvant.toFixed(2)} kg` : ''}${pvApres > 0 ? `\n📐 *Après optimisation :* Volume ${colis.finL}×${colis.finW}×${colis.finH} cm — poids vol. ${pvApres.toFixed(2)} kg` : ''}
+⚖️ *Poids facturable :* ${pf} kg
 ${colis.lignes?.length > 0 ? `\n📋 *Contenu déclaré :*\n${colis.lignes.map((l) => `  • ${l.desc} × ${l.qte} — ${eur(l.prix * l.qte)}`).join('\n')}\n` : ''}
 ━━━━━━━━━━━━━━━━
 💰 *DÉTAIL DU DEVIS*
@@ -338,10 +341,9 @@ _L'équipe Expedîle — Paris → ${dest.nom}_`;
       const dest = getDestByCP(c.cp);
       const taxes = (colis.devisOM || 0) + (colis.devisOMR || 0);
       const pf = colis.poidsFact || colis.finP || colis.poids || 0;
-      const nb = Math.max((colis.trackingsDetail || []).length, (colis.trackings?.filter((t) => t) || []).length, 1);
       const cartonsInfo = devisCartonsDetail(colis, 'email');
-      const dimsBrutes = colis.dimL ? `${colis.dimL} × ${colis.dimW} × ${colis.dimH} cm — ${colis.poids} kg` : null;
-      const dimsFinales = colis.finL ? `${colis.finL} × ${colis.finW} × ${colis.finH} cm — ${colis.finP} kg` : null;
+      const pvAvant = colis.dimL ? ((colis.dimL * colis.dimW * colis.dimH) / 5000) : 0;
+      const pvApres = colis.finL ? ((colis.finL * colis.finW * colis.finH) / 5000) : 0;
       return `Objet : 💳 Devis final — ${colis.ref} : ${eur(colis.devisTotal)}
 
 Bonjour ${c.nom},
@@ -355,7 +357,8 @@ Référence : ${colis.ref}
 Destination : ${dest.flag} ${dest.nom}
 
 ${cartonsInfo}
-${dimsBrutes && dimsFinales ? `\nDimensions à réception : ${dimsBrutes}\nAprès optimisation :    ${dimsFinales}\n` : dimsFinales ? `\nDimensions : ${dimsFinales}\n` : dimsBrutes ? `\nDimensions : ${dimsBrutes}\n` : ''}
+${pvAvant > 0 ? `\nPoids volumétrique total avant optimisation : ${pvAvant.toFixed(2)} kg` : ''}${pvApres > 0 ? `\nAprès optimisation : Volume ${colis.finL} × ${colis.finW} × ${colis.finH} cm — poids vol. ${pvApres.toFixed(2)} kg` : ''}
+
 Poids facturable : ${pf} kg
 ${colis.lignes?.length > 0 ? `\nContenu déclaré :\n${colis.lignes.map((l) => `  • ${l.desc} × ${l.qte} — ${eur(l.prix * l.qte)}`).join('\n')}\n` : ''}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
