@@ -384,6 +384,7 @@ export default function StaffSettings() {
           </button>
         </div>
       </div>
+      )}
 
       {/* ── WhatsApp Business API ── */}
       <div className="card p-5 anim-fade">
@@ -554,6 +555,7 @@ export default function StaffSettings() {
       </div>
 
       {/* ── Templates de messages ── */}
+      {['directeur', 'vice_directeur'].includes(authRole) && (
       <div className="card p-5">
         <div className="flex items-center gap-2 mb-1">
           <MessageCircle size={18} style={{ color: BRAND.navy }} />
@@ -562,6 +564,7 @@ export default function StaffSettings() {
         <p className="text-sm text-gray-500 mb-4">Personnalisez les messages envoyés aux clients (WhatsApp et email). Cliquez sur une variable pour l'insérer.</p>
         <TemplateEditor />
       </div>
+      )}
     </div>
   );
 }
