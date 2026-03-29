@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Plane, CreditCard, FileText, ChevronDown, Trash2, Lock, MessageCircle, Send, CheckCircle, XCircle, Loader2 } from 'lucide-react';
+import { ArrowLeft, Plane, CreditCard, FileText, ChevronDown, Trash2, Lock, MessageCircle, Send, CheckCircle, XCircle, Loader2, ShieldAlert, Plus, X } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { BRAND, DESTINATIONS } from '../../constants';
 import { eur, labelEnvoi, uid, getCatTaux } from '../../utils';
@@ -8,7 +8,7 @@ import TemplateEditor from './TemplateEditor';
 import { isWaConfigured, sendTemplate, sendText } from '../../services/whatsappApi';
 
 export default function StaffSettings() {
-  const { setPage, envois, setEnvois, data, tarifs, setTarifs, categories, addCategory, updateCatTaux, updateCatLabel, deleteCategory, flash } = useApp();
+  const { setPage, envois, setEnvois, data, tarifs, setTarifs, categories, addCategory, updateCatTaux, updateCatLabel, deleteCategory, flash, produitsInterdits, setProduitsInterdits } = useApp();
   const [newEnvoiDate, setNewEnvoiDate] = useState('');
   const [jourEnvoi, setJourEnvoi] = useState(5); // 0=Dim, 1=Lun, ... 5=Ven, 6=Sam
   const [nbSemaines, setNbSemaines] = useState(4);

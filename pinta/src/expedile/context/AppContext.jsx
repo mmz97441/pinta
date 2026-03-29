@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useMemo, useEffect, useRef } from 'react';
-import { STATUTS, PREV_STATUT, CATEGORIES_INIT, CLIENTS_INIT, TARIFS_DEFAUT, initEnvois, getDestByCP } from '../constants';
+import { STATUTS, PREV_STATUT, CATEGORIES_INIT, CLIENTS_INIT, TARIFS_DEFAUT, initEnvois, getDestByCP, PRODUITS_INTERDITS } from '../constants';
 import { MSG_TEMPLATES } from '../constants/templates';
 import { uid, makeData, calcTransport, getCatTaux, eur, mailtoLink, getClientDest } from '../utils';
 import { isWaConfigured, sendWhatsApp, sendNotification, waMeLink, normalizeTel } from '../services/whatsappApi';
@@ -27,6 +27,7 @@ export function AppProvider({ children }) {
   const [envois, setEnvois] = useState(initEnvois);
   const [logs, setLogs] = useState([]);
   const [sbReady, setSbReady] = useState(false);
+  const [produitsInterdits, setProduitsInterdits] = useState(PRODUITS_INTERDITS);
 
   // ── Communication ──
   const [comLog, setComLog] = useState([]);
@@ -581,7 +582,7 @@ export function AppProvider({ children }) {
     // Auth
     auth, setAuth, isStaff, authCl, sbReady,
     // Data
-    data, setData, clients, setClients, categories, setCategories, tarifs, setTarifs, envois, setEnvois, logs,
+    data, setData, clients, setClients, categories, setCategories, tarifs, setTarifs, envois, setEnvois, logs, produitsInterdits, setProduitsInterdits,
     // Communication
     comLog, sendMsg, getPreview,
     // Notifications
@@ -594,7 +595,7 @@ export function AppProvider({ children }) {
     addCategory, updateCatTaux, updateCatLabel, deleteCategory,
     receptionner, changerStatut, revertStatut, annulerColis, demanderFeuVert, feuVert, feuVertBulk, envoyerDevis, payer, envMsg,
   }), [
-    auth, isStaff, authCl, data, clients, categories, tarifs, envois, logs,
+    auth, isStaff, authCl, data, clients, categories, tarifs, envois, logs, produitsInterdits,
     comLog, sendMsg, getPreview, notifs, unreadNotifs, markNotifRead, markAllNotifsRead,
     selId, sel, selClient, selDest, toast, setToast, page, clientTab, colisFilter, cfm,
     flash, ask, closeConfirm, upd, log, getClient, getTarif,
