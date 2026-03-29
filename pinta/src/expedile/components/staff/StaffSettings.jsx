@@ -8,7 +8,7 @@ import TemplateEditor from './TemplateEditor';
 import { isWaConfigured, sendTemplate, sendText } from '../../services/whatsappApi';
 
 export default function StaffSettings() {
-  const { setPage, envois, setEnvois, data, tarifs, setTarifs, categories, addCategory, updateCatTaux, updateCatLabel, deleteCategory, flash, produitsInterdits, setProduitsInterdits } = useApp();
+  const { setPage, envois, setEnvois, data, tarifs, setTarifs, categories, addCategory, updateCatTaux, updateCatLabel, deleteCategory, flash, produitsInterdits, setProduitsInterdits, authRole } = useApp();
   const [newEnvoiDate, setNewEnvoiDate] = useState('');
   const [jourEnvoi, setJourEnvoi] = useState(5); // 0=Dim, 1=Lun, ... 5=Ven, 6=Sam
   const [nbSemaines, setNbSemaines] = useState(4);
@@ -185,6 +185,7 @@ export default function StaffSettings() {
       </div>
 
       {/* ── Tarifs transport ── */}
+      {['directeur', 'vice_directeur', 'logisticien'].includes(authRole) && (
       <div className="card p-5">
         <div className="flex items-center gap-2 mb-1">
           <CreditCard size={18} style={{ color: BRAND.navy }} />
@@ -216,8 +217,10 @@ export default function StaffSettings() {
           })}
         </div>
       </div>
+      )}
 
       {/* ── Catégories taxes ── */}
+      {['directeur', 'vice_directeur', 'logisticien'].includes(authRole) && (
       <div className="card p-5 anim-fade">
         <div className="flex items-center gap-2 mb-1">
           <FileText size={18} style={{ color: BRAND.navy }} />
