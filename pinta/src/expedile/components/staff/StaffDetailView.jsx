@@ -214,6 +214,7 @@ export default function StaffDetailView() {
     getTarif,
     envois,
     setSelId,
+    logCarton,
   } = useApp();
 
   // ── Local state ──────────────────────────────────────────────────────────
@@ -344,6 +345,10 @@ export default function StaffDetailView() {
         poids: Math.round(totalPoids * 100) / 100,
         statut: 'mesure',
       });
+      dimsParColis.forEach((d, i) => {
+        const label = trackingsActive[i] || `Colis ${i + 1}`;
+        logCarton(sel.id, 'mesure', `${label} : ${d.dimL}×${d.dimW}×${d.dimH} cm, ${d.poids} kg`);
+      });
       flash(`Mesures enregistrées (${dimsParColis.length} colis)`);
     } else {
       const { dimL, dimW, dimH, poids } = dims;
@@ -359,6 +364,7 @@ export default function StaffDetailView() {
         poids: parseFloat(poids),
         statut: 'mesure',
       });
+      logCarton(sel.id, 'mesure', `Dimensions : ${dimL}×${dimW}×${dimH} cm, ${poids} kg`);
       flash('Mesures enregistrées');
     }
   }
@@ -412,6 +418,17 @@ export default function StaffDetailView() {
     changes.statut = hasDims ? 'mesure' : 'receptionne';
 
     upd(sel.id, changes);
+    logCarton(sel.id, 'reception', `Réceptionné — Casier ${casierTmp.trim()}`);
+    if (hasDims) {
+      if (changes.dimsParColis) {
+        changes.dimsParColis.forEach((d, i) => {
+          const label = trackingsActive[i] || `Colis ${i + 1}`;
+          logCarton(sel.id, 'mesure', `${label} : ${d.dimL}×${d.dimW}×${d.dimH} cm, ${d.poids} kg`);
+        });
+      } else {
+        logCarton(sel.id, 'mesure', `Dimensions : ${changes.dimL}×${changes.dimW}×${changes.dimH} cm, ${changes.poids} kg`);
+      }
+    }
     flash(hasDims ? 'Réceptionné + mesuré' : 'Colis réceptionné');
     if (withWA) {
       sendMsg(sel.id, cl?.id, 'whatsapp', 'reception', null);
@@ -434,7 +451,10 @@ export default function StaffDetailView() {
     if (finDims.finW) changes.finW = parseFloat(finDims.finW);
     if (finDims.finH) changes.finH = parseFloat(finDims.finH);
     if (finDims.finP) changes.finP = parseFloat(finDims.finP);
-    if (Object.keys(changes).length) upd(sel.id, changes);
+    if (Object.keys(changes).length) {
+      upd(sel.id, changes);
+      logCarton(sel.id, 'optimisation', `Après optimisation : ${changes.finL || sel.finL}×${changes.finW || sel.finW}×${changes.finH || sel.finH} cm, ${changes.finP || sel.finP} kg`);
+    }
 
     setTimeout(() => {
       envoyerDevis(sel.id);

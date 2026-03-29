@@ -82,7 +82,11 @@ export function AppProvider({ children }) {
   }, []);
 
   const log = useCallback((id, oldStatut, newStatut) => {
-    setLogs((prev) => [...prev, { id: uid(), cid: id, o: oldStatut, n: newStatut, w: auth?.u?.nom || '?' }]);
+    setLogs((prev) => [...prev, { id: uid(), cid: id, type: 'status', o: oldStatut, n: newStatut, w: auth?.u?.nom || '?', at: new Date().toISOString() }]);
+  }, [auth]);
+
+  const logCarton = useCallback((id, action, detail) => {
+    setLogs((prev) => [...prev, { id: uid(), cid: id, type: 'carton', action, detail, w: auth?.u?.nom || '?', at: new Date().toISOString() }]);
   }, [auth]);
 
   const getClient = useCallback((id) => clients.find((c) => c.id === id), [clients]);
@@ -233,6 +237,7 @@ export function AppProvider({ children }) {
     const c = data.find((x) => x.id === id);
     if (!c) return;
     log(id, c.statut, 'receptionne');
+    logCarton(id, 'casier', `Casier attribué : ${casierVal.trim()}`);
     upd(id, { statut: 'receptionne', casier: casierVal.trim(), dateReception: new Date().toISOString() });
     const cl = clients.find((x) => x.id === c.clientId);
     if (notifier && cl) {
@@ -240,7 +245,7 @@ export function AppProvider({ children }) {
     } else {
       flash('Réceptionné (sans notification client)');
     }
-  }, [data, clients, log, upd, flash]);
+  }, [data, clients, log, logCarton, upd, flash]);
 
   const changerStatut = useCallback((id, ns) => {
     const c = data.find((x) => x.id === id);
@@ -474,7 +479,7 @@ export function AppProvider({ children }) {
     // UI
     selId, setSelId, sel, selClient, selDest, toast, setToast, page, setPage, clientTab, setClientTab, colisFilter, setColisFilter, cfm, setCfm,
     // Actions
-    flash, ask, closeConfirm, upd, log: log, getClient, getTarif,
+    flash, ask, closeConfirm, upd, log: log, logCarton, getClient, getTarif,
     updateClient, addNewClient, deleteClient,
     addCategory, updateCatTaux, updateCatLabel, deleteCategory,
     receptionner, changerStatut, revertStatut, annulerColis, demanderFeuVert, feuVert, feuVertBulk, envoyerDevis, payer, envMsg,
@@ -482,7 +487,7 @@ export function AppProvider({ children }) {
     auth, isStaff, authCl, data, clients, categories, tarifs, envois, logs,
     comLog, sendMsg, getPreview, notifs, unreadNotifs, markNotifRead, markAllNotifsRead,
     selId, sel, selClient, selDest, toast, setToast, page, clientTab, colisFilter, cfm,
-    flash, ask, closeConfirm, upd, log, getClient, getTarif,
+    flash, ask, closeConfirm, upd, log, logCarton, getClient, getTarif,
     updateClient, addNewClient, deleteClient,
     addCategory, updateCatTaux, updateCatLabel, deleteCategory,
     receptionner, changerStatut, revertStatut, annulerColis, demanderFeuVert, feuVert, feuVertBulk, envoyerDevis, payer, envMsg,

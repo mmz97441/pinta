@@ -5,7 +5,7 @@ import { BRAND } from '../../constants';
 import { eur, hasTrack, trackStr, trackCount, waLink } from '../../utils';
 
 export default function ColisInfo() {
-  const { sel, selClient: cl, selDest, isStaff, upd, flash } = useApp();
+  const { sel, selClient: cl, selDest, isStaff, upd, flash, logCarton } = useApp();
   const [editCasier, setEditCasier] = useState(false);
   const [casierTmp, setCasierTmp] = useState('');
 
@@ -112,7 +112,7 @@ export default function ColisInfo() {
                 autoFocus
               />
               <button onClick={() => {
-                if (casierTmp.trim()) { upd(sel.id, { casier: casierTmp.trim() }); flash('Casier mis à jour'); }
+                if (casierTmp.trim()) { upd(sel.id, { casier: casierTmp.trim() }); logCarton(sel.id, 'casier', `Casier modifié : ${sel.casier || '—'} → ${casierTmp.trim()}`); flash('Casier mis à jour'); }
                 setEditCasier(false); setCasierTmp('');
               }} className="p-1 rounded-md text-green-600 hover:bg-green-50 transition-colors">
                 <Check size={16} />
