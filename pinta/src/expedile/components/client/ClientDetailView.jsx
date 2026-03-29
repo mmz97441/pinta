@@ -2,10 +2,11 @@ import React, { useState } from 'react';
 import {
   ArrowLeft, Package, CheckCircle, Wrench, CreditCard, Plane, MapPin,
   ChevronDown, ChevronUp, ChevronRight, AlertCircle, ThumbsUp, ThumbsDown, RotateCcw,
-  ExternalLink, Clock,
+  ExternalLink, Clock, Download,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { BRAND, PHASES_CLIENT, getPhaseIndex } from '../../constants';
+import { BRAND, PHASES_CLIENT, getPhaseIndex, getDestByCP } from '../../constants';
+import { exportDevisPDF } from '../../utils/exportDevisPDF';
 import { eur, trackStr, hasTrack } from '../../utils';
 import { Badge, Ligne, ProgressBar } from '../ui';
 
@@ -434,6 +435,17 @@ export default function ClientDetailView() {
                 <p className="text-xs text-emerald-600">{eur(sel.paiementMontant)} reçu</p>
               </div>
             </div>
+          )}
+
+          {hasDevis && (
+            <button
+              onClick={() => exportDevisPDF(sel, authCl, getDestByCP(authCl?.cp))}
+              className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl font-bold text-sm transition-all active:scale-95"
+              style={{ background: `${BRAND.navy}10`, color: BRAND.navy }}
+            >
+              <Download size={15} />
+              Télécharger le devis (PDF)
+            </button>
           )}
 
           {(isPay || isDevis) && !isPaye && (

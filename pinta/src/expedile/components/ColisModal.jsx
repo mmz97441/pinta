@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
-import { X, FileText, Search, UserPlus, Ruler, Package, MapPin } from 'lucide-react';
+import { X, FileText, Search, UserPlus, Ruler, Package, MapPin, Camera } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { BRAND, STATUTS, getDestByCP } from '../constants';
+import { BRAND, STATUTS, getDestByCP, PRODUITS_INTERDITS } from '../constants';
 import { uid, searchClients, waLink } from '../utils';
 import { Badge } from './ui';
 import * as sb from '../lib/supabaseData';
@@ -26,6 +26,7 @@ const EMPTY_FORM = {
   // Multi-colis dims keyed by index: { 0: { dimL, dimW, dimH, poids }, 1: ... }
   multiDims: {},
   showDims: false,
+  photoFile: null,
 };
 
 const EMPTY_NEW_CLIENT = {
@@ -50,7 +51,9 @@ function nextRef(data) {
 }
 
 export default function ColisModal({ open, onClose }) {
-  const { isStaff, authCl, clients, data, setData, flash, addNewClient, receptionner, upd, log } = useApp();
+  const appCtx = useApp();
+  const { isStaff, authCl, clients, data, setData, flash, addNewClient, receptionner, upd, log } = appCtx;
+  const produitsInterdits = appCtx.produitsInterdits || PRODUITS_INTERDITS;
 
   const [nf, setNf] = useState(EMPTY_FORM);
   const [formErr, setFormErr] = useState({});
@@ -61,6 +64,8 @@ export default function ColisModal({ open, onClose }) {
   // ── Mode: null = choix (ou auto-nouveau si pas de regroupables), 'rattacher', 'nouveau' ──
   const [mode, setMode] = useState(null);
   const [rattacherTarget, setRattacherTarget] = useState(null);
+
+  const [checkedInterdits, setCheckedInterdits] = useState([]);
 
   // ── State ──
   const [newClientMode, setNewClientMode] = useState(false);
@@ -103,6 +108,7 @@ export default function ColisModal({ open, onClose }) {
     setNewClientMode(false);
     setNewClientForm(EMPTY_NEW_CLIENT);
     setNewClientErr({});
+    setCheckedInterdits([]);
     onClose();
   };
 
@@ -392,6 +398,9 @@ export default function ColisModal({ open, onClose }) {
       envoi: null,
       casier: isStaff ? nf.casier.trim() : null,
       dateReception: isStaff ? new Date().toISOString() : null,
+      checkInterdits: checkedInterdits,
+      produitInterdit: checkedInterdits.length > 0,
+      photoReception: !!nf.photoFile,
     };
   };
 
@@ -865,6 +874,82 @@ export default function ColisModal({ open, onClose }) {
                     rows={2}
                     className="w-full rounded-xl border-2 border-amber-300 bg-amber-50 focus:border-amber-400 focus:bg-white px-3 py-2.5 text-sm outline-none transition-colors"
                   />
+                </div>
+              )}
+
+              {/* ── CONTROLE PRODUITS INTERDITS (staff) ── */}
+              {isStaff && (
+                <div>
+                  <label className={labelCls}>Contrôle produits interdits</label>
+                  <div className="flex flex-wrap gap-1.5 mb-2">
+                    {produitsInterdits.map((item) => {
+                      const checked = checkedInterdits.includes(item);
+                      return (
+                        <button
+                          key={item}
+                          type="button"
+                          onClick={() => setCheckedInterdits(prev =>
+                            checked ? prev.filter(i => i !== item) : [...prev, item]
+                          )}
+                          className={`px-2.5 py-1 rounded-full text-[11px] font-bold transition-all ${
+                            checked ? 'bg-red-100 text-red-700 ring-2 ring-red-400' : 'bg-gray-100 text-gray-600'
+                          }`}
+                        >
+                          {checked ? '\u26A0\uFE0F ' : ''}{item}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {checkedInterdits.length > 0 && (
+                    <div className="p-2.5 rounded-xl bg-red-50 border border-red-200">
+                      <p className="text-xs font-bold text-red-700">{'\u26A0\uFE0F'} Attention : {checkedInterdits.length} produit(s) interdit(s) détecté(s)</p>
+                      <p className="text-[10px] text-red-600 mt-0.5">Ce colis ne pourra peut-être pas être expédié par voie aérienne.</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ── PHOTO DE RECEPTION (staff, optional) ── */}
+              {isStaff && (
+                <div>
+                  <label className={labelCls}>
+                    Photo de réception
+                    <span className="ml-1 normal-case text-gray-400 font-normal">(facultatif)</span>
+                  </label>
+                  <div className="flex items-center gap-3">
+                    <label className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-dashed border-gray-300 bg-gray-50 cursor-pointer hover:bg-gray-100 transition-colors">
+                      <Camera size={16} className="text-gray-400" />
+                      <span className="text-xs font-semibold text-gray-500">
+                        {nf.photoFile ? nf.photoFile.name : 'Prendre une photo / Choisir un fichier'}
+                      </span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        capture="environment"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) setField('photoFile', file);
+                        }}
+                      />
+                    </label>
+                    {nf.photoFile && (
+                      <button
+                        type="button"
+                        onClick={() => setField('photoFile', null)}
+                        className="text-xs text-red-500 hover:text-red-700"
+                      >
+                        Supprimer
+                      </button>
+                    )}
+                  </div>
+                  {nf.photoFile && (
+                    <img
+                      src={URL.createObjectURL(nf.photoFile)}
+                      alt="Photo réception"
+                      className="mt-2 rounded-xl max-h-32 object-cover"
+                    />
+                  )}
                 </div>
               )}
 

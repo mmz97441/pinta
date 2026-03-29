@@ -13,6 +13,7 @@ import { exportColisExcel } from '../../utils/exportExcel';
 import { exportFactureCommerciale } from '../../utils/exportFactureCommerciale';
 import { exportDAUData } from '../../utils/exportDAU';
 import { exportFactureCommerciPDF } from '../../utils/exportFactureCommerciPDF';
+import KPIDashboard from './KPIDashboard';
 
 // ── Statut groups ──────────────────────────────────────────────────────────────
 const STATUTS_A_FAIRE = [
@@ -408,7 +409,7 @@ function ColisTable({ items, getClient, envois, openColis, filterFn }) {
 
 // ── Main component ───────────────────────────────────────────────────────────
 export default function StaffDashboard({ onNewColis }) {
-  const { data, clients, envois, categories, setSelId, getClient, isStaff, page, flash } = useApp();
+  const { data, clients, envois, categories, setSelId, getClient, isStaff, authRole, page, flash } = useApp();
 
   const [globalSearch, setGlobalSearch] = useState('');
   const [envoiFilter, setEnvoiFilter] = useState('ALL');
@@ -419,6 +420,7 @@ export default function StaffDashboard({ onNewColis }) {
   const [displayMode, setDisplayMode] = useState('columns'); // 'cards' | 'columns'
   const [tableSearch, setTableSearch] = useState('');
   const [showAllMissing, setShowAllMissing] = useState(false);
+  const [showKPI, setShowKPI] = useState(false);
   const [showExportPanel, setShowExportPanel] = useState(false);
   const [exportCols, setExportCols] = useState({
     client: true, statut: true, description: true, dims: true, poids: true,
@@ -617,6 +619,29 @@ export default function StaffDashboard({ onNewColis }) {
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="flex flex-col gap-5 pb-24">
+
+      {/* ── KPI Section (collapsible) ──────────────────────────────────── */}
+      <div className="anim-fade">
+        <button
+          onClick={() => setShowKPI((p) => !p)}
+          className="w-full flex items-center gap-2 px-4 py-2.5 rounded-xl transition-all hover:bg-gray-50"
+          style={{ background: showKPI ? `${BRAND.navy}08` : 'transparent', border: `1px solid ${showKPI ? BRAND.navy + '25' : '#E5E7EB'}` }}
+        >
+          <span className="text-base">{'📊'}</span>
+          <span className="text-sm font-bold" style={{ color: BRAND.navy }}>Indicateurs</span>
+          <span
+            className="ml-auto text-xs font-semibold transition-transform"
+            style={{ color: BRAND.navy, transform: showKPI ? 'rotate(180deg)' : 'rotate(0deg)' }}
+          >
+            ▾
+          </span>
+        </button>
+        {showKPI && (
+          <div className="mt-3">
+            <KPIDashboard />
+          </div>
+        )}
+      </div>
 
       {/* ── Header ──────────────────────────────────────────────────────── */}
       <div className="anim-fade flex items-center justify-between gap-3 pt-1">

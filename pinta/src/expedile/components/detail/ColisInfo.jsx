@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Edit3, Check, X, ChevronDown, ChevronUp, ClipboardList } from 'lucide-react';
+import { Edit3, Check, X, ChevronDown, ChevronUp, ClipboardList, Camera } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { BRAND, ABONNEMENTS } from '../../constants';
 import { eur, hasTrack, trackStr, trackCount, waLink } from '../../utils';
@@ -262,6 +262,14 @@ export default function ColisInfo() {
               <p className="text-xs text-amber-900">{sel.notesReception}</p>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Photo de réception */}
+      {sel.photoReception && (
+        <div className="mt-2 pt-2 border-t flex items-center gap-1.5 text-xs text-gray-500">
+          <Camera size={12} />
+          Photo de réception disponible
         </div>
       )}
 

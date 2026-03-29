@@ -15,6 +15,8 @@ export default function StaffSettings() {
   const [catEditId, setCatEditId] = useState(null);
   const [newCat, setNewCat] = useState({ label: '', taux: {} });
 
+  const [newInterdit, setNewInterdit] = useState('');
+
   // ── WhatsApp test ──
   const [waTestNum, setWaTestNum] = useState('');
   const [waTestMsg, setWaTestMsg] = useState('');
@@ -307,6 +309,76 @@ export default function StaffSettings() {
               Ajouter et configurer les taux
             </button>
           </div>
+        </div>
+      </div>
+
+      {/* ── Produits interdits ── */}
+      <div className="card p-5 anim-fade">
+        <div className="flex items-center gap-2 mb-1">
+          <ShieldAlert size={18} className="text-red-600" />
+          <p className="font-bold text-lg">Produits interdits</p>
+        </div>
+        <p className="text-sm text-gray-500 mb-4">Liste des produits interdits au transport aérien. Modifiable selon la réglementation.</p>
+
+        <div className="flex flex-wrap gap-2 mb-4">
+          {produitsInterdits.map((item) => (
+            <span key={item} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-red-50 text-red-700 border border-red-200">
+              {item}
+              <button
+                type="button"
+                onClick={() => {
+                  setProduitsInterdits((prev) => prev.filter((i) => i !== item));
+                  flash(`"${item}" retiré de la liste`);
+                }}
+                className="ml-0.5 p-0.5 rounded-full hover:bg-red-200 transition-colors"
+              >
+                <X size={12} />
+              </button>
+            </span>
+          ))}
+          {produitsInterdits.length === 0 && (
+            <p className="text-sm text-gray-400 italic">Aucun produit interdit configuré</p>
+          )}
+        </div>
+
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={newInterdit}
+            onChange={(e) => setNewInterdit(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && newInterdit.trim()) {
+                if (produitsInterdits.includes(newInterdit.trim())) {
+                  flash('Ce produit est déjà dans la liste');
+                  return;
+                }
+                setProduitsInterdits((prev) => [...prev, newInterdit.trim()]);
+                flash(`"${newInterdit.trim()}" ajouté`);
+                setNewInterdit('');
+              }
+            }}
+            placeholder="Ajouter un produit interdit..."
+            className="flex-1 px-3 py-2.5 rounded-xl border-2 border-gray-200 text-sm outline-none focus:border-red-300"
+            style={{ color: BRAND.navy }}
+          />
+          <button
+            onClick={() => {
+              if (!newInterdit.trim()) return;
+              if (produitsInterdits.includes(newInterdit.trim())) {
+                flash('Ce produit est déjà dans la liste');
+                return;
+              }
+              setProduitsInterdits((prev) => [...prev, newInterdit.trim()]);
+              flash(`"${newInterdit.trim()}" ajouté`);
+              setNewInterdit('');
+            }}
+            disabled={!newInterdit.trim()}
+            className="px-4 py-2.5 rounded-xl text-sm font-bold text-white transition-all active:scale-95 disabled:opacity-40 flex items-center gap-1.5"
+            style={{ background: BRAND.navy }}
+          >
+            <Plus size={14} />
+            Ajouter
+          </button>
         </div>
       </div>
 

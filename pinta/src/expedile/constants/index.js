@@ -92,8 +92,8 @@ export const CATEGORIES_INIT = [
 
 // ══════════ STAFF ══════════
 export const STAFF = [
-  { id: 'u1', nom: 'Marie Dupont', role: 'Directrice' },
-  { id: 'u2', nom: 'Sophie Martin', role: 'Logisticienne' },
+  { id: 'u1', nom: 'Marie Dupont', role: 'directeur' },
+  { id: 'u2', nom: 'Sophie Martin', role: 'logisticien' },
 ];
 
 // ══════════ CLIENTS INITIAUX ══════════

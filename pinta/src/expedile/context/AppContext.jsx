@@ -132,6 +132,8 @@ export function AppProvider({ children }) {
   const selClient = useMemo(() => (sel ? clients.find((c) => c.id === sel.clientId) : null), [sel, clients]);
   const selDest = useMemo(() => (sel ? getClientDest(sel.clientId, clients) : null), [sel, clients]);
 
+  const authRole = auth?.u?.role || (isStaff ? 'preparateur' : 'client');
+
   const unreadNotifs = useMemo(() => notifs.filter((n) => !n.lu).length, [notifs]);
 
   // ── Flash messages ──
@@ -580,7 +582,7 @@ export function AppProvider({ children }) {
 
   const value = useMemo(() => ({
     // Auth
-    auth, setAuth, isStaff, authCl, sbReady,
+    auth, setAuth, isStaff, authCl, authRole, sbReady,
     // Data
     data, setData, clients, setClients, categories, setCategories, tarifs, setTarifs, envois, setEnvois, logs, produitsInterdits, setProduitsInterdits,
     // Communication
@@ -595,7 +597,7 @@ export function AppProvider({ children }) {
     addCategory, updateCatTaux, updateCatLabel, deleteCategory,
     receptionner, changerStatut, revertStatut, annulerColis, demanderFeuVert, feuVert, feuVertBulk, envoyerDevis, payer, envMsg,
   }), [
-    auth, isStaff, authCl, data, clients, categories, tarifs, envois, logs, produitsInterdits,
+    auth, isStaff, authCl, authRole, data, clients, categories, tarifs, envois, logs, produitsInterdits,
     comLog, sendMsg, getPreview, notifs, unreadNotifs, markNotifRead, markAllNotifsRead,
     selId, sel, selClient, selDest, toast, setToast, page, clientTab, colisFilter, cfm,
     flash, ask, closeConfirm, upd, log, getClient, getTarif,
