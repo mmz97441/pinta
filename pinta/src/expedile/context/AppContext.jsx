@@ -418,6 +418,21 @@ export function AppProvider({ children }) {
       flash('Renseignez les dimensions et poids après optimisation');
       return;
     }
+
+    // Vérifier que la facture est validée (obligatoire pour calculer les taxes)
+    const cl = clients.find((x) => x.id === c.clientId);
+    const hasValidFacture = c.factures && c.factures.length > 0 && c.factures.some((f) => f.valide);
+    if (!hasValidFacture) {
+      flash({ msg: 'Impossible d\'envoyer le devis : aucune facture validée. Les taxes (OM/OMR) ne peuvent pas être calculées sans la facture d\'achat.', type: 'warning', duration: 6000 });
+      return;
+    }
+
+    // Vérifier que des lignes articles existent (issues de la facture)
+    if (!c.lignes || c.lignes.length === 0) {
+      flash({ msg: 'Aucun article renseigné. Ajoutez les articles du colis (depuis la facture) pour calculer les taxes.', type: 'warning', duration: 5000 });
+      return;
+    }
+
     const dest = getClientDest(c.clientId, clients);
     const t = tarifs[dest.code] || tarifs['974'];
 

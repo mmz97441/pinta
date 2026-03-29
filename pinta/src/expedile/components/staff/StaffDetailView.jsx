@@ -866,15 +866,23 @@ export default function StaffDetailView() {
         const apTr = fPf > 0 ? calcTransport(fPf, tarif) : 0;
 
         const canPreview = usedFinL > 0 && usedFinW > 0 && usedFinH > 0 && usedFinP > 0;
+        const hasValidFacture = sel.factures && sel.factures.length > 0 && sel.factures.some((f) => f.valide);
+        const hasLignes = sel.lignes && sel.lignes.length > 0;
+        const canSendDevis = canPreview && hasValidFacture && hasLignes;
 
         return (
           <div className="space-y-4">
             {missingFacture && (
               <div className="flex items-start gap-2 p-3 rounded-xl bg-red-50 border border-red-300">
                 <X size={14} className="text-red-600 flex-shrink-0 mt-0.5" />
-                <p className="text-xs font-bold text-red-800">
-                  🚫 Facture d'achat non validée — Le devis ne pourra pas être calculé. Demandez la facture au client avant de finaliser.
-                </p>
+                <div>
+                  <p className="text-xs font-bold text-red-800">
+                    Facture d'achat non validée
+                  </p>
+                  <p className="text-[10px] text-red-600 mt-0.5">
+                    Le devis ne peut pas être envoyé sans facture validée. Les taxes (OM/OMR) sont calculées sur la valeur des articles.
+                  </p>
+                </div>
               </div>
             )}
             {/* Tags de préparation */}
@@ -1059,14 +1067,22 @@ export default function StaffDetailView() {
 
             {/* Devis preview / send */}
             {!devisPrev ? (
-              <BtnPrimary
-                onClick={handleEnvoyerDevis}
-                disabled={!canPreview}
-                color="#2563EB"
-              >
-                <Eye size={15} />
-                Prévisualiser le devis
-              </BtnPrimary>
+              <div className="space-y-2">
+                <BtnPrimary
+                  onClick={handleEnvoyerDevis}
+                  disabled={!canSendDevis}
+                  color="#2563EB"
+                >
+                  <Eye size={15} />
+                  Prévisualiser le devis
+                </BtnPrimary>
+                {!hasValidFacture && canPreview && (
+                  <p className="text-[10px] text-red-500 text-center font-semibold">Facture validée requise pour envoyer le devis</p>
+                )}
+                {hasValidFacture && !hasLignes && canPreview && (
+                  <p className="text-[10px] text-orange-500 text-center font-semibold">Ajoutez les articles (catégories) pour calculer les taxes</p>
+                )}
+              </div>
             ) : (
               <Section title="Brouillon du devis" icon={Eye} color="#2563EB">
                 <div className="space-y-3">
