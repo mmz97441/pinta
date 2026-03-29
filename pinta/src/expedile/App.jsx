@@ -30,7 +30,7 @@ import AuditLog from './components/detail/AuditLog';
 import { Etapes } from './components/ui';
 
 function AppContent() {
-  const { auth, setAuth, isStaff, sel, setSelId, page, setPage, clientTab, authCl, data, updateClient } = useApp();
+  const { auth, setAuth, isStaff, sel, setSelId, page, setPage, clientTab, authCl, data, updateClient, sbReady } = useApp();
   const [modal, setModal] = useState(false);
   const [onboardingDismissed, setOnboardingDismissed] = useState(false);
 
@@ -96,6 +96,13 @@ function AppContent() {
       <Toast />
       <ConfirmDialog />
       <ColisModal open={modal} onClose={() => setModal(false)} />
+
+      {/* ── Bandeau mode mock ── */}
+      {!sbReady && (
+        <div className="bg-red-600 text-white text-center text-xs font-bold py-1.5 px-4">
+          ⚠️ Mode hors-ligne — Supabase inaccessible. Les données affichées sont des données de démonstration.
+        </div>
+      )}
 
       {/* Header */}
       <div

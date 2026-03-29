@@ -54,12 +54,18 @@ export function AppProvider({ children }) {
           setCategories(catsData);
           setTarifs(tarifsData);
           setSbReady(true);
-          console.log('[Supabase] Données chargées :', colisData.length, 'colis,', clientsData.length, 'clients');
+          console.log('[Supabase] ✅ Données chargées :', colisData.length, 'colis,', clientsData.length, 'clients');
         } else {
-          console.log('[Supabase] Base vide — mode démo avec données mock');
+          // Base vide mais connexion OK
+          setData([]);
+          setClients([]);
+          setEnvois([]);
+          setSbReady(true);
+          console.log('[Supabase] ✅ Connecté — base vide');
         }
       } catch (err) {
-        console.warn('[Supabase] Connexion impossible — mode démo', err.message);
+        console.error('[Supabase] ❌ Connexion impossible — FALLBACK MOCK', err.message);
+        setSbReady(false);
       }
     }
     load();
@@ -567,7 +573,7 @@ export function AppProvider({ children }) {
 
   const value = useMemo(() => ({
     // Auth
-    auth, setAuth, isStaff, authCl,
+    auth, setAuth, isStaff, authCl, sbReady,
     // Data
     data, setData, clients, setClients, categories, setCategories, tarifs, setTarifs, envois, setEnvois, logs,
     // Communication
