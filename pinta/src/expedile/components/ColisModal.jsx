@@ -158,7 +158,8 @@ export default function ColisModal({ open, onClose }) {
     const errs = {};
     if (isStaff) {
       if (!selectedClient && !newClientMode) errs.client = 'Sélectionnez un client';
-      if (!nf.d.trim()) errs.d = 'Description requise';
+      const hasFournisseur = nf.trackingLines.some((l) => l.fournisseur.trim());
+      if (!nf.d.trim() && !hasFournisseur) errs.d = 'Saisissez au moins un fournisseur';
       if (!nf.casier.trim()) errs.casier = 'Numéro de casier requis';
     } else {
       if (!nf.d.trim()) errs.d = 'Description requise';
@@ -371,7 +372,7 @@ export default function ColisModal({ open, onClose }) {
       statut: finalStatut,
       trackings,
       trackingsDetail,
-      desc: nf.d.trim() || (nf.trackingLines[0]?.fournisseur?.trim() || ''),
+      desc: nf.d.trim() || [...new Set(nf.trackingLines.map((l) => l.fournisseur.trim()).filter(Boolean))].join(' + ') || '',
       notesReception: nf.notesReception.trim() || null,
       valeur: null,
       dimL,
@@ -794,33 +795,13 @@ export default function ColisModal({ open, onClose }) {
                 </div>
               )}
 
-              {/* ── DESCRIPTION (origin/supplier) ── */}
+              {/* ── TRACKINGS (fournisseur + numéro par carton) ── */}
               <div>
                 <label className={labelCls}>
-                  {isStaff ? 'Origine / Fournisseur' : 'Origine du colis'}
-                  {isStaff && <span className="text-red-400 ml-0.5">*</span>}
+                  Cartons reçus
+                  <span className="text-red-400 ml-0.5">*</span>
                 </label>
-                <input
-                  type="text"
-                  placeholder="Ex: Amazon, Temu, Shein, Nike…"
-                  value={nf.d}
-                  onChange={(e) => {
-                    setField('d', e.target.value);
-                    if (formErr.d) setFormErr((prev) => ({ ...prev, d: undefined }));
-                  }}
-                  className={inputCls(formErr.d)}
-                />
-                {formErr.d && (
-                  <p className="mt-1 text-xs text-red-500">{formErr.d}</p>
-                )}
-              </div>
-
-              {/* ── TRACKINGS ── */}
-              <div>
-                <label className={labelCls}>
-                  Numéros de tracking
-                  <span className="ml-1 normal-case text-gray-400 font-normal">(facultatif)</span>
-                </label>
+                <p className="text-[10px] text-gray-400 mb-2">Un fournisseur + tracking par carton reçu</p>
                 <div className="space-y-2">
                   {nf.trackingLines.map((line, idx) => (
                     <div key={idx} className="flex items-center gap-2">

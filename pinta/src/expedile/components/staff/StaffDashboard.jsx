@@ -302,8 +302,18 @@ function ColisTableRow({ c, client, envois, onClick, stagger }) {
               {c.casier}
             </span>
           )}
+          {(c.trackings?.filter((t) => t).length || 0) > 1 && (
+            <span className="text-[9px] font-bold px-1 py-0.5 rounded bg-blue-100 text-blue-700">
+              {c.trackings.filter((t) => t).length} cartons
+            </span>
+          )}
         </div>
         {c.desc && <span className="text-[11px] text-gray-500 truncate block max-w-[130px]">{c.desc}</span>}
+        {c.trackingsDetail?.length > 1 && (
+          <span className="text-[10px] text-gray-400 truncate block max-w-[160px]">
+            {[...new Set(c.trackingsDetail.map((td) => td.fournisseur).filter(Boolean))].join(', ')}
+          </span>
+        )}
       </td>
       <td className="px-3 py-2.5">
         {c.factures && c.factures.length > 0 ? (
