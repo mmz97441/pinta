@@ -220,7 +220,7 @@ export default function StaffSettings() {
       )}
 
       {/* ── Catégories taxes ── */}
-      {['directeur', 'vice_directeur', 'logisticien'].includes(authRole) && (
+      {['directeur', 'vice_directeur', 'logisticien'].includes(authRole) && (<>
       <div className="card p-5 anim-fade">
         <div className="flex items-center gap-2 mb-1">
           <FileText size={18} style={{ color: BRAND.navy }} />
@@ -384,7 +384,7 @@ export default function StaffSettings() {
           </button>
         </div>
       </div>
-      )}
+      </>)}
 
       {/* ── WhatsApp Business API ── */}
       <div className="card p-5 anim-fade">
