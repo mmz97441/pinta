@@ -226,6 +226,7 @@ export default function StaffDetailView() {
     categories,
     getTarif,
     envois,
+    payer,
     setSelId,
   } = useApp();
 
@@ -261,6 +262,8 @@ export default function StaffDetailView() {
   const [fraisDivers, setFraisDivers] = useState(sel?.fraisDivers || []);
   const [newFraisLibelle, setNewFraisLibelle] = useState('');
   const [newFraisMontant, setNewFraisMontant] = useState('');
+  // Pro payment method
+  const [proPayMethod, setProPayMethod] = useState(cl?.modePaiement || 'virement');
 
   if (!sel || !isStaff) return null;
 
@@ -1143,6 +1146,13 @@ export default function StaffDetailView() {
 
       // ── 8. ATTENTE_PAIEMENT ────────────────────────────────────────────
       case 'attente_paiement': {
+        const isPro = cl?.type === 'pro';
+        const PAY_METHODS = {
+          virement: 'Virement bancaire',
+          especes: 'Espèces',
+          '30_jours': 'Paiement à 30 jours',
+          fin_de_mois: 'Paiement fin de mois',
+        };
         return (
           <Section title="En attente de paiement" icon={Clock} color={borderColor}>
             <div className="space-y-4">
@@ -1152,9 +1162,44 @@ export default function StaffDetailView() {
                   {eur(sel.devisTotal)}
                 </p>
               </div>
-              <BtnWA onClick={() => sendMsg(sel.id, cl?.id, 'whatsapp', 'relance_paiement', null)}>
-                Relancer via WhatsApp
-              </BtnWA>
+              {isPro ? (
+                <>
+                  <div className="p-3 rounded-xl bg-blue-50 border border-blue-200">
+                    <p className="text-xs font-bold text-blue-800 mb-1">
+                      Client professionnel — paiement par {PAY_METHODS[proPayMethod] || proPayMethod}
+                    </p>
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wider block mb-1">
+                      Mode de paiement
+                    </label>
+                    <select
+                      value={proPayMethod}
+                      onChange={(e) => setProPayMethod(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-sm outline-none"
+                      style={{ color: BRAND.navy }}
+                    >
+                      {Object.entries(PAY_METHODS).map(([k, v]) => (
+                        <option key={k} value={k}>{v}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <BtnPrimary
+                    onClick={() => {
+                      upd(sel.id, { modePaiementPro: proPayMethod });
+                      payer(sel.id, sel.devisTotal);
+                    }}
+                    color="#059669"
+                  >
+                    <Check size={15} />
+                    Confirmer réception du paiement
+                  </BtnPrimary>
+                </>
+              ) : (
+                <BtnWA onClick={() => sendMsg(sel.id, cl?.id, 'whatsapp', 'relance_paiement', null)}>
+                  Relancer via WhatsApp
+                </BtnWA>
+              )}
             </div>
           </Section>
         );

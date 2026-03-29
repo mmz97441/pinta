@@ -181,7 +181,7 @@ export default function ClientColis() {
                     Votre accord est attendu
                   </div>
                 )}
-                {isPay && p.devisTotal != null && (
+                {isPay && p.devisTotal != null && authCl?.type !== 'pro' && (
                   <div className="mt-3 pt-2.5 border-t border-gray-100">
                     <div className="flex items-center justify-between">
                       <span className="text-xs text-gray-500">Montant dû</span>
@@ -213,6 +213,12 @@ export default function ClientColis() {
                         Payer
                       </div>
                     </div>
+                  </div>
+                )}
+                {isPay && p.devisTotal != null && authCl?.type === 'pro' && (
+                  <div className="mt-2.5 flex items-center gap-1.5 text-xs font-semibold text-blue-800 bg-blue-50 rounded-xl px-3 py-2">
+                    <CreditCard size={13} />
+                    Paiement géré par votre entreprise
                   </div>
                 )}
                 {isPay && p.devisTotal == null && (
@@ -360,7 +366,7 @@ export default function ClientColis() {
                             Accord
                           </span>
                         )}
-                        {isPay && p.devisTotal != null && (
+                        {isPay && p.devisTotal != null && authCl?.type !== 'pro' && (
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
@@ -380,6 +386,11 @@ export default function ClientColis() {
                             <CreditCard size={11} />
                             Payer
                           </button>
+                        )}
+                        {isPay && p.devisTotal != null && authCl?.type === 'pro' && (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-blue-700">
+                            Pro
+                          </span>
                         )}
                         {isPay && p.devisTotal == null && (
                           <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-800">

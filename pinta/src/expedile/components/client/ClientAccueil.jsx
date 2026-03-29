@@ -187,7 +187,7 @@ export default function ClientAccueil() {
                     <Badge statut={p.statut} />
                   </div>
                 </button>
-                {p.devisTotal != null && (
+                {p.devisTotal != null && cl?.type !== 'pro' && (
                   <div className="px-4 pb-4">
                     <button
                       onClick={(e) => {
@@ -209,6 +209,14 @@ export default function ClientAccueil() {
                       <CreditCard size={14} />
                       Payer {eur(p.devisTotal)}
                     </button>
+                  </div>
+                )}
+                {p.devisTotal != null && cl?.type === 'pro' && (
+                  <div className="px-4 pb-4">
+                    <div className="flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-semibold text-blue-800 bg-blue-50 border border-blue-200">
+                      <CreditCard size={14} />
+                      Paiement géré par votre entreprise
+                    </div>
                   </div>
                 )}
               </div>
