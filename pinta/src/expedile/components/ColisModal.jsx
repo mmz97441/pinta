@@ -4,6 +4,7 @@ import { useApp } from '../context/AppContext';
 import { BRAND, STATUTS, getDestByCP } from '../constants';
 import { uid, searchClients, waLink } from '../utils';
 import { Badge } from './ui';
+import * as sb from '../lib/supabaseData';
 
 const EMPTY_FORM = {
   trackingLines: [{ fournisseur: '', tracking: '' }],
@@ -209,7 +210,7 @@ export default function ColisModal({ open, onClose }) {
   };
 
   // ── submit: staff new colis (reception) ──────────────
-  const handleReceptionner = (sendWA) => {
+  const handleReceptionner = async (sendWA) => {
     // If in new client mode, create client first
     let clientId;
     let cl;
@@ -244,7 +245,32 @@ export default function ColisModal({ open, onClose }) {
       }
     }
 
-    const newColis = buildColis(clientId, 'receptionne');
+    const colisTemplate = buildColis(clientId, 'receptionne');
+
+    // Insert into Supabase, fallback to local
+    let newColis = colisTemplate;
+    try {
+      const inserted = await sb.insertColis({
+        clientId,
+        desc: colisTemplate.desc,
+        trackings: colisTemplate.trackings,
+        trackingsDetail: colisTemplate.trackingsDetail,
+        casier: colisTemplate.casier,
+        dateReception: colisTemplate.dateReception,
+        valeur: colisTemplate.valeur,
+        notesReception: colisTemplate.notesReception,
+        dimL: colisTemplate.dimL,
+        dimW: colisTemplate.dimW,
+        dimH: colisTemplate.dimH,
+        poids: colisTemplate.poids,
+        nbColis: colisTemplate.trackings?.length || 1,
+        dimsParColis: colisTemplate.dimsParColis,
+        statut: colisTemplate.statut,
+      });
+      newColis = { ...colisTemplate, ...inserted };
+    } catch (err) {
+      console.warn('[Supabase] insertColis fallback local:', err.message);
+    }
     setData((prev) => [...prev, newColis]);
 
     // Auto-group: move all other active colis of this client to the same casier

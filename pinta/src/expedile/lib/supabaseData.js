@@ -15,6 +15,7 @@ function mapColis(row) {
     desc: row.desc_contenu || '',
     valeur: row.valeur_declaree,
     trackings: row.trackings || [],
+    trackingsDetail: row.trackings_detail || [],
     casier: row.casier,
     dateReception: row.date_reception,
     dimL: row.dim_l ? +row.dim_l : null,
@@ -48,6 +49,10 @@ function mapColis(row) {
     notesInternes: row.notes_internes,
     produitInterdit: row.produit_interdit || false,
     checkInterdits: row.check_interdits || [],
+    casierHistorique: row.casier_historique || [],
+    tagsPreparation: row.tags_preparation || [],
+    notesReception: row.notes_reception || null,
+    commentairePreparation: row.commentaire_preparation || null,
     createdAt: row.created_at,
     // Relations (loaded separately or joined)
     factures: row._factures || [],
@@ -257,8 +262,13 @@ export async function updateColis(id, changes) {
     envoi: 'envoi_id', urgence: 'urgence', notesInternes: 'notes_internes',
     produitInterdit: 'produit_interdit', checkInterdits: 'check_interdits',
     poidsFact: 'poids_facturable', trackings: 'trackings',
+    trackingsDetail: 'trackings_detail',
     dimsParColis: 'dims_par_colis', nbColis: 'nb_colis',
     valeur: 'valeur_declaree',
+    casierHistorique: 'casier_historique',
+    tagsPreparation: 'tags_preparation',
+    notesReception: 'notes_reception',
+    commentairePreparation: 'commentaire_preparation',
   };
 
   for (const [key, val] of Object.entries(changes)) {
@@ -274,17 +284,30 @@ export async function updateColis(id, changes) {
 }
 
 export async function insertColis(colisData) {
+  const row = {
+    client_id: colisData.clientId,
+    desc_contenu: colisData.desc || null,
+    trackings: colisData.trackings || [],
+    trackings_detail: colisData.trackingsDetail || [],
+    casier: colisData.casier || null,
+    date_reception: colisData.dateReception || new Date().toISOString(),
+    valeur_declaree: colisData.valeur || null,
+    notes_reception: colisData.notesReception || null,
+    cree_par: colisData.creePar || null,
+    nb_colis: colisData.nbColis || 1,
+  };
+  // Dims if provided
+  if (colisData.dimL) row.dim_l = colisData.dimL;
+  if (colisData.dimW) row.dim_w = colisData.dimW;
+  if (colisData.dimH) row.dim_h = colisData.dimH;
+  if (colisData.poids) row.poids = colisData.poids;
+  if (colisData.dimsParColis?.length > 0) row.dims_par_colis = colisData.dimsParColis;
+  // Override statut if provided (e.g., 'mesure' when dims are filled at reception)
+  if (colisData.statut && colisData.statut !== 'receptionne') row.statut = colisData.statut;
+
   const { data, error } = await supabase
     .from('colis')
-    .insert({
-      client_id: colisData.clientId,
-      desc_contenu: colisData.desc,
-      trackings: colisData.trackings || [],
-      casier: colisData.casier,
-      date_reception: colisData.dateReception || new Date().toISOString(),
-      valeur_declaree: colisData.valeur,
-      cree_par: colisData.creePar,
-    })
+    .insert(row)
     .select()
     .single();
   if (error) throw error;
@@ -336,6 +359,78 @@ export async function markAllNotifsRead(userId) {
     .update({ lu: true })
     .eq('user_id', userId)
     .eq('lu', false);
+  if (error) throw error;
+}
+
+export async function insertClient(clientData) {
+  // Split nom if it contains both nom + prenom (legacy format "FONTAINE Flavie")
+  let nom = clientData.nom;
+  let prenom = clientData.prenom || null;
+  if (!prenom && nom && nom.includes(' ')) {
+    const parts = nom.split(' ');
+    // Don't split if it looks like a company name
+    if (clientData.type !== 'pro') {
+      nom = parts[0];
+      prenom = parts.slice(1).join(' ');
+    }
+  }
+
+  const { data, error } = await supabase
+    .from('clients')
+    .insert({
+      nom,
+      prenom,
+      ville: clientData.ville || null,
+      cp: clientData.cp,
+      tel: clientData.tel || null,
+      email: clientData.email || null,
+      canal: clientData.canal || 'whatsapp',
+      type: clientData.type || 'particulier',
+      points: clientData.points || 0,
+      onboarded: clientData.onboarded || false,
+      notes: clientData.notes || null,
+    })
+    .select()
+    .single();
+  if (error) throw error;
+  return mapClient(data);
+}
+
+export async function deleteClient(id) {
+  const { error } = await supabase.from('clients').delete().eq('id', id);
+  if (error) throw error;
+}
+
+export async function insertEnvoi(envoiData) {
+  const { data, error } = await supabase
+    .from('envois')
+    .insert({
+      date_depart: envoiData.date,
+      statut: envoiData.statut || 'planifie',
+      destination_code: envoiData.destinationCode || null,
+    })
+    .select()
+    .single();
+  if (error) throw error;
+  return mapEnvoi(data);
+}
+
+export async function updateEnvoi(id, changes) {
+  const snakeChanges = {};
+  const map = {
+    date: 'date_depart', statut: 'statut', destinationCode: 'destination_code',
+    transporteur: 'transporteur', trackingPrincipal: 'tracking_principal',
+    notes: 'notes',
+  };
+  for (const [key, val] of Object.entries(changes)) {
+    snakeChanges[map[key] || key] = val;
+  }
+  const { error } = await supabase.from('envois').update(snakeChanges).eq('id', id);
+  if (error) throw error;
+}
+
+export async function deleteEnvoi(id) {
+  const { error } = await supabase.from('envois').delete().eq('id', id);
   if (error) throw error;
 }
 

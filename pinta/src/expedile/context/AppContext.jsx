@@ -166,12 +166,23 @@ export function AppProvider({ children }) {
     if (!silent) flash('Client mis à jour');
   }, [flash, sbReady]);
 
-  const addNewClient = useCallback((cl) => {
+  const addNewClient = useCallback(async (cl) => {
+    try {
+      if (sbReady) {
+        const newCl = await sb.insertClient(cl);
+        setClients((prev) => [...prev, newCl]);
+        flash('Client ajouté');
+        return newCl.id;
+      }
+    } catch (err) {
+      console.error('[Supabase] insertClient error:', err.message);
+    }
+    // Fallback local
     const id = 'cl_' + uid();
     setClients((prev) => [...prev, { id, ...cl }]);
     flash('Client ajouté');
     return id;
-  }, [flash]);
+  }, [flash, sbReady]);
 
   const deleteClient = useCallback((id) => {
     if (data.some((p) => p.clientId === id)) {
@@ -179,8 +190,9 @@ export function AppProvider({ children }) {
       return;
     }
     setClients((prev) => prev.filter((c) => c.id !== id));
+    if (sbReady) sb.deleteClient(id).catch(console.error);
     flash('Client supprimé');
-  }, [data, flash]);
+  }, [data, flash, sbReady]);
 
   // ── Category CRUD ──
   const addCategory = useCallback((label, taux) => {
