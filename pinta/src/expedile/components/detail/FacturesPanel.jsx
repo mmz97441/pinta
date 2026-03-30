@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Check, X, RotateCcw, Eye, Upload, FileText, Image as ImageIcon, ZoomIn, Plus, Send } from 'lucide-react';
+import { Check, X, RotateCcw, Eye, Upload, FileText, Image as ImageIcon, ZoomIn, Plus, Send, Scan } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { BRAND, getDestByCP } from '../../constants';
 import { eur, uid } from '../../utils';
@@ -52,6 +52,7 @@ export default function FacturesPanel() {
   const [showAddForm, setShowAddForm] = useState(false);
   const [newVendeur, setNewVendeur] = useState('');
   const [newMontant, setNewMontant] = useState('');
+  const [ocrLoading, setOcrLoading] = useState(null); // factureId being analyzed
 
   if (!sel) return null;
 
@@ -195,6 +196,72 @@ export default function FacturesPanel() {
   };
 
   // ── Open preview ───────────────────────────────────────────────────────
+  // ── OCR Analysis ────────────────────────────────────────────────────
+  const handleOCR = async (facture) => {
+    if (!facture.fichier) {
+      flash({ msg: 'Aucun fichier joint — joignez la facture d\'abord', type: 'warning' });
+      return;
+    }
+    setOcrLoading(facture.id);
+    try {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://bqprktzehuhplpqjgjaz.supabase.co';
+      const res = await fetch(`${supabaseUrl}/functions/v1/ocr-facture`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          imageUrl: facture.fichier,
+          colisId: sel.id,
+          factureId: facture.id,
+        }),
+      });
+      const data = await res.json();
+
+      if (data.error) {
+        flash({ msg: `OCR: ${data.error}`, type: 'warning' });
+        return;
+      }
+
+      if (data.success) {
+        // Update local state with extracted articles
+        if (data.insertedLignes?.length > 0) {
+          setData((prev) => prev.map((c) => {
+            if (c.id !== sel.id) return c;
+            return { ...c, lignes: [...(c.lignes || []), ...data.insertedLignes] };
+          }));
+        }
+
+        // Update facture montant + vendeur locally
+        if (data.total || data.vendeur) {
+          setData((prev) => prev.map((c) => {
+            if (c.id !== sel.id) return c;
+            return {
+              ...c,
+              factures: c.factures.map((f) =>
+                f.id === facture.id ? {
+                  ...f,
+                  montant: data.total || f.montant,
+                  vendeur: data.vendeur || f.vendeur,
+                } : f
+              ),
+            };
+          }));
+        }
+
+        const catCount = data.articles?.filter((a) => a.categorie_suggeree).length || 0;
+        flash({
+          msg: `OCR : ${data.nbArticles} article${data.nbArticles > 1 ? 's' : ''} extrait${data.nbArticles > 1 ? 's' : ''} (${catCount} catégorisé${catCount > 1 ? 's' : ''}) — Total: ${eur(data.total || 0)}`,
+          type: 'success',
+          duration: 6000,
+        });
+      }
+    } catch (err) {
+      console.error('OCR error:', err);
+      flash({ msg: 'Erreur OCR: ' + err.message, type: 'warning' });
+    } finally {
+      setOcrLoading(null);
+    }
+  };
+
   const openPreview = (f) => {
     if (f.fichier) {
       setPreviewSrc(f.fichier);
@@ -415,7 +482,16 @@ export default function FacturesPanel() {
                   style={{ background: `${BRAND.navy}10`, color: BRAND.navy }}
                 >
                   <Eye size={12} />
-                  Voir la facture
+                  Voir
+                </button>
+                <button
+                  onClick={() => handleOCR(f)}
+                  disabled={ocrLoading === f.id}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all active:scale-95 disabled:opacity-50"
+                  style={{ background: '#7C3AED15', color: '#7C3AED' }}
+                >
+                  <Scan size={12} />
+                  {ocrLoading === f.id ? 'Analyse...' : 'Analyser (OCR)'}
                 </button>
                 <button
                   onClick={() => handleFileUpload(f.id)}
