@@ -498,22 +498,36 @@ export function AppProvider({ children }) {
 
   const envMsg = useCallback(async (colisId, msgTxt, authInfo, tel) => {
     if (!msgTxt.trim()) return;
-    const msgId = uid();
     const heure = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
     const isStaffSender = authInfo.type === 'staff';
 
-    // Add message immediately (status 'envoi' for staff, null for client)
+    // Persist to Supabase FIRST, get real ID
+    let savedMsg = null;
+    try {
+      savedMsg = await sb.insertMessage(colisId, {
+        type: isStaffSender ? 'staff' : 'client',
+        auteur: authInfo.u.nom,
+        texte: msgTxt.trim(),
+        statut: isStaffSender ? 'envoi' : null,
+      });
+    } catch (err) {
+      console.warn('[Supabase] insertMessage error:', err.message);
+    }
+
+    const msgId = savedMsg?.id || uid();
+
+    // Add to local state
     setData((prev) => prev.map((c) => {
       if (c.id !== colisId) return c;
       return {
         ...c,
-        messages: [...c.messages, {
+        messages: [...c.messages, savedMsg || {
           id: msgId,
           type: isStaffSender ? 'staff' : 'client',
           auteur: authInfo.u.nom,
           texte: msgTxt.trim(),
           heure,
-          statut: isStaffSender && tel ? 'envoi' : null,
+          statut: isStaffSender ? 'envoi' : null,
         }],
       };
     }));
