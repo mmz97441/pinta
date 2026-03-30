@@ -1,5 +1,32 @@
 # CLAUDE.md — Règles de développement Expedîle
 
+## Philosophie produit
+
+### Automatisation maximale
+Chaque action manuelle est une friction. Avant de coder une fonctionnalité, se demander :
+- **Le système peut-il le faire automatiquement ?** (ex: grouper les casiers, calculer les taxes, générer les départs)
+- **L'utilisateur peut-il accomplir sa tâche en moins de clics ?** (ex: boutons inline Telegram, import depuis factures)
+- **L'information est-elle au bon endroit au bon moment ?** (ex: alerte facture dans le panneau d'action, pas ailleurs)
+- **Le staff a-t-il besoin de chercher l'information ?** Si oui, c'est mal conçu.
+
+### UX par rôle — Faciliter la vie de chacun
+- **Préparateur** : file de travail claire, gros boutons, zéro ambiguïté. Il travaille debout avec une tablette.
+- **Logisticien** : vue envois, exports douane, suivi post-expédition. Il planifie et optimise.
+- **Directeur** : KPIs, alertes, tarifs, paramètres. Il pilote et décide.
+- **Client** : suivi simple, notifications, paiement en un clic. Il veut savoir où en est son colis.
+
+### Ton des messages — Bienveillant et commercial
+Chaque message envoyé au client est une opportunité de renforcer la relation. Règles :
+- **Toujours commencer par le prénom** : "Bonjour Flavie 👋"
+- **Toujours expliquer le contexte** : pourquoi on demande quelque chose, qu'est-ce qui se passe ensuite
+- **Toujours rassurer** : "Notre équipe s'en occupe", "Vous serez notifié(e)"
+- **Toujours valoriser le service** : mentionner l'optimisation, les économies, la destination
+- **Jamais de message sec ou technique** : pas de "Statut: attente_paiement", mais "Votre devis est prêt !"
+- **Utiliser les emojis avec parcimonie** : 📦 🎯 ✅ pour structurer, pas pour décorer
+- **Signer chaque message** : "_L'équipe Expedîle_" ou "_Expedîle — Paris → La Réunion_"
+- **Adapter le message au contexte** : si les dimensions sont renseignées → les montrer. Si la facture manque → expliquer pourquoi on en a besoin.
+- **Deux versions de chaque message** : une si l'info est disponible, une si elle ne l'est pas. Jamais de champ vide ou "0.00 €".
+
 ## Contexte métier
 Expedîle est un SaaS de réexpédition de colis de la France métropolitaine vers les DOM-TOM (Réunion, Mayotte, Guadeloupe, Martinique). Le staff reçoit des colis à Paris, les mesure, optimise l'emballage, calcule les taxes douanières (OM/OMR), et expédie par envois groupés.
 
