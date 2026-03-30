@@ -1172,18 +1172,18 @@ export default function ColisModal({ open, onClose }) {
                 <>
                   <button
                     type="button"
-                    onClick={() => handleReceptionner(false)}
-                    className="flex-1 py-2.5 rounded-xl font-bold text-sm text-white bg-blue-600 hover:bg-blue-700 active:scale-95 transition-all"
+                    onClick={() => handleReceptionner(true)}
+                    className="flex-1 py-2.5 rounded-xl font-bold text-sm text-white active:scale-95 transition-all"
+                    style={{ background: `linear-gradient(135deg, ${BRAND.navy}, ${BRAND.navyL})` }}
                   >
-                    Réceptionner
+                    Réceptionner et notifier le client
                   </button>
                   <button
                     type="button"
-                    onClick={() => handleReceptionner(true)}
-                    className="flex-1 py-2.5 rounded-xl font-bold text-sm text-white active:scale-95 transition-all"
-                    style={{ background: '#0088cc' }}
+                    onClick={() => handleReceptionner(false)}
+                    className="px-4 py-2.5 rounded-xl font-semibold text-sm text-gray-600 bg-gray-100 hover:bg-gray-200 active:scale-95 transition-all"
                   >
-                    + Telegram
+                    Sans notification
                   </button>
                 </>
               )}
