@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { ArrowLeft, Plane, CreditCard, FileText, ChevronDown, Trash2, Lock, MessageCircle, Send, CheckCircle, XCircle, Loader2, ShieldAlert, Plus, X } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { ArrowLeft, Plane, CreditCard, FileText, ChevronDown, Trash2, Lock, MessageCircle, Send, CheckCircle, XCircle, Loader2, ShieldAlert, Plus, X, Paperclip, ChevronUp } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { BRAND, DESTINATIONS } from '../../constants';
 import { eur, labelEnvoi, uid, getCatTaux } from '../../utils';
@@ -11,9 +11,34 @@ export default function StaffSettings() {
   const { setPage, envois, setEnvois, data, tarifs, setTarifs, categories, addCategory, updateCatTaux, updateCatLabel, deleteCategory, flash, produitsInterdits, setProduitsInterdits, authRole } = useApp();
   const [newEnvoiDate, setNewEnvoiDate] = useState('');
   const [jourEnvoi, setJourEnvoi] = useState(5); // 0=Dim, 1=Lun, ... 5=Ven, 6=Sam
-  const [nbSemaines, setNbSemaines] = useState(4);
+  const [nbSemaines, setNbSemaines] = useState(8);
+  const [expandedEnvoi, setExpandedEnvoi] = useState(null);
   const [catEditId, setCatEditId] = useState(null);
   const [newCat, setNewCat] = useState({ label: '', taux: {} });
+
+  // ── Auto-generate departures on mount ──
+  useEffect(() => {
+    const today = new Date();
+    const diff = (jourEnvoi - today.getDay() + 7) % 7;
+    const next = new Date(today);
+    next.setDate(today.getDate() + (diff === 0 ? 7 : diff));
+
+    let added = 0;
+    const newEnvois = [...envois];
+    for (let w = 0; w < 8; w++) {
+      const d = new Date(next);
+      d.setDate(next.getDate() + w * 7);
+      const dateStr = d.toISOString().slice(0, 10);
+      if (!newEnvois.find((e) => e.date === dateStr)) {
+        newEnvois.push({ id: uid(), date: dateStr, statut: 'planifie', documents: [] });
+        added++;
+      }
+    }
+    if (added > 0) {
+      newEnvois.sort((a, b) => a.date.localeCompare(b.date));
+      setEnvois(newEnvois);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [newInterdit, setNewInterdit] = useState('');
 
@@ -141,25 +166,121 @@ export default function StaffSettings() {
           )}
           {envois.map((e) => {
             const count = data.filter((c) => c.envoi === e.id).length;
+            const isExpanded = expandedEnvoi === e.id;
+            const docs = e.documents || [];
             return (
-              <div key={e.id} className="flex items-center gap-2 p-3 bg-gray-50 rounded-xl">
-                <div className="flex-1">
-                  <p className="font-bold text-sm">{labelEnvoi(e)}</p>
-                  <p className="text-xs text-gray-500">{`${count} colis affectés`}</p>
-                </div>
-                <select value={e.statut} onChange={(ev) => setEnvois((p) => p.map((x) => (x.id === e.id ? { ...x, statut: ev.target.value } : x)))} className="px-2 py-1 rounded-lg border text-xs">
-                  <option value="planifie">○ Planifié</option>
-                  <option value="prochain">● Prochain</option>
-                  <option value="en_cours">● En cours</option>
-                  <option value="parti">✈ Parti</option>
-                  <option value="arrive">✓ Arrivé</option>
-                </select>
-                {count === 0 ? (
-                  <button onClick={() => { setEnvois((p) => p.filter((x) => x.id !== e.id)); flash('Départ supprimé'); }} className="text-red-400 hover:text-red-600 p-1.5 rounded-lg hover:bg-red-50 transition-colors">
-                    <Trash2 size={15} />
+              <div key={e.id} className="bg-gray-50 rounded-xl overflow-hidden">
+                <div className="flex items-center gap-2 p-3">
+                  <button
+                    onClick={() => setExpandedEnvoi(isExpanded ? null : e.id)}
+                    className="flex-shrink-0 text-gray-400 hover:text-gray-600 transition-colors"
+                  >
+                    {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                   </button>
-                ) : (
-                  <span className="text-gray-300 p-1.5" title="Impossible de supprimer un départ avec des colis affectés"><Lock size={14} /></span>
+                  <div className="flex-1">
+                    <p className="font-bold text-sm">{labelEnvoi(e)}</p>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className="text-xs text-gray-500">{count} colis</span>
+                      {docs.length > 0 && (
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-green-100 text-green-700">
+                          {docs.length} doc{docs.length > 1 ? 's' : ''}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <select value={e.statut} onChange={(ev) => setEnvois((p) => p.map((x) => (x.id === e.id ? { ...x, statut: ev.target.value } : x)))} className="px-2 py-1 rounded-lg border text-xs">
+                    <option value="planifie">○ Planifié</option>
+                    <option value="prochain">● Prochain</option>
+                    <option value="en_cours">● En cours</option>
+                    <option value="parti">✈ Parti</option>
+                    <option value="arrive">✓ Arrivé</option>
+                  </select>
+                  {count === 0 ? (
+                    <button onClick={() => { setEnvois((p) => p.filter((x) => x.id !== e.id)); flash('Départ supprimé'); }} className="text-red-400 hover:text-red-600 p-1.5 rounded-lg hover:bg-red-50 transition-colors">
+                      <Trash2 size={15} />
+                    </button>
+                  ) : (
+                    <span className="text-gray-300 p-1.5" title="Impossible de supprimer un départ avec des colis affectés"><Lock size={14} /></span>
+                  )}
+                </div>
+
+                {/* Expanded: documents section */}
+                {isExpanded && (
+                  <div className="px-3 pb-3 pt-1 border-t border-gray-200 space-y-2">
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Documents rattachés</p>
+
+                    {/* Existing docs */}
+                    {docs.map((doc, di) => (
+                      <div key={di} className="flex items-center gap-2 p-2 bg-white rounded-lg border border-gray-100">
+                        <Paperclip size={12} className="text-gray-400 flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-semibold text-gray-700 truncate">{doc.nom}</p>
+                          <p className="text-[10px] text-gray-400">{doc.type} — {new Date(doc.date).toLocaleDateString('fr-FR')}</p>
+                        </div>
+                        <button
+                          onClick={() => {
+                            const updated = docs.filter((_, j) => j !== di);
+                            setEnvois((p) => p.map((x) => x.id === e.id ? { ...x, documents: updated } : x));
+                          }}
+                          className="text-gray-300 hover:text-red-500 transition-colors"
+                        >
+                          <X size={12} />
+                        </button>
+                      </div>
+                    ))}
+
+                    {/* Add document */}
+                    <div className="flex gap-2 items-end">
+                      <div className="flex-1">
+                        <select
+                          id={`doc-type-${e.id}`}
+                          className="w-full px-2 py-1.5 rounded-lg border border-gray-200 text-xs mb-1"
+                          defaultValue="facture_transitaire"
+                        >
+                          <option value="facture_transitaire">Facture transitaire</option>
+                          <option value="dau">DAU (Déclaration douane)</option>
+                          <option value="bon_livraison">Bon de livraison</option>
+                          <option value="certificat_origine">Certificat d'origine</option>
+                          <option value="autre">Autre document</option>
+                        </select>
+                        <label className="flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed border-gray-300 bg-white cursor-pointer hover:bg-gray-50 transition-colors">
+                          <Paperclip size={13} className="text-gray-400" />
+                          <span className="text-xs text-gray-500">Choisir un fichier...</span>
+                          <input
+                            type="file"
+                            accept=".pdf,.jpg,.jpeg,.png,.xlsx,.xls,.doc,.docx"
+                            className="hidden"
+                            onChange={(ev) => {
+                              const file = ev.target.files?.[0];
+                              if (!file) return;
+                              const typeSelect = document.getElementById(`doc-type-${e.id}`);
+                              const typeLabels = {
+                                facture_transitaire: 'Facture transitaire',
+                                dau: 'DAU',
+                                bon_livraison: 'Bon de livraison',
+                                certificat_origine: 'Certificat d\'origine',
+                                autre: 'Document',
+                              };
+                              const newDoc = {
+                                nom: file.name,
+                                type: typeLabels[typeSelect?.value] || 'Document',
+                                typeKey: typeSelect?.value || 'autre',
+                                date: new Date().toISOString(),
+                                size: file.size,
+                              };
+                              setEnvois((p) => p.map((x) => x.id === e.id ? { ...x, documents: [...(x.documents || []), newDoc] } : x));
+                              flash(`Document "${file.name}" ajouté à ${labelEnvoi(e)}`);
+                              ev.target.value = '';
+                            }}
+                          />
+                        </label>
+                      </div>
+                    </div>
+
+                    {docs.length === 0 && (
+                      <p className="text-[10px] text-gray-400 text-center py-1">Aucun document — ajoutez facture transitaire, DAU, etc.</p>
+                    )}
+                  </div>
                 )}
               </div>
             );
