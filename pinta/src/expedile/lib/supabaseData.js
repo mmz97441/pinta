@@ -138,15 +138,29 @@ function mapLigne(row) {
   };
 }
 
+function formatMessageDate(isoStr) {
+  if (!isoStr) return '';
+  const d = new Date(isoStr);
+  const now = new Date();
+  const time = d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
+  const msgDay = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+
+  if (msgDay.getTime() === today.getTime()) return time;
+  if (msgDay.getTime() === yesterday.getTime()) return `Hier ${time}`;
+  return `${d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })} ${time}`;
+}
+
 function mapMessage(row) {
   return {
     id: row.id,
     type: row.type,
     auteur: row.auteur_nom || 'Système',
     texte: row.texte,
-    heure: row.created_at
-      ? new Date(row.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
-      : '',
+    heure: formatMessageDate(row.created_at),
+    createdAt: row.created_at,
     statut: row.statut,
     msgId: row.msg_id || row.wa_id,
   };
