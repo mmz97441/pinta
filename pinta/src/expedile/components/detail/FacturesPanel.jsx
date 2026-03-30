@@ -123,6 +123,9 @@ export default function FacturesPanel() {
 
   // ── Reject with motif ──────────────────────────────────────────────────
   const rejectFacture = (facture, motifLabel) => {
+    // Persist to Supabase
+    sb.updateFacture(facture.id, { valide: false, rejetMotif: motifLabel }).catch(console.error);
+    // Update local state
     setData((prev) => prev.map((c) => {
       if (c.id !== sel.id) return c;
       return { ...c, factures: c.factures.map((f) => (f.id === facture.id ? { ...f, valide: false, rejetMotif: motifLabel } : f)) };

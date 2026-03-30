@@ -125,6 +125,7 @@ function mapFact(row) {
     valide: row.valide || false,
     fichier: row.fichier_url,
     fichierNom: row.fichier_nom,
+    rejetMotif: row.rejet_motif || null,
   };
 }
 
@@ -401,6 +402,8 @@ export async function updateFacture(factureId, changes) {
   if ('vendeur' in changes) snakeChanges.vendeur = changes.vendeur;
   if ('montant' in changes) snakeChanges.montant = changes.montant;
   if ('fichierUrl' in changes) snakeChanges.fichier_url = changes.fichierUrl;
+  if ('fichierNom' in changes) snakeChanges.fichier_nom = changes.fichierNom;
+  if ('rejetMotif' in changes) snakeChanges.rejet_motif = changes.rejetMotif;
   if ('fichierNom' in changes) snakeChanges.fichier_nom = changes.fichierNom;
   const { error } = await supabase.from('factures').update(snakeChanges).eq('id', factureId);
   if (error) throw error;
