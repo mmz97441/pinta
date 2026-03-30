@@ -572,7 +572,9 @@ export default function StaffDashboard({ onNewColis }) {
     if (!tableSearch.trim()) return null;
     return (list) => list.filter((c) => {
       const cl = getClient(c.clientId);
-      const txt = `${c.ref} ${c.desc || ''} ${cl?.nom || ''} ${c.casier || ''} ${c.trackings?.join(' ') || ''}`;
+      const trackingsStr = c.trackings?.join(' ') || '';
+      const fournisseurs = (c.trackingsDetail || []).map((td) => td.fournisseur).join(' ');
+      const txt = `${c.ref} ${c.desc || ''} ${cl?.nom || ''} ${c.casier || ''} ${trackingsStr} ${fournisseurs}`;
       return fuzzy(txt, tableSearch);
     });
   }, [tableSearch, getClient]);
@@ -1328,7 +1330,7 @@ export default function StaffDashboard({ onNewColis }) {
               type="text"
               value={tableSearch}
               onChange={(e) => setTableSearch(e.target.value)}
-              placeholder="Filtrer les colis (ref, client, description, casier…)"
+              placeholder="Filtrer les colis (ref, client, tracking, fournisseur, casier…)"
               className="w-full pl-9 pr-8 py-2 text-sm rounded-xl border border-gray-200 outline-none transition-all focus:border-amber-400 bg-white"
               style={{ color: BRAND.navy }}
             />
