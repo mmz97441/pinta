@@ -143,6 +143,15 @@ export default function ClientAccueil() {
                             {p.dimL}×{p.dimW}×{p.dimH} cm
                           </span>
                         )}
+                        {(() => {
+                          const created = p.createdAt ? new Date(p.createdAt) : null;
+                          const days = created ? Math.floor((Date.now() - created.getTime()) / (1000 * 60 * 60 * 24)) : 0;
+                          return days > 5 ? (
+                            <span className="ml-1.5 text-[9px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded-full">
+                              urgent
+                            </span>
+                          ) : null;
+                        })()}
                       </div>
                       <ChevronRight size={14} className="text-gray-400 flex-shrink-0" />
                     </button>

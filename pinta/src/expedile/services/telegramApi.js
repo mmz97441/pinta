@@ -51,6 +51,7 @@ export function telegramMeLink(startParam) {
  */
 export async function sendTelegram(chatId, text) {
   if (!BOT_TOKEN || !chatId) return { ok: false, error: 'Bot non configuré' };
+  if (!/^\d+$/.test(String(chatId))) return { ok: false, error: 'Format Chat ID invalide' };
 
   try {
     const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
@@ -80,6 +81,7 @@ export async function sendTelegram(chatId, text) {
  */
 export async function sendTelegramWithButtons(chatId, text, buttons) {
   if (!BOT_TOKEN || !chatId) return { ok: false, error: 'Bot non configuré' };
+  if (!/^\d+$/.test(String(chatId))) return { ok: false, error: 'Format Chat ID invalide' };
 
   try {
     const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {

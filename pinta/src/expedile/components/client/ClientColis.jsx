@@ -52,7 +52,7 @@ export default function ClientColis() {
     myColis;
 
   const needsAction = (p) =>
-    p.statut === 'attente_feu_vert' || p.statut === 'attente_paiement';
+    p.statut === 'attente_feu_vert' || p.statut === 'attente_paiement' || p.statut === 'devis_envoye';
 
   return (
     <div className="anim-fade space-y-4">

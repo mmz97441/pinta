@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import {
-  Ruler, Check, Clock, Camera, AlertTriangle, Eye, X, RotateCcw, Send, Mail, Plus,
+  Ruler, Check, Clock, Camera, AlertTriangle, AlertCircle, Eye, X, RotateCcw, Send, Mail, Plus,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { BRAND, STATUTS, TRANSITIONS, PRODUITS_INTERDITS, TAGS_PREPARATION, getDestByCP } from '../../constants';
@@ -700,7 +700,7 @@ export default function StaffDetailView() {
                   </div>
                   <div className="flex gap-2">
                     <button
-                      onClick={() => sendMsg(sel.id, cl?.id, 'telegram', 'demande_facture', null)}
+                      onClick={() => sendMsg(sel.id, cl?.id, 'telegram', 'facture_manquante', null)}
                       className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[11px] font-bold transition-all active:scale-95"
                       style={{ background: '#0088cc', color: 'white' }}
                     >
@@ -708,7 +708,7 @@ export default function StaffDetailView() {
                       Demander par Telegram
                     </button>
                     <button
-                      onClick={() => sendMsg(sel.id, cl?.id, 'email', 'demande_facture', null)}
+                      onClick={() => sendMsg(sel.id, cl?.id, 'email', 'facture_manquante', null)}
                       className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[11px] font-bold transition-all active:scale-95"
                       style={{ background: BRAND.navy, color: 'white' }}
                     >
@@ -745,7 +745,9 @@ export default function StaffDetailView() {
               <BtnTelegram
                 onClick={() => {
                   demanderFeuVert(sel.id);
-                  sendMsg(sel.id, cl?.id, 'telegram', 'demande_feu_vert', null);
+                  setTimeout(() => {
+                    sendMsg(sel.id, cl?.id, 'telegram', 'demande_feu_vert', null);
+                  }, 200);
                 }}
               >
                 Envoyer via Telegram — demander le feu vert
@@ -754,7 +756,9 @@ export default function StaffDetailView() {
               <BtnEmail
                 onClick={() => {
                   demanderFeuVert(sel.id);
-                  sendMsg(sel.id, cl?.id, 'email', 'demande_feu_vert', null);
+                  setTimeout(() => {
+                    sendMsg(sel.id, cl?.id, 'email', 'demande_feu_vert', null);
+                  }, 200);
                 }}
               >
                 Envoyer par email — demander le feu vert
@@ -786,7 +790,7 @@ export default function StaffDetailView() {
                   </div>
                   <div className="flex gap-2">
                     <button
-                      onClick={() => sendMsg(sel.id, cl?.id, 'telegram', 'demande_facture', null)}
+                      onClick={() => sendMsg(sel.id, cl?.id, 'telegram', 'facture_manquante', null)}
                       className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[11px] font-bold transition-all active:scale-95"
                       style={{ background: '#0088cc', color: 'white' }}
                     >
@@ -794,7 +798,7 @@ export default function StaffDetailView() {
                       Demander par Telegram
                     </button>
                     <button
-                      onClick={() => sendMsg(sel.id, cl?.id, 'email', 'demande_facture', null)}
+                      onClick={() => sendMsg(sel.id, cl?.id, 'email', 'facture_manquante', null)}
                       className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[11px] font-bold transition-all active:scale-95"
                       style={{ background: BRAND.navy, color: 'white' }}
                     >
@@ -879,6 +883,14 @@ export default function StaffDetailView() {
 
         return (
           <div className="space-y-4">
+            {sel.devisTotal > 0 && sel.statut === 'en_preparation' && (
+              <div className="p-3 rounded-xl bg-amber-50 border border-amber-300 flex items-start gap-2">
+                <AlertCircle size={14} className="text-amber-600 flex-shrink-0 mt-0.5" />
+                <p className="text-xs font-bold text-amber-800">
+                  Devis calculé mais non envoyé au client.
+                </p>
+              </div>
+            )}
             {missingFacture && (
               <div className="p-3 rounded-xl bg-red-50 border border-red-300 space-y-2.5">
                 <div className="flex items-start gap-2">
@@ -1324,7 +1336,13 @@ export default function StaffDetailView() {
                   </BtnPrimary>
                 </>
               ) : (
-                <BtnTelegram onClick={() => sendMsg(sel.id, cl?.id, 'telegram', 'relance_paiement', null)}>
+                <BtnTelegram onClick={() => {
+                  if (!sel.devisTotal || sel.devisTotal <= 0) {
+                    flash('Le devis n\'a pas été calculé — impossible de relancer le paiement');
+                    return;
+                  }
+                  sendMsg(sel.id, cl?.id, 'telegram', 'relance_paiement', null);
+                }}>
                   Relancer via Telegram
                 </BtnTelegram>
               )}

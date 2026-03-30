@@ -155,11 +155,14 @@ export function AppProvider({ children }) {
   const upd = useCallback((id, changes) => {
     // Optimistic local update
     setData((prev) => prev.map((c) => (c.id === id ? { ...c, ...changes } : c)));
-    // Persist to Supabase (fire and forget, realtime will sync)
+    // Persist to Supabase
     if (sbReady) {
-      sb.updateColis(id, changes).catch((err) => console.error('[Supabase] upd error:', err.message));
+      sb.updateColis(id, changes).catch((err) => {
+        console.error('[Supabase] upd error:', err.message);
+        flash({ msg: 'Erreur de sauvegarde — vérifiez votre connexion', type: 'warning' });
+      });
     }
-  }, [sbReady]);
+  }, [sbReady, flash]);
 
   const log = useCallback((id, oldStatut, newStatut) => {
     setLogs((prev) => [...prev, { id: uid(), cid: id, o: oldStatut, n: newStatut, w: auth?.u?.nom || '?' }]);
@@ -427,11 +430,21 @@ export function AppProvider({ children }) {
   }, [log, upd, flash]);
 
   const feuVertBulk = useCallback((ids) => {
+    let successCount = 0;
     ids.forEach((id) => {
-      log(id, 'attente_feu_vert', 'autorise');
-      upd(id, { statut: 'autorise', feuVert: 'autorise' });
+      try {
+        log(id, 'attente_feu_vert', 'autorise');
+        upd(id, { statut: 'autorise', feuVert: 'autorise' });
+        successCount++;
+      } catch (err) {
+        console.error(`[feuVertBulk] Erreur sur colis ${id}:`, err.message);
+      }
     });
-    flash({ msg: `${ids.length} colis autorisés`, type: 'success', duration: 4000 });
+    if (successCount === ids.length) {
+      flash({ msg: `${ids.length} colis autorisés`, type: 'success', duration: 4000 });
+    } else {
+      flash({ msg: `${successCount}/${ids.length} colis autorisés — certains ont échoué`, type: 'warning', duration: 5000 });
+    }
   }, [log, upd, flash]);
 
   const envoyerDevis = useCallback((id) => {

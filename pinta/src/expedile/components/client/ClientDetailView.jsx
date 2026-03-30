@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
+import * as sb from '../../lib/supabaseData';
 import { BRAND, PHASES_CLIENT, getPhaseIndex, getDestByCP } from '../../constants';
 import { exportDevisPDF } from '../../utils/exportDevisPDF';
 import { eur, trackStr, hasTrack } from '../../utils';
@@ -148,14 +149,37 @@ export default function ClientDetailView() {
         ask(
           'Autoriser la préparation',
           `Vous confirmez que le contenu de ${sel.ref} est conforme et autorisez Expedîle à le préparer pour l'expédition ?\n\nVous avez aussi ${autresFV.length} autre${autresFV.length > 1 ? 's' : ''} colis en attente (${refs}). Voulez-vous tout autoriser d'un coup ?`,
-          () => { feuVertBulk([sel.id, ...autresFV.map((p) => p.id)]); navigate('/'); },
+          () => {
+            const ids = [sel.id, ...autresFV.map((p) => p.id)];
+            feuVertBulk(ids);
+            ids.forEach(async (colisId) => {
+              try {
+                await sb.insertMessage(colisId, {
+                  type: 'client',
+                  auteur: authCl?.nom || 'Client',
+                  texte: '✅ Accord donné depuis l\'application',
+                  statut: null,
+                });
+              } catch (e) { /* ignore */ }
+            });
+            navigate('/');
+          },
           { okLabel: `Tout autoriser (${autresFV.length + 1})` }
         );
       } else {
         ask(
           'Autoriser la préparation',
           `Vous confirmez que le contenu de ${sel.ref} est conforme et autorisez Expedîle à le préparer pour l'expédition ?`,
-          () => { feuVert(sel.id, true); navigate('/'); },
+          () => {
+            feuVert(sel.id, true);
+            sb.insertMessage(sel.id, {
+              type: 'client',
+              auteur: authCl?.nom || 'Client',
+              texte: '✅ Accord donné depuis l\'application',
+              statut: null,
+            }).catch(() => {});
+            navigate('/');
+          },
           { okLabel: 'Oui, j\'autorise' }
         );
       }

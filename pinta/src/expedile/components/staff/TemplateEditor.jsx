@@ -74,6 +74,7 @@ const TEMPLATES = [
   { key: 'arrive', label: '📍 Arrivé', emoji: '📍' },
   { key: 'en_livraison', label: '🚚 En livraison', emoji: '🚚' },
   { key: 'facture_rejetee', label: '❌ Facture rejetée', emoji: '❌' },
+  { key: 'invitation_telegram', label: '📲 Invitation Telegram', emoji: '📲' },
 ];
 
 const DEFAULT_BODIES = {
@@ -99,6 +100,8 @@ const DEFAULT_BODIES = {
   en_livraison_email: `Bonjour {{nom_complet}},\n\nVotre colis {{ref}} est en cours de livraison.\n\nCordialement,\nL'équipe Expedîle`,
   facture_rejetee_telegram: `Bonjour {{prenom}} 👋\n\n⚠️ La facture pour *{{ref}}* n'a pas pu être validée.\n\n📄 *Motif :* {{motif_rejet}}\n\n👉 Renvoyez une facture conforme (photo/PDF lisible).\n\n_Expedîle_`,
   facture_rejetee_email: `Bonjour {{nom_complet}},\n\nLa facture pour {{ref}} n'a pas pu être validée.\nMotif : {{motif_rejet}}\n\nMerci de renvoyer une facture conforme.\n\nCordialement,\nL'équipe Expedîle`,
+  invitation_telegram_telegram: `Bonjour {{prenom}} 👋\n\nPour suivre vos colis en temps réel et recevoir vos notifications, connectez-vous à notre bot Telegram :\n\n👉 https://t.me/Expedilebot\n\nEnvoyez /start pour activer le suivi.\n\n_L'équipe Expedîle_`,
+  invitation_telegram_email: `Objet : 📲 Suivez vos colis sur Telegram\n\nBonjour {{nom_complet}},\n\nPour suivre vos colis en temps réel et recevoir vos notifications directement sur Telegram, cliquez sur le lien ci-dessous :\n\nhttps://t.me/Expedilebot\n\nEnvoyez /start pour activer le suivi.\n\nCordialement,\nL'équipe Expedîle`,
 };
 
 // ── Preview: replace {{var}} with examples ──

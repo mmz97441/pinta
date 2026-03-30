@@ -146,6 +146,10 @@ Pour avancer sur votre colis *${colis.ref}* (${colis.desc}), nous avons besoin d
 
 ⏱️ Sans cette facture, nous ne pouvons malheureusement pas finaliser le traitement de votre colis.
 
+⚠️ *Bon à savoir :* Des frais de stockage peuvent s'appliquer après 14 jours.
+
+Notre équipe attend votre facture — dès réception, nous avançons rapidement. 🚀
+
 Merci d'avance !
 _L'équipe Expedîle_`,
     email: (c, colis) =>
@@ -163,6 +167,10 @@ Cette facture est indispensable pour :
 Merci de nous la transmettre en réponse à cet email (photo ou PDF lisible).
 
 Sans ce document, le traitement de votre colis ne pourra pas avancer.
+
+Important : Des frais de stockage peuvent s'appliquer après 14 jours.
+
+Notre équipe attend votre facture — dès réception, nous avançons rapidement.
 
 Cordialement,
 L'équipe Expedîle`,
@@ -665,7 +673,7 @@ L'équipe Expedîle`,
   // ═══════════════════════════════════════════════════════════════
   libre: {
     label: '✍️ Message libre',
-    telegram: (c) => `Bonjour ${c.nom.split(' ')[0]} 👋\n\n`,
+    telegram: (c) => `Bonjour ${c.nom.split(' ')[0]} 👋\n\n\n\n_L'équipe Expedîle_`,
     email: (c) => `Objet : \n\nBonjour ${c.nom},\n\n\n\nCordialement,\nL'équipe Expedîle`,
   },
 
