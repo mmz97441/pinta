@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Edit3, Check, X } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { BRAND } from '../../constants';
-import { eur, hasTrack, trackStr, trackCount, waLink } from '../../utils';
+import { eur, hasTrack, trackStr, trackCount, tgLink } from '../../utils';
 
 export default function ColisInfo() {
   const { sel, selClient: cl, selDest, isStaff, upd, flash, logCarton } = useApp();
@@ -30,8 +30,8 @@ export default function ColisInfo() {
             )}
             {isStaff && cl.tel && (
               <div className="mt-1 flex items-center justify-end gap-1.5">
-                <a href={waLink(cl.tel, '')} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-bold hover:bg-green-200">
-                  WhatsApp
+                <a href={tgLink()} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-bold hover:bg-blue-200">
+                  Telegram
                 </a>
                 <a href={`tel:${cl.tel}`} className="text-xs text-gray-400 hover:text-gray-600">Appeler</a>
               </div>

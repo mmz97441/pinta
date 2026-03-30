@@ -50,7 +50,7 @@ export default function FacturesPanel() {
   if (!sel || sel.factures.length === 0) return null;
 
   const cl = getClient(sel.clientId);
-  const canal = cl?.canal || 'whatsapp';
+  const canal = cl?.canal || 'telegram';
 
   // ── Validate ───────────────────────────────────────────────────────────
   const validateFacture = (factureId) => {
@@ -81,7 +81,7 @@ export default function FacturesPanel() {
     const dest = getDestByCP(cl?.cp);
     const nom = cl?.nom?.split(' ')[0] || '';
 
-    const msg = canal === 'whatsapp'
+    const msg = canal === 'telegram'
       ? `Bonjour ${nom} 👋\n\n⚠️ La facture *${facture.vendeur}* (${eur(facture.montant)}) pour votre colis *${sel.ref}* n'a pas pu être validée.\n\n📄 *Motif : ${motifLabel}*\n\n👉 Merci de nous renvoyer une facture conforme dès que possible (photo ou PDF lisible).\n\nSans facture validée, nous ne pouvons pas avancer sur la préparation de votre colis.\n\n_Expedîle${dest ? ` — Paris → ${dest.nom}` : ''}_`
       : `Objet : Facture rejetée — ${sel.ref}\n\nBonjour ${cl?.nom || ''},\n\nLa facture ${facture.vendeur} (${eur(facture.montant)}) pour votre colis ${sel.ref} n'a pas pu être validée.\nMotif : ${motifLabel}.\n\nMerci de nous renvoyer une facture conforme (photo ou PDF lisible).\n\nCordialement,\nL'équipe Expedîle`;
 
@@ -324,7 +324,7 @@ export default function FacturesPanel() {
             {rejectingId === f.id && !f.valide && (
               <div className="px-3 pb-3 space-y-2.5 border-t border-red-100 pt-3 anim-slide-down">
                 <p className="text-[11px] font-bold text-red-700">
-                  Motif du refus <span className="font-normal text-red-400">(le client sera notifié par {canal === 'whatsapp' ? 'WhatsApp' : 'email'})</span>
+                  Motif du refus <span className="font-normal text-red-400">(le client sera notifié par {canal === 'telegram' ? 'Telegram' : 'email'})</span>
                 </p>
 
                 <div className="flex flex-wrap gap-1.5">

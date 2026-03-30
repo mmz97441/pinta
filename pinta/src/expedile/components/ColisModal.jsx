@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { X, FileText, Search, Package, ChevronRight, UserPlus, Link2, Plus, Ruler } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { BRAND, getDestByCP } from '../constants';
-import { uid, searchClients, waLink, trackStr } from '../utils';
+import { uid, searchClients, tgLink, trackStr } from '../utils';
 import { Badge } from './ui';
 
 const EMPTY_FORM = {
@@ -32,7 +32,7 @@ const EMPTY_NEW_CLIENT = {
   cp: '',
   tel: '',
   email: '',
-  canal: 'whatsapp',
+  canal: 'telegram',
   type: 'particulier',
 };
 
@@ -180,7 +180,7 @@ export default function ColisModal({ open, onClose }) {
           ? `🔍 Tracking : ${annonce.trackings.filter((t) => t).join(', ')}\n`
           : '') +
         `\nVotre pré-annonce a bien été rattachée. Nous allons le mesurer et peser. On revient vers vous rapidement !\n\n_Expedîle_`;
-      window.open(waLink(cl.tel, msg), '_blank');
+      window.open(tgLink(), '_blank');
     }
 
     flash(`${annonce.ref} rattaché et réceptionné — casier ${nf.casier.trim()}`);
@@ -225,11 +225,11 @@ export default function ColisModal({ open, onClose }) {
           ? `🔍 Tracking : ${newColis.trackings.filter((t) => t).join(', ')}\n`
           : '') +
         `\nNous allons le mesurer et peser. On revient vers vous rapidement pour la suite.\n\n_Expedîle_`;
-      window.open(waLink(cl.tel, msg), '_blank');
+      window.open(tgLink(), '_blank');
     }
 
     const hasDims = nf.dimL && nf.dimW && nf.dimH && nf.poids;
-    const label = sendWA ? 'réceptionné + WhatsApp envoyé' : 'réceptionné';
+    const label = sendWA ? 'réceptionné + Telegram envoyé' : 'réceptionné';
     flash(`Colis ${newColis.ref} ${label}${hasDims ? ' + mesuré' : ''} — casier ${nf.casier.trim()}`);
     resetAndClose();
   };
@@ -564,7 +564,7 @@ export default function ColisModal({ open, onClose }) {
                 </div>
               </div>
               <div>
-                <label className={labelCls}>Téléphone <span className="normal-case text-gray-400 font-normal">(pour WhatsApp)</span></label>
+                <label className={labelCls}>Téléphone <span className="normal-case text-gray-400 font-normal">(pour Telegram)</span></label>
                 <input
                   type="tel"
                   placeholder="+262 692 12 34 56"
@@ -1044,7 +1044,7 @@ export default function ColisModal({ open, onClose }) {
                   onClick={() => handleMatchReception(true)}
                   className="flex-1 py-2.5 rounded-xl font-bold text-sm text-white bg-green-600 hover:bg-green-700 active:scale-95 transition-all"
                 >
-                  + WhatsApp
+                  + Telegram
                 </button>
               </div>
             ) : (
@@ -1069,7 +1069,7 @@ export default function ColisModal({ open, onClose }) {
                   onClick={() => handleReceptionner(true)}
                   className="flex-1 py-2.5 rounded-xl font-bold text-sm text-white bg-green-600 hover:bg-green-700 active:scale-95 transition-all"
                 >
-                  + WhatsApp
+                  + Telegram
                 </button>
               </div>
             )

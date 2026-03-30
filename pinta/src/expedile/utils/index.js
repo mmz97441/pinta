@@ -85,8 +85,8 @@ export function searchGlobal(clients, data, q) {
 }
 
 // ══════════ LIENS ══════════
-export function waLink(tel, msg) {
-  return `https://wa.me/${tel.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(msg)}`;
+export function tgLink(username, msg) {
+  return `https://t.me/${username || 'expedile_bot'}`;
 }
 
 export function mailtoLink(email, msg) {

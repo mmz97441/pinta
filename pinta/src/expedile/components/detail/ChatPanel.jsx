@@ -3,7 +3,7 @@ import { Send, MessageCircle, ChevronDown, Check, CheckCheck, Clock, AlertCircle
 import { useApp } from '../../context/AppContext';
 import { BRAND } from '../../constants';
 
-// ── Status indicator (WhatsApp-style) ────────────────────────────────────────
+// ── Status indicator (Telegram-style) ────────────────────────────────────────
 function MsgStatut({ statut }) {
   if (!statut) return null;
   switch (statut) {
@@ -88,7 +88,7 @@ export default function ChatPanel() {
             value={msgTxt}
             onChange={(e) => setMsgTxt(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') handleSend(); }}
-            placeholder={selClient?.tel ? 'Écrire au client via WhatsApp…' : 'Note interne…'}
+            placeholder={selClient?.tel ? 'Écrire au client via Telegram…' : 'Note interne…'}
             className="flex-1 px-3 py-2 rounded-xl border text-sm"
           />
           <button
@@ -102,7 +102,7 @@ export default function ChatPanel() {
         </div>
         {selClient?.tel && (
           <p className="text-[10px] text-gray-400 mt-1.5 text-right">
-            Envoi WhatsApp → {selClient.tel}
+            Envoi Telegram → {selClient.tel}
           </p>
         )}
       </div>
