@@ -79,18 +79,18 @@ export default function FacturesPanel() {
   };
 
   // ── Request facture from client ────────────────────────────────────
-  const handleDemanderFacture = () => {
+  const handleDemanderFacture = (sendCanal) => {
     const dest = getDestByCP(cl?.cp);
     const prenom = cl?.nom?.split(' ')[0] || 'Client';
     const trackingsStr = sel.trackings?.filter((t) => t).join(', ') || '';
     const fournisseurs = (sel.trackingsDetail || []).map((td) => td.fournisseur).filter(Boolean).join(', ');
 
-    const msg = canal === 'telegram'
+    const msg = sendCanal === 'telegram'
       ? `Bonjour ${prenom} 👋\n\nPour avancer sur votre expédition *${sel.ref}*, nous avons besoin de la *facture d'achat* :\n\n📦 *Contenu :* ${sel.desc || fournisseurs || '—'}\n${trackingsStr ? `🔍 *Tracking :* ${trackingsStr}\n` : ''}${fournisseurs ? `🏪 *Fournisseur(s) :* ${fournisseurs}\n` : ''}\n📄 *Pourquoi ?*\n• Calcul des taxes douanières (OM/OMR)\n• Déclaration en douane\n• Établir votre devis final\n\n👉 Envoyez-nous simplement une *photo* ou un *PDF* de la facture en réponse à ce message.\n\n⏱️ Sans cette facture, nous ne pouvons pas finaliser le traitement.\n\n_L'équipe Expedîle${dest ? ` — Paris → ${dest.nom}` : ''}_`
       : `Objet : 📄 Facture requise pour ${sel.ref}\n\nBonjour ${cl?.nom || ''},\n\nPour traiter votre expédition ${sel.ref} :\n- Contenu : ${sel.desc || fournisseurs || '—'}\n${trackingsStr ? `- Tracking : ${trackingsStr}\n` : ''}${fournisseurs ? `- Fournisseur(s) : ${fournisseurs}\n` : ''}\nNous avons besoin de la facture d'achat (photo ou PDF).\n\nSans cette facture, le calcul des taxes et le devis ne peuvent pas être finalisés.\n\nCordialement,\nL'équipe Expedîle`;
 
-    sendMsg(sel.id, sel.clientId, canal, null, msg);
-    flash(`Demande de facture envoyée par ${canal === 'telegram' ? 'Telegram' : 'email'}`);
+    sendMsg(sel.id, sel.clientId, sendCanal, null, msg);
+    flash(`Demande de facture envoyée par ${sendCanal === 'telegram' ? 'Telegram' : 'email'}`);
   };
 
   // ── Validate ───────────────────────────────────────────────────────────
@@ -236,12 +236,20 @@ export default function FacturesPanel() {
         </p>
         <div className="flex gap-1.5">
           <button
-            onClick={handleDemanderFacture}
+            onClick={() => handleDemanderFacture('telegram')}
             className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold transition-all active:scale-95"
             style={{ background: '#0088cc15', color: '#0088cc' }}
           >
             <Send size={10} />
-            Demander au client
+            Telegram
+          </button>
+          <button
+            onClick={() => handleDemanderFacture('email')}
+            className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold transition-all active:scale-95"
+            style={{ background: `${BRAND.navy}08`, color: BRAND.navy }}
+          >
+            <Send size={10} />
+            Email
           </button>
           <button
             onClick={() => setShowAddForm(!showAddForm)}
