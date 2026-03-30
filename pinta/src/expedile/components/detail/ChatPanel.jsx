@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Send, MessageCircle, ChevronDown, Check, CheckCheck, Clock, AlertCircle } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { BRAND } from '../../constants';
+import * as sb from '../../lib/supabaseData';
 
 // ── Status indicator (Telegram-style) ────────────────────────────────────────
 function MsgStatut({ statut }) {
@@ -25,7 +26,7 @@ function MsgStatut({ statut }) {
 }
 
 export default function ChatPanel() {
-  const { sel, selClient, isStaff, auth, envMsg } = useApp();
+  const { sel, selClient, isStaff, auth, envMsg, setData } = useApp();
   const [msgTxt, setMsgTxt] = useState('');
   const hasMsg = sel?.messages?.length > 0;
   const [expanded, setExpanded] = useState(false);
@@ -35,6 +36,19 @@ export default function ChatPanel() {
   useEffect(() => {
     setExpanded(hasMsg);
   }, [hasMsg]);
+
+  useEffect(() => {
+    if (expanded && sel?.messages?.some((m) => m.type === 'client' && !m.lu)) {
+      setData((prev) => prev.map((c) => {
+        if (c.id !== sel.id) return c;
+        return {
+          ...c,
+          messages: c.messages.map((m) => m.type === 'client' && !m.lu ? { ...m, lu: true } : m),
+        };
+      }));
+      sb.markAllMessagesLu(sel.id).catch(console.error);
+    }
+  }, [expanded, sel?.id]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -57,7 +71,10 @@ export default function ChatPanel() {
   const renderMessage = (m) => {
     const isS = m.type === 'staff';
     return (
-      <div key={m.id} className={`flex ${isS ? 'justify-end' : 'justify-start'}`}>
+      <div key={m.id} className={`flex ${isS ? 'justify-end' : 'justify-start'} items-center gap-1`}>
+        {!isS && m.type === 'client' && !m.lu && (
+          <span className="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0" />
+        )}
         <div
           className={`max-w-[75%] px-3 py-2 rounded-2xl text-xs ${isS ? 'text-white' : 'bg-gray-100'}`}
           style={isS ? { backgroundColor: BRAND.navy } : {}}
@@ -71,6 +88,23 @@ export default function ChatPanel() {
             </div>
           )}
         </div>
+        {isStaff && m.type === 'client' && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              const newLu = !m.lu;
+              setData((prev) => prev.map((c) => {
+                if (c.id !== sel.id) return c;
+                return { ...c, messages: c.messages.map((msg) => msg.id === m.id ? { ...msg, lu: newLu } : msg) };
+              }));
+              sb.updateMessageLu(m.id, newLu).catch(console.error);
+            }}
+            className="text-[9px] text-gray-400 hover:text-blue-500"
+            title={m.lu ? 'Marquer comme non lu' : 'Marquer comme lu'}
+          >
+            {m.lu ? '○' : '●'}
+          </button>
+        )}
       </div>
     );
   };
@@ -79,7 +113,11 @@ export default function ChatPanel() {
   if (isStaff) {
     return (
       <div className="card p-4 anim-fade">
-        <p className="font-bold mb-2 text-sm">Chat avec le client</p>
+        <p className="font-bold mb-2 text-sm">Chat avec le client{(() => {
+          const unread = (sel?.messages || []).filter((m) => m.type === 'client' && !m.lu).length;
+          if (unread === 0) return null;
+          return <span className="ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-red-500 text-white">{unread}</span>;
+        })()}</p>
         <div ref={scrollRef} className="space-y-1.5 mb-3 max-h-64 overflow-y-auto">
           {!hasMessages && (
             <p className="text-xs text-gray-400 italic text-center py-3">Aucun message</p>

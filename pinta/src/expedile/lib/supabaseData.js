@@ -163,6 +163,7 @@ function mapMessage(row) {
     createdAt: row.created_at,
     statut: row.statut,
     msgId: row.msg_id || row.wa_id,
+    lu: row.lu || false,
   };
 }
 
@@ -446,6 +447,16 @@ export async function updateLigne(ligneId, changes) {
 
 export async function deleteLigne(ligneId) {
   const { error } = await supabase.from('lignes').delete().eq('id', ligneId);
+  if (error) throw error;
+}
+
+export async function updateMessageLu(messageId, lu) {
+  const { error } = await supabase.from('messages').update({ lu }).eq('id', messageId);
+  if (error) throw error;
+}
+
+export async function markAllMessagesLu(colisId) {
+  const { error } = await supabase.from('messages').update({ lu: true }).eq('colis_id', colisId).eq('lu', false);
   if (error) throw error;
 }
 

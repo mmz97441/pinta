@@ -310,6 +310,15 @@ function ColisTableRow({ c, client, envois, onClick, stagger }) {
               {nbCartons} cartons
             </span>
           )}
+          {(() => {
+            const unread = (c.messages || []).filter((m) => m.type === 'client' && !m.lu).length;
+            if (unread === 0) return null;
+            return (
+              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-red-500 text-white animate-pulse">
+                {unread} msg
+              </span>
+            );
+          })()}
         </div>
         {c.desc && <span className="text-[11px] text-gray-500 truncate block max-w-[130px]">{c.desc}</span>}
       </td>
