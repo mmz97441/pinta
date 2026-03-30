@@ -531,7 +531,26 @@ export default function FacturesPanel() {
                   <RotateCcw size={12} />
                   Annuler la validation
                 </button>
+              ) : f.rejetMotif ? (
+                /* Facture refusée — proposer de re-valider ou demander une nouvelle */
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => validateFacture(f.id)}
+                    className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-bold border-2 border-green-200 text-green-700 bg-green-50 hover:bg-green-100 transition-all active:scale-[0.98]"
+                  >
+                    <Check size={12} />
+                    Re-valider
+                  </button>
+                  <button
+                    onClick={() => handleFileUpload(f.id)}
+                    className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-bold border-2 border-gray-200 text-gray-600 bg-gray-50 hover:bg-gray-100 transition-all active:scale-[0.98]"
+                  >
+                    <Upload size={12} />
+                    Remplacer le fichier
+                  </button>
+                </div>
               ) : (
+                /* Facture en attente — valider ou refuser */
                 <div className="flex gap-2">
                   <button
                     onClick={() => validateFacture(f.id)}
