@@ -13,6 +13,15 @@ export default function StaffSettings() {
   const [jourEnvoi, setJourEnvoi] = useState(5); // 0=Dim, 1=Lun, ... 5=Ven, 6=Sam
   const [nbSemaines, setNbSemaines] = useState(8);
   const [expandedEnvoi, setExpandedEnvoi] = useState(null);
+  const [businessParams, setBusinessParams] = useState({
+    fraisStockage: '1.50',
+    stockageGratuit: '14',
+    relancesFeuVert: 'J+2, J+5, J+7',
+    relancesPaiement: 'J+3, J+7, J+14',
+    diviseurVolumetrique: '5000',
+  });
+  const [editingParam, setEditingParam] = useState(null);
+  const [paramTmp, setParamTmp] = useState('');
   const [catEditId, setCatEditId] = useState(null);
   const [newCat, setNewCat] = useState({ label: '', taux: {} });
 
@@ -662,18 +671,64 @@ export default function StaffSettings() {
         )}
       </div>
 
-      {/* ── Infos système ── */}
+      {/* ── Paramètres métier (direction only) ── */}
+      {['directeur', 'vice_directeur'].includes(authRole) && (
       <div className="card p-5 anim-fade">
-        <p className="font-bold text-lg mb-3">Informations</p>
-        <div className="space-y-1 text-sm">
-          <Ligne label="Formule transport" value="Forfait + Poids facturable × Prix/kg" />
-          <Ligne label="Poids volumétrique" value="L × l × H ÷ 5000" />
-          <Ligne label="Poids facturable" value="Max(réel, volumétrique)" />
-          <Ligne label="Frais de stockage" value="1,50 € / jour après J+14" />
-          <Ligne label="Relances feu vert" value="J+2, J+5, J+7" />
-          <Ligne label="Relances paiement" value="J+3, J+7, J+14" />
+        <div className="flex items-center gap-2 mb-1">
+          <FileText size={18} style={{ color: BRAND.navy }} />
+          <p className="font-bold text-lg">Paramètres métier</p>
+        </div>
+        <p className="text-sm text-gray-500 mb-4">Règles de calcul, frais et relances — modifiables par la direction.</p>
+
+        <div className="space-y-3">
+          {[
+            { key: 'fraisStockage', label: 'Frais de stockage (€/jour)', defaultVal: '1.50', suffix: '€ / jour' },
+            { key: 'stockageGratuit', label: 'Jours de stockage gratuit', defaultVal: '14', suffix: 'jours' },
+            { key: 'relancesFeuVert', label: 'Relances feu vert (jours)', defaultVal: 'J+2, J+5, J+7', suffix: '' },
+            { key: 'relancesPaiement', label: 'Relances paiement (jours)', defaultVal: 'J+3, J+7, J+14', suffix: '' },
+            { key: 'diviseurVolumetrique', label: 'Diviseur volumétrique', defaultVal: '5000', suffix: '(L×l×H ÷ X)' },
+          ].map(({ key, label, defaultVal, suffix }) => {
+            const currentVal = businessParams[key] ?? defaultVal;
+            const isEditing = editingParam === key;
+            return (
+              <div key={key} className="flex items-center justify-between p-3 rounded-xl bg-gray-50 border border-gray-100">
+                <span className="text-xs font-semibold text-gray-600">{label}</span>
+                {isEditing ? (
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      autoFocus
+                      value={paramTmp}
+                      onChange={(e) => setParamTmp(e.target.value)}
+                      className="px-2 py-1 rounded-lg border-2 border-blue-400 text-sm font-mono w-32 text-right outline-none"
+                    />
+                    {suffix && <span className="text-[10px] text-gray-400">{suffix}</span>}
+                    <button onClick={() => {
+                      setBusinessParams((p) => ({ ...p, [key]: paramTmp }));
+                      setEditingParam(null);
+                      flash('Paramètre mis à jour');
+                    }} className="p-1 text-green-600 hover:bg-green-50 rounded"><CheckCircle size={14} /></button>
+                    <button onClick={() => setEditingParam(null)} className="p-1 text-gray-400 hover:bg-gray-100 rounded"><X size={14} /></button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => { setEditingParam(key); setParamTmp(currentVal); }}
+                    className="text-sm font-mono font-bold text-right hover:text-blue-600 transition-colors"
+                    style={{ color: BRAND.navy }}
+                  >
+                    {currentVal} {suffix && <span className="text-[10px] text-gray-400 font-sans">{suffix}</span>}
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="mt-4 pt-3 border-t border-gray-100 space-y-1 text-xs text-gray-400">
+          <p><span className="font-semibold">Formule transport :</span> Forfait + Poids facturable × Prix/kg</p>
+          <p><span className="font-semibold">Poids facturable :</span> Max(poids réel, poids volumétrique)</p>
         </div>
       </div>
+      )}
 
       {/* ── Templates de messages ── */}
       {['directeur', 'vice_directeur'].includes(authRole) && (
