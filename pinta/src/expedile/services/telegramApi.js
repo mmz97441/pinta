@@ -76,6 +76,34 @@ export async function sendTelegram(chatId, text) {
 }
 
 /**
+ * Envoie un message Telegram avec des boutons inline (cliquables).
+ */
+export async function sendTelegramWithButtons(chatId, text, buttons) {
+  if (!BOT_TOKEN || !chatId) return { ok: false, error: 'Bot non configuré' };
+
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text,
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: buttons,
+        },
+      }),
+    });
+    const data = await res.json();
+    if (data.ok) return { ok: true, messageId: data.result?.message_id };
+    console.error('[Telegram API] Erreur:', data);
+    return { ok: false, error: data.description || 'Erreur Telegram' };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+}
+
+/**
  * Envoie une notification Telegram.
  * Telegram n'a pas de templates comme WhatsApp — on envoie le texte directement.
  *

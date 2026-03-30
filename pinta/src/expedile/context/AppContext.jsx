@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useCallback, useMemo, useEf
 import { STATUTS, PREV_STATUT, CATEGORIES_INIT, CLIENTS_INIT, TARIFS_DEFAUT, initEnvois, getDestByCP, PRODUITS_INTERDITS } from '../constants';
 import { MSG_TEMPLATES } from '../constants/templates';
 import { uid, makeData, calcTransport, getCatTaux, eur, mailtoLink, getClientDest } from '../utils';
-import { isTelegramConfigured, sendTelegram, sendNotification, telegramMeLink, normalizeTel } from '../services/telegramApi';
+import { isTelegramConfigured, sendTelegram, sendNotification, sendTelegramWithButtons, telegramMeLink, normalizeTel } from '../services/telegramApi';
 import { connectWebhook } from '../services/webhookListener';
 import * as sb from '../lib/supabaseData';
 import { supabase } from '../lib/supabase';
@@ -295,7 +295,20 @@ export function AppProvider({ children }) {
       if (isTelegramConfigured() && chatId) {
         const prenom = c.nom.split(' ')[0];
         flash({ msg: `Envoi Telegram → ${prenom}…`, type: 'info' });
-        const res = await sendNotification(chatId, fullMsg);
+
+        // Si c'est un feu vert, envoyer avec boutons OUI/NON
+        const isFeuVert = templateKey === 'demande_feu_vert' || templateKey === 'relance_feu_vert';
+        let res;
+        if (isFeuVert && colisId) {
+          res = await sendTelegramWithButtons(chatId, fullMsg, [
+            [
+              { text: '✅ OUI — Autoriser', callback_data: `fv_oui_${colisId}` },
+              { text: '❌ NON — Refuser', callback_data: `fv_non_${colisId}` },
+            ],
+          ]);
+        } else {
+          res = await sendNotification(chatId, fullMsg);
+        }
         if (res.ok) {
           await persistMessage('envoye');
           flash({ msg: `Telegram envoyé → ${prenom}`, type: 'success' });
