@@ -73,7 +73,7 @@ export default function ColisInfo() {
             {cl && !cl.telegramChatId && (
               <button
                 onClick={() => {
-                  navigator.clipboard.writeText(`https://t.me/expedile_bot?start=${cl.id}`);
+                  navigator.clipboard.writeText(`https://t.me/Expedilebot?start=${cl.id}`);
                   flash('Lien d\'invitation Telegram copie !');
                 }}
                 className="text-[10px] font-semibold px-2 py-0.5 rounded bg-orange-100 text-orange-700 hover:bg-orange-200 transition-colors"

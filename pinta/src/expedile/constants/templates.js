@@ -674,7 +674,7 @@ L'équipe Expedîle`,
     telegram: (c) => '',
     email: (c) => {
       const prenom = c.nom?.split(' ')[0] || 'Client';
-      const inviteLink = `https://t.me/expedile_bot?start=${c.id || ''}`;
+      const inviteLink = `https://t.me/Expedilebot?start=${c.id || ''}`;
       return `Objet : 📲 Activez vos notifications Expedile sur Telegram
 
 Bonjour ${prenom},
@@ -685,7 +685,7 @@ ${inviteLink}
 
 C'est simple :
 1. Cliquez sur le lien ci-dessus
-2. Telegram s'ouvre avec notre bot @expedile_bot
+2. Telegram s'ouvre avec notre bot @Expedilebot
 3. Appuyez sur "Demarrer"
 4. C'est fait ! Vous recevrez toutes vos notifications ici.
 

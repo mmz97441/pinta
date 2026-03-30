@@ -106,7 +106,7 @@ export default function ChatPanel() {
         <p className="text-[10px] mt-1.5 text-right" style={{ color: selClient?.telegramChatId ? '#0088cc' : '#9CA3AF' }}>
           {selClient?.telegramChatId
             ? `Telegram connecté (ID: ${selClient.telegramChatId})`
-            : 'Telegram non lié — le client doit envoyer /start à @expedile_bot'}
+            : 'Telegram non lié — le client doit envoyer /start à @Expedilebot'}
         </p>
       </div>
     );

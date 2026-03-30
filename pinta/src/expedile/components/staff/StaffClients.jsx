@@ -644,13 +644,13 @@ export default function StaffClients() {
                       <div className="flex gap-2">
                         <input
                           readOnly
-                          value={`https://t.me/expedile_bot?start=${cl.id}`}
+                          value={`https://t.me/Expedilebot?start=${cl.id}`}
                           className="flex-1 px-2 py-1.5 rounded-lg border border-blue-200 bg-white text-xs font-mono text-blue-700"
                           onClick={(e) => e.target.select()}
                         />
                         <button
                           onClick={() => {
-                            navigator.clipboard.writeText(`https://t.me/expedile_bot?start=${cl.id}`);
+                            navigator.clipboard.writeText(`https://t.me/Expedilebot?start=${cl.id}`);
                             flash('Lien copie !');
                           }}
                           className="px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-600 text-white active:scale-95 transition-all"

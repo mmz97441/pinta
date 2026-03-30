@@ -86,7 +86,7 @@ export function searchGlobal(clients, data, q) {
 
 // ══════════ LIENS ══════════
 export function telegramLink(startParam) {
-  return `https://t.me/expedile_bot${startParam ? '?start=' + encodeURIComponent(startParam) : ''}`;
+  return `https://t.me/Expedilebot${startParam ? '?start=' + encodeURIComponent(startParam) : ''}`;
 }
 
 export function mailtoLink(email, msg) {

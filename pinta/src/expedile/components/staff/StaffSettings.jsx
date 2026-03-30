@@ -534,7 +534,7 @@ export default function StaffSettings() {
               <div>
                 <p className="text-sm font-bold text-green-800">Bot configuré</p>
                 <p className="text-xs text-green-600">
-                  Bot : @expedile_bot
+                  Bot : @Expedilebot
                 </p>
               </div>
             </>
