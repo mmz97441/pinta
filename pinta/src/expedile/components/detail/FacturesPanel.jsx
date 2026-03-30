@@ -1,8 +1,8 @@
 import React, { useState, useRef } from 'react';
-import { Check, X, RotateCcw, Eye, Upload, FileText, Image as ImageIcon, ZoomIn } from 'lucide-react';
+import { Check, X, RotateCcw, Eye, Upload, FileText, Image as ImageIcon, ZoomIn, Plus, Send } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { BRAND, getDestByCP } from '../../constants';
-import { eur } from '../../utils';
+import { eur, uid } from '../../utils';
 
 const MOTIFS_REJET = [
   { key: 'non_conforme', label: 'Non conforme' },
@@ -47,10 +47,51 @@ export default function FacturesPanel() {
   const fileInputRef = useRef(null);
   const [uploadTargetId, setUploadTargetId] = useState(null);
 
-  if (!sel || sel.factures.length === 0) return null;
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [newVendeur, setNewVendeur] = useState('');
+  const [newMontant, setNewMontant] = useState('');
+
+  if (!sel) return null;
 
   const cl = getClient(sel.clientId);
   const canal = cl?.canal || 'telegram';
+  const hasFactures = sel.factures && sel.factures.length > 0;
+
+  // ── Add new facture ─────────────────────────────────────────────────
+  const handleAddFacture = () => {
+    if (!newVendeur.trim()) return;
+    const newFacture = {
+      id: 'f_' + uid(),
+      vendeur: newVendeur.trim(),
+      montant: parseFloat(newMontant) || 0,
+      valide: false,
+      fichier: null,
+      fichierNom: null,
+    };
+    setData((prev) => prev.map((c) => {
+      if (c.id !== sel.id) return c;
+      return { ...c, factures: [...(c.factures || []), newFacture] };
+    }));
+    setNewVendeur('');
+    setNewMontant('');
+    setShowAddForm(false);
+    flash('Facture ajoutée');
+  };
+
+  // ── Request facture from client ────────────────────────────────────
+  const handleDemanderFacture = () => {
+    const dest = getDestByCP(cl?.cp);
+    const prenom = cl?.nom?.split(' ')[0] || 'Client';
+    const trackingsStr = sel.trackings?.filter((t) => t).join(', ') || '';
+    const fournisseurs = (sel.trackingsDetail || []).map((td) => td.fournisseur).filter(Boolean).join(', ');
+
+    const msg = canal === 'telegram'
+      ? `Bonjour ${prenom} 👋\n\nPour avancer sur votre expédition *${sel.ref}*, nous avons besoin de la *facture d'achat* :\n\n📦 *Contenu :* ${sel.desc || fournisseurs || '—'}\n${trackingsStr ? `🔍 *Tracking :* ${trackingsStr}\n` : ''}${fournisseurs ? `🏪 *Fournisseur(s) :* ${fournisseurs}\n` : ''}\n📄 *Pourquoi ?*\n• Calcul des taxes douanières (OM/OMR)\n• Déclaration en douane\n• Établir votre devis final\n\n👉 Envoyez-nous simplement une *photo* ou un *PDF* de la facture en réponse à ce message.\n\n⏱️ Sans cette facture, nous ne pouvons pas finaliser le traitement.\n\n_L'équipe Expedîle${dest ? ` — Paris → ${dest.nom}` : ''}_`
+      : `Objet : 📄 Facture requise pour ${sel.ref}\n\nBonjour ${cl?.nom || ''},\n\nPour traiter votre expédition ${sel.ref} :\n- Contenu : ${sel.desc || fournisseurs || '—'}\n${trackingsStr ? `- Tracking : ${trackingsStr}\n` : ''}${fournisseurs ? `- Fournisseur(s) : ${fournisseurs}\n` : ''}\nNous avons besoin de la facture d'achat (photo ou PDF).\n\nSans cette facture, le calcul des taxes et le devis ne peuvent pas être finalisés.\n\nCordialement,\nL'équipe Expedîle`;
+
+    sendMsg(sel.id, sel.clientId, canal, null, msg);
+    flash(`Demande de facture envoyée par ${canal === 'telegram' ? 'Telegram' : 'email'}`);
+  };
 
   // ── Validate ───────────────────────────────────────────────────────────
   const validateFacture = (factureId) => {
@@ -142,6 +183,7 @@ export default function FacturesPanel() {
   // Client: compact inline view
   // ══════════════════════════════════════════════════════════════════════
   if (!isStaff) {
+    if (!hasFactures) return null;
     return (
       <div className="card px-4 py-3 anim-fade">
         {hiddenInput}
@@ -188,10 +230,81 @@ export default function FacturesPanel() {
       {hiddenInput}
       {previewSrc && <Lightbox src={previewSrc} title={previewTitle} onClose={() => setPreviewSrc(null)} />}
 
-      <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-3">Factures d'origine</p>
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">
+          Factures d'origine {hasFactures ? `(${sel.factures.length})` : ''}
+        </p>
+        <div className="flex gap-1.5">
+          <button
+            onClick={handleDemanderFacture}
+            className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold transition-all active:scale-95"
+            style={{ background: '#0088cc15', color: '#0088cc' }}
+          >
+            <Send size={10} />
+            Demander au client
+          </button>
+          <button
+            onClick={() => setShowAddForm(!showAddForm)}
+            className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold transition-all active:scale-95"
+            style={{ background: `${BRAND.navy}10`, color: BRAND.navy }}
+          >
+            <Plus size={10} />
+            Ajouter
+          </button>
+        </div>
+      </div>
 
+      {/* Add facture form */}
+      {showAddForm && (
+        <div className="mb-3 p-3 rounded-xl border-2 border-dashed border-gray-200 bg-gray-50 space-y-2">
+          <div className="flex gap-2">
+            <input
+              autoFocus
+              type="text"
+              value={newVendeur}
+              onChange={(e) => setNewVendeur(e.target.value)}
+              placeholder="Vendeur (Amazon, Zara...)"
+              className="flex-1 px-3 py-2 rounded-lg border border-gray-200 bg-white text-xs outline-none focus:border-blue-400"
+            />
+            <input
+              type="number"
+              value={newMontant}
+              onChange={(e) => setNewMontant(e.target.value)}
+              placeholder="Montant €"
+              className="w-24 px-3 py-2 rounded-lg border border-gray-200 bg-white text-xs outline-none focus:border-blue-400 text-right"
+            />
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={handleAddFacture}
+              disabled={!newVendeur.trim()}
+              className="flex-1 py-2 rounded-lg text-xs font-bold text-white disabled:opacity-30 transition-all active:scale-95"
+              style={{ background: BRAND.navy }}
+            >
+              Ajouter la facture
+            </button>
+            <button
+              onClick={() => { setShowAddForm(false); setNewVendeur(''); setNewMontant(''); }}
+              className="px-3 py-2 rounded-lg text-xs font-semibold text-gray-500 bg-gray-100"
+            >
+              Annuler
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* No factures message */}
+      {!hasFactures && !showAddForm && (
+        <div className="py-6 text-center">
+          <FileText size={24} className="mx-auto text-gray-300 mb-2" />
+          <p className="text-xs text-gray-400 mb-1">Aucune facture rattachée</p>
+          <p className="text-[10px] text-gray-400">Ajoutez une facture ou demandez-la au client.</p>
+        </div>
+      )}
+
+      {/* Existing factures */}
       <div className="space-y-3">
-        {sel.factures.map((f) => (
+        {(sel.factures || []).map((f) => (
           <div
             key={f.id}
             className="rounded-xl border-2 overflow-hidden transition-all"
