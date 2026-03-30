@@ -496,7 +496,10 @@ export default function StaffDetailView() {
 
   function handleConfirmDevisEnvoye() {
     changerStatut(sel.id, 'devis_envoye');
-    sendMsg(sel.id, cl?.id, cl?.canal || 'telegram', 'devis_final', null);
+    // Wait for state to sync, then send with current sel values
+    setTimeout(() => {
+      sendMsg(sel.id, cl?.id, cl?.canal || 'telegram', 'devis_final', null);
+    }, 300);
     setDevisPrev(false);
   }
 

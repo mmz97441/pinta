@@ -173,6 +173,7 @@ export default function FacturesPanel() {
       .getPublicUrl(path);
 
     const publicUrl = urlData?.publicUrl || '';
+    console.log('[FacturesPanel] Upload complete, publicUrl:', publicUrl, 'for facture:', uploadTargetId);
 
     // Update local state + Supabase
     setData((prev) => prev.map((c) => {
