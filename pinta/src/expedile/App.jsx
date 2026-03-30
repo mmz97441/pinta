@@ -33,14 +33,21 @@ import { Etapes } from './components/ui';
 // ── Wrapper: Staff colis detail (reads :id from URL) ──
 function StaffColisDetail() {
   const { id } = useParams();
-  const { setSelId, sel } = useApp();
+  const { setSelId, sel, data } = useApp();
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (id) setSelId(id);
     return () => setSelId(null);
   }, [id, setSelId]);
 
-  if (!sel) return <Navigate to="/" replace />;
+  // Wait for sel to be set (async state update)
+  if (!sel) {
+    // Check if the colis exists in data
+    const exists = data.some((c) => c.id === id);
+    if (!exists && data.length > 0) return <Navigate to="/" replace />;
+    return <div className="flex items-center justify-center min-h-screen text-gray-400">Chargement...</div>;
+  }
 
   return (
     <>
@@ -68,14 +75,18 @@ function StaffColisDetail() {
 // ── Wrapper: Client colis detail (reads :id from URL) ──
 function ClientColisDetail() {
   const { id } = useParams();
-  const { setSelId, sel } = useApp();
+  const { setSelId, sel, data } = useApp();
 
   useEffect(() => {
     if (id) setSelId(id);
     return () => setSelId(null);
   }, [id, setSelId]);
 
-  if (!sel) return <Navigate to="/" replace />;
+  if (!sel) {
+    const exists = data.some((c) => c.id === id);
+    if (!exists && data.length > 0) return <Navigate to="/" replace />;
+    return <div className="flex items-center justify-center min-h-screen text-gray-400">Chargement...</div>;
+  }
 
   return (
     <div className="max-w-xl md:max-w-3xl lg:max-w-5xl xl:max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4 pb-24 space-y-4">
