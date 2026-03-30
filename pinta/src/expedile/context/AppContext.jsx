@@ -518,15 +518,29 @@ export function AppProvider({ children }) {
       };
     }));
 
-    // Send via Telegram if staff + phone available
-    if (isStaffSender && tel && isTelegramConfigured()) {
-      const res = await sendTelegram(tel, msgTxt.trim());
+    // Send via Telegram if staff + client has a Telegram Chat ID
+    const client = clientsRef.current?.find((x) => x.tel === tel);
+    const chatId = client?.telegramChatId;
+
+    if (isStaffSender && isTelegramConfigured() && chatId) {
+      const res = await sendTelegram(chatId, msgTxt.trim());
       setData((prev) => prev.map((c) => {
         if (c.id !== colisId) return c;
         return {
           ...c,
           messages: c.messages.map((m) =>
             m.id === msgId ? { ...m, statut: res.ok ? 'envoye' : 'echec', msgId: res.ok ? res.messageId : null } : m,
+          ),
+        };
+      }));
+    } else if (isStaffSender && isTelegramConfigured() && !chatId) {
+      // Client hasn't linked Telegram yet — mark as pending
+      setData((prev) => prev.map((c) => {
+        if (c.id !== colisId) return c;
+        return {
+          ...c,
+          messages: c.messages.map((m) =>
+            m.id === msgId ? { ...m, statut: 'en_attente' } : m,
           ),
         };
       }));

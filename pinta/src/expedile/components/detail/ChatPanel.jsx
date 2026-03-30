@@ -17,6 +17,8 @@ function MsgStatut({ statut }) {
       return <CheckCheck size={11} className="text-blue-400" />;
     case 'echec':
       return <AlertCircle size={11} className="text-red-400" />;
+    case 'en_attente':
+      return <Clock size={11} className="text-orange-400" title="Client n'a pas encore lié Telegram" />;
     default:
       return null;
   }
@@ -101,8 +103,10 @@ export default function ChatPanel() {
             <Send size={16} />
           </button>
         </div>
-        <p className="text-[10px] text-gray-400 mt-1.5 text-right">
-          Envoi via Telegram @expedile_bot
+        <p className="text-[10px] mt-1.5 text-right" style={{ color: selClient?.telegramChatId ? '#0088cc' : '#9CA3AF' }}>
+          {selClient?.telegramChatId
+            ? `Telegram connecté (ID: ${selClient.telegramChatId})`
+            : 'Telegram non lié — le client doit envoyer /start à @expedile_bot'}
         </p>
       </div>
     );

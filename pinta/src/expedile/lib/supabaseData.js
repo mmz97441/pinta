@@ -80,6 +80,7 @@ function mapClient(row) {
     abonnementDebut: row.abonnement_debut,
     abonnementFin: row.abonnement_fin,
     methode_paiement: row.methode_paiement,
+    telegramChatId: row.telegram_chat_id || null,
   };
 }
 
