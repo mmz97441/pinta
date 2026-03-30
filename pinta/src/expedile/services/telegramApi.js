@@ -7,7 +7,7 @@
 // ⚠️  En production, le token devra être sur un backend sécurisé (jamais côté client)
 // ──────────────────────────────────────────────────────────────────────────────
 
-const BOT_TOKEN = import.meta.env.VITE_TELEGRAM_BOT_TOKEN || '';
+const BOT_TOKEN = import.meta.env.VITE_TG_BOT_TOKEN || import.meta.env.VITE_TELEGRAM_BOT_TOKEN || '';
 const BOT_USERNAME = 'expedile_bot';
 
 /** Vérifie si l'API Telegram est configurée */

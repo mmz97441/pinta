@@ -101,11 +101,9 @@ export default function ChatPanel() {
             <Send size={16} />
           </button>
         </div>
-        {selClient?.tel && (
-          <p className="text-[10px] text-gray-400 mt-1.5 text-right">
-            Envoi Telegram → {selClient.tel}
-          </p>
-        )}
+        <p className="text-[10px] text-gray-400 mt-1.5 text-right">
+          Envoi via Telegram @expedile_bot
+        </p>
       </div>
     );
   }
