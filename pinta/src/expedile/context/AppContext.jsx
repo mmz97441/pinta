@@ -533,7 +533,8 @@ export function AppProvider({ children }) {
     }));
 
     // Send via Telegram if staff + client has a Telegram Chat ID
-    const client = clientsRef.current?.find((x) => x.tel === tel);
+    const colis = data.find((x) => x.id === colisId);
+    const client = colis ? clientsRef.current?.find((x) => x.id === colis.clientId) : null;
     const chatId = client?.telegramChatId;
 
     if (isStaffSender && isTelegramConfigured() && chatId) {
