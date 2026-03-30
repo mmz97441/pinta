@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { X, FileText, Search, UserPlus, Ruler, Package, MapPin, Camera } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { BRAND, STATUTS, getDestByCP, PRODUITS_INTERDITS } from '../constants';
 import { uid, searchClients, telegramLink } from '../utils';
@@ -52,6 +53,7 @@ function nextRef(data) {
 }
 
 export default function ColisModal({ open, onClose }) {
+  const navigate = useNavigate();
   const appCtx = useApp();
   const { isStaff, authCl, clients, data, setData, flash, addNewClient, receptionner, upd, log } = appCtx;
   const produitsInterdits = appCtx.produitsInterdits || PRODUITS_INTERDITS;
@@ -316,7 +318,12 @@ export default function ColisModal({ open, onClose }) {
     });
     const label = sendTG ? 'réceptionné + Telegram envoyé' : 'réceptionné';
     flash(`Colis ${newColis.ref} ${label}${hasDims ? ' + mesuré' : ''} — casier ${nf.casier.trim()}`);
+    const newId = newColis.id;
     resetAndClose();
+    // Navigate to the new colis detail
+    if (isStaff && newId) {
+      setTimeout(() => navigate(`/colis/${newId}`), 100);
+    }
   };
 
   // ── build colis object ────────────────────────────────────

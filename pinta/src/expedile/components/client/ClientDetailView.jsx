@@ -155,7 +155,7 @@ export default function ClientDetailView() {
         ask(
           'Autoriser la préparation',
           `Vous confirmez que le contenu de ${sel.ref} est conforme et autorisez Expedîle à le préparer pour l'expédition ?`,
-          () => feuVert(sel.id, true),
+          () => { feuVert(sel.id, true); navigate('/'); },
           { okLabel: 'Oui, j\'autorise' }
         );
       }
@@ -562,7 +562,7 @@ export default function ClientDetailView() {
       {/* ── Compact header with back ── */}
       <div className="flex items-center gap-3">
         <button
-          onClick={() => navigate(-1)}
+          onClick={() => navigate('/colis')}
           className="flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center transition-all active:scale-90 hover:bg-gray-100"
         >
           <ArrowLeft size={18} className="text-gray-600" />
