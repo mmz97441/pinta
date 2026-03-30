@@ -550,6 +550,53 @@ export async function deleteEnvoi(id) {
   if (error) throw error;
 }
 
+// ── Categories CRUD ────────────────────────────────────────────────
+
+export async function insertCategorie(label, custom = true) {
+  const { data, error } = await supabase.from('categories').insert({ label, custom, position: 99 }).select().single();
+  if (error) throw error;
+  return data;
+}
+
+export async function updateCategorie(id, changes) {
+  const { error } = await supabase.from('categories').update(changes).eq('id', id);
+  if (error) throw error;
+}
+
+export async function deleteCategorie(id) {
+  await supabase.from('taux_categories').delete().eq('categorie_id', id);
+  const { error } = await supabase.from('categories').delete().eq('id', id);
+  if (error) throw error;
+}
+
+export async function upsertTauxCategorie(categorieId, destinationCode, om, omr) {
+  const { error } = await supabase.from('taux_categories').upsert({
+    categorie_id: categorieId,
+    destination_code: destinationCode,
+    om, omr,
+  }, { onConflict: 'categorie_id,destination_code' });
+  if (error) throw error;
+}
+
+// ── Tarifs CRUD ────────────────────────────────────────────────────
+
+export async function updateTarif(destinationCode, base, parKg) {
+  const { error } = await supabase.from('tarifs').update({ base, par_kg: parKg }).eq('destination_code', destinationCode).eq('actif', true);
+  if (error) throw error;
+}
+
+// ── Audit logs ─────────────────────────────────────────────────────
+
+export async function insertLog(colisId, ancienStatut, nouveauStatut, userNom) {
+  const { error } = await supabase.from('logs_statut').insert({
+    colis_id: colisId,
+    ancien_statut: ancienStatut,
+    nouveau_statut: nouveauStatut,
+    user_nom: userNom,
+  });
+  if (error) console.error('[Supabase] insertLog error:', error.message);
+}
+
 // ── Realtime subscriptions ──────────────────────────────────────────
 
 export function subscribeColis(callback) {

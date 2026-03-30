@@ -7,10 +7,11 @@ import { eur, labelEnvoi, uid, getCatTaux } from '../../utils';
 import { Ligne } from '../ui';
 import TemplateEditor from './TemplateEditor';
 import { isTelegramConfigured, sendTelegram } from '../../services/telegramApi';
+import * as sb from '../../lib/supabaseData';
 
 export default function StaffSettings() {
   const navigate = useNavigate();
-  const { envois, setEnvois, data, tarifs, setTarifs, categories, addCategory, updateCatTaux, updateCatLabel, deleteCategory, flash, produitsInterdits, setProduitsInterdits, authRole } = useApp();
+  const { envois, setEnvois, data, tarifs, setTarifs, categories, addCategory, updateCatTaux, updateCatLabel, deleteCategory, flash, produitsInterdits, setProduitsInterdits, authRole, sbReady } = useApp();
   const [newEnvoiDate, setNewEnvoiDate] = useState('');
   const [jourEnvoi, setJourEnvoi] = useState(5); // 0=Dim, 1=Lun, ... 5=Ven, 6=Sam
   const [nbSemaines, setNbSemaines] = useState(8);
@@ -36,18 +37,30 @@ export default function StaffSettings() {
 
     let added = 0;
     const newEnvois = [...envois];
+    const toInsert = [];
     for (let w = 0; w < 8; w++) {
       const d = new Date(next);
       d.setDate(next.getDate() + w * 7);
       const dateStr = d.toISOString().slice(0, 10);
       if (!newEnvois.find((e) => e.date === dateStr)) {
-        newEnvois.push({ id: uid(), date: dateStr, statut: 'planifie', documents: [] });
+        const newEnvoi = { id: uid(), date: dateStr, statut: 'planifie', documents: [] };
+        newEnvois.push(newEnvoi);
+        toInsert.push(newEnvoi);
         added++;
       }
     }
     if (added > 0) {
       newEnvois.sort((a, b) => a.date.localeCompare(b.date));
       setEnvois(newEnvois);
+      // Persist new envois to Supabase
+      if (sbReady) {
+        toInsert.forEach((e) => {
+          sb.insertEnvoi({ date: e.date, statut: e.statut }).then((saved) => {
+            // Replace temp ID with real Supabase ID
+            setEnvois((prev) => prev.map((x) => x.id === e.id ? { ...x, id: saved.id } : x));
+          }).catch(console.error);
+        });
+      }
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -144,16 +157,30 @@ export default function StaffSettings() {
                 next.setDate(today.getDate() + (diff === 0 ? 7 : diff));
 
                 let added = 0;
+                const toInsert = [];
+                const newItems = [];
                 for (let w = 0; w < nbSemaines; w++) {
                   const d = new Date(next);
                   d.setDate(next.getDate() + w * 7);
                   const dateStr = d.toISOString().slice(0, 10);
                   if (!envois.find((e) => e.date === dateStr)) {
-                    setEnvois((p) => [...p, { id: uid(), date: dateStr, statut: 'planifie' }]);
+                    const newEnvoi = { id: uid(), date: dateStr, statut: 'planifie' };
+                    newItems.push(newEnvoi);
+                    toInsert.push(newEnvoi);
                     added++;
                   }
                 }
-                setEnvois((p) => [...p].sort((a, b) => a.date.localeCompare(b.date)));
+                if (newItems.length > 0) {
+                  setEnvois((p) => [...p, ...newItems].sort((a, b) => a.date.localeCompare(b.date)));
+                  // Persist to Supabase
+                  if (sbReady) {
+                    toInsert.forEach((e) => {
+                      sb.insertEnvoi({ date: e.date, statut: e.statut }).then((saved) => {
+                        setEnvois((prev) => prev.map((x) => x.id === e.id ? { ...x, id: saved.id } : x));
+                      }).catch(console.error);
+                    });
+                  }
+                }
                 flash(added > 0 ? `${added} départ${added > 1 ? 's' : ''} ajouté${added > 1 ? 's' : ''}` : 'Tous les départs existent déjà');
               }}
               className="px-4 py-2 rounded-xl text-sm font-bold text-white active:scale-95 transition-all"
@@ -193,7 +220,7 @@ export default function StaffSettings() {
                       )}
                     </div>
                   </div>
-                  <select value={e.statut} onChange={(ev) => setEnvois((p) => p.map((x) => (x.id === e.id ? { ...x, statut: ev.target.value } : x)))} className="px-2 py-1 rounded-lg border text-xs">
+                  <select value={e.statut} onChange={(ev) => { const newStatut = ev.target.value; setEnvois((p) => p.map((x) => (x.id === e.id ? { ...x, statut: newStatut } : x))); if (sbReady) sb.updateEnvoi(e.id, { statut: newStatut }).catch(console.error); }} className="px-2 py-1 rounded-lg border text-xs">
                     <option value="planifie">○ Planifié</option>
                     <option value="prochain">● Prochain</option>
                     <option value="en_cours">● En cours</option>
@@ -201,7 +228,7 @@ export default function StaffSettings() {
                     <option value="arrive">✓ Arrivé</option>
                   </select>
                   {count === 0 ? (
-                    <button onClick={() => { setEnvois((p) => p.filter((x) => x.id !== e.id)); flash('Départ supprimé'); }} className="text-red-400 hover:text-red-600 p-1.5 rounded-lg hover:bg-red-50 transition-colors">
+                    <button onClick={() => { setEnvois((p) => p.filter((x) => x.id !== e.id)); if (sbReady) sb.deleteEnvoi(e.id).catch(console.error); flash('Départ supprimé'); }} className="text-red-400 hover:text-red-600 p-1.5 rounded-lg hover:bg-red-50 transition-colors">
                       <Trash2 size={15} />
                     </button>
                   ) : (
@@ -300,7 +327,14 @@ export default function StaffSettings() {
             <button onClick={() => {
               if (!newEnvoiDate) { flash('Choisissez une date'); return; }
               if (envois.find((e) => e.date === newEnvoiDate)) { flash('Ce départ existe déjà'); return; }
-              setEnvois((p) => [...p, { id: uid(), date: newEnvoiDate, statut: 'planifie' }].sort((a, b) => a.date.localeCompare(b.date)));
+              const tempId = uid();
+              setEnvois((p) => [...p, { id: tempId, date: newEnvoiDate, statut: 'planifie' }].sort((a, b) => a.date.localeCompare(b.date)));
+              // Persist to Supabase
+              if (sbReady) {
+                sb.insertEnvoi({ date: newEnvoiDate, statut: 'planifie' }).then((saved) => {
+                  setEnvois((prev) => prev.map((x) => x.id === tempId ? { ...x, id: saved.id } : x));
+                }).catch(console.error);
+              }
               setNewEnvoiDate('');
               flash('Départ ajouté');
             }} className="px-4 py-2 rounded-xl text-sm font-bold text-gray-600 border border-gray-200 hover:bg-gray-50">
@@ -330,11 +364,11 @@ export default function StaffSettings() {
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="text-xs font-bold text-gray-500 block mb-1">Forfait de base (€)</label>
-                    <input type="number" step="0.5" value={t.base} onChange={(e) => setTarifs((prev) => ({ ...prev, [d.code]: { ...t, base: Number(e.target.value) || 0 } }))} className="w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-sm font-bold text-center" style={{ outline: 'none' }} />
+                    <input type="number" step="0.5" value={t.base} onChange={(e) => { const newBase = Number(e.target.value) || 0; setTarifs((prev) => ({ ...prev, [d.code]: { ...t, base: newBase } })); if (sbReady) sb.updateTarif(d.code, newBase, t.parKg).catch(console.error); }} className="w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-sm font-bold text-center" style={{ outline: 'none' }} />
                   </div>
                   <div>
                     <label className="text-xs font-bold text-gray-500 block mb-1">Prix par kg (€)</label>
-                    <input type="number" step="0.5" value={t.parKg} onChange={(e) => setTarifs((prev) => ({ ...prev, [d.code]: { ...t, parKg: Number(e.target.value) || 0 } }))} className="w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-sm font-bold text-center" style={{ outline: 'none' }} />
+                    <input type="number" step="0.5" value={t.parKg} onChange={(e) => { const newParKg = Number(e.target.value) || 0; setTarifs((prev) => ({ ...prev, [d.code]: { ...t, parKg: newParKg } })); if (sbReady) sb.updateTarif(d.code, t.base, newParKg).catch(console.error); }} className="w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-sm font-bold text-center" style={{ outline: 'none' }} />
                   </div>
                 </div>
                 <p className="text-xs text-gray-400 mt-2">{`Exemple : colis 3 kg → ${eur(t.base + 3 * t.parKg)} (${eur(t.base)} + 3 × ${eur(t.parKg)})`}</p>

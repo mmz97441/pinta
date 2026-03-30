@@ -405,7 +405,7 @@ export default function ClientDetailView() {
       const isPay = sel.statut === 'attente_paiement';
       const isDevis = sel.statut === 'devis_envoye';
       const isPaye = sel.paiementMontant != null;
-      const hasDevis = sel.devisTotal != null;
+      const hasDevis = sel.devisTotal != null && sel.devisTotal > 0;
 
       return (
         <div className="space-y-3">
@@ -428,10 +428,16 @@ export default function ClientDetailView() {
                 )}
                 <Ligne label="Transport optimisé" value={eur(sel.devisTransport)} />
                 {sel.devisOM != null && sel.devisOM > 0 && (
-                  <Ligne label="Octroi de Mer" value={eur(sel.devisOM)} />
+                  <>
+                    <Ligne label="Octroi de Mer" value={eur(sel.devisOM)} />
+                    <p className="text-[10px] text-gray-400 mt-0.5">Octroi de Mer — taxe douanière à l'importation dans les DOM-TOM</p>
+                  </>
                 )}
                 {sel.devisOMR != null && sel.devisOMR > 0 && (
-                  <Ligne label="OM Régional" value={eur(sel.devisOMR)} />
+                  <>
+                    <Ligne label="OM Régional" value={eur(sel.devisOMR)} />
+                    <p className="text-[10px] text-gray-400 mt-0.5">Octroi de Mer Régional — taxe complémentaire régionale</p>
+                  </>
                 )}
                 {sel.devisTVA != null && sel.devisTVA > 0 && (
                   <Ligne label={`TVA (${selDest?.tva ?? 8.5}%)`} value={eur(sel.devisTVA)} />

@@ -125,11 +125,12 @@ function BtnPrimary({ onClick, children, disabled, color }) {
 }
 
 // ── Telegram button ──────────────────────────────────────────────────────────
-function BtnTelegram({ onClick, children }) {
+function BtnTelegram({ onClick, children, disabled }) {
   return (
     <button
       onClick={onClick}
-      className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl text-sm font-bold transition-all active:scale-95"
+      disabled={disabled}
+      className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl text-sm font-bold transition-all active:scale-95 disabled:opacity-40"
       style={{ background: '#0088cc', color: 'white', boxShadow: '0 2px 8px #0088cc40' }}
     >
       <Send size={14} />
@@ -139,11 +140,12 @@ function BtnTelegram({ onClick, children }) {
 }
 
 // ── Email button ────────────────────────────────────────────────────────────
-function BtnEmail({ onClick, children }) {
+function BtnEmail({ onClick, children, disabled }) {
   return (
     <button
       onClick={onClick}
-      className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl text-sm font-bold transition-all active:scale-95"
+      disabled={disabled}
+      className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl text-sm font-bold transition-all active:scale-95 disabled:opacity-40"
       style={{ background: `linear-gradient(135deg, ${BRAND.navy}, ${BRAND.navyL})`, color: 'white', boxShadow: '0 2px 8px rgba(27,58,75,0.25)' }}
     >
       <Mail size={14} />
@@ -231,6 +233,7 @@ export default function StaffDetailView() {
   } = useApp();
 
   // ── Local state ──────────────────────────────────────────────────────────
+  const [actionLoading, setActionLoading] = useState(false);
   const [casierTmp, setCasierTmp] = useState('');
   const [editCasier, setEditCasier] = useState(false);
   const [formErr, setFormErr] = useState('');
@@ -615,9 +618,9 @@ export default function StaffDetailView() {
 
                 {formErr && <p className="text-xs text-red-500 font-medium">{formErr}</p>}
 
-                <BtnPrimary onClick={handleValiderMesures}>
+                <BtnPrimary onClick={() => { if (actionLoading) return; setActionLoading(true); try { handleValiderMesures(); } finally { setTimeout(() => setActionLoading(false), 1000); } }} disabled={actionLoading}>
                   <Check size={15} />
-                  Valider les mesures ({trackingsActive.length} colis)
+                  {actionLoading ? 'Validation...' : `Valider les mesures (${trackingsActive.length} colis)`}
                 </BtnPrimary>
               </div>
             </Section>
@@ -676,9 +679,9 @@ export default function StaffDetailView() {
 
               {formErr && <p className="text-xs text-red-500 font-medium">{formErr}</p>}
 
-              <BtnPrimary onClick={handleValiderMesures}>
+              <BtnPrimary onClick={() => { if (actionLoading) return; setActionLoading(true); try { handleValiderMesures(); } finally { setTimeout(() => setActionLoading(false), 1000); } }} disabled={actionLoading}>
                 <Check size={15} />
-                Valider les mesures
+                {actionLoading ? 'Validation...' : 'Valider les mesures'}
               </BtnPrimary>
             </div>
           </Section>
@@ -743,25 +746,35 @@ export default function StaffDetailView() {
               </div>
 
               <BtnTelegram
+                disabled={actionLoading}
                 onClick={() => {
-                  demanderFeuVert(sel.id);
-                  setTimeout(() => {
-                    sendMsg(sel.id, cl?.id, 'telegram', 'demande_feu_vert', null);
-                  }, 200);
+                  if (actionLoading) return;
+                  setActionLoading(true);
+                  try {
+                    demanderFeuVert(sel.id);
+                    setTimeout(() => {
+                      sendMsg(sel.id, cl?.id, 'telegram', 'demande_feu_vert', null);
+                    }, 200);
+                  } finally { setTimeout(() => setActionLoading(false), 1000); }
                 }}
               >
-                Envoyer via Telegram — demander le feu vert
+                {actionLoading ? 'Envoi en cours...' : 'Envoyer via Telegram — demander le feu vert'}
               </BtnTelegram>
 
               <BtnEmail
+                disabled={actionLoading}
                 onClick={() => {
-                  demanderFeuVert(sel.id);
-                  setTimeout(() => {
-                    sendMsg(sel.id, cl?.id, 'email', 'demande_feu_vert', null);
-                  }, 200);
+                  if (actionLoading) return;
+                  setActionLoading(true);
+                  try {
+                    demanderFeuVert(sel.id);
+                    setTimeout(() => {
+                      sendMsg(sel.id, cl?.id, 'email', 'demande_feu_vert', null);
+                    }, 200);
+                  } finally { setTimeout(() => setActionLoading(false), 1000); }
                 }}
               >
-                Envoyer par email — demander le feu vert
+                {actionLoading ? 'Envoi en cours...' : 'Envoyer par email — demander le feu vert'}
               </BtnEmail>
             </div>
           </Section>
@@ -810,15 +823,17 @@ export default function StaffDetailView() {
               )}
 
               <BtnTelegram
-                onClick={() => sendMsg(sel.id, cl?.id, 'telegram', 'relance_feu_vert', null)}
+                disabled={actionLoading}
+                onClick={() => { if (actionLoading) return; setActionLoading(true); try { sendMsg(sel.id, cl?.id, 'telegram', 'relance_feu_vert', null); } finally { setTimeout(() => setActionLoading(false), 1000); } }}
               >
-                Relancer via Telegram
+                {actionLoading ? 'Envoi en cours...' : 'Relancer via Telegram'}
               </BtnTelegram>
 
               <BtnEmail
-                onClick={() => sendMsg(sel.id, cl?.id, 'email', 'relance_feu_vert', null)}
+                disabled={actionLoading}
+                onClick={() => { if (actionLoading) return; setActionLoading(true); try { sendMsg(sel.id, cl?.id, 'email', 'relance_feu_vert', null); } finally { setTimeout(() => setActionLoading(false), 1000); } }}
               >
-                Relancer par email
+                {actionLoading ? 'Envoi en cours...' : 'Relancer par email'}
               </BtnEmail>
             </div>
           </Section>
@@ -847,11 +862,12 @@ export default function StaffDetailView() {
               )}
 
               <BtnPrimary
-                onClick={() => changerStatut(sel.id, 'en_preparation')}
+                onClick={() => { if (actionLoading) return; setActionLoading(true); try { changerStatut(sel.id, 'en_preparation'); } finally { setTimeout(() => setActionLoading(false), 1000); } }}
+                disabled={actionLoading}
                 color="#2563EB"
               >
                 <Check size={15} />
-                Commencer la préparation
+                {actionLoading ? 'En cours...' : 'Commencer la préparation'}
               </BtnPrimary>
             </div>
           </Section>
@@ -1201,12 +1217,12 @@ export default function StaffDetailView() {
             {!devisPrev ? (
               <div className="space-y-2">
                 <BtnPrimary
-                  onClick={handleEnvoyerDevis}
-                  disabled={!canSendDevis}
+                  onClick={() => { if (actionLoading) return; setActionLoading(true); try { handleEnvoyerDevis(); } finally { setTimeout(() => setActionLoading(false), 1000); } }}
+                  disabled={!canSendDevis || actionLoading}
                   color="#2563EB"
                 >
                   <Eye size={15} />
-                  Prévisualiser le devis
+                  {actionLoading ? 'Calcul en cours...' : 'Prévisualiser le devis'}
                 </BtnPrimary>
                 {!hasValidFacture && canPreview && (
                   <p className="text-[10px] text-red-500 text-center font-semibold">Facture validée requise pour envoyer le devis</p>
@@ -1247,9 +1263,9 @@ export default function StaffDetailView() {
                   </div>
 
                   <div className="flex flex-col gap-2">
-                    <BtnPrimary onClick={handleConfirmDevisEnvoye} color="#16A34A">
+                    <BtnPrimary onClick={() => { if (actionLoading) return; setActionLoading(true); try { handleConfirmDevisEnvoye(); } finally { setTimeout(() => setActionLoading(false), 1000); } }} disabled={actionLoading} color="#16A34A">
                       <Check size={15} />
-                      Envoyer le devis au client
+                      {actionLoading ? 'Envoi en cours...' : 'Envoyer le devis au client'}
                     </BtnPrimary>
                     <button
                       onClick={() => setDevisPrev(false)}
@@ -1276,8 +1292,8 @@ export default function StaffDetailView() {
                   {eur(sel.devisTotal)}
                 </p>
               </div>
-              <BtnTelegram onClick={() => sendMsg(sel.id, cl?.id, 'telegram', 'devis_final', null)}>
-                Relancer via Telegram
+              <BtnTelegram disabled={actionLoading} onClick={() => { if (actionLoading) return; setActionLoading(true); try { sendMsg(sel.id, cl?.id, 'telegram', 'devis_final', null); } finally { setTimeout(() => setActionLoading(false), 1000); } }}>
+                {actionLoading ? 'Envoi en cours...' : 'Relancer via Telegram'}
               </BtnTelegram>
             </div>
           </Section>
@@ -1336,14 +1352,16 @@ export default function StaffDetailView() {
                   </BtnPrimary>
                 </>
               ) : (
-                <BtnTelegram onClick={() => {
+                <BtnTelegram disabled={actionLoading} onClick={() => {
+                  if (actionLoading) return;
                   if (!sel.devisTotal || sel.devisTotal <= 0) {
                     flash('Le devis n\'a pas été calculé — impossible de relancer le paiement');
                     return;
                   }
-                  sendMsg(sel.id, cl?.id, 'telegram', 'relance_paiement', null);
+                  setActionLoading(true);
+                  try { sendMsg(sel.id, cl?.id, 'telegram', 'relance_paiement', null); } finally { setTimeout(() => setActionLoading(false), 1000); }
                 }}>
-                  Relancer via Telegram
+                  {actionLoading ? 'Envoi en cours...' : 'Relancer via Telegram'}
                 </BtnTelegram>
               )}
             </div>

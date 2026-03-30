@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Package, AlertCircle, CreditCard, CheckCircle, Clock, TrendingUp, ChevronRight } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { BRAND, STATUTS, getDestByCP } from '../../constants';
+import { BRAND, STATUTS, ABONNEMENTS, getDestByCP } from '../../constants';
 import { eur } from '../../utils';
 import { Badge, ProgressBar, ViewToggle } from '../ui';
 
@@ -68,6 +68,26 @@ export default function ClientAccueil() {
           </p>
         )}
       </div>
+
+      {/* ── Subscription expiry alert ── */}
+      {authCl?.abonnement && authCl.abonnement !== 'freemium' && authCl.abonnementFin && (() => {
+        const fin = new Date(authCl.abonnementFin);
+        const now = new Date();
+        const daysLeft = Math.ceil((fin - now) / (1000 * 60 * 60 * 24));
+        if (daysLeft > 30) return null;
+        if (daysLeft <= 0) return (
+          <div className="rounded-2xl p-4 bg-red-50 border border-red-200 mb-4">
+            <p className="text-sm font-bold text-red-800">⚠️ Votre abonnement {ABONNEMENTS[authCl.abonnement]?.label} a expiré</p>
+            <p className="text-xs text-red-600 mt-1">Contactez-nous pour le renouveler et continuer à bénéficier de vos avantages.</p>
+          </div>
+        );
+        return (
+          <div className="rounded-2xl p-4 bg-amber-50 border border-amber-200 mb-4">
+            <p className="text-sm font-bold text-amber-800">⏰ Votre abonnement {ABONNEMENTS[authCl.abonnement]?.label} expire dans {daysLeft} jours</p>
+            <p className="text-xs text-amber-600 mt-1">Pensez à le renouveler pour garder vos avantages (tarifs réduits, stockage gratuit, etc.).</p>
+          </div>
+        );
+      })()}
 
       {/* ── Stats grid ── */}
       <div className="grid grid-cols-3 gap-3">
@@ -331,7 +351,7 @@ export default function ClientAccueil() {
                             )}
                           </td>
                           <td className="px-3 py-2.5 text-right">
-                            {p.devisTotal != null ? (
+                            {p.devisTotal != null && p.devisTotal > 0 ? (
                               <span className="text-sm font-bold" style={{ color: BRAND.navy }}>{eur(p.devisTotal)}</span>
                             ) : (
                               <span className="text-xs text-gray-300">—</span>

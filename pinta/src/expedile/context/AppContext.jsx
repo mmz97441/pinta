@@ -27,7 +27,12 @@ export function AppProvider({ children }) {
   const [envois, setEnvois] = useState(initEnvois);
   const [logs, setLogs] = useState([]);
   const [sbReady, setSbReady] = useState(false);
-  const [produitsInterdits, setProduitsInterdits] = useState(PRODUITS_INTERDITS);
+  const [produitsInterdits, setProduitsInterdits] = useState(() => {
+    try {
+      const saved = localStorage.getItem('expedile_produits_interdits');
+      return saved ? JSON.parse(saved) : PRODUITS_INTERDITS;
+    } catch { return PRODUITS_INTERDITS; }
+  });
 
   // ── Communication ──
   const [comLog, setComLog] = useState([]);
@@ -113,6 +118,13 @@ export function AppProvider({ children }) {
     };
   }, [sbReady]);
 
+  // ── Persist produitsInterdits to localStorage (TODO: migrate to Supabase parametres table) ──
+  useEffect(() => {
+    try {
+      localStorage.setItem('expedile_produits_interdits', JSON.stringify(produitsInterdits));
+    } catch { /* ignore storage errors */ }
+  }, [produitsInterdits]);
+
   // ── UI state ──
   const [selId, setSelId] = useState(null);
   const [toast, setToast] = useState('');
@@ -166,7 +178,11 @@ export function AppProvider({ children }) {
 
   const log = useCallback((id, oldStatut, newStatut) => {
     setLogs((prev) => [...prev, { id: uid(), cid: id, o: oldStatut, n: newStatut, w: auth?.u?.nom || '?' }]);
-  }, [auth]);
+    // Persist to Supabase
+    if (sbReady) {
+      sb.insertLog(id, oldStatut, newStatut, auth?.u?.nom || '?');
+    }
+  }, [auth, sbReady]);
 
   const getClient = useCallback((id) => clients.find((c) => c.id === id), [clients]);
   const getTarif = useCallback((destCode) => tarifs[destCode || '974'] || tarifs['974'], [tarifs]);
@@ -210,9 +226,25 @@ export function AppProvider({ children }) {
   const addCategory = useCallback((label, taux) => {
     const id = 'c_' + uid();
     setCategories((prev) => [...prev, { id, label, custom: true, taux }]);
+    // Persist to Supabase
+    if (sbReady) {
+      sb.insertCategorie(label).then((saved) => {
+        // Replace temp ID with real Supabase ID
+        setCategories((prev) => prev.map(c => c.id === id ? { ...c, id: saved.id } : c));
+        // Also persist initial taux for each destination
+        if (taux) {
+          Object.entries(taux).forEach(([destCode, t]) => {
+            sb.upsertTauxCategorie(saved.id, destCode, t.om || 0, t.omr || 0).catch(console.error);
+          });
+        }
+      }).catch(err => {
+        console.error('[Supabase] insertCategorie error:', err.message);
+        flash({ msg: 'Erreur sauvegarde catégorie', type: 'warning' });
+      });
+    }
     flash(`Catégorie "${label}" ajoutée`);
     return id;
-  }, [flash]);
+  }, [flash, sbReady]);
 
   const updateCatTaux = useCallback((catId, destCode, field, val) => {
     setCategories((prev) => prev.map((c) => {
@@ -221,16 +253,38 @@ export function AppProvider({ children }) {
       newTaux[destCode] = { ...(newTaux[destCode] || { om: 0, omr: 0 }), [field]: Number(val) || 0 };
       return { ...c, taux: newTaux };
     }));
-  }, []);
+    // Persist to Supabase
+    if (sbReady) {
+      // Read the current taux to get both om and omr values
+      const cat = categories.find(c => c.id === catId);
+      const existing = cat?.taux?.[destCode] || { om: 0, omr: 0 };
+      const updated = { ...existing, [field]: Number(val) || 0 };
+      sb.upsertTauxCategorie(catId, destCode, updated.om, updated.omr).catch(err => {
+        console.error('[Supabase] upsertTauxCategorie error:', err.message);
+      });
+    }
+  }, [sbReady, categories]);
 
   const updateCatLabel = useCallback((catId, label) => {
     setCategories((prev) => prev.map((c) => (c.id === catId ? { ...c, label } : c)));
-  }, []);
+    // Persist to Supabase
+    if (sbReady) {
+      sb.updateCategorie(catId, { label }).catch(err => {
+        console.error('[Supabase] updateCategorie error:', err.message);
+      });
+    }
+  }, [sbReady]);
 
   const deleteCategory = useCallback((catId) => {
     setCategories((prev) => prev.filter((c) => c.id !== catId));
+    // Persist to Supabase (deletes taux_categories rows too)
+    if (sbReady) {
+      sb.deleteCategorie(catId).catch(err => {
+        console.error('[Supabase] deleteCategorie error:', err.message);
+      });
+    }
     flash('Catégorie supprimée');
-  }, [flash]);
+  }, [flash, sbReady]);
 
   // ── Notifications ──
   const markNotifRead = useCallback((nid) => {
