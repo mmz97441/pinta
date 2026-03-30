@@ -429,14 +429,14 @@ export default function ClientDetailView() {
                 <Ligne label="Transport optimisé" value={eur(sel.devisTransport)} />
                 {sel.devisOM != null && sel.devisOM > 0 && (
                   <>
-                    <Ligne label="Octroi de Mer" value={eur(sel.devisOM)} />
-                    <p className="text-[10px] text-gray-400 mt-0.5">Octroi de Mer — taxe douanière à l'importation dans les DOM-TOM</p>
+                    <Ligne label="Octroi de Mer (OM)" value={eur(sel.devisOM)} />
+                    <p className="text-[10px] text-gray-400 mt-0.5">Taxe douanière calculée sur la valeur de vos articles</p>
                   </>
                 )}
                 {sel.devisOMR != null && sel.devisOMR > 0 && (
                   <>
-                    <Ligne label="OM Régional" value={eur(sel.devisOMR)} />
-                    <p className="text-[10px] text-gray-400 mt-0.5">Octroi de Mer Régional — taxe complémentaire régionale</p>
+                    <Ligne label="OMR (régional)" value={eur(sel.devisOMR)} />
+                    <p className="text-[10px] text-gray-400 mt-0.5">Taxe complémentaire régionale sur vos articles</p>
                   </>
                 )}
                 {sel.devisTVA != null && sel.devisTVA > 0 && (

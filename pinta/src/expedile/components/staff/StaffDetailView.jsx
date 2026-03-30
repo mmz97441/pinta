@@ -1236,9 +1236,9 @@ export default function StaffDetailView() {
                 <div className="space-y-3">
                   <div className="p-3 rounded-xl bg-blue-50 border border-blue-200 space-y-0.5 text-sm">
                     <Ligne label="Transport" value={eur(sel.devisTransport || devisCalc.tr)} />
-                    <Ligne label="OM" value={eur(sel.devisOM || devisCalc.om)} />
-                    <Ligne label="OMR" value={eur(sel.devisOMR || devisCalc.omr)} />
-                    <Ligne label="TVA" value={eur(sel.devisTVA || devisCalc.tva)} />
+                    <Ligne label={`OM (Octroi de Mer)`} value={eur(sel.devisOM || devisCalc.om)} />
+                    <Ligne label={`OMR (régional)`} value={eur(sel.devisOMR || devisCalc.omr)} />
+                    <Ligne label={`TVA (${dest?.tva || 0}%)`} value={eur(sel.devisTVA || devisCalc.tva)} />
                     {fraisDivers.length > 0 && (
                       <Ligne label="Frais divers" value={eur(fraisDivers.reduce((s, f) => s + f.montant, 0))} />
                     )}

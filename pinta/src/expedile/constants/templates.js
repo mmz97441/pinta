@@ -332,7 +332,8 @@ ${colis.lignes?.length > 0 ? `\n📋 *Contenu déclaré :*\n${colis.lignes.map((
 💰 *DÉTAIL DU DEVIS*
 ━━━━━━━━━━━━━━━━
 🚀 Transport : *${eur(colis.devisTransport)}*
-🏛️ Taxes (OM + OMR) : *${eur(taxes)}*
+🏛️ Octroi de Mer (OM) : *${eur(colis.devisOM)}*
+🏛️ OMR (régional) : *${eur(colis.devisOMR)}*
 📊 TVA (${dest.tva}%) : *${eur(colis.devisTVA)}*
 ${colis.fraisDivers?.length > 0 ? colis.fraisDivers.map((f) => `📎 ${f.libelle} : *${eur(f.montant)}*`).join('\n') + '\n' : ''}━━━━━━━━━━━━━━━━
 💰 *TOTAL : ${eur(colis.devisTotal)}*
