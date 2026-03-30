@@ -161,7 +161,7 @@ export default function ColisModal({ open, onClose }) {
   };
 
   // ── submit: staff matches a pre-announcement ──────────────
-  const handleMatchReception = (sendWA) => {
+  const handleMatchReception = (sendTg) => {
     if (!nf.casier.trim()) {
       setFormErr({ casier: 'Numéro de casier requis' });
       return;
@@ -172,7 +172,7 @@ export default function ColisModal({ open, onClose }) {
     log(annonce.id, annonce.statut, 'receptionne');
     upd(annonce.id, { statut: 'receptionne', casier: nf.casier.trim(), dateReception: new Date().toISOString() });
 
-    if (sendWA && cl?.tel) {
+    if (sendTg && cl?.tel) {
       const msg =
         `Bonjour ${cl.nom.split(' ')[0]} 👋\n\nVotre colis pré-annoncé *${annonce.ref}* est bien arrivé à notre entrepôt de Paris !\n\n` +
         `📦 Contenu : ${annonce.desc}\n` +
@@ -188,7 +188,7 @@ export default function ColisModal({ open, onClose }) {
   };
 
   // ── submit: staff new colis (blind reception) ──────────────
-  const handleReceptionner = (sendWA) => {
+  const handleReceptionner = (sendTg) => {
     // If in new client mode, create client first
     let clientId;
     let cl;
@@ -217,7 +217,7 @@ export default function ColisModal({ open, onClose }) {
     const newColis = buildColis(clientId, 'receptionne');
     setData((prev) => [...prev, newColis]);
 
-    if (sendWA && cl?.tel) {
+    if (sendTg && cl?.tel) {
       const msg =
         `Bonjour ${cl.nom.split(' ')[0]} 👋\n\nVotre colis *${newColis.ref}* est bien arrivé à notre entrepôt de Paris !\n\n` +
         `📦 Contenu : ${newColis.desc}\n` +
@@ -229,7 +229,7 @@ export default function ColisModal({ open, onClose }) {
     }
 
     const hasDims = nf.dimL && nf.dimW && nf.dimH && nf.poids;
-    const label = sendWA ? 'réceptionné + Telegram envoyé' : 'réceptionné';
+    const label = sendTg ? 'réceptionné + Telegram envoyé' : 'réceptionné';
     flash(`Colis ${newColis.ref} ${label}${hasDims ? ' + mesuré' : ''} — casier ${nf.casier.trim()}`);
     resetAndClose();
   };
