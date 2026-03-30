@@ -301,15 +301,12 @@ export default function ColisModal({ open, onClose }) {
       });
     }
 
-    if (sendTG && cl?.tel) {
-      const msg =
-        `Bonjour ${cl.nom.split(' ')[0]} 👋\n\nVotre colis *${newColis.ref}* est bien arrivé à notre entrepôt de Paris !\n\n` +
-        `📦 Contenu : ${newColis.desc}\n` +
-        (newColis.trackings.some((t) => t)
-          ? `🔍 Tracking : ${newColis.trackings.filter((t) => t).join(', ')}\n`
-          : '') +
-        `\nNous allons le mesurer et peser. On revient vers vous rapidement pour la suite.\n\n_Expedîle_`;
-      window.open(telegramLink(newColis.ref), '_blank');
+    if (sendTG && cl) {
+      // Envoyer la notification de réception au client via Telegram ou email
+      const { sendMsg } = appCtx;
+      if (sendMsg && newColis.id) {
+        sendMsg(newColis.id, clientId, cl.telegramChatId ? 'telegram' : 'email', 'reception', null);
+      }
     }
 
     const hasDims = nf.trackingLines.every((_, i) => {
