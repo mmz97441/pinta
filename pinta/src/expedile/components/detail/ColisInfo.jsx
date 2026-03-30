@@ -70,6 +70,17 @@ export default function ColisInfo() {
                 </span>
               )}
             </p>
+            {cl && !cl.telegramChatId && (
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(`https://t.me/expedile_bot?start=${cl.id}`);
+                  flash('Lien d\'invitation Telegram copie !');
+                }}
+                className="text-[10px] font-semibold px-2 py-0.5 rounded bg-orange-100 text-orange-700 hover:bg-orange-200 transition-colors"
+              >
+                Inviter sur Telegram
+              </button>
+            )}
             {cl.abonnement && (
               <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${ABONNEMENTS[cl.abonnement]?.couleur || 'bg-gray-200 text-gray-600'}`}>
                 {ABONNEMENTS[cl.abonnement]?.label || cl.abonnement}

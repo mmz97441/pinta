@@ -668,6 +668,33 @@ L'équipe Expedîle`,
     telegram: (c) => `Bonjour ${c.nom.split(' ')[0]} 👋\n\n`,
     email: (c) => `Objet : \n\nBonjour ${c.nom},\n\n\n\nCordialement,\nL'équipe Expedîle`,
   },
+
+  invitation_telegram: {
+    label: '📲 Invitation Telegram',
+    telegram: (c) => '',
+    email: (c) => {
+      const prenom = c.nom?.split(' ')[0] || 'Client';
+      const inviteLink = `https://t.me/expedile_bot?start=${c.id || ''}`;
+      return `Objet : 📲 Activez vos notifications Expedile sur Telegram
+
+Bonjour ${prenom},
+
+Pour recevoir les notifications en temps reel concernant vos colis (reception, devis, expedition, livraison), activez votre compte Telegram Expedile en un clic :
+
+${inviteLink}
+
+C'est simple :
+1. Cliquez sur le lien ci-dessus
+2. Telegram s'ouvre avec notre bot @expedile_bot
+3. Appuyez sur "Demarrer"
+4. C'est fait ! Vous recevrez toutes vos notifications ici.
+
+Si vous n'avez pas Telegram, telechargez-le gratuitement sur telegram.org
+
+Cordialement,
+L'equipe Expedile`;
+    },
+  },
 };
 
 export const TEMPLATE_LABELS = {};

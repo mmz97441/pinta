@@ -14,6 +14,7 @@ const emptyDraft = () => ({
   ville: '',
   cp: '',
   adresse: '',
+  telegramUsername: '',
   canal: 'telegram',
   type: 'particulier',
   notes: '',
@@ -85,7 +86,7 @@ function ValidatedField({ label, value, onChange, placeholder, type = 'text', mo
 
 // ── Main component ───────────────────────────────────────────────────────────
 export default function StaffClients() {
-  const { clients, data, setPage, setSelId, updateClient, addNewClient, deleteClient, flash } = useApp();
+  const { clients, data, setPage, setSelId, updateClient, addNewClient, deleteClient, flash, sendMsg } = useApp();
 
   const [clPageSearch, setClPageSearch] = useState('');
   const [clEditId, setClEditId] = useState(null);
@@ -196,6 +197,7 @@ export default function StaffClients() {
       ville: cl.ville || '',
       cp: cl.cp || '',
       adresse: cl.adresse || '',
+      telegramUsername: cl.telegramUsername || '',
       canal: cl.canal || 'telegram',
       type: cl.type || 'particulier',
       notes: cl.notes || '',
@@ -388,6 +390,11 @@ export default function StaffClients() {
                     {cl.canal === 'telegram' && (
                       <span className="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0" title="Telegram" />
                     )}
+                    {cl.telegramChatId ? (
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-green-100 text-green-700">Telegram lie</span>
+                    ) : (
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-orange-100 text-orange-700">Telegram non lie</span>
+                    )}
                   </div>
                   <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                     <span className="text-xs">{dest.flag}</span>
@@ -539,6 +546,13 @@ export default function StaffClients() {
                     />
 
                     <ValidatedField
+                      label="Telegram @username"
+                      value={clDraft.telegramUsername}
+                      onChange={(e) => patchDraft('telegramUsername', e.target.value)}
+                      placeholder="@username"
+                    />
+
+                    <ValidatedField
                       label="Ville"
                       value={clDraft.ville}
                       onChange={(e) => patchDraft('ville', e.target.value)}
@@ -621,6 +635,44 @@ export default function StaffClients() {
                       className="w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-sm outline-none focus:border-blue-300 transition-colors resize-none"
                     />
                   </div>
+
+                  {/* Telegram invitation link */}
+                  {cl.id && (
+                    <div className="mt-2 p-3 rounded-xl bg-blue-50 border border-blue-200">
+                      <p className="text-xs font-bold text-blue-800 mb-1">Lien d'invitation Telegram</p>
+                      <p className="text-[10px] text-blue-600 mb-2">Envoyez ce lien au client pour qu'il lie son compte Telegram :</p>
+                      <div className="flex gap-2">
+                        <input
+                          readOnly
+                          value={`https://t.me/expedile_bot?start=${cl.id}`}
+                          className="flex-1 px-2 py-1.5 rounded-lg border border-blue-200 bg-white text-xs font-mono text-blue-700"
+                          onClick={(e) => e.target.select()}
+                        />
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(`https://t.me/expedile_bot?start=${cl.id}`);
+                            flash('Lien copie !');
+                          }}
+                          className="px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-600 text-white active:scale-95 transition-all"
+                        >
+                          Copier
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (cl.email) {
+                              sendMsg(null, cl.id, 'email', 'invitation_telegram', null);
+                              flash('Invitation Telegram envoyee par email');
+                            } else {
+                              flash('Pas d\'email pour ce client');
+                            }
+                          }}
+                          className="px-3 py-1.5 rounded-lg text-xs font-bold border border-blue-300 text-blue-700 active:scale-95 transition-all"
+                        >
+                          Envoyer par email
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Save / Cancel */}
                   <div className="flex gap-2">

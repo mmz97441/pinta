@@ -35,6 +35,7 @@ const EMPTY_NEW_CLIENT = {
   cp: '',
   tel: '',
   email: '',
+  telegramUsername: '',
   canal: 'telegram',
   type: 'particulier',
 };
@@ -231,6 +232,7 @@ export default function ColisModal({ open, onClose }) {
         cp: newClientForm.cp.trim(),
         tel: newClientForm.tel.trim(),
         email: newClientForm.email.trim(),
+        telegramUsername: newClientForm.telegramUsername.trim(),
         canal: newClientForm.canal,
         type: newClientForm.type,
         created: new Date().toISOString().slice(0, 10),
@@ -705,6 +707,16 @@ export default function ColisModal({ open, onClose }) {
                   value={newClientForm.email}
                   onChange={(e) => setNCField('email', e.target.value)}
                   className={inputCls(false)}
+                />
+              </div>
+              <div>
+                <label className={labelCls}>Telegram</label>
+                <input
+                  type="text"
+                  placeholder="@username"
+                  value={newClientForm.telegramUsername}
+                  onChange={(e) => setNCField('telegramUsername', e.target.value)}
+                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm outline-none focus:border-blue-400 focus:bg-white"
                 />
               </div>
             </div>

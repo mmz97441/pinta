@@ -81,6 +81,7 @@ function mapClient(row) {
     abonnementFin: row.abonnement_fin,
     methode_paiement: row.methode_paiement,
     telegramChatId: row.telegram_chat_id || null,
+    telegramUsername: row.telegram_username || null,
   };
 }
 
@@ -329,6 +330,7 @@ export async function updateClient(id, changes) {
     abonnementDebut: 'abonnement_debut',
     abonnementFin: 'abonnement_fin',
     methodePaiement: 'methode_paiement',
+    telegramUsername: 'telegram_username',
   };
   for (const [key, val] of Object.entries(changes)) {
     snakeChanges[map[key] || key] = val;
@@ -398,6 +400,7 @@ export async function insertClient(clientData) {
       points: clientData.points || 0,
       onboarded: clientData.onboarded || false,
       notes: clientData.notes || null,
+      telegram_username: clientData.telegramUsername || null,
     })
     .select()
     .single();
