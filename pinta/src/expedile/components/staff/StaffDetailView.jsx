@@ -495,8 +495,12 @@ export default function StaffDetailView() {
   }
 
   function handleConfirmDevisEnvoye() {
+    // Vérifier que le devis a bien été calculé
+    if (!sel.devisTotal || sel.devisTotal <= 0) {
+      flash({ msg: 'Le devis n\'a pas été calculé. Vérifiez la facture et les articles.', type: 'warning', duration: 5000 });
+      return;
+    }
     changerStatut(sel.id, 'devis_envoye');
-    // Wait for state to sync, then send with current sel values
     setTimeout(() => {
       sendMsg(sel.id, cl?.id, cl?.canal || 'telegram', 'devis_final', null);
     }, 300);
