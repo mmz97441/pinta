@@ -257,12 +257,13 @@ export function AppProvider({ children }) {
 
     const fullMsg = tpl ? (canal === 'telegram' ? tpl.telegram(c, colis) : tpl.email(c, colis)) : customMsg || '';
 
-    if (canal === 'telegram' && c.tel) {
-      if (isTelegramConfigured()) {
+    if (canal === 'telegram') {
+      const chatId = c.telegramChatId;
+      if (isTelegramConfigured() && chatId) {
         // ── API Telegram Bot ──
         const prenom = c.nom.split(' ')[0];
         flash({ msg: `Envoi Telegram → ${prenom}…`, type: 'info' });
-        sendNotification(c.tel, fullMsg).then((res) => {
+        sendNotification(chatId, fullMsg).then((res) => {
           if (res.ok) {
             const methodLabel = 'texte';
             // Add to chat thread
@@ -291,17 +292,17 @@ export function AppProvider({ children }) {
             });
           }
         });
-      } else {
-        // API non configurée → bouton t.me
-        const link = telegramMeLink();
+      } else if (isTelegramConfigured() && !chatId) {
+        // Client n'a pas lié Telegram
+        const prenom = c.nom.split(' ')[0];
         flash({
-          msg: `API Telegram non configurée`,
+          msg: `${prenom} n'a pas encore lié son compte Telegram. Envoyez-lui l'invitation.`,
           type: 'warning',
-          action: {
-            label: 'Ouvrir Telegram',
-            onClick: () => window.open(link, '_blank'),
-          },
+          duration: 5000,
         });
+      } else {
+        // API non configurée
+        flash({ msg: 'Bot Telegram non configuré', type: 'warning' });
       }
     } else if (canal === 'email' && c.email) {
       window.open(mailtoLink(c.email, fullMsg), '_blank');

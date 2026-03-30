@@ -242,14 +242,21 @@ export default function FacturesPanel() {
           Factures d'origine {hasFactures ? `(${sel.factures.length})` : ''}
         </p>
         <div className="flex gap-1.5">
-          <button
-            onClick={() => handleDemanderFacture('telegram')}
-            className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold transition-all active:scale-95"
-            style={{ background: '#0088cc15', color: '#0088cc' }}
-          >
-            <Send size={10} />
-            Telegram
-          </button>
+          {cl?.telegramChatId ? (
+            <button
+              onClick={() => handleDemanderFacture('telegram')}
+              className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold transition-all active:scale-95"
+              style={{ background: '#0088cc15', color: '#0088cc' }}
+            >
+              <Send size={10} />
+              Telegram
+            </button>
+          ) : (
+            <span className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold text-gray-300 bg-gray-50" title="Client n'a pas lié Telegram">
+              <Send size={10} />
+              Telegram
+            </span>
+          )}
           <button
             onClick={() => handleDemanderFacture('email')}
             className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold transition-all active:scale-95"
