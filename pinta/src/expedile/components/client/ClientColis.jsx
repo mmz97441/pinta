@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Package, ChevronRight, AlertCircle, CreditCard, CheckCircle, X } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { BRAND } from '../../constants';
@@ -17,7 +18,8 @@ const FILTER_LABELS = {
 };
 
 export default function ClientColis() {
-  const { authCl, data, setSelId, colisFilter, setColisFilter, ask, payer } = useApp();
+  const navigate = useNavigate();
+  const { authCl, data, colisFilter, setColisFilter, ask, payer } = useApp();
   const [colisTab, setColisTab] = useState('actifs');
   const [viewMode, setViewMode] = useState('cards'); // 'cards' | 'columns'
 
@@ -144,7 +146,7 @@ export default function ClientColis() {
             return (
               <button
                 key={p.id}
-                onClick={() => setSelId(p.id)}
+                onClick={() => navigate(`/colis/${p.id}`)}
                 className={`anim-fade w-full text-left ${action ? 'card-elevated' : 'card'} p-4 rounded-2xl`}
                 style={{
                   ...(isFV ? { borderLeft: `4px solid ${BRAND.gold}` } : {}),
@@ -282,7 +284,7 @@ export default function ClientColis() {
                   return (
                     <tr
                       key={p.id}
-                      onClick={() => setSelId(p.id)}
+                      onClick={() => navigate(`/colis/${p.id}`)}
                       className="anim-fade border-b border-gray-50 last:border-b-0 cursor-pointer transition-colors hover:bg-gray-50 active:bg-gray-100"
                       style={{
                         animationDelay: `${i * 0.03}s`,

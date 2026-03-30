@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Plus, Search, X, BarChart3, CircleDot, Clock, CheckCircle, Check,
   ChevronRight, AlertTriangle, Filter, Package, Download,
@@ -427,7 +428,8 @@ function ColisTable({ items, getClient, envois, openColis, filterFn }) {
 
 // ── Main component ───────────────────────────────────────────────────────────
 export default function StaffDashboard({ onNewColis }) {
-  const { data, clients, envois, categories, setSelId, getClient, isStaff, authRole, page, flash } = useApp();
+  const navigate = useNavigate();
+  const { data, clients, envois, categories, getClient, isStaff, authRole, page, flash } = useApp();
 
   const [globalSearch, setGlobalSearch] = useState('');
   const [envoiFilter, setEnvoiFilter] = useState('ALL');
@@ -648,7 +650,7 @@ export default function StaffDashboard({ onNewColis }) {
 
   // ── Handlers ─────────────────────────────────────────────────────────────
   const openColis = (id) => {
-    setSelId(id);
+    navigate(`/colis/${id}`);
     setGlobalSearch('');
   };
 

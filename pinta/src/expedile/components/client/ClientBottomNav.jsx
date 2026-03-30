@@ -1,17 +1,20 @@
 import React from 'react';
 import { Home, Package, Bell, User } from 'lucide-react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import { BRAND } from '../../constants';
 
 const TABS = [
-  { key: 'accueil', Icon: Home,    label: 'Accueil' },
-  { key: 'colis',   Icon: Package, label: 'Colis' },
-  { key: 'notifs',  Icon: Bell,    label: 'Notifs' },
-  { key: 'profil',  Icon: User,    label: 'Profil' },
+  { key: 'accueil', Icon: Home,    label: 'Accueil',  path: '/' },
+  { key: 'colis',   Icon: Package, label: 'Colis',    path: '/colis' },
+  { key: 'notifs',  Icon: Bell,    label: 'Notifs',   path: '/notifications' },
+  { key: 'profil',  Icon: User,    label: 'Profil',   path: '/profil' },
 ];
 
 export default function ClientBottomNav() {
-  const { clientTab, setClientTab, setSelId, unreadNotifs } = useApp();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { unreadNotifs } = useApp();
 
   // Count actions needed for badge on "Colis" tab
   const { data, authCl } = useApp();
@@ -25,11 +28,21 @@ export default function ClientBottomNav() {
     profil: 0,
   };
 
+  // Determine active tab from current URL
+  const getActiveTab = () => {
+    const p = location.pathname;
+    if (p === '/profil') return 'profil';
+    if (p === '/notifications') return 'notifs';
+    if (p === '/colis' || p.startsWith('/colis/')) return 'colis';
+    return 'accueil';
+  };
+  const activeTab = getActiveTab();
+
   return (
     <nav className="fixed bottom-0 left-0 right-0 glass-nav border-t-0 z-40" aria-label="Navigation principale" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
       <div className="flex max-w-xl md:max-w-3xl lg:max-w-5xl xl:max-w-6xl mx-auto" role="tablist">
         {TABS.map((tab) => {
-          const active = clientTab === tab.key;
+          const active = activeTab === tab.key;
           const badge = badges[tab.key] || 0;
           return (
             <button
@@ -37,7 +50,7 @@ export default function ClientBottomNav() {
               role="tab"
               aria-selected={active}
               aria-label={`${tab.label}${badge > 0 ? ` (${badge} actions)` : ''}`}
-              onClick={() => { setClientTab(tab.key); setSelId(null); }}
+              onClick={() => navigate(tab.path)}
               className={`flex-1 flex flex-col items-center py-2 relative transition-all duration-200 ${active ? '' : 'text-gray-400'}`}
             >
               <div

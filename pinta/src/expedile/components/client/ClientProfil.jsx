@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   User, Package, CheckCircle, CreditCard, TrendingUp, Star, Bell,
   Lock, Download, HelpCircle, LogOut, Trash2, Edit3, X, ChevronRight,
@@ -111,7 +112,8 @@ const INPUT_CLS = (err) =>
 const LABEL_CLS = 'block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1';
 
 export default function ClientProfil() {
-  const { authCl, data, clients, updateClient, setAuth, flash, ask, setSelId, setClientTab } = useApp();
+  const navigate = useNavigate();
+  const { authCl, data, clients, updateClient, setAuth, flash, ask } = useApp();
 
   const cl = authCl;
   const dest = cl ? getDestByCP(cl.cp) : null;
@@ -467,7 +469,7 @@ export default function ClientProfil() {
               allDevis.map((p) => (
                 <button
                   key={p.id}
-                  onClick={() => setSelId(p.id)}
+                  onClick={() => navigate(`/colis/${p.id}`)}
                   className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 active:bg-gray-100 transition-colors"
                 >
                   <div

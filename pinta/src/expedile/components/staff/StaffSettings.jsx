@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Plane, CreditCard, FileText, ChevronDown, Trash2, Lock, MessageCircle, Send, CheckCircle, XCircle, Loader2, ShieldAlert, Plus, X, Paperclip, ChevronUp } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { BRAND, DESTINATIONS } from '../../constants';
@@ -8,7 +9,8 @@ import TemplateEditor from './TemplateEditor';
 import { isTelegramConfigured, sendTelegram } from '../../services/telegramApi';
 
 export default function StaffSettings() {
-  const { setPage, envois, setEnvois, data, tarifs, setTarifs, categories, addCategory, updateCatTaux, updateCatLabel, deleteCategory, flash, produitsInterdits, setProduitsInterdits, authRole } = useApp();
+  const navigate = useNavigate();
+  const { envois, setEnvois, data, tarifs, setTarifs, categories, addCategory, updateCatTaux, updateCatLabel, deleteCategory, flash, produitsInterdits, setProduitsInterdits, authRole } = useApp();
   const [newEnvoiDate, setNewEnvoiDate] = useState('');
   const [jourEnvoi, setJourEnvoi] = useState(5); // 0=Dim, 1=Lun, ... 5=Ven, 6=Sam
   const [nbSemaines, setNbSemaines] = useState(8);
@@ -84,7 +86,7 @@ export default function StaffSettings() {
           </div>
           <p className="font-bold text-xl" style={{ color: BRAND.navy }}>Paramètres</p>
         </div>
-        <button onClick={() => setPage('home')} className="flex items-center gap-1.5 text-sm font-bold px-3 py-1.5 rounded-xl hover:bg-gray-100 transition-colors" style={{ color: BRAND.navy }}>
+        <button onClick={() => navigate('/')} className="flex items-center gap-1.5 text-sm font-bold px-3 py-1.5 rounded-xl hover:bg-gray-100 transition-colors" style={{ color: BRAND.navy }}>
           <ArrowLeft size={16} />Retour
         </button>
       </div>

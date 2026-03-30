@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Package, AlertCircle, CreditCard, CheckCircle, Clock, TrendingUp, ChevronRight } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { BRAND, STATUTS, getDestByCP } from '../../constants';
@@ -6,7 +7,8 @@ import { eur } from '../../utils';
 import { Badge, ProgressBar, ViewToggle } from '../ui';
 
 export default function ClientAccueil() {
-  const { authCl, data, clients, ask, feuVertBulk, payer, setSelId, setClientTab, setColisFilter } = useApp();
+  const navigate = useNavigate();
+  const { authCl, data, clients, ask, feuVertBulk, payer, setColisFilter } = useApp();
   const [viewMode, setViewMode] = useState('cards');
 
   const cl = authCl;
@@ -69,14 +71,14 @@ export default function ClientAccueil() {
 
       {/* ── Stats grid ── */}
       <div className="grid grid-cols-3 gap-3">
-        <button onClick={() => { setColisFilter(null); setClientTab('colis'); }} className="card p-3 text-center hover:shadow-md active:scale-95 transition-all cursor-pointer">
+        <button onClick={() => { setColisFilter(null); navigate('/colis'); }} className="card p-3 text-center hover:shadow-md active:scale-95 transition-all cursor-pointer">
           <div className="text-2xl font-black" style={{ color: BRAND.navy }}>
             {enCours.length}
           </div>
           <div className="text-[11px] text-gray-500 font-medium mt-0.5">En cours</div>
         </button>
         <button
-          onClick={() => { setColisFilter('a_traiter'); setClientTab('colis'); }}
+          onClick={() => { setColisFilter('a_traiter'); navigate('/colis'); }}
           className="card p-3 text-center hover:shadow-md active:scale-95 transition-all cursor-pointer"
           style={aTraiter.length > 0 ? { borderLeft: `3px solid ${BRAND.gold}` } : {}}
         >
@@ -89,7 +91,7 @@ export default function ClientAccueil() {
           <div className="text-[11px] text-gray-500 font-medium mt-0.5">À traiter</div>
         </button>
         <button
-          onClick={() => { setColisFilter('a_payer'); setClientTab('colis'); }}
+          onClick={() => { setColisFilter('a_payer'); navigate('/colis'); }}
           className="card p-3 text-center hover:shadow-md active:scale-95 transition-all cursor-pointer"
           style={aPayer.length > 0 ? { borderLeft: `3px solid #f59e0b` } : {}}
         >
@@ -131,7 +133,7 @@ export default function ClientAccueil() {
                     <button
                       key={p.id}
                       className="w-full flex items-center gap-2 text-left bg-amber-50/60 rounded-xl px-3 py-2 active:bg-amber-100 transition-colors"
-                      onClick={() => { setSelId(p.id); setClientTab('colis'); }}
+                      onClick={() => navigate(`/colis/${p.id}`)}
                     >
                       <div className="flex-1 min-w-0">
                         <span className="font-bold text-xs text-gray-800">{p.ref}</span>
@@ -176,7 +178,7 @@ export default function ClientAccueil() {
                 style={{ borderLeft: `4px solid #f59e0b` }}
               >
                 <button
-                  onClick={() => setSelId(p.id)}
+                  onClick={() => navigate(`/colis/${p.id}`)}
                   className="w-full text-left p-4 active:bg-gray-50 transition-colors"
                 >
                   <div className="flex items-start justify-between gap-2">
@@ -239,7 +241,7 @@ export default function ClientAccueil() {
           {viewMode === 'cards' ? (
             <div className="space-y-2.5">
               {colisCours.slice(0, 3).map((p) => (
-                <button key={p.id} onClick={() => setSelId(p.id)} className="card p-4 w-full text-left hover:shadow-md active:scale-[0.98] transition-all cursor-pointer">
+                <button key={p.id} onClick={() => navigate(`/colis/${p.id}`)} className="card p-4 w-full text-left hover:shadow-md active:scale-[0.98] transition-all cursor-pointer">
                   <div className="flex items-start justify-between gap-2 mb-1">
                     <div className="flex-1 min-w-0">
                       <p className="font-bold text-sm text-gray-900">{p.ref}</p>
@@ -252,7 +254,7 @@ export default function ClientAccueil() {
               ))}
               {colisCours.length > 3 && (
                 <button
-                  onClick={() => { setColisFilter(null); setClientTab('colis'); }}
+                  onClick={() => { setColisFilter(null); navigate('/colis'); }}
                   className="w-full flex items-center justify-center gap-1.5 py-2.5 text-xs font-bold rounded-xl active:scale-95 transition-all"
                   style={{ color: BRAND.navy, backgroundColor: BRAND.navy + '08' }}
                 >
@@ -285,7 +287,7 @@ export default function ClientAccueil() {
                       return (
                         <tr
                           key={p.id}
-                          onClick={() => setSelId(p.id)}
+                          onClick={() => navigate(`/colis/${p.id}`)}
                           className="anim-fade border-b border-gray-50 last:border-b-0 cursor-pointer transition-colors hover:bg-gray-50 active:bg-gray-100"
                           style={{ animationDelay: `${i * 0.03}s` }}
                         >
@@ -348,7 +350,7 @@ export default function ClientAccueil() {
             <h3 className="font-bold text-sm text-gray-800">Dernière livraison</h3>
           </div>
           <button
-            onClick={() => setSelId(derniereLivraison.id)}
+            onClick={() => navigate(`/colis/${derniereLivraison.id}`)}
             className="card p-4 rounded-2xl w-full text-left hover:shadow-md active:scale-[0.98] transition-all cursor-pointer"
             style={{ borderLeft: `4px solid #10b981` }}
           >

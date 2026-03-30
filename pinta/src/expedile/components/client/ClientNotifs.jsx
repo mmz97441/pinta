@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Bell, CheckCheck, ChevronRight, Package, CheckCircle, CreditCard, MessageCircle } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { BRAND } from '../../constants';
@@ -32,7 +33,8 @@ function relativeDate(raw) {
 }
 
 export default function ClientNotifs() {
-  const { notifs, unreadNotifs, markNotifRead, markAllNotifsRead, setSelId, setClientTab } = useApp();
+  const navigate = useNavigate();
+  const { notifs, unreadNotifs, markNotifRead, markAllNotifsRead } = useApp();
 
   // Sort by date, newest first
   const sorted = useMemo(
@@ -47,8 +49,7 @@ export default function ClientNotifs() {
   const handleNotifClick = (n) => {
     markNotifRead(n.id);
     if (n.colisId) {
-      setSelId(n.colisId);
-      setClientTab('colis');
+      navigate(`/colis/${n.colisId}`);
     }
   };
 

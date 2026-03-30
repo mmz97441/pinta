@@ -1,11 +1,13 @@
 import React from 'react';
 import { ArrowLeft } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import { Badge } from '../ui';
 import { hasTrack, trackStr, trackCount } from '../../utils';
 
 export default function DetailHeader() {
-  const { sel, selClient, selDest, isStaff, setSelId } = useApp();
+  const navigate = useNavigate();
+  const { sel, selClient, selDest, isStaff } = useApp();
   if (!sel) return null;
 
   return (
@@ -13,7 +15,7 @@ export default function DetailHeader() {
       className="border-b border-white border-opacity-5 px-4 py-3.5 flex items-center gap-3 sticky top-0 z-20"
       style={{ background: 'linear-gradient(135deg, rgba(18,42,54,0.98), rgba(27,58,75,0.98))' }}
     >
-      <button onClick={() => setSelId(null)} className="text-white font-bold text-lg p-1 hover:bg-white hover:bg-opacity-10 rounded-xl transition-all">
+      <button onClick={() => navigate(-1)} className="text-white font-bold text-lg p-1 hover:bg-white hover:bg-opacity-10 rounded-xl transition-all">
         <ArrowLeft size={22} />
       </button>
       <div className="flex-1">

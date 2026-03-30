@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Users, Plus, Search, ChevronDown, Check, X, AlertTriangle, ExternalLink, Send, Download, FileSpreadsheet } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { BRAND, ABONNEMENTS, getDestByCP } from '../../constants';
@@ -86,7 +87,8 @@ function ValidatedField({ label, value, onChange, placeholder, type = 'text', mo
 
 // ── Main component ───────────────────────────────────────────────────────────
 export default function StaffClients() {
-  const { clients, data, setPage, setSelId, updateClient, addNewClient, deleteClient, flash, sendMsg } = useApp();
+  const navigate = useNavigate();
+  const { clients, data, updateClient, addNewClient, deleteClient, flash, sendMsg } = useApp();
 
   const [clPageSearch, setClPageSearch] = useState('');
   const [clEditId, setClEditId] = useState(null);
@@ -245,7 +247,7 @@ export default function StaffClients() {
   }
 
   function handleOpenColis(colisId) {
-    setSelId(colisId);
+    navigate(`/colis/${colisId}`);
   }
 
   // ── Generate invitation Telegram link ──────────────────────────────────────
@@ -261,7 +263,7 @@ export default function StaffClients() {
       <div className="flex items-center justify-between gap-2 pt-1">
         <div className="flex items-center gap-2.5">
           <button
-            onClick={() => setPage('home')}
+            onClick={() => navigate('/')}
             className="p-2 rounded-xl hover:bg-gray-100 transition-colors"
             style={{ color: BRAND.navy }}
           >

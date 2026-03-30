@@ -4,6 +4,7 @@ import {
   ChevronDown, ChevronUp, ChevronRight, AlertCircle, ThumbsUp, ThumbsDown, RotateCcw,
   ExternalLink, Clock, Download,
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import { BRAND, PHASES_CLIENT, getPhaseIndex, getDestByCP } from '../../constants';
 import { exportDevisPDF } from '../../utils/exportDevisPDF';
@@ -119,7 +120,8 @@ function PhaseStep({ phase, phaseIdx, state, open, onToggle, children }) {
 
 // ── Main component ─────────────────────────────────────────────────────────────
 export default function ClientDetailView() {
-  const { sel, selDest, setSelId, feuVert, feuVertBulk, payer, ask, flash, authCl, data } = useApp();
+  const navigate = useNavigate();
+  const { sel, selDest, feuVert, feuVertBulk, payer, ask, flash, authCl, data } = useApp();
 
   if (!sel) return null;
 
@@ -146,7 +148,7 @@ export default function ClientDetailView() {
         ask(
           'Autoriser la préparation',
           `Vous confirmez que le contenu de ${sel.ref} est conforme et autorisez Expedîle à le préparer pour l'expédition ?\n\nVous avez aussi ${autresFV.length} autre${autresFV.length > 1 ? 's' : ''} colis en attente (${refs}). Voulez-vous tout autoriser d'un coup ?`,
-          () => { feuVertBulk([sel.id, ...autresFV.map((p) => p.id)]); setSelId(null); },
+          () => { feuVertBulk([sel.id, ...autresFV.map((p) => p.id)]); navigate('/'); },
           { okLabel: `Tout autoriser (${autresFV.length + 1})` }
         );
       } else {
@@ -161,7 +163,7 @@ export default function ClientDetailView() {
       ask(
         'Refuser la préparation',
         `Êtes-vous sûr de vouloir refuser la préparation de ${sel.ref} ? Ce colis ne sera pas expédié.`,
-        () => { feuVert(sel.id, false); setSelId(null); },
+        () => { feuVert(sel.id, false); navigate('/'); },
         { danger: true, okLabel: 'Oui, je refuse' }
       );
     }
@@ -560,7 +562,7 @@ export default function ClientDetailView() {
       {/* ── Compact header with back ── */}
       <div className="flex items-center gap-3">
         <button
-          onClick={() => setSelId(null)}
+          onClick={() => navigate(-1)}
           className="flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center transition-all active:scale-90 hover:bg-gray-100"
         >
           <ArrowLeft size={18} className="text-gray-600" />
