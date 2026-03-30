@@ -241,7 +241,7 @@ export function AppProvider({ children }) {
   }, [sbReady, auth]);
 
   // ── Communication ──
-  const sendMsg = useCallback((colisId, clientId, canal, templateKey, customMsg) => {
+  const sendMsg = useCallback(async (colisId, clientId, canal, templateKey, customMsg) => {
     const c = clients.find((x) => x.id === clientId);
     const colis = data.find((x) => x.id === colisId);
     if (!c) return;
@@ -257,55 +257,69 @@ export function AppProvider({ children }) {
 
     const fullMsg = tpl ? (canal === 'telegram' ? tpl.telegram(c, colis) : tpl.email(c, colis)) : customMsg || '';
 
+    // ── Persist message to Supabase (ALL channels) ──
+    const persistMessage = async (statut) => {
+      if (!colisId) return;
+      try {
+        const saved = await sb.insertMessage(colisId, {
+          type: 'staff',
+          auteur: auth?.u?.nom || 'Système',
+          texte: fullMsg,
+          statut,
+        });
+        if (saved) {
+          setData((prev) => prev.map((p) => {
+            if (p.id !== colisId) return p;
+            return { ...p, messages: [...p.messages, saved] };
+          }));
+        }
+      } catch (err) {
+        console.warn('[Supabase] insertMessage in sendMsg:', err.message);
+        // Fallback local
+        setData((prev) => prev.map((p) => {
+          if (p.id !== colisId) return p;
+          return {
+            ...p,
+            messages: [...p.messages, {
+              id: uid(), type: 'staff', auteur: auth?.u?.nom || 'Système',
+              texte: fullMsg, statut,
+              heure: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
+            }],
+          };
+        }));
+      }
+    };
+
     if (canal === 'telegram') {
       const chatId = c.telegramChatId;
       if (isTelegramConfigured() && chatId) {
-        // ── API Telegram Bot ──
         const prenom = c.nom.split(' ')[0];
         flash({ msg: `Envoi Telegram → ${prenom}…`, type: 'info' });
-        sendNotification(chatId, fullMsg).then((res) => {
-          if (res.ok) {
-            const methodLabel = 'texte';
-            // Add to chat thread
-            setData((prev) => prev.map((p) => {
-              if (p.id !== colisId) return p;
-              return {
-                ...p,
-                messages: [...p.messages, {
-                  id: uid(), type: 'staff', auteur: auth?.u?.nom || 'Système',
-                  texte: fullMsg, statut: 'envoye', msgId: res.messageId || null,
-                  heure: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
-                }],
-              };
-            }));
-            flash({ msg: `Telegram envoyé (${methodLabel}) → ${prenom}`, type: 'success' });
-          } else {
-            // Échec API → bouton fallback
-            const link = res.telegramLink;
-            flash({
-              msg: `Envoi auto impossible → ${prenom}\n(${res.error || 'erreur'})`,
-              type: 'warning',
-              action: link ? {
-                label: 'Ouvrir Telegram manuellement',
-                onClick: () => window.open(link, '_blank'),
-              } : null,
-            });
-          }
-        });
+        const res = await sendNotification(chatId, fullMsg);
+        if (res.ok) {
+          await persistMessage('envoye');
+          flash({ msg: `Telegram envoyé → ${prenom}`, type: 'success' });
+        } else {
+          await persistMessage('echec');
+          flash({
+            msg: `Envoi impossible → ${prenom}\n(${res.error || 'erreur'})`,
+            type: 'warning',
+          });
+        }
       } else if (isTelegramConfigured() && !chatId) {
-        // Client n'a pas lié Telegram
-        const prenom = c.nom.split(' ')[0];
+        // Client pas lié → persister en attente
+        await persistMessage('en_attente');
         flash({
-          msg: `${prenom} n'a pas encore lié son compte Telegram. Envoyez-lui l'invitation.`,
+          msg: `${c.nom.split(' ')[0]} n'a pas encore lié Telegram. Message en attente.`,
           type: 'warning',
           duration: 5000,
         });
       } else {
-        // API non configurée
         flash({ msg: 'Bot Telegram non configuré', type: 'warning' });
       }
     } else if (canal === 'email' && c.email) {
       window.open(mailtoLink(c.email, fullMsg), '_blank');
+      await persistMessage('envoye');
       flash(`Email → ${c.nom.split(' ')[0]}`);
     }
   }, [clients, data, auth, flash]);
