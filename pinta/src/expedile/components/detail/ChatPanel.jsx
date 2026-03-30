@@ -67,20 +67,47 @@ export default function ChatPanel() {
 
   const hasMessages = sel.messages.length > 0;
 
+  // ── Render text with clickable URLs ─────────────────────────────────────────
+  const renderText = (text) => {
+    if (!text) return null;
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    const parts = text.split(urlRegex);
+    return parts.map((part, i) => {
+      if (urlRegex.test(part)) {
+        urlRegex.lastIndex = 0;
+        const isImage = /\.(jpg|jpeg|png|gif|webp)/i.test(part);
+        return (
+          <span key={i}>
+            {isImage && (
+              <a href={part} target="_blank" rel="noopener noreferrer" className="block mt-1 mb-1">
+                <img src={part} alt="Pièce jointe" className="max-w-[200px] max-h-[150px] rounded-lg border border-gray-200" />
+              </a>
+            )}
+            <a href={part} target="_blank" rel="noopener noreferrer" className="underline text-blue-400 hover:text-blue-600 break-all">
+              {isImage ? '📎 Voir la pièce jointe' : part.length > 50 ? part.slice(0, 50) + '...' : part}
+            </a>
+          </span>
+        );
+      }
+      return <span key={i}>{part}</span>;
+    });
+  };
+
   // ── Render a single message bubble ─────────────────────────────────────────
   const renderMessage = (m) => {
     const isS = m.type === 'staff';
+    const isFacture = m.texte?.includes('Facture envoyée') || m.texte?.includes('📎');
     return (
       <div key={m.id} className={`flex ${isS ? 'justify-end' : 'justify-start'} items-center gap-1`}>
         {!isS && m.type === 'client' && !m.lu && (
           <span className="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0" />
         )}
         <div
-          className={`max-w-[75%] px-3 py-2 rounded-2xl text-xs ${isS ? 'text-white' : 'bg-gray-100'}`}
+          className={`max-w-[75%] px-3 py-2 rounded-2xl text-xs ${isS ? 'text-white' : isFacture ? 'bg-green-50 border border-green-200' : 'bg-gray-100'}`}
           style={isS ? { backgroundColor: BRAND.navy } : {}}
         >
           <p style={{ fontSize: 10 }} className="opacity-60 mb-0.5">{m.auteur}</p>
-          <p className="whitespace-pre-line">{m.texte}</p>
+          <p className="whitespace-pre-line">{renderText(m.texte)}</p>
           {(m.heure || m.statut) && (
             <div className={`flex items-center justify-end gap-1 mt-1 ${isS ? 'opacity-70' : 'opacity-40'}`}>
               {m.heure && <span style={{ fontSize: 9 }}>{m.heure}</span>}
