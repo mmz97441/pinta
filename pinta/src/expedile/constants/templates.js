@@ -24,7 +24,7 @@ function devisCartonsDetail(colis, mode) {
   const trackings = colis.trackings?.filter((t) => t) || [];
   const dimsPC = colis.dimsParColis || [];
   const nb = Math.max(details.length, trackings.length, 1);
-  const bold = mode === 'whatsapp' ? '*' : '';
+  const bold = mode === 'telegram' ? '*' : '';
 
   if (nb <= 1 && details.length <= 1) {
     // Single carton — simple
@@ -74,7 +74,7 @@ export const MSG_TEMPLATES = {
       lang: 'fr',
       params: (c, colis) => [c.nom.split(' ')[0], colis.ref, colis.desc || ''],
     },
-    whatsapp: (c, colis) => {
+    telegram: (c, colis) => {
       const dest = getDestByCP(c.cp);
       const cartonsInfo = cartonsList(colis);
       return `Bonjour ${c.nom.split(' ')[0]} 👋
@@ -132,7 +132,7 @@ Paris → ${dest.nom}`;
       lang: 'fr',
       params: (c, colis) => [c.nom.split(' ')[0], colis.ref],
     },
-    whatsapp: (c, colis) =>
+    telegram: (c, colis) =>
       `Bonjour ${c.nom.split(' ')[0]} 👋
 
 Pour avancer sur votre colis *${colis.ref}* (${colis.desc}), nous avons besoin de la *facture d'achat d'origine*.
@@ -183,7 +183,7 @@ L'équipe Expedîle`,
         colis.poids ? `${colis.poids} kg` : '',
       ],
     },
-    whatsapp: (c, colis) => {
+    telegram: (c, colis) => {
       const dest = getDestByCP(c.cp);
       const hasMulti = (colis.trackings?.filter((t) => t).length || 0) > 1;
       return `Bonjour ${c.nom.split(' ')[0]} 👋
@@ -252,7 +252,7 @@ Paris → ${dest.nom}`;
       lang: 'fr',
       params: (c, colis) => [c.nom.split(' ')[0], colis.ref],
     },
-    whatsapp: (c, colis) =>
+    telegram: (c, colis) =>
       `Bonjour ${c.nom.split(' ')[0]} 👋
 
 Merci pour votre accord ! ✅
@@ -301,11 +301,11 @@ L'équipe Expedîle`,
         eur((colis.devisOM || 0) + (colis.devisOMR || 0)),
       ],
     },
-    whatsapp: (c, colis) => {
+    telegram: (c, colis) => {
       const dest = getDestByCP(c.cp);
       const taxes = (colis.devisOM || 0) + (colis.devisOMR || 0);
       const pf = colis.poidsFact || colis.finP || colis.poids || 0;
-      const cartonsInfo = devisCartonsDetail(colis, 'whatsapp');
+      const cartonsInfo = devisCartonsDetail(colis, 'telegram');
       // Poids vol. avant optimisation (somme des cartons)
       const pvAvant = colis.dimL ? ((colis.dimL * colis.dimW * colis.dimH) / 5000) : 0;
       // Poids vol. après optimisation
@@ -395,7 +395,7 @@ Paris → ${dest.nom}`;
       lang: 'fr',
       params: (c, colis) => [c.nom.split(' ')[0], colis.ref],
     },
-    whatsapp: (c, colis) =>
+    telegram: (c, colis) =>
       `Bonjour ${c.nom.split(' ')[0]} 👋
 
 Petit rappel amical 😊 Votre colis *${colis.ref}* (${colis.desc}) attend toujours votre accord pour la préparation.
@@ -441,7 +441,7 @@ L'équipe Expedîle`,
       lang: 'fr',
       params: (c, colis) => [c.nom.split(' ')[0], colis.ref, eur(colis.devisTotal)],
     },
-    whatsapp: (c, colis) => {
+    telegram: (c, colis) => {
       const dest = getDestByCP(c.cp);
       return `Bonjour ${c.nom.split(' ')[0]} 👋
 
@@ -496,7 +496,7 @@ L'équipe Expedîle`;
       lang: 'fr',
       params: (c, colis) => [c.nom.split(' ')[0], colis.ref, getDestByCP(c.cp).nom],
     },
-    whatsapp: (c, colis) => {
+    telegram: (c, colis) => {
       const dest = getDestByCP(c.cp);
       return `Bonjour ${c.nom.split(' ')[0]} 👋
 
@@ -549,7 +549,7 @@ Paris → ${dest.nom}`;
       lang: 'fr',
       params: (c, colis) => [c.nom.split(' ')[0], colis.ref, getDestByCP(c.cp).nom],
     },
-    whatsapp: (c, colis) => {
+    telegram: (c, colis) => {
       const dest = getDestByCP(c.cp);
       return `Bonjour ${c.nom.split(' ')[0]} 👋
 
@@ -590,7 +590,7 @@ L'équipe Expedîle`;
       lang: 'fr',
       params: (c, colis) => [c.nom.split(' ')[0], colis?.ref || ''],
     },
-    whatsapp: (c, colis) =>
+    telegram: (c, colis) =>
       `Bonjour ${c.nom.split(' ')[0]} 👋
 
 🚚 *Votre colis ${colis?.ref || ''} est en cours de livraison !*
@@ -627,7 +627,7 @@ L'équipe Expedîle`,
       lang: 'fr',
       params: (c, colis) => [c.nom.split(' ')[0], colis.ref],
     },
-    whatsapp: (c, colis) =>
+    telegram: (c, colis) =>
       `Bonjour ${c.nom.split(' ')[0]} 👋
 
 ⚠️ La facture transmise pour votre colis *${colis.ref}* (${colis.desc}) n'a pas pu être validée.
@@ -665,7 +665,7 @@ L'équipe Expedîle`,
   // ═══════════════════════════════════════════════════════════════
   libre: {
     label: '✍️ Message libre',
-    whatsapp: (c) => `Bonjour ${c.nom.split(' ')[0]} 👋\n\n`,
+    telegram: (c) => `Bonjour ${c.nom.split(' ')[0]} 👋\n\n`,
     email: (c) => `Objet : \n\nBonjour ${c.nom},\n\n\n\nCordialement,\nL'équipe Expedîle`,
   },
 };

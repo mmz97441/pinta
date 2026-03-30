@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useCallback, useMemo, useEf
 import { STATUTS, PREV_STATUT, CATEGORIES_INIT, CLIENTS_INIT, TARIFS_DEFAUT, initEnvois, getDestByCP, PRODUITS_INTERDITS } from '../constants';
 import { MSG_TEMPLATES } from '../constants/templates';
 import { uid, makeData, calcTransport, getCatTaux, eur, mailtoLink, getClientDest } from '../utils';
-import { isWaConfigured, sendWhatsApp, sendNotification, waMeLink, normalizeTel } from '../services/whatsappApi';
+import { isTelegramConfigured, sendTelegram, sendNotification, telegramMeLink, normalizeTel } from '../services/telegramApi';
 import { connectWebhook } from '../services/webhookListener';
 import * as sb from '../lib/supabaseData';
 import { supabase } from '../lib/supabase';
@@ -100,7 +100,7 @@ export function AppProvider({ children }) {
               texte: newMsg.texte,
               heure: new Date(newMsg.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
               statut: newMsg.statut,
-              waId: newMsg.wa_id,
+              msgId: newMsg.msg_id || newMsg.wa_id,
             }],
           };
         }));
@@ -255,22 +255,16 @@ export function AppProvider({ children }) {
       user: auth?.u?.nom || '?',
     }, ...prev]);
 
-    const fullMsg = tpl ? (canal === 'whatsapp' ? tpl.whatsapp(c, colis) : tpl.email(c, colis)) : customMsg || '';
+    const fullMsg = tpl ? (canal === 'telegram' ? tpl.telegram(c, colis) : tpl.email(c, colis)) : customMsg || '';
 
-    if (canal === 'whatsapp' && c.tel) {
-      if (isWaConfigured()) {
-        // ── API WhatsApp Business Cloud — template Meta + fallback texte ──
+    if (canal === 'telegram' && c.tel) {
+      if (isTelegramConfigured()) {
+        // ── API Telegram Bot ──
         const prenom = c.nom.split(' ')[0];
-        // Préparer les infos template Meta si disponibles
-        const metaInfo = tpl?.meta ? {
-          name: tpl.meta.name,
-          lang: tpl.meta.lang || 'fr',
-          params: tpl.meta.params ? tpl.meta.params(c, colis || {}) : [],
-        } : null;
-        flash({ msg: `Envoi WhatsApp → ${prenom}…`, type: 'info' });
-        sendNotification(c.tel, fullMsg, metaInfo).then((res) => {
+        flash({ msg: `Envoi Telegram → ${prenom}…`, type: 'info' });
+        sendNotification(c.tel, fullMsg).then((res) => {
           if (res.ok) {
-            const methodLabel = res.method === 'template' ? 'template' : 'texte';
+            const methodLabel = 'texte';
             // Add to chat thread
             setData((prev) => prev.map((p) => {
               if (p.id !== colisId) return p;
@@ -278,33 +272,33 @@ export function AppProvider({ children }) {
                 ...p,
                 messages: [...p.messages, {
                   id: uid(), type: 'staff', auteur: auth?.u?.nom || 'Système',
-                  texte: fullMsg, statut: 'envoye', waId: res.messageId || null,
+                  texte: fullMsg, statut: 'envoye', msgId: res.messageId || null,
                   heure: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
                 }],
               };
             }));
-            flash({ msg: `WhatsApp envoyé (${methodLabel}) → ${prenom}`, type: 'success' });
+            flash({ msg: `Telegram envoyé (${methodLabel}) → ${prenom}`, type: 'success' });
           } else {
-            // Échec API → bouton fallback, PAS de redirection auto
-            const link = res.waLink;
+            // Échec API → bouton fallback
+            const link = res.telegramLink;
             flash({
-              msg: `Envoi auto impossible → ${prenom}\n(${res.error || 'fenêtre 24h expirée'})`,
+              msg: `Envoi auto impossible → ${prenom}\n(${res.error || 'erreur'})`,
               type: 'warning',
               action: link ? {
-                label: 'Ouvrir WhatsApp manuellement',
+                label: 'Ouvrir Telegram manuellement',
                 onClick: () => window.open(link, '_blank'),
               } : null,
             });
           }
         });
       } else {
-        // API non configurée → bouton wa.me, pas de redirection auto
-        const link = waMeLink(c.tel, fullMsg);
+        // API non configurée → bouton t.me
+        const link = telegramMeLink();
         flash({
-          msg: `API WhatsApp non configurée`,
+          msg: `API Telegram non configurée`,
           type: 'warning',
           action: {
-            label: 'Ouvrir WhatsApp',
+            label: 'Ouvrir Telegram',
             onClick: () => window.open(link, '_blank'),
           },
         });
@@ -319,7 +313,7 @@ export function AppProvider({ children }) {
     const c = clients.find((x) => x.id === clientId);
     const colis = data.find((x) => x.id === colisId);
     if (!c || !MSG_TEMPLATES[templateKey]) return '';
-    return canal === 'whatsapp' ? MSG_TEMPLATES[templateKey].whatsapp(c, colis || {}) : MSG_TEMPLATES[templateKey].email(c, colis || {});
+    return canal === 'telegram' ? MSG_TEMPLATES[templateKey].telegram(c, colis || {}) : MSG_TEMPLATES[templateKey].email(c, colis || {});
   }, [clients, data]);
 
   // ── Colis actions ──
@@ -524,15 +518,15 @@ export function AppProvider({ children }) {
       };
     }));
 
-    // Send via WhatsApp if staff + phone available
-    if (isStaffSender && tel && isWaConfigured()) {
-      const res = await sendWhatsApp(tel, msgTxt.trim());
+    // Send via Telegram if staff + phone available
+    if (isStaffSender && tel && isTelegramConfigured()) {
+      const res = await sendTelegram(tel, msgTxt.trim());
       setData((prev) => prev.map((c) => {
         if (c.id !== colisId) return c;
         return {
           ...c,
           messages: c.messages.map((m) =>
-            m.id === msgId ? { ...m, statut: res.ok ? 'envoye' : 'echec', waId: res.ok ? res.messageId : null } : m,
+            m.id === msgId ? { ...m, statut: res.ok ? 'envoye' : 'echec', msgId: res.ok ? res.messageId : null } : m,
           ),
         };
       }));
@@ -572,7 +566,7 @@ export function AppProvider({ children }) {
                 texte: event.text,
                 heure: new Date(parseInt(event.timestamp, 10) * 1000)
                   .toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
-                waId: event.waId,
+                msgId: event.msgId || event.waId,
               }],
             };
           });
@@ -587,7 +581,7 @@ export function AppProvider({ children }) {
         setData((prev) => prev.map((p) => ({
           ...p,
           messages: p.messages.map((m) =>
-            m.waId === event.waId ? { ...m, statut: newStatut } : m,
+            (m.msgId === event.msgId || m.waId === event.waId) ? { ...m, statut: newStatut } : m,
           ),
         })));
       }

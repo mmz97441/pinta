@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { X, FileText, Search, UserPlus, Ruler, Package, MapPin, Camera } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { BRAND, STATUTS, getDestByCP, PRODUITS_INTERDITS } from '../constants';
-import { uid, searchClients, waLink } from '../utils';
+import { uid, searchClients, telegramLink } from '../utils';
 import { Badge } from './ui';
 import * as sb from '../lib/supabaseData';
 
@@ -35,7 +35,7 @@ const EMPTY_NEW_CLIENT = {
   cp: '',
   tel: '',
   email: '',
-  canal: 'whatsapp',
+  canal: 'telegram',
   type: 'particulier',
 };
 
@@ -217,7 +217,7 @@ export default function ColisModal({ open, onClose }) {
   };
 
   // ── submit: staff new colis (reception) ──────────────
-  const handleReceptionner = async (sendWA) => {
+  const handleReceptionner = async (sendTG) => {
     // If in new client mode, create client first
     let clientId;
     let cl;
@@ -297,7 +297,7 @@ export default function ColisModal({ open, onClose }) {
       });
     }
 
-    if (sendWA && cl?.tel) {
+    if (sendTG && cl?.tel) {
       const msg =
         `Bonjour ${cl.nom.split(' ')[0]} 👋\n\nVotre colis *${newColis.ref}* est bien arrivé à notre entrepôt de Paris !\n\n` +
         `📦 Contenu : ${newColis.desc}\n` +
@@ -305,14 +305,14 @@ export default function ColisModal({ open, onClose }) {
           ? `🔍 Tracking : ${newColis.trackings.filter((t) => t).join(', ')}\n`
           : '') +
         `\nNous allons le mesurer et peser. On revient vers vous rapidement pour la suite.\n\n_Expedîle_`;
-      window.open(waLink(cl.tel, msg), '_blank');
+      window.open(telegramLink(newColis.ref), '_blank');
     }
 
     const hasDims = nf.trackingLines.every((_, i) => {
       const d = nf.multiDims[i] || {};
       return d.dimL && d.dimW && d.dimH && d.poids;
     });
-    const label = sendWA ? 'réceptionné + WhatsApp envoyé' : 'réceptionné';
+    const label = sendTG ? 'réceptionné + Telegram envoyé' : 'réceptionné';
     flash(`Colis ${newColis.ref} ${label}${hasDims ? ' + mesuré' : ''} — casier ${nf.casier.trim()}`);
     resetAndClose();
   };
@@ -687,7 +687,7 @@ export default function ColisModal({ open, onClose }) {
                 </div>
               </div>
               <div>
-                <label className={labelCls}>Téléphone <span className="normal-case text-gray-400 font-normal">(pour WhatsApp)</span></label>
+                <label className={labelCls}>Téléphone <span className="normal-case text-gray-400 font-normal">(pour Telegram)</span></label>
                 <input
                   type="tel"
                   placeholder="+262 692 12 34 56"
@@ -1161,9 +1161,10 @@ export default function ColisModal({ open, onClose }) {
                   <button
                     type="button"
                     onClick={() => handleReceptionner(true)}
-                    className="flex-1 py-2.5 rounded-xl font-bold text-sm text-white bg-green-600 hover:bg-green-700 active:scale-95 transition-all"
+                    className="flex-1 py-2.5 rounded-xl font-bold text-sm text-white active:scale-95 transition-all"
+                    style={{ background: '#0088cc' }}
                   >
-                    + WhatsApp
+                    + Telegram
                   </button>
                 </>
               )}

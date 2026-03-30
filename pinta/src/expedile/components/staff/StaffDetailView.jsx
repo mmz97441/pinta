@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import {
-  Ruler, Check, Clock, Camera, AlertTriangle, Eye, X, RotateCcw, ExternalLink, Mail, Plus,
+  Ruler, Check, Clock, Camera, AlertTriangle, Eye, X, RotateCcw, Send, Mail, Plus,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { BRAND, STATUTS, TRANSITIONS, PRODUITS_INTERDITS, TAGS_PREPARATION, getDestByCP } from '../../constants';
@@ -124,15 +124,15 @@ function BtnPrimary({ onClick, children, disabled, color }) {
   );
 }
 
-// ── WhatsApp button ──────────────────────────────────────────────────────────
-function BtnWA({ onClick, children }) {
+// ── Telegram button ──────────────────────────────────────────────────────────
+function BtnTelegram({ onClick, children }) {
   return (
     <button
       onClick={onClick}
       className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl text-sm font-bold transition-all active:scale-95"
-      style={{ background: '#25D366', color: 'white', boxShadow: '0 2px 8px #25D36640' }}
+      style={{ background: '#0088cc', color: 'white', boxShadow: '0 2px 8px #0088cc40' }}
     >
-      <ExternalLink size={14} />
+      <Send size={14} />
       {children}
     </button>
   );
@@ -237,7 +237,7 @@ export default function StaffDetailView() {
   const [msgPanel, setMsgPanel] = useState(false);
   const [selTemplate, setSelTemplate] = useState('libre');
   const [msgPreview, setMsgPreview] = useState('');
-  const [sendCanal, setSendCanal] = useState(cl?.canal || 'whatsapp');
+  const [sendCanal, setSendCanal] = useState(cl?.canal || 'telegram');
 
   // Local measure form
   const [dims, setDims] = useState({ dimL: '', dimW: '', dimH: '', poids: '' });
@@ -416,7 +416,7 @@ export default function StaffDetailView() {
   }
 
   // ── Reception handler ─────────────────────────────────────────────────────
-  function handleReceptionner(withWA) {
+  function handleReceptionner(withTelegram) {
     if (!casierTmp.trim()) {
       setFormErr('Le numéro de casier est obligatoire.');
       return;
@@ -465,8 +465,8 @@ export default function StaffDetailView() {
 
     upd(sel.id, changes);
     flash(hasDims ? 'Réceptionné + mesuré' : 'Colis réceptionné');
-    if (withWA) {
-      sendMsg(sel.id, cl?.id, 'whatsapp', 'reception', null);
+    if (withTelegram) {
+      sendMsg(sel.id, cl?.id, 'telegram', 'reception', null);
     }
   }
 
@@ -496,7 +496,7 @@ export default function StaffDetailView() {
 
   function handleConfirmDevisEnvoye() {
     changerStatut(sel.id, 'devis_envoye');
-    sendMsg(sel.id, cl?.id, cl?.canal || 'whatsapp', 'devis_final', null);
+    sendMsg(sel.id, cl?.id, cl?.canal || 'telegram', 'devis_final', null);
     setDevisPrev(false);
   }
 
@@ -693,12 +693,12 @@ export default function StaffDetailView() {
                   </div>
                   <div className="flex gap-2">
                     <button
-                      onClick={() => sendMsg(sel.id, cl?.id, 'whatsapp', 'demande_facture', null)}
+                      onClick={() => sendMsg(sel.id, cl?.id, 'telegram', 'demande_facture', null)}
                       className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[11px] font-bold transition-all active:scale-95"
-                      style={{ background: '#25D366', color: 'white' }}
+                      style={{ background: '#0088cc', color: 'white' }}
                     >
-                      <ExternalLink size={11} />
-                      Demander par WhatsApp
+                      <Send size={11} />
+                      Demander par Telegram
                     </button>
                     <button
                       onClick={() => sendMsg(sel.id, cl?.id, 'email', 'demande_facture', null)}
@@ -735,14 +735,14 @@ export default function StaffDetailView() {
                 </div>
               </div>
 
-              <BtnWA
+              <BtnTelegram
                 onClick={() => {
                   demanderFeuVert(sel.id);
-                  sendMsg(sel.id, cl?.id, 'whatsapp', 'demande_feu_vert', null);
+                  sendMsg(sel.id, cl?.id, 'telegram', 'demande_feu_vert', null);
                 }}
               >
-                Envoyer via WhatsApp — demander le feu vert
-              </BtnWA>
+                Envoyer via Telegram — demander le feu vert
+              </BtnTelegram>
 
               <BtnEmail
                 onClick={() => {
@@ -779,12 +779,12 @@ export default function StaffDetailView() {
                   </div>
                   <div className="flex gap-2">
                     <button
-                      onClick={() => sendMsg(sel.id, cl?.id, 'whatsapp', 'demande_facture', null)}
+                      onClick={() => sendMsg(sel.id, cl?.id, 'telegram', 'demande_facture', null)}
                       className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[11px] font-bold transition-all active:scale-95"
-                      style={{ background: '#25D366', color: 'white' }}
+                      style={{ background: '#0088cc', color: 'white' }}
                     >
-                      <ExternalLink size={11} />
-                      Demander par WhatsApp
+                      <Send size={11} />
+                      Demander par Telegram
                     </button>
                     <button
                       onClick={() => sendMsg(sel.id, cl?.id, 'email', 'demande_facture', null)}
@@ -798,11 +798,11 @@ export default function StaffDetailView() {
                 </div>
               )}
 
-              <BtnWA
-                onClick={() => sendMsg(sel.id, cl?.id, 'whatsapp', 'relance_feu_vert', null)}
+              <BtnTelegram
+                onClick={() => sendMsg(sel.id, cl?.id, 'telegram', 'relance_feu_vert', null)}
               >
-                Relancer via WhatsApp
-              </BtnWA>
+                Relancer via Telegram
+              </BtnTelegram>
 
               <BtnEmail
                 onClick={() => sendMsg(sel.id, cl?.id, 'email', 'relance_feu_vert', null)}
@@ -1144,9 +1144,9 @@ export default function StaffDetailView() {
                   {eur(sel.devisTotal)}
                 </p>
               </div>
-              <BtnWA onClick={() => sendMsg(sel.id, cl?.id, 'whatsapp', 'devis_final', null)}>
-                Relancer via WhatsApp
-              </BtnWA>
+              <BtnTelegram onClick={() => sendMsg(sel.id, cl?.id, 'telegram', 'devis_final', null)}>
+                Relancer via Telegram
+              </BtnTelegram>
             </div>
           </Section>
         );
@@ -1204,9 +1204,9 @@ export default function StaffDetailView() {
                   </BtnPrimary>
                 </>
               ) : (
-                <BtnWA onClick={() => sendMsg(sel.id, cl?.id, 'whatsapp', 'relance_paiement', null)}>
-                  Relancer via WhatsApp
-                </BtnWA>
+                <BtnTelegram onClick={() => sendMsg(sel.id, cl?.id, 'telegram', 'relance_paiement', null)}>
+                  Relancer via Telegram
+                </BtnTelegram>
               )}
             </div>
           </Section>
@@ -1365,7 +1365,7 @@ export default function StaffDetailView() {
                     <BtnPrimary
                       onClick={() => {
                         changerStatut(sel.id, 'arrive');
-                        sendMsg(sel.id, cl?.id, cl?.canal || 'whatsapp', 'arrive', null);
+                        sendMsg(sel.id, cl?.id, cl?.canal || 'telegram', 'arrive', null);
                       }}
                       color="#14B8A6"
                     >
@@ -1382,7 +1382,7 @@ export default function StaffDetailView() {
                         key={ns}
                         onClick={() => {
                           changerStatut(sel.id, ns);
-                          if (tpl) sendMsg(sel.id, cl?.id, cl?.canal || 'whatsapp', tpl, null);
+                          if (tpl) sendMsg(sel.id, cl?.id, cl?.canal || 'telegram', tpl, null);
                         }}
                         color={borderColor}
                       >

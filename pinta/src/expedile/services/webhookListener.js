@@ -1,4 +1,4 @@
-// ══════════ SSE listener — messages WhatsApp entrants ══════════
+// ══════════ SSE listener — messages Telegram entrants ══════════
 // Se connecte au serveur webhook via Server-Sent Events.
 // EventSource gère la reconnexion automatique en cas de coupure.
 // ───────────────────────────────────────────────────────────────

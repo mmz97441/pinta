@@ -17,7 +17,7 @@ const TIERS = [
     maxPts: 200,
     color: '#64748b',
     bg: '#f1f5f9',
-    avantages: ['Suivi de colis en temps réel', 'Notifications WhatsApp', 'Support par email'],
+    avantages: ['Suivi de colis en temps réel', 'Notifications Telegram', 'Support par email'],
   },
   {
     key: 'premium',
@@ -26,7 +26,7 @@ const TIERS = [
     maxPts: 500,
     color: BRAND.goldD,
     bg: '#fef9ec',
-    avantages: ['Priorité de traitement', 'Réduction 5% sur transport', 'Support prioritaire WhatsApp', 'Accès aux offres groupées'],
+    avantages: ['Priorité de traitement', 'Réduction 5% sur transport', 'Support prioritaire Telegram', 'Accès aux offres groupées'],
   },
   {
     key: 'vip',
@@ -538,7 +538,7 @@ export default function ClientProfil() {
             </div>
             <div className="flex-1">
               <p className="text-sm font-semibold text-gray-800">Notifications</p>
-              <p className="text-xs text-gray-400 mt-0.5">Alertes WhatsApp et email</p>
+              <p className="text-xs text-gray-400 mt-0.5">Alertes Telegram et email</p>
             </div>
             <button
               onClick={() => setNotifsOn((v) => !v)}
@@ -597,7 +597,7 @@ export default function ClientProfil() {
           <SettingRow
             icon={HelpCircle}
             label="Aide & Support"
-            sub="FAQ, contact WhatsApp"
+            sub="FAQ, contact Telegram"
             onClick={() => flash('Ouverture du support…')}
           />
         </div>

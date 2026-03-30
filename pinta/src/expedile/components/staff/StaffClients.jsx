@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { ArrowLeft, Users, Plus, Search, ChevronDown, Check, X, AlertTriangle, ExternalLink, Send, Download, FileSpreadsheet } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { BRAND, ABONNEMENTS, getDestByCP } from '../../constants';
-import { uid, waLink, searchClients } from '../../utils';
+import { uid, telegramLink, searchClients } from '../../utils';
 import { Badge } from '../ui';
 import { exportRecapProExcel } from '../../utils/exportRecapPro';
 
@@ -14,7 +14,7 @@ const emptyDraft = () => ({
   ville: '',
   cp: '',
   adresse: '',
-  canal: 'whatsapp',
+  canal: 'telegram',
   type: 'particulier',
   notes: '',
 });
@@ -101,7 +101,7 @@ export default function StaffClients() {
 
   // ── Derived ───────────────────────────────────────────────────────────────
   const filtered = searchClients(clients, clPageSearch);
-  const waCount = clients.filter((c) => c.canal === 'whatsapp').length;
+  const tgCount = clients.filter((c) => c.canal === 'telegram').length;
   const proCount = clients.filter((c) => c.type === 'pro').length;
 
   // ── Duplicate detection ────────────────────────────────────────────────────
@@ -196,7 +196,7 @@ export default function StaffClients() {
       ville: cl.ville || '',
       cp: cl.cp || '',
       adresse: cl.adresse || '',
-      canal: cl.canal || 'whatsapp',
+      canal: cl.canal || 'telegram',
       type: cl.type || 'particulier',
       notes: cl.notes || '',
     });
@@ -246,12 +246,9 @@ export default function StaffClients() {
     setSelId(colisId);
   }
 
-  // ── Generate invitation WhatsApp link ──────────────────────────────────────
-  function getInvitationWALink(cl) {
-    const prenom = cl.nom ? cl.nom.split(' ')[0] : '';
-    const dest = getDestByCP(cl.cp);
-    const msg = `Bonjour ${prenom} !\n\nBienvenue chez Expedîle ! Votre espace client est prêt.\n\nVous pouvez dès maintenant suivre vos colis depuis la métropole vers ${dest.flag} ${dest.nom}.\n\nConnectez-vous ici :\nhttps://expedile.re/app\n\nÀ très vite !`;
-    return waLink(cl.tel, msg);
+  // ── Generate invitation Telegram link ──────────────────────────────────────
+  function getInvitationTelegramLink(cl) {
+    return telegramLink(cl.id);
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -330,8 +327,8 @@ export default function StaffClients() {
           <span className="text-[11px] font-semibold text-gray-400 mt-0.5">Total</span>
         </div>
         <div className="card p-3 flex flex-col items-center">
-          <span className="text-2xl font-black leading-none text-green-600">{waCount}</span>
-          <span className="text-[11px] font-semibold text-gray-400 mt-0.5">WhatsApp</span>
+          <span className="text-2xl font-black leading-none text-blue-600">{tgCount}</span>
+          <span className="text-[11px] font-semibold text-gray-400 mt-0.5">Telegram</span>
         </div>
         <div className="card p-3 flex flex-col items-center">
           <span className="text-2xl font-black leading-none" style={{ color: BRAND.goldD }}>
@@ -388,8 +385,8 @@ export default function StaffClients() {
                         {cl.methodePaiement === '30_jours' ? '30j' : 'Fin de mois'}
                       </span>
                     )}
-                    {cl.canal === 'whatsapp' && (
-                      <span className="w-2 h-2 rounded-full bg-green-500 flex-shrink-0" title="WhatsApp" />
+                    {cl.canal === 'telegram' && (
+                      <span className="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0" title="Telegram" />
                     )}
                   </div>
                   <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
@@ -450,17 +447,17 @@ export default function StaffClients() {
                     </div>
                   </div>
 
-                  {cl.tel && cl.canal === 'whatsapp' && (
+                  {cl.tel && cl.canal === 'telegram' && (
                     <a
-                      href={getInvitationWALink(cl)}
+                      href={getInvitationTelegramLink(cl)}
                       target="_blank"
                       rel="noreferrer"
                       className="flex items-center justify-center gap-2 w-full py-3 rounded-xl text-sm font-bold transition-all active:scale-95"
-                      style={{ background: '#25D366', color: 'white', boxShadow: '0 2px 10px #25D36640' }}
+                      style={{ background: '#0088cc', color: 'white', boxShadow: '0 2px 10px #0088cc40' }}
                       onClick={() => setTimeout(() => setJustSavedId(null), 500)}
                     >
                       <Send size={14} />
-                      Inviter via WhatsApp
+                      Inviter via Telegram
                     </a>
                   )}
 
@@ -590,7 +587,7 @@ export default function StaffClients() {
                       value={clDraft.canal}
                       onChange={(v) => patchDraft('canal', v)}
                       options={[
-                        { value: 'whatsapp', label: 'WhatsApp' },
+                        { value: 'telegram', label: 'Telegram' },
                         { value: 'email', label: 'Email' },
                       ]}
                     />
@@ -648,14 +645,14 @@ export default function StaffClients() {
                   {/* Quick action links */}
                   {!isNewClient && (cl.tel || cl.email) && (
                     <div className="flex gap-2 flex-wrap">
-                      {cl.tel && cl.canal === 'whatsapp' && (
+                      {cl.tel && cl.canal === 'telegram' && (
                         <a
-                          href={waLink(cl.tel, `Bonjour ${cl.nom ? cl.nom.split(' ')[0] : ''} !`)}
+                          href={telegramLink(cl.id)}
                           target="_blank"
                           rel="noreferrer"
-                          className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-green-50 text-green-700 hover:bg-green-100 transition-colors"
+                          className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors"
                         >
-                          WhatsApp
+                          Telegram
                         </a>
                       )}
                       {cl.email && (

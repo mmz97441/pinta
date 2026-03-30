@@ -146,7 +146,7 @@ function mapMessage(row) {
       ? new Date(row.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
       : '',
     statut: row.statut,
-    waId: row.wa_id,
+    msgId: row.msg_id || row.wa_id,
   };
 }
 
@@ -392,7 +392,7 @@ export async function insertClient(clientData) {
       cp: clientData.cp,
       tel: clientData.tel || null,
       email: clientData.email || null,
-      canal: clientData.canal || 'whatsapp',
+      canal: clientData.canal || 'telegram',
       type: clientData.type || 'particulier',
       points: clientData.points || 0,
       onboarded: clientData.onboarded || false,

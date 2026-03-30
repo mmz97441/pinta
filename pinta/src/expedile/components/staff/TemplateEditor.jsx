@@ -77,27 +77,27 @@ const TEMPLATES = [
 ];
 
 const DEFAULT_BODIES = {
-  reception_whatsapp: `Bonjour {{prenom}} 👋\n\nBonne nouvelle ! Votre colis *{{ref}}* est bien arrivé à notre entrepôt de Paris 🎉\n\n📦 *Contenu :* {{desc}}\n{{liste_cartons}}\n🎯 *Destination :* {{destination_flag}} {{destination}}\n\n📐 *Prochaine étape :* Nous allons mesurer et peser votre colis.\n\n💡 Pensez à nous envoyer la *facture d'achat* si ce n'est pas déjà fait.\n\nÀ très vite !\n_L'équipe Expedîle — Paris → {{destination}}_`,
+  reception_telegram: `Bonjour {{prenom}} 👋\n\nBonne nouvelle ! Votre colis *{{ref}}* est bien arrivé à notre entrepôt de Paris 🎉\n\n📦 *Contenu :* {{desc}}\n{{liste_cartons}}\n🎯 *Destination :* {{destination_flag}} {{destination}}\n\n📐 *Prochaine étape :* Nous allons mesurer et peser votre colis.\n\n💡 Pensez à nous envoyer la *facture d'achat* si ce n'est pas déjà fait.\n\nÀ très vite !\n_L'équipe Expedîle — Paris → {{destination}}_`,
   reception_email: `Bonjour {{nom_complet}},\n\nNous confirmons la réception de votre colis {{ref}} ({{desc}}) à notre entrepôt de Paris.\n\nDestination : {{destination_flag}} {{destination}}\n\nProchaines étapes :\n1. Mesure et pesage\n2. Demande de votre accord\n3. Optimisation emballage\n4. Envoi du devis final\n\n💡 Pensez à nous transmettre la facture d'achat.\n\nCordialement,\nL'équipe Expedîle`,
-  demande_feu_vert_whatsapp: `Bonjour {{prenom}} 👋\n\nVotre colis *{{ref}}* a été mesuré ✅\n\n📦 *{{desc}}*\n📐 *Dimensions :* {{dims_brutes}} — {{poids_brut}}\n⚖️ *Poids vol. :* {{poids_vol_avant}}\n🎯 *Destination :* {{destination_flag}} {{destination}}\n\n🔔 *Votre accord est nécessaire :*\n✅ *OUI* → On prépare et optimise\n❌ *NON* → On annule\n\n💡 Le devis final après optimisation.\n\n_Expedîle_`,
+  demande_feu_vert_telegram: `Bonjour {{prenom}} 👋\n\nVotre colis *{{ref}}* a été mesuré ✅\n\n📦 *{{desc}}*\n📐 *Dimensions :* {{dims_brutes}} — {{poids_brut}}\n⚖️ *Poids vol. :* {{poids_vol_avant}}\n🎯 *Destination :* {{destination_flag}} {{destination}}\n\n🔔 *Votre accord est nécessaire :*\n✅ *OUI* → On prépare et optimise\n❌ *NON* → On annule\n\n💡 Le devis final après optimisation.\n\n_Expedîle_`,
   demande_feu_vert_email: `Bonjour {{nom_complet}},\n\nVotre colis {{ref}} ({{desc}}) a été mesuré.\n\nDimensions : {{dims_brutes}} — Poids : {{poids_brut}}\nPoids volumétrique : {{poids_vol_avant}}\nDestination : {{destination_flag}} {{destination}}\n\nNous avons besoin de votre accord pour préparer votre colis.\n\nCordialement,\nL'équipe Expedîle`,
-  devis_final_whatsapp: `Bonjour {{prenom}} 👋\n\nLe devis pour *{{ref}}* est prêt ! 📋\n\n🎯 {{destination_flag}} {{destination}}\n{{liste_cartons}}\n\n📐 Poids vol. avant : {{poids_vol_avant}}\n📐 Après optim. : {{dims_finales}} — {{poids_vol_apres}}\n⚖️ Poids facturable : {{poids_facturable}}\n{{contenu_declare}}\n\n━━━━━━━━━━━━━━\n🚀 Transport : *{{transport}}*\n🏛️ Taxes : *{{taxes}}*\n📊 TVA ({{taux_tva}}) : *{{tva}}*\n{{frais_divers}}\n━━━━━━━━━━━━━━\n💰 *TOTAL : {{total}}*\n━━━━━━━━━━━━━━\n\n👉 Payez pour déclencher l'expédition.\n\n_Expedîle_`,
+  devis_final_telegram: `Bonjour {{prenom}} 👋\n\nLe devis pour *{{ref}}* est prêt ! 📋\n\n🎯 {{destination_flag}} {{destination}}\n{{liste_cartons}}\n\n📐 Poids vol. avant : {{poids_vol_avant}}\n📐 Après optim. : {{dims_finales}} — {{poids_vol_apres}}\n⚖️ Poids facturable : {{poids_facturable}}\n{{contenu_declare}}\n\n━━━━━━━━━━━━━━\n🚀 Transport : *{{transport}}*\n🏛️ Taxes : *{{taxes}}*\n📊 TVA ({{taux_tva}}) : *{{tva}}*\n{{frais_divers}}\n━━━━━━━━━━━━━━\n💰 *TOTAL : {{total}}*\n━━━━━━━━━━━━━━\n\n👉 Payez pour déclencher l'expédition.\n\n_Expedîle_`,
   devis_final_email: `Bonjour {{nom_complet}},\n\nLe devis final pour {{ref}} est prêt.\n\nRéférence : {{ref}}\nDestination : {{destination_flag}} {{destination}}\n{{liste_cartons}}\n\nPoids facturable : {{poids_facturable}}\n\nTransport : {{transport}}\nOM : {{om}}\nOMR : {{omr}}\nTVA ({{taux_tva}}) : {{tva}}\n{{frais_divers}}\n\nTOTAL : {{total}}\n\nCordialement,\nL'équipe Expedîle`,
-  facture_manquante_whatsapp: `Bonjour {{prenom}} 👋\n\nPour votre colis *{{ref}}* ({{desc}}), nous avons besoin de la *facture d'achat*.\n\n📄 *Pourquoi ?* Calcul des taxes, déclaration douane, devis final.\n\n👉 Envoyez-nous une *photo* ou *PDF* en réponse.\n\n_Expedîle_`,
+  facture_manquante_telegram: `Bonjour {{prenom}} 👋\n\nPour votre colis *{{ref}}* ({{desc}}), nous avons besoin de la *facture d'achat*.\n\n📄 *Pourquoi ?* Calcul des taxes, déclaration douane, devis final.\n\n👉 Envoyez-nous une *photo* ou *PDF* en réponse.\n\n_Expedîle_`,
   facture_manquante_email: `Bonjour {{nom_complet}},\n\nPour traiter votre colis {{ref}} ({{desc}}), nous avons besoin de la facture d'achat.\n\nMerci de nous la transmettre.\n\nCordialement,\nL'équipe Expedîle`,
-  feu_vert_recu_whatsapp: `Bonjour {{prenom}} 👋\n\nMerci pour votre accord ! ✅\n\nVotre colis *{{ref}}* est en cours de préparation.\n\nVous recevrez le devis final dès que c'est prêt.\n\n_Expedîle_`,
+  feu_vert_recu_telegram: `Bonjour {{prenom}} 👋\n\nMerci pour votre accord ! ✅\n\nVotre colis *{{ref}}* est en cours de préparation.\n\nVous recevrez le devis final dès que c'est prêt.\n\n_Expedîle_`,
   feu_vert_recu_email: `Bonjour {{nom_complet}},\n\nAccord reçu pour {{ref}}. Notre équipe prépare votre colis.\n\nCordialement,\nL'équipe Expedîle`,
-  relance_feu_vert_whatsapp: `Bonjour {{prenom}} 👋\n\nRappel : *{{ref}}* ({{desc}}) attend votre accord.\n\n✅ *OUI* pour préparer\n❌ *NON* pour annuler\n\n⚠️ Frais de stockage après 14 jours.\n\n_Expedîle_`,
+  relance_feu_vert_telegram: `Bonjour {{prenom}} 👋\n\nRappel : *{{ref}}* ({{desc}}) attend votre accord.\n\n✅ *OUI* pour préparer\n❌ *NON* pour annuler\n\n⚠️ Frais de stockage après 14 jours.\n\n_Expedîle_`,
   relance_feu_vert_email: `Bonjour {{nom_complet}},\n\nVotre colis {{ref}} est toujours en attente de votre accord.\n\nNote : frais de stockage possibles après 14 jours.\n\nCordialement,\nL'équipe Expedîle`,
-  relance_paiement_whatsapp: `Bonjour {{prenom}} 👋\n\nVotre colis *{{ref}}* est prêt ! ✈️\n\n💰 *Montant : {{total}}*\n🎯 {{destination_flag}} {{destination}}\n\n👉 Payez pour déclencher l'expédition.\n\n_Expedîle_`,
+  relance_paiement_telegram: `Bonjour {{prenom}} 👋\n\nVotre colis *{{ref}}* est prêt ! ✈️\n\n💰 *Montant : {{total}}*\n🎯 {{destination_flag}} {{destination}}\n\n👉 Payez pour déclencher l'expédition.\n\n_Expedîle_`,
   relance_paiement_email: `Bonjour {{nom_complet}},\n\nLe paiement de {{total}} pour {{ref}} est en attente.\n\nCordialement,\nL'équipe Expedîle`,
-  expedie_whatsapp: `Bonjour {{prenom}} 👋\n\n✈️ *{{ref}}* est en route !\n\n📦 {{desc}}\n🎯 {{destination_flag}} {{destination}}\n📅 Expédié le {{date_expedition}}\n\nSuivi : Transit → Dédouanement → Arrivée → Livraison\n\n_Expedîle_`,
+  expedie_telegram: `Bonjour {{prenom}} 👋\n\n✈️ *{{ref}}* est en route !\n\n📦 {{desc}}\n🎯 {{destination_flag}} {{destination}}\n📅 Expédié le {{date_expedition}}\n\nSuivi : Transit → Dédouanement → Arrivée → Livraison\n\n_Expedîle_`,
   expedie_email: `Bonjour {{nom_complet}},\n\nVotre colis {{ref}} a été expédié vers {{destination_flag}} {{destination}} le {{date_expedition}}.\n\nCordialement,\nL'équipe Expedîle`,
-  arrive_whatsapp: `Bonjour {{prenom}} 👋\n\n📍 *{{ref}}* est arrivé à {{destination}} !\n\n🚚 Livraison en cours d'organisation.\n\n_Expedîle_`,
+  arrive_telegram: `Bonjour {{prenom}} 👋\n\n📍 *{{ref}}* est arrivé à {{destination}} !\n\n🚚 Livraison en cours d'organisation.\n\n_Expedîle_`,
   arrive_email: `Bonjour {{nom_complet}},\n\nVotre colis {{ref}} est arrivé à {{destination}}. Livraison prochainement.\n\nCordialement,\nL'équipe Expedîle`,
-  en_livraison_whatsapp: `Bonjour {{prenom}} 👋\n\n🚚 *{{ref}}* est en livraison aujourd'hui !\n\nRestez disponible.\n\n_Expedîle_`,
+  en_livraison_telegram: `Bonjour {{prenom}} 👋\n\n🚚 *{{ref}}* est en livraison aujourd'hui !\n\nRestez disponible.\n\n_Expedîle_`,
   en_livraison_email: `Bonjour {{nom_complet}},\n\nVotre colis {{ref}} est en cours de livraison.\n\nCordialement,\nL'équipe Expedîle`,
-  facture_rejetee_whatsapp: `Bonjour {{prenom}} 👋\n\n⚠️ La facture pour *{{ref}}* n'a pas pu être validée.\n\n📄 *Motif :* {{motif_rejet}}\n\n👉 Renvoyez une facture conforme (photo/PDF lisible).\n\n_Expedîle_`,
+  facture_rejetee_telegram: `Bonjour {{prenom}} 👋\n\n⚠️ La facture pour *{{ref}}* n'a pas pu être validée.\n\n📄 *Motif :* {{motif_rejet}}\n\n👉 Renvoyez une facture conforme (photo/PDF lisible).\n\n_Expedîle_`,
   facture_rejetee_email: `Bonjour {{nom_complet}},\n\nLa facture pour {{ref}} n'a pas pu être validée.\nMotif : {{motif_rejet}}\n\nMerci de renvoyer une facture conforme.\n\nCordialement,\nL'équipe Expedîle`,
 };
 
@@ -111,7 +111,7 @@ function renderPreview(text) {
 // ════════════════════════════════════════════
 export default function TemplateEditor() {
   const [selKey, setSelKey] = useState('reception');
-  const [canal, setCanal] = useState('whatsapp');
+  const [canal, setCanal] = useState('telegram');
   const [bodies, setBodies] = useState(DEFAULT_BODIES);
   const [showPreview, setShowPreview] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
@@ -188,14 +188,14 @@ export default function TemplateEditor() {
             {TEMPLATES.find((t) => t.key === selKey)?.label}
           </span>
           <div className="ml-auto flex rounded-lg overflow-hidden border" style={{ borderColor: '#E5E7EB' }}>
-            {['whatsapp', 'email'].map((c) => (
+            {['telegram', 'email'].map((c) => (
               <button
                 key={c}
                 onClick={() => setCanal(c)}
                 className="px-3 py-1.5 text-xs font-bold transition-all"
                 style={canal === c ? { background: BRAND.navy, color: 'white' } : { color: '#6B7280' }}
               >
-                {c === 'whatsapp' ? 'WhatsApp' : 'Email'}
+                {c === 'telegram' ? 'Telegram' : 'Email'}
               </button>
             ))}
           </div>
@@ -208,7 +208,7 @@ export default function TemplateEditor() {
           onChange={(e) => setCorps(e.target.value)}
           rows={12}
           className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 text-sm leading-relaxed outline-none resize-y transition-all focus:border-blue-400"
-          style={{ color: BRAND.navy, fontFamily: canal === 'whatsapp' ? 'monospace' : 'inherit' }}
+          style={{ color: BRAND.navy, fontFamily: canal === 'telegram' ? 'monospace' : 'inherit' }}
         />
 
         {/* Variable pills */}
@@ -263,7 +263,7 @@ export default function TemplateEditor() {
         {showPreview && (
           <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 anim-fade">
             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Aperçu avec données d'exemple</p>
-            <pre className="text-xs text-gray-800 whitespace-pre-wrap leading-relaxed" style={{ fontFamily: canal === 'whatsapp' ? 'monospace' : 'inherit' }}>
+            <pre className="text-xs text-gray-800 whitespace-pre-wrap leading-relaxed" style={{ fontFamily: canal === 'telegram' ? 'monospace' : 'inherit' }}>
               {renderPreview(corps)}
             </pre>
           </div>
