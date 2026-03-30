@@ -4,6 +4,7 @@ import { useApp } from '../../context/AppContext';
 import { BRAND, getDestByCP } from '../../constants';
 import { eur, uid } from '../../utils';
 import * as sb from '../../lib/supabaseData';
+import { supabase } from '../../lib/supabase';
 
 const MOTIFS_REJET = [
   { key: 'non_conforme', label: 'Non conforme' },
@@ -145,25 +146,50 @@ export default function FacturesPanel() {
     fileInputRef.current?.click();
   };
 
-  const handleFileChange = (e) => {
+  const handleFileChange = async (e) => {
     const file = e.target.files?.[0];
     if (!file || !uploadTargetId) return;
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      setData((prev) => prev.map((c) => {
-        if (c.id !== sel.id) return c;
-        return {
-          ...c,
-          factures: c.factures.map((f) =>
-            f.id === uploadTargetId ? { ...f, fichier: reader.result, fichierNom: file.name } : f,
-          ),
-        };
-      }));
-      flash('Fichier joint à la facture');
-      setUploadTargetId(null);
-    };
-    reader.readAsDataURL(file);
+    // Upload to Supabase Storage
+    const ext = file.name.split('.').pop() || 'jpg';
+    const path = `${sel.id}/${uploadTargetId}.${ext}`;
+
+    flash({ msg: 'Upload en cours...', type: 'info' });
+
+    const { error: uploadErr } = await supabase.storage
+      .from('factures')
+      .upload(path, file, { upsert: true });
+
+    if (uploadErr) {
+      console.error('Upload error:', uploadErr);
+      flash({ msg: 'Erreur upload : ' + uploadErr.message, type: 'warning' });
+      e.target.value = '';
+      return;
+    }
+
+    // Get public URL
+    const { data: urlData } = supabase.storage
+      .from('factures')
+      .getPublicUrl(path);
+
+    const publicUrl = urlData?.publicUrl || '';
+
+    // Update local state + Supabase
+    setData((prev) => prev.map((c) => {
+      if (c.id !== sel.id) return c;
+      return {
+        ...c,
+        factures: c.factures.map((f) =>
+          f.id === uploadTargetId ? { ...f, fichier: publicUrl, fichierNom: file.name } : f,
+        ),
+      };
+    }));
+
+    // Persist URL to Supabase factures table
+    sb.updateFacture(uploadTargetId, { fichierUrl: publicUrl, fichierNom: file.name }).catch(console.error);
+
+    flash('Fichier joint à la facture ✓');
+    setUploadTargetId(null);
     e.target.value = '';
   };
 
