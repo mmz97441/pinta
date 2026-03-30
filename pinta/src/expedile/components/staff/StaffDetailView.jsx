@@ -6,6 +6,7 @@ import { useApp } from '../../context/AppContext';
 import { BRAND, STATUTS, TRANSITIONS, PRODUITS_INTERDITS, TAGS_PREPARATION, getDestByCP } from '../../constants';
 import { eur, calcTransport, getCatTaux } from '../../utils';
 import { Ligne } from '../ui';
+import * as sb from '../../lib/supabaseData';
 
 // ── Status border color helper ───────────────────────────────────────────────
 function statusBorderColor(statut) {
@@ -276,9 +277,9 @@ export default function StaffDetailView() {
   const thisComLog = comLog.filter((l) => l.colisId === sel.id);
 
   // ── Missing invoice? ──────────────────────────────────────────────────────
-  const missingFacture = sel.factures && sel.factures.length > 0
-    ? sel.factures.some((f) => !f.valide)
-    : sel.factures?.length === 0 || !sel.factures;
+  // missingFacture = true si AUCUNE facture n'est validée
+  const hasAnyValidFacture = sel.factures && sel.factures.length > 0 && sel.factures.some((f) => f.valide);
+  const missingFacture = !hasAnyValidFacture;
 
   // ── Computed dimensions ───────────────────────────────────────────────────
   function calcDims(l, w, h, p) {
@@ -1051,7 +1052,10 @@ export default function StaffDetailView() {
                         <p className="text-xs text-gray-500">{ligne.qte} × {eur(ligne.prix)}</p>
                       </div>
                       <button
-                        onClick={() => upd(sel.id, { lignes: sel.lignes.filter((l) => l.id !== ligne.id) })}
+                        onClick={() => {
+                          setData((prev) => prev.map((c) => c.id === sel.id ? { ...c, lignes: c.lignes.filter((l) => l.id !== ligne.id) } : c));
+                          sb.deleteLigne(ligne.id).catch((err) => flash({ msg: 'Erreur suppression article', type: 'warning' }));
+                        }}
                         className="text-gray-300 hover:text-red-500 flex-shrink-0"
                       >
                         <X size={12} />
@@ -1060,11 +1064,9 @@ export default function StaffDetailView() {
                     <select
                       value={ligne.cat || ''}
                       onChange={(e) => {
-                        upd(sel.id, {
-                          lignes: sel.lignes.map((l) =>
-                            l.id === ligne.id ? { ...l, cat: e.target.value } : l,
-                          ),
-                        });
+                        const newCat = e.target.value;
+                        setData((prev) => prev.map((c) => c.id === sel.id ? { ...c, lignes: c.lignes.map((l) => l.id === ligne.id ? { ...l, cat: newCat } : l) } : c));
+                        sb.updateLigne(ligne.id, { cat: newCat }).catch(() => flash({ msg: 'Erreur sauvegarde catégorie', type: 'warning' }));
                       }}
                       className="w-full px-3 py-1.5 rounded-lg border-2 border-gray-200 text-sm outline-none"
                       style={{ color: BRAND.navy }}
@@ -1085,16 +1087,14 @@ export default function StaffDetailView() {
                       {sel.factures.filter((f) => f.valide).map((f) => (
                         <button
                           key={f.id}
-                          onClick={() => {
-                            const newLigne = {
-                              id: 'l_' + Math.random().toString(36).slice(2, 8),
-                              desc: f.vendeur || 'Article',
-                              qte: 1,
-                              prix: f.montant || 0,
-                              cat: '',
-                            };
-                            upd(sel.id, { lignes: [...(sel.lignes || []), newLigne] });
-                            flash(`Article "${f.vendeur}" ajouté — sélectionnez sa catégorie`);
+                          onClick={async () => {
+                            try {
+                              const saved = await sb.insertLigne(sel.id, { desc: f.vendeur || 'Article', qte: 1, prix: f.montant || 0, cat: '' });
+                              setData((prev) => prev.map((c) => c.id === sel.id ? { ...c, lignes: [...(c.lignes || []), saved] } : c));
+                              flash(`Article "${f.vendeur}" ajouté — sélectionnez sa catégorie`);
+                            } catch (err) {
+                              flash({ msg: 'Erreur ajout article', type: 'warning' });
+                            }
                           }}
                           className="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-white border border-amber-200 hover:bg-amber-100 transition-colors text-left active:scale-[0.98]"
                         >
@@ -1128,16 +1128,15 @@ export default function StaffDetailView() {
                     className="w-20 px-2 py-2 rounded-lg border border-gray-200 bg-gray-50 text-xs outline-none focus:border-blue-400 text-right"
                   />
                   <button
-                    onClick={() => {
+                    onClick={async () => {
                       const desc = document.getElementById('new-ligne-desc')?.value?.trim();
                       const qte = parseInt(document.getElementById('new-ligne-qte')?.value) || 1;
                       const prix = parseFloat(document.getElementById('new-ligne-prix')?.value) || 0;
                       if (!desc) return;
-                      const newLigne = {
-                        id: 'l_' + Math.random().toString(36).slice(2, 8),
-                        desc, qte, prix, cat: '',
-                      };
-                      upd(sel.id, { lignes: [...(sel.lignes || []), newLigne] });
+                      try {
+                        const saved = await sb.insertLigne(sel.id, { desc, qte, prix, cat: '' });
+                        setData((prev) => prev.map((c) => c.id === sel.id ? { ...c, lignes: [...(c.lignes || []), saved] } : c));
+                      } catch { flash({ msg: 'Erreur ajout article', type: 'warning' }); return; }
                       document.getElementById('new-ligne-desc').value = '';
                       document.getElementById('new-ligne-prix').value = '';
                       document.getElementById('new-ligne-qte').value = '1';
