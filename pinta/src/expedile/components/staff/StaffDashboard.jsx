@@ -276,52 +276,43 @@ function ColisTableRow({ c, client, envois, onClick, stagger }) {
     ? ((c.devisOM || 0) + (c.devisOMR || 0) + (c.devisTVA || 0))
     : null;
 
-  const details = c.trackingsDetail || [];
   const trackings = c.trackings?.filter((t) => t) || [];
-  const dimsPC = c.dimsParColis || [];
-  const nbCartons = Math.max(details.length, trackings.length, 1);
-  const hasMulti = nbCartons > 1;
-
-  const [expanded, setExpanded] = React.useState(false);
+  const nbCartons = trackings.length || 1;
 
   return (
-    <>
-      <tr
-        onClick={onClick}
-        className="anim-fade border-b border-gray-50 last:border-b-0 cursor-pointer transition-colors hover:bg-gray-50 active:bg-gray-100"
-        style={{
-          animationDelay: `${stagger * 0.03}s`,
-          borderLeft: `3px solid ${scs.border}`,
-        }}
-      >
-        <td className="px-3 py-2.5">
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs text-gray-600 font-medium truncate max-w-[120px]">{client?.nom ?? '—'}</span>
-            {dest && <span className="text-xs flex-shrink-0">{dest.flag}</span>}
-          </div>
-        </td>
-        <td className="px-3 py-2.5">
-          <div className="flex items-center gap-1.5">
-            <span className="font-black text-xs text-gray-900">{c.ref}</span>
-            {c.casier && (
-              <span
-                className="text-[9px] font-bold px-1 py-0.5 rounded"
-                style={{ background: `${BRAND.gold}22`, color: BRAND.goldD }}
-              >
-                {c.casier}
-              </span>
-            )}
-            {hasMulti && (
-              <button
-                onClick={(e) => { e.stopPropagation(); setExpanded((p) => !p); }}
-                className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors"
-              >
-                {nbCartons} cartons {expanded ? '▲' : '▼'}
-              </button>
-            )}
-          </div>
-          {c.desc && <span className="text-[11px] text-gray-500 truncate block max-w-[130px]">{c.desc}</span>}
-        </td>
+    <tr
+      onClick={onClick}
+      className="anim-fade border-b border-gray-50 last:border-b-0 cursor-pointer transition-colors hover:bg-gray-50 active:bg-gray-100"
+      style={{
+        animationDelay: `${stagger * 0.03}s`,
+        borderLeft: `3px solid ${scs.border}`,
+      }}
+    >
+      <td className="px-3 py-2.5">
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs text-gray-600 font-medium truncate max-w-[120px]">{client?.nom ?? '—'}</span>
+          {dest && <span className="text-xs flex-shrink-0">{dest.flag}</span>}
+        </div>
+      </td>
+      <td className="px-3 py-2.5">
+        <div className="flex items-center gap-1.5">
+          <span className="font-black text-xs text-gray-900">{c.ref}</span>
+          {c.casier && (
+            <span
+              className="text-[9px] font-bold px-1 py-0.5 rounded"
+              style={{ background: `${BRAND.gold}22`, color: BRAND.goldD }}
+            >
+              {c.casier}
+            </span>
+          )}
+          {nbCartons > 1 && (
+            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-700">
+              {nbCartons} cartons
+            </span>
+          )}
+        </div>
+        {c.desc && <span className="text-[11px] text-gray-500 truncate block max-w-[130px]">{c.desc}</span>}
+      </td>
       <td className="px-3 py-2.5">
         {c.factures && c.factures.length > 0 ? (
           c.factures.every((f) => f.valide) ? (
