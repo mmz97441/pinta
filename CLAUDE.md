@@ -13,7 +13,7 @@ Chaque action manuelle est une friction. Avant de coder une fonctionnalité, se 
 - **Préparateur** : file de travail claire, gros boutons, zéro ambiguïté. Il travaille debout avec une tablette.
 - **Logisticien** : vue envois, exports douane, suivi post-expédition. Il planifie et optimise.
 - **Directeur** : KPIs, alertes, tarifs, paramètres. Il pilote et décide.
-- **Client** : suivi simple, notifications, paiement en un clic. Il veut savoir où en est son colis.
+- **Client** : suivi simple, notifications proactives, paiement en un clic. Il est toujours inquiet de savoir où en est son colis. Il veut être informé à chaque étape, rassuré que tout se passe bien, et prévenu AVANT de devoir demander. Si le client doit nous contacter pour avoir des nouvelles, c'est qu'on a échoué.
 
 ### Ton des messages — Bienveillant et commercial
 Chaque message envoyé au client est une opportunité de renforcer la relation. Règles :
