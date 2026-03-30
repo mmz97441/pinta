@@ -247,9 +247,11 @@ export default function FacturesPanel() {
           }));
         }
 
-        const catCount = data.articles?.filter((a) => a.categorie_suggeree).length || 0;
+        const nbTotal = data.nb_articles_total || data.nbArticles || 0;
+        const nbLignes = data.nbLignes || data.insertedLignes?.length || 0;
+        const total = data.total_ht || data.total || 0;
         flash({
-          msg: `OCR : ${data.nbArticles} article${data.nbArticles > 1 ? 's' : ''} extrait${data.nbArticles > 1 ? 's' : ''} (${catCount} catégorisé${catCount > 1 ? 's' : ''}) — Total: ${eur(data.total || 0)}`,
+          msg: `OCR : ${nbTotal} article${nbTotal > 1 ? 's' : ''} → regroupés en ${nbLignes} catégorie${nbLignes > 1 ? 's' : ''} — Total HT: ${eur(total)}`,
           type: 'success',
           duration: 6000,
         });
