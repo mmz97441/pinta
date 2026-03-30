@@ -315,7 +315,12 @@ export default function ColisModal({ open, onClose }) {
       const trackingsStr = newColis.trackings?.filter((t) => t).join(', ') || '';
       const fournisseurs = (newColis.trackingsDetail || []).map((td) => td.fournisseur).filter(Boolean).join(', ');
 
-      const telegramMsg = `Bonjour ${prenom} 👋\n\nBonne nouvelle ! Votre colis *${newColis.ref}* est bien arrivé à notre entrepôt de Paris 🎉\n\n📦 *Contenu :* ${newColis.desc || fournisseurs}\n${trackingsStr ? `🔍 *Tracking :* ${trackingsStr}\n` : ''}🎯 *Destination :* ${dest?.flag || ''} ${dest?.nom || ''}\n\n📐 Nous allons le mesurer et peser. On revient vers vous rapidement.\n\n💡 Pensez à nous envoyer la *facture d'achat* si ce n'est pas déjà fait.\n\n_L'équipe Expedîle_`;
+      const hasMeasured = newColis.dimL && newColis.dimW && newColis.dimH && newColis.poids;
+      const dimsLine = hasMeasured
+        ? `📐 *Dimensions :* ${newColis.dimL}×${newColis.dimW}×${newColis.dimH} cm — ${newColis.poids} kg\n⚖️ *Poids vol. :* ${((newColis.dimL * newColis.dimW * newColis.dimH) / 5000).toFixed(2)} kg\n`
+        : '📐 Nous allons le mesurer et peser.\n';
+
+      const telegramMsg = `Bonjour ${prenom} 👋\n\nBonne nouvelle ! Votre colis *${newColis.ref}* est bien arrivé à notre entrepôt de Paris 🎉\n\n📦 *Contenu :* ${newColis.desc || fournisseurs}\n${trackingsStr ? `🔍 *Tracking :* ${trackingsStr}\n` : ''}🎯 *Destination :* ${dest?.flag || ''} ${dest?.nom || ''}\n\n${dimsLine}\n💡 Pensez à nous envoyer la *facture d'achat* si ce n'est pas déjà fait.\n\n_L'équipe Expedîle_`;
 
       if (chatId && isTelegramConfigured()) {
         // Envoyer via API Telegram directement
