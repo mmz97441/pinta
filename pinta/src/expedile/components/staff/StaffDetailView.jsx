@@ -873,15 +873,48 @@ export default function StaffDetailView() {
         return (
           <div className="space-y-4">
             {missingFacture && (
-              <div className="flex items-start gap-2 p-3 rounded-xl bg-red-50 border border-red-300">
-                <X size={14} className="text-red-600 flex-shrink-0 mt-0.5" />
-                <div>
-                  <p className="text-xs font-bold text-red-800">
-                    Facture d'achat non validée
-                  </p>
-                  <p className="text-[10px] text-red-600 mt-0.5">
-                    Le devis ne peut pas être envoyé sans facture validée. Les taxes (OM/OMR) sont calculées sur la valeur des articles.
-                  </p>
+              <div className="p-3 rounded-xl bg-red-50 border border-red-300 space-y-2.5">
+                <div className="flex items-start gap-2">
+                  <X size={14} className="text-red-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-xs font-bold text-red-800">
+                      Facture d'achat non validée
+                    </p>
+                    <p className="text-[10px] text-red-600 mt-0.5">
+                      Le devis ne peut pas être envoyé sans facture validée. Les taxes (OM/OMR) sont calculées sur la valeur des articles.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  {cl?.telegramChatId ? (
+                    <button
+                      onClick={() => sendMsg(sel.id, cl?.id, 'telegram', 'facture_manquante', null)}
+                      className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-[11px] font-bold text-white transition-all active:scale-95"
+                      style={{ background: '#0088cc' }}
+                    >
+                      <Send size={11} />
+                      Demander par Telegram
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => sendMsg(sel.id, cl?.id, 'email', 'facture_manquante', null)}
+                      className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-[11px] font-bold text-white transition-all active:scale-95"
+                      style={{ background: BRAND.navy }}
+                    >
+                      <Mail size={11} />
+                      Demander par email
+                    </button>
+                  )}
+                  {cl?.telegramChatId && (
+                    <button
+                      onClick={() => sendMsg(sel.id, cl?.id, 'email', 'facture_manquante', null)}
+                      className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-[11px] font-bold transition-all active:scale-95"
+                      style={{ background: `${BRAND.navy}10`, color: BRAND.navy }}
+                    >
+                      <Mail size={11} />
+                      Email
+                    </button>
+                  )}
                 </div>
               </div>
             )}
