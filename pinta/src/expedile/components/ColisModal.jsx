@@ -301,25 +301,30 @@ export default function ColisModal({ open, onClose }) {
       });
     }
 
-    if (sendTG && cl) {
-      // Envoyer la notification de réception au client via Telegram ou email
-      const { sendMsg } = appCtx;
-      if (sendMsg && newColis.id) {
-        sendMsg(newColis.id, clientId, cl.telegramChatId ? 'telegram' : 'email', 'reception', null);
-      }
-    }
+    const shouldNotify = sendTG && cl;
+    const notifyClientId = clientId;
+    const notifyCanal = cl?.telegramChatId ? 'telegram' : 'email';
 
     const hasDims = nf.trackingLines.every((_, i) => {
       const d = nf.multiDims[i] || {};
       return d.dimL && d.dimW && d.dimH && d.poids;
     });
-    const label = sendTG ? 'réceptionné + Telegram envoyé' : 'réceptionné';
+    const label = sendTG ? 'réceptionné + notification envoyée' : 'réceptionné';
     flash(`Colis ${newColis.ref} ${label}${hasDims ? ' + mesuré' : ''} — casier ${nf.casier.trim()}`);
     const newId = newColis.id;
     resetAndClose();
-    // Navigate to the new colis detail
+    // Navigate to the new colis detail, then send notification after state sync
     if (isStaff && newId) {
-      setTimeout(() => navigate(`/colis/${newId}`), 100);
+      setTimeout(() => {
+        navigate(`/colis/${newId}`);
+        if (shouldNotify) {
+          // Wait for navigation + state to settle, then send
+          setTimeout(() => {
+            const { sendMsg: sMsg } = appCtx;
+            if (sMsg) sMsg(newId, notifyClientId, notifyCanal, 'reception', null);
+          }, 500);
+        }
+      }, 100);
     }
   };
 
