@@ -6,6 +6,7 @@ import { BRAND, STATUTS, getDestByCP, PRODUITS_INTERDITS } from '../constants';
 import { uid, searchClients, telegramLink } from '../utils';
 import { Badge } from './ui';
 import * as sb from '../lib/supabaseData';
+import { isTelegramConfigured, sendTelegram } from '../services/telegramApi';
 
 const EMPTY_FORM = {
   trackingLines: [{ fournisseur: '', tracking: '' }],
@@ -301,30 +302,51 @@ export default function ColisModal({ open, onClose }) {
       });
     }
 
-    const shouldNotify = sendTG && cl;
-    const notifyClientId = clientId;
-    const notifyCanal = cl?.telegramChatId ? 'telegram' : 'email';
-
     const hasDims = nf.trackingLines.every((_, i) => {
       const d = nf.multiDims[i] || {};
       return d.dimL && d.dimW && d.dimH && d.poids;
     });
-    const label = sendTG ? 'réceptionné + notification envoyée' : 'réceptionné';
-    flash(`Colis ${newColis.ref} ${label}${hasDims ? ' + mesuré' : ''} — casier ${nf.casier.trim()}`);
+
+    // Envoyer notification DIRECTEMENT (pas via sendMsg qui dépend du state)
+    if (sendTG && cl) {
+      const chatId = cl.telegramChatId;
+      const dest = getDestByCP(cl.cp);
+      const prenom = cl.nom.split(' ')[0];
+      const trackingsStr = newColis.trackings?.filter((t) => t).join(', ') || '';
+      const fournisseurs = (newColis.trackingsDetail || []).map((td) => td.fournisseur).filter(Boolean).join(', ');
+
+      const telegramMsg = `Bonjour ${prenom} 👋\n\nBonne nouvelle ! Votre colis *${newColis.ref}* est bien arrivé à notre entrepôt de Paris 🎉\n\n📦 *Contenu :* ${newColis.desc || fournisseurs}\n${trackingsStr ? `🔍 *Tracking :* ${trackingsStr}\n` : ''}🎯 *Destination :* ${dest?.flag || ''} ${dest?.nom || ''}\n\n📐 Nous allons le mesurer et peser. On revient vers vous rapidement.\n\n💡 Pensez à nous envoyer la *facture d'achat* si ce n'est pas déjà fait.\n\n_L'équipe Expedîle_`;
+
+      if (chatId && isTelegramConfigured()) {
+        // Envoyer via API Telegram directement
+        sendTelegram(chatId, telegramMsg).then(async (res) => {
+          // Persister le message dans Supabase
+          try {
+            await sb.insertMessage(newColis.id, {
+              type: 'staff',
+              auteur: appCtx.auth?.u?.nom || 'Système',
+              texte: telegramMsg,
+              statut: res.ok ? 'envoye' : 'echec',
+            });
+          } catch (e) { console.warn('insertMessage error:', e.message); }
+        });
+        flash(`Colis ${newColis.ref} réceptionné — notification Telegram envoyée à ${prenom}`);
+      } else if (cl.email) {
+        // Fallback email
+        const emailMsg = `Objet : Votre colis ${newColis.ref} est arrivé\n\nBonjour ${cl.nom},\n\nVotre colis ${newColis.ref} (${newColis.desc || fournisseurs}) est arrivé à notre entrepôt de Paris.\n\nDestination : ${dest?.flag || ''} ${dest?.nom || ''}\n\nCordialement,\nL'équipe Expedîle`;
+        window.open(`mailto:${cl.email}?subject=${encodeURIComponent(`Votre colis ${newColis.ref} est arrivé`)}&body=${encodeURIComponent(emailMsg)}`, '_blank');
+        flash(`Colis ${newColis.ref} réceptionné — email ouvert pour ${prenom}`);
+      } else {
+        flash(`Colis ${newColis.ref} réceptionné — client non joignable (pas de Telegram ni email)`);
+      }
+    } else {
+      flash(`Colis ${newColis.ref} réceptionné${hasDims ? ' + mesuré' : ''} — casier ${nf.casier.trim()}`);
+    }
+
     const newId = newColis.id;
     resetAndClose();
-    // Navigate to the new colis detail, then send notification after state sync
     if (isStaff && newId) {
-      setTimeout(() => {
-        navigate(`/colis/${newId}`);
-        if (shouldNotify) {
-          // Wait for navigation + state to settle, then send
-          setTimeout(() => {
-            const { sendMsg: sMsg } = appCtx;
-            if (sMsg) sMsg(newId, notifyClientId, notifyCanal, 'reception', null);
-          }, 500);
-        }
-      }, 100);
+      setTimeout(() => navigate(`/colis/${newId}`), 100);
     }
   };
 
