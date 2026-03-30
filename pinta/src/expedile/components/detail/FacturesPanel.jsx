@@ -3,6 +3,7 @@ import { Check, X, RotateCcw, Eye, Upload, FileText, Image as ImageIcon, ZoomIn,
 import { useApp } from '../../context/AppContext';
 import { BRAND, getDestByCP } from '../../constants';
 import { eur, uid } from '../../utils';
+import * as sb from '../../lib/supabaseData';
 
 const MOTIFS_REJET = [
   { key: 'non_conforme', label: 'Non conforme' },
@@ -58,16 +59,20 @@ export default function FacturesPanel() {
   const hasFactures = sel.factures && sel.factures.length > 0;
 
   // ── Add new facture ─────────────────────────────────────────────────
-  const handleAddFacture = () => {
+  const handleAddFacture = async () => {
     if (!newVendeur.trim()) return;
-    const newFacture = {
-      id: 'f_' + uid(),
+    const factureData = {
       vendeur: newVendeur.trim(),
       montant: parseFloat(newMontant) || 0,
       valide: false,
-      fichier: null,
-      fichierNom: null,
     };
+    let newFacture;
+    try {
+      newFacture = await sb.insertFacture(sel.id, factureData);
+    } catch (err) {
+      console.warn('[Supabase] insertFacture fallback:', err.message);
+      newFacture = { id: 'f_' + uid(), ...factureData, fichier: null, fichierNom: null };
+    }
     setData((prev) => prev.map((c) => {
       if (c.id !== sel.id) return c;
       return { ...c, factures: [...(c.factures || []), newFacture] };
@@ -99,6 +104,7 @@ export default function FacturesPanel() {
       if (c.id !== sel.id) return c;
       return { ...c, factures: c.factures.map((f) => (f.id === factureId ? { ...f, valide: true, rejetMotif: null } : f)) };
     }));
+    sb.updateFacture(factureId, { valide: true }).catch(console.error);
     flash('Facture validée');
     setRejectingId(null);
   };
@@ -109,6 +115,7 @@ export default function FacturesPanel() {
       if (c.id !== sel.id) return c;
       return { ...c, factures: c.factures.map((f) => (f.id === factureId ? { ...f, valide: false } : f)) };
     }));
+    sb.updateFacture(factureId, { valide: false }).catch(console.error);
     flash('Validation annulée');
   };
 

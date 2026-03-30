@@ -370,6 +370,85 @@ export async function insertMessage(colisId, msg) {
   return mapMessage(data);
 }
 
+// ── Factures ─────────────────────────────────────────────────────────
+
+export async function insertFacture(colisId, factureData) {
+  const { data, error } = await supabase
+    .from('factures')
+    .insert({
+      colis_id: colisId,
+      vendeur: factureData.vendeur || null,
+      montant: factureData.montant || 0,
+      valide: factureData.valide || false,
+    })
+    .select()
+    .single();
+  if (error) throw error;
+  return {
+    id: data.id,
+    vendeur: data.vendeur,
+    montant: data.montant ? +data.montant : 0,
+    valide: data.valide || false,
+    fichier: data.fichier_url,
+    fichierNom: data.fichier_nom,
+  };
+}
+
+export async function updateFacture(factureId, changes) {
+  const snakeChanges = {};
+  if ('valide' in changes) snakeChanges.valide = changes.valide;
+  if ('vendeur' in changes) snakeChanges.vendeur = changes.vendeur;
+  if ('montant' in changes) snakeChanges.montant = changes.montant;
+  if ('fichierUrl' in changes) snakeChanges.fichier_url = changes.fichierUrl;
+  if ('fichierNom' in changes) snakeChanges.fichier_nom = changes.fichierNom;
+  const { error } = await supabase.from('factures').update(snakeChanges).eq('id', factureId);
+  if (error) throw error;
+}
+
+export async function deleteFacture(factureId) {
+  const { error } = await supabase.from('factures').delete().eq('id', factureId);
+  if (error) throw error;
+}
+
+// ── Lignes (articles) ────────────────────────────────────────────────
+
+export async function insertLigne(colisId, ligneData) {
+  const { data, error } = await supabase
+    .from('lignes')
+    .insert({
+      colis_id: colisId,
+      description: ligneData.desc || '',
+      qte: ligneData.qte || 1,
+      prix_unitaire: ligneData.prix || 0,
+      categorie_id: ligneData.cat || null,
+    })
+    .select()
+    .single();
+  if (error) throw error;
+  return {
+    id: data.id,
+    desc: data.description,
+    qte: data.qte,
+    prix: data.prix_unitaire ? +data.prix_unitaire : 0,
+    cat: data.categorie_id,
+  };
+}
+
+export async function updateLigne(ligneId, changes) {
+  const snakeChanges = {};
+  if ('desc' in changes) snakeChanges.description = changes.desc;
+  if ('qte' in changes) snakeChanges.qte = changes.qte;
+  if ('prix' in changes) snakeChanges.prix_unitaire = changes.prix;
+  if ('cat' in changes) snakeChanges.categorie_id = changes.cat;
+  const { error } = await supabase.from('lignes').update(snakeChanges).eq('id', ligneId);
+  if (error) throw error;
+}
+
+export async function deleteLigne(ligneId) {
+  const { error } = await supabase.from('lignes').delete().eq('id', ligneId);
+  if (error) throw error;
+}
+
 export async function markNotifRead(notifId) {
   const { error } = await supabase
     .from('notifications')
