@@ -971,44 +971,124 @@ export default function StaffDetailView() {
               </div>
             </Section>
 
-            {/* Catégorisation produits */}
-            {sel.lignes && sel.lignes.length > 0 && (
-              <Section title="Catégorisation des lignes" icon={Check} color={borderColor}>
-                <div className="space-y-2">
-                  {sel.lignes.map((ligne) => (
-                    <div key={ligne.id} className="p-3 rounded-xl bg-gray-50 border border-gray-200">
-                      <div className="flex items-start justify-between gap-2 mb-2">
-                        <div>
-                          <p className="text-sm font-medium text-gray-800">
-                            {ligne.desc}
-                          </p>
-                          <p className="text-xs text-gray-500">
-                            {ligne.qte} × {eur(ligne.prix)}
-                          </p>
-                        </div>
+            {/* Catégorisation produits + ajout articles */}
+            <Section title="Articles pour calcul taxes" icon={Check} color={borderColor}>
+              <div className="space-y-3">
+                {/* Existing lignes */}
+                {(sel.lignes || []).map((ligne) => (
+                  <div key={ligne.id} className="p-3 rounded-xl bg-gray-50 border border-gray-200">
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-800">{ligne.desc}</p>
+                        <p className="text-xs text-gray-500">{ligne.qte} × {eur(ligne.prix)}</p>
                       </div>
-                      <select
-                        value={ligne.cat || ''}
-                        onChange={(e) => {
-                          upd(sel.id, {
-                            lignes: sel.lignes.map((l) =>
-                              l.id === ligne.id ? { ...l, cat: e.target.value } : l,
-                            ),
-                          });
-                        }}
-                        className="w-full px-3 py-1.5 rounded-lg border-2 border-gray-200 text-sm outline-none"
-                        style={{ color: BRAND.navy }}
+                      <button
+                        onClick={() => upd(sel.id, { lignes: sel.lignes.filter((l) => l.id !== ligne.id) })}
+                        className="text-gray-300 hover:text-red-500 flex-shrink-0"
                       >
-                        <option value="">— Choisir une catégorie —</option>
-                        {categories.map((cat) => (
-                          <option key={cat.id} value={cat.id}>{cat.label}</option>
-                        ))}
-                      </select>
+                        <X size={12} />
+                      </button>
                     </div>
-                  ))}
+                    <select
+                      value={ligne.cat || ''}
+                      onChange={(e) => {
+                        upd(sel.id, {
+                          lignes: sel.lignes.map((l) =>
+                            l.id === ligne.id ? { ...l, cat: e.target.value } : l,
+                          ),
+                        });
+                      }}
+                      className="w-full px-3 py-1.5 rounded-lg border-2 border-gray-200 text-sm outline-none"
+                      style={{ color: BRAND.navy }}
+                    >
+                      <option value="">— Choisir une catégorie —</option>
+                      {categories.map((cat) => (
+                        <option key={cat.id} value={cat.id}>{cat.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                ))}
+
+                {/* Quick-add from factures */}
+                {sel.factures?.length > 0 && (!sel.lignes || sel.lignes.length === 0) && (
+                  <div className="p-3 rounded-xl border-2 border-dashed border-amber-300 bg-amber-50">
+                    <p className="text-xs font-bold text-amber-800 mb-2">Importer depuis les factures</p>
+                    <div className="space-y-1.5">
+                      {sel.factures.filter((f) => f.valide).map((f) => (
+                        <button
+                          key={f.id}
+                          onClick={() => {
+                            const newLigne = {
+                              id: 'l_' + Math.random().toString(36).slice(2, 8),
+                              desc: f.vendeur || 'Article',
+                              qte: 1,
+                              prix: f.montant || 0,
+                              cat: '',
+                            };
+                            upd(sel.id, { lignes: [...(sel.lignes || []), newLigne] });
+                            flash(`Article "${f.vendeur}" ajouté — sélectionnez sa catégorie`);
+                          }}
+                          className="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-white border border-amber-200 hover:bg-amber-100 transition-colors text-left active:scale-[0.98]"
+                        >
+                          <span className="text-xs font-semibold text-gray-700">{f.vendeur} — {eur(f.montant)}</span>
+                          <span className="text-[10px] font-bold text-amber-700">+ Importer</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Add article manually */}
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="Description article"
+                    id="new-ligne-desc"
+                    className="flex-1 px-3 py-2 rounded-lg border border-gray-200 bg-gray-50 text-xs outline-none focus:border-blue-400"
+                  />
+                  <input
+                    type="number"
+                    placeholder="Qté"
+                    id="new-ligne-qte"
+                    defaultValue="1"
+                    className="w-14 px-2 py-2 rounded-lg border border-gray-200 bg-gray-50 text-xs outline-none focus:border-blue-400 text-center"
+                  />
+                  <input
+                    type="number"
+                    placeholder="Prix €"
+                    id="new-ligne-prix"
+                    className="w-20 px-2 py-2 rounded-lg border border-gray-200 bg-gray-50 text-xs outline-none focus:border-blue-400 text-right"
+                  />
+                  <button
+                    onClick={() => {
+                      const desc = document.getElementById('new-ligne-desc')?.value?.trim();
+                      const qte = parseInt(document.getElementById('new-ligne-qte')?.value) || 1;
+                      const prix = parseFloat(document.getElementById('new-ligne-prix')?.value) || 0;
+                      if (!desc) return;
+                      const newLigne = {
+                        id: 'l_' + Math.random().toString(36).slice(2, 8),
+                        desc, qte, prix, cat: '',
+                      };
+                      upd(sel.id, { lignes: [...(sel.lignes || []), newLigne] });
+                      document.getElementById('new-ligne-desc').value = '';
+                      document.getElementById('new-ligne-prix').value = '';
+                      document.getElementById('new-ligne-qte').value = '1';
+                      flash('Article ajouté — sélectionnez sa catégorie');
+                    }}
+                    className="px-3 py-2 rounded-lg text-xs font-bold"
+                    style={{ background: `${BRAND.navy}10`, color: BRAND.navy }}
+                  >
+                    + Ajouter
+                  </button>
                 </div>
-              </Section>
-            )}
+
+                {(!sel.lignes || sel.lignes.length === 0) && (
+                  <p className="text-[10px] text-orange-500 text-center">
+                    Ajoutez les articles et leur catégorie pour calculer les taxes (OM/OMR)
+                  </p>
+                )}
+              </div>
+            </Section>
 
             {/* Frais divers */}
             <div className="space-y-2">
