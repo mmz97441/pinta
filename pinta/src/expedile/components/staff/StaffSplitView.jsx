@@ -107,6 +107,7 @@ function ColisTableRow({ c, client, envois, onClick, isSelected, compact, checke
       <td className={TD}>
         <span className="font-black text-gray-900">{c.ref}</span>
         {c.casier && <span className="text-[8px] font-bold px-1 py-0.5 rounded ml-1" style={{ background: `${BRAND.gold}22`, color: BRAND.goldD }}>{c.casier}</span>}
+        {(() => { const unread = (c.messages || []).filter((m) => m.type === 'client' && !m.lu).length; return unread > 0 ? <span className="ml-1 text-[8px] font-bold px-1.5 py-0.5 rounded-full bg-red-500 text-white animate-pulse">{unread}</span> : null; })()}
       </td>
       <td className={TD}><Badge statut={c.statut} /></td>
       {!compact && <td className={TD}>
@@ -304,7 +305,9 @@ export default function StaffColisPage() {
   const [sortCol, setSortCol] = useState(null);
   const [sortDir, setSortDir] = useState('asc');
   const [showArchive, setShowArchive] = useState(false);
-  const [viewMode, setViewMode] = useState('statut'); // 'statut' | 'envoi'
+  const [viewMode, setViewMode] = useState('statut');
+  const [showFactures, setShowFactures] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
 
   useEffect(() => {
     if (urlTab && PIPELINE.some((t) => t.key === urlTab)) setActiveTab(urlTab);
@@ -612,34 +615,98 @@ export default function StaffColisPage() {
         </div>
 
         {/* Detail panel (inline, right side) */}
-        {sel && (
+        {sel && (() => {
+          const clDetail = getClient(sel.clientId);
+          const destDetail = clDetail ? getDestByCP(clDetail.cp) : null;
+          const unreadCount = (sel.messages || []).filter((m) => m.type === 'client' && !m.lu).length;
+          const facturesSummary = sel.factures || [];
+          const validCount = facturesSummary.filter((f) => f.valide).length;
+          const rejetCount = facturesSummary.filter((f) => f.rejetMotif).length;
+          const hasDims = sel.dimL && sel.dimW && sel.dimH && sel.poids;
+          const hasFin = sel.finL && sel.finW && sel.finH && sel.finP;
+          return (
           <div className="w-[820px] flex-shrink-0 border-l border-gray-200 bg-white overflow-y-auto">
-            {/* Header */}
-            <div className="sticky top-0 z-10 bg-white border-b border-gray-100 px-4 py-3 flex items-center justify-between">
+            {/* Compact header */}
+            <div className="sticky top-0 z-10 bg-white border-b border-gray-100 px-4 py-2.5 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <div className="w-2.5 h-2.5 rounded-full" style={{ background: statutBorderColor(sel.statut) }} />
                 <span className="text-sm font-black" style={{ color: BRAND.navy }}>{sel.ref}</span>
                 <Badge statut={sel.statut} />
+                {sel.devisTotal > 0 && <span className="text-xs font-bold" style={{ color: BRAND.navy }}>{eur(sel.devisTotal)}</span>}
               </div>
               <button onClick={closeDetail} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400"><X size={18} /></button>
             </div>
-            <div className="px-4 pt-3"><Etapes statut={sel.statut} /></div>
-            {/* Two-column detail layout */}
-            <div className="p-4 flex gap-4">
-              {/* Left: info, factures, audit */}
-              <div className="flex-1 min-w-0 space-y-4">
-                <ColisInfo />
-                <FacturesPanel />
-                <AuditLog />
+
+            {/* Steps */}
+            <div className="px-4 pt-2 pb-1"><Etapes statut={sel.statut} /></div>
+
+            {/* Two-column compact layout */}
+            <div className="px-4 py-3 flex gap-4">
+              {/* LEFT: info résumé + factures collapsées + historique */}
+              <div className="flex-1 min-w-0 space-y-3">
+                {/* Client + colis summary — 4 lines max */}
+                <div className="rounded-xl border border-gray-100 p-3 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-bold" style={{ color: BRAND.navy }}>{clDetail?.nom || '—'}</span>
+                      {destDetail && <span>{destDetail.flag}</span>}
+                      {clDetail?.abonnement && clDetail.abonnement !== 'freemium' && (
+                        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${ABONNEMENTS[clDetail.abonnement]?.couleur || ''}`}>
+                          {ABONNEMENTS[clDetail.abonnement]?.label}
+                        </span>
+                      )}
+                    </div>
+                    {sel.casier && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ background: `${BRAND.gold}22`, color: BRAND.goldD }}>Casier {sel.casier}</span>}
+                  </div>
+                  <p className="text-xs text-gray-600">{sel.desc || '—'} · {(sel.trackings?.filter(Boolean) || []).length || 1} carton{(sel.trackings?.filter(Boolean) || []).length > 1 ? 's' : ''}</p>
+                  {hasFin ? (
+                    <p className="text-xs text-gray-500 font-mono">{sel.finL}×{sel.finW}×{sel.finH} cm · {sel.finP} kg</p>
+                  ) : hasDims ? (
+                    <p className="text-xs text-gray-500 font-mono">{sel.dimL}×{sel.dimW}×{sel.dimH} cm · {sel.poids} kg</p>
+                  ) : (
+                    <p className="text-xs text-gray-400 italic">Dimensions non renseignées</p>
+                  )}
+                  {sel.economie > 0 && (
+                    <p className="text-[10px] font-bold text-emerald-600">Économie : {eur(sel.economie)}</p>
+                  )}
+                </div>
+
+                {/* Factures — one line summary, expandable */}
+                <button
+                  onClick={() => setShowFactures((p) => !p)}
+                  className="w-full flex items-center justify-between px-3 py-2 rounded-xl border border-gray-100 hover:bg-gray-50 transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <FileText size={13} className="text-gray-400" />
+                    <span className="text-xs font-bold text-gray-600">Factures ({facturesSummary.length})</span>
+                    {validCount > 0 && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-green-100 text-green-700">{validCount} validée{validCount > 1 ? 's' : ''}</span>}
+                    {rejetCount > 0 && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-red-100 text-red-600">{rejetCount} refusée{rejetCount > 1 ? 's' : ''}</span>}
+                    {facturesSummary.length === 0 && <span className="text-[9px] font-bold text-red-500">Manquante</span>}
+                  </div>
+                  <span className="text-[10px] text-gray-400">{showFactures ? '▼' : '▸'}</span>
+                </button>
+                {showFactures && <FacturesPanel />}
+
+                {/* Historique — collapsed */}
+                <button
+                  onClick={() => setShowHistory((p) => !p)}
+                  className="w-full flex items-center justify-between px-3 py-2 rounded-xl border border-gray-100 hover:bg-gray-50 transition-colors"
+                >
+                  <span className="text-xs font-bold text-gray-600">Historique</span>
+                  <span className="text-[10px] text-gray-400">{showHistory ? '▼' : '▸'}</span>
+                </button>
+                {showHistory && <AuditLog />}
               </div>
-              {/* Right: actions + chat */}
-              <div className="w-[340px] flex-shrink-0 space-y-4">
+
+              {/* RIGHT: action + chat */}
+              <div className="w-[360px] flex-shrink-0 space-y-3">
                 <StaffDetailView />
                 <ChatPanel />
               </div>
             </div>
           </div>
-        )}
+          );
+        })()}
       </div>
     </div>
   );
