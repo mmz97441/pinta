@@ -51,7 +51,8 @@ function ColisTableHead({ compact }) {
       <th className={TH}>Réf.</th>
       <th className={TH}>Statut</th>
       {!compact && <th className={TH}>Paiem.</th>}
-      <th className={TH}>Client</th>
+      <th className={TH}>Nom</th>
+      <th className={TH}>Prénom</th>
       {!compact && <th className={TH}>Email</th>}
       {!compact && <th className={TH}>Tél.</th>}
       {!compact && <th className={TH}>Forfait</th>}
@@ -105,10 +106,8 @@ function ColisTableRow({ c, client, envois, onClick, isSelected, compact }) {
           : c.devisTotal ? <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">En attente</span>
           : DASH}
       </td>}
-      <td className={TD}>
-        <span className="text-gray-700 font-medium">{nom}</span>
-        {dest && <span className="ml-1">{dest.flag}</span>}
-      </td>
+      <td className={TD}><span className="text-gray-700 font-medium">{nom}</span>{dest && <span className="ml-1">{dest.flag}</span>}</td>
+      <td className={TD}><span className="text-gray-500">{prenom || '—'}</span></td>
       {!compact && <td className={TD}><span className="text-gray-500 text-[10px]">{client?.email || '—'}</span></td>}
       {!compact && <td className={TD}><span className="text-gray-500 text-[10px] font-mono">{client?.tel || '—'}</span></td>}
       {!compact && <td className={TD}><span className="text-[9px] font-semibold">{abo}</span></td>}
