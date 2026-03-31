@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, Users, Plus, Search, ChevronDown, Check, X, AlertTriangle, ExternalLink, Send, Download, FileSpreadsheet } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { BRAND, ABONNEMENTS, getDestByCP } from '../../constants';
-import { uid, telegramLink, searchClients } from '../../utils';
+import { uid, telegramLink, searchClients, eur } from '../../utils';
 import { Badge } from '../ui';
 import { exportRecapProExcel } from '../../utils/exportRecapPro';
 
