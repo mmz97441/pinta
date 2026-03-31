@@ -40,7 +40,6 @@ function templatesForStatut(statut) {
     autorise: ['feu_vert_recu', 'libre'],
     en_preparation: ['libre'],
     devis_envoye: ['devis_final', 'relance_paiement', 'libre'],
-    devis_envoye: ['devis_final', 'relance_paiement', 'libre'],
     paye: ['expedie', 'libre'],
     expedie: ['expedie', 'libre'],
     transit: ['libre'],
