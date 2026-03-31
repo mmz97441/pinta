@@ -1236,18 +1236,43 @@ export default function StaffDetailView() {
                 <div className="space-y-3">
                   <div className="p-3 rounded-xl bg-blue-50 border border-blue-200 space-y-0.5 text-sm">
                     <Ligne label="Transport" value={eur(sel.devisTransport || devisCalc.tr)} />
+                    {/* Taxes douanières par catégorie */}
                     {(() => {
-                      // Calculer le taux effectif OM/OMR à partir de la valeur des articles
-                      const valeurArticles = (sel.lignes || []).reduce((s, l) => s + (l.qte || 1) * (l.prix || 0), 0);
-                      const omVal = sel.devisOM || devisCalc.om;
-                      const omrVal = sel.devisOMR || devisCalc.omr;
-                      const tauxOM = valeurArticles > 0 ? ((omVal / valeurArticles) * 100).toFixed(1) : '0';
-                      const tauxOMR = valeurArticles > 0 ? ((omrVal / valeurArticles) * 100).toFixed(1) : '0';
+                      const lignes = sel.lignes || [];
+                      if (lignes.length === 0) {
+                        return (
+                          <>
+                            <Ligne label="Octroi de Mer" value={eur(sel.devisOM || 0)} />
+                            <Ligne label="Octroi de Mer Régional" value={eur(sel.devisOMR || 0)} />
+                          </>
+                        );
+                      }
+                      // Group by category and calculate OM/OMR per category
+                      const byCat = {};
+                      lignes.forEach((l) => {
+                        const cat = categories.find((c) => c.id === l.cat);
+                        const catLabel = cat?.label || 'Non catégorisé';
+                        const ct = cat ? getCatTaux(cat, dest?.code || '974') : { om: 0, omr: 0 };
+                        const valeur = (l.qte || 1) * (l.prix || 0);
+                        if (!byCat[catLabel]) byCat[catLabel] = { om: 0, omr: 0, tauxOM: ct.om, tauxOMR: ct.omr, valeur: 0 };
+                        byCat[catLabel].om += valeur * ct.om / 100;
+                        byCat[catLabel].omr += valeur * ct.omr / 100;
+                        byCat[catLabel].valeur += valeur;
+                      });
+                      const entries = Object.entries(byCat);
                       return (
-                        <>
-                          <Ligne label={`Octroi de Mer (${tauxOM}%)`} value={eur(omVal)} />
-                          <Ligne label={`OMR (${tauxOMR}%)`} value={eur(omrVal)} />
-                        </>
+                        <div className="space-y-1">
+                          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mt-1">Taxes douanières</p>
+                          {entries.map(([catLabel, v]) => (
+                            <div key={catLabel}>
+                              <div className="flex justify-between">
+                                <span className="text-xs text-gray-700">📦 {catLabel}</span>
+                                <span className="text-xs font-semibold">{eur(v.om + v.omr)}</span>
+                              </div>
+                              <p className="text-[9px] text-gray-400 ml-5">Octroi de Mer {v.tauxOM}% + Octroi de Mer Régional {v.tauxOMR}%</p>
+                            </div>
+                          ))}
+                        </div>
                       );
                     })()}
                     <Ligne label={`TVA (${dest?.tva || 0}%)`} value={eur(sel.devisTVA || devisCalc.tva)} />

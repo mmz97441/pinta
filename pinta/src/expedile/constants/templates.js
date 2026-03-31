@@ -332,8 +332,8 @@ ${colis.lignes?.length > 0 ? `\n📋 *Contenu déclaré :*\n${colis.lignes.map((
 💰 *DÉTAIL DU DEVIS*
 ━━━━━━━━━━━━━━━━
 🚀 Transport : *${eur(colis.devisTransport)}*
-🏛️ Octroi de Mer (OM) : *${eur(colis.devisOM)}*
-🏛️ OMR (régional) : *${eur(colis.devisOMR)}*
+🏛️ Taxes douanières : *${eur((colis.devisOM || 0) + (colis.devisOMR || 0))}*
+${(colis.devisOM > 0 || colis.devisOMR > 0) ? `   _(Octroi de Mer + Octroi de Mer Régional, calculés sur la valeur de vos articles)_\n` : ''}
 📊 TVA (${dest.tva}%) : *${eur(colis.devisTVA)}*
 ${colis.fraisDivers?.length > 0 ? colis.fraisDivers.map((f) => `📎 ${f.libelle} : *${eur(f.montant)}*`).join('\n') + '\n' : ''}━━━━━━━━━━━━━━━━
 💰 *TOTAL : ${eur(colis.devisTotal)}*
@@ -374,8 +374,8 @@ ${colis.lignes?.length > 0 ? `\nContenu déclaré :\n${colis.lignes.map((l) => `
 💰 DÉTAIL DU DEVIS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🚀 Transport ........................ ${eur(colis.devisTransport)}
-🏛️ Octroi de Mer (OM) .............. ${eur(colis.devisOM)}
-🏛️ Octroi de Mer Régional (OMR) .... ${eur(colis.devisOMR)}
+🏛️ Taxes douanières ................. ${eur((colis.devisOM || 0) + (colis.devisOMR || 0))}
+   (Octroi de Mer + Octroi de Mer Régional)
 📊 TVA (${dest.tva}%) ..................... ${eur(colis.devisTVA)}
 ${colis.fraisDivers?.length > 0 ? colis.fraisDivers.map((f) => `📎 ${f.libelle} ..................... ${eur(f.montant)}`).join('\n') + '\n' : ''}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 💰 TOTAL                              ${eur(colis.devisTotal)}

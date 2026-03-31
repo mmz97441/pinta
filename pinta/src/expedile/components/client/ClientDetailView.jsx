@@ -9,7 +9,7 @@ import { useApp } from '../../context/AppContext';
 import * as sb from '../../lib/supabaseData';
 import { BRAND, PHASES_CLIENT, getPhaseIndex, getDestByCP } from '../../constants';
 import { exportDevisPDF } from '../../utils/exportDevisPDF';
-import { eur, trackStr, hasTrack } from '../../utils';
+import { eur, trackStr, hasTrack, getCatTaux } from '../../utils';
 import { Badge, Ligne, ProgressBar } from '../ui';
 
 // ── Phase icons ────────────────────────────────────────────────────────────────
@@ -122,7 +122,7 @@ function PhaseStep({ phase, phaseIdx, state, open, onToggle, children }) {
 // ── Main component ─────────────────────────────────────────────────────────────
 export default function ClientDetailView() {
   const navigate = useNavigate();
-  const { sel, selDest, feuVert, feuVertBulk, payer, ask, flash, authCl, data } = useApp();
+  const { sel, selDest, feuVert, feuVertBulk, payer, ask, flash, authCl, data, categories } = useApp();
 
   if (!sel) return null;
 
@@ -427,18 +427,47 @@ export default function ClientDetailView() {
                   </>
                 )}
                 <Ligne label="Transport optimisé" value={eur(sel.devisTransport)} />
-                {sel.devisOM != null && sel.devisOM > 0 && (
-                  <>
-                    <Ligne label="Octroi de Mer (OM)" value={eur(sel.devisOM)} />
-                    <p className="text-[10px] text-gray-400 mt-0.5">Taxe douanière calculée sur la valeur de vos articles</p>
-                  </>
-                )}
-                {sel.devisOMR != null && sel.devisOMR > 0 && (
-                  <>
-                    <Ligne label="OMR (régional)" value={eur(sel.devisOMR)} />
-                    <p className="text-[10px] text-gray-400 mt-0.5">Taxe complémentaire régionale sur vos articles</p>
-                  </>
-                )}
+                {/* Taxes douanières par catégorie */}
+                {(() => {
+                  const lignes = sel.lignes || [];
+                  if (lignes.length === 0) {
+                    return (
+                      <>
+                        {sel.devisOM > 0 && <Ligne label="Octroi de Mer" value={eur(sel.devisOM)} />}
+                        {sel.devisOMR > 0 && <Ligne label="Octroi de Mer Régional" value={eur(sel.devisOMR)} />}
+                      </>
+                    );
+                  }
+                  const byCat = {};
+                  lignes.forEach((l) => {
+                    const cat = categories?.find((c) => c.id === l.cat);
+                    const catLabel = cat?.label || 'Articles';
+                    const ct = cat ? getCatTaux(cat, selDest?.code || '974') : { om: 0, omr: 0 };
+                    const valeur = (l.qte || 1) * (l.prix || 0);
+                    if (!byCat[catLabel]) byCat[catLabel] = { om: 0, omr: 0, tauxOM: ct.om, tauxOMR: ct.omr };
+                    byCat[catLabel].om += valeur * ct.om / 100;
+                    byCat[catLabel].omr += valeur * ct.omr / 100;
+                  });
+                  const entries = Object.entries(byCat);
+                  const hasTaxes = entries.some(([, v]) => v.om > 0 || v.omr > 0);
+                  if (!hasTaxes && sel.devisOM <= 0 && sel.devisOMR <= 0) return null;
+                  return (
+                    <div className="space-y-1.5 mt-1">
+                      <p className="text-[10px] font-bold text-gray-500 uppercase">Taxes douanières</p>
+                      {entries.map(([catLabel, v]) => (
+                        <div key={catLabel}>
+                          <div className="flex justify-between">
+                            <span className="text-xs text-gray-700">📦 {catLabel}</span>
+                            <span className="text-xs font-semibold">{eur(v.om + v.omr)}</span>
+                          </div>
+                          <p className="text-[9px] text-gray-400 ml-5">
+                            Octroi de Mer {v.tauxOM}% + Octroi de Mer Régional {v.tauxOMR}%
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
                 {sel.devisTVA != null && sel.devisTVA > 0 && (
                   <Ligne label={`TVA (${selDest?.tva ?? 8.5}%)`} value={eur(sel.devisTVA)} />
                 )}
