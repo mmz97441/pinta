@@ -339,8 +339,9 @@ ${colis.fraisDivers?.length > 0 ? colis.fraisDivers.map((f) => `📎 ${f.libelle
 💰 *TOTAL : ${eur(colis.devisTotal)}*
 ━━━━━━━━━━━━━━━━
 ${colis.economie > 0 ? `\n✅ *Vous économisez ${eur(colis.economie)}* grâce à l'optimisation !\n(Sans optimisation : ${eur(colis.avantOptimTotal)})\n` : ''}
-👉 *Pour déclencher l'expédition :*
-Payez sur votre espace client ou contactez-nous.
+${colis.payplugPaymentUrl
+? `💳 *Payez en ligne :*\n${colis.payplugPaymentUrl}`
+: `👉 *Pour déclencher l'expédition :*\nContactez-nous pour le règlement.`}
 
 ❓ Une question ? Répondez à ce message.
 

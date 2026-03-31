@@ -1406,7 +1406,7 @@ export default function StaffDetailView() {
                   </div>
 
                   <div className="flex flex-col gap-2">
-                    <BtnPrimary onClick={() => { if (actionLoading) return; setActionLoading(true); try { handleConfirmDevisEnvoye(); } finally { setTimeout(() => setActionLoading(false), 1000); } }} disabled={actionLoading} color="#16A34A">
+                    <BtnPrimary onClick={async () => { if (actionLoading) return; setActionLoading(true); try { await handleConfirmDevisEnvoye(); } finally { setTimeout(() => setActionLoading(false), 1500); } }} disabled={actionLoading} color="#16A34A">
                       <Check size={15} />
                       {actionLoading ? 'Envoi en cours...' : 'Envoyer le devis au client'}
                     </BtnPrimary>
