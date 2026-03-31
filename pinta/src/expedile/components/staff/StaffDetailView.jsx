@@ -1334,8 +1334,11 @@ export default function StaffDetailView() {
                 )}
               </div>
             ) : (
-              <Section title="Brouillon du devis" icon={Eye} color="#2563EB">
+              <Section title="Brouillon du devis — vérifiez avant envoi" icon={Eye} color="#2563EB">
                 <div className="space-y-3">
+                  <div className="p-2 rounded-lg bg-amber-50 border border-amber-200">
+                    <p className="text-[10px] font-bold text-amber-700">⚠️ Vérifiez les montants ci-dessous avant d'envoyer au client.</p>
+                  </div>
                   <div className="p-3 rounded-xl bg-blue-50 border border-blue-200 space-y-0.5 text-sm">
                     <Ligne label="Transport" value={eur(sel.devisTransport || devisCalc.tr)} />
                     {/* Taxes douanières par catégorie */}
