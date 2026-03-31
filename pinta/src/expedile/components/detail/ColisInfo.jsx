@@ -28,10 +28,13 @@ export default function ColisInfo() {
     }
     upd(sel.id, updFields);
 
-    // Move all client's active colis if checked
+    // Move all client's active colis if checked (same envoi only)
     if (moveAll && cl) {
+      const currentEnvoi = sel.envoi || null;
       const activeColis = data.filter(
-        (c) => c.clientId === cl.id && c.id !== sel.id && c.statut !== 'livre' && c.statut !== 'annule'
+        (c) => c.clientId === cl.id && c.id !== sel.id
+          && c.statut !== 'livre' && c.statut !== 'annule'
+          && (!c.envoi || !currentEnvoi || c.envoi === currentEnvoi) // same envoi or no envoi
       );
       activeColis.forEach((c) => {
         const cHistEntry = c.casier ? { casier: c.casier, date: new Date().toISOString() } : null;
@@ -41,7 +44,15 @@ export default function ColisInfo() {
         }
         upd(c.id, cUpd);
       });
-      flash(`Casier mis à jour pour ${activeColis.length + 1} colis`);
+      const skipped = data.filter(
+        (c) => c.clientId === cl.id && c.id !== sel.id
+          && c.statut !== 'livre' && c.statut !== 'annule'
+          && c.envoi && currentEnvoi && c.envoi !== currentEnvoi
+      ).length;
+      flash(skipped > 0
+        ? `Casier mis à jour pour ${activeColis.length + 1} colis (${skipped} colis sur un autre envoi non déplacés)`
+        : `Casier mis à jour pour ${activeColis.length + 1} colis`
+      );
     } else {
       flash('Casier mis à jour');
     }

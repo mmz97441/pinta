@@ -274,19 +274,26 @@ export default function ColisModal({ open, onClose }) {
     }
     setData((prev) => [...prev, newColis]);
 
-    // Auto-group: move all other active colis of this client to the same casier
+    // Auto-group: move other active colis of this client to the same casier
+    // ONLY if they share the same envoi (or have no envoi yet)
+    // Colis with a different envoi keep their own casier to avoid mixing shipments
     if (nf.casier.trim()) {
       const newCasier = nf.casier.trim();
+      const newColisEnvoi = newColis.envoi || null;
       data.forEach((c) => {
         if (c.clientId === clientId && c.id !== newColis.id
             && c.statut !== 'livre' && c.statut !== 'annule'
             && c.casier !== newCasier) {
-          const oldCasier = c.casier;
-          const historique = c.casierHistorique || [];
-          if (oldCasier) {
-            historique.push({ casier: oldCasier, date: new Date().toISOString() });
+          // Only group if same envoi or no envoi assigned
+          const sameEnvoi = !c.envoi || !newColisEnvoi || c.envoi === newColisEnvoi;
+          if (sameEnvoi) {
+            const oldCasier = c.casier;
+            const historique = c.casierHistorique || [];
+            if (oldCasier) {
+              historique.push({ casier: oldCasier, date: new Date().toISOString() });
+            }
+            upd(c.id, { casier: newCasier, casierHistorique: historique });
           }
-          upd(c.id, { casier: newCasier, casierHistorique: historique });
         }
       });
     }
