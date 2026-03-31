@@ -91,6 +91,11 @@ export function AppProvider({ children }) {
       }
     });
 
+    const facturesSub = sb.subscribeFactures((payload) => {
+      // Facture ajoutée, modifiée ou supprimée → refetch all colis to get updated relations
+      sb.fetchColis().then(setData).catch(console.error);
+    });
+
     const msgSub = sb.subscribeMessages((payload) => {
       if (payload.eventType === 'INSERT') {
         const newMsg = payload.new;
@@ -114,6 +119,7 @@ export function AppProvider({ children }) {
 
     return () => {
       supabase.removeChannel(colisSub);
+      supabase.removeChannel(facturesSub);
       supabase.removeChannel(msgSub);
     };
   }, [sbReady]);
@@ -515,30 +521,90 @@ export function AppProvider({ children }) {
     }
   }, [data, log, upd, flash]);
 
+  // ── Auto-assign envoi based on feu vert date ──────────────────────────────
+  // Règle : feu vert avant mercredi 17h → vendredi de la semaine, sinon vendredi suivant
+  const autoAssignEnvoi = useCallback(async (colisId) => {
+    const now = new Date();
+    const day = now.getDay(); // 0=dim, 1=lun, ..., 3=mer, 5=ven
+    const hour = now.getHours();
+    const isBeforeDeadline = day < 3 || (day === 3 && hour < 17); // avant mercredi 17h
+
+    // Calcul du vendredi cible
+    const target = new Date(now);
+    const daysUntilFriday = (5 - day + 7) % 7 || 7; // jours jusqu'au prochain vendredi
+    if (isBeforeDeadline) {
+      // Ce vendredi (si on est déjà vendredi/samedi/dimanche, prendre le prochain)
+      const daysToThisFri = (5 - day + 7) % 7;
+      target.setDate(now.getDate() + (daysToThisFri === 0 && day === 5 ? 0 : daysToThisFri));
+    } else {
+      // Vendredi de la semaine prochaine
+      target.setDate(now.getDate() + daysUntilFriday + (day <= 5 ? 0 : 0));
+      if (day > 3 && day < 5) target.setDate(now.getDate() + daysUntilFriday);
+      else if (day === 3) target.setDate(now.getDate() + 2); // mercredi → vendredi prochain = +9 jours? non
+    }
+    // Simplification: calculer proprement
+    const friday = new Date(now);
+    if (isBeforeDeadline) {
+      // Ce vendredi
+      const diff = (5 - day + 7) % 7;
+      friday.setDate(now.getDate() + (diff === 0 ? 0 : diff));
+    } else {
+      // Vendredi prochain (semaine suivante)
+      const diff = (5 - day + 7) % 7;
+      friday.setDate(now.getDate() + (diff === 0 ? 7 : diff));
+    }
+    const dateStr = friday.toISOString().slice(0, 10); // YYYY-MM-DD
+
+    // Chercher un envoi existant pour cette date
+    let existingEnvoi = envois.find((e) => e.date === dateStr && e.statut !== 'parti');
+
+    if (!existingEnvoi) {
+      // Créer l'envoi automatiquement
+      try {
+        const newEnvoi = await sb.insertEnvoi({ date: dateStr, statut: 'planifie' });
+        setEnvois((prev) => [...prev, newEnvoi]);
+        existingEnvoi = newEnvoi;
+      } catch (err) {
+        console.warn('[autoAssignEnvoi] Erreur création envoi:', err.message);
+        return;
+      }
+    }
+
+    // Affecter le colis
+    upd(colisId, { envoi: existingEnvoi.id });
+    flash({ msg: `Envoi auto-affecté : départ prévu le ${friday.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}`, type: 'success', duration: 4000 });
+  }, [envois, setEnvois, upd, flash]);
+
   const feuVert = useCallback((id, ok) => {
     const ns = ok ? 'autorise' : 'refuse_client';
     log(id, 'attente_feu_vert', ns);
-    upd(id, { statut: ns, feuVert: ok ? 'autorise' : 'refuse' });
-    flash({ msg: ok ? 'Vous avez autorisé la préparation' : 'Vous avez refusé — le colis ne sera pas préparé', type: ok ? 'success' : 'warning', duration: 4000 });
-  }, [log, upd, flash]);
+    upd(id, { statut: ns, feuVert: ok ? 'autorise' : 'refuse', feuVertDate: new Date().toISOString() });
+    if (ok) {
+      autoAssignEnvoi(id);
+      flash({ msg: 'Feu vert reçu — envoi auto-affecté', type: 'success', duration: 4000 });
+    } else {
+      flash({ msg: 'Refusé — le colis ne sera pas préparé', type: 'warning', duration: 4000 });
+    }
+  }, [log, upd, flash, autoAssignEnvoi]);
 
   const feuVertBulk = useCallback((ids) => {
     let successCount = 0;
     ids.forEach((id) => {
       try {
         log(id, 'attente_feu_vert', 'autorise');
-        upd(id, { statut: 'autorise', feuVert: 'autorise' });
+        upd(id, { statut: 'autorise', feuVert: 'autorise', feuVertDate: new Date().toISOString() });
+        autoAssignEnvoi(id);
         successCount++;
       } catch (err) {
         console.error(`[feuVertBulk] Erreur sur colis ${id}:`, err.message);
       }
     });
     if (successCount === ids.length) {
-      flash({ msg: `${ids.length} colis autorisés`, type: 'success', duration: 4000 });
+      flash({ msg: `${ids.length} colis autorisés — envois auto-affectés`, type: 'success', duration: 4000 });
     } else {
       flash({ msg: `${successCount}/${ids.length} colis autorisés — certains ont échoué`, type: 'warning', duration: 5000 });
     }
-  }, [log, upd, flash]);
+  }, [log, upd, flash, autoAssignEnvoi]);
 
   const envoyerDevis = useCallback((id) => {
     const c = data.find((x) => x.id === id);

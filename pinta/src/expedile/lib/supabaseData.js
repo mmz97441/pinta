@@ -669,6 +669,13 @@ export function subscribeColis(callback) {
     .subscribe();
 }
 
+export function subscribeFactures(callback) {
+  return supabase
+    .channel('factures-changes')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'factures' }, callback)
+    .subscribe();
+}
+
 export function subscribeMessages(callback) {
   return supabase
     .channel('messages-changes')
