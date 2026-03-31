@@ -794,141 +794,6 @@ export default function StaffDashboard({ onNewColis }) {
         </button>
       </div>
 
-      {/* ── Global search + envoi filter toggle ─────────────────────────── */}
-      <div className="anim-fade stagger-1 relative">
-        <div className="flex gap-2">
-          <div className="relative flex-1">
-            <Search
-              size={15}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
-            />
-            <input
-              type="text"
-              value={globalSearch}
-              onChange={(e) => setGlobalSearch(e.target.value)}
-              placeholder="Rechercher client, colis, tracking…"
-              className="w-full pl-9 pr-8 py-2.5 text-sm rounded-xl border-2 border-gray-200 outline-none transition-all focus:border-amber-400"
-              style={{ color: BRAND.navy, background: '#FFFFFF', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}
-            />
-            {hasSearch && (
-              <button
-                onClick={() => setGlobalSearch('')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-              >
-                <X size={14} />
-              </button>
-            )}
-          </div>
-          <button
-            aria-label="Filtrer par envoi"
-            onClick={() => setShowEnvoiFilter((p) => !p)}
-            className="relative flex items-center justify-center w-10 rounded-xl border bg-white transition-all active:scale-95"
-            style={{
-              borderColor: showEnvoiFilter ? BRAND.navy : '#E5E7EB',
-              background: showEnvoiFilter ? `${BRAND.navy}08` : 'white',
-            }}
-          >
-            <Filter size={15} style={{ color: showEnvoiFilter || envoiFilter !== 'ALL' ? BRAND.navy : '#9CA3AF' }} />
-            {envoiFilter !== 'ALL' && (
-              <span
-                className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full border-2 border-white"
-                style={{ background: BRAND.navy }}
-              />
-            )}
-          </button>
-        </div>
-
-        {/* Search backdrop */}
-        {hasSearch && (
-          <div
-            className="fixed inset-0 z-20"
-            onClick={() => setGlobalSearch('')}
-          />
-        )}
-
-        {/* Search dropdown */}
-        {hasSearch && (
-          <div
-            className="absolute top-full left-0 right-0 mt-1.5 z-30 rounded-2xl overflow-hidden"
-            style={{ maxHeight: 320, overflowY: 'auto', background: '#FFFFFF', border: '1px solid #E5E7EB', boxShadow: '0 8px 32px rgba(0,0,0,0.16)' }}
-          >
-            {!hasResults && (
-              <p className="px-4 py-3 text-sm text-gray-400">Aucun résultat</p>
-            )}
-
-            {searchResults.clients.length > 0 && (
-              <div>
-                <div className="px-3 py-1.5 bg-gray-50 border-b border-gray-100">
-                  <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
-                    Clients
-                  </span>
-                </div>
-                {searchResults.clients.map((cl) => (
-                  <button
-                    key={cl.id}
-                    onClick={() => setGlobalSearch('')}
-                    className="w-full flex items-center gap-2.5 px-3 py-2.5 hover:bg-gray-50 transition-colors text-left"
-                  >
-                    <div
-                      className="w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-black"
-                      style={{
-                        background: `linear-gradient(135deg, ${BRAND.navyL}, ${BRAND.navy})`,
-                        color: BRAND.goldL,
-                      }}
-                    >
-                      {cl.nom.charAt(0)}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-gray-800 truncate">{cl.nom}</p>
-                      <p className="text-xs text-gray-400 truncate">
-                        {cl.ville} · {getDestByCP(cl.cp).flag} {getDestByCP(cl.cp).label}
-                      </p>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {searchResults.colis.length > 0 && (
-              <div>
-                <div className="px-3 py-1.5 bg-gray-50 border-b border-gray-100">
-                  <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
-                    Colis
-                  </span>
-                </div>
-                {searchResults.colis.map((c) => {
-                  const cl = getClient(c.clientId);
-                  return (
-                    <button
-                      key={c.id}
-                      onClick={() => openColis(c.id)}
-                      className="w-full flex items-center gap-2.5 px-3 py-2.5 hover:bg-gray-50 transition-colors text-left"
-                    >
-                      <div
-                        className="w-7 h-7 rounded-lg flex-shrink-0 flex items-center justify-center"
-                        style={{ background: `${BRAND.navy}12` }}
-                      >
-                        <Package size={13} style={{ color: BRAND.navy }} />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <p className="text-sm font-bold text-gray-800">{c.ref}</p>
-                          <Badge statut={c.statut} />
-                        </div>
-                        <p className="text-xs text-gray-400 truncate">
-                          {cl?.nom ?? '—'} · {c.desc}
-                        </p>
-                      </div>
-                      <ChevronRight size={14} className="text-gray-300 flex-shrink-0" />
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
       {/* ── Summary cards (primary navigation) ─────────────────────────── */}
       <div className="anim-fade stagger-2">
         <div className="grid grid-cols-3 md:grid-cols-7 gap-3">
@@ -1022,6 +887,141 @@ export default function StaffDashboard({ onNewColis }) {
                 <X size={11} />
                 Tout voir
               </button>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* ── Global search + envoi filter toggle ─────────────────────────── */}
+      <div className="anim-fade stagger-3 relative z-40">
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <Search
+              size={15}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
+            />
+            <input
+              type="text"
+              value={globalSearch}
+              onChange={(e) => setGlobalSearch(e.target.value)}
+              placeholder="Rechercher client, colis, tracking…"
+              className="w-full pl-9 pr-8 py-2.5 text-sm rounded-xl border-2 border-gray-200 outline-none transition-all focus:border-amber-400"
+              style={{ color: BRAND.navy, background: '#FFFFFF', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}
+            />
+            {hasSearch && (
+              <button
+                onClick={() => setGlobalSearch('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
+          <button
+            aria-label="Filtrer par envoi"
+            onClick={() => setShowEnvoiFilter((p) => !p)}
+            className="relative flex items-center justify-center w-10 rounded-xl border bg-white transition-all active:scale-95"
+            style={{
+              borderColor: showEnvoiFilter ? BRAND.navy : '#E5E7EB',
+              background: showEnvoiFilter ? `${BRAND.navy}08` : 'white',
+            }}
+          >
+            <Filter size={15} style={{ color: showEnvoiFilter || envoiFilter !== 'ALL' ? BRAND.navy : '#9CA3AF' }} />
+            {envoiFilter !== 'ALL' && (
+              <span
+                className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full border-2 border-white"
+                style={{ background: BRAND.navy }}
+              />
+            )}
+          </button>
+        </div>
+
+        {/* Search backdrop */}
+        {hasSearch && (
+          <div
+            className="fixed inset-0 z-40"
+            onClick={() => setGlobalSearch('')}
+          />
+        )}
+
+        {/* Search dropdown */}
+        {hasSearch && (
+          <div
+            className="absolute top-full left-0 right-0 mt-1.5 z-50 rounded-2xl overflow-hidden"
+            style={{ maxHeight: 380, overflowY: 'auto', background: '#FFFFFF', border: '1px solid #E5E7EB', boxShadow: '0 12px 40px rgba(0,0,0,0.2)' }}
+          >
+            {!hasResults && (
+              <p className="px-4 py-3 text-sm text-gray-400">Aucun résultat</p>
+            )}
+
+            {searchResults.clients.length > 0 && (
+              <div>
+                <div className="px-3 py-1.5 bg-gray-50 border-b border-gray-100">
+                  <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                    Clients
+                  </span>
+                </div>
+                {searchResults.clients.map((cl) => (
+                  <button
+                    key={cl.id}
+                    onClick={() => { setGlobalSearch(''); navigate(`/clients`); }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2.5 hover:bg-gray-50 transition-colors text-left"
+                  >
+                    <div
+                      className="w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-black"
+                      style={{
+                        background: `linear-gradient(135deg, ${BRAND.navyL}, ${BRAND.navy})`,
+                        color: BRAND.goldL,
+                      }}
+                    >
+                      {cl.nom.charAt(0)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-gray-800 truncate">{cl.nom}</p>
+                      <p className="text-xs text-gray-400 truncate">
+                        {cl.ville} · {getDestByCP(cl.cp).flag} {getDestByCP(cl.cp).label}
+                      </p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {searchResults.colis.length > 0 && (
+              <div>
+                <div className="px-3 py-1.5 bg-gray-50 border-b border-gray-100">
+                  <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                    Colis
+                  </span>
+                </div>
+                {searchResults.colis.map((c) => {
+                  const cl = getClient(c.clientId);
+                  return (
+                    <button
+                      key={c.id}
+                      onClick={() => { setGlobalSearch(''); openColis(c.id); }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2.5 hover:bg-gray-50 transition-colors text-left"
+                    >
+                      <div
+                        className="w-7 h-7 rounded-lg flex-shrink-0 flex items-center justify-center"
+                        style={{ background: `${BRAND.navy}12` }}
+                      >
+                        <Package size={13} style={{ color: BRAND.navy }} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-bold text-gray-800">{c.ref}</p>
+                          <Badge statut={c.statut} />
+                        </div>
+                        <p className="text-xs text-gray-400 truncate">
+                          {cl?.nom ?? '—'} · {c.desc}
+                        </p>
+                      </div>
+                      <ChevronRight size={14} className="text-gray-300 flex-shrink-0" />
+                    </button>
+                  );
+                })}
+              </div>
             )}
           </div>
         )}
