@@ -784,28 +784,14 @@ export default function StaffDashboard({ onNewColis }) {
             )}
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={onNewColis}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-bold transition-all active:scale-95 border-2"
-            style={{ borderColor: BRAND.navy, color: BRAND.navy, background: 'white' }}
-          >
-            <UserPlus size={15} strokeWidth={2.5} />
-            Nouveau client
-          </button>
-          <button
-            onClick={onNewColis}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-bold transition-all active:scale-95"
-            style={{
-              background: `linear-gradient(135deg, ${BRAND.gold}, ${BRAND.goldD})`,
-              color: BRAND.navyD,
-              boxShadow: `0 2px 12px ${BRAND.gold}40`,
-            }}
-          >
-            <Package size={15} strokeWidth={2.5} />
-            Nouveau colis
-          </button>
-        </div>
+        <button
+          onClick={() => navigate('/clients')}
+          className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all active:scale-95"
+          style={{ background: `${BRAND.navy}08`, color: BRAND.navy }}
+        >
+          <User size={14} />
+          Clients
+        </button>
       </div>
 
       {/* ── Global search + envoi filter toggle ─────────────────────────── */}
@@ -1700,6 +1686,20 @@ export default function StaffDashboard({ onNewColis }) {
           })}
         </div>
       )}
+
+      {/* ── FAB — Nouveau colis (always visible, bottom right) ────────── */}
+      <button
+        onClick={onNewColis}
+        className="fixed bottom-6 right-6 z-40 flex items-center gap-2 pl-4 pr-5 py-3.5 rounded-2xl text-sm font-black transition-all active:scale-95 shadow-xl hover:shadow-2xl"
+        style={{
+          background: `linear-gradient(135deg, ${BRAND.gold}, ${BRAND.goldD})`,
+          color: BRAND.navyD,
+          boxShadow: `0 4px 20px ${BRAND.gold}50`,
+        }}
+      >
+        <Plus size={18} strokeWidth={3} />
+        Nouveau colis
+      </button>
 
     </div>
   );
