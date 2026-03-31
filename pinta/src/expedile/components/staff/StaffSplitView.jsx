@@ -258,7 +258,9 @@ export default function StaffColisPage() {
   const [searchParams] = useSearchParams();
 
   const urlTab = searchParams.get('tab');
+  const urlDest = searchParams.get('dest');
   const [activeTab, setActiveTab] = useState(urlTab && PIPELINE.some((t) => t.key === urlTab) ? urlTab : 'all');
+  const [activeDest, setActiveDest] = useState(urlDest || null);
   const [search, setSearch] = useState('');
   const [sortCol, setSortCol] = useState(null);
   const [sortDir, setSortDir] = useState('asc');
@@ -266,15 +268,25 @@ export default function StaffColisPage() {
 
   useEffect(() => {
     if (urlTab && PIPELINE.some((t) => t.key === urlTab)) setActiveTab(urlTab);
-  }, [urlTab]);
+    setActiveDest(searchParams.get('dest') || null);
+  }, [urlTab, searchParams]);
 
   // Pool
   const pool = useMemo(() => {
     let list = showArchive ? data : data.filter((c) => !c.archive);
     const tab = PIPELINE.find((t) => t.key === activeTab);
     if (tab) list = list.filter(tab.filter);
+    // Filter by destination
+    if (activeDest) {
+      list = list.filter((c) => {
+        const cl = getClient(c.clientId);
+        if (!cl) return false;
+        const d = getDestByCP(cl.cp);
+        return d?.code === activeDest;
+      });
+    }
     return list;
-  }, [data, activeTab, showArchive]);
+  }, [data, activeTab, showArchive, activeDest, getClient]);
 
   // Search
   const searched = useMemo(() => {
@@ -375,6 +387,18 @@ export default function StaffColisPage() {
             {search && <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"><X size={14} /></button>}
           </div>
           <span className="text-xs text-gray-400 font-medium">{sorted.length} colis</span>
+          {activeDest && (() => {
+            const d = getDestByCP(activeDest === '974' ? '97400' : activeDest === '976' ? '97600' : activeDest === '971' ? '97100' : '97200');
+            return (
+              <button
+                onClick={() => { setActiveDest(null); navigate('/colis' + (activeTab !== 'all' ? `?tab=${activeTab}` : '')); }}
+                className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-bold bg-amber-100 text-amber-800 hover:bg-amber-200 transition-all"
+              >
+                {d?.flag} {d?.label || activeDest}
+                <X size={12} />
+              </button>
+            );
+          })()}
         </div>
 
         {/* Table */}

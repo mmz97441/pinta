@@ -172,7 +172,7 @@ export default function KPIDashboard() {
           {destStats.map((d) => (
             <button
               key={d.code}
-              onClick={() => navigate('/colis')}
+              onClick={() => navigate(`/colis?dest=${d.code}`)}
               className="card p-4 rounded-2xl text-left hover:shadow-md transition-all active:scale-[0.98]"
               style={{ borderLeft: `3px solid ${BRAND.gold}` }}
             >
