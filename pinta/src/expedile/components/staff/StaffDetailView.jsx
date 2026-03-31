@@ -83,7 +83,7 @@ function Section({ title, icon: Icon, color, children }) {
 }
 
 // ── Input field ──────────────────────────────────────────────────────────────
-function Field({ label, type = 'text', value, onChange, placeholder, min, step, unit }) {
+function Field({ label, type = 'text', value, onChange, onBlur, placeholder, min, step, unit }) {
   return (
     <div className="flex flex-col gap-1">
       <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">{label}</label>
@@ -92,6 +92,7 @@ function Field({ label, type = 'text', value, onChange, placeholder, min, step, 
           type={type}
           value={value}
           onChange={onChange}
+          onBlur={onBlur}
           placeholder={placeholder}
           min={min}
           step={step}
@@ -296,19 +297,24 @@ export default function StaffDetailView() {
     return { pv: pv.toFixed(2), pf: pf.toFixed(2), tr: tr.toFixed(2) };
   }
 
-  // ── Compute taxes from lignes + categories ────────────────────────────────
+  // ── Compute taxes from lignes + categories (CIF-based) ─────────────────────
   function calcTaxes(pf) {
+    const tr = calcTransport(parseFloat(pf) || 0, tarif);
+    const lignes = sel.lignes || [];
+    const totalValeur = lignes.reduce((s, l) => s + (l.qte || 1) * (l.prix || 0), 0);
     let om = 0;
     let omr = 0;
-    (sel.lignes || []).forEach((l) => {
+    lignes.forEach((l) => {
       const cat = categories.find((c) => c.id === l.cat);
       if (cat) {
         const ct = getCatTaux(cat, dest.code);
-        om += l.qte * l.prix * (ct.om / 100);
-        omr += l.qte * l.prix * (ct.omr / 100);
+        const valeur = (l.qte || 1) * (l.prix || 0);
+        const transportShare = totalValeur > 0 ? tr * (valeur / totalValeur) : 0;
+        const cif = valeur + transportShare;
+        om += cif * (ct.om / 100);
+        omr += cif * (ct.omr / 100);
       }
     });
-    const tr = calcTransport(parseFloat(pf) || 0, tarif);
     const ht = tr + om + omr;
     const tva = ht * ((dest?.tva || 0) / 100);
     const total = Math.round((ht + tva) * 100) / 100;
@@ -1305,16 +1311,20 @@ export default function StaffDetailView() {
                           </>
                         );
                       }
-                      // Group by category and calculate OM/OMR per category
+                      // Group by category and calculate OM/OMR per category (CIF-based)
+                      const totalValeurArticles = lignes.reduce((s, l) => s + (l.qte || 1) * (l.prix || 0), 0);
+                      const transportForTax = sel.devisTransport || devisCalc.tr;
                       const byCat = {};
                       lignes.forEach((l) => {
                         const cat = categories.find((c) => c.id === l.cat);
                         const catLabel = cat?.label || 'Non catégorisé';
                         const ct = cat ? getCatTaux(cat, dest?.code || '974') : { om: 0, omr: 0 };
                         const valeur = (l.qte || 1) * (l.prix || 0);
+                        const transportShare = totalValeurArticles > 0 ? transportForTax * (valeur / totalValeurArticles) : 0;
+                        const cif = valeur + transportShare;
                         if (!byCat[catLabel]) byCat[catLabel] = { om: 0, omr: 0, tauxOM: ct.om, tauxOMR: ct.omr, valeur: 0 };
-                        byCat[catLabel].om += valeur * ct.om / 100;
-                        byCat[catLabel].omr += valeur * ct.omr / 100;
+                        byCat[catLabel].om += cif * ct.om / 100;
+                        byCat[catLabel].omr += cif * ct.omr / 100;
                         byCat[catLabel].valeur += valeur;
                       });
                       const entries = Object.entries(byCat);
