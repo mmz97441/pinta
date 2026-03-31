@@ -482,19 +482,19 @@ export default function StaffColisPage() {
               <button onClick={closeDetail} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400"><X size={18} /></button>
             </div>
             <div className="px-4 pt-3"><Etapes statut={sel.statut} /></div>
-            {/* Two-column detail layout like old version */}
+            {/* Two-column detail layout */}
             <div className="p-4 flex gap-4">
-              {/* Left: info, factures, chat, audit */}
+              {/* Left: info, factures, audit */}
               <div className="flex-1 min-w-0 space-y-4">
                 <ColisInfo />
                 <FacturesPanel />
-                <ChatPanel />
                 <AuditLog />
               </div>
-              {/* Right: actions (sticky) */}
-              <div className="w-[340px] flex-shrink-0">
+              {/* Right: actions + chat */}
+              <div className="w-[340px] flex-shrink-0 space-y-4">
                 <div className="sticky top-16 space-y-4">
                   <StaffDetailView />
+                  <ChatPanel />
                 </div>
               </div>
             </div>
