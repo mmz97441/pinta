@@ -88,18 +88,9 @@ export default function FacturesPanel() {
     sb.insertAuditAction(sel.id, 'Staff', 'Facture ajoutée', `${newVendeur.trim()} — ${parseFloat(newMontant) || 0} €`).catch(() => {});
   };
 
-  // ── Request facture from client ────────────────────────────────────
+  // ── Request facture from client (uses same template as StaffDetailView) ──
   const handleDemanderFacture = (sendCanal) => {
-    const dest = getDestByCP(cl?.cp);
-    const prenom = cl?.nom?.split(' ')[0] || 'Client';
-    const trackingsStr = sel.trackings?.filter((t) => t).join(', ') || '';
-    const fournisseurs = (sel.trackingsDetail || []).map((td) => td.fournisseur).filter(Boolean).join(', ');
-
-    const msg = sendCanal === 'telegram'
-      ? `Bonjour ${prenom} 👋\n\nPour avancer sur votre expédition *${sel.ref}*, nous avons besoin de la *facture d'achat* :\n\n📦 *Contenu :* ${sel.desc || fournisseurs || '—'}\n${trackingsStr ? `🔍 *Tracking :* ${trackingsStr}\n` : ''}${fournisseurs ? `🏪 *Fournisseur(s) :* ${fournisseurs}\n` : ''}\n📄 *Pourquoi ?*\n• Calcul des taxes douanières (OM/OMR)\n• Déclaration en douane\n• Établir votre devis final\n\n👉 Envoyez-nous simplement une *photo* ou un *PDF* de la facture en réponse à ce message.\n\n⏱️ Sans cette facture, nous ne pouvons pas finaliser le traitement.\n\n_L'équipe Expedîle${dest ? ` — Paris → ${dest.nom}` : ''}_`
-      : `Objet : 📄 Facture requise pour ${sel.ref}\n\nBonjour ${cl?.nom || ''},\n\nPour traiter votre expédition ${sel.ref} :\n- Contenu : ${sel.desc || fournisseurs || '—'}\n${trackingsStr ? `- Tracking : ${trackingsStr}\n` : ''}${fournisseurs ? `- Fournisseur(s) : ${fournisseurs}\n` : ''}\nNous avons besoin de la facture d'achat (photo ou PDF).\n\nSans cette facture, le calcul des taxes et le devis ne peuvent pas être finalisés.\n\nCordialement,\nL'équipe Expedîle`;
-
-    sendMsg(sel.id, sel.clientId, sendCanal, null, msg);
+    sendMsg(sel.id, sel.clientId, sendCanal, 'facture_manquante', null);
     flash(`Demande de facture envoyée par ${sendCanal === 'telegram' ? 'Telegram' : 'email'}`);
   };
 
