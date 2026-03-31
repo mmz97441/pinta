@@ -12,6 +12,7 @@ import ColisModal from './components/ColisModal';
 import OnboardingOverlay from './components/client/OnboardingOverlay';
 
 import StaffDashboard from './components/staff/StaffDashboard';
+import StaffSplitView from './components/staff/StaffSplitView';
 import StaffSettings from './components/staff/StaffSettings';
 import StaffClients from './components/staff/StaffClients';
 import StaffDetailView from './components/staff/StaffDetailView';
@@ -183,9 +184,7 @@ function AppContent() {
             </div>
           } />
           <Route path="/" element={
-            <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-4 space-y-4">
-              <StaffDashboard onNewColis={() => setModal(true)} />
-            </div>
+            <StaffSplitView onNewColis={() => setModal(true)} />
           } />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
