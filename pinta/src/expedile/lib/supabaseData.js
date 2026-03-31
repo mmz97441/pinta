@@ -607,6 +607,29 @@ export async function insertLog(colisId, ancienStatut, nouveauStatut, userNom) {
   if (error) console.error('[Supabase] insertLog error:', error.message);
 }
 
+export async function insertAuditAction(colisId, userNom, action, detail) {
+  const { error } = await supabase.from('audit_actions').insert({
+    colis_id: colisId, user_nom: userNom, action, detail,
+  });
+  if (error) console.error('[Supabase] insertAuditAction:', error.message);
+}
+
+export async function fetchAuditActions(colisId) {
+  const { data, error } = await supabase
+    .from('audit_actions')
+    .select('*')
+    .eq('colis_id', colisId)
+    .order('created_at', { ascending: false });
+  if (error) return [];
+  return (data || []).map((row) => ({
+    id: row.id,
+    user: row.user_nom || '—',
+    action: row.action,
+    detail: row.detail,
+    date: row.created_at,
+  }));
+}
+
 export async function fetchLogsForColis(colisId) {
   const { data, error } = await supabase
     .from('logs_statut')

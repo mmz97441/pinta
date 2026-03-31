@@ -85,6 +85,7 @@ export default function FacturesPanel() {
     setNewMontant('');
     setShowAddForm(false);
     flash('Facture ajoutée');
+    sb.insertAuditAction(sel.id, 'Staff', 'Facture ajoutée', `${newVendeur.trim()} — ${parseFloat(newMontant) || 0} €`).catch(() => {});
   };
 
   // ── Request facture from client ────────────────────────────────────
@@ -110,6 +111,7 @@ export default function FacturesPanel() {
     }));
     sb.updateFacture(factureId, { valide: true }).catch(console.error);
     flash('Facture validée');
+    sb.insertAuditAction(sel.id, 'Staff', 'Facture validée', `ID: ${factureId}`).catch(() => {});
     setRejectingId(null);
   };
 
@@ -157,6 +159,7 @@ export default function FacturesPanel() {
     }
 
     flash('Facture refusée — client notifié');
+    sb.insertAuditAction(sel.id, 'Staff', 'Facture refusée', `"${facture.vendeur}" — Motif : ${motifLabel}`).catch(() => {});
     setRejectingId(null);
     setMotifLibre('');
   };

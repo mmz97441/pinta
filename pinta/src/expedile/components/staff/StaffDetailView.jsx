@@ -233,6 +233,7 @@ export default function StaffDetailView() {
     payer,
     setSelId,
     setData,
+    auth,
   } = useApp();
 
   // ── Local state ──────────────────────────────────────────────────────────
@@ -1148,6 +1149,7 @@ export default function StaffDetailView() {
                               const saved = await sb.insertLigne(sel.id, { desc: f.vendeur || 'Article', qte: 1, prix: f.montant || 0, cat: '' });
                               setData((prev) => prev.map((c) => c.id === sel.id ? { ...c, lignes: [...(c.lignes || []), saved] } : c));
                               flash(`Article "${f.vendeur}" ajouté — sélectionnez sa catégorie`);
+                              sb.insertAuditAction(sel.id, auth?.u?.nom || 'Staff', 'Article ajouté (import facture)', `${f.vendeur} — ${f.montant || 0} €`).catch(() => {});
                             } catch (err) {
                               flash({ msg: 'Erreur ajout article', type: 'warning' });
                             }
@@ -1197,6 +1199,7 @@ export default function StaffDetailView() {
                       document.getElementById('new-ligne-prix').value = '';
                       document.getElementById('new-ligne-qte').value = '1';
                       flash('Article ajouté — sélectionnez sa catégorie');
+                      sb.insertAuditAction(sel.id, auth?.u?.nom || 'Staff', 'Article ajouté', `${desc} — ${qte}× ${prix}€`).catch(() => {});
                     }}
                     className="px-3 py-2 rounded-lg text-xs font-bold"
                     style={{ background: `${BRAND.navy}10`, color: BRAND.navy }}

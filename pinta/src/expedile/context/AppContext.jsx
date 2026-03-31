@@ -164,17 +164,57 @@ export function AppProvider({ children }) {
   const closeConfirm = useCallback(() => setCfm(null), []);
 
   // ── Data helpers ──
+  // Labels lisibles pour l'audit
+  const FIELD_LABELS = {
+    dimL: 'Longueur brute', dimW: 'Largeur brute', dimH: 'Hauteur brute', poids: 'Poids brut',
+    finL: 'Longueur finale', finW: 'Largeur finale', finH: 'Hauteur finale', finP: 'Poids final',
+    casier: 'Casier', feuVert: 'Feu vert', statut: 'Statut',
+    devisTransport: 'Transport', devisOM: 'Octroi de Mer', devisOMR: 'OMR', devisTVA: 'TVA', devisTotal: 'Total devis',
+    paiementMontant: 'Montant paiement', urgence: 'Urgence',
+    tagsPreparation: 'Tags préparation', commentairePreparation: 'Commentaire préparation',
+    notesInternes: 'Notes internes',
+  };
+
   const upd = useCallback((id, changes) => {
+    // Detect what changed for audit
+    const oldColis = data.find((c) => c.id === id);
+    const userName = auth?.u?.nom || '?';
+
     // Optimistic local update
     setData((prev) => prev.map((c) => (c.id === id ? { ...c, ...changes } : c)));
+
     // Persist to Supabase
     if (sbReady) {
       sb.updateColis(id, changes).catch((err) => {
         console.error('[Supabase] upd error:', err.message);
         flash({ msg: 'Erreur de sauvegarde — vérifiez votre connexion', type: 'warning' });
       });
+
+      // Auto-log significant changes (not statut — that's in log())
+      if (oldColis) {
+        const details = [];
+        for (const [key, newVal] of Object.entries(changes)) {
+          if (key === 'statut') continue; // statut logged separately
+          if (key === 'casierHistorique' || key === 'dimsParColis') continue; // skip arrays
+          const label = FIELD_LABELS[key];
+          if (!label) continue;
+          const oldVal = oldColis[key];
+          if (oldVal !== newVal && newVal !== undefined) {
+            if (typeof newVal === 'number' || typeof newVal === 'string' || typeof newVal === 'boolean') {
+              details.push(`${label} : ${oldVal ?? '—'} → ${newVal}`);
+            }
+          }
+        }
+        // Log casier change specifically
+        if (changes.casier && changes.casier !== oldColis.casier) {
+          details.push(`Casier : ${oldColis.casier || '—'} → ${changes.casier}`);
+        }
+        if (details.length > 0) {
+          sb.insertAuditAction(id, userName, 'Modification', details.join('\n')).catch(() => {});
+        }
+      }
     }
-  }, [sbReady, flash]);
+  }, [sbReady, flash, data, auth]);
 
   const log = useCallback((id, oldStatut, newStatut) => {
     setLogs((prev) => [...prev, { id: uid(), cid: id, o: oldStatut, n: newStatut, w: auth?.u?.nom || '?' }]);
