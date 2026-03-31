@@ -124,7 +124,10 @@ function AppContent() {
       { key: '/settings', label: 'Paramètres', icon: Settings },
     ];
 
-    const activePath = currentPath === '/' || currentPath.startsWith('/colis') ? (currentPath.startsWith('/colis') ? '/colis' : '/') : currentPath;
+    const activePath = currentPath.startsWith('/colis') ? '/colis'
+      : currentPath === '/clients' ? '/clients'
+      : currentPath === '/settings' ? '/settings'
+      : '/';
 
     return (
       <div style={{ fontFamily: "system-ui, -apple-system, 'Segoe UI', sans-serif" }} className="h-screen flex">
@@ -173,7 +176,7 @@ function AppContent() {
               return (
                 <button
                   key={item.key}
-                  onClick={() => navigate(item.key === '/colis' ? '/' : item.key)}
+                  onClick={() => navigate(item.key)}
                   className={`w-full flex items-center gap-3 rounded-xl transition-all ${
                     sidebarCollapsed ? 'justify-center px-2 py-2.5' : 'px-3 py-2.5'
                   } ${isActive
@@ -238,7 +241,7 @@ function AppContent() {
             return (
               <button
                 key={item.key}
-                onClick={() => navigate(item.key === '/colis' ? '/' : item.key)}
+                onClick={() => navigate(item.key)}
                 className="flex flex-col items-center gap-0.5 px-3 py-1"
               >
                 <Icon size={20} style={{ color: isActive ? BRAND.navy : '#9CA3AF' }} strokeWidth={isActive ? 2.5 : 2} />
@@ -269,6 +272,9 @@ function AppContent() {
           <div className="flex-1 overflow-hidden">
             <Routes>
               <Route path="/colis/:id" element={<StaffColisDetail />} />
+              <Route path="/colis" element={
+                <StaffSplitView onNewColis={() => setModal(true)} />
+              } />
               <Route path="/clients" element={
                 <div className="h-full overflow-y-auto">
                   <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-4 space-y-4">
