@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
-import { BRAND, STATUTS, getDestByCP } from '../../constants';
+import { BRAND, STATUTS, ABONNEMENTS, getDestByCP } from '../../constants';
 import { eur, fuzzy, labelEnvoi } from '../../utils';
 import { Badge, Etapes } from '../ui';
 import StaffDetailView from './StaffDetailView';
@@ -38,68 +38,91 @@ function statutBorderColor(s) {
   return map[s] || BRAND.navy;
 }
 
-// ── Table header style ──────────────────────────────────────────────────────
-const TH = 'px-3 py-2.5 text-[10px] font-bold uppercase tracking-wider text-gray-500';
+// ── Table styles ────────────────────────────────────────────────────────────
+const TH = 'px-2 py-2 text-[9px] font-bold uppercase tracking-wider text-gray-500 whitespace-nowrap';
+const TD = 'px-2 py-2 text-[11px] whitespace-nowrap';
+const DASH = <span className="text-gray-300">—</span>;
 
-// ════════════════════════════════════════════════════════════════════════════
-// TABLE ROW
-// ════════════════════════════════════════════════════════════════════════════
-function ColisTableRow({ c, client, envois, onClick, stagger }) {
-  const envoi = envois.find((e) => e.id === c.envoi);
+// ── Table header row ────────────────────────────────────────────────────────
+function ColisTableHead({ compact }) {
+  return (
+    <tr className="border-b border-gray-200" style={{ background: `${BRAND.navy}06` }}>
+      <th className={TH}>Date</th>
+      <th className={TH}>Réf.</th>
+      <th className={TH}>Statut</th>
+      {!compact && <th className={TH}>Paiem.</th>}
+      <th className={TH}>Client</th>
+      {!compact && <th className={TH}>Email</th>}
+      {!compact && <th className={TH}>Tél.</th>}
+      {!compact && <th className={TH}>Forfait</th>}
+      <th className={TH}>Intitulé</th>
+      {!compact && <th className={`${TH} text-right`}>Vol. cm³</th>}
+      {!compact && <th className={`${TH} text-right`}>Vol. kg</th>}
+      {!compact && <th className={`${TH} text-right`}>Poids</th>}
+      <th className={`${TH} text-right`}>Transport</th>
+      <th className={`${TH} text-right`}>Taxes</th>
+      <th className={`${TH} text-right`}>Total</th>
+      {!compact && <th className={`${TH} text-right`}>Payé</th>}
+      {!compact && <th className={TH}>Commune</th>}
+      {!compact && <th className={TH}>CP</th>}
+      <th className="w-5"></th>
+    </tr>
+  );
+}
+
+// ── Table data row ──────────────────────────────────────────────────────────
+function ColisTableRow({ c, client, envois, onClick, isSelected, compact }) {
   const dest = client ? getDestByCP(client.cp) : null;
-  const hasDims = c.dimL && c.dimW && c.dimH && c.poids;
+  const hasDims = c.dimL && c.dimW && c.dimH;
+  const volCm3 = hasDims ? c.dimL * c.dimW * c.dimH : null;
+  const volKg = volCm3 ? (volCm3 / 5000).toFixed(2) : null;
   const taxes = (c.devisOM != null || c.devisOMR != null || c.devisTVA != null)
     ? ((c.devisOM || 0) + (c.devisOMR || 0) + (c.devisTVA || 0)) : null;
-  const nbCartons = (c.trackings?.filter((t) => t) || []).length || 1;
+  const dateCreation = c.dateReception
+    ? new Date(c.dateReception).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })
+    : c.createdAt
+    ? new Date(c.createdAt).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })
+    : '—';
+  const isPaid = c.paiementMontant > 0;
+  const abo = client?.abonnement ? (ABONNEMENTS[client.abonnement]?.label || client.abonnement) : '—';
+  const prenom = client?.nom?.split(' ').slice(0, -1).join(' ') || '';
+  const nom = client?.nom?.split(' ').pop() || client?.nom || '—';
 
   return (
     <tr
       onClick={onClick}
-      className="border-b border-gray-50 last:border-b-0 cursor-pointer transition-colors hover:bg-gray-50 active:bg-gray-100"
+      className={`border-b border-gray-50 cursor-pointer transition-colors ${isSelected ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
       style={{ borderLeft: `3px solid ${statutBorderColor(c.statut)}` }}
     >
-      <td className="px-3 py-2.5">
-        <div className="flex items-center gap-1.5">
-          <span className="text-xs text-gray-600 font-medium truncate max-w-[120px]">{client?.nom ?? '—'}</span>
-          {dest && <span className="text-xs flex-shrink-0">{dest.flag}</span>}
-        </div>
+      <td className={TD}><span className="text-gray-500">{dateCreation}</span></td>
+      <td className={TD}>
+        <span className="font-black text-gray-900">{c.ref}</span>
+        {c.casier && <span className="text-[8px] font-bold px-1 py-0.5 rounded ml-1" style={{ background: `${BRAND.gold}22`, color: BRAND.goldD }}>{c.casier}</span>}
       </td>
-      <td className="px-3 py-2.5">
-        <div className="flex items-center gap-1.5">
-          <span className="font-black text-xs text-gray-900">{c.ref}</span>
-          {c.casier && (
-            <span className="text-[9px] font-bold px-1 py-0.5 rounded" style={{ background: `${BRAND.gold}22`, color: BRAND.goldD }}>{c.casier}</span>
-          )}
-          {nbCartons > 1 && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-700">{nbCartons} cartons</span>}
-        </div>
-        {c.desc && <span className="text-[11px] text-gray-500 truncate block max-w-[130px]">{c.desc}</span>}
+      <td className={TD}><Badge statut={c.statut} /></td>
+      {!compact && <td className={TD}>
+        {isPaid ? <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-green-100 text-green-700">Payé</span>
+          : c.devisTotal ? <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">En attente</span>
+          : DASH}
+      </td>}
+      <td className={TD}>
+        <span className="text-gray-700 font-medium">{nom}</span>
+        {dest && <span className="ml-1">{dest.flag}</span>}
       </td>
-      <td className="px-3 py-2.5">
-        {c.factures && c.factures.length > 0 ? (
-          c.factures.every((f) => f.valide)
-            ? <Check size={14} className="text-green-500" />
-            : <AlertTriangle size={14} className="text-amber-500" />
-        ) : <span className="text-[10px] font-bold text-red-500">Manquante</span>}
-      </td>
-      <td className="px-3 py-2.5"><Badge statut={c.statut} /></td>
-      <td className="px-3 py-2.5">
-        {hasDims
-          ? <span className="text-[11px] text-gray-500 font-mono whitespace-nowrap">{c.dimL}×{c.dimW}×{c.dimH} cm · {c.poids} kg</span>
-          : <span className="text-xs text-gray-300">—</span>}
-      </td>
-      <td className="px-3 py-2.5 text-right">
-        {c.devisTransport != null ? <span className="text-xs font-semibold text-gray-700">{eur(c.devisTransport)}</span> : <span className="text-xs text-gray-300">—</span>}
-      </td>
-      <td className="px-3 py-2.5 text-right">
-        {taxes != null ? <span className="text-xs text-gray-600">{eur(taxes)}</span> : <span className="text-xs text-gray-300">—</span>}
-      </td>
-      <td className="px-3 py-2.5 text-right">
-        {c.devisTotal != null ? <span className="text-sm font-bold" style={{ color: BRAND.navy }}>{eur(c.devisTotal)}</span> : <span className="text-xs text-gray-300">—</span>}
-      </td>
-      <td className="px-3 py-2.5">
-        {envoi ? <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full whitespace-nowrap" style={{ background: `${BRAND.navy}10`, color: BRAND.navy }}>{labelEnvoi(envoi)}</span> : <span className="text-xs text-gray-300">—</span>}
-      </td>
-      <td className="pr-2 py-2.5"><ChevronRight size={14} className="text-gray-300" /></td>
+      {!compact && <td className={TD}><span className="text-gray-500 text-[10px]">{client?.email || '—'}</span></td>}
+      {!compact && <td className={TD}><span className="text-gray-500 text-[10px] font-mono">{client?.tel || '—'}</span></td>}
+      {!compact && <td className={TD}><span className="text-[9px] font-semibold">{abo}</span></td>}
+      <td className={TD}><span className="text-gray-600 truncate block max-w-[120px]">{c.desc || '—'}</span></td>
+      {!compact && <td className={`${TD} text-right`}>{volCm3 ? <span className="text-gray-500 font-mono text-[10px]">{volCm3.toLocaleString()}</span> : DASH}</td>}
+      {!compact && <td className={`${TD} text-right`}>{volKg ? <span className="text-gray-500 font-mono text-[10px]">{volKg}</span> : DASH}</td>}
+      {!compact && <td className={`${TD} text-right`}>{c.poids ? <span className="text-gray-600 font-mono text-[10px]">{c.poids} kg</span> : DASH}</td>}
+      <td className={`${TD} text-right`}>{c.devisTransport != null ? <span className="font-semibold text-gray-700">{eur(c.devisTransport)}</span> : DASH}</td>
+      <td className={`${TD} text-right`}>{taxes != null ? <span className="text-gray-600">{eur(taxes)}</span> : DASH}</td>
+      <td className={`${TD} text-right`}>{c.devisTotal != null ? <span className="font-bold" style={{ color: BRAND.navy }}>{eur(c.devisTotal)}</span> : DASH}</td>
+      {!compact && <td className={`${TD} text-right`}>{c.paiementMontant ? <span className="font-bold text-green-700">{eur(c.paiementMontant)}</span> : DASH}</td>}
+      {!compact && <td className={TD}><span className="text-gray-500 text-[10px]">{client?.ville || '—'}</span></td>}
+      {!compact && <td className={TD}><span className="text-gray-500 text-[10px] font-mono">{client?.cp || '—'}</span></td>}
+      <td className="pr-1 py-2"><ChevronRight size={12} className="text-gray-300" /></td>
     </tr>
   );
 }
@@ -469,17 +492,17 @@ export default function StaffColisPage() {
 
           {viewMode === 'envoi' ? (
             /* ── VUE PAR ENVOI ── */
-            <div className="space-y-4 p-2">
+            <div className="space-y-3 p-2">
               {groupedByEnvoi.length === 0 ? (
                 <p className="text-center text-sm text-gray-400 py-8">Aucun colis</p>
-              ) : groupedByEnvoi.map((group, gi) => {
+              ) : groupedByEnvoi.map((group) => {
                 const e = group.envoi;
                 const dateLabel = e?.date
                   ? new Date(e.date + 'T00:00:00').toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })
                   : 'Sans envoi affecté';
                 return (
                   <div key={e?.id || 'none'} className="rounded-xl border border-gray-100 overflow-hidden bg-white">
-                    <div className="px-3 py-2 border-b border-gray-100 flex items-center justify-between" style={{ background: `${BRAND.navy}06` }}>
+                    <div className="px-3 py-2 border-b border-gray-200 flex items-center justify-between" style={{ background: `${BRAND.navy}06` }}>
                       <div className="flex items-center gap-2">
                         <Plane size={13} style={{ color: BRAND.navy }} />
                         <span className="text-xs font-bold" style={{ color: BRAND.navy }}>{dateLabel}</span>
@@ -487,90 +510,48 @@ export default function StaffColisPage() {
                       </div>
                       <span className="text-[10px] font-bold text-gray-400">{group.colis.length} colis</span>
                     </div>
-                    <table className="w-full text-left text-sm">
-                      <tbody>
-                        {group.colis.map((c, i) => {
-                          const isSelected = sel?.id === c.id;
-                          const client = getClient(c.clientId);
-                          const dest = client ? getDestByCP(client.cp) : null;
-                          return (
-                            <tr key={c.id} onClick={() => openColis(c.id)}
-                              className={`border-b border-gray-50 cursor-pointer transition-colors ${isSelected ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
-                              style={{ borderLeft: `3px solid ${statutBorderColor(c.statut)}` }}>
-                              <td className="px-3 py-2">
-                                <span className="text-xs text-gray-600 font-medium">{client?.nom ?? '—'}</span>
-                                {dest && <span className="text-xs ml-1">{dest.flag}</span>}
-                              </td>
-                              <td className="px-3 py-2">
-                                <span className="font-black text-xs text-gray-900">{c.ref}</span>
-                                {c.casier && <span className="text-[9px] font-bold px-1 py-0.5 rounded ml-1" style={{ background: `${BRAND.gold}22`, color: BRAND.goldD }}>{c.casier}</span>}
-                              </td>
-                              <td className="px-3 py-2"><Badge statut={c.statut} /></td>
-                              <td className="px-3 py-2 text-right">
-                                {c.devisTotal != null ? <span className="text-sm font-bold" style={{ color: BRAND.navy }}>{eur(c.devisTotal)}</span> : <span className="text-xs text-gray-300">—</span>}
-                              </td>
-                              <td className="pr-2 py-2"><ChevronRight size={14} className="text-gray-300" /></td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left">
+                        <thead><ColisTableHead compact={!!sel} /></thead>
+                        <tbody>
+                          {group.colis.map((c) => (
+                            <ColisTableRow key={c.id} c={c} client={getClient(c.clientId)} envois={envois}
+                              onClick={() => openColis(c.id)} isSelected={sel?.id === c.id} compact={!!sel} />
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                 );
               })}
             </div>
           ) : (
             /* ── VUE PAR STATUT (groupé par phase) ── */
-            <div className="space-y-4 p-2">
+            <div className="space-y-3 p-2">
               {groupedByStatut.length === 0 ? (
                 <p className="text-center text-sm text-gray-400 py-8">Aucun colis</p>
               ) : groupedByStatut.map((group) => {
                 const Icon = group.icon;
                 return (
                   <div key={group.label} className="rounded-xl border border-gray-100 overflow-hidden bg-white">
-                    <div className="px-3 py-2 border-b border-gray-100 flex items-center justify-between" style={{ background: `${group.color}08` }}>
+                    <div className="px-3 py-2 border-b border-gray-200 flex items-center justify-between" style={{ background: `${group.color}08` }}>
                       <div className="flex items-center gap-2">
                         <Icon size={13} style={{ color: group.color }} />
                         <span className="text-xs font-bold" style={{ color: group.color }}>{group.label}</span>
                       </div>
                       <span className="text-[10px] font-bold text-gray-400">{group.colis.length} colis</span>
                     </div>
-                    <table className="w-full text-left text-sm">
-                      <tbody>
-                        {group.colis.map((c) => {
-                          const isSelected = sel?.id === c.id;
-                          const client = getClient(c.clientId);
-                          const envoi = envois.find((e) => e.id === c.envoi);
-                          const dest = client ? getDestByCP(client.cp) : null;
-                          const hasDims = c.dimL && c.dimW && c.dimH && c.poids;
-                          const taxes = (c.devisOM != null || c.devisOMR != null || c.devisTVA != null)
-                            ? ((c.devisOM || 0) + (c.devisOMR || 0) + (c.devisTVA || 0)) : null;
-                          return (
-                            <tr key={c.id} onClick={() => openColis(c.id)}
-                              className={`border-b border-gray-50 cursor-pointer transition-colors ${isSelected ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
-                              style={{ borderLeft: `3px solid ${statutBorderColor(c.statut)}` }}>
-                              <td className="px-3 py-2">
-                                <span className="text-xs text-gray-600 font-medium">{client?.nom ?? '—'}</span>
-                                {dest && <span className="text-xs ml-1">{dest.flag}</span>}
-                              </td>
-                              <td className="px-3 py-2">
-                                <span className="font-black text-xs text-gray-900">{c.ref}</span>
-                                {c.casier && <span className="text-[9px] font-bold px-1 py-0.5 rounded ml-1" style={{ background: `${BRAND.gold}22`, color: BRAND.goldD }}>{c.casier}</span>}
-                              </td>
-                              <td className="px-3 py-2">
-                                {c.factures?.length > 0 ? (c.factures.every((f) => f.valide) ? <Check size={12} className="text-green-500" /> : <AlertTriangle size={12} className="text-amber-500" />) : <span className="text-[9px] font-bold text-red-500">!</span>}
-                              </td>
-                              <td className="px-3 py-2"><Badge statut={c.statut} /></td>
-                              {!sel && <td className="px-3 py-2">{hasDims ? <span className="text-[10px] text-gray-500 font-mono">{c.dimL}×{c.dimW}×{c.dimH} · {c.poids}kg</span> : <span className="text-xs text-gray-300">—</span>}</td>}
-                              {!sel && <td className="px-3 py-2 text-right">{c.devisTransport != null ? <span className="text-xs text-gray-600">{eur(c.devisTransport)}</span> : <span className="text-xs text-gray-300">—</span>}</td>}
-                              <td className="px-3 py-2 text-right">{c.devisTotal != null ? <span className="text-xs font-bold" style={{ color: BRAND.navy }}>{eur(c.devisTotal)}</span> : <span className="text-xs text-gray-300">—</span>}</td>
-                              {!sel && <td className="px-3 py-2">{envoi ? <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full" style={{ background: `${BRAND.navy}10`, color: BRAND.navy }}>{labelEnvoi(envoi)}</span> : <span className="text-xs text-gray-300">—</span>}</td>}
-                              <td className="pr-2 py-2"><ChevronRight size={12} className="text-gray-300" /></td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left">
+                        <thead><ColisTableHead compact={!!sel} /></thead>
+                        <tbody>
+                          {group.colis.map((c) => (
+                            <ColisTableRow key={c.id} c={c} client={getClient(c.clientId)} envois={envois}
+                              onClick={() => openColis(c.id)} isSelected={sel?.id === c.id} compact={!!sel} />
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                 );
               })}
