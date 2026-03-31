@@ -434,21 +434,10 @@ export function AppProvider({ children }) {
     const prev = PREV_STATUT[c.statut];
     if (!prev) { flash('Impossible de revenir en arrière depuis ce statut'); return; }
 
-    const resetMap = {
-      receptionne: { casier: null, photoReception: false, checkInterdits: [], produitInterdit: false, dimL: null, dimW: null, dimH: null, poids: null, dimsParColis: [], dateReception: null },
-      mesure: { dimL: null, dimW: null, dimH: null, poids: null, dimsParColis: [] },
-      attente_feu_vert: { feuVert: null },
-      autorise: { feuVert: null },
-      en_preparation: { finL: null, finW: null, finH: null, finP: null },
-      devis_envoye: { devisTransport: null, devisOM: null, devisOMR: null, devisTVA: null, devisTotal: null, avantOptimTransport: null, avantOptimTotal: null, economie: null, devisBrouillon: false },
-      attente_paiement: { devisTransport: null, devisOM: null, devisOMR: null, devisTVA: null, devisTotal: null, avantOptimTransport: null, avantOptimTotal: null, economie: null, devisBrouillon: false },
-      paye: { paiementMontant: null },
-    };
-
-    const reset = { ...(resetMap[c.statut] || {}), statut: prev };
-    log(id, c.statut, prev + ' (correction)');
-    upd(id, reset);
-    flash(`Retour à : ${STATUTS[prev].label}`);
+    // Retour en arrière = changement de statut UNIQUEMENT, pas de suppression de données
+    log(id, c.statut, prev + ' (vérification)');
+    upd(id, { statut: prev });
+    flash(`Retour à : ${STATUTS[prev].label} — les données sont conservées`);
   }, [data, log, upd, flash]);
 
   const annulerColis = useCallback((id) => {
