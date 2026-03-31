@@ -488,6 +488,16 @@ export function AppProvider({ children }) {
     flash('Colis annulé');
   }, [data, log, upd, flash]);
 
+  const archiverColis = useCallback((id) => {
+    upd(id, { archive: true });
+    flash('Colis archivé');
+  }, [upd, flash]);
+
+  const desarchiverColis = useCallback((id) => {
+    upd(id, { archive: false });
+    flash('Colis désarchivé');
+  }, [upd, flash]);
+
   const demanderFeuVert = useCallback((id) => {
     const c = data.find((x) => x.id === id);
     if (!c || !c.dimL || !c.dimW || !c.dimH || !c.poids) {
@@ -763,7 +773,7 @@ export function AppProvider({ children }) {
     flash, ask, closeConfirm, upd, log: log, getClient, getTarif,
     updateClient, addNewClient, deleteClient,
     addCategory, updateCatTaux, updateCatLabel, deleteCategory,
-    receptionner, changerStatut, revertStatut, annulerColis, demanderFeuVert, feuVert, feuVertBulk, envoyerDevis, payer, envMsg,
+    receptionner, changerStatut, revertStatut, annulerColis, archiverColis, desarchiverColis, demanderFeuVert, feuVert, feuVertBulk, envoyerDevis, payer, envMsg,
   }), [
     auth, isStaff, authCl, authRole, data, clients, categories, tarifs, envois, logs, produitsInterdits,
     comLog, sendMsg, getPreview, notifs, unreadNotifs, markNotifRead, markAllNotifsRead,
@@ -771,7 +781,7 @@ export function AppProvider({ children }) {
     flash, ask, closeConfirm, upd, log, getClient, getTarif,
     updateClient, addNewClient, deleteClient,
     addCategory, updateCatTaux, updateCatLabel, deleteCategory,
-    receptionner, changerStatut, revertStatut, annulerColis, demanderFeuVert, feuVert, feuVertBulk, envoyerDevis, payer, envMsg,
+    receptionner, changerStatut, revertStatut, annulerColis, archiverColis, desarchiverColis, demanderFeuVert, feuVert, feuVertBulk, envoyerDevis, payer, envMsg,
   ]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

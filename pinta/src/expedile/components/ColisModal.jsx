@@ -42,9 +42,9 @@ const EMPTY_NEW_CLIENT = {
   type: 'particulier',
 };
 
+// Ref provisoire locale — sera remplacée par la ref unique Supabase dans insertColis
 function nextRef() {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  return 'EXP-' + Array.from({length: 6}, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+  return 'EXP-TMP-' + Date.now().toString(36).toUpperCase();
 }
 
 export default function ColisModal({ open, onClose }) {

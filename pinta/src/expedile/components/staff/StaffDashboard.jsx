@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Plus, Search, X, BarChart3, CircleDot, Clock, CheckCircle, Check,
-  ChevronRight, AlertTriangle, Filter, Package, Download,
+  ChevronRight, AlertTriangle, Filter, Package, Download, Archive,
   User, UserPlus, Ruler, Wrench, CreditCard, Plane, Star,
   Hash, Layers, CalendarDays, FileSpreadsheet, FileText,
 } from 'lucide-react';
@@ -478,7 +478,7 @@ function ColisTable({ items, getClient, envois, openColis, filterFn, sortCol, so
 // ── Main component ───────────────────────────────────────────────────────────
 export default function StaffDashboard({ onNewColis }) {
   const navigate = useNavigate();
-  const { data, clients, envois, categories, getClient, isStaff, authRole, page, flash } = useApp();
+  const { data, clients, envois, categories, getClient, isStaff, authRole, page, flash, archiverColis, desarchiverColis } = useApp();
 
   const [globalSearch, setGlobalSearch] = useState('');
   const [envoiFilter, setEnvoiFilter] = useState('ALL');
@@ -493,6 +493,7 @@ export default function StaffDashboard({ onNewColis }) {
   const [showAllMissing, setShowAllMissing] = useState(false);
   const [showKPI, setShowKPI] = useState(false);
   const [showExportPanel, setShowExportPanel] = useState(false);
+  const [showArchive, setShowArchive] = useState(false);
   const [exportCols, setExportCols] = useState({
     client: true, statut: true, description: true, dims: true, poids: true,
     transport: true, taxes: true, total: true, dateReception: true, casier: true,
@@ -507,12 +508,16 @@ export default function StaffDashboard({ onNewColis }) {
   const hasSearch = globalSearch.trim().length > 0;
   const hasResults = hasSearch && (searchResults.clients.length > 0 || searchResults.colis.length > 0);
 
+  // ── Filter archived colis ─────────────────────────────────────────────────
+  const nonArchived = useMemo(() => showArchive ? data : data.filter((c) => !c.archive), [data, showArchive]);
+  const archivedCount = useMemo(() => data.filter((c) => c.archive).length, [data]);
+
   // ── Filtered pool by envoi ────────────────────────────────────────────────
   const envoiFiltered = useMemo(() => {
-    if (envoiFilter === 'ALL') return data;
-    if (envoiFilter === 'NONE') return data.filter((c) => !c.envoi);
-    return data.filter((c) => c.envoi === envoiFilter);
-  }, [data, envoiFilter]);
+    if (envoiFilter === 'ALL') return nonArchived;
+    if (envoiFilter === 'NONE') return nonArchived.filter((c) => !c.envoi);
+    return nonArchived.filter((c) => c.envoi === envoiFilter);
+  }, [nonArchived, envoiFilter]);
 
   // ── Active card definition ──────────────────────────────────────────────
   const activeCardDef = useMemo(
@@ -764,6 +769,19 @@ export default function StaffDashboard({ onNewColis }) {
           </h1>
           <p className="text-xs text-gray-500 mt-0.5 font-medium">
             {totalAll} colis actifs
+            {archivedCount > 0 && (
+              <button
+                onClick={() => setShowArchive((p) => !p)}
+                className="ml-2 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold transition-colors"
+                style={{
+                  background: showArchive ? `${BRAND.navy}15` : '#F3F4F6',
+                  color: showArchive ? BRAND.navy : '#9CA3AF',
+                }}
+              >
+                <Archive size={10} />
+                {showArchive ? `${archivedCount} archivé${archivedCount > 1 ? 's' : ''} (visible)` : `${archivedCount} archivé${archivedCount > 1 ? 's' : ''}`}
+              </button>
+            )}
           </p>
         </div>
         <div className="flex items-center gap-2">

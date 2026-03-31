@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import {
-  Ruler, Check, Clock, Camera, AlertTriangle, AlertCircle, Eye, X, RotateCcw, Send, Mail, Plus,
+  Ruler, Check, Clock, Camera, AlertTriangle, AlertCircle, Eye, X, RotateCcw, Send, Mail, Plus, Archive,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { BRAND, STATUTS, TRANSITIONS, PRODUITS_INTERDITS, TAGS_PREPARATION, getDestByCP } from '../../constants';
@@ -223,6 +223,8 @@ export default function StaffDetailView() {
     changerStatut,
     revertStatut,
     annulerColis,
+    archiverColis,
+    desarchiverColis,
     demanderFeuVert,
     envoyerDevis,
     sendMsg,
@@ -1713,6 +1715,23 @@ export default function StaffDetailView() {
                 >
                   <X size={11} />
                   Annuler le colis
+                </button>
+              )}
+              {sel.archive ? (
+                <button
+                  onClick={() => desarchiverColis(sel.id)}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border border-blue-200 text-blue-600 bg-blue-50 hover:bg-blue-100 transition-colors"
+                >
+                  <Archive size={11} />
+                  Désarchiver
+                </button>
+              ) : (
+                <button
+                  onClick={() => archiverColis(sel.id)}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border border-gray-200 text-gray-500 bg-gray-50 hover:bg-gray-100 transition-colors"
+                >
+                  <Archive size={11} />
+                  Archiver
                 </button>
               )}
             </div>

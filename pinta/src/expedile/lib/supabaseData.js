@@ -56,6 +56,7 @@ function mapColis(row) {
     fraisDivers: row.frais_divers || [],
     modePaiementPro: row.mode_paiement_pro || null,
     photoReception: row.photo_reception || false,
+    archive: row.archive || false,
     createdAt: row.created_at,
     // Relations (loaded separately or joined)
     factures: row._factures || [],
@@ -298,6 +299,7 @@ export async function updateColis(id, changes) {
     fraisDivers: 'frais_divers',
     modePaiementPro: 'mode_paiement_pro',
     photoReception: 'photo_reception',
+    archive: 'archive',
   };
 
   for (const [key, val] of Object.entries(changes)) {
@@ -319,7 +321,6 @@ function generateRandomRef() {
 
 export async function insertColis(colisData) {
   const row = {
-    ref: generateRandomRef(),
     client_id: colisData.clientId,
     desc_contenu: colisData.desc || null,
     trackings: colisData.trackings || [],
@@ -340,13 +341,19 @@ export async function insertColis(colisData) {
   // Override statut if provided (e.g., 'mesure' when dims are filled at reception)
   if (colisData.statut && colisData.statut !== 'receptionne') row.statut = colisData.statut;
 
-  const { data, error } = await supabase
-    .from('colis')
-    .insert(row)
-    .select()
-    .single();
-  if (error) throw error;
-  return mapColis({ ...data, _factures: [], _lignes: [], _messages: [] });
+  // Retry with new ref on unique constraint violation (max 5 attempts)
+  for (let attempt = 0; attempt < 5; attempt++) {
+    row.ref = generateRandomRef();
+    const { data, error } = await supabase
+      .from('colis')
+      .insert(row)
+      .select()
+      .single();
+    if (error && error.code === '23505') continue; // unique violation → retry
+    if (error) throw error;
+    return mapColis({ ...data, _factures: [], _lignes: [], _messages: [] });
+  }
+  throw new Error('Impossible de générer une référence unique après 5 tentatives');
 }
 
 export async function updateClient(id, changes) {
