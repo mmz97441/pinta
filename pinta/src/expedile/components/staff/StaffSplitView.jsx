@@ -1,18 +1,19 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import {
   Search, X, Package, Clock, CheckCircle, Check, Wrench, CreditCard, Plane, Ruler,
-  AlertTriangle, Filter, ChevronRight, Star, FileText,
+  AlertTriangle, Filter, ChevronRight, Star, FileText, TrendingUp, Users, BarChart3,
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
-import { BRAND, STATUTS, getDestByCP } from '../../constants';
+import { BRAND, STATUTS, ABONNEMENTS, getDestByCP } from '../../constants';
 import { eur, fuzzy } from '../../utils';
 import { Badge, Etapes } from '../ui';
 import StaffDetailView from './StaffDetailView';
+import KPIDashboard from './KPIDashboard';
 import ColisInfo from '../detail/ColisInfo';
 import FacturesPanel from '../detail/FacturesPanel';
 import ChatPanel from '../detail/ChatPanel';
 import AuditLog from '../detail/AuditLog';
-import DetailHeader from '../detail/DetailHeader';
 
 // ── Tab definitions ─────────────────────────────────────────────────────────
 const TABS = [
@@ -107,17 +108,187 @@ function ColisRow({ colis, client, isActive, onClick }) {
 // ════════════════════════════════════════════════════════════════════════════
 // DETAIL PANEL — right side (reuses existing components)
 // ════════════════════════════════════════════════════════════════════════════
-function DetailPanel({ onClose }) {
+// ════════════════════════════════════════════════════════════════════════════
+// DASHBOARD OVERVIEW — shown when no colis is selected
+// ════════════════════════════════════════════════════════════════════════════
+function DashboardOverview({ onSelectColis }) {
+  const navigate = useNavigate();
+  const { data, clients, getClient, authRole } = useApp();
+
+  const active = data.filter((c) => c.statut !== 'annule' && !c.archive);
+
+  // Counts
+  const counts = useMemo(() => ({
+    aTraiter: active.filter((c) => ['receptionne', 'mesure', 'autorise', 'en_preparation', 'paye'].includes(c.statut)).length,
+    attClient: active.filter((c) => ['attente_feu_vert', 'devis_envoye', 'attente_paiement'].includes(c.statut)).length,
+    expedition: active.filter((c) => ['expedie', 'transit', 'dedouanement', 'arrive', 'livraison'].includes(c.statut)).length,
+    livres: active.filter((c) => c.statut === 'livre').length,
+    total: active.length,
+  }), [active]);
+
+  // Missing invoices
+  const missingFactures = useMemo(() =>
+    active.filter((c) => {
+      if (c.statut === 'livre') return false;
+      return !c.factures?.some((f) => f.valide);
+    }),
+  [active]);
+
+  // Feu vert sans facture (urgent)
+  const fvSansFacture = useMemo(() =>
+    missingFactures.filter((c) => ['attente_feu_vert', 'autorise', 'en_preparation'].includes(c.statut)),
+  [missingFactures]);
+
+  // Revenue this month
+  const caMonth = useMemo(() => {
+    const now = new Date();
+    const m = now.getMonth(), y = now.getFullYear();
+    return active
+      .filter((c) => c.paiementMontant && c.paiementDate)
+      .filter((c) => { const d = new Date(c.paiementDate); return d.getMonth() === m && d.getFullYear() === y; })
+      .reduce((s, c) => s + (c.paiementMontant || 0), 0);
+  }, [active]);
+
+  const CARDS = [
+    { label: 'À traiter', count: counts.aTraiter, color: BRAND.navy, icon: Package },
+    { label: 'Att. client', count: counts.attClient, color: '#D97706', icon: Clock },
+    { label: 'Expédition', count: counts.expedition, color: '#0891B2', icon: Plane },
+    { label: 'Livrés', count: counts.livres, color: '#16A34A', icon: Check },
+  ];
+
+  return (
+    <div className="h-full overflow-y-auto">
+      <div className="max-w-4xl mx-auto p-6 space-y-6">
+
+        {/* Welcome header */}
+        <div>
+          <h1 className="text-xl font-black" style={{ color: BRAND.navy }}>Tableau de bord</h1>
+          <p className="text-xs text-gray-400 mt-0.5">{counts.total} colis actifs · {clients.length} clients</p>
+        </div>
+
+        {/* Summary cards */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {CARDS.map((card) => {
+            const Icon = card.icon;
+            return (
+              <div key={card.label} className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">{card.label}</p>
+                    <p className="text-2xl font-black mt-0.5" style={{ color: card.color }}>{card.count}</p>
+                  </div>
+                  <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: `${card.color}12` }}>
+                    <Icon size={16} style={{ color: card.color }} />
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* CA this month */}
+        {(authRole === 'directeur' || authRole === 'vice_directeur') && caMonth > 0 && (
+          <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm flex items-center gap-4">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: `${BRAND.gold}20` }}>
+              <TrendingUp size={18} style={{ color: BRAND.goldD }} />
+            </div>
+            <div>
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">CA ce mois</p>
+              <p className="text-xl font-black" style={{ color: BRAND.navy }}>{eur(caMonth)}</p>
+            </div>
+          </div>
+        )}
+
+        {/* Alerts */}
+        {missingFactures.length > 0 && (
+          <div className="bg-amber-50 rounded-xl border border-amber-200 p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <AlertTriangle size={14} className="text-amber-600" />
+              <p className="text-xs font-bold text-amber-800">{missingFactures.length} colis sans facture validée</p>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {missingFactures.slice(0, 8).map((c) => (
+                <button
+                  key={c.id}
+                  onClick={() => onSelectColis(c.id)}
+                  className="text-[11px] font-bold px-2 py-1 rounded-lg bg-white border border-amber-200 text-amber-800 hover:bg-amber-100 transition-all active:scale-95"
+                >
+                  {c.ref}
+                </button>
+              ))}
+              {missingFactures.length > 8 && (
+                <span className="text-[11px] font-semibold text-amber-500 px-2 py-1">+{missingFactures.length - 8} autres</span>
+              )}
+            </div>
+          </div>
+        )}
+
+        {fvSansFacture.length > 0 && (
+          <div className="bg-red-50 rounded-xl border border-red-200 p-4">
+            <div className="flex items-center gap-2 mb-1">
+              <AlertTriangle size={14} className="text-red-600" />
+              <p className="text-xs font-bold text-red-800">{fvSansFacture.length} colis en traitement sans facture — relance nécessaire</p>
+            </div>
+            <p className="text-[10px] text-red-600 mb-2">Sans facture, le calcul des taxes (OM/OMR) et les formalités douanières sont impossibles.</p>
+            <div className="flex flex-wrap gap-1.5">
+              {fvSansFacture.map((c) => {
+                const cl = getClient(c.clientId);
+                return (
+                  <button
+                    key={c.id}
+                    onClick={() => onSelectColis(c.id)}
+                    className="text-[11px] font-bold px-2 py-1 rounded-lg bg-white border border-red-200 text-red-700 hover:bg-red-100 transition-all active:scale-95"
+                  >
+                    {c.ref} <span className="font-normal text-red-400">{cl?.nom?.split(' ').pop()}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Quick links */}
+        <div className="flex gap-3">
+          <button
+            onClick={() => navigate('/clients')}
+            className="flex-1 flex items-center gap-2.5 p-3.5 bg-white rounded-xl border border-gray-100 shadow-sm hover:bg-gray-50 transition-all"
+          >
+            <Users size={16} style={{ color: BRAND.navy }} />
+            <div className="text-left">
+              <p className="text-xs font-bold" style={{ color: BRAND.navy }}>Clients</p>
+              <p className="text-[10px] text-gray-400">{clients.length} clients</p>
+            </div>
+          </button>
+          <button
+            onClick={() => navigate('/settings')}
+            className="flex-1 flex items-center gap-2.5 p-3.5 bg-white rounded-xl border border-gray-100 shadow-sm hover:bg-gray-50 transition-all"
+          >
+            <BarChart3 size={16} style={{ color: BRAND.navy }} />
+            <div className="text-left">
+              <p className="text-xs font-bold" style={{ color: BRAND.navy }}>Paramètres</p>
+              <p className="text-[10px] text-gray-400">Tarifs, catégories</p>
+            </div>
+          </button>
+        </div>
+
+        {/* KPI Dashboard (directors only) */}
+        {(authRole === 'directeur' || authRole === 'vice_directeur') && (
+          <KPIDashboard />
+        )}
+
+      </div>
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// DETAIL PANEL — right side (reuses existing components)
+// ════════════════════════════════════════════════════════════════════════════
+function DetailPanel({ onClose, onSelectColis }) {
   const { sel } = useApp();
 
   if (!sel) {
-    return (
-      <div className="flex flex-col items-center justify-center h-full text-center px-6">
-        <Package size={40} className="text-gray-200 mb-3" />
-        <p className="text-sm font-semibold text-gray-400">Sélectionnez un colis</p>
-        <p className="text-xs text-gray-300 mt-1">Cliquez sur un colis dans la liste pour voir son détail</p>
-      </div>
-    );
+    return <DashboardOverview onSelectColis={onSelectColis} />;
   }
 
   return (
@@ -132,10 +303,11 @@ function DetailPanel({ onClose }) {
           <span className="text-sm font-black" style={{ color: BRAND.navy }}>{sel.ref}</span>
           <Badge statut={sel.statut} />
         </div>
-        {/* Close button for mobile */}
+        {/* Close button — back to dashboard */}
         <button
           onClick={onClose}
-          className="lg:hidden p-1.5 rounded-lg hover:bg-gray-100 text-gray-400"
+          className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400"
+          title="Retour au tableau de bord"
         >
           <X size={16} />
         </button>
@@ -312,7 +484,7 @@ export default function StaffSplitView({ onNewColis }) {
           mobileDetail ? 'flex flex-col' : 'hidden lg:flex lg:flex-col'
         }`}
       >
-        <DetailPanel onClose={closeDetail} />
+        <DetailPanel onClose={closeDetail} onSelectColis={selectColis} />
       </div>
 
       {/* ══════════════ FAB — Nouveau colis ══════════════ */}
