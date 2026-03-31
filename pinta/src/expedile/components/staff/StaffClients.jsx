@@ -191,6 +191,9 @@ export default function StaffClients() {
 
   // ── Handlers ─────────────────────────────────────────────────────────────
   const [showNewModal, setShowNewModal] = useState(false);
+  const [clViewMode, setClViewMode] = useState('list'); // 'cards' | 'list'
+  const [clSortCol, setClSortCol] = useState('nom');
+  const [clSortDir, setClSortDir] = useState('asc');
   const [newDraft, setNewDraft] = useState(emptyDraft());
 
   function handleNewClient() {
@@ -585,6 +588,21 @@ export default function StaffClients() {
         </div>
       </div>
 
+      {/* ── View toggle ──────────────────────────────────────────────── */}
+      <div className="flex items-center justify-between">
+        <span className="text-xs text-gray-400">{filtered.length} clients</span>
+        <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5">
+          <button onClick={() => setClViewMode('list')}
+            className={`px-2.5 py-1 rounded-md text-[10px] font-bold transition-all ${clViewMode === 'list' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-400'}`}>
+            Liste
+          </button>
+          <button onClick={() => setClViewMode('cards')}
+            className={`px-2.5 py-1 rounded-md text-[10px] font-bold transition-all ${clViewMode === 'cards' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-400'}`}>
+            Cartes
+          </button>
+        </div>
+      </div>
+
       {/* ── Client list ─────────────────────────────────────────────────── */}
       {filtered.length === 0 && (
         <div className="card p-8 flex flex-col items-center text-center">
@@ -594,7 +612,97 @@ export default function StaffClients() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+      {/* ── Table view ─────────────────────────────────────────────────── */}
+      {clViewMode === 'list' && filtered.length > 0 && (() => {
+        const sortedClients = [...filtered].sort((a, b) => {
+          const dir = clSortDir === 'asc' ? 1 : -1;
+          switch (clSortCol) {
+            case 'nom': return dir * (a.nom || '').localeCompare(b.nom || '', 'fr');
+            case 'prenom': return dir * (a.prenom || '').localeCompare(b.prenom || '', 'fr');
+            case 'ville': return dir * (a.ville || '').localeCompare(b.ville || '', 'fr');
+            case 'type': return dir * (a.type || '').localeCompare(b.type || '', 'fr');
+            case 'abonnement': return dir * (a.abonnement || '').localeCompare(b.abonnement || '', 'fr');
+            case 'colis': return dir * (clientColis(a.id).length - clientColis(b.id).length);
+            case 'ca': return dir * (clientCA(a.id) - clientCA(b.id));
+            default: return 0;
+          }
+        });
+        const handleClSort = (col) => {
+          if (clSortCol === col) setClSortDir((d) => d === 'asc' ? 'desc' : 'asc');
+          else { setClSortCol(col); setClSortDir('asc'); }
+        };
+        const si = (col) => clSortCol === col ? (clSortDir === 'asc' ? ' ▲' : ' ▼') : ' ↕';
+        const TH = 'px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-gray-500 cursor-pointer hover:text-gray-700 select-none whitespace-nowrap';
+        return (
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="border-b border-gray-200" style={{ background: `${BRAND.navy}06` }}>
+                    <th className={TH} onClick={() => handleClSort('nom')}>Nom{si('nom')}</th>
+                    <th className={TH} onClick={() => handleClSort('prenom')}>Prénom{si('prenom')}</th>
+                    <th className={TH} onClick={() => handleClSort('type')}>Type{si('type')}</th>
+                    <th className={TH} onClick={() => handleClSort('abonnement')}>Forfait{si('abonnement')}</th>
+                    <th className={TH} onClick={() => handleClSort('ville')}>Ville{si('ville')}</th>
+                    <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-gray-500">Tél.</th>
+                    <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-gray-500">Email</th>
+                    <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-gray-500">Telegram</th>
+                    <th className={TH} onClick={() => handleClSort('colis')}>Colis{si('colis')}</th>
+                    <th className={`${TH} text-right`} onClick={() => handleClSort('ca')}>CA{si('ca')}</th>
+                    <th className="w-6"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sortedClients.map((cl) => {
+                    const dest = getDestByCP(cl.cp);
+                    const colis = clientColis(cl.id);
+                    const ca = clientCA(cl.id);
+                    const abo = ABONNEMENTS[cl.abonnement];
+                    return (
+                      <tr key={cl.id} onClick={() => handleEdit(cl)}
+                        className="border-b border-gray-50 cursor-pointer hover:bg-gray-50 transition-colors">
+                        <td className="px-3 py-2.5">
+                          <span className="text-xs font-bold text-gray-800">{cl.nomFamille || cl.nom}</span>
+                          {dest && <span className="ml-1 text-xs">{dest.flag}</span>}
+                        </td>
+                        <td className="px-3 py-2.5 text-xs text-gray-600">{cl.prenom || '—'}</td>
+                        <td className="px-3 py-2.5">
+                          {cl.type === 'pro' ? (
+                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full" style={{ background: `${BRAND.gold}30`, color: BRAND.goldD }}>PRO</span>
+                          ) : (
+                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-600">Part.</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2.5">
+                          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${abo?.couleur || 'bg-gray-100 text-gray-500'}`}>
+                            {abo?.label || cl.abonnement}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2.5 text-xs text-gray-500">{cl.ville || '—'}</td>
+                        <td className="px-3 py-2.5 text-[10px] text-gray-500 font-mono">{cl.tel || '—'}</td>
+                        <td className="px-3 py-2.5 text-[10px] text-gray-500 truncate max-w-[140px]">{cl.email || '—'}</td>
+                        <td className="px-3 py-2.5">
+                          {cl.telegramChatId ? (
+                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-green-100 text-green-700">Lié</span>
+                          ) : (
+                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-red-100 text-red-500">Non lié</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2.5 text-xs font-semibold text-gray-700">{colis.length}</td>
+                        <td className="px-3 py-2.5 text-right text-xs font-bold" style={{ color: ca > 0 ? BRAND.navy : '#9CA3AF' }}>{ca > 0 ? eur(ca) : '—'}</td>
+                        <td className="pr-2 py-2.5"><ChevronDown size={12} className="text-gray-300" /></td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ── Cards view ─────────────────────────────────────────────────── */}
+      {clViewMode === 'cards' && <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
         {filtered.map((cl) => {
           const isOpen = clEditId === cl.id;
           const colis = clientColis(cl.id);
@@ -1151,7 +1259,7 @@ export default function StaffClients() {
             </div>
           );
         })}
-      </div>
+      </div>}
     </div>
   );
 }
