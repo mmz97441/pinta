@@ -53,7 +53,8 @@ export default function FacturesPanel() {
   const [showAddForm, setShowAddForm] = useState(false);
   const [newVendeur, setNewVendeur] = useState('');
   const [newMontant, setNewMontant] = useState('');
-  const [ocrLoading, setOcrLoading] = useState(null); // factureId being analyzed
+  const [ocrLoading, setOcrLoading] = useState(null);
+  const [collapsed, setCollapsed] = useState(true); // factureId being analyzed
 
   if (!sel) return null;
 
@@ -353,9 +354,18 @@ export default function FacturesPanel() {
       {previewSrc && <Lightbox src={previewSrc} title={previewTitle} onClose={() => setPreviewSrc(null)} />}
 
       <div className="flex items-center justify-between mb-3">
-        <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">
+        <button
+          onClick={() => setCollapsed(!collapsed)}
+          className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-gray-400 hover:text-gray-600 transition-colors"
+        >
+          <span>{collapsed ? '▶' : '▼'}</span>
           Factures d'origine {hasFactures ? `(${sel.factures.length})` : ''}
-        </p>
+          {hasFactures && collapsed && (
+            <span className="normal-case font-semibold text-gray-500 ml-1">
+              — {sel.factures.filter(f => f.valide).length} validée{sel.factures.filter(f => f.valide).length > 1 ? 's' : ''}, {sel.factures.filter(f => f.rejetMotif).length} refusée{sel.factures.filter(f => f.rejetMotif).length > 1 ? 's' : ''}
+            </span>
+          )}
+        </button>
         <div className="flex gap-1.5">
           {cl?.telegramChatId ? (
             <button
@@ -391,6 +401,7 @@ export default function FacturesPanel() {
         </div>
       </div>
 
+      {!collapsed && <>
       {/* Add facture form */}
       {showAddForm && (
         <div className="mb-3 p-3 rounded-xl border-2 border-dashed border-gray-200 bg-gray-50 space-y-2">
@@ -645,6 +656,7 @@ export default function FacturesPanel() {
           </div>
         ))}
       </div>
+      </>}
     </div>
   );
 }

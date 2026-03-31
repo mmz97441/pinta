@@ -1000,18 +1000,22 @@ export default function StaffDetailView() {
                   <Field label="Long. finale (cm)" type="number" min="0" step="0.5"
                     value={finDims.finL}
                     onChange={(e) => setFinDims({ ...finDims, finL: e.target.value })}
+                    onBlur={(e) => { const v = parseFloat(e.target.value); if (v > 0) upd(sel.id, { finL: v }); }}
                     placeholder={sel.finL || '38'} unit="cm" />
                   <Field label="Larg. finale (cm)" type="number" min="0" step="0.5"
                     value={finDims.finW}
                     onChange={(e) => setFinDims({ ...finDims, finW: e.target.value })}
+                    onBlur={(e) => { const v = parseFloat(e.target.value); if (v > 0) upd(sel.id, { finW: v }); }}
                     placeholder={sel.finW || '28'} unit="cm" />
                   <Field label="Haut. finale (cm)" type="number" min="0" step="0.5"
                     value={finDims.finH}
                     onChange={(e) => setFinDims({ ...finDims, finH: e.target.value })}
+                    onBlur={(e) => { const v = parseFloat(e.target.value); if (v > 0) upd(sel.id, { finH: v }); }}
                     placeholder={sel.finH || '18'} unit="cm" />
                   <Field label="Poids final (kg)" type="number" min="0" step="0.1"
                     value={finDims.finP}
                     onChange={(e) => setFinDims({ ...finDims, finP: e.target.value })}
+                    onBlur={(e) => { const v = parseFloat(e.target.value); if (v > 0) upd(sel.id, { finP: v }); }}
                     placeholder={sel.finP || '2.0'} unit="kg" />
                 </div>
 
