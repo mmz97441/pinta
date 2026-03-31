@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import {
   Search, X, Package, Clock, CheckCircle, Check, Wrench, CreditCard, Plane,
-  AlertTriangle, ChevronRight, Star, TrendingUp, Users, BarChart3,
+  AlertTriangle, ChevronRight, Star, TrendingUp, Users, BarChart3, FileText,
 } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
