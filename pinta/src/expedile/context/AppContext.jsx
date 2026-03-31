@@ -92,8 +92,48 @@ export function AppProvider({ children }) {
     });
 
     const facturesSub = sb.subscribeFactures((payload) => {
-      // Facture ajoutée, modifiée ou supprimée → refetch all colis to get updated relations
-      sb.fetchColis().then(setData).catch(console.error);
+      if (payload.eventType === 'INSERT') {
+        const f = payload.new;
+        setData((prev) => prev.map((c) => {
+          if (c.id !== f.colis_id) return c;
+          const newFacture = {
+            id: f.id,
+            vendeur: f.vendeur || 'Facture',
+            montant: f.montant ? +f.montant : 0,
+            valide: f.valide || false,
+            fichier: f.fichier_url || null,
+            fichierNom: f.fichier_nom || null,
+            rejetMotif: f.rejet_motif || null,
+            telegramMsgId: f.telegram_msg_id || null,
+          };
+          // Avoid duplicates
+          if (c.factures.some((x) => x.id === f.id)) return c;
+          return { ...c, factures: [...c.factures, newFacture] };
+        }));
+      } else if (payload.eventType === 'UPDATE') {
+        const f = payload.new;
+        setData((prev) => prev.map((c) => {
+          if (c.id !== f.colis_id) return c;
+          return {
+            ...c,
+            factures: c.factures.map((x) => x.id === f.id ? {
+              ...x,
+              vendeur: f.vendeur || x.vendeur,
+              montant: f.montant ? +f.montant : x.montant,
+              valide: f.valide ?? x.valide,
+              fichier: f.fichier_url || x.fichier,
+              fichierNom: f.fichier_nom || x.fichierNom,
+              rejetMotif: f.rejet_motif ?? x.rejetMotif,
+            } : x),
+          };
+        }));
+      } else if (payload.eventType === 'DELETE') {
+        const f = payload.old;
+        setData((prev) => prev.map((c) => ({
+          ...c,
+          factures: c.factures.filter((x) => x.id !== f.id),
+        })));
+      }
     });
 
     const msgSub = sb.subscribeMessages((payload) => {
