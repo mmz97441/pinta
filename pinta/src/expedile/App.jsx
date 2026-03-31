@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, useNavigate, useParams, useLocation, Navigate } from 'react-router-dom';
-import { Settings, Users, LogOut } from 'lucide-react';
+import { Settings, Users, LogOut, LayoutDashboard, Package, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import './brand.css';
 
 import { AppProvider, useApp } from './context/AppContext';
@@ -112,82 +112,184 @@ function AppContent() {
   const isColisDetail = location.pathname.startsWith('/colis/');
   const showOnboarding = !isStaff && authCl && !authCl.onboarded && !onboardingDismissed && !isColisDetail;
 
-  // ── Staff layout ──
+  // ── Staff layout with sidebar ──
   if (isStaff) {
-    // Determine active page from URL for header button styling
     const currentPath = location.pathname;
-    const isClientsPage = currentPath === '/clients';
-    const isSettingsPage = currentPath === '/settings';
+    const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
+    const NAV_ITEMS = [
+      { key: '/', label: 'Dashboard', icon: LayoutDashboard },
+      { key: '/colis', label: 'Colis', icon: Package },
+      { key: '/clients', label: 'Clients', icon: Users },
+      { key: '/settings', label: 'Paramètres', icon: Settings },
+    ];
+
+    const activePath = currentPath === '/' || currentPath.startsWith('/colis') ? (currentPath.startsWith('/colis') ? '/colis' : '/') : currentPath;
 
     return (
-      <div style={{ fontFamily: "system-ui, -apple-system, 'Segoe UI', sans-serif", background: '#f6f7f8' }} className="min-h-screen">
+      <div style={{ fontFamily: "system-ui, -apple-system, 'Segoe UI', sans-serif" }} className="h-screen flex">
         <Toast />
         <ConfirmDialog />
         <ColisModal open={modal} onClose={() => setModal(false)} />
 
-        {/* ── Bandeau mode mock ── */}
-        {!sbReady && (
-          <div className="bg-red-600 text-white text-center text-xs font-bold py-1.5 px-4">
-            ⚠️ Mode hors-ligne — Supabase inaccessible. Les données affichées sont des données de démonstration.
-          </div>
-        )}
-
-        {/* Header */}
+        {/* ── Sidebar (desktop) ──────────────────────────────────────── */}
         <div
-          className="glass-dark border-b border-white border-opacity-5 px-4 py-3.5 flex items-center justify-between sticky top-0 z-20"
-          style={{ background: 'linear-gradient(135deg, rgba(18,42,54,0.98), rgba(27,58,75,0.98))' }}
+          className="hidden lg:flex flex-col flex-shrink-0 border-r border-gray-800 transition-all duration-200"
+          style={{
+            width: sidebarCollapsed ? 64 : 220,
+            background: 'linear-gradient(180deg, #122A36 0%, #1B3A4B 100%)',
+          }}
         >
-          <div className="flex items-center gap-2.5">
-            <b className="text-lg text-white tracking-tight">
-              EXPÉD<span style={{ color: BRAND.gold }}>ÎLE</span>
-            </b>
-            <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-white bg-opacity-15 text-white tracking-wider">
-              STAFF
-            </span>
+          {/* Logo */}
+          <div className="px-4 py-4 flex items-center justify-between">
+            {!sidebarCollapsed ? (
+              <b className="text-lg text-white tracking-tight">
+                EXPÉD<span style={{ color: BRAND.gold }}>ÎLE</span>
+              </b>
+            ) : (
+              <b className="text-lg text-white tracking-tight mx-auto">
+                E<span style={{ color: BRAND.gold }}>.</span>
+              </b>
+            )}
           </div>
-          <div className="flex items-center gap-2">
+
+          {/* New colis button */}
+          <div className="px-3 mb-2">
             <button
-              aria-label="Gestion des clients"
-              onClick={() => navigate(isClientsPage ? '/' : '/clients')}
-              className={`p-2 rounded-xl transition-all ${isClientsPage ? 'bg-white bg-opacity-20 text-white' : 'text-gray-400 hover:text-white hover:bg-white hover:bg-opacity-10'}`}
+              onClick={() => setModal(true)}
+              className={`w-full flex items-center gap-2 rounded-xl text-sm font-bold transition-all active:scale-95 ${sidebarCollapsed ? 'justify-center px-2 py-2.5' : 'px-3 py-2.5'}`}
+              style={{ background: `linear-gradient(135deg, ${BRAND.gold}, ${BRAND.goldD})`, color: BRAND.navyD }}
             >
-              <Users size={18} />
+              <Plus size={16} strokeWidth={2.5} />
+              {!sidebarCollapsed && 'Nouveau colis'}
             </button>
+          </div>
+
+          {/* Navigation */}
+          <nav className="flex-1 px-3 space-y-1">
+            {NAV_ITEMS.map((item) => {
+              const Icon = item.icon;
+              const isActive = activePath === item.key;
+              return (
+                <button
+                  key={item.key}
+                  onClick={() => navigate(item.key === '/colis' ? '/' : item.key)}
+                  className={`w-full flex items-center gap-3 rounded-xl transition-all ${
+                    sidebarCollapsed ? 'justify-center px-2 py-2.5' : 'px-3 py-2.5'
+                  } ${isActive
+                    ? 'bg-white bg-opacity-15 text-white'
+                    : 'text-gray-400 hover:text-white hover:bg-white hover:bg-opacity-8'
+                  }`}
+                >
+                  <Icon size={18} strokeWidth={isActive ? 2.5 : 2} />
+                  {!sidebarCollapsed && (
+                    <span className="text-sm font-semibold">{item.label}</span>
+                  )}
+                </button>
+              );
+            })}
+          </nav>
+
+          {/* Collapse toggle */}
+          <div className="px-3 py-2">
             <button
-              aria-label="Paramètres"
-              onClick={() => navigate(isSettingsPage ? '/' : '/settings')}
-              className={`p-2 rounded-xl transition-all ${isSettingsPage ? 'bg-white bg-opacity-20 text-white' : 'text-gray-400 hover:text-white hover:bg-white hover:bg-opacity-10'}`}
+              onClick={() => setSidebarCollapsed((p) => !p)}
+              className="w-full flex items-center justify-center gap-2 px-2 py-2 rounded-xl text-gray-500 hover:text-white hover:bg-white hover:bg-opacity-8 transition-all"
             >
-              <Settings size={18} />
+              {sidebarCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+              {!sidebarCollapsed && <span className="text-xs font-medium">Réduire</span>}
             </button>
-            <span className="text-sm text-gray-300 ml-1">{auth.u.nom.split(' ')[0]}</span>
-            <button
-              aria-label="Se déconnecter"
-              onClick={() => { setAuth(null); navigate('/'); }}
-              className="p-2 rounded-xl text-red-400 hover:text-red-300 hover:bg-white hover:bg-opacity-10 transition-all"
-            >
-              <LogOut size={16} />
-            </button>
+          </div>
+
+          {/* User + logout */}
+          <div className="px-3 pb-4 pt-2 border-t border-white border-opacity-10">
+            <div className={`flex items-center gap-2.5 ${sidebarCollapsed ? 'justify-center' : ''}`}>
+              <div
+                className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-black flex-shrink-0"
+                style={{ background: `${BRAND.gold}30`, color: BRAND.gold }}
+              >
+                {auth.u.nom.charAt(0)}
+              </div>
+              {!sidebarCollapsed && (
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-semibold text-gray-200 truncate">{auth.u.nom}</p>
+                  <p className="text-[10px] text-gray-500 truncate">{auth.u.role || 'Staff'}</p>
+                </div>
+              )}
+              <button
+                onClick={() => { setAuth(null); navigate('/'); }}
+                className={`p-1.5 rounded-lg text-gray-500 hover:text-red-400 hover:bg-white hover:bg-opacity-8 transition-all ${sidebarCollapsed ? 'mt-2' : ''}`}
+                title="Se déconnecter"
+              >
+                <LogOut size={14} />
+              </button>
+            </div>
           </div>
         </div>
 
-        <Routes>
-          <Route path="/colis/:id" element={<StaffColisDetail />} />
-          <Route path="/clients" element={
-            <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-4 space-y-4">
-              <StaffClients />
+        {/* ── Mobile bottom nav ──────────────────────────────────────── */}
+        <div
+          className="lg:hidden fixed bottom-0 left-0 right-0 z-50 border-t border-gray-200 flex items-center justify-around py-2 px-1"
+          style={{ background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(10px)' }}
+        >
+          {NAV_ITEMS.map((item) => {
+            const Icon = item.icon;
+            const isActive = activePath === item.key;
+            return (
+              <button
+                key={item.key}
+                onClick={() => navigate(item.key === '/colis' ? '/' : item.key)}
+                className="flex flex-col items-center gap-0.5 px-3 py-1"
+              >
+                <Icon size={20} style={{ color: isActive ? BRAND.navy : '#9CA3AF' }} strokeWidth={isActive ? 2.5 : 2} />
+                <span className={`text-[9px] font-bold ${isActive ? 'text-gray-800' : 'text-gray-400'}`}>{item.label}</span>
+              </button>
+            );
+          })}
+          <button
+            onClick={() => setModal(true)}
+            className="flex flex-col items-center gap-0.5 px-3 py-1"
+          >
+            <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ background: BRAND.gold }}>
+              <Plus size={18} style={{ color: BRAND.navyD }} strokeWidth={3} />
             </div>
-          } />
-          <Route path="/settings" element={
-            <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-4 space-y-4">
-              <StaffSettings />
+          </button>
+        </div>
+
+        {/* ── Main content area ──────────────────────────────────────── */}
+        <div className="flex-1 flex flex-col min-w-0 bg-gray-50">
+          {/* Offline banner */}
+          {!sbReady && (
+            <div className="bg-red-600 text-white text-center text-xs font-bold py-1.5 px-4">
+              ⚠️ Mode hors-ligne — Supabase inaccessible.
             </div>
-          } />
-          <Route path="/" element={
-            <StaffSplitView onNewColis={() => setModal(true)} />
-          } />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+          )}
+
+          {/* Content */}
+          <div className="flex-1 overflow-hidden">
+            <Routes>
+              <Route path="/colis/:id" element={<StaffColisDetail />} />
+              <Route path="/clients" element={
+                <div className="h-full overflow-y-auto">
+                  <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-4 space-y-4">
+                    <StaffClients />
+                  </div>
+                </div>
+              } />
+              <Route path="/settings" element={
+                <div className="h-full overflow-y-auto">
+                  <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-4 space-y-4">
+                    <StaffSettings />
+                  </div>
+                </div>
+              } />
+              <Route path="/" element={
+                <StaffSplitView onNewColis={() => setModal(true)} />
+              } />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </div>
+        </div>
       </div>
     );
   }

@@ -393,7 +393,7 @@ export default function StaffSplitView({ onNewColis }) {
   // RENDER
   // ════════════════════════════════════════════════════════════════════════
   return (
-    <div className="flex h-[calc(100vh-52px)]">
+    <div className="flex h-full">
 
       {/* ══════════════ LEFT PANEL — List ══════════════ */}
       <div
@@ -487,19 +487,6 @@ export default function StaffSplitView({ onNewColis }) {
         <DetailPanel onClose={closeDetail} onSelectColis={selectColis} />
       </div>
 
-      {/* ══════════════ FAB — Nouveau colis ══════════════ */}
-      <button
-        onClick={onNewColis}
-        className="fixed bottom-6 right-6 z-40 flex items-center gap-2 pl-4 pr-5 py-3.5 rounded-2xl text-sm font-black transition-all active:scale-95 shadow-xl hover:shadow-2xl"
-        style={{
-          background: `linear-gradient(135deg, ${BRAND.gold}, ${BRAND.goldD})`,
-          color: BRAND.navyD,
-          boxShadow: `0 4px 20px ${BRAND.gold}50`,
-        }}
-      >
-        <span className="text-lg leading-none">+</span>
-        Nouveau colis
-      </button>
     </div>
   );
 }
