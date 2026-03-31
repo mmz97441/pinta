@@ -522,7 +522,7 @@ export function AppProvider({ children }) {
     if (!prev) { flash('Impossible de revenir en arrière depuis ce statut'); return; }
 
     // Retour en arrière = changement de statut UNIQUEMENT, pas de suppression de données
-    log(id, c.statut, prev + ' (vérification)');
+    log(id, c.statut, prev);
     upd(id, { statut: prev });
     flash(`Retour à : ${STATUTS[prev].label} — les données sont conservées`);
   }, [data, log, upd, flash]);
