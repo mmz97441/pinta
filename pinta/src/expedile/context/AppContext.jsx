@@ -560,6 +560,7 @@ export function AppProvider({ children }) {
       economie: economie > 0 ? economie : 0,
     });
     flash(`Brouillon : ${eur(tot)}${economie > 0 ? ` (économie ${eur(economie)})` : ''} — Vérifiez puis envoyez`);
+    return true; // devis calculé avec succès
   }, [data, clients, tarifs, categories, upd, flash]);
 
   const payer = useCallback((id, mt) => {

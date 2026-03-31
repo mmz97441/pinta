@@ -495,9 +495,12 @@ export default function StaffDetailView() {
     if (Object.keys(changes).length) upd(sel.id, changes);
 
     setTimeout(() => {
-      envoyerDevis(sel.id);
-      setDevisPrev(true);
-    }, 50);
+      const success = envoyerDevis(sel.id);
+      if (success) {
+        setDevisPrev(true);
+      }
+      // Si envoyerDevis échoue (facture/articles manquants), le flash d'erreur est déjà affiché
+    }, 100);
   }
 
   function handleConfirmDevisEnvoye() {
