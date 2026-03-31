@@ -269,7 +269,7 @@ function AppContent() {
           )}
 
           {/* Content */}
-          <div className="flex-1 overflow-hidden">
+          <div className="flex-1 overflow-y-auto">
             <Routes>
               <Route path="/colis/:id" element={<StaffColisDetail />} />
               <Route path="/colis" element={
