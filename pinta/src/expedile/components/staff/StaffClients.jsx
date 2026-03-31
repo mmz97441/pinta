@@ -301,9 +301,9 @@ export default function StaffClients() {
         const LBL = 'text-[11px] font-bold text-gray-500 block mb-1 uppercase tracking-wide';
         const INP = 'w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-sm outline-none focus:border-blue-300 transition-colors';
         return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)' }}
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto py-8" style={{ background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)' }}
           onClick={(e) => { if (e.target === e.currentTarget) setShowNewModal(false); }}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[92vh] overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl my-auto">
             {/* Header */}
             <div className="flex items-center justify-between px-6 pt-5 pb-3 border-b border-gray-100">
               <div className="flex items-center gap-3">
