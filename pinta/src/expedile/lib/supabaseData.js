@@ -69,8 +69,14 @@ function mapClient(row) {
   return {
     id: row.id,
     userId: row.user_id,
-    nom: row.nom + (row.prenom ? ' ' + row.prenom : ''),
+    ref: row.ref || null,
+    // nom = full display name for backwards compat (used everywhere)
+    nom: (row.nom || '') + (row.prenom ? ' ' + row.prenom : ''),
+    // Separate fields for forms
+    nomFamille: row.nom || '',
+    prenom: row.prenom || '',
     ville: row.ville,
+    adresse: row.adresse || '',
     cp: row.cp,
     tel: row.tel,
     email: row.email,
@@ -359,7 +365,7 @@ export async function insertColis(colisData) {
 export async function updateClient(id, changes) {
   const snakeChanges = {};
   const map = {
-    nom: 'nom', prenom: 'prenom', ville: 'ville', cp: 'cp',
+    nom: 'nom', prenom: 'prenom', ville: 'ville', adresse: 'adresse', cp: 'cp',
     tel: 'tel', email: 'email', canal: 'canal', type: 'type',
     points: 'points', notes: 'notes', onboarded: 'onboarded',
     abonnement: 'abonnement',
@@ -500,39 +506,44 @@ export async function markAllNotifsRead(userId) {
   if (error) throw error;
 }
 
-export async function insertClient(clientData) {
-  // Split nom if it contains both nom + prenom (legacy format "FONTAINE Flavie")
-  let nom = clientData.nom;
-  let prenom = clientData.prenom || null;
-  if (!prenom && nom && nom.includes(' ')) {
-    const parts = nom.split(' ');
-    // Don't split if it looks like a company name
-    if (clientData.type !== 'pro') {
-      nom = parts[0];
-      prenom = parts.slice(1).join(' ');
-    }
-  }
+function generateClientRef() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  return 'CLI-' + Array.from({length: 5}, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+}
 
-  const { data, error } = await supabase
-    .from('clients')
-    .insert({
-      nom,
-      prenom,
-      ville: clientData.ville || null,
-      cp: clientData.cp,
-      tel: clientData.tel || null,
-      email: clientData.email || null,
-      canal: clientData.canal || 'telegram',
-      type: clientData.type || 'particulier',
-      points: clientData.points || 0,
-      onboarded: clientData.onboarded || false,
-      notes: clientData.notes || null,
-      telegram_username: clientData.telegramUsername || null,
-    })
-    .select()
-    .single();
-  if (error) throw error;
-  return mapClient(data);
+export async function insertClient(clientData) {
+  const row = {
+    nom: clientData.nom || '',
+    prenom: clientData.prenom || null,
+    ville: clientData.ville || null,
+    adresse: clientData.adresse || null,
+    cp: clientData.cp,
+    tel: clientData.tel || null,
+    email: clientData.email || null,
+    canal: clientData.canal || 'telegram',
+    type: clientData.type || 'particulier',
+    points: clientData.points || 0,
+    onboarded: clientData.onboarded || false,
+    notes: clientData.notes || null,
+    telegram_username: clientData.telegramUsername || null,
+    abonnement: clientData.abonnement || 'freemium',
+    abonnement_debut: clientData.abonnementDebut || null,
+    abonnement_fin: clientData.abonnementFin || null,
+  };
+
+  // Retry with new ref on unique constraint violation
+  for (let attempt = 0; attempt < 5; attempt++) {
+    row.ref = generateClientRef();
+    const { data, error } = await supabase
+      .from('clients')
+      .insert(row)
+      .select()
+      .single();
+    if (error && error.code === '23505') continue;
+    if (error) throw error;
+    return mapClient(data);
+  }
+  throw new Error('Impossible de générer une référence client unique');
 }
 
 export async function deleteClient(id) {

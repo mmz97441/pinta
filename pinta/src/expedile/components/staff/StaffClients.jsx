@@ -10,6 +10,7 @@ import { exportRecapProExcel } from '../../utils/exportRecapPro';
 // ── Empty draft ──────────────────────────────────────────────────────────────
 const emptyDraft = () => ({
   nom: '',
+  prenom: '',
   tel: '',
   email: '',
   ville: '',
@@ -18,6 +19,9 @@ const emptyDraft = () => ({
   telegramUsername: '',
   canal: 'telegram',
   type: 'particulier',
+  abonnement: 'freemium',
+  abonnementDebut: '',
+  abonnementFin: '',
   notes: '',
 });
 
@@ -191,32 +195,43 @@ export default function StaffClients() {
   }
 
   // ── Handlers ─────────────────────────────────────────────────────────────
+  const [showNewModal, setShowNewModal] = useState(false);
+  const [newDraft, setNewDraft] = useState(emptyDraft());
+
   function handleNewClient() {
-    const draft = emptyDraft();
-    const id = addNewClient({
-      ...draft,
-      created: new Date().toISOString().slice(0, 10),
+    setNewDraft(emptyDraft());
+    setShowNewModal(true);
+  }
+
+  async function handleCreateClient() {
+    if (!newDraft.nom.trim()) { flash({ msg: 'Le nom est requis', type: 'warning' }); return; }
+    if (!newDraft.cp.trim() || !/^9[7-8]\d{3}$/.test(newDraft.cp.replace(/\s/g, ''))) { flash({ msg: 'Code postal DOM-TOM requis (97xxx)', type: 'warning' }); return; }
+
+    const id = await addNewClient({
+      nom: newDraft.nom.trim(),
+      prenom: newDraft.prenom.trim(),
+      tel: newDraft.tel.trim(),
+      email: newDraft.email.trim(),
+      ville: newDraft.ville.trim(),
+      cp: newDraft.cp.trim(),
+      adresse: newDraft.adresse.trim(),
+      telegramUsername: newDraft.telegramUsername.trim(),
+      canal: newDraft.canal,
+      type: newDraft.type,
+      abonnement: newDraft.abonnement,
+      abonnementDebut: newDraft.abonnementDebut || null,
+      abonnementFin: newDraft.abonnementFin || null,
       points: 0,
     });
-    setClEditId(id);
-    setClDraft(draft);
-    setIsNewClient(true);
-    setJustSavedId(null);
-    setTouched({});
-    setClPageSearch(''); // Clear search so the new client is visible
-    // Scroll to the new client card after render
-    setTimeout(() => {
-      newClientRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      // Focus the first field
-      const nameInput = newClientRef.current?.querySelector('input');
-      nameInput?.focus();
-    }, 100);
+    setShowNewModal(false);
+    flash({ msg: 'Client créé avec succès', type: 'success' });
   }
 
   function handleEdit(cl) {
     setClEditId(cl.id);
     setClDraft({
-      nom: cl.nom || '',
+      nom: cl.nomFamille || cl.nom || '',
+      prenom: cl.prenom || '',
       tel: cl.tel || '',
       email: cl.email || '',
       ville: cl.ville || '',
@@ -225,6 +240,9 @@ export default function StaffClients() {
       telegramUsername: cl.telegramUsername || '',
       canal: cl.canal || 'telegram',
       type: cl.type || 'particulier',
+      abonnement: cl.abonnement || 'freemium',
+      abonnementDebut: cl.abonnementDebut || '',
+      abonnementFin: cl.abonnementFin || '',
       notes: cl.notes || '',
     });
     setIsNewClient(false);
@@ -281,6 +299,116 @@ export default function StaffClients() {
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="anim-fade flex flex-col gap-4 pb-24">
+
+      {/* ── Modal création client ────────────────────────────────────────── */}
+      {showNewModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)' }}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-gray-100">
+              <h2 className="text-lg font-black" style={{ color: BRAND.navy }}>Nouveau client</h2>
+              <button onClick={() => setShowNewModal(false)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400"><X size={18} /></button>
+            </div>
+            <div className="px-5 py-4 space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[11px] font-bold text-gray-500 block mb-1 uppercase tracking-wide">Nom *</label>
+                  <input value={newDraft.nom} onChange={(e) => setNewDraft((p) => ({ ...p, nom: e.target.value }))}
+                    placeholder="NOM" className="w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-sm outline-none focus:border-blue-300" autoFocus />
+                </div>
+                <div>
+                  <label className="text-[11px] font-bold text-gray-500 block mb-1 uppercase tracking-wide">Prénom</label>
+                  <input value={newDraft.prenom} onChange={(e) => setNewDraft((p) => ({ ...p, prenom: e.target.value }))}
+                    placeholder="Prénom" className="w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-sm outline-none focus:border-blue-300" />
+                </div>
+                <div>
+                  <label className="text-[11px] font-bold text-gray-500 block mb-1 uppercase tracking-wide">Téléphone</label>
+                  <input value={newDraft.tel} onChange={(e) => setNewDraft((p) => ({ ...p, tel: e.target.value }))}
+                    placeholder="+262 692 …" className="w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-sm outline-none focus:border-blue-300 font-mono" />
+                </div>
+                <div>
+                  <label className="text-[11px] font-bold text-gray-500 block mb-1 uppercase tracking-wide">Email</label>
+                  <input value={newDraft.email} onChange={(e) => setNewDraft((p) => ({ ...p, email: e.target.value }))}
+                    placeholder="adresse@exemple.com" type="email" className="w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-sm outline-none focus:border-blue-300" />
+                </div>
+                <div>
+                  <label className="text-[11px] font-bold text-gray-500 block mb-1 uppercase tracking-wide">Ville</label>
+                  <input value={newDraft.ville} onChange={(e) => setNewDraft((p) => ({ ...p, ville: e.target.value }))}
+                    placeholder="Saint-Denis" className="w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-sm outline-none focus:border-blue-300" />
+                </div>
+                <div>
+                  <label className="text-[11px] font-bold text-gray-500 block mb-1 uppercase tracking-wide">Code postal *</label>
+                  <input value={newDraft.cp} onChange={(e) => setNewDraft((p) => ({ ...p, cp: e.target.value }))}
+                    placeholder="97400" className="w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-sm outline-none focus:border-blue-300 font-mono" />
+                </div>
+                <div className="col-span-2">
+                  <label className="text-[11px] font-bold text-gray-500 block mb-1 uppercase tracking-wide">Adresse</label>
+                  <input value={newDraft.adresse} onChange={(e) => setNewDraft((p) => ({ ...p, adresse: e.target.value }))}
+                    placeholder="N° rue, résidence, étage…" className="w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-sm outline-none focus:border-blue-300" />
+                </div>
+                <div>
+                  <label className="text-[11px] font-bold text-gray-500 block mb-1 uppercase tracking-wide">Telegram @</label>
+                  <input value={newDraft.telegramUsername} onChange={(e) => setNewDraft((p) => ({ ...p, telegramUsername: e.target.value }))}
+                    placeholder="@username" className="w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-sm outline-none focus:border-blue-300" />
+                </div>
+                <div>
+                  <label className="text-[11px] font-bold text-gray-500 block mb-1 uppercase tracking-wide">Type</label>
+                  <select value={newDraft.type} onChange={(e) => setNewDraft((p) => ({ ...p, type: e.target.value }))}
+                    className="w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-sm outline-none focus:border-blue-300">
+                    <option value="particulier">Particulier</option>
+                    <option value="pro">Professionnel</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Forfait */}
+              <div>
+                <label className="text-[11px] font-bold text-gray-500 block mb-1 uppercase tracking-wide">Forfait</label>
+                <select value={newDraft.abonnement} onChange={(e) => setNewDraft((p) => ({ ...p, abonnement: e.target.value }))}
+                  className="w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-sm outline-none focus:border-blue-300">
+                  <option value="freemium">Freemium</option>
+                  <option value="premium_mensuel">Premium Mensuel (13€/mois)</option>
+                  <option value="premium_annuel">Premium Annuel (69€/an)</option>
+                  <option value="vip">VIP Annuel (149€/an)</option>
+                </select>
+              </div>
+              {newDraft.abonnement !== 'freemium' && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[11px] font-bold text-gray-500 block mb-1 uppercase tracking-wide">Début</label>
+                    <input type="date" value={newDraft.abonnementDebut}
+                      onChange={(e) => setNewDraft((p) => ({ ...p, abonnementDebut: e.target.value }))}
+                      className="w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-sm outline-none focus:border-blue-300" />
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-bold text-gray-500 block mb-1 uppercase tracking-wide">Fin</label>
+                    <input type="date" value={newDraft.abonnementFin}
+                      onChange={(e) => setNewDraft((p) => ({ ...p, abonnementFin: e.target.value }))}
+                      className="w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-sm outline-none focus:border-blue-300" />
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label className="text-[11px] font-bold text-gray-500 block mb-1 uppercase tracking-wide">Notes</label>
+                <textarea value={newDraft.notes} onChange={(e) => setNewDraft((p) => ({ ...p, notes: e.target.value }))}
+                  placeholder="Informations utiles…" rows={2}
+                  className="w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-sm outline-none focus:border-blue-300 resize-none" />
+              </div>
+            </div>
+            <div className="px-5 pb-5 pt-2 flex gap-3">
+              <button onClick={() => setShowNewModal(false)}
+                className="flex-1 py-2.5 rounded-xl border-2 border-gray-200 text-sm font-bold text-gray-600 hover:bg-gray-50 transition-colors">
+                Annuler
+              </button>
+              <button onClick={handleCreateClient}
+                className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white transition-all active:scale-95"
+                style={{ background: `linear-gradient(135deg, ${BRAND.navy}, ${BRAND.navyL})` }}>
+                Créer le client
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Header ──────────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between gap-2 pt-1">
@@ -396,6 +524,7 @@ export default function StaffClients() {
 
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
+                    {cl.ref && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 font-mono">{cl.ref}</span>}
                     <span className="text-sm font-black truncate" style={{ color: BRAND.navy }}>
                       {cl.nom || <span className="italic text-gray-400">Sans nom</span>}
                     </span>
@@ -541,13 +670,18 @@ export default function StaffClients() {
                   {/* Field grid */}
                   <div className="grid grid-cols-2 gap-3">
                     <ValidatedField
-                      label="Nom complet *"
+                      label="Nom *"
                       value={clDraft.nom}
                       onChange={(e) => patchDraft('nom', e.target.value)}
-                      placeholder="Prénom NOM"
+                      placeholder="NOM"
                       error={fieldErrors.nom}
                       valid={touched.nom && clDraft.nom && clDraft.nom.trim().length >= 2 && !fieldErrors.nom}
-                      colSpan={2}
+                    />
+                    <ValidatedField
+                      label="Prénom"
+                      value={clDraft.prenom}
+                      onChange={(e) => patchDraft('prenom', e.target.value)}
+                      placeholder="Prénom"
                     />
 
                     <ValidatedField
@@ -646,6 +780,51 @@ export default function StaffClients() {
                       ]}
                     />
                   </div>
+
+                  {/* Forfait */}
+                  <div>
+                    <label className="text-[11px] font-bold text-gray-500 block mb-1.5 uppercase tracking-wide">
+                      Forfait
+                    </label>
+                    <select
+                      value={clDraft.abonnement}
+                      onChange={(e) => patchDraft('abonnement', e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-sm outline-none focus:border-blue-300 transition-colors"
+                      style={{ color: BRAND.navy }}
+                    >
+                      <option value="freemium">Freemium</option>
+                      <option value="premium_mensuel">Premium Mensuel (13€/mois)</option>
+                      <option value="premium_annuel">Premium Annuel (69€/an)</option>
+                      <option value="vip">VIP Annuel (149€/an)</option>
+                    </select>
+                  </div>
+
+                  {clDraft.abonnement !== 'freemium' && (
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-[11px] font-bold text-gray-500 block mb-1 uppercase tracking-wide">
+                          Début abonnement
+                        </label>
+                        <input
+                          type="date"
+                          value={clDraft.abonnementDebut || ''}
+                          onChange={(e) => patchDraft('abonnementDebut', e.target.value)}
+                          className="w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-sm outline-none focus:border-blue-300 transition-colors"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[11px] font-bold text-gray-500 block mb-1 uppercase tracking-wide">
+                          Fin abonnement
+                        </label>
+                        <input
+                          type="date"
+                          value={clDraft.abonnementFin || ''}
+                          onChange={(e) => patchDraft('abonnementFin', e.target.value)}
+                          className="w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-sm outline-none focus:border-blue-300 transition-colors"
+                        />
+                      </div>
+                    </div>
+                  )}
 
                   {/* Notes internes */}
                   <div>
