@@ -586,10 +586,8 @@ export default function StaffColisPage() {
               </div>
               {/* Right: actions + chat */}
               <div className="w-[340px] flex-shrink-0 space-y-4">
-                <div className="sticky top-16 space-y-4">
-                  <StaffDetailView />
-                  <ChatPanel />
-                </div>
+                <StaffDetailView />
+                <ChatPanel />
               </div>
             </div>
           </div>
