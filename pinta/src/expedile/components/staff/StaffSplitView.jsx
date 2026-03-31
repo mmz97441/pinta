@@ -3,7 +3,7 @@ import {
   Search, X, Package, Clock, CheckCircle, Check, Wrench, CreditCard, Plane, Ruler,
   AlertTriangle, Filter, ChevronRight, Star, FileText, TrendingUp, Users, BarChart3,
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import { BRAND, STATUTS, ABONNEMENTS, getDestByCP } from '../../constants';
 import { eur, fuzzy } from '../../utils';
@@ -15,13 +15,15 @@ import FacturesPanel from '../detail/FacturesPanel';
 import ChatPanel from '../detail/ChatPanel';
 import AuditLog from '../detail/AuditLog';
 
-// ── Tab definitions ─────────────────────────────────────────────────────────
+// ── Tab definitions (pipeline complet) ──────────────────────────────────────
 const TABS = [
-  { key: 'all', label: 'Tout', filter: (c) => c.statut !== 'annule' },
-  { key: 'todo', label: 'À traiter', filter: (c) => ['receptionne', 'mesure', 'autorise', 'en_preparation', 'paye'].includes(c.statut) },
-  { key: 'waiting', label: 'Att. client', filter: (c) => ['attente_feu_vert', 'devis_envoye', 'attente_paiement'].includes(c.statut) },
-  { key: 'shipping', label: 'Expédition', filter: (c) => ['expedie', 'transit', 'dedouanement', 'arrive', 'livraison'].includes(c.statut) },
-  { key: 'done', label: 'Livrés', filter: (c) => c.statut === 'livre' },
+  { key: 'all',         label: 'Tout',            icon: Package,     color: BRAND.navy,  filter: (c) => c.statut !== 'annule' },
+  { key: 'reception',   label: 'Réception',       icon: Package,     color: BRAND.navy,  filter: (c) => ['receptionne', 'mesure'].includes(c.statut) },
+  { key: 'feuvert',     label: 'Att. feu vert',   icon: Clock,       color: '#F97316',   filter: (c) => c.statut === 'attente_feu_vert' },
+  { key: 'feuvert_ok',  label: 'Feu vert OK',     icon: CheckCircle, color: '#65A30D',   filter: (c) => ['autorise', 'en_preparation'].includes(c.statut) },
+  { key: 'paiement',    label: 'Att. paiement',   icon: CreditCard,  color: '#D97706',   filter: (c) => ['devis_envoye', 'attente_paiement'].includes(c.statut) },
+  { key: 'expedition',  label: 'Expédition',      icon: Plane,       color: '#0891B2',   filter: (c) => ['paye', 'expedie', 'transit', 'dedouanement', 'arrive', 'livraison'].includes(c.statut) },
+  { key: 'done',        label: 'Livrés',          icon: Check,       color: '#16A34A',   filter: (c) => c.statut === 'livre' },
 ];
 
 // ── Statut icon map ─────────────────────────────────────────────────────────
@@ -149,12 +151,13 @@ function DashboardOverview({ onSelectColis }) {
       .reduce((s, c) => s + (c.paiementMontant || 0), 0);
   }, [active]);
 
-  const CARDS = [
-    { label: 'À traiter', count: counts.aTraiter, color: BRAND.navy, icon: Package },
-    { label: 'Att. client', count: counts.attClient, color: '#D97706', icon: Clock },
-    { label: 'Expédition', count: counts.expedition, color: '#0891B2', icon: Plane },
-    { label: 'Livrés', count: counts.livres, color: '#16A34A', icon: Check },
-  ];
+  // Pipeline counts — matches the 7 tabs exactly
+  const pipelineCounts = useMemo(() => TABS.filter((t) => t.key !== 'all').map((t) => ({
+    ...t,
+    count: active.filter(t.filter).length,
+  })), [active]);
+
+  const CARDS = pipelineCounts;
 
   return (
     <div className="h-full overflow-y-auto">
@@ -166,12 +169,16 @@ function DashboardOverview({ onSelectColis }) {
           <p className="text-xs text-gray-400 mt-0.5">{counts.total} colis actifs · {clients.length} clients</p>
         </div>
 
-        {/* Summary cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {/* Pipeline cards — clickable → go to /colis with filter */}
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
           {CARDS.map((card) => {
             const Icon = card.icon;
             return (
-              <div key={card.label} className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
+              <button
+                key={card.label}
+                onClick={() => navigate(`/colis?tab=${card.key}`)}
+                className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm text-left hover:shadow-md hover:border-gray-200 transition-all active:scale-[0.98]"
+              >
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">{card.label}</p>
@@ -181,7 +188,7 @@ function DashboardOverview({ onSelectColis }) {
                     <Icon size={16} style={{ color: card.color }} />
                   </div>
                 </div>
-              </div>
+              </button>
             );
           })}
         </div>
@@ -246,30 +253,6 @@ function DashboardOverview({ onSelectColis }) {
             </div>
           </div>
         )}
-
-        {/* Quick links */}
-        <div className="flex gap-3">
-          <button
-            onClick={() => navigate('/clients')}
-            className="flex-1 flex items-center gap-2.5 p-3.5 bg-white rounded-xl border border-gray-100 shadow-sm hover:bg-gray-50 transition-all"
-          >
-            <Users size={16} style={{ color: BRAND.navy }} />
-            <div className="text-left">
-              <p className="text-xs font-bold" style={{ color: BRAND.navy }}>Clients</p>
-              <p className="text-[10px] text-gray-400">{clients.length} clients</p>
-            </div>
-          </button>
-          <button
-            onClick={() => navigate('/settings')}
-            className="flex-1 flex items-center gap-2.5 p-3.5 bg-white rounded-xl border border-gray-100 shadow-sm hover:bg-gray-50 transition-all"
-          >
-            <BarChart3 size={16} style={{ color: BRAND.navy }} />
-            <div className="text-left">
-              <p className="text-xs font-bold" style={{ color: BRAND.navy }}>Paramètres</p>
-              <p className="text-[10px] text-gray-400">Tarifs, catégories</p>
-            </div>
-          </button>
-        </div>
 
         {/* KPI Dashboard (directors only) */}
         {(authRole === 'directeur' || authRole === 'vice_directeur') && (
@@ -338,12 +321,22 @@ function DetailPanel({ onClose, onSelectColis }) {
 // ════════════════════════════════════════════════════════════════════════════
 // MAIN SPLIT VIEW
 // ════════════════════════════════════════════════════════════════════════════
-export default function StaffSplitView({ onNewColis }) {
+export default function StaffSplitView({ onNewColis, mode }) {
   const { data, clients, getClient, setSelId, sel, archiverColis } = useApp();
+  const [searchParams] = useSearchParams();
 
+  // Read initial tab from URL ?tab=xxx
+  const urlTab = searchParams.get('tab');
   const [search, setSearch] = useState('');
-  const [activeTab, setActiveTab] = useState('todo');
+  const [activeTab, setActiveTab] = useState(urlTab && TABS.some((t) => t.key === urlTab) ? urlTab : 'all');
   const [showArchive, setShowArchive] = useState(false);
+
+  // Update tab when URL changes
+  useEffect(() => {
+    if (urlTab && TABS.some((t) => t.key === urlTab)) {
+      setActiveTab(urlTab);
+    }
+  }, [urlTab]);
 
   // Mobile: show detail panel full-screen when a colis is selected
   const [mobileDetail, setMobileDetail] = useState(false);
@@ -422,26 +415,35 @@ export default function StaffSplitView({ onNewColis }) {
           </div>
         </div>
 
-        {/* Tabs */}
-        <div className="flex border-b border-gray-100 px-1 overflow-x-auto">
-          {TABS.map((tab) => (
-            <button
-              key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
-              className={`flex items-center gap-1 px-3 py-2 text-[11px] font-bold whitespace-nowrap transition-all border-b-2 ${
-                activeTab === tab.key
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-400 hover:text-gray-600'
-              }`}
-            >
-              {tab.label}
-              <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
-                activeTab === tab.key ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-400'
-              }`}>
-                {tabCounts[tab.key] || 0}
-              </span>
-            </button>
-          ))}
+        {/* Tabs — pipeline complet */}
+        <div className="flex border-b border-gray-100 px-1 overflow-x-auto scrollbar-hide">
+          {TABS.map((tab) => {
+            const isActive = activeTab === tab.key;
+            const tabColor = tab.color || BRAND.navy;
+            return (
+              <button
+                key={tab.key}
+                onClick={() => setActiveTab(tab.key)}
+                className={`flex items-center gap-1 px-2.5 py-2 text-[10px] font-bold whitespace-nowrap transition-all border-b-2 ${
+                  isActive
+                    ? 'border-current'
+                    : 'border-transparent text-gray-400 hover:text-gray-600'
+                }`}
+                style={isActive ? { color: tabColor, borderColor: tabColor } : {}}
+              >
+                {tab.label}
+                <span
+                  className="text-[9px] px-1.5 py-0.5 rounded-full font-black"
+                  style={isActive
+                    ? { background: `${tabColor}18`, color: tabColor }
+                    : { background: '#F3F4F6', color: '#9CA3AF' }
+                  }
+                >
+                  {tabCounts[tab.key] || 0}
+                </span>
+              </button>
+            );
+          })}
         </div>
 
         {/* Colis list */}
