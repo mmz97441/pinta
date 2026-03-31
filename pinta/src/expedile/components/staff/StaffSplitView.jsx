@@ -1,12 +1,12 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import {
-  Search, X, Package, Clock, CheckCircle, Check, Wrench, CreditCard, Plane, Ruler,
-  AlertTriangle, Filter, ChevronRight, Star, FileText, TrendingUp, Users, BarChart3,
+  Search, X, Package, Clock, CheckCircle, Check, Wrench, CreditCard, Plane,
+  AlertTriangle, ChevronRight, Star, TrendingUp, Users, BarChart3,
 } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
-import { BRAND, STATUTS, ABONNEMENTS, getDestByCP } from '../../constants';
-import { eur, fuzzy } from '../../utils';
+import { BRAND, STATUTS, getDestByCP } from '../../constants';
+import { eur, fuzzy, labelEnvoi } from '../../utils';
 import { Badge, Etapes } from '../ui';
 import StaffDetailView from './StaffDetailView';
 import KPIDashboard from './KPIDashboard';
@@ -15,10 +15,10 @@ import FacturesPanel from '../detail/FacturesPanel';
 import ChatPanel from '../detail/ChatPanel';
 import AuditLog from '../detail/AuditLog';
 
-// ── Tab definitions (pipeline complet) ──────────────────────────────────────
-const TABS = [
+// ── Pipeline cards (filters) ────────────────────────────────────────────────
+const PIPELINE = [
   { key: 'all',         label: 'Tout',            icon: Package,     color: BRAND.navy,  filter: (c) => c.statut !== 'annule' },
-  { key: 'reception',   label: 'Réception',       icon: Package,     color: BRAND.navy,  filter: (c) => ['receptionne', 'mesure'].includes(c.statut) },
+  { key: 'reception',   label: 'Réception',       icon: Package,     color: '#F59E0B',   filter: (c) => ['receptionne', 'mesure'].includes(c.statut) },
   { key: 'feuvert',     label: 'Att. feu vert',   icon: Clock,       color: '#F97316',   filter: (c) => c.statut === 'attente_feu_vert' },
   { key: 'feuvert_ok',  label: 'Feu vert OK',     icon: CheckCircle, color: '#65A30D',   filter: (c) => ['autorise', 'en_preparation'].includes(c.statut) },
   { key: 'paiement',    label: 'Att. paiement',   icon: CreditCard,  color: '#D97706',   filter: (c) => ['devis_envoye', 'attente_paiement'].includes(c.statut) },
@@ -26,20 +26,8 @@ const TABS = [
   { key: 'done',        label: 'Livrés',          icon: Check,       color: '#16A34A',   filter: (c) => c.statut === 'livre' },
 ];
 
-// ── Statut icon map ─────────────────────────────────────────────────────────
-function StatutIcon({ statut }) {
-  const map = {
-    receptionne: Package, mesure: Ruler, attente_feu_vert: Clock, autorise: CheckCircle,
-    en_preparation: Wrench, devis_envoye: Star, attente_paiement: CreditCard,
-    paye: CreditCard, expedie: Plane, transit: Plane, dedouanement: Clock,
-    arrive: CheckCircle, livraison: Plane, livre: Check,
-  };
-  const Icon = map[statut] || Package;
-  return <Icon size={12} />;
-}
-
-// ── Statut dot color ────────────────────────────────────────────────────────
-function statutColor(s) {
+// ── Statut border color ─────────────────────────────────────────────────────
+function statutBorderColor(s) {
   const map = {
     receptionne: '#F59E0B', mesure: '#EAB308', attente_feu_vert: '#F97316',
     autorise: '#22C55E', en_preparation: '#3B82F6', devis_envoye: '#D97706',
@@ -50,132 +38,151 @@ function statutColor(s) {
   return map[s] || BRAND.navy;
 }
 
+// ── Table header style ──────────────────────────────────────────────────────
+const TH = 'px-3 py-2.5 text-[10px] font-bold uppercase tracking-wider text-gray-500';
+
 // ════════════════════════════════════════════════════════════════════════════
-// COLIS ROW — compact list item
+// TABLE ROW
 // ════════════════════════════════════════════════════════════════════════════
-function ColisRow({ colis, client, isActive, onClick }) {
-  const hasValidFacture = colis.factures?.some((f) => f.valide);
-  const missingFacture = !hasValidFacture && colis.statut !== 'livre' && colis.statut !== 'annule';
-  const dest = getDestByCP(client?.cp);
+function ColisTableRow({ c, client, envois, onClick, stagger }) {
+  const envoi = envois.find((e) => e.id === c.envoi);
+  const dest = client ? getDestByCP(client.cp) : null;
+  const hasDims = c.dimL && c.dimW && c.dimH && c.poids;
+  const taxes = (c.devisOM != null || c.devisOMR != null || c.devisTVA != null)
+    ? ((c.devisOM || 0) + (c.devisOMR || 0) + (c.devisTVA || 0)) : null;
+  const nbCartons = (c.trackings?.filter((t) => t) || []).length || 1;
 
   return (
-    <button
+    <tr
       onClick={onClick}
-      className={`w-full text-left px-3 py-2.5 flex items-center gap-2.5 transition-all border-l-3 ${
-        isActive
-          ? 'bg-blue-50 border-l-[3px]'
-          : 'hover:bg-gray-50 border-l-[3px] border-transparent'
-      }`}
-      style={isActive ? { borderLeftColor: statutColor(colis.statut) } : {}}
+      className="border-b border-gray-50 last:border-b-0 cursor-pointer transition-colors hover:bg-gray-50 active:bg-gray-100"
+      style={{ borderLeft: `3px solid ${statutBorderColor(c.statut)}` }}
     >
-      {/* Status dot */}
-      <div
-        className="w-2 h-2 rounded-full flex-shrink-0"
-        style={{ background: statutColor(colis.statut) }}
-      />
-
-      {/* Main info */}
-      <div className="flex-1 min-w-0">
+      <td className="px-3 py-2.5">
         <div className="flex items-center gap-1.5">
-          <span className="text-xs font-black text-gray-800">{colis.ref}</span>
-          {colis.casier && (
-            <span className="text-[9px] font-bold px-1 py-0.5 rounded bg-gray-100 text-gray-500">{colis.casier}</span>
-          )}
-          {missingFacture && (
-            <FileText size={10} className="text-amber-500" title="Facture manquante" />
-          )}
+          <span className="text-xs text-gray-600 font-medium truncate max-w-[120px]">{client?.nom ?? '—'}</span>
+          {dest && <span className="text-xs flex-shrink-0">{dest.flag}</span>}
         </div>
-        <div className="flex items-center gap-1 mt-0.5">
-          <span className="text-[11px] text-gray-500 truncate">{client?.nom || '—'}</span>
-          {dest?.flag && <span className="text-[10px]">{dest.flag}</span>}
+      </td>
+      <td className="px-3 py-2.5">
+        <div className="flex items-center gap-1.5">
+          <span className="font-black text-xs text-gray-900">{c.ref}</span>
+          {c.casier && (
+            <span className="text-[9px] font-bold px-1 py-0.5 rounded" style={{ background: `${BRAND.gold}22`, color: BRAND.goldD }}>{c.casier}</span>
+          )}
+          {nbCartons > 1 && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-700">{nbCartons} cartons</span>}
         </div>
-      </div>
-
-      {/* Right side: status + amount */}
-      <div className="flex flex-col items-end flex-shrink-0 gap-0.5">
-        <span
-          className="text-[9px] font-bold px-1.5 py-0.5 rounded-full"
-          style={{ background: `${statutColor(colis.statut)}18`, color: statutColor(colis.statut) }}
-        >
-          {STATUTS[colis.statut]?.label?.split(' ')[0] || colis.statut}
-        </span>
-        {colis.devisTotal > 0 && (
-          <span className="text-[10px] font-bold text-gray-600">{eur(colis.devisTotal)}</span>
-        )}
-      </div>
-    </button>
+        {c.desc && <span className="text-[11px] text-gray-500 truncate block max-w-[130px]">{c.desc}</span>}
+      </td>
+      <td className="px-3 py-2.5">
+        {c.factures && c.factures.length > 0 ? (
+          c.factures.every((f) => f.valide)
+            ? <Check size={14} className="text-green-500" />
+            : <AlertTriangle size={14} className="text-amber-500" />
+        ) : <span className="text-[10px] font-bold text-red-500">Manquante</span>}
+      </td>
+      <td className="px-3 py-2.5"><Badge statut={c.statut} /></td>
+      <td className="px-3 py-2.5">
+        {hasDims
+          ? <span className="text-[11px] text-gray-500 font-mono whitespace-nowrap">{c.dimL}×{c.dimW}×{c.dimH} cm · {c.poids} kg</span>
+          : <span className="text-xs text-gray-300">—</span>}
+      </td>
+      <td className="px-3 py-2.5 text-right">
+        {c.devisTransport != null ? <span className="text-xs font-semibold text-gray-700">{eur(c.devisTransport)}</span> : <span className="text-xs text-gray-300">—</span>}
+      </td>
+      <td className="px-3 py-2.5 text-right">
+        {taxes != null ? <span className="text-xs text-gray-600">{eur(taxes)}</span> : <span className="text-xs text-gray-300">—</span>}
+      </td>
+      <td className="px-3 py-2.5 text-right">
+        {c.devisTotal != null ? <span className="text-sm font-bold" style={{ color: BRAND.navy }}>{eur(c.devisTotal)}</span> : <span className="text-xs text-gray-300">—</span>}
+      </td>
+      <td className="px-3 py-2.5">
+        {envoi ? <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full whitespace-nowrap" style={{ background: `${BRAND.navy}10`, color: BRAND.navy }}>{labelEnvoi(envoi)}</span> : <span className="text-xs text-gray-300">—</span>}
+      </td>
+      <td className="pr-2 py-2.5"><ChevronRight size={14} className="text-gray-300" /></td>
+    </tr>
   );
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// DASHBOARD OVERVIEW — shown on / route and when no colis is selected
+// DETAIL SLIDE-OVER
 // ════════════════════════════════════════════════════════════════════════════
-function DashboardOverview({ onSelectColis }) {
+function DetailSlideOver({ onClose }) {
+  const { sel } = useApp();
+  if (!sel) return null;
+
+  return (
+    <>
+      {/* Backdrop */}
+      <div className="fixed inset-0 z-40 bg-black/30" onClick={onClose} />
+      {/* Panel */}
+      <div className="fixed top-0 right-0 bottom-0 z-50 w-full max-w-[560px] bg-white shadow-2xl overflow-y-auto">
+        {/* Header */}
+        <div className="sticky top-0 z-10 bg-white border-b border-gray-100 px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-2.5 h-2.5 rounded-full" style={{ background: statutBorderColor(sel.statut) }} />
+            <span className="text-sm font-black" style={{ color: BRAND.navy }}>{sel.ref}</span>
+            <Badge statut={sel.statut} />
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400"><X size={18} /></button>
+        </div>
+        <div className="px-4 pt-3"><Etapes statut={sel.statut} /></div>
+        <div className="p-4 space-y-4">
+          <StaffDetailView />
+          <ColisInfo />
+          <FacturesPanel />
+          <ChatPanel />
+          <AuditLog />
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// DASHBOARD PAGE — exported for / route
+// ════════════════════════════════════════════════════════════════════════════
+export function DashboardPage() {
   const navigate = useNavigate();
-  const { data, clients, getClient, authRole } = useApp();
+  const { data, clients, getClient, setSelId, authRole } = useApp();
 
   const active = data.filter((c) => c.statut !== 'annule' && !c.archive);
 
-  // Counts
   const counts = useMemo(() => ({
-    aTraiter: active.filter((c) => ['receptionne', 'mesure', 'autorise', 'en_preparation', 'paye'].includes(c.statut)).length,
-    attClient: active.filter((c) => ['attente_feu_vert', 'devis_envoye', 'attente_paiement'].includes(c.statut)).length,
-    expedition: active.filter((c) => ['expedie', 'transit', 'dedouanement', 'arrive', 'livraison'].includes(c.statut)).length,
-    livres: active.filter((c) => c.statut === 'livre').length,
     total: active.length,
   }), [active]);
 
-  // Missing invoices
-  const missingFactures = useMemo(() =>
-    active.filter((c) => {
-      if (c.statut === 'livre') return false;
-      return !c.factures?.some((f) => f.valide);
-    }),
-  [active]);
+  const pipelineCounts = useMemo(() => PIPELINE.filter((t) => t.key !== 'all').map((t) => ({
+    ...t, count: active.filter(t.filter).length,
+  })), [active]);
 
-  // Feu vert sans facture (urgent)
-  const fvSansFacture = useMemo(() =>
-    missingFactures.filter((c) => ['attente_feu_vert', 'autorise', 'en_preparation'].includes(c.statut)),
-  [missingFactures]);
+  const missingFactures = useMemo(() => active.filter((c) => c.statut !== 'livre' && !c.factures?.some((f) => f.valide)), [active]);
+  const fvSansFacture = useMemo(() => missingFactures.filter((c) => ['attente_feu_vert', 'autorise', 'en_preparation'].includes(c.statut)), [missingFactures]);
 
-  // Revenue this month
   const caMonth = useMemo(() => {
-    const now = new Date();
-    const m = now.getMonth(), y = now.getFullYear();
-    return active
-      .filter((c) => c.paiementMontant && c.paiementDate)
+    const now = new Date(); const m = now.getMonth(), y = now.getFullYear();
+    return active.filter((c) => c.paiementMontant && c.paiementDate)
       .filter((c) => { const d = new Date(c.paiementDate); return d.getMonth() === m && d.getFullYear() === y; })
       .reduce((s, c) => s + (c.paiementMontant || 0), 0);
   }, [active]);
 
-  // Pipeline counts — matches the 7 tabs exactly
-  const pipelineCounts = useMemo(() => TABS.filter((t) => t.key !== 'all').map((t) => ({
-    ...t,
-    count: active.filter(t.filter).length,
-  })), [active]);
-
-  const CARDS = pipelineCounts;
+  const handleSelectColis = (id) => { setSelId(id); navigate('/colis'); };
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="max-w-4xl mx-auto p-6 space-y-6">
-
-        {/* Welcome header */}
+      <div className="max-w-5xl mx-auto p-6 space-y-6">
         <div>
           <h1 className="text-xl font-black" style={{ color: BRAND.navy }}>Tableau de bord</h1>
           <p className="text-xs text-gray-400 mt-0.5">{counts.total} colis actifs · {clients.length} clients</p>
         </div>
 
-        {/* Pipeline cards — clickable → go to /colis with filter */}
+        {/* Pipeline cards */}
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-          {CARDS.map((card) => {
+          {pipelineCounts.map((card) => {
             const Icon = card.icon;
             return (
-              <button
-                key={card.label}
-                onClick={() => navigate(`/colis?tab=${card.key}`)}
-                className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm text-left hover:shadow-md hover:border-gray-200 transition-all active:scale-[0.98]"
-              >
+              <button key={card.key} onClick={() => navigate(`/colis?tab=${card.key}`)}
+                className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm text-left hover:shadow-md hover:border-gray-200 transition-all active:scale-[0.98]">
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">{card.label}</p>
@@ -190,7 +197,6 @@ function DashboardOverview({ onSelectColis }) {
           })}
         </div>
 
-        {/* CA this month */}
         {(authRole === 'directeur' || authRole === 'vice_directeur') && caMonth > 0 && (
           <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm flex items-center gap-4">
             <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: `${BRAND.gold}20` }}>
@@ -203,7 +209,6 @@ function DashboardOverview({ onSelectColis }) {
           </div>
         )}
 
-        {/* Alerts */}
         {missingFactures.length > 0 && (
           <div className="bg-amber-50 rounded-xl border border-amber-200 p-4">
             <div className="flex items-center gap-2 mb-2">
@@ -212,17 +217,10 @@ function DashboardOverview({ onSelectColis }) {
             </div>
             <div className="flex flex-wrap gap-1.5">
               {missingFactures.slice(0, 8).map((c) => (
-                <button
-                  key={c.id}
-                  onClick={() => onSelectColis(c.id)}
-                  className="text-[11px] font-bold px-2 py-1 rounded-lg bg-white border border-amber-200 text-amber-800 hover:bg-amber-100 transition-all active:scale-95"
-                >
-                  {c.ref}
-                </button>
+                <button key={c.id} onClick={() => handleSelectColis(c.id)}
+                  className="text-[11px] font-bold px-2 py-1 rounded-lg bg-white border border-amber-200 text-amber-800 hover:bg-amber-100 transition-all active:scale-95">{c.ref}</button>
               ))}
-              {missingFactures.length > 8 && (
-                <span className="text-[11px] font-semibold text-amber-500 px-2 py-1">+{missingFactures.length - 8} autres</span>
-              )}
+              {missingFactures.length > 8 && <span className="text-[11px] font-semibold text-amber-500 px-2 py-1">+{missingFactures.length - 8} autres</span>}
             </div>
           </div>
         )}
@@ -233,148 +231,53 @@ function DashboardOverview({ onSelectColis }) {
               <AlertTriangle size={14} className="text-red-600" />
               <p className="text-xs font-bold text-red-800">{fvSansFacture.length} colis en traitement sans facture — relance nécessaire</p>
             </div>
-            <p className="text-[10px] text-red-600 mb-2">Sans facture, le calcul des taxes (OM/OMR) et les formalités douanières sont impossibles.</p>
             <div className="flex flex-wrap gap-1.5">
               {fvSansFacture.map((c) => {
                 const cl = getClient(c.clientId);
-                return (
-                  <button
-                    key={c.id}
-                    onClick={() => onSelectColis(c.id)}
-                    className="text-[11px] font-bold px-2 py-1 rounded-lg bg-white border border-red-200 text-red-700 hover:bg-red-100 transition-all active:scale-95"
-                  >
-                    {c.ref} <span className="font-normal text-red-400">{cl?.nom?.split(' ').pop()}</span>
-                  </button>
-                );
+                return <button key={c.id} onClick={() => handleSelectColis(c.id)}
+                  className="text-[11px] font-bold px-2 py-1 rounded-lg bg-white border border-red-200 text-red-700 hover:bg-red-100 transition-all active:scale-95">
+                  {c.ref} <span className="font-normal text-red-400">{cl?.nom?.split(' ').pop()}</span>
+                </button>;
               })}
             </div>
           </div>
         )}
 
-        {/* KPI Dashboard (directors only) */}
-        {(authRole === 'directeur' || authRole === 'vice_directeur') && (
-          <KPIDashboard />
-        )}
-
+        {(authRole === 'directeur' || authRole === 'vice_directeur') && <KPIDashboard />}
       </div>
     </div>
   );
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// DASHBOARD PAGE — full screen standalone, exported for / route
+// COLIS PAGE — /colis route: pipeline cards + table + detail slide-over
 // ════════════════════════════════════════════════════════════════════════════
-export function DashboardPage() {
+export default function StaffColisPage() {
   const navigate = useNavigate();
-  const { setSelId } = useApp();
-
-  const handleSelectColis = (id) => {
-    setSelId(id);
-    navigate('/colis');
-  };
-
-  return <DashboardOverview onSelectColis={handleSelectColis} />;
-}
-
-// ════════════════════════════════════════════════════════════════════════════
-// DETAIL PANEL — right side, shows dashboard when no colis selected
-// ════════════════════════════════════════════════════════════════════════════
-function DetailPanel({ onClose, onSelectColis }) {
-  const { sel } = useApp();
-
-  if (!sel) {
-    return <DashboardOverview onSelectColis={onSelectColis} />;
-  }
-
-  return (
-    <div className="h-full overflow-y-auto">
-      {/* Compact header for detail */}
-      <div className="sticky top-0 z-10 bg-white border-b border-gray-100 px-4 py-2.5 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div
-            className="w-2.5 h-2.5 rounded-full"
-            style={{ background: statutColor(sel.statut) }}
-          />
-          <span className="text-sm font-black" style={{ color: BRAND.navy }}>{sel.ref}</span>
-          <Badge statut={sel.statut} />
-        </div>
-        {/* Close button — back to dashboard */}
-        <button
-          onClick={onClose}
-          className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400"
-          title="Retour au tableau de bord"
-        >
-          <X size={16} />
-        </button>
-      </div>
-
-      {/* Status steps */}
-      <div className="px-4 pt-3">
-        <Etapes statut={sel.statut} />
-      </div>
-
-      {/* Two-column detail inside panel */}
-      <div className="p-4 space-y-4">
-        {/* Actions (most important — first) */}
-        <StaffDetailView />
-        {/* Info */}
-        <ColisInfo />
-        {/* Factures */}
-        <FacturesPanel />
-        {/* Chat */}
-        <ChatPanel />
-        {/* Audit */}
-        <AuditLog />
-      </div>
-    </div>
-  );
-}
-
-// ════════════════════════════════════════════════════════════════════════════
-// MAIN SPLIT VIEW
-// ════════════════════════════════════════════════════════════════════════════
-export default function StaffSplitView({ onNewColis, mode }) {
-  const { data, clients, getClient, setSelId, sel, archiverColis } = useApp();
+  const { data, clients, getClient, envois, setSelId, sel } = useApp();
   const [searchParams] = useSearchParams();
 
-  // Read initial tab from URL ?tab=xxx
   const urlTab = searchParams.get('tab');
+  const [activeTab, setActiveTab] = useState(urlTab && PIPELINE.some((t) => t.key === urlTab) ? urlTab : 'all');
   const [search, setSearch] = useState('');
-  const [activeTab, setActiveTab] = useState(urlTab && TABS.some((t) => t.key === urlTab) ? urlTab : 'all');
+  const [sortCol, setSortCol] = useState(null);
+  const [sortDir, setSortDir] = useState('asc');
   const [showArchive, setShowArchive] = useState(false);
 
-  // Update tab when URL changes
   useEffect(() => {
-    if (urlTab && TABS.some((t) => t.key === urlTab)) {
-      setActiveTab(urlTab);
-    }
+    if (urlTab && PIPELINE.some((t) => t.key === urlTab)) setActiveTab(urlTab);
   }, [urlTab]);
 
-  // Mobile: show detail panel full-screen when a colis is selected
-  const [mobileDetail, setMobileDetail] = useState(false);
-
-  // Select a colis
-  const selectColis = (id) => {
-    setSelId(id);
-    setMobileDetail(true); // On mobile, show detail
-  };
-
-  const closeDetail = () => {
-    setSelId(null);
-    setMobileDetail(false);
-  };
-
-  // ── Filter pipeline ────────────────────────────────────────────────────
+  // Pool
   const pool = useMemo(() => {
     let list = showArchive ? data : data.filter((c) => !c.archive);
-    // Apply tab filter
-    const tab = TABS.find((t) => t.key === activeTab);
+    const tab = PIPELINE.find((t) => t.key === activeTab);
     if (tab) list = list.filter(tab.filter);
     return list;
   }, [data, activeTab, showArchive]);
 
-  // Search filter
-  const filtered = useMemo(() => {
+  // Search
+  const searched = useMemo(() => {
     if (!search.trim()) return pool;
     return pool.filter((c) => {
       const cl = getClient(c.clientId);
@@ -383,124 +286,127 @@ export default function StaffSplitView({ onNewColis, mode }) {
     });
   }, [pool, search, getClient]);
 
-  // Tab counts (from full non-archived data)
+  // Sort
+  const sorted = useMemo(() => {
+    if (!sortCol) return searched;
+    const arr = [...searched];
+    const dir = sortDir === 'asc' ? 1 : -1;
+    arr.sort((a, b) => {
+      let va, vb;
+      switch (sortCol) {
+        case 'client': va = (getClient(a.clientId)?.nom || '').toLowerCase(); vb = (getClient(b.clientId)?.nom || '').toLowerCase(); return dir * va.localeCompare(vb, 'fr');
+        case 'ref': return dir * (a.ref || '').localeCompare(b.ref || '', 'fr', { numeric: true });
+        case 'statut': return dir * (STATUTS[a.statut]?.label || '').localeCompare(STATUTS[b.statut]?.label || '', 'fr');
+        case 'dims': return dir * ((a.dimL || 0) - (b.dimL || 0));
+        case 'transport': return dir * ((a.devisTransport || 0) - (b.devisTransport || 0));
+        case 'taxes': va = (a.devisOM || 0) + (a.devisOMR || 0) + (a.devisTVA || 0); vb = (b.devisOM || 0) + (b.devisOMR || 0) + (b.devisTVA || 0); return dir * (va - vb);
+        case 'total': return dir * ((a.devisTotal || 0) - (b.devisTotal || 0));
+        default: return 0;
+      }
+    });
+    return arr;
+  }, [searched, sortCol, sortDir, getClient]);
+
+  // Tab counts
   const tabCounts = useMemo(() => {
     const base = data.filter((c) => !c.archive);
-    return TABS.reduce((acc, tab) => {
-      acc[tab.key] = base.filter(tab.filter).length;
-      return acc;
-    }, {});
+    return PIPELINE.reduce((acc, t) => { acc[t.key] = base.filter(t.filter).length; return acc; }, {});
   }, [data]);
 
-  const archivedCount = useMemo(() => data.filter((c) => c.archive).length, [data]);
+  const handleSort = (col) => {
+    if (sortCol === col) setSortDir((d) => d === 'asc' ? 'desc' : 'asc');
+    else { setSortCol(col); setSortDir('asc'); }
+  };
 
-  // ════════════════════════════════════════════════════════════════════════
-  // RENDER
-  // ════════════════════════════════════════════════════════════════════════
+  const openColis = (id) => setSelId(id);
+  const closeDetail = () => setSelId(null);
+
+  const sortIndicator = (col) => sortCol === col ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ' ↕';
+  const thSort = (col) => ({ onClick: () => handleSort(col), className: `${TH} cursor-pointer hover:text-gray-700 select-none` });
+  const thSortRight = (col) => ({ onClick: () => handleSort(col), className: `${TH} text-right cursor-pointer hover:text-gray-700 select-none` });
+
   return (
-    <div className="flex h-full">
+    <div className="h-full overflow-y-auto">
+      {/* Detail slide-over */}
+      {sel && <DetailSlideOver onClose={closeDetail} />}
 
-      {/* ══════════════ LEFT PANEL — List ══════════════ */}
-      <div
-        className={`flex flex-col border-r border-gray-200 bg-white ${
-          mobileDetail ? 'hidden lg:flex' : 'flex'
-        }`}
-        style={{ width: '100%', maxWidth: '400px', minWidth: '320px' }}
-      >
-        {/* Search bar */}
-        <div className="p-3 border-b border-gray-100">
-          <div className="relative">
-            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Rechercher..."
-              className="w-full pl-8 pr-8 py-2 text-xs rounded-lg border border-gray-200 outline-none transition-all focus:border-blue-400"
-              style={{ color: BRAND.navy }}
-            />
-            {search && (
-              <button onClick={() => setSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-                <X size={12} />
-              </button>
-            )}
-          </div>
-        </div>
+      <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-4 space-y-4">
 
-        {/* Tabs — pipeline complet */}
-        <div className="flex border-b border-gray-100 px-1 overflow-x-auto scrollbar-hide">
-          {TABS.map((tab) => {
-            const isActive = activeTab === tab.key;
-            const tabColor = tab.color || BRAND.navy;
+        {/* Pipeline cards — clickable filters */}
+        <div className="flex gap-2 overflow-x-auto pb-1">
+          {PIPELINE.map((p) => {
+            const Icon = p.icon;
+            const isActive = activeTab === p.key;
+            const count = tabCounts[p.key] || 0;
             return (
               <button
-                key={tab.key}
-                onClick={() => setActiveTab(tab.key)}
-                className={`flex items-center gap-1 px-2.5 py-2 text-[10px] font-bold whitespace-nowrap transition-all border-b-2 ${
-                  isActive
-                    ? 'border-current'
-                    : 'border-transparent text-gray-400 hover:text-gray-600'
+                key={p.key}
+                onClick={() => setActiveTab(p.key)}
+                className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all active:scale-95 ${
+                  isActive ? 'text-white shadow-md' : 'bg-white border border-gray-100 shadow-sm hover:shadow-md'
                 }`}
-                style={isActive ? { color: tabColor, borderColor: tabColor } : {}}
+                style={isActive
+                  ? { background: p.color, boxShadow: `0 2px 8px ${p.color}40` }
+                  : { color: p.color }
+                }
               >
-                {tab.label}
-                <span
-                  className="text-[9px] px-1.5 py-0.5 rounded-full font-black"
-                  style={isActive
-                    ? { background: `${tabColor}18`, color: tabColor }
-                    : { background: '#F3F4F6', color: '#9CA3AF' }
-                  }
-                >
-                  {tabCounts[tab.key] || 0}
+                <Icon size={14} />
+                {p.label}
+                <span className={`font-black text-[11px] px-1.5 py-0.5 rounded-full ${
+                  isActive ? 'bg-white/25' : ''
+                }`} style={!isActive ? { background: `${p.color}12` } : {}}>
+                  {count}
                 </span>
               </button>
             );
           })}
         </div>
 
-        {/* Colis list */}
-        <div className="flex-1 overflow-y-auto divide-y divide-gray-50">
-          {filtered.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <Package size={24} className="text-gray-200 mb-2" />
-              <p className="text-xs text-gray-400">Aucun colis</p>
-            </div>
-          ) : (
-            filtered.map((c) => (
-              <ColisRow
-                key={c.id}
-                colis={c}
-                client={getClient(c.clientId)}
-                isActive={sel?.id === c.id}
-                onClick={() => selectColis(c.id)}
-              />
-            ))
-          )}
+        {/* Search + count */}
+        <div className="flex items-center gap-3">
+          <div className="relative flex-1 max-w-md">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+            <input
+              type="text" value={search} onChange={(e) => setSearch(e.target.value)}
+              placeholder="Filtrer les colis (ref, client, tracking, casier...)"
+              className="w-full pl-9 pr-8 py-2 text-sm rounded-xl border border-gray-200 outline-none focus:border-blue-400"
+              style={{ color: BRAND.navy }}
+            />
+            {search && <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"><X size={14} /></button>}
+          </div>
+          <span className="text-xs text-gray-400 font-medium">{sorted.length} colis</span>
         </div>
 
-        {/* Footer: count + archive toggle */}
-        <div className="px-3 py-2 border-t border-gray-100 flex items-center justify-between text-[10px] text-gray-400">
-          <span>{filtered.length} colis</span>
-          {archivedCount > 0 && (
-            <button
-              onClick={() => setShowArchive((p) => !p)}
-              className={`font-bold ${showArchive ? 'text-blue-500' : 'text-gray-400'}`}
-            >
-              {showArchive ? `${archivedCount} archivés (visible)` : `${archivedCount} archivés`}
-            </button>
-          )}
+        {/* Table */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="border-b border-gray-100" style={{ backgroundColor: BRAND.navy + '08' }}>
+                  <th {...thSort('client')}>Client{sortIndicator('client')}</th>
+                  <th {...thSort('ref')}>N° Colis{sortIndicator('ref')}</th>
+                  <th className={TH}>Facture</th>
+                  <th {...thSort('statut')}>Statut{sortIndicator('statut')}</th>
+                  <th {...thSort('dims')}>Dimensions{sortIndicator('dims')}</th>
+                  <th {...thSortRight('transport')}>Transport{sortIndicator('transport')}</th>
+                  <th {...thSortRight('taxes')}>Taxes{sortIndicator('taxes')}</th>
+                  <th {...thSortRight('total')}>Total{sortIndicator('total')}</th>
+                  <th className={TH}>Envoi</th>
+                  <th className="w-8"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {sorted.length === 0 ? (
+                  <tr><td colSpan={10} className="px-4 py-8 text-center text-sm text-gray-400">Aucun colis trouvé</td></tr>
+                ) : sorted.map((c, i) => (
+                  <ColisTableRow key={c.id} c={c} client={getClient(c.clientId)} envois={envois} stagger={i} onClick={() => openColis(c.id)} />
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
 
-      {/* ══════════════ RIGHT PANEL — Detail ══════════════ */}
-      <div
-        className={`flex-1 bg-gray-50 ${
-          mobileDetail ? 'flex flex-col' : 'hidden lg:flex lg:flex-col'
-        }`}
-      >
-        <DetailPanel onClose={closeDetail} onSelectColis={selectColis} />
       </div>
-
     </div>
   );
 }

@@ -12,7 +12,7 @@ import ColisModal from './components/ColisModal';
 import OnboardingOverlay from './components/client/OnboardingOverlay';
 
 import StaffDashboard from './components/staff/StaffDashboard';
-import StaffSplitView, { DashboardPage } from './components/staff/StaffSplitView';
+import StaffColisPage, { DashboardPage } from './components/staff/StaffSplitView';
 import StaffSettings from './components/staff/StaffSettings';
 import StaffClients from './components/staff/StaffClients';
 import StaffDetailView from './components/staff/StaffDetailView';
@@ -273,7 +273,7 @@ function AppContent() {
             <Routes>
               <Route path="/colis/:id" element={<StaffColisDetail />} />
               <Route path="/colis" element={
-                <StaffSplitView onNewColis={() => setModal(true)} />
+                <StaffColisPage />
               } />
               <Route path="/clients" element={
                 <div className="h-full overflow-y-auto">
