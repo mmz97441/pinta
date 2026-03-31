@@ -231,6 +231,7 @@ export default function StaffDetailView() {
     envois,
     payer,
     setSelId,
+    setData,
   } = useApp();
 
   // ── Local state ──────────────────────────────────────────────────────────
