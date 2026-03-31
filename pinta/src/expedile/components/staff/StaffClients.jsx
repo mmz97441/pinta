@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, Users, Plus, Search, ChevronDown, Check, X, AlertTriangle, ExternalLink, Send, Download, FileSpreadsheet } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
@@ -113,6 +113,7 @@ export default function StaffClients() {
   const [billingOpenId, setBillingOpenId] = useState(null);
   const [billingMonth, setBillingMonth] = useState(new Date().getMonth());
   const [billingYear, setBillingYear] = useState(new Date().getFullYear());
+  const newClientRef = useRef(null);
 
   const MOIS_LABELS = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
 
@@ -202,6 +203,14 @@ export default function StaffClients() {
     setIsNewClient(true);
     setJustSavedId(null);
     setTouched({});
+    setClPageSearch(''); // Clear search so the new client is visible
+    // Scroll to the new client card after render
+    setTimeout(() => {
+      newClientRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      // Focus the first field
+      const nameInput = newClientRef.current?.querySelector('input');
+      nameInput?.focus();
+    }, 100);
   }
 
   function handleEdit(cl) {
@@ -376,7 +385,7 @@ export default function StaffClients() {
           const isJustSaved = justSavedId === cl.id;
 
           return (
-            <div key={cl.id} className="card overflow-hidden">
+            <div key={cl.id} ref={isOpen && isNewClient ? newClientRef : undefined} className="card overflow-hidden">
 
               {/* ── Collapsed row ─────────────────────────────────────────── */}
               <button
