@@ -251,8 +251,13 @@ export default function StaffDetailView() {
   const [dims, setDims] = useState({ dimL: '', dimW: '', dimH: '', poids: '' });
   // Multi-colis measure form (one set per tracking)
   const [multiDims, setMultiDims] = useState({});
-  // Local fin dims form
-  const [finDims, setFinDims] = useState({ finL: '', finW: '', finH: '', finP: '' });
+  // Local fin dims form — initialized from existing sel values
+  const [finDims, setFinDims] = useState({
+    finL: sel?.finL || '',
+    finW: sel?.finW || '',
+    finH: sel?.finH || '',
+    finP: sel?.finP || '',
+  });
   // Photo simulation
   const [photoTaken, setPhotoTaken] = useState(false);
   // Produits interdits checklist

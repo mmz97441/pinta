@@ -53,6 +53,9 @@ function mapColis(row) {
     tagsPreparation: row.tags_preparation || [],
     notesReception: row.notes_reception || null,
     commentairePreparation: row.commentaire_preparation || null,
+    fraisDivers: row.frais_divers || [],
+    modePaiementPro: row.mode_paiement_pro || null,
+    photoReception: row.photo_reception || false,
     createdAt: row.created_at,
     // Relations (loaded separately or joined)
     factures: row._factures || [],
@@ -292,6 +295,9 @@ export async function updateColis(id, changes) {
     tagsPreparation: 'tags_preparation',
     notesReception: 'notes_reception',
     commentairePreparation: 'commentaire_preparation',
+    fraisDivers: 'frais_divers',
+    modePaiementPro: 'mode_paiement_pro',
+    photoReception: 'photo_reception',
   };
 
   for (const [key, val] of Object.entries(changes)) {
