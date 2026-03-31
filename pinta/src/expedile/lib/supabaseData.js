@@ -607,6 +607,23 @@ export async function insertLog(colisId, ancienStatut, nouveauStatut, userNom) {
   if (error) console.error('[Supabase] insertLog error:', error.message);
 }
 
+export async function fetchLogsForColis(colisId) {
+  const { data, error } = await supabase
+    .from('logs_statut')
+    .select('*')
+    .eq('colis_id', colisId)
+    .order('created_at', { ascending: false });
+  if (error) { console.error('fetchLogs:', error.message); return []; }
+  return (data || []).map((row) => ({
+    id: row.id,
+    ancienStatut: row.ancien_statut,
+    nouveauStatut: row.nouveau_statut,
+    user: row.user_nom || '—',
+    commentaire: row.commentaire,
+    date: row.created_at,
+  }));
+}
+
 // ── Realtime subscriptions ──────────────────────────────────────────
 
 export function subscribeColis(callback) {
