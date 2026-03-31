@@ -659,7 +659,7 @@ export default function StaffClients() {
                     const ca = clientCA(cl.id);
                     const abo = ABONNEMENTS[cl.abonnement];
                     return (
-                      <tr key={cl.id} onClick={() => handleEdit(cl)}
+                      <tr key={cl.id} onClick={() => { handleEdit(cl); setClViewMode('cards'); }}
                         className="border-b border-gray-50 cursor-pointer hover:bg-gray-50 transition-colors">
                         <td className="px-3 py-2.5">
                           <span className="text-xs font-bold text-gray-800">{cl.nomFamille || cl.nom}</span>
