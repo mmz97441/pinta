@@ -259,12 +259,16 @@ export default function StaffColisPage() {
 
   const urlTab = searchParams.get('tab');
   const urlDest = searchParams.get('dest');
-  const [activeTab, setActiveTab] = useState(urlTab && PIPELINE.some((t) => t.key === urlTab) ? urlTab : 'all');
+  // If a colis is already selected (navigated from dashboard), show 'all' to ensure it's visible
+  const [activeTab, setActiveTab] = useState(
+    sel ? 'all' : (urlTab && PIPELINE.some((t) => t.key === urlTab) ? urlTab : 'all')
+  );
   const [activeDest, setActiveDest] = useState(urlDest || null);
   const [search, setSearch] = useState('');
   const [sortCol, setSortCol] = useState(null);
   const [sortDir, setSortDir] = useState('asc');
   const [showArchive, setShowArchive] = useState(false);
+  const [viewMode, setViewMode] = useState('statut'); // 'statut' | 'envoi'
 
   useEffect(() => {
     if (urlTab && PIPELINE.some((t) => t.key === urlTab)) setActiveTab(urlTab);
@@ -318,6 +322,29 @@ export default function StaffColisPage() {
     });
     return arr;
   }, [searched, sortCol, sortDir, getClient]);
+
+  // Grouped by envoi (for envoi view)
+  const groupedByEnvoi = useMemo(() => {
+    const groups = {};
+    const noEnvoi = [];
+    sorted.forEach((c) => {
+      if (c.envoi) {
+        const e = envois.find((x) => x.id === c.envoi);
+        const key = c.envoi;
+        if (!groups[key]) groups[key] = { envoi: e, colis: [] };
+        groups[key].colis.push(c);
+      } else {
+        noEnvoi.push(c);
+      }
+    });
+    // Sort groups by date
+    const sortedGroups = Object.values(groups).sort((a, b) => {
+      if (!a.envoi?.date || !b.envoi?.date) return 0;
+      return a.envoi.date.localeCompare(b.envoi.date);
+    });
+    if (noEnvoi.length > 0) sortedGroups.push({ envoi: null, colis: noEnvoi });
+    return sortedGroups;
+  }, [sorted, envois]);
 
   // Tab counts
   const tabCounts = useMemo(() => {
@@ -397,6 +424,22 @@ export default function StaffColisPage() {
               </button>
             );
           })()}
+
+          {/* View mode toggle */}
+          <div className="flex items-center gap-1 ml-auto bg-gray-100 rounded-lg p-0.5">
+            <button
+              onClick={() => setViewMode('statut')}
+              className={`px-2.5 py-1 rounded-md text-[10px] font-bold transition-all ${viewMode === 'statut' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-400'}`}
+            >
+              Par statut
+            </button>
+            <button
+              onClick={() => setViewMode('envoi')}
+              className={`px-2.5 py-1 rounded-md text-[10px] font-bold transition-all ${viewMode === 'envoi' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-400'}`}
+            >
+              Par envoi
+            </button>
+          </div>
         </div>
       </div>
 
@@ -405,68 +448,121 @@ export default function StaffColisPage() {
 
         {/* Table (scrollable) */}
         <div className={`overflow-y-auto overflow-x-auto ${sel ? 'flex-1 min-w-0' : 'flex-1'}`}>
-          <table className="w-full text-left text-sm">
-            <thead className="sticky top-0 z-10">
-              <tr className="border-b border-gray-100 bg-white" style={{ backgroundColor: BRAND.navy + '06' }}>
-                <th {...thSort('client')}>Client{sortIndicator('client')}</th>
-                <th {...thSort('ref')}>N° Colis{sortIndicator('ref')}</th>
-                <th className={TH}>Facture</th>
-                <th {...thSort('statut')}>Statut{sortIndicator('statut')}</th>
-                {!sel && <th {...thSort('dims')}>Dimensions{sortIndicator('dims')}</th>}
-                {!sel && <th {...thSortRight('transport')}>Transport{sortIndicator('transport')}</th>}
-                {!sel && <th {...thSortRight('taxes')}>Taxes{sortIndicator('taxes')}</th>}
-                <th {...thSortRight('total')}>Total{sortIndicator('total')}</th>
-                {!sel && <th className={TH}>Envoi</th>}
-                <th className="w-6"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {sorted.length === 0 ? (
-                <tr><td colSpan={sel ? 6 : 10} className="px-4 py-8 text-center text-sm text-gray-400">Aucun colis trouvé</td></tr>
-              ) : sorted.map((c, i) => {
-                const isSelected = sel?.id === c.id;
-                const client = getClient(c.clientId);
-                const envoi = envois.find((e) => e.id === c.envoi);
-                const dest = client ? getDestByCP(client.cp) : null;
-                const hasDims = c.dimL && c.dimW && c.dimH && c.poids;
-                const taxes = (c.devisOM != null || c.devisOMR != null || c.devisTVA != null)
-                  ? ((c.devisOM || 0) + (c.devisOMR || 0) + (c.devisTVA || 0)) : null;
 
+          {viewMode === 'envoi' ? (
+            /* ── VUE PAR ENVOI ── */
+            <div className="space-y-4 p-2">
+              {groupedByEnvoi.length === 0 ? (
+                <p className="text-center text-sm text-gray-400 py-8">Aucun colis</p>
+              ) : groupedByEnvoi.map((group, gi) => {
+                const e = group.envoi;
+                const dateLabel = e?.date
+                  ? new Date(e.date + 'T00:00:00').toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })
+                  : 'Sans envoi affecté';
                 return (
-                  <tr
-                    key={c.id}
-                    onClick={() => openColis(c.id)}
-                    className={`border-b border-gray-50 cursor-pointer transition-colors ${isSelected ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
-                    style={{ borderLeft: `3px solid ${statutBorderColor(c.statut)}` }}
-                  >
-                    <td className="px-3 py-2.5">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-xs text-gray-600 font-medium truncate max-w-[120px]">{client?.nom ?? '—'}</span>
-                        {dest && <span className="text-xs">{dest.flag}</span>}
+                  <div key={e?.id || 'none'} className="rounded-xl border border-gray-100 overflow-hidden bg-white">
+                    <div className="px-3 py-2 border-b border-gray-100 flex items-center justify-between" style={{ background: `${BRAND.navy}06` }}>
+                      <div className="flex items-center gap-2">
+                        <Plane size={13} style={{ color: BRAND.navy }} />
+                        <span className="text-xs font-bold" style={{ color: BRAND.navy }}>{dateLabel}</span>
+                        {e?.ref && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">{e.ref}</span>}
                       </div>
-                    </td>
-                    <td className="px-3 py-2.5">
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-black text-xs text-gray-900">{c.ref}</span>
-                        {c.casier && <span className="text-[9px] font-bold px-1 py-0.5 rounded" style={{ background: `${BRAND.gold}22`, color: BRAND.goldD }}>{c.casier}</span>}
-                      </div>
-                      {c.desc && <span className="text-[11px] text-gray-500 truncate block max-w-[130px]">{c.desc}</span>}
-                    </td>
-                    <td className="px-3 py-2.5">
-                      {c.factures?.length > 0 ? (c.factures.every((f) => f.valide) ? <Check size={14} className="text-green-500" /> : <AlertTriangle size={14} className="text-amber-500" />) : <span className="text-[10px] font-bold text-red-500">Manquante</span>}
-                    </td>
-                    <td className="px-3 py-2.5"><Badge statut={c.statut} /></td>
-                    {!sel && <td className="px-3 py-2.5">{hasDims ? <span className="text-[11px] text-gray-500 font-mono whitespace-nowrap">{c.dimL}×{c.dimW}×{c.dimH} cm · {c.poids} kg</span> : <span className="text-xs text-gray-300">—</span>}</td>}
-                    {!sel && <td className="px-3 py-2.5 text-right">{c.devisTransport != null ? <span className="text-xs font-semibold text-gray-700">{eur(c.devisTransport)}</span> : <span className="text-xs text-gray-300">—</span>}</td>}
-                    {!sel && <td className="px-3 py-2.5 text-right">{taxes != null ? <span className="text-xs text-gray-600">{eur(taxes)}</span> : <span className="text-xs text-gray-300">—</span>}</td>}
-                    <td className="px-3 py-2.5 text-right">{c.devisTotal != null ? <span className="text-sm font-bold" style={{ color: BRAND.navy }}>{eur(c.devisTotal)}</span> : <span className="text-xs text-gray-300">—</span>}</td>
-                    {!sel && <td className="px-3 py-2.5">{envoi ? <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full whitespace-nowrap" style={{ background: `${BRAND.navy}10`, color: BRAND.navy }}>{labelEnvoi(envoi)}</span> : <span className="text-xs text-gray-300">—</span>}</td>}
-                    <td className="pr-2 py-2.5"><ChevronRight size={14} className="text-gray-300" /></td>
-                  </tr>
+                      <span className="text-[10px] font-bold text-gray-400">{group.colis.length} colis</span>
+                    </div>
+                    <table className="w-full text-left text-sm">
+                      <tbody>
+                        {group.colis.map((c, i) => {
+                          const isSelected = sel?.id === c.id;
+                          const client = getClient(c.clientId);
+                          const dest = client ? getDestByCP(client.cp) : null;
+                          return (
+                            <tr key={c.id} onClick={() => openColis(c.id)}
+                              className={`border-b border-gray-50 cursor-pointer transition-colors ${isSelected ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
+                              style={{ borderLeft: `3px solid ${statutBorderColor(c.statut)}` }}>
+                              <td className="px-3 py-2">
+                                <span className="text-xs text-gray-600 font-medium">{client?.nom ?? '—'}</span>
+                                {dest && <span className="text-xs ml-1">{dest.flag}</span>}
+                              </td>
+                              <td className="px-3 py-2">
+                                <span className="font-black text-xs text-gray-900">{c.ref}</span>
+                                {c.casier && <span className="text-[9px] font-bold px-1 py-0.5 rounded ml-1" style={{ background: `${BRAND.gold}22`, color: BRAND.goldD }}>{c.casier}</span>}
+                              </td>
+                              <td className="px-3 py-2"><Badge statut={c.statut} /></td>
+                              <td className="px-3 py-2 text-right">
+                                {c.devisTotal != null ? <span className="text-sm font-bold" style={{ color: BRAND.navy }}>{eur(c.devisTotal)}</span> : <span className="text-xs text-gray-300">—</span>}
+                              </td>
+                              <td className="pr-2 py-2"><ChevronRight size={14} className="text-gray-300" /></td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
                 );
               })}
-            </tbody>
-          </table>
+            </div>
+          ) : (
+            /* ── VUE PAR STATUT (tableau classique) ── */
+            <table className="w-full text-left text-sm">
+              <thead className="sticky top-0 z-10">
+                <tr className="border-b border-gray-100 bg-white" style={{ backgroundColor: BRAND.navy + '06' }}>
+                  <th {...thSort('client')}>Client{sortIndicator('client')}</th>
+                  <th {...thSort('ref')}>N° Colis{sortIndicator('ref')}</th>
+                  <th className={TH}>Facture</th>
+                  <th {...thSort('statut')}>Statut{sortIndicator('statut')}</th>
+                  {!sel && <th {...thSort('dims')}>Dimensions{sortIndicator('dims')}</th>}
+                  {!sel && <th {...thSortRight('transport')}>Transport{sortIndicator('transport')}</th>}
+                  {!sel && <th {...thSortRight('taxes')}>Taxes{sortIndicator('taxes')}</th>}
+                  <th {...thSortRight('total')}>Total{sortIndicator('total')}</th>
+                  {!sel && <th className={TH}>Envoi</th>}
+                  <th className="w-6"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {sorted.length === 0 ? (
+                  <tr><td colSpan={sel ? 6 : 10} className="px-4 py-8 text-center text-sm text-gray-400">Aucun colis trouvé</td></tr>
+                ) : sorted.map((c, i) => {
+                  const isSelected = sel?.id === c.id;
+                  const client = getClient(c.clientId);
+                  const envoi = envois.find((e) => e.id === c.envoi);
+                  const dest = client ? getDestByCP(client.cp) : null;
+                  const hasDims = c.dimL && c.dimW && c.dimH && c.poids;
+                  const taxes = (c.devisOM != null || c.devisOMR != null || c.devisTVA != null)
+                    ? ((c.devisOM || 0) + (c.devisOMR || 0) + (c.devisTVA || 0)) : null;
+
+                  return (
+                    <tr key={c.id} onClick={() => openColis(c.id)}
+                      className={`border-b border-gray-50 cursor-pointer transition-colors ${isSelected ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
+                      style={{ borderLeft: `3px solid ${statutBorderColor(c.statut)}` }}>
+                      <td className="px-3 py-2.5">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs text-gray-600 font-medium truncate max-w-[120px]">{client?.nom ?? '—'}</span>
+                          {dest && <span className="text-xs">{dest.flag}</span>}
+                        </div>
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-black text-xs text-gray-900">{c.ref}</span>
+                          {c.casier && <span className="text-[9px] font-bold px-1 py-0.5 rounded" style={{ background: `${BRAND.gold}22`, color: BRAND.goldD }}>{c.casier}</span>}
+                        </div>
+                        {c.desc && <span className="text-[11px] text-gray-500 truncate block max-w-[130px]">{c.desc}</span>}
+                      </td>
+                      <td className="px-3 py-2.5">
+                        {c.factures?.length > 0 ? (c.factures.every((f) => f.valide) ? <Check size={14} className="text-green-500" /> : <AlertTriangle size={14} className="text-amber-500" />) : <span className="text-[10px] font-bold text-red-500">Manquante</span>}
+                      </td>
+                      <td className="px-3 py-2.5"><Badge statut={c.statut} /></td>
+                      {!sel && <td className="px-3 py-2.5">{hasDims ? <span className="text-[11px] text-gray-500 font-mono whitespace-nowrap">{c.dimL}×{c.dimW}×{c.dimH} cm · {c.poids} kg</span> : <span className="text-xs text-gray-300">—</span>}</td>}
+                      {!sel && <td className="px-3 py-2.5 text-right">{c.devisTransport != null ? <span className="text-xs font-semibold text-gray-700">{eur(c.devisTransport)}</span> : <span className="text-xs text-gray-300">—</span>}</td>}
+                      {!sel && <td className="px-3 py-2.5 text-right">{taxes != null ? <span className="text-xs text-gray-600">{eur(taxes)}</span> : <span className="text-xs text-gray-300">—</span>}</td>}
+                      <td className="px-3 py-2.5 text-right">{c.devisTotal != null ? <span className="text-sm font-bold" style={{ color: BRAND.navy }}>{eur(c.devisTotal)}</span> : <span className="text-xs text-gray-300">—</span>}</td>
+                      {!sel && <td className="px-3 py-2.5">{envoi ? <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full whitespace-nowrap" style={{ background: `${BRAND.navy}10`, color: BRAND.navy }}>{labelEnvoi(envoi)}</span> : <span className="text-xs text-gray-300">—</span>}</td>}
+                      <td className="pr-2 py-2.5"><ChevronRight size={14} className="text-gray-300" /></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
         </div>
 
         {/* Detail panel (inline, right side) */}
