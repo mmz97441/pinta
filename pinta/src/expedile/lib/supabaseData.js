@@ -389,8 +389,10 @@ export async function updateClient(id, changes) {
     methodePaiement: 'methode_paiement', telegramUsername: 'telegram_username',
     raisonSociale: 'raison_sociale', siret: 'siret', interlocuteur: 'interlocuteur',
   };
+  const dateFields = ['date_naissance', 'abonnement_debut', 'abonnement_fin'];
   for (const [key, val] of Object.entries(changes)) {
-    snakeChanges[map[key] || key] = val;
+    const snakeKey = map[key] || key;
+    snakeChanges[snakeKey] = (val === '' && dateFields.includes(snakeKey)) ? null : val;
   }
   const { error } = await supabase.from('clients').update(snakeChanges).eq('id', id);
   if (error) throw error;
