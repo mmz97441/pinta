@@ -339,7 +339,7 @@ export default function StaffDetailView() {
   function handleRevert() {
     ask(
       'Retour à l\'étape précédente',
-      'Cette action remet le colis à l\'étape précédente et efface les données associées. Continuer ?',
+      'Cette action remet le colis à l\'étape précédente. Les données (dimensions, devis, etc.) sont conservées. Continuer ?',
       () => revertStatut(sel.id),
       { danger: true, okLabel: 'Oui, revenir en arrière' },
     );
