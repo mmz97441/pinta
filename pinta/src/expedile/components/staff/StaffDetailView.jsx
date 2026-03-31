@@ -279,6 +279,8 @@ export default function StaffDetailView() {
   const [newFraisMontant, setNewFraisMontant] = useState('');
   // Pro payment method
   const [proPayMethod, setProPayMethod] = useState(cl?.modePaiement || 'virement');
+  // Add carton toggle
+  const [showAddCarton, setShowAddCarton] = useState(false);
 
   if (!sel || !isStaff) return null;
 
@@ -765,7 +767,6 @@ export default function StaffDetailView() {
 
       // ── 3. MESURE ──────────────────────────────────────────────────────
       case 'mesure': {
-        const [showAddCarton, setShowAddCarton] = useState(false);
         return (
           <Section title="Demander le feu vert" icon={Clock} color={borderColor}>
             <div className="space-y-3">
