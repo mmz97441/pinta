@@ -360,6 +360,9 @@ reception, facture_manquante, demande_feu_vert, feu_vert_recu, devis_final, rela
 8. **window.open(telegramLink) au lieu de sendTelegram()** → n'envoie rien
 9. **Vérifier cl.tel au lieu de cl.telegramChatId** pour décider si Telegram est disponible
 10. **Modifier le state dans le render** (setTimeout dans JSX) → boucle infinie
+11. **JAMAIS de useState/useCallback/useMemo dans un if, switch case, IIFE, ou fonction conditionnelle** → écran blanc (React error #310). TOUS les hooks DOIVENT être au top level du composant, AVANT tout return conditionnel. Vérifier SYSTÉMATIQUEMENT avant chaque commit.
+12. **JAMAIS de clé dupliquée dans un objet** (ex: `{ devis_envoye: ..., devis_envoye: ... }`) → warning qui fait échouer le build Vercel. Vérifier après chaque remplacement global (sed, replace_all).
+13. **Toujours vérifier les imports** après ajout d'un composant/icône dans le JSX → `ReferenceError: X is not defined` = écran blanc en production.
 
 ---
 
