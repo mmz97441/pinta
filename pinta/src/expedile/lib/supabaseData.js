@@ -306,8 +306,14 @@ export async function updateColis(id, changes) {
   if (error) throw error;
 }
 
+function generateRandomRef() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  return 'EXP-' + Array.from({length: 6}, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+}
+
 export async function insertColis(colisData) {
   const row = {
+    ref: generateRandomRef(),
     client_id: colisData.clientId,
     desc_contenu: colisData.desc || null,
     trackings: colisData.trackings || [],

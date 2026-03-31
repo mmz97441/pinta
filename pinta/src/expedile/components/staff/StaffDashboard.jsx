@@ -386,30 +386,79 @@ function ColisTableRow({ c, client, envois, onClick, stagger }) {
 
 const TH = 'px-3 py-2.5 text-[10px] font-bold uppercase tracking-wider text-gray-500';
 
-function ColisTable({ items, getClient, envois, openColis, filterFn }) {
+function ColisTable({ items, getClient, envois, openColis, filterFn, sortCol, sortDir, onSort }) {
   const filtered = filterFn ? filterFn(items) : items;
+
+  const sorted = useMemo(() => {
+    if (!sortCol || !onSort) return filtered;
+    const arr = [...filtered];
+    const dir = sortDir === 'asc' ? 1 : -1;
+    arr.sort((a, b) => {
+      let va, vb;
+      switch (sortCol) {
+        case 'client': {
+          const ca = getClient(a.clientId);
+          const cb = getClient(b.clientId);
+          va = (ca?.nom || '').toLowerCase();
+          vb = (cb?.nom || '').toLowerCase();
+          return dir * va.localeCompare(vb, 'fr');
+        }
+        case 'ref':
+          return dir * (a.ref || '').localeCompare(b.ref || '', 'fr', { numeric: true });
+        case 'statut':
+          return dir * (STATUTS[a.statut]?.label || '').localeCompare(STATUTS[b.statut]?.label || '', 'fr');
+        case 'dims':
+          va = a.dimL || 0;
+          vb = b.dimL || 0;
+          return dir * (va - vb);
+        case 'transport':
+          va = a.devisTransport || 0;
+          vb = b.devisTransport || 0;
+          return dir * (va - vb);
+        case 'taxes':
+          va = (a.devisOM || 0) + (a.devisOMR || 0) + (a.devisTVA || 0);
+          vb = (b.devisOM || 0) + (b.devisOMR || 0) + (b.devisTVA || 0);
+          return dir * (va - vb);
+        case 'total':
+          va = a.devisTotal || 0;
+          vb = b.devisTotal || 0;
+          return dir * (va - vb);
+        default:
+          return 0;
+      }
+    });
+    return arr;
+  }, [filtered, sortCol, sortDir, getClient]);
+
+  const sortIndicator = (col) => {
+    if (!onSort) return '';
+    return sortCol === col ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ' ↕';
+  };
+  const thSort = (col) => onSort ? { onClick: () => onSort(col), className: `${TH} cursor-pointer hover:text-gray-700 select-none` } : { className: TH };
+  const thSortRight = (col) => onSort ? { onClick: () => onSort(col), className: `${TH} text-right cursor-pointer hover:text-gray-700 select-none` } : { className: `${TH} text-right` };
+
   return (
     <div className="card rounded-2xl overflow-hidden">
       <div className="overflow-x-auto">
         <table className="w-full text-left text-sm">
           <thead>
             <tr className="border-b border-gray-100" style={{ backgroundColor: BRAND.navy + '08' }}>
-              <th className={TH}>Client</th>
-              <th className={TH}>N° Colis</th>
+              <th {...thSort('client')}>Client{sortIndicator('client')}</th>
+              <th {...thSort('ref')}>N° Colis{sortIndicator('ref')}</th>
               <th className={TH}>Facture</th>
-              <th className={TH}>Statut</th>
-              <th className={TH}>Dimensions</th>
-              <th className={`${TH} text-right`}>Transport</th>
-              <th className={`${TH} text-right`}>Taxes</th>
-              <th className={`${TH} text-right`}>Total</th>
+              <th {...thSort('statut')}>Statut{sortIndicator('statut')}</th>
+              <th {...thSort('dims')}>Dimensions{sortIndicator('dims')}</th>
+              <th {...thSortRight('transport')}>Transport{sortIndicator('transport')}</th>
+              <th {...thSortRight('taxes')}>Taxes{sortIndicator('taxes')}</th>
+              <th {...thSortRight('total')}>Total{sortIndicator('total')}</th>
               <th className={TH}>Envoi</th>
               <th className="w-8"></th>
             </tr>
           </thead>
           <tbody>
-            {filtered.length === 0 ? (
+            {sorted.length === 0 ? (
               <tr><td colSpan={10} className="px-4 py-6 text-center text-sm text-gray-400">Aucun résultat</td></tr>
-            ) : filtered.map((c, i) => (
+            ) : sorted.map((c, i) => (
               <ColisTableRow
                 key={c.id}
                 c={c}
@@ -436,6 +485,8 @@ export default function StaffDashboard({ onNewColis }) {
   const [activeCard, setActiveCard] = useState(null);
   const [pipeFilter, setPipeFilter] = useState(null);
   const [showEnvoiFilter, setShowEnvoiFilter] = useState(false);
+  const [sortCol, setSortCol] = useState(null);
+  const [sortDir, setSortDir] = useState('asc');
   const [viewMode, setViewMode] = useState('status'); // 'status' | 'numero'
   const [displayMode, setDisplayMode] = useState('columns'); // 'cards' | 'columns'
   const [tableSearch, setTableSearch] = useState('');
@@ -647,6 +698,17 @@ export default function StaffDashboard({ onNewColis }) {
       })
       .filter((cl) => cl.colisCount > 0);
   }, [clients, data]);
+
+  // ── Sort handler ─────────────────────────────────────────────────────────
+  const handleSort = (col) => {
+    if (sortCol === col) {
+      if (sortDir === 'asc') setSortDir('desc');
+      else if (sortDir === 'desc') { setSortCol(null); setSortDir('asc'); }
+    } else {
+      setSortCol(col);
+      setSortDir('asc');
+    }
+  };
 
   // ── Handlers ─────────────────────────────────────────────────────────────
   const openColis = (id) => {
@@ -1376,7 +1438,7 @@ export default function StaffDashboard({ onNewColis }) {
                   <p className="text-xs text-gray-400 mt-0.5">Tous les colis sont à jour</p>
                 </div>
               ) : displayMode === 'columns' ? (
-                <ColisTable filterFn={filterByTableSearch} items={aFaire} getClient={getClient} envois={envois} openColis={openColis} />
+                <ColisTable filterFn={filterByTableSearch} items={aFaire} getClient={getClient} envois={envois} openColis={openColis} sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
                   {aFaire.map((c, i) => (
@@ -1412,7 +1474,7 @@ export default function StaffDashboard({ onNewColis }) {
                   <p className="text-sm text-amber-600 font-medium">Aucun colis en attente</p>
                 </div>
               ) : displayMode === 'columns' ? (
-                <ColisTable filterFn={filterByTableSearch} items={attente} getClient={getClient} envois={envois} openColis={openColis} />
+                <ColisTable filterFn={filterByTableSearch} items={attente} getClient={getClient} envois={envois} openColis={openColis} sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
                   {attente.map((c, i) => (
@@ -1448,7 +1510,7 @@ export default function StaffDashboard({ onNewColis }) {
                   <p className="text-sm text-emerald-600 font-medium">Aucun colis livré (sur la sélection)</p>
                 </div>
               ) : displayMode === 'columns' ? (
-                <ColisTable filterFn={filterByTableSearch} items={livres} getClient={getClient} envois={envois} openColis={openColis} />
+                <ColisTable filterFn={filterByTableSearch} items={livres} getClient={getClient} envois={envois} openColis={openColis} sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
                   {livres.map((c, i) => (
@@ -1483,7 +1545,7 @@ export default function StaffDashboard({ onNewColis }) {
               <p className="text-sm font-semibold text-gray-500">Aucun colis</p>
             </div>
           ) : displayMode === 'columns' ? (
-            <ColisTable filterFn={filterByTableSearch} items={sortedByNumero} getClient={getClient} envois={envois} openColis={openColis} />
+            <ColisTable filterFn={filterByTableSearch} items={sortedByNumero} getClient={getClient} envois={envois} openColis={openColis} sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
               {sortedByNumero.map((c, i) => (
@@ -1600,7 +1662,7 @@ export default function StaffDashboard({ onNewColis }) {
 
                 {/* Group content */}
                 {displayMode === 'columns' ? (
-                  <ColisTable filterFn={filterByTableSearch} items={group.colis} getClient={getClient} envois={envois} openColis={openColis} />
+                  <ColisTable filterFn={filterByTableSearch} items={group.colis} getClient={getClient} envois={envois} openColis={openColis} sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
                     {group.colis.map((c, i) => (

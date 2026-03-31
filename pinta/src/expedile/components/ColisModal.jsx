@@ -42,15 +42,9 @@ const EMPTY_NEW_CLIENT = {
   type: 'particulier',
 };
 
-function nextRef(data) {
-  const nums = data
-    .map((p) => {
-      const m = p.ref && p.ref.match(/^EXP-(\d+)$/);
-      return m ? parseInt(m[1], 10) : 0;
-    })
-    .filter(Boolean);
-  const max = nums.length > 0 ? Math.max(...nums) : 0;
-  return 'EXP-' + String(max + 1).padStart(4, '0');
+function nextRef() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  return 'EXP-' + Array.from({length: 6}, () => chars[Math.floor(Math.random() * chars.length)]).join('');
 }
 
 export default function ColisModal({ open, onClose }) {
@@ -357,7 +351,7 @@ export default function ColisModal({ open, onClose }) {
 
   // ── build colis object ────────────────────────────────────
   const buildColis = (clientId, statut) => {
-    const ref = nextRef(data);
+    const ref = nextRef();
     const trackings = nf.trackingLines.map((t) => t.tracking.trim()).filter((t) => t);
     const trackingsDetail = nf.trackingLines
       .filter((t) => t.tracking.trim())
