@@ -293,7 +293,7 @@ export default function StaffClients() {
   return (
     <div className="anim-fade flex flex-col gap-4 pb-24">
 
-      {/* ── Modal création client ────────────────────────────────────────── */}
+      {/* ── Page création client (plein écran) ─────────────────────────── */}
       {showNewModal && (() => {
         const nd = newDraft;
         const set = (k, v) => setNewDraft((p) => ({ ...p, [k]: v }));
@@ -301,13 +301,12 @@ export default function StaffClients() {
         const LBL = 'text-[11px] font-bold text-gray-500 block mb-1 uppercase tracking-wide';
         const INP = 'w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-sm outline-none focus:border-blue-300 transition-colors';
         return (
-        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto py-8" style={{ background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)' }}
-          onClick={(e) => { if (e.target === e.currentTarget) setShowNewModal(false); }}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-y-auto my-auto">
+        <div className="fixed inset-0 z-50 bg-gray-50 overflow-y-auto">
+          <div className="max-w-3xl mx-auto px-6 py-6">
             {/* Header */}
-            <div className="flex items-center justify-between px-6 pt-5 pb-3 border-b border-gray-100">
+            <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-3">
-                <h2 className="text-lg font-black" style={{ color: BRAND.navy }}>Nouveau client</h2>
+                <h2 className="text-xl font-black" style={{ color: BRAND.navy }}>Nouveau client</h2>
                 <div className="flex gap-1 bg-gray-100 rounded-lg p-0.5">
                   <button onClick={() => set('type', 'particulier')}
                     className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${!isPro ? 'bg-blue-500 text-white shadow' : 'text-gray-500'}`}>
@@ -323,7 +322,7 @@ export default function StaffClients() {
               <button onClick={() => setShowNewModal(false)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400"><X size={18} /></button>
             </div>
 
-            <div className="px-6 py-4 space-y-5">
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-5">
 
               {/* ── Section : Abonnement ── */}
               <div className="space-y-3">
@@ -485,10 +484,10 @@ export default function StaffClients() {
               </div>
             </div>
 
-            {/* Footer */}
-            <div className="px-6 pb-5 pt-2 flex gap-3 border-t border-gray-100">
+            {/* Footer — sticky bottom */}
+            <div className="sticky bottom-0 bg-white border-t border-gray-200 px-6 py-4 mt-6 rounded-b-2xl flex gap-3">
               <button onClick={() => setShowNewModal(false)}
-                className="flex-1 py-2.5 rounded-xl border-2 border-gray-200 text-sm font-bold text-gray-600 hover:bg-gray-50">
+                className="px-6 py-2.5 rounded-xl border-2 border-gray-200 text-sm font-bold text-gray-600 hover:bg-gray-50">
                 Annuler
               </button>
               <button onClick={handleCreateClient}
@@ -497,6 +496,7 @@ export default function StaffClients() {
                 {isPro ? 'Créer le client pro' : 'Créer le client'}
               </button>
             </div>
+
           </div>
         </div>
         );
