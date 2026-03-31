@@ -242,14 +242,9 @@ export default function ColisModal({ open, onClose }) {
       cl = selectedClient;
     }
 
-    // ── Subscription expiry check ──
-    if (cl && cl.abonnement && cl.abonnement !== 'freemium' && cl.abonnementFin) {
-      const fin = new Date(cl.abonnementFin);
-      if (fin < new Date()) {
-        setFormErr({ client: "L'abonnement de ce client a expiré. Renouvellement nécessaire avant de réceptionner un colis." });
-        return;
-      }
-    }
+    // ── Subscription expiry check — réception autorisée mais avertissement ──
+    const isSubExpired = cl && cl.abonnement && cl.abonnement !== 'freemium' && cl.abonnementFin && new Date(cl.abonnementFin) < new Date();
+    const isAnnuelSub = cl && (cl.abonnement === 'premium_annuel' || cl.abonnement === 'vip');
 
     const colisTemplate = buildColis(clientId, 'receptionne');
 
@@ -314,7 +309,11 @@ export default function ColisModal({ open, onClose }) {
         ? `📐 *Dimensions :* ${newColis.dimL}×${newColis.dimW}×${newColis.dimH} cm — ${newColis.poids} kg\n⚖️ *Poids vol. :* ${((newColis.dimL * newColis.dimW * newColis.dimH) / 5000).toFixed(2)} kg\n`
         : '📐 Nous allons le mesurer et peser.\n';
 
-      const telegramMsg = `Bonjour ${prenom} 👋\n\nBonne nouvelle ! Votre colis *${newColis.ref}* est bien arrivé à notre entrepôt de Paris 🎉\n\n📦 *Contenu :* ${newColis.desc || fournisseurs}\n${trackingsStr ? `🔍 *Tracking :* ${trackingsStr}\n` : ''}🎯 *Destination :* ${dest?.flag || ''} ${dest?.nom || ''}\n\n${dimsLine}\n📄 *Important :* Merci de nous envoyer la *facture d'achat d'origine* dans les meilleurs délais — elle est obligatoire pour le calcul des taxes douanières et l'établissement de votre devis.\n\n_L'équipe Expedîle_`;
+      const expiryWarning = isSubExpired && isAnnuelSub
+        ? `\n\n⚠️ *Attention :* Votre abonnement a expiré. Le traitement de vos colis est suspendu jusqu'au renouvellement. Contactez-nous pour réactiver votre compte.\n`
+        : '';
+
+      const telegramMsg = `Bonjour ${prenom} 👋\n\nBonne nouvelle ! Votre colis *${newColis.ref}* est bien arrivé à notre entrepôt de Paris 🎉\n\n📦 *Contenu :* ${newColis.desc || fournisseurs}\n${trackingsStr ? `🔍 *Tracking :* ${trackingsStr}\n` : ''}🎯 *Destination :* ${dest?.flag || ''} ${dest?.nom || ''}\n\n${dimsLine}\n📄 *Important :* Merci de nous envoyer la *facture d'achat d'origine* dans les meilleurs délais — elle est obligatoire pour le calcul des taxes douanières et l'établissement de votre devis.${expiryWarning}\n\n_L'équipe Expedîle_`;
 
       if (chatId && isTelegramConfigured()) {
         // Envoyer via API Telegram directement

@@ -310,12 +310,23 @@ export default function FacturesPanel() {
           <div key={f.id} className="flex items-center gap-2 py-1.5 text-xs">
             {/* Thumbnail / voir */}
             {f.fichier ? (
-              <button
-                onClick={() => openPreview(f)}
-                className="flex-shrink-0 w-8 h-8 rounded-lg border border-gray-200 overflow-hidden hover:ring-2 hover:ring-blue-300 transition-all"
-              >
-                <img src={f.fichier} alt="" className="w-full h-full object-cover" />
-              </button>
+              (f.fichierNom || f.fichier || '').toLowerCase().endsWith('.pdf') ? (
+                <a
+                  href={f.fichier}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-shrink-0 w-8 h-8 rounded-lg border border-red-200 bg-red-50 flex items-center justify-center hover:ring-2 hover:ring-red-300 transition-all"
+                >
+                  <FileText size={13} className="text-red-500" />
+                </a>
+              ) : (
+                <button
+                  onClick={() => openPreview(f)}
+                  className="flex-shrink-0 w-8 h-8 rounded-lg border border-gray-200 overflow-hidden hover:ring-2 hover:ring-blue-300 transition-all"
+                >
+                  <img src={f.fichier} alt="" className="w-full h-full object-cover" />
+                </button>
+              )
             ) : (
               <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center">
                 <FileText size={13} className="text-gray-400" />
@@ -459,15 +470,30 @@ export default function FacturesPanel() {
             <div className="px-3 py-2.5 flex items-center gap-3">
               {/* Thumbnail or upload */}
               {f.fichier ? (
-                <button
-                  onClick={() => openPreview(f)}
-                  className="relative flex-shrink-0 w-14 h-14 rounded-xl border-2 border-gray-200 overflow-hidden group hover:border-blue-400 transition-all"
-                >
-                  <img src={f.fichier} alt="" className="w-full h-full object-cover" />
-                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all flex items-center justify-center">
-                    <ZoomIn size={16} className="text-white opacity-0 group-hover:opacity-100 transition-opacity" />
-                  </div>
-                </button>
+                (() => {
+                  const isPdf = (f.fichierNom || f.fichier || '').toLowerCase().endsWith('.pdf');
+                  return isPdf ? (
+                    <a
+                      href={f.fichier}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="relative flex-shrink-0 w-14 h-14 rounded-xl border-2 border-red-200 bg-red-50 flex flex-col items-center justify-center gap-0.5 group hover:border-red-400 transition-all"
+                    >
+                      <FileText size={18} className="text-red-500" />
+                      <span className="text-[7px] font-black text-red-400 uppercase">PDF</span>
+                    </a>
+                  ) : (
+                    <button
+                      onClick={() => openPreview(f)}
+                      className="relative flex-shrink-0 w-14 h-14 rounded-xl border-2 border-gray-200 overflow-hidden group hover:border-blue-400 transition-all"
+                    >
+                      <img src={f.fichier} alt="" className="w-full h-full object-cover" />
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all flex items-center justify-center">
+                        <ZoomIn size={16} className="text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                      </div>
+                    </button>
+                  );
+                })()
               ) : (
                 <button
                   onClick={() => handleFileUpload(f.id)}
@@ -500,16 +526,31 @@ export default function FacturesPanel() {
             </div>
 
             {/* Preview button when file exists */}
-            {f.fichier && (
+            {f.fichier && (() => {
+              const isPdf = (f.fichierNom || f.fichier || '').toLowerCase().endsWith('.pdf');
+              return (
               <div className="px-3 pb-2 flex gap-2">
-                <button
-                  onClick={() => openPreview(f)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all active:scale-95"
-                  style={{ background: `${BRAND.navy}10`, color: BRAND.navy }}
-                >
-                  <Eye size={12} />
-                  Voir
-                </button>
+                {isPdf ? (
+                  <a
+                    href={f.fichier}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all active:scale-95"
+                    style={{ background: `${BRAND.navy}10`, color: BRAND.navy }}
+                  >
+                    <Eye size={12} />
+                    Ouvrir PDF
+                  </a>
+                ) : (
+                  <button
+                    onClick={() => openPreview(f)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all active:scale-95"
+                    style={{ background: `${BRAND.navy}10`, color: BRAND.navy }}
+                  >
+                    <Eye size={12} />
+                    Voir
+                  </button>
+                )}
                 <button
                   onClick={() => handleOCR(f)}
                   disabled={ocrLoading === f.id}
@@ -527,7 +568,8 @@ export default function FacturesPanel() {
                   Remplacer
                 </button>
               </div>
-            )}
+              );
+            })()}
 
             {/* Rejected motif display */}
             {!f.valide && f.rejetMotif && (

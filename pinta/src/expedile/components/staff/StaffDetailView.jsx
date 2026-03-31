@@ -285,6 +285,14 @@ export default function StaffDetailView() {
   const dest = selDest || getDestByCP(cl?.cp);
   const tarif = getTarif(dest?.code);
   const borderColor = statusBorderColor(sel.statut);
+
+  // ── Subscription status ──────────────────────────────────────────────────
+  const isFreemium = !cl?.abonnement || cl.abonnement === 'freemium';
+  const subFin = cl?.abonnementFin ? new Date(cl.abonnementFin) : null;
+  const subJoursRestants = subFin ? Math.ceil((subFin - new Date()) / (1000 * 60 * 60 * 24)) : null;
+  const subExpired = !isFreemium && subJoursRestants !== null && subJoursRestants <= 0;
+  const subWarning = !isFreemium && subJoursRestants !== null && subJoursRestants > 0 && subJoursRestants <= 7;
+  const isAnnuel = cl?.abonnement === 'premium_annuel' || cl?.abonnement === 'vip';
   const thisComLog = comLog.filter((l) => l.colisId === sel.id);
 
   // ── Missing invoice? ──────────────────────────────────────────────────────
@@ -928,9 +936,27 @@ export default function StaffDetailView() {
                 </div>
               )}
 
+              {subExpired && (
+                <div className="flex items-start gap-2 p-3 rounded-xl bg-red-50 border border-red-300">
+                  <AlertTriangle size={14} className="text-red-600 flex-shrink-0 mt-0.5" />
+                  <p className="text-xs font-bold text-red-800">
+                    Abonnement expiré — impossible de lancer la préparation.
+                    {isAnnuel ? ' Le client doit renouveler son abonnement.' : ' Renouvellement interne requis.'}
+                  </p>
+                </div>
+              )}
+              {subWarning && (
+                <div className="flex items-start gap-2 p-3 rounded-xl bg-amber-50 border border-amber-200">
+                  <AlertTriangle size={14} className="text-amber-500 flex-shrink-0 mt-0.5" />
+                  <p className="text-xs font-bold text-amber-700">
+                    Abonnement expire dans {subJoursRestants} jour{subJoursRestants > 1 ? 's' : ''}
+                  </p>
+                </div>
+              )}
+
               <BtnPrimary
                 onClick={() => { if (actionLoading) return; setActionLoading(true); try { changerStatut(sel.id, 'en_preparation'); } finally { setTimeout(() => setActionLoading(false), 1000); } }}
-                disabled={actionLoading}
+                disabled={actionLoading || subExpired}
                 color="#2563EB"
               >
                 <Check size={15} />
@@ -1284,12 +1310,31 @@ export default function StaffDetailView() {
               </div>
             </div>
 
+            {/* Subscription block */}
+            {subExpired && (
+              <div className="flex items-start gap-2 p-3 rounded-xl bg-red-50 border border-red-300">
+                <AlertTriangle size={14} className="text-red-600 flex-shrink-0 mt-0.5" />
+                <p className="text-xs font-bold text-red-800">
+                  Abonnement expiré — impossible d'envoyer le devis.
+                  {isAnnuel ? ' Le client doit renouveler son abonnement.' : ' Renouvellement interne requis.'}
+                </p>
+              </div>
+            )}
+            {subWarning && (
+              <div className="flex items-start gap-2 p-3 rounded-xl bg-amber-50 border border-amber-200">
+                <AlertTriangle size={14} className="text-amber-500 flex-shrink-0 mt-0.5" />
+                <p className="text-xs font-bold text-amber-700">
+                  Abonnement expire dans {subJoursRestants} jour{subJoursRestants > 1 ? 's' : ''}
+                </p>
+              </div>
+            )}
+
             {/* Devis preview / send */}
             {!devisPrev ? (
               <div className="space-y-2">
                 <BtnPrimary
                   onClick={() => { if (actionLoading) return; setActionLoading(true); try { handleEnvoyerDevis(); } finally { setTimeout(() => setActionLoading(false), 1000); } }}
-                  disabled={!canSendDevis || actionLoading}
+                  disabled={!canSendDevis || actionLoading || subExpired}
                   color="#2563EB"
                 >
                   <Eye size={15} />
@@ -1522,9 +1567,18 @@ export default function StaffDetailView() {
                 </select>
               </div>
 
+              {subExpired && (
+                <div className="flex items-start gap-2 p-3 rounded-xl bg-red-50 border border-red-300">
+                  <AlertTriangle size={14} className="text-red-600 flex-shrink-0 mt-0.5" />
+                  <p className="text-xs font-bold text-red-800">
+                    Abonnement expiré — expédition bloquée.
+                  </p>
+                </div>
+              )}
+
               <BtnPrimary
                 onClick={() => changerStatut(sel.id, 'expedie')}
-                disabled={!sel.envoi && !selEnvoi}
+                disabled={(!sel.envoi && !selEnvoi) || subExpired}
                 color="#0891B2"
               >
                 <Check size={15} />
