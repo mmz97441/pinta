@@ -532,40 +532,13 @@ export default function StaffDetailView() {
       flash({ msg: 'Le devis n\'a pas été calculé.', type: 'warning', duration: 5000 });
       return;
     }
-    changerStatut(sel.id, 'devis_envoye');
 
-    const chatId = cl?.telegramChatId;
-    const dest = selDest || getDestByCP(cl?.cp);
-    const prenom = cl?.nom?.split(' ')[0] || '';
-    const pf = sel.poidsFact || sel.finP || sel.poids || 0;
     const isPro = cl?.type === 'pro';
 
-    // Build per-category tax breakdown
-    const lignes = sel.lignes || [];
-    const totalValeurArticles = lignes.reduce((s, l) => s + (l.qte || 1) * (l.prix || 0), 0);
-    let taxBreakdown = '';
-    if (lignes.length > 0) {
-      const byCat = {};
-      lignes.forEach((l) => {
-        const cat = categories.find((x) => x.id === l.cat);
-        const catLabel = cat?.label || 'Articles';
-        const ct = cat ? getCatTaux(cat, dest?.code || '974') : { om: 0, omr: 0 };
-        const valeur = (l.qte || 1) * (l.prix || 0);
-        const transportShare = totalValeurArticles > 0 ? (sel.devisTransport || 0) * (valeur / totalValeurArticles) : 0;
-        const cif = valeur + transportShare;
-        if (!byCat[catLabel]) byCat[catLabel] = { om: 0, omr: 0, tauxOM: ct.om, tauxOMR: ct.omr };
-        byCat[catLabel].om += cif * ct.om / 100;
-        byCat[catLabel].omr += cif * ct.omr / 100;
-      });
-      taxBreakdown = Object.entries(byCat).map(([cat, v]) =>
-        `  📦 *${cat}* : ${eur(v.om + v.omr)}\n     _Octroi de Mer ${v.tauxOM}% + Octroi de Mer Régional ${v.tauxOMR}%_`
-      ).join('\n');
-    }
-
-    // Create PayPlug payment for particuliers (pros pay differently)
-    let paymentUrl = null;
+    // Step 1: Create PayPlug payment for particuliers FIRST
     if (!isPro) {
       try {
+        flash({ msg: 'Création du lien de paiement...', type: 'info' });
         const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://bqprktzehuhplpqjgjaz.supabase.co';
         const res = await fetch(`${supabaseUrl}/functions/v1/payplug-create`, {
           method: 'POST',
@@ -578,46 +551,30 @@ export default function StaffDetailView() {
             colisRef: sel.ref,
           }),
         });
-        const data = await res.json();
-        if (data.success && data.paymentUrl) {
-          paymentUrl = data.paymentUrl;
-          // Update local state with payment URL
-          setData((prev) => prev.map((c) => c.id === sel.id ? { ...c, payplugPaymentUrl: paymentUrl, payplugPaymentId: data.paymentId } : c));
+        const payData = await res.json();
+        if (payData.success && payData.paymentUrl) {
+          // Update local state so the template can read it
+          setData((prev) => prev.map((c) => c.id === sel.id
+            ? { ...c, payplugPaymentUrl: payData.paymentUrl, payplugPaymentId: payData.paymentId }
+            : c
+          ));
+          // Also update sel directly for template access
+          sel.payplugPaymentUrl = payData.paymentUrl;
         } else {
-          console.warn('[PayPlug] Creation failed:', data);
+          console.warn('[PayPlug] Creation failed:', payData);
         }
       } catch (err) {
         console.error('[PayPlug] Error:', err.message);
       }
     }
 
-    const paymentLine = paymentUrl
-      ? `\n💳 *Payer maintenant :*\n${paymentUrl}\n`
-      : isPro
-      ? `\n📄 _Paiement selon les conditions convenues (${cl?.modePaiement === 'fin_mois' ? 'fin de mois' : cl?.modePaiement === '30j' ? '30 jours' : 'en compte'})_\n`
-      : '\n👉 Payez pour déclencher l\'expédition.\n';
+    // Step 2: Change status
+    changerStatut(sel.id, 'devis_envoye');
 
-    const telegramMsg = `Bonjour ${prenom} 👋\n\nLe devis final pour votre expédition *${sel.ref}* est prêt ! 📋\n\n🎯 *Destination :* ${dest?.flag || ''} ${dest?.nom || ''}\n${sel.finL ? `📐 *Dimensions optimisées :* ${sel.finL}×${sel.finW}×${sel.finH} cm — ${sel.finP} kg\n` : ''}⚖️ *Poids facturable :* ${pf} kg\n\n━━━━━━━━━━━━━━━━\n💰 *DÉTAIL DU DEVIS*\n━━━━━━━━━━━━━━━━\n🚀 Transport : *${eur(sel.devisTransport)}*\n\n🏛️ *Taxes douanières :*\n${taxBreakdown || `  Octroi de Mer : ${eur(sel.devisOM)}\n  Octroi de Mer Régional : ${eur(sel.devisOMR)}`}\n\n📊 TVA (${dest?.tva || 0}%) : *${eur(sel.devisTVA)}*\n━━━━━━━━━━━━━━━━\n💰 *TOTAL : ${eur(sel.devisTotal)}*\n━━━━━━━━━━━━━━━━\n${sel.economie > 0 ? `\n✅ *Économie : ${eur(sel.economie)}* grâce à l'optimisation !\n` : ''}${paymentLine}\n_L'équipe Expedîle — Paris → ${dest?.nom || ''}_`;
-
-    if (chatId && isTelegramConfigured()) {
-      sendTelegram(chatId, telegramMsg).then(async (res) => {
-        try {
-          await sb.insertMessage(sel.id, {
-            type: 'staff',
-            auteur: 'Système',
-            texte: telegramMsg,
-            statut: res.ok ? 'envoye' : 'echec',
-          });
-        } catch (e) { console.warn('insertMessage:', e.message); }
-        flash({ msg: res.ok ? `Devis envoyé à ${prenom} via Telegram${paymentUrl ? ' + lien de paiement' : ''}` : `Erreur envoi Telegram`, type: res.ok ? 'success' : 'warning' });
-      });
-    } else if (cl?.email) {
-      const emailMsg = `Objet : Devis final — ${sel.ref} : ${eur(sel.devisTotal)}\n\nBonjour ${cl.nom},\n\nTransport: ${eur(sel.devisTransport)}\nTaxes (OM+OMR): ${eur((sel.devisOM || 0) + (sel.devisOMR || 0))}\nTVA: ${eur(sel.devisTVA)}\nTotal: ${eur(sel.devisTotal)}\n${paymentUrl ? `\nPayer: ${paymentUrl}\n` : ''}\nCordialement,\nL'équipe Expedîle`;
-      window.open(`mailto:${cl.email}?subject=${encodeURIComponent(`Devis ${sel.ref}`)}&body=${encodeURIComponent(emailMsg)}`, '_blank');
-      flash(`Email devis ouvert pour ${prenom}`);
-    } else {
-      flash({ msg: 'Client non joignable (pas de Telegram ni email)', type: 'warning' });
-    }
+    // Step 3: Send the devis via template (which now includes PayPlug link)
+    setTimeout(() => {
+      sendMsg(sel.id, cl?.id, cl?.telegramChatId ? 'telegram' : 'email', 'devis_final', null);
+    }, 300);
 
     setDevisPrev(false);
   }
