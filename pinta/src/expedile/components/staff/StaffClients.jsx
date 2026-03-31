@@ -303,7 +303,7 @@ export default function StaffClients() {
         return (
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto py-8" style={{ background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)' }}
           onClick={(e) => { if (e.target === e.currentTarget) setShowNewModal(false); }}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl my-auto">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-y-auto my-auto">
             {/* Header */}
             <div className="flex items-center justify-between px-6 pt-5 pb-3 border-b border-gray-100">
               <div className="flex items-center gap-3">
