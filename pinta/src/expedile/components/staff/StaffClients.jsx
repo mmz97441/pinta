@@ -9,20 +9,15 @@ import { exportRecapProExcel } from '../../utils/exportRecapPro';
 
 // ── Empty draft ──────────────────────────────────────────────────────────────
 const emptyDraft = () => ({
-  nom: '',
-  prenom: '',
-  tel: '',
-  email: '',
-  ville: '',
-  cp: '',
-  adresse: '',
-  telegramUsername: '',
-  canal: 'telegram',
-  type: 'particulier',
-  abonnement: 'freemium',
-  abonnementDebut: '',
-  abonnementFin: '',
+  nom: '', prenom: '', genre: '', dateNaissance: '',
+  tel: '', telFixe: '', email: '',
+  ville: '', cp: '', adresseLigne1: '', adresseLigne2: '', commune: '', infosLivraison: '',
+  telegramUsername: '', canal: 'telegram',
+  type: 'particulier', modePaiement: 'colis',
+  abonnement: 'freemium', abonnementDebut: '', abonnementFin: '',
   notes: '',
+  // Pro fields
+  raisonSociale: '', siret: '', interlocuteur: '',
 });
 
 // ── Avatar ───────────────────────────────────────────────────────────────────
@@ -204,27 +199,25 @@ export default function StaffClients() {
   }
 
   async function handleCreateClient() {
-    if (!newDraft.nom.trim()) { flash({ msg: 'Le nom est requis', type: 'warning' }); return; }
-    if (!newDraft.cp.trim() || !/^9[7-8]\d{3}$/.test(newDraft.cp.replace(/\s/g, ''))) { flash({ msg: 'Code postal DOM-TOM requis (97xxx)', type: 'warning' }); return; }
+    const nd = newDraft;
+    const isPro = nd.type === 'pro';
+    if (!nd.nom.trim()) { flash({ msg: 'Le nom est requis', type: 'warning' }); return; }
+    if (!nd.cp.trim() || !/^9[7-8]\d{3}$/.test(nd.cp.replace(/\s/g, ''))) { flash({ msg: 'Code postal DOM-TOM requis (97xxx)', type: 'warning' }); return; }
+    if (isPro && !nd.raisonSociale.trim()) { flash({ msg: 'La raison sociale est requise pour un pro', type: 'warning' }); return; }
 
     const id = await addNewClient({
-      nom: newDraft.nom.trim(),
-      prenom: newDraft.prenom.trim(),
-      tel: newDraft.tel.trim(),
-      email: newDraft.email.trim(),
-      ville: newDraft.ville.trim(),
-      cp: newDraft.cp.trim(),
-      adresse: newDraft.adresse.trim(),
-      telegramUsername: newDraft.telegramUsername.trim(),
-      canal: newDraft.canal,
-      type: newDraft.type,
-      abonnement: newDraft.abonnement,
-      abonnementDebut: newDraft.abonnementDebut || null,
-      abonnementFin: newDraft.abonnementFin || null,
+      ...nd,
+      nom: nd.nom.trim(),
+      prenom: nd.prenom.trim(),
+      cp: nd.cp.trim(),
+      modePaiement: isPro ? nd.modePaiement : 'colis', // Particuliers = toujours paiement par colis
+      abonnementDebut: nd.abonnementDebut || null,
+      abonnementFin: nd.abonnementFin || null,
+      dateNaissance: nd.dateNaissance || null,
       points: 0,
     });
     setShowNewModal(false);
-    flash({ msg: 'Client créé avec succès', type: 'success' });
+    flash({ msg: isPro ? 'Client pro créé avec succès' : 'Client créé avec succès', type: 'success' });
   }
 
   function handleEdit(cl) {
@@ -301,114 +294,213 @@ export default function StaffClients() {
     <div className="anim-fade flex flex-col gap-4 pb-24">
 
       {/* ── Modal création client ────────────────────────────────────────── */}
-      {showNewModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)' }}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-gray-100">
-              <h2 className="text-lg font-black" style={{ color: BRAND.navy }}>Nouveau client</h2>
+      {showNewModal && (() => {
+        const nd = newDraft;
+        const set = (k, v) => setNewDraft((p) => ({ ...p, [k]: v }));
+        const isPro = nd.type === 'pro';
+        const LBL = 'text-[11px] font-bold text-gray-500 block mb-1 uppercase tracking-wide';
+        const INP = 'w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-sm outline-none focus:border-blue-300 transition-colors';
+        return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)' }}
+          onClick={(e) => { if (e.target === e.currentTarget) setShowNewModal(false); }}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[92vh] overflow-y-auto">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 pt-5 pb-3 border-b border-gray-100">
+              <div className="flex items-center gap-3">
+                <h2 className="text-lg font-black" style={{ color: BRAND.navy }}>Nouveau client</h2>
+                <div className="flex gap-1 bg-gray-100 rounded-lg p-0.5">
+                  <button onClick={() => set('type', 'particulier')}
+                    className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${!isPro ? 'bg-blue-500 text-white shadow' : 'text-gray-500'}`}>
+                    Particulier
+                  </button>
+                  <button onClick={() => set('type', 'pro')}
+                    className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${isPro ? 'text-white shadow' : 'text-gray-500'}`}
+                    style={isPro ? { background: BRAND.goldD } : {}}>
+                    Professionnel
+                  </button>
+                </div>
+              </div>
               <button onClick={() => setShowNewModal(false)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400"><X size={18} /></button>
             </div>
-            <div className="px-5 py-4 space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-[11px] font-bold text-gray-500 block mb-1 uppercase tracking-wide">Nom *</label>
-                  <input value={newDraft.nom} onChange={(e) => setNewDraft((p) => ({ ...p, nom: e.target.value }))}
-                    placeholder="NOM" className="w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-sm outline-none focus:border-blue-300" autoFocus />
-                </div>
-                <div>
-                  <label className="text-[11px] font-bold text-gray-500 block mb-1 uppercase tracking-wide">Prénom</label>
-                  <input value={newDraft.prenom} onChange={(e) => setNewDraft((p) => ({ ...p, prenom: e.target.value }))}
-                    placeholder="Prénom" className="w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-sm outline-none focus:border-blue-300" />
-                </div>
-                <div>
-                  <label className="text-[11px] font-bold text-gray-500 block mb-1 uppercase tracking-wide">Téléphone</label>
-                  <input value={newDraft.tel} onChange={(e) => setNewDraft((p) => ({ ...p, tel: e.target.value }))}
-                    placeholder="+262 692 …" className="w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-sm outline-none focus:border-blue-300 font-mono" />
-                </div>
-                <div>
-                  <label className="text-[11px] font-bold text-gray-500 block mb-1 uppercase tracking-wide">Email</label>
-                  <input value={newDraft.email} onChange={(e) => setNewDraft((p) => ({ ...p, email: e.target.value }))}
-                    placeholder="adresse@exemple.com" type="email" className="w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-sm outline-none focus:border-blue-300" />
-                </div>
-                <div>
-                  <label className="text-[11px] font-bold text-gray-500 block mb-1 uppercase tracking-wide">Ville</label>
-                  <input value={newDraft.ville} onChange={(e) => setNewDraft((p) => ({ ...p, ville: e.target.value }))}
-                    placeholder="Saint-Denis" className="w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-sm outline-none focus:border-blue-300" />
-                </div>
-                <div>
-                  <label className="text-[11px] font-bold text-gray-500 block mb-1 uppercase tracking-wide">Code postal *</label>
-                  <input value={newDraft.cp} onChange={(e) => setNewDraft((p) => ({ ...p, cp: e.target.value }))}
-                    placeholder="97400" className="w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-sm outline-none focus:border-blue-300 font-mono" />
-                </div>
-                <div className="col-span-2">
-                  <label className="text-[11px] font-bold text-gray-500 block mb-1 uppercase tracking-wide">Adresse</label>
-                  <input value={newDraft.adresse} onChange={(e) => setNewDraft((p) => ({ ...p, adresse: e.target.value }))}
-                    placeholder="N° rue, résidence, étage…" className="w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-sm outline-none focus:border-blue-300" />
-                </div>
-                <div>
-                  <label className="text-[11px] font-bold text-gray-500 block mb-1 uppercase tracking-wide">Telegram @</label>
-                  <input value={newDraft.telegramUsername} onChange={(e) => setNewDraft((p) => ({ ...p, telegramUsername: e.target.value }))}
-                    placeholder="@username" className="w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-sm outline-none focus:border-blue-300" />
-                </div>
-                <div>
-                  <label className="text-[11px] font-bold text-gray-500 block mb-1 uppercase tracking-wide">Type</label>
-                  <select value={newDraft.type} onChange={(e) => setNewDraft((p) => ({ ...p, type: e.target.value }))}
-                    className="w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-sm outline-none focus:border-blue-300">
-                    <option value="particulier">Particulier</option>
-                    <option value="pro">Professionnel</option>
-                  </select>
+
+            <div className="px-6 py-4 space-y-5">
+
+              {/* ── Section : Abonnement ── */}
+              <div className="space-y-3">
+                <p className="text-xs font-black uppercase tracking-wider" style={{ color: BRAND.navy }}>Abonnement</p>
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <label className={LBL}>Forfait *</label>
+                    <select value={nd.abonnement} onChange={(e) => set('abonnement', e.target.value)} className={INP}>
+                      <option value="freemium">Freemium</option>
+                      <option value="premium_mensuel">Premium Mensuel</option>
+                      <option value="premium_annuel">Premium Annuel</option>
+                      <option value="vip">VIP Annuel</option>
+                    </select>
+                  </div>
+                  {nd.abonnement !== 'freemium' && <>
+                    <div>
+                      <label className={LBL}>Date fin abonnement *</label>
+                      <input type="date" value={nd.abonnementFin} onChange={(e) => set('abonnementFin', e.target.value)} className={INP} />
+                    </div>
+                  </>}
+                  <div>
+                    <label className={LBL}>Paiements *</label>
+                    {isPro ? (
+                      <select value={nd.modePaiement} onChange={(e) => set('modePaiement', e.target.value)} className={INP}>
+                        <option value="colis">Paiement à chaque colis</option>
+                        <option value="compte">Paiement en compte</option>
+                        <option value="30j">Paiement à 30 jours</option>
+                        <option value="fin_mois">Fin de mois</option>
+                      </select>
+                    ) : (
+                      <div className="flex items-center gap-2 px-3 py-2 rounded-xl border-2 border-gray-200 bg-gray-50 text-sm text-gray-600">
+                        <Check size={14} className="text-green-500" />
+                        Paiement à chaque colis
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 
-              {/* Forfait */}
-              <div>
-                <label className="text-[11px] font-bold text-gray-500 block mb-1 uppercase tracking-wide">Forfait</label>
-                <select value={newDraft.abonnement} onChange={(e) => setNewDraft((p) => ({ ...p, abonnement: e.target.value }))}
-                  className="w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-sm outline-none focus:border-blue-300">
-                  <option value="freemium">Freemium</option>
-                  <option value="premium_mensuel">Premium Mensuel (13€/mois)</option>
-                  <option value="premium_annuel">Premium Annuel (69€/an)</option>
-                  <option value="vip">VIP Annuel (149€/an)</option>
-                </select>
-              </div>
-              {newDraft.abonnement !== 'freemium' && (
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-[11px] font-bold text-gray-500 block mb-1 uppercase tracking-wide">Début</label>
-                    <input type="date" value={newDraft.abonnementDebut}
-                      onChange={(e) => setNewDraft((p) => ({ ...p, abonnementDebut: e.target.value }))}
-                      className="w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-sm outline-none focus:border-blue-300" />
-                  </div>
-                  <div>
-                    <label className="text-[11px] font-bold text-gray-500 block mb-1 uppercase tracking-wide">Fin</label>
-                    <input type="date" value={newDraft.abonnementFin}
-                      onChange={(e) => setNewDraft((p) => ({ ...p, abonnementFin: e.target.value }))}
-                      className="w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-sm outline-none focus:border-blue-300" />
+              {/* ── Section : Pro fields ── */}
+              {isPro && (
+                <div className="space-y-3 p-4 rounded-xl border-2" style={{ borderColor: `${BRAND.gold}40`, background: `${BRAND.gold}06` }}>
+                  <p className="text-xs font-black uppercase tracking-wider" style={{ color: BRAND.goldD }}>Personne morale</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className={LBL}>Raison sociale *</label>
+                      <input value={nd.raisonSociale} onChange={(e) => set('raisonSociale', e.target.value)} placeholder="Nom de l'entreprise" className={INP} autoFocus />
+                    </div>
+                    <div>
+                      <label className={LBL}>SIRET</label>
+                      <input value={nd.siret} onChange={(e) => set('siret', e.target.value)} placeholder="123 456 789 00012" className={`${INP} font-mono`} />
+                    </div>
+                    <div className="col-span-2">
+                      <label className={LBL}>Interlocuteur</label>
+                      <input value={nd.interlocuteur} onChange={(e) => set('interlocuteur', e.target.value)} placeholder="Nom du contact principal" className={INP} />
+                    </div>
                   </div>
                 </div>
               )}
 
+              {/* ── Section : Identité ── */}
+              <div className="space-y-3">
+                <p className="text-xs font-black uppercase tracking-wider" style={{ color: BRAND.navy }}>{isPro ? 'Contact' : 'Personne physique'}</p>
+                <div className="grid grid-cols-2 gap-3">
+                  {!isPro && (
+                    <div className="col-span-2">
+                      <label className={LBL}>Genre</label>
+                      <div className="flex gap-3">
+                        {['Homme', 'Femme'].map((g) => (
+                          <label key={g} className="flex items-center gap-1.5 cursor-pointer">
+                            <input type="radio" name="genre" value={g.toLowerCase()} checked={nd.genre === g.toLowerCase()}
+                              onChange={(e) => set('genre', e.target.value)} className="accent-blue-500" />
+                            <span className="text-sm">{g}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  <div>
+                    <label className={LBL}>{isPro ? 'Nom contact *' : 'Nom *'}</label>
+                    <input value={nd.nom} onChange={(e) => set('nom', e.target.value)} placeholder="NOM" className={INP} autoFocus={!isPro} />
+                  </div>
+                  <div>
+                    <label className={LBL}>Prénom</label>
+                    <input value={nd.prenom} onChange={(e) => set('prenom', e.target.value)} placeholder="Prénom" className={INP} />
+                  </div>
+                  {!isPro && (
+                    <div>
+                      <label className={LBL}>Date de naissance</label>
+                      <input type="date" value={nd.dateNaissance} onChange={(e) => set('dateNaissance', e.target.value)} className={INP} />
+                    </div>
+                  )}
+                  <div>
+                    <label className={LBL}>Téléphone mobile *</label>
+                    <input value={nd.tel} onChange={(e) => set('tel', e.target.value)} placeholder="+262 692 12 34 56" className={`${INP} font-mono`} />
+                  </div>
+                  <div>
+                    <label className={LBL}>Téléphone fixe</label>
+                    <input value={nd.telFixe} onChange={(e) => set('telFixe', e.target.value)} placeholder="+262 262 12 34 56" className={`${INP} font-mono`} />
+                  </div>
+                  <div>
+                    <label className={LBL}>Email *</label>
+                    <input type="email" value={nd.email} onChange={(e) => set('email', e.target.value)} placeholder="adresse@exemple.com" className={INP} />
+                  </div>
+                  <div>
+                    <label className={LBL}>Telegram @</label>
+                    <input value={nd.telegramUsername} onChange={(e) => set('telegramUsername', e.target.value)} placeholder="@username" className={INP} />
+                  </div>
+                </div>
+              </div>
+
+              {/* ── Section : Adresse livraison ── */}
+              <div className="space-y-3">
+                <p className="text-xs font-black uppercase tracking-wider" style={{ color: BRAND.navy }}>Adresse livraison</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className={LBL}>Département *</label>
+                    <select value={nd.cp ? nd.cp.slice(0, 3) : ''} onChange={(e) => set('cp', e.target.value + '00')} className={INP}>
+                      <option value="">— Sélectionner —</option>
+                      <option value="974">🇷🇪 La Réunion (974)</option>
+                      <option value="976">🇾🇹 Mayotte (976)</option>
+                      <option value="971">🇬🇵 Guadeloupe (971)</option>
+                      <option value="972">🇲🇶 Martinique (972)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className={LBL}>Commune</label>
+                    <input value={nd.commune} onChange={(e) => set('commune', e.target.value)} placeholder="Saint-Denis" className={INP} />
+                  </div>
+                  <div>
+                    <label className={LBL}>Code postal *</label>
+                    <input value={nd.cp} onChange={(e) => set('cp', e.target.value)} placeholder="97400" className={`${INP} font-mono`} />
+                  </div>
+                  <div>
+                    <label className={LBL}>Ville</label>
+                    <input value={nd.ville} onChange={(e) => set('ville', e.target.value)} placeholder="Saint-Denis" className={INP} />
+                  </div>
+                  <div className="col-span-2">
+                    <label className={LBL}>Adresse ligne 1 *</label>
+                    <input value={nd.adresseLigne1} onChange={(e) => set('adresseLigne1', e.target.value)} placeholder="N° et nom de rue" className={INP} />
+                  </div>
+                  <div className="col-span-2">
+                    <label className={LBL}>Adresse ligne 2</label>
+                    <input value={nd.adresseLigne2} onChange={(e) => set('adresseLigne2', e.target.value)} placeholder="Résidence, bâtiment, étage…" className={INP} />
+                  </div>
+                  <div className="col-span-2">
+                    <label className={LBL}>Informations pour la livraison</label>
+                    <textarea value={nd.infosLivraison} onChange={(e) => set('infosLivraison', e.target.value)}
+                      placeholder="Digicode, interphone, horaires…" rows={2} className={`${INP} resize-none`} />
+                  </div>
+                </div>
+              </div>
+
+              {/* Notes */}
               <div>
-                <label className="text-[11px] font-bold text-gray-500 block mb-1 uppercase tracking-wide">Notes</label>
-                <textarea value={newDraft.notes} onChange={(e) => setNewDraft((p) => ({ ...p, notes: e.target.value }))}
-                  placeholder="Informations utiles…" rows={2}
-                  className="w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-sm outline-none focus:border-blue-300 resize-none" />
+                <label className={LBL}>Notes internes</label>
+                <textarea value={nd.notes} onChange={(e) => set('notes', e.target.value)}
+                  placeholder="Informations utiles pour l'équipe…" rows={2} className={`${INP} resize-none`} />
               </div>
             </div>
-            <div className="px-5 pb-5 pt-2 flex gap-3">
+
+            {/* Footer */}
+            <div className="px-6 pb-5 pt-2 flex gap-3 border-t border-gray-100">
               <button onClick={() => setShowNewModal(false)}
-                className="flex-1 py-2.5 rounded-xl border-2 border-gray-200 text-sm font-bold text-gray-600 hover:bg-gray-50 transition-colors">
+                className="flex-1 py-2.5 rounded-xl border-2 border-gray-200 text-sm font-bold text-gray-600 hover:bg-gray-50">
                 Annuler
               </button>
               <button onClick={handleCreateClient}
-                className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white transition-all active:scale-95"
-                style={{ background: `linear-gradient(135deg, ${BRAND.navy}, ${BRAND.navyL})` }}>
-                Créer le client
+                className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white active:scale-95 transition-all"
+                style={{ background: isPro ? `linear-gradient(135deg, ${BRAND.goldD}, ${BRAND.gold})` : `linear-gradient(135deg, ${BRAND.navy}, ${BRAND.navyL})` }}>
+                {isPro ? 'Créer le client pro' : 'Créer le client'}
               </button>
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* ── Header ──────────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between gap-2 pt-1">

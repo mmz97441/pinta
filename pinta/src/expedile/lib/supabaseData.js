@@ -70,18 +70,24 @@ function mapClient(row) {
     id: row.id,
     userId: row.user_id,
     ref: row.ref || null,
-    // nom = full display name for backwards compat (used everywhere)
     nom: (row.nom || '') + (row.prenom ? ' ' + row.prenom : ''),
-    // Separate fields for forms
     nomFamille: row.nom || '',
     prenom: row.prenom || '',
+    genre: row.genre || null,
+    dateNaissance: row.date_naissance || null,
     ville: row.ville,
     adresse: row.adresse || '',
+    adresseLigne1: row.adresse_ligne1 || '',
+    adresseLigne2: row.adresse_ligne2 || '',
+    commune: row.commune || '',
+    infosLivraison: row.infos_livraison || '',
     cp: row.cp,
     tel: row.tel,
+    telFixe: row.tel_fixe || '',
     email: row.email,
     canal: row.canal,
     type: row.type,
+    modePaiement: row.mode_paiement || 'colis',
     points: row.points || 0,
     notes: row.notes,
     onboarded: row.onboarded || false,
@@ -92,6 +98,10 @@ function mapClient(row) {
     methode_paiement: row.methode_paiement,
     telegramChatId: row.telegram_chat_id || null,
     telegramUsername: row.telegram_username || null,
+    // Pro fields
+    raisonSociale: row.raison_sociale || '',
+    siret: row.siret || '',
+    interlocuteur: row.interlocuteur || '',
   };
 }
 
@@ -365,14 +375,15 @@ export async function insertColis(colisData) {
 export async function updateClient(id, changes) {
   const snakeChanges = {};
   const map = {
-    nom: 'nom', prenom: 'prenom', ville: 'ville', adresse: 'adresse', cp: 'cp',
-    tel: 'tel', email: 'email', canal: 'canal', type: 'type',
+    nom: 'nom', prenom: 'prenom', genre: 'genre', dateNaissance: 'date_naissance',
+    ville: 'ville', adresse: 'adresse', adresseLigne1: 'adresse_ligne1', adresseLigne2: 'adresse_ligne2',
+    commune: 'commune', infosLivraison: 'infos_livraison', cp: 'cp',
+    tel: 'tel', telFixe: 'tel_fixe', email: 'email', canal: 'canal', type: 'type',
+    modePaiement: 'mode_paiement',
     points: 'points', notes: 'notes', onboarded: 'onboarded',
-    abonnement: 'abonnement',
-    abonnementDebut: 'abonnement_debut',
-    abonnementFin: 'abonnement_fin',
-    methodePaiement: 'methode_paiement',
-    telegramUsername: 'telegram_username',
+    abonnement: 'abonnement', abonnementDebut: 'abonnement_debut', abonnementFin: 'abonnement_fin',
+    methodePaiement: 'methode_paiement', telegramUsername: 'telegram_username',
+    raisonSociale: 'raison_sociale', siret: 'siret', interlocuteur: 'interlocuteur',
   };
   for (const [key, val] of Object.entries(changes)) {
     snakeChanges[map[key] || key] = val;
@@ -515,13 +526,21 @@ export async function insertClient(clientData) {
   const row = {
     nom: clientData.nom || '',
     prenom: clientData.prenom || null,
+    genre: clientData.genre || null,
+    date_naissance: clientData.dateNaissance || null,
     ville: clientData.ville || null,
     adresse: clientData.adresse || null,
+    adresse_ligne1: clientData.adresseLigne1 || null,
+    adresse_ligne2: clientData.adresseLigne2 || null,
+    commune: clientData.commune || null,
+    infos_livraison: clientData.infosLivraison || null,
     cp: clientData.cp,
     tel: clientData.tel || null,
+    tel_fixe: clientData.telFixe || null,
     email: clientData.email || null,
     canal: clientData.canal || 'telegram',
     type: clientData.type || 'particulier',
+    mode_paiement: clientData.modePaiement || 'colis',
     points: clientData.points || 0,
     onboarded: clientData.onboarded || false,
     notes: clientData.notes || null,
@@ -529,6 +548,9 @@ export async function insertClient(clientData) {
     abonnement: clientData.abonnement || 'freemium',
     abonnement_debut: clientData.abonnementDebut || null,
     abonnement_fin: clientData.abonnementFin || null,
+    raison_sociale: clientData.raisonSociale || null,
+    siret: clientData.siret || null,
+    interlocuteur: clientData.interlocuteur || null,
   };
 
   // Retry with new ref on unique constraint violation
