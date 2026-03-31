@@ -108,10 +108,7 @@ function ColisRow({ colis, client, isActive, onClick }) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// DETAIL PANEL — right side (reuses existing components)
-// ════════════════════════════════════════════════════════════════════════════
-// ════════════════════════════════════════════════════════════════════════════
-// DASHBOARD OVERVIEW — shown when no colis is selected
+// DASHBOARD OVERVIEW — shown on / route and when no colis is selected
 // ════════════════════════════════════════════════════════════════════════════
 function DashboardOverview({ onSelectColis }) {
   const navigate = useNavigate();
@@ -265,7 +262,22 @@ function DashboardOverview({ onSelectColis }) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// DETAIL PANEL — right side (reuses existing components)
+// DASHBOARD PAGE — full screen standalone, exported for / route
+// ════════════════════════════════════════════════════════════════════════════
+export function DashboardPage() {
+  const navigate = useNavigate();
+  const { setSelId } = useApp();
+
+  const handleSelectColis = (id) => {
+    setSelId(id);
+    navigate('/colis');
+  };
+
+  return <DashboardOverview onSelectColis={handleSelectColis} />;
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// DETAIL PANEL — right side, shows dashboard when no colis selected
 // ════════════════════════════════════════════════════════════════════════════
 function DetailPanel({ onClose, onSelectColis }) {
   const { sel } = useApp();
