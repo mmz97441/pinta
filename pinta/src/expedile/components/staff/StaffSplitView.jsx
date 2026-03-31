@@ -21,7 +21,7 @@ const PIPELINE = [
   { key: 'reception',   label: 'Réception',       icon: Package,     color: '#F59E0B',   filter: (c) => ['receptionne', 'mesure'].includes(c.statut) },
   { key: 'feuvert',     label: 'Att. feu vert',   icon: Clock,       color: '#F97316',   filter: (c) => c.statut === 'attente_feu_vert' },
   { key: 'feuvert_ok',  label: 'Feu vert OK',     icon: CheckCircle, color: '#65A30D',   filter: (c) => ['autorise', 'en_preparation'].includes(c.statut) },
-  { key: 'paiement',    label: 'Att. paiement',   icon: CreditCard,  color: '#D97706',   filter: (c) => ['devis_envoye', 'attente_paiement'].includes(c.statut) },
+  { key: 'paiement',    label: 'Att. paiement',   icon: CreditCard,  color: '#D97706',   filter: (c) => ['devis_envoye'].includes(c.statut) },
   { key: 'expedition',  label: 'Expédition',      icon: Plane,       color: '#0891B2',   filter: (c) => ['paye', 'expedie', 'transit', 'dedouanement', 'arrive', 'livraison'].includes(c.statut) },
   { key: 'done',        label: 'Livrés',          icon: Check,       color: '#16A34A',   filter: (c) => c.statut === 'livre' },
 ];
@@ -31,7 +31,7 @@ function statutBorderColor(s) {
   const map = {
     receptionne: '#F59E0B', mesure: '#EAB308', attente_feu_vert: '#F97316',
     autorise: '#22C55E', en_preparation: '#3B82F6', devis_envoye: '#D97706',
-    attente_paiement: '#D97706', paye: '#10B981', expedie: '#06B6D4',
+    paye: '#10B981', expedie: '#06B6D4',
     transit: '#0EA5E9', dedouanement: '#8B5CF6', arrive: '#14B8A6',
     livraison: '#84CC16', livre: '#16A34A', annule: '#9CA3AF',
   };
@@ -44,9 +44,13 @@ const TD = 'px-2 py-2 text-[11px] whitespace-nowrap';
 const DASH = <span className="text-gray-300">—</span>;
 
 // ── Table header row ────────────────────────────────────────────────────────
-function ColisTableHead({ compact }) {
+function ColisTableHead({ compact, onSelectAll, allSelected }) {
   return (
     <tr className="border-b border-gray-200" style={{ background: `${BRAND.navy}06` }}>
+      <th className="px-2 py-2 w-8">
+        <input type="checkbox" checked={allSelected} onChange={onSelectAll}
+          className="w-3.5 h-3.5 rounded accent-blue-500 cursor-pointer" />
+      </th>
       <th className={TH}>Date</th>
       <th className={TH}>Réf.</th>
       <th className={TH}>Statut</th>
@@ -72,7 +76,7 @@ function ColisTableHead({ compact }) {
 }
 
 // ── Table data row ──────────────────────────────────────────────────────────
-function ColisTableRow({ c, client, envois, onClick, isSelected, compact }) {
+function ColisTableRow({ c, client, envois, onClick, isSelected, compact, checked, onCheck }) {
   const dest = client ? getDestByCP(client.cp) : null;
   const hasDims = c.dimL && c.dimW && c.dimH;
   const volCm3 = hasDims ? c.dimL * c.dimW * c.dimH : null;
@@ -95,6 +99,10 @@ function ColisTableRow({ c, client, envois, onClick, isSelected, compact }) {
       className={`border-b border-gray-50 cursor-pointer transition-colors ${isSelected ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
       style={{ borderLeft: `3px solid ${statutBorderColor(c.statut)}` }}
     >
+      <td className="px-2 py-2 w-8" onClick={(e) => e.stopPropagation()}>
+        <input type="checkbox" checked={checked} onChange={onCheck}
+          className="w-3.5 h-3.5 rounded accent-blue-500 cursor-pointer" />
+      </td>
       <td className={TD}><span className="text-gray-500">{dateCreation}</span></td>
       <td className={TD}>
         <span className="font-black text-gray-900">{c.ref}</span>
@@ -281,7 +289,8 @@ export function DashboardPage() {
 // ════════════════════════════════════════════════════════════════════════════
 export default function StaffColisPage() {
   const navigate = useNavigate();
-  const { data, clients, getClient, envois, setSelId, sel } = useApp();
+  const { data, clients, getClient, envois, setSelId, sel, changerStatut, flash } = useApp();
+  const [selectedIds, setSelectedIds] = useState(new Set());
   const [searchParams] = useSearchParams();
 
   const urlTab = searchParams.get('tab');
@@ -378,7 +387,7 @@ export default function StaffColisPage() {
     { label: 'Réception', statuts: ['receptionne', 'mesure'], color: '#F59E0B', icon: Package },
     { label: 'Attente feu vert', statuts: ['attente_feu_vert'], color: '#F97316', icon: Clock },
     { label: 'Feu vert OK / Préparation', statuts: ['autorise', 'en_preparation'], color: '#65A30D', icon: CheckCircle },
-    { label: 'Devis / Paiement', statuts: ['devis_envoye', 'attente_paiement'], color: '#D97706', icon: CreditCard },
+    { label: 'Devis / Paiement', statuts: ['devis_envoye'], color: '#D97706', icon: CreditCard },
     { label: 'Payé', statuts: ['paye'], color: '#10B981', icon: Check },
     { label: 'En expédition', statuts: ['expedie', 'transit', 'dedouanement', 'arrive', 'livraison'], color: '#0891B2', icon: Plane },
     { label: 'Livrés', statuts: ['livre'], color: '#16A34A', icon: Check },
@@ -488,6 +497,43 @@ export default function StaffColisPage() {
         </div>
       </div>
 
+      {/* Bulk action bar */}
+      {selectedIds.size > 0 && (
+        <div className="flex-shrink-0 px-4 py-2 bg-blue-50 border-b border-blue-200 flex items-center gap-3">
+          <span className="text-xs font-bold text-blue-700">{selectedIds.size} colis sélectionné{selectedIds.size > 1 ? 's' : ''}</span>
+          <div className="flex gap-1.5">
+            {[
+              { label: 'En transit', statut: 'transit', color: '#0EA5E9' },
+              { label: 'Dédouanement', statut: 'dedouanement', color: '#8B5CF6' },
+              { label: 'Arrivé', statut: 'arrive', color: '#14B8A6' },
+              { label: 'En livraison', statut: 'livraison', color: '#84CC16' },
+              { label: 'Livré', statut: 'livre', color: '#16A34A' },
+              { label: 'Expédié', statut: 'expedie', color: '#06B6D4' },
+            ].map((action) => (
+              <button
+                key={action.statut}
+                onClick={() => {
+                  const ids = [...selectedIds];
+                  let ok = 0;
+                  ids.forEach((id) => {
+                    try { changerStatut(id, action.statut); ok++; } catch (e) {}
+                  });
+                  flash({ msg: `${ok} colis → ${action.label}`, type: 'success' });
+                  setSelectedIds(new Set());
+                }}
+                className="px-2 py-1 rounded-lg text-[10px] font-bold text-white transition-all active:scale-95"
+                style={{ background: action.color }}
+              >
+                {action.label}
+              </button>
+            ))}
+          </div>
+          <button onClick={() => setSelectedIds(new Set())} className="ml-auto text-[10px] text-blue-500 hover:text-blue-700 font-semibold">
+            Désélectionner tout
+          </button>
+        </div>
+      )}
+
       {/* Main area: table + detail side by side */}
       <div className="flex-1 flex min-h-0">
 
@@ -516,11 +562,12 @@ export default function StaffColisPage() {
                     </div>
                     <div className="overflow-x-auto">
                       <table className="w-full text-left">
-                        <thead><ColisTableHead compact={!!sel} /></thead>
+                        <thead><ColisTableHead compact={!!sel} allSelected={sorted.length > 0 && sorted.every((c) => selectedIds.has(c.id))} onSelectAll={() => { if (sorted.every((c) => selectedIds.has(c.id))) { setSelectedIds(new Set()); } else { setSelectedIds(new Set(sorted.map((c) => c.id))); } }} /></thead>
                         <tbody>
                           {group.colis.map((c) => (
                             <ColisTableRow key={c.id} c={c} client={getClient(c.clientId)} envois={envois}
-                              onClick={() => openColis(c.id)} isSelected={sel?.id === c.id} compact={!!sel} />
+                              onClick={() => openColis(c.id)} isSelected={sel?.id === c.id} compact={!!sel}
+                              checked={selectedIds.has(c.id)} onCheck={() => setSelectedIds((prev) => { const next = new Set(prev); if (next.has(c.id)) next.delete(c.id); else next.add(c.id); return next; })} />
                           ))}
                         </tbody>
                       </table>
@@ -547,11 +594,12 @@ export default function StaffColisPage() {
                     </div>
                     <div className="overflow-x-auto">
                       <table className="w-full text-left">
-                        <thead><ColisTableHead compact={!!sel} /></thead>
+                        <thead><ColisTableHead compact={!!sel} allSelected={sorted.length > 0 && sorted.every((c) => selectedIds.has(c.id))} onSelectAll={() => { if (sorted.every((c) => selectedIds.has(c.id))) { setSelectedIds(new Set()); } else { setSelectedIds(new Set(sorted.map((c) => c.id))); } }} /></thead>
                         <tbody>
                           {group.colis.map((c) => (
                             <ColisTableRow key={c.id} c={c} client={getClient(c.clientId)} envois={envois}
-                              onClick={() => openColis(c.id)} isSelected={sel?.id === c.id} compact={!!sel} />
+                              onClick={() => openColis(c.id)} isSelected={sel?.id === c.id} compact={!!sel}
+                              checked={selectedIds.has(c.id)} onCheck={() => setSelectedIds((prev) => { const next = new Set(prev); if (next.has(c.id)) next.delete(c.id); else next.add(c.id); return next; })} />
                           ))}
                         </tbody>
                       </table>

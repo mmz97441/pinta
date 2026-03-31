@@ -402,7 +402,7 @@ export default function ClientDetailView() {
 
     // Phase 4 – Devis & Paiement
     if (phaseIdx === 3) {
-      const isPay = sel.statut === 'attente_paiement';
+      const isPay = sel.statut === 'devis_envoye';
       const isDevis = sel.statut === 'devis_envoye';
       const isPaye = sel.paiementMontant != null;
       const hasDevis = sel.devisTotal != null && sel.devisTotal > 0;

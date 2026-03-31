@@ -10,7 +10,7 @@ const KPI_PIPELINE = [
   { key: 'reception',   label: 'Reception',    statuts: ['receptionne', 'mesure'],                              color: '#D97706' },
   { key: 'feu_vert',    label: 'Feu vert',     statuts: ['attente_feu_vert'],                                   color: '#F97316' },
   { key: 'preparation', label: 'Preparation',   statuts: ['autorise', 'en_preparation'],                        color: '#2563EB' },
-  { key: 'paiement',    label: 'Paiement',     statuts: ['devis_envoye', 'attente_paiement'],                   color: '#A21CAF' },
+  { key: 'paiement',    label: 'Paiement',     statuts: ['devis_envoye'],                   color: '#A21CAF' },
   { key: 'expedition',  label: 'Expedition',    statuts: ['paye', 'expedie', 'transit', 'dedouanement'],        color: '#0891B2' },
   { key: 'livre',       label: 'Livre',         statuts: ['arrive', 'livraison', 'livre'],                      color: '#16A34A' },
 ];

@@ -19,7 +19,6 @@ function statusBorderColor(statut) {
     refuse_client: '#EF4444',
     en_preparation: '#3B82F6',
     devis_envoye: '#D97706',
-    attente_paiement: '#D97706',
     paye: '#10B981',
     expedie: '#06B6D4',
     transit: '#0EA5E9',
@@ -41,7 +40,7 @@ function templatesForStatut(statut) {
     autorise: ['feu_vert_recu', 'libre'],
     en_preparation: ['libre'],
     devis_envoye: ['devis_final', 'relance_paiement', 'libre'],
-    attente_paiement: ['relance_paiement', 'libre'],
+    devis_envoye: ['devis_final', 'relance_paiement', 'libre'],
     paye: ['expedie', 'libre'],
     expedie: ['expedie', 'libre'],
     transit: ['libre'],
@@ -1385,26 +1384,8 @@ export default function StaffDetailView() {
       }
 
       // ── 7. DEVIS_ENVOYE ────────────────────────────────────────────────
+      // ── 7. DEVIS ENVOYE — en attente de paiement ──────────────────────
       case 'devis_envoye': {
-        return (
-          <Section title="Devis envoyé — en attente client" icon={Clock} color={borderColor}>
-            <div className="space-y-4">
-              <div className="p-4 rounded-xl bg-amber-50 border border-amber-200">
-                <p className="text-xs font-bold text-amber-700 mb-1">Montant du devis</p>
-                <p className="text-2xl font-black" style={{ color: BRAND.navyD }}>
-                  {eur(sel.devisTotal)}
-                </p>
-              </div>
-              <BtnTelegram disabled={actionLoading} onClick={() => { if (actionLoading) return; setActionLoading(true); try { sendMsg(sel.id, cl?.id, 'telegram', 'devis_final', null); } finally { setTimeout(() => setActionLoading(false), 1000); } }}>
-                {actionLoading ? 'Envoi en cours...' : 'Relancer via Telegram'}
-              </BtnTelegram>
-            </div>
-          </Section>
-        );
-      }
-
-      // ── 8. ATTENTE_PAIEMENT ────────────────────────────────────────────
-      case 'attente_paiement': {
         const isPro = cl?.type === 'pro';
         const PAY_METHODS = {
           virement: 'Virement bancaire',

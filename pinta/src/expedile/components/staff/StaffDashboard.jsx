@@ -22,7 +22,7 @@ const STATUTS_A_FAIRE = [
   'receptionne', 'mesure', 'autorise',
   'en_preparation', 'paye', 'expedie', 'transit', 'arrive', 'livraison',
 ];
-const STATUTS_ATTENTE = ['attente_feu_vert', 'devis_envoye', 'attente_paiement'];
+const STATUTS_ATTENTE = ['attente_feu_vert', 'devis_envoye'];
 const STATUTS_LIVRE = ['livre'];
 const STATUTS_PRETS_EXPEDIES = ['paye', 'expedie', 'transit', 'arrive', 'livraison', 'livre'];
 
@@ -34,7 +34,7 @@ const SUMMARY_CARDS = [
   { key: 'afaire', label: 'À traiter', statuts: STATUTS_A_FAIRE, color: BRAND.navy, icon: CircleDot },
   { key: 'attente_fv', label: 'Att. feu vert', statuts: ['attente_feu_vert'], color: '#F97316', icon: Clock },
   { key: 'feuvert', label: 'Feu vert OK', statuts: STATUTS_FEU_VERT_OK, color: '#65A30D', icon: CheckCircle },
-  { key: 'attente_paie', label: 'Att. paiement', statuts: ['devis_envoye', 'attente_paiement'], color: '#D97706', icon: CreditCard },
+  { key: 'attente_paie', label: 'Att. paiement', statuts: ['devis_envoye'], color: '#D97706', icon: CreditCard },
   { key: 'expedies', label: 'Prêts / Expédiés', statuts: STATUTS_PRETS_EXPEDIES, color: '#059669', icon: Plane },
 ];
 
@@ -51,7 +51,7 @@ const PIPELINE = [
     key: 'attente',
     label: 'Att. client',
     icon: Clock,
-    statuts: ['attente_feu_vert', 'devis_envoye', 'attente_paiement'],
+    statuts: ['attente_feu_vert', 'devis_envoye'],
     color: '#D97706',
   },
   {
@@ -564,7 +564,7 @@ export default function StaffDashboard({ onNewColis }) {
     [data],
   );
   const totalAttentePaie = useMemo(
-    () => data.filter((c) => ['devis_envoye', 'attente_paiement'].includes(c.statut)).length,
+    () => data.filter((c) => ['devis_envoye'].includes(c.statut)).length,
     [data],
   );
   const totalFeuVert = useMemo(

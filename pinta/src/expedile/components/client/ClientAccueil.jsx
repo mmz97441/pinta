@@ -23,15 +23,15 @@ export default function ClientAccueil() {
   const aTraiter = myColis.filter((p) =>
     p.statut === 'attente_feu_vert' || p.statut === 'devis_envoye'
   );
-  const aPayer = myColis.filter((p) => p.statut === 'attente_paiement');
+  const aPayer = myColis.filter((p) => p.statut === 'devis_envoye');
   const livres = myColis.filter((p) => p.statut === 'livre');
 
   const colisAttenteFV = myColis.filter((p) => p.statut === 'attente_feu_vert');
-  const colisPaiement = myColis.filter((p) => p.statut === 'attente_paiement');
+  const colisPaiement = myColis.filter((p) => p.statut === 'devis_envoye');
   const actionsRequises = [...colisAttenteFV, ...colisPaiement];
 
   const colisCours = enCours.filter(
-    (p) => p.statut !== 'attente_feu_vert' && p.statut !== 'attente_paiement'
+    (p) => p.statut !== 'attente_feu_vert' && p.statut !== 'devis_envoye'
   );
 
   const derniereLivraison = livres.length > 0 ? livres[livres.length - 1] : null;

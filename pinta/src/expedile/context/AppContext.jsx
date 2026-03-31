@@ -721,7 +721,7 @@ export function AppProvider({ children }) {
   }, [data, clients, tarifs, categories, upd, flash]);
 
   const payer = useCallback((id, mt) => {
-    log(id, 'attente_paiement', 'paye');
+    log(id, 'devis_envoye', 'paye');
     upd(id, { statut: 'paye', paiementMontant: mt, paiementDate: new Date().toISOString() });
 
     // Programme fidélité : 10€ de transport = 1 point (particuliers uniquement)

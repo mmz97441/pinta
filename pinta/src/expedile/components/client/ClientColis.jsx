@@ -37,7 +37,7 @@ export default function ClientColis() {
   const filteredActifs = colisFilter === 'a_traiter'
     ? actifs.filter((p) => p.statut === 'attente_feu_vert' || p.statut === 'devis_envoye')
     : colisFilter === 'a_payer'
-    ? actifs.filter((p) => p.statut === 'attente_paiement')
+    ? actifs.filter((p) => p.statut === 'devis_envoye')
     : actifs;
 
   const counts = {
@@ -52,7 +52,7 @@ export default function ClientColis() {
     myColis;
 
   const needsAction = (p) =>
-    p.statut === 'attente_feu_vert' || p.statut === 'attente_paiement' || p.statut === 'devis_envoye';
+    p.statut === 'attente_feu_vert' || p.statut === 'devis_envoye';
 
   return (
     <div className="anim-fade space-y-4">
@@ -141,7 +141,7 @@ export default function ClientColis() {
             const action = needsAction(p);
             const isLivre = p.statut === 'livre';
             const isFV = p.statut === 'attente_feu_vert';
-            const isPay = p.statut === 'attente_paiement';
+            const isPay = p.statut === 'devis_envoye';
 
             return (
               <button
@@ -276,7 +276,7 @@ export default function ClientColis() {
                   const action = needsAction(p);
                   const isLivre = p.statut === 'livre';
                   const isFV = p.statut === 'attente_feu_vert';
-                  const isPay = p.statut === 'attente_paiement';
+                  const isPay = p.statut === 'devis_envoye';
                   const taxes = (p.devisOM != null || p.devisOMR != null || p.devisTVA != null)
                     ? ((p.devisOM || 0) + (p.devisOMR || 0) + (p.devisTVA || 0))
                     : null;

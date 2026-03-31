@@ -19,7 +19,7 @@ export default function ClientBottomNav() {
   // Count actions needed for badge on "Colis" tab
   const { data, authCl } = useApp();
   const myColis = data.filter((c) => c.clientId === authCl?.id);
-  const mesActions = myColis.filter((c) => c.statut === 'attente_feu_vert' || c.statut === 'attente_paiement').length;
+  const mesActions = myColis.filter((c) => c.statut === 'attente_feu_vert' || c.statut === 'devis_envoye').length;
 
   const badges = {
     accueil: 0,

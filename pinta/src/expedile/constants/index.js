@@ -16,8 +16,7 @@ export const STATUTS = {
   autorise:           { label: 'Autorisation reçue',          labelClient: 'Accord donné',                  couleur: 'bg-green-200 text-green-800',    phase: 2, actionStaff: 'Préparer ce colis',               actionClient: null },
   refuse_client:      { label: 'Refusé par le client',        labelClient: 'Refusé',                        couleur: 'bg-red-200 text-red-700',        phase: 2, actionStaff: 'Traiter le refus',                actionClient: null },
   en_preparation:     { label: 'En cours de préparation',     labelClient: null,                            couleur: 'bg-blue-200 text-blue-800',      phase: 3, actionStaff: 'Finaliser et envoyer le devis',   actionClient: null },
-  devis_envoye:       { label: 'Devis envoyé',                labelClient: 'Devis reçu',                    couleur: 'bg-amber-200 text-amber-900',    phase: 4, actionStaff: 'En attente validation client',    actionClient: 'Valider le devis' },
-  attente_paiement:   { label: 'En attente de paiement',      labelClient: 'En attente de votre paiement',  couleur: 'bg-amber-200 text-amber-900',    phase: 4, actionStaff: 'En attente paiement',             actionClient: 'Payer' },
+  devis_envoye:       { label: 'Devis envoyé',                labelClient: 'Devis reçu — en attente de paiement', couleur: 'bg-amber-200 text-amber-900',    phase: 4, actionStaff: 'En attente paiement',              actionClient: 'Payer' },
   paye:               { label: 'Payé',                        labelClient: null,                            couleur: 'bg-emerald-200 text-emerald-800',phase: 4, actionStaff: 'Expédier ce colis',               actionClient: null },
   expedie:            { label: 'Expédié',                     labelClient: null,                            couleur: 'bg-cyan-200 text-cyan-800',      phase: 5, actionStaff: 'Marquer en transit',              actionClient: null },
   transit:            { label: 'En vol',                      labelClient: null,                            couleur: 'bg-sky-200 text-sky-800',        phase: 5, actionStaff: 'Dédouanement ou arrivée',       actionClient: null },
@@ -35,8 +34,7 @@ export const TRANSITIONS = {
   autorise: ['en_preparation'],
   refuse_client: ['annule'],
   en_preparation: ['devis_envoye'],
-  devis_envoye: ['attente_paiement'],
-  attente_paiement: ['paye'],
+  devis_envoye: ['paye'],
   paye: ['expedie'],
   expedie: ['transit'],
   transit: ['dedouanement', 'arrive'],
@@ -53,8 +51,7 @@ export const PREV_STATUT = {
   autorise: 'attente_feu_vert',
   en_preparation: 'autorise',
   devis_envoye: 'en_preparation',
-  attente_paiement: 'devis_envoye',
-  paye: 'attente_paiement',
+  paye: 'devis_envoye',
 };
 
 // ══════════ DESTINATIONS DOM-TOM ══════════
@@ -129,7 +126,7 @@ export const PHASES_CLIENT = [
   { key: 'reception',   label: 'Réceptionné',       statuts: ['receptionne', 'mesure'] },
   { key: 'feu_vert',    label: 'Votre accord',      statuts: ['attente_feu_vert', 'autorise'] },
   { key: 'preparation', label: 'Préparation',       statuts: ['en_preparation'] },
-  { key: 'devis',       label: 'Devis & Paiement',  statuts: ['devis_envoye', 'attente_paiement', 'litige_devis', 'paye'] },
+  { key: 'devis',       label: 'Devis & Paiement',  statuts: ['devis_envoye', 'litige_devis', 'paye'] },
   { key: 'expedition',  label: 'Expédition',        statuts: ['expedie', 'transit', 'dedouanement'] },
   { key: 'livraison',   label: 'Livraison',         statuts: ['arrive', 'livraison', 'livre'] },
 ];
