@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { AlertTriangle, TrendingUp, Package, Target, ShoppingCart } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { BRAND, STATUTS, DESTINATIONS, getDestByCP } from '../../constants';
@@ -15,6 +16,7 @@ const KPI_PIPELINE = [
 ];
 
 export default function KPIDashboard() {
+  const navigate = useNavigate();
   const { data, clients, envois, authRole } = useApp();
 
   const isDirection = ['directeur', 'vice_directeur'].includes(authRole);
@@ -139,10 +141,10 @@ export default function KPIDashboard() {
       {/* ── Row 1: Key Metrics (direction only) ── */}
       {isDirection && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <MetricCard label="CA Total" value={eur(caTotal)} icon={TrendingUp} color={BRAND.navy} />
-          <MetricCard label="CA ce mois" value={eur(caMois)} icon={TrendingUp} color="#059669" />
-          <MetricCard label="Panier moyen" value={eur(panierMoyen)} icon={ShoppingCart} color="#7C3AED" />
-          <MetricCard label="Colis livres" value={colisTraites} icon={Package} color="#16A34A" />
+          <MetricCard label="CA Total" value={eur(caTotal)} icon={TrendingUp} color={BRAND.navy} onClick={() => navigate('/colis')} />
+          <MetricCard label="CA ce mois" value={eur(caMois)} icon={TrendingUp} color="#059669" onClick={() => navigate('/colis')} />
+          <MetricCard label="Panier moyen" value={eur(panierMoyen)} icon={ShoppingCart} color="#7C3AED" onClick={() => navigate('/colis')} />
+          <MetricCard label="Colis livres" value={colisTraites} icon={Package} color="#16A34A" onClick={() => navigate('/colis?tab=done')} />
         </div>
       )}
 
@@ -151,14 +153,15 @@ export default function KPIDashboard() {
         <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Pipeline ({pipelineTotal} colis actifs)</p>
         <div className="flex gap-2 flex-wrap">
           {pipelineCounts.map((p) => (
-            <div
+            <button
               key={p.key}
-              className="flex items-center gap-2 px-3 py-2 rounded-xl"
+              onClick={() => navigate(`/colis?tab=${p.key}`)}
+              className="flex items-center gap-2 px-3 py-2 rounded-xl transition-all hover:shadow-md active:scale-95"
               style={{ background: `${p.color}12`, border: `1px solid ${p.color}30` }}
             >
               <span className="text-lg font-black" style={{ color: p.color }}>{p.count}</span>
               <span className="text-xs font-semibold text-gray-600">{p.label}</span>
-            </div>
+            </button>
           ))}
         </div>
       </div>
@@ -167,9 +170,10 @@ export default function KPIDashboard() {
       {isDirection && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           {destStats.map((d) => (
-            <div
+            <button
               key={d.code}
-              className="card p-4 rounded-2xl"
+              onClick={() => navigate('/colis')}
+              className="card p-4 rounded-2xl text-left hover:shadow-md transition-all active:scale-[0.98]"
               style={{ borderLeft: `3px solid ${BRAND.gold}` }}
             >
               <div className="flex items-center gap-2 mb-2">
@@ -178,7 +182,7 @@ export default function KPIDashboard() {
               </div>
               <p className="text-xs text-gray-500">{d.count} colis</p>
               <p className="text-sm font-bold" style={{ color: BRAND.navy }}>{eur(d.ca)}</p>
-            </div>
+            </button>
           ))}
         </div>
       )}
@@ -208,9 +212,9 @@ export default function KPIDashboard() {
       {/* ── Row 5: Alertes actives (direction only) ── */}
       {isDirection && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <AlertCard label="Colis bloques > 7j" count={blockedOver7} color="#DC2626" />
-          <AlertCard label="Factures manquantes" count={facturesManquantes} color="#D97706" />
-          <AlertCard label="Abo. expirants" count={abonnementsExpirants} color="#7C3AED" />
+          <AlertCard label="Colis bloques > 7j" count={blockedOver7} color="#DC2626" onClick={() => navigate('/colis?tab=reception')} />
+          <AlertCard label="Factures manquantes" count={facturesManquantes} color="#D97706" onClick={() => navigate('/colis')} />
+          <AlertCard label="Abo. expirants" count={abonnementsExpirants} color="#7C3AED" onClick={() => navigate('/clients')} />
         </div>
       )}
     </div>
@@ -219,9 +223,9 @@ export default function KPIDashboard() {
 
 // ── Sub-components ──
 
-function MetricCard({ label, value, icon: Icon, color }) {
+function MetricCard({ label, value, icon: Icon, color, onClick }) {
   return (
-    <div className="card p-4 rounded-2xl">
+    <button onClick={onClick} className="card p-4 rounded-2xl text-left hover:shadow-md transition-all active:scale-[0.98]">
       <div className="flex items-center gap-2 mb-1">
         <div
           className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
@@ -232,7 +236,7 @@ function MetricCard({ label, value, icon: Icon, color }) {
         <span className="text-xs font-semibold text-gray-500">{label}</span>
       </div>
       <p className="text-lg font-black mt-1" style={{ color }}>{value}</p>
-    </div>
+    </button>
   );
 }
 
@@ -254,10 +258,11 @@ function ObjectiveBar({ label, pct, color }) {
   );
 }
 
-function AlertCard({ label, count, color }) {
+function AlertCard({ label, count, color, onClick }) {
   return (
-    <div
-      className="card p-4 rounded-2xl cursor-pointer hover:shadow-md transition-shadow"
+    <button
+      onClick={onClick}
+      className="card p-4 rounded-2xl text-left hover:shadow-md transition-shadow w-full"
       style={{ borderLeft: `3px solid ${color}` }}
     >
       <div className="flex items-center gap-2">
@@ -265,6 +270,6 @@ function AlertCard({ label, count, color }) {
         <span className="text-xs font-semibold text-gray-600">{label}</span>
       </div>
       <p className="text-2xl font-black mt-1" style={{ color }}>{count}</p>
-    </div>
+    </button>
   );
 }

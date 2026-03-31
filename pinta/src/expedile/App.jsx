@@ -181,7 +181,7 @@ function AppContent() {
                     sidebarCollapsed ? 'justify-center px-2 py-2.5' : 'px-3 py-2.5'
                   } ${isActive
                     ? 'bg-white bg-opacity-15 text-white'
-                    : 'text-gray-400 hover:text-white hover:bg-white hover:bg-opacity-8'
+                    : 'text-gray-400 hover:text-white hover:bg-white/10'
                   }`}
                 >
                   <Icon size={18} strokeWidth={isActive ? 2.5 : 2} />
@@ -197,7 +197,7 @@ function AppContent() {
           <div className="px-3 py-2">
             <button
               onClick={() => setSidebarCollapsed((p) => !p)}
-              className="w-full flex items-center justify-center gap-2 px-2 py-2 rounded-xl text-gray-500 hover:text-white hover:bg-white hover:bg-opacity-8 transition-all"
+              className="w-full flex items-center justify-center gap-2 px-2 py-2 rounded-xl text-gray-500 hover:text-white hover:bg-white/10 transition-all"
             >
               {sidebarCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
               {!sidebarCollapsed && <span className="text-xs font-medium">Réduire</span>}
@@ -221,7 +221,7 @@ function AppContent() {
               )}
               <button
                 onClick={() => { setAuth(null); navigate('/'); }}
-                className={`p-1.5 rounded-lg text-gray-500 hover:text-red-400 hover:bg-white hover:bg-opacity-8 transition-all ${sidebarCollapsed ? 'mt-2' : ''}`}
+                className={`p-1.5 rounded-lg text-gray-500 hover:text-red-400 hover:bg-white/10 transition-all ${sidebarCollapsed ? 'mt-2' : ''}`}
                 title="Se déconnecter"
               >
                 <LogOut size={14} />
