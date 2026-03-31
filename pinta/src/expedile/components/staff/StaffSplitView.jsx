@@ -471,7 +471,7 @@ export default function StaffColisPage() {
 
         {/* Detail panel (inline, right side) */}
         {sel && (
-          <div className="w-[480px] flex-shrink-0 border-l border-gray-200 bg-white overflow-y-auto">
+          <div className="w-[680px] flex-shrink-0 border-l border-gray-200 bg-white overflow-y-auto">
             {/* Header */}
             <div className="sticky top-0 z-10 bg-white border-b border-gray-100 px-4 py-3 flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -482,12 +482,21 @@ export default function StaffColisPage() {
               <button onClick={closeDetail} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400"><X size={18} /></button>
             </div>
             <div className="px-4 pt-3"><Etapes statut={sel.statut} /></div>
-            <div className="p-4 space-y-4">
-              <StaffDetailView />
-              <ColisInfo />
-              <FacturesPanel />
-              <ChatPanel />
-              <AuditLog />
+            {/* Two-column detail layout like old version */}
+            <div className="p-4 flex gap-4">
+              {/* Left: info, factures, chat, audit */}
+              <div className="flex-1 min-w-0 space-y-4">
+                <ColisInfo />
+                <FacturesPanel />
+                <ChatPanel />
+                <AuditLog />
+              </div>
+              {/* Right: actions (sticky) */}
+              <div className="w-[280px] flex-shrink-0">
+                <div className="sticky top-16 space-y-4">
+                  <StaffDetailView />
+                </div>
+              </div>
             </div>
           </div>
         )}
