@@ -471,7 +471,7 @@ export default function StaffColisPage() {
 
         {/* Detail panel (inline, right side) */}
         {sel && (
-          <div className="w-[680px] flex-shrink-0 border-l border-gray-200 bg-white overflow-y-auto">
+          <div className="w-[820px] flex-shrink-0 border-l border-gray-200 bg-white overflow-y-auto">
             {/* Header */}
             <div className="sticky top-0 z-10 bg-white border-b border-gray-100 px-4 py-3 flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -492,7 +492,7 @@ export default function StaffColisPage() {
                 <AuditLog />
               </div>
               {/* Right: actions (sticky) */}
-              <div className="w-[280px] flex-shrink-0">
+              <div className="w-[340px] flex-shrink-0">
                 <div className="sticky top-16 space-y-4">
                   <StaffDetailView />
                 </div>
