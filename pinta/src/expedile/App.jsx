@@ -104,6 +104,7 @@ function AppContent() {
   const { auth, setAuth, isStaff, sel, setSelId, page, setPage, clientTab, authCl, data, updateClient, sbReady } = useApp();
   const [modal, setModal] = useState(false);
   const [onboardingDismissed, setOnboardingDismissed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   // ── Not logged in ──
   if (!auth) return <LoginPage />;
@@ -115,7 +116,6 @@ function AppContent() {
   // ── Staff layout with sidebar ──
   if (isStaff) {
     const currentPath = location.pathname;
-    const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
     const NAV_ITEMS = [
       { key: '/', label: 'Dashboard', icon: LayoutDashboard },
