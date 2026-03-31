@@ -557,6 +557,18 @@ export default function StaffColisPage() {
                   <div key={e?.id || 'none'} className="rounded-xl border border-gray-100 overflow-hidden bg-white">
                     <div className="px-3 py-2 border-b border-gray-200 flex items-center justify-between" style={{ background: `${BRAND.navy}06` }}>
                       <div className="flex items-center gap-2">
+                        <input type="checkbox"
+                          checked={group.colis.every((c) => selectedIds.has(c.id))}
+                          onChange={() => {
+                            const ids = group.colis.map((c) => c.id);
+                            setSelectedIds((prev) => {
+                              const next = new Set(prev);
+                              if (ids.every((id) => next.has(id))) { ids.forEach((id) => next.delete(id)); }
+                              else { ids.forEach((id) => next.add(id)); }
+                              return next;
+                            });
+                          }}
+                          className="w-3.5 h-3.5 rounded accent-blue-500 cursor-pointer" />
                         <Plane size={13} style={{ color: BRAND.navy }} />
                         <span className="text-xs font-bold" style={{ color: BRAND.navy }}>{dateLabel}</span>
                         {e?.ref && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">{e.ref}</span>}
@@ -590,6 +602,18 @@ export default function StaffColisPage() {
                   <div key={group.label} className="rounded-xl border border-gray-100 overflow-hidden bg-white">
                     <div className="px-3 py-2 border-b border-gray-200 flex items-center justify-between" style={{ background: `${group.color}08` }}>
                       <div className="flex items-center gap-2">
+                        <input type="checkbox"
+                          checked={group.colis.every((c) => selectedIds.has(c.id))}
+                          onChange={() => {
+                            const ids = group.colis.map((c) => c.id);
+                            setSelectedIds((prev) => {
+                              const next = new Set(prev);
+                              if (ids.every((id) => next.has(id))) { ids.forEach((id) => next.delete(id)); }
+                              else { ids.forEach((id) => next.add(id)); }
+                              return next;
+                            });
+                          }}
+                          className="w-3.5 h-3.5 rounded accent-blue-500 cursor-pointer" />
                         <Icon size={13} style={{ color: group.color }} />
                         <span className="text-xs font-bold" style={{ color: group.color }}>{group.label}</span>
                       </div>
