@@ -440,7 +440,7 @@ export function AppProvider({ children }) {
       attente_feu_vert: { feuVert: null },
       autorise: { feuVert: null },
       en_preparation: { finL: null, finW: null, finH: null, finP: null },
-      devis_envoye: { devisTransport: null, devisOM: null, devisOMR: null, devisTVA: null, devisTotal: null, avantOptimTransport: null, avantOptimTotal: null, economie: null, devisBrouillon: false, finL: null, finW: null, finH: null, finP: null },
+      devis_envoye: { devisTransport: null, devisOM: null, devisOMR: null, devisTVA: null, devisTotal: null, avantOptimTransport: null, avantOptimTotal: null, economie: null, devisBrouillon: false },
       attente_paiement: { devisTransport: null, devisOM: null, devisOMR: null, devisTVA: null, devisTotal: null, avantOptimTransport: null, avantOptimTotal: null, economie: null, devisBrouillon: false },
       paye: { paiementMontant: null },
     };
