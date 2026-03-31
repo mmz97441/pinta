@@ -620,17 +620,29 @@ export default function StaffClients() {
                     <span className="text-sm font-black truncate" style={{ color: BRAND.navy }}>
                       {cl.nom || <span className="italic text-gray-400">Sans nom</span>}
                     </span>
-                    {cl.type === 'pro' && (
-                      <span
-                        className="text-[10px] font-black px-1.5 py-0.5 rounded-full uppercase"
-                        style={{ background: `${BRAND.gold}30`, color: BRAND.goldD }}
-                      >
+                    {cl.abonnement === 'vip' ? (
+                      <span className="text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider"
+                        style={{ background: 'linear-gradient(135deg, #F59E0B, #D97706)', color: 'white' }}>
+                        👑 VIP
+                      </span>
+                    ) : cl.type === 'pro' ? (
+                      <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full uppercase"
+                        style={{ background: `${BRAND.gold}30`, color: BRAND.goldD }}>
                         PRO
                       </span>
+                    ) : (
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-600">
+                        Particulier
+                      </span>
                     )}
-                    {cl.type === 'pro' && (
-                      <span className="text-[10px] font-semibold text-indigo-500">
-                        {cl.methodePaiement === '30_jours' ? '30j' : 'Fin de mois'}
+                    {cl.abonnement && cl.abonnement !== 'freemium' && (
+                      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${ABONNEMENTS[cl.abonnement]?.couleur || 'bg-gray-200 text-gray-600'}`}>
+                        {ABONNEMENTS[cl.abonnement]?.label || cl.abonnement}
+                      </span>
+                    )}
+                    {cl.type === 'pro' && cl.modePaiement && cl.modePaiement !== 'colis' && (
+                      <span className="text-[9px] font-semibold text-indigo-500">
+                        {cl.modePaiement === '30j' ? '30 jours' : cl.modePaiement === 'fin_mois' ? 'Fin de mois' : cl.modePaiement === 'compte' ? 'En compte' : ''}
                       </span>
                     )}
                     {cl.canal === 'telegram' && (

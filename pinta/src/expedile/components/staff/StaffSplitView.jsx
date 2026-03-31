@@ -106,7 +106,12 @@ function ColisTableRow({ c, client, envois, onClick, isSelected, compact }) {
           : c.devisTotal ? <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">En attente</span>
           : DASH}
       </td>}
-      <td className={TD}><span className="text-gray-700 font-medium">{nom}</span>{dest && <span className="ml-1">{dest.flag}</span>}</td>
+      <td className={TD}>
+        <span className="text-gray-700 font-medium">{nom}</span>
+        {dest && <span className="ml-1">{dest.flag}</span>}
+        {client?.abonnement === 'vip' && <span className="ml-1 text-[8px] font-black px-1 py-0.5 rounded" style={{ background: 'linear-gradient(135deg, #F59E0B, #D97706)', color: 'white' }}>VIP</span>}
+        {client?.type === 'pro' && client?.abonnement !== 'vip' && <span className="ml-1 text-[8px] font-black px-1 py-0.5 rounded" style={{ background: `${BRAND.gold}30`, color: BRAND.goldD }}>PRO</span>}
+      </td>
       <td className={TD}><span className="text-gray-500">{prenom || '—'}</span></td>
       {!compact && <td className={TD}><span className="text-gray-500 text-[10px]">{client?.email || '—'}</span></td>}
       {!compact && <td className={TD}><span className="text-gray-500 text-[10px] font-mono">{client?.tel || '—'}</span></td>}
