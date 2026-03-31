@@ -397,16 +397,18 @@ export async function updateClient(id, changes) {
 }
 
 export async function insertMessage(colisId, msg) {
+  const row = {
+    colis_id: colisId,
+    type: msg.type,
+    auteur_id: msg.auteurId || null,
+    auteur_nom: msg.auteur,
+    texte: msg.texte,
+    statut: msg.statut || null,
+  };
+  if (msg.telegramMsgId) row.telegram_msg_id = String(msg.telegramMsgId);
   const { data, error } = await supabase
     .from('messages')
-    .insert({
-      colis_id: colisId,
-      type: msg.type,
-      auteur_id: msg.auteurId || null,
-      auteur_nom: msg.auteur,
-      texte: msg.texte,
-      statut: msg.statut || null,
-    })
+    .insert(row)
     .select()
     .single();
   if (error) throw error;

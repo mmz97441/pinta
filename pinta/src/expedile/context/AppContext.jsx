@@ -401,7 +401,7 @@ export function AppProvider({ children }) {
     const fullMsg = tpl ? (canal === 'telegram' ? tpl.telegram(c, colis) : tpl.email(c, colis)) : customMsg || '';
 
     // ── Persist message to Supabase (ALL channels) ──
-    const persistMessage = async (statut) => {
+    const persistMessage = async (statut, telegramMsgId) => {
       if (!colisId) return;
       try {
         const saved = await sb.insertMessage(colisId, {
@@ -409,6 +409,7 @@ export function AppProvider({ children }) {
           auteur: auth?.u?.nom || 'Système',
           texte: fullMsg,
           statut,
+          telegramMsgId: telegramMsgId || null,
         });
         if (saved) {
           setData((prev) => prev.map((p) => {
@@ -453,10 +454,10 @@ export function AppProvider({ children }) {
           res = await sendNotification(chatId, fullMsg);
         }
         if (res.ok) {
-          await persistMessage('envoye');
+          await persistMessage('envoye', res.messageId);
           flash({ msg: `Telegram envoyé → ${prenom}`, type: 'success' });
         } else {
-          await persistMessage('echec');
+          await persistMessage('echec', null);
           flash({
             msg: `Envoi impossible → ${prenom}\n(${res.error || 'erreur'})`,
             type: 'warning',
