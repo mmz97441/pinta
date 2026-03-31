@@ -1236,8 +1236,20 @@ export default function StaffDetailView() {
                 <div className="space-y-3">
                   <div className="p-3 rounded-xl bg-blue-50 border border-blue-200 space-y-0.5 text-sm">
                     <Ligne label="Transport" value={eur(sel.devisTransport || devisCalc.tr)} />
-                    <Ligne label={`OM (Octroi de Mer)`} value={eur(sel.devisOM || devisCalc.om)} />
-                    <Ligne label={`OMR (régional)`} value={eur(sel.devisOMR || devisCalc.omr)} />
+                    {(() => {
+                      // Calculer le taux effectif OM/OMR à partir de la valeur des articles
+                      const valeurArticles = (sel.lignes || []).reduce((s, l) => s + (l.qte || 1) * (l.prix || 0), 0);
+                      const omVal = sel.devisOM || devisCalc.om;
+                      const omrVal = sel.devisOMR || devisCalc.omr;
+                      const tauxOM = valeurArticles > 0 ? ((omVal / valeurArticles) * 100).toFixed(1) : '0';
+                      const tauxOMR = valeurArticles > 0 ? ((omrVal / valeurArticles) * 100).toFixed(1) : '0';
+                      return (
+                        <>
+                          <Ligne label={`Octroi de Mer (${tauxOM}%)`} value={eur(omVal)} />
+                          <Ligne label={`OMR (${tauxOMR}%)`} value={eur(omrVal)} />
+                        </>
+                      );
+                    })()}
                     <Ligne label={`TVA (${dest?.tva || 0}%)`} value={eur(sel.devisTVA || devisCalc.tva)} />
                     {fraisDivers.length > 0 && (
                       <Ligne label="Frais divers" value={eur(fraisDivers.reduce((s, f) => s + f.montant, 0))} />
