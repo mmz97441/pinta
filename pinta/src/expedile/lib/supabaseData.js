@@ -126,6 +126,7 @@ function mapFact(row) {
     fichier: row.fichier_url,
     fichierNom: row.fichier_nom,
     rejetMotif: row.rejet_motif || null,
+    telegramMsgId: row.telegram_msg_id || null,
   };
 }
 

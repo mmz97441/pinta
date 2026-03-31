@@ -77,6 +77,28 @@ export async function sendTelegram(chatId, text) {
 }
 
 /**
+ * Envoie un message Telegram en réponse à un message spécifique (reply).
+ */
+export async function sendTelegramReply(chatId, text, replyToMessageId) {
+  if (!BOT_TOKEN || !chatId) return { ok: false, error: 'Bot non configuré' };
+  if (!/^\d+$/.test(String(chatId))) return { ok: false, error: 'Format Chat ID invalide' };
+  try {
+    const body = { chat_id: chatId, text, parse_mode: 'Markdown' };
+    if (replyToMessageId) body.reply_to_message_id = parseInt(replyToMessageId);
+    const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (data.ok) return { ok: true, messageId: data.result?.message_id };
+    return { ok: false, error: data.description || 'Erreur Telegram' };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+}
+
+/**
  * Envoie un message Telegram avec des boutons inline (cliquables).
  */
 export async function sendTelegramWithButtons(chatId, text, buttons) {

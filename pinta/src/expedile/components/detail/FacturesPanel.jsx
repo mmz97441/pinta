@@ -5,6 +5,7 @@ import { BRAND, getDestByCP } from '../../constants';
 import { eur, uid } from '../../utils';
 import * as sb from '../../lib/supabaseData';
 import { supabase } from '../../lib/supabase';
+import { sendTelegramReply } from '../../services/telegramApi';
 
 const MOTIFS_REJET = [
   { key: 'non_conforme', label: 'Non conforme' },
@@ -122,7 +123,7 @@ export default function FacturesPanel() {
   };
 
   // ── Reject with motif ──────────────────────────────────────────────────
-  const rejectFacture = (facture, motifLabel) => {
+  const rejectFacture = async (facture, motifLabel) => {
     // Persist to Supabase
     sb.updateFacture(facture.id, { valide: false, rejetMotif: motifLabel }).catch(console.error);
     // Update local state
@@ -133,12 +134,27 @@ export default function FacturesPanel() {
 
     const dest = getDestByCP(cl?.cp);
     const nom = cl?.nom?.split(' ')[0] || '';
+    const chatId = cl?.telegramChatId;
 
-    const msg = canal === 'telegram'
-      ? `Bonjour ${nom} 👋\n\n⚠️ La facture *${facture.vendeur}* (${eur(facture.montant)}) pour votre colis *${sel.ref}* n'a pas pu être validée.\n\n📄 *Motif : ${motifLabel}*\n\n👉 Merci de nous renvoyer une facture conforme dès que possible (photo ou PDF lisible).\n\nSans facture validée, nous ne pouvons pas avancer sur la préparation de votre colis.\n\n_Expedîle${dest ? ` — Paris → ${dest.nom}` : ''}_`
-      : `Objet : Facture rejetée — ${sel.ref}\n\nBonjour ${cl?.nom || ''},\n\nLa facture ${facture.vendeur} (${eur(facture.montant)}) pour votre colis ${sel.ref} n'a pas pu être validée.\nMotif : ${motifLabel}.\n\nMerci de nous renvoyer une facture conforme (photo ou PDF lisible).\n\nCordialement,\nL'équipe Expedîle`;
+    // Reply to the SPECIFIC Telegram message (if the facture was sent via Telegram)
+    if (chatId && facture.telegramMsgId) {
+      const replyMsg = `⚠️ *Facture "${facture.vendeur}" refusée*\n\n📄 *Motif : ${motifLabel}*\n\n👉 Merci de nous renvoyer une facture conforme (photo ou PDF lisible) pour votre colis *${sel.ref}*.\n\nSans facture validée, nous ne pouvons pas avancer.\n\n_Expedîle${dest ? ` — Paris → ${dest.nom}` : ''}_`;
+      sendTelegramReply(chatId, replyMsg, facture.telegramMsgId);
+      // Also persist the message in chat
+      sb.insertMessage(sel.id, {
+        type: 'staff',
+        auteur: 'Système',
+        texte: `❌ Facture "${facture.vendeur}" refusée — Motif : ${motifLabel}`,
+        statut: 'envoye',
+      }).catch(console.error);
+    } else {
+      // Fallback: send via sendMsg (generic, not reply)
+      const msg = canal === 'telegram'
+        ? `Bonjour ${nom} 👋\n\n⚠️ La facture *${facture.vendeur}* (${eur(facture.montant)}) pour votre colis *${sel.ref}* n'a pas pu être validée.\n\n📄 *Motif : ${motifLabel}*\n\n👉 Merci de nous renvoyer une facture conforme dès que possible.\n\n_Expedîle${dest ? ` — Paris → ${dest.nom}` : ''}_`
+        : `Objet : Facture rejetée — ${sel.ref}\n\nBonjour ${cl?.nom || ''},\n\nLa facture ${facture.vendeur} (${eur(facture.montant)}) pour votre colis ${sel.ref} n'a pas pu être validée.\nMotif : ${motifLabel}.\n\nMerci de nous renvoyer une facture conforme.\n\nCordialement,\nL'équipe Expedîle`;
+      sendMsg(sel.id, sel.clientId, canal, null, msg);
+    }
 
-    sendMsg(sel.id, sel.clientId, canal, null, msg);
     flash('Facture refusée — client notifié');
     setRejectingId(null);
     setMotifLibre('');
