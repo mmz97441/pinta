@@ -57,6 +57,8 @@ function mapColis(row) {
     modePaiementPro: row.mode_paiement_pro || null,
     photoReception: row.photo_reception || false,
     archive: row.archive || false,
+    payplugPaymentId: row.payplug_payment_id || null,
+    payplugPaymentUrl: row.payplug_payment_url || null,
     createdAt: row.created_at,
     // Relations (loaded separately or joined)
     factures: row._factures || [],
@@ -316,6 +318,8 @@ export async function updateColis(id, changes) {
     modePaiementPro: 'mode_paiement_pro',
     photoReception: 'photo_reception',
     archive: 'archive',
+    payplugPaymentId: 'payplug_payment_id',
+    payplugPaymentUrl: 'payplug_payment_url',
   };
 
   for (const [key, val] of Object.entries(changes)) {

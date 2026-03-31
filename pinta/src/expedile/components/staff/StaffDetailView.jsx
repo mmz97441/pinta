@@ -527,18 +527,18 @@ export default function StaffDetailView() {
     }, 100);
   }
 
-  function handleConfirmDevisEnvoye() {
+  async function handleConfirmDevisEnvoye() {
     if (!sel.devisTotal || sel.devisTotal <= 0) {
       flash({ msg: 'Le devis n\'a pas été calculé.', type: 'warning', duration: 5000 });
       return;
     }
     changerStatut(sel.id, 'devis_envoye');
 
-    // Send devis notification DIRECTLY (not via sendMsg to avoid race condition)
     const chatId = cl?.telegramChatId;
     const dest = selDest || getDestByCP(cl?.cp);
     const prenom = cl?.nom?.split(' ')[0] || '';
     const pf = sel.poidsFact || sel.finP || sel.poids || 0;
+    const isPro = cl?.type === 'pro';
 
     // Build per-category tax breakdown
     const lignes = sel.lignes || [];
@@ -562,7 +562,42 @@ export default function StaffDetailView() {
       ).join('\n');
     }
 
-    const telegramMsg = `Bonjour ${prenom} 👋\n\nLe devis final pour votre expédition *${sel.ref}* est prêt ! 📋\n\n🎯 *Destination :* ${dest?.flag || ''} ${dest?.nom || ''}\n${sel.finL ? `📐 *Dimensions optimisées :* ${sel.finL}×${sel.finW}×${sel.finH} cm — ${sel.finP} kg\n` : ''}⚖️ *Poids facturable :* ${pf} kg\n\n━━━━━━━━━━━━━━━━\n💰 *DÉTAIL DU DEVIS*\n━━━━━━━━━━━━━━━━\n🚀 Transport : *${eur(sel.devisTransport)}*\n\n🏛️ *Taxes douanières :*\n${taxBreakdown || `  Octroi de Mer : ${eur(sel.devisOM)}\n  Octroi de Mer Régional : ${eur(sel.devisOMR)}`}\n\n📊 TVA (${dest?.tva || 0}%) : *${eur(sel.devisTVA)}*\n━━━━━━━━━━━━━━━━\n💰 *TOTAL : ${eur(sel.devisTotal)}*\n━━━━━━━━━━━━━━━━\n${sel.economie > 0 ? `\n✅ *Économie : ${eur(sel.economie)}* grâce à l'optimisation !\n` : ''}\n👉 Payez pour déclencher l'expédition.\n\n_L'équipe Expedîle — Paris → ${dest?.nom || ''}_`;
+    // Create PayPlug payment for particuliers (pros pay differently)
+    let paymentUrl = null;
+    if (!isPro) {
+      try {
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://bqprktzehuhplpqjgjaz.supabase.co';
+        const res = await fetch(`${supabaseUrl}/functions/v1/payplug-create`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            colisId: sel.id,
+            amount: sel.devisTotal,
+            clientEmail: cl?.email || '',
+            clientName: cl?.nom || '',
+            colisRef: sel.ref,
+          }),
+        });
+        const data = await res.json();
+        if (data.success && data.paymentUrl) {
+          paymentUrl = data.paymentUrl;
+          // Update local state with payment URL
+          setData((prev) => prev.map((c) => c.id === sel.id ? { ...c, payplugPaymentUrl: paymentUrl, payplugPaymentId: data.paymentId } : c));
+        } else {
+          console.warn('[PayPlug] Creation failed:', data);
+        }
+      } catch (err) {
+        console.error('[PayPlug] Error:', err.message);
+      }
+    }
+
+    const paymentLine = paymentUrl
+      ? `\n💳 *Payer maintenant :*\n${paymentUrl}\n`
+      : isPro
+      ? `\n📄 _Paiement selon les conditions convenues (${cl?.modePaiement === 'fin_mois' ? 'fin de mois' : cl?.modePaiement === '30j' ? '30 jours' : 'en compte'})_\n`
+      : '\n👉 Payez pour déclencher l\'expédition.\n';
+
+    const telegramMsg = `Bonjour ${prenom} 👋\n\nLe devis final pour votre expédition *${sel.ref}* est prêt ! 📋\n\n🎯 *Destination :* ${dest?.flag || ''} ${dest?.nom || ''}\n${sel.finL ? `📐 *Dimensions optimisées :* ${sel.finL}×${sel.finW}×${sel.finH} cm — ${sel.finP} kg\n` : ''}⚖️ *Poids facturable :* ${pf} kg\n\n━━━━━━━━━━━━━━━━\n💰 *DÉTAIL DU DEVIS*\n━━━━━━━━━━━━━━━━\n🚀 Transport : *${eur(sel.devisTransport)}*\n\n🏛️ *Taxes douanières :*\n${taxBreakdown || `  Octroi de Mer : ${eur(sel.devisOM)}\n  Octroi de Mer Régional : ${eur(sel.devisOMR)}`}\n\n📊 TVA (${dest?.tva || 0}%) : *${eur(sel.devisTVA)}*\n━━━━━━━━━━━━━━━━\n💰 *TOTAL : ${eur(sel.devisTotal)}*\n━━━━━━━━━━━━━━━━\n${sel.economie > 0 ? `\n✅ *Économie : ${eur(sel.economie)}* grâce à l'optimisation !\n` : ''}${paymentLine}\n_L'équipe Expedîle — Paris → ${dest?.nom || ''}_`;
 
     if (chatId && isTelegramConfigured()) {
       sendTelegram(chatId, telegramMsg).then(async (res) => {
@@ -574,10 +609,10 @@ export default function StaffDetailView() {
             statut: res.ok ? 'envoye' : 'echec',
           });
         } catch (e) { console.warn('insertMessage:', e.message); }
-        flash({ msg: res.ok ? `Devis envoyé à ${prenom} via Telegram` : `Erreur envoi Telegram`, type: res.ok ? 'success' : 'warning' });
+        flash({ msg: res.ok ? `Devis envoyé à ${prenom} via Telegram${paymentUrl ? ' + lien de paiement' : ''}` : `Erreur envoi Telegram`, type: res.ok ? 'success' : 'warning' });
       });
     } else if (cl?.email) {
-      const emailMsg = `Objet : Devis final — ${sel.ref} : ${eur(sel.devisTotal)}\n\nBonjour ${cl.nom},\n\nTransport: ${eur(sel.devisTransport)}\nTaxes (OM+OMR): ${eur((sel.devisOM || 0) + (sel.devisOMR || 0))}\nTVA: ${eur(sel.devisTVA)}\nTotal: ${eur(sel.devisTotal)}\n\nCordialement,\nL'équipe Expedîle`;
+      const emailMsg = `Objet : Devis final — ${sel.ref} : ${eur(sel.devisTotal)}\n\nBonjour ${cl.nom},\n\nTransport: ${eur(sel.devisTransport)}\nTaxes (OM+OMR): ${eur((sel.devisOM || 0) + (sel.devisOMR || 0))}\nTVA: ${eur(sel.devisTVA)}\nTotal: ${eur(sel.devisTotal)}\n${paymentUrl ? `\nPayer: ${paymentUrl}\n` : ''}\nCordialement,\nL'équipe Expedîle`;
       window.open(`mailto:${cl.email}?subject=${encodeURIComponent(`Devis ${sel.ref}`)}&body=${encodeURIComponent(emailMsg)}`, '_blank');
       flash(`Email devis ouvert pour ${prenom}`);
     } else {
@@ -1460,17 +1495,41 @@ export default function StaffDetailView() {
                   </BtnPrimary>
                 </>
               ) : (
-                <BtnTelegram disabled={actionLoading} onClick={() => {
-                  if (actionLoading) return;
-                  if (!sel.devisTotal || sel.devisTotal <= 0) {
-                    flash('Le devis n\'a pas été calculé — impossible de relancer le paiement');
-                    return;
-                  }
-                  setActionLoading(true);
-                  try { sendMsg(sel.id, cl?.id, 'telegram', 'relance_paiement', null); } finally { setTimeout(() => setActionLoading(false), 1000); }
-                }}>
-                  {actionLoading ? 'Envoi en cours...' : 'Relancer via Telegram'}
-                </BtnTelegram>
+                <div className="space-y-2">
+                  {/* Lien de paiement PayPlug */}
+                  {sel.payplugPaymentUrl && (
+                    <div className="p-3 rounded-xl bg-blue-50 border border-blue-200 space-y-2">
+                      <p className="text-[10px] font-bold text-blue-700 uppercase">Lien de paiement</p>
+                      <a href={sel.payplugPaymentUrl} target="_blank" rel="noopener noreferrer"
+                        className="text-xs text-blue-600 underline break-all block">{sel.payplugPaymentUrl}</a>
+                    </div>
+                  )}
+                  {/* Renvoyer le lien */}
+                  <BtnTelegram disabled={actionLoading} onClick={() => {
+                    if (actionLoading) return;
+                    const chatId = cl?.telegramChatId;
+                    const prenom = cl?.nom?.split(' ')[0] || '';
+                    const payUrl = sel.payplugPaymentUrl;
+                    if (!chatId) { flash({ msg: 'Client n\'a pas lié Telegram', type: 'warning' }); return; }
+                    setActionLoading(true);
+                    const msg = payUrl
+                      ? `Bonjour ${prenom} 👋\n\n💳 Voici votre lien de paiement pour le colis *${sel.ref}* :\n\n💰 *Montant : ${eur(sel.devisTotal)}*\n\n👉 ${payUrl}\n\n_L'équipe Expedîle_`
+                      : `Bonjour ${prenom} 👋\n\nRappel : votre colis *${sel.ref}* est en attente de paiement.\n\n💰 *Montant : ${eur(sel.devisTotal)}*\n\nMerci de procéder au règlement.\n\n_L'équipe Expedîle_`;
+                    sendTelegram(chatId, msg).then(async (res) => {
+                      try { await sb.insertMessage(sel.id, { type: 'staff', auteur: 'Système', texte: msg, statut: res.ok ? 'envoye' : 'echec' }); } catch (e) {}
+                      flash({ msg: res.ok ? `Lien de paiement renvoyé à ${prenom}` : 'Erreur Telegram', type: res.ok ? 'success' : 'warning' });
+                    }).finally(() => setTimeout(() => setActionLoading(false), 1000));
+                  }}>
+                    {actionLoading ? 'Envoi...' : sel.payplugPaymentUrl ? 'Renvoyer le lien de paiement' : 'Relancer via Telegram'}
+                  </BtnTelegram>
+                  <BtnEmail disabled={actionLoading} onClick={() => {
+                    if (actionLoading) return;
+                    setActionLoading(true);
+                    try { sendMsg(sel.id, cl?.id, 'email', 'relance_paiement', null); } finally { setTimeout(() => setActionLoading(false), 1000); }
+                  }}>
+                    {actionLoading ? 'Envoi...' : 'Relancer par email'}
+                  </BtnEmail>
+                </div>
               )}
             </div>
           </Section>
