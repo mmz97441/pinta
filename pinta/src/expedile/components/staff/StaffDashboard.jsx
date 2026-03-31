@@ -964,7 +964,7 @@ export default function StaffDashboard({ onNewColis }) {
                 {searchResults.clients.map((cl) => (
                   <button
                     key={cl.id}
-                    onClick={() => { setGlobalSearch(''); navigate(`/clients`); }}
+                    onClick={() => { setGlobalSearch(''); navigate('/clients', { state: { openClientId: cl.id } }); }}
                     className="w-full flex items-center gap-2.5 px-3 py-2.5 hover:bg-gray-50 transition-colors text-left"
                   >
                     <div

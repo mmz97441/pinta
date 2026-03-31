@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useMemo, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, Users, Plus, Search, ChevronDown, Check, X, AlertTriangle, ExternalLink, Send, Download, FileSpreadsheet } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { BRAND, ABONNEMENTS, getDestByCP } from '../../constants';
@@ -88,10 +88,24 @@ function ValidatedField({ label, value, onChange, placeholder, type = 'text', mo
 // ── Main component ───────────────────────────────────────────────────────────
 export default function StaffClients() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { clients, data, updateClient, addNewClient, deleteClient, flash, sendMsg } = useApp();
 
   const [clPageSearch, setClPageSearch] = useState('');
   const [clEditId, setClEditId] = useState(null);
+
+  // Open specific client if navigated with state
+  useEffect(() => {
+    if (location.state?.openClientId) {
+      const cl = clients.find((c) => c.id === location.state.openClientId);
+      if (cl) {
+        setClEditId(cl.id);
+        setClDraft({ ...cl });
+      }
+      // Clear the state to avoid re-opening on re-render
+      navigate('/clients', { replace: true, state: {} });
+    }
+  }, [location.state?.openClientId]);
   const [clDraft, setClDraft] = useState(emptyDraft());
   const [isNewClient, setIsNewClient] = useState(false);
   const [justSavedId, setJustSavedId] = useState(null);
