@@ -529,13 +529,18 @@ export function AppProvider({ children }) {
     const pv = (c.finL * c.finW * c.finH) / 5000;
     const pf = Math.max(c.finP, pv);
     const tr = calcTransport(pf, t);
+    // CIF = Cost (goods) + Insurance (0) + Freight (proportional transport)
+    const totalValeurArticles = c.lignes.reduce((s, l) => s + (l.qte || 1) * (l.prix || 0), 0);
     let om = 0, omr = 0;
     c.lignes.forEach((l) => {
       const cat = categories.find((x) => x.id === l.cat);
       if (cat) {
         const ct = getCatTaux(cat, dest.code);
-        om += l.qte * l.prix * ct.om / 100;
-        omr += l.qte * l.prix * ct.omr / 100;
+        const valeurArticle = (l.qte || 1) * (l.prix || 0);
+        const transportShare = totalValeurArticles > 0 ? tr * (valeurArticle / totalValeurArticles) : 0;
+        const cif = valeurArticle + transportShare;
+        om += cif * ct.om / 100;
+        omr += cif * ct.omr / 100;
       }
     });
     const ht = tr + om + omr;

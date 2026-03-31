@@ -7,6 +7,7 @@ import { BRAND, STATUTS, TRANSITIONS, PRODUITS_INTERDITS, TAGS_PREPARATION, getD
 import { eur, calcTransport, getCatTaux } from '../../utils';
 import { Ligne } from '../ui';
 import * as sb from '../../lib/supabaseData';
+import { isTelegramConfigured, sendTelegram } from '../../services/telegramApi';
 
 // ── Status border color helper ───────────────────────────────────────────────
 function statusBorderColor(statut) {
@@ -500,15 +501,62 @@ export default function StaffDetailView() {
   }
 
   function handleConfirmDevisEnvoye() {
-    // Vérifier que le devis a bien été calculé
     if (!sel.devisTotal || sel.devisTotal <= 0) {
-      flash({ msg: 'Le devis n\'a pas été calculé. Vérifiez la facture et les articles.', type: 'warning', duration: 5000 });
+      flash({ msg: 'Le devis n\'a pas été calculé.', type: 'warning', duration: 5000 });
       return;
     }
     changerStatut(sel.id, 'devis_envoye');
-    setTimeout(() => {
-      sendMsg(sel.id, cl?.id, cl?.canal || 'telegram', 'devis_final', null);
-    }, 300);
+
+    // Send devis notification DIRECTLY (not via sendMsg to avoid race condition)
+    const chatId = cl?.telegramChatId;
+    const dest = selDest || getDestByCP(cl?.cp);
+    const prenom = cl?.nom?.split(' ')[0] || '';
+    const pf = sel.poidsFact || sel.finP || sel.poids || 0;
+
+    // Build per-category tax breakdown
+    const lignes = sel.lignes || [];
+    const totalValeurArticles = lignes.reduce((s, l) => s + (l.qte || 1) * (l.prix || 0), 0);
+    let taxBreakdown = '';
+    if (lignes.length > 0) {
+      const byCat = {};
+      lignes.forEach((l) => {
+        const cat = categories.find((x) => x.id === l.cat);
+        const catLabel = cat?.label || 'Articles';
+        const ct = cat ? getCatTaux(cat, dest?.code || '974') : { om: 0, omr: 0 };
+        const valeur = (l.qte || 1) * (l.prix || 0);
+        const transportShare = totalValeurArticles > 0 ? (sel.devisTransport || 0) * (valeur / totalValeurArticles) : 0;
+        const cif = valeur + transportShare;
+        if (!byCat[catLabel]) byCat[catLabel] = { om: 0, omr: 0, tauxOM: ct.om, tauxOMR: ct.omr };
+        byCat[catLabel].om += cif * ct.om / 100;
+        byCat[catLabel].omr += cif * ct.omr / 100;
+      });
+      taxBreakdown = Object.entries(byCat).map(([cat, v]) =>
+        `  📦 *${cat}* : ${eur(v.om + v.omr)}\n     _Octroi de Mer ${v.tauxOM}% + Octroi de Mer Régional ${v.tauxOMR}%_`
+      ).join('\n');
+    }
+
+    const telegramMsg = `Bonjour ${prenom} 👋\n\nLe devis final pour votre expédition *${sel.ref}* est prêt ! 📋\n\n🎯 *Destination :* ${dest?.flag || ''} ${dest?.nom || ''}\n${sel.finL ? `📐 *Dimensions optimisées :* ${sel.finL}×${sel.finW}×${sel.finH} cm — ${sel.finP} kg\n` : ''}⚖️ *Poids facturable :* ${pf} kg\n\n━━━━━━━━━━━━━━━━\n💰 *DÉTAIL DU DEVIS*\n━━━━━━━━━━━━━━━━\n🚀 Transport : *${eur(sel.devisTransport)}*\n\n🏛️ *Taxes douanières :*\n${taxBreakdown || `  Octroi de Mer : ${eur(sel.devisOM)}\n  Octroi de Mer Régional : ${eur(sel.devisOMR)}`}\n\n📊 TVA (${dest?.tva || 0}%) : *${eur(sel.devisTVA)}*\n━━━━━━━━━━━━━━━━\n💰 *TOTAL : ${eur(sel.devisTotal)}*\n━━━━━━━━━━━━━━━━\n${sel.economie > 0 ? `\n✅ *Économie : ${eur(sel.economie)}* grâce à l'optimisation !\n` : ''}\n👉 Payez pour déclencher l'expédition.\n\n_L'équipe Expedîle — Paris → ${dest?.nom || ''}_`;
+
+    if (chatId && isTelegramConfigured()) {
+      sendTelegram(chatId, telegramMsg).then(async (res) => {
+        try {
+          await sb.insertMessage(sel.id, {
+            type: 'staff',
+            auteur: 'Système',
+            texte: telegramMsg,
+            statut: res.ok ? 'envoye' : 'echec',
+          });
+        } catch (e) { console.warn('insertMessage:', e.message); }
+        flash({ msg: res.ok ? `Devis envoyé à ${prenom} via Telegram` : `Erreur envoi Telegram`, type: res.ok ? 'success' : 'warning' });
+      });
+    } else if (cl?.email) {
+      const emailMsg = `Objet : Devis final — ${sel.ref} : ${eur(sel.devisTotal)}\n\nBonjour ${cl.nom},\n\nTransport: ${eur(sel.devisTransport)}\nTaxes (OM+OMR): ${eur((sel.devisOM || 0) + (sel.devisOMR || 0))}\nTVA: ${eur(sel.devisTVA)}\nTotal: ${eur(sel.devisTotal)}\n\nCordialement,\nL'équipe Expedîle`;
+      window.open(`mailto:${cl.email}?subject=${encodeURIComponent(`Devis ${sel.ref}`)}&body=${encodeURIComponent(emailMsg)}`, '_blank');
+      flash(`Email devis ouvert pour ${prenom}`);
+    } else {
+      flash({ msg: 'Client non joignable (pas de Telegram ni email)', type: 'warning' });
+    }
+
     setDevisPrev(false);
   }
 
