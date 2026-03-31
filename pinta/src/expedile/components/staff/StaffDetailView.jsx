@@ -765,92 +765,70 @@ export default function StaffDetailView() {
 
       // ── 3. MESURE ──────────────────────────────────────────────────────
       case 'mesure': {
+        const [showAddCarton, setShowAddCarton] = useState(false);
         return (
           <Section title="Demander le feu vert" icon={Clock} color={borderColor}>
-            <div className="space-y-4">
+            <div className="space-y-3">
+              {/* Action principale : 2 boutons côte à côte */}
+              <div className="flex gap-2">
+                <BtnTelegram
+                  disabled={actionLoading}
+                  onClick={() => {
+                    if (actionLoading) return;
+                    setActionLoading(true);
+                    try {
+                      demanderFeuVert(sel.id);
+                      setTimeout(() => sendMsg(sel.id, cl?.id, 'telegram', 'demande_feu_vert', null), 200);
+                    } finally { setTimeout(() => setActionLoading(false), 1000); }
+                  }}
+                >
+                  {actionLoading ? 'Envoi...' : 'Telegram'}
+                </BtnTelegram>
+                <BtnEmail
+                  disabled={actionLoading}
+                  onClick={() => {
+                    if (actionLoading) return;
+                    setActionLoading(true);
+                    try {
+                      demanderFeuVert(sel.id);
+                      setTimeout(() => sendMsg(sel.id, cl?.id, 'email', 'demande_feu_vert', null), 200);
+                    } finally { setTimeout(() => setActionLoading(false), 1000); }
+                  }}
+                >
+                  {actionLoading ? 'Envoi...' : 'Email'}
+                </BtnEmail>
+              </div>
+
+              {/* Alerte facture — compacte */}
               {missingFacture && (
-                <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 space-y-2">
-                  <div className="flex items-start gap-2">
-                    <AlertTriangle size={14} className="text-amber-500 flex-shrink-0 mt-0.5" />
-                    <p className="text-xs font-bold text-amber-800">
-                      ⚠️ Facture d'achat manquante — Sans cette facture, le calcul des taxes (OM/OMR) sera impossible.
-                    </p>
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => sendMsg(sel.id, cl?.id, 'telegram', 'facture_manquante', null)}
-                      className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[11px] font-bold transition-all active:scale-95"
-                      style={{ background: '#0088cc', color: 'white' }}
-                    >
-                      <Send size={11} />
-                      Demander par Telegram
-                    </button>
-                    <button
-                      onClick={() => sendMsg(sel.id, cl?.id, 'email', 'facture_manquante', null)}
-                      className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[11px] font-bold transition-all active:scale-95"
-                      style={{ background: BRAND.navy, color: 'white' }}
-                    >
-                      <Mail size={11} />
-                      Demander par email
-                    </button>
-                  </div>
+                <div className="flex items-center gap-2 p-2 rounded-lg bg-amber-50 border border-amber-200">
+                  <AlertTriangle size={12} className="text-amber-500 flex-shrink-0" />
+                  <p className="text-[10px] font-semibold text-amber-700 flex-1">Facture manquante</p>
+                  <button
+                    onClick={() => sendMsg(sel.id, cl?.id, cl?.telegramChatId ? 'telegram' : 'email', 'facture_manquante', null)}
+                    className="text-[10px] font-bold px-2 py-1 rounded bg-amber-200 text-amber-800 hover:bg-amber-300 transition-all active:scale-95"
+                  >
+                    Demander
+                  </button>
                 </div>
               )}
 
-              {/* Ajouter un carton (remet en receptionne pour re-mesurer) */}
-              <div className="pt-2 border-t border-gray-100">
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Ajouter un carton</p>
-                <p className="text-[10px] text-gray-400 mb-2">Les mesures seront à refaire avec le nouveau carton.</p>
+              {/* Ajouter carton — collapsé */}
+              <button
+                onClick={() => setShowAddCarton((p) => !p)}
+                className="flex items-center gap-1 text-[10px] text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <Plus size={10} />
+                {showAddCarton ? 'Masquer' : 'Ajouter un carton'}
+              </button>
+              {showAddCarton && (
                 <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={newTracking}
-                    onChange={(e) => setNewTracking(e.target.value)}
-                    placeholder="N° tracking du nouveau carton"
-                    className="flex-1 px-3 py-2 rounded-lg border border-gray-200 bg-gray-50 text-xs outline-none focus:border-blue-400 focus:bg-white transition-colors"
-                  />
-                  <button
-                    onClick={handleAddTracking}
-                    className="flex items-center gap-1 px-3 py-2 rounded-lg text-xs font-bold transition-all active:scale-95"
-                    style={{ background: `${BRAND.navy}10`, color: BRAND.navy }}
-                  >
-                    <Plus size={13} />
-                    Ajouter
-                  </button>
+                  <input type="text" value={newTracking} onChange={(e) => setNewTracking(e.target.value)}
+                    placeholder="N° tracking" className="flex-1 px-2 py-1.5 rounded-lg border border-gray-200 bg-gray-50 text-xs outline-none focus:border-blue-400" />
+                  <button onClick={handleAddTracking}
+                    className="px-2 py-1.5 rounded-lg text-xs font-bold" style={{ background: `${BRAND.navy}10`, color: BRAND.navy }}>+ Ajouter</button>
                 </div>
-              </div>
-
-              <BtnTelegram
-                disabled={actionLoading}
-                onClick={() => {
-                  if (actionLoading) return;
-                  setActionLoading(true);
-                  try {
-                    demanderFeuVert(sel.id);
-                    setTimeout(() => {
-                      sendMsg(sel.id, cl?.id, 'telegram', 'demande_feu_vert', null);
-                    }, 200);
-                  } finally { setTimeout(() => setActionLoading(false), 1000); }
-                }}
-              >
-                {actionLoading ? 'Envoi en cours...' : 'Envoyer via Telegram — demander le feu vert'}
-              </BtnTelegram>
-
-              <BtnEmail
-                disabled={actionLoading}
-                onClick={() => {
-                  if (actionLoading) return;
-                  setActionLoading(true);
-                  try {
-                    demanderFeuVert(sel.id);
-                    setTimeout(() => {
-                      sendMsg(sel.id, cl?.id, 'email', 'demande_feu_vert', null);
-                    }, 200);
-                  } finally { setTimeout(() => setActionLoading(false), 1000); }
-                }}
-              >
-                {actionLoading ? 'Envoi en cours...' : 'Envoyer par email — demander le feu vert'}
-              </BtnEmail>
+              )}
             </div>
           </Section>
         );
@@ -859,57 +837,40 @@ export default function StaffDetailView() {
       // ── 4. ATTENTE_FEU_VERT ────────────────────────────────────────────
       case 'attente_feu_vert': {
         return (
-          <Section title="En attente de l'accord" icon={Clock} color={borderColor}>
-            <div className="space-y-4">
-              <div className="flex items-center gap-2 p-3 rounded-xl bg-orange-50 border border-orange-200">
-                <Clock size={14} className="text-orange-500 flex-shrink-0" />
-                <p className="text-xs font-medium text-orange-700">
-                  En attente de la réponse du client ({cl?.nom ?? '—'})
+          <Section title="En attente du client" icon={Clock} color={borderColor}>
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 p-2 rounded-lg bg-orange-50 border border-orange-200">
+                <Clock size={12} className="text-orange-500 flex-shrink-0" />
+                <p className="text-[10px] font-medium text-orange-700">
+                  Réponse attendue de {cl?.nom?.split(' ')[0] ?? '—'}
                 </p>
               </div>
 
+              {/* Relancer — 2 boutons côte à côte */}
+              <div className="flex gap-2">
+                <BtnTelegram disabled={actionLoading}
+                  onClick={() => { if (actionLoading) return; setActionLoading(true); try { sendMsg(sel.id, cl?.id, 'telegram', 'relance_feu_vert', null); } finally { setTimeout(() => setActionLoading(false), 1000); } }}>
+                  {actionLoading ? 'Envoi...' : 'Relancer Telegram'}
+                </BtnTelegram>
+                <BtnEmail disabled={actionLoading}
+                  onClick={() => { if (actionLoading) return; setActionLoading(true); try { sendMsg(sel.id, cl?.id, 'email', 'relance_feu_vert', null); } finally { setTimeout(() => setActionLoading(false), 1000); } }}>
+                  {actionLoading ? 'Envoi...' : 'Relancer email'}
+                </BtnEmail>
+              </div>
+
+              {/* Alerte facture — compacte */}
               {missingFacture && (
-                <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 space-y-2">
-                  <div className="flex items-start gap-2">
-                    <AlertTriangle size={14} className="text-amber-500 flex-shrink-0 mt-0.5" />
-                    <p className="text-xs font-bold text-amber-800">
-                      ⚠️ Facture d'achat manquante — Sans cette facture, le calcul des taxes (OM/OMR) sera impossible.
-                    </p>
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => sendMsg(sel.id, cl?.id, 'telegram', 'facture_manquante', null)}
-                      className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[11px] font-bold transition-all active:scale-95"
-                      style={{ background: '#0088cc', color: 'white' }}
-                    >
-                      <Send size={11} />
-                      Demander par Telegram
-                    </button>
-                    <button
-                      onClick={() => sendMsg(sel.id, cl?.id, 'email', 'facture_manquante', null)}
-                      className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[11px] font-bold transition-all active:scale-95"
-                      style={{ background: BRAND.navy, color: 'white' }}
-                    >
-                      <Mail size={11} />
-                      Demander par email
-                    </button>
-                  </div>
+                <div className="flex items-center gap-2 p-2 rounded-lg bg-amber-50 border border-amber-200">
+                  <AlertTriangle size={12} className="text-amber-500 flex-shrink-0" />
+                  <p className="text-[10px] font-semibold text-amber-700 flex-1">Facture manquante</p>
+                  <button
+                    onClick={() => sendMsg(sel.id, cl?.id, cl?.telegramChatId ? 'telegram' : 'email', 'facture_manquante', null)}
+                    className="text-[10px] font-bold px-2 py-1 rounded bg-amber-200 text-amber-800 hover:bg-amber-300 transition-all active:scale-95"
+                  >
+                    Demander
+                  </button>
                 </div>
               )}
-
-              <BtnTelegram
-                disabled={actionLoading}
-                onClick={() => { if (actionLoading) return; setActionLoading(true); try { sendMsg(sel.id, cl?.id, 'telegram', 'relance_feu_vert', null); } finally { setTimeout(() => setActionLoading(false), 1000); } }}
-              >
-                {actionLoading ? 'Envoi en cours...' : 'Relancer via Telegram'}
-              </BtnTelegram>
-
-              <BtnEmail
-                disabled={actionLoading}
-                onClick={() => { if (actionLoading) return; setActionLoading(true); try { sendMsg(sel.id, cl?.id, 'email', 'relance_feu_vert', null); } finally { setTimeout(() => setActionLoading(false), 1000); } }}
-              >
-                {actionLoading ? 'Envoi en cours...' : 'Relancer par email'}
-              </BtnEmail>
             </div>
           </Section>
         );
@@ -918,47 +879,36 @@ export default function StaffDetailView() {
       // ── 5. AUTORISE ────────────────────────────────────────────────────
       case 'autorise': {
         return (
-          <Section title="Client OK — Préparer le colis" icon={Check} color={borderColor}>
-            <div className="space-y-4">
-              <div className="flex items-center gap-2 p-3 rounded-xl bg-green-50 border border-green-200">
-                <Check size={14} className="text-green-500 flex-shrink-0" />
-                <p className="text-xs font-bold text-green-700">
-                  Le client a donné son accord pour la préparation.
-                </p>
+          <Section title="Préparer le colis" icon={Check} color={borderColor}>
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 p-2 rounded-lg bg-green-50 border border-green-200">
+                <Check size={12} className="text-green-500 flex-shrink-0" />
+                <p className="text-[10px] font-bold text-green-700">Accord client reçu</p>
               </div>
 
               {missingFacture && (
-                <div className="flex items-start gap-2 p-3 rounded-xl bg-amber-50 border border-amber-300">
-                  <AlertTriangle size={14} className="text-amber-600 flex-shrink-0 mt-0.5" />
-                  <p className="text-xs font-bold text-amber-800">
-                    Attention : la facture d'achat n'est pas encore validée. Sans elle, le devis final ne pourra pas être calculé après la préparation.
-                  </p>
+                <div className="flex items-center gap-2 p-2 rounded-lg bg-amber-50 border border-amber-200">
+                  <AlertTriangle size={12} className="text-amber-500 flex-shrink-0" />
+                  <p className="text-[10px] font-semibold text-amber-700">Facture non validée — devis impossible après préparation</p>
                 </div>
               )}
 
               {subExpired && (
-                <div className="flex items-start gap-2 p-3 rounded-xl bg-red-50 border border-red-300">
-                  <AlertTriangle size={14} className="text-red-600 flex-shrink-0 mt-0.5" />
-                  <p className="text-xs font-bold text-red-800">
-                    Abonnement expiré — impossible de lancer la préparation.
-                    {isAnnuel ? ' Le client doit renouveler son abonnement.' : ' Renouvellement interne requis.'}
-                  </p>
+                <div className="flex items-center gap-2 p-2 rounded-lg bg-red-50 border border-red-200">
+                  <AlertTriangle size={12} className="text-red-500 flex-shrink-0" />
+                  <p className="text-[10px] font-bold text-red-700">Abonnement expiré — préparation bloquée</p>
                 </div>
               )}
               {subWarning && (
-                <div className="flex items-start gap-2 p-3 rounded-xl bg-amber-50 border border-amber-200">
-                  <AlertTriangle size={14} className="text-amber-500 flex-shrink-0 mt-0.5" />
-                  <p className="text-xs font-bold text-amber-700">
-                    Abonnement expire dans {subJoursRestants} jour{subJoursRestants > 1 ? 's' : ''}
-                  </p>
+                <div className="flex items-center gap-2 p-2 rounded-lg bg-amber-50 border border-amber-200">
+                  <AlertTriangle size={12} className="text-amber-500 flex-shrink-0" />
+                  <p className="text-[10px] font-semibold text-amber-700">Abo. expire dans {subJoursRestants}j</p>
                 </div>
               )}
 
               <BtnPrimary
                 onClick={() => { if (actionLoading) return; setActionLoading(true); try { changerStatut(sel.id, 'en_preparation'); } finally { setTimeout(() => setActionLoading(false), 1000); } }}
-                disabled={actionLoading || subExpired}
-                color="#2563EB"
-              >
+                disabled={actionLoading || subExpired} color="#2563EB">
                 <Check size={15} />
                 {actionLoading ? 'En cours...' : 'Commencer la préparation'}
               </BtnPrimary>
