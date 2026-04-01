@@ -11,7 +11,6 @@ import LoginPage from './components/LoginPage';
 import ColisModal from './components/ColisModal';
 import OnboardingOverlay from './components/client/OnboardingOverlay';
 
-import StaffDashboard from './components/staff/StaffDashboard';
 import StaffColisPage, { DashboardPage } from './components/staff/StaffSplitView';
 import StaffSettings from './components/staff/StaffSettings';
 import StaffClients from './components/staff/StaffClients';
