@@ -15,7 +15,7 @@ async function generateQR(text) {
 export async function printEtiquettes(colisList, clients, getClient) {
   if (!colisList || colisList.length === 0) return;
 
-  const doc = new jsPDF({ unit: 'mm', format: [105, 148] });
+  const doc = new jsPDF({ unit: 'mm', format: [100, 120] });
   let first = true;
 
   for (const colis of colisList) {
@@ -26,10 +26,10 @@ export async function printEtiquettes(colisList, clients, getClient) {
     const nbCartons = Math.max(trackings.length, 1);
 
     for (let i = 0; i < nbCartons; i++) {
-      if (!first) doc.addPage([105, 148]);
+      if (!first) doc.addPage([100, 120]);
       first = false;
 
-      const W = 105, H = 148;
+      const W = 100, H = 120;
 
       // ══════ HEADER NAVY ══════
       doc.setFillColor(27, 58, 75);
@@ -72,7 +72,7 @@ export async function printEtiquettes(colisList, clients, getClient) {
 
       try {
         const qr = await generateQR(qrText);
-        if (qr) doc.addImage(qr, 'PNG', W - 30, 14, 26, 26);
+        if (qr) doc.addImage(qr, 'PNG', W - 28, 14, 22, 22);
       } catch {}
 
       // ══════ SÉPARATEUR ══════
@@ -84,7 +84,7 @@ export async function printEtiquettes(colisList, clients, getClient) {
       doc.setTextColor(0, 0, 0);
       doc.setFontSize(18);
       doc.setFont('helvetica', 'bold');
-      const nomComplet = ((cl.nom || '') + (cl.prenom ? ' ' + cl.prenom : '')).toUpperCase();
+      const nomComplet = ((cl.nomFamille || cl.nom || '') + (cl.prenom ? ' ' + cl.prenom : '')).toUpperCase();
       doc.text(nomComplet, 4, 45);
 
       // ══════ ADRESSE — LISIBLE ══════
