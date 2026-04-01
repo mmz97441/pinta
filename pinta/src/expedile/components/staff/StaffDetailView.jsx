@@ -235,6 +235,7 @@ export default function StaffDetailView() {
     setSelId,
     setData,
     auth,
+    can,
   } = useApp();
 
   // ── Local state ──────────────────────────────────────────────────────────
@@ -579,8 +580,8 @@ export default function StaffDetailView() {
   }
 
   // ── Correction bar availability ───────────────────────────────────────────
-  const canRevert = !!sel.statut && sel.statut !== 'annule' && sel.statut !== 'livre';
-  const canCancel = !!sel.statut && sel.statut !== 'annule' && sel.statut !== 'livre';
+  const canRevert = !!sel.statut && sel.statut !== 'annule' && sel.statut !== 'livre' && can('perm_colis_revenir_arriere');
+  const canCancel = !!sel.statut && sel.statut !== 'annule' && sel.statut !== 'livre' && can('perm_colis_annuler');
 
   // ════════════════════════════════════════════════════════════════════════
   // RENDER STATUS BLOCKS
@@ -686,7 +687,7 @@ export default function StaffDetailView() {
 
                 {formErr && <p className="text-xs text-red-500 font-medium">{formErr}</p>}
 
-                <BtnPrimary onClick={() => { if (actionLoading) return; setActionLoading(true); try { handleValiderMesures(); } finally { setTimeout(() => setActionLoading(false), 1000); } }} disabled={actionLoading}>
+                <BtnPrimary onClick={() => { if (actionLoading) return; setActionLoading(true); try { handleValiderMesures(); } finally { setTimeout(() => setActionLoading(false), 1000); } }} disabled={actionLoading || !can('perm_colis_mesurer')}>
                   <Check size={15} />
                   {actionLoading ? 'Validation...' : `Valider les mesures (${trackingsActive.length} colis)`}
                 </BtnPrimary>
@@ -747,7 +748,7 @@ export default function StaffDetailView() {
 
               {formErr && <p className="text-xs text-red-500 font-medium">{formErr}</p>}
 
-              <BtnPrimary onClick={() => { if (actionLoading) return; setActionLoading(true); try { handleValiderMesures(); } finally { setTimeout(() => setActionLoading(false), 1000); } }} disabled={actionLoading}>
+              <BtnPrimary onClick={() => { if (actionLoading) return; setActionLoading(true); try { handleValiderMesures(); } finally { setTimeout(() => setActionLoading(false), 1000); } }} disabled={actionLoading || !can('perm_colis_mesurer')}>
                 <Check size={15} />
                 {actionLoading ? 'Validation...' : 'Valider les mesures'}
               </BtnPrimary>
@@ -764,7 +765,7 @@ export default function StaffDetailView() {
               {/* Action principale : 2 boutons côte à côte */}
               <div className="flex gap-2">
                 <BtnTelegram
-                  disabled={actionLoading}
+                  disabled={actionLoading || !can('perm_colis_demander_feuvert')}
                   onClick={() => {
                     if (actionLoading) return;
                     setActionLoading(true);
@@ -777,7 +778,7 @@ export default function StaffDetailView() {
                   {actionLoading ? 'Envoi...' : 'Telegram'}
                 </BtnTelegram>
                 <BtnEmail
-                  disabled={actionLoading}
+                  disabled={actionLoading || !can('perm_colis_demander_feuvert')}
                   onClick={() => {
                     if (actionLoading) return;
                     setActionLoading(true);
@@ -900,7 +901,7 @@ export default function StaffDetailView() {
 
               <BtnPrimary
                 onClick={() => { if (actionLoading) return; setActionLoading(true); try { changerStatut(sel.id, 'en_preparation'); } finally { setTimeout(() => setActionLoading(false), 1000); } }}
-                disabled={actionLoading || subExpired} color="#2563EB">
+                disabled={actionLoading || subExpired || !can('perm_colis_preparer')} color="#2563EB">
                 <Check size={15} />
                 {actionLoading ? 'En cours...' : 'Commencer la préparation'}
               </BtnPrimary>
@@ -1276,7 +1277,7 @@ export default function StaffDetailView() {
               <div className="space-y-2">
                 <BtnPrimary
                   onClick={() => { if (actionLoading) return; setActionLoading(true); try { handleEnvoyerDevis(); } finally { setTimeout(() => setActionLoading(false), 1000); } }}
-                  disabled={!canSendDevis || actionLoading || subExpired}
+                  disabled={!canSendDevis || actionLoading || subExpired || !can('perm_colis_calculer_devis')}
                   color="#2563EB"
                 >
                   <Eye size={15} />
@@ -1365,7 +1366,7 @@ export default function StaffDetailView() {
                   </div>
 
                   <div className="flex flex-col gap-2">
-                    <BtnPrimary onClick={async () => { if (actionLoading) return; setActionLoading(true); try { await handleConfirmDevisEnvoye(); } finally { setTimeout(() => setActionLoading(false), 1500); } }} disabled={actionLoading} color="#16A34A">
+                    <BtnPrimary onClick={async () => { if (actionLoading) return; setActionLoading(true); try { await handleConfirmDevisEnvoye(); } finally { setTimeout(() => setActionLoading(false), 1500); } }} disabled={actionLoading || !can('perm_colis_envoyer_devis')} color="#16A34A">
                       <Check size={15} />
                       {actionLoading ? 'Envoi en cours...' : 'Envoyer le devis au client'}
                     </BtnPrimary>
@@ -1429,6 +1430,7 @@ export default function StaffDetailView() {
                       upd(sel.id, { modePaiementPro: proPayMethod });
                       payer(sel.id, sel.devisTotal);
                     }}
+                    disabled={!can('perm_colis_confirmer_paiement')}
                     color="#059669"
                   >
                     <Check size={15} />
@@ -1529,7 +1531,7 @@ export default function StaffDetailView() {
 
               <BtnPrimary
                 onClick={() => changerStatut(sel.id, 'expedie')}
-                disabled={(!sel.envoi && !selEnvoi) || subExpired}
+                disabled={(!sel.envoi && !selEnvoi) || subExpired || !can('perm_colis_expedier')}
                 color="#0891B2"
               >
                 <Check size={15} />

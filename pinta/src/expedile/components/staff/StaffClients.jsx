@@ -88,7 +88,7 @@ function ValidatedField({ label, value, onChange, placeholder, type = 'text', mo
 export default function StaffClients() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { clients, data, updateClient, addNewClient, deleteClient, flash, sendMsg } = useApp();
+  const { clients, data, updateClient, addNewClient, deleteClient, flash, sendMsg, can } = useApp();
 
   const [clPageSearch, setClPageSearch] = useState('');
   const [clEditId, setClEditId] = useState(null);
@@ -530,18 +530,20 @@ export default function StaffClients() {
             </span>
           </div>
         </div>
-        <button
-          onClick={handleNewClient}
-          className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-bold transition-all active:scale-95"
-          style={{
-            background: `linear-gradient(135deg, ${BRAND.gold}, ${BRAND.goldD})`,
-            color: BRAND.navyD,
-            boxShadow: `0 2px 12px ${BRAND.gold}40`,
-          }}
-        >
-          <Plus size={14} strokeWidth={2.5} />
-          Nouveau client
-        </button>
+        {can('perm_clients_creer') && (
+          <button
+            onClick={handleNewClient}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-bold transition-all active:scale-95"
+            style={{
+              background: `linear-gradient(135deg, ${BRAND.gold}, ${BRAND.goldD})`,
+              color: BRAND.navyD,
+              boxShadow: `0 2px 12px ${BRAND.gold}40`,
+            }}
+          >
+            <Plus size={14} strokeWidth={2.5} />
+            Nouveau client
+          </button>
+        )}
       </div>
 
       {/* ── Search bar ──────────────────────────────────────────────────── */}

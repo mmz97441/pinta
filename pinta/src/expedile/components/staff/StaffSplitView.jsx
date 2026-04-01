@@ -297,7 +297,7 @@ export function DashboardPage() {
 // ════════════════════════════════════════════════════════════════════════════
 export default function StaffColisPage() {
   const navigate = useNavigate();
-  const { data, clients, getClient, envois, setSelId, sel, changerStatut, flash } = useApp();
+  const { data, clients, getClient, envois, setSelId, sel, changerStatut, flash, can } = useApp();
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [searchParams] = useSearchParams();
 
@@ -488,12 +488,14 @@ export default function StaffColisPage() {
           })()}
 
           {/* Export Excel (all visible) */}
-          <button
-            onClick={() => exportColisExcel(sorted, getClient, envois)}
-            className="px-2 py-1 rounded-lg text-[10px] font-bold text-gray-500 bg-gray-100 hover:bg-gray-200 transition-all active:scale-95"
-          >
-            📊 Export
-          </button>
+          {can('perm_export_colis') && (
+            <button
+              onClick={() => exportColisExcel(sorted, getClient, envois)}
+              className="px-2 py-1 rounded-lg text-[10px] font-bold text-gray-500 bg-gray-100 hover:bg-gray-200 transition-all active:scale-95"
+            >
+              📊 Export
+            </button>
+          )}
 
           {/* View mode toggle */}
           <div className="flex items-center gap-1 ml-auto bg-gray-100 rounded-lg p-0.5">
@@ -545,27 +547,31 @@ export default function StaffColisPage() {
             ))}
           </div>
           {/* Étiquettes + Export */}
-          <button
-            onClick={() => {
-              const ids = [...selectedIds];
-              const colisForLabels = ids.map((id) => data.find((c) => c.id === id)).filter(Boolean);
-              if (colisForLabels.length === 0) return;
-              import('../../utils/exportEtiquettes').then((mod) => mod.printEtiquettes(colisForLabels, clients, getClient));
-            }}
-            className="px-2 py-1 rounded-lg text-[10px] font-bold bg-white border border-blue-200 text-blue-700 hover:bg-blue-50 transition-all active:scale-95"
-          >
-            🏷️ Étiquettes
-          </button>
-          <button
-            onClick={() => {
-              const ids = [...selectedIds];
-              const colisForExport = ids.map((id) => data.find((c) => c.id === id)).filter(Boolean);
-              exportColisExcel(colisForExport, getClient, envois);
-            }}
-            className="px-2 py-1 rounded-lg text-[10px] font-bold bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 transition-all active:scale-95"
-          >
-            📊 Export Excel
-          </button>
+          {can('perm_envois_etiquettes') && (
+            <button
+              onClick={() => {
+                const ids = [...selectedIds];
+                const colisForLabels = ids.map((id) => data.find((c) => c.id === id)).filter(Boolean);
+                if (colisForLabels.length === 0) return;
+                import('../../utils/exportEtiquettes').then((mod) => mod.printEtiquettes(colisForLabels, clients, getClient));
+              }}
+              className="px-2 py-1 rounded-lg text-[10px] font-bold bg-white border border-blue-200 text-blue-700 hover:bg-blue-50 transition-all active:scale-95"
+            >
+              🏷️ Étiquettes
+            </button>
+          )}
+          {can('perm_export_colis') && (
+            <button
+              onClick={() => {
+                const ids = [...selectedIds];
+                const colisForExport = ids.map((id) => data.find((c) => c.id === id)).filter(Boolean);
+                exportColisExcel(colisForExport, getClient, envois);
+              }}
+              className="px-2 py-1 rounded-lg text-[10px] font-bold bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 transition-all active:scale-95"
+            >
+              📊 Export Excel
+            </button>
+          )}
           <button onClick={() => setSelectedIds(new Set())} className="ml-auto text-[10px] text-blue-500 hover:text-blue-700 font-semibold">
             Désélectionner tout
           </button>
