@@ -1,5 +1,5 @@
 import jsPDF from 'jspdf';
-import { getDestByCP } from '../constants';
+import { getDestByCP, getSecteurByCP, getSecteurColor } from '../constants';
 
 async function generateQR(text) {
   try {
@@ -110,6 +110,23 @@ export async function printEtiquettes(colisList, clients, getClient) {
         doc.setTextColor(27, 58, 75);
         doc.text(dest.nom?.toUpperCase() || '', 4, y);
         y += 10;
+      }
+
+      // SECTEUR — TRÈS VISIBLE
+      const secteur = getSecteurByCP(cl.cp);
+      if (secteur) {
+        y += 4;
+        const sColor = getSecteurColor(secteur);
+        const r = parseInt(sColor.slice(1, 3), 16);
+        const g = parseInt(sColor.slice(3, 5), 16);
+        const b = parseInt(sColor.slice(5, 7), 16);
+        doc.setFillColor(r, g, b);
+        doc.roundedRect(4, y - 8, W - 8, 14, 3, 3, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(18);
+        doc.setFont('helvetica', 'bold');
+        doc.text(`SECTEUR ${secteur}`, W / 2, y, { align: 'center' });
+        y += 12;
       }
 
       // TÉLÉPHONE

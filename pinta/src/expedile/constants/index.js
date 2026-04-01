@@ -68,6 +68,33 @@ export function getDestByCP(cp) {
   return DESTINATIONS[prefix] || DESTINATIONS['974'];
 }
 
+// ══════════ SECTEURS LIVRAISON LA RÉUNION ══════════
+const SECTEURS_REUNION = {
+  '97400': 'NORD', '97417': 'NORD', '97438': 'NORD', '97490': 'NORD',
+  '97412': 'EST', '97431': 'EST', '97433': 'EST', '97437': 'EST',
+  '97439': 'EST', '97440': 'EST', '97441': 'EST', '97470': 'EST',
+  '97411': 'OUEST', '97416': 'OUEST', '97419': 'OUEST', '97420': 'OUEST',
+  '97422': 'OUEST', '97423': 'OUEST', '97424': 'OUEST', '97426': 'OUEST',
+  '97434': 'OUEST', '97435': 'OUEST', '97436': 'OUEST', '97460': 'OUEST',
+  '97410': 'SUD', '97413': 'SUD', '97414': 'SUD', '97418': 'SUD',
+  '97421': 'SUD', '97425': 'SUD', '97427': 'SUD', '97429': 'SUD',
+  '97430': 'SUD', '97432': 'SUD', '97442': 'SUD', '97450': 'SUD', '97480': 'SUD',
+};
+
+const SECTEUR_COLORS = {
+  NORD: '#2563EB', EST: '#059669', OUEST: '#D97706', SUD: '#DC2626',
+};
+
+export function getSecteurByCP(cp) {
+  if (!cp) return null;
+  const code = String(cp).replace(/\s/g, '').slice(0, 5);
+  return SECTEURS_REUNION[code] || null;
+}
+
+export function getSecteurColor(secteur) {
+  return SECTEUR_COLORS[secteur] || '#6B7280';
+}
+
 // ══════════ TARIFS TRANSPORT ══════════
 export const TARIFS_DEFAUT = {
   '974': { base: 25, parKg: 5 },

@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
-import { BRAND, STATUTS, ABONNEMENTS, getDestByCP } from '../../constants';
+import { BRAND, STATUTS, ABONNEMENTS, getDestByCP, getSecteurByCP, getSecteurColor } from '../../constants';
 import { eur, fuzzy, labelEnvoi } from '../../utils';
 import { exportColisExcel } from '../../utils/exportExcel';
 import { Badge, Etapes } from '../ui';
@@ -119,6 +119,7 @@ function ColisTableRow({ c, client, envois, onClick, isSelected, compact, checke
       <td className={TD}>
         <span className="text-gray-700 font-medium">{nom}</span>
         {dest && <span className="ml-1">{dest.flag}</span>}
+        {(() => { const s = getSecteurByCP(client?.cp); return s ? <span className="ml-1 text-[7px] font-black px-1 py-0.5 rounded text-white" style={{ background: getSecteurColor(s) }}>{s}</span> : null; })()}
         {client?.abonnement === 'vip' && <span className="ml-1 text-[8px] font-black px-1 py-0.5 rounded" style={{ background: 'linear-gradient(135deg, #F59E0B, #D97706)', color: 'white' }}>VIP</span>}
         {client?.type === 'pro' && client?.abonnement !== 'vip' && <span className="ml-1 text-[8px] font-black px-1 py-0.5 rounded" style={{ background: `${BRAND.gold}30`, color: BRAND.goldD }}>PRO</span>}
       </td>
