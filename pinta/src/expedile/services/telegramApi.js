@@ -1,155 +1,102 @@
-// ══════════ Telegram Bot API ══════════
-// Documentation : https://core.telegram.org/bots/api
-//
-// Envoi de messages via bot Telegram.
-// Le bot doit être créé via @BotFather et le token stocké en variable d'env.
-//
-// ⚠️  En production, le token devra être sur un backend sécurisé (jamais côté client)
-// ──────────────────────────────────────────────────────────────────────────────
+// ══════════ Telegram via Edge Function (sécurisé) ══════════
+// Le token Telegram n'est PLUS dans le frontend.
+// Tous les appels passent par l'Edge Function send-telegram côté serveur.
 
-const BOT_TOKEN = import.meta.env.VITE_TG_BOT_TOKEN || import.meta.env.VITE_TELEGRAM_BOT_TOKEN || '';
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://bqprktzehuhplpqjgjaz.supabase.co';
+const SEND_URL = `${SUPABASE_URL}/functions/v1/send-telegram`;
 const BOT_USERNAME = 'Expedilebot';
 
-/** Vérifie si l'API Telegram est configurée */
+/** Vérifie si l'API Telegram est configurée (toujours true avec Edge Function) */
 export function isTelegramConfigured() {
-  return !!BOT_TOKEN;
+  return true;
 }
 
-/**
- * Normalise un numéro FR/DOM-TOM au format international sans le +
- * Ex: "+262 692 12 34 56" → "262692123456"
- *     "0692123456"        → "262692123456"
- */
 export function normalizeTel(tel) {
   let cleaned = tel.replace(/[^0-9+]/g, '');
-  // Si commence par +, on enlève le +
   if (cleaned.startsWith('+')) cleaned = cleaned.slice(1);
-  // Si commence par 0 (numéro local Réunion/Mayotte/Antilles)
   if (cleaned.startsWith('06') || cleaned.startsWith('07')) {
-    cleaned = '33' + cleaned.slice(1); // France métro
+    cleaned = '33' + cleaned.slice(1);
   } else if (cleaned.startsWith('0692') || cleaned.startsWith('0693') || cleaned.startsWith('0694')) {
-    cleaned = '262' + cleaned.slice(1); // Réunion
-  } else if (cleaned.startsWith('0639')) {
-    cleaned = '262' + cleaned.slice(1); // Mayotte
+    cleaned = '262' + cleaned.slice(1);
+  } else if (cleaned.startsWith('0262')) {
+    cleaned = '262' + cleaned.slice(1);
   }
   return cleaned;
 }
 
-/**
- * Construit un lien t.me (deep link vers le bot).
- */
 export function telegramMeLink(startParam) {
   return `https://t.me/${BOT_USERNAME}${startParam ? '?start=' + encodeURIComponent(startParam) : ''}`;
 }
 
-/**
- * Envoie un message Telegram via le Bot API.
- *
- * @param {string} chatId - Chat ID du destinataire
- * @param {string} text   - Corps du message (Markdown supporté)
- * @returns {{ ok: boolean, messageId?: string, error?: string }}
- */
+export function telegramLink(clientId) {
+  return telegramMeLink(clientId);
+}
+
+/** Envoie un message Telegram via Edge Function (token côté serveur) */
 export async function sendTelegram(chatId, text) {
-  if (!BOT_TOKEN || !chatId) return { ok: false, error: 'Bot non configuré' };
+  if (!chatId) return { ok: false, error: 'Chat ID manquant' };
   if (!/^\d+$/.test(String(chatId))) return { ok: false, error: 'Format Chat ID invalide' };
 
   try {
-    const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+    const res = await fetch(SEND_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: chatId,
-        text,
-        parse_mode: 'Markdown',
-      }),
+      body: JSON.stringify({ chatId: String(chatId), text }),
     });
     const data = await res.json();
     if (data.ok) {
-      console.log('[Telegram API] Message envoyé ✓', data);
-      return { ok: true, messageId: data.result?.message_id };
+      console.log('[Telegram] Message envoyé ✓');
+      return { ok: true, messageId: data.messageId };
     }
-    console.error('[Telegram API] Erreur:', data);
-    return { ok: false, error: data.description || 'Erreur Telegram' };
+    console.error('[Telegram] Erreur:', data.error);
+    return { ok: false, error: data.error || 'Erreur Telegram' };
   } catch (err) {
-    console.error('[Telegram API] Erreur réseau:', err);
+    console.error('[Telegram] Erreur réseau:', err);
     return { ok: false, error: err.message };
   }
 }
 
-/**
- * Envoie un message Telegram en réponse à un message spécifique (reply).
- */
+/** Envoie un message en réponse à un message spécifique */
 export async function sendTelegramReply(chatId, text, replyToMessageId) {
-  if (!BOT_TOKEN || !chatId) return { ok: false, error: 'Bot non configuré' };
-  if (!/^\d+$/.test(String(chatId))) return { ok: false, error: 'Format Chat ID invalide' };
+  if (!chatId) return { ok: false, error: 'Chat ID manquant' };
   try {
-    const body = { chat_id: chatId, text, parse_mode: 'Markdown' };
-    if (replyToMessageId) body.reply_to_message_id = parseInt(replyToMessageId);
-    const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    const data = await res.json();
-    if (data.ok) return { ok: true, messageId: data.result?.message_id };
-    return { ok: false, error: data.description || 'Erreur Telegram' };
-  } catch (err) {
-    return { ok: false, error: err.message };
-  }
-}
-
-/**
- * Envoie un message Telegram avec des boutons inline (cliquables).
- */
-export async function sendTelegramWithButtons(chatId, text, buttons) {
-  if (!BOT_TOKEN || !chatId) return { ok: false, error: 'Bot non configuré' };
-  if (!/^\d+$/.test(String(chatId))) return { ok: false, error: 'Format Chat ID invalide' };
-
-  try {
-    const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+    const res = await fetch(SEND_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        chat_id: chatId,
+        chatId: String(chatId),
         text,
-        parse_mode: 'Markdown',
-        reply_markup: {
-          inline_keyboard: buttons,
-        },
+        replyToId: replyToMessageId ? parseInt(replyToMessageId) : undefined,
       }),
     });
     const data = await res.json();
-    if (data.ok) return { ok: true, messageId: data.result?.message_id };
-    console.error('[Telegram API] Erreur:', data);
-    return { ok: false, error: data.description || 'Erreur Telegram' };
+    return { ok: data.ok, messageId: data.messageId, error: data.error };
   } catch (err) {
     return { ok: false, error: err.message };
   }
 }
 
-/**
- * Envoie une notification Telegram.
- * Telegram n'a pas de templates comme WhatsApp — on envoie le texte directement.
- *
- * @param {string} chatId     - Chat ID du destinataire
- * @param {string} text       - Corps du message
- * @param {object} [templateInfo] - Ignoré (compat WhatsApp)
- * @returns {{ ok: boolean, messageId?: string, error?: string, method?: string }}
- */
-export async function sendNotification(chatId, text, templateInfo) {
-  if (!isTelegramConfigured()) {
-    return { ok: false, error: 'Bot non configuré', telegramLink: telegramMeLink() };
+/** Envoie un message avec boutons inline (feu vert OUI/NON) */
+export async function sendTelegramWithButtons(chatId, text, buttons) {
+  if (!chatId) return { ok: false, error: 'Chat ID manquant' };
+  try {
+    const res = await fetch(SEND_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chatId: String(chatId),
+        text,
+        replyMarkup: { inline_keyboard: buttons },
+      }),
+    });
+    const data = await res.json();
+    return { ok: data.ok, messageId: data.messageId, error: data.error };
+  } catch (err) {
+    return { ok: false, error: err.message };
   }
+}
 
-  const result = await sendTelegram(chatId, text);
-  if (result.ok) {
-    return { ok: true, messageId: result.messageId, method: 'text' };
-  }
-
-  return {
-    ok: false,
-    error: result.error,
-    telegramLink: telegramMeLink(),
-    method: 'failed',
-  };
+/** Alias pour compatibilité — envoie une notification simple */
+export async function sendNotification(chatId, text) {
+  return sendTelegram(chatId, text);
 }
