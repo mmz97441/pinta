@@ -53,9 +53,25 @@ export async function printEtiquettes(colisList, clients, getClient) {
       doc.setFontSize(11);
       doc.text(`Carton ${i + 1}/${nbCartons}`, w - 8, 12, { align: 'right' });
 
-      // QR Code
+      // QR Code — encode full delivery info for driver scanning
       try {
-        const qrDataUrl = await generateQRDataUrl(colis.ref || colis.id);
+        const qrData = JSON.stringify({
+          ref: colis.ref,
+          carton: `${i + 1}/${nbCartons}`,
+          dest: {
+            nom: cl.nom || '',
+            prenom: cl.prenom || '',
+            adresse: cl.adresseLigne1 || cl.adresse || '',
+            adresse2: cl.adresseLigne2 || '',
+            cp: cl.cp || '',
+            ville: cl.commune || cl.ville || '',
+            pays: dest?.nom || '',
+          },
+          tel: cl.tel || '',
+          poids: colis.finP || colis.poids || 0,
+          casier: colis.casier || '',
+        });
+        const qrDataUrl = await generateQRDataUrl(qrData);
         if (qrDataUrl) {
           doc.addImage(qrDataUrl, 'PNG', 8, 22, 35, 35);
         }
