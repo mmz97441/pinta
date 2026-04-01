@@ -1,220 +1,144 @@
-import React from 'react';
-import { ChevronRight, Shield, User } from 'lucide-react';
+import React, { useState } from 'react';
+import { LogIn, AlertCircle } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { STAFF, BRAND, getDestByCP } from '../constants';
+import { BRAND } from '../constants';
+import { supabase } from '../lib/supabase';
 
 export default function LoginPage() {
-  const { auth, setAuth, clients, data } = useApp();
+  const { setAuth } = useApp();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    if (!email.trim() || !password.trim()) { setError('Email et mot de passe requis'); return; }
+    setLoading(true);
+    setError('');
+
+    try {
+      const { data, error: authError } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password: password.trim(),
+      });
+
+      if (authError) {
+        setError(authError.message === 'Invalid login credentials'
+          ? 'Email ou mot de passe incorrect'
+          : authError.message);
+        setLoading(false);
+        return;
+      }
+
+      if (data?.user) {
+        const meta = data.user.user_metadata || {};
+        setAuth({
+          type: 'staff',
+          u: {
+            id: data.user.id,
+            nom: `${meta.nom || ''} ${meta.prenom || ''}`.trim() || data.user.email,
+            email: data.user.email,
+            role: meta.role || 'preparateur',
+          },
+          session: data.session,
+        });
+      }
+    } catch (err) {
+      setError('Erreur de connexion : ' + err.message);
+    }
+    setLoading(false);
+  };
 
   return (
     <div
       className="min-h-screen flex flex-col items-center justify-center px-4 py-10"
-      style={{
-        background: `linear-gradient(160deg, ${BRAND.navy} 0%, ${BRAND.navyD} 100%)`,
-      }}
+      style={{ background: `linear-gradient(160deg, ${BRAND.navy} 0%, ${BRAND.navyD} 100%)` }}
     >
-      {/* ── Logo ── */}
-      <div className="anim-fade mb-2 flex flex-col items-center select-none">
+      {/* Logo */}
+      <div className="mb-8 flex flex-col items-center select-none">
         <div className="flex items-baseline gap-0 leading-none">
-          <span
-            className="text-5xl font-black text-white"
-            style={{ letterSpacing: '-0.03em' }}
-          >
-            EXPÉD
-          </span>
-          <span
-            className="text-5xl font-black"
-            style={{ color: BRAND.gold, letterSpacing: '-0.03em' }}
-          >
-            ÎLE
-          </span>
+          <span className="text-5xl font-black text-white" style={{ letterSpacing: '-0.03em' }}>EXPÉD</span>
+          <span className="text-5xl font-black" style={{ color: BRAND.gold, letterSpacing: '-0.03em' }}>ÎLE</span>
         </div>
-        <p
-          className="mt-2 text-sm font-semibold uppercase"
-          style={{ color: BRAND.gold, letterSpacing: '0.18em' }}
-        >
+        <p className="mt-2 text-sm font-semibold uppercase" style={{ color: BRAND.gold, letterSpacing: '0.18em' }}>
           Paris → Réunion · Mayotte · Antilles
         </p>
       </div>
 
-      {/* ── Card ── */}
+      {/* Login card */}
       <div
-        className="anim-fade-up mt-8 w-full max-w-sm md:max-w-2xl lg:max-w-3xl rounded-2xl p-5 md:p-8 glass"
+        className="w-full max-w-sm rounded-2xl p-6"
         style={{
           background: 'rgba(255,255,255,0.07)',
           border: '1px solid rgba(255,255,255,0.12)',
           boxShadow: '0 8px 40px rgba(0,0,0,0.35)',
         }}
       >
-        <div className="md:grid md:grid-cols-2 md:gap-6">
-        {/* ─── Équipe section ─── */}
-        <div className="mb-5 md:mb-0">
-          <div className="flex items-center gap-2 mb-3">
-            <Shield size={15} style={{ color: BRAND.gold }} strokeWidth={2.5} />
-            <span
-              className="text-xs font-bold uppercase"
-              style={{ color: BRAND.goldL, letterSpacing: '0.15em' }}
-            >
-              Équipe
-            </span>
+        <form onSubmit={handleLogin} className="space-y-4">
+          <div>
+            <label className="text-[11px] font-bold uppercase tracking-wider" style={{ color: BRAND.goldL }}>Email</label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="direction@delivrex.io"
+              className="w-full mt-1 px-4 py-3 rounded-xl text-sm font-medium outline-none transition-all"
+              style={{
+                background: 'rgba(255,255,255,0.08)',
+                border: '1px solid rgba(255,255,255,0.15)',
+                color: 'white',
+              }}
+              onFocus={(e) => { e.target.style.borderColor = BRAND.gold; }}
+              onBlur={(e) => { e.target.style.borderColor = 'rgba(255,255,255,0.15)'; }}
+              autoComplete="email"
+              autoFocus
+            />
           </div>
 
-          <div className="flex flex-col gap-2">
-            {STAFF.map((user, idx) => (
-              <button
-                key={user.id}
-                onClick={() => setAuth({ type: 'staff', u: user })}
-                className={`anim-fade stagger-${idx + 1} group flex items-center gap-3 w-full rounded-xl px-3 py-2.5 text-left transition-all duration-150`}
-                style={{
-                  background: 'rgba(255,255,255,0.06)',
-                  border: '1px solid rgba(255,255,255,0.08)',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = `rgba(232,184,75,0.12)`;
-                  e.currentTarget.style.borderColor = `rgba(232,184,75,0.30)`;
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'rgba(255,255,255,0.06)';
-                  e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)';
-                }}
-              >
-                {/* Avatar */}
-                <div
-                  className="flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-sm font-black"
-                  style={{
-                    background: `linear-gradient(135deg, ${BRAND.gold}, ${BRAND.goldD})`,
-                    color: BRAND.navyD,
-                  }}
-                >
-                  {user.nom.charAt(0).toUpperCase()}
-                </div>
-
-                {/* Name + role */}
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-bold text-white leading-tight truncate">
-                    {user.nom}
-                  </div>
-                  <div
-                    className="text-xs leading-tight mt-0.5 truncate"
-                    style={{ color: BRAND.goldL }}
-                  >
-                    {user.role}
-                  </div>
-                </div>
-
-                {/* Arrow */}
-                <ChevronRight
-                  size={16}
-                  className="flex-shrink-0 opacity-40 group-hover:opacity-80 transition-opacity"
-                  style={{ color: BRAND.gold }}
-                />
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Separator (mobile only) */}
-        <div
-          className="my-4 md:hidden"
-          style={{ height: '1px', background: 'rgba(255,255,255,0.08)' }}
-        />
-
-        {/* ─── Clients section ─── */}
-        <div>
-          <div className="flex items-center gap-2 mb-3">
-            <User size={15} style={{ color: BRAND.gold }} strokeWidth={2.5} />
-            <span
-              className="text-xs font-bold uppercase"
-              style={{ color: BRAND.goldL, letterSpacing: '0.15em' }}
-            >
-              Clients
-            </span>
+          <div>
+            <label className="text-[11px] font-bold uppercase tracking-wider" style={{ color: BRAND.goldL }}>Mot de passe</label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••"
+              className="w-full mt-1 px-4 py-3 rounded-xl text-sm font-medium outline-none transition-all"
+              style={{
+                background: 'rgba(255,255,255,0.08)',
+                border: '1px solid rgba(255,255,255,0.15)',
+                color: 'white',
+              }}
+              onFocus={(e) => { e.target.style.borderColor = BRAND.gold; }}
+              onBlur={(e) => { e.target.style.borderColor = 'rgba(255,255,255,0.15)'; }}
+              autoComplete="current-password"
+            />
           </div>
 
-          <div className="flex flex-col gap-2">
-            {clients.map((c, idx) => {
-              const dest = getDestByCP(c.cp);
-              const colisCount = data.filter((p) => p.clientId === c.id).length;
-              const staggerClass = `stagger-${Math.min(idx + 1, 8)}`;
+          {error && (
+            <div className="flex items-center gap-2 p-2 rounded-lg" style={{ background: 'rgba(239,68,68,0.15)' }}>
+              <AlertCircle size={14} className="text-red-400 flex-shrink-0" />
+              <p className="text-xs text-red-300">{error}</p>
+            </div>
+          )}
 
-              return (
-                <button
-                  key={c.id}
-                  onClick={() =>
-                    setAuth({ type: 'client', u: { id: c.id, nom: c.nom }, cl: c })
-                  }
-                  className={`anim-fade ${staggerClass} group flex items-center gap-3 w-full rounded-xl px-3 py-2.5 text-left transition-all duration-150`}
-                  style={{
-                    background: 'rgba(255,255,255,0.06)',
-                    border: '1px solid rgba(255,255,255,0.08)',
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = 'rgba(255,255,255,0.11)';
-                    e.currentTarget.style.borderColor = 'rgba(255,255,255,0.18)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = 'rgba(255,255,255,0.06)';
-                    e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)';
-                  }}
-                >
-                  {/* Avatar */}
-                  <div
-                    className="flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-sm font-black"
-                    style={{
-                      background: `linear-gradient(135deg, ${BRAND.navyL}, ${BRAND.navy})`,
-                      color: BRAND.goldL,
-                      border: `1.5px solid rgba(232,184,75,0.25)`,
-                    }}
-                  >
-                    {c.nom.charAt(0).toUpperCase()}
-                  </div>
-
-                  {/* Name + destination */}
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-bold text-white leading-tight truncate">
-                      {c.nom}
-                    </div>
-                    <div
-                      className="text-xs leading-tight mt-0.5 flex items-center gap-1 truncate"
-                      style={{ color: 'rgba(255,255,255,0.55)' }}
-                    >
-                      <span>{dest.flag}</span>
-                      <span className="truncate">{dest.label}</span>
-                      {colisCount > 0 && (
-                        <>
-                          <span className="opacity-40">·</span>
-                          <span
-                            className="font-semibold"
-                            style={{ color: BRAND.goldL }}
-                          >
-                            {colisCount} colis
-                          </span>
-                        </>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Arrow */}
-                  <ChevronRight
-                    size={16}
-                    className="flex-shrink-0 opacity-40 group-hover:opacity-80 transition-opacity"
-                    style={{ color: 'rgba(255,255,255,0.6)' }}
-                  />
-                </button>
-              );
-            })}
-          </div>
-        </div>
-        </div>{/* end md:grid */}
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold transition-all active:scale-[0.98] disabled:opacity-50"
+            style={{
+              background: `linear-gradient(135deg, ${BRAND.gold}, ${BRAND.goldD})`,
+              color: BRAND.navyD,
+              boxShadow: `0 4px 20px ${BRAND.gold}40`,
+            }}
+          >
+            <LogIn size={16} />
+            {loading ? 'Connexion...' : 'Se connecter'}
+          </button>
+        </form>
       </div>
 
-      {/* ── Footer ── */}
-      <p
-        className="anim-fade mt-6 text-xs"
-        style={{ color: 'rgba(255,255,255,0.25)', letterSpacing: '0.06em' }}
-      >
-        MVP Demo · v2.0
-      </p>
+      <p className="mt-6 text-[10px] text-gray-500">Expedîle © 2026 — Réexpédition DOM-TOM</p>
     </div>
   );
 }
