@@ -654,18 +654,20 @@ export function AppProvider({ children }) {
       return;
     }
 
-    // Vérifier que la facture est validée (obligatoire pour calculer les taxes)
     const cl = clients.find((x) => x.id === c.clientId);
-    const hasValidFacture = c.factures && c.factures.length > 0 && c.factures.some((f) => f.valide);
-    if (!hasValidFacture) {
-      flash({ msg: 'Impossible d\'envoyer le devis : aucune facture validée. Les taxes (OM/OMR) ne peuvent pas être calculées sans la facture d\'achat.', type: 'warning', duration: 6000 });
-      return;
-    }
+    const isPro = cl?.type === 'pro';
 
-    // Vérifier que des lignes articles existent (issues de la facture)
-    if (!c.lignes || c.lignes.length === 0) {
-      flash({ msg: 'Aucun article renseigné. Ajoutez les articles du colis (depuis la facture) pour calculer les taxes.', type: 'warning', duration: 5000 });
-      return;
+    // PRO: pas besoin de facture ni d'articles pour les taxes (pas d'OM/OMR/TVA)
+    if (!isPro) {
+      const hasValidFacture = c.factures && c.factures.length > 0 && c.factures.some((f) => f.valide);
+      if (!hasValidFacture) {
+        flash({ msg: 'Impossible d\'envoyer le devis : aucune facture validée. Les taxes (OM/OMR) ne peuvent pas être calculées sans la facture d\'achat.', type: 'warning', duration: 6000 });
+        return;
+      }
+      if (!c.lignes || c.lignes.length === 0) {
+        flash({ msg: 'Aucun article renseigné. Ajoutez les articles du colis (depuis la facture) pour calculer les taxes.', type: 'warning', duration: 5000 });
+        return;
+      }
     }
 
     const dest = getClientDest(c.clientId, clients);
@@ -675,22 +677,29 @@ export function AppProvider({ children }) {
     const pv = (c.finL * c.finW * c.finH) / 5000;
     const pf = Math.max(c.finP, pv);
     const tr = calcTransport(pf, t);
-    // CIF = Cost (goods) + Insurance (0) + Freight (proportional transport)
-    const totalValeurArticles = c.lignes.reduce((s, l) => s + (l.qte || 1) * (l.prix || 0), 0);
-    let om = 0, omr = 0;
-    c.lignes.forEach((l) => {
-      const cat = categories.find((x) => x.id === l.cat);
-      if (cat) {
-        const ct = getCatTaux(cat, dest.code);
-        const valeurArticle = (l.qte || 1) * (l.prix || 0);
-        const transportShare = totalValeurArticles > 0 ? tr * (valeurArticle / totalValeurArticles) : 0;
-        const cif = valeurArticle + transportShare;
-        om += cif * ct.om / 100;
-        omr += cif * ct.omr / 100;
-      }
-    });
+
+    let om = 0, omr = 0, tva = 0;
+
+    if (!isPro) {
+      // Particulier: calcul CIF OM/OMR/TVA
+      const totalValeurArticles = (c.lignes || []).reduce((s, l) => s + (l.qte || 1) * (l.prix || 0), 0);
+      (c.lignes || []).forEach((l) => {
+        const cat = categories.find((x) => x.id === l.cat);
+        if (cat) {
+          const ct = getCatTaux(cat, dest.code);
+          const valeurArticle = (l.qte || 1) * (l.prix || 0);
+          const transportShare = totalValeurArticles > 0 ? tr * (valeurArticle / totalValeurArticles) : 0;
+          const cif = valeurArticle + transportShare;
+          om += cif * ct.om / 100;
+          omr += cif * ct.omr / 100;
+        }
+      });
+      const ht = tr + om + omr;
+      tva = ht * (dest.tva / 100);
+    }
+    // PRO: devis = transport uniquement (pas d'OM, OMR, TVA)
+
     const ht = tr + om + omr;
-    const tva = ht * (dest.tva / 100);
     const tot = Math.round((ht + tva) * 100) / 100;
 
     // Calcul AVANT optimisation (supporte multi-colis)

@@ -30,11 +30,11 @@ export default function ColisInfo() {
 
     // Move all client's active colis if checked (same envoi only)
     if (moveAll && cl) {
-      const currentEnvoi = sel.envoi || null;
+      // Only move colis that have NO envoi (locked colis stay in their casier)
       const activeColis = data.filter(
         (c) => c.clientId === cl.id && c.id !== sel.id
           && c.statut !== 'livre' && c.statut !== 'annule'
-          && (!c.envoi || !currentEnvoi || c.envoi === currentEnvoi) // same envoi or no envoi
+          && !c.envoi // NEVER move a colis that has an envoi
       );
       activeColis.forEach((c) => {
         const cHistEntry = c.casier ? { casier: c.casier, date: new Date().toISOString() } : null;
@@ -47,7 +47,7 @@ export default function ColisInfo() {
       const skipped = data.filter(
         (c) => c.clientId === cl.id && c.id !== sel.id
           && c.statut !== 'livre' && c.statut !== 'annule'
-          && c.envoi && currentEnvoi && c.envoi !== currentEnvoi
+          && c.envoi
       ).length;
       flash(skipped > 0
         ? `Casier mis à jour pour ${activeColis.length + 1} colis (${skipped} colis sur un autre envoi non déplacés)`
