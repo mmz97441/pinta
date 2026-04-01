@@ -538,9 +538,10 @@ export default function StaffDetailView() {
       try {
         flash({ msg: 'Création du lien de paiement...', type: 'info' });
         const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://bqprktzehuhplpqjgjaz.supabase.co';
+        const edgeSecret = import.meta.env.VITE_EDGE_API_SECRET || '529b12c1d205370f3297776d59e71fb067cabc5a168c83772cf2ddffa38de8ef';
         const res = await fetch(`${supabaseUrl}/functions/v1/payplug-create`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'x-api-secret': edgeSecret },
           body: JSON.stringify({
             colisId: sel.id,
             amount: sel.devisTotal,

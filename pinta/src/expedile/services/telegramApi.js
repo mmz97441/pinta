@@ -4,7 +4,12 @@
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://bqprktzehuhplpqjgjaz.supabase.co';
 const SEND_URL = `${SUPABASE_URL}/functions/v1/send-telegram`;
+const API_SECRET = import.meta.env.VITE_EDGE_API_SECRET || '529b12c1d205370f3297776d59e71fb067cabc5a168c83772cf2ddffa38de8ef';
 const BOT_USERNAME = 'Expedilebot';
+
+function edgeHeaders() {
+  return { 'Content-Type': 'application/json', 'x-api-secret': API_SECRET };
+}
 
 /** Vérifie si l'API Telegram est configurée (toujours true avec Edge Function) */
 export function isTelegramConfigured() {
@@ -40,7 +45,7 @@ export async function sendTelegram(chatId, text) {
   try {
     const res = await fetch(SEND_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: edgeHeaders(),
       body: JSON.stringify({ chatId: String(chatId), text }),
     });
     const data = await res.json();
@@ -62,7 +67,7 @@ export async function sendTelegramReply(chatId, text, replyToMessageId) {
   try {
     const res = await fetch(SEND_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: edgeHeaders(),
       body: JSON.stringify({
         chatId: String(chatId),
         text,
@@ -82,7 +87,7 @@ export async function sendTelegramWithButtons(chatId, text, buttons) {
   try {
     const res = await fetch(SEND_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: edgeHeaders(),
       body: JSON.stringify({
         chatId: String(chatId),
         text,
