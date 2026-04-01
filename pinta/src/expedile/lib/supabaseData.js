@@ -270,6 +270,55 @@ export async function fetchTarifs() {
   return obj;
 }
 
+// ══════════ STAFF USERS & PERMISSIONS ══════════
+
+export async function fetchStaffUsers() {
+  const { data, error } = await supabase
+    .from('staff_users')
+    .select('*, staff_permissions(*)')
+    .order('nom');
+  if (error) throw error;
+  return (data || []).map((u) => ({
+    id: u.id,
+    authId: u.auth_id,
+    nom: u.nom,
+    prenom: u.prenom,
+    email: u.email,
+    role: u.role,
+    actif: u.actif,
+    permissions: u.staff_permissions?.[0] || null,
+  }));
+}
+
+export async function insertStaffUser(userData) {
+  const { data, error } = await supabase
+    .from('staff_users')
+    .insert({ nom: userData.nom, prenom: userData.prenom || null, email: userData.email, role: userData.role || 'preparateur' })
+    .select()
+    .single();
+  if (error) throw error;
+  // Create default permissions via SQL function
+  const { data: defaults } = await supabase.rpc('fn_default_permissions', { p_role: data.role });
+  const permsRow = { staff_id: data.id, ...(defaults || {}) };
+  await supabase.from('staff_permissions').insert(permsRow);
+  return data;
+}
+
+export async function updateStaffUser(id, changes) {
+  const { error } = await supabase.from('staff_users').update(changes).eq('id', id);
+  if (error) throw error;
+}
+
+export async function updateStaffPermissions(staffId, perms) {
+  const { error } = await supabase.from('staff_permissions').update(perms).eq('staff_id', staffId);
+  if (error) throw error;
+}
+
+export async function deleteStaffUser(id) {
+  const { error } = await supabase.from('staff_users').delete().eq('id', id);
+  if (error) throw error;
+}
+
 export async function fetchNotifications(userId) {
   const { data, error } = await supabase
     .from('notifications')
