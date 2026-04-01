@@ -1,27 +1,21 @@
 import jsPDF from 'jspdf';
 import { getDestByCP } from '../constants';
 
-// QR Code generation using canvas API (no external dependency)
-async function generateQRDataUrl(text) {
+async function generateQR(text) {
   try {
-    // Use the qrcode library if available
     const QRCode = await import('qrcode');
-    return await QRCode.toDataURL(text, { width: 200, margin: 1 });
-  } catch {
-    // Fallback: return null (no QR code)
-    console.warn('[Etiquettes] QR code generation failed, skipping');
-    return null;
-  }
+    return await QRCode.toDataURL(text, { width: 200, margin: 0, errorCorrectionLevel: 'L' });
+  } catch { return null; }
 }
 
 /**
- * Génère et ouvre un PDF d'étiquettes d'expédition pour les colis sélectionnés.
- * Chaque carton = 1 page A5 avec QR code.
+ * Étiquette d'expédition — format A4, GROS caractères.
+ * Le livreur doit pouvoir lire le nom et l'adresse en conduisant.
  */
 export async function printEtiquettes(colisList, clients, getClient) {
   if (!colisList || colisList.length === 0) return;
 
-  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a5' });
+  const doc = new jsPDF({ unit: 'mm', format: [105, 148] });
   let first = true;
 
   for (const colis of colisList) {
@@ -32,130 +26,107 @@ export async function printEtiquettes(colisList, clients, getClient) {
     const nbCartons = Math.max(trackings.length, 1);
 
     for (let i = 0; i < nbCartons; i++) {
-      if (!first) doc.addPage();
+      if (!first) doc.addPage([105, 148]);
       first = false;
 
-      const w = doc.internal.pageSize.getWidth();
-      const h = doc.internal.pageSize.getHeight();
+      const W = 105, H = 148;
 
-      // Border
-      doc.setDrawColor(27, 58, 75);
-      doc.setLineWidth(0.8);
-      doc.rect(3, 3, w - 6, h - 6, 'S');
-
-      // Header bar
+      // ══════ HEADER NAVY ══════
       doc.setFillColor(27, 58, 75);
-      doc.rect(3, 3, w - 6, 14, 'F');
+      doc.rect(0, 0, W, 12, 'F');
       doc.setTextColor(255, 255, 255);
-      doc.setFontSize(14);
+      doc.setFontSize(10);
       doc.setFont('helvetica', 'bold');
-      doc.text('EXPEDILE', 8, 12);
-      doc.setFontSize(11);
-      doc.text(`Carton ${i + 1}/${nbCartons}`, w - 8, 12, { align: 'right' });
+      doc.text('EXPEDILE', 4, 8);
+      doc.setFontSize(12);
+      doc.text(`${i + 1} / ${nbCartons}`, W - 4, 8, { align: 'right' });
 
-      // QR Code — encode full delivery info for driver scanning
-      try {
-        const qrData = JSON.stringify({
-          ref: colis.ref,
-          carton: `${i + 1}/${nbCartons}`,
-          dest: {
-            nom: cl.nom || '',
-            prenom: cl.prenom || '',
-            adresse: cl.adresseLigne1 || cl.adresse || '',
-            adresse2: cl.adresseLigne2 || '',
-            cp: cl.cp || '',
-            ville: cl.commune || cl.ville || '',
-            pays: dest?.nom || '',
-          },
-          tel: cl.tel || '',
-          poids: colis.finP || colis.poids || 0,
-          casier: colis.casier || '',
-        });
-        const qrDataUrl = await generateQRDataUrl(qrData);
-        if (qrDataUrl) {
-          doc.addImage(qrDataUrl, 'PNG', 8, 22, 35, 35);
-        }
-      } catch (e) {
-        console.warn('QR failed:', e);
-      }
-
-      // Ref + Casier
+      // ══════ REF + CASIER ══════
       doc.setTextColor(27, 58, 75);
       doc.setFontSize(18);
       doc.setFont('helvetica', 'bold');
-      doc.text(colis.ref || 'EXP-????', 48, 32);
+      doc.text(colis.ref || '?', 4, 22);
 
       if (colis.casier) {
-        doc.setFontSize(10);
         doc.setFillColor(232, 184, 75);
-        doc.roundedRect(48, 35, 28, 8, 2, 2, 'F');
+        doc.roundedRect(4, 24, 28, 7, 2, 2, 'F');
         doc.setTextColor(18, 42, 54);
-        doc.text(`Casier ${colis.casier}`, 50, 41);
-      }
-
-      // Tracking
-      if (trackings[i]) {
-        doc.setTextColor(120, 120, 120);
-        doc.setFontSize(8);
-        doc.setFont('helvetica', 'normal');
-        doc.text(`Tracking: ${trackings[i]}`, 48, 50);
+        doc.setFontSize(9);
+        doc.text(`Casier ${colis.casier}`, 6, 29);
       }
 
       // Poids
       doc.setTextColor(27, 58, 75);
-      doc.setFontSize(10);
+      doc.setFontSize(11);
+      doc.text(`${colis.finP || colis.poids || '?'} kg`, 36, 29);
+
+      // ══════ QR CODE (en haut à droite) ══════
+      const qrText = [
+        colis.ref,
+        (cl.nom || '') + (cl.prenom ? ' ' + cl.prenom : ''),
+        cl.adresseLigne1 || cl.adresse || '',
+        `${cl.cp || ''} ${cl.commune || cl.ville || ''}`,
+        dest?.nom || '',
+        cl.tel || '',
+      ].filter(Boolean).join('\n');
+
+      try {
+        const qr = await generateQR(qrText);
+        if (qr) doc.addImage(qr, 'PNG', W - 30, 14, 26, 26);
+      } catch {}
+
+      // ══════ SÉPARATEUR ══════
+      doc.setDrawColor(27, 58, 75);
+      doc.setLineWidth(0.8);
+      doc.line(4, 35, W - 4, 35);
+
+      // ══════ NOM — GROS ══════
+      doc.setTextColor(0, 0, 0);
+      doc.setFontSize(18);
       doc.setFont('helvetica', 'bold');
-      doc.text(`${colis.finP || colis.poids || '?'} kg`, 48, 56);
+      const nomComplet = ((cl.nom || '') + (cl.prenom ? ' ' + cl.prenom : '')).toUpperCase();
+      doc.text(nomComplet, 4, 45);
 
-      // Separator
-      doc.setDrawColor(200, 200, 200);
-      doc.setLineWidth(0.3);
-      doc.line(8, 62, w - 8, 62);
-
-      // DESTINATAIRE
-      doc.setTextColor(150, 150, 150);
-      doc.setFontSize(7);
-      doc.setFont('helvetica', 'bold');
-      doc.text('DESTINATAIRE', 8, 68);
-
-      doc.setTextColor(27, 58, 75);
-      doc.setFontSize(13);
-      doc.setFont('helvetica', 'bold');
-      doc.text(cl.nom || '—', 8, 76);
-
-      doc.setFontSize(10);
+      // ══════ ADRESSE — LISIBLE ══════
+      doc.setFontSize(12);
       doc.setFont('helvetica', 'normal');
-      doc.setTextColor(60, 60, 60);
+      doc.setTextColor(30, 30, 30);
+      let y = 53;
 
-      let y = 82;
-      const addr = cl.adresseLigne1 || cl.adresse || '';
-      if (addr) { doc.text(addr, 8, y); y += 5; }
-      if (cl.adresseLigne2) { doc.text(cl.adresseLigne2, 8, y); y += 5; }
+      const addr1 = (cl.adresseLigne1 || cl.adresse || '').toUpperCase();
+      if (addr1) { doc.text(addr1, 4, y); y += 6; }
+      if (cl.adresseLigne2) { doc.text(cl.adresseLigne2.toUpperCase(), 4, y); y += 6; }
 
-      const cpVille = `${cl.cp || ''} ${cl.commune || cl.ville || ''}`.trim();
-      if (cpVille) {
-        doc.setFont('helvetica', 'bold');
-        doc.text(cpVille, 8, y);
-        y += 6;
-      }
+      // CP + VILLE — GROS
+      doc.setFontSize(14);
+      doc.setFont('helvetica', 'bold');
+      const cpVille = `${cl.cp || ''} ${(cl.commune || cl.ville || '').toUpperCase()}`.trim();
+      if (cpVille) { doc.text(cpVille, 4, y); y += 8; }
 
+      // DESTINATION — TRÈS GROS
       if (dest) {
-        doc.setFontSize(12);
+        doc.setFontSize(20);
         doc.setFont('helvetica', 'bold');
-        doc.text(`${dest.nom || ''}`, 8, y);
+        doc.setTextColor(27, 58, 75);
+        doc.text(dest.nom?.toUpperCase() || '', 4, y);
+        y += 10;
       }
 
-      // Bottom: description
-      if (colis.desc) {
-        doc.setFontSize(7);
+      // TÉLÉPHONE
+      if (cl.tel) {
+        doc.setFontSize(11);
         doc.setFont('helvetica', 'normal');
-        doc.setTextColor(150, 150, 150);
-        doc.text(colis.desc.slice(0, 60), 8, h - 6);
+        doc.setTextColor(80, 80, 80);
+        doc.text(`TEL: ${cl.tel}`, 4, y);
       }
+
+      // ══════ BORDURE ══════
+      doc.setDrawColor(27, 58, 75);
+      doc.setLineWidth(1);
+      doc.rect(1, 1, W - 2, H - 2, 'S');
     }
   }
 
-  // Open in new window
   const pdfBlob = doc.output('blob');
   const url = URL.createObjectURL(pdfBlob);
   window.open(url, '_blank');
