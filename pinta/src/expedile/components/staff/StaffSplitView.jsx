@@ -97,7 +97,7 @@ function ColisTableRow({ c, client, envois, onClick, isSelected, compact, checke
   return (
     <tr
       onClick={onClick}
-      className={`border-b border-gray-50 cursor-pointer transition-colors ${isSelected ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
+      className={`border-b border-gray-50 cursor-pointer transition-colors ${isSelected ? 'bg-blue-50' : client?.type === 'pro' ? 'bg-amber-50/40 hover:bg-amber-50' : 'hover:bg-gray-50'}`}
       style={{ borderLeft: `3px solid ${statutBorderColor(c.statut)}` }}
     >
       <td className="px-2 py-2 w-8" onClick={(e) => e.stopPropagation()}>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, useNavigate, useParams, useLocation, Navigate } from 'react-router-dom';
-import { Settings, Users, LogOut, LayoutDashboard, Package, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
+import { Settings, Users, LogOut, LayoutDashboard, Package, ChevronLeft, ChevronRight, Plus, FileText } from 'lucide-react';
 import './brand.css';
 
 import { AppProvider, useApp } from './context/AppContext';
@@ -16,6 +16,7 @@ import StaffColisPage, { DashboardPage } from './components/staff/StaffSplitView
 import StaffSettings from './components/staff/StaffSettings';
 import StaffClients from './components/staff/StaffClients';
 import StaffDetailView from './components/staff/StaffDetailView';
+import DevisProspect from './components/staff/DevisProspect';
 
 import ClientAccueil from './components/client/ClientAccueil';
 import ClientColis from './components/client/ClientColis';
@@ -121,11 +122,13 @@ function AppContent() {
       { key: '/', label: 'Dashboard', icon: LayoutDashboard },
       { key: '/colis', label: 'Colis', icon: Package },
       { key: '/clients', label: 'Clients', icon: Users },
+      { key: '/devis', label: 'Devis', icon: FileText },
       { key: '/settings', label: 'Paramètres', icon: Settings },
     ];
 
     const activePath = currentPath.startsWith('/colis') ? '/colis'
       : currentPath === '/clients' ? '/clients'
+      : currentPath === '/devis' ? '/devis'
       : currentPath === '/settings' ? '/settings'
       : '/';
 
@@ -280,6 +283,11 @@ function AppContent() {
                   <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-4 space-y-4">
                     <StaffClients />
                   </div>
+                </div>
+              } />
+              <Route path="/devis" element={
+                <div className="h-full overflow-y-auto">
+                  <DevisProspect />
                 </div>
               } />
               <Route path="/settings" element={

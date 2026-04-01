@@ -339,6 +339,7 @@ ${colis.fraisDivers?.length > 0 ? colis.fraisDivers.map((f) => `📎 ${f.libelle
 💰 *TOTAL : ${eur(colis.devisTotal)}*
 ━━━━━━━━━━━━━━━━
 ${colis.economie > 0 ? `\n✅ *Vous économisez ${eur(colis.economie)}* grâce à l'optimisation !\n(Sans optimisation : ${eur(colis.avantOptimTotal)})\n` : ''}
+${c.abonnement === 'freemium' ? `\n💡 *Bon à savoir :* Avec l'abonnement *Premium* (69€/an), vous bénéficieriez de tarifs réduits, sans frais de dossier et 30 jours de stockage gratuit. Renseignez-vous !\n` : ''}
 ${colis.payplugPaymentUrl
 ? `💳 *Payez en ligne :*\n${colis.payplugPaymentUrl}`
 : `👉 *Pour déclencher l'expédition :*\nContactez-nous pour le règlement.`}

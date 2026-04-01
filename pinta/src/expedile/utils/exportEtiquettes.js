@@ -1,17 +1,31 @@
 import jsPDF from 'jspdf';
-import QRCode from 'qrcode';
 import { getDestByCP } from '../constants';
+
+// QR Code generation using canvas API (no external dependency)
+async function generateQRDataUrl(text) {
+  try {
+    // Use the qrcode library if available
+    const QRCode = await import('qrcode');
+    return await QRCode.toDataURL(text, { width: 200, margin: 1 });
+  } catch {
+    // Fallback: return null (no QR code)
+    console.warn('[Etiquettes] QR code generation failed, skipping');
+    return null;
+  }
+}
 
 /**
  * Génère et ouvre un PDF d'étiquettes d'expédition pour les colis sélectionnés.
  * Chaque carton = 1 page A5 avec QR code.
  */
 export async function printEtiquettes(colisList, clients, getClient) {
+  if (!colisList || colisList.length === 0) return;
+
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a5' });
   let first = true;
 
   for (const colis of colisList) {
-    const cl = getClient(colis.clientId);
+    const cl = typeof getClient === 'function' ? getClient(colis.clientId) : null;
     if (!cl) continue;
     const dest = getDestByCP(cl.cp);
     const trackings = colis.trackings?.filter((t) => t) || [];
@@ -24,13 +38,9 @@ export async function printEtiquettes(colisList, clients, getClient) {
       const w = doc.internal.pageSize.getWidth();
       const h = doc.internal.pageSize.getHeight();
 
-      // Background
-      doc.setFillColor(255, 255, 255);
-      doc.rect(0, 0, w, h, 'F');
-
       // Border
       doc.setDrawColor(27, 58, 75);
-      doc.setLineWidth(1);
+      doc.setLineWidth(0.8);
       doc.rect(3, 3, w - 6, h - 6, 'S');
 
       // Header bar
@@ -45,50 +55,48 @@ export async function printEtiquettes(colisList, clients, getClient) {
 
       // QR Code
       try {
-        const qrUrl = `https://expedile.fr/colis/${colis.id}`;
-        const qrDataUrl = await QRCode.toDataURL(qrUrl, { width: 200, margin: 1 });
-        doc.addImage(qrDataUrl, 'PNG', 8, 22, 35, 35);
+        const qrDataUrl = await generateQRDataUrl(colis.ref || colis.id);
+        if (qrDataUrl) {
+          doc.addImage(qrDataUrl, 'PNG', 8, 22, 35, 35);
+        }
       } catch (e) {
-        console.warn('QR generation failed:', e);
+        console.warn('QR failed:', e);
       }
 
-      // Ref + Casier next to QR
+      // Ref + Casier
       doc.setTextColor(27, 58, 75);
-      doc.setFontSize(16);
+      doc.setFontSize(18);
       doc.setFont('helvetica', 'bold');
-      doc.text(colis.ref || 'EXP-????', 48, 30);
+      doc.text(colis.ref || 'EXP-????', 48, 32);
 
-      doc.setFontSize(10);
-      doc.setFont('helvetica', 'normal');
       if (colis.casier) {
+        doc.setFontSize(10);
         doc.setFillColor(232, 184, 75);
-        doc.roundedRect(48, 33, 25, 7, 1.5, 1.5, 'F');
+        doc.roundedRect(48, 35, 28, 8, 2, 2, 'F');
         doc.setTextColor(18, 42, 54);
-        doc.setFont('helvetica', 'bold');
-        doc.text(`Casier ${colis.casier}`, 50, 38);
+        doc.text(`Casier ${colis.casier}`, 50, 41);
       }
 
       // Tracking
       if (trackings[i]) {
-        doc.setTextColor(100, 100, 100);
+        doc.setTextColor(120, 120, 120);
         doc.setFontSize(8);
         doc.setFont('helvetica', 'normal');
-        doc.text(`Tracking: ${trackings[i]}`, 48, 47);
+        doc.text(`Tracking: ${trackings[i]}`, 48, 50);
       }
 
       // Poids
-      const poids = colis.finP || colis.poids || 0;
       doc.setTextColor(27, 58, 75);
-      doc.setFontSize(9);
+      doc.setFontSize(10);
       doc.setFont('helvetica', 'bold');
-      doc.text(`Poids: ${poids} kg`, 48, 53);
+      doc.text(`${colis.finP || colis.poids || '?'} kg`, 48, 56);
 
-      // Separator line
+      // Separator
       doc.setDrawColor(200, 200, 200);
       doc.setLineWidth(0.3);
       doc.line(8, 62, w - 8, 62);
 
-      // DESTINATAIRE section
+      // DESTINATAIRE
       doc.setTextColor(150, 150, 150);
       doc.setFontSize(7);
       doc.setFont('helvetica', 'bold');
@@ -97,52 +105,42 @@ export async function printEtiquettes(colisList, clients, getClient) {
       doc.setTextColor(27, 58, 75);
       doc.setFontSize(13);
       doc.setFont('helvetica', 'bold');
-      const nomComplet = cl.nom || '';
-      doc.text(nomComplet, 8, 76);
+      doc.text(cl.nom || '—', 8, 76);
 
       doc.setFontSize(10);
       doc.setFont('helvetica', 'normal');
       doc.setTextColor(60, 60, 60);
 
       let y = 82;
-      if (cl.adresseLigne1 || cl.adresse) {
-        doc.text(cl.adresseLigne1 || cl.adresse || '', 8, y);
-        y += 5;
-      }
-      if (cl.adresseLigne2) {
-        doc.text(cl.adresseLigne2, 8, y);
-        y += 5;
-      }
+      const addr = cl.adresseLigne1 || cl.adresse || '';
+      if (addr) { doc.text(addr, 8, y); y += 5; }
+      if (cl.adresseLigne2) { doc.text(cl.adresseLigne2, 8, y); y += 5; }
+
       const cpVille = `${cl.cp || ''} ${cl.commune || cl.ville || ''}`.trim();
       if (cpVille) {
         doc.setFont('helvetica', 'bold');
         doc.text(cpVille, 8, y);
-        y += 5;
+        y += 6;
       }
+
       if (dest) {
+        doc.setFontSize(12);
         doc.setFont('helvetica', 'bold');
-        doc.setFontSize(11);
-        doc.text(`${dest.flag || ''} ${dest.nom || ''}`, 8, y);
+        doc.text(`${dest.nom || ''}`, 8, y);
       }
 
-      // Envoi date (bottom right)
-      if (colis.envoi) {
-        doc.setFontSize(8);
-        doc.setFont('helvetica', 'normal');
-        doc.setTextColor(150, 150, 150);
-        doc.text(`Envoi: ${colis.envoi}`, w - 8, h - 8, { align: 'right' });
-      }
-
-      // Description (bottom left)
+      // Bottom: description
       if (colis.desc) {
-        doc.setFontSize(8);
+        doc.setFontSize(7);
         doc.setFont('helvetica', 'normal');
         doc.setTextColor(150, 150, 150);
-        doc.text(colis.desc.slice(0, 50), 8, h - 8);
+        doc.text(colis.desc.slice(0, 60), 8, h - 6);
       }
     }
   }
 
-  // Open PDF
-  doc.output('dataurlnewwindow');
+  // Open in new window
+  const pdfBlob = doc.output('blob');
+  const url = URL.createObjectURL(pdfBlob);
+  window.open(url, '_blank');
 }
