@@ -15,7 +15,7 @@ async function generateQR(text) {
 export async function printEtiquettes(colisList, clients, getClient) {
   if (!colisList || colisList.length === 0) return;
 
-  const doc = new jsPDF({ unit: 'mm', format: [100, 120] });
+  const doc = new jsPDF({ unit: 'mm', format: [100, 150] });
   let first = true;
 
   for (const colis of colisList) {
@@ -26,10 +26,10 @@ export async function printEtiquettes(colisList, clients, getClient) {
     const nbCartons = Math.max(trackings.length, 1);
 
     for (let i = 0; i < nbCartons; i++) {
-      if (!first) doc.addPage([100, 120]);
+      if (!first) doc.addPage([100, 150]);
       first = false;
 
-      const W = 100, H = 120;
+      const W = 100, H = 150;
 
       // ══════ HEADER NAVY ══════
       doc.setFillColor(27, 58, 75);
