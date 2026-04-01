@@ -45,29 +45,34 @@ const TD = 'px-2 py-2 text-[11px] whitespace-nowrap';
 const DASH = <span className="text-gray-300">—</span>;
 
 // ── Table header row ────────────────────────────────────────────────────────
-function ColisTableHead({ compact, onSelectAll, allSelected }) {
+function ColisTableHead({ compact, onSelectAll, allSelected, onSort, sortCol, sortDir }) {
+  const indicator = (col) => onSort ? (sortCol === col ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ' ↕') : '';
+  const sortable = (col, align) => onSort
+    ? { onClick: () => onSort(col), className: `${TH}${align === 'right' ? ' text-right' : ''} cursor-pointer hover:text-gray-700 select-none` }
+    : { className: align === 'right' ? `${TH} text-right` : TH };
+
   return (
     <tr className="border-b border-gray-200" style={{ background: `${BRAND.navy}06` }}>
       <th className="px-2 py-2 w-8">
         <input type="checkbox" checked={allSelected} onChange={onSelectAll}
           className="w-3.5 h-3.5 rounded accent-blue-500 cursor-pointer" />
       </th>
-      <th className={TH}>Date</th>
-      <th className={TH}>Réf.</th>
-      <th className={TH}>Statut</th>
+      <th {...sortable('date')}>Date{indicator('date')}</th>
+      <th {...sortable('ref')}>Réf.{indicator('ref')}</th>
+      <th {...sortable('statut')}>Statut{indicator('statut')}</th>
       {!compact && <th className={TH}>Paiem.</th>}
-      <th className={TH}>Nom</th>
+      <th {...sortable('client')}>Nom{indicator('client')}</th>
       <th className={TH}>Prénom</th>
       {!compact && <th className={TH}>Email</th>}
       {!compact && <th className={TH}>Tél.</th>}
       {!compact && <th className={TH}>Forfait</th>}
       <th className={TH}>Intitulé</th>
-      {!compact && <th className={`${TH} text-right`}>Vol. cm³</th>}
+      {!compact && <th {...sortable('dims', 'right')}>Vol. cm³{indicator('dims')}</th>}
       {!compact && <th className={`${TH} text-right`}>Vol. kg</th>}
       {!compact && <th className={`${TH} text-right`}>Poids</th>}
-      <th className={`${TH} text-right`}>Transport</th>
-      <th className={`${TH} text-right`}>Taxes</th>
-      <th className={`${TH} text-right`}>Total</th>
+      <th {...sortable('transport', 'right')}>Transport{indicator('transport')}</th>
+      <th {...sortable('taxes', 'right')}>Taxes{indicator('taxes')}</th>
+      <th {...sortable('total', 'right')}>Total{indicator('total')}</th>
       {!compact && <th className={`${TH} text-right`}>Payé</th>}
       {!compact && <th className={TH}>Commune</th>}
       {!compact && <th className={TH}>CP</th>}
@@ -351,6 +356,7 @@ export default function StaffColisPage() {
     arr.sort((a, b) => {
       let va, vb;
       switch (sortCol) {
+        case 'date': va = a.dateReception || a.createdAt || ''; vb = b.dateReception || b.createdAt || ''; return dir * va.localeCompare(vb);
         case 'client': va = (getClient(a.clientId)?.nom || '').toLowerCase(); vb = (getClient(b.clientId)?.nom || '').toLowerCase(); return dir * va.localeCompare(vb, 'fr');
         case 'ref': return dir * (a.ref || '').localeCompare(b.ref || '', 'fr', { numeric: true });
         case 'statut': return dir * (STATUTS[a.statut]?.label || '').localeCompare(STATUTS[b.statut]?.label || '', 'fr');
@@ -419,9 +425,6 @@ export default function StaffColisPage() {
   const openColis = (id) => setSelId(id);
   const closeDetail = () => setSelId(null);
 
-  const sortIndicator = (col) => sortCol === col ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ' ↕';
-  const thSort = (col) => ({ onClick: () => handleSort(col), className: `${TH} cursor-pointer hover:text-gray-700 select-none` });
-  const thSortRight = (col) => ({ onClick: () => handleSort(col), className: `${TH} text-right cursor-pointer hover:text-gray-700 select-none` });
 
   return (
     <div className="h-full flex flex-col">
@@ -609,7 +612,7 @@ export default function StaffColisPage() {
                     </div>
                     <div className="overflow-x-auto">
                       <table className="w-full text-left">
-                        <thead><ColisTableHead compact={!!sel} allSelected={sorted.length > 0 && sorted.every((c) => selectedIds.has(c.id))} onSelectAll={() => { if (sorted.every((c) => selectedIds.has(c.id))) { setSelectedIds(new Set()); } else { setSelectedIds(new Set(sorted.map((c) => c.id))); } }} /></thead>
+                        <thead><ColisTableHead compact={!!sel} allSelected={sorted.length > 0 && sorted.every((c) => selectedIds.has(c.id))} onSelectAll={() => { if (sorted.every((c) => selectedIds.has(c.id))) { setSelectedIds(new Set()); } else { setSelectedIds(new Set(sorted.map((c) => c.id))); } }} onSort={handleSort} sortCol={sortCol} sortDir={sortDir} /></thead>
                         <tbody>
                           {group.colis.map((c) => (
                             <ColisTableRow key={c.id} c={c} client={getClient(c.clientId)} envois={envois}
@@ -653,7 +656,7 @@ export default function StaffColisPage() {
                     </div>
                     <div className="overflow-x-auto">
                       <table className="w-full text-left">
-                        <thead><ColisTableHead compact={!!sel} allSelected={sorted.length > 0 && sorted.every((c) => selectedIds.has(c.id))} onSelectAll={() => { if (sorted.every((c) => selectedIds.has(c.id))) { setSelectedIds(new Set()); } else { setSelectedIds(new Set(sorted.map((c) => c.id))); } }} /></thead>
+                        <thead><ColisTableHead compact={!!sel} allSelected={sorted.length > 0 && sorted.every((c) => selectedIds.has(c.id))} onSelectAll={() => { if (sorted.every((c) => selectedIds.has(c.id))) { setSelectedIds(new Set()); } else { setSelectedIds(new Set(sorted.map((c) => c.id))); } }} onSort={handleSort} sortCol={sortCol} sortDir={sortDir} /></thead>
                         <tbody>
                           {group.colis.map((c) => (
                             <ColisTableRow key={c.id} c={c} client={getClient(c.clientId)} envois={envois}

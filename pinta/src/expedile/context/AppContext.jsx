@@ -3,6 +3,7 @@ import { STATUTS, PREV_STATUT, CATEGORIES_INIT, CLIENTS_INIT, TARIFS_DEFAUT, ini
 import { MSG_TEMPLATES } from '../constants/templates';
 import { uid, makeData, calcTransport, getCatTaux, eur, mailtoLink, getClientDest } from '../utils';
 import { isTelegramConfigured, sendTelegram, sendNotification, sendTelegramWithButtons, telegramMeLink, normalizeTel } from '../services/telegramApi';
+import { usePermissions } from '../hooks/usePermissions';
 import { connectWebhook } from '../services/webhookListener';
 import * as sb from '../lib/supabaseData';
 import { supabase } from '../lib/supabase';
@@ -191,6 +192,7 @@ export function AppProvider({ children }) {
   const selDest = useMemo(() => (sel ? getClientDest(sel.clientId, clients) : null), [sel, clients]);
 
   const authRole = auth?.u?.role || (isStaff ? 'preparateur' : 'client');
+  const { can, perms: staffPerms } = usePermissions(auth?.u?.id || auth?.session?.user?.id);
 
   const unreadNotifs = useMemo(() => notifs.filter((n) => !n.lu).length, [notifs]);
 
@@ -876,7 +878,7 @@ export function AppProvider({ children }) {
 
   const value = useMemo(() => ({
     // Auth
-    auth, setAuth, isStaff, authCl, authRole, sbReady,
+    auth, setAuth, isStaff, authCl, authRole, sbReady, can,
     // Data
     data, setData, clients, setClients, categories, setCategories, tarifs, setTarifs, envois, setEnvois, logs, produitsInterdits, setProduitsInterdits,
     // Communication
@@ -891,7 +893,7 @@ export function AppProvider({ children }) {
     addCategory, updateCatTaux, updateCatLabel, deleteCategory,
     receptionner, changerStatut, revertStatut, annulerColis, archiverColis, desarchiverColis, demanderFeuVert, feuVert, feuVertBulk, envoyerDevis, payer, envMsg,
   }), [
-    auth, isStaff, authCl, authRole, data, clients, categories, tarifs, envois, logs, produitsInterdits,
+    auth, isStaff, authCl, authRole, data, clients, categories, tarifs, envois, logs, produitsInterdits, can,
     comLog, sendMsg, getPreview, notifs, unreadNotifs, markNotifRead, markAllNotifsRead,
     selId, sel, selClient, selDest, toast, setToast, page, clientTab, colisFilter, cfm,
     flash, ask, closeConfirm, upd, log, getClient, getTarif,

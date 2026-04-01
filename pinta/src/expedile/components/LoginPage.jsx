@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { LogIn, AlertCircle, ChevronRight, Shield } from 'lucide-react';
+import { LogIn, AlertCircle } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { BRAND, STAFF } from '../constants';
+import { BRAND } from '../constants';
 import { supabase } from '../lib/supabase';
 
 export default function LoginPage() {
@@ -10,7 +10,6 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [showAuth, setShowAuth] = useState(true);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -76,81 +75,44 @@ export default function LoginPage() {
           boxShadow: '0 8px 40px rgba(0,0,0,0.35)',
         }}
       >
-        {showAuth ? (
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div>
-              <label className="text-[11px] font-bold uppercase tracking-wider" style={{ color: BRAND.goldL }}>Email</label>
-              <input
-                type="email" value={email} onChange={(e) => setEmail(e.target.value)}
-                placeholder="direction@delivrex.io"
-                className="w-full mt-1 px-4 py-3 rounded-xl text-sm font-medium outline-none"
-                style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', color: 'white' }}
-                autoComplete="email" autoFocus
-              />
-            </div>
-            <div>
-              <label className="text-[11px] font-bold uppercase tracking-wider" style={{ color: BRAND.goldL }}>Mot de passe</label>
-              <input
-                type="password" value={password} onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                className="w-full mt-1 px-4 py-3 rounded-xl text-sm font-medium outline-none"
-                style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', color: 'white' }}
-                autoComplete="current-password"
-              />
-            </div>
-
-            {error && (
-              <div className="flex items-center gap-2 p-2 rounded-lg" style={{ background: 'rgba(239,68,68,0.15)' }}>
-                <AlertCircle size={14} className="text-red-400 flex-shrink-0" />
-                <p className="text-xs text-red-300">{error}</p>
-              </div>
-            )}
-
-            <button
-              type="submit" disabled={loading}
-              className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold transition-all active:scale-[0.98] disabled:opacity-50"
-              style={{ background: `linear-gradient(135deg, ${BRAND.gold}, ${BRAND.goldD})`, color: BRAND.navyD }}
-            >
-              <LogIn size={16} />
-              {loading ? 'Connexion...' : 'Se connecter'}
-            </button>
-
-            <button type="button" onClick={() => setShowAuth(false)}
-              className="w-full text-center text-[10px] text-gray-500 hover:text-gray-300 mt-2">
-              Mode démonstration →
-            </button>
-          </form>
-        ) : (
-          /* Mode démo — accès rapide sans auth */
-          <div className="space-y-3">
-            <div className="flex items-center gap-2 mb-2">
-              <Shield size={13} style={{ color: BRAND.gold }} />
-              <span className="text-[10px] font-bold uppercase" style={{ color: BRAND.goldL, letterSpacing: '0.15em' }}>Mode démonstration</span>
-            </div>
-            {STAFF.map((user) => (
-              <button
-                key={user.id}
-                onClick={() => setAuth({ type: 'staff', u: user })}
-                className="group flex items-center gap-3 w-full rounded-xl px-3 py-2.5 text-left transition-all"
-                style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }}
-              >
-                <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-black"
-                  style={{ background: `linear-gradient(135deg, ${BRAND.gold}, ${BRAND.goldD})`, color: BRAND.navyD }}>
-                  {user.nom.charAt(0)}
-                </div>
-                <div className="flex-1">
-                  <div className="text-sm font-bold text-white">{user.nom}</div>
-                  <div className="text-[10px]" style={{ color: BRAND.goldL }}>{user.role}</div>
-                </div>
-                <ChevronRight size={14} style={{ color: BRAND.gold }} className="opacity-40" />
-              </button>
-            ))}
-            <button type="button" onClick={() => setShowAuth(true)}
-              className="w-full text-center text-[10px] text-gray-500 hover:text-gray-300 mt-2">
-              ← Connexion avec email
-            </button>
+        <form onSubmit={handleLogin} className="space-y-4">
+          <div>
+            <label className="text-[11px] font-bold uppercase tracking-wider" style={{ color: BRAND.goldL }}>Email</label>
+            <input
+              type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+              placeholder="direction@delivrex.io"
+              className="w-full mt-1 px-4 py-3 rounded-xl text-sm font-medium outline-none"
+              style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', color: 'white' }}
+              autoComplete="email" autoFocus
+            />
           </div>
-        )}
+          <div>
+            <label className="text-[11px] font-bold uppercase tracking-wider" style={{ color: BRAND.goldL }}>Mot de passe</label>
+            <input
+              type="password" value={password} onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••"
+              className="w-full mt-1 px-4 py-3 rounded-xl text-sm font-medium outline-none"
+              style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', color: 'white' }}
+              autoComplete="current-password"
+            />
+          </div>
+
+          {error && (
+            <div className="flex items-center gap-2 p-2 rounded-lg" style={{ background: 'rgba(239,68,68,0.15)' }}>
+              <AlertCircle size={14} className="text-red-400 flex-shrink-0" />
+              <p className="text-xs text-red-300">{error}</p>
+            </div>
+          )}
+
+          <button
+            type="submit" disabled={loading}
+            className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold transition-all active:scale-[0.98] disabled:opacity-50"
+            style={{ background: `linear-gradient(135deg, ${BRAND.gold}, ${BRAND.goldD})`, color: BRAND.navyD }}
+          >
+            <LogIn size={16} />
+            {loading ? 'Connexion...' : 'Se connecter'}
+          </button>
+        </form>
       </div>
 
       <p className="mt-6 text-[10px] text-gray-500">Expedîle © 2026</p>
