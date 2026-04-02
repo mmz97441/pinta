@@ -6,6 +6,7 @@ import { BRAND, DESTINATIONS } from '../../constants';
 import { eur, labelEnvoi, uid, getCatTaux } from '../../utils';
 import { Ligne } from '../ui';
 import TemplateEditor from './TemplateEditor';
+import StaffPermissions from './StaffPermissions';
 import { isTelegramConfigured, sendTelegram } from '../../services/telegramApi';
 import * as sb from '../../lib/supabaseData';
 
@@ -25,6 +26,7 @@ export default function StaffSettings() {
   });
   const [editingParam, setEditingParam] = useState(null);
   const [paramTmp, setParamTmp] = useState('');
+  const [settingsTab, setSettingsTab] = useState('planning');
   const [catEditId, setCatEditId] = useState(null);
   const [newCat, setNewCat] = useState({ label: '', taux: {} });
 
@@ -104,7 +106,37 @@ export default function StaffSettings() {
         </button>
       </div>
 
+      {/* ── Onglets ── */}
+      <div className="flex gap-1 overflow-x-auto border-b border-gray-200 pb-0">
+        {[
+          { key: 'planning', label: 'Planning' },
+          { key: 'tarifs', label: 'Tarifs' },
+          { key: 'categories', label: 'Catégories' },
+          { key: 'users', label: 'Utilisateurs' },
+          { key: 'telegram', label: 'Telegram' },
+          { key: 'templates', label: 'Templates' },
+          { key: 'metier', label: 'Métier' },
+          { key: 'interdits', label: 'Interdits' },
+        ].map((tab) => (
+          <button key={tab.key} onClick={() => setSettingsTab(tab.key)}
+            className={`px-3 py-2 text-xs font-bold whitespace-nowrap border-b-2 transition-all ${
+              settingsTab === tab.key ? 'border-current' : 'border-transparent text-gray-400 hover:text-gray-600'
+            }`}
+            style={settingsTab === tab.key ? { color: BRAND.navy, borderColor: BRAND.navy } : {}}>
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Utilisateurs & Permissions ── */}
+      {settingsTab === 'users' && (
+        <div className="card p-5">
+          <StaffPermissions />
+        </div>
+      )}
+
       {/* ── Départs ── */}
+      {settingsTab === 'planning' && (
       <div className="card p-5">
         <div className="flex items-center gap-2 mb-1">
           <Plane size={18} style={{ color: BRAND.navy }} />
@@ -344,8 +376,10 @@ export default function StaffSettings() {
         </div>
       </div>
 
+      )}
+
       {/* ── Tarifs transport ── */}
-      {['directeur', 'vice_directeur', 'logisticien'].includes(authRole) && (
+      {settingsTab === 'tarifs' && ['directeur', 'vice_directeur', 'logisticien'].includes(authRole) && (
       <div className="card p-5">
         <div className="flex items-center gap-2 mb-1">
           <CreditCard size={18} style={{ color: BRAND.navy }} />
@@ -380,7 +414,7 @@ export default function StaffSettings() {
       )}
 
       {/* ── Catégories taxes ── */}
-      {['directeur', 'vice_directeur', 'logisticien'].includes(authRole) && (<>
+      {settingsTab === 'categories' && ['directeur', 'vice_directeur', 'logisticien'].includes(authRole) && (
       <div className="card p-5 anim-fade">
         <div className="flex items-center gap-2 mb-1">
           <FileText size={18} style={{ color: BRAND.navy }} />
@@ -474,8 +508,10 @@ export default function StaffSettings() {
           </div>
         </div>
       </div>
+      )}
 
       {/* ── Produits interdits ── */}
+      {settingsTab === 'interdits' && (
       <div className="card p-5 anim-fade">
         <div className="flex items-center gap-2 mb-1">
           <ShieldAlert size={18} className="text-red-600" />
@@ -544,9 +580,10 @@ export default function StaffSettings() {
           </button>
         </div>
       </div>
-      </>)}
+      )}
 
       {/* ── Telegram Bot ── */}
+      {settingsTab === 'telegram' && (
       <div className="card p-5 anim-fade">
         <div className="flex items-center gap-2 mb-1">
           <MessageCircle size={18} style={{ color: '#0088cc' }} />
@@ -664,8 +701,10 @@ export default function StaffSettings() {
         )}
       </div>
 
+      )}
+
       {/* ── Paramètres métier (direction only) ── */}
-      {['directeur', 'vice_directeur'].includes(authRole) && (
+      {settingsTab === 'metier' && ['directeur', 'vice_directeur'].includes(authRole) && (
       <div className="card p-5 anim-fade">
         <div className="flex items-center gap-2 mb-1">
           <FileText size={18} style={{ color: BRAND.navy }} />
@@ -724,7 +763,7 @@ export default function StaffSettings() {
       )}
 
       {/* ── Templates de messages ── */}
-      {['directeur', 'vice_directeur'].includes(authRole) && (
+      {settingsTab === 'templates' && ['directeur', 'vice_directeur'].includes(authRole) && (
       <div className="card p-5">
         <div className="flex items-center gap-2 mb-1">
           <MessageCircle size={18} style={{ color: BRAND.navy }} />
