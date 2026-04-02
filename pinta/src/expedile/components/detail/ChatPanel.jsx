@@ -73,8 +73,7 @@ export default function ChatPanel() {
     const urlRegex = /(https?:\/\/[^\s]+)/g;
     const parts = text.split(urlRegex);
     return parts.map((part, i) => {
-      if (urlRegex.test(part)) {
-        urlRegex.lastIndex = 0;
+      if (/https?:\/\/[^\s]+/.test(part)) {
         const isImage = /\.(jpg|jpeg|png|gif|webp)/i.test(part);
         return (
           <span key={i}>

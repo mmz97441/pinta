@@ -334,6 +334,7 @@ export async function fetchNotifications(userId) {
     msg: n.msg,
     lu: n.lu,
     colisId: n.colis_id,
+    type: n.type || null,
   }));
 }
 
@@ -498,7 +499,6 @@ export async function updateFacture(factureId, changes) {
   if ('fichierUrl' in changes) snakeChanges.fichier_url = changes.fichierUrl;
   if ('fichierNom' in changes) snakeChanges.fichier_nom = changes.fichierNom;
   if ('rejetMotif' in changes) snakeChanges.rejet_motif = changes.rejetMotif;
-  if ('fichierNom' in changes) snakeChanges.fichier_nom = changes.fichierNom;
   const { error } = await supabase.from('factures').update(snakeChanges).eq('id', factureId);
   if (error) throw error;
 }

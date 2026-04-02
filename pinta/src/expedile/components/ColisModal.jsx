@@ -223,7 +223,7 @@ export default function ColisModal({ open, onClose }) {
       if (!validateNewClient()) return;
       if (!nf.d.trim()) { setFormErr({ d: 'Description requise' }); return; }
       if (!nf.casier.trim()) { setFormErr({ casier: 'Numéro de casier requis' }); return; }
-      clientId = addNewClient({
+      clientId = await addNewClient({
         nom: newClientForm.nom.trim(),
         ville: newClientForm.ville.trim(),
         cp: newClientForm.cp.trim(),

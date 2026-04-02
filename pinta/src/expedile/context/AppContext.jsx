@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useCallback, useMemo, useEf
 import { STATUTS, PREV_STATUT, CATEGORIES_INIT, CLIENTS_INIT, TARIFS_DEFAUT, initEnvois, getDestByCP, PRODUITS_INTERDITS } from '../constants';
 import { MSG_TEMPLATES } from '../constants/templates';
 import { uid, makeData, calcTransport, getCatTaux, eur, mailtoLink, getClientDest } from '../utils';
-import { isTelegramConfigured, sendTelegram, sendNotification, sendTelegramWithButtons, telegramMeLink, normalizeTel } from '../services/telegramApi';
+import { isTelegramConfigured, sendTelegram, sendNotification, sendTelegramWithButtons, normalizeTel } from '../services/telegramApi';
 import { usePermissions } from '../hooks/usePermissions';
 import { connectWebhook } from '../services/webhookListener';
 import * as sb from '../lib/supabaseData';
@@ -573,19 +573,6 @@ export function AppProvider({ children }) {
     const isBeforeDeadline = day < 3 || (day === 3 && hour < 17); // avant mercredi 17h
 
     // Calcul du vendredi cible
-    const target = new Date(now);
-    const daysUntilFriday = (5 - day + 7) % 7 || 7; // jours jusqu'au prochain vendredi
-    if (isBeforeDeadline) {
-      // Ce vendredi (si on est déjà vendredi/samedi/dimanche, prendre le prochain)
-      const daysToThisFri = (5 - day + 7) % 7;
-      target.setDate(now.getDate() + (daysToThisFri === 0 && day === 5 ? 0 : daysToThisFri));
-    } else {
-      // Vendredi de la semaine prochaine
-      target.setDate(now.getDate() + daysUntilFriday + (day <= 5 ? 0 : 0));
-      if (day > 3 && day < 5) target.setDate(now.getDate() + daysUntilFriday);
-      else if (day === 3) target.setDate(now.getDate() + 2); // mercredi → vendredi prochain = +9 jours? non
-    }
-    // Simplification: calculer proprement
     const friday = new Date(now);
     if (isBeforeDeadline) {
       // Ce vendredi
@@ -791,7 +778,7 @@ export function AppProvider({ children }) {
     }));
 
     // Send via Telegram if staff + client has a Telegram Chat ID
-    const colis = data.find((x) => x.id === colisId);
+    const colis = dataRef.current.find((x) => x.id === colisId);
     const client = colis ? clientsRef.current?.find((x) => x.id === colis.clientId) : null;
     const chatId = client?.telegramChatId;
 
@@ -823,6 +810,8 @@ export function AppProvider({ children }) {
   // ── Webhook SSE — réception messages entrants + statuts ──
   const clientsRef = useRef(clients);
   clientsRef.current = clients;
+  const dataRef = useRef(data);
+  useEffect(() => { dataRef.current = data; }, [data]);
 
   useEffect(() => {
     const cleanup = connectWebhook((event) => {

@@ -52,6 +52,11 @@ export const PREV_STATUT = {
   en_preparation: 'autorise',
   devis_envoye: 'en_preparation',
   paye: 'devis_envoye',
+  expedie: 'paye',
+  transit: 'expedie',
+  dedouanement: 'transit',
+  arrive: 'dedouanement',
+  livraison: 'arrive',
 };
 
 // ══════════ DESTINATIONS DOM-TOM ══════════
@@ -153,7 +158,7 @@ export const PHASES_CLIENT = [
   { key: 'reception',   label: 'Réceptionné',       statuts: ['receptionne', 'mesure'] },
   { key: 'feu_vert',    label: 'Votre accord',      statuts: ['attente_feu_vert', 'autorise'] },
   { key: 'preparation', label: 'Préparation',       statuts: ['en_preparation'] },
-  { key: 'devis',       label: 'Devis & Paiement',  statuts: ['devis_envoye', 'litige_devis', 'paye'] },
+  { key: 'devis',       label: 'Devis & Paiement',  statuts: ['devis_envoye', 'paye'] },
   { key: 'expedition',  label: 'Expédition',        statuts: ['expedie', 'transit', 'dedouanement'] },
   { key: 'livraison',   label: 'Livraison',         statuts: ['arrive', 'livraison', 'livre'] },
 ];

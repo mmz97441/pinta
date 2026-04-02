@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Ruler, Check, Clock, Camera, AlertTriangle, AlertCircle, Eye, X, RotateCcw, Send, Mail, Plus, Archive,
 } from 'lucide-react';
@@ -281,6 +281,17 @@ export default function StaffDetailView() {
   // Add carton toggle
   const [showAddCarton, setShowAddCarton] = useState(false);
 
+  useEffect(() => {
+    if (sel) {
+      setFinDims({ finL: sel.finL || '', finW: sel.finW || '', finH: sel.finH || '', finP: sel.finP || '' });
+      setSelEnvoi(sel.envoi || '');
+      setSelTags(sel.tagsPreparation || []);
+      setFraisDivers(sel.fraisDivers || []);
+      setShowAddCarton(false);
+      setDevisPrev(false);
+    }
+  }, [sel?.id]);
+
   if (!sel || !isStaff) return null;
 
   const dest = selDest || getDestByCP(cl?.cp);
@@ -558,8 +569,6 @@ export default function StaffDetailView() {
             ? { ...c, payplugPaymentUrl: payData.paymentUrl, payplugPaymentId: payData.paymentId }
             : c
           ));
-          // Also update sel directly for template access
-          sel.payplugPaymentUrl = payData.paymentUrl;
         } else {
           console.warn('[PayPlug] Creation failed:', payData);
         }
