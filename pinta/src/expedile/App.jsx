@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, useNavigate, useParams, useLocation, Navigate } from 'react-router-dom';
-import { Settings, Users, LogOut, LayoutDashboard, Package, ChevronLeft, ChevronRight, Plus, FileText } from 'lucide-react';
+import { Settings, Users, LogOut, LayoutDashboard, Package, ChevronLeft, ChevronRight, Plus, FileText, Key } from 'lucide-react';
 import './brand.css';
 
 import { AppProvider, useApp } from './context/AppContext';
 import { BRAND } from './constants';
+import { supabase } from './lib/supabase';
 
 import { Toast, ConfirmDialog } from './components/ui';
 import LoginPage from './components/LoginPage';
@@ -221,8 +222,25 @@ function AppContent() {
                   <p className="text-[10px] text-gray-500 truncate">{auth.u.role || 'Staff'}</p>
                 </div>
               )}
+              {!sidebarCollapsed && (
+                <button
+                  onClick={async () => {
+                    const newPwd = prompt('Nouveau mot de passe (min. 6 caractères) :');
+                    if (!newPwd || newPwd.length < 6) { if (newPwd) alert('Le mot de passe doit faire au moins 6 caractères'); return; }
+                    try {
+                      const { error } = await supabase.auth.updateUser({ password: newPwd });
+                      if (error) alert('Erreur : ' + error.message);
+                      else alert('Mot de passe modifié avec succès !');
+                    } catch (e) { alert('Erreur : ' + e.message); }
+                  }}
+                  className="p-1.5 rounded-lg text-gray-500 hover:text-amber-400 hover:bg-white/10 transition-all"
+                  title="Modifier mot de passe"
+                >
+                  <Key size={14} />
+                </button>
+              )}
               <button
-                onClick={() => { setAuth(null); navigate('/'); }}
+                onClick={() => { supabase.auth.signOut(); setAuth(null); navigate('/'); }}
                 className={`p-1.5 rounded-lg text-gray-500 hover:text-red-400 hover:bg-white/10 transition-all ${sidebarCollapsed ? 'mt-2' : ''}`}
                 title="Se déconnecter"
               >

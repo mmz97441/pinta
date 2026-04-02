@@ -3,7 +3,8 @@ import { useApp } from '../../context/AppContext';
 import { BRAND } from '../../constants';
 import { PERMISSION_CATEGORIES } from '../../constants/permissions';
 import * as sb from '../../lib/supabaseData';
-import { Shield, Plus, Trash2, Check, X, ChevronDown, ChevronRight } from 'lucide-react';
+import { supabase } from '../../lib/supabase';
+import { Shield, Plus, Trash2, Check, X, ChevronDown, ChevronRight, Eye, EyeOff } from 'lucide-react';
 
 const ROLES = [
   { value: 'directeur', label: 'Directeur', color: '#DC2626' },
@@ -21,7 +22,8 @@ export default function StaffPermissions() {
 
   // New user form
   const [showNew, setShowNew] = useState(false);
-  const [newForm, setNewForm] = useState({ nom: '', prenom: '', email: '', role: 'preparateur' });
+  const [newForm, setNewForm] = useState({ nom: '', prenom: '', email: '', password: '', role: 'preparateur' });
+  const [showNewPwd, setShowNewPwd] = useState(false);
 
   useEffect(() => {
     sb.fetchStaffUsers().then((users) => {
@@ -31,17 +33,40 @@ export default function StaffPermissions() {
   }, []);
 
   const handleCreateUser = async () => {
-    if (!newForm.nom.trim() || !newForm.email.trim()) {
-      flash({ msg: 'Nom et email requis', type: 'warning' });
+    if (!newForm.nom.trim() || !newForm.email.trim() || !newForm.password.trim()) {
+      flash({ msg: 'Nom, email et mot de passe requis', type: 'warning' });
+      return;
+    }
+    if (newForm.password.length < 6) {
+      flash({ msg: 'Le mot de passe doit faire au moins 6 caractères', type: 'warning' });
       return;
     }
     try {
-      await sb.insertStaffUser(newForm);
+      // 1. Create Auth account via Edge Function
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://bqprktzehuhplpqjgjaz.supabase.co';
+      const res = await fetch(`${supabaseUrl}/functions/v1/create-staff-user`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: newForm.email.trim(),
+          password: newForm.password.trim(),
+          nom: newForm.nom.trim(),
+          prenom: newForm.prenom.trim(),
+          role: newForm.role,
+        }),
+      });
+      const authResult = await res.json();
+      if (authResult.error) {
+        flash({ msg: 'Erreur Auth : ' + authResult.error, type: 'warning' });
+        return;
+      }
+
+      // 2. Refresh staff list
       const users = await sb.fetchStaffUsers();
       setStaffUsers(users);
       setShowNew(false);
-      setNewForm({ nom: '', prenom: '', email: '', role: 'preparateur' });
-      flash({ msg: 'Utilisateur créé — il doit être créé aussi dans Authentication > Users', type: 'success', duration: 5000 });
+      setNewForm({ nom: '', prenom: '', email: '', password: '', role: 'preparateur' });
+      flash({ msg: `${newForm.prenom} ${newForm.nom} peut maintenant se connecter`, type: 'success', duration: 5000 });
     } catch (err) {
       flash({ msg: 'Erreur : ' + err.message, type: 'warning' });
     }
@@ -113,6 +138,14 @@ export default function StaffPermissions() {
               placeholder="Prénom" className="px-3 py-2 rounded-lg border text-sm" />
             <input value={newForm.email} onChange={(e) => setNewForm((p) => ({ ...p, email: e.target.value }))}
               placeholder="Email *" type="email" className="px-3 py-2 rounded-lg border text-sm" />
+            <div className="relative">
+              <input value={newForm.password} onChange={(e) => setNewForm((p) => ({ ...p, password: e.target.value }))}
+                placeholder="Mot de passe *" type={showNewPwd ? 'text' : 'password'} className="w-full px-3 py-2 pr-9 rounded-lg border text-sm" />
+              <button type="button" onClick={() => setShowNewPwd((p) => !p)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                {showNewPwd ? <EyeOff size={14} /> : <Eye size={14} />}
+              </button>
+            </div>
             <select value={newForm.role} onChange={(e) => setNewForm((p) => ({ ...p, role: e.target.value }))}
               className="px-3 py-2 rounded-lg border text-sm">
               {ROLES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
