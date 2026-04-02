@@ -26,7 +26,8 @@ export function labelEnvoi(e) {
 
 // ══════════ CALCULS ══════════
 export function calcTransport(poids, tarif) {
-  return tarif.base + poids * tarif.parKg;
+  if (!tarif) return 0;
+  return (tarif.base || 0) + poids * (tarif.parKg || 0);
 }
 
 export function getCatTaux(cat, destCode) {
