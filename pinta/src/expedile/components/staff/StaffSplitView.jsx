@@ -15,6 +15,7 @@ import ColisInfo from '../detail/ColisInfo';
 import FacturesPanel from '../detail/FacturesPanel';
 import ChatPanel from '../detail/ChatPanel';
 import AuditLog from '../detail/AuditLog';
+import { useColisLock } from '../../hooks/useColisLock';
 
 // ── Pipeline cards (filters) ────────────────────────────────────────────────
 const PIPELINE = [
@@ -297,7 +298,7 @@ export function DashboardPage() {
 // ════════════════════════════════════════════════════════════════════════════
 export default function StaffColisPage() {
   const navigate = useNavigate();
-  const { data, clients, getClient, envois, setSelId, sel, changerStatut, flash, can } = useApp();
+  const { data, clients, getClient, envois, setSelId, sel, changerStatut, flash, can, auth } = useApp();
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [searchParams] = useSearchParams();
 
@@ -315,6 +316,9 @@ export default function StaffColisPage() {
   const [viewMode, setViewMode] = useState('statut');
   const [showFactures, setShowFactures] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+
+  // Verrouillage optimiste — affiche un bandeau si quelqu'un d'autre édite le même colis
+  const { lockedBy, isLockedByOther } = useColisLock(sel?.id, auth?.u?.id, auth?.u?.nom);
 
   useEffect(() => {
     if (urlTab && PIPELINE.some((t) => t.key === urlTab)) setActiveTab(urlTab);
@@ -701,6 +705,18 @@ export default function StaffColisPage() {
               </div>
               <button onClick={closeDetail} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400"><X size={18} /></button>
             </div>
+
+            {/* Lock warning banner */}
+            {isLockedByOther && (
+              <div className="mx-4 mt-2 px-4 py-3 rounded-xl flex items-center gap-3 animate-pulse"
+                style={{ background: '#FEF3C7', border: '2px solid #F59E0B' }}>
+                <span className="text-2xl">⚠️</span>
+                <div>
+                  <p className="text-sm font-black text-amber-800">{lockedBy} est en train de modifier ce colis</p>
+                  <p className="text-xs text-amber-600">Vos modifications pourraient entrer en conflit. Coordonnez-vous.</p>
+                </div>
+              </div>
+            )}
 
             {/* Steps */}
             <div className="px-4 pt-2 pb-1"><Etapes statut={sel.statut} /></div>
