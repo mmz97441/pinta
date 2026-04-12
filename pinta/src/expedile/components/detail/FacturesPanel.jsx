@@ -219,6 +219,7 @@ export default function FacturesPanel() {
     setOcrLoading(facture.id);
     try {
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://bqprktzehuhplpqjgjaz.supabase.co';
+      // TODO: Remplacer par JWT Supabase Auth quand verify_jwt sera activé
       const edgeSecret = import.meta.env.VITE_EDGE_API_SECRET || '';
       const res = await fetch(`${supabaseUrl}/functions/v1/ocr-facture`, {
         method: 'POST',

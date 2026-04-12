@@ -4,6 +4,7 @@
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://bqprktzehuhplpqjgjaz.supabase.co';
 const SEND_URL = `${SUPABASE_URL}/functions/v1/send-telegram`;
+// TODO: Remplacer par JWT Supabase Auth quand verify_jwt sera activé
 const API_SECRET = import.meta.env.VITE_EDGE_API_SECRET || '';
 const BOT_USERNAME = 'Expedilebot';
 

@@ -557,6 +557,7 @@ export default function StaffDetailView() {
       try {
         flash({ msg: 'Création du lien de paiement...', type: 'info' });
         const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://bqprktzehuhplpqjgjaz.supabase.co';
+        // TODO: Remplacer par JWT Supabase Auth quand verify_jwt sera activé
         const edgeSecret = import.meta.env.VITE_EDGE_API_SECRET || '';
         const res = await fetch(`${supabaseUrl}/functions/v1/payplug-create`, {
           method: 'POST',
@@ -588,9 +589,10 @@ export default function StaffDetailView() {
     changerStatut(sel.id, 'devis_envoye');
 
     // Step 3: Send the devis via template (which now includes PayPlug link)
+    // 800ms delay to allow setData to propagate so the template reads the PayPlug URL
     setTimeout(() => {
       sendMsg(sel.id, cl?.id, cl?.telegramChatId ? 'telegram' : 'email', 'devis_final', null);
-    }, 300);
+    }, 800);
 
     setDevisPrev(false);
   }
@@ -1108,7 +1110,7 @@ export default function StaffDetailView() {
                       </div>
                       <button
                         onClick={() => {
-                          setData((prev) => prev.map((c) => c.id === sel.id ? { ...c, lignes: c.lignes.filter((l) => l.id !== ligne.id) } : c));
+                          setData((prev) => prev.map((c) => c.id === sel.id ? { ...c, lignes: (c.lignes || []).filter((l) => l.id !== ligne.id) } : c));
                           sb.deleteLigne(ligne.id).catch((err) => flash({ msg: 'Erreur suppression article', type: 'warning' }));
                         }}
                         className="text-gray-300 hover:text-red-500 flex-shrink-0"
@@ -1120,7 +1122,7 @@ export default function StaffDetailView() {
                       value={ligne.cat || ''}
                       onChange={(e) => {
                         const newCat = e.target.value;
-                        setData((prev) => prev.map((c) => c.id === sel.id ? { ...c, lignes: c.lignes.map((l) => l.id === ligne.id ? { ...l, cat: newCat } : l) } : c));
+                        setData((prev) => prev.map((c) => c.id === sel.id ? { ...c, lignes: (c.lignes || []).map((l) => l.id === ligne.id ? { ...l, cat: newCat } : l) } : c));
                         sb.updateLigne(ligne.id, { cat: newCat }).catch(() => flash({ msg: 'Erreur sauvegarde catégorie', type: 'warning' }));
                       }}
                       className="w-full px-3 py-1.5 rounded-lg border-2 border-gray-200 text-sm outline-none"

@@ -240,11 +240,11 @@ function AppContent() {
                 className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-black flex-shrink-0"
                 style={{ background: `${BRAND.gold}30`, color: BRAND.gold }}
               >
-                {auth.u.nom.charAt(0)}
+                {(auth.u?.nom || '?').charAt(0)}
               </div>
               {!sidebarCollapsed && (
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs font-semibold text-gray-200 truncate">{auth.u.nom}</p>
+                  <p className="text-xs font-semibold text-gray-200 truncate">{auth.u?.nom || ''}</p>
                   <p className="text-[10px] text-gray-500 truncate">{auth.u.role || 'Staff'}</p>
                 </div>
               )}
@@ -382,12 +382,12 @@ function AppContent() {
               onClick={() => navigate('/profil')}
               className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl text-white hover:bg-white hover:bg-opacity-10 transition-all"
             >
-              <span className="text-sm font-medium text-gray-300">{authCl.nom.split(' ')[0]}</span>
+              <span className="text-sm font-medium text-gray-300">{(authCl.nom || '').split(' ')[0]}</span>
               <div
                 className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-black flex-shrink-0"
                 style={{ background: `linear-gradient(135deg, ${BRAND.gold}, ${BRAND.goldD})`, color: BRAND.navyD }}
               >
-                {authCl.nom.charAt(0).toUpperCase()}
+                {(authCl.nom || '?').charAt(0).toUpperCase()}
               </div>
             </button>
           )}

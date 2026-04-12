@@ -302,7 +302,7 @@ export default function ColisModal({ open, onClose }) {
     if (sendTG && cl) {
       const chatId = cl.telegramChatId;
       const dest = getDestByCP(cl.cp);
-      const prenom = cl.nom.split(' ')[0];
+      const prenom = (cl.nom || '').split(' ')[0];
       const trackingsStr = newColis.trackings?.filter((t) => t).join(', ') || '';
       const fournisseurs = (newColis.trackingsDetail || []).map((td) => td.fournisseur).filter(Boolean).join(', ');
 

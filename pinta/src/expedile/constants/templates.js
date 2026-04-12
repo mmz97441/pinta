@@ -72,12 +72,12 @@ export const MSG_TEMPLATES = {
     meta: {
       name: 'colis_reception',
       lang: 'fr',
-      params: (c, colis) => [c.nom.split(' ')[0], colis.ref, colis.desc || ''],
+      params: (c, colis) => [(c.nom || '').split(' ')[0], colis.ref, colis.desc || ''],
     },
     telegram: (c, colis) => {
       const dest = getDestByCP(c.cp);
       const cartonsInfo = cartonsList(colis);
-      return `Bonjour ${c.nom.split(' ')[0]} 👋
+      return `Bonjour ${(c.nom || '').split(' ')[0]} 👋
 
 Bonne nouvelle ! Votre colis *${colis.ref}* est bien arrivé à notre entrepôt de Paris 🎉
 
@@ -130,10 +130,10 @@ Paris → ${dest.nom}`;
     meta: {
       name: 'facture_manquante',
       lang: 'fr',
-      params: (c, colis) => [c.nom.split(' ')[0], colis.ref],
+      params: (c, colis) => [(c.nom || '').split(' ')[0], colis.ref],
     },
     telegram: (c, colis) =>
-      `Bonjour ${c.nom.split(' ')[0]} 👋
+      `Bonjour ${(c.nom || '').split(' ')[0]} 👋
 
 Pour avancer sur votre colis *${colis.ref}* (${colis.desc}), nous avons besoin de la *facture d'achat d'origine*.
 
@@ -185,7 +185,7 @@ L'équipe Expedîle`,
       name: 'demande_feu_vert',
       lang: 'fr',
       params: (c, colis) => [
-        c.nom.split(' ')[0],
+        (c.nom || '').split(' ')[0],
         colis.ref,
         colis.dimL ? `${colis.dimL}x${colis.dimW}x${colis.dimH} cm` : '',
         colis.poids ? `${colis.poids} kg` : '',
@@ -194,7 +194,7 @@ L'équipe Expedîle`,
     telegram: (c, colis) => {
       const dest = getDestByCP(c.cp);
       const hasMulti = (colis.trackings?.filter((t) => t).length || 0) > 1;
-      return `Bonjour ${c.nom.split(' ')[0]} 👋
+      return `Bonjour ${(c.nom || '').split(' ')[0]} 👋
 
 Votre colis *${colis.ref}* a été réceptionné et mesuré à notre entrepôt de Paris ✅
 
@@ -258,10 +258,10 @@ Paris → ${dest.nom}`;
     meta: {
       name: 'feu_vert_confirme',
       lang: 'fr',
-      params: (c, colis) => [c.nom.split(' ')[0], colis.ref],
+      params: (c, colis) => [(c.nom || '').split(' ')[0], colis.ref],
     },
     telegram: (c, colis) =>
-      `Bonjour ${c.nom.split(' ')[0]} 👋
+      `Bonjour ${(c.nom || '').split(' ')[0]} 👋
 
 Merci pour votre accord ! ✅
 
@@ -302,7 +302,7 @@ L'équipe Expedîle`,
       name: 'devis_final',
       lang: 'fr',
       params: (c, colis) => [
-        c.nom.split(' ')[0],
+        (c.nom || '').split(' ')[0],
         colis.ref,
         eur(colis.devisTotal),
         eur(colis.devisTransport),
@@ -318,7 +318,7 @@ L'équipe Expedîle`,
       const pvAvant = colis.dimL ? ((colis.dimL * colis.dimW * colis.dimH) / 5000) : 0;
       // Poids vol. après optimisation
       const pvApres = colis.finL ? ((colis.finL * colis.finW * colis.finH) / 5000) : 0;
-      return `Bonjour ${c.nom.split(' ')[0]} 👋
+      return `Bonjour ${(c.nom || '').split(' ')[0]} 👋
 
 Le devis final pour votre expédition *${colis.ref}* est prêt ! 📋
 
@@ -404,10 +404,10 @@ Paris → ${dest.nom}`;
     meta: {
       name: 'relance_feu_vert',
       lang: 'fr',
-      params: (c, colis) => [c.nom.split(' ')[0], colis.ref],
+      params: (c, colis) => [(c.nom || '').split(' ')[0], colis.ref],
     },
     telegram: (c, colis) =>
-      `Bonjour ${c.nom.split(' ')[0]} 👋
+      `Bonjour ${(c.nom || '').split(' ')[0]} 👋
 
 Petit rappel amical 😊 Votre colis *${colis.ref}* (${colis.desc}) attend toujours votre accord pour la préparation.
 
@@ -450,11 +450,11 @@ L'équipe Expedîle`,
     meta: {
       name: 'relance_paiement',
       lang: 'fr',
-      params: (c, colis) => [c.nom.split(' ')[0], colis.ref, eur(colis.devisTotal)],
+      params: (c, colis) => [(c.nom || '').split(' ')[0], colis.ref, eur(colis.devisTotal)],
     },
     telegram: (c, colis) => {
       const dest = getDestByCP(c.cp);
-      return `Bonjour ${c.nom.split(' ')[0]} 👋
+      return `Bonjour ${(c.nom || '').split(' ')[0]} 👋
 
 Votre colis *${colis.ref}* (${colis.desc}) est prêt à partir ! ✈️
 
@@ -505,11 +505,11 @@ L'équipe Expedîle`;
     meta: {
       name: 'colis_expedie',
       lang: 'fr',
-      params: (c, colis) => [c.nom.split(' ')[0], colis.ref, getDestByCP(c.cp).nom],
+      params: (c, colis) => [(c.nom || '').split(' ')[0], colis.ref, getDestByCP(c.cp).nom],
     },
     telegram: (c, colis) => {
       const dest = getDestByCP(c.cp);
-      return `Bonjour ${c.nom.split(' ')[0]} 👋
+      return `Bonjour ${(c.nom || '').split(' ')[0]} 👋
 
 ✈️ *Votre colis est en route !*
 
@@ -558,11 +558,11 @@ Paris → ${dest.nom}`;
     meta: {
       name: 'colis_arrive',
       lang: 'fr',
-      params: (c, colis) => [c.nom.split(' ')[0], colis.ref, getDestByCP(c.cp).nom],
+      params: (c, colis) => [(c.nom || '').split(' ')[0], colis.ref, getDestByCP(c.cp).nom],
     },
     telegram: (c, colis) => {
       const dest = getDestByCP(c.cp);
-      return `Bonjour ${c.nom.split(' ')[0]} 👋
+      return `Bonjour ${(c.nom || '').split(' ')[0]} 👋
 
 📍 *Votre colis est arrivé à ${dest.nom} !*
 
@@ -599,10 +599,10 @@ L'équipe Expedîle`;
     meta: {
       name: 'en_livraison',
       lang: 'fr',
-      params: (c, colis) => [c.nom.split(' ')[0], colis?.ref || ''],
+      params: (c, colis) => [(c.nom || '').split(' ')[0], colis?.ref || ''],
     },
     telegram: (c, colis) =>
-      `Bonjour ${c.nom.split(' ')[0]} 👋
+      `Bonjour ${(c.nom || '').split(' ')[0]} 👋
 
 🚚 *Votre colis ${colis?.ref || ''} est en cours de livraison !*
 
@@ -636,10 +636,10 @@ L'équipe Expedîle`,
     meta: {
       name: 'facture_rejetee',
       lang: 'fr',
-      params: (c, colis) => [c.nom.split(' ')[0], colis.ref],
+      params: (c, colis) => [(c.nom || '').split(' ')[0], colis.ref],
     },
     telegram: (c, colis) =>
-      `Bonjour ${c.nom.split(' ')[0]} 👋
+      `Bonjour ${(c.nom || '').split(' ')[0]} 👋
 
 ⚠️ La facture transmise pour votre colis *${colis.ref}* (${colis.desc}) n'a pas pu être validée.
 
@@ -676,7 +676,7 @@ L'équipe Expedîle`,
   // ═══════════════════════════════════════════════════════════════
   libre: {
     label: '✍️ Message libre',
-    telegram: (c) => `Bonjour ${c.nom.split(' ')[0]} 👋\n\n\n\n_L'équipe Expedîle_`,
+    telegram: (c) => `Bonjour ${(c.nom || '').split(' ')[0]} 👋\n\n\n\n_L'équipe Expedîle_`,
     email: (c) => `Objet : \n\nBonjour ${c.nom},\n\n\n\nCordialement,\nL'équipe Expedîle`,
   },
 

@@ -439,7 +439,7 @@ export function AppProvider({ children }) {
     if (canal === 'telegram') {
       const chatId = c.telegramChatId;
       if (isTelegramConfigured() && chatId) {
-        const prenom = c.nom.split(' ')[0];
+        const prenom = (c.nom || '').split(' ')[0];
         flash({ msg: `Envoi Telegram → ${prenom}…`, type: 'info' });
 
         // Si c'est un feu vert, envoyer avec boutons OUI/NON
@@ -469,12 +469,12 @@ export function AppProvider({ children }) {
         // Client pas lié Telegram → fallback email automatique
         window.open(mailtoLink(c.email, fullMsg), '_blank');
         await persistMessage('envoye');
-        flash({ msg: `Telegram non disponible → email envoyé à ${c.nom.split(' ')[0]}`, type: 'success' });
+        flash({ msg: `Telegram non disponible → email envoyé à ${(c.nom || '').split(' ')[0]}`, type: 'success' });
       } else if (!chatId && !c.email) {
         // Ni Telegram ni email
         await persistMessage('en_attente');
         flash({
-          msg: `${c.nom.split(' ')[0]} n'a ni Telegram ni email. Message en attente.`,
+          msg: `${(c.nom || '').split(' ')[0]} n'a ni Telegram ni email. Message en attente.`,
           type: 'warning',
           duration: 5000,
         });
@@ -484,9 +484,9 @@ export function AppProvider({ children }) {
     } else if (canal === 'email' && c.email) {
       window.open(mailtoLink(c.email, fullMsg), '_blank');
       await persistMessage('envoye');
-      flash(`Email → ${c.nom.split(' ')[0]}`);
+      flash(`Email → ${(c.nom || '').split(' ')[0]}`);
     } else if (canal === 'email' && !c.email) {
-      flash({ msg: `${c.nom.split(' ')[0]} n'a pas d'adresse email`, type: 'warning' });
+      flash({ msg: `${(c.nom || '').split(' ')[0]} n'a pas d'adresse email`, type: 'warning' });
     }
   }, [clients, data, auth, flash]);
 
@@ -516,7 +516,7 @@ export function AppProvider({ children }) {
     const c = data.find((x) => x.id === id);
     if (!c) return;
     if (ns === 'en_preparation' && c.feuVert !== 'autorise') { flash("Le client n'a pas encore donné son accord"); return; }
-    if (ns === 'devis_envoye' && c.factures.length === 0) { flash("Il manque la facture d'origine"); return; }
+    if (ns === 'devis_envoye' && (!c.factures || c.factures.length === 0)) { flash("Il manque la facture d'origine"); return; }
     if (ns === 'expedie' && !c.paiementMontant) { flash("Le client n'a pas encore payé"); return; }
     if (ns === 'expedie' && !c.envoi) { flash("Affectez le colis à un envoi d'abord"); return; }
     log(id, c.statut, ns);
@@ -696,7 +696,8 @@ export function AppProvider({ children }) {
     // PRO: devis = transport uniquement (pas d'OM, OMR, TVA)
 
     const ht = tr + om + omr;
-    const tot = Math.round((ht + tva) * 100) / 100;
+    const fraisTotal = (c.fraisDivers || []).reduce((s, f) => s + (f.montant || 0), 0);
+    const tot = Math.round((ht + tva + fraisTotal) * 100) / 100;
 
     // Calcul AVANT optimisation (supporte multi-colis)
     let avantTr = 0, avantTot = 0;
@@ -758,7 +759,7 @@ export function AppProvider({ children }) {
     try {
       savedMsg = await sb.insertMessage(colisId, {
         type: isStaffSender ? 'staff' : 'client',
-        auteur: authInfo.u.nom,
+        auteur: authInfo?.u?.nom || authInfo?.cl?.nom || 'Client',
         texte: msgTxt.trim(),
         statut: isStaffSender ? 'envoi' : null,
       });
@@ -776,7 +777,7 @@ export function AppProvider({ children }) {
         messages: [...c.messages, savedMsg || {
           id: msgId,
           type: isStaffSender ? 'staff' : 'client',
-          auteur: authInfo.u.nom,
+          auteur: authInfo?.u?.nom || authInfo?.cl?.nom || 'Client',
           texte: msgTxt.trim(),
           heure,
           statut: isStaffSender ? 'envoi' : null,

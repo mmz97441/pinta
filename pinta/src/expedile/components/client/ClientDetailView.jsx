@@ -122,7 +122,7 @@ function PhaseStep({ phase, phaseIdx, state, open, onToggle, children }) {
 // ── Main component ─────────────────────────────────────────────────────────────
 export default function ClientDetailView() {
   const navigate = useNavigate();
-  const { sel, selDest, feuVert, feuVertBulk, payer, ask, flash, authCl, data, categories } = useApp();
+  const { sel, selDest, feuVert, feuVertBulk, ask, flash, authCl, data, categories } = useApp();
 
   if (!sel) return null;
 
@@ -205,12 +205,11 @@ export default function ClientDetailView() {
   // ── Payer handler ──────────────────────────────────────────────────────────
   const handlePayer = () => {
     if (!sel.devisTotal) return;
-    ask(
-      'Confirmer le paiement',
-      `Vous allez valider le paiement de ${eur(sel.devisTotal)} pour le colis ${sel.ref}.\n\nVous serez redirigé vers notre page de paiement sécurisé.`,
-      () => { payer(sel.id, sel.devisTotal); },
-      { okLabel: 'Procéder au paiement' }
-    );
+    if (sel.payplugPaymentUrl) {
+      window.open(sel.payplugPaymentUrl, '_blank');
+    } else {
+      flash({ msg: 'Contactez-nous pour le paiement : contact@expedile.com', type: 'info', duration: 6000 });
+    }
   };
 
   // ── Phase content renderers ───────────────────────────────────────────────

@@ -44,9 +44,11 @@ export default function StaffPermissions() {
     try {
       // 1. Create Auth account via Edge Function
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://bqprktzehuhplpqjgjaz.supabase.co';
+      // TODO: Remplacer par JWT Supabase Auth quand verify_jwt sera activé
+      const edgeSecret = import.meta.env.VITE_EDGE_API_SECRET || '';
       const res = await fetch(`${supabaseUrl}/functions/v1/create-staff-user`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'x-api-secret': edgeSecret },
         body: JSON.stringify({
           email: newForm.email.trim(),
           password: newForm.password.trim(),

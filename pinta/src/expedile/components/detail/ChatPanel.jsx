@@ -65,7 +65,7 @@ export default function ChatPanel() {
     await envMsg(sel.id, txt, auth, selClient?.tel);
   };
 
-  const hasMessages = sel.messages.length > 0;
+  const hasMessages = (sel.messages || []).length > 0;
 
   // ── Render text with clickable URLs ─────────────────────────────────────────
   const renderText = (text) => {
@@ -148,7 +148,7 @@ export default function ChatPanel() {
           {!hasMessages && (
             <p className="text-xs text-gray-400 italic text-center py-3">Aucun message</p>
           )}
-          {sel.messages.map(renderMessage)}
+          {(sel.messages || []).map(renderMessage)}
         </div>
         <div className="flex gap-2">
           <input
@@ -186,7 +186,7 @@ export default function ChatPanel() {
         <div className="flex items-center gap-2">
           <MessageCircle size={15} style={{ color: BRAND.navy }} />
           <span className="text-sm font-bold text-gray-800">
-            {hasMessages ? `Messages (${sel.messages.length})` : 'Une question ?'}
+            {hasMessages ? `Messages (${(sel.messages || []).length})` : 'Une question ?'}
           </span>
         </div>
         <ChevronDown
@@ -199,7 +199,7 @@ export default function ChatPanel() {
         <div className="px-4 pb-4 anim-slide-down">
           {hasMessages && (
             <div ref={scrollRef} className="space-y-1.5 mb-3 max-h-40 overflow-y-auto">
-              {sel.messages.map(renderMessage)}
+              {(sel.messages || []).map(renderMessage)}
             </div>
           )}
           <div className="flex gap-2">
