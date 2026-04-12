@@ -286,6 +286,7 @@ export async function fetchStaffUsers() {
     email: u.email,
     role: u.role,
     actif: u.actif,
+    mustChangePassword: u.must_change_password || false,
     permissions: u.staff_permissions?.[0] || null,
   }));
 }

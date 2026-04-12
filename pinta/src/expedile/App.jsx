@@ -9,6 +9,7 @@ import { supabase } from './lib/supabase';
 
 import { Toast, ConfirmDialog } from './components/ui';
 import LoginPage from './components/LoginPage';
+import ForceChangePassword from './components/ForceChangePassword';
 import ColisModal from './components/ColisModal';
 import OnboardingOverlay from './components/client/OnboardingOverlay';
 
@@ -106,9 +107,43 @@ function AppContent() {
   const [modal, setModal] = useState(false);
   const [onboardingDismissed, setOnboardingDismissed] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mustChangePassword, setMustChangePassword] = useState(false);
+  const [staffUserForPwd, setStaffUserForPwd] = useState(null);
+
+  // Check if user must change password on first login
+  useEffect(() => {
+    if (auth?.type === 'staff' && auth?.u?.id) {
+      import('./lib/supabaseData').then((sb) => {
+        sb.fetchStaffUsers().then((users) => {
+          const me = users.find((u) => u.authId === auth.u.id);
+          if (me && me.permissions && 'must_change_password' in me) {
+            // must_change_password might not be in permissions, check staff user directly
+          }
+          // Check via direct query
+          supabase.from('staff_users').select('id, must_change_password').eq('auth_id', auth.u.id).single()
+            .then(({ data }) => {
+              if (data?.must_change_password) {
+                setMustChangePassword(true);
+                setStaffUserForPwd(data);
+              }
+            });
+        });
+      });
+    }
+  }, [auth?.u?.id]);
 
   // ── Not logged in ──
   if (!auth) return <LoginPage />;
+
+  // ── Force change password on first login ──
+  if (mustChangePassword) {
+    return (
+      <ForceChangePassword
+        staffUser={staffUserForPwd}
+        onDone={() => setMustChangePassword(false)}
+      />
+    );
+  }
 
   // ── Onboarding for new clients ──
   const isColisDetail = location.pathname.startsWith('/colis/');
