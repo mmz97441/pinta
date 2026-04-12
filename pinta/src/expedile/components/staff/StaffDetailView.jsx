@@ -280,6 +280,8 @@ export default function StaffDetailView() {
   const [proPayMethod, setProPayMethod] = useState(cl?.modePaiement || 'virement');
   // Add carton toggle
   const [showAddCarton, setShowAddCarton] = useState(false);
+  // Corrections section
+  const [showCorrections, setShowCorrections] = useState(false);
 
   useEffect(() => {
     if (sel) {
@@ -289,6 +291,11 @@ export default function StaffDetailView() {
       setFraisDivers(sel.fraisDivers || []);
       setShowAddCarton(false);
       setDevisPrev(false);
+      setShowCorrections(false);
+      // Re-sync canal based on new client
+      const newCl = clients.find((x) => x.id === sel.clientId);
+      setSendCanal(newCl?.telegramChatId ? 'telegram' : 'email');
+      setProPayMethod(newCl?.modePaiement || 'virement');
     }
   }, [sel?.id]);
 
@@ -1649,7 +1656,7 @@ export default function StaffDetailView() {
                     <BtnPrimary
                       onClick={() => {
                         changerStatut(sel.id, 'arrive');
-                        sendMsg(sel.id, cl?.id, cl?.canal || 'telegram', 'arrive', null);
+                        sendMsg(sel.id, cl?.id, cl?.telegramChatId ? 'telegram' : 'email', 'arrive', null);
                       }}
                       color="#14B8A6"
                     >
@@ -1666,7 +1673,7 @@ export default function StaffDetailView() {
                         key={ns}
                         onClick={() => {
                           changerStatut(sel.id, ns);
-                          if (tpl) sendMsg(sel.id, cl?.id, cl?.canal || 'telegram', tpl, null);
+                          if (tpl) sendMsg(sel.id, cl?.id, cl?.telegramChatId ? 'telegram' : 'email', tpl, null);
                         }}
                         color={borderColor}
                       >
@@ -1695,7 +1702,6 @@ export default function StaffDetailView() {
   // ════════════════════════════════════════════════════════════════════════
   // FULL RENDER
   // ════════════════════════════════════════════════════════════════════════
-  const [showCorrections, setShowCorrections] = useState(false);
 
   return (
     <div className="flex flex-col gap-4 pb-24 lg:pb-4">

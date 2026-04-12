@@ -113,22 +113,13 @@ function AppContent() {
   // Check if user must change password on first login
   useEffect(() => {
     if (auth?.type === 'staff' && auth?.u?.id) {
-      import('./lib/supabaseData').then((sb) => {
-        sb.fetchStaffUsers().then((users) => {
-          const me = users.find((u) => u.authId === auth.u.id);
-          if (me && me.permissions && 'must_change_password' in me) {
-            // must_change_password might not be in permissions, check staff user directly
+      supabase.from('staff_users').select('id, must_change_password').eq('auth_id', auth.u.id).single()
+        .then(({ data }) => {
+          if (data?.must_change_password) {
+            setMustChangePassword(true);
+            setStaffUserForPwd(data);
           }
-          // Check via direct query
-          supabase.from('staff_users').select('id, must_change_password').eq('auth_id', auth.u.id).single()
-            .then(({ data }) => {
-              if (data?.must_change_password) {
-                setMustChangePassword(true);
-                setStaffUserForPwd(data);
-              }
-            });
         });
-      });
     }
   }, [auth?.u?.id]);
 
