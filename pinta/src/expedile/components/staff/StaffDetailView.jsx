@@ -246,7 +246,7 @@ export default function StaffDetailView() {
   const [msgPanel, setMsgPanel] = useState(false);
   const [selTemplate, setSelTemplate] = useState('libre');
   const [msgPreview, setMsgPreview] = useState('');
-  const [sendCanal, setSendCanal] = useState(cl?.canal || 'telegram');
+  const [sendCanal, setSendCanal] = useState(cl?.telegramChatId ? 'telegram' : 'email');
 
   // Local measure form
   const [dims, setDims] = useState({ dimL: '', dimW: '', dimH: '', poids: '' });

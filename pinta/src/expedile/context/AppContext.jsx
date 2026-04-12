@@ -465,11 +465,16 @@ export function AppProvider({ children }) {
             type: 'warning',
           });
         }
-      } else if (isTelegramConfigured() && !chatId) {
-        // Client pas lié → persister en attente
+      } else if (!chatId && c.email) {
+        // Client pas lié Telegram → fallback email automatique
+        window.open(mailtoLink(c.email, fullMsg), '_blank');
+        await persistMessage('envoye');
+        flash({ msg: `Telegram non disponible → email envoyé à ${c.nom.split(' ')[0]}`, type: 'success' });
+      } else if (!chatId && !c.email) {
+        // Ni Telegram ni email
         await persistMessage('en_attente');
         flash({
-          msg: `${c.nom.split(' ')[0]} n'a pas encore lié Telegram. Message en attente.`,
+          msg: `${c.nom.split(' ')[0]} n'a ni Telegram ni email. Message en attente.`,
           type: 'warning',
           duration: 5000,
         });
@@ -480,6 +485,8 @@ export function AppProvider({ children }) {
       window.open(mailtoLink(c.email, fullMsg), '_blank');
       await persistMessage('envoye');
       flash(`Email → ${c.nom.split(' ')[0]}`);
+    } else if (canal === 'email' && !c.email) {
+      flash({ msg: `${c.nom.split(' ')[0]} n'a pas d'adresse email`, type: 'warning' });
     }
   }, [clients, data, auth, flash]);
 
@@ -793,16 +800,18 @@ export function AppProvider({ children }) {
           ),
         };
       }));
-    } else if (isStaffSender && isTelegramConfigured() && !chatId) {
-      // Client hasn't linked Telegram yet — mark as pending
+    } else if (isStaffSender && !chatId && client?.email) {
+      // Pas de Telegram → fallback email
+      window.open(mailtoLink(client.email, msgTxt.trim()), '_blank');
       setData((prev) => prev.map((c) => {
         if (c.id !== colisId) return c;
-        return {
-          ...c,
-          messages: c.messages.map((m) =>
-            m.id === msgId ? { ...m, statut: 'en_attente' } : m,
-          ),
-        };
+        return { ...c, messages: c.messages.map((m) => m.id === msgId ? { ...m, statut: 'envoye' } : m) };
+      }));
+    } else if (isStaffSender && !chatId && !client?.email) {
+      // Ni Telegram ni email
+      setData((prev) => prev.map((c) => {
+        if (c.id !== colisId) return c;
+        return { ...c, messages: c.messages.map((m) => m.id === msgId ? { ...m, statut: 'en_attente' } : m) };
       }));
     }
   }, []);

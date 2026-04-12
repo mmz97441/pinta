@@ -59,7 +59,7 @@ export default function FacturesPanel() {
   if (!sel) return null;
 
   const cl = getClient(sel.clientId);
-  const canal = cl?.canal || 'telegram';
+  const canal = cl?.telegramChatId ? 'telegram' : 'email';
   const hasFactures = sel.factures && sel.factures.length > 0;
 
   // ── Add new facture ─────────────────────────────────────────────────
