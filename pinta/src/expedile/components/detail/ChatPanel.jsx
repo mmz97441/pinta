@@ -43,7 +43,7 @@ export default function ChatPanel() {
         if (c.id !== sel.id) return c;
         return {
           ...c,
-          messages: c.messages.map((m) => m.type === 'client' && !m.lu ? { ...m, lu: true } : m),
+          messages: (c.messages || []).map((m) => m.type === 'client' && !m.lu ? { ...m, lu: true } : m),
         };
       }));
       sb.markAllMessagesLu(sel.id).catch(console.error);
@@ -121,7 +121,7 @@ export default function ChatPanel() {
               const newLu = !m.lu;
               setData((prev) => prev.map((c) => {
                 if (c.id !== sel.id) return c;
-                return { ...c, messages: c.messages.map((msg) => msg.id === m.id ? { ...msg, lu: newLu } : msg) };
+                return { ...c, messages: (c.messages || []).map((msg) => msg.id === m.id ? { ...msg, lu: newLu } : msg) };
               }));
               sb.updateMessageLu(m.id, newLu).catch(console.error);
             }}

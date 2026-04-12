@@ -144,7 +144,7 @@ export function AppProvider({ children }) {
           if (c.id !== newMsg.colis_id) return c;
           return {
             ...c,
-            messages: [...c.messages, {
+            messages: [...(c.messages || []), {
               id: newMsg.id,
               type: newMsg.type,
               auteur: newMsg.auteur_nom || 'Système',
@@ -774,7 +774,7 @@ export function AppProvider({ children }) {
       if (c.id !== colisId) return c;
       return {
         ...c,
-        messages: [...c.messages, savedMsg || {
+        messages: [...(c.messages || []), savedMsg || {
           id: msgId,
           type: isStaffSender ? 'staff' : 'client',
           auteur: authInfo?.u?.nom || authInfo?.cl?.nom || 'Client',
@@ -796,7 +796,7 @@ export function AppProvider({ children }) {
         if (c.id !== colisId) return c;
         return {
           ...c,
-          messages: c.messages.map((m) =>
+          messages: (c.messages || []).map((m) =>
             m.id === msgId ? { ...m, statut: res.ok ? 'envoye' : 'echec', msgId: res.ok ? res.messageId : null } : m,
           ),
         };
@@ -806,13 +806,13 @@ export function AppProvider({ children }) {
       window.open(mailtoLink(client.email, msgTxt.trim()), '_blank');
       setData((prev) => prev.map((c) => {
         if (c.id !== colisId) return c;
-        return { ...c, messages: c.messages.map((m) => m.id === msgId ? { ...m, statut: 'envoye' } : m) };
+        return { ...c, messages: (c.messages || []).map((m) => m.id === msgId ? { ...m, statut: 'envoye' } : m) };
       }));
     } else if (isStaffSender && !chatId && !client?.email) {
       // Ni Telegram ni email
       setData((prev) => prev.map((c) => {
         if (c.id !== colisId) return c;
-        return { ...c, messages: c.messages.map((m) => m.id === msgId ? { ...m, statut: 'en_attente' } : m) };
+        return { ...c, messages: (c.messages || []).map((m) => m.id === msgId ? { ...m, statut: 'en_attente' } : m) };
       }));
     }
   }, []);
@@ -866,7 +866,7 @@ export function AppProvider({ children }) {
         if (!newStatut) return;
         setData((prev) => prev.map((p) => ({
           ...p,
-          messages: p.messages.map((m) =>
+          messages: (p.messages || []).map((m) =>
             (m.msgId === event.msgId || m.waId === event.waId) ? { ...m, statut: newStatut } : m,
           ),
         })));
