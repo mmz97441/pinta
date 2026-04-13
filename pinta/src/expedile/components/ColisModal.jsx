@@ -147,6 +147,7 @@ export default function ColisModal({ open, onClose }) {
     if (!newClientForm.nom.trim() || newClientForm.nom.trim().length < 2) errs.nom = 'Nom requis (min. 2 car.)';
     if (!newClientForm.cp.trim() || !/^9[7-8]\d{3}$/.test(newClientForm.cp.replace(/\s/g, ''))) errs.cp = 'Code postal DOM-TOM requis (97xxx)';
     if (newClientForm.tel && !/^\+?\d[\d\s\-]{6,18}$/.test(newClientForm.tel.replace(/\s/g, ''))) errs.tel = 'Numéro invalide';
+    if (!newClientForm.email.trim() && !newClientForm.telegramUsername.trim()) errs.contact = 'Email ou Telegram requis (au moins un moyen de contact)';
     if (newClientForm.type === 'pro' && !newClientForm.raisonSociale.trim()) errs.raisonSociale = 'Raison sociale requise pour un pro';
     setNewClientErr(errs);
     return Object.keys(errs).length === 0;
@@ -848,6 +849,7 @@ export default function ColisModal({ open, onClose }) {
               {/* ── Contact ── */}
               <div className="space-y-2">
                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Contact</p>
+                {newClientErr.contact && <p className="text-[10px] text-red-500 font-bold bg-red-50 border border-red-200 rounded-lg px-2 py-1">{newClientErr.contact}</p>}
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <input

@@ -213,6 +213,10 @@ export async function parseClientFile(file) {
       errors.push(`Ligne ${i + 2} : nom manquant`);
       continue;
     }
+    if (!cl.email.trim() && !cl.telegramUsername.trim()) {
+      errors.push(`Ligne ${i + 2} (${cl.nom}) : ni email ni Telegram — contact requis`);
+      continue;
+    }
 
     // Si pro et pas de raison sociale, mettre le nom
     if (cl.type === 'pro' && !cl.raisonSociale) {

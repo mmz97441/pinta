@@ -215,6 +215,7 @@ export default function StaffClients() {
     const isPro = nd.type === 'pro';
     if (!nd.nom.trim()) { flash({ msg: 'Le nom est requis', type: 'warning' }); return; }
     if (!nd.cp.trim() || !/^9[7-8]\d{3}$/.test(nd.cp.replace(/\s/g, ''))) { flash({ msg: 'Code postal DOM-TOM requis (97xxx)', type: 'warning' }); return; }
+    if (!nd.email.trim() && !nd.telegramUsername.trim()) { flash({ msg: 'Email ou Telegram requis — au moins un moyen de contact', type: 'warning' }); return; }
     if (isPro && !nd.raisonSociale.trim()) { flash({ msg: 'La raison sociale est requise pour un pro', type: 'warning' }); return; }
 
     const id = await addNewClient({
