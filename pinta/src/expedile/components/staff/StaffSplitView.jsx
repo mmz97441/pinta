@@ -706,17 +706,28 @@ export default function StaffColisPage() {
               </div>
               <div className="flex items-center gap-1">
                 {/* Chat toggle */}
-                <button
-                  onClick={() => setShowChat((p) => !p)}
-                  className={`p-1.5 rounded-lg transition-colors relative ${showChat ? 'bg-blue-100 text-blue-600' : 'hover:bg-gray-100 text-gray-400'}`}
-                  title="Chat"
-                >
-                  <MessageCircle size={16} />
-                  {unreadCount > 0 && (
-                    <span className="absolute -top-0.5 -right-0.5 text-[8px] font-bold px-1 py-0.5 rounded-full bg-red-500 text-white min-w-[14px] text-center leading-none">{unreadCount}</span>
-                  )}
-                </button>
-                <button onClick={closeDetail} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400"><X size={18} /></button>
+                <div className="relative group">
+                  <button
+                    onClick={() => setShowChat((p) => !p)}
+                    className={`p-1.5 rounded-lg transition-colors relative ${showChat ? 'bg-blue-100 text-blue-600' : 'hover:bg-gray-100 text-gray-400 hover:text-gray-600'}`}
+                  >
+                    <MessageCircle size={16} />
+                    {unreadCount > 0 && (
+                      <span className="absolute -top-0.5 -right-0.5 text-[8px] font-bold px-1 py-0.5 rounded-full bg-red-500 text-white min-w-[14px] text-center leading-none">{unreadCount}</span>
+                    )}
+                  </button>
+                  <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-lg text-[10px] font-bold text-white bg-gray-800 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                    {showChat ? 'Fermer le chat' : unreadCount > 0 ? `Chat (${unreadCount} non lu${unreadCount > 1 ? 's' : ''})` : 'Chat client'}
+                  </span>
+                </div>
+                <div className="relative group">
+                  <button onClick={closeDetail} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600">
+                    <X size={18} />
+                  </button>
+                  <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-lg text-[10px] font-bold text-white bg-gray-800 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                    Fermer
+                  </span>
+                </div>
               </div>
             </div>
 
