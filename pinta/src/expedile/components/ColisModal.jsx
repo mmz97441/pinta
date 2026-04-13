@@ -239,7 +239,7 @@ export default function ColisModal({ open, onClose }) {
         telFixe: newClientForm.telFixe.trim(),
         email: newClientForm.email.trim(),
         telegramUsername: newClientForm.telegramUsername.trim(),
-        canal: newClientForm.canal,
+        canal: newClientForm.telegramUsername.trim() ? 'telegram' : (newClientForm.email.trim() ? 'email' : 'telegram'),
         type: newClientForm.type,
         modePaiement: newClientForm.modePaiement,
         abonnement: newClientForm.abonnement,

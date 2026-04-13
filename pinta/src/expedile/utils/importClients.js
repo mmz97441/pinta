@@ -219,6 +219,11 @@ export async function parseClientFile(file) {
       cl.raisonSociale = cl.nom;
     }
 
+    // Canal: email par défaut si pas de telegram
+    if (!cl.telegramUsername) {
+      cl.canal = 'email';
+    }
+
     // Notes: stocker la ref d'origine et le n° commande
     const importNotes = [];
     if (cl._ref) importNotes.push(`Réf. import: ${cl._ref}`);

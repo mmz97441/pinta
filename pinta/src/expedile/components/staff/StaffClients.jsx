@@ -222,6 +222,7 @@ export default function StaffClients() {
       nom: nd.nom.trim(),
       prenom: nd.prenom.trim(),
       cp: nd.cp.trim(),
+      canal: nd.telegramUsername?.trim() ? 'telegram' : (nd.email?.trim() ? 'email' : 'telegram'),
       modePaiement: isPro ? nd.modePaiement : 'colis', // Particuliers = toujours paiement par colis
       abonnementDebut: nd.abonnementDebut || null,
       abonnementFin: nd.abonnementFin || null,
