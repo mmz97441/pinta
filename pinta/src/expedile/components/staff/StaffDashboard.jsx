@@ -1243,7 +1243,7 @@ export default function StaffDashboard({ onNewColis }) {
           >
             Sans envoi
           </button>
-          {envois.map((e) => (
+          {envois.filter((e) => e.statut !== 'archive').map((e) => (
             <button
               key={e.id}
               onClick={() => setEnvoiFilter(e.id)}

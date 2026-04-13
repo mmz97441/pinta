@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Plane, CreditCard, FileText, ChevronDown, Trash2, Lock, MessageCircle, Send, CheckCircle, XCircle, Loader2, ShieldAlert, Plus, X, Paperclip, ChevronUp } from 'lucide-react';
+import { ArrowLeft, Plane, CreditCard, FileText, ChevronDown, Trash2, Lock, MessageCircle, Send, CheckCircle, XCircle, Loader2, ShieldAlert, Plus, X, Paperclip, ChevronUp, Archive, AlertTriangle, RotateCcw, Square, CheckSquare } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { BRAND, DESTINATIONS } from '../../constants';
 import { eur, labelEnvoi, uid, getCatTaux } from '../../utils';
@@ -29,6 +29,11 @@ export default function StaffSettings() {
   const [settingsTab, setSettingsTab] = useState('planning');
   const [catEditId, setCatEditId] = useState(null);
   const [newCat, setNewCat] = useState({ label: '', taux: {} });
+
+  // ── Multi-selection envois ──
+  const [selectedEnvois, setSelectedEnvois] = useState(new Set());
+  const [showArchived, setShowArchived] = useState(false);
+  const [confirmModal, setConfirmModal] = useState(null); // { type: 'archive'|'delete'|'delete_with_colis', ids: [], colisCount: 0 }
 
   // ── Auto-generate departures on mount ──
   useEffect(() => {
@@ -223,135 +228,426 @@ export default function StaffSettings() {
           </div>
         </div>
 
-        {/* Existing envois */}
-        <div className="space-y-2 mb-4">
-          {envois.length === 0 && (
-            <p className="text-sm text-gray-400 text-center py-4">Aucun départ planifié</p>
-          )}
-          {envois.map((e) => {
-            const count = data.filter((c) => c.envoi === e.id).length;
-            const isExpanded = expandedEnvoi === e.id;
-            const docs = e.documents || [];
-            return (
-              <div key={e.id} className="bg-gray-50 rounded-xl overflow-hidden">
-                <div className="flex items-center gap-2 p-3">
-                  <button
-                    onClick={() => setExpandedEnvoi(isExpanded ? null : e.id)}
-                    className="flex-shrink-0 text-gray-400 hover:text-gray-600 transition-colors"
-                  >
-                    {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                  </button>
-                  <div className="flex-1">
-                    <p className="font-bold text-sm">{labelEnvoi(e)}</p>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      <span className="text-xs text-gray-500">{count} colis</span>
-                      {docs.length > 0 && (
-                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-green-100 text-green-700">
-                          {docs.length} doc{docs.length > 1 ? 's' : ''}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  <select value={e.statut} onChange={(ev) => { const newStatut = ev.target.value; setEnvois((p) => p.map((x) => (x.id === e.id ? { ...x, statut: newStatut } : x))); if (sbReady) sb.updateEnvoi(e.id, { statut: newStatut }).catch(console.error); }} className="px-2 py-1 rounded-lg border text-xs">
-                    <option value="planifie">○ Planifié</option>
-                    <option value="prochain">● Prochain</option>
-                    <option value="en_cours">● En cours</option>
-                    <option value="parti">✈ Parti</option>
-                    <option value="arrive">✓ Arrivé</option>
-                  </select>
-                  {count === 0 ? (
-                    <button onClick={() => { setEnvois((p) => p.filter((x) => x.id !== e.id)); if (sbReady) sb.deleteEnvoi(e.id).catch(console.error); flash('Départ supprimé'); }} className="text-red-400 hover:text-red-600 p-1.5 rounded-lg hover:bg-red-50 transition-colors">
-                      <Trash2 size={15} />
-                    </button>
+        {/* ── Confirmation Modal ── */}
+        {confirmModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setConfirmModal(null)}>
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6 space-y-4" onClick={(ev) => ev.stopPropagation()}>
+              <div className="flex items-center gap-3">
+                <div className={`p-2.5 rounded-xl ${confirmModal.type === 'archive' ? 'bg-amber-100' : 'bg-red-100'}`}>
+                  {confirmModal.type === 'archive' ? (
+                    <Archive size={20} className="text-amber-600" />
                   ) : (
-                    <span className="text-gray-300 p-1.5" title="Impossible de supprimer un départ avec des colis affectés"><Lock size={14} /></span>
+                    <AlertTriangle size={20} className="text-red-600" />
+                  )}
+                </div>
+                <div>
+                  <h3 className="font-bold text-base" style={{ color: BRAND.navy }}>
+                    {confirmModal.type === 'archive' ? 'Archiver les envois' : 'Supprimer les envois'}
+                  </h3>
+                  <p className="text-xs text-gray-500">
+                    {confirmModal.ids.length} envoi{confirmModal.ids.length > 1 ? 's' : ''} sélectionné{confirmModal.ids.length > 1 ? 's' : ''}
+                  </p>
+                </div>
+              </div>
+
+              {confirmModal.type === 'archive' && (
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 space-y-1.5">
+                  <p className="text-sm font-semibold text-amber-800">Que se passe-t-il en archivant ?</p>
+                  <ul className="text-xs text-amber-700 space-y-1 list-disc pl-4">
+                    <li>Les envois seront masqués de la vue principale</li>
+                    <li>Les colis rattachés restent liés à l'envoi (historique conservé)</li>
+                    <li>Aucune donnée n'est supprimée</li>
+                    <li>Vous pouvez retrouver les envois archivés via le bouton "Voir archivés"</li>
+                  </ul>
+                  {confirmModal.colisCount > 0 && (
+                    <p className="text-xs font-bold text-amber-800 pt-1">
+                      {confirmModal.colisCount} colis rattaché{confirmModal.colisCount > 1 ? 's' : ''} — leur historique sera préservé.
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {confirmModal.type === 'delete' && (
+                <div className="bg-red-50 border border-red-200 rounded-xl p-3 space-y-1.5">
+                  <p className="text-sm font-semibold text-red-800">Attention — action irréversible</p>
+                  <ul className="text-xs text-red-700 space-y-1 list-disc pl-4">
+                    <li>Les envois seront définitivement supprimés</li>
+                    <li>Les documents rattachés seront perdus</li>
+                    {confirmModal.colisCount > 0 && (
+                      <li className="font-bold">
+                        {confirmModal.colisCount} colis sont rattachés — ils seront détachés de l'envoi (remis sans affectation)
+                      </li>
+                    )}
+                  </ul>
+                  {confirmModal.colisCount > 0 && (
+                    <p className="text-xs text-red-800 pt-1 font-semibold">
+                      Nous recommandons d'archiver plutôt que de supprimer quand des colis sont rattachés.
+                    </p>
+                  )}
+                </div>
+              )}
+
+              <div className="flex gap-2 justify-end pt-2">
+                <button
+                  onClick={() => setConfirmModal(null)}
+                  className="px-4 py-2 rounded-xl text-sm font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 transition-colors"
+                >
+                  Annuler
+                </button>
+                {confirmModal.type === 'delete' && confirmModal.colisCount > 0 && (
+                  <button
+                    onClick={() => {
+                      // Archive instead of delete
+                      confirmModal.ids.forEach((eid) => {
+                        setEnvois((p) => p.map((x) => x.id === eid ? { ...x, statut: 'archive' } : x));
+                        if (sbReady) sb.updateEnvoi(eid, { statut: 'archive' }).catch(console.error);
+                      });
+                      setSelectedEnvois(new Set());
+                      setConfirmModal(null);
+                      flash({ msg: `${confirmModal.ids.length} envoi${confirmModal.ids.length > 1 ? 's' : ''} archivé${confirmModal.ids.length > 1 ? 's' : ''} (recommandé)`, type: 'success' });
+                    }}
+                    className="px-4 py-2 rounded-xl text-sm font-bold text-white bg-amber-500 hover:bg-amber-600 transition-colors"
+                  >
+                    <span className="flex items-center gap-1.5"><Archive size={14} /> Archiver plutôt</span>
+                  </button>
+                )}
+                <button
+                  onClick={() => {
+                    if (confirmModal.type === 'archive') {
+                      confirmModal.ids.forEach((eid) => {
+                        setEnvois((p) => p.map((x) => x.id === eid ? { ...x, statut: 'archive' } : x));
+                        if (sbReady) sb.updateEnvoi(eid, { statut: 'archive' }).catch(console.error);
+                      });
+                      flash({ msg: `${confirmModal.ids.length} envoi${confirmModal.ids.length > 1 ? 's' : ''} archivé${confirmModal.ids.length > 1 ? 's' : ''}`, type: 'success' });
+                    } else {
+                      // Delete: detach colis first, then delete envois
+                      confirmModal.ids.forEach((eid) => {
+                        // Detach colis linked to this envoi
+                        data.filter((c) => c.envoi === eid).forEach((c) => {
+                          if (sbReady) sb.updateColis(c.id, { envoi: null }).catch(console.error);
+                        });
+                        setEnvois((p) => p.filter((x) => x.id !== eid));
+                        if (sbReady) sb.deleteEnvoi(eid).catch(console.error);
+                      });
+                      flash({ msg: `${confirmModal.ids.length} envoi${confirmModal.ids.length > 1 ? 's' : ''} supprimé${confirmModal.ids.length > 1 ? 's' : ''}`, type: 'success' });
+                    }
+                    setSelectedEnvois(new Set());
+                    setConfirmModal(null);
+                  }}
+                  className={`px-4 py-2 rounded-xl text-sm font-bold text-white transition-colors ${
+                    confirmModal.type === 'archive'
+                      ? 'bg-amber-500 hover:bg-amber-600'
+                      : 'bg-red-500 hover:bg-red-600'
+                  }`}
+                >
+                  {confirmModal.type === 'archive' ? (
+                    <span className="flex items-center gap-1.5"><Archive size={14} /> Archiver</span>
+                  ) : (
+                    <span className="flex items-center gap-1.5"><Trash2 size={14} /> Supprimer définitivement</span>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Bulk action bar + filter ── */}
+        {(() => {
+          const visibleEnvois = showArchived ? envois.filter((e) => e.statut === 'archive') : envois.filter((e) => e.statut !== 'archive');
+          const archivedCount = envois.filter((e) => e.statut === 'archive').length;
+          const allVisibleIds = visibleEnvois.map((e) => e.id);
+          const allSelected = visibleEnvois.length > 0 && visibleEnvois.every((e) => selectedEnvois.has(e.id));
+
+          return (
+            <>
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  {/* Select all checkbox */}
+                  <button
+                    onClick={() => {
+                      if (allSelected) {
+                        setSelectedEnvois(new Set());
+                      } else {
+                        setSelectedEnvois(new Set(allVisibleIds));
+                      }
+                    }}
+                    className="flex items-center gap-1.5 text-xs font-semibold text-gray-500 hover:text-gray-700 transition-colors"
+                    title={allSelected ? 'Tout désélectionner' : 'Tout sélectionner'}
+                  >
+                    {allSelected ? <CheckSquare size={16} className="text-blue-500" /> : <Square size={16} />}
+                    <span>{allSelected ? 'Désélectionner tout' : 'Tout sélectionner'}</span>
+                  </button>
+
+                  {selectedEnvois.size > 0 && (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
+                      {selectedEnvois.size} sélectionné{selectedEnvois.size > 1 ? 's' : ''}
+                    </span>
                   )}
                 </div>
 
-                {/* Expanded: documents section */}
-                {isExpanded && (
-                  <div className="px-3 pb-3 pt-1 border-t border-gray-200 space-y-2">
-                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Documents rattachés</p>
+                <div className="flex items-center gap-2">
+                  {/* Bulk actions */}
+                  {selectedEnvois.size > 0 && !showArchived && (
+                    <>
+                      <button
+                        onClick={() => {
+                          const ids = [...selectedEnvois];
+                          const totalColis = ids.reduce((sum, eid) => sum + data.filter((c) => c.envoi === eid).length, 0);
+                          setConfirmModal({ type: 'archive', ids, colisCount: totalColis });
+                        }}
+                        className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold text-amber-700 bg-amber-100 hover:bg-amber-200 transition-colors"
+                      >
+                        <Archive size={13} /> Archiver
+                      </button>
+                      <button
+                        onClick={() => {
+                          const ids = [...selectedEnvois];
+                          const totalColis = ids.reduce((sum, eid) => sum + data.filter((c) => c.envoi === eid).length, 0);
+                          setConfirmModal({ type: 'delete', ids, colisCount: totalColis });
+                        }}
+                        className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold text-red-600 bg-red-100 hover:bg-red-200 transition-colors"
+                      >
+                        <Trash2 size={13} /> Supprimer
+                      </button>
+                    </>
+                  )}
 
-                    {/* Existing docs */}
-                    {docs.map((doc, di) => (
-                      <div key={di} className="flex items-center gap-2 p-2 bg-white rounded-lg border border-gray-100">
-                        <Paperclip size={12} className="text-gray-400 flex-shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-semibold text-gray-700 truncate">{doc.nom}</p>
-                          <p className="text-[10px] text-gray-400">{doc.type} — {new Date(doc.date).toLocaleDateString('fr-FR')}</p>
-                        </div>
+                  {/* Restore selected archived */}
+                  {selectedEnvois.size > 0 && showArchived && (
+                    <button
+                      onClick={() => {
+                        const ids = [...selectedEnvois];
+                        ids.forEach((eid) => {
+                          setEnvois((p) => p.map((x) => x.id === eid ? { ...x, statut: 'arrive' } : x));
+                          if (sbReady) sb.updateEnvoi(eid, { statut: 'arrive' }).catch(console.error);
+                        });
+                        setSelectedEnvois(new Set());
+                        flash({ msg: `${ids.length} envoi${ids.length > 1 ? 's' : ''} restauré${ids.length > 1 ? 's' : ''}`, type: 'success' });
+                      }}
+                      className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold text-blue-700 bg-blue-100 hover:bg-blue-200 transition-colors"
+                    >
+                      <RotateCcw size={13} /> Restaurer
+                    </button>
+                  )}
+
+                  {/* Toggle archived view */}
+                  {archivedCount > 0 && (
+                    <button
+                      onClick={() => { setShowArchived((p) => !p); setSelectedEnvois(new Set()); }}
+                      className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                        showArchived ? 'text-white bg-gray-600 hover:bg-gray-700' : 'text-gray-500 bg-gray-100 hover:bg-gray-200'
+                      }`}
+                    >
+                      <Archive size={13} />
+                      {showArchived ? 'Voir actifs' : `Voir archivés (${archivedCount})`}
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Envois list */}
+              <div className="space-y-2 mb-4">
+                {visibleEnvois.length === 0 && (
+                  <p className="text-sm text-gray-400 text-center py-4">
+                    {showArchived ? 'Aucun envoi archivé' : 'Aucun départ planifié'}
+                  </p>
+                )}
+                {visibleEnvois.map((e) => {
+                  const count = data.filter((c) => c.envoi === e.id).length;
+                  const isExpanded = expandedEnvoi === e.id;
+                  const docs = e.documents || [];
+                  const isChecked = selectedEnvois.has(e.id);
+                  return (
+                    <div key={e.id} className={`rounded-xl overflow-hidden transition-all ${isChecked ? 'bg-blue-50 ring-2 ring-blue-300' : 'bg-gray-50'} ${showArchived ? 'opacity-75' : ''}`}>
+                      <div className="flex items-center gap-2 p-3">
+                        {/* Checkbox */}
                         <button
                           onClick={() => {
-                            const updated = docs.filter((_, j) => j !== di);
-                            setEnvois((p) => p.map((x) => x.id === e.id ? { ...x, documents: updated } : x));
+                            setSelectedEnvois((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(e.id)) next.delete(e.id);
+                              else next.add(e.id);
+                              return next;
+                            });
                           }}
-                          className="text-gray-300 hover:text-red-500 transition-colors"
+                          className="flex-shrink-0"
                         >
-                          <X size={12} />
+                          {isChecked
+                            ? <CheckSquare size={16} className="text-blue-500" />
+                            : <Square size={16} className="text-gray-300 hover:text-gray-500" />
+                          }
                         </button>
-                      </div>
-                    ))}
 
-                    {/* Add document */}
-                    <div className="flex gap-2 items-end">
-                      <div className="flex-1">
-                        <select
-                          id={`doc-type-${e.id}`}
-                          className="w-full px-2 py-1.5 rounded-lg border border-gray-200 text-xs mb-1"
-                          defaultValue="facture_transitaire"
+                        <button
+                          onClick={() => setExpandedEnvoi(isExpanded ? null : e.id)}
+                          className="flex-shrink-0 text-gray-400 hover:text-gray-600 transition-colors"
                         >
-                          <option value="facture_transitaire">Facture transitaire</option>
-                          <option value="dau">DAU (Déclaration douane)</option>
-                          <option value="bon_livraison">Bon de livraison</option>
-                          <option value="certificat_origine">Certificat d'origine</option>
-                          <option value="autre">Autre document</option>
-                        </select>
-                        <label className="flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed border-gray-300 bg-white cursor-pointer hover:bg-gray-50 transition-colors">
-                          <Paperclip size={13} className="text-gray-400" />
-                          <span className="text-xs text-gray-500">Choisir un fichier...</span>
-                          <input
-                            type="file"
-                            accept=".pdf,.jpg,.jpeg,.png,.xlsx,.xls,.doc,.docx"
-                            className="hidden"
-                            onChange={(ev) => {
-                              const file = ev.target.files?.[0];
-                              if (!file) return;
-                              const typeSelect = document.getElementById(`doc-type-${e.id}`);
-                              const typeLabels = {
-                                facture_transitaire: 'Facture transitaire',
-                                dau: 'DAU',
-                                bon_livraison: 'Bon de livraison',
-                                certificat_origine: 'Certificat d\'origine',
-                                autre: 'Document',
-                              };
-                              const newDoc = {
-                                nom: file.name,
-                                type: typeLabels[typeSelect?.value] || 'Document',
-                                typeKey: typeSelect?.value || 'autre',
-                                date: new Date().toISOString(),
-                                size: file.size,
-                              };
-                              setEnvois((p) => p.map((x) => x.id === e.id ? { ...x, documents: [...(x.documents || []), newDoc] } : x));
-                              flash(`Document "${file.name}" ajouté à ${labelEnvoi(e)}`);
-                              ev.target.value = '';
-                            }}
-                          />
-                        </label>
-                      </div>
-                    </div>
+                          {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                        </button>
+                        <div className="flex-1">
+                          <p className="font-bold text-sm">{labelEnvoi(e)}</p>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <span className="text-xs text-gray-500">{count} colis</span>
+                            {docs.length > 0 && (
+                              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-green-100 text-green-700">
+                                {docs.length} doc{docs.length > 1 ? 's' : ''}
+                              </span>
+                            )}
+                          </div>
+                        </div>
 
-                    {docs.length === 0 && (
-                      <p className="text-[10px] text-gray-400 text-center py-1">Aucun document — ajoutez facture transitaire, DAU, etc.</p>
-                    )}
-                  </div>
-                )}
+                        {!showArchived ? (
+                          <>
+                            <select
+                              value={e.statut}
+                              onChange={(ev) => {
+                                const newStatut = ev.target.value;
+                                if (newStatut === 'archive') {
+                                  const totalColis = data.filter((c) => c.envoi === e.id).length;
+                                  setConfirmModal({ type: 'archive', ids: [e.id], colisCount: totalColis });
+                                  return;
+                                }
+                                setEnvois((p) => p.map((x) => (x.id === e.id ? { ...x, statut: newStatut } : x)));
+                                if (sbReady) sb.updateEnvoi(e.id, { statut: newStatut }).catch(console.error);
+                              }}
+                              className="px-2 py-1 rounded-lg border text-xs"
+                            >
+                              <option value="planifie">○ Planifié</option>
+                              <option value="prochain">● Prochain</option>
+                              <option value="en_cours">● En cours</option>
+                              <option value="parti">✈ Parti</option>
+                              <option value="arrive">✓ Arrivé</option>
+                              <option value="archive">📦 Archiver</option>
+                            </select>
+
+                            {/* Individual delete */}
+                            <button
+                              onClick={() => {
+                                const totalColis = data.filter((c) => c.envoi === e.id).length;
+                                setConfirmModal({ type: 'delete', ids: [e.id], colisCount: totalColis });
+                              }}
+                              className="text-red-400 hover:text-red-600 p-1.5 rounded-lg hover:bg-red-50 transition-colors"
+                              title="Supprimer cet envoi"
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              setEnvois((p) => p.map((x) => x.id === e.id ? { ...x, statut: 'arrive' } : x));
+                              if (sbReady) sb.updateEnvoi(e.id, { statut: 'arrive' }).catch(console.error);
+                              flash({ msg: 'Envoi restauré', type: 'success' });
+                            }}
+                            className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-bold text-blue-600 bg-blue-100 hover:bg-blue-200 transition-colors"
+                          >
+                            <RotateCcw size={12} /> Restaurer
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Expanded: documents section */}
+                      {isExpanded && (
+                        <div className="px-3 pb-3 pt-1 border-t border-gray-200 space-y-2">
+                          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Documents rattachés</p>
+
+                          {docs.map((doc, di) => (
+                            <div key={di} className="flex items-center gap-2 p-2 bg-white rounded-lg border border-gray-100">
+                              <Paperclip size={12} className="text-gray-400 flex-shrink-0" />
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs font-semibold text-gray-700 truncate">{doc.nom}</p>
+                                <p className="text-[10px] text-gray-400">{doc.type} — {new Date(doc.date).toLocaleDateString('fr-FR')}</p>
+                              </div>
+                              <button
+                                onClick={() => {
+                                  const updated = docs.filter((_, j) => j !== di);
+                                  setEnvois((p) => p.map((x) => x.id === e.id ? { ...x, documents: updated } : x));
+                                }}
+                                className="text-gray-300 hover:text-red-500 transition-colors"
+                              >
+                                <X size={12} />
+                              </button>
+                            </div>
+                          ))}
+
+                          {!showArchived && (
+                            <div className="flex gap-2 items-end">
+                              <div className="flex-1">
+                                <select
+                                  id={`doc-type-${e.id}`}
+                                  className="w-full px-2 py-1.5 rounded-lg border border-gray-200 text-xs mb-1"
+                                  defaultValue="facture_transitaire"
+                                >
+                                  <option value="facture_transitaire">Facture transitaire</option>
+                                  <option value="dau">DAU (Déclaration douane)</option>
+                                  <option value="bon_livraison">Bon de livraison</option>
+                                  <option value="certificat_origine">Certificat d'origine</option>
+                                  <option value="autre">Autre document</option>
+                                </select>
+                                <label className="flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed border-gray-300 bg-white cursor-pointer hover:bg-gray-50 transition-colors">
+                                  <Paperclip size={13} className="text-gray-400" />
+                                  <span className="text-xs text-gray-500">Choisir un fichier...</span>
+                                  <input
+                                    type="file"
+                                    accept=".pdf,.jpg,.jpeg,.png,.xlsx,.xls,.doc,.docx"
+                                    className="hidden"
+                                    onChange={(ev) => {
+                                      const file = ev.target.files?.[0];
+                                      if (!file) return;
+                                      const typeSelect = document.getElementById(`doc-type-${e.id}`);
+                                      const typeLabels = {
+                                        facture_transitaire: 'Facture transitaire',
+                                        dau: 'DAU',
+                                        bon_livraison: 'Bon de livraison',
+                                        certificat_origine: 'Certificat d\'origine',
+                                        autre: 'Document',
+                                      };
+                                      const newDoc = {
+                                        nom: file.name,
+                                        type: typeLabels[typeSelect?.value] || 'Document',
+                                        typeKey: typeSelect?.value || 'autre',
+                                        date: new Date().toISOString(),
+                                        size: file.size,
+                                      };
+                                      setEnvois((p) => p.map((x) => x.id === e.id ? { ...x, documents: [...(x.documents || []), newDoc] } : x));
+                                      flash(`Document "${file.name}" ajouté à ${labelEnvoi(e)}`);
+                                      ev.target.value = '';
+                                    }}
+                                  />
+                                </label>
+                              </div>
+                            </div>
+                          )}
+
+                          {docs.length === 0 && (
+                            <p className="text-[10px] text-gray-400 text-center py-1">Aucun document — ajoutez facture transitaire, DAU, etc.</p>
+                          )}
+
+                          {/* Show linked colis */}
+                          {count > 0 && (
+                            <div className="pt-1">
+                              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Colis rattachés</p>
+                              <div className="flex flex-wrap gap-1">
+                                {data.filter((c) => c.envoi === e.id).map((c) => (
+                                  <span key={c.id} className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-gray-200 text-gray-600">
+                                    {c.ref}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
-            );
-          })}
-        </div>
+            </>
+          );
+        })()}
 
         {/* Manual add */}
+        {!showArchived && (
         <div className="border-t pt-4">
           <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Ou ajouter un départ manuellement</p>
           <div className="flex gap-2">
@@ -361,7 +657,6 @@ export default function StaffSettings() {
               if (envois.find((e) => e.date === newEnvoiDate)) { flash('Ce départ existe déjà'); return; }
               const tempId = uid();
               setEnvois((p) => [...p, { id: tempId, date: newEnvoiDate, statut: 'planifie' }].sort((a, b) => a.date.localeCompare(b.date)));
-              // Persist to Supabase
               if (sbReady) {
                 sb.insertEnvoi({ date: newEnvoiDate, statut: 'planifie' }).then((saved) => {
                   setEnvois((prev) => prev.map((x) => x.id === tempId ? { ...x, id: saved.id } : x));
@@ -374,6 +669,7 @@ export default function StaffSettings() {
             </button>
           </div>
         </div>
+        )}
       </div>
 
       )}

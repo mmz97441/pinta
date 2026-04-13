@@ -1499,7 +1499,7 @@ export default function StaffDetailView() {
 
       // ── 9. PAYE ────────────────────────────────────────────────────────
       case 'paye': {
-        const availableEnvois = envois.filter((e) => e.statut !== 'parti');
+        const availableEnvois = envois.filter((e) => e.statut !== 'parti' && e.statut !== 'archive');
         return (
           <Section title="Paiement reçu — Expédier" icon={Check} color={borderColor}>
             <div className="space-y-4">

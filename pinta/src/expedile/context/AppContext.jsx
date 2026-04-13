@@ -593,7 +593,7 @@ export function AppProvider({ children }) {
     const dateStr = friday.toISOString().slice(0, 10); // YYYY-MM-DD
 
     // Chercher un envoi existant pour cette date
-    let existingEnvoi = envois.find((e) => e.date === dateStr && e.statut !== 'parti');
+    let existingEnvoi = envois.find((e) => e.date === dateStr && e.statut !== 'parti' && e.statut !== 'archive');
 
     if (!existingEnvoi) {
       // Créer l'envoi automatiquement

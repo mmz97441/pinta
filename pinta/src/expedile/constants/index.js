@@ -151,6 +151,8 @@ export const STATUT_ENVOI = {
   en_cours: 'En cours',
   prochain: 'Prochain',
   planifie: 'Planifié',
+  arrive: 'Arrivé',
+  archive: 'Archivé',
 };
 
 // ══════════ PHASES CLIENT (timeline) ══════════
