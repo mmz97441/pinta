@@ -694,11 +694,11 @@ export default function StaffSettings() {
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="text-xs font-bold text-gray-500 block mb-1">Forfait de base (€)</label>
-                    <input type="number" step="0.5" value={t.base} onChange={(e) => { const newBase = Number(e.target.value) || 0; setTarifs((prev) => ({ ...prev, [d.code]: { ...t, base: newBase } })); if (sbReady) sb.updateTarif(d.code, newBase, t.parKg).catch(console.error); }} className="w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-sm font-bold text-center" style={{ outline: 'none' }} />
+                    <input type="text" inputMode="decimal" value={t.base || ''} onFocus={(e) => { if (e.target.value === '0') e.target.value = ''; }} onChange={(e) => { const raw = e.target.value.replace(',', '.'); if (raw === '' || /^\d*\.?\d*$/.test(raw)) { const newBase = raw === '' ? 0 : Number(raw) || 0; setTarifs((prev) => ({ ...prev, [d.code]: { ...t, base: newBase } })); if (sbReady) sb.updateTarif(d.code, newBase, t.parKg).catch(console.error); } }} className="w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-sm font-bold text-center" style={{ outline: 'none' }} />
                   </div>
                   <div>
                     <label className="text-xs font-bold text-gray-500 block mb-1">Prix par kg (€)</label>
-                    <input type="number" step="0.5" value={t.parKg} onChange={(e) => { const newParKg = Number(e.target.value) || 0; setTarifs((prev) => ({ ...prev, [d.code]: { ...t, parKg: newParKg } })); if (sbReady) sb.updateTarif(d.code, t.base, newParKg).catch(console.error); }} className="w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-sm font-bold text-center" style={{ outline: 'none' }} />
+                    <input type="text" inputMode="decimal" value={t.parKg || ''} onFocus={(e) => { if (e.target.value === '0') e.target.value = ''; }} onChange={(e) => { const raw = e.target.value.replace(',', '.'); if (raw === '' || /^\d*\.?\d*$/.test(raw)) { const newParKg = raw === '' ? 0 : Number(raw) || 0; setTarifs((prev) => ({ ...prev, [d.code]: { ...t, parKg: newParKg } })); if (sbReady) sb.updateTarif(d.code, t.base, newParKg).catch(console.error); } }} className="w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-sm font-bold text-center" style={{ outline: 'none' }} />
                   </div>
                 </div>
                 <p className="text-xs text-gray-400 mt-2">{`Exemple : colis 3 kg → ${eur(t.base + 3 * t.parKg)} (${eur(t.base)} + 3 × ${eur(t.parKg)})`}</p>
@@ -757,12 +757,12 @@ export default function StaffSettings() {
                             <div className="flex gap-2">
                               <div className="flex-1">
                                 <label className="text-[10px] text-gray-500 block">{dest.hasOM ? 'Taux OM %' : 'Taxe conso %'}</label>
-                                <input type="number" step="0.1" min="0" max="100" value={t.om} onChange={(e) => updateCatTaux(cat.id, dest.code, 'om', e.target.value)} className="w-full px-2 py-1.5 rounded-lg border text-sm text-center font-bold" />
+                                <input type="text" inputMode="decimal" value={t.om || ''} onFocus={(e) => { if (e.target.value === '0') e.target.value = ''; }} onChange={(e) => { const raw = e.target.value.replace(',', '.'); if (raw === '' || /^\d*\.?\d*$/.test(raw)) updateCatTaux(cat.id, dest.code, 'om', raw === '' ? '0' : raw); }} className="w-full px-2 py-1.5 rounded-lg border text-sm text-center font-bold" />
                               </div>
                               {dest.hasOM && (
                                 <div className="flex-1">
                                   <label className="text-[10px] text-gray-500 block">Taux OMR %</label>
-                                  <input type="number" step="0.1" min="0" max="100" value={t.omr} onChange={(e) => updateCatTaux(cat.id, dest.code, 'omr', e.target.value)} className="w-full px-2 py-1.5 rounded-lg border text-sm text-center font-bold" />
+                                  <input type="text" inputMode="decimal" value={t.omr || ''} onFocus={(e) => { if (e.target.value === '0') e.target.value = ''; }} onChange={(e) => { const raw = e.target.value.replace(',', '.'); if (raw === '' || /^\d*\.?\d*$/.test(raw)) updateCatTaux(cat.id, dest.code, 'omr', raw === '' ? '0' : raw); }} className="w-full px-2 py-1.5 rounded-lg border text-sm text-center font-bold" />
                                 </div>
                               )}
                               <div className="flex-1">
