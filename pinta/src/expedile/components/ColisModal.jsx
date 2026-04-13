@@ -32,12 +32,12 @@ const EMPTY_FORM = {
 };
 
 const EMPTY_NEW_CLIENT = {
-  nom: '', prenom: '', genre: '',
+  nom: '', prenom: '', genre: '', dateNaissance: '',
   tel: '', telFixe: '', email: '',
   ville: '', cp: '', adresseLigne1: '', adresseLigne2: '', commune: '', infosLivraison: '',
   telegramUsername: '', canal: 'telegram',
   type: 'particulier', modePaiement: 'colis',
-  abonnement: 'freemium', abonnementFin: '',
+  abonnement: 'freemium', abonnementDebut: '', abonnementFin: '',
   notes: '',
   raisonSociale: '', siret: '', interlocuteur: '',
 };
@@ -228,6 +228,7 @@ export default function ColisModal({ open, onClose }) {
         nom: newClientForm.nom.trim(),
         prenom: newClientForm.prenom.trim(),
         genre: newClientForm.genre || '',
+        dateNaissance: newClientForm.dateNaissance || null,
         ville: newClientForm.ville.trim(),
         cp: newClientForm.cp.trim(),
         adresseLigne1: newClientForm.adresseLigne1.trim(),
@@ -242,6 +243,7 @@ export default function ColisModal({ open, onClose }) {
         type: newClientForm.type,
         modePaiement: newClientForm.modePaiement,
         abonnement: newClientForm.abonnement,
+        abonnementDebut: newClientForm.abonnementDebut || null,
         abonnementFin: newClientForm.abonnementFin || null,
         raisonSociale: newClientForm.raisonSociale.trim(),
         siret: newClientForm.siret.trim(),
@@ -724,15 +726,26 @@ export default function ColisModal({ open, onClose }) {
                   ))}
                 </select>
                 {newClientForm.abonnement !== 'freemium' && (
-                  <div className="flex items-center gap-1">
-                    <span className="text-[10px] text-gray-500">Fin :</span>
-                    <input
-                      type="date"
-                      value={newClientForm.abonnementFin}
-                      onChange={(e) => setNCField('abonnementFin', e.target.value)}
-                      className="px-2 py-1 rounded-lg border border-gray-200 text-xs"
-                    />
-                  </div>
+                  <>
+                    <div className="flex items-center gap-1">
+                      <span className="text-[10px] text-gray-500">Début :</span>
+                      <input
+                        type="date"
+                        value={newClientForm.abonnementDebut}
+                        onChange={(e) => setNCField('abonnementDebut', e.target.value)}
+                        className="px-2 py-1 rounded-lg border border-gray-200 text-xs"
+                      />
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <span className="text-[10px] text-gray-500">Fin :</span>
+                      <input
+                        type="date"
+                        value={newClientForm.abonnementFin}
+                        onChange={(e) => setNCField('abonnementFin', e.target.value)}
+                        className="px-2 py-1 rounded-lg border border-gray-200 text-xs"
+                      />
+                    </div>
+                  </>
                 )}
               </div>
 
@@ -801,7 +814,7 @@ export default function ColisModal({ open, onClose }) {
                     ))}
                   </div>
                 )}
-                <div className="grid grid-cols-2 gap-2">
+                <div className={`grid gap-2 ${newClientForm.type === 'particulier' ? 'grid-cols-3' : 'grid-cols-2'}`}>
                   <div>
                     <input
                       type="text"
@@ -819,6 +832,16 @@ export default function ColisModal({ open, onClose }) {
                     onChange={(e) => setNCField('prenom', e.target.value)}
                     className={inputCls(false)}
                   />
+                  {newClientForm.type === 'particulier' && (
+                    <input
+                      type="date"
+                      title="Date de naissance"
+                      placeholder="Date naissance"
+                      value={newClientForm.dateNaissance}
+                      onChange={(e) => setNCField('dateNaissance', e.target.value)}
+                      className={inputCls(false)}
+                    />
+                  )}
                 </div>
               </div>
 
