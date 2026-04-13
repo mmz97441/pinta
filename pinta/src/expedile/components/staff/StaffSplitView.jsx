@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import {
   Search, X, Package, Clock, CheckCircle, Check, Wrench, CreditCard, Plane,
-  AlertTriangle, ChevronRight, Star, TrendingUp, Users, BarChart3, FileText,
+  AlertTriangle, ChevronRight, Star, TrendingUp, Users, BarChart3, FileText, MessageCircle,
 } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
@@ -62,8 +62,8 @@ function ColisTableHead({ compact, onSelectAll, allSelected, onSort, sortCol, so
       <th {...sortable('ref')}>Réf.{indicator('ref')}</th>
       <th {...sortable('statut')}>Statut{indicator('statut')}</th>
       {!compact && <th className={TH}>Paiem.</th>}
-      <th {...sortable('client')}>Nom{indicator('client')}</th>
-      <th className={TH}>Prénom</th>
+      <th {...sortable('client')}>Client{indicator('client')}</th>
+      {!compact && <th className={TH}>Prénom</th>}
       {!compact && <th className={TH}>Email</th>}
       {!compact && <th className={TH}>Tél.</th>}
       {!compact && <th className={TH}>Forfait</th>}
@@ -71,8 +71,8 @@ function ColisTableHead({ compact, onSelectAll, allSelected, onSort, sortCol, so
       {!compact && <th {...sortable('dims', 'right')}>Vol. cm³{indicator('dims')}</th>}
       {!compact && <th className={`${TH} text-right`}>Vol. kg</th>}
       {!compact && <th className={`${TH} text-right`}>Poids</th>}
-      <th {...sortable('transport', 'right')}>Transport{indicator('transport')}</th>
-      <th {...sortable('taxes', 'right')}>Taxes{indicator('taxes')}</th>
+      {!compact && <th {...sortable('transport', 'right')}>Transport{indicator('transport')}</th>}
+      {!compact && <th {...sortable('taxes', 'right')}>Taxes{indicator('taxes')}</th>}
       <th {...sortable('total', 'right')}>Total{indicator('total')}</th>
       {!compact && <th className={`${TH} text-right`}>Payé</th>}
       {!compact && <th className={TH}>Commune</th>}
@@ -123,13 +123,13 @@ function ColisTableRow({ c, client, envois, onClick, isSelected, compact, checke
           : DASH}
       </td>}
       <td className={TD}>
-        <span className="text-gray-700 font-medium">{nom}</span>
+        <span className="text-gray-700 font-medium">{compact ? `${nom} ${prenom}`.trim() : nom}</span>
         {dest && <span className="ml-1">{dest.flag}</span>}
         {(() => { const s = getSecteurByCP(client?.cp); return s ? <span className="ml-1 text-[7px] font-black px-1 py-0.5 rounded text-white" style={{ background: getSecteurColor(s) }}>{s}</span> : null; })()}
         {client?.abonnement === 'vip' && <span className="ml-1 text-[8px] font-black px-1 py-0.5 rounded" style={{ background: 'linear-gradient(135deg, #F59E0B, #D97706)', color: 'white' }}>VIP</span>}
         {client?.type === 'pro' && client?.abonnement !== 'vip' && <span className="ml-1 text-[8px] font-black px-1 py-0.5 rounded" style={{ background: `${BRAND.gold}30`, color: BRAND.goldD }}>PRO</span>}
       </td>
-      <td className={TD}><span className="text-gray-500">{prenom || '—'}</span></td>
+      {!compact && <td className={TD}><span className="text-gray-500">{prenom || '—'}</span></td>}
       {!compact && <td className={TD}><span className="text-gray-500 text-[10px]">{client?.email || '—'}</span></td>}
       {!compact && <td className={TD}><span className="text-gray-500 text-[10px] font-mono">{client?.tel || '—'}</span></td>}
       {!compact && <td className={TD}><span className="text-[9px] font-semibold">{abo}</span></td>}
@@ -137,8 +137,8 @@ function ColisTableRow({ c, client, envois, onClick, isSelected, compact, checke
       {!compact && <td className={`${TD} text-right`}>{volCm3 ? <span className="text-gray-500 font-mono text-[10px]">{volCm3.toLocaleString()}</span> : DASH}</td>}
       {!compact && <td className={`${TD} text-right`}>{volKg ? <span className="text-gray-500 font-mono text-[10px]">{volKg}</span> : DASH}</td>}
       {!compact && <td className={`${TD} text-right`}>{c.poids ? <span className="text-gray-600 font-mono text-[10px]">{c.poids} kg</span> : DASH}</td>}
-      <td className={`${TD} text-right`}>{c.devisTransport != null ? <span className="font-semibold text-gray-700">{eur(c.devisTransport)}</span> : DASH}</td>
-      <td className={`${TD} text-right`}>{taxes != null ? <span className="text-gray-600">{eur(taxes)}</span> : DASH}</td>
+      {!compact && <td className={`${TD} text-right`}>{c.devisTransport != null ? <span className="font-semibold text-gray-700">{eur(c.devisTransport)}</span> : DASH}</td>}
+      {!compact && <td className={`${TD} text-right`}>{taxes != null ? <span className="text-gray-600">{eur(taxes)}</span> : DASH}</td>}
       <td className={`${TD} text-right`}>{c.devisTotal != null ? <span className="font-bold" style={{ color: BRAND.navy }}>{eur(c.devisTotal)}</span> : DASH}</td>
       {!compact && <td className={`${TD} text-right`}>{c.paiementMontant ? <span className="font-bold text-green-700">{eur(c.paiementMontant)}</span> : DASH}</td>}
       {!compact && <td className={TD}><span className="text-gray-500 text-[10px]">{client?.ville || '—'}</span></td>}
@@ -316,6 +316,7 @@ export default function StaffColisPage() {
   const [viewMode, setViewMode] = useState('statut');
   const [showFactures, setShowFactures] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [showChat, setShowChat] = useState(false);
 
   // Verrouillage optimiste — affiche un bandeau si quelqu'un d'autre édite le même colis
   const { lockedBy, isLockedByOther } = useColisLock(sel?.id, auth?.u?.id, auth?.u?.nom);
@@ -694,97 +695,111 @@ export default function StaffColisPage() {
           const hasDims = sel.dimL && sel.dimW && sel.dimH && sel.poids;
           const hasFin = sel.finL && sel.finW && sel.finH && sel.finP;
           return (
-          <div className="w-[820px] flex-shrink-0 border-l border-gray-200 bg-white overflow-y-auto">
+          <div className="w-[540px] flex-shrink-0 border-l border-gray-200 bg-white overflow-y-auto relative">
             {/* Compact header */}
-            <div className="sticky top-0 z-10 bg-white border-b border-gray-100 px-4 py-2.5 flex items-center justify-between">
+            <div className="sticky top-0 z-10 bg-white border-b border-gray-100 px-4 py-2 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <div className="w-2.5 h-2.5 rounded-full" style={{ background: statutBorderColor(sel.statut) }} />
                 <span className="text-sm font-black" style={{ color: BRAND.navy }}>{sel.ref}</span>
                 <Badge statut={sel.statut} />
                 {sel.devisTotal > 0 && <span className="text-xs font-bold" style={{ color: BRAND.navy }}>{eur(sel.devisTotal)}</span>}
               </div>
-              <button onClick={closeDetail} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400"><X size={18} /></button>
+              <div className="flex items-center gap-1">
+                {/* Chat toggle */}
+                <button
+                  onClick={() => setShowChat((p) => !p)}
+                  className={`p-1.5 rounded-lg transition-colors relative ${showChat ? 'bg-blue-100 text-blue-600' : 'hover:bg-gray-100 text-gray-400'}`}
+                  title="Chat"
+                >
+                  <MessageCircle size={16} />
+                  {unreadCount > 0 && (
+                    <span className="absolute -top-0.5 -right-0.5 text-[8px] font-bold px-1 py-0.5 rounded-full bg-red-500 text-white min-w-[14px] text-center leading-none">{unreadCount}</span>
+                  )}
+                </button>
+                <button onClick={closeDetail} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400"><X size={18} /></button>
+              </div>
             </div>
 
             {/* Lock warning banner */}
             {isLockedByOther && (
-              <div className="mx-4 mt-2 px-4 py-3 rounded-xl flex items-center gap-3 animate-pulse"
+              <div className="mx-4 mt-2 px-3 py-2 rounded-xl flex items-center gap-2"
                 style={{ background: '#FEF3C7', border: '2px solid #F59E0B' }}>
-                <span className="text-2xl">⚠️</span>
-                <div>
-                  <p className="text-sm font-black text-amber-800">{lockedBy} est en train de modifier ce colis</p>
-                  <p className="text-xs text-amber-600">Vos modifications pourraient entrer en conflit. Coordonnez-vous.</p>
-                </div>
+                <span>⚠️</span>
+                <p className="text-xs font-bold text-amber-800">{lockedBy} modifie ce colis</p>
               </div>
             )}
 
-            {/* Steps */}
-            <div className="px-4 pt-2 pb-1"><Etapes statut={sel.statut} /></div>
-
-            {/* Two-column compact layout */}
-            <div className="px-4 py-3 flex gap-4">
-              {/* LEFT: info résumé + factures collapsées + historique */}
-              <div className="flex-1 min-w-0 space-y-3">
-                {/* Client + colis summary — 4 lines max */}
-                <div className="rounded-xl border border-gray-100 p-3 space-y-1">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-bold" style={{ color: BRAND.navy }}>{clDetail?.nom || '—'}</span>
-                      {destDetail && <span>{destDetail.flag}</span>}
-                      {clDetail?.abonnement && clDetail.abonnement !== 'freemium' && (
-                        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${ABONNEMENTS[clDetail.abonnement]?.couleur || ''}`}>
-                          {ABONNEMENTS[clDetail.abonnement]?.label}
-                        </span>
-                      )}
-                    </div>
-                    {sel.casier && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ background: `${BRAND.gold}22`, color: BRAND.goldD }}>Casier {sel.casier}</span>}
-                  </div>
-                  <p className="text-xs text-gray-600">{sel.desc || '—'} · {(sel.trackings?.filter(Boolean) || []).length || 1} carton{(sel.trackings?.filter(Boolean) || []).length > 1 ? 's' : ''}</p>
-                  {hasFin ? (
-                    <p className="text-xs text-gray-500 font-mono">{sel.finL}×{sel.finW}×{sel.finH} cm · {sel.finP} kg</p>
-                  ) : hasDims ? (
-                    <p className="text-xs text-gray-500 font-mono">{sel.dimL}×{sel.dimW}×{sel.dimH} cm · {sel.poids} kg</p>
-                  ) : (
-                    <p className="text-xs text-gray-400 italic">Dimensions non renseignées</p>
+            {/* Client + colis summary — compact inline */}
+            <div className="px-4 py-3 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-sm font-bold" style={{ color: BRAND.navy }}>{clDetail?.nom || '—'}</span>
+                  {destDetail && <span>{destDetail.flag}</span>}
+                  {clDetail?.abonnement && clDetail.abonnement !== 'freemium' && (
+                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${ABONNEMENTS[clDetail.abonnement]?.couleur || ''}`}>
+                      {ABONNEMENTS[clDetail.abonnement]?.label}
+                    </span>
                   )}
-                  {sel.economie > 0 && (
-                    <p className="text-[10px] font-bold text-emerald-600">Économie : {eur(sel.economie)}</p>
-                  )}
+                  {sel.casier && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded" style={{ background: `${BRAND.gold}22`, color: BRAND.goldD }}>{sel.casier}</span>}
                 </div>
-
-                {/* Factures — one line summary, expandable */}
-                <button
-                  onClick={() => setShowFactures((p) => !p)}
-                  className="w-full flex items-center justify-between px-3 py-2 rounded-xl border border-gray-100 hover:bg-gray-50 transition-colors"
-                >
-                  <div className="flex items-center gap-2">
-                    <FileText size={13} className="text-gray-400" />
-                    <span className="text-xs font-bold text-gray-600">Factures ({facturesSummary.length})</span>
-                    {validCount > 0 && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-green-100 text-green-700">{validCount} validée{validCount > 1 ? 's' : ''}</span>}
-                    {rejetCount > 0 && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-red-100 text-red-600">{rejetCount} refusée{rejetCount > 1 ? 's' : ''}</span>}
-                    {facturesSummary.length === 0 && <span className="text-[9px] font-bold text-red-500">Manquante</span>}
-                  </div>
-                  <span className="text-[10px] text-gray-400">{showFactures ? '▼' : '▸'}</span>
-                </button>
-                {showFactures && <FacturesPanel />}
-
-                {/* Historique — collapsed */}
-                <button
-                  onClick={() => setShowHistory((p) => !p)}
-                  className="w-full flex items-center justify-between px-3 py-2 rounded-xl border border-gray-100 hover:bg-gray-50 transition-colors"
-                >
-                  <span className="text-xs font-bold text-gray-600">Historique</span>
-                  <span className="text-[10px] text-gray-400">{showHistory ? '▼' : '▸'}</span>
-                </button>
-                {showHistory && <AuditLog />}
+                <div className="text-right">
+                  {hasFin ? (
+                    <span className="text-[10px] text-gray-500 font-mono">{sel.finL}×{sel.finW}×{sel.finH} cm · {sel.finP} kg</span>
+                  ) : hasDims ? (
+                    <span className="text-[10px] text-gray-500 font-mono">{sel.dimL}×{sel.dimW}×{sel.dimH} cm · {sel.poids} kg</span>
+                  ) : null}
+                </div>
               </div>
-
-              {/* RIGHT: action + chat */}
-              <div className="w-[360px] flex-shrink-0 space-y-3">
-                <StaffDetailView />
-                <ChatPanel />
-              </div>
+              <p className="text-xs text-gray-600">{sel.desc || '—'} · {(sel.trackings?.filter(Boolean) || []).length || 1} carton{(sel.trackings?.filter(Boolean) || []).length > 1 ? 's' : ''}</p>
             </div>
+
+            {/* Single column layout — actions first, then factures/historique */}
+            <div className="px-4 pb-4 space-y-3">
+              {/* Actions (StaffDetailView) */}
+              <StaffDetailView />
+
+              {/* Factures — one line summary, expandable */}
+              <button
+                onClick={() => setShowFactures((p) => !p)}
+                className="w-full flex items-center justify-between px-3 py-2 rounded-xl border border-gray-100 hover:bg-gray-50 transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <FileText size={13} className="text-gray-400" />
+                  <span className="text-xs font-bold text-gray-600">Factures ({facturesSummary.length})</span>
+                  {validCount > 0 && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-green-100 text-green-700">{validCount} validée{validCount > 1 ? 's' : ''}</span>}
+                  {rejetCount > 0 && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-red-100 text-red-600">{rejetCount} refusée{rejetCount > 1 ? 's' : ''}</span>}
+                  {facturesSummary.length === 0 && <span className="text-[9px] font-bold text-red-500">Manquante</span>}
+                </div>
+                <span className="text-[10px] text-gray-400">{showFactures ? '▼' : '▸'}</span>
+              </button>
+              {showFactures && <FacturesPanel />}
+
+              {/* Historique — collapsed */}
+              <button
+                onClick={() => setShowHistory((p) => !p)}
+                className="w-full flex items-center justify-between px-3 py-2 rounded-xl border border-gray-100 hover:bg-gray-50 transition-colors"
+              >
+                <span className="text-xs font-bold text-gray-600">Historique</span>
+                <span className="text-[10px] text-gray-400">{showHistory ? '▼' : '▸'}</span>
+              </button>
+              {showHistory && <AuditLog />}
+            </div>
+
+            {/* Chat — slide-over overlay from right */}
+            {showChat && (
+              <div className="absolute inset-0 z-20 flex">
+                <div className="w-16 flex-shrink-0 bg-black/10" onClick={() => setShowChat(false)} />
+                <div className="flex-1 bg-white border-l border-gray-200 flex flex-col">
+                  <div className="flex items-center justify-between px-4 py-2 border-b border-gray-100">
+                    <span className="text-xs font-bold" style={{ color: BRAND.navy }}>Chat avec le client</span>
+                    <button onClick={() => setShowChat(false)} className="p-1 rounded-lg hover:bg-gray-100 text-gray-400"><X size={14} /></button>
+                  </div>
+                  <div className="flex-1 min-h-0 overflow-y-auto">
+                    <ChatPanel />
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
           );
         })()}
