@@ -215,6 +215,7 @@ export default function StaffDetailView() {
     selClient: cl,
     selDest,
     isStaff,
+    clients,
     upd,
     ask,
     flash,
