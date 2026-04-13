@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { X, FileText, Search, UserPlus, Ruler, Package, MapPin, Camera } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
-import { BRAND, STATUTS, getDestByCP, PRODUITS_INTERDITS } from '../constants';
+import { BRAND, STATUTS, getDestByCP, PRODUITS_INTERDITS, ABONNEMENTS } from '../constants';
 import { uid, searchClients, telegramLink } from '../utils';
 import { Badge } from './ui';
 import * as sb from '../lib/supabaseData';
@@ -32,14 +32,14 @@ const EMPTY_FORM = {
 };
 
 const EMPTY_NEW_CLIENT = {
-  nom: '',
-  ville: '',
-  cp: '',
-  tel: '',
-  email: '',
-  telegramUsername: '',
-  canal: 'telegram',
-  type: 'particulier',
+  nom: '', prenom: '', genre: '',
+  tel: '', telFixe: '', email: '',
+  ville: '', cp: '', adresseLigne1: '', adresseLigne2: '', commune: '', infosLivraison: '',
+  telegramUsername: '', canal: 'telegram',
+  type: 'particulier', modePaiement: 'colis',
+  abonnement: 'freemium', abonnementFin: '',
+  notes: '',
+  raisonSociale: '', siret: '', interlocuteur: '',
 };
 
 // Ref provisoire locale — sera remplacée par la ref unique Supabase dans insertColis
@@ -147,6 +147,7 @@ export default function ColisModal({ open, onClose }) {
     if (!newClientForm.nom.trim() || newClientForm.nom.trim().length < 2) errs.nom = 'Nom requis (min. 2 car.)';
     if (!newClientForm.cp.trim() || !/^9[7-8]\d{3}$/.test(newClientForm.cp.replace(/\s/g, ''))) errs.cp = 'Code postal DOM-TOM requis (97xxx)';
     if (newClientForm.tel && !/^\+?\d[\d\s\-]{6,18}$/.test(newClientForm.tel.replace(/\s/g, ''))) errs.tel = 'Numéro invalide';
+    if (newClientForm.type === 'pro' && !newClientForm.raisonSociale.trim()) errs.raisonSociale = 'Raison sociale requise pour un pro';
     setNewClientErr(errs);
     return Object.keys(errs).length === 0;
   };
@@ -225,13 +226,27 @@ export default function ColisModal({ open, onClose }) {
       if (!nf.casier.trim()) { setFormErr({ casier: 'Numéro de casier requis' }); return; }
       clientId = await addNewClient({
         nom: newClientForm.nom.trim(),
+        prenom: newClientForm.prenom.trim(),
+        genre: newClientForm.genre || '',
         ville: newClientForm.ville.trim(),
         cp: newClientForm.cp.trim(),
+        adresseLigne1: newClientForm.adresseLigne1.trim(),
+        adresseLigne2: newClientForm.adresseLigne2.trim(),
+        commune: newClientForm.commune.trim(),
+        infosLivraison: newClientForm.infosLivraison.trim(),
         tel: newClientForm.tel.trim(),
+        telFixe: newClientForm.telFixe.trim(),
         email: newClientForm.email.trim(),
         telegramUsername: newClientForm.telegramUsername.trim(),
         canal: newClientForm.canal,
         type: newClientForm.type,
+        modePaiement: newClientForm.modePaiement,
+        abonnement: newClientForm.abonnement,
+        abonnementFin: newClientForm.abonnementFin || null,
+        raisonSociale: newClientForm.raisonSociale.trim(),
+        siret: newClientForm.siret.trim(),
+        interlocuteur: newClientForm.interlocuteur.trim(),
+        notes: newClientForm.notes.trim(),
         created: new Date().toISOString().slice(0, 10),
         points: 0,
       });
@@ -662,10 +677,10 @@ export default function ColisModal({ open, onClose }) {
             </div>
           )}
 
-          {/* ── INLINE NEW CLIENT FORM ── */}
+          {/* ── INLINE NEW CLIENT FORM (complet) ── */}
           {isStaff && newClientMode && (
             <div
-              className="rounded-xl border p-4 space-y-3"
+              className="rounded-xl border p-4 space-y-4"
               style={{ borderColor: '#10B981', background: '#F0FDF4' }}
             >
               <div className="flex items-center justify-between mb-1">
@@ -685,71 +700,231 @@ export default function ColisModal({ open, onClose }) {
                   Annuler
                 </button>
               </div>
-              <div>
-                <label className={labelCls}>Nom complet</label>
-                <input
-                  type="text"
-                  placeholder="Ex: Jean DUPONT"
-                  value={newClientForm.nom}
-                  onChange={(e) => setNCField('nom', e.target.value)}
-                  className={inputCls(newClientErr.nom)}
-                />
-                {newClientErr.nom && <p className="mt-1 text-xs text-red-500">{newClientErr.nom}</p>}
+
+              {/* ── Type client + Forfait ── */}
+              <div className="flex gap-2 flex-wrap">
+                <div className="flex rounded-lg overflow-hidden border border-gray-200">
+                  {[{ v: 'particulier', l: 'Particulier' }, { v: 'pro', l: 'Professionnel' }].map((t) => (
+                    <button
+                      key={t.v} type="button"
+                      onClick={() => setNCField('type', t.v)}
+                      className={`px-3 py-1.5 text-xs font-bold transition-colors ${newClientForm.type === t.v ? 'bg-emerald-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`}
+                    >
+                      {t.l}
+                    </button>
+                  ))}
+                </div>
+                <select
+                  value={newClientForm.abonnement}
+                  onChange={(e) => setNCField('abonnement', e.target.value)}
+                  className="px-2 py-1.5 rounded-lg border border-gray-200 text-xs font-semibold bg-white"
+                >
+                  {Object.entries(ABONNEMENTS).map(([k, v]) => (
+                    <option key={k} value={k}>{v.icon} {v.label} {v.prix > 0 ? `(${v.prix}€/${v.periode})` : ''}</option>
+                  ))}
+                </select>
+                {newClientForm.abonnement !== 'freemium' && (
+                  <div className="flex items-center gap-1">
+                    <span className="text-[10px] text-gray-500">Fin :</span>
+                    <input
+                      type="date"
+                      value={newClientForm.abonnementFin}
+                      onChange={(e) => setNCField('abonnementFin', e.target.value)}
+                      className="px-2 py-1 rounded-lg border border-gray-200 text-xs"
+                    />
+                  </div>
+                )}
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className={labelCls}>Ville</label>
+
+              {/* ── Champs Pro (conditionnels) ── */}
+              {newClientForm.type === 'pro' && (
+                <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 space-y-2">
+                  <p className="text-[10px] font-bold text-amber-700 uppercase tracking-wider">Entreprise</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <input
+                        type="text"
+                        placeholder="Raison sociale *"
+                        value={newClientForm.raisonSociale}
+                        onChange={(e) => setNCField('raisonSociale', e.target.value)}
+                        className={inputCls(newClientErr.raisonSociale)}
+                      />
+                      {newClientErr.raisonSociale && <p className="mt-0.5 text-[10px] text-red-500">{newClientErr.raisonSociale}</p>}
+                    </div>
+                    <input
+                      type="text"
+                      placeholder="SIRET"
+                      value={newClientForm.siret}
+                      onChange={(e) => setNCField('siret', e.target.value)}
+                      className={inputCls(false)}
+                      style={{ fontFamily: 'monospace' }}
+                    />
+                  </div>
                   <input
                     type="text"
-                    placeholder="Saint-Denis"
+                    placeholder="Interlocuteur"
+                    value={newClientForm.interlocuteur}
+                    onChange={(e) => setNCField('interlocuteur', e.target.value)}
+                    className={inputCls(false)}
+                  />
+                  <div>
+                    <label className="text-[10px] text-gray-500 font-semibold mb-0.5 block">Mode de paiement</label>
+                    <select
+                      value={newClientForm.modePaiement}
+                      onChange={(e) => setNCField('modePaiement', e.target.value)}
+                      className="w-full px-2 py-1.5 rounded-lg border border-gray-200 text-xs bg-white"
+                    >
+                      <option value="colis">Paiement par colis</option>
+                      <option value="virement">Virement</option>
+                      <option value="30j">Paiement à 30 jours</option>
+                      <option value="fin_mois">Fin de mois</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Identité ── */}
+              <div className="space-y-2">
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Identité</p>
+                {newClientForm.type === 'particulier' && (
+                  <div className="flex gap-3">
+                    {['Homme', 'Femme'].map((g) => (
+                      <label key={g} className="flex items-center gap-1.5 cursor-pointer">
+                        <input
+                          type="radio" name="nc-genre"
+                          checked={newClientForm.genre === g}
+                          onChange={() => setNCField('genre', g)}
+                          className="accent-emerald-500"
+                        />
+                        <span className="text-xs text-gray-600">{g}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <input
+                      type="text"
+                      placeholder={newClientForm.type === 'pro' ? 'Nom contact *' : 'Nom *'}
+                      value={newClientForm.nom}
+                      onChange={(e) => setNCField('nom', e.target.value)}
+                      className={inputCls(newClientErr.nom)}
+                    />
+                    {newClientErr.nom && <p className="mt-0.5 text-[10px] text-red-500">{newClientErr.nom}</p>}
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Prénom"
+                    value={newClientForm.prenom}
+                    onChange={(e) => setNCField('prenom', e.target.value)}
+                    className={inputCls(false)}
+                  />
+                </div>
+              </div>
+
+              {/* ── Contact ── */}
+              <div className="space-y-2">
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Contact</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <input
+                      type="tel"
+                      placeholder="Tél. mobile *"
+                      value={newClientForm.tel}
+                      onChange={(e) => setNCField('tel', e.target.value)}
+                      className={inputCls(newClientErr.tel)}
+                      style={{ fontFamily: 'monospace' }}
+                    />
+                    {newClientErr.tel && <p className="mt-0.5 text-[10px] text-red-500">{newClientErr.tel}</p>}
+                  </div>
+                  <input
+                    type="tel"
+                    placeholder="Tél. fixe"
+                    value={newClientForm.telFixe}
+                    onChange={(e) => setNCField('telFixe', e.target.value)}
+                    className={inputCls(false)}
+                    style={{ fontFamily: 'monospace' }}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <input
+                    type="email"
+                    placeholder="Email *"
+                    value={newClientForm.email}
+                    onChange={(e) => setNCField('email', e.target.value)}
+                    className={inputCls(false)}
+                  />
+                  <input
+                    type="text"
+                    placeholder="Telegram @username"
+                    value={newClientForm.telegramUsername}
+                    onChange={(e) => setNCField('telegramUsername', e.target.value)}
+                    className={inputCls(false)}
+                  />
+                </div>
+              </div>
+
+              {/* ── Adresse livraison ── */}
+              <div className="space-y-2">
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Adresse de livraison</p>
+                <input
+                  type="text"
+                  placeholder="Adresse ligne 1 *"
+                  value={newClientForm.adresseLigne1}
+                  onChange={(e) => setNCField('adresseLigne1', e.target.value)}
+                  className={inputCls(false)}
+                />
+                <input
+                  type="text"
+                  placeholder="Adresse ligne 2 (complément)"
+                  value={newClientForm.adresseLigne2}
+                  onChange={(e) => setNCField('adresseLigne2', e.target.value)}
+                  className={inputCls(false)}
+                />
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <input
+                      type="text"
+                      placeholder="Code postal *"
+                      value={newClientForm.cp}
+                      onChange={(e) => setNCField('cp', e.target.value)}
+                      className={inputCls(newClientErr.cp)}
+                      style={{ fontFamily: 'monospace' }}
+                    />
+                    {newClientErr.cp && <p className="mt-0.5 text-[10px] text-red-500">{newClientErr.cp}</p>}
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Ville"
                     value={newClientForm.ville}
                     onChange={(e) => setNCField('ville', e.target.value)}
                     className={inputCls(false)}
                   />
-                </div>
-                <div>
-                  <label className={labelCls}>Code postal</label>
                   <input
                     type="text"
-                    placeholder="97400"
-                    value={newClientForm.cp}
-                    onChange={(e) => setNCField('cp', e.target.value)}
-                    className={inputCls(newClientErr.cp)}
+                    placeholder="Commune"
+                    value={newClientForm.commune}
+                    onChange={(e) => setNCField('commune', e.target.value)}
+                    className={inputCls(false)}
                   />
-                  {newClientErr.cp && <p className="mt-1 text-xs text-red-500">{newClientErr.cp}</p>}
                 </div>
-              </div>
-              <div>
-                <label className={labelCls}>Téléphone <span className="normal-case text-gray-400 font-normal">(pour Telegram)</span></label>
-                <input
-                  type="tel"
-                  placeholder="+262 692 12 34 56"
-                  value={newClientForm.tel}
-                  onChange={(e) => setNCField('tel', e.target.value)}
-                  className={inputCls(newClientErr.tel)}
-                />
-                {newClientErr.tel && <p className="mt-1 text-xs text-red-500">{newClientErr.tel}</p>}
-              </div>
-              <div>
-                <label className={labelCls}>Email <span className="normal-case text-gray-400 font-normal">(facultatif)</span></label>
-                <input
-                  type="email"
-                  placeholder="jean.dupont@gmail.com"
-                  value={newClientForm.email}
-                  onChange={(e) => setNCField('email', e.target.value)}
-                  className={inputCls(false)}
+                <textarea
+                  placeholder="Infos livraison (digicode, étage, horaires...)"
+                  value={newClientForm.infosLivraison}
+                  onChange={(e) => setNCField('infosLivraison', e.target.value)}
+                  rows={2}
+                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:bg-white resize-none"
                 />
               </div>
-              <div>
-                <label className={labelCls}>Telegram</label>
-                <input
-                  type="text"
-                  placeholder="@username"
-                  value={newClientForm.telegramUsername}
-                  onChange={(e) => setNCField('telegramUsername', e.target.value)}
-                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm outline-none focus:border-blue-400 focus:bg-white"
-                />
-              </div>
+
+              {/* ── Notes ── */}
+              <textarea
+                placeholder="Notes internes (optionnel)"
+                value={newClientForm.notes}
+                onChange={(e) => setNCField('notes', e.target.value)}
+                rows={2}
+                className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:bg-white resize-none"
+              />
             </div>
           )}
 
