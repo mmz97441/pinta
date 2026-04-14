@@ -1,21 +1,27 @@
-// ══════════ SSE listener — messages Telegram entrants ══════════
-// Se connecte au serveur webhook via Server-Sent Events.
-// EventSource gère la reconnexion automatique en cas de coupure.
-// ───────────────────────────────────────────────────────────────
+// ══════════ SSE listener — messages Telegram entrants (legacy) ══════════
+// Ce listener SSE n'est activé QUE si VITE_WEBHOOK_URL est explicitement défini.
+// Les messages Telegram entrants passent désormais par :
+//   1. Edge Function `telegram-webhook` (reçoit les messages du bot)
+//   2. Insertion dans la table `messages` de Supabase
+//   3. Supabase Realtime notifie le frontend
+// Donc ce fichier est conservé uniquement pour compatibilité avec un serveur SSE externe.
+// ─────────────────────────────────────────────────────────────────────────
 
-const SSE_URL = import.meta.env.VITE_WEBHOOK_URL || '/api/events';
+const SSE_URL = import.meta.env.VITE_WEBHOOK_URL || '';
 
 let eventSource = null;
 let listeners = [];
 
 /**
- * Se connecte au flux SSE et appelle `onEvent(event)` pour chaque événement.
- * Retourne une fonction de nettoyage.
- *
- * event.type === 'message'  → message entrant du client
- * event.type === 'status'   → mise à jour statut (sent|delivered|read)
+ * Se connecte au flux SSE si VITE_WEBHOOK_URL est configuré, sinon ne fait rien.
+ * Retourne une fonction de nettoyage (no-op si SSE non configuré).
  */
 export function connectWebhook(onEvent) {
+  // Si aucune URL SSE n'est configurée, on n'essaie pas de se connecter
+  if (!SSE_URL) {
+    return () => {};
+  }
+
   listeners.push(onEvent);
 
   if (!eventSource) {
@@ -31,7 +37,6 @@ export function connectWebhook(onEvent) {
     };
 
     eventSource.onerror = () => {
-      // EventSource reconnecte automatiquement
       console.warn('[Webhook SSE] Connexion perdue, reconnexion auto…');
     };
   }
