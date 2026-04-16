@@ -6,6 +6,7 @@ import { useApp } from '../../context/AppContext';
 import { BRAND, STATUTS, TRANSITIONS, PRODUITS_INTERDITS, TAGS_PREPARATION, getDestByCP } from '../../constants';
 import { eur, calcTransport, getCatTaux } from '../../utils';
 import { Ligne } from '../ui';
+import WebcamCapture from '../ui/WebcamCapture';
 import * as sb from '../../lib/supabaseData';
 import { isTelegramConfigured, sendTelegram } from '../../services/telegramApi';
 
@@ -1290,6 +1291,17 @@ export default function StaffDetailView() {
                 </p>
               </div>
             )}
+
+            {/* Photo préparation */}
+            <div className="space-y-1.5">
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Photo préparation</p>
+              <WebcamCapture
+                colisId={sel.id}
+                colisRef={sel.ref}
+                existingUrl={sel.photoPrep}
+                onCapture={(url) => upd(sel.id, { photoPrep: url })}
+              />
+            </div>
 
             {/* Devis preview / send */}
             {!devisPrev ? (

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import {
   ArrowLeft, Package, CheckCircle, Wrench, CreditCard, Plane, MapPin,
   ChevronDown, ChevronUp, ChevronRight, AlertCircle, ThumbsUp, ThumbsDown, RotateCcw,
-  ExternalLink, Clock, Download,
+  ExternalLink, Clock, Download, Camera,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
@@ -393,6 +393,15 @@ export default function ClientDetailView() {
             <div className="flex items-center gap-2 text-xs text-gray-600 bg-gray-50 rounded-xl px-3 py-2">
               <Package size={13} />
               <span>Casier : <span className="font-black">{sel.casier}</span></span>
+            </div>
+          )}
+          {sel.photoPrep && (
+            <div className="rounded-xl overflow-hidden border border-gray-200">
+              <img src={sel.photoPrep} alt="Photo de votre colis préparé" className="w-full h-auto" />
+              <div className="px-3 py-2 bg-gray-50 text-[10px] text-gray-500 flex items-center gap-1.5">
+                <Camera size={11} />
+                Photo de votre colis préparé par notre équipe
+              </div>
             </div>
           )}
         </div>
