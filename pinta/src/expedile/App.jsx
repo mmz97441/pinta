@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, useNavigate, useParams, useLocation, Navigate } from 'react-router-dom';
-import { Settings, Users, LogOut, LayoutDashboard, Package, ChevronLeft, ChevronRight, Plus, FileText, Key } from 'lucide-react';
+import { Settings, Users, LogOut, LayoutDashboard, Package, ChevronLeft, ChevronRight, Plus, FileText, Key, AlertTriangle } from 'lucide-react';
 import './brand.css';
 
 import { AppProvider, useApp } from './context/AppContext';
@@ -310,8 +310,8 @@ function AppContent() {
         <div className="flex-1 flex flex-col min-w-0 bg-gray-50">
           {/* Offline banner */}
           {!sbReady && (
-            <div className="bg-red-600 text-white text-center text-xs font-bold py-1.5 px-4">
-              ⚠️ Mode hors-ligne — Supabase inaccessible.
+            <div className="bg-red-600 text-white text-center text-xs font-bold py-1.5 px-4 inline-flex items-center justify-center gap-1.5">
+              <AlertTriangle size={12} />Mode hors-ligne — Supabase inaccessible.
             </div>
           )}
 
@@ -361,8 +361,8 @@ function AppContent() {
 
       {/* ── Bandeau mode mock ── */}
       {!sbReady && (
-        <div className="bg-red-600 text-white text-center text-xs font-bold py-1.5 px-4">
-          ⚠️ Mode hors-ligne — Supabase inaccessible. Les données affichées sont des données de démonstration.
+        <div className="bg-red-600 text-white text-center text-xs font-bold py-1.5 px-4 inline-flex items-center justify-center gap-1.5 w-full">
+          <AlertTriangle size={12} />Mode hors-ligne — Supabase inaccessible. Les données affichées sont des données de démonstration.
         </div>
       )}
 

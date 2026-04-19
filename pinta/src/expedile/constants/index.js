@@ -23,7 +23,7 @@ export const STATUTS = {
   dedouanement:       { label: 'En dédouanement',              labelClient: 'En cours de dédouanement',      couleur: 'bg-violet-200 text-violet-800',  phase: 6, actionStaff: 'Confirmer arrivée',              actionClient: null },
   arrive:             { label: 'Arrivé destination',          labelClient: null,                            couleur: 'bg-teal-200 text-teal-800',      phase: 7, actionStaff: 'Lancer la livraison',             actionClient: null },
   livraison:          { label: 'En cours de livraison',       labelClient: null,                            couleur: 'bg-lime-200 text-lime-800',      phase: 8, actionStaff: 'Confirmer livraison',             actionClient: null },
-  livre:              { label: 'Livré ✓',                     labelClient: null,                            couleur: 'bg-green-300 text-green-900',    phase: 8, actionStaff: null,                              actionClient: null },
+  livre:              { label: 'Livré',                       labelClient: null,                            couleur: 'bg-green-300 text-green-900',    phase: 8, actionStaff: null,                              actionClient: null },
   annule:             { label: 'Annulé',                      labelClient: null,                            couleur: 'bg-gray-200 text-gray-500',      phase: 0, actionStaff: null,                              actionClient: null },
 };
 

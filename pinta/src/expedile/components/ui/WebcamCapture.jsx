@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Camera, CameraOff, RotateCcw, Check, X } from 'lucide-react';
+import { Camera, CameraOff, RotateCcw, Check, X, Loader2 } from 'lucide-react';
 import { BRAND } from '../../constants';
 import { supabase } from '../../lib/supabase';
 
@@ -143,7 +143,7 @@ export default function WebcamCapture({ colisId, colisRef, onCapture, existingUr
                 className="p-1.5 rounded-lg bg-green-500 text-white shadow-lg hover:bg-green-600 transition-colors"
                 title="Valider et enregistrer"
               >
-                {uploading ? <span className="animate-spin text-xs">⏳</span> : <Check size={14} />}
+                {uploading ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
               </button>
             )}
             <button

@@ -204,7 +204,7 @@ export default function FacturesPanel() {
     // Persist URL to Supabase factures table
     sb.updateFacture(uploadTargetId, { fichierUrl: publicUrl, fichierNom: file.name }).catch(console.error);
 
-    flash('Fichier joint à la facture ✓');
+    flash({ msg: 'Fichier joint à la facture', type: 'success' });
     setUploadTargetId(null);
     e.target.value = '';
   };

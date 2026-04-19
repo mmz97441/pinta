@@ -369,7 +369,72 @@ reception, facture_manquante, demande_feu_vert, feu_vert_recu, devis_final, rela
 
 ---
 
-## 11. STRUCTURE DES FICHIERS
+## 11. DESIGN SYSTEM (taste-skill)
+
+### EMOJI BAN (UI uniquement)
+- **JAMAIS d'emoji dans le JSX/UI** → utiliser `lucide-react` icons
+- Mapping standard :
+  - ⚠️ → `<AlertTriangle size={11} />`
+  - ✓ → `<Check size={11} />`
+  - ✗ ❌ → `<X size={11} />` ou `<XCircle size={11} />`
+  - ✅ → `<CheckCircle size={11} />`
+  - 📦 → `<Package size={11} />`
+  - 🚀 → `<Rocket size={11} />`
+  - 👑 → `<Crown size={11} />`
+  - ✈️ → `<Plane size={11} />`
+  - 🚚 → `<Truck size={11} />`
+  - 🛃 → `<Shield size={11} />`
+  - 📊 → `<BarChart3 size={11} />`
+  - ⏳ → `<Loader2 size={11} className="animate-spin" />`
+- **EXCEPTION : à GARDER** → emojis dans :
+  - Templates de messages Telegram/email envoyés au client (humanisation)
+  - Drapeaux DOM-TOM 🇷🇪🇾🇹🇬🇵🇲🇶 (data DESTINATIONS)
+  - `getStatutLabel` côté client (contenu rassurant)
+
+### CARD REDUCTION
+- **Pas de `.card`** générique pour grouper des données
+- Préférer `border-t`, `divide-y border-slate-100`, négatif space
+- Cards uniquement quand l'élévation est fonctionnellement nécessaire (modal, popup)
+
+### FORM PATTERN
+```jsx
+<label class="text-[11px] font-bold uppercase tracking-wider text-gray-600">
+  Nom du champ
+</label>
+<input class="w-full px-3 py-2 rounded-xl border-2 border-gray-200 focus:border-blue-400" />
+<p class="text-[10px] text-gray-500 mt-0.5">Helper text optionnel</p>
+{error && <p class="text-red-500 text-[11px] mt-1">{error}</p>}
+```
+
+### MOBILE / RESPONSIVE
+- **JAMAIS `h-screen`** → toujours `min-h-[100dvh]` (iOS Safari fix)
+- Layouts asymétriques (variance > 4) → forcer single-column en mobile (`md:` breakpoint)
+- Touch targets minimum 44px
+
+### TACTILE FEEDBACK
+- Boutons avec `active:scale-[0.98]` ou `active:translate-y-[1px]`
+- Hover : `hover:translate-y-[-1px]` sur CTA primaires
+- Transitions : `transition-all duration-200 ease-out` (jamais linear)
+
+### COULEURS
+- **Pas de Lila/violet pour primary** (cliché AI)
+- Accent unique : BRAND.navy ou BRAND.gold
+- Pas de pure black (`#000000`) → `text-zinc-950` ou `BRAND.navy`
+- Saturation < 80% pour les accents
+
+### TYPOGRAPHIE
+- Hiérarchie via **weight + color**, pas juste taille
+- Labels uppercase tracking-wider pour distinguer sections
+- `font-mono` réservé aux nombres et codes (pas aux labels)
+
+### LOADING / EMPTY / ERROR (mandatory)
+- Loading : skeleton animé qui matche le layout, pas de spinner générique seul
+- Empty state : illustratif avec CTA pour populer
+- Error : inline rouge sous le champ, pas en alert/toast pour validation form
+
+---
+
+## 12. STRUCTURE DES FICHIERS
 
 ```
 src/expedile/

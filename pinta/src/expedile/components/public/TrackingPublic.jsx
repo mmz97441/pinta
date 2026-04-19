@@ -39,7 +39,7 @@ function getStatutLabel(statut) {
     dedouanement: 'En cours de dédouanement 🛃',
     arrive: 'Arrivé au dépôt local 📦',
     livraison: 'En cours de livraison 🚚',
-    livre: 'Livré ✓',
+    livre: 'Livré',
   };
   return map[statut] || statut;
 }

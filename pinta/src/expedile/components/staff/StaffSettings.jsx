@@ -512,12 +512,12 @@ export default function StaffSettings() {
                               }}
                               className="px-2 py-1 rounded-lg border text-xs"
                             >
-                              <option value="planifie">○ Planifié</option>
-                              <option value="prochain">● Prochain</option>
-                              <option value="en_cours">● En cours</option>
-                              <option value="parti">✈ Parti</option>
-                              <option value="arrive">✓ Arrivé</option>
-                              <option value="archive">📦 Archiver</option>
+                              <option value="planifie">Planifié</option>
+                              <option value="prochain">Prochain</option>
+                              <option value="en_cours">En cours</option>
+                              <option value="parti">Parti</option>
+                              <option value="arrive">Arrivé</option>
+                              <option value="archive">Archiver</option>
                             </select>
 
                             {/* Individual delete */}

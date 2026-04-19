@@ -77,7 +77,7 @@ export default function LoginPage() {
 
   return (
     <div
-      className="min-h-screen flex flex-col items-center justify-center px-4 py-10"
+      className="min-h-[100dvh] flex flex-col items-center justify-center px-4 py-10"
       style={{ background: `linear-gradient(160deg, ${BRAND.navy} 0%, ${BRAND.navyD} 100%)` }}
     >
       {/* Logo */}

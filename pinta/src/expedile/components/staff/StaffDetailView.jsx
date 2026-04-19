@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Ruler, Check, Clock, Camera, AlertTriangle, AlertCircle, Eye, X, RotateCcw, Send, Mail, Plus, Archive,
+  Ruler, Check, Clock, Camera, AlertTriangle, AlertCircle, Eye, X, RotateCcw, Send, Mail, Plus, Archive, Package,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { BRAND, STATUTS, TRANSITIONS, PRODUITS_INTERDITS, TAGS_PREPARATION, getDestByCP } from '../../constants';
@@ -1326,7 +1326,7 @@ export default function StaffDetailView() {
               <Section title="Brouillon du devis — vérifiez avant envoi" icon={Eye} color="#2563EB">
                 <div className="space-y-3">
                   <div className="p-2 rounded-lg bg-amber-50 border border-amber-200">
-                    <p className="text-[10px] font-bold text-amber-700">⚠️ Vérifiez les montants ci-dessous avant d'envoyer au client.</p>
+                    <p className="text-[10px] font-bold text-amber-700 inline-flex items-center gap-1.5"><AlertTriangle size={11} />Vérifiez les montants ci-dessous avant d'envoyer au client.</p>
                   </div>
                   <div className="p-3 rounded-xl bg-blue-50 border border-blue-200 space-y-0.5 text-sm">
                     <Ligne label="Transport" value={eur(sel.devisTransport || devisCalc.tr)} />
@@ -1364,7 +1364,7 @@ export default function StaffDetailView() {
                           {entries.map(([catLabel, v]) => (
                             <div key={catLabel}>
                               <div className="flex justify-between">
-                                <span className="text-xs text-gray-700">📦 {catLabel}</span>
+                                <span className="text-xs text-gray-700 inline-flex items-center gap-1.5"><Package size={11} />{catLabel}</span>
                                 <span className="text-xs font-semibold">{eur(v.om + v.omr)}</span>
                               </div>
                               <p className="text-[9px] text-gray-400 ml-5">Octroi de Mer {v.tauxOM}% + Octroi de Mer Régional {v.tauxOMR}%</p>

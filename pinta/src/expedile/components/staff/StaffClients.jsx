@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { ArrowLeft, Users, Plus, Search, ChevronDown, Check, X, AlertTriangle, ExternalLink, Send, Download, FileSpreadsheet, Upload, Loader2 } from 'lucide-react';
+import { ArrowLeft, Users, Plus, Search, ChevronDown, Check, X, AlertTriangle, ExternalLink, Send, Download, FileSpreadsheet, Upload, Loader2, Crown } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { BRAND, ABONNEMENTS, getDestByCP } from '../../constants';
 import { uid, telegramLink, searchClients, eur } from '../../utils';
@@ -1092,9 +1092,9 @@ export default function StaffClients() {
                       {cl.nom || <span className="italic text-gray-400">Sans nom</span>}
                     </span>
                     {cl.abonnement === 'vip' ? (
-                      <span className="text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider"
+                      <span className="inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider"
                         style={{ background: 'linear-gradient(135deg, #F59E0B, #D97706)', color: 'white' }}>
-                        👑 VIP
+                        <Crown size={10} strokeWidth={2.5} /> VIP
                       </span>
                     ) : cl.type === 'pro' ? (
                       <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full uppercase"

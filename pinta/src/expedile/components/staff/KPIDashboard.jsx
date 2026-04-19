@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   AlertTriangle, TrendingUp, TrendingDown, Package, Target, ShoppingCart, Plane,
   Users, FileText, Clock, CheckCircle, CreditCard, Crown, Zap, UserPlus, Send,
+  Rocket, Sparkles, XCircle, Calendar,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { BRAND, DESTINATIONS, ABONNEMENTS, getDestByCP } from '../../constants';
@@ -307,7 +308,9 @@ export default function KPIDashboard() {
           </div>
           {colisSansEnvoi > 0 && (
             <div className="mt-3 pt-3 border-t border-white/20 flex items-center justify-between text-xs">
-              <span className="opacity-90">⚠️ {colisSansEnvoi} colis payés sans envoi affecté</span>
+              <span className="opacity-90 inline-flex items-center gap-1.5">
+                <AlertTriangle size={12} />{colisSansEnvoi} colis payés sans envoi affecté
+              </span>
               <button onClick={() => navigate('/colis?tab=expedition')} className="font-bold hover:underline">Affecter →</button>
             </div>
           )}
@@ -363,27 +366,27 @@ export default function KPIDashboard() {
             <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Abonnements</p>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
-            <SubStatCard label="VIP" count={abonnementStats.vip} color="#D97706" icon="👑" onClick={() => navigate('/clients')} />
-            <SubStatCard label="Premium annuel" count={abonnementStats.premiumAn} color="#2563EB" icon="🚀" onClick={() => navigate('/clients')} />
-            <SubStatCard label="Premium mensuel" count={abonnementStats.premiumMois} color="#7C3AED" icon="🚀" onClick={() => navigate('/clients')} />
-            <SubStatCard label="Freemium" count={abonnementStats.freemium} color="#64748B" icon="🆓" onClick={() => navigate('/clients')} />
-            <SubStatCard label="À convertir (≥3 colis)" count={abonnementStats.aConvertir.length} color="#16A34A" icon="💎" onClick={() => navigate('/clients')} />
+            <SubStatCard label="VIP" count={abonnementStats.vip} color="#D97706" Icon={Crown} onClick={() => navigate('/clients')} />
+            <SubStatCard label="Premium annuel" count={abonnementStats.premiumAn} color="#2563EB" Icon={Rocket} onClick={() => navigate('/clients')} />
+            <SubStatCard label="Premium mensuel" count={abonnementStats.premiumMois} color="#7C3AED" Icon={Zap} onClick={() => navigate('/clients')} />
+            <SubStatCard label="Freemium" count={abonnementStats.freemium} color="#64748B" Icon={Users} onClick={() => navigate('/clients')} />
+            <SubStatCard label="À convertir (≥3 colis)" count={abonnementStats.aConvertir.length} color="#16A34A" Icon={Sparkles} onClick={() => navigate('/clients')} />
           </div>
           {(abonnementStats.expired.length > 0 || abonnementStats.expiring30.length > 0) && (
             <div className="flex gap-2 mt-3 pt-3 border-t border-gray-100 text-[11px]">
               {abonnementStats.expired.length > 0 && (
-                <button onClick={() => navigate('/clients')} className="px-2 py-1 rounded-lg bg-red-50 text-red-700 font-bold hover:bg-red-100">
-                  ❌ {abonnementStats.expired.length} expiré{abonnementStats.expired.length > 1 ? 's' : ''}
+                <button onClick={() => navigate('/clients')} className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-red-50 text-red-700 font-bold hover:bg-red-100">
+                  <XCircle size={11} />{abonnementStats.expired.length} expiré{abonnementStats.expired.length > 1 ? 's' : ''}
                 </button>
               )}
               {abonnementStats.expiring7.length > 0 && (
-                <button onClick={() => navigate('/clients')} className="px-2 py-1 rounded-lg bg-amber-50 text-amber-700 font-bold hover:bg-amber-100">
-                  ⚠️ {abonnementStats.expiring7.length} expire &lt; 7j
+                <button onClick={() => navigate('/clients')} className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-amber-50 text-amber-700 font-bold hover:bg-amber-100">
+                  <AlertTriangle size={11} />{abonnementStats.expiring7.length} expire &lt; 7j
                 </button>
               )}
               {abonnementStats.expiring30.length > 0 && (
-                <button onClick={() => navigate('/clients')} className="px-2 py-1 rounded-lg bg-blue-50 text-blue-700 font-bold hover:bg-blue-100">
-                  🗓 {abonnementStats.expiring30.length} expire &lt; 30j
+                <button onClick={() => navigate('/clients')} className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-blue-50 text-blue-700 font-bold hover:bg-blue-100">
+                  <Calendar size={11} />{abonnementStats.expiring30.length} expire &lt; 30j
                 </button>
               )}
             </div>
@@ -522,14 +525,14 @@ function AlertCard({ icon: Icon, label, count, color, action, onClick }) {
   );
 }
 
-function SubStatCard({ label, count, color, icon, onClick }) {
+function SubStatCard({ label, count, color, Icon, onClick }) {
   return (
     <button
       onClick={onClick}
       className="rounded-xl border border-gray-100 p-3 text-left hover:shadow-sm hover:border-gray-200 transition-all active:scale-[0.98]"
     >
       <div className="flex items-center gap-1.5 mb-1">
-        <span className="text-sm">{icon}</span>
+        {Icon && <Icon size={12} style={{ color }} strokeWidth={2.25} />}
         <span className="text-[10px] font-semibold text-gray-500 truncate">{label}</span>
       </div>
       <p className="text-lg font-black" style={{ color }}>{count}</p>
