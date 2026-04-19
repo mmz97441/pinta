@@ -44,7 +44,7 @@ function statutBorderColor(s) {
 // ── Table styles ────────────────────────────────────────────────────────────
 const TH = 'px-2 py-2 text-[9px] font-bold uppercase tracking-wider text-gray-500 whitespace-nowrap';
 const TD = 'px-2 py-2 text-[11px] whitespace-nowrap';
-const DASH = <span className="text-gray-300">—</span>;
+const DASH = null; // Cellule vide au lieu d'un tiret gris (moins de bruit visuel)
 
 // ── Column definitions ──────────────────────────────────────────────────────
 const ALL_COLUMNS = [
@@ -112,32 +112,37 @@ function loadDefaultSort() {
 // ── Table header row ────────────────────────────────────────────────────────
 function ColisTableHead({ visibleCols, onSelectAll, allSelected, onSort, sortCol, sortDir }) {
   const indicator = (col) => onSort ? (sortCol === col ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ' ↕') : '';
+  // Sticky : colonnes du tableau restent visibles au scroll (au-dessus des lignes)
+  const stickyBg = 'bg-[#F5F7F9]'; // ≈ BRAND.navy + 06% sur blanc
+  const thCls = (extra = '') => `${TH} ${stickyBg} sticky top-0 z-[5] ${extra}`;
 
   return (
-    <tr className="border-b border-gray-200" style={{ background: `${BRAND.navy}06` }}>
-      <th className="px-2 py-2 w-8">
+    <tr className="border-b border-gray-200">
+      <th className={`px-2 py-2 w-8 ${stickyBg} sticky top-0 z-[5]`}>
         <input type="checkbox" checked={allSelected} onChange={onSelectAll}
           className="w-3.5 h-3.5 rounded accent-blue-500 cursor-pointer" />
       </th>
       {ALL_COLUMNS.filter((col) => visibleCols.has(col.key)).map((col) => {
-        const align = col.align === 'right' ? ' text-right' : '';
+        const align = col.align === 'right' ? 'text-right' : '';
         if (col.sortable && onSort) {
           return (
             <th key={col.key} onClick={() => onSort(col.key === 'volCm3' ? 'dims' : col.key)}
-              className={`${TH}${align} cursor-pointer hover:text-gray-700 select-none`}>
+              className={`${thCls(align)} cursor-pointer hover:text-gray-700 select-none`}>
               {col.label}{indicator(col.key === 'volCm3' ? 'dims' : col.key)}
             </th>
           );
         }
-        return <th key={col.key} className={`${TH}${align}`}>{col.label}</th>;
+        return <th key={col.key} className={thCls(align)}>{col.label}</th>;
       })}
-      <th className="w-5"></th>
+      <th className={`w-5 ${stickyBg} sticky top-0 z-[5]`}></th>
     </tr>
   );
 }
 
 // ── Table data row ──────────────────────────────────────────────────────────
-function ColisTableRow({ c, client, envois, onClick, isSelected, checked, onCheck, visibleCols }) {
+function ColisTableRow({ c, client, prevClient, envois, onClick, isSelected, checked, onCheck, visibleCols }) {
+  const sameClient = prevClient && prevClient.id === client?.id;
+  const dim = sameClient ? 'text-gray-300' : '';
   const dest = client ? getDestByCP(client.cp) : null;
   const hasDims = c.dimL && c.dimW && c.dimH;
   const volCm3 = hasDims ? c.dimL * c.dimW * c.dimH : null;
@@ -171,7 +176,9 @@ function ColisTableRow({ c, client, envois, onClick, isSelected, checked, onChec
     ),
     statut: () => <Badge statut={c.statut} />,
     paiement: () => isPaid ? <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-green-100 text-green-700">Payé</span> : c.devisTotal ? <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">En attente</span> : DASH,
-    client: () => (
+    client: () => sameClient ? (
+      <span className="text-gray-300 text-[10px] italic">↑ idem</span>
+    ) : (
       <>
         <span className="text-gray-700 font-medium">{`${prenom} ${nom}`.trim()}</span>
         {dest && <span className="ml-1">{dest.flag}</span>}
@@ -180,10 +187,10 @@ function ColisTableRow({ c, client, envois, onClick, isSelected, checked, onChec
         {client?.type === 'pro' && client?.abonnement !== 'vip' && <span className="ml-1 text-[8px] font-black px-1 py-0.5 rounded" style={{ background: `${BRAND.gold}30`, color: BRAND.goldD }}>PRO</span>}
       </>
     ),
-    prenom: () => <span className="text-gray-500">{prenom || '—'}</span>,
-    email: () => <span className="text-gray-500 text-[10px]">{client?.email || '—'}</span>,
-    tel: () => <span className="text-gray-500 text-[10px] font-mono">{client?.tel || '—'}</span>,
-    forfait: () => <span className="text-[9px] font-semibold">{abo}</span>,
+    prenom: () => sameClient ? null : <span className="text-gray-500">{prenom || ''}</span>,
+    email: () => sameClient ? null : <span className="text-gray-500 text-[10px]">{client?.email || ''}</span>,
+    tel: () => sameClient ? null : <span className="text-gray-500 text-[10px] font-mono">{client?.tel || ''}</span>,
+    forfait: () => sameClient ? null : <span className="text-[9px] font-semibold">{abo === '—' ? '' : abo}</span>,
     intitule: () => <span className="text-gray-600 truncate block max-w-[120px]">{c.desc || '—'}</span>,
     volCm3: () => volCm3 ? <span className="text-gray-500 font-mono text-[10px]">{volCm3.toLocaleString()}</span> : DASH,
     volKg: () => volKg ? <span className="text-gray-500 font-mono text-[10px]">{volKg}</span> : DASH,
@@ -192,8 +199,8 @@ function ColisTableRow({ c, client, envois, onClick, isSelected, checked, onChec
     taxes: () => taxes != null ? <span className="text-gray-600">{eur(taxes)}</span> : DASH,
     total: () => c.devisTotal != null ? <span className="font-bold" style={{ color: BRAND.navy }}>{eur(c.devisTotal)}</span> : DASH,
     paye: () => c.paiementMontant ? <span className="font-bold text-green-700">{eur(c.paiementMontant)}</span> : DASH,
-    commune: () => <span className="text-gray-500 text-[10px]">{client?.ville || '—'}</span>,
-    cp: () => <span className="text-gray-500 text-[10px] font-mono">{client?.cp || '—'}</span>,
+    commune: () => sameClient ? null : <span className="text-gray-500 text-[10px]">{client?.ville || ''}</span>,
+    cp: () => sameClient ? null : <span className="text-gray-500 text-[10px] font-mono">{client?.cp || ''}</span>,
   };
 
   return (
@@ -813,11 +820,15 @@ export default function StaffColisPage() {
                       <table className="w-full text-left">
                         <thead><ColisTableHead visibleCols={visibleCols} allSelected={sorted.length > 0 && sorted.every((c) => selectedIds.has(c.id))} onSelectAll={() => { if (sorted.every((c) => selectedIds.has(c.id))) { setSelectedIds(new Set()); } else { setSelectedIds(new Set(sorted.map((c) => c.id))); } }} onSort={handleSort} sortCol={sortCol} sortDir={sortDir} /></thead>
                         <tbody>
-                          {group.colis.map((c) => (
-                            <ColisTableRow key={c.id} c={c} client={getClient(c.clientId)} envois={envois}
-                              onClick={() => openColis(c.id)} isSelected={sel?.id === c.id} visibleCols={visibleCols}
-                              checked={selectedIds.has(c.id)} onCheck={() => setSelectedIds((prev) => { const next = new Set(prev); if (next.has(c.id)) next.delete(c.id); else next.add(c.id); return next; })} />
-                          ))}
+                          {group.colis.map((c, idx) => {
+                            const prevC = idx > 0 ? group.colis[idx - 1] : null;
+                            const prevCl = prevC ? getClient(prevC.clientId) : null;
+                            return (
+                              <ColisTableRow key={c.id} c={c} client={getClient(c.clientId)} prevClient={prevCl} envois={envois}
+                                onClick={() => openColis(c.id)} isSelected={sel?.id === c.id} visibleCols={visibleCols}
+                                checked={selectedIds.has(c.id)} onCheck={() => setSelectedIds((prev) => { const next = new Set(prev); if (next.has(c.id)) next.delete(c.id); else next.add(c.id); return next; })} />
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>
@@ -857,11 +868,15 @@ export default function StaffColisPage() {
                       <table className="w-full text-left">
                         <thead><ColisTableHead visibleCols={visibleCols} allSelected={sorted.length > 0 && sorted.every((c) => selectedIds.has(c.id))} onSelectAll={() => { if (sorted.every((c) => selectedIds.has(c.id))) { setSelectedIds(new Set()); } else { setSelectedIds(new Set(sorted.map((c) => c.id))); } }} onSort={handleSort} sortCol={sortCol} sortDir={sortDir} /></thead>
                         <tbody>
-                          {group.colis.map((c) => (
-                            <ColisTableRow key={c.id} c={c} client={getClient(c.clientId)} envois={envois}
-                              onClick={() => openColis(c.id)} isSelected={sel?.id === c.id} visibleCols={visibleCols}
-                              checked={selectedIds.has(c.id)} onCheck={() => setSelectedIds((prev) => { const next = new Set(prev); if (next.has(c.id)) next.delete(c.id); else next.add(c.id); return next; })} />
-                          ))}
+                          {group.colis.map((c, idx) => {
+                            const prevC = idx > 0 ? group.colis[idx - 1] : null;
+                            const prevCl = prevC ? getClient(prevC.clientId) : null;
+                            return (
+                              <ColisTableRow key={c.id} c={c} client={getClient(c.clientId)} prevClient={prevCl} envois={envois}
+                                onClick={() => openColis(c.id)} isSelected={sel?.id === c.id} visibleCols={visibleCols}
+                                checked={selectedIds.has(c.id)} onCheck={() => setSelectedIds((prev) => { const next = new Set(prev); if (next.has(c.id)) next.delete(c.id); else next.add(c.id); return next; })} />
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>

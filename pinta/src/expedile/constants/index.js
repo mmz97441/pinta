@@ -10,8 +10,8 @@ export const BRAND = {
 
 // ══════════ STATUTS COLIS ══════════
 export const STATUTS = {
-  receptionne:        { label: 'Réceptionné',                 labelClient: null,                            couleur: 'bg-amber-200 text-amber-800',    phase: 1, actionStaff: 'Mesurer ce colis',               actionClient: null },
-  mesure:             { label: 'Mesuré à réception',          labelClient: 'Mesuré',                        couleur: 'bg-yellow-200 text-yellow-800',  phase: 1, actionStaff: 'Demander le feu vert',            actionClient: null },
+  receptionne:        { label: 'Réceptionné',                 labelClient: null,                            couleur: 'bg-orange-100 text-orange-700',  phase: 1, actionStaff: 'Mesurer ce colis',               actionClient: null },
+  mesure:             { label: 'Mesuré à réception',          labelClient: 'Mesuré',                        couleur: 'bg-amber-300 text-amber-900',    phase: 1, actionStaff: 'Demander le feu vert',            actionClient: null },
   attente_feu_vert:   { label: "En attente d'accord client",  labelClient: 'Votre accord est attendu',      couleur: 'bg-orange-200 text-orange-800',  phase: 2, actionStaff: 'En attente du client',            actionClient: 'Donner votre accord' },
   autorise:           { label: 'Autorisation reçue',          labelClient: 'Accord donné',                  couleur: 'bg-green-200 text-green-800',    phase: 2, actionStaff: 'Préparer ce colis',               actionClient: null },
   refuse_client:      { label: 'Refusé par le client',        labelClient: 'Refusé',                        couleur: 'bg-red-200 text-red-700',        phase: 2, actionStaff: 'Traiter le refus',                actionClient: null },
