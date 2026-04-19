@@ -89,6 +89,7 @@ function Field({ label, type = 'text', value, onChange, onBlur, placeholder, min
       <div className="relative flex items-center">
         <input
           type={type}
+          inputMode={type === 'number' ? 'decimal' : undefined}
           value={value}
           onChange={onChange}
           onBlur={onBlur}

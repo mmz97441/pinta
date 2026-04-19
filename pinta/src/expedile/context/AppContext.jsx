@@ -192,7 +192,7 @@ export function AppProvider({ children }) {
   const selDest = useMemo(() => (sel ? getClientDest(sel.clientId, clients) : null), [sel, clients]);
 
   const authRole = auth?.u?.role || (isStaff ? 'preparateur' : 'client');
-  const { can, perms: staffPerms } = usePermissions(auth?.u?.id || auth?.session?.user?.id);
+  const { can, perms: staffPerms } = usePermissions(auth?.u?.id || auth?.session?.user?.id, authRole);
 
   const unreadNotifs = useMemo(() => notifs.filter((n) => !n.lu).length, [notifs]);
 
@@ -545,7 +545,7 @@ export function AppProvider({ children }) {
   }, [data, log, upd, flash]);
 
   const archiverColis = useCallback((id) => {
-    upd(id, { archive: true });
+    upd(id, { archive: true, envoi: null });
     flash('Colis archivé');
   }, [upd, flash]);
 
@@ -627,6 +627,8 @@ export function AppProvider({ children }) {
   const feuVertBulk = useCallback((ids) => {
     let successCount = 0;
     ids.forEach((id) => {
+      const c = data.find((x) => x.id === id);
+      if (c?.archive) return;
       try {
         log(id, 'attente_feu_vert', 'autorise');
         upd(id, { statut: 'autorise', feuVert: 'autorise', feuVertDate: new Date().toISOString() });
@@ -727,6 +729,7 @@ export function AppProvider({ children }) {
   }, [data, clients, tarifs, categories, upd, flash]);
 
   const payer = useCallback((id, mt) => {
+    if (!isStaff) { flash({ msg: 'Seul le staff peut confirmer un paiement', type: 'warning' }); return; }
     log(id, 'devis_envoye', 'paye');
     upd(id, { statut: 'paye', paiementMontant: mt, paiementDate: new Date().toISOString() });
 

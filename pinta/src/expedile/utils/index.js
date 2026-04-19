@@ -2,7 +2,8 @@ import { getDestByCP } from '../constants';
 
 // ══════════ FORMATAGE ══════════
 export function eur(n) {
-  return (n || 0).toFixed(2) + ' €';
+  const v = Number(n);
+  return (isFinite(v) ? v : 0).toFixed(2) + ' €';
 }
 
 export function uid() {

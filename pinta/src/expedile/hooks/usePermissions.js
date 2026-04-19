@@ -6,7 +6,7 @@ import * as sb from '../lib/supabaseData';
  * Usage: const { can, perms, loading } = usePermissions(authUserId);
  * can('perm_colis_receptionner') → true/false
  */
-export function usePermissions(authId) {
+export function usePermissions(authId, authRole) {
   const [perms, setPerms] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -18,7 +18,6 @@ export function usePermissions(authId) {
       if (me?.permissions) {
         setPerms(me.permissions);
       } else {
-        // Fallback: all permissions (no restrictions)
         setPerms(null);
       }
       setLoading(false);
@@ -29,9 +28,11 @@ export function usePermissions(authId) {
   }, [authId]);
 
   const can = useCallback((permKey) => {
-    if (!perms) return true; // No permissions loaded = allow all (backwards compat)
+    // Directeur/vice-directeur = full access even without explicit permissions
+    if (authRole === 'directeur' || authRole === 'vice_directeur') return true;
+    if (!perms) return false;
     return perms[permKey] === true;
-  }, [perms]);
+  }, [perms, authRole]);
 
   return { can, perms, loading, setPerms };
 }

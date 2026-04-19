@@ -140,6 +140,9 @@ function cleanTel(val) {
 
 /** Parse un fichier Excel ou CSV et retourne les clients mappés */
 export async function parseClientFile(file) {
+  if (file.size > 10 * 1024 * 1024) throw new Error('Fichier trop volumineux (max 10 Mo)');
+  const validTypes = ['text/csv', 'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', ''];
+  if (file.type && !validTypes.includes(file.type)) throw new Error('Format non supporté (CSV, XLS, XLSX uniquement)');
   const buffer = await file.arrayBuffer();
   const wb = XLSX.read(buffer, { type: 'array', cellDates: false });
   const sheet = wb.Sheets[wb.SheetNames[0]];
