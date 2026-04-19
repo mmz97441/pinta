@@ -385,7 +385,8 @@ export function DashboardPage() {
           </div>
         )}
 
-        {(authRole === 'directeur' || authRole === 'vice_directeur') && <KPIDashboard />}
+        <KPIDashboard />
+        {/* KPIDashboard gère lui-même la visibilité par rôle */}
       </div>
     </div>
   );
