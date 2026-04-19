@@ -7,6 +7,7 @@ import { uid, telegramLink, searchClients, eur } from '../../utils';
 import { Badge } from '../ui';
 import { exportRecapProExcel } from '../../utils/exportRecapPro';
 import { parseClientFile, detectDuplicates } from '../../utils/importClients';
+import ShareLinkPanel from './ShareLinkPanel';
 
 // ── Empty draft ──────────────────────────────────────────────────────────────
 const emptyDraft = () => ({
@@ -89,7 +90,7 @@ function ValidatedField({ label, value, onChange, placeholder, type = 'text', mo
 export default function StaffClients() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { clients, data, updateClient, addNewClient, deleteClient, flash, sendMsg, can } = useApp();
+  const { clients, data, updateClient, addNewClient, deleteClient, flash, sendMsg, can, ask, auth } = useApp();
 
   const [clPageSearch, setClPageSearch] = useState('');
   const [clEditId, setClEditId] = useState(null);
@@ -1605,6 +1606,16 @@ export default function StaffClients() {
                         </div>
                       )}
                     </div>
+                  )}
+
+                  {/* Lien de suivi partagé — uniquement pour les clients existants */}
+                  {!isNewClient && cl.id && (
+                    <ShareLinkPanel
+                      client={cl}
+                      currentUserId={auth?.u?.id}
+                      flash={flash}
+                      ask={ask}
+                    />
                   )}
 
                   {/* Delete button — only if no colis */}

@@ -666,6 +666,46 @@ export async function deleteEnvoi(id) {
   if (error) throw error;
 }
 
+// ── Share links CRUD ────────────────────────────────────────────────
+
+function generateToken() {
+  // 32 caractères hex non devinables
+  const arr = new Uint8Array(16);
+  crypto.getRandomValues(arr);
+  return Array.from(arr).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+export async function fetchShareLink(clientId) {
+  const { data, error } = await supabase
+    .from('share_links')
+    .select('id, token, created_at, revoked_at, access_count, last_accessed_at')
+    .eq('client_id', clientId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+export async function createShareLink(clientId, createdBy) {
+  const token = generateToken();
+  const { data, error } = await supabase
+    .from('share_links')
+    .insert({ client_id: clientId, token, created_by: createdBy || null })
+    .select('id, token, created_at, revoked_at, access_count, last_accessed_at')
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function revokeShareLink(linkId) {
+  const { error } = await supabase
+    .from('share_links')
+    .update({ revoked_at: new Date().toISOString() })
+    .eq('id', linkId);
+  if (error) throw error;
+}
+
 // ── Categories CRUD ────────────────────────────────────────────────
 
 export async function insertCategorie(label, custom = true) {
