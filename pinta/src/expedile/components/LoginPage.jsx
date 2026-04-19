@@ -76,125 +76,174 @@ export default function LoginPage() {
   };
 
   return (
-    <div
-      className="min-h-[100dvh] flex flex-col items-center justify-center px-4 py-10"
-      style={{ background: `linear-gradient(160deg, ${BRAND.navy} 0%, ${BRAND.navyD} 100%)` }}
-    >
-      {/* Logo */}
-      <div className="mb-6 flex flex-col items-center select-none">
-        <div className="flex items-baseline gap-0 leading-none">
-          <span className="text-5xl font-black text-white" style={{ letterSpacing: '-0.03em' }}>EXPÉD</span>
-          <span className="text-5xl font-black" style={{ color: BRAND.gold, letterSpacing: '-0.03em' }}>ÎLE</span>
+    <div className="min-h-[100dvh] grid grid-cols-1 md:grid-cols-2 bg-white">
+
+      {/* ── COLONNE GAUCHE — Brand visuel (cachée mobile, full desktop) ── */}
+      <div
+        className="hidden md:flex relative flex-col justify-between px-12 py-10 overflow-hidden"
+        style={{ background: `linear-gradient(160deg, ${BRAND.navy} 0%, ${BRAND.navyD} 100%)` }}
+      >
+        {/* Decorative SVG pattern subtle */}
+        <div
+          className="absolute inset-0 opacity-[0.08] pointer-events-none"
+          style={{
+            backgroundImage: `radial-gradient(circle at 20% 30%, ${BRAND.gold} 1px, transparent 1px), radial-gradient(circle at 70% 60%, ${BRAND.gold} 1px, transparent 1px)`,
+            backgroundSize: '80px 80px, 120px 120px',
+          }}
+        />
+
+        {/* Logo en haut */}
+        <div className="relative z-10 select-none">
+          <div className="flex items-baseline gap-0 leading-none">
+            <span className="text-6xl font-black text-white tracking-tighter">EXPÉD</span>
+            <span className="text-6xl font-black tracking-tighter" style={{ color: BRAND.gold }}>ÎLE</span>
+          </div>
+          <p className="mt-3 text-sm font-semibold uppercase" style={{ color: BRAND.gold, letterSpacing: '0.18em' }}>
+            Paris → Réunion · Mayotte · Antilles
+          </p>
         </div>
-        <p className="mt-2 text-sm font-semibold uppercase" style={{ color: BRAND.gold, letterSpacing: '0.18em' }}>
-          Paris → Réunion · Mayotte · Antilles
+
+        {/* Tagline central */}
+        <div className="relative z-10 max-w-md">
+          <h2 className="text-3xl font-black text-white leading-tight tracking-tight">
+            Vos colis, suivis<br />
+            <span style={{ color: BRAND.gold }}>en temps réel.</span>
+          </h2>
+          <p className="mt-4 text-sm text-white/70 leading-relaxed max-w-sm">
+            La plateforme logistique qui automatise la réexpédition de Paris vers
+            les DOM-TOM. Mesure, devis, paiement, livraison — un seul outil.
+          </p>
+        </div>
+
+        {/* Footer */}
+        <p className="relative z-10 text-[11px] text-white/40">
+          © {new Date().getFullYear()} Expedîle · Tous droits réservés
         </p>
       </div>
 
-      {/* Card */}
-      <div
-        className="w-full max-w-sm rounded-2xl p-6"
-        style={{
-          background: 'rgba(255,255,255,0.07)',
-          border: '1px solid rgba(255,255,255,0.12)',
-          boxShadow: '0 8px 40px rgba(0,0,0,0.35)',
-        }}
-      >
-        {mode === 'login' ? (
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div>
-              <label className="text-[11px] font-bold uppercase tracking-wider" style={{ color: BRAND.goldL }}>Email</label>
-              <input
-                type="email" value={email} onChange={(e) => setEmail(e.target.value)}
-                placeholder="direction@delivrex.io"
-                className="w-full mt-1 px-4 py-3 rounded-xl text-sm font-medium outline-none"
-                style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', color: 'white' }}
-                autoComplete="email" autoFocus
-              />
-            </div>
-            <div>
-              <label className="text-[11px] font-bold uppercase tracking-wider" style={{ color: BRAND.goldL }}>Mot de passe</label>
-              <div className="relative mt-1">
+      {/* ── COLONNE DROITE — Formulaire ── */}
+      <div className="flex flex-col items-center justify-center px-6 py-10 md:px-16">
+        {/* Logo mobile only */}
+        <div className="md:hidden mb-8 flex flex-col items-center select-none">
+          <div className="flex items-baseline gap-0 leading-none">
+            <span className="text-4xl font-black tracking-tighter" style={{ color: BRAND.navy }}>EXPÉD</span>
+            <span className="text-4xl font-black tracking-tighter" style={{ color: BRAND.gold }}>ÎLE</span>
+          </div>
+          <p className="mt-2 text-[10px] font-semibold uppercase" style={{ color: BRAND.navy, letterSpacing: '0.18em', opacity: 0.7 }}>
+            Paris → Réunion · Mayotte · Antilles
+          </p>
+        </div>
+
+        <div className="w-full max-w-sm">
+          {mode === 'login' ? (
+            <form onSubmit={handleLogin} className="space-y-5">
+              <div>
+                <h1 className="text-2xl font-black tracking-tight" style={{ color: BRAND.navy }}>
+                  Connexion
+                </h1>
+                <p className="text-sm text-slate-500 mt-1">Accédez à votre espace Expedîle.</p>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[11px] font-bold uppercase tracking-wider text-slate-600">Email</label>
                 <input
-                  type={showPwd ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full px-4 py-3 pr-11 rounded-xl text-sm font-medium outline-none"
-                  style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', color: 'white' }}
-                  autoComplete="current-password"
+                  type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+                  placeholder="direction@delivrex.io"
+                  className="w-full px-4 py-3 rounded-xl text-sm font-medium outline-none border-2 border-slate-200 focus:border-blue-400 transition-colors bg-white"
+                  style={{ color: BRAND.navy }}
+                  autoComplete="email" autoFocus
                 />
-                <button type="button" onClick={() => setShowPwd((p) => !p)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white transition-colors">
-                  {showPwd ? <EyeOff size={18} /> : <Eye size={18} />}
-                </button>
               </div>
-            </div>
 
-            {error && (
-              <div className="flex items-center gap-2 p-2 rounded-lg" style={{ background: 'rgba(239,68,68,0.15)' }}>
-                <AlertCircle size={14} className="text-red-400 flex-shrink-0" />
-                <p className="text-xs text-red-300">{error}</p>
+              <div className="space-y-1">
+                <label className="text-[11px] font-bold uppercase tracking-wider text-slate-600">Mot de passe</label>
+                <div className="relative">
+                  <input
+                    type={showPwd ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full px-4 py-3 pr-11 rounded-xl text-sm font-medium outline-none border-2 border-slate-200 focus:border-blue-400 transition-colors bg-white"
+                    style={{ color: BRAND.navy }}
+                    autoComplete="current-password"
+                  />
+                  <button type="button" onClick={() => setShowPwd((p) => !p)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 transition-colors">
+                    {showPwd ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
               </div>
-            )}
 
-            <button
-              type="submit" disabled={loading}
-              className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold transition-all active:scale-[0.98] disabled:opacity-50"
-              style={{ background: `linear-gradient(135deg, ${BRAND.gold}, ${BRAND.goldD})`, color: BRAND.navyD }}
-            >
-              <LogIn size={16} />
-              {loading ? 'Connexion...' : 'Se connecter'}
-            </button>
+              {error && (
+                <div className="flex items-center gap-2 p-2.5 rounded-lg bg-red-50 border border-red-200">
+                  <AlertCircle size={14} className="text-red-500 flex-shrink-0" />
+                  <p className="text-xs text-red-700">{error}</p>
+                </div>
+              )}
 
-            <button type="button" onClick={() => { setMode('forgot'); setError(''); setSuccess(''); }}
-              className="w-full text-center text-[11px] text-gray-400 hover:text-gray-200 transition-colors">
-              Mot de passe oublié ?
-            </button>
-          </form>
-        ) : (
-          /* Forgot password */
-          <form onSubmit={handleForgotPassword} className="space-y-4">
-            <button type="button" onClick={() => { setMode('login'); setError(''); setSuccess(''); }}
-              className="flex items-center gap-1 text-[11px] text-gray-400 hover:text-white transition-colors mb-2">
-              <ArrowLeft size={12} /> Retour à la connexion
-            </button>
+              <button
+                type="submit" disabled={loading}
+                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold transition-all active:scale-[0.98] hover:translate-y-[-1px] disabled:opacity-50 disabled:translate-y-0"
+                style={{ background: `linear-gradient(135deg, ${BRAND.gold}, ${BRAND.goldD})`, color: BRAND.navyD, boxShadow: `0 4px 14px -4px ${BRAND.gold}80` }}
+              >
+                <LogIn size={16} />
+                {loading ? 'Connexion...' : 'Se connecter'}
+              </button>
 
-            <p className="text-sm text-gray-300">Saisissez votre email. Vous recevrez un lien pour réinitialiser votre mot de passe.</p>
+              <button type="button" onClick={() => { setMode('forgot'); setError(''); setSuccess(''); }}
+                className="w-full text-center text-[12px] text-slate-500 hover:text-slate-800 transition-colors">
+                Mot de passe oublié ?
+              </button>
+            </form>
+          ) : (
+            /* Forgot password */
+            <form onSubmit={handleForgotPassword} className="space-y-5">
+              <button type="button" onClick={() => { setMode('login'); setError(''); setSuccess(''); }}
+                className="flex items-center gap-1 text-[12px] text-slate-500 hover:text-slate-800 transition-colors">
+                <ArrowLeft size={12} /> Retour à la connexion
+              </button>
 
-            <div>
-              <label className="text-[11px] font-bold uppercase tracking-wider" style={{ color: BRAND.goldL }}>Email</label>
-              <input
-                type="email" value={email} onChange={(e) => setEmail(e.target.value)}
-                placeholder="votre@email.com"
-                className="w-full mt-1 px-4 py-3 rounded-xl text-sm font-medium outline-none"
-                style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', color: 'white' }}
-                autoComplete="email" autoFocus
-              />
-            </div>
-
-            {error && (
-              <div className="flex items-center gap-2 p-2 rounded-lg" style={{ background: 'rgba(239,68,68,0.15)' }}>
-                <AlertCircle size={14} className="text-red-400 flex-shrink-0" />
-                <p className="text-xs text-red-300">{error}</p>
+              <div>
+                <h1 className="text-2xl font-black tracking-tight" style={{ color: BRAND.navy }}>
+                  Mot de passe oublié
+                </h1>
+                <p className="text-sm text-slate-500 mt-1">Saisissez votre email, vous recevrez un lien pour réinitialiser votre mot de passe.</p>
               </div>
-            )}
-            {success && (
-              <div className="flex items-center gap-2 p-2 rounded-lg" style={{ background: 'rgba(16,185,129,0.15)' }}>
-                <p className="text-xs text-emerald-300">{success}</p>
-              </div>
-            )}
 
-            <button
-              type="submit" disabled={loading}
-              className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold transition-all active:scale-[0.98] disabled:opacity-50"
-              style={{ background: `linear-gradient(135deg, ${BRAND.gold}, ${BRAND.goldD})`, color: BRAND.navyD }}
-            >
-              {loading ? 'Envoi...' : 'Envoyer le lien de réinitialisation'}
-            </button>
-          </form>
-        )}
+              <div className="space-y-1">
+                <label className="text-[11px] font-bold uppercase tracking-wider text-slate-600">Email</label>
+                <input
+                  type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+                  placeholder="votre@email.com"
+                  className="w-full px-4 py-3 rounded-xl text-sm font-medium outline-none border-2 border-slate-200 focus:border-blue-400 transition-colors bg-white"
+                  style={{ color: BRAND.navy }}
+                  autoComplete="email" autoFocus
+                />
+              </div>
+
+              {error && (
+                <div className="flex items-center gap-2 p-2.5 rounded-lg bg-red-50 border border-red-200">
+                  <AlertCircle size={14} className="text-red-500 flex-shrink-0" />
+                  <p className="text-xs text-red-700">{error}</p>
+                </div>
+              )}
+              {success && (
+                <div className="flex items-center gap-2 p-2.5 rounded-lg bg-emerald-50 border border-emerald-200">
+                  <p className="text-xs text-emerald-700">{success}</p>
+                </div>
+              )}
+
+              <button
+                type="submit" disabled={loading}
+                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold transition-all active:scale-[0.98] hover:translate-y-[-1px] disabled:opacity-50 disabled:translate-y-0"
+                style={{ background: `linear-gradient(135deg, ${BRAND.gold}, ${BRAND.goldD})`, color: BRAND.navyD, boxShadow: `0 4px 14px -4px ${BRAND.gold}80` }}
+              >
+                {loading ? 'Envoi...' : 'Envoyer le lien de réinitialisation'}
+              </button>
+            </form>
+          )}
+
+          <p className="mt-8 text-[11px] text-slate-400 text-center md:hidden">© {new Date().getFullYear()} Expedîle</p>
+        </div>
       </div>
-
-      <p className="mt-6 text-[10px] text-gray-500">Expedîle © 2026</p>
     </div>
   );
 }
