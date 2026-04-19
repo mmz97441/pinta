@@ -561,10 +561,23 @@ export default function StaffColisPage() {
     })).filter((g) => g.colis.length > 0);
   }, [sorted]);
 
-  // Tab counts
+  // Tab counts + urgences (>7j sans mouvement) par phase
   const tabCounts = useMemo(() => {
     const base = data.filter((c) => !c.archive);
     return PIPELINE.reduce((acc, t) => { acc[t.key] = base.filter(t.filter).length; return acc; }, {});
+  }, [data]);
+
+  const tabUrgences = useMemo(() => {
+    const now = Date.now();
+    const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000;
+    const base = data.filter((c) => !c.archive && c.statut !== 'livre' && c.statut !== 'annule');
+    return PIPELINE.reduce((acc, t) => {
+      acc[t.key] = base.filter(t.filter).filter((c) => {
+        const d = c.dateReception ? new Date(c.dateReception).getTime() : (c.createdAt ? new Date(c.createdAt).getTime() : now);
+        return (now - d) > SEVEN_DAYS;
+      }).length;
+      return acc;
+    }, {});
   }, [data]);
 
   const handleSort = (col) => {
@@ -581,31 +594,47 @@ export default function StaffColisPage() {
 
       {/* Top bar: pipeline cards + search */}
       <div className="flex-shrink-0 px-4 pt-3 pb-2 space-y-3 border-b border-gray-100 bg-white">
-        {/* Pipeline cards — clickable filters */}
+        {/* Pipeline cards — clickable filters (taste-skill : tactile feedback, urgence dot, hover lift) */}
         <div className="flex gap-2 overflow-x-auto pb-1">
           {PIPELINE.map((p) => {
             const Icon = p.icon;
             const isActive = activeTab === p.key;
             const count = tabCounts[p.key] || 0;
+            const urgent = tabUrgences[p.key] || 0;
             return (
               <button
                 key={p.key}
                 onClick={() => setActiveTab(p.key)}
-                className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all active:scale-95 ${
-                  isActive ? 'text-white shadow-md' : 'bg-white border border-gray-100 shadow-sm hover:shadow-md'
+                className={`relative inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all duration-200 ease-out active:scale-[0.97] ${
+                  isActive
+                    ? 'text-white shadow-lg'
+                    : 'bg-white border border-slate-200/70 hover:border-slate-300 hover:-translate-y-[1px] hover:shadow-md'
                 }`}
                 style={isActive
-                  ? { background: p.color, boxShadow: `0 2px 8px ${p.color}40` }
+                  ? { background: p.color, boxShadow: `0 4px 14px -4px ${p.color}80` }
                   : { color: p.color }
                 }
               >
-                <Icon size={14} />
-                {p.label}
-                <span className={`font-black text-[11px] px-1.5 py-0.5 rounded-full ${
-                  isActive ? 'bg-white/25' : ''
-                }`} style={!isActive ? { background: `${p.color}12` } : {}}>
+                <Icon size={14} strokeWidth={2.25} />
+                <span>{p.label}</span>
+                <span
+                  className={`font-black text-[11px] px-1.5 py-0.5 rounded-full leading-none transition-colors`}
+                  style={isActive
+                    ? { background: 'rgba(255,255,255,0.22)' }
+                    : { background: `${p.color}14`, color: p.color }
+                  }
+                >
                   {count}
                 </span>
+                {urgent > 0 && (
+                  <span
+                    className="absolute -top-1 -right-1 inline-flex items-center justify-center min-w-[16px] h-[16px] px-1 rounded-full text-[9px] font-black text-white"
+                    style={{ background: '#DC2626', boxShadow: '0 0 0 2px white' }}
+                    title={`${urgent} colis bloqué${urgent > 1 ? 's' : ''} > 7j`}
+                  >
+                    {urgent}
+                  </span>
+                )}
               </button>
             );
           })}
