@@ -41,9 +41,10 @@ export function AppProvider({ children }) {
   // ── Notifications (client) ──
   const [notifs, setNotifs] = useState([]);
 
-  // ── Load data from Supabase on mount ──
+  // ── Load data from Supabase (attend l'auth pour que RLS applique le bon user) ──
   useEffect(() => {
     let cancelled = false;
+
     async function load() {
       try {
         const [colisData, clientsData, envoisData, catsData, tarifsData] = await Promise.all([
@@ -54,29 +55,41 @@ export function AppProvider({ children }) {
           sb.fetchTarifs(),
         ]);
         if (cancelled) return;
-        if (colisData.length > 0 || clientsData.length > 0) {
-          setData(colisData);
-          setClients(clientsData);
-          setEnvois(envoisData);
-          setCategories(catsData);
-          setTarifs(tarifsData);
-          setSbReady(true);
-          console.log('[Supabase] ✅ Données chargées :', colisData.length, 'colis,', clientsData.length, 'clients');
-        } else {
-          // Base vide mais connexion OK
-          setData([]);
-          setClients([]);
-          setEnvois([]);
-          setSbReady(true);
-          console.log('[Supabase] ✅ Connecté — base vide');
-        }
+        setData(colisData);
+        setClients(clientsData);
+        setEnvois(envoisData);
+        setCategories(catsData);
+        setTarifs(tarifsData);
+        setSbReady(true);
+        console.log('[Supabase] ✅ Données chargées :', colisData.length, 'colis,', clientsData.length, 'clients');
       } catch (err) {
-        console.error('[Supabase] ❌ Connexion impossible — FALLBACK MOCK', err.message);
+        console.error('[Supabase] ❌ Connexion impossible', err.message);
         setSbReady(false);
       }
     }
-    load();
-    return () => { cancelled = true; };
+
+    // 1. Charger une première fois (session déjà restaurée au cas où)
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!cancelled) load();
+    });
+
+    // 2. Re-charger à chaque changement d'auth (login / logout / token refresh)
+    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
+      if (cancelled) return;
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        load();
+      } else if (event === 'SIGNED_OUT') {
+        setData([]);
+        setClients([]);
+        setEnvois([]);
+        setSbReady(false);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      sub?.subscription?.unsubscribe();
+    };
   }, []);
 
   // ── Realtime subscriptions ──
