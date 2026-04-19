@@ -1047,8 +1047,20 @@ export default function StaffClients() {
       })()}
 
       {/* ── Cards view ─────────────────────────────────────────────────── */}
-      {clViewMode === 'cards' && <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-        {filtered.map((cl) => {
+      {clViewMode === 'cards' && (
+        <>
+          {/* Backdrop plein écran si un client est en édition */}
+          {clEditId && (
+            <div
+              className="fixed inset-0 z-40 bg-black/50 anim-fade"
+              onClick={handleCancel}
+            />
+          )}
+          <div className={clEditId
+            ? "fixed inset-0 z-50 overflow-y-auto p-4 flex items-start justify-center pointer-events-none"
+            : "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3"
+          }>
+        {filtered.filter((cl) => !clEditId || cl.id === clEditId).map((cl) => {
           const isOpen = clEditId === cl.id;
           const colis = clientColis(cl.id);
           const actifs = clientActifs(cl.id);
@@ -1058,7 +1070,12 @@ export default function StaffClients() {
           const isJustSaved = justSavedId === cl.id;
 
           return (
-            <div key={cl.id} ref={isOpen && isNewClient ? newClientRef : undefined} className="card overflow-hidden">
+            <div key={cl.id} ref={isOpen && isNewClient ? newClientRef : undefined}
+              className={isOpen
+                ? "card overflow-hidden pointer-events-auto w-full max-w-3xl my-4 shadow-2xl animate-in"
+                : "card overflow-hidden"
+              }
+              onClick={(e) => isOpen && e.stopPropagation()}>
 
               {/* ── Collapsed row ─────────────────────────────────────────── */}
               <button
@@ -1604,7 +1621,9 @@ export default function StaffClients() {
             </div>
           );
         })}
-      </div>}
+          </div>
+        </>
+      )}
     </div>
   );
 }
