@@ -292,9 +292,9 @@ export default function ColisModal({ open, onClose }) {
     }
     setData((prev) => [...prev, newColis]);
 
-    // Auto-group casier: ONLY move colis that have NO envoi assigned
-    // A colis with an envoi = its casier is locked, NEVER move it
-    if (nf.casier.trim()) {
+    // Auto-group casier: UNIQUEMENT en mode "rattacher" (ajout d'un carton à un EXP existant)
+    // Créer un nouveau EXP = groupe physique indépendant, casier propre
+    if (mode === 'rattacher' && nf.casier.trim()) {
       const newCasier = nf.casier.trim();
       data.forEach((c) => {
         if (c.clientId === clientId && c.id !== newColis.id
