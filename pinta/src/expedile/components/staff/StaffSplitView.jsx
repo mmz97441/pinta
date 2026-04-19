@@ -91,6 +91,24 @@ function priorityScore(c, client) {
   return score;
 }
 
+// ── Default sort options ────────────────────────────────────────────────────
+const SORT_OPTIONS = [
+  { key: 'priority', label: 'Priorité (urgent → VIP → Pro → ancien)' },
+  { key: 'date_desc', label: 'Plus récent d\'abord' },
+  { key: 'date_asc', label: 'Plus ancien d\'abord (FIFO)' },
+  { key: 'total_desc', label: 'Montant décroissant' },
+  { key: 'total_asc', label: 'Montant croissant' },
+  { key: 'ref_asc', label: 'Référence (A → Z)' },
+];
+const LS_SORT_KEY = 'expedile_default_sort';
+function loadDefaultSort() {
+  try {
+    const saved = localStorage.getItem(LS_SORT_KEY);
+    if (saved && SORT_OPTIONS.some((o) => o.key === saved)) return saved;
+  } catch {}
+  return 'priority';
+}
+
 // ── Table header row ────────────────────────────────────────────────────────
 function ColisTableHead({ visibleCols, onSelectAll, allSelected, onSort, sortCol, sortDir }) {
   const indicator = (col) => onSort ? (sortCol === col ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ' ↕') : '';
@@ -366,6 +384,8 @@ export default function StaffColisPage() {
   const [viewMode, setViewMode] = useState('statut');
   const [visibleCols, setVisibleCols] = useState(loadVisibleCols);
   const [showColPicker, setShowColPicker] = useState(false);
+  const [defaultSort, setDefaultSort] = useState(loadDefaultSort);
+  const [showSortPicker, setShowSortPicker] = useState(false);
 
   const toggleCol = useCallback((key) => {
     setVisibleCols((prev) => {
@@ -374,6 +394,12 @@ export default function StaffColisPage() {
       localStorage.setItem(LS_COLS_KEY, JSON.stringify([...next]));
       return next;
     });
+  }, []);
+
+  const changeDefaultSort = useCallback((key) => {
+    setDefaultSort(key);
+    localStorage.setItem(LS_SORT_KEY, key);
+    setShowSortPicker(false);
   }, []);
   const [showFactures, setShowFactures] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
@@ -417,13 +443,31 @@ export default function StaffColisPage() {
   // Sort
   const sorted = useMemo(() => {
     if (!sortCol) {
-      // Default: priority sort (urgent > VIP/Pro > FIFO)
       const arr = [...searched];
-      arr.sort((a, b) => {
-        const clA = getClient(a.clientId);
-        const clB = getClient(b.clientId);
-        return priorityScore(b, clB) - priorityScore(a, clA);
-      });
+      switch (defaultSort) {
+        case 'priority':
+          arr.sort((a, b) => {
+            const clA = getClient(a.clientId);
+            const clB = getClient(b.clientId);
+            return priorityScore(b, clB) - priorityScore(a, clA);
+          });
+          break;
+        case 'date_desc':
+          arr.sort((a, b) => (b.dateReception || b.createdAt || '').localeCompare(a.dateReception || a.createdAt || ''));
+          break;
+        case 'date_asc':
+          arr.sort((a, b) => (a.dateReception || a.createdAt || '').localeCompare(b.dateReception || b.createdAt || ''));
+          break;
+        case 'total_desc':
+          arr.sort((a, b) => (b.devisTotal || 0) - (a.devisTotal || 0));
+          break;
+        case 'total_asc':
+          arr.sort((a, b) => (a.devisTotal || 0) - (b.devisTotal || 0));
+          break;
+        case 'ref_asc':
+          arr.sort((a, b) => (a.ref || '').localeCompare(b.ref || '', 'fr', { numeric: true }));
+          break;
+      }
       return arr;
     }
     const arr = [...searched];
@@ -443,7 +487,7 @@ export default function StaffColisPage() {
       }
     });
     return arr;
-  }, [searched, sortCol, sortDir, getClient]);
+  }, [searched, sortCol, sortDir, getClient, defaultSort]);
 
   // Grouped by envoi (for envoi view)
   const groupedByEnvoi = useMemo(() => {
@@ -586,6 +630,36 @@ export default function StaffColisPage() {
             >
               Par envoi
             </button>
+          </div>
+
+          {/* Default sort picker */}
+          <div className="relative">
+            <button
+              onClick={() => setShowSortPicker((p) => !p)}
+              className={`flex items-center gap-1 px-2 py-1.5 rounded-lg text-[10px] font-bold transition-colors ${showSortPicker ? 'bg-blue-100 text-blue-600' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'}`}
+              title="Tri par défaut"
+            >
+              <span>Tri : {SORT_OPTIONS.find((o) => o.key === defaultSort)?.label.split(' ')[0] || 'Priorité'}</span>
+              <ChevronRight size={12} className={`transition-transform ${showSortPicker ? 'rotate-90' : ''}`} />
+            </button>
+            {showSortPicker && (
+              <>
+                <div className="fixed inset-0 z-30" onClick={() => setShowSortPicker(false)} />
+                <div className="absolute right-0 top-full mt-1 z-40 bg-white rounded-xl shadow-2xl border border-gray-200 p-2 w-72">
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider px-2 py-1">Tri par défaut</p>
+                  {SORT_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.key}
+                      onClick={() => changeDefaultSort(opt.key)}
+                      className={`w-full text-left px-2 py-2 rounded-lg text-xs transition-colors ${defaultSort === opt.key ? 'bg-blue-50 text-blue-700 font-bold' : 'text-gray-700 hover:bg-gray-50'}`}
+                    >
+                      {defaultSort === opt.key && '✓ '}{opt.label}
+                    </button>
+                  ))}
+                  <p className="text-[9px] text-gray-400 px-2 pt-2 border-t mt-1">Cliquer sur une colonne triable reste prioritaire.</p>
+                </div>
+              </>
+            )}
           </div>
 
           {/* Column picker */}
