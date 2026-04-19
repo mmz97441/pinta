@@ -223,6 +223,29 @@ function ColisTableRow({ c, client, prevClient, envois, onClick, isSelected, che
   );
 }
 
+// ── Group header row (colspan toute la largeur) ─────────────────────────────
+function GroupHeaderRow({ icon: Icon, color, label, extraLabel, count, allChecked, onToggleAll, colspan, bgTint }) {
+  return (
+    <tr className="border-b border-gray-200" style={{ background: bgTint || `${color}08` }}>
+      <td colSpan={colspan} className="px-3 py-2">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <input type="checkbox"
+              checked={allChecked}
+              onChange={(e) => { e.stopPropagation(); onToggleAll(); }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-3.5 h-3.5 rounded accent-blue-500 cursor-pointer" />
+            {Icon && <Icon size={13} style={{ color }} />}
+            <span className="text-xs font-bold" style={{ color }}>{label}</span>
+            {extraLabel && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">{extraLabel}</span>}
+          </div>
+          <span className="text-[10px] font-bold text-gray-400">{count} colis</span>
+        </div>
+      </td>
+    </tr>
+  );
+}
+
 // ════════════════════════════════════════════════════════════════════════════
 // DETAIL SLIDE-OVER
 // ════════════════════════════════════════════════════════════════════════════
@@ -784,107 +807,103 @@ export default function StaffColisPage() {
         {/* Table (scrollable) */}
         <div className={`overflow-y-auto overflow-x-auto ${sel ? 'flex-1 min-w-0' : 'flex-1'}`}>
 
-          {viewMode === 'envoi' ? (
-            /* ── VUE PAR ENVOI ── */
-            <div className="space-y-3 p-2">
-              {groupedByEnvoi.length === 0 ? (
-                <p className="text-center text-sm text-gray-400 py-8">Aucun colis</p>
-              ) : groupedByEnvoi.map((group) => {
-                const e = group.envoi;
-                const dateLabel = e?.date
-                  ? new Date(e.date + 'T00:00:00').toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })
-                  : 'Sans envoi affecté';
-                return (
-                  <div key={e?.id || 'none'} className="rounded-xl border border-gray-100 overflow-hidden bg-white">
-                    <div className="px-3 py-2 border-b border-gray-200 flex items-center justify-between" style={{ background: `${BRAND.navy}06` }}>
-                      <div className="flex items-center gap-2">
-                        <input type="checkbox"
-                          checked={group.colis.every((c) => selectedIds.has(c.id))}
-                          onChange={() => {
-                            const ids = group.colis.map((c) => c.id);
-                            setSelectedIds((prev) => {
-                              const next = new Set(prev);
-                              if (ids.every((id) => next.has(id))) { ids.forEach((id) => next.delete(id)); }
-                              else { ids.forEach((id) => next.add(id)); }
-                              return next;
-                            });
-                          }}
-                          className="w-3.5 h-3.5 rounded accent-blue-500 cursor-pointer" />
-                        <Plane size={13} style={{ color: BRAND.navy }} />
-                        <span className="text-xs font-bold" style={{ color: BRAND.navy }}>{dateLabel}</span>
-                        {e?.ref && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">{e.ref}</span>}
-                      </div>
-                      <span className="text-[10px] font-bold text-gray-400">{group.colis.length} colis</span>
-                    </div>
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left">
-                        <thead><ColisTableHead visibleCols={visibleCols} allSelected={sorted.length > 0 && sorted.every((c) => selectedIds.has(c.id))} onSelectAll={() => { if (sorted.every((c) => selectedIds.has(c.id))) { setSelectedIds(new Set()); } else { setSelectedIds(new Set(sorted.map((c) => c.id))); } }} onSort={handleSort} sortCol={sortCol} sortDir={sortDir} /></thead>
-                        <tbody>
-                          {group.colis.map((c, idx) => {
-                            const prevC = idx > 0 ? group.colis[idx - 1] : null;
-                            const prevCl = prevC ? getClient(prevC.clientId) : null;
-                            return (
-                              <ColisTableRow key={c.id} c={c} client={getClient(c.clientId)} prevClient={prevCl} envois={envois}
-                                onClick={() => openColis(c.id)} isSelected={sel?.id === c.id} visibleCols={visibleCols}
-                                checked={selectedIds.has(c.id)} onCheck={() => setSelectedIds((prev) => { const next = new Set(prev); if (next.has(c.id)) next.delete(c.id); else next.add(c.id); return next; })} />
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            /* ── VUE PAR STATUT (groupé par phase) ── */
-            <div className="space-y-3 p-2">
-              {groupedByStatut.length === 0 ? (
-                <p className="text-center text-sm text-gray-400 py-8">Aucun colis</p>
-              ) : groupedByStatut.map((group) => {
-                const Icon = group.icon;
-                return (
-                  <div key={group.label} className="rounded-xl border border-gray-100 overflow-hidden bg-white">
-                    <div className="px-3 py-2 border-b border-gray-200 flex items-center justify-between" style={{ background: `${group.color}08` }}>
-                      <div className="flex items-center gap-2">
-                        <input type="checkbox"
-                          checked={group.colis.every((c) => selectedIds.has(c.id))}
-                          onChange={() => {
-                            const ids = group.colis.map((c) => c.id);
-                            setSelectedIds((prev) => {
-                              const next = new Set(prev);
-                              if (ids.every((id) => next.has(id))) { ids.forEach((id) => next.delete(id)); }
-                              else { ids.forEach((id) => next.add(id)); }
-                              return next;
-                            });
-                          }}
-                          className="w-3.5 h-3.5 rounded accent-blue-500 cursor-pointer" />
-                        <Icon size={13} style={{ color: group.color }} />
-                        <span className="text-xs font-bold" style={{ color: group.color }}>{group.label}</span>
-                      </div>
-                      <span className="text-[10px] font-bold text-gray-400">{group.colis.length} colis</span>
-                    </div>
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left">
-                        <thead><ColisTableHead visibleCols={visibleCols} allSelected={sorted.length > 0 && sorted.every((c) => selectedIds.has(c.id))} onSelectAll={() => { if (sorted.every((c) => selectedIds.has(c.id))) { setSelectedIds(new Set()); } else { setSelectedIds(new Set(sorted.map((c) => c.id))); } }} onSort={handleSort} sortCol={sortCol} sortDir={sortDir} /></thead>
-                        <tbody>
-                          {group.colis.map((c, idx) => {
-                            const prevC = idx > 0 ? group.colis[idx - 1] : null;
-                            const prevCl = prevC ? getClient(prevC.clientId) : null;
-                            return (
-                              <ColisTableRow key={c.id} c={c} client={getClient(c.clientId)} prevClient={prevCl} envois={envois}
-                                onClick={() => openColis(c.id)} isSelected={sel?.id === c.id} visibleCols={visibleCols}
-                                checked={selectedIds.has(c.id)} onCheck={() => setSelectedIds((prev) => { const next = new Set(prev); if (next.has(c.id)) next.delete(c.id); else next.add(c.id); return next; })} />
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+          {(() => {
+            const groups = viewMode === 'envoi' ? groupedByEnvoi : groupedByStatut;
+            const totalColspan = visibleCols.size + 2; // checkbox + N colonnes + chevron
+            const allInGroupSelected = (g) => g.colis.length > 0 && g.colis.every((c) => selectedIds.has(c.id));
+            const toggleGroup = (g) => {
+              const ids = g.colis.map((c) => c.id);
+              setSelectedIds((prev) => {
+                const next = new Set(prev);
+                if (ids.every((id) => next.has(id))) ids.forEach((id) => next.delete(id));
+                else ids.forEach((id) => next.add(id));
+                return next;
+              });
+            };
+
+            if (groups.length === 0) {
+              return <p className="text-center text-sm text-gray-400 py-8">Aucun colis</p>;
+            }
+
+            return (
+              <table className="w-full text-left">
+                <thead>
+                  <ColisTableHead
+                    visibleCols={visibleCols}
+                    allSelected={sorted.length > 0 && sorted.every((c) => selectedIds.has(c.id))}
+                    onSelectAll={() => {
+                      if (sorted.every((c) => selectedIds.has(c.id))) setSelectedIds(new Set());
+                      else setSelectedIds(new Set(sorted.map((c) => c.id)));
+                    }}
+                    onSort={handleSort}
+                    sortCol={sortCol}
+                    sortDir={sortDir}
+                  />
+                </thead>
+                <tbody>
+                  {groups.map((group) => {
+                    // Props header selon vue
+                    let headerProps;
+                    if (viewMode === 'envoi') {
+                      const e = group.envoi;
+                      const dateLabel = e?.date
+                        ? new Date(e.date + 'T00:00:00').toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })
+                        : 'Sans envoi affecté';
+                      headerProps = {
+                        icon: Plane,
+                        color: BRAND.navy,
+                        label: dateLabel,
+                        extraLabel: e?.ref,
+                        bgTint: `${BRAND.navy}06`,
+                      };
+                    } else {
+                      headerProps = {
+                        icon: group.icon,
+                        color: group.color,
+                        label: group.label,
+                        bgTint: `${group.color}08`,
+                      };
+                    }
+                    const groupKey = viewMode === 'envoi' ? (group.envoi?.id || 'none') : group.label;
+                    return (
+                      <React.Fragment key={groupKey}>
+                        <GroupHeaderRow
+                          {...headerProps}
+                          count={group.colis.length}
+                          colspan={totalColspan}
+                          allChecked={allInGroupSelected(group)}
+                          onToggleAll={() => toggleGroup(group)}
+                        />
+                        {group.colis.map((c, idx) => {
+                          const prevC = idx > 0 ? group.colis[idx - 1] : null;
+                          const prevCl = prevC ? getClient(prevC.clientId) : null;
+                          return (
+                            <ColisTableRow
+                              key={c.id}
+                              c={c}
+                              client={getClient(c.clientId)}
+                              prevClient={prevCl}
+                              envois={envois}
+                              onClick={() => openColis(c.id)}
+                              isSelected={sel?.id === c.id}
+                              visibleCols={visibleCols}
+                              checked={selectedIds.has(c.id)}
+                              onCheck={() => setSelectedIds((prev) => {
+                                const next = new Set(prev);
+                                if (next.has(c.id)) next.delete(c.id);
+                                else next.add(c.id);
+                                return next;
+                              })}
+                            />
+                          );
+                        })}
+                      </React.Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
+            );
+          })()}
         </div>
 
         {/* Detail panel (inline, right side) */}
