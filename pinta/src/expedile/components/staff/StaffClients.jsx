@@ -1072,7 +1072,7 @@ export default function StaffClients() {
           return (
             <div key={cl.id} ref={isOpen && isNewClient ? newClientRef : undefined}
               className={isOpen
-                ? "card overflow-hidden pointer-events-auto w-full max-w-3xl my-4 shadow-2xl animate-in"
+                ? "card pointer-events-auto w-full max-w-3xl my-4 shadow-2xl animate-in bg-white rounded-2xl"
                 : "card overflow-hidden"
               }
               onClick={(e) => isOpen && e.stopPropagation()}>
