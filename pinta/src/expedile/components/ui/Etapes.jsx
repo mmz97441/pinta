@@ -1,20 +1,28 @@
 import React from 'react';
-import { Package, CheckCircle, Wrench, CreditCard, Truck } from 'lucide-react';
+import { Package, CheckCircle, Wrench, CreditCard, Plane, Shield, Warehouse, Truck } from 'lucide-react';
 import { STATUTS, BRAND } from '../../constants';
 
-const STEP_NAMES = ['Réception', 'Accord', 'Préparation', 'Paiement', 'Livraison'];
-const STEP_ICONS = [Package, CheckCircle, Wrench, CreditCard, Truck];
+const STEPS = [
+  { name: 'Réception',    icon: Package },
+  { name: 'Accord',       icon: CheckCircle },
+  { name: 'Préparation',  icon: Wrench },
+  { name: 'Paiement',     icon: CreditCard },
+  { name: 'En vol',       icon: Plane },
+  { name: 'Dédouanement', icon: Shield },
+  { name: 'Au dépôt',     icon: Warehouse },
+  { name: 'Livraison',    icon: Truck },
+];
 
 export default function Etapes({ statut }) {
   const cur = STATUTS[statut] ? STATUTS[statut].phase : 0;
 
   return (
     <div className="flex items-center gap-0">
-      {STEP_NAMES.map((nom, i) => {
+      {STEPS.map((step, i) => {
         const n = i + 1;
         const done = cur > n;
         const active = cur === n;
-        const Icon = STEP_ICONS[i];
+        const Icon = step.icon;
         return (
           <div key={i} className="flex-1 flex flex-col items-center relative">
             {i > 0 && (
@@ -33,7 +41,7 @@ export default function Etapes({ statut }) {
               className={`mt-1.5 text-center leading-tight ${done || active ? 'font-bold' : 'text-gray-400'}`}
               style={done ? { fontSize: 9, color: BRAND.goldD } : active ? { fontSize: 9, color: BRAND.navy } : { fontSize: 9 }}
             >
-              {nom}
+              {step.name}
             </span>
           </div>
         );

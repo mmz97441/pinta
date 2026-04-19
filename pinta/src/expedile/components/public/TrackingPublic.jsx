@@ -1,18 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { Package, CheckCircle, Clock, Plane, MapPin, Loader2, AlertTriangle, Ruler } from 'lucide-react';
+import { Package, CheckCircle, Clock, CreditCard, Plane, Shield, Warehouse, Truck, Loader2, AlertTriangle, Ruler } from 'lucide-react';
 import { BRAND, STATUTS, DESTINATIONS, getDestByCP } from '../../constants';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://bqprktzehuhplpqjgjaz.supabase.co';
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
-// Phases simplifiées pour affichage public
+// Phases détaillées pour le client (8 étapes visibles)
 const PUBLIC_PHASES = [
-  { key: 'reception', label: 'Reçu', icon: Package, statuts: ['receptionne', 'mesure'] },
-  { key: 'accord', label: 'Votre accord', icon: CheckCircle, statuts: ['attente_feu_vert', 'autorise'] },
-  { key: 'preparation', label: 'Préparation', icon: Clock, statuts: ['en_preparation', 'devis_envoye', 'paye'] },
-  { key: 'expedition', label: 'En vol', icon: Plane, statuts: ['expedie', 'transit', 'dedouanement'] },
-  { key: 'livraison', label: 'Livré', icon: MapPin, statuts: ['arrive', 'livraison', 'livre'] },
+  { key: 'reception',    label: 'Reçu',         icon: Package,     statuts: ['receptionne', 'mesure'] },
+  { key: 'accord',       label: 'Accord',       icon: CheckCircle, statuts: ['attente_feu_vert', 'autorise'] },
+  { key: 'preparation',  label: 'Préparation',  icon: Clock,       statuts: ['en_preparation'] },
+  { key: 'paiement',     label: 'Paiement',     icon: CreditCard,  statuts: ['devis_envoye', 'paye'] },
+  { key: 'vol',          label: 'En vol',       icon: Plane,       statuts: ['expedie', 'transit'] },
+  { key: 'dedouanement', label: 'Douane',       icon: Shield,      statuts: ['dedouanement'] },
+  { key: 'depot',        label: 'Au dépôt',     icon: Warehouse,   statuts: ['arrive'] },
+  { key: 'livraison',    label: 'Livraison',    icon: Truck,       statuts: ['livraison', 'livre'] },
 ];
 
 function getPhaseIndex(statut) {
@@ -33,9 +36,9 @@ function getStatutLabel(statut) {
     paye: 'Payé, programmé pour le prochain vol',
     expedie: 'En route vers l\'aéroport',
     transit: 'En vol vers sa destination ✈️',
-    dedouanement: 'En cours de dédouanement',
-    arrive: 'Arrivé à destination',
-    livraison: 'En cours de livraison',
+    dedouanement: 'En cours de dédouanement 🛃',
+    arrive: 'Arrivé au dépôt local 📦',
+    livraison: 'En cours de livraison 🚚',
     livre: 'Livré ✓',
   };
   return map[statut] || statut;

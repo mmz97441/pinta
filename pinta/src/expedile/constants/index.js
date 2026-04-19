@@ -20,10 +20,10 @@ export const STATUTS = {
   paye:               { label: 'Payé',                        labelClient: null,                            couleur: 'bg-emerald-200 text-emerald-800',phase: 4, actionStaff: 'Expédier ce colis',               actionClient: null },
   expedie:            { label: 'Expédié',                     labelClient: null,                            couleur: 'bg-cyan-200 text-cyan-800',      phase: 5, actionStaff: 'Marquer en transit',              actionClient: null },
   transit:            { label: 'En vol',                      labelClient: null,                            couleur: 'bg-sky-200 text-sky-800',        phase: 5, actionStaff: 'Dédouanement ou arrivée',       actionClient: null },
-  dedouanement:       { label: 'En dédouanement',              labelClient: 'En cours de dédouanement',      couleur: 'bg-violet-200 text-violet-800',  phase: 5, actionStaff: 'Confirmer arrivée',              actionClient: null },
-  arrive:             { label: 'Arrivé destination',          labelClient: null,                            couleur: 'bg-teal-200 text-teal-800',      phase: 5, actionStaff: 'Lancer la livraison',             actionClient: null },
-  livraison:          { label: 'En cours de livraison',       labelClient: null,                            couleur: 'bg-lime-200 text-lime-800',      phase: 5, actionStaff: 'Confirmer livraison',             actionClient: null },
-  livre:              { label: 'Livré ✓',                     labelClient: null,                            couleur: 'bg-green-300 text-green-900',    phase: 5, actionStaff: null,                              actionClient: null },
+  dedouanement:       { label: 'En dédouanement',              labelClient: 'En cours de dédouanement',      couleur: 'bg-violet-200 text-violet-800',  phase: 6, actionStaff: 'Confirmer arrivée',              actionClient: null },
+  arrive:             { label: 'Arrivé destination',          labelClient: null,                            couleur: 'bg-teal-200 text-teal-800',      phase: 7, actionStaff: 'Lancer la livraison',             actionClient: null },
+  livraison:          { label: 'En cours de livraison',       labelClient: null,                            couleur: 'bg-lime-200 text-lime-800',      phase: 8, actionStaff: 'Confirmer livraison',             actionClient: null },
+  livre:              { label: 'Livré ✓',                     labelClient: null,                            couleur: 'bg-green-300 text-green-900',    phase: 8, actionStaff: null,                              actionClient: null },
   annule:             { label: 'Annulé',                      labelClient: null,                            couleur: 'bg-gray-200 text-gray-500',      phase: 0, actionStaff: null,                              actionClient: null },
 };
 
@@ -157,12 +157,14 @@ export const STATUT_ENVOI = {
 
 // ══════════ PHASES CLIENT (timeline) ══════════
 export const PHASES_CLIENT = [
-  { key: 'reception',   label: 'Réceptionné',       statuts: ['receptionne', 'mesure'] },
-  { key: 'feu_vert',    label: 'Votre accord',      statuts: ['attente_feu_vert', 'autorise'] },
-  { key: 'preparation', label: 'Préparation',       statuts: ['en_preparation'] },
-  { key: 'devis',       label: 'Devis & Paiement',  statuts: ['devis_envoye', 'paye'] },
-  { key: 'expedition',  label: 'Expédition',        statuts: ['expedie', 'transit', 'dedouanement'] },
-  { key: 'livraison',   label: 'Livraison',         statuts: ['arrive', 'livraison', 'livre'] },
+  { key: 'reception',    label: 'Réception',      statuts: ['receptionne', 'mesure'] },
+  { key: 'accord',       label: 'Votre accord',   statuts: ['attente_feu_vert', 'autorise'] },
+  { key: 'preparation',  label: 'Préparation',    statuts: ['en_preparation'] },
+  { key: 'paiement',     label: 'Paiement',       statuts: ['devis_envoye', 'paye'] },
+  { key: 'vol',          label: 'En vol',         statuts: ['expedie', 'transit'] },
+  { key: 'dedouanement', label: 'Dédouanement',   statuts: ['dedouanement'] },
+  { key: 'depot',        label: 'Au dépôt',       statuts: ['arrive'] },
+  { key: 'livraison',    label: 'Livraison',      statuts: ['livraison', 'livre'] },
 ];
 
 export function getPhaseIndex(statut) {
