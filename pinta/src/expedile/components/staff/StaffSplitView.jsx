@@ -1,7 +1,8 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   Search, X, Package, Clock, CheckCircle, Check, Wrench, CreditCard, Plane,
   AlertTriangle, ChevronRight, Star, TrendingUp, Users, BarChart3, FileText, MessageCircle,
+  Settings2, AlertCircle,
 } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
@@ -45,12 +46,54 @@ const TH = 'px-2 py-2 text-[9px] font-bold uppercase tracking-wider text-gray-50
 const TD = 'px-2 py-2 text-[11px] whitespace-nowrap';
 const DASH = <span className="text-gray-300">—</span>;
 
+// ── Column definitions ──────────────────────────────────────────────────────
+const ALL_COLUMNS = [
+  { key: 'date', label: 'Date', sortable: true, defaultOn: true },
+  { key: 'ref', label: 'Réf.', sortable: true, defaultOn: true, alwaysOn: true },
+  { key: 'statut', label: 'Statut', sortable: true, defaultOn: true, alwaysOn: true },
+  { key: 'paiement', label: 'Paiem.', defaultOn: false },
+  { key: 'client', label: 'Client', sortable: true, defaultOn: true, alwaysOn: true },
+  { key: 'prenom', label: 'Prénom', defaultOn: false },
+  { key: 'email', label: 'Email', defaultOn: false },
+  { key: 'tel', label: 'Tél.', defaultOn: false },
+  { key: 'forfait', label: 'Forfait', defaultOn: false },
+  { key: 'intitule', label: 'Intitulé', defaultOn: true },
+  { key: 'volCm3', label: 'Vol. cm³', sortable: true, align: 'right', defaultOn: false },
+  { key: 'volKg', label: 'Vol. kg', align: 'right', defaultOn: false },
+  { key: 'poids', label: 'Poids', align: 'right', defaultOn: false },
+  { key: 'transport', label: 'Transport', sortable: true, align: 'right', defaultOn: false },
+  { key: 'taxes', label: 'Taxes', sortable: true, align: 'right', defaultOn: false },
+  { key: 'total', label: 'Total', sortable: true, align: 'right', defaultOn: true, alwaysOn: true },
+  { key: 'paye', label: 'Payé', align: 'right', defaultOn: false },
+  { key: 'commune', label: 'Commune', defaultOn: false },
+  { key: 'cp', label: 'CP', defaultOn: false },
+];
+
+const LS_COLS_KEY = 'expedile_visible_columns';
+function loadVisibleCols() {
+  try {
+    const saved = localStorage.getItem(LS_COLS_KEY);
+    if (saved) return new Set(JSON.parse(saved));
+  } catch {}
+  return new Set(ALL_COLUMNS.filter((c) => c.defaultOn).map((c) => c.key));
+}
+
+// ── Priority sort helper ────────────────────────────────────────────────────
+function priorityScore(c, client) {
+  let score = 0;
+  const now = Date.now();
+  const recDate = c.dateReception ? new Date(c.dateReception).getTime() : (c.createdAt ? new Date(c.createdAt).getTime() : now);
+  const daysSinceReception = (now - recDate) / (1000 * 60 * 60 * 24);
+  if (daysSinceReception > 5) score += 1000;
+  if (client?.abonnement === 'vip') score += 100;
+  if (client?.type === 'pro') score += 50;
+  score += Math.min(daysSinceReception, 999);
+  return score;
+}
+
 // ── Table header row ────────────────────────────────────────────────────────
-function ColisTableHead({ compact, onSelectAll, allSelected, onSort, sortCol, sortDir }) {
+function ColisTableHead({ visibleCols, onSelectAll, allSelected, onSort, sortCol, sortDir }) {
   const indicator = (col) => onSort ? (sortCol === col ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ' ↕') : '';
-  const sortable = (col, align) => onSort
-    ? { onClick: () => onSort(col), className: `${TH}${align === 'right' ? ' text-right' : ''} cursor-pointer hover:text-gray-700 select-none` }
-    : { className: align === 'right' ? `${TH} text-right` : TH };
 
   return (
     <tr className="border-b border-gray-200" style={{ background: `${BRAND.navy}06` }}>
@@ -58,32 +101,25 @@ function ColisTableHead({ compact, onSelectAll, allSelected, onSort, sortCol, so
         <input type="checkbox" checked={allSelected} onChange={onSelectAll}
           className="w-3.5 h-3.5 rounded accent-blue-500 cursor-pointer" />
       </th>
-      <th {...sortable('date')}>Date{indicator('date')}</th>
-      <th {...sortable('ref')}>Réf.{indicator('ref')}</th>
-      <th {...sortable('statut')}>Statut{indicator('statut')}</th>
-      {!compact && <th className={TH}>Paiem.</th>}
-      <th {...sortable('client')}>Client{indicator('client')}</th>
-      {!compact && <th className={TH}>Prénom</th>}
-      {!compact && <th className={TH}>Email</th>}
-      {!compact && <th className={TH}>Tél.</th>}
-      {!compact && <th className={TH}>Forfait</th>}
-      <th className={TH}>Intitulé</th>
-      {!compact && <th {...sortable('dims', 'right')}>Vol. cm³{indicator('dims')}</th>}
-      {!compact && <th className={`${TH} text-right`}>Vol. kg</th>}
-      {!compact && <th className={`${TH} text-right`}>Poids</th>}
-      {!compact && <th {...sortable('transport', 'right')}>Transport{indicator('transport')}</th>}
-      {!compact && <th {...sortable('taxes', 'right')}>Taxes{indicator('taxes')}</th>}
-      <th {...sortable('total', 'right')}>Total{indicator('total')}</th>
-      {!compact && <th className={`${TH} text-right`}>Payé</th>}
-      {!compact && <th className={TH}>Commune</th>}
-      {!compact && <th className={TH}>CP</th>}
+      {ALL_COLUMNS.filter((col) => visibleCols.has(col.key)).map((col) => {
+        const align = col.align === 'right' ? ' text-right' : '';
+        if (col.sortable && onSort) {
+          return (
+            <th key={col.key} onClick={() => onSort(col.key === 'volCm3' ? 'dims' : col.key)}
+              className={`${TH}${align} cursor-pointer hover:text-gray-700 select-none`}>
+              {col.label}{indicator(col.key === 'volCm3' ? 'dims' : col.key)}
+            </th>
+          );
+        }
+        return <th key={col.key} className={`${TH}${align}`}>{col.label}</th>;
+      })}
       <th className="w-5"></th>
     </tr>
   );
 }
 
 // ── Table data row ──────────────────────────────────────────────────────────
-function ColisTableRow({ c, client, envois, onClick, isSelected, compact, checked, onCheck }) {
+function ColisTableRow({ c, client, envois, onClick, isSelected, checked, onCheck, visibleCols }) {
   const dest = client ? getDestByCP(client.cp) : null;
   const hasDims = c.dimL && c.dimW && c.dimH;
   const volCm3 = hasDims ? c.dimL * c.dimW * c.dimH : null;
@@ -97,52 +133,66 @@ function ColisTableRow({ c, client, envois, onClick, isSelected, compact, checke
     : '—';
   const isPaid = c.paiementMontant > 0;
   const abo = client?.abonnement ? (ABONNEMENTS[client.abonnement]?.label || client.abonnement) : '—';
-  const prenom = client?.nom?.split(' ').slice(0, -1).join(' ') || '';
-  const nom = client?.nom?.split(' ').pop() || client?.nom || '—';
+  const prenom = client?.prenom || client?.nom?.split(' ').slice(0, -1).join(' ') || '';
+  const nom = client?.nomFamille || client?.nom?.split(' ').pop() || client?.nom || '—';
+
+  // Urgency: >5 days without status change
+  const recDate = c.dateReception || c.createdAt;
+  const daysOld = recDate ? Math.floor((Date.now() - new Date(recDate).getTime()) / (1000 * 60 * 60 * 24)) : 0;
+  const isUrgent = daysOld > 5 && !['expedie', 'transit', 'dedouanement', 'arrive', 'livraison', 'livre', 'annule'].includes(c.statut);
+
+  const cellRenderers = {
+    date: () => <span className="text-gray-500">{dateCreation}</span>,
+    ref: () => (
+      <>
+        <span className="font-black text-gray-900">{c.ref}</span>
+        {c.casier && <span className="text-[8px] font-bold px-1 py-0.5 rounded ml-1" style={{ background: `${BRAND.gold}22`, color: BRAND.goldD }}>{c.casier}</span>}
+        {isUrgent && <span className="ml-1 text-[7px] font-bold px-1 py-0.5 rounded bg-red-100 text-red-600">{daysOld}j</span>}
+        {(() => { const unread = (c.messages || []).filter((m) => m.type === 'client' && !m.lu).length; return unread > 0 ? <span className="ml-1 text-[8px] font-bold px-1.5 py-0.5 rounded-full bg-red-500 text-white animate-pulse">{unread}</span> : null; })()}
+      </>
+    ),
+    statut: () => <Badge statut={c.statut} />,
+    paiement: () => isPaid ? <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-green-100 text-green-700">Payé</span> : c.devisTotal ? <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">En attente</span> : DASH,
+    client: () => (
+      <>
+        <span className="text-gray-700 font-medium">{`${prenom} ${nom}`.trim()}</span>
+        {dest && <span className="ml-1">{dest.flag}</span>}
+        {(() => { const s = getSecteurByCP(client?.cp); return s ? <span className="ml-1 text-[7px] font-black px-1 py-0.5 rounded text-white" style={{ background: getSecteurColor(s) }}>{s}</span> : null; })()}
+        {client?.abonnement === 'vip' && <span className="ml-1 text-[8px] font-black px-1 py-0.5 rounded" style={{ background: 'linear-gradient(135deg, #F59E0B, #D97706)', color: 'white' }}>VIP</span>}
+        {client?.type === 'pro' && client?.abonnement !== 'vip' && <span className="ml-1 text-[8px] font-black px-1 py-0.5 rounded" style={{ background: `${BRAND.gold}30`, color: BRAND.goldD }}>PRO</span>}
+      </>
+    ),
+    prenom: () => <span className="text-gray-500">{prenom || '—'}</span>,
+    email: () => <span className="text-gray-500 text-[10px]">{client?.email || '—'}</span>,
+    tel: () => <span className="text-gray-500 text-[10px] font-mono">{client?.tel || '—'}</span>,
+    forfait: () => <span className="text-[9px] font-semibold">{abo}</span>,
+    intitule: () => <span className="text-gray-600 truncate block max-w-[120px]">{c.desc || '—'}</span>,
+    volCm3: () => volCm3 ? <span className="text-gray-500 font-mono text-[10px]">{volCm3.toLocaleString()}</span> : DASH,
+    volKg: () => volKg ? <span className="text-gray-500 font-mono text-[10px]">{volKg}</span> : DASH,
+    poids: () => c.poids ? <span className="text-gray-600 font-mono text-[10px]">{c.poids} kg</span> : DASH,
+    transport: () => c.devisTransport != null ? <span className="font-semibold text-gray-700">{eur(c.devisTransport)}</span> : DASH,
+    taxes: () => taxes != null ? <span className="text-gray-600">{eur(taxes)}</span> : DASH,
+    total: () => c.devisTotal != null ? <span className="font-bold" style={{ color: BRAND.navy }}>{eur(c.devisTotal)}</span> : DASH,
+    paye: () => c.paiementMontant ? <span className="font-bold text-green-700">{eur(c.paiementMontant)}</span> : DASH,
+    commune: () => <span className="text-gray-500 text-[10px]">{client?.ville || '—'}</span>,
+    cp: () => <span className="text-gray-500 text-[10px] font-mono">{client?.cp || '—'}</span>,
+  };
 
   return (
     <tr
       onClick={onClick}
-      className={`border-b border-gray-50 cursor-pointer transition-colors ${isSelected ? 'bg-blue-50' : client?.type === 'pro' ? 'bg-amber-50/40 hover:bg-amber-50' : 'hover:bg-gray-50'}`}
-      style={{ borderLeft: `3px solid ${statutBorderColor(c.statut)}` }}
+      className={`border-b border-gray-50 cursor-pointer transition-colors ${isSelected ? 'bg-blue-50' : isUrgent ? 'bg-red-50/50 hover:bg-red-50' : client?.type === 'pro' ? 'bg-amber-50/40 hover:bg-amber-50' : 'hover:bg-gray-50'}`}
+      style={{ borderLeft: `3px solid ${isUrgent ? '#EF4444' : statutBorderColor(c.statut)}` }}
     >
       <td className="px-2 py-2 w-8" onClick={(e) => e.stopPropagation()}>
         <input type="checkbox" checked={checked} onChange={onCheck}
           className="w-3.5 h-3.5 rounded accent-blue-500 cursor-pointer" />
       </td>
-      <td className={TD}><span className="text-gray-500">{dateCreation}</span></td>
-      <td className={TD}>
-        <span className="font-black text-gray-900">{c.ref}</span>
-        {c.casier && <span className="text-[8px] font-bold px-1 py-0.5 rounded ml-1" style={{ background: `${BRAND.gold}22`, color: BRAND.goldD }}>{c.casier}</span>}
-        {(() => { const unread = (c.messages || []).filter((m) => m.type === 'client' && !m.lu).length; return unread > 0 ? <span className="ml-1 text-[8px] font-bold px-1.5 py-0.5 rounded-full bg-red-500 text-white animate-pulse">{unread}</span> : null; })()}
-      </td>
-      <td className={TD}><Badge statut={c.statut} /></td>
-      {!compact && <td className={TD}>
-        {isPaid ? <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-green-100 text-green-700">Payé</span>
-          : c.devisTotal ? <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">En attente</span>
-          : DASH}
-      </td>}
-      <td className={TD}>
-        <span className="text-gray-700 font-medium">{compact ? `${nom} ${prenom}`.trim() : nom}</span>
-        {dest && <span className="ml-1">{dest.flag}</span>}
-        {(() => { const s = getSecteurByCP(client?.cp); return s ? <span className="ml-1 text-[7px] font-black px-1 py-0.5 rounded text-white" style={{ background: getSecteurColor(s) }}>{s}</span> : null; })()}
-        {client?.abonnement === 'vip' && <span className="ml-1 text-[8px] font-black px-1 py-0.5 rounded" style={{ background: 'linear-gradient(135deg, #F59E0B, #D97706)', color: 'white' }}>VIP</span>}
-        {client?.type === 'pro' && client?.abonnement !== 'vip' && <span className="ml-1 text-[8px] font-black px-1 py-0.5 rounded" style={{ background: `${BRAND.gold}30`, color: BRAND.goldD }}>PRO</span>}
-      </td>
-      {!compact && <td className={TD}><span className="text-gray-500">{prenom || '—'}</span></td>}
-      {!compact && <td className={TD}><span className="text-gray-500 text-[10px]">{client?.email || '—'}</span></td>}
-      {!compact && <td className={TD}><span className="text-gray-500 text-[10px] font-mono">{client?.tel || '—'}</span></td>}
-      {!compact && <td className={TD}><span className="text-[9px] font-semibold">{abo}</span></td>}
-      <td className={TD}><span className="text-gray-600 truncate block max-w-[120px]">{c.desc || '—'}</span></td>
-      {!compact && <td className={`${TD} text-right`}>{volCm3 ? <span className="text-gray-500 font-mono text-[10px]">{volCm3.toLocaleString()}</span> : DASH}</td>}
-      {!compact && <td className={`${TD} text-right`}>{volKg ? <span className="text-gray-500 font-mono text-[10px]">{volKg}</span> : DASH}</td>}
-      {!compact && <td className={`${TD} text-right`}>{c.poids ? <span className="text-gray-600 font-mono text-[10px]">{c.poids} kg</span> : DASH}</td>}
-      {!compact && <td className={`${TD} text-right`}>{c.devisTransport != null ? <span className="font-semibold text-gray-700">{eur(c.devisTransport)}</span> : DASH}</td>}
-      {!compact && <td className={`${TD} text-right`}>{taxes != null ? <span className="text-gray-600">{eur(taxes)}</span> : DASH}</td>}
-      <td className={`${TD} text-right`}>{c.devisTotal != null ? <span className="font-bold" style={{ color: BRAND.navy }}>{eur(c.devisTotal)}</span> : DASH}</td>
-      {!compact && <td className={`${TD} text-right`}>{c.paiementMontant ? <span className="font-bold text-green-700">{eur(c.paiementMontant)}</span> : DASH}</td>}
-      {!compact && <td className={TD}><span className="text-gray-500 text-[10px]">{client?.ville || '—'}</span></td>}
-      {!compact && <td className={TD}><span className="text-gray-500 text-[10px] font-mono">{client?.cp || '—'}</span></td>}
+      {ALL_COLUMNS.filter((col) => visibleCols.has(col.key)).map((col) => (
+        <td key={col.key} className={`${TD}${col.align === 'right' ? ' text-right' : ''}`}>
+          {cellRenderers[col.key]?.() || DASH}
+        </td>
+      ))}
       <td className="pr-1 py-2"><ChevronRight size={12} className="text-gray-300" /></td>
     </tr>
   );
@@ -314,6 +364,17 @@ export default function StaffColisPage() {
   const [sortDir, setSortDir] = useState('asc');
   const [showArchive, setShowArchive] = useState(false);
   const [viewMode, setViewMode] = useState('statut');
+  const [visibleCols, setVisibleCols] = useState(loadVisibleCols);
+  const [showColPicker, setShowColPicker] = useState(false);
+
+  const toggleCol = useCallback((key) => {
+    setVisibleCols((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      localStorage.setItem(LS_COLS_KEY, JSON.stringify([...next]));
+      return next;
+    });
+  }, []);
   const [showFactures, setShowFactures] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [showChat, setShowChat] = useState(false);
@@ -355,7 +416,16 @@ export default function StaffColisPage() {
 
   // Sort
   const sorted = useMemo(() => {
-    if (!sortCol) return searched;
+    if (!sortCol) {
+      // Default: priority sort (urgent > VIP/Pro > FIFO)
+      const arr = [...searched];
+      arr.sort((a, b) => {
+        const clA = getClient(a.clientId);
+        const clB = getClient(b.clientId);
+        return priorityScore(b, clB) - priorityScore(a, clA);
+      });
+      return arr;
+    }
     const arr = [...searched];
     const dir = sortDir === 'asc' ? 1 : -1;
     arr.sort((a, b) => {
@@ -517,6 +587,50 @@ export default function StaffColisPage() {
               Par envoi
             </button>
           </div>
+
+          {/* Column picker */}
+          <div className="relative">
+            <button
+              onClick={() => setShowColPicker((p) => !p)}
+              className={`p-1.5 rounded-lg transition-colors ${showColPicker ? 'bg-blue-100 text-blue-600' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'}`}
+              title="Colonnes visibles"
+            >
+              <Settings2 size={15} />
+            </button>
+            {showColPicker && (
+              <>
+                <div className="fixed inset-0 z-30" onClick={() => setShowColPicker(false)} />
+                <div className="absolute right-0 top-full mt-1 z-40 bg-white rounded-xl shadow-2xl border border-gray-200 p-3 w-56">
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Colonnes affichées</p>
+                  <div className="space-y-1 max-h-64 overflow-y-auto">
+                    {ALL_COLUMNS.map((col) => (
+                      <label key={col.key} className={`flex items-center gap-2 px-2 py-1 rounded-lg cursor-pointer hover:bg-gray-50 ${col.alwaysOn ? 'opacity-50' : ''}`}>
+                        <input
+                          type="checkbox"
+                          checked={visibleCols.has(col.key)}
+                          onChange={() => !col.alwaysOn && toggleCol(col.key)}
+                          disabled={col.alwaysOn}
+                          className="w-3.5 h-3.5 rounded accent-blue-500"
+                        />
+                        <span className="text-xs text-gray-700">{col.label}</span>
+                        {col.alwaysOn && <span className="text-[8px] text-gray-400 ml-auto">requis</span>}
+                      </label>
+                    ))}
+                  </div>
+                  <button
+                    onClick={() => {
+                      const defaults = new Set(ALL_COLUMNS.filter((c) => c.defaultOn).map((c) => c.key));
+                      setVisibleCols(defaults);
+                      localStorage.setItem(LS_COLS_KEY, JSON.stringify([...defaults]));
+                    }}
+                    className="mt-2 w-full text-center text-[10px] font-bold text-blue-600 hover:text-blue-800 py-1"
+                  >
+                    Réinitialiser par défaut
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
@@ -623,11 +737,11 @@ export default function StaffColisPage() {
                     </div>
                     <div className="overflow-x-auto">
                       <table className="w-full text-left">
-                        <thead><ColisTableHead compact={!!sel} allSelected={sorted.length > 0 && sorted.every((c) => selectedIds.has(c.id))} onSelectAll={() => { if (sorted.every((c) => selectedIds.has(c.id))) { setSelectedIds(new Set()); } else { setSelectedIds(new Set(sorted.map((c) => c.id))); } }} onSort={handleSort} sortCol={sortCol} sortDir={sortDir} /></thead>
+                        <thead><ColisTableHead visibleCols={visibleCols} allSelected={sorted.length > 0 && sorted.every((c) => selectedIds.has(c.id))} onSelectAll={() => { if (sorted.every((c) => selectedIds.has(c.id))) { setSelectedIds(new Set()); } else { setSelectedIds(new Set(sorted.map((c) => c.id))); } }} onSort={handleSort} sortCol={sortCol} sortDir={sortDir} /></thead>
                         <tbody>
                           {group.colis.map((c) => (
                             <ColisTableRow key={c.id} c={c} client={getClient(c.clientId)} envois={envois}
-                              onClick={() => openColis(c.id)} isSelected={sel?.id === c.id} compact={!!sel}
+                              onClick={() => openColis(c.id)} isSelected={sel?.id === c.id} visibleCols={visibleCols}
                               checked={selectedIds.has(c.id)} onCheck={() => setSelectedIds((prev) => { const next = new Set(prev); if (next.has(c.id)) next.delete(c.id); else next.add(c.id); return next; })} />
                           ))}
                         </tbody>
@@ -667,11 +781,11 @@ export default function StaffColisPage() {
                     </div>
                     <div className="overflow-x-auto">
                       <table className="w-full text-left">
-                        <thead><ColisTableHead compact={!!sel} allSelected={sorted.length > 0 && sorted.every((c) => selectedIds.has(c.id))} onSelectAll={() => { if (sorted.every((c) => selectedIds.has(c.id))) { setSelectedIds(new Set()); } else { setSelectedIds(new Set(sorted.map((c) => c.id))); } }} onSort={handleSort} sortCol={sortCol} sortDir={sortDir} /></thead>
+                        <thead><ColisTableHead visibleCols={visibleCols} allSelected={sorted.length > 0 && sorted.every((c) => selectedIds.has(c.id))} onSelectAll={() => { if (sorted.every((c) => selectedIds.has(c.id))) { setSelectedIds(new Set()); } else { setSelectedIds(new Set(sorted.map((c) => c.id))); } }} onSort={handleSort} sortCol={sortCol} sortDir={sortDir} /></thead>
                         <tbody>
                           {group.colis.map((c) => (
                             <ColisTableRow key={c.id} c={c} client={getClient(c.clientId)} envois={envois}
-                              onClick={() => openColis(c.id)} isSelected={sel?.id === c.id} compact={!!sel}
+                              onClick={() => openColis(c.id)} isSelected={sel?.id === c.id} visibleCols={visibleCols}
                               checked={selectedIds.has(c.id)} onCheck={() => setSelectedIds((prev) => { const next = new Set(prev); if (next.has(c.id)) next.delete(c.id); else next.add(c.id); return next; })} />
                           ))}
                         </tbody>

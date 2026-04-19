@@ -200,7 +200,11 @@ export function AppProvider({ children }) {
   // Accepts string OR rich object { msg, type, action: { label, onClick }, duration }
   const flash = useCallback((m) => {
     setToast(m);
-    const dur = (typeof m === 'object' && m.action) ? 6000 : (typeof m === 'object' && m.duration) ? m.duration : 2200;
+    const isWarning = typeof m === 'object' && (m.type === 'warning' || m.type === 'error');
+    const dur = (typeof m === 'object' && m.action) ? 6000
+      : (typeof m === 'object' && m.duration) ? m.duration
+      : isWarning ? 4000
+      : 2000;
     setTimeout(() => setToast(''), dur);
   }, []);
 
@@ -515,10 +519,10 @@ export function AppProvider({ children }) {
   const changerStatut = useCallback((id, ns) => {
     const c = data.find((x) => x.id === id);
     if (!c) return;
-    if (ns === 'en_preparation' && c.feuVert !== 'autorise') { flash("Le client n'a pas encore donné son accord"); return; }
-    if (ns === 'devis_envoye' && (!c.factures || c.factures.length === 0)) { flash("Il manque la facture d'origine"); return; }
-    if (ns === 'expedie' && !c.paiementMontant) { flash("Le client n'a pas encore payé"); return; }
-    if (ns === 'expedie' && !c.envoi) { flash("Affectez le colis à un envoi d'abord"); return; }
+    if (ns === 'en_preparation' && c.feuVert !== 'autorise') { flash({ msg: "Le client n'a pas encore donné son accord", type: 'warning' }); return; }
+    if (ns === 'devis_envoye' && (!c.factures || c.factures.length === 0)) { flash({ msg: "Il manque la facture d'origine", type: 'warning' }); return; }
+    if (ns === 'expedie' && !c.paiementMontant) { flash({ msg: "Le client n'a pas encore payé", type: 'warning' }); return; }
+    if (ns === 'expedie' && !c.envoi) { flash({ msg: "Affectez le colis à un envoi d'abord", type: 'warning' }); return; }
     log(id, c.statut, ns);
     upd(id, { statut: ns });
     flash(STATUTS[ns].label);
