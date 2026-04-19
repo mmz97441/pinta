@@ -471,17 +471,23 @@ export default function KPIDashboard() {
 function MetricCard({ label, value, icon: Icon, color, trend, onClick }) {
   const trendPositive = trend > 0;
   return (
-    <button onClick={onClick} className="card p-4 rounded-2xl text-left hover:shadow-md transition-all active:scale-[0.98]">
+    <button
+      onClick={onClick}
+      className="bg-white border border-slate-200/60 p-4 rounded-2xl text-left transition-all duration-200 ease-out hover:-translate-y-[1px] hover:border-slate-300 active:scale-[0.98]"
+      style={{ transitionProperty: 'transform, box-shadow, border-color' }}
+      onMouseEnter={(e) => { e.currentTarget.style.boxShadow = `0 8px 20px -8px ${color}30`; }}
+      onMouseLeave={(e) => { e.currentTarget.style.boxShadow = ''; }}
+    >
       <div className="flex items-center gap-2 mb-1">
         <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: `${color}15` }}>
           <Icon size={14} style={{ color }} strokeWidth={2.5} />
         </div>
-        <span className="text-xs font-semibold text-gray-500">{label}</span>
+        <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">{label}</span>
       </div>
-      <div className="flex items-end justify-between gap-1 mt-1">
-        <p className="text-lg font-black" style={{ color }}>{value}</p>
+      <div className="flex items-end justify-between gap-1 mt-1.5">
+        <p className="text-lg font-black tracking-tight" style={{ color }}>{value}</p>
         {trend != null && (
-          <span className={`text-[10px] font-bold flex items-center gap-0.5 ${trendPositive ? 'text-green-600' : 'text-red-500'}`}>
+          <span className={`text-[10px] font-bold inline-flex items-center gap-0.5 ${trendPositive ? 'text-emerald-600' : 'text-rose-500'}`}>
             {trendPositive ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
             {Math.abs(trend).toFixed(0)}%
           </span>
@@ -510,16 +516,18 @@ function AlertCard({ icon: Icon, label, count, color, action, onClick }) {
   return (
     <button
       onClick={onClick}
-      className="card p-3 rounded-2xl text-left hover:shadow-md transition-all active:scale-[0.98] w-full"
+      className="group bg-white border border-slate-200/60 p-3 rounded-2xl text-left transition-all duration-200 ease-out hover:-translate-y-[1px] hover:border-slate-300 active:scale-[0.98] w-full"
       style={{ borderLeft: `3px solid ${color}` }}
+      onMouseEnter={(e) => { e.currentTarget.style.boxShadow = `0 8px 20px -8px ${color}40`; }}
+      onMouseLeave={(e) => { e.currentTarget.style.boxShadow = ''; }}
     >
-      <div className="flex items-center gap-2 mb-1">
+      <div className="flex items-center gap-2 mb-1.5">
         <Icon size={13} style={{ color }} />
-        <span className="text-[10px] font-semibold text-gray-600">{label}</span>
+        <span className="text-[10px] font-semibold text-slate-600 uppercase tracking-wider">{label}</span>
       </div>
       <div className="flex items-center justify-between">
-        <p className="text-xl font-black" style={{ color }}>{count}</p>
-        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded" style={{ background: `${color}15`, color }}>{action} →</span>
+        <p className="text-2xl font-black tracking-tight" style={{ color }}>{count}</p>
+        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded transition-transform group-hover:translate-x-0.5" style={{ background: `${color}15`, color }}>{action} →</span>
       </div>
     </button>
   );
