@@ -364,6 +364,8 @@ reception, facture_manquante, demande_feu_vert, feu_vert_recu, devis_final, rela
 12. **JAMAIS de clé dupliquée dans un objet** (ex: `{ devis_envoye: ..., devis_envoye: ... }`) → warning qui fait échouer le build Vercel. Vérifier après chaque remplacement global (sed, replace_all).
 13. **Toujours vérifier les imports** après ajout d'un composant/icône dans le JSX → `ReferenceError: X is not defined` = écran blanc en production.
 14. **Lancer plusieurs agents en parallèle** quand il y a beaucoup de tâches à faire. À la fin, faire vérifier le travail de TOUS les sous-agents par un super-agent avant de build et commit. Cela évite les conflits et les erreurs croisées.
+15. **NE JAMAIS livrer une modification UI sans test visuel**. Avant chaque commit touchant à un écran (modal, overlay, layout, responsive, etc.) : lancer `vite preview`, charger la page via Playwright headless, prendre un screenshot, vérifier le résultat réel. Le build qui passe ≠ l'écran qui marche. Un modal avec `overflow-hidden` peut compiler parfaitement ET couper tout le contenu. Si test visuel impossible (auth requise, données spécifiques), le déclarer explicitement au user au lieu de livrer aveuglément.
+16. **Pour les modales/overlays spécifiquement** : tester 3 cas visuellement — contenu court (tient à l'écran), contenu long (nécessite scroll interne), fermeture (click backdrop, Esc, bouton X). Vérifier que le scroll fonctionne et que rien n'est clippé.
 
 ---
 
