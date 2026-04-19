@@ -18,6 +18,7 @@ import StaffSettings from './components/staff/StaffSettings';
 import StaffClients from './components/staff/StaffClients';
 import StaffDetailView from './components/staff/StaffDetailView';
 import DevisProspect from './components/staff/DevisProspect';
+import TrackingPublic from './components/public/TrackingPublic';
 
 import ClientAccueil from './components/client/ClientAccueil';
 import ClientColis from './components/client/ClientColis';
@@ -422,9 +423,16 @@ function AppContent() {
 export default function App() {
   return (
     <BrowserRouter>
-      <AppProvider>
-        <AppContent />
-      </AppProvider>
+      <Routes>
+        {/* Route publique — suivi partagé par token (pas d'auth nécessaire) */}
+        <Route path="/suivi/:token" element={<TrackingPublic />} />
+        {/* Toute autre route passe par l'app authentifiée */}
+        <Route path="/*" element={
+          <AppProvider>
+            <AppContent />
+          </AppProvider>
+        } />
+      </Routes>
     </BrowserRouter>
   );
 }
