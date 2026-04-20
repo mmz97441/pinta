@@ -595,7 +595,7 @@ export default function StaffColisPage() {
       {/* Top bar: pipeline cards + search */}
       <div className="flex-shrink-0 px-4 pt-3 pb-2 space-y-3 border-b border-gray-100 bg-white">
         {/* Pipeline cards — clickable filters (taste-skill : tactile feedback, urgence dot, hover lift) */}
-        <div className="flex gap-2 overflow-x-auto pb-1">
+        <div className="flex gap-2 overflow-x-auto pt-2 pb-1">
           {PIPELINE.map((p) => {
             const Icon = p.icon;
             const isActive = activeTab === p.key;
