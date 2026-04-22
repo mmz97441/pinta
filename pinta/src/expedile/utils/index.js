@@ -10,10 +10,19 @@ export function uid() {
   return Math.random().toString(36).slice(2, 8);
 }
 
-// Prénom du client pour les salutations. c.nom est construit comme "NOM Prénom"
-// dans mapClient(), donc split(' ')[0] seul renvoie le nom de famille (bug).
+// Prénom du client pour les salutations.
+// - c.prenom prioritaire (champ dédié en DB, c'est le cas nominal)
+// - Fallback : c.nom est construit dans mapClient() comme "NOM Prénom"
+//   (supabaseData.js:76 : row.nom + ' ' + row.prenom). Donc si prenom vide mais
+//   c.nom contient plusieurs mots, on suppose la convention "NOM Prénom" et on
+//   renvoie tout ce qui suit le premier mot.
+// - Dernier recours : c.nom en un seul mot (on n'a pas mieux, au moins on n'hallucine pas).
 export function getPrenom(c) {
-  return c?.prenom || c?.nom || '';
+  if (!c) return '';
+  if (c.prenom) return c.prenom;
+  const parts = (c.nom || '').trim().split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) return parts.slice(1).join(' ');
+  return parts[0] || '';
 }
 
 const MOIS_FR = ['janv.', 'fév.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
