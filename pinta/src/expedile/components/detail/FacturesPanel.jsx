@@ -230,10 +230,14 @@ export default function FacturesPanel() {
           factureId: facture.id,
         }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
 
       if (data.error) {
-        flash({ msg: `OCR: ${data.error}`, type: 'warning' });
+        flash({
+          msg: `OCR échoué (${data.error}). Saisissez les articles manuellement dans la section « Articles déclarés » en dessous.`,
+          type: 'warning',
+          duration: 8000,
+        });
         return;
       }
 
@@ -266,15 +270,36 @@ export default function FacturesPanel() {
         const nbTotal = data.nb_articles_total || data.nbArticles || 0;
         const nbLignes = data.nbLignes || data.insertedLignes?.length || 0;
         const total = data.total_ht || data.total || 0;
-        flash({
-          msg: `OCR : ${nbTotal} article${nbTotal > 1 ? 's' : ''} → regroupés en ${nbLignes} catégorie${nbLignes > 1 ? 's' : ''} — Total HT: ${eur(total)}`,
-          type: 'success',
-          duration: 6000,
-        });
+
+        if (nbLignes === 0) {
+          flash({
+            msg: 'OCR terminé mais aucun article n\'a pu être extrait. Saisissez les articles manuellement dans la section « Articles déclarés » en dessous.',
+            type: 'warning',
+            duration: 8000,
+          });
+        } else {
+          flash({
+            msg: `OCR : ${nbTotal} article${nbTotal > 1 ? 's' : ''} → regroupés en ${nbLignes} catégorie${nbLignes > 1 ? 's' : ''} — Total HT: ${eur(total)}`,
+            type: 'success',
+            duration: 6000,
+          });
+        }
+        return;
       }
+
+      // Réponse sans error ni success → cas non nominal
+      flash({
+        msg: 'OCR indisponible. Saisissez les articles manuellement dans la section « Articles déclarés » en dessous.',
+        type: 'warning',
+        duration: 8000,
+      });
     } catch (err) {
       console.error('OCR error:', err);
-      flash({ msg: 'Erreur OCR: ' + err.message, type: 'warning' });
+      flash({
+        msg: `OCR indisponible (${err.message}). Saisissez les articles manuellement dans la section « Articles déclarés » en dessous.`,
+        type: 'warning',
+        duration: 8000,
+      });
     } finally {
       setOcrLoading(null);
     }

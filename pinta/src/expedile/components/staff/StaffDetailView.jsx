@@ -4,6 +4,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { BRAND, STATUTS, TRANSITIONS, PRODUITS_INTERDITS, TAGS_PREPARATION, getDestByCP } from '../../constants';
+import { MSG_TEMPLATES } from '../../constants/templates';
 import { eur, calcTransport, getCatTaux, getPrenom } from '../../utils';
 import { Ligne } from '../ui';
 import WebcamCapture from '../ui/WebcamCapture';
@@ -554,13 +555,17 @@ export default function StaffDetailView() {
     }
 
     const isPro = cl?.type === 'pro';
+    const canal = cl?.telegramChatId ? 'telegram' : 'email';
 
-    // Step 1: Create PayPlug payment for particuliers FIRST
-    if (!isPro) {
+    // Step 1: particulier → tenter de créer le lien PayPlug
+    let paymentUrl = sel.payplugPaymentUrl || null;
+    let paymentId = sel.payplugPaymentId || null;
+    let payplugFailed = false;
+
+    if (!isPro && !paymentUrl) {
       try {
         flash({ msg: 'Création du lien de paiement...', type: 'info' });
         const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://bqprktzehuhplpqjgjaz.supabase.co';
-        // TODO: Remplacer par JWT Supabase Auth quand verify_jwt sera activé
         const edgeSecret = import.meta.env.VITE_EDGE_API_SECRET || '';
         const res = await fetch(`${supabaseUrl}/functions/v1/payplug-create`, {
           method: 'POST',
@@ -573,30 +578,52 @@ export default function StaffDetailView() {
             colisRef: sel.ref,
           }),
         });
-        const payData = await res.json();
+        const payData = await res.json().catch(() => ({}));
         if (payData.success && payData.paymentUrl) {
-          // Update local state so the template can read it
+          paymentUrl = payData.paymentUrl;
+          paymentId = payData.paymentId;
           setData((prev) => prev.map((c) => c.id === sel.id
-            ? { ...c, payplugPaymentUrl: payData.paymentUrl, payplugPaymentId: payData.paymentId }
+            ? { ...c, payplugPaymentUrl: paymentUrl, payplugPaymentId: paymentId }
             : c
           ));
         } else {
+          payplugFailed = true;
           console.warn('[PayPlug] Creation failed:', payData);
         }
       } catch (err) {
+        payplugFailed = true;
         console.error('[PayPlug] Error:', err.message);
       }
     }
 
-    // Step 2: Change status
+    // Step 2 : particulier sans lien → bloquer et laisser le staff choisir
+    if (!isPro && !paymentUrl) {
+      const reason = payplugFailed
+        ? 'La création du lien de paiement PayPlug a échoué (vérifiez la configuration ou les logs).'
+        : 'Aucun lien de paiement PayPlug n\'a été créé pour ce colis.';
+      ask(
+        'Devis sans lien de paiement',
+        `${reason}\n\nLe client recevra un devis avec "Contactez-nous pour le règlement" au lieu du bouton Payer. Envoyer quand même ?`,
+        () => proceedSendDevis(canal, null),
+        { danger: true, okLabel: 'Envoyer sans lien' },
+      );
+      return;
+    }
+
+    proceedSendDevis(canal, paymentUrl);
+  }
+
+  // Envoi effectif du devis : on construit le message localement pour éviter
+  // la race condition entre setData() et sendMsg() qui relisait l'état async.
+  function proceedSendDevis(canal, paymentUrl) {
+    const effectiveColis = paymentUrl
+      ? { ...sel, payplugPaymentUrl: paymentUrl }
+      : sel;
+    const tpl = MSG_TEMPLATES.devis_final;
+    const fullMsg = canal === 'telegram' ? tpl.telegram(cl, effectiveColis) : tpl.email(cl, effectiveColis);
+
     changerStatut(sel.id, 'devis_envoye');
-
-    // Step 3: Send the devis via template (which now includes PayPlug link)
-    // 800ms delay to allow setData to propagate so the template reads the PayPlug URL
-    setTimeout(() => {
-      sendMsg(sel.id, cl?.id, cl?.telegramChatId ? 'telegram' : 'email', 'devis_final', null);
-    }, 800);
-
+    sendMsg(sel.id, cl?.id, canal, null, fullMsg);
     setDevisPrev(false);
   }
 
