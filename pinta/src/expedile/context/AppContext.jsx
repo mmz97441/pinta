@@ -403,7 +403,7 @@ export function AppProvider({ children }) {
   }, [sbReady, auth]);
 
   // ── Communication ──
-  const sendMsg = useCallback(async (colisId, clientId, canal, templateKey, customMsg) => {
+  const sendMsg = useCallback(async (colisId, clientId, canal, templateKey, customMsg, options = {}) => {
     const c = clients.find((x) => x.id === clientId);
     const colis = data.find((x) => x.id === colisId);
     if (!c) return;
@@ -461,6 +461,7 @@ export function AppProvider({ children }) {
 
         // Si c'est un feu vert, envoyer avec boutons OUI/NON
         const isFeuVert = templateKey === 'demande_feu_vert' || templateKey === 'relance_feu_vert';
+        const extraButtons = Array.isArray(options.buttons) ? options.buttons : [];
         let res;
         if (isFeuVert && colisId) {
           res = await sendTelegramWithButtons(chatId, fullMsg, [
@@ -469,6 +470,8 @@ export function AppProvider({ children }) {
               { text: '❌ NON — Refuser', callback_data: `fv_non_${colisId}` },
             ],
           ]);
+        } else if (extraButtons.length > 0) {
+          res = await sendTelegramWithButtons(chatId, fullMsg, extraButtons);
         } else {
           res = await sendNotification(chatId, fullMsg);
         }

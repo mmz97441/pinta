@@ -622,8 +622,13 @@ export default function StaffDetailView() {
     const tpl = MSG_TEMPLATES.devis_final;
     const fullMsg = canal === 'telegram' ? tpl.telegram(cl, effectiveColis) : tpl.email(cl, effectiveColis);
 
+    // Bouton inline "Payer maintenant" (Telegram uniquement, si lien dispo)
+    const buttons = (canal === 'telegram' && paymentUrl)
+      ? [[{ text: '💳 Payer maintenant', url: paymentUrl }]]
+      : [];
+
     changerStatut(sel.id, 'devis_envoye');
-    sendMsg(sel.id, cl?.id, canal, null, fullMsg);
+    sendMsg(sel.id, cl?.id, canal, null, fullMsg, { buttons });
     setDevisPrev(false);
   }
 

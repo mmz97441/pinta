@@ -382,8 +382,8 @@ ${colis.lignes?.length > 0 ? `\nContenu déclaré :\n${colis.lignes.map((l) => `
 ${colis.fraisDivers?.length > 0 ? colis.fraisDivers.map((f) => `📎 ${f.libelle} ..................... ${eur(f.montant)}`).join('\n') + '\n' : ''}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 💰 TOTAL                              ${eur(colis.devisTotal)}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-${colis.economie > 0 ? `\n✅ Économie réalisée : ${eur(colis.economie)}\nGrâce à l'optimisation, vous économisez par rapport\naux dimensions d'origine (${eur(colis.avantOptimTotal)}).\n` : ''}
-Pour déclencher l'expédition, réglez ce montant :
+${colis.economie > 0 ? `\n✅ Économie réalisée : ${eur(colis.economie)}\nGrâce à l'optimisation, vous économisez par rapport\naux dimensions d'origine (${eur(colis.avantOptimTotal)}).\n` : ''}${colis.payplugPaymentUrl ? `\n💳 Payez en ligne en un clic :\n${colis.payplugPaymentUrl}\n` : ''}
+Pour déclencher l'expédition, réglez ce montant :${colis.payplugPaymentUrl ? `\n• En cliquant sur le lien de paiement ci-dessus` : ''}
 • Sur votre espace client en ligne
 • Par virement bancaire
 • En nous contactant
