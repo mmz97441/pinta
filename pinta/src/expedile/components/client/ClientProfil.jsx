@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { BRAND, getDestByCP } from '../../constants';
-import { eur, fmtMembreDep, validateProfile } from '../../utils';
+import { eur, fmtMembreDep, validateProfile, getPrenom } from '../../utils';
 
 // ── Tier config ────────────────────────────────────────────────────────────────
 const TIERS = [
@@ -117,7 +117,7 @@ export default function ClientProfil() {
 
   const cl = authCl;
   const dest = cl ? getDestByCP(cl.cp) : null;
-  const firstName = cl ? cl.nom.split(' ')[0] : 'Client';
+  const firstName = getPrenom(cl) || 'Client';
   const initials = cl
     ? cl.nom.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase()
     : '?';

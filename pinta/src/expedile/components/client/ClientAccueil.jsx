@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Package, AlertCircle, CreditCard, CheckCircle, Clock, TrendingUp, ChevronRight } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { BRAND, STATUTS, ABONNEMENTS, getDestByCP } from '../../constants';
-import { eur } from '../../utils';
+import { eur, getPrenom } from '../../utils';
 import { Badge, ProgressBar, ViewToggle } from '../ui';
 
 export default function ClientAccueil() {
@@ -13,7 +13,7 @@ export default function ClientAccueil() {
 
   const cl = authCl;
   const dest = cl ? getDestByCP(cl.cp) : null;
-  const firstName = cl ? cl.nom.split(' ')[0] : 'Client';
+  const firstName = getPrenom(cl) || 'Client';
 
   const myColis = cl ? data.filter((p) => p.clientId === cl.id) : [];
 

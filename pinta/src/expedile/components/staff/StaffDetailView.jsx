@@ -4,7 +4,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { BRAND, STATUTS, TRANSITIONS, PRODUITS_INTERDITS, TAGS_PREPARATION, getDestByCP } from '../../constants';
-import { eur, calcTransport, getCatTaux } from '../../utils';
+import { eur, calcTransport, getCatTaux, getPrenom } from '../../utils';
 import { Ligne } from '../ui';
 import WebcamCapture from '../ui/WebcamCapture';
 import * as sb from '../../lib/supabaseData';
@@ -856,7 +856,7 @@ export default function StaffDetailView() {
               <div className="flex items-center gap-2 p-2 rounded-lg bg-orange-50 border border-orange-200">
                 <Clock size={12} className="text-orange-500 flex-shrink-0" />
                 <p className="text-[10px] font-medium text-orange-700">
-                  Réponse attendue de {cl?.nom?.split(' ')[0] ?? '—'}
+                  Réponse attendue de {getPrenom(cl) || '—'}
                 </p>
               </div>
 
@@ -1483,7 +1483,7 @@ export default function StaffDetailView() {
                   <BtnTelegram disabled={actionLoading} onClick={() => {
                     if (actionLoading) return;
                     const chatId = cl?.telegramChatId;
-                    const prenom = cl?.nom?.split(' ')[0] || '';
+                    const prenom = getPrenom(cl);
                     const payUrl = sel.payplugPaymentUrl;
                     if (!chatId) { flash({ msg: 'Client n\'a pas lié Telegram', type: 'warning' }); return; }
                     setActionLoading(true);

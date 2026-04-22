@@ -6,6 +6,7 @@ import {
 import { BRAND } from '../../constants';
 import * as sb from '../../lib/supabaseData';
 import { sendTelegram } from '../../services/telegramApi';
+import { getPrenom } from '../../utils';
 
 /**
  * ShareLinkPanel — gestion du lien de suivi partagé pour un client.
@@ -87,7 +88,7 @@ export default function ShareLinkPanel({ client, currentUserId, flash, ask }) {
     }
     if (!url) return;
     setSendingTg(true);
-    const prenom = (client.prenom || (client.nom || '').split(' ')[0]) || 'bonjour';
+    const prenom = getPrenom(client) || 'bonjour';
     const message = `Bonjour ${prenom} 👋\n\nVoici votre *lien de suivi en temps réel* à partager avec votre famille :\n\n${url}\n\nIls pourront suivre l'avancement de chaque colis sans créer de compte.\n\n_L'équipe Expedîle_`;
     const res = await sendTelegram(client.telegramChatId, message);
     setSendingTg(false);

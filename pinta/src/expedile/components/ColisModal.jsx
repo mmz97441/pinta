@@ -3,7 +3,7 @@ import { X, FileText, Search, UserPlus, Ruler, Package, MapPin, Camera } from 'l
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { BRAND, STATUTS, getDestByCP, PRODUITS_INTERDITS, ABONNEMENTS } from '../constants';
-import { uid, searchClients, telegramLink } from '../utils';
+import { uid, searchClients, telegramLink, getPrenom } from '../utils';
 import { Badge } from './ui';
 import * as sb from '../lib/supabaseData';
 import { isTelegramConfigured, sendTelegram } from '../services/telegramApi';
@@ -320,9 +320,25 @@ export default function ColisModal({ open, onClose }) {
     if (sendTG && cl) {
       const chatId = cl.telegramChatId;
       const dest = getDestByCP(cl.cp);
-      const prenom = (cl.nom || '').split(' ')[0];
-      const trackingsStr = newColis.trackings?.filter((t) => t).join(', ') || '';
+      const prenom = getPrenom(cl);
       const fournisseurs = (newColis.trackingsDetail || []).map((td) => td.fournisseur).filter(Boolean).join(', ');
+
+      // Tracking groupé par fournisseur : SHEIN : X, Y — AMAZON : Z
+      // Fallback : liste plate si aucune info fournisseur par carton.
+      const detail = (newColis.trackingsDetail || []).filter((td) => td?.number);
+      let trackingBlock = '';
+      if (detail.length > 0 && detail.some((td) => td.fournisseur)) {
+        const grouped = detail.reduce((acc, td) => {
+          const key = td.fournisseur || 'Autre';
+          (acc[key] = acc[key] || []).push(td.number);
+          return acc;
+        }, {});
+        const lines = Object.entries(grouped).map(([f, nums]) => `  • *${f}* : ${nums.join(', ')}`);
+        trackingBlock = `🔍 *Tracking :*\n${lines.join('\n')}\n`;
+      } else {
+        const flat = newColis.trackings?.filter((t) => t).join(', ') || detail.map((td) => td.number).join(', ');
+        if (flat) trackingBlock = `🔍 *Tracking :* ${flat}\n`;
+      }
 
       const hasMeasured = newColis.dimL && newColis.dimW && newColis.dimH && newColis.poids;
       const dimsLine = hasMeasured
@@ -333,7 +349,7 @@ export default function ColisModal({ open, onClose }) {
         ? `\n\n⚠️ *Attention :* Votre abonnement a expiré. Le traitement de vos colis est suspendu jusqu'au renouvellement. Contactez-nous pour réactiver votre compte.\n`
         : '';
 
-      const telegramMsg = `Bonjour ${prenom} 👋\n\nBonne nouvelle ! Votre colis *${newColis.ref}* est bien arrivé à notre entrepôt de Paris 🎉\n\n📦 *Contenu :* ${newColis.desc || fournisseurs}\n${trackingsStr ? `🔍 *Tracking :* ${trackingsStr}\n` : ''}🎯 *Destination :* ${dest?.flag || ''} ${dest?.nom || ''}\n\n${dimsLine}\n📄 *Important :* Merci de nous envoyer la *facture d'achat d'origine* dans les meilleurs délais — elle est obligatoire pour le calcul des taxes douanières et l'établissement de votre devis.${expiryWarning}\n\n_L'équipe Expedîle_`;
+      const telegramMsg = `Bonjour ${prenom} 👋\n\nBonne nouvelle ! Votre colis *${newColis.ref}* est bien arrivé à notre entrepôt de Paris 🎉\n\n📦 *Contenu :* ${newColis.desc || fournisseurs}\n${trackingBlock}🎯 *Destination :* ${dest?.flag || ''} ${dest?.nom || ''}\n\n${dimsLine}\n📄 *Important :* Merci de nous envoyer la *facture d'achat d'origine* dans les meilleurs délais — elle est obligatoire pour le calcul des taxes douanières et l'établissement de votre devis.${expiryWarning}\n\n_L'équipe Expedîle_`;
 
       if (chatId && isTelegramConfigured()) {
         // Envoyer via API Telegram directement
@@ -351,7 +367,7 @@ export default function ColisModal({ open, onClose }) {
         flash(`Colis ${newColis.ref} réceptionné — notification Telegram envoyée à ${prenom}`);
       } else if (cl.email) {
         // Fallback email
-        const emailMsg = `Objet : Votre colis ${newColis.ref} est arrivé\n\nBonjour ${cl.nom},\n\nVotre colis ${newColis.ref} (${newColis.desc || fournisseurs}) est arrivé à notre entrepôt de Paris.\n\nDestination : ${dest?.flag || ''} ${dest?.nom || ''}\n\nCordialement,\nL'équipe Expedîle`;
+        const emailMsg = `Objet : Votre colis ${newColis.ref} est arrivé\n\nBonjour ${prenom},\n\nVotre colis ${newColis.ref} (${newColis.desc || fournisseurs}) est arrivé à notre entrepôt de Paris.\n\nDestination : ${dest?.flag || ''} ${dest?.nom || ''}\n\nCordialement,\nL'équipe Expedîle`;
         window.open(`mailto:${cl.email}?subject=${encodeURIComponent(`Votre colis ${newColis.ref} est arrivé`)}&body=${encodeURIComponent(emailMsg)}`, '_blank');
         flash(`Colis ${newColis.ref} réceptionné — email ouvert pour ${prenom}`);
       } else {

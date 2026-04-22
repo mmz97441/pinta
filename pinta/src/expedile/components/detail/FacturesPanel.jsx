@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import { Check, X, RotateCcw, Eye, Upload, FileText, Image as ImageIcon, ZoomIn, Plus, Send, Scan } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { BRAND, getDestByCP } from '../../constants';
-import { eur, uid } from '../../utils';
+import { eur, uid, getPrenom } from '../../utils';
 import * as sb from '../../lib/supabaseData';
 import { supabase } from '../../lib/supabase';
 import { sendTelegramReply } from '../../services/telegramApi';
@@ -127,7 +127,7 @@ export default function FacturesPanel() {
     }));
 
     const dest = getDestByCP(cl?.cp);
-    const nom = cl?.nom?.split(' ')[0] || '';
+    const nom = getPrenom(cl) || '';
     const chatId = cl?.telegramChatId;
 
     // Reply to the SPECIFIC Telegram message (if the facture was sent via Telegram)

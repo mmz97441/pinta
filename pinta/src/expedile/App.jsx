@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, useNavigate, useParams, useLocation, Navigate } from 'react-router-dom';
 import { Settings, Users, LogOut, LayoutDashboard, Package, ChevronLeft, ChevronRight, Plus, FileText, Key, AlertTriangle } from 'lucide-react';
 import './brand.css';
+import { getPrenom } from './utils';
 
 import { AppProvider, useApp } from './context/AppContext';
 import { BRAND } from './constants';
@@ -383,7 +384,7 @@ function AppContent() {
               onClick={() => navigate('/profil')}
               className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl text-white hover:bg-white hover:bg-opacity-10 transition-all"
             >
-              <span className="text-sm font-medium text-gray-300">{(authCl.nom || '').split(' ')[0]}</span>
+              <span className="text-sm font-medium text-gray-300">{getPrenom(authCl)}</span>
               <div
                 className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-black flex-shrink-0"
                 style={{ background: `linear-gradient(135deg, ${BRAND.gold}, ${BRAND.goldD})`, color: BRAND.navyD }}

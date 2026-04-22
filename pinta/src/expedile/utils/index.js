@@ -10,6 +10,12 @@ export function uid() {
   return Math.random().toString(36).slice(2, 8);
 }
 
+// Prénom du client pour les salutations. c.nom est construit comme "NOM Prénom"
+// dans mapClient(), donc split(' ')[0] seul renvoie le nom de famille (bug).
+export function getPrenom(c) {
+  return c?.prenom || c?.nom || '';
+}
+
 const MOIS_FR = ['janv.', 'fév.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
 
 export function fmtMembreDep(dateStr) {

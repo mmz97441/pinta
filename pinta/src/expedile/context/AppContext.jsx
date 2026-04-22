@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { STATUTS, PREV_STATUT, CATEGORIES_INIT, CLIENTS_INIT, TARIFS_DEFAUT, initEnvois, getDestByCP, PRODUITS_INTERDITS } from '../constants';
 import { MSG_TEMPLATES } from '../constants/templates';
-import { uid, makeData, calcTransport, getCatTaux, eur, mailtoLink, getClientDest } from '../utils';
+import { uid, makeData, calcTransport, getCatTaux, eur, mailtoLink, getClientDest, getPrenom } from '../utils';
 import { isTelegramConfigured, sendTelegram, sendNotification, sendTelegramWithButtons, normalizeTel } from '../services/telegramApi';
 import { usePermissions } from '../hooks/usePermissions';
 import { connectWebhook } from '../services/webhookListener';
@@ -456,7 +456,7 @@ export function AppProvider({ children }) {
     if (canal === 'telegram') {
       const chatId = c.telegramChatId;
       if (isTelegramConfigured() && chatId) {
-        const prenom = (c.nom || '').split(' ')[0];
+        const prenom = getPrenom(c);
         flash({ msg: `Envoi Telegram → ${prenom}…`, type: 'info' });
 
         // Si c'est un feu vert, envoyer avec boutons OUI/NON
@@ -486,12 +486,12 @@ export function AppProvider({ children }) {
         // Client pas lié Telegram → fallback email automatique
         window.open(mailtoLink(c.email, fullMsg), '_blank');
         await persistMessage('envoye');
-        flash({ msg: `Telegram non disponible → email envoyé à ${(c.nom || '').split(' ')[0]}`, type: 'success' });
+        flash({ msg: `Telegram non disponible → email envoyé à ${getPrenom(c)}`, type: 'success' });
       } else if (!chatId && !c.email) {
         // Ni Telegram ni email
         await persistMessage('en_attente');
         flash({
-          msg: `${(c.nom || '').split(' ')[0]} n'a ni Telegram ni email. Message en attente.`,
+          msg: `${getPrenom(c)} n'a ni Telegram ni email. Message en attente.`,
           type: 'warning',
           duration: 5000,
         });
@@ -501,9 +501,9 @@ export function AppProvider({ children }) {
     } else if (canal === 'email' && c.email) {
       window.open(mailtoLink(c.email, fullMsg), '_blank');
       await persistMessage('envoye');
-      flash(`Email → ${(c.nom || '').split(' ')[0]}`);
+      flash(`Email → ${getPrenom(c)}`);
     } else if (canal === 'email' && !c.email) {
-      flash({ msg: `${(c.nom || '').split(' ')[0]} n'a pas d'adresse email`, type: 'warning' });
+      flash({ msg: `${getPrenom(c)} n'a pas d'adresse email`, type: 'warning' });
     }
   }, [clients, data, auth, flash]);
 

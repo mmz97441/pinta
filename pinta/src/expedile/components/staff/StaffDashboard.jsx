@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { BRAND, STATUTS, STATUT_ENVOI, ABONNEMENTS, getDestByCP } from '../../constants';
-import { eur, labelEnvoi, trackStr, trackCount, hasTrack, searchGlobal, fuzzy } from '../../utils';
+import { eur, labelEnvoi, trackStr, trackCount, hasTrack, searchGlobal, fuzzy, getPrenom } from '../../utils';
 import { Badge, ViewToggle } from '../ui';
 import { exportColisExcel } from '../../utils/exportExcel';
 import { exportFactureCommerciale } from '../../utils/exportFactureCommerciale';
@@ -1093,7 +1093,7 @@ export default function StaffDashboard({ onNewColis }) {
                   style={{ background: '#FFF5F5', color: '#991B1B', border: '1px solid #FECACA' }}
                 >
                   <span>{c.ref}</span>
-                  <span className="font-normal text-red-500">{cl?.nom?.split(' ')[0] || ''}</span>
+                  <span className="font-normal text-red-500">{getPrenom(cl)}</span>
                   <ChevronRight size={11} className="text-red-400" />
                 </button>
               );

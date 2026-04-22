@@ -1,5 +1,5 @@
 import { getDestByCP } from './index';
-import { eur, trackStr } from '../utils';
+import { eur, trackStr, getPrenom } from '../utils';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // MSG_TEMPLATES — Messages professionnels et informatifs
@@ -72,12 +72,12 @@ export const MSG_TEMPLATES = {
     meta: {
       name: 'colis_reception',
       lang: 'fr',
-      params: (c, colis) => [(c.nom || '').split(' ')[0], colis.ref, colis.desc || ''],
+      params: (c, colis) => [getPrenom(c), colis.ref, colis.desc || ''],
     },
     telegram: (c, colis) => {
       const dest = getDestByCP(c.cp);
       const cartonsInfo = cartonsList(colis);
-      return `Bonjour ${(c.nom || '').split(' ')[0]} 👋
+      return `Bonjour ${getPrenom(c)} 👋
 
 Bonne nouvelle ! Votre colis *${colis.ref}* est bien arrivé à notre entrepôt de Paris 🎉
 
@@ -96,7 +96,7 @@ _L'équipe Expedîle — Paris → ${dest.nom}_`;
       const cartonsInfo = cartonsList(colis);
       return `Objet : 📦 Votre colis ${colis.ref} est bien arrivé à Paris !
 
-Bonjour ${c.nom},
+Bonjour ${getPrenom(c)},
 
 Nous avons le plaisir de vous confirmer la réception de votre colis à notre entrepôt de Paris.
 
@@ -130,10 +130,10 @@ Paris → ${dest.nom}`;
     meta: {
       name: 'facture_manquante',
       lang: 'fr',
-      params: (c, colis) => [(c.nom || '').split(' ')[0], colis.ref],
+      params: (c, colis) => [getPrenom(c), colis.ref],
     },
     telegram: (c, colis) =>
-      `Bonjour ${(c.nom || '').split(' ')[0]} 👋
+      `Bonjour ${getPrenom(c)} 👋
 
 Pour avancer sur votre colis *${colis.ref}* (${colis.desc}), nous avons besoin de la *facture d'achat d'origine*.
 
@@ -155,7 +155,7 @@ _L'équipe Expedîle_`,
     email: (c, colis) =>
       `Objet : 📄 Facture requise pour votre colis ${colis.ref}
 
-Bonjour ${c.nom},
+Bonjour ${getPrenom(c)},
 
 Pour poursuivre le traitement de votre colis ${colis.ref} (${colis.desc}), nous avons besoin de la facture d'achat d'origine.
 
@@ -185,7 +185,7 @@ L'équipe Expedîle`,
       name: 'demande_feu_vert',
       lang: 'fr',
       params: (c, colis) => [
-        (c.nom || '').split(' ')[0],
+        getPrenom(c),
         colis.ref,
         colis.dimL ? `${colis.dimL}x${colis.dimW}x${colis.dimH} cm` : '',
         colis.poids ? `${colis.poids} kg` : '',
@@ -194,7 +194,7 @@ L'équipe Expedîle`,
     telegram: (c, colis) => {
       const dest = getDestByCP(c.cp);
       const hasMulti = (colis.trackings?.filter((t) => t).length || 0) > 1;
-      return `Bonjour ${(c.nom || '').split(' ')[0]} 👋
+      return `Bonjour ${getPrenom(c)} 👋
 
 Votre colis *${colis.ref}* a été réceptionné et mesuré à notre entrepôt de Paris ✅
 
@@ -221,7 +221,7 @@ _Expedîle — Paris → ${dest.nom}_`;
       const dest = getDestByCP(c.cp);
       return `Objet : 🔔 Votre accord est nécessaire — Colis ${colis.ref}
 
-Bonjour ${c.nom},
+Bonjour ${getPrenom(c)},
 
 Votre colis a été réceptionné et mesuré à notre entrepôt de Paris.
 
@@ -258,10 +258,10 @@ Paris → ${dest.nom}`;
     meta: {
       name: 'feu_vert_confirme',
       lang: 'fr',
-      params: (c, colis) => [(c.nom || '').split(' ')[0], colis.ref],
+      params: (c, colis) => [getPrenom(c), colis.ref],
     },
     telegram: (c, colis) =>
-      `Bonjour ${(c.nom || '').split(' ')[0]} 👋
+      `Bonjour ${getPrenom(c)} 👋
 
 Merci pour votre accord ! ✅
 
@@ -278,7 +278,7 @@ _L'équipe Expedîle_`,
     email: (c, colis) =>
       `Objet : ✅ Accord reçu — ${colis.ref} en préparation
 
-Bonjour ${c.nom},
+Bonjour ${getPrenom(c)},
 
 Merci ! Nous avons bien reçu votre accord pour le colis ${colis.ref} (${colis.desc}).
 
@@ -302,7 +302,7 @@ L'équipe Expedîle`,
       name: 'devis_final',
       lang: 'fr',
       params: (c, colis) => [
-        (c.nom || '').split(' ')[0],
+        getPrenom(c),
         colis.ref,
         eur(colis.devisTotal),
         eur(colis.devisTransport),
@@ -318,7 +318,7 @@ L'équipe Expedîle`,
       const pvAvant = colis.dimL ? ((colis.dimL * colis.dimW * colis.dimH) / 5000) : 0;
       // Poids vol. après optimisation
       const pvApres = colis.finL ? ((colis.finL * colis.finW * colis.finH) / 5000) : 0;
-      return `Bonjour ${(c.nom || '').split(' ')[0]} 👋
+      return `Bonjour ${getPrenom(c)} 👋
 
 Le devis final pour votre expédition *${colis.ref}* est prêt ! 📋
 
@@ -357,7 +357,7 @@ _L'équipe Expedîle — Paris → ${dest.nom}_`;
       const pvApres = colis.finL ? ((colis.finL * colis.finW * colis.finH) / 5000) : 0;
       return `Objet : 💳 Devis final — ${colis.ref} : ${eur(colis.devisTotal)}
 
-Bonjour ${c.nom},
+Bonjour ${getPrenom(c)},
 
 Le devis final pour votre expédition est prêt.
 
@@ -404,10 +404,10 @@ Paris → ${dest.nom}`;
     meta: {
       name: 'relance_feu_vert',
       lang: 'fr',
-      params: (c, colis) => [(c.nom || '').split(' ')[0], colis.ref],
+      params: (c, colis) => [getPrenom(c), colis.ref],
     },
     telegram: (c, colis) =>
-      `Bonjour ${(c.nom || '').split(' ')[0]} 👋
+      `Bonjour ${getPrenom(c)} 👋
 
 Petit rappel amical 😊 Votre colis *${colis.ref}* (${colis.desc}) attend toujours votre accord pour la préparation.
 
@@ -423,7 +423,7 @@ _L'équipe Expedîle_`,
     email: (c, colis) =>
       `Objet : ⏰ Rappel — En attente de votre accord pour ${colis.ref}
 
-Bonjour ${c.nom},
+Bonjour ${getPrenom(c)},
 
 Nous nous permettons de vous relancer : votre colis ${colis.ref} (${colis.desc}) est toujours en attente de votre accord pour la préparation.
 
@@ -450,11 +450,11 @@ L'équipe Expedîle`,
     meta: {
       name: 'relance_paiement',
       lang: 'fr',
-      params: (c, colis) => [(c.nom || '').split(' ')[0], colis.ref, eur(colis.devisTotal)],
+      params: (c, colis) => [getPrenom(c), colis.ref, eur(colis.devisTotal)],
     },
     telegram: (c, colis) => {
       const dest = getDestByCP(c.cp);
-      return `Bonjour ${(c.nom || '').split(' ')[0]} 👋
+      return `Bonjour ${getPrenom(c)} 👋
 
 Votre colis *${colis.ref}* (${colis.desc}) est prêt à partir ! ✈️
 
@@ -477,7 +477,7 @@ _L'équipe Expedîle_`;
       const dest = getDestByCP(c.cp);
       return `Objet : ⏰ Rappel paiement — ${colis.ref} (${eur(colis.devisTotal)})
 
-Bonjour ${c.nom},
+Bonjour ${getPrenom(c)},
 
 Votre colis ${colis.ref} (${colis.desc}) est prêt et n'attend plus que votre paiement pour être expédié vers ${dest.flag} ${dest.nom}.
 
@@ -505,11 +505,11 @@ L'équipe Expedîle`;
     meta: {
       name: 'colis_expedie',
       lang: 'fr',
-      params: (c, colis) => [(c.nom || '').split(' ')[0], colis.ref, getDestByCP(c.cp).nom],
+      params: (c, colis) => [getPrenom(c), colis.ref, getDestByCP(c.cp).nom],
     },
     telegram: (c, colis) => {
       const dest = getDestByCP(c.cp);
-      return `Bonjour ${(c.nom || '').split(' ')[0]} 👋
+      return `Bonjour ${getPrenom(c)} 👋
 
 ✈️ *Votre colis est en route !*
 
@@ -527,7 +527,7 @@ _L'équipe Expedîle — Paris → ${dest.nom}_`;
       const dest = getDestByCP(c.cp);
       return `Objet : ✈️ Votre colis ${colis.ref} est en route vers ${dest.nom} !
 
-Bonjour ${c.nom},
+Bonjour ${getPrenom(c)},
 
 Excellente nouvelle ! Votre colis a été expédié depuis notre entrepôt de Paris.
 
@@ -558,11 +558,11 @@ Paris → ${dest.nom}`;
     meta: {
       name: 'colis_arrive',
       lang: 'fr',
-      params: (c, colis) => [(c.nom || '').split(' ')[0], colis.ref, getDestByCP(c.cp).nom],
+      params: (c, colis) => [getPrenom(c), colis.ref, getDestByCP(c.cp).nom],
     },
     telegram: (c, colis) => {
       const dest = getDestByCP(c.cp);
-      return `Bonjour ${(c.nom || '').split(' ')[0]} 👋
+      return `Bonjour ${getPrenom(c)} 👋
 
 📍 *Votre colis est arrivé à ${dest.nom} !*
 
@@ -578,7 +578,7 @@ _L'équipe Expedîle_`;
       const dest = getDestByCP(c.cp);
       return `Objet : 📍 Votre colis ${colis.ref} est arrivé à ${dest.nom} !
 
-Bonjour ${c.nom},
+Bonjour ${getPrenom(c)},
 
 Votre colis ${colis.ref} (${colis.desc}) est bien arrivé à ${dest.nom}.
 
@@ -599,10 +599,10 @@ L'équipe Expedîle`;
     meta: {
       name: 'en_livraison',
       lang: 'fr',
-      params: (c, colis) => [(c.nom || '').split(' ')[0], colis?.ref || ''],
+      params: (c, colis) => [getPrenom(c), colis?.ref || ''],
     },
     telegram: (c, colis) =>
-      `Bonjour ${(c.nom || '').split(' ')[0]} 👋
+      `Bonjour ${getPrenom(c)} 👋
 
 🚚 *Votre colis ${colis?.ref || ''} est en cours de livraison !*
 
@@ -616,7 +616,7 @@ _L'équipe Expedîle_`,
     email: (c, colis) =>
       `Objet : 🚚 Livraison en cours — ${colis?.ref || 'Votre colis'}
 
-Bonjour ${c.nom},
+Bonjour ${getPrenom(c)},
 
 Votre colis ${colis?.ref || ''} (${colis?.desc || ''}) est en cours de livraison aujourd'hui.
 
@@ -636,10 +636,10 @@ L'équipe Expedîle`,
     meta: {
       name: 'facture_rejetee',
       lang: 'fr',
-      params: (c, colis) => [(c.nom || '').split(' ')[0], colis.ref],
+      params: (c, colis) => [getPrenom(c), colis.ref],
     },
     telegram: (c, colis) =>
-      `Bonjour ${(c.nom || '').split(' ')[0]} 👋
+      `Bonjour ${getPrenom(c)} 👋
 
 ⚠️ La facture transmise pour votre colis *${colis.ref}* (${colis.desc}) n'a pas pu être validée.
 
@@ -656,7 +656,7 @@ _L'équipe Expedîle_`,
     email: (c, colis) =>
       `Objet : ⚠️ Facture non validée — ${colis.ref}
 
-Bonjour ${c.nom},
+Bonjour ${getPrenom(c)},
 
 La facture que vous nous avez transmise pour votre colis ${colis.ref} (${colis.desc}) n'a malheureusement pas pu être validée.
 
@@ -676,15 +676,15 @@ L'équipe Expedîle`,
   // ═══════════════════════════════════════════════════════════════
   libre: {
     label: '✍️ Message libre',
-    telegram: (c) => `Bonjour ${(c.nom || '').split(' ')[0]} 👋\n\n\n\n_L'équipe Expedîle_`,
-    email: (c) => `Objet : \n\nBonjour ${c.nom},\n\n\n\nCordialement,\nL'équipe Expedîle`,
+    telegram: (c) => `Bonjour ${getPrenom(c)} 👋\n\n\n\n_L'équipe Expedîle_`,
+    email: (c) => `Objet : \n\nBonjour ${getPrenom(c)},\n\n\n\nCordialement,\nL'équipe Expedîle`,
   },
 
   invitation_telegram: {
     label: '📲 Invitation Telegram',
     telegram: (c) => '',
     email: (c) => {
-      const prenom = c.nom?.split(' ')[0] || 'Client';
+      const prenom = getPrenom(c) || 'Client';
       const inviteLink = `https://t.me/Expedilebot?start=${c.id || ''}`;
       return `Objet : 📲 Activez vos notifications Expedile sur Telegram
 

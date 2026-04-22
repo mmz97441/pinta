@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, Users, Plus, Search, ChevronDown, Check, X, AlertTriangle, ExternalLink, Send, Download, FileSpreadsheet, Upload, Loader2, Crown } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { BRAND, ABONNEMENTS, getDestByCP } from '../../constants';
-import { uid, telegramLink, searchClients, eur } from '../../utils';
+import { uid, telegramLink, searchClients, eur, getPrenom } from '../../utils';
 import { Badge } from '../ui';
 import { exportRecapProExcel } from '../../utils/exportRecapPro';
 import { parseClientFile, detectDuplicates } from '../../utils/importClients';
@@ -1199,7 +1199,7 @@ export default function StaffClients() {
 
                   {cl.email && (
                     <a
-                      href={`mailto:${cl.email}?subject=${encodeURIComponent('Bienvenue chez Expedîle !')}&body=${encodeURIComponent(`Bonjour ${cl.nom ? cl.nom.split(' ')[0] : ''},\n\nVotre espace client Expedîle est prêt !\n\nConnectez-vous ici : https://expedile.re/app\n\nÀ très vite !\nL'équipe Expedîle`)}`}
+                      href={`mailto:${cl.email}?subject=${encodeURIComponent('Bienvenue chez Expedîle !')}&body=${encodeURIComponent(`Bonjour ${getPrenom(cl)},\n\nVotre espace client Expedîle est prêt !\n\nConnectez-vous ici : https://expedile.re/app\n\nÀ très vite !\nL'équipe Expedîle`)}`}
                       target="_blank"
                       rel="noreferrer"
                       className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl text-sm font-bold bg-blue-50 text-blue-700 border-2 border-blue-200 hover:bg-blue-100 transition-all active:scale-95"
