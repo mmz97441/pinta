@@ -3,6 +3,7 @@ import { X, FileText, Search, UserPlus, Ruler, Package, MapPin, Camera } from 'l
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { BRAND, STATUTS, getDestByCP, PRODUITS_INTERDITS, ABONNEMENTS } from '../constants';
+import { MSG_TEMPLATES } from '../constants/templates';
 import { uid, searchClients, telegramLink, getPrenom } from '../utils';
 import { Badge } from './ui';
 import * as sb from '../lib/supabaseData';
@@ -316,40 +317,18 @@ export default function ColisModal({ open, onClose }) {
       return d.dimL && d.dimW && d.dimH && d.poids;
     });
 
-    // Envoyer notification DIRECTEMENT (pas via sendMsg qui dépend du state)
+    // Envoyer notification DIRECTEMENT (pas via sendMsg qui dépend du state).
+    // On passe par le template centralisé MSG_TEMPLATES.reception pour rester
+    // cohérent avec les autres canaux et éviter la duplication de logique.
     if (sendTG && cl) {
       const chatId = cl.telegramChatId;
-      const dest = getDestByCP(cl.cp);
       const prenom = getPrenom(cl);
-      const fournisseurs = (newColis.trackingsDetail || []).map((td) => td.fournisseur).filter(Boolean).join(', ');
-
-      // Tracking groupé par fournisseur : SHEIN : X, Y — AMAZON : Z
-      // Fallback : liste plate si aucune info fournisseur par carton.
-      const detail = (newColis.trackingsDetail || []).filter((td) => td?.number);
-      let trackingBlock = '';
-      if (detail.length > 0 && detail.some((td) => td.fournisseur)) {
-        const grouped = detail.reduce((acc, td) => {
-          const key = td.fournisseur || 'Autre';
-          (acc[key] = acc[key] || []).push(td.number);
-          return acc;
-        }, {});
-        const lines = Object.entries(grouped).map(([f, nums]) => `  • *${f}* : ${nums.join(', ')}`);
-        trackingBlock = `🔍 *Tracking :*\n${lines.join('\n')}\n`;
-      } else {
-        const flat = newColis.trackings?.filter((t) => t).join(', ') || detail.map((td) => td.number).join(', ');
-        if (flat) trackingBlock = `🔍 *Tracking :* ${flat}\n`;
-      }
-
-      const hasMeasured = newColis.dimL && newColis.dimW && newColis.dimH && newColis.poids;
-      const dimsLine = hasMeasured
-        ? `📐 *Dimensions :* ${newColis.dimL}×${newColis.dimW}×${newColis.dimH} cm — ${newColis.poids} kg\n⚖️ *Poids vol. :* ${((newColis.dimL * newColis.dimW * newColis.dimH) / 5000).toFixed(2)} kg\n`
-        : '📐 Nous allons le mesurer et peser.\n';
 
       const expiryWarning = isSubExpired && isAnnuelSub
         ? `\n\n⚠️ *Attention :* Votre abonnement a expiré. Le traitement de vos colis est suspendu jusqu'au renouvellement. Contactez-nous pour réactiver votre compte.\n`
         : '';
 
-      const telegramMsg = `Bonjour ${prenom} 👋\n\nBonne nouvelle ! Votre colis *${newColis.ref}* est bien arrivé à notre entrepôt de Paris 🎉\n\n📦 *Contenu :* ${newColis.desc || fournisseurs}\n${trackingBlock}🎯 *Destination :* ${dest?.flag || ''} ${dest?.nom || ''}\n\n${dimsLine}\n📄 *Important :* Merci de nous envoyer la *facture d'achat d'origine* dans les meilleurs délais — elle est obligatoire pour le calcul des taxes douanières et l'établissement de votre devis.${expiryWarning}\n\n_L'équipe Expedîle_`;
+      const telegramMsg = MSG_TEMPLATES.reception.telegram(cl, newColis) + expiryWarning;
 
       if (chatId && isTelegramConfigured()) {
         // Envoyer via API Telegram directement
@@ -366,9 +345,12 @@ export default function ColisModal({ open, onClose }) {
         });
         flash(`Colis ${newColis.ref} réceptionné — notification Telegram envoyée à ${prenom}`);
       } else if (cl.email) {
-        // Fallback email
-        const emailMsg = `Objet : Votre colis ${newColis.ref} est arrivé\n\nBonjour ${prenom},\n\nVotre colis ${newColis.ref} (${newColis.desc || fournisseurs}) est arrivé à notre entrepôt de Paris.\n\nDestination : ${dest?.flag || ''} ${dest?.nom || ''}\n\nCordialement,\nL'équipe Expedîle`;
-        window.open(`mailto:${cl.email}?subject=${encodeURIComponent(`Votre colis ${newColis.ref} est arrivé`)}&body=${encodeURIComponent(emailMsg)}`, '_blank');
+        // Fallback email — template centralisé aussi
+        const emailMsg = MSG_TEMPLATES.reception.email(cl, newColis);
+        const lines = emailMsg.split('\n');
+        const subject = (lines[0] || '').replace(/^Objet\s*:\s*/, '').trim() || `Votre colis ${newColis.ref} est arrivé`;
+        const body = lines.slice(1).join('\n').trim();
+        window.open(`mailto:${cl.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`, '_blank');
         flash(`Colis ${newColis.ref} réceptionné — email ouvert pour ${prenom}`);
       } else {
         flash(`Colis ${newColis.ref} réceptionné — client non joignable (pas de Telegram ni email)`);

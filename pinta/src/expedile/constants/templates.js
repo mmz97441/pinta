@@ -1,5 +1,29 @@
 import { getDestByCP } from './index';
-import { eur, trackStr, getPrenom } from '../utils';
+import { eur, trackStr, getPrenom, nbCartons, renderCartonsDetail } from '../utils';
+
+// Poids réel total + poids volumétrique total d'un colis, calculés à partir
+// des mesures par carton si dispo, sinon à partir des dims globales.
+function computeWeights(colis) {
+  const pc = colis?.dimsParColis || [];
+  const hasPerCarton = pc.some((d) => d?.dimL);
+  if (hasPerCarton) {
+    let poidsReel = 0;
+    let poidsVol = 0;
+    for (const d of pc) {
+      if (d?.poids) poidsReel += Number(d.poids) || 0;
+      if (d?.dimL) poidsVol += (Number(d.dimL) * Number(d.dimW) * Number(d.dimH)) / 5000;
+    }
+    return { poidsReel, poidsVol, hasMeasures: true };
+  }
+  if (colis?.dimL) {
+    return {
+      poidsReel: Number(colis.poids) || 0,
+      poidsVol: (Number(colis.dimL) * Number(colis.dimW) * Number(colis.dimH)) / 5000,
+      hasMeasures: true,
+    };
+  }
+  return { poidsReel: 0, poidsVol: 0, hasMeasures: false };
+}
 
 // ══════════════════════════════════════════════════════════════════════════════
 // MSG_TEMPLATES — Messages professionnels et informatifs
@@ -76,49 +100,142 @@ export const MSG_TEMPLATES = {
     },
     telegram: (c, colis) => {
       const dest = getDestByCP(c.cp);
-      const cartonsInfo = cartonsList(colis);
-      return `Bonjour ${getPrenom(c)} 👋
+      const n = nbCartons(colis);
+      const { poidsReel, poidsVol, hasMeasures } = computeWeights(colis);
+      const cartonsBlock = renderCartonsDetail(colis, { showMeasures: hasMeasures, mode: 'telegram' });
+      const synthese = hasMeasures
+        ? `━━━━━━━━━━━━━━━━━\n📊 *Synthèse actuelle*\n━━━━━━━━━━━━━━━━━\n⚖️ Poids réel${n > 1 ? ' total' : ''} : ${poidsReel.toFixed(1)} kg\n📐 Poids volumétrique : ${poidsVol.toFixed(1)} kg\n\n`
+        : '';
 
-Bonne nouvelle ! Votre colis *${colis.ref}* est bien arrivé à notre entrepôt de Paris 🎉
+      if (n === 1) {
+        return `Bonjour ${getPrenom(c)} 👋
 
-📦 *Contenu :* ${colis.desc}
-${cartonsInfo ? `📋 *${nbCartonsText(colis)} :*\n${cartonsInfo}\n` : ''}🎯 *Destination :* ${dest.flag} ${dest.nom}
+Bonne nouvelle ! Votre colis est bien arrivé à notre entrepôt de Paris. Notre équipe l'a immédiatement pesé et mesuré pour préparer le terrain à l'optimisation 🎉
 
-📐 *Prochaine étape :* Nous allons mesurer et peser votre colis. Vous recevrez les dimensions et une demande d'accord pour lancer la préparation.
+📦 *Détail de votre colis :*
 
-💡 En attendant, pensez à nous envoyer la *facture d'achat* si ce n'est pas déjà fait — elle est nécessaire pour le calcul des taxes.
+${cartonsBlock}
+
+${synthese}🎯 *Destination :* ${dest.flag} ${dest.nom}
+
+━━━━━━━━━━━━━━━━━
+💡 *Notre travail d'optimisation*
+━━━━━━━━━━━━━━━━━
+
+Avec votre accord, notre équipe pourra optimiser l'emballage de votre carton pour réduire le volume facturable.
+
+Nos clients économisent en moyenne *25 à 50% sur le transport* grâce à notre optimisation 💰
+
+🔔 Vous recevrez très bientôt notre demande d'accord détaillée pour pouvoir lancer la préparation.
+
+📄 Pour anticiper la suite : pensez à préparer votre facture d'achat (PDF de préférence). Nous en aurons besoin d'ici quelques jours pour calculer les frais de douane et établir votre devis personnalisé. Vous pouvez nous l'envoyer dès maintenant en réponse à ce message si vous voulez prendre de l'avance 👍
 
 À très vite !
-_L'équipe Expedîle — Paris → ${dest.nom}_`;
+_L'équipe Expedîle — Paris → ${dest.flag} ${dest.nom}_
+
+_Réf. suivi Expedîle : ${colis.ref}_`;
+      }
+
+      // Plusieurs cartons
+      return `Bonjour ${getPrenom(c)} 👋
+
+Bonne nouvelle ! Vos cartons sont bien arrivés à notre entrepôt de Paris. Notre équipe les a immédiatement pesés et mesurés pour préparer le terrain à l'optimisation 🎉
+
+📦 *Détail de vos cartons :*
+
+${cartonsBlock}
+
+${synthese}🎯 *Destination :* ${dest.flag} ${dest.nom}
+
+━━━━━━━━━━━━━━━━━
+💡 *Notre travail d'optimisation*
+━━━━━━━━━━━━━━━━━
+
+Avec votre accord, notre équipe pourra regrouper, démonter et ré-emballer vos cartons pour réduire au maximum le volume facturable.
+
+Nos clients économisent en moyenne *25 à 50% sur le transport* grâce à notre optimisation 💰
+
+🔔 Vous recevrez très bientôt notre demande d'accord détaillée pour pouvoir lancer la préparation.
+
+📄 Pour anticiper la suite : pensez à préparer vos factures d'achat (PDF de préférence). Nous en aurons besoin d'ici quelques jours pour calculer les frais de douane et établir votre devis personnalisé. Vous pouvez nous les envoyer dès maintenant en réponse à ce message si vous voulez prendre de l'avance 👍
+
+À très vite !
+_L'équipe Expedîle — Paris → ${dest.flag} ${dest.nom}_
+
+_Réf. suivi Expedîle : ${colis.ref}_`;
     },
     email: (c, colis) => {
       const dest = getDestByCP(c.cp);
-      const cartonsInfo = cartonsList(colis);
-      return `Objet : 📦 Votre colis ${colis.ref} est bien arrivé à Paris !
+      const n = nbCartons(colis);
+      const { poidsReel, poidsVol, hasMeasures } = computeWeights(colis);
+      const cartonsBlock = renderCartonsDetail(colis, { showMeasures: hasMeasures, mode: 'email' });
+      const synthese = hasMeasures
+        ? `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n📊 Synthèse actuelle\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n⚖️ Poids réel${n > 1 ? ' total' : ''} : ${poidsReel.toFixed(1)} kg\n📐 Poids volumétrique : ${poidsVol.toFixed(1)} kg\n\n`
+        : '';
+
+      if (n === 1) {
+        return `Objet : 📦 Votre colis est bien arrivé à Paris !
 
 Bonjour ${getPrenom(c)},
 
-Nous avons le plaisir de vous confirmer la réception de votre colis à notre entrepôt de Paris.
+Bonne nouvelle ! Votre colis est bien arrivé à notre entrepôt de Paris. Notre équipe l'a immédiatement pesé et mesuré pour préparer le terrain à l'optimisation.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📦 Référence : ${colis.ref}
-📋 Contenu : ${colis.desc}
-${cartonsInfo ? `📦 ${nbCartonsText(colis)} :\n${cartonsInfo}\n` : ''}🎯 Destination : ${dest.flag} ${dest.nom}
+📦 Détail de votre colis
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+${cartonsBlock}
+
+${synthese}🎯 Destination : ${dest.flag} ${dest.nom}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+💡 Notre travail d'optimisation
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Prochaines étapes :
-1. Mesure et pesage de votre colis
-2. Demande de votre accord pour la préparation
-3. Optimisation de l'emballage
-4. Envoi du devis final
+Avec votre accord, notre équipe pourra optimiser l'emballage de votre carton pour réduire le volume facturable.
 
-💡 Important : Si vous ne l'avez pas encore fait, merci de nous transmettre la facture d'achat d'origine. Elle est indispensable pour le calcul des taxes (Octroi de Mer).
+Nos clients économisent en moyenne 25 à 50% sur le transport grâce à notre optimisation.
 
-N'hésitez pas à nous contacter pour toute question.
+Vous recevrez très bientôt notre demande d'accord détaillée pour pouvoir lancer la préparation.
 
-Cordialement,
+📄 Pour anticiper la suite : pensez à préparer votre facture d'achat (PDF de préférence). Nous en aurons besoin d'ici quelques jours pour calculer les frais de douane et établir votre devis personnalisé. Vous pouvez nous l'envoyer dès maintenant en réponse à cet email si vous voulez prendre de l'avance.
+
+À très vite !
 L'équipe Expedîle
-Paris → ${dest.nom}`;
+Paris → ${dest.flag} ${dest.nom}
+
+(Réf. suivi Expedîle : ${colis.ref})`;
+      }
+
+      return `Objet : 📦 Vos cartons sont bien arrivés à Paris !
+
+Bonjour ${getPrenom(c)},
+
+Bonne nouvelle ! Vos cartons sont bien arrivés à notre entrepôt de Paris. Notre équipe les a immédiatement pesés et mesurés pour préparer le terrain à l'optimisation.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📦 Détail de vos cartons
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+${cartonsBlock}
+
+${synthese}🎯 Destination : ${dest.flag} ${dest.nom}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+💡 Notre travail d'optimisation
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Avec votre accord, notre équipe pourra regrouper, démonter et ré-emballer vos cartons pour réduire au maximum le volume facturable.
+
+Nos clients économisent en moyenne 25 à 50% sur le transport grâce à notre optimisation.
+
+Vous recevrez très bientôt notre demande d'accord détaillée pour pouvoir lancer la préparation.
+
+📄 Pour anticiper la suite : pensez à préparer vos factures d'achat (PDF de préférence). Nous en aurons besoin d'ici quelques jours pour calculer les frais de douane et établir votre devis personnalisé. Vous pouvez nous les envoyer dès maintenant en réponse à cet email si vous voulez prendre de l'avance.
+
+À très vite !
+L'équipe Expedîle
+Paris → ${dest.flag} ${dest.nom}
+
+(Réf. suivi Expedîle : ${colis.ref})`;
     },
   },
 
