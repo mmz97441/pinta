@@ -73,6 +73,126 @@ export function trackCount(c) {
   return c.trackings ? c.trackings.filter((t) => t).length : 0;
 }
 
+// ══════════ HELPERS MULTI-CARTONS / MULTI-FOURNISSEURS ══════════
+
+// Nombre réel de cartons d'un colis. On prend le max entre les 3 sources
+// possibles (trackingsDetail, trackings, dimsParColis), fallback à 1.
+export function nbCartons(colis) {
+  if (!colis) return 1;
+  const detailLen = (colis.trackingsDetail || []).length;
+  const trackLen = (colis.trackings || []).filter((t) => t).length;
+  const dimsLen = (colis.dimsParColis || []).length;
+  return Math.max(detailLen, trackLen, dimsLen, 1);
+}
+
+// Liste unique des fournisseurs identifiés sur un colis (depuis trackingsDetail).
+export function fournisseursOf(colis) {
+  if (!colis?.trackingsDetail) return [];
+  return [...new Set(colis.trackingsDetail.map((td) => td?.fournisseur).filter(Boolean))];
+}
+
+// Description naturelle du colis pour le corps des messages client.
+// Pas d'EXP-XXX visible, on parle SES achats. Singulier/pluriel adapté.
+//   "votre colis SHEIN"             (1 fournisseur, 1 carton)
+//   "vos 3 cartons SHEIN"           (1 fournisseur, plusieurs cartons)
+//   "votre colis SHEIN + AMAZON"    (plusieurs fournisseurs, 1 carton total — rare)
+//   "votre livraison SHEIN + AMAZON" (plusieurs fournisseurs, plusieurs cartons)
+//   "votre colis" / "vos cartons"   (pas d'info fournisseur — fallback)
+export function describeColis(colis) {
+  if (!colis) return 'votre colis';
+  const n = nbCartons(colis);
+  const f = fournisseursOf(colis);
+  const fStr = f.join(' + ');
+  if (f.length === 0) return n === 1 ? 'votre colis' : `vos ${n} cartons`;
+  if (f.length === 1 && n === 1) return `votre colis ${fStr}`;
+  if (f.length === 1) return `vos ${n} cartons ${fStr}`;
+  if (n === 1) return `votre colis ${fStr}`;
+  return `votre livraison ${fStr}`;
+}
+
+// Bloc détail des cartons groupés par fournisseur, avec ou sans mesures.
+// opts.showMeasures : afficher dims + poids par carton si dimsParColis dispo
+// opts.mode : 'telegram' (Markdown *bold*) ou 'email' (plain text)
+export function renderCartonsDetail(colis, opts = {}) {
+  const { showMeasures = false, mode = 'telegram' } = opts;
+  const detail = colis?.trackingsDetail || [];
+  const trackings = (colis?.trackings || []).filter((t) => t);
+  const dimsPC = colis?.dimsParColis || [];
+  const n = nbCartons(colis);
+  if (n === 0 || (detail.length === 0 && trackings.length === 0)) return '';
+  const bold = mode === 'telegram' ? '*' : '';
+
+  // Grouper par fournisseur en préservant l'ordre d'arrivée
+  const groups = new Map();
+  for (let i = 0; i < n; i++) {
+    const td = detail[i] || {};
+    const f = td.fournisseur || 'Autre';
+    if (!groups.has(f)) groups.set(f, []);
+    groups.get(f).push({
+      number: td.number || trackings[i] || '',
+      dims: dimsPC[i] || null,
+    });
+  }
+
+  const lines = [];
+  for (const [fournisseur, cartons] of groups) {
+    const lbl = cartons.length === 1 ? '1 carton' : `${cartons.length} cartons`;
+    lines.push(`🛒 ${bold}${fournisseur}${bold} — ${lbl}`);
+    cartons.forEach((carton, i) => {
+      let line = `  ${i + 1}. Tracking : ${carton.number || '—'}`;
+      if (showMeasures && carton.dims?.dimL) {
+        line += `\n     📐 ${carton.dims.dimL} × ${carton.dims.dimW} × ${carton.dims.dimH} cm · ⚖️ ${carton.dims.poids} kg`;
+      }
+      lines.push(line);
+    });
+  }
+  return lines.join('\n');
+}
+
+// Variante "rappel" pour le devis final : pas de tracking, juste les dims/poids
+// (le client n'a plus besoin de revoir les trackings, il les a vus à la réception).
+export function renderCartonsBrief(colis, opts = {}) {
+  const { mode = 'telegram' } = opts;
+  const detail = colis?.trackingsDetail || [];
+  const dimsPC = colis?.dimsParColis || [];
+  const n = nbCartons(colis);
+  if (n === 0) return '';
+  const bold = mode === 'telegram' ? '*' : '';
+
+  const groups = new Map();
+  for (let i = 0; i < n; i++) {
+    const td = detail[i] || {};
+    const f = td.fournisseur || 'Autre';
+    if (!groups.has(f)) groups.set(f, []);
+    groups.get(f).push(dimsPC[i] || null);
+  }
+
+  const lines = [];
+  for (const [fournisseur, dims] of groups) {
+    const lbl = dims.length === 1 ? '1 carton' : `${dims.length} cartons`;
+    lines.push(`🛒 ${bold}${fournisseur}${bold} — ${lbl}`);
+    dims.forEach((d, i) => {
+      if (d?.dimL) lines.push(`  ${i + 1}. ${d.dimL} × ${d.dimW} × ${d.dimH} cm · ${d.poids} kg`);
+    });
+  }
+  return lines.join('\n');
+}
+
+// Date de réception formatée naturellement pour les messages clients.
+// "le 22 avril" / "le 22 avril 2025" si année différente
+export function fmtDateReception(dateStr) {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return '';
+  const mois = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin',
+                'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
+  const jour = d.getDate();
+  const moisStr = mois[d.getMonth()];
+  const annee = d.getFullYear();
+  const anneeCourante = new Date().getFullYear();
+  return annee === anneeCourante ? `le ${jour} ${moisStr}` : `le ${jour} ${moisStr} ${annee}`;
+}
+
 // ══════════ RECHERCHE ══════════
 export function fuzzy(haystack, needle) {
   if (!needle) return true;
