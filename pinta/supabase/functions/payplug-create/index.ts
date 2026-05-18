@@ -5,7 +5,7 @@ const PAYPLUG_KEY = (Deno.env.get('PAYPLUG_SECRET_KEY') || '').trim();
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || '';
 const SUPABASE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
 const API_SECRET = Deno.env.get('EDGE_API_SECRET') || '';
-const APP_URL = 'https://pinta-git-claude-add-column-layout-ceg00-mmz97441s-projects.vercel.app';
+const APP_URL = Deno.env.get('APP_URL') || 'https://pinta.vercel.app';
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -21,15 +21,40 @@ function checkSecret(req: Request): boolean {
 
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
-  if (!checkSecret(req)) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 403, headers: cors });
+  if (!checkSecret(req)) return new Response(JSON.stringify({ ok: false, error: 'Unauthorized' }), { status: 403, headers: cors });
 
   try {
-    if (!PAYPLUG_KEY) return new Response(JSON.stringify({ error: 'PAYPLUG_SECRET_KEY non configuree' }), { status: 500, headers: cors });
+    if (!PAYPLUG_KEY) return new Response(JSON.stringify({ ok: false, error: 'PAYPLUG_SECRET_KEY non configuree' }), { status: 500, headers: cors });
 
     const body = await req.json();
-    const { colisId, amount, clientEmail, clientName, colisRef } = body;
-    if (!colisId || !amount || amount <= 0) return new Response(JSON.stringify({ error: 'colisId et amount requis' }), { status: 400, headers: cors });
+    const { colisId, amount: bodyAmount, clientEmail, clientName, colisRef } = body;
+    if (!colisId) return new Response(JSON.stringify({ ok: false, error: 'colisId requis' }), { status: 400, headers: cors });
 
+    const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    // SECURITY: never trust amount from the request body. Always use the
+    // authoritative devis_total stored on the colis row.
+    const { data: colisRow, error: colisErr } = await supabase
+      .from('colis')
+      .select('devis_total, statut')
+      .eq('id', colisId)
+      .single();
+
+    if (colisErr || !colisRow) {
+      return new Response(JSON.stringify({ ok: false, error: 'Colis introuvable' }), { status: 404, headers: cors });
+    }
+
+    const devisTotal = Number(colisRow.devis_total);
+    if (!devisTotal || devisTotal <= 0) {
+      return new Response(JSON.stringify({ ok: false, error: 'Devis non calculé' }), { status: 400, headers: cors });
+    }
+
+    // Sanity check vs body amount — log only, never let it override.
+    if (bodyAmount && Math.abs(Number(bodyAmount) - devisTotal) > 0.01) {
+      console.warn('[payplug-create] body amount differs from devis_total', { bodyAmount, devisTotal, colisId });
+    }
+
+    const amount = devisTotal;
     const amountCents = Math.round(amount * 100);
     const notificationUrl = `${SUPABASE_URL}/functions/v1/payplug-webhook`;
     const firstName = (clientName || 'Client').split(' ')[0] || 'Client';
@@ -49,14 +74,13 @@ Deno.serve(async (req: Request) => {
       }),
     });
     const payText = await payRes.text();
-    if (!payRes.ok) return new Response(JSON.stringify({ error: 'Erreur PayPlug', status: payRes.status, details: payText.slice(0, 500) }), { status: 500, headers: cors });
+    if (!payRes.ok) return new Response(JSON.stringify({ ok: false, error: 'Erreur PayPlug', status: payRes.status, details: payText.slice(0, 500) }), { status: 500, headers: cors });
 
     const payData = JSON.parse(payText);
-    const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
     await supabase.from('colis').update({ payplug_payment_id: payData.id, payplug_payment_url: payData.hosted_payment?.payment_url }).eq('id', colisId);
 
-    return new Response(JSON.stringify({ success: true, paymentId: payData.id, paymentUrl: payData.hosted_payment?.payment_url }), { headers: cors });
+    return new Response(JSON.stringify({ success: true, paymentId: payData.id, paymentUrl: payData.hosted_payment?.payment_url, amount }), { headers: cors });
   } catch (err) {
-    return new Response(JSON.stringify({ error: String(err) }), { status: 500, headers: cors });
+    return new Response(JSON.stringify({ ok: false, error: String(err) }), { status: 500, headers: cors });
   }
 });
