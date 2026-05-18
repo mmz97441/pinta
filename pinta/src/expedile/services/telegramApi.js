@@ -12,9 +12,9 @@ function edgeHeaders() {
   return { 'Content-Type': 'application/json', 'x-api-secret': API_SECRET };
 }
 
-/** Vérifie si l'API Telegram est configurée (toujours true avec Edge Function) */
+/** Vérifie que le frontend a ce qu'il faut pour appeler l'Edge Function send-telegram. */
 export function isTelegramConfigured() {
-  return true;
+  return !!(SUPABASE_URL && API_SECRET);
 }
 
 export function normalizeTel(tel) {
