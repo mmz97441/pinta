@@ -14,7 +14,15 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const BOT_TOKEN = Deno.env.get("TELEGRAM_BOT_TOKEN") || "";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
 const SUPABASE_SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+const WEBHOOK_SECRET = Deno.env.get("TELEGRAM_WEBHOOK_SECRET") || "";
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
+
+if (!WEBHOOK_SECRET) {
+  console.warn(
+    "[telegram-webhook] TELEGRAM_WEBHOOK_SECRET non configuré — endpoint accepte toutes les requêtes. " +
+    "Configurer la variable d'env ET appeler setWebhook avec secret_token pour activer la vérification.",
+  );
+}
 
 // ═════════════════════════════ HELPERS TELEGRAM ═════════════════════════════
 
@@ -179,6 +187,15 @@ async function findBestColis(
 
 Deno.serve(async (req: Request) => {
   if (req.method !== "POST") return new Response("OK");
+
+  if (WEBHOOK_SECRET) {
+    const headerSecret = req.headers.get("X-Telegram-Bot-Api-Secret-Token") || "";
+    if (headerSecret !== WEBHOOK_SECRET) {
+      console.warn("[telegram-webhook] rejected: invalid secret_token");
+      return new Response("Unauthorized", { status: 401 });
+    }
+  }
+
   try {
     const update = await req.json();
 
