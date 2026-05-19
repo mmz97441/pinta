@@ -1,30 +1,56 @@
 // ══════════ BRAND COLORS ══════════
+// Workshop-calm palette: designed for 8h+ work sessions without eye fatigue.
+// Light mode CSS variables are defined in brand.css; this object mirrors them
+// for inline-style usage (style={{ color: BRAND.navy }}, etc.).
 export const BRAND = {
+  // Core identity (unchanged — load-bearing for visual recognition)
   navy: '#1B3A4B',
   navyL: '#24506A',
   navyD: '#122A36',
-  gold: '#E8B84B',
-  goldL: '#F5D98A',
-  goldD: '#C99A2E',
+  gold: '#D8AA42',   // was #E8B84B — desaturated ~5% for long-session comfort
+  goldL: '#E8C779',
+  goldD: '#B8902F',
+
+  // Backgrounds (light mode) — no more pure white
+  bgCanvas:    '#FAFAF6',  // warm paper, replaces bg-white globally
+  bgSurface:   '#F4F0E6',  // cards on canvas
+  bgElevated:  '#FDFBF5',  // floating cards / modals
+  borderSubtle:'#E5E0D3',
+
+  // Text (light mode) — softened contrast
+  textPrimary:  '#2A2826',  // 12:1 instead of slate-900's 19:1
+  textSecondary:'#605C56',
+  textMuted:    '#8A857B',
+
+  // Semantic — desaturated, "earthy" palette
+  success: '#5C9970',   // sage green (was Tailwind green-500)
+  warning: '#C29243',   // soft amber (was amber-500)
+  danger:  '#B85454',   // brick red (was red-500)
+  info:    '#5577A3',   // slate blue (was blue-500)
+
+  // Pipeline phase gradient (replaces the 6-color rainbow)
+  phase1: '#DBC68A',
+  phase2: '#C9A368',
+  phase3: '#91A584',
 };
 
 // ══════════ STATUTS COLIS ══════════
 export const STATUTS = {
-  receptionne:        { label: 'Réceptionné',                 labelClient: null,                            couleur: 'bg-orange-100 text-orange-700',  phase: 1, actionStaff: 'Mesurer ce colis',               actionClient: null },
-  mesure:             { label: 'Mesuré à réception',          labelClient: 'Mesuré',                        couleur: 'bg-amber-300 text-amber-900',    phase: 1, actionStaff: 'Demander le feu vert',            actionClient: null },
-  attente_feu_vert:   { label: "En attente d'accord client",  labelClient: 'Votre accord est attendu',      couleur: 'bg-orange-200 text-orange-800',  phase: 2, actionStaff: 'En attente du client',            actionClient: 'Donner votre accord' },
-  autorise:           { label: 'Autorisation reçue',          labelClient: 'Accord donné',                  couleur: 'bg-green-200 text-green-800',    phase: 2, actionStaff: 'Préparer ce colis',               actionClient: null },
-  refuse_client:      { label: 'Refusé par le client',        labelClient: 'Refusé',                        couleur: 'bg-red-200 text-red-700',        phase: 2, actionStaff: 'Traiter le refus',                actionClient: null },
-  en_preparation:     { label: 'En cours de préparation',     labelClient: null,                            couleur: 'bg-blue-200 text-blue-800',      phase: 3, actionStaff: 'Finaliser et envoyer le devis',   actionClient: null },
-  devis_envoye:       { label: 'Devis envoyé',                labelClient: 'Devis reçu — en attente de paiement', couleur: 'bg-amber-200 text-amber-900',    phase: 4, actionStaff: 'En attente paiement',              actionClient: 'Payer' },
-  paye:               { label: 'Payé',                        labelClient: null,                            couleur: 'bg-emerald-200 text-emerald-800',phase: 4, actionStaff: 'Expédier ce colis',               actionClient: null },
-  expedie:            { label: 'Expédié',                     labelClient: null,                            couleur: 'bg-cyan-200 text-cyan-800',      phase: 5, actionStaff: 'Marquer en transit',              actionClient: null },
-  transit:            { label: 'En vol',                      labelClient: null,                            couleur: 'bg-sky-200 text-sky-800',        phase: 5, actionStaff: 'Dédouanement ou arrivée',       actionClient: null },
-  dedouanement:       { label: 'En dédouanement',              labelClient: 'En cours de dédouanement',      couleur: 'bg-violet-200 text-violet-800',  phase: 6, actionStaff: 'Confirmer arrivée',              actionClient: null },
-  arrive:             { label: 'Arrivé destination',          labelClient: null,                            couleur: 'bg-teal-200 text-teal-800',      phase: 7, actionStaff: 'Lancer la livraison',             actionClient: null },
-  livraison:          { label: 'En cours de livraison',       labelClient: null,                            couleur: 'bg-lime-200 text-lime-800',      phase: 8, actionStaff: 'Confirmer livraison',             actionClient: null },
-  livre:              { label: 'Livré',                       labelClient: null,                            couleur: 'bg-green-300 text-green-900',    phase: 8, actionStaff: null,                              actionClient: null },
-  annule:             { label: 'Annulé',                      labelClient: null,                            couleur: 'bg-gray-200 text-gray-500',      phase: 0, actionStaff: null,                              actionClient: null },
+  receptionne:        { label: 'Réceptionné',                 labelClient: null,                            couleur: 'bg-orange-50 text-orange-700',   phase: 1, actionStaff: 'Mesurer ce colis',               actionClient: null },
+  mesure:             { label: 'Mesuré à réception',          labelClient: 'Mesuré',                        couleur: 'bg-amber-100 text-amber-800',    phase: 1, actionStaff: 'Demander le feu vert',            actionClient: null },
+  attente_feu_vert:   { label: "En attente d'accord client",  labelClient: 'Votre accord est attendu',      couleur: 'bg-orange-100 text-orange-800',  phase: 2, actionStaff: 'En attente du client',            actionClient: 'Donner votre accord' },
+  autorise:           { label: 'Autorisation reçue',          labelClient: 'Accord donné',                  couleur: 'bg-green-100 text-green-800',    phase: 2, actionStaff: 'Préparer ce colis',               actionClient: null },
+  refuse_client:      { label: 'Refusé par le client',        labelClient: 'Refusé',                        couleur: 'bg-red-100 text-red-700',        phase: 2, actionStaff: 'Traiter le refus',                actionClient: null },
+  en_preparation:     { label: 'En cours de préparation',     labelClient: null,                            couleur: 'bg-blue-100 text-blue-800',      phase: 3, actionStaff: 'Finaliser et envoyer le devis',   actionClient: null },
+  devis_envoye:       { label: 'Devis envoyé',                labelClient: 'Devis reçu — en attente de paiement', couleur: 'bg-amber-100 text-amber-800',    phase: 4, actionStaff: 'En attente paiement',              actionClient: 'Payer' },
+  paye:               { label: 'Payé',                        labelClient: null,                            couleur: 'bg-emerald-100 text-emerald-800',phase: 4, actionStaff: 'Expédier ce colis',               actionClient: null },
+  expedie:            { label: 'Expédié',                     labelClient: null,                            couleur: 'bg-cyan-100 text-cyan-800',      phase: 5, actionStaff: 'Marquer en transit',              actionClient: null },
+  transit:            { label: 'En vol',                      labelClient: null,                            couleur: 'bg-sky-100 text-sky-800',        phase: 5, actionStaff: 'Dédouanement ou arrivée',       actionClient: null },
+  dedouanement:       { label: 'En dédouanement',              labelClient: 'En cours de dédouanement',      couleur: 'bg-slate-100 text-slate-700',    phase: 6, actionStaff: 'Confirmer arrivée',              actionClient: null },
+  arrive:             { label: 'Arrivé destination',          labelClient: null,                            couleur: 'bg-teal-100 text-teal-800',      phase: 7, actionStaff: 'Lancer la livraison',             actionClient: null },
+  livraison:          { label: 'En cours de livraison',       labelClient: null,                            couleur: 'bg-lime-100 text-lime-800',      phase: 8, actionStaff: 'Confirmer livraison',             actionClient: null },
+  livre:              { label: 'Livré',                       labelClient: null,                            couleur: 'bg-green-200 text-green-900',    phase: 8, actionStaff: null,                              actionClient: null },
+  annule:             { label: 'Annulé',                      labelClient: null,                            couleur: 'bg-gray-100 text-gray-500',      phase: 0, actionStaff: null,                              actionClient: null },
 };
 
 export const TRANSITIONS = {

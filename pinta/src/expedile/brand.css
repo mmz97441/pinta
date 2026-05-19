@@ -1,12 +1,111 @@
-/* ══════════ BRAND EXPEDÎLE ══════════ */
-.brand-bg       { background: #1B3A4B; }
-.brand-bg-l     { background: #1B3A4B10; }
-.brand-bg-gold  { background: #E8B84B; }
-.brand-bg-gold-l{ background: #E8B84B15; }
-.brand-t        { color: #1B3A4B; }
-.brand-t-gold   { color: #C99A2E; }
-.brand-bd       { border-color: #1B3A4B; }
-.brand-bd-gold  { border-color: #E8B84B; }
+/* ══════════ WORKSHOP-CALM DESIGN SYSTEM (2026-05-18) ══════════
+   Designed for 8h+ work sessions: warm off-white surfaces, desaturated
+   accents, mirrored dark mode. Tokens are mirrored in BRAND constant
+   (constants/index.js) for inline-style usage. */
+:root {
+  /* Backgrounds */
+  --bg-canvas:    #FAFAF6;   /* warm paper, body */
+  --bg-surface:   #F4F0E6;   /* cards on canvas */
+  --bg-elevated:  #FDFBF5;   /* floating cards / modals */
+  --border-subtle:#E5E0D3;
+
+  /* Text */
+  --text-primary:  #2A2826;
+  --text-secondary:#605C56;
+  --text-muted:    #8A857B;
+
+  /* Brand */
+  --brand-navy:   #1B3A4B;
+  --brand-navy-l: #24506A;
+  --brand-navy-d: #122A36;
+  --brand-gold:   #D8AA42;
+  --brand-gold-l: #E8C779;
+  --brand-gold-d: #B8902F;
+
+  /* Semantic — desaturated */
+  --success: #5C9970;
+  --warning: #C29243;
+  --danger:  #B85454;
+  --info:    #5577A3;
+
+  /* Pipeline phase gradient */
+  --phase-1: #DBC68A;
+  --phase-2: #C9A368;
+  --phase-3: #91A584;
+
+  /* Card shadows tuned for warm surface */
+  --shadow-1: 0 1px 2px rgba(45,40,30,.04), 0 2px 8px rgba(45,40,30,.04);
+  --shadow-2: 0 1px 3px rgba(45,40,30,.05), 0 4px 16px rgba(45,40,30,.06);
+  --shadow-3: 0 4px 12px rgba(45,40,30,.08), 0 8px 32px rgba(45,40,30,.07);
+}
+
+html.dark {
+  --bg-canvas:    #1C1A17;   /* off-black warm */
+  --bg-surface:   #25221E;
+  --bg-elevated:  #2F2B26;
+  --border-subtle:#3A3530;
+
+  --text-primary:  #E8E4DC;
+  --text-secondary:#B5AFA3;
+  --text-muted:    #7E776A;
+
+  --brand-gold:   #E8C779;   /* lighter in dark for legibility */
+  --brand-gold-d: #D4A845;
+
+  --success: #7AB089;
+  --warning: #D9A862;
+  --danger:  #CF7575;
+  --info:    #7B9DC4;
+
+  --shadow-1: 0 1px 2px rgba(0,0,0,.25), 0 2px 8px rgba(0,0,0,.20);
+  --shadow-2: 0 1px 3px rgba(0,0,0,.30), 0 4px 16px rgba(0,0,0,.25);
+  --shadow-3: 0 4px 12px rgba(0,0,0,.40), 0 8px 32px rgba(0,0,0,.30);
+}
+
+/* Body background: applied to body so EVERY page uses canvas instead of pure white. */
+body {
+  background-color: var(--bg-canvas);
+  color: var(--text-primary);
+}
+
+/* Dark-mode safety net: any Tailwind utility that hardcodes white/slate-50/slate-100
+   gets remapped to our elevated tokens. Lets the rest of the app survive a dark-mode
+   toggle without touching every component. Components that need light surface in
+   dark mode can override locally. */
+html.dark .bg-white         { background-color: var(--bg-elevated) !important; }
+html.dark .bg-slate-50      { background-color: var(--bg-surface) !important; }
+html.dark .bg-slate-100     { background-color: var(--bg-surface) !important; }
+html.dark .bg-gray-50       { background-color: var(--bg-surface) !important; }
+html.dark .bg-gray-100      { background-color: var(--bg-surface) !important; }
+html.dark .text-slate-900   { color: var(--text-primary) !important; }
+html.dark .text-slate-800   { color: var(--text-primary) !important; }
+html.dark .text-slate-700   { color: var(--text-secondary) !important; }
+html.dark .text-slate-600   { color: var(--text-secondary) !important; }
+html.dark .text-slate-500   { color: var(--text-muted) !important; }
+html.dark .text-slate-400   { color: var(--text-muted) !important; }
+html.dark .text-gray-900    { color: var(--text-primary) !important; }
+html.dark .text-gray-800    { color: var(--text-primary) !important; }
+html.dark .text-gray-700    { color: var(--text-secondary) !important; }
+html.dark .text-gray-600    { color: var(--text-secondary) !important; }
+html.dark .text-gray-500    { color: var(--text-muted) !important; }
+html.dark .text-gray-400    { color: var(--text-muted) !important; }
+html.dark .border-slate-200 { border-color: var(--border-subtle) !important; }
+html.dark .border-slate-100 { border-color: var(--border-subtle) !important; }
+html.dark .border-gray-200  { border-color: var(--border-subtle) !important; }
+html.dark .border-gray-100  { border-color: var(--border-subtle) !important; }
+
+/* ══════════ BRAND legacy utility classes (kept for backward compat) ══════════ */
+.brand-bg       { background: var(--brand-navy); }
+.brand-bg-l     { background: rgb(27 58 75 / .06); }
+.brand-bg-gold  { background: var(--brand-gold); }
+.brand-bg-gold-l{ background: rgb(216 170 66 / .12); }
+.brand-t        { color: var(--brand-navy); }
+.brand-t-gold   { color: var(--brand-gold-d); }
+.brand-bd       { border-color: var(--brand-navy); }
+.brand-bd-gold  { border-color: var(--brand-gold); }
+
+html.dark .brand-t { color: #C4DAE5; }
+html.dark .brand-bg-l { background: rgb(36 80 106 / .14); }
 
 /* ══════════ ANIMATIONS ══════════ */
 @keyframes fadeIn {
@@ -62,23 +161,25 @@
 
 /* ══════════ CARD SYSTEM ══════════ */
 .card {
-  background: white;
+  background: var(--bg-elevated);
+  color: var(--text-primary);
   border-radius: 16px;
-  border: 1px solid rgba(0,0,0,.04);
-  box-shadow: 0 1px 2px rgba(0,0,0,.03), 0 2px 8px rgba(0,0,0,.03);
+  border: 1px solid var(--border-subtle);
+  box-shadow: var(--shadow-1);
   transition: all .2s cubic-bezier(.22,1,.36,1);
 }
 .card:hover {
-  box-shadow: 0 2px 8px rgba(0,0,0,.06), 0 4px 16px rgba(0,0,0,.04);
+  box-shadow: var(--shadow-2);
 }
 .card-elevated {
-  background: white;
+  background: var(--bg-elevated);
+  color: var(--text-primary);
   border-radius: 16px;
-  box-shadow: 0 1px 3px rgba(0,0,0,.04), 0 4px 16px rgba(0,0,0,.05);
+  box-shadow: var(--shadow-2);
   transition: all .2s cubic-bezier(.22,1,.36,1);
 }
 .card-elevated:hover {
-  box-shadow: 0 4px 12px rgba(0,0,0,.07), 0 8px 32px rgba(0,0,0,.06);
+  box-shadow: var(--shadow-3);
   transform: translateY(-1px);
 }
 
@@ -88,10 +189,14 @@
   -webkit-backdrop-filter: blur(16px) saturate(180%);
 }
 .glass-nav {
-  background: rgba(255,255,255,.88);
+  background: rgb(250 250 246 / .88);
   backdrop-filter: blur(24px) saturate(200%);
   -webkit-backdrop-filter: blur(24px) saturate(200%);
-  box-shadow: 0 -1px 0 rgba(0,0,0,.04), 0 -4px 16px rgba(0,0,0,.03);
+  box-shadow: 0 -1px 0 var(--border-subtle), 0 -4px 16px rgba(45,40,30,.04);
+}
+html.dark .glass-nav {
+  background: rgb(28 26 23 / .88);
+  box-shadow: 0 -1px 0 var(--border-subtle), 0 -4px 16px rgba(0,0,0,.3);
 }
 .glass-dark {
   background: rgba(27,58,75,.97);

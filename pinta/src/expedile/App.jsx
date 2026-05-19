@@ -9,6 +9,7 @@ import { BRAND } from './constants';
 import { supabase } from './lib/supabase';
 
 import { Toast, ConfirmDialog } from './components/ui';
+import ThemeToggle from './components/ui/ThemeToggle';
 import LoginPage from './components/LoginPage';
 import ForceChangePassword from './components/ForceChangePassword';
 import ColisModal from './components/ColisModal';
@@ -250,6 +251,7 @@ function AppContent() {
                   <p className="text-[10px] text-gray-500 truncate">{auth.u.role || 'Staff'}</p>
                 </div>
               )}
+              <ThemeToggle compact />
               {!sidebarCollapsed && (
                 <button
                   onClick={async () => {
