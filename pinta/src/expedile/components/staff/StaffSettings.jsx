@@ -913,7 +913,7 @@ export default function StaffSettings() {
               <div>
                 <p className="text-sm font-bold text-red-800">Bot non configuré</p>
                 <p className="text-xs text-red-600">
-                  Créez un fichier <code className="bg-red-100 px-1 rounded">.env</code> avec la variable VITE_TELEGRAM_BOT_TOKEN
+                  Variables Vercel manquantes : <code className="bg-red-100 px-1 rounded">VITE_SUPABASE_URL</code> et <code className="bg-red-100 px-1 rounded">VITE_EDGE_API_SECRET</code>. Le token bot reste côté Supabase.
                 </p>
               </div>
             </>
