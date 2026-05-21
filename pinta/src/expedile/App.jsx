@@ -9,6 +9,7 @@ import { BRAND } from './constants';
 import { supabase } from './lib/supabase';
 
 import { Toast, ConfirmDialog } from './components/ui';
+import ThemeToggle from './components/ui/ThemeToggle';
 import LoginPage from './components/LoginPage';
 import ForceChangePassword from './components/ForceChangePassword';
 import ColisModal from './components/ColisModal';
@@ -17,6 +18,7 @@ import OnboardingOverlay from './components/client/OnboardingOverlay';
 import StaffColisPage, { DashboardPage } from './components/staff/StaffSplitView';
 import StaffSettings from './components/staff/StaffSettings';
 import StaffClients from './components/staff/StaffClients';
+import StaffClientDetail from './components/staff/StaffClientDetail';
 import StaffDetailView from './components/staff/StaffDetailView';
 import DevisProspect from './components/staff/DevisProspect';
 import TrackingPublic from './components/public/TrackingPublic';
@@ -250,6 +252,7 @@ function AppContent() {
                   <p className="text-[10px] text-gray-500 truncate">{auth.u.role || 'Staff'}</p>
                 </div>
               )}
+              <ThemeToggle compact />
               {!sidebarCollapsed && (
                 <button
                   onClick={async () => {
@@ -327,6 +330,20 @@ function AppContent() {
                 <div className="h-full overflow-y-auto">
                   <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-4 space-y-4">
                     <StaffClients />
+                  </div>
+                </div>
+              } />
+              <Route path="/clients/new" element={
+                <div className="h-full overflow-y-auto">
+                  <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-4 space-y-4">
+                    <StaffClientDetail />
+                  </div>
+                </div>
+              } />
+              <Route path="/clients/:id" element={
+                <div className="h-full overflow-y-auto">
+                  <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-4 space-y-4">
+                    <StaffClientDetail />
                   </div>
                 </div>
               } />

@@ -193,6 +193,26 @@ export function AppProvider({ children }) {
   const [colisFilter, setColisFilter] = useState(null);
   const [cfm, setCfm] = useState(null);
 
+  // ── Theme (light/dark) ──
+  const [theme, setTheme] = useState(() => {
+    if (typeof window === 'undefined') return 'light';
+    const saved = localStorage.getItem('expedile-theme');
+    if (saved === 'dark' || saved === 'light') return saved;
+    // Fallback to OS preference
+    return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  });
+
+  useEffect(() => {
+    const root = document.documentElement;
+    if (theme === 'dark') root.classList.add('dark');
+    else root.classList.remove('dark');
+    localStorage.setItem('expedile-theme', theme);
+  }, [theme]);
+
+  const toggleTheme = useCallback(() => {
+    setTheme((t) => (t === 'dark' ? 'light' : 'dark'));
+  }, []);
+
   // ── Computed ──
   const isStaff = auth?.type === 'staff';
   const authCl = useMemo(() => {
@@ -914,6 +934,8 @@ export function AppProvider({ children }) {
     updateClient, addNewClient, deleteClient,
     addCategory, updateCatTaux, updateCatLabel, deleteCategory,
     receptionner, changerStatut, revertStatut, annulerColis, archiverColis, desarchiverColis, demanderFeuVert, feuVert, feuVertBulk, envoyerDevis, payer, envMsg,
+    // Theme
+    theme, toggleTheme,
   }), [
     auth, isStaff, authCl, authRole, data, clients, categories, tarifs, envois, logs, produitsInterdits, can,
     comLog, sendMsg, getPreview, notifs, unreadNotifs, markNotifRead, markAllNotifsRead,
@@ -922,6 +944,7 @@ export function AppProvider({ children }) {
     updateClient, addNewClient, deleteClient,
     addCategory, updateCatTaux, updateCatLabel, deleteCategory,
     receptionner, changerStatut, revertStatut, annulerColis, archiverColis, desarchiverColis, demanderFeuVert, feuVert, feuVertBulk, envoyerDevis, payer, envMsg,
+    theme, toggleTheme,
   ]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

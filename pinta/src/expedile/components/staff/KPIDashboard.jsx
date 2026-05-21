@@ -10,13 +10,14 @@ import { BRAND, DESTINATIONS, ABONNEMENTS, getDestByCP } from '../../constants';
 import { eur } from '../../utils';
 
 // ── Pipeline groups for KPI ──
+// Progression gradient: phase-1 (pâle) → phase-2 (milieu) → phase-3 (fin)
 const KPI_PIPELINE = [
-  { key: 'reception',   label: 'Réception',    statuts: ['receptionne', 'mesure'],                              color: '#D97706' },
-  { key: 'feu_vert',    label: 'Feu vert',     statuts: ['attente_feu_vert'],                                   color: '#F97316' },
-  { key: 'preparation', label: 'Préparation',  statuts: ['autorise', 'en_preparation'],                         color: '#2563EB' },
-  { key: 'paiement',    label: 'Paiement',     statuts: ['devis_envoye'],                                       color: '#A21CAF' },
-  { key: 'expedition',  label: 'Expédition',   statuts: ['paye', 'expedie', 'transit', 'dedouanement'],         color: '#0891B2' },
-  { key: 'livre',       label: 'Livré',        statuts: ['arrive', 'livraison', 'livre'],                       color: '#16A34A' },
+  { key: 'reception',   label: 'Réception',    statuts: ['receptionne', 'mesure'],                              color: BRAND.phase1 },
+  { key: 'feu_vert',    label: 'Feu vert',     statuts: ['attente_feu_vert'],                                   color: BRAND.phase1 },
+  { key: 'preparation', label: 'Préparation',  statuts: ['autorise', 'en_preparation'],                         color: BRAND.phase2 },
+  { key: 'paiement',    label: 'Paiement',     statuts: ['devis_envoye'],                                       color: BRAND.phase2 },
+  { key: 'expedition',  label: 'Expédition',   statuts: ['paye', 'expedie', 'transit', 'dedouanement'],         color: BRAND.phase3 },
+  { key: 'livre',       label: 'Livré',        statuts: ['arrive', 'livraison', 'livre'],                       color: BRAND.phase3 },
 ];
 
 // Helper : date range utils
@@ -200,8 +201,8 @@ export default function KPIDashboard() {
     data.forEach((c) => {
       const cl = clients.find((x) => x.id === c.clientId);
       const nom = cl?.nom || '?';
-      if (c.paiementDate) events.push({ type: 'paye', date: c.paiementDate, icon: CheckCircle, color: '#16A34A', text: `${nom} a payé ${c.ref}`, amount: eur(c.paiementMontant) });
-      if (c.dateReception && c.statut !== 'annule') events.push({ type: 'reception', date: c.dateReception, icon: Package, color: '#D97706', text: `${c.ref} réceptionné (${nom})` });
+      if (c.paiementDate) events.push({ type: 'paye', date: c.paiementDate, icon: CheckCircle, color: BRAND.success, text: `${nom} a payé ${c.ref}`, amount: eur(c.paiementMontant) });
+      if (c.dateReception && c.statut !== 'annule') events.push({ type: 'reception', date: c.dateReception, icon: Package, color: BRAND.warning, text: `${c.ref} réceptionné (${nom})` });
     });
     return events.sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 6);
   }, [data, clients]);
@@ -218,9 +219,9 @@ export default function KPIDashboard() {
   }
 
   function progressColor(pct) {
-    if (pct >= 100) return '#16A34A';
-    if (pct >= 70) return '#D97706';
-    return '#DC2626';
+    if (pct >= 100) return BRAND.success;
+    if (pct >= 70) return BRAND.warning;
+    return BRAND.danger;
   }
 
   // ══════════ RENDU ══════════
@@ -235,7 +236,7 @@ export default function KPIDashboard() {
               icon={Clock}
               label="Colis bloqués > 7j"
               count={blockedOver7}
-              color="#DC2626"
+              color={BRAND.danger}
               action="Voir"
               onClick={() => navigate('/colis?tab=reception')}
             />
@@ -245,7 +246,7 @@ export default function KPIDashboard() {
               icon={FileText}
               label="Factures manquantes"
               count={facturesManquantes}
-              color="#D97706"
+              color={BRAND.warning}
               action="Demander"
               onClick={() => navigate('/colis?tab=preparation')}
             />
@@ -255,7 +256,7 @@ export default function KPIDashboard() {
               icon={CreditCard}
               label="Paiements > 3j"
               count={paiementsEnRetard}
-              color="#EA580C"
+              color={BRAND.warning}
               action="Relancer"
               onClick={() => navigate('/colis?tab=paiement')}
             />
@@ -265,7 +266,7 @@ export default function KPIDashboard() {
               icon={Crown}
               label="Abo. expire < 7j"
               count={abonnementStats.expiring7.length}
-              color="#7C3AED"
+              color={BRAND.gold}
               action="Relancer"
               onClick={() => navigate('/clients')}
             />
@@ -325,15 +326,15 @@ export default function KPIDashboard() {
             label="CA ce mois"
             value={eur(caMois)}
             icon={TrendingUp}
-            color="#059669"
+            color={BRAND.success}
             trend={caMoisPrev > 0 ? evolutionMois : null}
             onClick={() => navigate('/colis')}
           />
-          <MetricCard label="CA semaine" value={eur(caSemaine)} icon={Zap} color="#2563EB" onClick={() => navigate('/colis')} />
-          <MetricCard label="Panier moyen" value={eur(panierMoyen)} icon={ShoppingCart} color="#7C3AED" onClick={() => navigate('/colis')} />
-          <MetricCard label="Taux conversion" value={`${tauxConversion.toFixed(0)}%`} icon={Target} color="#EA580C" onClick={() => navigate('/colis')} />
-          <MetricCard label="Nouveaux clients" value={nouveauxClients} icon={UserPlus} color="#16A34A" onClick={() => navigate('/clients')} />
-          <MetricCard label="Colis livrés" value={colisTraites} icon={Package} color="#0891B2" onClick={() => navigate('/colis?tab=livre')} />
+          <MetricCard label="CA semaine" value={eur(caSemaine)} icon={Zap} color={BRAND.info} onClick={() => navigate('/colis')} />
+          <MetricCard label="Panier moyen" value={eur(panierMoyen)} icon={ShoppingCart} color={BRAND.gold} onClick={() => navigate('/colis')} />
+          <MetricCard label="Taux conversion" value={`${tauxConversion.toFixed(0)}%`} icon={Target} color={BRAND.warning} onClick={() => navigate('/colis')} />
+          <MetricCard label="Nouveaux clients" value={nouveauxClients} icon={UserPlus} color={BRAND.success} onClick={() => navigate('/clients')} />
+          <MetricCard label="Colis livrés" value={colisTraites} icon={Package} color={BRAND.info} onClick={() => navigate('/colis?tab=livre')} />
           <MetricCard label="Pipeline actif" value={pipelineTotal} icon={Send} color={BRAND.gold} onClick={() => navigate('/colis')} />
         </div>
       )}
@@ -366,11 +367,11 @@ export default function KPIDashboard() {
             <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Abonnements</p>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
-            <SubStatCard label="VIP" count={abonnementStats.vip} color="#D97706" Icon={Crown} onClick={() => navigate('/clients')} />
-            <SubStatCard label="Premium annuel" count={abonnementStats.premiumAn} color="#2563EB" Icon={Rocket} onClick={() => navigate('/clients')} />
-            <SubStatCard label="Premium mensuel" count={abonnementStats.premiumMois} color="#7C3AED" Icon={Zap} onClick={() => navigate('/clients')} />
+            <SubStatCard label="VIP" count={abonnementStats.vip} color={BRAND.gold} Icon={Crown} onClick={() => navigate('/clients')} />
+            <SubStatCard label="Premium annuel" count={abonnementStats.premiumAn} color={BRAND.navy} Icon={Rocket} onClick={() => navigate('/clients')} />
+            <SubStatCard label="Premium mensuel" count={abonnementStats.premiumMois} color={BRAND.info} Icon={Zap} onClick={() => navigate('/clients')} />
             <SubStatCard label="Freemium" count={abonnementStats.freemium} color="#64748B" Icon={Users} onClick={() => navigate('/clients')} />
-            <SubStatCard label="À convertir (≥3 colis)" count={abonnementStats.aConvertir.length} color="#16A34A" Icon={Sparkles} onClick={() => navigate('/clients')} />
+            <SubStatCard label="À convertir (≥3 colis)" count={abonnementStats.aConvertir.length} color={BRAND.success} Icon={Sparkles} onClick={() => navigate('/clients')} />
           </div>
           {(abonnementStats.expired.length > 0 || abonnementStats.expiring30.length > 0) && (
             <div className="flex gap-2 mt-3 pt-3 border-t border-gray-100 text-[11px]">
