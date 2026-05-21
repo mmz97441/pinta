@@ -46,9 +46,20 @@ export default function StaffPermissions() {
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://bqprktzehuhplpqjgjaz.supabase.co';
       // TODO: Remplacer par JWT Supabase Auth quand verify_jwt sera activé
       const edgeSecret = import.meta.env.VITE_EDGE_API_SECRET || '';
+      // The Edge Function checks that the caller is a directeur/vice_directeur
+      // by looking up x-caller-auth-id in staff_users. Without this header it 401s.
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user?.id) {
+        flash({ msg: 'Session expirée — reconnectez-vous', type: 'warning' });
+        return;
+      }
       const res = await fetch(`${supabaseUrl}/functions/v1/create-staff-user`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-api-secret': edgeSecret },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-secret': edgeSecret,
+          'x-caller-auth-id': user.id,
+        },
         body: JSON.stringify({
           email: newForm.email.trim(),
           password: newForm.password.trim(),

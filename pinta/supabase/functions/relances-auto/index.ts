@@ -3,6 +3,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || '';
 const SUPABASE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
 const TELEGRAM_BOT_TOKEN = Deno.env.get('TELEGRAM_BOT_TOKEN') || '';
+const EDGE_API_SECRET = Deno.env.get('EDGE_API_SECRET') || '';
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
@@ -15,7 +16,30 @@ async function sendTelegram(chatId: string, text: string) {
   });
 }
 
+function isAuthorized(req: Request): boolean {
+  // Accept Supabase cron callback authenticated with the service role key.
+  const authHeader = req.headers.get('Authorization') || req.headers.get('authorization') || '';
+  if (authHeader.startsWith('Bearer ') && SUPABASE_KEY && authHeader.slice(7).trim() === SUPABASE_KEY) {
+    return true;
+  }
+
+  // Accept manual / staff invocation authenticated with the shared secret.
+  if (EDGE_API_SECRET) {
+    return req.headers.get('x-api-secret') === EDGE_API_SECRET;
+  }
+
+  // Backward-compat: secret not configured yet — accept (and warn loudly).
+  console.warn('[relances-auto] EDGE_API_SECRET not configured — accepting all requests');
+  return true;
+}
+
 Deno.serve(async (req: Request) => {
+  if (!isAuthorized(req)) {
+    return new Response(JSON.stringify({ ok: false, error: 'Forbidden' }), {
+      status: 403, headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
   try {
     const now = new Date();
     console.log('[Relances] Running at', now.toISOString());
@@ -141,7 +165,7 @@ Deno.serve(async (req: Request) => {
 
   } catch (err) {
     console.error('[Relances] Error:', err);
-    return new Response(JSON.stringify({ error: String(err) }), {
+    return new Response(JSON.stringify({ ok: false, error: String(err) }), {
       status: 500, headers: { 'Content-Type': 'application/json' },
     });
   }
