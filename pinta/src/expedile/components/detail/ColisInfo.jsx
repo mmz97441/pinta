@@ -1,11 +1,15 @@
+import { SecureImage } from '../ui/SecureFile';
+import { createTelegramInvitation } from '../../services/telegramApi';
 import React, { useState } from 'react';
 import { Edit3, Check, X, ChevronDown, ChevronUp, ClipboardList, Camera, AlertTriangle } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { BRAND, ABONNEMENTS } from '../../constants';
 import { eur, hasTrack, trackStr, trackCount, telegramLink } from '../../utils';
+import { receptionCartonManifest } from '../../domain/reception';
+import { measureShipment, volumetricDivisor } from '../../domain/quote';
 
 export default function ColisInfo() {
-  const { sel, selClient: cl, selDest, isStaff, upd, flash, data } = useApp();
+  const { sel, selClient: cl, selDest, isStaff, upd, flash, data, settings } = useApp();
   const [editCasier, setEditCasier] = useState(false);
   const [casierTmp, setCasierTmp] = useState('');
   const [moveAll, setMoveAll] = useState(false);
@@ -14,7 +18,8 @@ export default function ColisInfo() {
   if (!sel) return null;
 
   // ── Casier save handler (with moveAll support) ──
-  const handleSaveCasier = () => {
+  const handleSaveCasier = async () => {
+    try {
     const newCasier = casierTmp.trim();
     if (!newCasier) { setEditCasier(false); setCasierTmp(''); return; }
 
@@ -26,7 +31,7 @@ export default function ColisInfo() {
     if (histEntry) {
       updFields.casierHistorique = [...(sel.casierHistorique || []), histEntry];
     }
-    upd(sel.id, updFields);
+    await upd(sel.id, updFields);
 
     // Move all client's active colis if checked (same envoi only)
     if (moveAll && cl) {
@@ -36,14 +41,14 @@ export default function ColisInfo() {
           && c.statut !== 'livre' && c.statut !== 'annule'
           && !c.envoi // NEVER move a colis that has an envoi
       );
-      activeColis.forEach((c) => {
+      for (const c of activeColis) {
         const cHistEntry = c.casier ? { casier: c.casier, date: new Date().toISOString() } : null;
         const cUpd = { casier: newCasier };
         if (cHistEntry) {
           cUpd.casierHistorique = [...(c.casierHistorique || []), cHistEntry];
         }
-        upd(c.id, cUpd);
-      });
+        await upd(c.id, cUpd);
+      }
       const skipped = data.filter(
         (c) => c.clientId === cl.id && c.id !== sel.id
           && c.statut !== 'livre' && c.statut !== 'annule'
@@ -60,6 +65,7 @@ export default function ColisInfo() {
     setEditCasier(false);
     setCasierTmp('');
     setMoveAll(false);
+    }catch(error){flash({msg:`Casier non enregistré : ${error.message}`,type:'error'});}
   };
 
   return (
@@ -83,9 +89,9 @@ export default function ColisInfo() {
             </p>
             {cl && !cl.telegramChatId && (
               <button
-                onClick={() => {
-                  navigator.clipboard.writeText(`https://t.me/Expedilebot?start=${cl.id}`);
-                  flash('Lien d\'invitation Telegram copie !');
+                onClick={async () => {
+                  try{const invitation=await createTelegramInvitation(cl.id);await navigator.clipboard.writeText(invitation.url);flash('Invitation Telegram copiée');}
+                  catch(error){flash({msg:error.message,type:'error'});}
                 }}
                 className="text-[10px] font-semibold px-2 py-0.5 rounded bg-orange-100 text-orange-700 hover:bg-orange-200 transition-colors"
               >
@@ -147,9 +153,10 @@ export default function ColisInfo() {
             )}
             {isStaff && cl.tel && (
               <div className="mt-1 flex items-center justify-end gap-1.5">
-                <a href={telegramLink(cl.id)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-bold hover:bg-blue-200">
-                  Telegram
-                </a>
+                <button onClick={async()=>{
+                  try{const invitation=await createTelegramInvitation(cl.id);await navigator.clipboard.writeText(invitation.url);flash('Invitation Telegram copiée. Transmettez-la au client.');}
+                  catch(error){flash({msg:error.message,type:'error'});}
+                }} className="inline-flex items-center min-h-[44px] gap-1 text-xs bg-blue-100 text-blue-700 px-3 rounded-xl font-bold">Inviter sur Telegram</button>
                 <a href={`tel:${cl.tel}`} className="text-xs text-gray-400 hover:text-gray-600">Appeler</a>
               </div>
             )}
@@ -159,34 +166,20 @@ export default function ColisInfo() {
 
       {/* ── Cartons (trackings + dimensions combinés) ── */}
       {(() => {
-        const trackings = sel.trackings?.filter((t) => t) || [];
-        const details = sel.trackingsDetail || [];
-        const dimsPC = sel.dimsParColis || [];
-        const nbCartons = Math.max(trackings.length, details.length, dimsPC.length);
-
-        if (nbCartons === 0 && !sel.dimL) return null;
-
-        // Build carton list
-        const cartons = [];
-        for (let i = 0; i < Math.max(nbCartons, 1); i++) {
-          const td = details[i];
-          const tracking = td?.number || trackings[i] || null;
-          const fournisseur = td?.fournisseur || null;
-          const dims = dimsPC[i] || (i === 0 && nbCartons <= 1 ? { dimL: sel.dimL, dimW: sel.dimW, dimH: sel.dimH, poids: sel.poids } : null);
-          cartons.push({ tracking, fournisseur, dims });
-        }
-
-        const hasDims = cartons.some((c) => c.dims?.dimL);
-        const totalPoids = cartons.reduce((s, c) => s + (c.dims?.poids || 0), 0);
-        const totalPv = cartons.reduce((s, c) => {
-          if (!c.dims?.dimL) return s;
-          return s + (c.dims.dimL * c.dims.dimW * c.dims.dimH) / 5000;
-        }, 0);
+        const manifest = receptionCartonManifest(sel);
+        const divisor = volumetricDivisor(settings);
+        const before = measureShipment(manifest.dimsParColis, divisor);
+        const after = measureShipment([{ dimL: sel.finL, dimW: sel.finW, dimH: sel.finH, poids: sel.finP }], divisor);
+        const nbCartons = manifest.nbColis;
+        const cartons = manifest.trackingsDetail.map((detail, index) => ({
+          tracking: detail.number, fournisseur: detail.fournisseur,
+          dims: manifest.dimsParColis[index], weights: measureShipment([manifest.dimsParColis[index]], divisor),
+        }));
 
         return (
-          <div className="mt-3 pt-3 border-t space-y-2">
+          <div role="region" aria-label="Mesures des cartons" className="mt-3 pt-3 border-t space-y-2">
             <p className="text-xs font-bold text-gray-400 uppercase">
-              {nbCartons > 1 ? `${nbCartons} cartons` : '1 carton'}
+              Mesures à réception — avant optimisation · {nbCartons > 1 ? `${nbCartons} cartons` : '1 carton'}
             </p>
             {cartons.map((c, i) => (
               <div key={i} className="rounded-lg bg-gray-50 p-2.5 space-y-1">
@@ -201,44 +194,46 @@ export default function ColisInfo() {
                 {c.tracking && (
                   <p className="text-xs font-mono text-gray-500">{c.tracking}</p>
                 )}
-                {c.dims?.dimL ? (
+                {c.weights ? (
                   <p className="text-xs text-gray-600">
                     {c.dims.dimL} × {c.dims.dimW} × {c.dims.dimH} cm · {c.dims.poids} kg
                     <span className="text-gray-400 ml-1">
-                      (vol: {((c.dims.dimL * c.dims.dimW * c.dims.dimH) / 5000).toFixed(2)} kg)
+                      (vol : {c.weights.volumetricWeight.toFixed(2)} kg)
                     </span>
                   </p>
                 ) : (
-                  <p className="text-[11px] text-gray-400 italic">Dimensions non mesurées</p>
+                  <p className="text-[11px] text-gray-500 italic">Mesures à réception incomplètes — à vérifier</p>
                 )}
               </div>
             ))}
 
             {/* Totaux si multi-cartons avec dimensions */}
-            {nbCartons > 1 && hasDims && (
+            {nbCartons > 1 && before && (
               <div className="rounded-lg border border-gray-200 p-2 space-y-0.5">
-                <p className="text-[10px] font-bold text-gray-500 uppercase">Totaux</p>
+                <p className="text-[10px] font-bold text-gray-500 uppercase">Totaux à réception</p>
                 <div className="flex justify-between text-xs text-gray-600">
                   <span>Poids total</span>
-                  <span className="font-semibold">{totalPoids.toFixed(2)} kg</span>
+                  <span className="font-semibold">{before.realWeight.toFixed(2)} kg</span>
                 </div>
                 <div className="flex justify-between text-xs text-gray-600">
                   <span>Vol. total</span>
-                  <span className="font-semibold">{totalPv.toFixed(2)} kg</span>
+                  <span className="font-semibold">{before.volumetricWeight.toFixed(2)} kg</span>
                 </div>
-                <div className="flex justify-between text-xs font-bold" style={{ color: BRAND.navy }}>
-                  <span>Poids facturable</span>
-                  <span>{Math.max(totalPoids, totalPv).toFixed(2)} kg</span>
+                <div className="flex justify-between text-xs font-bold" style={{ color: 'var(--brand-text)' }}>
+                  <span>Poids facturable avant optimisation</span>
+                  <span>{before.billableWeight.toFixed(2)} kg</span>
                 </div>
               </div>
             )}
+            {!before && <p className="text-xs text-gray-600">Total avant optimisation indisponible tant que les mesures de tous les cartons ne sont pas complètes et le diviseur valide.</p>}
 
             {/* Dimensions après optimisation */}
-            {sel.finL && (
+            {(sel.finL || sel.finW || sel.finH || sel.finP) && (
               <div className="rounded-lg border p-2 space-y-0.5" style={{ borderColor: BRAND.gold + '40', background: BRAND.gold + '08' }}>
-                <p className="text-[10px] font-bold uppercase" style={{ color: BRAND.goldD }}>Après optimisation</p>
-                <p className="text-xs">{sel.finL} × {sel.finW} × {sel.finH} cm · {sel.finP} kg</p>
-                <p className="text-xs text-gray-400">Vol: {((sel.finL * sel.finW * sel.finH) / 5000).toFixed(2)} kg</p>
+                <p className="text-[10px] font-bold uppercase" style={{ color: 'var(--text-accent)' }}>Après optimisation</p>
+                {after ? <><p className="text-xs">{sel.finL} × {sel.finW} × {sel.finH} cm · {sel.finP} kg</p>
+                <p className="text-xs text-gray-500">Vol : {after.volumetricWeight.toFixed(2)} kg</p></>
+                  : <p className="text-xs text-gray-500">Mesures après optimisation à compléter ; aucun poids calculé.</p>}
               </div>
             )}
           </div>
@@ -331,10 +326,10 @@ export default function ColisInfo() {
       )}
 
       {/* Photo de réception */}
-      {sel.photoReception && (
+      {sel.photoReceptionUrl && (
         <div className="mt-2 pt-2 border-t flex items-center gap-1.5 text-xs text-gray-500">
           <Camera size={12} />
-          Photo de réception disponible
+          <SecureImage src={sel.photoReceptionUrl} alt="Photo du colis à réception" className="max-h-64 w-full object-contain rounded-xl"/>
         </div>
       )}
 

@@ -1,5 +1,7 @@
 -- Migration: db_security_hardening
--- Version: 20260518120000
+-- Version: 20260521092941 (actual production migration history, verified 2026-09-10)
+-- Originally authored locally as 20260518120000. Statements match production;
+-- IF EXISTS on views permits replay where the optional subscription view is absent.
 -- Date: 2026-05-18
 --
 -- Closes 3 categories of advisor findings reported by the Supabase database
@@ -27,13 +29,13 @@
 -- 1. Switch the 7 SECURITY DEFINER views to SECURITY INVOKER (PG 15+ syntax)
 -- ════════════════════════════════════════════════════════════════════════════
 
-ALTER VIEW public.v_abonnements_alertes  SET (security_invoker = true);
-ALTER VIEW public.v_ca_par_destination   SET (security_invoker = true);
-ALTER VIEW public.v_colis                SET (security_invoker = true);
-ALTER VIEW public.v_envois_logisticien   SET (security_invoker = true);
-ALTER VIEW public.v_file_preparateur     SET (security_invoker = true);
-ALTER VIEW public.v_kpi_directeur        SET (security_invoker = true);
-ALTER VIEW public.v_top_clients          SET (security_invoker = true);
+ALTER VIEW IF EXISTS public.v_abonnements_alertes  SET (security_invoker = true);
+ALTER VIEW IF EXISTS public.v_ca_par_destination   SET (security_invoker = true);
+ALTER VIEW IF EXISTS public.v_colis                SET (security_invoker = true);
+ALTER VIEW IF EXISTS public.v_envois_logisticien   SET (security_invoker = true);
+ALTER VIEW IF EXISTS public.v_file_preparateur     SET (security_invoker = true);
+ALTER VIEW IF EXISTS public.v_kpi_directeur        SET (security_invoker = true);
+ALTER VIEW IF EXISTS public.v_top_clients          SET (security_invoker = true);
 
 
 -- ════════════════════════════════════════════════════════════════════════════

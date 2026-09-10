@@ -1,0 +1,50 @@
+[
+  {
+    "test": "official-payplug-notification-no-secret",
+    "result": {
+      "status": 200,
+      "body": {
+        "received": true,
+        "action": "none"
+      },
+      "writes": [],
+      "network": []
+    }
+  },
+  {
+    "test": "official-payplug-notification-with-secret",
+    "result": {
+      "status": 401,
+      "body": {
+        "ok": false,
+        "error": "Missing signature"
+      },
+      "writes": [],
+      "network": []
+    }
+  },
+  {
+    "test": "pro-unchanged-dimensions-saving",
+    "expectedSaving": 0,
+    "actualSaving": 3.4,
+    "total": 40,
+    "before": 43.4
+  },
+  {
+    "test": "uncategorized-article-quote",
+    "calculationAccepted": true,
+    "om": 0,
+    "omr": 0
+  },
+  {
+    "test": "wednesday-after-cutoff",
+    "at": "2026-09-09T18:00:00+02:00",
+    "commentExpected": "2026-09-18",
+    "actual": "2026-09-11"
+  },
+  {
+    "test": "autoassign-ignores-destination",
+    "existingDestination": "976",
+    "assigned": "wrong-destination"
+  }
+]

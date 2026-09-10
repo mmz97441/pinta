@@ -1,0 +1,24 @@
+{
+  "date": "2026-09-10",
+  "postgresql": "17, isolated container, network none",
+  "historical_schema_replay": "passed through 00017 with actual supabase_admin SQL owner",
+  "sql_conversation_assertions": 29,
+  "existing_sql_regressions": 45,
+  "outbox_edge_tests": 7,
+  "frontend_conversation_helper_tests": 3,
+  "scoped_cron_handler_test": "passed valid, absent, wrong and other-function denial",
+  "targeted_frontend_lint": "passed",
+  "provider_calls": "mocked",
+  "production_modified_by_backend_agent": false,
+  "migrations": [
+    "20260910000014_conversation_workflow.sql",
+    "20260910000016_ocr_confirmation_document_guard.sql",
+    "20260910000017_work_action_origin.sql"
+  ],
+  "ocr_document_guard_assertions": 10,
+  "work_action_origin_assertions": 9,
+  "payplug_mode_and_legacy_assertions": 44,
+  "edge_and_conversation_helper_suite": 44,
+  "supabase_admin_owner_replay_assertions": 95,
+  "actual_isolated_production_copy_rollback_assertions": 48
+}

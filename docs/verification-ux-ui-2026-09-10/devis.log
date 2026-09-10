@@ -1,0 +1,38 @@
+[
+  {
+    "test": "client-scoped-consent-three-cartons-one-tracking",
+    "pass": true,
+    "authorizeBox": {
+      "x": 36,
+      "y": 516.25,
+      "width": 322,
+      "height": 44
+    }
+  },
+  {
+    "test": "client-deliberate-wait-saved",
+    "pass": true
+  },
+  {
+    "test": "client-document-private-deposit-and-failed-insert-retry-no-duplicate-upload",
+    "pass": true
+  },
+  {
+    "test": "staff-action-bar-visible-mobile",
+    "pass": true,
+    "barBox": {
+      "x": 12,
+      "y": 651,
+      "width": 366,
+      "height": 121
+    }
+  },
+  {
+    "test": "ocr-resume-tabs-preserve-correction-and-block-inconsistent-total",
+    "pass": true
+  },
+  {
+    "test": "public-tracking-wraps-mobile-and-has-no-false-percentage",
+    "pass": true
+  }
+]

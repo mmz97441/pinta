@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Package, AlertCircle, CreditCard, CheckCircle, Clock, TrendingUp, ChevronRight } from 'lucide-react';
+import { hasPublishedQuote } from './quoteVisibility';
+import { cartonManifest } from '../../domain/clientJourney';
 import { useApp } from '../../context/AppContext';
 import { BRAND, STATUTS, ABONNEMENTS, getDestByCP } from '../../constants';
 import { eur, getPrenom } from '../../utils';
@@ -8,7 +10,7 @@ import { Badge, ProgressBar, ViewToggle } from '../ui';
 
 export default function ClientAccueil() {
   const navigate = useNavigate();
-  const { authCl, data, clients, ask, feuVertBulk, payer, setColisFilter } = useApp();
+  const { authCl, data, clients, ask, feuVertBulk, flash, setColisFilter } = useApp();
   const [viewMode, setViewMode] = useState('cards');
 
   const cl = authCl;
@@ -21,17 +23,19 @@ export default function ClientAccueil() {
     p.statut !== 'livre' && p.statut !== 'annule'
   );
   const aTraiter = myColis.filter((p) =>
-    p.statut === 'attente_feu_vert' || p.statut === 'devis_envoye'
+    (p.statut === 'attente_feu_vert' && !(p.attenteClientDate && (!p.attenteClientUntil || Date.parse(p.attenteClientUntil) > Date.now()))) || ['devis_envoye', 'attente_paiement'].includes(p.statut)
   );
-  const aPayer = myColis.filter((p) => p.statut === 'devis_envoye');
+  const aPayer = myColis.filter((p) => ['devis_envoye', 'attente_paiement'].includes(p.statut));
   const livres = myColis.filter((p) => p.statut === 'livre');
 
-  const colisAttenteFV = myColis.filter((p) => p.statut === 'attente_feu_vert');
-  const colisPaiement = myColis.filter((p) => p.statut === 'devis_envoye');
+  const isWaiting = (p) => Boolean(p.attenteClientDate && (!p.attenteClientUntil || Date.parse(p.attenteClientUntil) > Date.now()));
+  const colisAttenteFV = myColis.filter((p) => p.statut === 'attente_feu_vert' && !isWaiting(p));
+  const waiting = myColis.filter((p) => p.statut === 'attente_feu_vert' && isWaiting(p));
+  const colisPaiement = myColis.filter((p) => ['devis_envoye', 'attente_paiement'].includes(p.statut));
   const actionsRequises = [...colisAttenteFV, ...colisPaiement];
 
   const colisCours = enCours.filter(
-    (p) => p.statut !== 'attente_feu_vert' && p.statut !== 'devis_envoye'
+    (p) => p.statut !== 'attente_feu_vert' && !['devis_envoye', 'attente_paiement'].includes(p.statut)
   );
 
   const derniereLivraison = livres.length > 0 ? livres[livres.length - 1] : null;
@@ -60,7 +64,7 @@ export default function ClientAccueil() {
           Bienvenue
         </p>
         <h2 className="text-2xl font-black leading-tight mb-1">
-          Bonjour {firstName} 👋
+          Bonjour {firstName}
         </h2>
         {dest && (
           <p className="text-sm font-medium" style={{ color: 'rgba(255,255,255,0.7)' }}>
@@ -77,22 +81,24 @@ export default function ClientAccueil() {
         if (daysLeft > 30) return null;
         if (daysLeft <= 0) return (
           <div className="rounded-2xl p-4 bg-red-50 border border-red-200 mb-4">
-            <p className="text-sm font-bold text-red-800">⚠️ Votre abonnement {ABONNEMENTS[authCl.abonnement]?.label} a expiré</p>
+            <p className="text-sm font-bold text-red-800">Votre abonnement {ABONNEMENTS[authCl.abonnement]?.label} a expiré</p>
             <p className="text-xs text-red-600 mt-1">Contactez-nous pour le renouveler et continuer à bénéficier de vos avantages.</p>
           </div>
         );
         return (
           <div className="rounded-2xl p-4 bg-amber-50 border border-amber-200 mb-4">
-            <p className="text-sm font-bold text-amber-800">⏰ Votre abonnement {ABONNEMENTS[authCl.abonnement]?.label} expire dans {daysLeft} jours</p>
+            <p className="text-sm font-bold text-amber-800">Votre abonnement {ABONNEMENTS[authCl.abonnement]?.label} expire dans {daysLeft} jours</p>
             <p className="text-xs text-amber-600 mt-1">Pensez à le renouveler pour garder vos avantages (tarifs réduits, stockage gratuit, etc.).</p>
           </div>
         );
       })()}
 
+      {waiting.length > 0 && <section className="rounded-xl border border-gray-200 p-4"><h3 className="font-semibold text-gray-800 flex items-center gap-2"><Clock size={16} />En attente à votre demande</h3><p className="text-xs text-gray-500 mt-1">Vous pourrez autoriser la préparation dès que vos achats seront complets.</p><div className="mt-2 divide-y divide-gray-100">{waiting.map((p) => <button key={p.id} onClick={() => navigate(`/colis/${p.id}`)} className="w-full min-h-11 flex items-center gap-2 text-left text-sm"><span className="font-semibold brand-t">{p.ref}</span><span className="flex-1 text-xs text-gray-500 truncate">{p.attenteClientMotif}</span><ChevronRight size={16} /></button>)}</div></section>}
+
       {/* ── Stats grid ── */}
       <div className="grid grid-cols-3 gap-3">
         <button onClick={() => { setColisFilter(null); navigate('/colis'); }} className="card p-3 text-center hover:shadow-md active:scale-95 transition-all cursor-pointer">
-          <div className="text-2xl font-black" style={{ color: BRAND.navy }}>
+          <div className="text-2xl font-black" style={{ color: 'var(--brand-text)' }}>
             {enCours.length}
           </div>
           <div className="text-[11px] text-gray-500 font-medium mt-0.5">En cours</div>
@@ -152,11 +158,11 @@ export default function ClientAccueil() {
                   {colisAttenteFV.map((p) => (
                     <button
                       key={p.id}
-                      className="w-full flex items-center gap-2 text-left bg-amber-50/60 rounded-xl px-3 py-2 active:bg-amber-100 transition-colors"
+                      className="w-full flex items-center gap-2 text-left bg-amber-50 dark:bg-slate-800 rounded-xl px-3 py-2 active:bg-amber-100 transition-colors"
                       onClick={() => navigate(`/colis/${p.id}`)}
                     >
                       <div className="flex-1 min-w-0">
-                        <span className="font-bold text-xs text-gray-800">{p.ref}</span>
+                        <span className="font-bold text-xs text-gray-800">{p.ref} · {cartonManifest(p).count} carton(s)</span>
                         <span className="text-xs text-gray-500 ml-1.5 truncate">{p.desc}</span>
                         {p.dimL != null && (
                           <span className="text-[10px] text-gray-400 ml-1.5">
@@ -164,11 +170,11 @@ export default function ClientAccueil() {
                           </span>
                         )}
                         {(() => {
-                          const created = p.createdAt ? new Date(p.createdAt) : null;
-                          const days = created ? Math.floor((Date.now() - created.getTime()) / (1000 * 60 * 60 * 24)) : 0;
+                          const requested = p.demandeFeuVertEnvoyeeAt ? new Date(p.demandeFeuVertEnvoyeeAt) : null;
+                          const days = requested ? Math.floor((Date.now() - requested.getTime()) / (1000 * 60 * 60 * 24)) : 0;
                           return days > 5 ? (
                             <span className="ml-1.5 text-[9px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded-full">
-                              urgent
+                              Demande envoyée il y a {days} j
                             </span>
                           ) : null;
                         })()}
@@ -177,6 +183,7 @@ export default function ClientAccueil() {
                     </button>
                   ))}
                 </div>
+                <p className="mb-2 text-xs text-slate-600">L’accord lance la préparation. Le devis final suit ensuite. Pour attendre d’autres achats ou refuser, ouvrez le dossier concerné.</p>
                 <button
                   className="w-full flex items-center justify-center gap-2 py-3 rounded-xl font-bold text-white text-sm active:scale-95 transition-all"
                   style={{
@@ -184,17 +191,18 @@ export default function ClientAccueil() {
                     boxShadow: `0 2px 12px rgba(27,58,75,0.2)`,
                   }}
                   onClick={() => {
-                    const refs = colisAttenteFV.map((p) => p.ref).join(', ');
+                    const manifest = colisAttenteFV.map(cartonManifest);
+                    const refs = manifest.map((p) => `${p.ref} — ${p.count} carton(s)${p.trackings.length ? ': ' + p.trackings.join(', ') : ''}`).join('\n');
                     ask(
                       'Autoriser tous les colis',
-                      `Vous confirmez autoriser la préparation de ${colisAttenteFV.length} colis ?\n\n${refs}`,
-                      () => feuVertBulk(colisAttenteFV.map((p) => p.id)),
+                      `Vous autorisez uniquement les ${colisAttenteFV.length} dossiers listés ci-dessous, avec leurs cartons actuellement réceptionnés. Les futurs cartons sont exclus.\n\n${refs}`,
+                      async () => { try { await feuVertBulk(manifest.map((p) => p.id), { expectedVersions: Object.fromEntries(manifest.map((p) => [p.id, p.updatedAt])) }); } catch (error) { flash({ msg: error.message, type: 'error' }); } },
                       { okLabel: 'Oui, tout autoriser' }
                     );
                   }}
                 >
                   <CheckCircle size={16} strokeWidth={2.5} />
-                  Tout autoriser ({colisAttenteFV.length})
+                  Autoriser les dossiers listés ({colisAttenteFV.length})
                 </button>
               </div>
             )}
@@ -218,17 +226,12 @@ export default function ClientAccueil() {
                     <Badge statut={p.statut} />
                   </div>
                 </button>
-                {p.devisTotal != null && cl?.type !== 'pro' && (
+                {hasPublishedQuote(p) && cl?.type !== 'pro' && (
                   <div className="px-4 pb-4">
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        ask(
-                          'Confirmer le paiement',
-                          `Valider le paiement de ${eur(p.devisTotal)} pour ${p.ref} ?`,
-                          () => payer(p.id, p.devisTotal),
-                          { okLabel: 'Payer' }
-                        );
+                        navigate(`/colis/${p.id}`);
                       }}
                       className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl font-black text-sm active:scale-95 transition-all"
                       style={{
@@ -242,7 +245,7 @@ export default function ClientAccueil() {
                     </button>
                   </div>
                 )}
-                {p.devisTotal != null && cl?.type === 'pro' && (
+                {hasPublishedQuote(p) && cl?.type === 'pro' && (
                   <div className="px-4 pb-4">
                     <div className="flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-semibold text-blue-800 bg-blue-50 border border-blue-200">
                       <CreditCard size={14} />
@@ -260,7 +263,7 @@ export default function ClientAccueil() {
       {colisCours.length > 0 && (
         <div className="anim-fade">
           <div className="flex items-center gap-2 mb-2">
-            <Package size={15} style={{ color: BRAND.navy }} />
+            <Package size={15} style={{ color: 'var(--brand-text)' }} />
             <h3 className="font-bold text-sm text-gray-800">Colis en cours</h3>
             <div className="ml-auto">
               <ViewToggle value={viewMode} onChange={setViewMode} />
@@ -285,7 +288,7 @@ export default function ClientAccueil() {
                 <button
                   onClick={() => { setColisFilter(null); navigate('/colis'); }}
                   className="w-full flex items-center justify-center gap-1.5 py-2.5 text-xs font-bold rounded-xl active:scale-95 transition-all"
-                  style={{ color: BRAND.navy, backgroundColor: BRAND.navy + '08' }}
+                  style={{ color: 'var(--brand-text)', backgroundColor: BRAND.navy + '08' }}
                 >
                   Voir les {colisCours.length} colis en cours
                   <ChevronRight size={13} />
@@ -351,8 +354,8 @@ export default function ClientAccueil() {
                             )}
                           </td>
                           <td className="px-3 py-2.5 text-right">
-                            {p.devisTotal != null && p.devisTotal > 0 ? (
-                              <span className="text-sm font-bold" style={{ color: BRAND.navy }}>{eur(p.devisTotal)}</span>
+                            {hasPublishedQuote(p) ? (
+                              <span className="text-sm font-bold" style={{ color: 'var(--brand-text)' }}>{eur(p.devisTotal)}</span>
                             ) : (
                               <span className="text-xs text-gray-300">—</span>
                             )}

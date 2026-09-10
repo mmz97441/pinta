@@ -1,0 +1,14 @@
+{
+  "date": "2026-09-10",
+  "migration": "20260910000013_reminders_activation.sql",
+  "helper_test_groups": 5,
+  "edge_and_helper_tests_total": 21,
+  "migration_preservation_assertions": 2,
+  "database": "PostgreSQL 17, local disposable container, network none",
+  "empty_schema_replay_through_00013": "passed",
+  "historical_schema_replay_through_00013": "passed",
+  "historical_schema_business_regressions": 45,
+  "historical_payment_runner_postgresql_17": "passed",
+  "production_modified_by_these_tests": false,
+  "provider_requests": "mocked; no live provider requests"
+}

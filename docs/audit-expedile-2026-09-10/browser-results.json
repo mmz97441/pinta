@@ -1,0 +1,54 @@
+[
+  {
+    "test": "login-role-client",
+    "staffDashboardVisible": true,
+    "errors": []
+  },
+  {
+    "test": "session-reload-client",
+    "loginVisible": true,
+    "errors": []
+  },
+  {
+    "test": "login-role-directeur",
+    "staffDashboardVisible": true,
+    "errors": []
+  },
+  {
+    "test": "open-settings-creates-departures",
+    "postCount": 0
+  },
+  {
+    "test": "settings-buttons",
+    "labels": []
+  },
+  {
+    "test": "template-save",
+    "feedback": true,
+    "networkRequests": []
+  },
+  {
+    "test": "template-remount",
+    "originalRestored": true
+  },
+  {
+    "test": "quote-after-weight-change",
+    "newWeight": 5,
+    "expectedTransport": 50,
+    "actualTransport": 50
+  },
+  {
+    "test": "mobile-overflow",
+    "width": 390,
+    "scrollWidth": 390
+  },
+  {
+    "test": "open-settings-final-post-count",
+    "count": 8
+  },
+  {
+    "test": "session-reload-directeur",
+    "loginVisible": true,
+    "errors": []
+  }
+]

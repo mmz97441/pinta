@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Camera, CameraOff, RotateCcw, Check, X, Loader2 } from 'lucide-react';
 import { BRAND } from '../../constants';
-import { supabase } from '../../lib/supabase';
+import { uploadDocument, signedFileUrl } from '../../lib/supabaseData';
 
 /**
  * WebcamCapture — Capture photo via webcam USB ou caméra tablette.
@@ -24,6 +24,14 @@ export default function WebcamCapture({ colisId, colisRef, onCapture, existingUr
   const [capturedUrl, setCapturedUrl] = useState(existingUrl || null);
   const [uploading, setUploading] = useState(false);
 
+  useEffect(() => {
+    let active=true;
+    if(existingUrl)signedFileUrl('photos-colis',existingUrl).then(url=>{if(active)setCapturedUrl(url);}).catch(error=>setCameraError(error.message));
+    return()=>{active=false;};
+  },[existingUrl]);
+  useEffect(()=>{
+    if(cameraActive && videoRef.current && streamRef.current) videoRef.current.srcObject=streamRef.current;
+  },[cameraActive]);
   // Start camera
   const startCamera = useCallback(async () => {
     setCameraError(null);
@@ -100,20 +108,14 @@ export default function WebcamCapture({ colisId, colisRef, onCapture, existingUr
     if (!capturedBlob || !colisId) return;
     setUploading(true);
     try {
-      const filename = `${colisId}_prep_${Date.now()}.jpg`;
-      const { error } = await supabase.storage
-        .from('photos-colis')
-        .upload(filename, capturedBlob, { contentType: 'image/jpeg', upsert: true });
-      if (error) throw error;
-
-      const { data: urlData } = supabase.storage.from('photos-colis').getPublicUrl(filename);
-      const publicUrl = urlData.publicUrl;
-
-      if (onCapture) onCapture(publicUrl);
-      setCapturedUrl(publicUrl);
+      const file=new File([capturedBlob],`${colisRef || 'preparation'}.jpg`,{type:'image/jpeg'});
+      const {path,url}=await uploadDocument('photos-colis',colisId,file);
+      if(onCapture)await onCapture(path);
+      if(capturedUrl?.startsWith('blob:'))URL.revokeObjectURL(capturedUrl);
+      setCapturedUrl(url);
       setCapturedBlob(null);
     } catch (err) {
-      console.error('[WebcamCapture] Upload error:', err);
+      setCameraError(`Photo non enregistrée : ${err.message}`);
     }
     setUploading(false);
   }, [capturedBlob, colisId, onCapture]);

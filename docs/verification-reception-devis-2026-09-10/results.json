@@ -1,0 +1,18 @@
+[
+  {
+    "test": "physical-cartons-preserved-and-new-receipt-measured-desktop",
+    "pass": true
+  },
+  {
+    "test": "final-quote-needs-new-measures-keeps-reception-snapshot-desktop",
+    "pass": true
+  },
+  {
+    "test": "physical-cartons-preserved-and-new-receipt-measured-mobile",
+    "pass": true
+  },
+  {
+    "test": "final-quote-needs-new-measures-keeps-reception-snapshot-mobile",
+    "pass": true
+  }
+]

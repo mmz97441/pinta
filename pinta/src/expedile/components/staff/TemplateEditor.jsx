@@ -1,6 +1,8 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Eye, EyeOff, Save, RotateCcw, ChevronDown, ChevronUp } from 'lucide-react';
 import { BRAND } from '../../constants';
+import { useApp } from '../../context/AppContext';
+import { DEFAULT_BODIES } from '../../services/messageDefaults';
 
 // ── Variables disponibles par groupe ──
 const VAR_GROUPS = [
@@ -44,6 +46,10 @@ const VAR_GROUPS = [
       { key: 'tva', label: 'TVA', ex: '6.96 €' },
       { key: 'taux_tva', label: 'Taux TVA', ex: '8.5%' },
       { key: 'total', label: 'Total', ex: '93.81 €' },
+      { key: 'lien_paiement', label: 'Lien de paiement', ex: 'https://paiement.exemple.test/devis' },
+      { key: 'modalite_paiement', label: 'Modalités pro', ex: 'par virement bancaire' },
+      { key: 'lien_espace', label: 'Dossier en ligne', ex: 'https://exemple.test/colis/dossier' },
+      { key: 'documents_attendus', label: 'Documents attendus', ex: 'Merci de joindre la facture d’achat.' },
       { key: 'economie', label: 'Économie', ex: '12.50 €' },
       { key: 'frais_divers', label: 'Frais divers', ex: 'Enlèvement : 5.00 €' },
       { key: 'contenu_declare', label: 'Contenu déclaré', ex: '• Casque Sony × 1 — 350 €' },
@@ -67,7 +73,8 @@ const TEMPLATES = [
   { key: 'facture_manquante', label: '📄 Facture manquante', emoji: '📄' },
   { key: 'demande_feu_vert', label: '🟢 Demande feu vert', emoji: '🟢' },
   { key: 'feu_vert_recu', label: '✅ Feu vert confirmé', emoji: '✅' },
-  { key: 'devis_final', label: '💳 Devis final', emoji: '💳' },
+  { key: 'devis_final', label: 'Devis particulier', emoji: '' },
+  { key: 'devis_final_pro', label: 'Devis professionnel', emoji: '' },
   { key: 'relance_feu_vert', label: '⏰ Relance feu vert', emoji: '⏰' },
   { key: 'relance_paiement', label: '⏰ Relance paiement', emoji: '⏰' },
   { key: 'expedie', label: '✈️ Expédié', emoji: '✈️' },
@@ -76,33 +83,6 @@ const TEMPLATES = [
   { key: 'facture_rejetee', label: '❌ Facture rejetée', emoji: '❌' },
   { key: 'invitation_telegram', label: '📲 Invitation Telegram', emoji: '📲' },
 ];
-
-const DEFAULT_BODIES = {
-  reception_telegram: `Bonjour {{prenom}} 👋\n\nBonne nouvelle ! Votre colis *{{ref}}* est bien arrivé à notre entrepôt de Paris 🎉\n\n📦 *Contenu :* {{desc}}\n{{liste_cartons}}\n🎯 *Destination :* {{destination_flag}} {{destination}}\n\n📐 *Prochaine étape :* Nous allons mesurer et peser votre colis.\n\n💡 Pensez à nous envoyer la *facture d'achat* si ce n'est pas déjà fait.\n\nÀ très vite !\n_L'équipe Expedîle — Paris → {{destination}}_`,
-  reception_email: `Bonjour {{nom_complet}},\n\nNous confirmons la réception de votre colis {{ref}} ({{desc}}) à notre entrepôt de Paris.\n\nDestination : {{destination_flag}} {{destination}}\n\nProchaines étapes :\n1. Mesure et pesage\n2. Demande de votre accord\n3. Optimisation emballage\n4. Envoi du devis final\n\n💡 Pensez à nous transmettre la facture d'achat.\n\nCordialement,\nL'équipe Expedîle`,
-  demande_feu_vert_telegram: `Bonjour {{prenom}} 👋\n\nVotre colis *{{ref}}* a été mesuré ✅\n\n📦 *{{desc}}*\n📐 *Dimensions :* {{dims_brutes}} — {{poids_brut}}\n⚖️ *Poids vol. :* {{poids_vol_avant}}\n🎯 *Destination :* {{destination_flag}} {{destination}}\n\n🔔 *Votre accord est nécessaire :*\n✅ *OUI* → On prépare et optimise\n❌ *NON* → On annule\n\n💡 Le devis final après optimisation.\n\n_Expedîle_`,
-  demande_feu_vert_email: `Bonjour {{nom_complet}},\n\nVotre colis {{ref}} ({{desc}}) a été mesuré.\n\nDimensions : {{dims_brutes}} — Poids : {{poids_brut}}\nPoids volumétrique : {{poids_vol_avant}}\nDestination : {{destination_flag}} {{destination}}\n\nNous avons besoin de votre accord pour préparer votre colis.\n\nCordialement,\nL'équipe Expedîle`,
-  devis_final_telegram: `Bonjour {{prenom}} 👋\n\nLe devis pour *{{ref}}* est prêt ! 📋\n\n🎯 {{destination_flag}} {{destination}}\n{{liste_cartons}}\n\n📐 Poids vol. avant : {{poids_vol_avant}}\n📐 Après optim. : {{dims_finales}} — {{poids_vol_apres}}\n⚖️ Poids facturable : {{poids_facturable}}\n{{contenu_declare}}\n\n━━━━━━━━━━━━━━\n🚀 Transport : *{{transport}}*\n🏛️ Taxes : *{{taxes}}*\n📊 TVA ({{taux_tva}}) : *{{tva}}*\n{{frais_divers}}\n━━━━━━━━━━━━━━\n💰 *TOTAL : {{total}}*\n━━━━━━━━━━━━━━\n\n👉 Payez pour déclencher l'expédition.\n\n_Expedîle_`,
-  devis_final_email: `Bonjour {{nom_complet}},\n\nLe devis final pour {{ref}} est prêt.\n\nRéférence : {{ref}}\nDestination : {{destination_flag}} {{destination}}\n{{liste_cartons}}\n\nPoids facturable : {{poids_facturable}}\n\nTransport : {{transport}}\nOM : {{om}}\nOMR : {{omr}}\nTVA ({{taux_tva}}) : {{tva}}\n{{frais_divers}}\n\nTOTAL : {{total}}\n\nCordialement,\nL'équipe Expedîle`,
-  facture_manquante_telegram: `Bonjour {{prenom}} 👋\n\nPour votre colis *{{ref}}* ({{desc}}), nous avons besoin de la *facture d'achat*.\n\n📄 *Pourquoi ?* Calcul des taxes, déclaration douane, devis final.\n\n👉 Envoyez-nous une *photo* ou *PDF* en réponse.\n\n_Expedîle_`,
-  facture_manquante_email: `Bonjour {{nom_complet}},\n\nPour traiter votre colis {{ref}} ({{desc}}), nous avons besoin de la facture d'achat.\n\nMerci de nous la transmettre.\n\nCordialement,\nL'équipe Expedîle`,
-  feu_vert_recu_telegram: `Bonjour {{prenom}} 👋\n\nMerci pour votre accord ! ✅\n\nVotre colis *{{ref}}* est en cours de préparation.\n\nVous recevrez le devis final dès que c'est prêt.\n\n_Expedîle_`,
-  feu_vert_recu_email: `Bonjour {{nom_complet}},\n\nAccord reçu pour {{ref}}. Notre équipe prépare votre colis.\n\nCordialement,\nL'équipe Expedîle`,
-  relance_feu_vert_telegram: `Bonjour {{prenom}} 👋\n\nRappel : *{{ref}}* ({{desc}}) attend votre accord.\n\n✅ *OUI* pour préparer\n❌ *NON* pour annuler\n\n⚠️ Frais de stockage après 14 jours.\n\n_Expedîle_`,
-  relance_feu_vert_email: `Bonjour {{nom_complet}},\n\nVotre colis {{ref}} est toujours en attente de votre accord.\n\nNote : frais de stockage possibles après 14 jours.\n\nCordialement,\nL'équipe Expedîle`,
-  relance_paiement_telegram: `Bonjour {{prenom}} 👋\n\nVotre colis *{{ref}}* est prêt ! ✈️\n\n💰 *Montant : {{total}}*\n🎯 {{destination_flag}} {{destination}}\n\n👉 Payez pour déclencher l'expédition.\n\n_Expedîle_`,
-  relance_paiement_email: `Bonjour {{nom_complet}},\n\nLe paiement de {{total}} pour {{ref}} est en attente.\n\nCordialement,\nL'équipe Expedîle`,
-  expedie_telegram: `Bonjour {{prenom}} 👋\n\n✈️ *{{ref}}* est en route !\n\n📦 {{desc}}\n🎯 {{destination_flag}} {{destination}}\n📅 Expédié le {{date_expedition}}\n\nSuivi : Transit → Dédouanement → Arrivée → Livraison\n\n_Expedîle_`,
-  expedie_email: `Bonjour {{nom_complet}},\n\nVotre colis {{ref}} a été expédié vers {{destination_flag}} {{destination}} le {{date_expedition}}.\n\nCordialement,\nL'équipe Expedîle`,
-  arrive_telegram: `Bonjour {{prenom}} 👋\n\n📍 *{{ref}}* est arrivé à {{destination}} !\n\n🚚 Livraison en cours d'organisation.\n\n_Expedîle_`,
-  arrive_email: `Bonjour {{nom_complet}},\n\nVotre colis {{ref}} est arrivé à {{destination}}. Livraison prochainement.\n\nCordialement,\nL'équipe Expedîle`,
-  en_livraison_telegram: `Bonjour {{prenom}} 👋\n\n🚚 *{{ref}}* est en livraison aujourd'hui !\n\nRestez disponible.\n\n_Expedîle_`,
-  en_livraison_email: `Bonjour {{nom_complet}},\n\nVotre colis {{ref}} est en cours de livraison.\n\nCordialement,\nL'équipe Expedîle`,
-  facture_rejetee_telegram: `Bonjour {{prenom}} 👋\n\n⚠️ La facture pour *{{ref}}* n'a pas pu être validée.\n\n📄 *Motif :* {{motif_rejet}}\n\n👉 Renvoyez une facture conforme (photo/PDF lisible).\n\n_Expedîle_`,
-  facture_rejetee_email: `Bonjour {{nom_complet}},\n\nLa facture pour {{ref}} n'a pas pu être validée.\nMotif : {{motif_rejet}}\n\nMerci de renvoyer une facture conforme.\n\nCordialement,\nL'équipe Expedîle`,
-  invitation_telegram_telegram: `Bonjour {{prenom}} 👋\n\nPour suivre vos colis en temps réel et recevoir vos notifications, connectez-vous à notre bot Telegram :\n\n👉 https://t.me/Expedilebot\n\nEnvoyez /start pour activer le suivi.\n\n_L'équipe Expedîle_`,
-  invitation_telegram_email: `Objet : 📲 Suivez vos colis sur Telegram\n\nBonjour {{nom_complet}},\n\nPour suivre vos colis en temps réel et recevoir vos notifications directement sur Telegram, cliquez sur le lien ci-dessous :\n\nhttps://t.me/Expedilebot\n\nEnvoyez /start pour activer le suivi.\n\nCordialement,\nL'équipe Expedîle`,
-};
 
 // ── Preview: replace {{var}} with examples ──
 function renderPreview(text) {
@@ -113,14 +93,17 @@ function renderPreview(text) {
 // COMPONENT
 // ════════════════════════════════════════════
 export default function TemplateEditor() {
+  const {messageTemplates,saveMessageTemplate,flash}=useApp();
+  const [saving,setSaving]=useState(false);
   const [selKey, setSelKey] = useState('reception');
   const [canal, setCanal] = useState('telegram');
-  const [bodies, setBodies] = useState(DEFAULT_BODIES);
+  const [bodies, setBodies] = useState(()=>({...DEFAULT_BODIES,...messageTemplates}));
   const [showPreview, setShowPreview] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [versions, setVersions] = useState({});
   const [saved, setSaved] = useState(false);
   const textareaRef = useRef(null);
+  useEffect(()=>setBodies(prev=>({...prev,...messageTemplates})),[messageTemplates]);
 
   const bodyKey = `${selKey}_${canal}`;
   const corps = bodies[bodyKey] || '';
@@ -141,7 +124,15 @@ export default function TemplateEditor() {
     }, 0);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    if(saving)return;
+    if(!corps.trim()){flash({msg:'Le modèle ne peut pas être vide.',type:'error'});return;}
+    const unknown=[...corps.matchAll(/\{\{(\w+)\}\}/g)].map(m=>m[1]).filter(key=>!(key in ALL_EXAMPLES));
+    if(unknown.length){flash({msg:`Variables inconnues : ${unknown.join(', ')}`,type:'error'});return;}
+    setSaving(true);
+    try { await saveMessageTemplate(selKey,canal,corps); }
+    catch(error){flash({msg:`Modèle non enregistré : ${error.message}`,type:'error'});setSaving(false);return;}
+    setSaving(false);
     const vKey = bodyKey;
     const prev = versions[vKey] || [];
     setVersions((v) => ({
@@ -163,16 +154,16 @@ export default function TemplateEditor() {
   const historyItems = versions[bodyKey] || [];
 
   return (
-    <div className="flex gap-4 min-h-[500px]">
+    <div className="flex flex-col sm:flex-row gap-4 min-h-[500px]">
       {/* ── Left: Template list ── */}
-      <div className="w-48 flex-shrink-0 space-y-0.5">
+      <div className="sm:w-48 flex-shrink-0 flex sm:block overflow-x-auto space-y-0.5">
         {TEMPLATES.map((tpl) => {
           const isActive = selKey === tpl.key;
           return (
             <button
               key={tpl.key}
               onClick={() => { setSelKey(tpl.key); setShowPreview(false); }}
-              className={`w-full text-left px-3 py-2 rounded-lg text-xs font-semibold transition-all ${
+              className={`w-full min-h-[44px] whitespace-nowrap text-left px-3 py-2 rounded-lg text-xs font-semibold transition-all ${
                 isActive ? 'bg-white shadow-sm' : 'text-gray-600 hover:bg-gray-50'
               }`}
               style={isActive ? { color: BRAND.navy, borderLeft: `3px solid ${BRAND.navy}` } : {}}
@@ -253,7 +244,7 @@ export default function TemplateEditor() {
           </button>
           <div className="flex-1" />
           <button
-            onClick={handleSave}
+            onClick={handleSave} disabled={saving}
             className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold text-white transition-all active:scale-95"
             style={{ background: saved ? '#10B981' : `linear-gradient(135deg, ${BRAND.navy}, ${BRAND.navyL})` }}
           >

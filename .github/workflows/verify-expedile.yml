@@ -1,0 +1,80 @@
+name: Vérifier Expedîle
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  application:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: pinta
+    env:
+      VITE_SUPABASE_URL: https://pinta-ci.supabase.co
+      VITE_SUPABASE_ANON_KEY: pinta-ci-public-placeholder
+      PINTA_TEST_OUT: /tmp/pinta-browser-results
+      PINTA_A11Y_OUT: /tmp/pinta-accessibility-results
+      PINTA_UX_DEVIS_OUT: /tmp/pinta-devis-results
+      PINTA_UX_TEAM_OUT: /tmp/pinta-team-results
+      PINTA_PDF_OUT: /tmp/pinta-pdf-results
+      PINTA_RECEPTION_DEVIS_OUT: /tmp/pinta-reception-devis-results
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: pinta/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+      - run: node --test supabase/tests/*.test.cjs
+      - name: Migrations, permissions et cohérence des calculs
+        run: |
+          docker run --rm -d --name pinta-finalisation-db --network none -e POSTGRES_PASSWORD=pinta-local-test-only postgres:17-alpine
+          trap 'docker stop pinta-finalisation-db' EXIT
+          ./supabase/tests/run-migrations.sh
+          ./supabase/tests/run-regressions.sh
+          ./supabase/tests/run-conversations.sh
+          ./supabase/tests/run-document-work-guards.sh
+          ./supabase/tests/run-reminder-activation.sh
+          node supabase/tests/quote-parity.mjs
+          PINTA_DB_CONTAINER=pinta-finalisation-db ./supabase/tests/run-compatibility.sh
+          ./supabase/tests/run-legacy-payments.sh
+          ./supabase/tests/run-migration-owners.sh
+      - run: npx playwright install --with-deps chromium
+      - name: Parcours navigateur sans services externes
+        run: |
+          npm run preview -- --host 127.0.0.1 --port 4175 > /tmp/pinta-preview.log 2>&1 &
+          pinta_preview_pid=$!
+          trap 'kill "$pinta_preview_pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 30); do
+            if curl --silent --fail http://127.0.0.1:4175/ > /dev/null; then break; fi
+            sleep 1
+          done
+          npm run test:browser
+          node tests/accessibility.cjs
+          node tests/ux-team-browser.cjs
+          node tests/reception-concurrency.browser.cjs
+          node tests/reception-devis.browser.cjs
+          node tests/measurements-display.browser.cjs
+          node tests/ux-devis.browser.cjs
+          node tests/pdf-preview.browser.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: expedile-verifications
+          path: |
+            /tmp/pinta-browser-results
+            /tmp/pinta-accessibility-results
+            /tmp/pinta-devis-results
+            /tmp/pinta-team-results
+            /tmp/pinta-pdf-results
+            /tmp/pinta-reception-devis-results
+            /tmp/pinta-preview.log

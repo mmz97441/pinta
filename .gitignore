@@ -5,3 +5,11 @@ dist/
 .env
 .env.local
 .env.*.local
+
+.vercel/
+pinta/supabase/.temp/
+.deployment-backups/
+.vercel
+.env*
+__pycache__/
+*.py[cod]

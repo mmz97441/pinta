@@ -11,6 +11,9 @@ import * as XLSX from 'xlsx';
  * @param {Array} categories - Categories with HS codes
  */
 export function exportDAUData(envoi, colis, clients, categories) {
+  if(!colis.length || colis.some(c=>!c.lignes?.length))throw new Error('Complétez les articles de chaque dossier avant l’export douanier.');
+  const missing=colis.flatMap(c=>(c.lignes||[]).filter(line=>!categories.find(cat=>cat.id===line.cat)?.codeHs).map(line=>`${c.ref} : ${line.desc}`));
+  if(missing.length)throw new Error(`Codes douaniers manquants : ${missing.join(', ')}. Complétez les catégories avec votre déclarant.`);
   // Group articles by HS code for the declaration
   const byHsCode = {};
   let totalMasseBrute = 0;
@@ -25,7 +28,7 @@ export function exportDAUData(envoi, colis, clients, categories) {
 
     (c.lignes || []).forEach((ligne) => {
       const cat = categories.find((x) => x.id === ligne.cat);
-      const hs = cat?.codeHs || cat?.code_hs || '99999999';
+      const hs = cat.codeHs;
       const val = (ligne.qte || 1) * (ligne.prix || 0);
       totalValeur += val;
 

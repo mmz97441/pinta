@@ -4,6 +4,7 @@ import { ArrowLeft, Users, Plus, Search, ChevronDown, Check, X, AlertTriangle, F
 import { useApp } from '../../context/AppContext';
 import { BRAND, ABONNEMENTS, getDestByCP } from '../../constants';
 import { searchClients, eur } from '../../utils';
+import { useDialog } from '../ui/useDialog';
 import { parseClientFile, detectDuplicates } from '../../utils/importClients';
 
 // ── Avatar ───────────────────────────────────────────────────────────────────
@@ -38,10 +39,11 @@ export default function StaffClients() {
   const [importProgress, setImportProgress] = useState({ done: 0, total: 0, created: 0, skipped: 0, errors: [] });
   const [importSkipDuplicates, setImportSkipDuplicates] = useState(true);
   const importFileRef = useRef(null);
+  const dialogRef = useDialog(importModal, () => { if (importStep !== 'importing') handleImportClose(); });
 
   // ── Derived ───────────────────────────────────────────────────────────────
   const filtered = searchClients(clients, clPageSearch);
-  const tgCount = clients.filter((c) => c.canal === 'telegram').length;
+  const tgCount = clients.filter((c) => c.telegramChatId).length;
   const proCount = clients.filter((c) => c.type === 'pro').length;
 
   // ── Helpers ───────────────────────────────────────────────────────────────
@@ -119,6 +121,7 @@ export default function StaffClients() {
   }
 
   function handleImportClose() {
+    if (importStep === 'importing') return;
     setImportModal(false);
     setImportData(null);
     setImportStep('upload');
@@ -132,19 +135,19 @@ export default function StaffClients() {
       {/* ── Modal Import Clients ────────────────────────────────────────── */}
       {importModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={handleImportClose}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl mx-4 max-h-[85vh] flex flex-col" onClick={(ev) => ev.stopPropagation()}>
+          <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Importer des clients" tabIndex={-1} className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl mx-4 max-h-[85dvh] flex flex-col" onClick={(ev) => ev.stopPropagation()}>
             {/* Header */}
             <div className="flex items-center justify-between p-5 border-b">
               <div className="flex items-center gap-3">
                 <div className="p-2 rounded-xl" style={{ background: BRAND.navy + '10' }}>
-                  <Upload size={20} style={{ color: BRAND.navy }} />
+                  <Upload size={20} style={{ color: 'var(--brand-text)' }} />
                 </div>
                 <div>
-                  <h2 className="font-bold text-base" style={{ color: BRAND.navy }}>Importer des clients</h2>
+                  <h2 className="font-bold text-base" style={{ color: 'var(--brand-text)' }}>Importer des clients</h2>
                   <p className="text-xs text-gray-400">CSV, Excel (.xlsx, .xls)</p>
                 </div>
               </div>
-              <button onClick={handleImportClose} className="p-2 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600">
+              <button disabled={importStep === 'importing'} aria-label="Fermer l’import de clients" onClick={handleImportClose} className="p-2 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600">
                 <X size={18} />
               </button>
             </div>
@@ -258,7 +261,7 @@ export default function StaffClients() {
                     <p className="text-xs font-bold text-gray-500 uppercase tracking-wider p-3 bg-gray-50 border-b">
                       Aperçu ({Math.min(importData.clients.length, 10)} sur {importData.clients.length})
                     </p>
-                    <div className="overflow-x-auto">
+                    <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Tableau des clients">
                       <table className="w-full text-[11px]">
                         <thead>
                           <tr className="bg-gray-50 border-b">
@@ -316,7 +319,7 @@ export default function StaffClients() {
                 <div className="flex flex-col items-center justify-center py-10 space-y-4">
                   <Loader2 size={40} className="animate-spin text-blue-500" />
                   <div className="text-center">
-                    <p className="text-lg font-bold" style={{ color: BRAND.navy }}>Import en cours...</p>
+                    <p className="text-lg font-bold" style={{ color: 'var(--brand-text)' }}>Import en cours...</p>
                     <p className="text-sm text-gray-500">{importProgress.done} / {importProgress.total} clients</p>
                   </div>
                   <div className="w-64 h-2 rounded-full bg-gray-200 overflow-hidden">
@@ -335,7 +338,7 @@ export default function StaffClients() {
                     <Check size={32} className="text-green-600" />
                   </div>
                   <div className="text-center">
-                    <p className="text-lg font-bold" style={{ color: BRAND.navy }}>Import terminé</p>
+                    <p className="text-lg font-bold" style={{ color: 'var(--brand-text)' }}>Import terminé</p>
                     <p className="text-sm text-gray-500 mt-1">{importProgress.created} client{importProgress.created > 1 ? 's' : ''} créé{importProgress.created > 1 ? 's' : ''}</p>
                     {importProgress.skipped > 0 && (
                       <p className="text-xs text-amber-600">{importProgress.skipped} doublon{importProgress.skipped > 1 ? 's' : ''} ignoré{importProgress.skipped > 1 ? 's' : ''}</p>
@@ -391,22 +394,22 @@ export default function StaffClients() {
       <div className="flex items-center justify-between gap-2 pt-1">
         <div className="flex items-center gap-2.5">
           <button
-            onClick={() => navigate('/')}
+            aria-label="Revenir à l’accueil" onClick={() => navigate('/')}
             className="p-2 rounded-xl hover:bg-gray-100 transition-colors"
-            style={{ color: BRAND.navy }}
+            style={{ color: 'var(--brand-text)' }}
           >
             <ArrowLeft size={18} />
           </button>
           <div className="flex items-center gap-2">
             <h1
               className="text-xl font-black tracking-tight leading-none"
-              style={{ color: BRAND.navy, letterSpacing: '-0.025em' }}
+              style={{ color: 'var(--brand-text)', letterSpacing: '-0.025em' }}
             >
               Clients
             </h1>
             <span
               className="text-xs font-black px-2 py-0.5 rounded-full"
-              style={{ background: `${BRAND.navy}15`, color: BRAND.navy }}
+              style={{ background: `${BRAND.navy}15`, color: 'var(--brand-text)' }}
             >
               {clients.length}
             </span>
@@ -418,7 +421,7 @@ export default function StaffClients() {
               <button
                 onClick={() => { setImportModal(true); setImportStep('upload'); setImportData(null); }}
                 className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-bold border-2 transition-all active:scale-95 hover:bg-gray-50"
-                style={{ borderColor: BRAND.navy + '30', color: BRAND.navy }}
+                style={{ borderColor: BRAND.navy + '30', color: 'var(--brand-text)' }}
               >
                 <Upload size={14} />
                 Importer
@@ -450,13 +453,13 @@ export default function StaffClients() {
           type="text"
           value={clPageSearch}
           onChange={(e) => setClPageSearch(e.target.value)}
-          placeholder="Rechercher par nom, ville, email, tél…"
+          aria-label="Rechercher un client" placeholder="Rechercher par nom, ville, email, tél…"
           className="w-full pl-9 pr-8 py-2.5 text-sm rounded-xl border border-gray-200 bg-white outline-none transition-all"
-          style={{ color: BRAND.navy }}
+          style={{ color: 'var(--brand-text)' }}
         />
         {clPageSearch && (
           <button
-            onClick={() => setClPageSearch('')}
+            aria-label="Effacer la recherche de clients" onClick={() => setClPageSearch('')}
             className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
           >
             <X size={14} />
@@ -467,7 +470,7 @@ export default function StaffClients() {
       {/* ── Stats row ───────────────────────────────────────────────────── */}
       <div className="grid grid-cols-3 gap-3">
         <div className="card p-3 flex flex-col items-center">
-          <span className="text-2xl font-black leading-none" style={{ color: BRAND.navy }}>
+          <span className="text-2xl font-black leading-none" style={{ color: 'var(--brand-text)' }}>
             {clients.length}
           </span>
           <span className="text-[11px] font-semibold text-gray-400 mt-0.5">Total</span>
@@ -477,7 +480,7 @@ export default function StaffClients() {
           <span className="text-[11px] font-semibold text-gray-400 mt-0.5">Telegram</span>
         </div>
         <div className="card p-3 flex flex-col items-center">
-          <span className="text-2xl font-black leading-none" style={{ color: BRAND.goldD }}>
+          <span className="text-2xl font-black leading-none" style={{ color: 'var(--text-accent)' }}>
             {proCount}
           </span>
           <span className="text-[11px] font-semibold text-gray-400 mt-0.5">Pro</span>
@@ -531,20 +534,20 @@ export default function StaffClients() {
         const TH = 'px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-gray-500 cursor-pointer hover:text-gray-700 select-none whitespace-nowrap';
         return (
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Tableau des clients">
               <table className="w-full text-left text-sm">
                 <thead>
                   <tr className="border-b border-gray-200" style={{ background: `${BRAND.navy}06` }}>
-                    <th className={TH} onClick={() => handleClSort('nom')}>Nom{si('nom')}</th>
-                    <th className={TH} onClick={() => handleClSort('prenom')}>Prénom{si('prenom')}</th>
-                    <th className={TH} onClick={() => handleClSort('type')}>Type{si('type')}</th>
-                    <th className={TH} onClick={() => handleClSort('abonnement')}>Forfait{si('abonnement')}</th>
-                    <th className={TH} onClick={() => handleClSort('ville')}>Ville{si('ville')}</th>
+                    <th className={TH} aria-sort={clSortCol === 'nom' ? (clSortDir === 'asc' ? 'ascending' : 'descending') : 'none'}><button type="button" onClick={() => handleClSort('nom')} className="min-h-11">Nom{si('nom')}</button></th>
+                    <th className={TH} aria-sort={clSortCol === 'prenom' ? (clSortDir === 'asc' ? 'ascending' : 'descending') : 'none'}><button type="button" onClick={() => handleClSort('prenom')} className="min-h-11">Prénom{si('prenom')}</button></th>
+                    <th className={TH} aria-sort={clSortCol === 'type' ? (clSortDir === 'asc' ? 'ascending' : 'descending') : 'none'}><button type="button" onClick={() => handleClSort('type')} className="min-h-11">Type{si('type')}</button></th>
+                    <th className={TH} aria-sort={clSortCol === 'abonnement' ? (clSortDir === 'asc' ? 'ascending' : 'descending') : 'none'}><button type="button" onClick={() => handleClSort('abonnement')} className="min-h-11">Forfait{si('abonnement')}</button></th>
+                    <th className={TH} aria-sort={clSortCol === 'ville' ? (clSortDir === 'asc' ? 'ascending' : 'descending') : 'none'}><button type="button" onClick={() => handleClSort('ville')} className="min-h-11">Ville{si('ville')}</button></th>
                     <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-gray-500">Tél.</th>
                     <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-gray-500">Email</th>
                     <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-gray-500">Telegram</th>
-                    <th className={TH} onClick={() => handleClSort('colis')}>Colis{si('colis')}</th>
-                    <th className={`${TH} text-right`} onClick={() => handleClSort('ca')}>CA{si('ca')}</th>
+                    <th className={TH} aria-sort={clSortCol === 'colis' ? (clSortDir === 'asc' ? 'ascending' : 'descending') : 'none'}><button type="button" onClick={() => handleClSort('colis')} className="min-h-11">Colis{si('colis')}</button></th>
+                    <th className={`${TH} text-right`} aria-sort={clSortCol === 'ca' ? (clSortDir === 'asc' ? 'ascending' : 'descending') : 'none'}><button type="button" onClick={() => handleClSort('ca')} className="min-h-11">Encaissé{si('ca')}</button></th>
                     <th className="w-6"></th>
                   </tr>
                 </thead>
@@ -558,13 +561,13 @@ export default function StaffClients() {
                       <tr key={cl.id} onClick={() => navigate('/clients/' + cl.id)}
                         className="border-b border-gray-50 cursor-pointer hover:bg-gray-50 transition-colors">
                         <td className="px-3 py-2.5">
-                          <span className="text-xs font-bold text-gray-800">{cl.nomFamille || cl.nom}</span>
+                          <button type="button" onClick={event => { event.stopPropagation(); navigate('/clients/' + cl.id); }} className="min-h-11 text-left text-xs font-bold text-gray-800">{cl.nomFamille || cl.nom}</button>
                           {dest && <span className="ml-1 text-xs">{dest.flag}</span>}
                         </td>
                         <td className="px-3 py-2.5 text-xs text-gray-600">{cl.prenom || '—'}</td>
                         <td className="px-3 py-2.5">
                           {cl.type === 'pro' ? (
-                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full" style={{ background: `${BRAND.gold}30`, color: BRAND.goldD }}>PRO</span>
+                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full" style={{ background: `${BRAND.gold}30`, color: 'var(--text-accent)' }}>PRO</span>
                           ) : (
                             <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-600">Part.</span>
                           )}
@@ -617,7 +620,7 @@ export default function StaffClients() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       {cl.ref && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 font-mono">{cl.ref}</span>}
-                      <span className="text-sm font-black truncate" style={{ color: BRAND.navy }}>
+                      <span className="text-sm font-black truncate" style={{ color: 'var(--brand-text)' }}>
                         {cl.nom || <span className="italic text-gray-400">Sans nom</span>}
                       </span>
                       {cl.abonnement === 'vip' ? (
@@ -627,7 +630,7 @@ export default function StaffClients() {
                         </span>
                       ) : cl.type === 'pro' ? (
                         <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full uppercase"
-                          style={{ background: `${BRAND.gold}30`, color: BRAND.goldD }}>
+                          style={{ background: `${BRAND.gold}30`, color: 'var(--text-accent)' }}>
                           PRO
                         </span>
                       ) : (
@@ -684,7 +687,7 @@ export default function StaffClients() {
                       {actifs.length > 0 && (
                         <span
                           className="text-[10px] font-bold px-1.5 py-0.5 rounded-full"
-                          style={{ background: `${BRAND.navy}12`, color: BRAND.navy }}
+                          style={{ background: `${BRAND.navy}12`, color: 'var(--brand-text)' }}
                         >
                           {actifs.length} actifs
                         </span>

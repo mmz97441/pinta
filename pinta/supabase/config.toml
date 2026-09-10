@@ -1,0 +1,44 @@
+project_id = "expedile-local"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+shadow_port = 54320
+major_version = 17
+
+[auth]
+enabled = true
+site_url = "http://localhost:5173"
+additional_redirect_urls = ["http://localhost:5173/**"]
+enable_signup = false
+minimum_password_length = 12
+
+# All authenticated functions verify the user with auth.getUser themselves,
+# so the gateway remains compatible with both legacy and asymmetric signing keys.
+[functions.send-telegram]
+verify_jwt = false
+[functions.create-staff-user]
+verify_jwt = false
+[functions.payplug-create]
+verify_jwt = false
+[functions.ocr-facture]
+verify_jwt = false
+[functions.telegram-inbox-assign]
+verify_jwt = false
+[functions.relances-auto]
+verify_jwt = false
+# Provider authentication is enforced inside each webhook.
+[functions.telegram-webhook]
+verify_jwt = false
+[functions.payplug-webhook]
+verify_jwt = false
+[functions.get-tracking]
+verify_jwt = false
+[functions.invite-client-user]
+verify_jwt = false

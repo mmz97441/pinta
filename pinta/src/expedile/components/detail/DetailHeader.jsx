@@ -15,11 +15,11 @@ export default function DetailHeader() {
       className="border-b border-white border-opacity-5 px-4 py-3.5 flex items-center gap-3 sticky top-0 z-20"
       style={{ background: 'linear-gradient(135deg, rgba(18,42,54,0.98), rgba(27,58,75,0.98))' }}
     >
-      <button onClick={() => navigate(isStaff ? '/' : '/colis')} className="text-white font-bold text-lg p-1 hover:bg-white hover:bg-opacity-10 rounded-xl transition-all">
+      <button aria-label="Retour aux colis" onClick={() => navigate('/colis')} className="min-w-[44px] min-h-[44px] flex items-center justify-center text-white font-bold text-lg p-1 hover:bg-white hover:bg-opacity-10 rounded-xl transition-all">
         <ArrowLeft size={22} />
       </button>
       <div className="flex-1">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <b className="font-mono text-white">{sel.ref}</b>
           <Badge statut={sel.statut} />
           {selDest && (

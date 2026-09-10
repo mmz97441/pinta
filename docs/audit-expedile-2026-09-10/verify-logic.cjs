@@ -1,0 +1,45 @@
+const fs=require('node:fs/promises');
+const vm=require('node:vm');
+const path=require('node:path');
+const root=path.resolve(__dirname,'../../pinta');
+const {transformSync}=require(path.join(root,'node_modules/esbuild'));
+const evidenceDir=process.env.PINTA_AUDIT_OUT || __dirname;
+const results=[];
+async function paymentTest(secret,payload) {
+ const source=await fs.readFile(root+'/supabase/functions/payplug-webhook/index.ts','utf8');
+ const code=transformSync(source.replace(/^import .*\n/,''),{loader:'ts',format:'cjs'}).code;
+ const writes=[], network=[]; let handler;
+ const query={select(){return this},eq(){return this},single:async()=>({data:{statut:'devis_envoye',client_id:null,ref:'EXP-TEST'}}),update(x){writes.push(x);return this},insert(x){return Promise.resolve({data:x})},then(resolve){return Promise.resolve({data:null,error:null}).then(resolve)}};
+ const sandbox={createClient:()=>({from:()=>query}),Deno:{env:{get:k=>({PAYPLUG_WEBHOOK_SECRET:secret,SUPABASE_URL:'https://example.test',SUPABASE_SERVICE_ROLE_KEY:'dummy'}[k]||'')},serve:h=>handler=h},console:{log(){},warn(){},error(){}},Response,Request,TextEncoder,crypto:require('node:crypto').webcrypto,fetch:async url=>{network.push(String(url));throw Error('Network disabled')}};
+ vm.runInNewContext(code,sandbox);
+ const response=await handler(new Request('http://local.test',{method:'POST',body:JSON.stringify(payload)}));
+ return {status:response.status,body:await response.json(),writes,network};
+}
+(async()=>{
+ const official={id:'pay_audit',object:'payment',is_live:false};
+ results.push({test:'official-payplug-notification-no-secret',result:await paymentTest('',official)});
+ results.push({test:'official-payplug-notification-with-secret',result:await paymentTest('audit-only',official)});
+ const source=await fs.readFile(root+'/src/expedile/context/AppContext.jsx','utf8');
+ const quote=source.split('const envoyerDevis = useCallback((id) => {')[1].split('\n  }, [data, clients, tarifs, categories, upd, flash]);')[0];
+ const q=new Function('data','clients','categories','tarifs','getClientDest','calcTransport','getCatTaux','upd','flash','eur','return (id)=>{'+quote+'\n}');
+ const parcel={id:'p',clientId:'c',finL:30,finW:20,finH:20,finP:3,dimL:30,dimW:20,dimH:20,poids:3,lignes:[{cat:'cat',qte:1,prix:100}],factures:[{valide:true}]};
+ let changes;
+ q([parcel],[{id:'c',type:'pro'}],[],{'974':{base:25,parKg:5}},()=>({code:'974',tva:8.5}),(kg,t)=>t.base+kg*t.parKg,()=>({om:0,omr:0}),(_id,c)=>changes=c,()=>{},x=>x)('p');
+ results.push({test:'pro-unchanged-dimensions-saving',expectedSaving:0,actualSaving:changes.economie,total:changes.devisTotal,before:changes.avantOptimTotal});
+ const missingCat={...parcel,lignes:[{cat:null,qte:1,prix:100}]};
+ const success=q([missingCat],[{id:'c',type:'particulier'}],[],{'974':{base:25,parKg:5}},()=>({code:'974',tva:8.5}),(kg,t)=>t.base+kg*t.parKg,()=>({om:0,omr:0}),(_id,c)=>changes=c,()=>{},x=>x)('p');
+ results.push({test:'uncategorized-article-quote',calculationAccepted:success,om:changes.devisOM,omr:changes.devisOMR});
+ const auto=source.split('const autoAssignEnvoi = useCallback(async (colisId) => {')[1].split('\n  }, [envois, setEnvois, upd, flash]);')[0];
+ const FixedDate=class extends Date {constructor(...args){super(...(args.length?args:['2026-09-09T18:00:00+02:00']))}};
+ let inserted;
+ const assign=new Function('Date','envois','sb','setEnvois','upd','flash','return async (colisId)=>{'+auto+'}');
+ await assign(FixedDate,[],{insertEnvoi:async x=>{inserted=x;return{id:'e',...x}}},()=>{},()=>{},()=>{})('p');
+ results.push({test:'wednesday-after-cutoff',at:'2026-09-09T18:00:00+02:00',commentExpected:'2026-09-18',actual:inserted.date});
+ let updated;
+ const existing=[{id:'wrong-destination',date:inserted.date,destinationCode:'976',statut:'planifie'}];
+ await assign(FixedDate,existing,{insertEnvoi:async()=>{throw Error('Unexpected')}},()=>{},(_id,x)=>updated=x,()=>{})('reunion-parcel');
+ results.push({test:'autoassign-ignores-destination',existingDestination:'976',assigned:updated.envoi});
+ await fs.mkdir(evidenceDir,{recursive:true});
+ await fs.writeFile(path.join(evidenceDir,'logic-results.json'),JSON.stringify(results,null,2));
+ console.log(JSON.stringify(results,null,2));
+})();

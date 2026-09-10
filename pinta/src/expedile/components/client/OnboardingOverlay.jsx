@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Package, Ruler, Plane, Truck, ChevronRight, ChevronLeft, X } from 'lucide-react';
+import { useDialog } from '../ui/useDialog';
 import { BRAND } from '../../constants';
 
 const STEPS = [
@@ -7,7 +8,7 @@ const STEPS = [
     icon: Package,
     title: 'Faites vos achats en ligne',
     desc: 'Passez commande chez Amazon, Nike, Temu, Shein… et faites livrer à notre entrepôt de Paris. On réceptionne votre colis pour vous.',
-    color: BRAND.navy,
+    color: 'var(--brand-text)',
     illustration: (
       <div className="flex items-center justify-center gap-3 my-4">
         {['Amazon', 'Nike', 'Temu'].map((b) => (
@@ -21,7 +22,7 @@ const STEPS = [
   {
     icon: Ruler,
     title: 'On optimise pour vous',
-    desc: 'Dès la réception à Paris, on mesure, on regroupe et on optimise vos colis pour réduire le volume et donc le prix du transport.',
+    desc: 'Après réception à Paris et votre accord, on prépare et on optimise vos colis pour réduire le volume et donc le prix du transport.',
     color: '#F59E0B',
     illustration: (
       <div className="flex items-center justify-center my-4">
@@ -58,23 +59,27 @@ const STEPS = [
 
 export default function OnboardingOverlay({ onDone }) {
   const [step, setStep] = useState(0);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const finish = async () => { if (saving) return; setSaving(true); try { await onDone(); } catch { setError('Votre progression n’a pas pu être enregistrée. Réessayez.'); setSaving(false); } };
+  const dialogRef = useDialog(true, finish);
   const current = STEPS[step];
   const Icon = current.icon;
   const isLast = step === STEPS.length - 1;
 
   return (
     <div
-      className="fixed inset-0 z-[9999] flex items-center justify-center px-4"
+      onClick={(event) => { if (event.target === event.currentTarget) finish(); }} className="fixed inset-0 z-[9999] flex items-center justify-center px-4 py-6 overflow-y-auto"
       style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)' }}
     >
-      <div className="w-full max-w-sm bg-white rounded-3xl overflow-hidden shadow-2xl anim-fade-up">
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="onboarding-title" tabIndex={-1} className="w-full max-w-sm max-h-full bg-white rounded-3xl overflow-y-auto shadow-2xl anim-fade-up">
         {/* Top accent bar */}
         <div className="h-1.5" style={{ background: `linear-gradient(90deg, ${BRAND.navy}, ${BRAND.gold}, ${BRAND.navy})` }} />
 
         {/* Skip */}
         <div className="flex justify-end px-4 pt-3">
           <button
-            onClick={onDone}
+            disabled={saving} onClick={finish}
             className="text-xs text-gray-400 hover:text-gray-600 font-medium flex items-center gap-1 transition-colors"
           >
             Passer <X size={12} />
@@ -97,7 +102,7 @@ export default function OnboardingOverlay({ onDone }) {
           </p>
 
           {/* Title */}
-          <h2 className="text-xl font-black mb-2" style={{ color: BRAND.navy }}>
+          <h2 id="onboarding-title" className="text-xl font-black mb-2" style={{ color: 'var(--brand-text)' }}>
             {current.title}
           </h2>
 
@@ -110,22 +115,11 @@ export default function OnboardingOverlay({ onDone }) {
           </p>
         </div>
 
-        {/* Dots */}
-        <div className="flex items-center justify-center gap-2 pb-4">
-          {STEPS.map((_, i) => (
-            <button
-              key={i}
-              onClick={() => setStep(i)}
-              className="transition-all rounded-full"
-              style={{
-                width: i === step ? 24 : 8,
-                height: 8,
-                background: i === step ? BRAND.navy : '#E5E7EB',
-              }}
-            />
-          ))}
+        <div className="flex items-center justify-center gap-1 pb-2">
+          {STEPS.map((_, i) => <button key={i} aria-label={`Voir l’étape ${i + 1}`} aria-current={i === step ? 'step' : undefined} onClick={() => setStep(i)} className="min-w-11 min-h-11 flex items-center justify-center"><span className="h-2 rounded-full transition-all" style={{ width: i === step ? 24 : 8, background: i === step ? 'var(--brand-text)' : 'var(--border-subtle)' }} /></button>)}
         </div>
 
+        {error && <p role="alert" className="text-xs text-red-600 px-6 pb-3">{error}</p>}
         {/* Navigation */}
         <div className="flex gap-3 px-6 pb-6">
           {step > 0 && (
@@ -140,7 +134,7 @@ export default function OnboardingOverlay({ onDone }) {
           <button
             onClick={() => {
               if (isLast) {
-                onDone();
+                finish();
               } else {
                 setStep(step + 1);
               }

@@ -2,16 +2,18 @@ import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { Package, CheckCircle, Clock, CreditCard, Plane, Shield, Warehouse, Truck, Loader2, AlertTriangle, Ruler } from 'lucide-react';
 import { BRAND, STATUTS, DESTINATIONS, getDestByCP } from '../../constants';
+import { configurationError } from '../../lib/supabase';
+import { clientJourney } from '../../domain/clientJourney';
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://bqprktzehuhplpqjgjaz.supabase.co';
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
 // Phases détaillées pour le client (8 étapes visibles)
 const PUBLIC_PHASES = [
   { key: 'reception',    label: 'Reçu',         icon: Package,     statuts: ['receptionne', 'mesure'] },
-  { key: 'accord',       label: 'Accord',       icon: CheckCircle, statuts: ['attente_feu_vert', 'autorise'] },
+  { key: 'accord',       label: 'Accord',       icon: CheckCircle, statuts: ['attente_feu_vert', 'autorise', 'refuse_client'] },
   { key: 'preparation',  label: 'Préparation',  icon: Clock,       statuts: ['en_preparation'] },
-  { key: 'paiement',     label: 'Paiement',     icon: CreditCard,  statuts: ['devis_envoye', 'paye'] },
+  { key: 'paiement',     label: 'Paiement',     icon: CreditCard,  statuts: ['devis_envoye', 'attente_paiement', 'paye'] },
   { key: 'vol',          label: 'En vol',       icon: Plane,       statuts: ['expedie', 'transit'] },
   { key: 'dedouanement', label: 'Douane',       icon: Shield,      statuts: ['dedouanement'] },
   { key: 'depot',        label: 'Au dépôt',     icon: Warehouse,   statuts: ['arrive'] },
@@ -25,41 +27,14 @@ function getPhaseIndex(statut) {
   return 0;
 }
 
-function getStatutLabel(statut) {
-  const map = {
-    receptionne: 'Votre colis est bien arrivé chez Expedîle',
-    mesure: 'Mesuré et prêt pour validation',
-    attente_feu_vert: 'En attente de votre accord',
-    autorise: 'Accord reçu — préparation programmée',
-    en_preparation: 'En cours de préparation et optimisation',
-    devis_envoye: 'Devis envoyé, en attente de paiement',
-    paye: 'Payé, programmé pour le prochain vol',
-    expedie: 'En route vers l\'aéroport',
-    transit: 'En vol vers sa destination ✈️',
-    dedouanement: 'En cours de dédouanement 🛃',
-    arrive: 'Arrivé au dépôt local 📦',
-    livraison: 'En cours de livraison 🚚',
-    livre: 'Livré',
-  };
-  return map[statut] || statut;
-}
-
 function formatDate(dateStr) {
   if (!dateStr) return null;
   return new Date(dateStr).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' });
 }
 
-function formatETA(dateStr) {
-  if (!dateStr) return null;
-  const d = new Date(dateStr + 'T00:00:00');
-  const now = new Date();
-  const days = Math.ceil((d - now) / (1000 * 60 * 60 * 24));
-  const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
-  const label = cap(d.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' }));
-  if (days < 0) return label;
-  if (days === 0) return `Aujourd'hui — ${label}`;
-  if (days === 1) return `Demain — ${label}`;
-  return `Dans ${days} jours — ${label}`;
+function formatETA(value) {
+  const date = new Date(/^\d{4}-\d{2}-\d{2}$/.test(value || '') ? `${value}T12:00:00` : value);
+  return Number.isFinite(date.getTime()) ? date.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' }) : null;
 }
 
 export default function TrackingPublic() {
@@ -69,8 +44,12 @@ export default function TrackingPublic() {
   const [error, setError] = useState(null);
 
   useEffect(() => {
+    setData(null); setError(null); setLoading(true);
+    if (configurationError) { setError('Le suivi est momentanément indisponible. Contactez notre équipe.'); setLoading(false); return; }
     if (!token) { setError('Lien invalide'); setLoading(false); return; }
+    const controller = new AbortController();
     fetch(`${SUPABASE_URL}/functions/v1/get-tracking?token=${encodeURIComponent(token)}`, {
+      signal: controller.signal,
       headers: {
         apikey: SUPABASE_ANON_KEY,
         Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
@@ -78,16 +57,18 @@ export default function TrackingPublic() {
     })
       .then((r) => r.json())
       .then((res) => {
+        if (controller.signal.aborted) return;
         if (!res.ok) setError(res.error || 'Une erreur est survenue');
         else setData(res);
         setLoading(false);
       })
-      .catch(() => { setError('Connexion impossible. Réessayez plus tard.'); setLoading(false); });
+      .catch(() => { if (!controller.signal.aborted) { setError('Connexion impossible. Réessayez plus tard.'); setLoading(false); } });
+    return () => controller.abort();
   }, [token]);
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: '#F8FAFC' }}>
+      <div className="min-h-[100dvh] flex items-center justify-center" style={{ background: '#F8FAFC' }}>
         <div className="flex flex-col items-center gap-3">
           <Loader2 size={32} className="animate-spin" style={{ color: BRAND.navy }} />
           <p className="text-sm text-gray-500">Chargement du suivi...</p>
@@ -98,7 +79,7 @@ export default function TrackingPublic() {
 
   if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-4" style={{ background: '#F8FAFC' }}>
+      <div className="min-h-[100dvh] flex items-center justify-center p-4" style={{ background: '#F8FAFC' }}>
         <div className="max-w-md w-full bg-white rounded-2xl shadow-lg p-8 text-center">
           <div className="w-16 h-16 rounded-full bg-red-50 flex items-center justify-center mx-auto mb-4">
             <AlertTriangle size={28} className="text-red-500" />
@@ -115,12 +96,12 @@ export default function TrackingPublic() {
   const destInfo = dest ? DESTINATIONS[dest.code] : null;
 
   return (
-    <div className="min-h-screen" style={{ background: '#F8FAFC' }}>
+    <div className="min-h-[100dvh]" style={{ background: '#F8FAFC' }}>
       {/* Header */}
       <div className="bg-white border-b border-gray-100">
         <div className="max-w-3xl mx-auto px-4 py-5 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="text-xl">📦</span>
+            <Package size={24} style={{ color: BRAND.navy }} />
             <span className="text-base font-black" style={{ color: BRAND.navy, letterSpacing: '-0.02em' }}>Expedîle</span>
           </div>
           <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Suivi partagé</span>
@@ -142,13 +123,14 @@ export default function TrackingPublic() {
             </div>
           )}
           <p className="text-xs text-gray-400 mt-3">
-            {data.colis.length} colis en cours · suivi en temps réel
+            {data.colis.length} colis · informations de suivi
           </p>
         </div>
 
         {/* Cards colis */}
         {data.colis.map((c) => {
           const phaseIdx = getPhaseIndex(c.statut);
+          const journey = clientJourney(c);
           return (
             <div key={c.ref} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
               {/* Header du colis */}
@@ -166,55 +148,19 @@ export default function TrackingPublic() {
 
               {/* Timeline */}
               <div className="px-5 py-5">
-                <div className="relative flex items-start justify-between">
-                  {/* Ligne horizontale de base */}
-                  <div className="absolute top-4 left-[10%] right-[10%] h-0.5 bg-gray-100" />
-                  {/* Ligne horizontale remplie (progression) */}
-                  <div
-                    className="absolute top-4 left-[10%] h-0.5 transition-all duration-700 ease-out"
-                    style={{
-                      width: `${(phaseIdx / (PUBLIC_PHASES.length - 1)) * 80}%`,
-                      background: `linear-gradient(90deg, ${BRAND.gold}, ${BRAND.navy})`,
-                    }}
-                  />
-
-                  {PUBLIC_PHASES.map((phase, i) => {
+                <section aria-label={`État actuel ${c.ref}`} className="space-y-2">
+                  <h2 className="text-base font-bold text-slate-800">{journey.label}</h2>
+                  <p className="text-sm text-slate-600">{journey.actor && <strong>{journey.actor} · </strong>}{journey.next}</p>
+                  <p className="text-xs text-slate-500">{journey.event ? `${journey.event.label} le ${formatDate(journey.event.date)}` : 'Date du dernier événement non renseignée.'}</p>
+                  {c.eta && formatETA(c.eta) && ['autorise', 'en_preparation', 'devis_envoye', 'attente_paiement', 'paye', 'expedie'].includes(c.statut) && <p className="text-sm text-slate-600">Départ prévu : <strong>{formatETA(c.eta)}</strong>. Il s’agit du départ, pas de la date de livraison.</p>}
+                </section>
+                <details className="mt-4 border-t border-slate-200">
+                  <summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-slate-600">Parcours du colis</summary>
+                  <ol aria-label="Progression du colis" className="grid grid-cols-1 sm:grid-cols-2 gap-2">{PUBLIC_PHASES.map((phase, index) => {
                     const Icon = phase.icon;
-                    const done = i < phaseIdx;
-                    const active = i === phaseIdx;
-                    return (
-                      <div key={phase.key} className="relative z-10 flex flex-col items-center" style={{ width: `${100 / PUBLIC_PHASES.length}%` }}>
-                        <div
-                          className={`w-8 h-8 rounded-full flex items-center justify-center transition-all duration-500 ${active ? 'ring-4 ring-opacity-30' : ''}`}
-                          style={{
-                            background: done || active ? BRAND.navy : '#E5E7EB',
-                            color: done || active ? 'white' : '#9CA3AF',
-                            ringColor: active ? BRAND.navy : undefined,
-                          }}
-                        >
-                          <Icon size={14} />
-                        </div>
-                        <span className={`text-[10px] mt-2 font-bold text-center ${active ? '' : 'text-gray-400'}`}
-                          style={{ color: active ? BRAND.navy : undefined }}>
-                          {phase.label}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {/* Statut détaillé */}
-                <div className="mt-4 p-3 rounded-xl bg-gray-50">
-                  <p className="text-xs font-bold mb-1" style={{ color: BRAND.navy }}>État actuel</p>
-                  <p className="text-sm text-gray-700">{getStatutLabel(c.statut)}</p>
-                  {c.eta && ['autorise', 'en_preparation', 'devis_envoye', 'paye', 'expedie'].includes(c.statut) && (
-                    <div className="mt-2 pt-2 border-t border-gray-200 flex items-center gap-2 text-xs">
-                      <Plane size={12} style={{ color: BRAND.navy }} />
-                      <span className="text-gray-500">Envoi prévu :</span>
-                      <span className="font-bold" style={{ color: BRAND.navy }}>{formatETA(c.eta)}</span>
-                    </div>
-                  )}
-                </div>
+                    return <li key={phase.key} aria-current={index === phaseIdx ? 'step' : undefined} className={`flex items-center gap-2 py-2 text-sm ${index === phaseIdx ? 'font-bold text-slate-800' : 'text-slate-500'}`}><Icon size={16} /><span>{phase.label}</span><span className="ml-auto text-xs">{index < phaseIdx ? 'Étape passée' : index === phaseIdx ? 'En cours' : 'À venir'}</span></li>;
+                  })}</ol>
+                </details>
 
                 {/* Photo préparation */}
                 {c.photoPrep && (
@@ -248,7 +194,7 @@ export default function TrackingPublic() {
         {/* Footer */}
         <div className="text-center pt-6 pb-4">
           <p className="text-[10px] text-gray-400">
-            Suivi en temps réel · propulsé par <span className="font-bold" style={{ color: BRAND.navy }}>Expedîle</span>
+            Suivi partagé · <span className="font-bold" style={{ color: BRAND.navy }}>Expedîle</span>
           </p>
         </div>
       </div>

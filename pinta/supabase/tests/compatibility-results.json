@@ -1,0 +1,13 @@
+{
+  "date": "2026-09-10",
+  "database": "PostgreSQL 17, isolated disposable container, network none",
+  "empty_schema_replay": "passed through 20260910000010, including reconciliation",
+  "historical_synthetic_schema_replay": "passed through 20260910000012",
+  "reconciliation_second_execution": "passed after September schema exists",
+  "historical_preservation_assertions": 9,
+  "sql_regression_assertions_per_schema": 45,
+  "javascript_postgresql_quote_parity_cases": 24,
+  "fixtures_contain_production_data": false,
+  "production_modified_by_compatibility_tests": false,
+  "entrypoint": "run-compatibility.sh"
+}

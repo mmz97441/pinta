@@ -1,216 +1,54 @@
 import React, { useState } from 'react';
+import { Copy, Download, Mail, Calculator } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { BRAND, ABONNEMENTS, getDestByCP, DESTINATIONS } from '../../constants';
-import { eur, calcTransport, getCatTaux } from '../../utils';
+import { BRAND, DESTINATIONS } from '../../constants';
+import { eur } from '../../utils';
+import { calculateQuote } from '../../domain/quote';
+
+const INPUT = 'min-h-11 w-full min-w-0 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-300';
+function Field({ label, children }) { return <label className="block text-xs font-semibold text-gray-500">{label}<div className="mt-1">{children}</div></label>; }
 
 export default function DevisProspect() {
-  const { tarifs, categories, flash } = useApp();
-
-  const [form, setForm] = useState({
-    nom: '', prenom: '', email: '', type: 'particulier',
-    dimL: '', dimW: '', dimH: '', poids: '',
-    valeurMarchandise: '', categorie: '',
-    destination: '974',
-    abonnement: 'freemium',
-  });
-
-  const set = (k, v) => setForm((p) => ({ ...p, [k]: v }));
+  const { tarifs, categories, settings = {} } = useApp();
+  const [form, setForm] = useState({ nom: '', prenom: '', email: '', type: 'particulier', dimL: '', dimW: '', dimH: '', poids: '', valeurMarchandise: '', categorie: '', destination: '974' });
+  const [notice, setNotice] = useState('');
+  const [busy, setBusy] = useState(false);
+  const set = (key, value) => { setForm((previous) => ({ ...previous, [key]: value })); setNotice(''); };
   const isPro = form.type === 'pro';
-  const dest = DESTINATIONS[form.destination] || DESTINATIONS['974'];
-  const t = tarifs[form.destination] || tarifs['974'];
-
-  // Calcul
-  const L = parseFloat(form.dimL) || 0;
-  const W = parseFloat(form.dimW) || 0;
-  const H = parseFloat(form.dimH) || 0;
-  const P = parseFloat(form.poids) || 0;
-  const pv = L && W && H ? (L * W * H) / 5000 : 0;
-  const pf = Math.max(P, pv);
-  const tr = pf > 0 ? calcTransport(pf, t) : 0;
-
-  const valeur = parseFloat(form.valeurMarchandise) || 0;
-  let om = 0, omr = 0, tva = 0;
-
-  if (!isPro && valeur > 0 && form.categorie) {
-    const cat = categories.find((c) => c.id === form.categorie);
-    if (cat) {
-      const ct = getCatTaux(cat, form.destination);
-      const cif = valeur + tr;
-      om = cif * ct.om / 100;
-      omr = cif * ct.omr / 100;
-    }
-    const ht = tr + om + omr;
-    tva = ht * (dest.tva / 100);
-  }
-
-  const total = Math.round((tr + om + omr + tva) * 100) / 100;
-
-  // Calcul premium pour comparaison
-  const tPremium = tarifs[form.destination + '_premium'] || t; // fallback
-  const trPremium = pf > 0 ? calcTransport(pf, tPremium) : tr; // simplified
-  const totalPremiumEstimate = Math.round((trPremium + om + omr + tva) * 100) / 100;
-
-  const canSend = form.email && form.nom && pf > 0 && total > 0;
-
-  const handleSendEmail = () => {
-    if (!canSend) { flash({ msg: 'Remplissez tous les champs obligatoires', type: 'warning' }); return; }
-
-    const prenom = form.prenom || form.nom.split(' ')[0];
-    const subject = `Devis estimatif Expedîle — ${dest.flag} ${dest.nom}`;
-    const body = `Bonjour ${prenom},
-
-Suite à votre demande, voici votre devis estimatif pour une expédition vers ${dest.nom} :
-
-Dimensions : ${L}×${W}×${H} cm
-Poids : ${P} kg
-Poids facturable : ${pf.toFixed(2)} kg
-
-Transport : ${eur(tr)}${!isPro ? `
-Taxes douanières (OM+OMR) : ${eur(om + omr)}
-TVA (${dest.tva}%) : ${eur(tva)}` : ''}
-━━━━━━━━━━━━━━━━
-TOTAL ESTIMATIF : ${eur(total)}
-━━━━━━━━━━━━━━━━
-
-⚠️ Ce devis est fourni à titre indicatif, sous réserve d'exactitude des données fournies. Le montant définitif sera établi après réception et mesure du colis dans notre entrepôt.
-
-Pour toute question, n'hésitez pas à nous contacter.
-
-Cordialement,
-L'équipe Expedîle — Paris → ${dest.nom}`;
-
-    window.open(`mailto:${form.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`, '_blank');
-    flash({ msg: `Email devis ouvert pour ${prenom}`, type: 'success' });
+  const destination = DESTINATIONS[form.destination];
+  const client = { type: form.type, nom: `${form.prenom} ${form.nom}`.trim(), email: form.email };
+  const colis = { ref: 'ESTIMATION', finL: form.dimL, finW: form.dimW, finH: form.dimH, finP: form.poids, lignes: [{ desc: 'Marchandise déclarée', qte: 1, prix: form.valeurMarchandise, cat: form.categorie }] };
+  const quote = calculateQuote({ colis, client, destination, tarif: tarifs[form.destination], categories, settings, mode: 'estimate' });
+  const text = quote.ok ? `Bonjour ${form.prenom || form.nom || ''},\n\nVoici votre estimation pour une expédition vers ${destination.nom}.\n\nDimensions : ${form.dimL} × ${form.dimW} × ${form.dimH} cm\nPoids réel : ${form.poids} kg\nPoids facturable : ${quote.amounts.billableWeight.toFixed(2)} kg\n\nTransport : ${eur(quote.amounts.transport)}${isPro ? '' : `\nOctroi de mer : ${eur(quote.amounts.om)}\nOctroi de mer régional : ${eur(quote.amounts.omr)}\nTVA : ${eur(quote.amounts.tva)}`}\nTotal estimatif : ${eur(quote.amounts.total)}\n\nLe montant définitif sera établi après réception, vérification des documents et mesure du colis. Les frais de services supplémentaires éventuellement convenus seront indiqués séparément.\n\nL’équipe Expedîle` : '';
+  const prepareEmail = () => {
+    window.location.href = `mailto:${encodeURIComponent(form.email)}?subject=${encodeURIComponent(`Estimation Expedîle — ${destination.nom}`)}&body=${encodeURIComponent(text)}`;
+    setNotice('L’email est préparé dans votre messagerie. Vérifiez-le puis envoyez-le ; son envoi n’est pas suivi dans Expedîle.');
   };
-
-  const LBL = 'text-[11px] font-bold text-gray-500 block mb-1 uppercase tracking-wide';
-  const INP = 'w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-sm outline-none focus:border-blue-300 transition-colors';
-
-  return (
-    <div className="h-full overflow-y-auto">
-      <div className="max-w-2xl mx-auto px-6 py-6 space-y-6">
-        <div>
-          <h1 className="text-xl font-black" style={{ color: BRAND.navy }}>Devis rapide (prospect)</h1>
-          <p className="text-xs text-gray-400 mt-0.5">Estimation sans création de colis ni de client</p>
-        </div>
-
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-5">
-          {/* Type */}
-          <div className="flex gap-2">
-            <button onClick={() => set('type', 'particulier')}
-              className={`flex-1 py-2 rounded-xl text-sm font-bold transition-all ${!isPro ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-500'}`}>
-              Particulier
-            </button>
-            <button onClick={() => set('type', 'pro')}
-              className={`flex-1 py-2 rounded-xl text-sm font-bold transition-all ${isPro ? 'text-white' : 'bg-gray-100 text-gray-500'}`}
-              style={isPro ? { background: BRAND.goldD } : {}}>
-              Professionnel
-            </button>
-          </div>
-
-          {/* Client info */}
-          <div className="grid grid-cols-3 gap-3">
-            <div>
-              <label className={LBL}>Nom *</label>
-              <input value={form.nom} onChange={(e) => set('nom', e.target.value)} placeholder="NOM" className={INP} />
-            </div>
-            <div>
-              <label className={LBL}>Prénom</label>
-              <input value={form.prenom} onChange={(e) => set('prenom', e.target.value)} placeholder="Prénom" className={INP} />
-            </div>
-            <div>
-              <label className={LBL}>Email *</label>
-              <input type="email" value={form.email} onChange={(e) => set('email', e.target.value)} placeholder="adresse@email.com" className={INP} />
-            </div>
-          </div>
-
-          {/* Destination */}
-          <div>
-            <label className={LBL}>Destination *</label>
-            <select value={form.destination} onChange={(e) => set('destination', e.target.value)} className={INP}>
-              {Object.entries(DESTINATIONS).map(([code, d]) => (
-                <option key={code} value={code}>{d.flag} {d.nom} ({code})</option>
-              ))}
-            </select>
-          </div>
-
-          {/* Dimensions */}
-          <div>
-            <label className={LBL}>Dimensions et poids *</label>
-            <div className="grid grid-cols-4 gap-2">
-              <input type="number" value={form.dimL} onChange={(e) => set('dimL', e.target.value)} placeholder="Long. cm" className={INP} />
-              <input type="number" value={form.dimW} onChange={(e) => set('dimW', e.target.value)} placeholder="Larg. cm" className={INP} />
-              <input type="number" value={form.dimH} onChange={(e) => set('dimH', e.target.value)} placeholder="Haut. cm" className={INP} />
-              <input type="number" value={form.poids} onChange={(e) => set('poids', e.target.value)} placeholder="Poids kg" className={INP} />
-            </div>
-          </div>
-
-          {/* Marchandise (particuliers uniquement) */}
-          {!isPro && (
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className={LBL}>Valeur marchandise (€)</label>
-                <input type="number" value={form.valeurMarchandise} onChange={(e) => set('valeurMarchandise', e.target.value)} placeholder="0.00" className={INP} />
-              </div>
-              <div>
-                <label className={LBL}>Catégorie</label>
-                <select value={form.categorie} onChange={(e) => set('categorie', e.target.value)} className={INP}>
-                  <option value="">— Choisir —</option>
-                  {categories.map((cat) => (
-                    <option key={cat.id} value={cat.id}>{cat.label}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-          )}
-
-          {/* Résultat */}
-          {pf > 0 && (
-            <div className="p-4 rounded-xl border-2" style={{ borderColor: BRAND.navy + '30', background: BRAND.navy + '06' }}>
-              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Estimation</p>
-              <div className="space-y-1 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Poids facturable</span>
-                  <span className="font-bold">{pf.toFixed(2)} kg</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Transport</span>
-                  <span className="font-semibold">{eur(tr)}</span>
-                </div>
-                {!isPro && (om + omr) > 0 && (
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Taxes (OM+OMR)</span>
-                    <span className="font-semibold">{eur(om + omr)}</span>
-                  </div>
-                )}
-                {!isPro && tva > 0 && (
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">TVA ({dest.tva}%)</span>
-                    <span className="font-semibold">{eur(tva)}</span>
-                  </div>
-                )}
-                <div className="border-t border-gray-200 pt-1 mt-1 flex justify-between">
-                  <span className="font-bold" style={{ color: BRAND.navy }}>TOTAL ESTIMATIF</span>
-                  <span className="text-lg font-black" style={{ color: BRAND.navy }}>{eur(total)}</span>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Bouton envoi */}
-          <button
-            onClick={handleSendEmail}
-            disabled={!canSend}
-            className="w-full py-3 rounded-xl text-sm font-bold text-white transition-all active:scale-95 disabled:opacity-40"
-            style={{ background: `linear-gradient(135deg, ${BRAND.navy}, ${BRAND.navyL})` }}
-          >
-            Envoyer le devis par email
-          </button>
-          <p className="text-[9px] text-gray-400 text-center">
-            Mention "sous réserve d'exactitude des données fournies" incluse automatiquement
-          </p>
-        </div>
+  const download = async () => {
+    setBusy(true); setNotice('');
+    try { const { exportDevisPDF } = await import('../../utils/exportDevisPDF'); exportDevisPDF({ ...colis, ...quote.patch, quoteSnapshot: quote.snapshot }, client, destination); }
+    catch (error) { setNotice(`Le PDF n’a pas pu être créé : ${error.message}`); }
+    finally { setBusy(false); }
+  };
+  return <div className="h-full overflow-y-auto"><div className="mx-auto max-w-3xl px-4 py-6 sm:px-6 space-y-6">
+    <div><p className="text-xs font-bold uppercase tracking-wider text-gray-400">Avant réception</p><h1 className="mt-1 flex items-center gap-2 text-2xl font-bold" style={{ color: BRAND.navy }}><Calculator size={23} />Estimation rapide</h1><p className="mt-2 text-sm text-gray-500">Le même calcul que le devis définitif, à partir des informations déclarées.</p></div>
+    <div className="grid gap-6 md:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
+      <div className="min-w-0 space-y-5">
+        <div className="flex rounded-xl bg-slate-100 p-1">{[['particulier', 'Particulier'], ['pro', 'Professionnel']].map(([value, label]) => <button key={value} aria-pressed={form.type === value} onClick={() => set('type', value)} className={`min-h-11 flex-1 rounded-lg px-3 py-2 text-sm font-semibold ${form.type === value ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500'}`}>{label}</button>)}</div>
+        <Field label="Destination"><select value={form.destination} onChange={(event) => set('destination', event.target.value)} className={INPUT}>{Object.entries(DESTINATIONS).map(([code, item]) => <option key={code} value={code}>{item.flag} {item.nom}</option>)}</select></Field>
+        <div className="grid grid-cols-2 gap-3">{[['dimL', 'Longueur (cm)'], ['dimW', 'Largeur (cm)'], ['dimH', 'Hauteur (cm)'], ['poids', 'Poids (kg)']].map(([key, label]) => <Field key={key} label={label}><input aria-label={label} type="number" min="0.01" step="0.01" value={form[key]} onChange={(event) => set(key, event.target.value)} className={INPUT} /></Field>)}</div>
+        {!isPro && <div className="space-y-3 border-t border-gray-200 pt-4"><Field label="Valeur de la marchandise (€)"><input aria-label="Valeur de la marchandise" type="number" min="0.01" step="0.01" value={form.valeurMarchandise} onChange={(event) => set('valeurMarchandise', event.target.value)} className={INPUT} /></Field><Field label="Catégorie de marchandise"><select value={form.categorie} onChange={(event) => set('categorie', event.target.value)} className={INPUT}><option value="">Choisir une catégorie</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.label}</option>)}</select></Field><p className="text-xs text-gray-400">Pour des achats de plusieurs catégories, établissez le devis détaillé dans un dossier client.</p></div>}
+        <div className="space-y-3 border-t border-gray-200 pt-4"><p className="text-xs font-semibold text-slate-600">Destinataire (pour partager)</p><div className="grid grid-cols-2 gap-3"><Field label="Nom"><input value={form.nom} onChange={(event) => set('nom', event.target.value)} className={INPUT} /></Field><Field label="Prénom"><input value={form.prenom} onChange={(event) => set('prenom', event.target.value)} className={INPUT} /></Field></div><Field label="Email"><input type="email" value={form.email} onChange={(event) => set('email', event.target.value)} className={INPUT} /></Field></div>
       </div>
+      <aside className="min-w-0 space-y-4 self-start rounded-2xl bg-slate-50 p-4">
+        <h2 className="text-sm font-semibold text-slate-800">Votre estimation</h2>
+        {quote.ok ? <><p className="text-3xl font-bold" style={{ color: BRAND.navy }}>{eur(quote.amounts.total)}</p><dl className="space-y-2 text-sm">{[['Transport', quote.amounts.transport], ...(!isPro ? [['Octroi de mer', quote.amounts.om], ['Octroi de mer régional', quote.amounts.omr], [`TVA (${destination.tva} %)`, quote.amounts.tva]] : [])].map(([label, amount]) => <div key={label} className="flex justify-between gap-2"><dt className="text-gray-500">{label}</dt><dd className="font-semibold text-slate-700">{eur(amount)}</dd></div>)}</dl><p className="border-t border-gray-200 pt-3 text-xs text-gray-500">Poids facturable : {quote.amounts.billableWeight.toFixed(2)} kg. {isPro ? 'Transport professionnel, hors taxes gérées séparément.' : 'Taxes calculées sur la catégorie sélectionnée.'}</p></> : <ul className="list-disc space-y-2 pl-4 text-xs text-gray-500">{quote.errors.map((error, index) => <li key={index}>{error.message}</li>)}</ul>}
+        <p className="text-xs text-gray-500">Estimation indicative, à confirmer après réception et vérification. Les frais supplémentaires ne sont ajoutés que s’ils sont convenus et renseignés.</p>
+        <button disabled={!quote.ok || busy} onClick={download} className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-slate-700 px-3 py-2 text-sm font-semibold text-white disabled:opacity-40"><Download size={15} />Télécharger l’estimation</button>
+        <button disabled={!quote.ok} onClick={async () => { try { await navigator.clipboard.writeText(text); setNotice('Estimation copiée.'); } catch { setNotice('La copie est indisponible. Utilisez le PDF ou préparez l’email.'); } }} className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 disabled:opacity-40"><Copy size={15} />Copier le texte</button>
+        <button disabled={!quote.ok || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)} onClick={prepareEmail} className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 disabled:opacity-40"><Mail size={15} />Préparer l’email</button>
+        {notice && <p role="status" className="text-xs text-blue-800">{notice}</p>}
+      </aside>
     </div>
-  );
+  </div></div>;
 }

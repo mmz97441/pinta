@@ -1,3 +1,4 @@
+import { trustedStoragePath, throwDb } from '../_shared/http.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || '';
@@ -59,13 +60,15 @@ Deno.serve(async (req: Request) => {
     }
 
     // 3. Colis actifs (ou livrés depuis moins de 10j)
-    const { data: allColis } = await supabase
+    const { data: allColis, error: colisError } = await supabase
       .from('colis')
-      .select('id, ref, desc_contenu, statut, date_reception, casier, fin_l, fin_w, fin_h, fin_p, dim_l, dim_w, dim_h, poids, photo_prep, feu_vert, envoi_id, updated_at')
+      .select('id, ref, desc_contenu, statut, date_reception, casier, fin_l, fin_w, fin_h, fin_p, dim_l, dim_w, dim_h, poids, photo_prep, feu_vert, envoi_id, updated_at, attente_client_date, attente_client_until, feu_vert_date, demande_feu_vert_envoyee_at, devis_envoye_le, paiement_date, date_expedition, date_livraison')
       .eq('client_id', link.client_id)
       .neq('statut', 'annule')
       .eq('archive', false)
       .order('date_reception', { ascending: false });
+
+    if (colisError) throw colisError;
 
     // 4. Filtrer : soit pas livré, soit livré depuis < 10j (via updated_at)
     const now = Date.now();
@@ -101,7 +104,15 @@ Deno.serve(async (req: Request) => {
     const expediteur = `${prenom} ${initialeNom}.`;
 
     // Mapper vers format public (zéro info sensible)
-    const publicColis = colis.map((c) => {
+    const publicColis = await Promise.all(colis.map(async (c) => {
+      let photoPrep = null;
+      if (c.photo_prep) {
+        try {
+          const path = trustedStoragePath(c.photo_prep, 'photos-colis', c.id);
+          const signed = await supabase.storage.from('photos-colis').createSignedUrl(path, 900);
+          throwDb(signed); photoPrep = signed.data?.signedUrl || null;
+        } catch { /* Keep tracking available when a historical photo cannot be signed. */ }
+      }
       const envoi = envois?.find((e) => e.id === c.envoi_id);
       const hasFin = c.fin_l && c.fin_w && c.fin_h;
       const hasDim = c.dim_l && c.dim_w && c.dim_h;
@@ -110,14 +121,17 @@ Deno.serve(async (req: Request) => {
         desc: c.desc_contenu,
         statut: c.statut,
         dateReception: c.date_reception,
-        casier: c.casier,
+        attenteClientDate: c.attente_client_date, attenteClientUntil: c.attente_client_until,
+        feuVertDate: c.feu_vert_date, demandeFeuVertEnvoyeeAt: c.demande_feu_vert_envoyee_at,
+        devisEnvoyeLe: c.devis_envoye_le, paiementDate: c.paiement_date, dateExpedition: c.date_expedition, dateLivraison: c.date_livraison,
+
         dims: hasFin ? { L: c.fin_l, W: c.fin_w, H: c.fin_h, P: c.fin_p }
             : hasDim ? { L: c.dim_l, W: c.dim_w, H: c.dim_h, P: c.poids } : null,
-        photoPrep: c.photo_prep,
+        photoPrep,
         eta: envoi?.date_depart,
         envoiStatut: envoi?.statut,
       };
-    });
+    }));
 
     // 8. Incrémenter le compteur
     await supabase

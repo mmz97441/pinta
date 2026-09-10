@@ -1,519 +1,86 @@
-// Edge Function telegram-webhook
-// Reçoit les callbacks de boutons inline et les messages entrants
-// du bot @Expedilebot, puis met à jour la DB Supabase en conséquence.
-//
-// Déploiement : `supabase functions deploy telegram-webhook`
-// Variables d'environnement attendues :
-//   - TELEGRAM_BOT_TOKEN
-//   - SUPABASE_URL
-//   - SUPABASE_SERVICE_ROLE_KEY
+import { admin, fail, HttpError, json, throwDb, uuid } from '../_shared/http.ts';
+import { telegram } from '../_shared/telegram.ts';
+import { saveIncoming } from '../_shared/telegramIncoming.ts';
 
-import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const BOT_TOKEN = Deno.env.get("TELEGRAM_BOT_TOKEN") || "";
-const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
-const SUPABASE_SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
-const WEBHOOK_SECRET = Deno.env.get("TELEGRAM_WEBHOOK_SECRET") || "";
-const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
-
-if (!WEBHOOK_SECRET) {
-  console.warn(
-    "[telegram-webhook] TELEGRAM_WEBHOOK_SECRET non configuré — endpoint accepte toutes les requêtes. " +
-    "Configurer la variable d'env ET appeler setWebhook avec secret_token pour activer la vérification.",
-  );
-}
-
-// ═════════════════════════════ HELPERS TELEGRAM ═════════════════════════════
-
-async function sendReply(
-  chatId: number,
-  text: string,
-  opts?: { replyMarkup?: unknown; replyToId?: number },
-): Promise<number | null> {
-  const body: Record<string, unknown> = { chat_id: chatId, text, parse_mode: "Markdown" };
-  if (opts?.replyMarkup) body.reply_markup = opts.replyMarkup;
-  if (opts?.replyToId) body.reply_to_message_id = opts.replyToId;
-  const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  const data = await res.json();
-  return data?.result?.message_id || null;
-}
-
-async function answerCallback(cbId: string, text: string): Promise<void> {
-  await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/answerCallbackQuery`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ callback_query_id: cbId, text }),
-  });
-}
-
-// Retire l'inline keyboard d'un message existant (sans toucher au texte).
-// Plus robuste que editMessageText : pas de risque de casser le Markdown du message original.
-async function removeInlineKeyboard(chatId: number, msgId: number): Promise<void> {
-  await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/editMessageReplyMarkup`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      chat_id: chatId,
-      message_id: msgId,
-      reply_markup: { inline_keyboard: [] },
-    }),
-  });
-}
-
-// ═════════════════════════════ HELPERS DIVERS ═════════════════════════════
-
-// Équivalent Deno du helper frontend utils/getPrenom.
-// c.nom est construit comme "NOM Prénom" dans mapClient() — donc split[0] donne
-// le nom de famille (bug). On utilise c.prenom en priorité, avec fallback sur
-// tout ce qui suit le premier mot de c.nom.
-function getPrenom(client: { prenom?: string | null; nom?: string | null }): string {
-  if (!client) return "";
-  if (client.prenom) return client.prenom;
-  const parts = (client.nom || "").trim().split(/\s+/).filter(Boolean);
-  if (parts.length >= 2) return parts.slice(1).join(" ");
-  return parts[0] || "";
-}
-
-function nowParis(): string {
-  return new Date().toLocaleString("fr-FR", {
-    day: "2-digit",
-    month: "long",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: "Europe/Paris",
-  });
-}
-
-// Upload d'un fichier Telegram (photo ou document) vers Supabase Storage.
-async function handleFile(
-  fileId: string,
-  colisId: string,
-  fileName: string,
-): Promise<string | null> {
-  try {
-    const fr = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getFile?file_id=${fileId}`);
-    const fd = await fr.json();
-    if (!fd.ok) return null;
-    const blob = await fetch(`https://api.telegram.org/file/bot${BOT_TOKEN}/${fd.result.file_path}`);
-    const bytes = await blob.arrayBuffer();
-    const ext = fileName.split(".").pop() || "jpg";
-    const path = `${colisId}/telegram_${Date.now()}.${ext}`;
-    const { error } = await supabase.storage.from("factures").upload(path, bytes, {
-      contentType: ext === "pdf" ? "application/pdf" : `image/${ext}`,
-      upsert: true,
-    });
-    if (error) return null;
-    const { data: u } = supabase.storage.from("factures").getPublicUrl(path);
-    return u?.publicUrl || null;
-  } catch {
-    return null;
-  }
-}
-
-// ═════════════════════════════ ROUTING DES RÉPONSES CLIENT ═════════════════════════════
-
-async function findColisFromReply(replyToMsgId: number): Promise<string | null> {
-  if (!replyToMsgId) return null;
-  const { data: msg } = await supabase
-    .from("messages")
-    .select("colis_id")
-    .eq("telegram_msg_id", String(replyToMsgId))
-    .limit(1)
-    .single();
-  if (msg?.colis_id) return msg.colis_id;
-  const { data: fac } = await supabase
-    .from("factures")
-    .select("colis_id")
-    .eq("telegram_msg_id", String(replyToMsgId))
-    .limit(1)
-    .single();
-  if (fac?.colis_id) return fac.colis_id;
-  return null;
-}
-
-async function findBestColis(
-  clientId: string,
-  activeColis: { id: string; ref: string }[],
-  replyToMsgId?: number,
-): Promise<{ id: string; ref: string } | null> {
-  if (!activeColis?.length) return null;
-  if (activeColis.length === 1) return activeColis[0];
-
-  if (replyToMsgId) {
-    const tracedColisId = await findColisFromReply(replyToMsgId);
-    if (tracedColisId) {
-      const match = activeColis.find((c) => c.id === tracedColisId);
-      if (match) return match;
+const db = admin();
+const reply = (chatId: number, text: string, replyMarkup?: unknown) => telegram('sendMessage', { chat_id: chatId, text, ...(replyMarkup ? { reply_markup: replyMarkup } : {}) });
+async function processUpdate(update: any): Promise<{ chatId?: number; text?: string; markup?: unknown; callbackId?: string }> {
+  const cb = update.callback_query;
+  if (cb) {
+    const chatId = cb.message?.chat?.id;
+    if (!chatId || cb.message?.chat?.type !== 'private' || cb.from?.id !== chatId) throw new HttpError(403, 'Conversation privée requise');
+    if (typeof cb.data !== 'string') throw new HttpError(400, 'Action invalide');
+    const match = cb.data.match(/^fv_(oui|non|wait)_([0-9a-f-]{36})$/);
+    if (match && uuid(match[2])) {
+      const result = await db.rpc('telegram_client_decision', { p_colis_id: match[2], p_action: ({ oui:'approve',non:'refuse',wait:'wait' } as any)[match[1]], p_chat_id: String(chatId), p_message_id: String(cb.message.message_id) });
+      if (result.error) return { chatId, callbackId: cb.id, text: result.error.message };
+      return { chatId, callbackId: cb.id, text: match[1] === 'oui' ? `Votre accord pour ${result.data.ref} est enregistré. Notre équipe peut préparer les cartons de ce dossier. Vous recevrez votre devis dès sa finalisation.\n\nL’équipe Expedîle` : match[1] === 'wait' ? 'Votre attente est enregistrée. Les relances sont suspendues jusqu’à une nouvelle réception ou votre décision dans l’application.\n\nL’équipe Expedîle' : 'Votre refus est enregistré. Notre équipe vous contactera pour organiser la suite.\n\nL’équipe Expedîle' };
     }
+    const assignment = cb.data.match(/^in_([0-9a-f-]{36})_(\d+)$/);
+    if (assignment && uuid(assignment[1])) {
+      const client = await db.from('clients').select('id,nom,prenom').eq('telegram_chat_id', String(chatId)).single(); throwDb(client);
+      const pending = await db.from('client_inbox').select('*').eq('telegram_update_id', Number(assignment[2])).eq('client_id', client.data.id).single(); throwDb(pending);
+      const colis = await db.from('colis').select('id,ref').eq('id', assignment[1]).eq('client_id', client.data.id).single(); throwDb(colis);
+      if (pending.data.status === 'assigned') return { chatId, callbackId: cb.id, text: 'Ce message a déjà été rattaché à son dossier.' };
+      const claim = await db.rpc('claim_inbox_assignment',{p_inbox_id:pending.data.id,p_colis_id:colis.data.id}); throwDb(claim);
+      if (claim.data.status !== 'assigned') await saveIncoming(db, client.data, colis.data, pending.data.payload, pending.data.telegram_update_id);
+      throwDb(await db.from('client_inbox').update({ colis_id: colis.data.id, status: 'assigned' }).eq('id', pending.data.id));
+      return { chatId, callbackId: cb.id, text: `Votre message est enregistré dans ${colis.data.ref}. Notre équipe le retrouvera dans ce dossier.` };
+    }
+    return { chatId, callbackId: cb.id, text: 'Ce bouton n’est pas une décision reconnue. Ouvrez le dossier dans l’application.' };
   }
-
-  // Priorité : dernière demande de facture staff
-  const { data: factureRequests } = await supabase
-    .from("messages")
-    .select("colis_id")
-    .eq("type", "staff")
-    .in("colis_id", activeColis.map((c) => c.id))
-    .or("texte.ilike.%facture%")
-    .order("created_at", { ascending: false })
-    .limit(1);
-  if (factureRequests?.length) {
-    const match = activeColis.find((c) => c.id === factureRequests[0].colis_id);
-    if (match) return match;
+  const msg = update.message;
+  if (!msg || msg.chat?.type !== 'private' || msg.from?.id !== msg.chat.id) return {};
+  const chatId = msg.chat.id;
+  const text = (msg.text || '').trim();
+  if (/^\/start(?:\s|$)/.test(text)) {
+    const token = text.split(/\s+/)[1];
+    if (!token || !/^[0-9a-f]{64}$/.test(token)) return { chatId, text: 'Bonjour ! Ouvrez votre profil Expedîle et utilisez « Lier Telegram » pour obtenir votre invitation personnelle valable 24 heures.\n\nL’équipe Expedîle' };
+    const result = await db.rpc('consume_telegram_invitation', { p_token: token, p_chat_id: String(chatId) });
+    return { chatId, text: result.error ? result.error.message : `Bonjour ${result.data.prenom || result.data.nom}, votre compte Telegram est lié. Utilisez /statut pour retrouver vos dossiers.\n\nL’équipe Expedîle` };
   }
-
-  // Priorité : dernière conversation staff
-  const { data: recentMsgs } = await supabase
-    .from("messages")
-    .select("colis_id")
-    .eq("type", "staff")
-    .in("colis_id", activeColis.map((c) => c.id))
-    .order("created_at", { ascending: false })
-    .limit(1);
-  if (recentMsgs?.length) {
-    const match = activeColis.find((c) => c.id === recentMsgs[0].colis_id);
-    if (match) return match;
+  const customer = await db.from('clients').select('id,nom,prenom').eq('telegram_chat_id', String(chatId)).maybeSingle(); throwDb(customer);
+  if (!customer.data) return { chatId, text: 'Liez d’abord votre compte depuis votre profil Expedîle pour recevoir vos informations personnelles.' };
+  const client = customer.data;
+  const active = await db.from('colis').select('id,ref,statut').eq('client_id', client.id).not('statut','in','(livre,annule)').order('created_at', { ascending: false }); throwDb(active);
+  if (text === '/statut') return { chatId, text: `Bonjour ${client.prenom || client.nom},\n\n${active.data.map((c: any) => `${c.ref} : ${c.statut.replaceAll('_',' ')}`).join('\n') || 'Aucun dossier actif.'}\n\nL’équipe Expedîle` };
+  if (text === '/aide') return { chatId, text: 'Pour envoyer une facture ou un message, répondez à un message du dossier ou indiquez sa référence EXP. Si plusieurs dossiers sont ouverts, nous vous proposerons de choisir. /statut affiche vos dossiers.\n\nL’équipe Expedîle' };
+  let chosen = active.data.length === 1 ? active.data[0] : null;
+  const ref = `${text} ${msg.caption || ''}`.match(/\bEXP-[A-Z0-9]+\b/i)?.[0];
+  if (ref) chosen = active.data.find((c: any) => c.ref.toUpperCase() === ref.toUpperCase()) || null;
+  if (!chosen && msg.reply_to_message && active.data.length) {
+    const original = await db.from('messages').select('colis_id').eq('telegram_msg_id', String(msg.reply_to_message.message_id)).in('colis_id', active.data.map((c: any) => c.id)).limit(1).maybeSingle(); throwDb(original);
+    chosen = active.data.find((c: any) => c.id === original.data?.colis_id);
   }
-
-  return activeColis[0];
+  if (!chosen) {
+    throwDb(await db.from('client_inbox').upsert({ client_id: client.id, texte: text || msg.caption || 'Document reçu', telegram_update_id: update.update_id, payload: msg }, { onConflict: 'telegram_update_id', ignoreDuplicates: true }));
+    return { chatId, text: active.data.length ? 'À quel dossier correspond ce message ou document ? Choisissez ci-dessous pour que notre équipe puisse le traiter.' : 'Votre message est enregistré pour notre équipe. Aucun dossier actif ne permet encore de le rattacher.', markup: { inline_keyboard: active.data.slice(0,10).map((c: any) => [{ text: c.ref, callback_data: `in_${c.id}_${update.update_id}` }]) } };
+  }
+  await saveIncoming(db, client, chosen, msg, update.update_id);
+  return { chatId, text: `Bonjour ${client.prenom || client.nom}, votre ${msg.document || msg.photo ? 'document' : 'message'} est enregistré pour ${chosen.ref}. Notre équipe le retrouvera dans ce dossier.\n\nL’équipe Expedîle` };
 }
-
-// ═════════════════════════════ SERVEUR PRINCIPAL ═════════════════════════════
-
 Deno.serve(async (req: Request) => {
-  if (req.method !== "POST") return new Response("OK");
-
-  if (WEBHOOK_SECRET) {
-    const headerSecret = req.headers.get("X-Telegram-Bot-Api-Secret-Token") || "";
-    if (headerSecret !== WEBHOOK_SECRET) {
-      console.warn("[telegram-webhook] rejected: invalid secret_token");
-      return new Response("Unauthorized", { status: 401 });
-    }
-  }
-
+  if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
+  const secret = Deno.env.get('TELEGRAM_WEBHOOK_SECRET');
+  if (!secret) return json({ error: 'Webhook non configuré' }, 503);
+  if (req.headers.get('X-Telegram-Bot-Api-Secret-Token') !== secret) return json({ error: 'Unauthorized' }, 401);
+  let updateId: number | undefined;
   try {
-    const update = await req.json();
-
-    // ═════════════════ CALLBACK QUERIES (boutons inline) ═════════════════
-    if (update.callback_query) {
-      const cb = update.callback_query;
-      const chatId = cb.message?.chat?.id;
-      const msgId = cb.message?.message_id;
-      const data = cb.data;
-
-      if (data?.startsWith("fv_")) {
-        const parts = data.split("_");
-        const action = parts[1]; // "oui" | "non" | "wait"
-        const colisId = parts.slice(2).join("_");
-
-        const { data: colis } = await supabase
-          .from("colis")
-          .select("ref, statut, client_id")
-          .eq("id", colisId)
-          .single();
-
-        if (!colis || colis.statut !== "attente_feu_vert") {
-          await answerCallback(cb.id, "Cette demande n'est plus en attente.");
-          return new Response("OK");
-        }
-
-        const ts = nowParis();
-
-        // ─── OUI : on approuve UNIQUEMENT le colis cliqué ───
-        // (et pas tous les autres en attente_feu_vert comme avant — fix du bulk OUI)
-        if (action === "oui") {
-          await supabase.from("colis").update({
-            statut: "autorise",
-            feu_vert: "autorise",
-            feu_vert_date: new Date().toISOString(),
-          }).eq("id", colisId);
-
-          await supabase.from("logs_statut").insert({
-            colis_id: colisId,
-            ancien_statut: "attente_feu_vert",
-            nouveau_statut: "autorise",
-          });
-
-          await supabase.from("messages").insert({
-            colis_id: colisId,
-            type: "client",
-            auteur_nom: "Client (Telegram)",
-            texte: "✅ Accord donné via bouton Telegram",
-          });
-
-          // Ligne "Système" — trace de la transition pour l'historique staff
-          await supabase.from("messages").insert({
-            colis_id: colisId,
-            type: "systeme",
-            auteur_nom: "Système",
-            texte: `🔄 Feu vert reçu le ${ts} → colis passé de "Attente feu vert" à "Autorisé"`,
-          });
-
-          await answerCallback(cb.id, "Accord enregistré ✅");
-          // On retire juste les boutons, le message original reste intact
-          await removeInlineKeyboard(chatId, msgId);
-          // Et on envoie un NOUVEAU message de confirmation en réponse
-          await sendReply(
-            chatId,
-            `✅ *Accord enregistré le ${ts}*\n\nMerci ! Notre équipe lance la préparation de votre colis.\n\n⏱️ Vous recevrez votre devis final sous 24-48h, avec le résultat précis de notre optimisation et l'économie réalisée 💰\n\n_L'équipe Expedîle_`,
-            { replyToId: msgId },
-          );
-          return new Response("OK");
-        }
-
-        // ─── J'ATTENDS : on met en pause sans annuler ───
-        if (action === "wait") {
-          await supabase.from("colis").update({
-            attente_client_motif: "Attend d'autres colis (via Telegram)",
-            attente_client_date: new Date().toISOString(),
-          }).eq("id", colisId);
-
-          await supabase.from("messages").insert({
-            colis_id: colisId,
-            type: "client",
-            auteur_nom: "Client (Telegram)",
-            texte: "⏸️ Attend d'autres colis avant préparation",
-          });
-
-          await supabase.from("messages").insert({
-            colis_id: colisId,
-            type: "systeme",
-            auteur_nom: "Système",
-            texte: `🔄 Client souhaite attendre d'autres colis (via Telegram, ${ts}) — préparation en pause, relance auto à la prochaine réception`,
-          });
-
-          await answerCallback(cb.id, "Pause enregistrée ⏸️");
-          await removeInlineKeyboard(chatId, msgId);
-          await sendReply(
-            chatId,
-            `⏸️ *Pause enregistrée le ${ts}*\n\nPas de préparation lancée pour l'instant. Votre colis reste en sécurité dans notre entrepôt.\n\n📦 Dès qu'un nouveau colis arrive à votre nom, nous vous redemandons si vous voulez toujours attendre ou lancer la préparation groupée.\n\n_L'équipe Expedîle_`,
-            { replyToId: msgId },
-          );
-          return new Response("OK");
-        }
-
-        // ─── NON : refus explicite ───
-        await supabase.from("colis").update({
-          statut: "refuse_client",
-          feu_vert: "refuse",
-        }).eq("id", colisId);
-
-        await supabase.from("logs_statut").insert({
-          colis_id: colisId,
-          ancien_statut: "attente_feu_vert",
-          nouveau_statut: "refuse_client",
-        });
-
-        await supabase.from("messages").insert({
-          colis_id: colisId,
-          type: "client",
-          auteur_nom: "Client (Telegram)",
-          texte: "❌ Refus via bouton Telegram",
-        });
-
-        await supabase.from("messages").insert({
-          colis_id: colisId,
-          type: "systeme",
-          auteur_nom: "Système",
-          texte: `🔄 Refus reçu le ${ts} → colis passé de "Attente feu vert" à "Refusé par le client"`,
-        });
-
-        await answerCallback(cb.id, "Refus enregistré ❌");
-        await removeInlineKeyboard(chatId, msgId);
-        await sendReply(
-          chatId,
-          `❌ *Refus enregistré le ${ts}*\n\nMessage bien reçu. Votre colis reste en sécurité dans notre entrepôt en attendant vos instructions.\n\n💬 Deux options pour la suite :\n• Vous souhaitez qu'on le renvoie à l'expéditeur ?\n• Vous voulez qu'on le garde encore quelques jours au cas où ?\n\nRépondez simplement à ce message, notre équipe revient vers vous dans la journée.\n\n_L'équipe Expedîle_`,
-          { replyToId: msgId },
-        );
-      }
-      return new Response("OK");
-    }
-
-    // ═════════════════ MESSAGES ENTRANTS ═════════════════
-    const msg = update.message;
-    if (!msg) return new Response("OK");
-    const chatId = msg.chat.id;
-    const text = (msg.text || "").trim();
-    const msgTelegramId = msg.message_id;
-    const replyToMsgId = msg.reply_to_message?.message_id || null;
-    const fromUsername = msg.from?.username || "";
-    const fromName = [msg.from?.first_name, msg.from?.last_name].filter(Boolean).join(" ");
-
-    // ─── /start : liaison du compte Telegram au client DB ───
-    if (text.startsWith("/start")) {
-      const param = text.replace("/start", "").trim();
-      let client: { id: string; nom: string; prenom?: string; telegram_chat_id?: string; telegram_username?: string } | null = null;
-
-      if (param) {
-        const { data } = await supabase
-          .from("clients")
-          .select("id,nom,prenom,telegram_chat_id")
-          .eq("id", param)
-          .single();
-        client = data;
-      }
-      if (!client && fromUsername) {
-        const { data } = await supabase
-          .from("clients")
-          .select("id,nom,prenom,telegram_chat_id,telegram_username")
-          .not("telegram_username", "is", null);
-        if (data) {
-          client = data.find((c: { telegram_username?: string }) =>
-            (c.telegram_username || "").replace(/^@/, "").toLowerCase() === fromUsername.toLowerCase()
-          );
-        }
-      }
-      if (client) {
-        if (client.telegram_chat_id === String(chatId)) {
-          await sendReply(chatId, "Déjà lié ! ✅ /statut\n\n_Expedîle_");
-          return new Response("OK");
-        }
-        await supabase.from("clients").update({ telegram_chat_id: String(chatId) }).eq("id", client.id);
-        await sendReply(
-          chatId,
-          `Bonjour ${getPrenom(client)} 👋\n\nCompte lié ! ✅\n📦 Réception 🔔 Accords 💳 Devis ✈️ Expédition\n\n/statut\n\n_Expedîle_`,
-        );
-      } else {
-        await sendReply(
-          chatId,
-          `Bienvenue ! 👋\nCompte non trouvé. Demandez le lien.\nChat ID: \`${chatId}\`\n${fromUsername ? `@${fromUsername}` : ""}\n\n_Expedîle_`,
-        );
-      }
-      return new Response("OK");
-    }
-
-    // ─── /statut : liste des colis actifs ───
-    if (text === "/statut") {
-      const { data: cl } = await supabase
-        .from("clients")
-        .select("id,nom")
-        .eq("telegram_chat_id", String(chatId))
-        .single();
-      if (!cl) {
-        await sendReply(chatId, "Non lié. /start");
-        return new Response("OK");
-      }
-      const { data: colis } = await supabase
-        .from("colis")
-        .select("ref,statut,desc_contenu")
-        .eq("client_id", cl.id)
-        .not("statut", "in", '("livre","annule")')
-        .order("created_at", { ascending: false });
-      if (!colis?.length) {
-        await sendReply(chatId, "Aucun colis 📦\n_Expedîle_");
-        return new Response("OK");
-      }
-      const e: Record<string, string> = {
-        receptionne: "📦", mesure: "📐", attente_feu_vert: "🔔", autorise: "✅",
-        en_preparation: "🔧", devis_envoye: "💳", attente_paiement: "⏳", paye: "💰",
-        expedie: "✈️", transit: "🛫", dedouanement: "🏛️", arrive: "📍", livraison: "🚚",
-      };
-      const lines = colis.map((c: { statut: string; ref: string; desc_contenu?: string }) =>
-        `${e[c.statut] || "📦"} *${c.ref}* — ${c.desc_contenu || "—"}\n   _${c.statut.replace(/_/g, " ")}_`
-      );
-      await sendReply(chatId, `📦 *Colis (${colis.length})* :\n\n${lines.join("\n\n")}\n\n_Expedîle_`);
-      return new Response("OK");
-    }
-
-    // ─── /aide ───
-    if (text === "/aide") {
-      await sendReply(
-        chatId,
-        "*Aide* 📋\n/start — Lier\n/statut — Colis\n/aide — Aide\n\nEnvoyez vos *factures* (photo/PDF) ici.\n\n_Expedîle_",
-      );
-      return new Response("OK");
-    }
-
-    // ─── Identification du client ───
-    const { data: client } = await supabase
-      .from("clients")
-      .select("id,nom,prenom")
-      .eq("telegram_chat_id", String(chatId))
-      .single();
-    if (!client) {
-      if (text) await sendReply(chatId, "Non lié. /start");
-      return new Response("OK");
-    }
-
-    const { data: activeColis } = await supabase
-      .from("colis")
-      .select("id,ref,desc_contenu")
-      .eq("client_id", client.id)
-      .not("statut", "in", '("livre","annule")')
-      .order("created_at", { ascending: false });
-    if (!activeColis?.length) {
-      await sendReply(chatId, "Aucun colis actif.");
-      return new Response("OK");
-    }
-
-    // ─── PHOTO / DOCUMENT (facture) ───
-    if (msg.photo || msg.document) {
-      let fileId = "";
-      let fileName = "facture.jpg";
-      if (msg.photo?.length) {
-        fileId = msg.photo[msg.photo.length - 1].file_id;
-        fileName = "facture_telegram.jpg";
-      } else if (msg.document) {
-        fileId = msg.document.file_id;
-        fileName = msg.document.file_name || "document.pdf";
-      }
-      const caption = msg.caption || "";
-
-      const bestColis = await findBestColis(client.id, activeColis, replyToMsgId);
-      if (!bestColis) {
-        await sendReply(chatId, "Aucun colis actif.");
-        return new Response("OK");
-      }
-
-      const url = await handleFile(fileId, bestColis.id, fileName);
-      if (url) {
-        const vendeur = caption || "Facture (Telegram)";
-        await supabase.from("factures").insert({
-          colis_id: bestColis.id,
-          vendeur,
-          montant: 0,
-          valide: false,
-          fichier_url: url,
-          fichier_nom: fileName,
-          telegram_msg_id: String(msgTelegramId),
-        });
-        await supabase.from("messages").insert({
-          colis_id: bestColis.id,
-          type: "client",
-          auteur_nom: fromName || `${client.nom}${client.prenom ? " " + client.prenom : ""}`,
-          texte: `📎 Facture envoyée : ${vendeur}\n${url}`,
-        });
-        await sendReply(
-          chatId,
-          `✅ Facture reçue pour *${bestColis.ref}* !\nNotre équipe va la vérifier.\n\n_Expedîle_`,
-          { replyToId: msgTelegramId },
-        );
-      } else {
-        await sendReply(chatId, "⚠️ Erreur fichier. Ressayez.", { replyToId: msgTelegramId });
-      }
-      return new Response("OK");
-    }
-
-    // ─── TEXTE LIBRE ───
-    if (text && !text.startsWith("/")) {
-      const bestColis = await findBestColis(client.id, activeColis, replyToMsgId);
-      const cId = bestColis?.id || activeColis[0].id;
-      await supabase.from("messages").insert({
-        colis_id: cId,
-        type: "client",
-        auteur_nom: fromName || `${client.nom}${client.prenom ? " " + client.prenom : ""}`,
-        texte: text,
-      });
-      await sendReply(chatId, "Reçu ✅");
-    }
-    return new Response("OK");
-  } catch (err) {
-    console.error("Webhook:", err);
-    return new Response("OK");
+    const update = await req.json(); updateId = update.update_id;
+    if (!Number.isSafeInteger(updateId)) throw new HttpError(400, 'Update invalide');
+    const claimed = await db.rpc('claim_telegram_update', { p_update_id: updateId }); throwDb(claimed);
+    if (claimed.data === 'done') return json({ ok: true, duplicate: true });
+    if (claimed.data === 'busy') return json({ error: 'Update en cours' }, 503);
+    const result = await processUpdate(update);
+    throwDb(await db.from('telegram_updates').update({ status: 'done', processed_at: new Date().toISOString() }).eq('update_id', updateId));
+    // Persistence is complete. A failure in the acknowledgement must not replay a decision.
+    try {
+      if (result.callbackId) await telegram('answerCallbackQuery', { callback_query_id: result.callbackId, text: 'Réponse traitée' });
+      if (result.chatId && result.text) await reply(result.chatId, result.text, result.markup);
+    } catch (error) { console.error('Telegram acknowledgement unavailable', error instanceof Error ? error.message : 'error'); }
+    return json({ ok: true });
+  } catch (error) {
+    if (updateId !== undefined) await db.from('telegram_updates').update({ status: 'failed' }).eq('update_id', updateId);
+    return fail(error);
   }
 });

@@ -1,3 +1,5 @@
+-- Authored locally as 20260423000000, never applied in production (history and
+-- column inventory verified 2026-09-10). Ordered after the actual May migration.
 -- Feu vert "J'attends d'autres colis" : le client met la préparation en pause
 -- en attendant l'arrivée d'autres colis, sans annuler.
 -- Le colis reste en statut `attente_feu_vert` mais avec ces deux flags, ce qui :

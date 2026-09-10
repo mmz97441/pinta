@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Package, ChevronRight, AlertCircle, CreditCard, CheckCircle, X } from 'lucide-react';
+import { hasPublishedQuote } from './quoteVisibility';
 import { useApp } from '../../context/AppContext';
 import { BRAND } from '../../constants';
 import { eur } from '../../utils';
@@ -19,8 +20,9 @@ const FILTER_LABELS = {
 
 export default function ClientColis() {
   const navigate = useNavigate();
-  const { authCl, data, colisFilter, setColisFilter, ask, payer } = useApp();
+  const { authCl, data, colisFilter, setColisFilter, ask, archivesLoaded, loadArchives, flash } = useApp();
   const [colisTab, setColisTab] = useState('actifs');
+  const [archivesBusy, setArchivesBusy] = useState(false);
   const [viewMode, setViewMode] = useState('cards'); // 'cards' | 'columns'
 
   // When arriving from a stat card with a filter, force the "actifs" tab
@@ -35,9 +37,9 @@ export default function ClientColis() {
 
   // Apply sub-filter within actifs
   const filteredActifs = colisFilter === 'a_traiter'
-    ? actifs.filter((p) => p.statut === 'attente_feu_vert' || p.statut === 'devis_envoye')
+    ? actifs.filter((p) => (p.statut === 'attente_feu_vert' && !(p.attenteClientDate && (!p.attenteClientUntil || Date.parse(p.attenteClientUntil) > Date.now()))) || ['devis_envoye', 'attente_paiement'].includes(p.statut))
     : colisFilter === 'a_payer'
-    ? actifs.filter((p) => p.statut === 'devis_envoye')
+    ? actifs.filter((p) => ['devis_envoye', 'attente_paiement'].includes(p.statut))
     : actifs;
 
   const counts = {
@@ -52,10 +54,12 @@ export default function ClientColis() {
     myColis;
 
   const needsAction = (p) =>
-    p.statut === 'attente_feu_vert' || p.statut === 'devis_envoye';
+    (p.statut === 'attente_feu_vert' && !(p.attenteClientDate && (!p.attenteClientUntil || Date.parse(p.attenteClientUntil) > Date.now()))) || ['devis_envoye', 'attente_paiement'].includes(p.statut);
 
   return (
     <div className="anim-fade space-y-4">
+      {!archivesLoaded && <button disabled={archivesBusy} onClick={async () => { setArchivesBusy(true); try { await loadArchives(); } catch (error) { flash({ msg: 'Historique indisponible. ' + error.message, type: 'error' }); } finally { setArchivesBusy(false); } }} className="min-h-11 text-xs font-semibold brand-t underline">{archivesBusy ? 'Chargement de l’historique…' : 'Inclure mes anciens dossiers archivés'}</button>}
+
       {/* ── Header ── */}
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-black text-gray-900">Mes colis</h2>
@@ -73,7 +77,7 @@ export default function ClientColis() {
               className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-bold transition-all ${
                 active ? 'bg-white shadow-sm' : 'text-gray-500'
               }`}
-              style={active ? { color: BRAND.navy } : {}}
+              style={active ? { color: 'var(--brand-text)' } : {}}
             >
               {tab.label}
               {counts[tab.key] > 0 && (
@@ -113,7 +117,7 @@ export default function ClientColis() {
             className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4"
             style={{ backgroundColor: BRAND.navy + '10' }}
           >
-            <Package size={28} style={{ color: BRAND.navy }} strokeWidth={1.5} />
+            <Package size={28} style={{ color: 'var(--brand-text)' }} strokeWidth={1.5} />
           </div>
           <p className="font-bold text-gray-700 mb-1">
             {colisFilter === 'a_traiter'
@@ -141,7 +145,7 @@ export default function ClientColis() {
             const action = needsAction(p);
             const isLivre = p.statut === 'livre';
             const isFV = p.statut === 'attente_feu_vert';
-            const isPay = p.statut === 'devis_envoye';
+            const isPay = ['devis_envoye', 'attente_paiement'].includes(p.statut);
 
             return (
               <button
@@ -183,11 +187,11 @@ export default function ClientColis() {
                     Votre accord est attendu
                   </div>
                 )}
-                {isPay && p.devisTotal != null && p.devisTotal > 0 && authCl?.type !== 'pro' && (
+                {isPay && hasPublishedQuote(p) && authCl?.type !== 'pro' && (
                   <div className="mt-3 pt-2.5 border-t border-gray-100">
                     <div className="flex items-center justify-between">
                       <span className="text-xs text-gray-500">Montant dû</span>
-                      <span className="text-sm font-black" style={{ color: BRAND.navy }}>
+                      <span className="text-sm font-black" style={{ color: 'var(--brand-text)' }}>
                         {p.devisTotal.toFixed(2)} €
                       </span>
                     </div>
@@ -195,12 +199,7 @@ export default function ClientColis() {
                       className="mt-2"
                       onClick={(e) => {
                         e.stopPropagation();
-                        ask(
-                          'Confirmer le paiement',
-                          `Valider le paiement de ${p.devisTotal.toFixed(2)} € pour ${p.ref} ?`,
-                          () => payer(p.id, p.devisTotal),
-                          { okLabel: 'Payer' }
-                        );
+                        navigate(`/colis/${p.id}`);
                       }}
                     >
                       <div
@@ -217,7 +216,7 @@ export default function ClientColis() {
                     </div>
                   </div>
                 )}
-                {isPay && p.devisTotal != null && p.devisTotal > 0 && authCl?.type === 'pro' && (
+                {isPay && hasPublishedQuote(p) && authCl?.type === 'pro' && (
                   <div className="mt-2.5 flex items-center gap-1.5 text-xs font-semibold text-blue-800 bg-blue-50 rounded-xl px-3 py-2">
                     <CreditCard size={13} />
                     Paiement géré par votre entreprise
@@ -276,7 +275,7 @@ export default function ClientColis() {
                   const action = needsAction(p);
                   const isLivre = p.statut === 'livre';
                   const isFV = p.statut === 'attente_feu_vert';
-                  const isPay = p.statut === 'devis_envoye';
+                  const isPay = ['devis_envoye', 'attente_paiement'].includes(p.statut);
                   const taxes = (p.devisOM != null || p.devisOMR != null || p.devisTVA != null)
                     ? ((p.devisOM || 0) + (p.devisOMR || 0) + (p.devisTVA || 0))
                     : null;
@@ -347,8 +346,8 @@ export default function ClientColis() {
 
                       {/* Total */}
                       <td className="px-3 py-2.5 text-right">
-                        {p.devisTotal != null && p.devisTotal > 0 ? (
-                          <span className="text-sm font-bold" style={{ color: BRAND.navy }}>
+                        {hasPublishedQuote(p) ? (
+                          <span className="text-sm font-bold" style={{ color: 'var(--brand-text)' }}>
                             {eur(p.devisTotal)}
                           </span>
                         ) : p.estMin != null && p.estMax != null ? (
@@ -368,16 +367,11 @@ export default function ClientColis() {
                             Accord
                           </span>
                         )}
-                        {isPay && p.devisTotal != null && p.devisTotal > 0 && authCl?.type !== 'pro' && (
+                        {isPay && hasPublishedQuote(p) && authCl?.type !== 'pro' && (
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              ask(
-                                'Confirmer le paiement',
-                                `Valider le paiement de ${p.devisTotal.toFixed(2)} € pour ${p.ref} ?`,
-                                () => payer(p.id, p.devisTotal),
-                                { okLabel: 'Payer' }
-                              );
+                              navigate(`/colis/${p.id}`);
                             }}
                             className="inline-flex items-center gap-1 text-[11px] font-black px-2 py-1 rounded-lg active:scale-95 transition-all"
                             style={{
@@ -389,7 +383,7 @@ export default function ClientColis() {
                             Payer
                           </button>
                         )}
-                        {isPay && p.devisTotal != null && p.devisTotal > 0 && authCl?.type === 'pro' && (
+                        {isPay && hasPublishedQuote(p) && authCl?.type === 'pro' && (
                           <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-blue-700">
                             Pro
                           </span>

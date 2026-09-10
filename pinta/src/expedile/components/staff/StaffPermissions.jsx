@@ -4,6 +4,7 @@ import { BRAND } from '../../constants';
 import { PERMISSION_CATEGORIES } from '../../constants/permissions';
 import * as sb from '../../lib/supabaseData';
 import { supabase } from '../../lib/supabase';
+import { functionErrorMessage } from '../../services/functionErrors';
 import { Shield, Plus, Trash2, Check, X, ChevronDown, ChevronRight, Eye, EyeOff } from 'lucide-react';
 
 const ROLES = [
@@ -29,7 +30,7 @@ export default function StaffPermissions() {
     sb.fetchStaffUsers().then((users) => {
       setStaffUsers(users);
       setLoading(false);
-    }).catch(() => setLoading(false));
+    }).catch(error => {flash({msg:`Accès équipe indisponibles : ${error.message}`,type:'error'});setLoading(false);});
   }, []);
 
   const handleCreateUser = async () => {
@@ -37,38 +38,15 @@ export default function StaffPermissions() {
       flash({ msg: 'Nom, email et mot de passe requis', type: 'warning' });
       return;
     }
-    if (newForm.password.length < 6) {
-      flash({ msg: 'Le mot de passe doit faire au moins 6 caractères', type: 'warning' });
+    if (newForm.password.length < 12) {
+      flash({ msg: 'Le mot de passe doit faire au moins 12 caractères', type: 'warning' });
       return;
     }
     try {
-      // 1. Create Auth account via Edge Function
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://bqprktzehuhplpqjgjaz.supabase.co';
-      // TODO: Remplacer par JWT Supabase Auth quand verify_jwt sera activé
-      const edgeSecret = import.meta.env.VITE_EDGE_API_SECRET || '';
-      // The Edge Function checks that the caller is a directeur/vice_directeur
-      // by looking up x-caller-auth-id in staff_users. Without this header it 401s.
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user?.id) {
-        flash({ msg: 'Session expirée — reconnectez-vous', type: 'warning' });
-        return;
-      }
-      const res = await fetch(`${supabaseUrl}/functions/v1/create-staff-user`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-secret': edgeSecret,
-          'x-caller-auth-id': user.id,
-        },
-        body: JSON.stringify({
-          email: newForm.email.trim(),
-          password: newForm.password.trim(),
-          nom: newForm.nom.trim(),
-          prenom: newForm.prenom.trim(),
-          role: newForm.role,
-        }),
-      });
-      const authResult = await res.json();
+      const {data:authResult,error}=await supabase.functions.invoke('create-staff-user',{body:{
+        email:newForm.email.trim(),password:newForm.password,nom:newForm.nom.trim(),prenom:newForm.prenom.trim(),role:newForm.role,
+      }});
+      if(error)throw new Error(await functionErrorMessage({ data: authResult, error }, 'Le compte équipe n’a pas pu être créé.'));
       if (authResult.error) {
         flash({ msg: 'Erreur Auth : ' + authResult.error, type: 'warning' });
         return;

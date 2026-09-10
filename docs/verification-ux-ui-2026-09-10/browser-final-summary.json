@@ -1,0 +1,54 @@
+{
+  "verifiedAt": "2026-09-10T17:11:15.123004+00:00",
+  "baseUrl": "http://127.0.0.1:4175",
+  "build": "Vite production preview",
+  "finalBuildEntry": "/assets/index-C3LyJMGi.js",
+  "status": "passed",
+  "applicationChangesDuringRecipe": "Root added reception focus scrollIntoView then rebuilt; all impacted receiving suites repeated after rebuild. Core/accessibility pages retained their passing checks as instructed.",
+  "applicationChangesByReviewer": false,
+  "testChangesByReviewer": false,
+  "maxConcurrentBrowsers": 2,
+  "suites": {
+    "core": {
+      "passedScenarios": 11,
+      "diagnosticEntries": 1,
+      "log": "browser.log"
+    },
+    "accessibility": {
+      "views": 32,
+      "failed": 0,
+      "log": "accessibility.log"
+    },
+    "team": {
+      "viewports": 2,
+      "mobileMeasurementFocus": "PASS new receipt and attachment",
+      "log": "team.log"
+    },
+    "receptionConcurrency": {
+      "scenarios": 1,
+      "remoteCartonsPreserved": 4,
+      "log": "reception-concurrency.log"
+    },
+    "receptionDevis": {
+      "scenarios": 4,
+      "log": "reception.log"
+    },
+    "devisClient": {
+      "scenarios": 6,
+      "log": "devis.log"
+    },
+    "pdf": {
+      "scenarios": 4,
+      "log": "pdf.log"
+    },
+    "measurementDisplay": {
+      "viewports": 2,
+      "log": "measurements-display.log"
+    }
+  },
+  "failures": [],
+  "limitations": [
+    "Automated local fixture tests; no production or provider mutation.",
+    "Automated WCAG checks do not certify accessibility."
+  ]
+}

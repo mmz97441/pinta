@@ -1,0 +1,36 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { cartonManifest, clientJourney, quotePresentation } from './clientJourney.js';
+
+test('consent counts received cartons even with missing or duplicate tracking references', () => {
+  assert.deepEqual(cartonManifest({ id: 'p', ref: 'EXP', nbColis: 3, trackings: [' ONE ', '', 'ONE'], updatedAt: 'version' }), { id: 'p', ref: 'EXP', count: 3, trackings: ['ONE'], updatedAt: 'version' });
+  assert.equal(cartonManifest({ id: 'p', dimsParColis: [{}, {}] }).count, 2);
+});
+
+test('a deliberate pause is not an overdue agreement and no status implies today', () => {
+  const now = Date.parse('2026-09-10T10:00:00Z');
+  assert.equal(clientJourney({ statut: 'attente_feu_vert', attenteClientDate: '2026-09-08', attenteClientUntil: '2026-09-12' }, now).waiting, true);
+  assert.equal(clientJourney({ statut: 'attente_feu_vert', attenteClientDate: '2026-09-08', attenteClientUntil: '2026-09-09' }, now).waiting, false);
+  assert.equal(clientJourney({ statut: 'en_preparation' }).label, 'Préparation en cours');
+  assert.doesNotMatch(clientJourney({ statut: 'livraison' }).next, /aujourd’hui|aujourd'hui/);
+  assert.equal(clientJourney({ statut: 'livre' }).actor, null);
+});
+
+test('latest dated business event ignores edits, invalid dates and future dates', () => {
+  const journey = clientJourney({ statut: 'paye', dateReception: '2026-09-01', devisEnvoyeLe: '2026-09-04', paiementDate: '2026-09-07', dateExpedition: '2026-09-12', updatedAt: '2026-09-10' }, Date.parse('2026-09-10'));
+  assert.equal(journey.event.label, 'Paiement reçu');
+  assert.equal(clientJourney({ statut: 'mesure', dateReception: 'invalid' }).event, null);
+});
+
+test('published price uses frozen fee, rate and payment terms across later configuration changes', () => {
+  const input = { devisTotal: 900, fraisDivers: [{ libelle: 'Modifié', montant: 90 }], modePaiementPro: 'especes', devisSnapshot: { version: 4, inputs: { client: { type: 'pro' }, destination: { tva: 8.5 }, fees: [{ libelle: 'Emballage convenu', montant: 3 }], paymentTerms: { mode: '30_jours' }, finalBox: {} }, amounts: { transport: 40, total: 43, tva: 0 }, before: { transport: 50 }, savings: 10 } };
+  const before = JSON.stringify(input);
+  const view = quotePresentation(input, { type: 'particulier' }, { tva: 20 });
+  assert.equal(view.colis.devisTotal, 43);
+  assert.equal(view.colis.fraisDivers[0].libelle, 'Emballage convenu');
+  assert.equal(view.destination.tva, 8.5);
+  assert.equal(view.paymentMode, '30_jours');
+  assert.equal(view.client.type, 'pro');
+  assert.equal(JSON.stringify(input), before);
+  assert.equal(quotePresentation({ devisTotal: 43 }, {}, { tva: 20 }).destination.tva, null);
+});

@@ -1,0 +1,17 @@
+[
+  {
+    "file": "src/expedile/components/client/ClientDetailView.jsx",
+    "messages": [
+      {
+        "ruleId": "react-hooks/rules-of-hooks",
+        "severity": 2,
+        "message": "React Hook \"useState\" is called conditionally. React Hooks must be called in the exact same order in every component render.",
+        "line": 132,
+        "column": 35,
+        "nodeType": "Identifier",
+        "endLine": 132,
+        "endColumn": 43
+      }
+    ]
+  }
+]

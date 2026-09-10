@@ -1,0 +1,27 @@
+{
+  "date": "2026-09-10",
+  "node": "v25.2.1",
+  "status": "passed",
+  "vite": "7.3.6",
+  "initial_javascript": [
+    {
+      "file": "/assets/index-DItsDgII.js",
+      "bytes": 285983,
+      "gzip_bytes": 78076
+    },
+    {
+      "file": "/assets/react-vendor-DpfZLGEx.js",
+      "bytes": 181695,
+      "gzip_bytes": 59765
+    },
+    {
+      "file": "/assets/supabase-vendor-DDrlQt8y.js",
+      "bytes": 226985,
+      "gzip_bytes": 58626
+    }
+  ],
+  "initial_bytes": 694663,
+  "initial_gzip_bytes": 196467,
+  "initial_build_baseline_gzip_approx_bytes": 520000,
+  "note": "Bootstrap JavaScript only; route chunks, CSS and documents are additional. This is an asset-size comparison, not a measured network latency or load test."
+}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, useNavigate, useParams, useLocation, Navigate } from 'react-router-dom';
 import { Settings, Users, LogOut, LayoutDashboard, Package, ChevronLeft, ChevronRight, Plus, FileText, Key, AlertTriangle } from 'lucide-react';
 import './brand.css';
@@ -6,7 +6,7 @@ import { getPrenom } from './utils';
 
 import { AppProvider, useApp } from './context/AppContext';
 import { BRAND } from './constants';
-import { supabase } from './lib/supabase';
+
 
 import { Toast, ConfirmDialog } from './components/ui';
 import ThemeToggle from './components/ui/ThemeToggle';
@@ -15,18 +15,19 @@ import ForceChangePassword from './components/ForceChangePassword';
 import ColisModal from './components/ColisModal';
 import OnboardingOverlay from './components/client/OnboardingOverlay';
 
-import StaffColisPage, { DashboardPage } from './components/staff/StaffSplitView';
-import StaffSettings from './components/staff/StaffSettings';
-import StaffClients from './components/staff/StaffClients';
-import StaffClientDetail from './components/staff/StaffClientDetail';
+const StaffColisPage = lazy(() => import('./components/staff/StaffSplitView'));
+const DashboardPage = lazy(() => import('./components/staff/StaffSplitView').then((m) => ({ default: m.DashboardPage })));
+const StaffSettings = lazy(() => import('./components/staff/StaffSettings'));
+const StaffClients = lazy(() => import('./components/staff/StaffClients'));
+const StaffClientDetail = lazy(() => import('./components/staff/StaffClientDetail'));
 import StaffDetailView from './components/staff/StaffDetailView';
-import DevisProspect from './components/staff/DevisProspect';
-import TrackingPublic from './components/public/TrackingPublic';
+const DevisProspect = lazy(() => import('./components/staff/DevisProspect'));
+const TrackingPublic = lazy(() => import('./components/public/TrackingPublic'));
 
-import ClientAccueil from './components/client/ClientAccueil';
-import ClientColis from './components/client/ClientColis';
-import ClientNotifs from './components/client/ClientNotifs';
-import ClientProfil from './components/client/ClientProfil';
+const ClientAccueil = lazy(() => import('./components/client/ClientAccueil'));
+const ClientColis = lazy(() => import('./components/client/ClientColis'));
+const ClientNotifs = lazy(() => import('./components/client/ClientNotifs'));
+const ClientProfil = lazy(() => import('./components/client/ClientProfil'));
 import ClientDetailView from './components/client/ClientDetailView';
 import ClientBottomNav from './components/client/ClientBottomNav';
 
@@ -37,31 +38,72 @@ import ChatPanel from './components/detail/ChatPanel';
 import AuditLog from './components/detail/AuditLog';
 import { Etapes } from './components/ui';
 
+function LoadingView({ label = 'Chargement de votre espace…' }) {
+  return <div role="status" aria-live="polite" className="max-w-5xl mx-auto w-full p-6 space-y-5">
+    <p className="text-sm font-semibold text-gray-600">{label}</p>
+    <div className="h-8 w-1/2 rounded-xl bg-gray-100 animate-pulse" />
+    <div className="grid grid-cols-2 gap-4">{[0, 1, 2, 3].map((i) => <div key={i} className="h-28 rounded-xl bg-gray-100 animate-pulse" />)}</div>
+  </div>;
+}
+
+class ScreenBoundary extends React.Component {
+  state = { failed: false };
+  static getDerivedStateFromError() { return { failed: true }; }
+  componentDidCatch(error) { console.error('[Expedîle] Écran indisponible', error); }
+  render() {
+    if (!this.state.failed) return this.props.children;
+    return <div role="alert" className="max-w-lg mx-auto p-8 space-y-4">
+      <h1 className="text-xl font-bold text-gray-900">Cet écran n’a pas pu s’afficher</h1>
+      <p className="text-sm text-gray-600">Rechargez votre espace. Les modifications déjà enregistrées sont conservées.</p>
+      <button className="min-h-11 px-4 rounded-xl text-white brand-bg" onClick={() => window.location.reload()}>Recharger l’application</button>
+    </div>;
+  }
+}
+
+function MissingColis({ isClient }) {
+  return <div className="max-w-lg mx-auto p-8 space-y-4"><h1 className="text-xl font-bold text-gray-900">Dossier indisponible</h1>
+    <p className="text-sm text-gray-600">Ce dossier n’existe pas ou votre compte n’y a pas accès.</p>
+    <a className="inline-flex min-h-11 items-center px-4 rounded-xl brand-bg text-white" href={isClient ? '/colis' : '/colis'}>Retour aux colis</a></div>;
+}
+
+function Permission({ allowed, children }) {
+  if (allowed) return children;
+  return <div role="alert" className="p-8"><h1 className="text-lg font-bold text-gray-900">Accès limité</h1><p className="text-sm text-gray-600 mt-2">Votre rôle ne permet pas d’utiliser cet écran. Contactez votre responsable si nécessaire.</p></div>;
+}
+
 // ── Wrapper: Staff colis detail (reads :id from URL) ──
 function StaffColisDetail() {
   const { id } = useParams();
-  const { setSelId, sel, data } = useApp();
+  const { setSelId, sel, data, dataLoading, refreshColis } = useApp();
+  const [detailLoading, setDetailLoading] = useState(true);
+  const [detailError, setDetailError] = useState('');
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (id) setSelId(id);
-    return () => setSelId(null);
-  }, [id, setSelId]);
+    let active = true;
+    setDetailLoading(true); setDetailError('');
+    if (id) { setSelId(id); refreshColis(id).catch((error) => { if (active) setDetailError(error.message || 'Chargement impossible.'); }).finally(() => { if (active) setDetailLoading(false); }); }
+    return () => { active = false; setSelId(null); };
+  }, [id, setSelId, refreshColis]);
 
-  // Wait for sel to be set (async state update)
-  if (!sel) {
-    // Check if the colis exists in data
-    const exists = data.some((c) => c.id === id);
-    if (!exists && data.length > 0) return <Navigate to="/" replace />;
-    return <div className="flex items-center justify-center min-h-screen text-gray-400">Chargement...</div>;
-  }
+  if (dataLoading || detailLoading) return <LoadingView label="Chargement du dossier…" />;
+  if (detailError) return <div role="alert" className="p-6 text-sm text-red-700">{detailError}<button onClick={() => window.location.reload()} className="block min-h-11 font-semibold underline">Réessayer</button></div>;
+  if (!data.some((c) => c.id === id)) return <MissingColis />;
+  if (!sel || sel.id !== id) return <LoadingView label="Ouverture du dossier…" />;
 
   return (
     <>
       <DetailHeader />
       <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-4 space-y-4">
         <Etapes statut={sel.statut} />
-        <div className="flex flex-col lg:flex-row gap-4">
+        {sel.statut === 'en_preparation' ? <>
+          <details className="rounded-2xl border border-gray-200 bg-white">
+            <summary className="min-h-11 cursor-pointer px-4 py-3 text-sm font-semibold text-gray-700">Cartons reçus et informations du dossier</summary>
+            <div className="px-3 pb-3"><ColisInfo /></div>
+          </details>
+          <StaffDetailView />
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4"><ChatPanel /><AuditLog /></div>
+        </> : <div className="flex flex-col lg:flex-row gap-4">
           <div className="w-full lg:w-[420px] lg:flex-shrink-0 lg:order-2">
             <div className="lg:sticky lg:top-4 space-y-4">
               <StaffDetailView />
@@ -69,11 +111,11 @@ function StaffColisDetail() {
           </div>
           <div className="flex-1 lg:order-1 space-y-4 min-w-0">
             <ColisInfo />
-            <FacturesPanel />
+            {sel.statut !== 'en_preparation' && <FacturesPanel />}
             <ChatPanel />
             <AuditLog />
           </div>
-        </div>
+        </div>}
       </div>
     </>
   );
@@ -82,24 +124,27 @@ function StaffColisDetail() {
 // ── Wrapper: Client colis detail (reads :id from URL) ──
 function ClientColisDetail() {
   const { id } = useParams();
-  const { setSelId, sel, data } = useApp();
+  const { setSelId, sel, data, dataLoading, refreshColis } = useApp();
+  const [detailLoading, setDetailLoading] = useState(true);
+  const [detailError, setDetailError] = useState('');
 
   useEffect(() => {
-    if (id) setSelId(id);
-    return () => setSelId(null);
-  }, [id, setSelId]);
+    let active = true;
+    setDetailLoading(true); setDetailError('');
+    if (id) { setSelId(id); refreshColis(id).catch((error) => { if (active) setDetailError(error.message || 'Chargement impossible.'); }).finally(() => { if (active) setDetailLoading(false); }); }
+    return () => { active = false; setSelId(null); };
+  }, [id, setSelId, refreshColis]);
 
-  if (!sel) {
-    const exists = data.some((c) => c.id === id);
-    if (!exists && data.length > 0) return <Navigate to="/" replace />;
-    return <div className="flex items-center justify-center min-h-screen text-gray-400">Chargement...</div>;
-  }
+  if (dataLoading || detailLoading) return <LoadingView label="Chargement du dossier…" />;
+  if (detailError) return <div role="alert" className="p-6 text-sm text-red-700">{detailError}<button onClick={() => window.location.reload()} className="block min-h-11 font-semibold underline">Réessayer</button></div>;
+  if (!data.some((c) => c.id === id)) return <MissingColis isClient />;
+  if (!sel || sel.id !== id) return <LoadingView label="Ouverture du dossier…" />;
 
   return (
-    <div className="max-w-xl md:max-w-3xl lg:max-w-5xl xl:max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4 pb-24 space-y-4">
+    <div className="space-y-4">
       <ClientDetailView />
       <FacturesPanel />
-      <ChatPanel />
+      <section id="client-conversation" className="scroll-mt-24"><ChatPanel /></section>
     </div>
   );
 }
@@ -107,38 +152,32 @@ function ClientColisDetail() {
 function AppContent() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { auth, setAuth, isStaff, sel, setSelId, page, setPage, clientTab, authCl, data, updateClient, sbReady } = useApp();
+  const { auth, authLoading, authError, signOut, isStaff, authCl, updateClient, sbReady, dataLoading, dataError, retryLoad, passwordRecovery, completePasswordRecovery, can, flash } = useApp();
   const [modal, setModal] = useState(false);
   const [onboardingDismissed, setOnboardingDismissed] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [mustChangePassword, setMustChangePassword] = useState(false);
-  const [staffUserForPwd, setStaffUserForPwd] = useState(null);
+  useEffect(() => { setOnboardingDismissed(false); }, [auth?.session?.user?.id]);
+  const needsPassword = passwordRecovery || auth?.u?.mustChangePassword || location.pathname === '/password';
 
-  // Check if user must change password on first login
-  useEffect(() => {
-    if (auth?.type === 'staff' && auth?.u?.id) {
-      supabase.from('staff_users').select('id, must_change_password').eq('auth_id', auth.u.id).single()
-        .then(({ data }) => {
-          if (data?.must_change_password) {
-            setMustChangePassword(true);
-            setStaffUserForPwd(data);
-          }
-        });
-    }
-  }, [auth?.u?.id]);
-
-  // ── Not logged in ──
+  if (authLoading) return <div className="min-h-[100dvh] flex items-center"><LoadingView /></div>;
   if (!auth) return <LoginPage />;
 
-  // ── Force change password on first login ──
-  if (mustChangePassword) {
-    return (
-      <ForceChangePassword
-        staffUser={staffUserForPwd}
-        onDone={() => setMustChangePassword(false)}
-      />
-    );
-  }
+  const handleLogout = async () => {
+    try { await signOut(); navigate('/', { replace: true }); }
+    catch (error) { flash({ msg: error.message || 'Déconnexion impossible. Réessayez.', type: 'error' }); }
+  };
+
+  if (needsPassword) return <ForceChangePassword
+    staffUser={auth.u?.mustChangePassword ? { id: auth.u.staffId } : null}
+    recovery={passwordRecovery}
+    onDone={async () => { await completePasswordRecovery(); navigate('/', { replace: true }); }}
+    onCancel={!passwordRecovery && !auth.u?.mustChangePassword ? () => navigate('/') : undefined}
+  />;
+
+  const loadBanner = dataError || (!sbReady && !dataLoading) ? <div role="alert" className="bg-red-50 border-b border-red-200 text-red-800 text-xs px-4 py-3 flex flex-wrap items-center gap-2">
+    <AlertTriangle size={16} /><span className="flex-1">{dataError || 'Connexion aux données interrompue. Réessayez avant de modifier un dossier.'}</span>
+    <button onClick={retryLoad} className="font-bold underline min-h-11">Réessayer</button>
+  </div> : null;
 
   // ── Onboarding for new clients ──
   const isColisDetail = location.pathname.startsWith('/colis/');
@@ -149,28 +188,28 @@ function AppContent() {
     const currentPath = location.pathname;
 
     const NAV_ITEMS = [
-      { key: '/', label: 'Dashboard', icon: LayoutDashboard },
+      { key: '/', label: 'À traiter', icon: LayoutDashboard },
       { key: '/colis', label: 'Colis', icon: Package },
-      { key: '/clients', label: 'Clients', icon: Users },
-      { key: '/devis', label: 'Devis', icon: FileText },
-      { key: '/settings', label: 'Paramètres', icon: Settings },
-    ];
+      { key: '/clients', label: 'Clients', icon: Users, visible: can('perm_clients_voir') || can('perm_clients_creer') },
+      { key: '/devis', label: 'Estimation', icon: FileText, visible: can('perm_colis_calculer_devis') },
+      { key: '/settings', label: 'Paramètres', icon: Settings, visible: can('perm_admin_parametres') },
+    ].filter((item) => item.visible !== false);
 
     const activePath = currentPath.startsWith('/colis') ? '/colis'
-      : currentPath === '/clients' ? '/clients'
+      : currentPath.startsWith('/clients') ? '/clients'
       : currentPath === '/devis' ? '/devis'
       : currentPath === '/settings' ? '/settings'
       : '/';
 
     return (
-      <div style={{ fontFamily: "system-ui, -apple-system, 'Segoe UI', sans-serif" }} className="h-screen flex">
+      <div style={{ fontFamily: "system-ui, -apple-system, 'Segoe UI', sans-serif" }} className="h-[100dvh] flex overflow-hidden">
         <Toast />
         <ConfirmDialog />
         <ColisModal open={modal} onClose={() => setModal(false)} />
 
         {/* ── Sidebar (desktop) ──────────────────────────────────────── */}
         <div
-          className="hidden lg:flex flex-col flex-shrink-0 border-r border-gray-800 transition-all duration-200"
+          className="staff-sidebar hidden lg:flex flex-col flex-shrink-0 border-r border-gray-800 transition-all duration-200"
           style={{
             width: sidebarCollapsed ? 64 : 220,
             background: 'linear-gradient(180deg, #122A36 0%, #1B3A4B 100%)',
@@ -190,9 +229,9 @@ function AppContent() {
           </div>
 
           {/* New colis button */}
-          <div className="px-3 mb-2">
+          <div className="px-3 mb-2" hidden={!can('perm_colis_receptionner')}>
             <button
-              onClick={() => setModal(true)}
+              aria-label="Nouveau colis" onClick={() => setModal(true)}
               className={`w-full flex items-center gap-2 rounded-xl text-sm font-bold transition-all active:scale-95 ${sidebarCollapsed ? 'justify-center px-2 py-2.5' : 'px-3 py-2.5'}`}
               style={{ background: `linear-gradient(135deg, ${BRAND.gold}, ${BRAND.goldD})`, color: BRAND.navyD }}
             >
@@ -210,6 +249,7 @@ function AppContent() {
                 <button
                   key={item.key}
                   onClick={() => navigate(item.key)}
+                  aria-label={item.label} aria-current={isActive ? 'page' : undefined}
                   className={`w-full flex items-center gap-3 rounded-xl transition-all ${
                     sidebarCollapsed ? 'justify-center px-2 py-2.5' : 'px-3 py-2.5'
                   } ${isActive
@@ -229,7 +269,7 @@ function AppContent() {
           {/* Collapse toggle */}
           <div className="px-3 py-2">
             <button
-              onClick={() => setSidebarCollapsed((p) => !p)}
+              aria-label={sidebarCollapsed ? 'Déplier la navigation' : 'Réduire la navigation'} onClick={() => setSidebarCollapsed((p) => !p)}
               className="w-full flex items-center justify-center gap-2 px-2 py-2 rounded-xl text-gray-500 hover:text-white hover:bg-white/10 transition-all"
             >
               {sidebarCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
@@ -237,46 +277,15 @@ function AppContent() {
             </button>
           </div>
 
-          {/* User + logout */}
-          <div className="px-3 pb-4 pt-2 border-t border-white border-opacity-10">
+          <div className="px-3 pb-3 pt-3 border-t border-white/10">
             <div className={`flex items-center gap-2.5 ${sidebarCollapsed ? 'justify-center' : ''}`}>
-              <div
-                className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-black flex-shrink-0"
-                style={{ background: `${BRAND.gold}30`, color: BRAND.gold }}
-              >
-                {(auth.u?.nom || '?').charAt(0)}
-              </div>
-              {!sidebarCollapsed && (
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-semibold text-gray-200 truncate">{auth.u?.nom || ''}</p>
-                  <p className="text-[10px] text-gray-500 truncate">{auth.u.role || 'Staff'}</p>
-                </div>
-              )}
+              <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-black shrink-0" style={{ background: `${BRAND.gold}30`, color: BRAND.gold }}>{(auth.u?.nom || '?').charAt(0)}</div>
+              {!sidebarCollapsed && <div className="flex-1"><p className="text-xs font-semibold text-gray-200 truncate" title={auth.u?.nom}>{auth.u?.nom}</p><p className="text-[10px] text-gray-400 mt-0.5">{{ directeur: 'Direction', vice_directeur: 'Direction adjointe', logisticien: 'Logistique', preparateur: 'Préparation' }[auth.u.role] || 'Équipe'}</p></div>}
+            </div>
+            <div className={`mt-2 flex items-center ${sidebarCollapsed ? 'flex-col gap-1' : 'justify-between'}`}>
               <ThemeToggle compact />
-              {!sidebarCollapsed && (
-                <button
-                  onClick={async () => {
-                    const newPwd = prompt('Nouveau mot de passe (min. 6 caractères) :');
-                    if (!newPwd || newPwd.length < 6) { if (newPwd) alert('Le mot de passe doit faire au moins 6 caractères'); return; }
-                    try {
-                      const { error } = await supabase.auth.updateUser({ password: newPwd });
-                      if (error) alert('Erreur : ' + error.message);
-                      else alert('Mot de passe modifié avec succès !');
-                    } catch (e) { alert('Erreur : ' + e.message); }
-                  }}
-                  className="p-1.5 rounded-lg text-gray-500 hover:text-amber-400 hover:bg-white/10 transition-all"
-                  title="Modifier mot de passe"
-                >
-                  <Key size={14} />
-                </button>
-              )}
-              <button
-                onClick={() => { supabase.auth.signOut(); setAuth(null); navigate('/'); }}
-                className={`p-1.5 rounded-lg text-gray-500 hover:text-red-400 hover:bg-white/10 transition-all ${sidebarCollapsed ? 'mt-2' : ''}`}
-                title="Se déconnecter"
-              >
-                <LogOut size={14} />
-              </button>
+              <button onClick={() => navigate('/password')} className="min-w-10 min-h-10 rounded-lg text-gray-400 hover:text-amber-400 hover:bg-white/10 flex items-center justify-center" title="Modifier le mot de passe" aria-label="Modifier le mot de passe"><Key size={16} /></button>
+              <button onClick={handleLogout} className="min-w-10 min-h-10 rounded-lg text-gray-400 hover:text-red-400 hover:bg-white/10 flex items-center justify-center" title="Se déconnecter" aria-label="Se déconnecter"><LogOut size={16} /></button>
             </div>
           </div>
         </div>
@@ -284,7 +293,7 @@ function AppContent() {
         {/* ── Mobile bottom nav ──────────────────────────────────────── */}
         <div
           className="lg:hidden fixed bottom-0 left-0 right-0 z-50 border-t border-gray-200 flex items-center justify-around py-2 px-1"
-          style={{ background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(10px)' }}
+          style={{ background: 'var(--bg-elevated)', paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }}
         >
           {NAV_ITEMS.map((item) => {
             const Icon = item.icon;
@@ -293,16 +302,18 @@ function AppContent() {
               <button
                 key={item.key}
                 onClick={() => navigate(item.key)}
-                className="flex flex-col items-center gap-0.5 px-3 py-1"
+                  aria-label={item.label} aria-current={isActive ? 'page' : undefined}
+                className="flex-1 min-h-11 flex flex-col items-center justify-center gap-0.5 px-1 py-1"
               >
-                <Icon size={20} style={{ color: isActive ? BRAND.navy : '#9CA3AF' }} strokeWidth={isActive ? 2.5 : 2} />
+                <Icon size={20} style={{ color: isActive ? 'var(--brand-text)' : '#9CA3AF' }} strokeWidth={isActive ? 2.5 : 2} />
                 <span className={`text-[9px] font-bold ${isActive ? 'text-gray-800' : 'text-gray-400'}`}>{item.label}</span>
               </button>
             );
           })}
           <button
+            hidden={!can('perm_colis_receptionner')} aria-label="Réceptionner un colis"
             onClick={() => setModal(true)}
-            className="flex flex-col items-center gap-0.5 px-3 py-1"
+            className="flex-1 min-h-11 flex flex-col items-center justify-center gap-0.5 px-1 py-1"
           >
             <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ background: BRAND.gold }}>
               <Plus size={18} style={{ color: BRAND.navyD }} strokeWidth={3} />
@@ -312,15 +323,13 @@ function AppContent() {
 
         {/* ── Main content area ──────────────────────────────────────── */}
         <div className="flex-1 flex flex-col min-w-0 bg-gray-50">
-          {/* Offline banner */}
-          {!sbReady && (
-            <div className="bg-red-600 text-white text-center text-xs font-bold py-1.5 px-4 inline-flex items-center justify-center gap-1.5">
-              <AlertTriangle size={12} />Mode hors-ligne — Supabase inaccessible.
-            </div>
-          )}
-
-          {/* Content */}
-          <div className="flex-1 overflow-y-auto">
+          <div className="lg:hidden min-h-12 px-4 flex items-center justify-between border-b border-gray-200">
+            <span className="font-black brand-t">EXPÉD<span className="brand-t-gold">ÎLE</span></span>
+            <div className="flex items-center gap-2"><ThemeToggle compact /><button aria-label="Se déconnecter" onClick={handleLogout} className="min-h-11 min-w-11 flex items-center justify-center text-gray-500"><LogOut size={18} /></button></div>
+          </div>
+          {loadBanner}
+          <div className="flex-1 min-h-0 overflow-y-auto pb-[calc(4.5rem+env(safe-area-inset-bottom))] lg:pb-0">
+            {dataLoading ? <LoadingView /> : <Suspense fallback={<LoadingView />}><ScreenBoundary key={location.pathname}>
             <Routes>
               <Route path="/colis/:id" element={<StaffColisDetail />} />
               <Route path="/colis" element={
@@ -329,33 +338,33 @@ function AppContent() {
               <Route path="/clients" element={
                 <div className="h-full overflow-y-auto">
                   <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-4 space-y-4">
-                    <StaffClients />
+                    <Permission allowed={can('perm_clients_voir') || can('perm_clients_creer')}><StaffClients /></Permission>
                   </div>
                 </div>
               } />
               <Route path="/clients/new" element={
                 <div className="h-full overflow-y-auto">
                   <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-4 space-y-4">
-                    <StaffClientDetail />
+                    <Permission allowed={can('perm_clients_voir') || can('perm_clients_creer')}><StaffClientDetail /></Permission>
                   </div>
                 </div>
               } />
               <Route path="/clients/:id" element={
                 <div className="h-full overflow-y-auto">
                   <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-4 space-y-4">
-                    <StaffClientDetail />
+                    <Permission allowed={can('perm_clients_voir') || can('perm_clients_creer')}><StaffClientDetail /></Permission>
                   </div>
                 </div>
               } />
               <Route path="/devis" element={
                 <div className="h-full overflow-y-auto">
-                  <DevisProspect />
+                  <Permission allowed={can('perm_colis_calculer_devis')}><DevisProspect /></Permission>
                 </div>
               } />
               <Route path="/settings" element={
                 <div className="h-full overflow-y-auto">
                   <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-4 space-y-4">
-                    <StaffSettings />
+                    <Permission allowed={can('perm_admin_parametres')}><StaffSettings /></Permission>
                   </div>
                 </div>
               } />
@@ -364,6 +373,7 @@ function AppContent() {
               } />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
+            </ScreenBoundary></Suspense>}
           </div>
         </div>
       </div>
@@ -372,17 +382,12 @@ function AppContent() {
 
   // ── Client layout ──
   return (
-    <div style={{ fontFamily: "system-ui, -apple-system, 'Segoe UI', sans-serif", background: '#f6f7f8' }} className="min-h-screen">
+    <div style={{ fontFamily: "system-ui, -apple-system, 'Segoe UI', sans-serif", background: 'var(--bg-canvas)' }} className="min-h-[100dvh]">
       <Toast />
       <ConfirmDialog />
       <ColisModal open={modal} onClose={() => setModal(false)} />
 
-      {/* ── Bandeau mode mock ── */}
-      {!sbReady && (
-        <div className="bg-red-600 text-white text-center text-xs font-bold py-1.5 px-4 inline-flex items-center justify-center gap-1.5 w-full">
-          <AlertTriangle size={12} />Mode hors-ligne — Supabase inaccessible. Les données affichées sont des données de démonstration.
-        </div>
-      )}
+      {loadBanner}
 
       {/* Header */}
       <div
@@ -395,6 +400,7 @@ function AppContent() {
           </b>
         </div>
         <div className="flex items-center gap-2">
+          <ThemeToggle compact />
           {authCl && (
             <button
               aria-label="Mon profil"
@@ -417,20 +423,20 @@ function AppContent() {
         <div className="pb-20">
           {showOnboarding && (
             <OnboardingOverlay
-              onDone={() => {
+              onDone={async () => {
+                if (authCl) await updateClient(authCl.id, { onboarded: true }, true);
                 setOnboardingDismissed(true);
-                if (authCl) updateClient(authCl.id, { onboarded: true }, true);
               }}
             />
           )}
-          <Routes>
+          {dataLoading ? <LoadingView /> : <Suspense fallback={<LoadingView />}><ScreenBoundary key={location.pathname}><Routes>
             <Route path="/" element={<ClientAccueil />} />
             <Route path="/colis" element={<ClientColis />} />
             <Route path="/colis/:id" element={<ClientColisDetail />} />
             <Route path="/notifications" element={<ClientNotifs />} />
             <Route path="/profil" element={<ClientProfil />} />
             <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
+          </Routes></ScreenBoundary></Suspense>}
           <ClientBottomNav />
         </div>
       </div>
@@ -443,7 +449,7 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         {/* Route publique — suivi partagé par token (pas d'auth nécessaire) */}
-        <Route path="/suivi/:token" element={<TrackingPublic />} />
+        <Route path="/suivi/:token" element={<Suspense fallback={<LoadingView />}><ScreenBoundary><TrackingPublic /></ScreenBoundary></Suspense>} />
         {/* Toute autre route passe par l'app authentifiée */}
         <Route path="/*" element={
           <AppProvider>

@@ -1,0 +1,38 @@
+BEGIN;
+GRANT USAGE ON SCHEMA public,auth TO authenticated;
+GRANT ALL ON ALL TABLES IN SCHEMA public TO authenticated;
+CREATE FUNCTION test_work_assert(ok boolean,label text) RETURNS void LANGUAGE plpgsql AS $$ BEGIN IF NOT coalesce(ok,false) THEN RAISE EXCEPTION 'FAIL: %',label;END IF;RAISE NOTICE 'PASS: %',label;END; $$;
+CREATE FUNCTION test_work_reject(command text,label text) RETURNS void LANGUAGE plpgsql AS $$ BEGIN BEGIN EXECUTE command; EXCEPTION WHEN OTHERS THEN RAISE NOTICE 'PASS rejected: % [%]',label,SQLERRM;RETURN;END;RAISE EXCEPTION 'FAIL accepted: %',label;END; $$;
+INSERT INTO auth.users(id,email) VALUES('a1000000-0000-4000-8000-000000000001','work-director@example.test'),('a1000000-0000-4000-8000-000000000002','work-client@example.test');
+INSERT INTO staff_users(auth_id,nom,email,role,must_change_password) VALUES('a1000000-0000-4000-8000-000000000001','Work fixture','work-director@example.test','directeur',false);
+INSERT INTO staff_permissions SELECT (jsonb_populate_record(NULL::staff_permissions,fn_default_permissions(s.role::text)||jsonb_build_object('id',gen_random_uuid(),'staff_id',s.id))).* FROM staff_users s ON CONFLICT(staff_id) DO NOTHING;
+INSERT INTO clients(id,user_id,nom,cp,email,type) VALUES('a2000000-0000-4000-8000-000000000001','a1000000-0000-4000-8000-000000000002','Fixture','97400','work-client@example.test','pro');
+INSERT INTO colis(id,client_id,statut,trackings,nb_colis,fin_l,fin_w,fin_h,fin_p) VALUES
+ ('a3000000-0000-4000-8000-000000000001','a2000000-0000-4000-8000-000000000001','attente_feu_vert',ARRAY['AUTO'],1,10,10,10,2),
+ ('a3000000-0000-4000-8000-000000000002','a2000000-0000-4000-8000-000000000001','attente_feu_vert',ARRAY['MANUAL'],1,10,10,10,2);
+SELECT _apply_client_decision('a3000000-0000-4000-8000-000000000001','approve',NULL,NULL,NULL,'fixture');
+SELECT test_work_assert((SELECT next_action='Préparer le colis' AND next_action_source='system' AND next_action_at IS NULL FROM colis WHERE id='a3000000-0000-4000-8000-000000000001'),'New automatic preparation is not an immediately overdue staff deadline');
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claim.role','authenticated',true),set_config('request.jwt.claim.sub','a1000000-0000-4000-8000-000000000001',true);
+SELECT assign_colis_work(id,auth.uid(),next_action,next_action_at,updated_at,false) FROM colis WHERE id='a3000000-0000-4000-8000-000000000001';
+SELECT test_work_assert((SELECT next_action_source='system' FROM colis WHERE id='a3000000-0000-4000-8000-000000000001'),'Taking ownership alone does not freeze a system action as manual');
+UPDATE colis SET statut='en_preparation' WHERE id='a3000000-0000-4000-8000-000000000001';
+SELECT test_work_assert((SELECT next_action IS NULL AND next_action_at IS NULL FROM colis WHERE id='a3000000-0000-4000-8000-000000000001'),'A completed stage clears its unchanged automatic action');
+SELECT test_work_reject($q$UPDATE colis SET next_action='Forged direct task',next_action_source='manual' WHERE id='a3000000-0000-4000-8000-000000000001'$q$,'Direct patches cannot bypass the versioned assignment command');
+SELECT assign_colis_work(id,auth.uid(),'Vérifier le transporteur demain','2030-09-11T10:00:00Z',updated_at) FROM colis WHERE id='a3000000-0000-4000-8000-000000000002';
+SELECT test_work_assert((SELECT next_action_source='manual' FROM colis WHERE id='a3000000-0000-4000-8000-000000000002'),'An explicit operator instruction is marked manual');
+RESET ROLE;
+SELECT _apply_client_decision('a3000000-0000-4000-8000-000000000002','approve',NULL,NULL,NULL,'fixture');
+SELECT test_work_assert((SELECT next_action='Vérifier le transporteur demain' AND next_action_source='manual' AND next_action_at='2030-09-11T10:00:00Z'::timestamptz FROM colis WHERE id='a3000000-0000-4000-8000-000000000002'),'Client approval preserves the staff instruction and deadline');
+SET LOCAL ROLE authenticated;
+UPDATE colis SET statut='en_preparation' WHERE id='a3000000-0000-4000-8000-000000000002';
+SELECT save_quote('a3000000-0000-4000-8000-000000000002',jsonb_build_object('devisTotal',base+2*par_kg,'devisTransport',base+2*par_kg,'devisOM',0,'devisOMR',0,'devisTVA',0,'finL',10,'finW',10,'finH',10,'finP',2,'modePaiementPro','virement','fraisDivers','[]'::jsonb)) FROM tarifs WHERE destination_code='974' AND actif;
+UPDATE colis SET statut='devis_envoye' WHERE id='a3000000-0000-4000-8000-000000000002';
+SELECT mark_manual_payment(id,devis_total) FROM colis WHERE id='a3000000-0000-4000-8000-000000000002';
+SELECT test_work_assert((SELECT statut='paye' AND next_action='Vérifier le transporteur demain' AND next_action_source='manual' AND next_action_at='2030-09-11T10:00:00Z'::timestamptz FROM colis WHERE id='a3000000-0000-4000-8000-000000000002'),'Payment does not erase a pending manual instruction');
+SELECT assign_colis_work(id,auth.uid(),NULL,NULL,updated_at) FROM colis WHERE id='a3000000-0000-4000-8000-000000000002';
+SELECT test_work_assert((SELECT next_action IS NULL AND next_action_at IS NULL FROM colis WHERE id='a3000000-0000-4000-8000-000000000002'),'The operator can explicitly clear a completed instruction');
+RESET ROLE;
+UPDATE colis SET next_action='Contrôler la livraison',next_action_source='system' WHERE id='a3000000-0000-4000-8000-000000000002';
+SELECT test_work_assert((SELECT next_action='Contrôler la livraison' AND next_action_source='system' FROM colis WHERE id='a3000000-0000-4000-8000-000000000002'),'Clearing a manual instruction allows future automatic guidance');
+ROLLBACK;

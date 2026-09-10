@@ -1,19 +1,21 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   ArrowLeft, Package, CheckCircle, Wrench, CreditCard, Plane, MapPin,
   ChevronDown, ChevronUp, ChevronRight, AlertCircle, ThumbsUp, ThumbsDown, RotateCcw,
-  ExternalLink, Clock, Download, Camera,
+  ExternalLink, Clock, Download, Camera, Shield, Warehouse, Truck,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { hasPublishedQuote } from './quoteVisibility';
+import { cartonManifest, clientJourney, quotePresentation, PAYMENT_TERMS } from '../../domain/clientJourney';
 import { useApp } from '../../context/AppContext';
-import * as sb from '../../lib/supabaseData';
+import { SecureImage } from '../ui/SecureFile';
 import { BRAND, PHASES_CLIENT, getPhaseIndex, getDestByCP } from '../../constants';
-import { exportDevisPDF } from '../../utils/exportDevisPDF';
+
 import { eur, trackStr, hasTrack, getCatTaux } from '../../utils';
 import { Badge, Ligne, ProgressBar } from '../ui';
 
 // ── Phase icons ────────────────────────────────────────────────────────────────
-const PHASE_ICONS = [Package, Package, CheckCircle, Wrench, CreditCard, Plane, MapPin];
+const PHASE_ICONS = [Package, CheckCircle, Wrench, CreditCard, Plane, Shield, Warehouse, Truck];
 
 // ── Phase state helper ─────────────────────────────────────────────────────────
 function getPhaseState(phaseIdx, curPhaseIdx) {
@@ -86,7 +88,7 @@ function PhaseStep({ phase, phaseIdx, state, open, onToggle, children }) {
             {phase.label}
           </p>
           {isActive && (
-            <p className="text-[10px] font-semibold mt-0.5" style={{ color: BRAND.gold }}>
+            <p className="text-[10px] font-semibold mt-0.5" style={{ color: 'var(--text-accent)' }}>
               Étape en cours
             </p>
           )}
@@ -122,94 +124,46 @@ function PhaseStep({ phase, phaseIdx, state, open, onToggle, children }) {
 // ── Main component ─────────────────────────────────────────────────────────────
 export default function ClientDetailView() {
   const navigate = useNavigate();
-  const { sel, selDest, feuVert, feuVertBulk, ask, flash, authCl, data, categories } = useApp();
+  const { sel, selDest, feuVert, ask, flash, authCl } = useApp();
 
-  if (!sel) return null;
-
-  const curPhaseIdx = getPhaseIndex(sel.statut);
-
-  // Auto-expand the active phase so the client sees the action immediately
+  const curPhaseIdx = sel ? getPhaseIndex(sel.statut) : 0;
   const [timeOpen, setTimeOpen] = useState(curPhaseIdx);
+  const [decisionPending, setDecisionPending] = useState(false);
+  const [decisionError, setDecisionError] = useState('');
+  const [showWait, setShowWait] = useState(false);
+  const [waitUntil, setWaitUntil] = useState('');
+  const [waitReason, setWaitReason] = useState('J’attends d’autres achats');
+  useEffect(() => { setTimeOpen(curPhaseIdx); setDecisionError(''); setShowWait(false); }, [sel?.id, curPhaseIdx]);
+  if (!sel) return null;
+  const manifest = cartonManifest(sel);
+  const journey = clientJourney(sel);
+  const published = quotePresentation(sel, authCl, selDest);
+  const price = published.colis;
+  const clientWaiting=sel.statut==='attente_feu_vert'&&Boolean(sel.attenteClientDate&&(!sel.attenteClientUntil||Date.parse(sel.attenteClientUntil)>Date.now()));
 
   const toggleStep = (idx) => {
-    const state = getPhaseState(idx, curPhaseIdx);
-    if (state === 'future') return; // not expandable
-    setTimeOpen((prev) => (prev === idx ? null : idx));
+    if (getPhaseState(idx, curPhaseIdx) !== 'future') setTimeOpen((prev) => prev === idx ? null : idx);
   };
-
-  // ── Feu vert handlers ──────────────────────────────────────────────────────
-  const autresFV = authCl
-    ? data.filter((p) => p.clientId === authCl.id && p.statut === 'attente_feu_vert' && p.id !== sel.id)
-    : [];
-
+  const recordDecision = async (decision, options) => {
+    setDecisionPending(true); setDecisionError('');
+    try { await feuVert(sel.id, decision, { expectedUpdatedAt: sel.updatedAt, ...options }); setShowWait(false); }
+    catch (error) { setDecisionError(error.message || 'Votre réponse n’a pas été enregistrée. Réessayez.'); }
+    finally { setDecisionPending(false); }
+  };
   const handleFeuVert = (ok) => {
-    if (ok) {
-      if (autresFV.length > 0) {
-        const refs = autresFV.map((p) => p.ref).join(', ');
-        ask(
-          'Autoriser la préparation',
-          `Vous confirmez que le contenu de ${sel.ref} est conforme et autorisez Expedîle à le préparer pour l'expédition ?\n\nVous avez aussi ${autresFV.length} autre${autresFV.length > 1 ? 's' : ''} colis en attente (${refs}). Voulez-vous tout autoriser d'un coup ?`,
-          () => {
-            const ids = [sel.id, ...autresFV.map((p) => p.id)];
-            feuVertBulk(ids);
-            ids.forEach(async (colisId) => {
-              try {
-                await sb.insertMessage(colisId, {
-                  type: 'client',
-                  auteur: authCl?.nom || 'Client',
-                  texte: '✅ Accord donné depuis l\'application',
-                  statut: null,
-                });
-              } catch (e) { /* ignore */ }
-            });
-            navigate('/');
-          },
-          { okLabel: `Tout autoriser (${autresFV.length + 1})` }
-        );
-      } else {
-        ask(
-          'Autoriser la préparation',
-          `Vous confirmez que le contenu de ${sel.ref} est conforme et autorisez Expedîle à le préparer pour l'expédition ?`,
-          () => {
-            feuVert(sel.id, true);
-            sb.insertMessage(sel.id, {
-              type: 'client',
-              auteur: authCl?.nom || 'Client',
-              texte: '✅ Accord donné depuis l\'application',
-              statut: null,
-            }).catch(() => {});
-            navigate('/');
-          },
-          { okLabel: 'Oui, j\'autorise' }
-        );
-      }
-    } else {
-      ask(
-        'Refuser la préparation',
-        `Êtes-vous sûr de vouloir refuser la préparation de ${sel.ref} ? Ce colis ne sera pas expédié.`,
-        () => { feuVert(sel.id, false); navigate('/'); },
-        { danger: true, okLabel: 'Oui, je refuse' }
-      );
-    }
+    const cartons = (sel.trackings || []).filter(Boolean);
+    ask(ok ? 'Autoriser cette préparation' : 'Refuser cette préparation',
+      ok ? `Vous autorisez la préparation du dossier ${sel.ref}, avec ${manifest.count} carton(s) actuellement réceptionné(s).${cartons.length ? '\n\n' + cartons.join(' · ') : ''}\n\nLes nouveaux cartons ne sont pas inclus. Le devis final suivra la préparation.`
+        : `Vous refusez la préparation du dossier ${sel.ref}. Pour simplement attendre d’autres achats, choisissez « Attendre » à la place.`,
+      () => recordDecision(ok), { danger: !ok, okLabel: ok ? 'J’autorise ce dossier' : 'Confirmer le refus' });
   };
-
   const handleRevoke = () => {
-    ask(
-      'Révoquer l\'accord',
-      'Vous souhaitez annuler votre autorisation. Contactez-nous rapidement si la préparation n\'a pas encore commencé.',
-      () => flash('Contactez le support pour révoquer votre accord.'),
-      { okLabel: 'Contacter le support' }
-    );
+    document.getElementById('client-conversation')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    flash('Précisez votre demande dans la conversation. Notre équipe vous confirmera si la préparation peut encore être arrêtée.');
   };
-
-  // ── Payer handler ──────────────────────────────────────────────────────────
   const handlePayer = () => {
-    if (!sel.devisTotal) return;
-    if (sel.payplugPaymentUrl) {
-      window.open(sel.payplugPaymentUrl, '_blank');
-    } else {
-      flash({ msg: 'Contactez-nous pour le paiement : contact@expedile.com', type: 'info', duration: 6000 });
-    }
+    if (hasPublishedQuote(sel) && sel.payplugPaymentUrl && /^https:\/\//.test(sel.payplugPaymentUrl)) window.open(sel.payplugPaymentUrl, '_blank', 'noopener,noreferrer');
+    else document.getElementById('client-conversation')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
   // ── Phase content renderers ───────────────────────────────────────────────
@@ -279,16 +233,22 @@ export default function ClientDetailView() {
         <div className="space-y-3">
           {isFV && (
             <>
-              <div className="rounded-xl p-3 bg-amber-50 border border-amber-100">
-                <p className="text-xs font-bold text-amber-800 mb-1 flex items-center gap-1.5">
-                  <AlertCircle size={13} />
-                  Votre accord est requis
-                </p>
-                <p className="text-xs text-amber-700 leading-relaxed">
-                  Nous avons réceptionné et mesuré votre colis. Autorisez-nous à le préparer et l'optimiser pour l'expédition. Le devis final vous sera envoyé après la préparation.
-                </p>
+              {clientWaiting && <p className="border-l-2 border-slate-300 pl-3 text-sm text-slate-600">Votre attente est enregistrée. Aucune préparation ne commence tant que vous n’avez pas donné votre accord.</p>}
+              {decisionError && <p role="alert" className="text-sm text-red-700">{decisionError}</p>}
+              <p className="text-sm font-semibold text-slate-700">{manifest.count} carton(s) réceptionné(s) · dossier {sel.ref}</p>
+              {manifest.trackings.length > 0 && <p className="break-words text-xs text-slate-600">Références connues : {manifest.trackings.join(' · ')}</p>}
+              <p className="text-xs text-slate-600">Votre accord lance la préparation et l’optimisation. Vous recevrez ensuite le devis final à consulter avant règlement. Les futurs cartons sont exclus de cet accord.</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <button disabled={decisionPending} onClick={() => handleFeuVert(true)} className="min-h-11 flex items-center justify-center gap-2 rounded-xl px-3 py-3 font-bold text-sm text-white brand-bg disabled:opacity-50"><ThumbsUp size={16} />{decisionPending ? 'Enregistrement…' : 'Autoriser la préparation'}</button>
+                <button disabled={decisionPending} onClick={() => setShowWait((v) => !v)} aria-expanded={showWait} className="min-h-11 flex items-center justify-center gap-2 rounded-xl border border-slate-300 px-3 py-3 text-sm font-semibold text-slate-700"><Clock size={16} />Attendre d’autres achats</button>
               </div>
-              {sel.dimsParColis && sel.dimsParColis.length > 1 ? (
+              {showWait && <form className="border border-gray-200 rounded-xl p-3 space-y-3" onSubmit={(event) => { event.preventDefault(); recordDecision('wait', { waitUntil: waitUntil || null, reason: waitReason.trim() }); }}>
+                <p className="text-xs text-gray-600">Nous conservons votre dossier en attente. Cette demande ne déclenche aucune préparation.</p>
+                <label className="block text-xs font-semibold text-gray-600">Votre précision<textarea required maxLength={500} value={waitReason} onChange={(e) => setWaitReason(e.target.value)} className="mt-1 block w-full rounded-lg border border-gray-200 p-2 text-sm bg-white" /></label>
+                <label className="block text-xs font-semibold text-gray-600">Attendre jusqu’au (facultatif)<input type="date" min={new Date().toLocaleDateString('en-CA')} value={waitUntil} onChange={(e) => setWaitUntil(e.target.value)} className="mt-1 block min-h-11 w-full rounded-lg border border-gray-200 px-2 text-sm bg-white" /></label>
+                <button disabled={decisionPending || !waitReason.trim()} className="min-h-11 w-full rounded-xl brand-bg text-white text-sm font-semibold disabled:opacity-50">{decisionPending ? 'Enregistrement…' : 'Enregistrer mon attente'}</button>
+              </form>}
+              <details className="border-t border-slate-200 pt-2"><summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-slate-600">Mesures et fonctionnement</summary><div className="space-y-3">              {sel.dimsParColis && sel.dimsParColis.length > 1 ? (
                 <div className="rounded-xl bg-gray-50 p-3 space-y-2">
                   <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">
                     Dimensions mesurées ({sel.dimsParColis.length} colis)
@@ -311,7 +271,7 @@ export default function ClientDetailView() {
                 </div>
               ) : null}
               <div className="rounded-xl p-3 border border-blue-100" style={{ backgroundColor: BRAND.navy + '06' }}>
-                <p className="text-[10px] font-black uppercase tracking-widest mb-1.5" style={{ color: BRAND.navy }}>
+                <p className="text-[10px] font-black uppercase tracking-widest mb-1.5" style={{ color: 'var(--brand-text)' }}>
                   Comment ça marche ?
                 </p>
                 <div className="space-y-1.5 text-xs text-gray-600 leading-relaxed">
@@ -320,23 +280,9 @@ export default function ClientDetailView() {
                   <p>3. Vous recevez le devis final à payer</p>
                 </div>
               </div>
-              <div className="flex gap-2 pt-1">
-                <button
-                  onClick={() => handleFeuVert(false)}
-                  className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-bold text-sm text-red-600 bg-red-50 active:scale-95 transition-all"
-                >
-                  <ThumbsDown size={15} />
-                  Non
-                </button>
-                <button
-                  onClick={() => handleFeuVert(true)}
-                  className="flex-[2] flex items-center justify-center gap-2 py-3 rounded-xl font-bold text-sm text-white active:scale-95 transition-all"
-                  style={{ background: `linear-gradient(135deg, ${BRAND.navy}, ${BRAND.navyL})` }}
-                >
-                  <ThumbsUp size={15} />
-                  Oui, j'autorise la préparation
-                </button>
-              </div>
+              {Boolean(sel.attenteClientDate && (!sel.attenteClientUntil || Date.parse(sel.attenteClientUntil) > Date.now())) && <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700"><p className="font-semibold">Votre demande d’attente est enregistrée</p><p className="mt-1">{sel.attenteClientMotif}{sel.attenteClientUntil ? ` · Jusqu’au ${new Date(sel.attenteClientUntil).toLocaleDateString('fr-FR')}` : ''}</p><p className="text-xs text-gray-500 mt-1">Vous pouvez utiliser le bouton « Autoriser la préparation » dès que vous êtes prêt.</p></div>}
+</div></details>
+              <button disabled={decisionPending} onClick={() => handleFeuVert(false)} className="min-h-11 flex items-center gap-2 text-sm font-semibold text-red-700"><ThumbsDown size={15} />Refuser la préparation</button>
             </>
           )}
           {isAutorise && (
@@ -355,7 +301,7 @@ export default function ClientDetailView() {
                 className="flex items-center gap-1.5 text-xs font-semibold text-gray-400 hover:text-red-500 transition-colors"
               >
                 <RotateCcw size={11} />
-                Révoquer mon accord
+                Demander l’annulation de mon accord
               </button>
             </>
           )}
@@ -379,11 +325,11 @@ export default function ClientDetailView() {
       return (
         <div className="space-y-2">
           <p className="text-xs text-gray-500 leading-relaxed">
-            {curPhaseIdx === 3
+            {curPhaseIdx === 2
               ? 'Votre colis est en cours de préparation et d\'optimisation dans notre entrepôt.'
               : 'La préparation est terminée.'}
           </p>
-          {curPhaseIdx === 3 && (
+          {curPhaseIdx === 2 && (
             <div className="flex items-center gap-2 text-xs text-blue-700 bg-blue-50 rounded-xl px-3 py-2">
               <Wrench size={13} />
               Traitement en cours — nous vous informerons dès que le devis est prêt
@@ -397,7 +343,7 @@ export default function ClientDetailView() {
           )}
           {sel.photoPrep && (
             <div className="rounded-xl overflow-hidden border border-gray-200">
-              <img src={sel.photoPrep} alt="Photo de votre colis préparé" className="w-full h-auto" />
+              <SecureImage src={sel.photoPrep} alt="Photo de votre colis préparé" className="w-full h-auto" />
               <div className="px-3 py-2 bg-gray-50 text-[10px] text-gray-500 flex items-center gap-1.5">
                 <Camera size={11} />
                 Photo de votre colis préparé par notre équipe
@@ -410,10 +356,9 @@ export default function ClientDetailView() {
 
     // Phase 4 – Devis & Paiement
     if (phaseIdx === 3) {
-      const isPay = sel.statut === 'devis_envoye';
-      const isDevis = sel.statut === 'devis_envoye';
+      const isPay = ['devis_envoye', 'attente_paiement'].includes(sel.statut);
       const isPaye = sel.paiementMontant != null;
-      const hasDevis = sel.devisTotal != null && sel.devisTotal > 0;
+      const hasDevis = hasPublishedQuote(sel);
 
       return (
         <div className="space-y-3">
@@ -421,74 +366,37 @@ export default function ClientDetailView() {
             <div className="rounded-xl border border-gray-100 overflow-hidden">
               <div
                 className="px-3 py-2 text-[10px] font-black uppercase tracking-widest"
-                style={{ backgroundColor: BRAND.navy + '08', color: BRAND.navy }}
+                style={{ backgroundColor: BRAND.navy + '08', color: 'var(--brand-text)' }}
               >
                 Détail du devis
               </div>
               <div className="p-3 space-y-1">
-                {sel.avantOptimTransport != null && sel.avantOptimTransport !== sel.devisTransport && (
+                {price.avantOptimTransport != null && price.avantOptimTransport !== price.devisTransport && (
                   <>
                     <div className="flex justify-between text-xs mb-1">
                       <span className="text-gray-400 line-through">Transport brut</span>
-                      <span className="text-gray-400 line-through">{eur(sel.avantOptimTransport)}</span>
+                      <span className="text-gray-400 line-through">{eur(price.avantOptimTransport)}</span>
                     </div>
                   </>
                 )}
-                <Ligne label="Transport optimisé" value={eur(sel.devisTransport)} />
+                <Ligne label="Transport optimisé" value={eur(price.devisTransport)} />
                 {/* Taxes douanières par catégorie */}
-                {(() => {
-                  const lignes = sel.lignes || [];
-                  if (lignes.length === 0) {
-                    return (
-                      <>
-                        {sel.devisOM > 0 && <Ligne label="Octroi de Mer" value={eur(sel.devisOM)} />}
-                        {sel.devisOMR > 0 && <Ligne label="Octroi de Mer Régional" value={eur(sel.devisOMR)} />}
-                      </>
-                    );
-                  }
-                  const byCat = {};
-                  lignes.forEach((l) => {
-                    const cat = categories?.find((c) => c.id === l.cat);
-                    const catLabel = cat?.label || 'Articles';
-                    const ct = cat ? getCatTaux(cat, selDest?.code || '974') : { om: 0, omr: 0 };
-                    const valeur = (l.qte || 1) * (l.prix || 0);
-                    if (!byCat[catLabel]) byCat[catLabel] = { om: 0, omr: 0, tauxOM: ct.om, tauxOMR: ct.omr };
-                    byCat[catLabel].om += valeur * ct.om / 100;
-                    byCat[catLabel].omr += valeur * ct.omr / 100;
-                  });
-                  const entries = Object.entries(byCat);
-                  const hasTaxes = entries.some(([, v]) => v.om > 0 || v.omr > 0);
-                  if (!hasTaxes && sel.devisOM <= 0 && sel.devisOMR <= 0) return null;
-                  return (
-                    <div className="space-y-1.5 mt-1">
-                      <p className="text-[10px] font-bold text-gray-500 uppercase">Taxes douanières</p>
-                      {entries.map(([catLabel, v]) => (
-                        <div key={catLabel}>
-                          <div className="flex justify-between">
-                            <span className="text-xs text-gray-700">📦 {catLabel}</span>
-                            <span className="text-xs font-semibold">{eur(v.om + v.omr)}</span>
-                          </div>
-                          <p className="text-[9px] text-gray-400 ml-5">
-                            Octroi de Mer {v.tauxOM}% + Octroi de Mer Régional {v.tauxOMR}%
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                  );
-                })()}
-                {sel.devisTVA != null && sel.devisTVA > 0 && (
-                  <Ligne label={`TVA (${selDest?.tva ?? 8.5}%)`} value={eur(sel.devisTVA)} />
+                {price.devisOM > 0 && <Ligne label="Octroi de mer" value={eur(price.devisOM)} />}
+                {price.devisOMR > 0 && <Ligne label="Octroi de mer régional" value={eur(price.devisOMR)} />}
+                {(price.fraisDivers || []).filter((f) => Number(f.montant) > 0).map((f, i) => <Ligne key={i} label={f.libelle || f.label || f.nom || 'Frais complémentaires'} value={eur(f.montant)} />)}
+                {price.devisTVA != null && price.devisTVA > 0 && (
+                  <Ligne label={published.destination.tva == null ? 'TVA (taux historique non documenté)' : `TVA (${published.destination.tva}%)`} value={eur(price.devisTVA)} />
                 )}
                 <div className="border-t border-gray-100 mt-2 pt-2">
                   <div className="flex justify-between items-center">
                     <span className="font-black text-sm text-gray-900">Total</span>
-                    <span className="font-black text-lg" style={{ color: BRAND.navy }}>
-                      {eur(sel.devisTotal)}
+                    <span className="font-black text-lg" style={{ color: 'var(--brand-text)' }}>
+                      {eur(price.devisTotal)}
                     </span>
                   </div>
-                  {sel.economie != null && sel.economie > 0 && (
+                  {price.economie != null && price.economie > 0 && (
                     <div className="mt-1.5 text-[10px] font-bold text-emerald-600 bg-emerald-50 rounded-lg px-2.5 py-1.5 flex items-center gap-1">
-                      <span>Économie réalisée : {eur(sel.economie)}</span>
+                      <span>Économie réalisée : {eur(price.economie)}</span>
                     </div>
                   )}
                 </div>
@@ -496,6 +404,14 @@ export default function ClientDetailView() {
             </div>
           )}
 
+          {hasDevis && <div className="border-t border-slate-200 pt-3 text-sm text-slate-600">
+            <p className="font-semibold">{published.version ? `Devis publié · version ${published.version}` : 'Devis historique'}</p>
+            {published.issuedAt && <p className="mt-1 text-xs">Établi le {new Date(published.issuedAt).toLocaleDateString('fr-FR')}</p>}
+            {published.paymentMode && <p className="mt-2">Modalités convenues : <strong>{PAYMENT_TERMS[published.paymentMode] || published.paymentMode}</strong>.</p>}
+            {published.client.type === 'pro' && !isPaye && <p className="mt-1">Le règlement suit ces modalités. Sa réception sera confirmée ici par l’équipe ; aucune nouvelle autorisation de préparation n’est nécessaire.</p>}
+            {published.client.type === 'pro' && !isPaye && <div className="mt-2 space-y-2"><p className="text-xs">Référence à communiquer pour le règlement : <strong>{price.ref}</strong> · {eur(price.devisTotal)}.</p><button className="min-h-11 rounded-lg border border-slate-300 px-3 text-sm font-semibold" onClick={async () => { try { await navigator.clipboard.writeText(`${price.ref} · ${eur(price.devisTotal)}`); flash('Référence de règlement copiée'); } catch { flash({ msg: 'Copie indisponible. La référence reste affichée ci-dessus.', type: 'error' }); } }}>Copier la référence de règlement</button></div>}
+
+          </div>}
           {isPaye && (
             <div className="rounded-xl p-3 bg-emerald-50 border border-emerald-100 flex items-center gap-2">
               <CheckCircle size={15} className="text-emerald-600 flex-shrink-0" />
@@ -508,16 +424,16 @@ export default function ClientDetailView() {
 
           {hasDevis && (
             <button
-              onClick={() => exportDevisPDF(sel, authCl, getDestByCP(authCl?.cp))}
+              onClick={async () => { try { const { exportDevisPDF } = await import('../../utils/exportDevisPDF'); await exportDevisPDF(sel, authCl, getDestByCP(authCl?.cp)); } catch (error) { flash({ msg: 'Le PDF n’a pas pu être généré. ' + error.message, type: 'error' }); } }}
               className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl font-bold text-sm transition-all active:scale-95"
-              style={{ background: `${BRAND.navy}10`, color: BRAND.navy }}
+              style={{ background: `${BRAND.navy}10`, color: 'var(--brand-text)' }}
             >
               <Download size={15} />
               Télécharger le devis (PDF)
             </button>
           )}
 
-          {(isPay || isDevis) && !isPaye && (
+          {hasDevis && isPay && !isPaye && (
             <button
               onClick={handlePayer}
               className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-black text-sm text-white active:scale-95 transition-all"
@@ -528,7 +444,7 @@ export default function ClientDetailView() {
               }}
             >
               <CreditCard size={16} />
-              Payer {hasDevis ? eur(sel.devisTotal) : ''}
+              {sel.payplugPaymentUrl ? `Payer ${hasDevis ? eur(price.devisTotal) : ''}` : published.client.type === 'pro' ? 'Consulter les échanges de règlement' : 'Contacter l’équipe pour le règlement'}
             </button>
           )}
 
@@ -568,7 +484,7 @@ export default function ClientDetailView() {
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-2 text-xs font-semibold px-3 py-2 rounded-xl transition-colors"
-              style={{ color: BRAND.navy, backgroundColor: BRAND.navy + '08' }}
+              style={{ color: 'var(--brand-text)', backgroundColor: BRAND.navy + '08' }}
             >
               <ExternalLink size={12} />
               Suivre le colis ({trackStr(sel)})
@@ -578,8 +494,10 @@ export default function ClientDetailView() {
       );
     }
 
-    // Phase 6 – Livraison
-    if (phaseIdx === 5) {
+    if (phaseIdx === 5) return <p className="text-sm text-slate-600">{sel.statut === 'dedouanement' ? 'Votre colis est en cours de dédouanement. Notre équipe suit cette étape avant sa mise à disposition au dépôt local.' : 'Étape de dédouanement passée.'}</p>;
+    if (phaseIdx === 6) return <p className="text-sm text-slate-600">{sel.statut === 'arrive' ? 'Votre colis est arrivé au dépôt local. Notre équipe organise la livraison et vous informera des modalités confirmées.' : 'Passage au dépôt local enregistré.'}</p>;
+    // Livraison
+    if (phaseIdx === 7) {
       const isLivre = sel.statut === 'livre';
       const isEnLivraison = sel.statut === 'livraison';
       const isArrive = sel.statut === 'arrive';
@@ -595,12 +513,12 @@ export default function ClientDetailView() {
           {isEnLivraison && (
             <div className="flex items-center gap-2 text-xs font-semibold text-lime-700 bg-lime-50 rounded-xl px-3 py-2">
               <MapPin size={13} />
-              Livraison en cours aujourd'hui !
+              Votre colis est en cours de livraison
             </div>
           )}
           {isLivre && (
             <div className="text-center py-3 space-y-2">
-              <div className="text-5xl">🎉</div>
+              <CheckCircle size={40} className="mx-auto text-emerald-600" />
               <p className="font-black text-xl text-gray-900">Livré !</p>
               <p className="text-sm text-gray-500">
                 Votre colis a bien été livré à {selDest?.nom || 'votre domicile'}.
@@ -630,23 +548,28 @@ export default function ClientDetailView() {
       <div className="flex items-center gap-3">
         <button
           onClick={() => navigate('/colis')}
-          className="flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center transition-all active:scale-90 hover:bg-gray-100"
+          aria-label="Retour à mes colis" className="flex-shrink-0 min-w-11 min-h-11 rounded-xl flex items-center justify-center transition-all active:scale-90 hover:bg-gray-100"
         >
           <ArrowLeft size={18} className="text-gray-600" />
         </button>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <h2 className="text-lg font-black text-gray-900 leading-none">{sel.ref}</h2>
-            <Badge statut={sel.statut} />
+            {clientWaiting ? <span className="rounded-full bg-slate-100 text-slate-600 px-2 py-1 text-[10px] font-semibold">Attente demandée</span> : <Badge statut={sel.statut} />}
           </div>
           <p className="text-xs text-gray-400 truncate mt-0.5">{sel.desc}</p>
         </div>
       </div>
 
+      <section aria-label="État actuel et prochaine étape" className="border-y border-slate-200 py-3 space-y-1">
+        <h2 className="text-base font-bold text-slate-800">{journey.label}</h2>
+        <p className="text-sm text-slate-600">{journey.actor && <strong>{journey.actor} · </strong>}{journey.next}</p>
+        <p className="text-xs text-slate-500">{journey.event ? `${journey.event.label} le ${new Date(journey.event.date).toLocaleDateString('fr-FR')}` : 'Date du dernier événement non renseignée.'}</p>
+      </section>
       {/* ── Progress bar (inline, no card wrapper) ── */}
       {sel.statut !== 'annule' && (
         <div className="px-1">
-          <ProgressBar statut={sel.statut} size="md" labelText="Progression" />
+          <ProgressBar statut={sel.statut} size="md" showLabel={false} />
         </div>
       )}
 
@@ -658,8 +581,8 @@ export default function ClientDetailView() {
       )}
 
       {/* ── Accordion timeline (done + active phases) ── */}
-      <div className="space-y-2">
-        {PHASES_CLIENT.map((phase, idx) => {
+      {sel.statut !== 'annule' && <div className="space-y-2">
+        {PHASES_CLIENT.map((phase, idx) => ({ phase, idx })).sort((a, b) => Number(b.idx === curPhaseIdx) - Number(a.idx === curPhaseIdx)).map(({ phase, idx }) => {
           const state = getPhaseState(idx, curPhaseIdx);
           if (state === 'future') return null;
           const isOpen = timeOpen === idx;
@@ -677,10 +600,10 @@ export default function ClientDetailView() {
             </PhaseStep>
           );
         })}
-      </div>
+      </div>}
 
       {/* ── Future phases (compact list) ── */}
-      {curPhaseIdx < PHASES_CLIENT.length - 1 && (
+      {!['annule','refuse_client'].includes(sel.statut) && curPhaseIdx < PHASES_CLIENT.length - 1 && (
         <div className="card rounded-2xl p-3">
           <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">
             Prochaines étapes

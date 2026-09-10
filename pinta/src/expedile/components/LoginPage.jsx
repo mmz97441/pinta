@@ -2,10 +2,10 @@ import React, { useState } from 'react';
 import { LogIn, AlertCircle, Eye, EyeOff, ArrowLeft } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { BRAND } from '../constants';
-import { supabase } from '../lib/supabase';
+import { supabase, configurationError } from '../lib/supabase';
 
 export default function LoginPage() {
-  const { setAuth } = useApp();
+  const { signIn, authError } = useApp();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPwd, setShowPwd] = useState(false);
@@ -16,45 +16,21 @@ export default function LoginPage() {
 
   const handleLogin = async (e) => {
     e.preventDefault();
-    if (!email.trim() || !password.trim()) { setError('Email et mot de passe requis'); return; }
+    if (!email.trim() || !password) { setError('Email et mot de passe requis'); return; }
     setLoading(true);
     setError('');
 
     try {
-      const { data, error: authError } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
-        password: password.trim(),
-      });
-
-      if (authError) {
-        setError(authError.message === 'Invalid login credentials'
-          ? 'Email ou mot de passe incorrect'
-          : authError.message);
-        setLoading(false);
-        return;
-      }
-
-      if (data?.user) {
-        const meta = data.user.user_metadata || {};
-        setAuth({
-          type: 'staff',
-          u: {
-            id: data.user.id,
-            nom: `${meta.prenom || ''} ${meta.nom || ''}`.trim() || data.user.email,
-            email: data.user.email,
-            role: meta.role || 'preparateur',
-          },
-          session: data.session,
-        });
-      }
+      await signIn(email.trim(), password);
     } catch (err) {
-      setError('Erreur : ' + err.message);
+      setError(err.message === 'Invalid login credentials' ? 'Email ou mot de passe incorrect.' : err.message || 'Connexion impossible. Réessayez.');
     }
     setLoading(false);
   };
 
   const handleForgotPassword = async (e) => {
     e.preventDefault();
+    if (configurationError) { setError(configurationError); return; }
     if (!email.trim()) { setError('Saisissez votre email'); return; }
     setLoading(true);
     setError('');
@@ -62,15 +38,15 @@ export default function LoginPage() {
 
     try {
       const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-        redirectTo: window.location.origin,
+        redirectTo: `${window.location.origin}/password`,
       });
       if (resetError) {
         setError(resetError.message);
       } else {
-        setSuccess('Un email de réinitialisation a été envoyé. Vérifiez votre boîte mail.');
+        setSuccess('Si un compte correspond à cette adresse, vous recevrez un lien de réinitialisation. Vérifiez aussi les courriers indésirables.');
       }
     } catch (err) {
-      setError('Erreur : ' + err.message);
+      setError(err.message === 'Invalid login credentials' ? 'Email ou mot de passe incorrect.' : err.message || 'Connexion impossible. Réessayez.');
     }
     setLoading(false);
   };
@@ -126,10 +102,10 @@ export default function LoginPage() {
         {/* Logo mobile only */}
         <div className="md:hidden mb-8 flex flex-col items-center select-none">
           <div className="flex items-baseline gap-0 leading-none">
-            <span className="text-4xl font-black tracking-tighter" style={{ color: BRAND.navy }}>EXPÉD</span>
+            <span className="text-4xl font-black tracking-tighter" style={{ color: 'var(--brand-text)' }}>EXPÉD</span>
             <span className="text-4xl font-black tracking-tighter" style={{ color: BRAND.gold }}>ÎLE</span>
           </div>
-          <p className="mt-2 text-[10px] font-semibold uppercase" style={{ color: BRAND.navy, letterSpacing: '0.18em', opacity: 0.7 }}>
+          <p className="mt-2 text-[10px] font-semibold uppercase" style={{ color: 'var(--brand-text)', letterSpacing: '0.18em', opacity: 0.7 }}>
             Paris → Réunion · Mayotte · Antilles
           </p>
         </div>
@@ -138,44 +114,44 @@ export default function LoginPage() {
           {mode === 'login' ? (
             <form onSubmit={handleLogin} className="space-y-5">
               <div>
-                <h1 className="text-2xl font-black tracking-tight" style={{ color: BRAND.navy }}>
+                <h1 className="text-2xl font-black tracking-tight" style={{ color: 'var(--brand-text)' }}>
                   Connexion
                 </h1>
                 <p className="text-sm text-slate-500 mt-1">Accédez à votre espace Expedîle.</p>
               </div>
 
               <div className="space-y-1">
-                <label className="text-[11px] font-bold uppercase tracking-wider text-slate-600">Email</label>
+                <label className="text-[11px] font-bold uppercase tracking-wider text-slate-600" htmlFor="login-email">Email</label>
                 <input
-                  type="email" value={email} onChange={(e) => setEmail(e.target.value)}
-                  placeholder="direction@delivrex.io"
+                  id="login-email" required type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+                  placeholder="vous@exemple.fr"
                   className="w-full px-4 py-3 rounded-xl text-sm font-medium outline-none border-2 border-slate-200 focus:border-blue-400 transition-colors bg-white"
-                  style={{ color: BRAND.navy }}
+                  style={{ color: 'var(--brand-text)' }}
                   autoComplete="email" autoFocus
                 />
               </div>
 
               <div className="space-y-1">
-                <label className="text-[11px] font-bold uppercase tracking-wider text-slate-600">Mot de passe</label>
+                <label className="text-[11px] font-bold uppercase tracking-wider text-slate-600" htmlFor="login-password">Mot de passe</label>
                 <div className="relative">
                   <input
-                    type={showPwd ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)}
+                    id="login-password" required type={showPwd ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••"
                     className="w-full px-4 py-3 pr-11 rounded-xl text-sm font-medium outline-none border-2 border-slate-200 focus:border-blue-400 transition-colors bg-white"
-                    style={{ color: BRAND.navy }}
+                    style={{ color: 'var(--brand-text)' }}
                     autoComplete="current-password"
                   />
-                  <button type="button" onClick={() => setShowPwd((p) => !p)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 transition-colors">
+                  <button aria-label={showPwd ? 'Masquer le mot de passe' : 'Afficher le mot de passe'} type="button" onClick={() => setShowPwd((p) => !p)}
+                    className="absolute right-1 top-1/2 -translate-y-1/2 min-h-11 min-w-11 flex items-center justify-center text-slate-400 hover:text-slate-700 transition-colors">
                     {showPwd ? <EyeOff size={18} /> : <Eye size={18} />}
                   </button>
                 </div>
               </div>
 
-              {error && (
+              {(error || authError) && (
                 <div className="flex items-center gap-2 p-2.5 rounded-lg bg-red-50 border border-red-200">
                   <AlertCircle size={14} className="text-red-500 flex-shrink-0" />
-                  <p className="text-xs text-red-700">{error}</p>
+                  <p role="alert" className="text-xs text-red-700">{error || authError}</p>
                 </div>
               )}
 
@@ -202,27 +178,27 @@ export default function LoginPage() {
               </button>
 
               <div>
-                <h1 className="text-2xl font-black tracking-tight" style={{ color: BRAND.navy }}>
+                <h1 className="text-2xl font-black tracking-tight" style={{ color: 'var(--brand-text)' }}>
                   Mot de passe oublié
                 </h1>
                 <p className="text-sm text-slate-500 mt-1">Saisissez votre email, vous recevrez un lien pour réinitialiser votre mot de passe.</p>
               </div>
 
               <div className="space-y-1">
-                <label className="text-[11px] font-bold uppercase tracking-wider text-slate-600">Email</label>
+                <label className="text-[11px] font-bold uppercase tracking-wider text-slate-600" htmlFor="login-email">Email</label>
                 <input
-                  type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+                  id="login-email" required type="email" value={email} onChange={(e) => setEmail(e.target.value)}
                   placeholder="votre@email.com"
                   className="w-full px-4 py-3 rounded-xl text-sm font-medium outline-none border-2 border-slate-200 focus:border-blue-400 transition-colors bg-white"
-                  style={{ color: BRAND.navy }}
+                  style={{ color: 'var(--brand-text)' }}
                   autoComplete="email" autoFocus
                 />
               </div>
 
-              {error && (
+              {(error || authError) && (
                 <div className="flex items-center gap-2 p-2.5 rounded-lg bg-red-50 border border-red-200">
                   <AlertCircle size={14} className="text-red-500 flex-shrink-0" />
-                  <p className="text-xs text-red-700">{error}</p>
+                  <p role="alert" className="text-xs text-red-700">{error || authError}</p>
                 </div>
               )}
               {success && (

@@ -1,0 +1,263 @@
+{
+  "checks": [
+    {
+      "role": "directeur",
+      "route": "/",
+      "mobile": false,
+      "theme": "light",
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "role": "directeur",
+      "route": "/colis",
+      "mobile": false,
+      "theme": "light",
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "role": "directeur",
+      "route": "/colis/33333333-3333-4333-8333-333333333333",
+      "mobile": false,
+      "theme": "light",
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "role": "directeur",
+      "route": "/clients",
+      "mobile": false,
+      "theme": "light",
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "role": "directeur",
+      "route": "/settings",
+      "mobile": false,
+      "theme": "light",
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "role": "directeur",
+      "route": "/",
+      "mobile": true,
+      "theme": "light",
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "role": "directeur",
+      "route": "/colis",
+      "mobile": true,
+      "theme": "light",
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "role": "directeur",
+      "route": "/colis/33333333-3333-4333-8333-333333333333",
+      "mobile": true,
+      "theme": "light",
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "role": "directeur",
+      "route": "/clients",
+      "mobile": true,
+      "theme": "light",
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "role": "directeur",
+      "route": "/settings",
+      "mobile": true,
+      "theme": "light",
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "role": "directeur",
+      "route": "/",
+      "mobile": false,
+      "theme": "dark",
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "role": "directeur",
+      "route": "/colis",
+      "mobile": false,
+      "theme": "dark",
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "role": "directeur",
+      "route": "/colis/33333333-3333-4333-8333-333333333333",
+      "mobile": false,
+      "theme": "dark",
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "role": "directeur",
+      "route": "/clients",
+      "mobile": false,
+      "theme": "dark",
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "role": "directeur",
+      "route": "/settings",
+      "mobile": false,
+      "theme": "dark",
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "role": "directeur",
+      "route": "/",
+      "mobile": true,
+      "theme": "dark",
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "role": "directeur",
+      "route": "/colis",
+      "mobile": true,
+      "theme": "dark",
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "role": "directeur",
+      "route": "/colis/33333333-3333-4333-8333-333333333333",
+      "mobile": true,
+      "theme": "dark",
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "role": "directeur",
+      "route": "/clients",
+      "mobile": true,
+      "theme": "dark",
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "role": "directeur",
+      "route": "/settings",
+      "mobile": true,
+      "theme": "dark",
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "role": "client",
+      "route": "/",
+      "mobile": false,
+      "theme": "light",
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "role": "client",
+      "route": "/colis/33333333-3333-4333-8333-333333333333",
+      "mobile": false,
+      "theme": "light",
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "role": "client",
+      "route": "/profil",
+      "mobile": false,
+      "theme": "light",
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "role": "client",
+      "route": "/",
+      "mobile": true,
+      "theme": "light",
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "role": "client",
+      "route": "/colis/33333333-3333-4333-8333-333333333333",
+      "mobile": true,
+      "theme": "light",
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "role": "client",
+      "route": "/profil",
+      "mobile": true,
+      "theme": "light",
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "role": "client",
+      "route": "/",
+      "mobile": false,
+      "theme": "dark",
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "role": "client",
+      "route": "/colis/33333333-3333-4333-8333-333333333333",
+      "mobile": false,
+      "theme": "dark",
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "role": "client",
+      "route": "/profil",
+      "mobile": false,
+      "theme": "dark",
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "role": "client",
+      "route": "/",
+      "mobile": true,
+      "theme": "dark",
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "role": "client",
+      "route": "/colis/33333333-3333-4333-8333-333333333333",
+      "mobile": true,
+      "theme": "dark",
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "role": "client",
+      "route": "/profil",
+      "mobile": true,
+      "theme": "dark",
+      "violations": [],
+      "overflow": false
+    }
+  ],
+  "failed": 0,
+  "status": "passed",
+  "limitations": "Automated checks on fixtures; not an accessibility certification."
+}

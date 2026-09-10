@@ -1,0 +1,35 @@
+{
+  "date": "2026-09-10",
+  "checks": [
+    {
+      "operation": "worker-global-preflight",
+      "passed": true
+    },
+    {
+      "operation": "worker-global-preflight",
+      "passed": true
+    },
+    {
+      "operation": "worker-fixture-prestaged-no-provider-needed",
+      "passed": true
+    },
+    {
+      "operation": "worker-global-preflight",
+      "passed": true
+    },
+    {
+      "operation": "worker-to-ocr-automated-auth-and-extraction-reuse",
+      "passed": true
+    },
+    {
+      "operation": "worker-recipe-complete",
+      "passed": true
+    }
+  ],
+  "automatedInternalAuthentication": "passed",
+  "providerCallsNeeded": false,
+  "realCustomerMessages": 0,
+  "paymentsCreated": 0,
+  "cleanup": "passed",
+  "cleanupNote": "Deletion verified in canonical Storage metadata; cached download alone was inconclusive."
+}

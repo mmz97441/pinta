@@ -1,51 +1,29 @@
 import React from 'react';
 import { Package, CheckCircle, Wrench, CreditCard, Plane, Shield, Warehouse, Truck } from 'lucide-react';
-import { STATUTS, BRAND } from '../../constants';
+import { STATUTS } from '../../constants';
 
 const STEPS = [
-  { name: 'Réception',    icon: Package },
-  { name: 'Accord',       icon: CheckCircle },
-  { name: 'Préparation',  icon: Wrench },
-  { name: 'Paiement',     icon: CreditCard },
-  { name: 'En vol',       icon: Plane },
-  { name: 'Dédouanement', icon: Shield },
-  { name: 'Au dépôt',     icon: Warehouse },
-  { name: 'Livraison',    icon: Truck },
+  { name: 'Réception', icon: Package }, { name: 'Accord', icon: CheckCircle },
+  { name: 'Préparation', icon: Wrench }, { name: 'Paiement', icon: CreditCard },
+  { name: 'En vol', icon: Plane }, { name: 'Dédouanement', icon: Shield },
+  { name: 'Au dépôt', icon: Warehouse }, { name: 'Livraison', icon: Truck },
 ];
-
 export default function Etapes({ statut }) {
-  const cur = STATUTS[statut] ? STATUTS[statut].phase : 0;
-
-  return (
-    <div className="flex items-center gap-0">
-      {STEPS.map((step, i) => {
-        const n = i + 1;
-        const done = cur > n;
-        const active = cur === n;
+  const current = STATUTS[statut]?.phase || 0;
+  const currentLabel = STATUTS[statut]?.label || 'Statut à préciser';
+  return <div className="space-y-2" role="group" aria-label={`Suivi du dossier : ${currentLabel}`}>
+    <p className="sm:hidden text-sm font-semibold brand-t">{currentLabel}</p>
+    <ol className="flex gap-1.5 sm:gap-2">
+      {STEPS.map((step, index) => {
+        const done = current > index + 1;
+        const active = current === index + 1;
         const Icon = step.icon;
-        return (
-          <div key={i} className="flex-1 flex flex-col items-center relative">
-            {i > 0 && (
-              <div
-                className="absolute top-3 right-1/2 w-full h-0.5"
-                style={{ backgroundColor: done || active ? BRAND.gold : '#e5e7eb', transform: 'translateX(-50%)' }}
-              />
-            )}
-            <div
-              className={`relative z-10 w-6 h-6 rounded-full flex items-center justify-center transition-all ${done ? 'shadow-sm' : active ? 'shadow-md' : ''}`}
-              style={done ? { backgroundColor: BRAND.gold } : active ? { backgroundColor: BRAND.navy } : { backgroundColor: '#e5e7eb' }}
-            >
-              <Icon size={12} strokeWidth={2.5} className={done || active ? 'text-white' : 'text-gray-400'} />
-            </div>
-            <span
-              className={`mt-1.5 text-center leading-tight ${done || active ? 'font-bold' : 'text-gray-400'}`}
-              style={done ? { fontSize: 9, color: BRAND.goldD } : active ? { fontSize: 9, color: BRAND.navy } : { fontSize: 9 }}
-            >
-              {step.name}
-            </span>
-          </div>
-        );
+        return <li key={step.name} aria-current={active ? 'step' : undefined} className="min-w-0 flex-1 flex flex-col items-center gap-1.5" title={`${step.name}${active ? ' · étape actuelle' : done ? ' · passée' : ''}`}>
+          <span className="h-1.5 w-full rounded-full" style={{ background: done || active ? 'var(--brand-gold)' : 'var(--border-subtle)' }} aria-hidden="true" />
+          <Icon size={16} className="hidden sm:block" style={{ color: done || active ? 'var(--brand-text)' : 'var(--text-muted)' }} aria-hidden="true" />
+          <span className={`sr-only sm:not-sr-only sm:text-[11px] sm:text-center sm:leading-tight sm:break-words ${active ? 'font-bold' : ''}`} style={{ color: active || done ? 'var(--brand-text)' : 'var(--text-muted)' }}>{step.name}{active && <span className="sr-only"> · étape actuelle</span>}</span>
+        </li>;
       })}
-    </div>
-  );
+    </ol>
+  </div>;
 }

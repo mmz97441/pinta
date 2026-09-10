@@ -1,0 +1,42 @@
+
+> pinta@1.0.0 build
+> vite build
+
+vite v7.3.6 building client environment for production...
+transforming...
+✓ 1771 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                                     0.83 kB │ gzip:   0.46 kB
+dist/assets/index-Cqw5bdJD.css                     63.55 kB │ gzip:  11.46 kB
+dist/assets/copy-ByRgrkyv.js                        0.23 kB │ gzip:   0.20 kB
+dist/assets/file-spreadsheet-CI-PZlnS.js            0.48 kB │ gzip:   0.30 kB
+dist/assets/trash-2-Crf1m6G3.js                     0.51 kB │ gzip:   0.32 kB
+dist/assets/calculator-BpmnBFU0.js                  0.53 kB │ gzip:   0.28 kB
+dist/assets/exportExcel-DoTRC2dA.js                 1.31 kB │ gzip:   0.75 kB
+dist/assets/ViewToggle-D6vu1VzR.js                  1.34 kB │ gzip:   0.57 kB
+dist/assets/exportDAU-DEB522qK.js                   1.72 kB │ gzip:   0.92 kB
+dist/assets/exportFactureCommerciPDF-CNTpwY9p.js    2.24 kB │ gzip:   1.15 kB
+dist/assets/exportEtiquettes-OSAVsrYG.js            3.79 kB │ gzip:   1.56 kB
+dist/assets/ClientNotifs-BepJnSCe.js                3.88 kB │ gzip:   1.69 kB
+dist/assets/exportDevisPDF-BijDH6NO.js              4.65 kB │ gzip:   2.01 kB
+dist/assets/DevisProspect-i_giE9yw.js               8.28 kB │ gzip:   3.12 kB
+dist/assets/TrackingPublic-CHv1bCLB.js              8.72 kB │ gzip:   3.18 kB
+dist/assets/ClientColis-BP_GCL0a.js                11.31 kB │ gzip:   3.05 kB
+dist/assets/ClientProfil-D9Z1biC-.js               11.75 kB │ gzip:   4.50 kB
+dist/assets/ClientAccueil-DJAq7tC7.js              14.25 kB │ gzip:   3.74 kB
+dist/assets/browser-BARc231u.js                    25.78 kB │ gzip:  10.02 kB
+dist/assets/purify.es-CEBYger9.js                  28.86 kB │ gzip:  11.03 kB
+dist/assets/jspdf.plugin.autotable-DEZvi-_-.js     30.89 kB │ gzip:   9.86 kB
+dist/assets/StaffClients-BxtNYu5a.js               32.79 kB │ gzip:   8.77 kB
+dist/assets/StaffSettings-B93ULQbn.js              35.73 kB │ gzip:  11.20 kB
+dist/assets/StaffClientDetail-BVQM6e5g.js          48.74 kB │ gzip:  12.75 kB
+dist/assets/StaffSplitView-Ca24XBTC.js             56.97 kB │ gzip:  16.64 kB
+dist/assets/index.es-Ssmat2Mr.js                  159.02 kB │ gzip:  52.97 kB
+dist/assets/react-vendor-DpfZLGEx.js              181.70 kB │ gzip:  59.87 kB
+dist/assets/html2canvas.esm-DfICb1sL.js           201.06 kB │ gzip:  47.08 kB
+dist/assets/supabase-vendor-DDrlQt8y.js           226.99 kB │ gzip:  58.79 kB
+dist/assets/index-DItsDgII.js                     285.98 kB │ gzip:  78.29 kB
+dist/assets/jspdf.es.min-CtexeTXV.js              385.91 kB │ gzip: 124.83 kB
+dist/assets/xlsx-B1qyvIrS.js                      492.02 kB │ gzip: 159.00 kB
+✓ built in 22.31s

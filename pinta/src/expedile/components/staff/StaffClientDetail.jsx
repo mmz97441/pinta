@@ -3,10 +3,55 @@ import { useNavigate, useParams, Navigate } from 'react-router-dom';
 import { ArrowLeft, Check, X, AlertTriangle, ExternalLink, Send, Download, FileSpreadsheet, ChevronDown, Crown } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { BRAND, ABONNEMENTS, getDestByCP } from '../../constants';
-import { telegramLink, eur, getPrenom } from '../../utils';
+import { eur, getPrenom } from '../../utils';
 import { Badge } from '../ui';
 import { exportRecapProExcel } from '../../utils/exportRecapPro';
 import ShareLinkPanel from './ShareLinkPanel';
+import { supabase } from '../../lib/supabase';
+import { functionErrorMessage } from '../../services/functionErrors';
+
+function InviteClientAccess({ client, flash }) {
+  const { retryLoad, can } = useApp();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [sent, setSent] = useState(false);
+  if (client.userId) return <p className="text-xs text-emerald-700 flex items-center gap-2"><Check size={14} />Espace client activé</p>;
+  async function invite() {
+    if (busy) return;
+    setBusy(true); setError('');
+    try {
+      const { data: result, error: functionError } = await supabase.functions.invoke('invite-client-user', { body: { clientId: client.id } });
+      if (functionError || result?.error) throw new Error(await functionErrorMessage({ data: result, error: functionError }, 'L’invitation n’a pas pu être envoyée. Vérifiez la configuration des emails.'));
+      setSent(true); flash({ msg: result.invitation_sent ? 'Invitation de connexion envoyée par email.' : 'Le compte existant du client est maintenant lié à cette fiche. Il peut utiliser ses identifiants habituels.', type: 'success' });
+      await retryLoad();
+    } catch (err) { setError(err.message || 'L’invitation n’a pas pu être envoyée.'); }
+    finally { setBusy(false); }
+  }
+  return <div className="border border-gray-200 rounded-xl p-3 space-y-2"><p className="text-xs font-bold text-gray-800">Accès à l’espace client</p><p className="text-xs text-gray-500">Invitez le client à définir son mot de passe et à retrouver ses dossiers. Son accès est lié à cette fiche.</p><button disabled={busy || sent || !client.email || !can('perm_clients_creer')} onClick={invite} className="min-h-11 px-3 rounded-xl brand-bg text-white text-xs font-semibold disabled:opacity-50">{busy ? 'Invitation en cours…' : sent ? 'Invitation prise en charge' : 'Inviter à l’espace client'}</button>{!client.email && <p className="text-xs text-gray-500">Enregistrez un email de contact avant d’inviter ce client.</p>}{error && <p role="alert" className="text-xs text-red-600">{error}</p>}</div>;
+}
+
+function TelegramInvitation({ client, flash }) {
+  const [invitation, setInvitation] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  async function create() {
+    setBusy(true); setError('');
+    try {
+      const { data, error: rpcError } = await supabase.rpc('create_telegram_invitation', { p_client_id: client.id });
+      if (rpcError) throw rpcError;
+      const value = Array.isArray(data) ? data[0] : data;
+      if (!value?.url) throw new Error('Invitation indisponible');
+      setInvitation(value);
+    } catch (err) { setError(err.message); }
+    finally { setBusy(false); }
+  }
+  return <div className="p-3 rounded-xl border border-gray-200 space-y-2">
+    <p className="text-xs font-bold text-gray-800">{client.telegramChatId ? 'Telegram connecté' : 'Connecter le Telegram du client'}</p>
+    <p className="text-xs text-gray-500">Le client utilise son lien personnel puis appuie sur « Démarrer ». Le lien expire et ne peut servir qu’une fois.</p>
+    {invitation ? <><input readOnly aria-label="Lien personnel Telegram" value={invitation.url} onClick={(e) => e.target.select()} className="min-h-11 w-full px-3 text-xs bg-white rounded-lg border border-gray-200 text-gray-800" /><div className="flex flex-wrap gap-2"><button onClick={async () => { try { await navigator.clipboard.writeText(invitation.url); flash('Lien copié'); } catch { setError('Sélectionnez le lien pour le copier manuellement.'); } }} className="min-h-11 px-3 rounded-xl brand-bg text-white text-xs font-semibold">Copier le lien</button>{client.email && <a href={`mailto:${client.email}?subject=${encodeURIComponent('Votre connexion Telegram Expedîle')}&body=${encodeURIComponent(`Bonjour ${getPrenom(client)},\n\nConnectez votre Telegram à votre dossier Expedîle avec ce lien personnel : ${invitation.url}\n\nL’équipe Expedîle`)}`} className="min-h-11 inline-flex items-center px-3 text-xs font-semibold brand-t">Préparer un email</a>}<button onClick={create} disabled={busy} className="min-h-11 px-3 text-xs text-gray-500">Renouveler</button></div></> : <button onClick={create} disabled={busy} className="min-h-11 px-3 rounded-xl brand-bg text-white text-xs font-semibold disabled:opacity-50">{busy ? 'Création…' : 'Créer une invitation personnelle'}</button>}
+    {error && <p role="alert" className="text-xs text-red-600">{error}</p>}
+  </div>;
+}
 
 // ── Empty draft ──────────────────────────────────────────────────────────────
 const emptyDraft = () => ({
@@ -78,17 +123,18 @@ const MOIS_LABELS = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet',
 export default function StaffClientDetail() {
   const navigate = useNavigate();
   const { id: routeId } = useParams();
-  const { clients, data, updateClient, addNewClient, deleteClient, flash, sendMsg, ask, auth } = useApp();
+  const { clients, data, updateClient, addNewClient, deleteClient, flash, sendMsg, ask, auth, can, dataLoading } = useApp();
 
   const isNewRoute = !routeId || routeId === 'new';
   const existing = !isNewRoute ? clients.find((c) => c.id === routeId) : null;
 
   // If route is /clients/:id but no such client found, redirect back.
   // Wait for clients to be loaded before deciding (avoid false negatives on first render).
-  if (!isNewRoute && !existing && clients.length > 0) {
+  if (!isNewRoute && !existing && !dataLoading) {
     return <Navigate to="/clients" replace />;
   }
 
+  if (isNewRoute && !can('perm_clients_creer')) return <p role="alert" className="p-6 text-sm text-gray-600">Votre rôle ne permet pas de créer un client.</p>;
   if (isNewRoute) {
     return <NewClientPage onDone={() => navigate('/clients')} onCancel={() => navigate('/clients')} />;
   }
@@ -118,6 +164,9 @@ export default function StaffClientDetail() {
 // ─────────────────────────────────────────────────────────────────────────────
 function EditClientPage({ cl, clients, data, updateClient, deleteClient, flash, sendMsg, ask, auth, onDone }) {
   const navigate = useNavigate();
+  const { can } = useApp();
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
 
   const [clDraft, setClDraft] = useState({
     nom: cl.nomFamille || cl.nom || '',
@@ -196,22 +245,24 @@ function EditClientPage({ cl, clients, data, updateClient, deleteClient, flash, 
     setTouched((prev) => ({ ...prev, [field]: true }));
   }
 
-  function handleSave() {
+  async function handleSave() {
     if (!canSave) {
       setTouched({ nom: true, tel: true, email: true, cp: true });
       return;
     }
-    updateClient(cl.id, clDraft);
-    onDone();
+    setSaving(true); setSaveError('');
+    try { await updateClient(cl.id, clDraft); onDone(); }
+    catch (error) { setSaveError(error.message || 'Enregistrement impossible.'); }
+    finally { setSaving(false); }
   }
 
-  function handleDelete() {
+  async function handleDelete() {
     if (hasColis) {
       flash('Ce client a des colis actifs, impossible de le supprimer');
       return;
     }
-    deleteClient(cl.id);
-    onDone();
+    try { const deleted = await deleteClient(cl.id); if (deleted) onDone(); }
+    catch (error) { setSaveError(error.message || 'Suppression impossible.'); }
   }
 
   function handleOpenColis(colisId) {
@@ -246,7 +297,7 @@ function EditClientPage({ cl, clients, data, updateClient, deleteClient, flash, 
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               {cl.ref && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 font-mono">{cl.ref}</span>}
-              <span className="text-base font-black truncate" style={{ color: BRAND.navy }}>
+              <span className="text-base font-black truncate" style={{ color: 'var(--brand-text)' }}>
                 {cl.nom || <span className="italic text-gray-400">Sans nom</span>}
               </span>
               {cl.abonnement === 'vip' ? (
@@ -283,7 +334,7 @@ function EditClientPage({ cl, clients, data, updateClient, deleteClient, flash, 
               {actifs.length > 0 && (
                 <span
                   className="text-[10px] font-bold px-1.5 py-0.5 rounded-full"
-                  style={{ background: `${BRAND.navy}12`, color: BRAND.navy }}
+                  style={{ background: `${BRAND.navy}12`, color: 'var(--brand-text)' }}
                 >
                   {actifs.length} actifs
                 </span>
@@ -438,7 +489,7 @@ function EditClientPage({ cl, clients, data, updateClient, deleteClient, flash, 
               value={clDraft.abonnement}
               onChange={(e) => patchDraft('abonnement', e.target.value)}
               className="w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-sm outline-none focus:border-blue-300 transition-colors"
-              style={{ color: BRAND.navy }}
+              style={{ color: 'var(--brand-text)' }}
             >
               <option value="freemium">Freemium</option>
               <option value="premium_mensuel">Premium Mensuel (13€/mois)</option>
@@ -488,49 +539,15 @@ function EditClientPage({ cl, clients, data, updateClient, deleteClient, flash, 
             />
           </div>
 
-          {/* Telegram invitation link */}
-          {cl.id && (
-            <div className="mt-2 p-3 rounded-xl bg-blue-50 border border-blue-200">
-              <p className="text-xs font-bold text-blue-800 mb-1">Lien d'invitation Telegram</p>
-              <p className="text-[10px] text-blue-600 mb-2">Envoyez ce lien au client pour qu'il lie son compte Telegram :</p>
-              <div className="flex gap-2">
-                <input
-                  readOnly
-                  value={`https://t.me/Expedilebot?start=${cl.id}`}
-                  className="flex-1 px-2 py-1.5 rounded-lg border border-blue-200 bg-white text-xs font-mono text-blue-700"
-                  onClick={(e) => e.target.select()}
-                />
-                <button
-                  onClick={() => {
-                    navigator.clipboard.writeText(`https://t.me/Expedilebot?start=${cl.id}`);
-                    flash('Lien copie !');
-                  }}
-                  className="px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-600 text-white active:scale-95 transition-all"
-                >
-                  Copier
-                </button>
-                <button
-                  onClick={() => {
-                    if (cl.email) {
-                      sendMsg(null, cl.id, 'email', 'invitation_telegram', null);
-                      flash('Invitation Telegram envoyee par email');
-                    } else {
-                      flash('Pas d\'email pour ce client');
-                    }
-                  }}
-                  className="px-3 py-1.5 rounded-lg text-xs font-bold border border-blue-300 text-blue-700 active:scale-95 transition-all"
-                >
-                  Envoyer par email
-                </button>
-              </div>
-            </div>
-          )}
+          {cl.id && <><InviteClientAccess client={cl} flash={flash} /><TelegramInvitation client={cl} flash={flash} /></>}
 
+          {saveError && <p role="alert" className="text-sm text-red-600">{saveError}</p>}
+          {!can('perm_clients_modifier') && <p className="text-xs text-gray-500">Votre rôle permet de consulter cette fiche. Les modifications sont réservées aux personnes habilitées.</p>}
           {/* Save / Cancel */}
           <div className="flex gap-2">
             <button
               onClick={handleSave}
-              disabled={!canSave}
+              disabled={!canSave || saving || !can('perm_clients_modifier')}
               className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-bold transition-all active:scale-95 disabled:opacity-40"
               style={{ background: BRAND.navy, color: 'white' }}
             >
@@ -549,16 +566,6 @@ function EditClientPage({ cl, clients, data, updateClient, deleteClient, flash, 
           {/* Quick action links */}
           {(cl.tel || cl.email) && (
             <div className="flex gap-2 flex-wrap">
-              {cl.tel && cl.canal === 'telegram' && (
-                <a
-                  href={telegramLink(cl.id)}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors"
-                >
-                  Telegram
-                </a>
-              )}
               {cl.email && (
                 <a
                   href={`mailto:${cl.email}`}
@@ -583,7 +590,7 @@ function EditClientPage({ cl, clients, data, updateClient, deleteClient, flash, 
             <div className="rounded-xl border border-gray-100 bg-gray-50 p-3">
               <p
                 className="text-[11px] font-bold uppercase tracking-wide mb-2"
-                style={{ color: BRAND.navy }}
+                style={{ color: 'var(--brand-text)' }}
               >
                 Colis ({colis.length})
               </p>
@@ -594,7 +601,7 @@ function EditClientPage({ cl, clients, data, updateClient, deleteClient, flash, 
                     onClick={() => handleOpenColis(p.id)}
                     className="w-full flex items-center gap-2 text-left p-2 rounded-lg hover:bg-white transition-colors group"
                   >
-                    <span className="text-xs font-black" style={{ color: BRAND.navy }}>
+                    <span className="text-xs font-black" style={{ color: 'var(--brand-text)' }}>
                       {p.ref}
                     </span>
                     <Badge statut={p.statut} />
@@ -692,7 +699,7 @@ function EditClientPage({ cl, clients, data, updateClient, deleteClient, flash, 
           )}
 
           {/* Delete button — only if no colis */}
-          {!hasColis && (
+          {!hasColis && can('perm_clients_supprimer') && (
             <button
               onClick={handleDelete}
               className="w-full py-2.5 rounded-xl text-xs font-bold text-red-500 border border-red-200 hover:bg-red-50 transition-colors"
@@ -713,6 +720,8 @@ function EditClientPage({ cl, clients, data, updateClient, deleteClient, flash, 
 function NewClientPage({ onDone, onCancel }) {
   const { addNewClient, flash } = useApp();
   const [nd, setNd] = useState(emptyDraft());
+  const [saving, setSaving] = useState(false);
+  const [createError, setCreateError] = useState('');
   const [justCreated, setJustCreated] = useState(null); // { id, cl } after save
 
   const set = (k, v) => setNd((p) => ({ ...p, [k]: v }));
@@ -727,6 +736,9 @@ function NewClientPage({ onDone, onCancel }) {
     if (!nd.email.trim() && !nd.telegramUsername.trim()) { flash({ msg: 'Email ou Telegram requis — au moins un moyen de contact', type: 'warning' }); return; }
     if (isPro && !nd.raisonSociale.trim()) { flash({ msg: 'La raison sociale est requise pour un pro', type: 'warning' }); return; }
 
+    if (saving) return;
+    setSaving(true); setCreateError('');
+    try {
     const id = await addNewClient({
       ...nd,
       nom: nd.nom.trim(),
@@ -740,7 +752,10 @@ function NewClientPage({ onDone, onCancel }) {
       points: 0,
     });
     flash({ msg: isPro ? 'Client pro créé avec succès' : 'Client créé avec succès', type: 'success' });
+    if (!id) throw new Error('La création du client n’a pas été confirmée.');
     setJustCreated({ id, cl: { ...nd, id } });
+    } catch (error) { setCreateError(error.message || 'Création impossible.'); }
+    finally { setSaving(false); }
   }
 
   // After creation: show invitation block, then return to list when dismissed
@@ -766,22 +781,12 @@ function NewClientPage({ onDone, onCancel }) {
             </div>
           </div>
 
-          {cl.tel && cl.canal === 'telegram' && (
-            <a
-              href={telegramLink(cl.id)}
-              target="_blank"
-              rel="noreferrer"
-              className="flex items-center justify-center gap-2 w-full py-3 rounded-xl text-sm font-bold transition-all active:scale-95"
-              style={{ background: '#0088cc', color: 'white', boxShadow: '0 2px 10px #0088cc40' }}
-            >
-              <Send size={14} />
-              Inviter via Telegram
-            </a>
-          )}
+          <InviteClientAccess client={cl} flash={flash} />
+          <TelegramInvitation client={cl} flash={flash} />
 
           {cl.email && (
             <a
-              href={`mailto:${cl.email}?subject=${encodeURIComponent('Bienvenue chez Expedîle !')}&body=${encodeURIComponent(`Bonjour ${getPrenom(cl)},\n\nVotre espace client Expedîle est prêt !\n\nConnectez-vous ici : https://expedile.re/app\n\nÀ très vite !\nL'équipe Expedîle`)}`}
+              href={`mailto:${cl.email}?subject=${encodeURIComponent('Bienvenue chez Expedîle !')}&body=${encodeURIComponent(`Bonjour ${getPrenom(cl)},\n\nVotre fiche client Expedîle a été créée. Contactez notre équipe pour activer votre accès si vous n’avez pas encore reçu vos identifiants.\n\nConnectez-vous ici : ${window.location.origin}\n\nÀ très vite !\nL'équipe Expedîle`)}`}
               target="_blank"
               rel="noreferrer"
               className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl text-sm font-bold bg-blue-50 text-blue-700 border-2 border-blue-200 hover:bg-blue-100 transition-all active:scale-95"
@@ -814,7 +819,7 @@ function NewClientPage({ onDone, onCancel }) {
             <ArrowLeft size={16} />
             Retour aux clients
           </button>
-          <h2 className="text-xl font-black" style={{ color: BRAND.navy }}>Nouveau client</h2>
+          <h2 className="text-xl font-black" style={{ color: 'var(--brand-text)' }}>Nouveau client</h2>
           <div className="flex gap-1 bg-gray-100 rounded-lg p-0.5">
             <button onClick={() => set('type', 'particulier')}
               className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${!isPro ? 'bg-blue-500 text-white shadow' : 'text-gray-500'}`}>
@@ -833,7 +838,7 @@ function NewClientPage({ onDone, onCancel }) {
 
         {/* ── Section : Abonnement ── */}
         <div className="space-y-3">
-          <p className="text-xs font-black uppercase tracking-wider" style={{ color: BRAND.navy }}>Abonnement</p>
+          <p className="text-xs font-black uppercase tracking-wider" style={{ color: 'var(--brand-text)' }}>Abonnement</p>
           <div className="grid grid-cols-3 gap-3">
             <div>
               <label className={LBL}>Forfait *</label>
@@ -892,7 +897,7 @@ function NewClientPage({ onDone, onCancel }) {
 
         {/* ── Section : Identité ── */}
         <div className="space-y-3">
-          <p className="text-xs font-black uppercase tracking-wider" style={{ color: BRAND.navy }}>{isPro ? 'Contact' : 'Personne physique'}</p>
+          <p className="text-xs font-black uppercase tracking-wider" style={{ color: 'var(--brand-text)' }}>{isPro ? 'Contact' : 'Personne physique'}</p>
           <div className="grid grid-cols-2 gap-3">
             {!isPro && (
               <div className="col-span-2">
@@ -943,7 +948,7 @@ function NewClientPage({ onDone, onCancel }) {
 
         {/* ── Section : Adresse livraison ── */}
         <div className="space-y-3">
-          <p className="text-xs font-black uppercase tracking-wider" style={{ color: BRAND.navy }}>Adresse livraison</p>
+          <p className="text-xs font-black uppercase tracking-wider" style={{ color: 'var(--brand-text)' }}>Adresse livraison</p>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={LBL}>Département *</label>
@@ -997,7 +1002,8 @@ function NewClientPage({ onDone, onCancel }) {
           className="px-6 py-2.5 rounded-xl border-2 border-gray-200 text-sm font-bold text-gray-600 hover:bg-gray-50">
           Annuler
         </button>
-        <button onClick={handleCreate}
+        {createError && <p role="alert" className="text-sm text-red-600">{createError}</p>}
+        <button disabled={saving} onClick={handleCreate}
           className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white active:scale-95 transition-all"
           style={{ background: isPro ? `linear-gradient(135deg, ${BRAND.goldD}, ${BRAND.gold})` : `linear-gradient(135deg, ${BRAND.navy}, ${BRAND.navyL})` }}>
           {isPro ? 'Créer le client pro' : 'Créer le client'}

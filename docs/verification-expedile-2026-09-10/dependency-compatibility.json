@@ -1,0 +1,20 @@
+{
+  "date": "2026-09-10T13:28:25.374Z",
+  "sheetjs": "0.20.3",
+  "jspdf": "4.2.1",
+  "tests": [
+    {
+      "name": "application-client-import-xlsx-unicode-email-postcode-date",
+      "pass": true
+    },
+    {
+      "name": "application-client-import-xls-unicode-email-postcode-date",
+      "pass": true
+    },
+    {
+      "name": "jspdf-autotable-pdf-generation",
+      "pass": true,
+      "bytes": 4488
+    }
+  ]
+}

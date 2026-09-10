@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { BRAND } from '../../constants';
 import * as sb from '../../lib/supabaseData';
+import { useApp } from '../../context/AppContext';
 import { sendTelegram } from '../../services/telegramApi';
 import { getPrenom } from '../../utils';
 
@@ -24,6 +25,10 @@ import { getPrenom } from '../../utils';
  *   - Révoquer (avec confirmation)
  */
 export default function ShareLinkPanel({ client, currentUserId, flash, ask }) {
+  const {data,refreshColis}=useApp();
+  const dossiers=data.filter(c=>c.clientId===client?.id&&!c.archive);
+  const [referenceId,setReferenceId]=useState('');
+  const dossierId=dossiers.length===1?dossiers[0].id:referenceId;
   const [link, setLink] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -87,13 +92,21 @@ export default function ShareLinkPanel({ client, currentUserId, flash, ask }) {
       return;
     }
     if (!url) return;
+    if(!dossierId){flash?.({msg:'Choisissez le dossier de référence pour cet échange.',type:'warning'});return;}
     setSendingTg(true);
     const prenom = getPrenom(client) || 'bonjour';
-    const message = `Bonjour ${prenom} 👋\n\nVoici votre *lien de suivi en temps réel* à partager avec votre famille :\n\n${url}\n\nIls pourront suivre l'avancement de chaque colis sans créer de compte.\n\n_L'équipe Expedîle_`;
-    const res = await sendTelegram(client.telegramChatId, message);
-    setSendingTg(false);
-    if (res.ok) flash?.({ msg: 'Lien envoyé via Telegram', type: 'success' });
-    else flash?.({ msg: 'Échec envoi Telegram : ' + (res.error || ''), type: 'warning' });
+    const message = `Bonjour ${prenom} 👋\n\nVoici votre lien de suivi à partager avec votre famille :\n\n${url}\n\nIls pourront suivre l'avancement de chaque colis sans créer de compte.\n\nL'équipe Expedîle`;
+    try {
+      const res = await sendTelegram(client.telegramChatId, message, { colisId: dossierId });
+      if (!res.ok) throw new Error(res.error || 'Envoi non confirmé');
+      flash?.({ msg: 'Lien envoyé via Telegram', type: 'success' });
+      try { await refreshColis(dossierId); }
+      catch { flash?.({ msg: 'Lien envoyé ; rechargez le dossier pour actualiser les échanges.', type: 'warning' }); }
+    } catch (error) {
+      flash?.({ msg: 'Échec envoi Telegram : ' + error.message, type: 'warning' });
+    } finally {
+      setSendingTg(false);
+    }
   };
 
   const handleRevoke = () => {
@@ -175,7 +188,7 @@ export default function ShareLinkPanel({ client, currentUserId, flash, ask }) {
               </p>
               <p className="text-[11px] text-slate-500 leading-relaxed mt-1 max-w-md">
                 Générez un lien unique que <span className="font-semibold text-slate-700">{client.prenom || client.nom}</span> pourra partager
-                avec sa famille. Suivi en temps réel, sans compte requis.
+                avec sa famille. Suivi des colis, sans compte requis.
               </p>
               <button
                 onClick={handleCreate}
@@ -262,6 +275,7 @@ export default function ShareLinkPanel({ client, currentUserId, flash, ask }) {
           </button>
         </div>
 
+        {dossiers.length>1&&<label className="block text-xs font-semibold px-5 pt-4">Dossier de référence<select value={referenceId} onChange={e=>setReferenceId(e.target.value)} className="w-full min-h-[44px] mt-1 border rounded-xl px-3 bg-transparent"><option value="">Choisir le dossier de cet échange</option>{dossiers.map(c=><option key={c.id} value={c.id}>{c.ref} — {c.desc}</option>)}</select></label>}
         {/* URL display */}
         <div className="px-5 py-4 space-y-3">
           <div className="group relative">
@@ -297,7 +311,7 @@ export default function ShareLinkPanel({ client, currentUserId, flash, ask }) {
             </button>
             <button
               onClick={handleTelegramShare}
-              disabled={sendingTg || !client?.telegramChatId}
+              disabled={sendingTg || !client?.telegramChatId || !dossierId}
               title={!client?.telegramChatId ? 'Client non lié à Telegram' : 'Envoyer au client via Telegram'}
               className="inline-flex items-center justify-center gap-1.5 text-xs font-bold px-3 py-2.5 rounded-xl text-white transition-all hover:translate-y-[-1px] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:translate-y-0 whitespace-nowrap"
               style={{ background: '#0088cc' }}
@@ -308,7 +322,7 @@ export default function ShareLinkPanel({ client, currentUserId, flash, ask }) {
           </div>
           {!client?.telegramChatId && (
             <p className="text-[10px] text-slate-400 leading-relaxed">
-              Le client doit envoyer <code className="text-[10px] font-mono bg-slate-100 px-1 py-0.5 rounded">/start</code> à @Expedilebot pour activer le partage Telegram.
+              Le client doit utiliser son invitation Telegram personnelle depuis son profil pour activer les notifications.
             </p>
           )}
         </div>

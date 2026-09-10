@@ -1,15 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
-  Ruler, Check, Clock, Camera, AlertTriangle, AlertCircle, Eye, X, RotateCcw, Send, Mail, Plus, Archive, Package,
+  Ruler, Check, Clock, AlertTriangle, Eye, X, RotateCcw, Send, Mail, Plus, Archive, Package,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { BRAND, STATUTS, TRANSITIONS, PRODUITS_INTERDITS, TAGS_PREPARATION, getDestByCP } from '../../constants';
-import { MSG_TEMPLATES } from '../../constants/templates';
-import { eur, calcTransport, getCatTaux, getPrenom } from '../../utils';
+import { BRAND, STATUTS, TRANSITIONS, TAGS_PREPARATION, getDestByCP } from '../../constants';
+import { eur } from '../../utils';
 import { Ligne } from '../ui';
 import WebcamCapture from '../ui/WebcamCapture';
+import StaffAssignment from './StaffAssignment';
+import FacturesPanel from '../detail/FacturesPanel';
+import ColisModal from '../ColisModal';
+import { receptionCartonManifest, receptionMeasurements } from '../../domain/reception';
 import * as sb from '../../lib/supabaseData';
-import { isTelegramConfigured, sendTelegram } from '../../services/telegramApi';
+import { calculateQuote, measureShipment, volumetricDivisor, quoteInputFingerprint } from '../../domain/quote';
 
 // ── Status border color helper ───────────────────────────────────────────────
 function statusBorderColor(statut) {
@@ -21,6 +24,7 @@ function statusBorderColor(statut) {
     refuse_client: '#EF4444',
     en_preparation: '#3B82F6',
     devis_envoye: '#D97706',
+    attente_paiement: '#D97706',
     paye: '#10B981',
     expedie: '#06B6D4',
     transit: '#0EA5E9',
@@ -33,40 +37,6 @@ function statusBorderColor(statut) {
   return map[statut] || BRAND.navy;
 }
 
-// ── Status template keys for quick messages ──────────────────────────────────
-function templatesForStatut(statut) {
-  const map = {
-    receptionne: ['reception', 'facture_manquante', 'libre'],
-    mesure: ['demande_feu_vert', 'facture_manquante', 'libre'],
-    attente_feu_vert: ['relance_feu_vert', 'demande_feu_vert', 'libre'],
-    autorise: ['feu_vert_recu', 'libre'],
-    en_preparation: ['libre'],
-    devis_envoye: ['devis_final', 'relance_paiement', 'libre'],
-    paye: ['expedie', 'libre'],
-    expedie: ['expedie', 'libre'],
-    transit: ['libre'],
-    arrive: ['arrive', 'libre'],
-    livraison: ['en_livraison', 'libre'],
-    livre: ['libre'],
-  };
-  return map[statut] || ['libre'];
-}
-
-// ── Template labels (short) ──────────────────────────────────────────────────
-const TEMPLATE_LABELS = {
-  reception: 'Réceptionné',
-  facture_manquante: 'Facture manquante',
-  demande_feu_vert: 'Feu vert',
-  relance_feu_vert: 'Relancer feu vert',
-  feu_vert_recu: 'Feu vert reçu',
-  devis_final: 'Devis final',
-  relance_paiement: 'Relancer paiement',
-  expedie: 'Expédié',
-  arrive: 'Arrivé',
-  en_livraison: 'En livraison',
-  libre: 'Message libre',
-};
-
 // ── Section block wrapper ────────────────────────────────────────────────────
 function Section({ title, icon: Icon, color, children }) {
   return (
@@ -74,7 +44,7 @@ function Section({ title, icon: Icon, color, children }) {
       <div className="px-4 pt-4 pb-3 border-b border-gray-100">
         <div className="flex items-center gap-2">
           {Icon && <Icon size={16} style={{ color: color || BRAND.navy }} />}
-          <span className="text-sm font-bold" style={{ color: BRAND.navy }}>{title}</span>
+          <span className="text-sm font-bold" style={{ color: 'var(--brand-text)' }}>{title}</span>
         </div>
       </div>
       <div className="p-4">{children}</div>
@@ -97,8 +67,9 @@ function Field({ label, type = 'text', value, onChange, onBlur, placeholder, min
           placeholder={placeholder}
           min={min}
           step={step}
-          className="w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-sm font-medium outline-none transition-all focus:border-blue-400"
-          style={{ color: BRAND.navy, paddingRight: unit ? '2.5rem' : undefined }}
+          aria-label={unit ? `${label} (${unit})` : label}
+          className="min-h-11 min-w-0 w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-sm font-medium outline-none transition-all focus:border-blue-400"
+          style={{ color: 'var(--brand-text)', paddingRight: unit ? '2.5rem' : undefined }}
         />
         {unit && (
           <span className="absolute right-3 text-xs text-gray-400 font-bold pointer-events-none">{unit}</span>
@@ -158,57 +129,6 @@ function BtnEmail({ onClick, children, disabled }) {
   );
 }
 
-// ── Dimension display row ────────────────────────────────────────────────────
-function DimsDisplay({ c }) {
-  const hasDims = c.dimL && c.dimW && c.dimH && c.poids;
-  if (!hasDims) return <p className="text-sm text-gray-400 italic">Dimensions non renseignées</p>;
-
-  // Multi-colis display
-  if (c.dimsParColis && c.dimsParColis.length > 1) {
-    const trackings = c.trackings?.filter((t) => t) || [];
-    let totalPoids = 0, totalPv = 0;
-    c.dimsParColis.forEach((d) => {
-      totalPoids += d.poids;
-      totalPv += (d.dimL * d.dimW * d.dimH) / 5000;
-    });
-    const totalPf = Math.max(totalPoids, totalPv);
-    return (
-      <div className="space-y-3">
-        {c.dimsParColis.map((d, i) => {
-          const pv = ((d.dimL * d.dimW * d.dimH) / 5000).toFixed(2);
-          return (
-            <div key={i} className="rounded-lg bg-gray-50 p-2.5 space-y-0.5 text-sm">
-              <p className="text-[10px] font-black uppercase tracking-wider text-gray-400 mb-1">
-                Colis {i + 1}{trackings[i] ? ` — ${trackings[i]}` : ''}
-              </p>
-              <Ligne label="Dimensions" value={`${d.dimL} × ${d.dimW} × ${d.dimH} cm`} />
-              <Ligne label="Poids" value={`${d.poids} kg`} />
-              <Ligne label="Vol." value={`${pv} kg`} />
-            </div>
-          );
-        })}
-        <div className="border-t border-gray-200 pt-2 space-y-0.5 text-sm">
-          <Ligne label="Poids total" value={`${totalPoids.toFixed(2)} kg`} />
-          <Ligne label="Poids vol. total" value={`${totalPv.toFixed(2)} kg`} />
-          <Ligne label="Poids facturable" value={`${totalPf.toFixed(2)} kg`} />
-        </div>
-      </div>
-    );
-  }
-
-  // Single colis display
-  const pv = ((c.dimL * c.dimW * c.dimH) / 5000).toFixed(2);
-  const pf = Math.max(c.poids, parseFloat(pv)).toFixed(2);
-  return (
-    <div className="space-y-0.5 text-sm">
-      <Ligne label="Dimensions" value={`${c.dimL} × ${c.dimW} × ${c.dimH} cm`} />
-      <Ligne label="Poids réel" value={`${c.poids} kg`} />
-      <Ligne label="Poids volumétrique" value={`${pv} kg`} />
-      <Ligne label="Poids facturable" value={`${pf} kg`} />
-    </div>
-  );
-}
-
 // ════════════════════════════════════════════════════════════════════════════
 // MAIN COMPONENT
 // ════════════════════════════════════════════════════════════════════════════
@@ -218,6 +138,8 @@ export default function StaffDetailView() {
     selClient: cl,
     selDest,
     isStaff,
+    auth,
+    teamUsers = [],
     clients,
     upd,
     ask,
@@ -229,32 +151,31 @@ export default function StaffDetailView() {
     desarchiverColis,
     demanderFeuVert,
     envoyerDevis,
+    confirmerDevis,
+    settings = {},
     sendMsg,
-    getPreview,
-    comLog,
     categories,
     getTarif,
     envois,
     payer,
-    setSelId,
     setData,
-    auth,
     can,
   } = useApp();
 
   // ── Local state ──────────────────────────────────────────────────────────
+  const [documentTab, setDocumentTab] = useState('articles');
   const [actionLoading, setActionLoading] = useState(false);
-  const [casierTmp, setCasierTmp] = useState('');
-  const [editCasier, setEditCasier] = useState(false);
+  const actionRef = useRef(false);
+  const [commentaire, setCommentaire] = useState(sel?.commentairePreparation || '');
+  const [newArticle, setNewArticle] = useState({ desc: '', qte: '1', prix: '', cat: '', factureId: '' });
   const [formErr, setFormErr] = useState('');
-  const [msgPanel, setMsgPanel] = useState(false);
-  const [selTemplate, setSelTemplate] = useState('libre');
-  const [msgPreview, setMsgPreview] = useState('');
-  const [sendCanal, setSendCanal] = useState(cl?.telegramChatId ? 'telegram' : 'email');
 
-  // Local measure form
-  const [dims, setDims] = useState({ dimL: '', dimW: '', dimH: '', poids: '' });
-  // Multi-colis measure form (one set per tracking)
+  // Reception measurements remain separate from the optimised final package.
+  const receptionVersion = useRef(null);
+  const receptionOwner = useRef(null);
+  const receptionDirty = useRef(false);
+  const [receptionConflict, setReceptionConflict] = useState(false);
+  // One set per physical carton, including cartons without a tracking number.
   const [multiDims, setMultiDims] = useState({});
   // Local fin dims form — initialized from existing sel values
   const [finDims, setFinDims] = useState({
@@ -264,16 +185,12 @@ export default function StaffDetailView() {
     finP: sel?.finP || '',
   });
   // Photo simulation
-  const [photoTaken, setPhotoTaken] = useState(false);
   // Produits interdits checklist
-  const [interdits, setInterdits] = useState([]);
   // Devis preview mode
   const [devisPrev, setDevisPrev] = useState(false);
+  const [savedInputs, setSavedInputs] = useState('');
   // Envoi assignment
   const [selEnvoi, setSelEnvoi] = useState(sel?.envoi || '');
-  // Add tracking
-  const [newTracking, setNewTracking] = useState('');
-  const [newFournisseur, setNewFournisseur] = useState('');
   // Tags préparation
   const [selTags, setSelTags] = useState(sel?.tagsPreparation || []);
   // Frais divers
@@ -281,7 +198,7 @@ export default function StaffDetailView() {
   const [newFraisLibelle, setNewFraisLibelle] = useState('');
   const [newFraisMontant, setNewFraisMontant] = useState('');
   // Pro payment method
-  const [proPayMethod, setProPayMethod] = useState(cl?.modePaiement || 'virement');
+  const [proPayMethod, setProPayMethod] = useState(sel?.modePaiementPro || cl?.methodePaiement || 'virement');
   // Add carton toggle
   const [showAddCarton, setShowAddCarton] = useState(false);
   // Corrections section
@@ -289,6 +206,9 @@ export default function StaffDetailView() {
 
   useEffect(() => {
     if (sel) {
+      setCommentaire(sel.commentairePreparation || '');
+      setNewArticle({ desc: '', qte: '1', prix: '', cat: '', factureId: '' });
+      setFormErr('');
       setFinDims({ finL: sel.finL || '', finW: sel.finW || '', finH: sel.finH || '', finP: sel.finP || '' });
       setSelEnvoi(sel.envoi || '');
       setSelTags(sel.tagsPreparation || []);
@@ -298,15 +218,38 @@ export default function StaffDetailView() {
       setShowCorrections(false);
       // Re-sync canal based on new client
       const newCl = clients.find((x) => x.id === sel.clientId);
-      setSendCanal(newCl?.telegramChatId ? 'telegram' : 'email');
-      setProPayMethod(newCl?.modePaiement || 'virement');
+      setProPayMethod(sel.modePaiementPro || newCl?.methodePaiement || 'virement');
     }
   }, [sel?.id]);
 
+  const receptionSignature = JSON.stringify([sel?.id, sel?.nbColis, sel?.trackings, sel?.trackingsDetail, sel?.dimsParColis, sel?.dimL, sel?.dimW, sel?.dimH, sel?.poids]);
+  useEffect(() => {
+    if (!sel) return;
+    if (receptionDirty.current && receptionOwner.current === sel.id) {
+      setReceptionConflict(true);
+      return;
+    }
+    const manifest = receptionCartonManifest(sel);
+    setMultiDims(Object.fromEntries(manifest.dimsParColis.map((box, index) => [index, box])));
+    receptionVersion.current = sel.updatedAt;
+    receptionOwner.current = sel.id;
+    receptionDirty.current = false;
+    setReceptionConflict(false);
+  }, [receptionSignature]);
+
   if (!sel || !isStaff) return null;
 
+  const assignee = teamUsers.find((user) => user.authId === sel.responsibleStaffId);
+  const assignmentLabel = sel.responsibleStaffId === auth?.u?.id ? 'vous' : assignee ? [assignee.prenom, assignee.nom].filter(Boolean).join(' ') : sel.responsibleStaffId ? 'dossier pris en charge' : 'non attribué';
   const dest = selDest || getDestByCP(cl?.cp);
-  const tarif = getTarif(dest?.code);
+  const tarif = getTarif(dest?.code, cl?.abonnement);
+  const divisor = volumetricDivisor(settings);
+  const runAction = async (action) => {
+    if (actionRef.current) return;
+    actionRef.current = true; setActionLoading(true); setFormErr('');
+    try { return await action(); } catch (error) { setFormErr(error.message || 'L’action n’a pas pu être enregistrée. Réessayez.'); return false; }
+    finally { actionRef.current = false; setActionLoading(false); }
+  };
   const borderColor = statusBorderColor(sel.statut);
 
   // ── Subscription status ──────────────────────────────────────────────────
@@ -315,70 +258,18 @@ export default function StaffDetailView() {
   const subJoursRestants = subFin ? Math.ceil((subFin - new Date()) / (1000 * 60 * 60 * 24)) : null;
   const subExpired = !isFreemium && subJoursRestants !== null && subJoursRestants <= 0;
   const subWarning = !isFreemium && subJoursRestants !== null && subJoursRestants > 0 && subJoursRestants <= 7;
-  const isAnnuel = cl?.abonnement === 'premium_annuel' || cl?.abonnement === 'vip';
-  const thisComLog = comLog.filter((l) => l.colisId === sel.id);
 
   // ── Missing invoice? ──────────────────────────────────────────────────────
   // missingFacture = true si AUCUNE facture n'est validée
   const hasAnyValidFacture = sel.factures && sel.factures.length > 0 && sel.factures.some((f) => f.valide);
-  const missingFacture = !hasAnyValidFacture;
-
-  // ── Computed dimensions ───────────────────────────────────────────────────
-  function calcDims(l, w, h, p) {
-    const L = parseFloat(l) || 0;
-    const W = parseFloat(w) || 0;
-    const H = parseFloat(h) || 0;
-    const P = parseFloat(p) || 0;
-    const pv = L && W && H ? (L * W * H) / 5000 : 0;
-    const pf = Math.max(P, pv);
-    const tr = pf > 0 ? calcTransport(pf, tarif) : 0;
-    return { pv: pv.toFixed(2), pf: pf.toFixed(2), tr: tr.toFixed(2) };
-  }
-
-  // ── Compute taxes from lignes + categories (CIF-based) ─────────────────────
-  function calcTaxes(pf) {
-    const tr = calcTransport(parseFloat(pf) || 0, tarif);
-    const lignes = sel.lignes || [];
-    const totalValeur = lignes.reduce((s, l) => s + (l.qte || 1) * (l.prix || 0), 0);
-    let om = 0;
-    let omr = 0;
-    lignes.forEach((l) => {
-      const cat = categories.find((c) => c.id === l.cat);
-      if (cat) {
-        const ct = getCatTaux(cat, dest.code);
-        const valeur = (l.qte || 1) * (l.prix || 0);
-        const transportShare = totalValeur > 0 ? tr * (valeur / totalValeur) : 0;
-        const cif = valeur + transportShare;
-        om += cif * (ct.om / 100);
-        omr += cif * (ct.omr / 100);
-      }
-    });
-    const ht = tr + om + omr;
-    const tva = ht * ((dest?.tva || 0) / 100);
-    const total = Math.round((ht + tva) * 100) / 100;
-    return { om, omr, tr, ht, tva, total };
-  }
-
-  // ── Handle template select ────────────────────────────────────────────────
-  function handleSelectTemplate(tpl) {
-    setSelTemplate(tpl);
-    const preview = getPreview(tpl, cl?.id, sel.id, sendCanal);
-    setMsgPreview(preview);
-  }
-
-  function handleSendMsg() {
-    if (!msgPreview.trim()) { flash('Le message est vide'); return; }
-    sendMsg(sel.id, cl?.id, sendCanal, selTemplate, msgPreview);
-    setMsgPanel(false);
-    setMsgPreview('');
-  }
+  const missingFacture = cl?.type !== 'pro' && !hasAnyValidFacture;
 
   // ── Revert / Cancel helpers ───────────────────────────────────────────────
   function handleRevert() {
     ask(
       'Retour à l\'étape précédente',
       'Cette action remet le colis à l\'étape précédente. Les données (dimensions, devis, etc.) sont conservées. Continuer ?',
-      () => revertStatut(sel.id),
+      () => runAction(() => revertStatut(sel.id)),
       { danger: true, okLabel: 'Oui, revenir en arrière' },
     );
   }
@@ -387,248 +278,53 @@ export default function StaffDetailView() {
     ask(
       'Annuler ce colis',
       `Voulez-vous vraiment annuler le colis ${sel.ref} ? Cette action est irréversible.`,
-      () => annulerColis(sel.id),
+      () => runAction(() => annulerColis(sel.id)),
       { danger: true, okLabel: 'Oui, annuler' },
     );
   }
 
-  // ── Add tracking (new carton to existing EXP) ────────────────────────────
-  const canAddTracking = sel.statut === 'receptionne' || sel.statut === 'mesure';
-
-  function handleAddTracking() {
-    const t = newTracking.trim().toUpperCase();
-    if (!t) { setFormErr('Saisissez un numéro de tracking'); return; }
-    const existing = sel.trackings?.filter((x) => x) || [];
-    if (existing.includes(t)) { setFormErr('Ce tracking est déjà rattaché'); return; }
-    setFormErr('');
-    const updated = [...existing, t];
-    const existingDetail = sel.trackingsDetail || [];
-    const updatedDetail = [...existingDetail, { number: t, fournisseur: newFournisseur.trim() }];
-    // Reset to receptionne since we have a new unmeasured carton
-    upd(sel.id, {
-      trackings: updated,
-      trackingsDetail: updatedDetail,
-      nbColis: updated.length,
-      // Reset dims since they need to be re-measured with the new carton
-      statut: 'receptionne',
-      dimL: null, dimW: null, dimH: null, poids: null,
-      dimsParColis: [],
-    });
-    setNewTracking('');
-    setNewFournisseur('');
-    flash(`Carton ajouté — ${sel.ref} a maintenant ${updated.length} colis`);
-  }
-
-  // ── Measure validation ────────────────────────────────────────────────────
-  function handleValiderMesures() {
-    const trackingsActive = sel.trackings?.filter((t) => t) || [];
-    const isMulti = trackingsActive.length > 1;
-
-    if (isMulti) {
-      for (let i = 0; i < trackingsActive.length; i++) {
-        const d = multiDims[i] || {};
-        if (!d.dimL || !d.dimW || !d.dimH || !d.poids) {
-          setFormErr(`Remplissez toutes les dimensions du colis ${i + 1} (${trackingsActive[i]}).`);
-          return;
-        }
-      }
-      setFormErr('');
-      const dimsParColis = trackingsActive.map((_, i) => {
-        const d = multiDims[i];
-        return { dimL: parseFloat(d.dimL), dimW: parseFloat(d.dimW), dimH: parseFloat(d.dimH), poids: parseFloat(d.poids) };
-      });
-      const totalPoids = dimsParColis.reduce((s, d) => s + d.poids, 0);
-      const maxL = Math.max(...dimsParColis.map((d) => d.dimL));
-      const maxW = Math.max(...dimsParColis.map((d) => d.dimW));
-      const maxH = Math.max(...dimsParColis.map((d) => d.dimH));
-      upd(sel.id, {
-        dimsParColis,
-        dimL: maxL, dimW: maxW, dimH: maxH,
-        poids: Math.round(totalPoids * 100) / 100,
-        statut: 'mesure',
-      });
-      flash(`Mesures enregistrées (${dimsParColis.length} colis)`);
-    } else {
-      const { dimL, dimW, dimH, poids } = dims;
-      if (!dimL || !dimW || !dimH || !poids) {
-        setFormErr('Veuillez remplir toutes les dimensions et le poids.');
-        return;
-      }
-      setFormErr('');
-      upd(sel.id, {
-        dimL: parseFloat(dimL),
-        dimW: parseFloat(dimW),
-        dimH: parseFloat(dimH),
-        poids: parseFloat(poids),
-        statut: 'mesure',
-      });
-      flash('Mesures enregistrées');
-    }
-  }
-
-  // ── Reception handler ─────────────────────────────────────────────────────
-  function handleReceptionner(withTelegram) {
-    if (!casierTmp.trim()) {
-      setFormErr('Le numéro de casier est obligatoire.');
+  // Every reception edit writes both the individual boxes and the aggregate summary.
+  async function handleValiderMesures() {
+    if (receptionConflict) { setFormErr('Les mesures enregistrées ont changé. Reprenez la version du dossier avant de poursuivre.'); return; }
+    const manifest = receptionCartonManifest(sel);
+    const lines = manifest.trackingsDetail.map((box, index) => ({ fournisseur: box.fournisseur || `Carton ${index + 1}`, tracking: box.number || '' }));
+    const measured = receptionMeasurements(lines, multiDims);
+    if (!measured) {
+      setFormErr('Renseignez les quatre mesures positives de chaque carton reçu.');
       return;
     }
-    setFormErr('');
-
-    const trackingsActive = sel.trackings?.filter((t) => t) || [];
-    const isMulti = trackingsActive.length > 1;
-
-    let hasDims = false;
-    const changes = {
-      casier: casierTmp.trim(),
-      photoReception: photoTaken,
-      checkInterdits: interdits,
-      dateReception: new Date().toISOString(),
-    };
-
-    if (isMulti) {
-      // Check if all multi-tracking dims are filled
-      const allFilled = trackingsActive.every((_, i) => {
-        const d = multiDims[i] || {};
-        return d.dimL && d.dimW && d.dimH && d.poids;
-      });
-      if (allFilled) {
-        hasDims = true;
-        const dimsParColis = trackingsActive.map((_, i) => {
-          const d = multiDims[i];
-          return { dimL: parseFloat(d.dimL), dimW: parseFloat(d.dimW), dimH: parseFloat(d.dimH), poids: parseFloat(d.poids) };
-        });
-        const totalPoids = dimsParColis.reduce((s, d) => s + d.poids, 0);
-        changes.dimsParColis = dimsParColis;
-        changes.dimL = Math.max(...dimsParColis.map((d) => d.dimL));
-        changes.dimW = Math.max(...dimsParColis.map((d) => d.dimW));
-        changes.dimH = Math.max(...dimsParColis.map((d) => d.dimH));
-        changes.poids = Math.round(totalPoids * 100) / 100;
-      }
-    } else if (dims.dimL && dims.dimW && dims.dimH && dims.poids) {
-      hasDims = true;
-      changes.dimL = parseFloat(dims.dimL);
-      changes.dimW = parseFloat(dims.dimW);
-      changes.dimH = parseFloat(dims.dimH);
-      changes.poids = parseFloat(dims.poids);
-    }
-
-    changes.statut = hasDims ? 'mesure' : 'receptionne';
-
-    upd(sel.id, changes);
-    flash(hasDims ? 'Réceptionné + mesuré' : 'Colis réceptionné');
-    if (withTelegram) {
-      sendMsg(sel.id, cl?.id, 'telegram', 'reception', null);
-    }
+    const saved = await upd(sel.id, { ...measured, statut: 'mesure' }, { expectedUpdatedAt: receptionVersion.current });
+    receptionVersion.current = saved.updatedAt;
+    receptionDirty.current = false;
+    setReceptionConflict(false);
+    setMultiDims(Object.fromEntries(saved.dimsParColis.map((box, index) => [index, box])));
+    flash(`Mesures de réception enregistrées (${manifest.nbColis} carton${manifest.nbColis > 1 ? 's' : ''}). Les mesures après optimisation seront saisies pendant la préparation.`);
   }
 
-  // ── Devis preview ─────────────────────────────────────────────────────────
-  const finPoids = parseFloat(finDims.finP) || sel.finP || 0;
-  const finL = parseFloat(finDims.finL) || sel.finL || 0;
-  const finW = parseFloat(finDims.finW) || sel.finW || 0;
-  const finH = parseFloat(finDims.finH) || sel.finH || 0;
-  const finPv = finL && finW && finH ? ((finL * finW * finH) / 5000).toFixed(2) : '0.00';
-  const finPf = Math.max(finPoids, parseFloat(finPv)).toFixed(2);
-  const devisCalc = calcTaxes(finPf);
+  // Preview and saved quote use exactly the same explicit input values.
+  const finalChanges = { finL: finDims.finL, finW: finDims.finW, finH: finDims.finH, finP: finDims.finP, fraisDivers, ...(cl?.type === 'pro' ? { modePaiementPro: proPayMethod } : {}) };
+  const quote = calculateQuote({ colis: { ...sel, ...finalChanges }, client: cl, destination: dest, tarif, categories, settings });
 
-  function handleEnvoyerDevis() {
-    // Persist fin dims first if filled locally
-    const changes = {};
-    if (finDims.finL) changes.finL = parseFloat(finDims.finL);
-    if (finDims.finW) changes.finW = parseFloat(finDims.finW);
-    if (finDims.finH) changes.finH = parseFloat(finDims.finH);
-    if (finDims.finP) changes.finP = parseFloat(finDims.finP);
-    if (Object.keys(changes).length) upd(sel.id, changes);
-
-    setTimeout(() => {
-      const success = envoyerDevis(sel.id);
-      if (success) {
-        setDevisPrev(true);
-      }
-      // Si envoyerDevis échoue (facture/articles manquants), le flash d'erreur est déjà affiché
-    }, 100);
+  async function handleEnvoyerDevis() {
+    if (!quote.ok) { setFormErr(quote.errors.map((error) => error.message).join(' ')); return false; }
+    const saved = await envoyerDevis(sel.id, finalChanges);
+    if (saved !== false && saved != null) { setSavedInputs(quoteInputFingerprint(quote.snapshot)); setDevisPrev(true); }
+    return saved;
   }
 
   async function handleConfirmDevisEnvoye() {
-    if (!sel.devisTotal || sel.devisTotal <= 0) {
-      flash({ msg: 'Le devis n\'a pas été calculé.', type: 'warning', duration: 5000 });
-      return;
-    }
-
-    const isPro = cl?.type === 'pro';
-    const canal = cl?.telegramChatId ? 'telegram' : 'email';
-
-    // Step 1: particulier → tenter de créer le lien PayPlug
-    let paymentUrl = sel.payplugPaymentUrl || null;
-    let paymentId = sel.payplugPaymentId || null;
-    let payplugFailed = false;
-
-    if (!isPro && !paymentUrl) {
-      try {
-        flash({ msg: 'Création du lien de paiement...', type: 'info' });
-        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://bqprktzehuhplpqjgjaz.supabase.co';
-        const edgeSecret = import.meta.env.VITE_EDGE_API_SECRET || '';
-        const res = await fetch(`${supabaseUrl}/functions/v1/payplug-create`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-api-secret': edgeSecret },
-          body: JSON.stringify({
-            colisId: sel.id,
-            amount: sel.devisTotal,
-            clientEmail: cl?.email || '',
-            clientName: cl?.nom || '',
-            colisRef: sel.ref,
-          }),
-        });
-        const payData = await res.json().catch(() => ({}));
-        if (payData.success && payData.paymentUrl) {
-          paymentUrl = payData.paymentUrl;
-          paymentId = payData.paymentId;
-          setData((prev) => prev.map((c) => c.id === sel.id
-            ? { ...c, payplugPaymentUrl: paymentUrl, payplugPaymentId: paymentId }
-            : c
-          ));
-        } else {
-          payplugFailed = true;
-          console.warn('[PayPlug] Creation failed:', payData);
-        }
-      } catch (err) {
-        payplugFailed = true;
-        console.error('[PayPlug] Error:', err.message);
-      }
-    }
-
-    // Step 2 : particulier sans lien → bloquer et laisser le staff choisir
-    if (!isPro && !paymentUrl) {
-      const reason = payplugFailed
-        ? 'La création du lien de paiement PayPlug a échoué (vérifiez la configuration ou les logs).'
-        : 'Aucun lien de paiement PayPlug n\'a été créé pour ce colis.';
-      ask(
-        'Devis sans lien de paiement',
-        `${reason}\n\nLe client recevra un devis avec "Contactez-nous pour le règlement" au lieu du bouton Payer. Envoyer quand même ?`,
-        () => proceedSendDevis(canal, null),
-        { danger: true, okLabel: 'Envoyer sans lien' },
-      );
-      return;
-    }
-
-    proceedSendDevis(canal, paymentUrl);
+    if (cl?.type === 'pro') await upd(sel.id, { modePaiementPro: proPayMethod });
+    const result = await confirmerDevis(sel.id, { canal: cl?.telegramChatId ? 'telegram' : 'email' });
+    if (result !== false) setDevisPrev(false);
+    return result;
   }
 
-  // Envoi effectif du devis : on construit le message localement pour éviter
-  // la race condition entre setData() et sendMsg() qui relisait l'état async.
-  function proceedSendDevis(canal, paymentUrl) {
-    const effectiveColis = paymentUrl
-      ? { ...sel, payplugPaymentUrl: paymentUrl }
-      : sel;
-    const tpl = MSG_TEMPLATES.devis_final;
-    const fullMsg = canal === 'telegram' ? tpl.telegram(cl, effectiveColis) : tpl.email(cl, effectiveColis);
-
-    // Bouton inline "Payer maintenant" (Telegram uniquement, si lien dispo)
-    const buttons = (canal === 'telegram' && paymentUrl)
-      ? [[{ text: '💳 Payer maintenant', url: paymentUrl }]]
-      : [];
-
-    changerStatut(sel.id, 'devis_envoye');
-    sendMsg(sel.id, cl?.id, canal, null, fullMsg, { buttons });
+  async function addArticle() {
+    const article = { ...newArticle, desc: newArticle.desc.trim(), qte: Number(newArticle.qte), prix: Number(newArticle.prix), factureId: newArticle.factureId || null };
+    if (!article.desc || !Number.isInteger(article.qte) || article.qte <= 0 || newArticle.prix === '' || !Number.isFinite(article.prix) || article.prix < 0 || !article.cat) throw new Error('Renseignez description, quantité entière positive, prix et catégorie.');
+    const saved = await sb.insertLigne(sel.id, article);
+    setData((previous) => previous.map((parcel) => parcel.id === sel.id ? { ...parcel, lignes: [...(parcel.lignes || []).filter((line) => line.id !== saved.id), saved] } : parcel));
+    setNewArticle({ desc: '', qte: '1', prix: '', cat: '', factureId: '' });
     setDevisPrev(false);
   }
 
@@ -645,172 +341,35 @@ export default function StaffDetailView() {
 
       // ── 1. RECEPTIONNE ─────────────────────────────────────────────────
       case 'receptionne': {
-        const trackingsActive = sel.trackings?.filter((t) => t) || [];
-        const isMulti = trackingsActive.length > 1;
-
-        if (isMulti) {
-          // Compute multi-colis summary
-          const allFilled = trackingsActive.every((_, i) => {
-            const d = multiDims[i] || {};
-            return d.dimL && d.dimW && d.dimH && d.poids;
-          });
-          let totalPoids = 0, totalPv = 0;
-          if (allFilled) {
-            trackingsActive.forEach((_, i) => {
-              const d = multiDims[i];
-              const L = parseFloat(d.dimL) || 0;
-              const W = parseFloat(d.dimW) || 0;
-              const H = parseFloat(d.dimH) || 0;
-              const P = parseFloat(d.poids) || 0;
-              totalPoids += P;
-              totalPv += (L * W * H) / 5000;
-            });
-          }
-          const totalPf = Math.max(totalPoids, totalPv);
-          const totalTr = totalPf > 0 ? calcTransport(totalPf, tarif) : 0;
-
-          return (
-            <Section title={`Mesurer les ${trackingsActive.length} colis`} icon={Ruler} color={borderColor}>
-              <div className="space-y-4">
-                {trackingsActive.map((tracking, idx) => {
-                  const d = multiDims[idx] || { dimL: '', dimW: '', dimH: '', poids: '' };
-                  const updateDim = (field, val) => setMultiDims((prev) => ({
-                    ...prev, [idx]: { ...prev[idx], dimL: '', dimW: '', dimH: '', poids: '', ...prev[idx], [field]: val },
-                  }));
-                  return (
-                    <div key={idx} className="rounded-xl border border-gray-200 p-3 space-y-3">
-                      <p className="text-xs font-black uppercase tracking-wider" style={{ color: BRAND.navy }}>
-                        Colis {idx + 1} — <span className="font-mono">{tracking}</span>
-                      </p>
-                      <div className="grid grid-cols-2 gap-3">
-                        <Field label="Longueur (cm)" type="number" min="0" step="0.5"
-                          value={d.dimL} onChange={(e) => updateDim('dimL', e.target.value)}
-                          placeholder="40" unit="cm" />
-                        <Field label="Largeur (cm)" type="number" min="0" step="0.5"
-                          value={d.dimW} onChange={(e) => updateDim('dimW', e.target.value)}
-                          placeholder="30" unit="cm" />
-                        <Field label="Hauteur (cm)" type="number" min="0" step="0.5"
-                          value={d.dimH} onChange={(e) => updateDim('dimH', e.target.value)}
-                          placeholder="20" unit="cm" />
-                        <Field label="Poids réel (kg)" type="number" min="0" step="0.1"
-                          value={d.poids} onChange={(e) => updateDim('poids', e.target.value)}
-                          placeholder="2.5" unit="kg" />
-                      </div>
-                    </div>
-                  );
-                })}
-
-                {allFilled && (
-                  <div className="p-3 rounded-xl bg-gray-50 border border-gray-200 space-y-0.5 text-sm">
-                    <Ligne label="Poids total" value={`${totalPoids.toFixed(2)} kg`} />
-                    <Ligne label="Poids vol. total" value={`${totalPv.toFixed(2)} kg`} />
-                    <Ligne label="Poids facturable" value={`${totalPf.toFixed(2)} kg`} />
-                    <Ligne label="Transport estimé" value={eur(totalTr)} />
-                  </div>
-                )}
-
-                {/* Ajouter un carton */}
-                <div className="pt-2 border-t border-gray-100">
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Ajouter un carton</p>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={newFournisseur}
-                      onChange={(e) => setNewFournisseur(e.target.value)}
-                      placeholder="Fournisseur"
-                      className="w-1/3 px-3 py-2 rounded-lg border border-gray-200 bg-gray-50 text-xs outline-none focus:border-blue-400 focus:bg-white transition-colors"
-                    />
-                    <input
-                      type="text"
-                      value={newTracking}
-                      onChange={(e) => setNewTracking(e.target.value)}
-                      placeholder="N° tracking"
-                      className="flex-1 px-3 py-2 rounded-lg border border-gray-200 bg-gray-50 text-xs outline-none focus:border-blue-400 focus:bg-white transition-colors"
-                    />
-                    <button
-                      onClick={handleAddTracking}
-                      className="flex items-center gap-1 px-3 py-2 rounded-lg text-xs font-bold transition-all active:scale-95"
-                      style={{ background: `${BRAND.navy}10`, color: BRAND.navy }}
-                    >
-                      <Plus size={13} />
-                      Ajouter
-                    </button>
-                  </div>
-                </div>
-
-                {formErr && <p className="text-xs text-red-500 font-medium">{formErr}</p>}
-
-                <BtnPrimary onClick={() => { if (actionLoading) return; setActionLoading(true); try { handleValiderMesures(); } finally { setTimeout(() => setActionLoading(false), 1000); } }} disabled={actionLoading || !can('perm_colis_mesurer')}>
-                  <Check size={15} />
-                  {actionLoading ? 'Validation...' : `Valider les mesures (${trackingsActive.length} colis)`}
-                </BtnPrimary>
-              </div>
-            </Section>
-          );
-        }
-
-        // Single tracking — existing form
-        const { pv, pf, tr } = calcDims(dims.dimL, dims.dimW, dims.dimH, dims.poids);
-        return (
-          <Section title="Mesurer ce colis" icon={Ruler} color={borderColor}>
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                <Field label="Longueur (cm)" type="number" min="0" step="0.5"
-                  value={dims.dimL} onChange={(e) => setDims({ ...dims, dimL: e.target.value })}
-                  placeholder="40" unit="cm" />
-                <Field label="Largeur (cm)" type="number" min="0" step="0.5"
-                  value={dims.dimW} onChange={(e) => setDims({ ...dims, dimW: e.target.value })}
-                  placeholder="30" unit="cm" />
-                <Field label="Hauteur (cm)" type="number" min="0" step="0.5"
-                  value={dims.dimH} onChange={(e) => setDims({ ...dims, dimH: e.target.value })}
-                  placeholder="20" unit="cm" />
-                <Field label="Poids réel (kg)" type="number" min="0" step="0.1"
-                  value={dims.poids} onChange={(e) => setDims({ ...dims, poids: e.target.value })}
-                  placeholder="2.5" unit="kg" />
-              </div>
-
-              {(dims.dimL || dims.dimW || dims.dimH || dims.poids) && (
-                <div className="p-3 rounded-xl bg-gray-50 border border-gray-200 space-y-0.5 text-sm">
-                  <Ligne label="Poids volumétrique" value={`${pv} kg`} />
-                  <Ligne label="Poids facturable" value={`${pf} kg`} />
-                  <Ligne label="Transport estimé" value={eur(parseFloat(tr))} />
-                </div>
-              )}
-
-              {/* Ajouter un carton */}
-              <div className="pt-2 border-t border-gray-100">
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Ajouter un carton à ce colis</p>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={newTracking}
-                    onChange={(e) => setNewTracking(e.target.value)}
-                    placeholder="N° tracking du nouveau carton"
-                    className="flex-1 px-3 py-2 rounded-lg border border-gray-200 bg-gray-50 text-xs outline-none focus:border-blue-400 focus:bg-white transition-colors"
-                  />
-                  <button
-                    onClick={handleAddTracking}
-                    className="flex items-center gap-1 px-3 py-2 rounded-lg text-xs font-bold transition-all active:scale-95"
-                    style={{ background: `${BRAND.navy}10`, color: BRAND.navy }}
-                  >
-                    <Plus size={13} />
-                    Ajouter
-                  </button>
-                </div>
-              </div>
-
-              {formErr && <p className="text-xs text-red-500 font-medium">{formErr}</p>}
-
-              <BtnPrimary onClick={() => { if (actionLoading) return; setActionLoading(true); try { handleValiderMesures(); } finally { setTimeout(() => setActionLoading(false), 1000); } }} disabled={actionLoading || !can('perm_colis_mesurer')}>
-                <Check size={15} />
-                {actionLoading ? 'Validation...' : 'Valider les mesures'}
-              </BtnPrimary>
-            </div>
-          </Section>
-        );
+        const manifest = receptionCartonManifest(sel);
+        const boxes = manifest.dimsParColis.map((_, index) => multiDims[index] || {});
+        const weights = measureShipment(boxes, divisor);
+        const validTariff = tarif && [tarif.base, tarif.parKg].every(value => value !== '' && value != null && Number.isFinite(Number(value)) && Number(value) >= 0);
+        const transport = weights && validTariff ? Number(tarif.base) + weights.billableWeight * Number(tarif.parKg) : null;
+        return <Section title={`Mesures de réception · ${manifest.nbColis} carton${manifest.nbColis > 1 ? 's' : ''}`} icon={Ruler} color={borderColor}>
+          <div className="space-y-4">
+            <p className="text-sm text-gray-600">Mesurez chaque carton tel qu’il est reçu. Après optimisation de l’emballage, de nouvelles dimensions et un nouveau poids seront saisis pour établir le devis.</p>
+            {receptionConflict && <div role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">Un carton ou ses mesures ont été modifiés depuis votre saisie. Vos valeurs saisies restent affichées.<button type="button" className="min-h-11 block font-semibold underline" onClick={() => { setMultiDims(Object.fromEntries(manifest.dimsParColis.map((box, index) => [index, box]))); receptionVersion.current = sel.updatedAt; receptionDirty.current = false; setReceptionConflict(false); setFormErr(''); }}>Reprendre les mesures enregistrées</button></div>}
+            {manifest.trackingsDetail.map((carton, index) => {
+              const box = multiDims[index] || {};
+              return <fieldset key={index} className="rounded-xl border border-gray-200 p-3 space-y-3">
+                <legend className="px-1 text-sm font-semibold brand-t">Carton {index + 1}{carton.fournisseur ? ` · ${carton.fournisseur}` : ''}{carton.number ? ` · ${carton.number}` : ' · Sans numéro de suivi'}</legend>
+                <div className="grid grid-cols-2 gap-3">{[['dimL', 'Longueur', 'cm'], ['dimW', 'Largeur', 'cm'], ['dimH', 'Hauteur', 'cm'], ['poids', 'Poids réel', 'kg']].map(([key, label, unit]) => <Field key={key} label={`${label} · carton ${index + 1}`} type="number" min="0.01" step="0.01" unit={unit} value={box[key] ?? ''} onChange={event => { receptionDirty.current = true; setMultiDims(previous => ({ ...previous, [index]: { ...previous[index], [key]: event.target.value } })); }} />)}</div>
+              </fieldset>;
+            })}
+            {weights && <div className="p-3 rounded-xl bg-gray-50 border border-gray-200 space-y-1 text-sm">
+              <Ligne label="Poids réel total à réception" value={`${weights.realWeight.toFixed(2)} kg`} />
+              <Ligne label="Poids volumétrique total à réception" value={`${weights.volumetricWeight.toFixed(2)} kg`} />
+              <Ligne label="Poids facturable avant optimisation" value={`${weights.billableWeight.toFixed(2)} kg`} />
+              {transport != null ? <Ligne label="Transport avant optimisation, hors taxes et frais" value={eur(transport)} /> : <p className="text-sm text-amber-700">Tarif de destination à renseigner avant toute estimation.</p>}
+              <p className="pt-1 text-xs text-gray-500">Ce montant ne constitue pas le devis final : celui-ci utilisera les mesures après optimisation et les documents vérifiés.</p>
+            </div>}
+            <BtnPrimary onClick={() => runAction(handleValiderMesures)} disabled={actionLoading || receptionConflict || !can('perm_colis_mesurer')}><Check size={15} />{actionLoading ? 'Enregistrement…' : 'Enregistrer les mesures de réception'}</BtnPrimary>
+          </div>
+        </Section>;
       }
 
-      // ── 3. MESURE ──────────────────────────────────────────────────────
+      // ── MEASURED AT RECEPTION: request explicit preparation consent ───────
       case 'mesure': {
         return (
           <Section title="Demander le feu vert" icon={Clock} color={borderColor}>
@@ -818,28 +377,14 @@ export default function StaffDetailView() {
               {/* Action principale : 2 boutons côte à côte */}
               <div className="flex gap-2">
                 <BtnTelegram
-                  disabled={actionLoading || !can('perm_colis_demander_feuvert')}
-                  onClick={() => {
-                    if (actionLoading) return;
-                    setActionLoading(true);
-                    try {
-                      demanderFeuVert(sel.id);
-                      setTimeout(() => sendMsg(sel.id, cl?.id, 'telegram', 'demande_feu_vert', null), 200);
-                    } finally { setTimeout(() => setActionLoading(false), 1000); }
-                  }}
+                  disabled={actionLoading || !cl?.telegramChatId || !can('perm_colis_demander_feuvert')}
+                  onClick={() => runAction(async () => { await demanderFeuVert(sel.id); await sendMsg(sel.id, cl?.id, 'telegram', 'demande_feu_vert', null); })}
                 >
                   {actionLoading ? 'Envoi...' : 'Telegram'}
                 </BtnTelegram>
                 <BtnEmail
-                  disabled={actionLoading || !can('perm_colis_demander_feuvert')}
-                  onClick={() => {
-                    if (actionLoading) return;
-                    setActionLoading(true);
-                    try {
-                      demanderFeuVert(sel.id);
-                      setTimeout(() => sendMsg(sel.id, cl?.id, 'email', 'demande_feu_vert', null), 200);
-                    } finally { setTimeout(() => setActionLoading(false), 1000); }
-                  }}
+                  disabled={actionLoading || !cl?.email || !can('perm_colis_demander_feuvert')}
+                  onClick={() => runAction(async () => { await demanderFeuVert(sel.id); await sendMsg(sel.id, cl?.id, 'email', 'demande_feu_vert', null); })}
                 >
                   {actionLoading ? 'Envoi...' : 'Email'}
                 </BtnEmail>
@@ -851,7 +396,7 @@ export default function StaffDetailView() {
                   <AlertTriangle size={12} className="text-amber-500 flex-shrink-0" />
                   <p className="text-[10px] font-semibold text-amber-700 flex-1">Facture manquante</p>
                   <button
-                    onClick={() => sendMsg(sel.id, cl?.id, cl?.telegramChatId ? 'telegram' : 'email', 'facture_manquante', null)}
+                    onClick={() => runAction(() => sendMsg(sel.id, cl?.id, cl?.telegramChatId ? 'telegram' : 'email', 'facture_manquante', null))}
                     className="text-[10px] font-bold px-2 py-1 rounded bg-amber-200 text-amber-800 hover:bg-amber-300 transition-all active:scale-95"
                   >
                     Demander
@@ -859,22 +404,6 @@ export default function StaffDetailView() {
                 </div>
               )}
 
-              {/* Ajouter carton — collapsé */}
-              <button
-                onClick={() => setShowAddCarton((p) => !p)}
-                className="flex items-center gap-1 text-[10px] text-gray-400 hover:text-gray-600 transition-colors"
-              >
-                <Plus size={10} />
-                {showAddCarton ? 'Masquer' : 'Ajouter un carton'}
-              </button>
-              {showAddCarton && (
-                <div className="flex gap-2">
-                  <input type="text" value={newTracking} onChange={(e) => setNewTracking(e.target.value)}
-                    placeholder="N° tracking" className="flex-1 px-2 py-1.5 rounded-lg border border-gray-200 bg-gray-50 text-xs outline-none focus:border-blue-400" />
-                  <button onClick={handleAddTracking}
-                    className="px-2 py-1.5 rounded-lg text-xs font-bold" style={{ background: `${BRAND.navy}10`, color: BRAND.navy }}>+ Ajouter</button>
-                </div>
-              )}
             </div>
           </Section>
         );
@@ -888,18 +417,18 @@ export default function StaffDetailView() {
               <div className="flex items-center gap-2 p-2 rounded-lg bg-orange-50 border border-orange-200">
                 <Clock size={12} className="text-orange-500 flex-shrink-0" />
                 <p className="text-[10px] font-medium text-orange-700">
-                  Réponse attendue de {getPrenom(cl) || '—'}
+                  Réponse attendue de {cl?.prenom || cl?.nom || 'votre client'}
                 </p>
               </div>
 
               {/* Relancer — 2 boutons côte à côte */}
               <div className="flex gap-2">
-                <BtnTelegram disabled={actionLoading}
-                  onClick={() => { if (actionLoading) return; setActionLoading(true); try { sendMsg(sel.id, cl?.id, 'telegram', 'relance_feu_vert', null); } finally { setTimeout(() => setActionLoading(false), 1000); } }}>
+                <BtnTelegram disabled={actionLoading || !cl?.telegramChatId}
+                  onClick={() => runAction(() => sendMsg(sel.id, cl?.id, 'telegram', 'relance_feu_vert', null))}>
                   {actionLoading ? 'Envoi...' : 'Relancer Telegram'}
                 </BtnTelegram>
-                <BtnEmail disabled={actionLoading}
-                  onClick={() => { if (actionLoading) return; setActionLoading(true); try { sendMsg(sel.id, cl?.id, 'email', 'relance_feu_vert', null); } finally { setTimeout(() => setActionLoading(false), 1000); } }}>
+                <BtnEmail disabled={actionLoading || !cl?.email}
+                  onClick={() => runAction(() => sendMsg(sel.id, cl?.id, 'email', 'relance_feu_vert', null))}>
                   {actionLoading ? 'Envoi...' : 'Relancer email'}
                 </BtnEmail>
               </div>
@@ -910,7 +439,7 @@ export default function StaffDetailView() {
                   <AlertTriangle size={12} className="text-amber-500 flex-shrink-0" />
                   <p className="text-[10px] font-semibold text-amber-700 flex-1">Facture manquante</p>
                   <button
-                    onClick={() => sendMsg(sel.id, cl?.id, cl?.telegramChatId ? 'telegram' : 'email', 'facture_manquante', null)}
+                    onClick={() => runAction(() => sendMsg(sel.id, cl?.id, cl?.telegramChatId ? 'telegram' : 'email', 'facture_manquante', null))}
                     className="text-[10px] font-bold px-2 py-1 rounded bg-amber-200 text-amber-800 hover:bg-amber-300 transition-all active:scale-95"
                   >
                     Demander
@@ -953,7 +482,7 @@ export default function StaffDetailView() {
               )}
 
               <BtnPrimary
-                onClick={() => { if (actionLoading) return; setActionLoading(true); try { changerStatut(sel.id, 'en_preparation'); } finally { setTimeout(() => setActionLoading(false), 1000); } }}
+                onClick={() => runAction(() => changerStatut(sel.id, 'en_preparation'))}
                 disabled={actionLoading || subExpired || !can('perm_colis_preparer')} color="#2563EB">
                 <Check size={15} />
                 {actionLoading ? 'En cours...' : 'Commencer la préparation'}
@@ -965,491 +494,73 @@ export default function StaffDetailView() {
 
       // ── 6. EN_PREPARATION ─────────────────────────────────────────────
       case 'en_preparation': {
-        const usedFinL = parseFloat(finDims.finL) || sel.finL || 0;
-        const usedFinW = parseFloat(finDims.finW) || sel.finW || 0;
-        const usedFinH = parseFloat(finDims.finH) || sel.finH || 0;
-        const usedFinP = parseFloat(finDims.finP) || sel.finP || 0;
-
-        const fPv = usedFinL && usedFinW && usedFinH ? ((usedFinL * usedFinW * usedFinH) / 5000) : 0;
-        const fPf = Math.max(usedFinP, fPv);
-
-        // Avant optim (supporte multi-colis)
-        const avPv = sel.dimsParColis && sel.dimsParColis.length > 1
-          ? sel.dimsParColis.reduce((s, d) => s + (d.dimL * d.dimW * d.dimH) / 5000, 0)
-          : sel.dimL && sel.dimW && sel.dimH ? ((sel.dimL * sel.dimW * sel.dimH) / 5000) : 0;
-        const avPf = Math.max(sel.poids || 0, avPv);
-        const avTr = avPf > 0 ? calcTransport(avPf, tarif) : 0;
-        const apTr = fPf > 0 ? calcTransport(fPf, tarif) : 0;
-
-        const canPreview = usedFinL > 0 && usedFinW > 0 && usedFinH > 0 && usedFinP > 0;
-        const hasValidFacture = sel.factures && sel.factures.length > 0 && sel.factures.some((f) => f.valide);
-        const hasLignes = sel.lignes && sel.lignes.length > 0;
-        const canSendDevis = canPreview && hasValidFacture && hasLignes;
-
-        return (
-          <div className="space-y-4">
-            {sel.devisTotal > 0 && sel.statut === 'en_preparation' && (
-              <div className="p-3 rounded-xl bg-amber-50 border border-amber-300 flex items-start gap-2">
-                <AlertCircle size={14} className="text-amber-600 flex-shrink-0 mt-0.5" />
-                <p className="text-xs font-bold text-amber-800">
-                  Devis calculé mais non envoyé au client.
-                </p>
-              </div>
-            )}
-            {missingFacture && (
-              <div className="p-3 rounded-xl bg-red-50 border border-red-300 space-y-2.5">
-                <div className="flex items-start gap-2">
-                  <X size={14} className="text-red-600 flex-shrink-0 mt-0.5" />
-                  <div>
-                    <p className="text-xs font-bold text-red-800">
-                      Facture d'achat non validée
-                    </p>
-                    <p className="text-[10px] text-red-600 mt-0.5">
-                      Le devis ne peut pas être envoyé sans facture validée. Les taxes (OM/OMR) sont calculées sur la valeur des articles.
-                    </p>
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  {cl?.telegramChatId ? (
-                    <button
-                      onClick={() => sendMsg(sel.id, cl?.id, 'telegram', 'facture_manquante', null)}
-                      className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-[11px] font-bold text-white transition-all active:scale-95"
-                      style={{ background: '#0088cc' }}
-                    >
-                      <Send size={11} />
-                      Demander par Telegram
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => sendMsg(sel.id, cl?.id, 'email', 'facture_manquante', null)}
-                      className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-[11px] font-bold text-white transition-all active:scale-95"
-                      style={{ background: BRAND.navy }}
-                    >
-                      <Mail size={11} />
-                      Demander par email
-                    </button>
-                  )}
-                  {cl?.telegramChatId && (
-                    <button
-                      onClick={() => sendMsg(sel.id, cl?.id, 'email', 'facture_manquante', null)}
-                      className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-[11px] font-bold transition-all active:scale-95"
-                      style={{ background: `${BRAND.navy}10`, color: BRAND.navy }}
-                    >
-                      <Mail size={11} />
-                      Email
-                    </button>
-                  )}
-                </div>
-              </div>
-            )}
-            {/* Tags de préparation */}
-            <div className="space-y-2">
-              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Tags de préparation</p>
-              <div className="flex flex-wrap gap-1.5">
-                {TAGS_PREPARATION.map((tag) => {
-                  const active = selTags.includes(tag);
-                  return (
-                    <button
-                      key={tag}
-                      onClick={() => {
-                        const next = active ? selTags.filter(t => t !== tag) : [...selTags, tag];
-                        setSelTags(next);
-                        upd(sel.id, { tagsPreparation: next });
-                      }}
-                      className={`px-2.5 py-1 rounded-full text-[11px] font-bold transition-all ${
-                        active ? 'text-white' : 'bg-gray-100 text-gray-600'
-                      }`}
-                      style={active ? { background: BRAND.navy } : {}}
-                    >
-                      {tag}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Commentaire de préparation */}
-            <div className="space-y-1">
-              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Commentaire de préparation</p>
-              <textarea
-                value={sel.commentairePreparation || ''}
-                onChange={(e) => upd(sel.id, { commentairePreparation: e.target.value })}
-                placeholder="Spécificités pour ce colis (visible sur le bon de préparation)..."
-                rows={2}
-                className="w-full px-3 py-2 rounded-xl border border-gray-200 bg-gray-50 text-xs outline-none resize-none focus:border-blue-400 focus:bg-white transition-colors"
-              />
-            </div>
-
-            {/* Dimensions finales */}
-            <Section title="Dimensions après optimisation" icon={Ruler} color={borderColor}>
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-3">
-                  <Field label="Long. finale (cm)" type="number" min="0" step="0.5"
-                    value={finDims.finL}
-                    onChange={(e) => setFinDims({ ...finDims, finL: e.target.value })}
-                    onBlur={(e) => { const v = parseFloat(e.target.value); if (v > 0) upd(sel.id, { finL: v }); }}
-                    placeholder={sel.finL || '38'} unit="cm" />
-                  <Field label="Larg. finale (cm)" type="number" min="0" step="0.5"
-                    value={finDims.finW}
-                    onChange={(e) => setFinDims({ ...finDims, finW: e.target.value })}
-                    onBlur={(e) => { const v = parseFloat(e.target.value); if (v > 0) upd(sel.id, { finW: v }); }}
-                    placeholder={sel.finW || '28'} unit="cm" />
-                  <Field label="Haut. finale (cm)" type="number" min="0" step="0.5"
-                    value={finDims.finH}
-                    onChange={(e) => setFinDims({ ...finDims, finH: e.target.value })}
-                    onBlur={(e) => { const v = parseFloat(e.target.value); if (v > 0) upd(sel.id, { finH: v }); }}
-                    placeholder={sel.finH || '18'} unit="cm" />
-                  <Field label="Poids final (kg)" type="number" min="0" step="0.1"
-                    value={finDims.finP}
-                    onChange={(e) => setFinDims({ ...finDims, finP: e.target.value })}
-                    onBlur={(e) => { const v = parseFloat(e.target.value); if (v > 0) upd(sel.id, { finP: v }); }}
-                    placeholder={sel.finP || '2.0'} unit="kg" />
-                </div>
-
-                {fPf > 0 && (
-                  <div className="p-3 rounded-xl bg-blue-50 border border-blue-200 space-y-0.5 text-sm">
-                    <Ligne label="Poids volumétrique" value={`${fPv.toFixed(2)} kg`} />
-                    <Ligne label="Poids facturable" value={`${fPf.toFixed(2)} kg`} />
-                  </div>
-                )}
-
-                {/* Comparaison avant/après */}
-                {avTr > 0 && apTr > 0 && (
-                  <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200">
-                    <p className="text-xs font-bold text-emerald-700 mb-2">Comparaison optimisation</p>
-                    <div className="space-y-0.5 text-sm">
-                      <Ligne label="Transport avant" value={eur(avTr)} />
-                      <Ligne label="Transport après" value={eur(apTr)} />
-                      {avTr > apTr && (
-                        <Ligne
-                          label="Économie client"
-                          value={<span className="text-emerald-600 font-black">{eur(avTr - apTr)}</span>}
-                        />
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </Section>
-
-            {/* Catégorisation produits + ajout articles */}
-            <Section title="Articles pour calcul taxes" icon={Check} color={borderColor}>
-              <div className="space-y-3">
-                {/* Existing lignes */}
-                {(sel.lignes || []).map((ligne) => (
-                  <div key={ligne.id} className="p-3 rounded-xl bg-gray-50 border border-gray-200">
-                    <div className="flex items-start justify-between gap-2 mb-2">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-800">{ligne.desc}</p>
-                        <p className="text-xs text-gray-500">{ligne.qte} × {eur(ligne.prix)}</p>
-                      </div>
-                      <button
-                        onClick={() => {
-                          setData((prev) => prev.map((c) => c.id === sel.id ? { ...c, lignes: (c.lignes || []).filter((l) => l.id !== ligne.id) } : c));
-                          sb.deleteLigne(ligne.id).catch((err) => flash({ msg: 'Erreur suppression article', type: 'warning' }));
-                        }}
-                        className="text-gray-300 hover:text-red-500 flex-shrink-0"
-                      >
-                        <X size={12} />
-                      </button>
-                    </div>
-                    <select
-                      value={ligne.cat || ''}
-                      onChange={(e) => {
-                        const newCat = e.target.value;
-                        setData((prev) => prev.map((c) => c.id === sel.id ? { ...c, lignes: (c.lignes || []).map((l) => l.id === ligne.id ? { ...l, cat: newCat } : l) } : c));
-                        sb.updateLigne(ligne.id, { cat: newCat }).catch(() => flash({ msg: 'Erreur sauvegarde catégorie', type: 'warning' }));
-                      }}
-                      className="w-full px-3 py-1.5 rounded-lg border-2 border-gray-200 text-sm outline-none"
-                      style={{ color: BRAND.navy }}
-                    >
-                      <option value="">— Choisir une catégorie —</option>
-                      {categories.map((cat) => (
-                        <option key={cat.id} value={cat.id}>{cat.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                ))}
-
-                {/* Quick-add from factures */}
-                {sel.factures?.length > 0 && (!sel.lignes || sel.lignes.length === 0) && (
-                  <div className="p-3 rounded-xl border-2 border-dashed border-amber-300 bg-amber-50">
-                    <p className="text-xs font-bold text-amber-800 mb-2">Importer depuis les factures</p>
-                    <div className="space-y-1.5">
-                      {sel.factures.filter((f) => f.valide).map((f) => (
-                        <button
-                          key={f.id}
-                          onClick={async () => {
-                            try {
-                              const saved = await sb.insertLigne(sel.id, { desc: f.vendeur || 'Article', qte: 1, prix: f.montant || 0, cat: '' });
-                              setData((prev) => prev.map((c) => c.id === sel.id ? { ...c, lignes: [...(c.lignes || []), saved] } : c));
-                              flash(`Article "${f.vendeur}" ajouté — sélectionnez sa catégorie`);
-                              sb.insertAuditAction(sel.id, auth?.u?.nom || 'Staff', 'Article ajouté (import facture)', `${f.vendeur} — ${f.montant || 0} €`).catch(() => {});
-                            } catch (err) {
-                              flash({ msg: 'Erreur ajout article', type: 'warning' });
-                            }
-                          }}
-                          className="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-white border border-amber-200 hover:bg-amber-100 transition-colors text-left active:scale-[0.98]"
-                        >
-                          <span className="text-xs font-semibold text-gray-700">{f.vendeur} — {eur(f.montant)}</span>
-                          <span className="text-[10px] font-bold text-amber-700">+ Importer</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Add article manually */}
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    placeholder="Description article"
-                    id="new-ligne-desc"
-                    className="flex-1 px-3 py-2 rounded-lg border border-gray-200 bg-gray-50 text-xs outline-none focus:border-blue-400"
-                  />
-                  <input
-                    type="number"
-                    placeholder="Qté"
-                    id="new-ligne-qte"
-                    defaultValue="1"
-                    className="w-14 px-2 py-2 rounded-lg border border-gray-200 bg-gray-50 text-xs outline-none focus:border-blue-400 text-center"
-                  />
-                  <input
-                    type="number"
-                    placeholder="Prix €"
-                    id="new-ligne-prix"
-                    className="w-20 px-2 py-2 rounded-lg border border-gray-200 bg-gray-50 text-xs outline-none focus:border-blue-400 text-right"
-                  />
-                  <button
-                    onClick={async () => {
-                      const desc = document.getElementById('new-ligne-desc')?.value?.trim();
-                      const qte = parseInt(document.getElementById('new-ligne-qte')?.value) || 1;
-                      const prix = parseFloat(document.getElementById('new-ligne-prix')?.value) || 0;
-                      if (!desc) return;
-                      try {
-                        const saved = await sb.insertLigne(sel.id, { desc, qte, prix, cat: '' });
-                        setData((prev) => prev.map((c) => c.id === sel.id ? { ...c, lignes: [...(c.lignes || []), saved] } : c));
-                      } catch { flash({ msg: 'Erreur ajout article', type: 'warning' }); return; }
-                      document.getElementById('new-ligne-desc').value = '';
-                      document.getElementById('new-ligne-prix').value = '';
-                      document.getElementById('new-ligne-qte').value = '1';
-                      flash('Article ajouté — sélectionnez sa catégorie');
-                      sb.insertAuditAction(sel.id, auth?.u?.nom || 'Staff', 'Article ajouté', `${desc} — ${qte}× ${prix}€`).catch(() => {});
-                    }}
-                    className="px-3 py-2 rounded-lg text-xs font-bold"
-                    style={{ background: `${BRAND.navy}10`, color: BRAND.navy }}
-                  >
-                    + Ajouter
-                  </button>
-                </div>
-
-                {(!sel.lignes || sel.lignes.length === 0) && (
-                  <p className="text-[10px] text-orange-500 text-center">
-                    Ajoutez les articles et leur catégorie pour calculer les taxes (OM/OMR)
-                  </p>
-                )}
-              </div>
-            </Section>
-
-            {/* Frais divers */}
-            <div className="space-y-2">
-              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Frais divers</p>
-
-              {/* Existing frais */}
-              {fraisDivers.map((f, i) => (
-                <div key={i} className="flex items-center gap-2 text-xs">
-                  <span className="flex-1 text-gray-700">{f.libelle}</span>
-                  <span className="font-bold" style={{ color: BRAND.navy }}>{f.montant.toFixed(2)} &euro;</span>
-                  <button
-                    onClick={() => {
-                      const next = fraisDivers.filter((_, j) => j !== i);
-                      setFraisDivers(next);
-                      upd(sel.id, { fraisDivers: next });
-                    }}
-                    className="text-gray-300 hover:text-red-500"
-                  >
-                    <X size={12} />
-                  </button>
-                </div>
-              ))}
-
-              {/* Add new */}
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={newFraisLibelle}
-                  onChange={(e) => setNewFraisLibelle(e.target.value)}
-                  placeholder="Libellé (enlèvement, douane...)"
-                  className="flex-1 px-2 py-1.5 rounded-lg border border-gray-200 bg-gray-50 text-xs outline-none focus:border-blue-400"
-                />
-                <input
-                  type="number"
-                  value={newFraisMontant}
-                  onChange={(e) => setNewFraisMontant(e.target.value)}
-                  placeholder="€"
-                  className="w-20 px-2 py-1.5 rounded-lg border border-gray-200 bg-gray-50 text-xs outline-none focus:border-blue-400 text-right"
-                />
-                <button
-                  onClick={() => {
-                    if (!newFraisLibelle.trim() || !newFraisMontant) return;
-                    const next = [...fraisDivers, { libelle: newFraisLibelle.trim(), montant: parseFloat(newFraisMontant) || 0 }];
-                    setFraisDivers(next);
-                    upd(sel.id, { fraisDivers: next });
-                    setNewFraisLibelle('');
-                    setNewFraisMontant('');
-                  }}
-                  className="px-2 py-1.5 rounded-lg text-xs font-bold"
-                  style={{ background: `${BRAND.navy}10`, color: BRAND.navy }}
-                >
-                  + Ajouter
-                </button>
-              </div>
-            </div>
-
-            {/* Subscription block */}
-            {subExpired && (
-              <div className="flex items-start gap-2 p-3 rounded-xl bg-red-50 border border-red-300">
-                <AlertTriangle size={14} className="text-red-600 flex-shrink-0 mt-0.5" />
-                <p className="text-xs font-bold text-red-800">
-                  Abonnement expiré — impossible d'envoyer le devis.
-                  {isAnnuel ? ' Le client doit renouveler son abonnement.' : ' Renouvellement interne requis.'}
-                </p>
-              </div>
-            )}
-            {subWarning && (
-              <div className="flex items-start gap-2 p-3 rounded-xl bg-amber-50 border border-amber-200">
-                <AlertTriangle size={14} className="text-amber-500 flex-shrink-0 mt-0.5" />
-                <p className="text-xs font-bold text-amber-700">
-                  Abonnement expire dans {subJoursRestants} jour{subJoursRestants > 1 ? 's' : ''}
-                </p>
-              </div>
-            )}
-
-            {/* Photo préparation */}
-            <div className="space-y-1.5">
-              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Photo préparation</p>
-              <WebcamCapture
-                colisId={sel.id}
-                colisRef={sel.ref}
-                existingUrl={sel.photoPrep}
-                onCapture={(url) => upd(sel.id, { photoPrep: url })}
-              />
-            </div>
-
-            {/* Devis preview / send */}
-            {!devisPrev ? (
-              <div className="space-y-2">
-                <BtnPrimary
-                  onClick={() => { if (actionLoading) return; setActionLoading(true); try { handleEnvoyerDevis(); } finally { setTimeout(() => setActionLoading(false), 1000); } }}
-                  disabled={!canSendDevis || actionLoading || subExpired || !can('perm_colis_calculer_devis')}
-                  color="#2563EB"
-                >
-                  <Eye size={15} />
-                  {actionLoading ? 'Calcul en cours...' : 'Prévisualiser le devis'}
-                </BtnPrimary>
-                {!hasValidFacture && canPreview && (
-                  <p className="text-[10px] text-red-500 text-center font-semibold">Facture validée requise pour envoyer le devis</p>
-                )}
-                {hasValidFacture && !hasLignes && canPreview && (
-                  <p className="text-[10px] text-orange-500 text-center font-semibold">Ajoutez les articles (catégories) pour calculer les taxes</p>
-                )}
-              </div>
-            ) : (
-              <Section title="Brouillon du devis — vérifiez avant envoi" icon={Eye} color="#2563EB">
-                <div className="space-y-3">
-                  <div className="p-2 rounded-lg bg-amber-50 border border-amber-200">
-                    <p className="text-[10px] font-bold text-amber-700 inline-flex items-center gap-1.5"><AlertTriangle size={11} />Vérifiez les montants ci-dessous avant d'envoyer au client.</p>
-                  </div>
-                  <div className="p-3 rounded-xl bg-blue-50 border border-blue-200 space-y-0.5 text-sm">
-                    <Ligne label="Transport" value={eur(sel.devisTransport || devisCalc.tr)} />
-                    {/* Taxes douanières par catégorie */}
-                    {(() => {
-                      const lignes = sel.lignes || [];
-                      if (lignes.length === 0) {
-                        return (
-                          <>
-                            <Ligne label="Octroi de Mer" value={eur(sel.devisOM || 0)} />
-                            <Ligne label="Octroi de Mer Régional" value={eur(sel.devisOMR || 0)} />
-                          </>
-                        );
-                      }
-                      // Group by category and calculate OM/OMR per category (CIF-based)
-                      const totalValeurArticles = lignes.reduce((s, l) => s + (l.qte || 1) * (l.prix || 0), 0);
-                      const transportForTax = sel.devisTransport || devisCalc.tr;
-                      const byCat = {};
-                      lignes.forEach((l) => {
-                        const cat = categories.find((c) => c.id === l.cat);
-                        const catLabel = cat?.label || 'Non catégorisé';
-                        const ct = cat ? getCatTaux(cat, dest?.code || '974') : { om: 0, omr: 0 };
-                        const valeur = (l.qte || 1) * (l.prix || 0);
-                        const transportShare = totalValeurArticles > 0 ? transportForTax * (valeur / totalValeurArticles) : 0;
-                        const cif = valeur + transportShare;
-                        if (!byCat[catLabel]) byCat[catLabel] = { om: 0, omr: 0, tauxOM: ct.om, tauxOMR: ct.omr, valeur: 0 };
-                        byCat[catLabel].om += cif * ct.om / 100;
-                        byCat[catLabel].omr += cif * ct.omr / 100;
-                        byCat[catLabel].valeur += valeur;
-                      });
-                      const entries = Object.entries(byCat);
-                      return (
-                        <div className="space-y-1">
-                          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mt-1">Taxes douanières</p>
-                          {entries.map(([catLabel, v]) => (
-                            <div key={catLabel}>
-                              <div className="flex justify-between">
-                                <span className="text-xs text-gray-700 inline-flex items-center gap-1.5"><Package size={11} />{catLabel}</span>
-                                <span className="text-xs font-semibold">{eur(v.om + v.omr)}</span>
-                              </div>
-                              <p className="text-[9px] text-gray-400 ml-5">Octroi de Mer {v.tauxOM}% + Octroi de Mer Régional {v.tauxOMR}%</p>
-                            </div>
-                          ))}
-                        </div>
-                      );
-                    })()}
-                    <Ligne label={`TVA (${dest?.tva || 0}%)`} value={eur(sel.devisTVA || devisCalc.tva)} />
-                    {fraisDivers.length > 0 && (
-                      <Ligne label="Frais divers" value={eur(fraisDivers.reduce((s, f) => s + f.montant, 0))} />
-                    )}
-                    <div className="border-t border-blue-200 pt-1 mt-1">
-                      <Ligne
-                        label="TOTAL"
-                        value={
-                          <span className="font-black text-blue-700 text-base">
-                            {eur((sel.devisTotal || devisCalc.total) + fraisDivers.reduce((s, f) => s + f.montant, 0))}
-                          </span>
-                        }
-                      />
-                    </div>
-                    {sel.economie > 0 && (
-                      <div className="mt-1 pt-1 border-t border-blue-200">
-                        <Ligne
-                          label="Économie réalisée"
-                          value={<span className="text-emerald-600 font-bold">{eur(sel.economie)}</span>}
-                        />
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="flex flex-col gap-2">
-                    <BtnPrimary onClick={async () => { if (actionLoading) return; setActionLoading(true); try { await handleConfirmDevisEnvoye(); } finally { setTimeout(() => setActionLoading(false), 1500); } }} disabled={actionLoading || !can('perm_colis_envoyer_devis')} color="#16A34A">
-                      <Check size={15} />
-                      {actionLoading ? 'Envoi en cours...' : 'Envoyer le devis au client'}
-                    </BtnPrimary>
-                    <button
-                      onClick={() => setDevisPrev(false)}
-                      className="w-full py-2.5 rounded-xl border-2 border-gray-200 text-sm font-bold text-gray-600 hover:bg-gray-50 transition-colors"
-                    >
-                      Modifier
-                    </button>
-                  </div>
-                </div>
-              </Section>
-            )}
+        const verified = devisPrev && quote.ok && savedInputs === quoteInputFingerprint(quote.snapshot);
+        const focusBlocker = (field) => {
+          const anchor = field.startsWith('dimensions') ? 'quote-measures' : field.startsWith('fraisDivers') ? 'quote-fees' : field.startsWith('lignes') || field.startsWith('lines') ? 'quote-articles' : 'quote-documents';
+          setDocumentTab('articles');
+          requestAnimationFrame(() => { const target = document.getElementById(anchor); target?.scrollIntoView({ behavior: 'smooth', block: 'start' }); target?.querySelector('input,select,button')?.focus({ preventScroll: true }); });
+        };
+        const weights = measureShipment([{ dimL: finDims.finL, dimW: finDims.finW, dimH: finDims.finH, poids: finDims.finP }], divisor);
+        const isPro = cl?.type === 'pro';
+        const inputClass = 'min-h-11 min-w-0 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300';
+        const changeFinal = (key, value) => { setFinDims((previous) => ({ ...previous, [key]: value })); setDevisPrev(false); };
+        return <div className="min-w-0 space-y-5">
+          <div className="border-b border-gray-200 pb-4">
+            <p className="text-xs font-bold uppercase tracking-wider text-gray-400">Préparation et devis</p>
+            <p className="mt-1 text-sm text-slate-700">{isPro ? 'Client professionnel : transport et frais convenus, sans calcul de taxes dans ce devis.' : 'Vérifiez les pièces et les articles, mesurez le colis optimisé, puis envoyez un devis complet.'}</p>
           </div>
-        );
+          <nav aria-label="Vérifications du devis" className="flex flex-wrap gap-2">{[['quote-measures','Mesures'],['quote-documents','Documents'],['quote-articles','Articles'],['quote-fees','Frais']].filter(([id]) => !isPro || id !== 'quote-articles').map(([id,label]) => <a key={id} href={`#${id}`} onClick={(event) => { event.preventDefault(); setDocumentTab(id === 'quote-documents' ? 'document' : 'articles'); requestAnimationFrame(() => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })); }} className="inline-flex min-h-11 items-center rounded-xl bg-slate-100 px-3 text-sm font-semibold text-slate-700">{label}</a>)}</nav>
+          {!quote.ok && <div className="rounded-xl bg-amber-50 p-3"><p className="text-xs font-semibold text-amber-800">À compléter pour le devis</p><ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-amber-800">{quote.errors.map((error, index) => <li key={index}><button className="min-h-11 text-left underline underline-offset-2" onClick={() => focusBlocker(error.field)}>{error.message}</button></li>)}</ul></div>}
+          {isPro && <label className="block space-y-2 text-xs font-semibold text-slate-600">Modalités de règlement convenues<select aria-label="Modalités de règlement professionnel" value={proPayMethod} onChange={(event) => { setProPayMethod(event.target.value); setDevisPrev(false); }} className={inputClass}>{[['virement', 'Virement bancaire'], ['especes', 'Espèces'], ['30_jours', 'Paiement à 30 jours'], ['fin_de_mois', 'Paiement en fin de mois']].map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select><span className="block text-xs font-normal text-gray-500">Cette modalité figurera dans la version du devis. Le paiement sera confirmé séparément après réception du règlement.</span></label>}
+          <div id="quote-measures" className="scroll-mt-24"><Section title="Mesures après optimisation" icon={Ruler} color={borderColor}>
+            <div className="grid grid-cols-2 gap-3">{[['finL', 'Longueur', 'cm'], ['finW', 'Largeur', 'cm'], ['finH', 'Hauteur', 'cm'], ['finP', 'Poids réel', 'kg']].map(([key, label, unit]) => <Field key={key} label={label} type="number" min="0.01" step="0.01" value={finDims[key]} onChange={(event) => changeFinal(key, event.target.value)} unit={unit} />)}</div>
+            <p className="mt-2 text-xs text-gray-400">Ces mesures sont enregistrées avec le brouillon du devis.</p>
+            {weights && <div className="mt-4 space-y-1 border-t border-gray-100 pt-3 text-sm"><Ligne label="Poids volumétrique" value={`${weights.volumetricWeight.toFixed(2)} kg`} /><Ligne label="Poids facturable" value={`${weights.billableWeight.toFixed(2)} kg`} /></div>}
+          </Section></div>
+          <FacturesPanel workspace tab={documentTab} onTabChange={setDocumentTab}>
+          {!isPro && <div id="quote-articles" className="scroll-mt-24"><Section title="Articles et catégories" icon={Package} color={borderColor}>
+            <div className="space-y-3">{(sel.lignes || []).map((line) => <div key={line.id} className="space-y-2 border-b border-gray-100 pb-3">
+              <div className="flex items-start justify-between gap-2"><div className="min-w-0"><p className="break-words text-sm font-medium text-slate-700">{line.desc}</p><p className="text-xs text-gray-500">{line.qte} × {eur(line.prix)}</p></div><button aria-label={`Supprimer ${line.desc}`} disabled={actionLoading || !can('perm_factures_modifier_articles')} onClick={() => runAction(async () => { await sb.deleteLigne(line.id); setData((previous) => previous.map((parcel) => parcel.id === sel.id ? { ...parcel, lignes: (parcel.lignes || []).filter((item) => item.id !== line.id) } : parcel)); setDevisPrev(false); })} className="flex min-h-11 min-w-11 items-center justify-center rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600"><X size={15} /></button></div>
+              <select aria-label={`Catégorie de ${line.desc}`} disabled={actionLoading || !can('perm_factures_modifier_articles')} value={line.cat || ''} onChange={(event) => { const cat = event.target.value; runAction(async () => { await sb.updateLigne(line.id, { cat }); setData((previous) => previous.map((parcel) => parcel.id === sel.id ? { ...parcel, lignes: (parcel.lignes || []).map((item) => item.id === line.id ? { ...item, cat } : item) } : parcel)); setDevisPrev(false); }); }} className={inputClass}><option value="">Catégorie à vérifier</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.label}</option>)}</select>
+            </div>)}
+              {!(sel.lignes || []).length && <p className="text-xs text-amber-700">Analysez la facture source ci-dessus ou saisissez les articles. Une catégorie inconnue ne peut pas être taxée à zéro.</p>}
+              <form className="space-y-2" onSubmit={(event) => { event.preventDefault(); runAction(addArticle); }}>
+                <input aria-label="Description du nouvel article" required value={newArticle.desc} onChange={(event) => setNewArticle({ ...newArticle, desc: event.target.value })} placeholder="Description de l’article" className={inputClass} />
+                <div className="grid grid-cols-2 gap-2"><label className="text-xs text-gray-500">Quantité<input required aria-label="Quantité du nouvel article" type="number" min="1" step="1" value={newArticle.qte} onChange={(event) => setNewArticle({ ...newArticle, qte: event.target.value })} className={inputClass} /></label><label className="text-xs text-gray-500">Prix unitaire HT (€)<input required aria-label="Prix du nouvel article" type="number" min="0" step="0.01" value={newArticle.prix} onChange={(event) => setNewArticle({ ...newArticle, prix: event.target.value })} className={inputClass} /></label></div>
+                <select required aria-label="Catégorie du nouvel article" value={newArticle.cat} onChange={(event) => setNewArticle({ ...newArticle, cat: event.target.value })} className={inputClass}><option value="">Choisir une catégorie</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.label}</option>)}</select>
+                <select aria-label="Facture source du nouvel article" value={newArticle.factureId} onChange={(event) => setNewArticle({ ...newArticle, factureId: event.target.value })} className={inputClass}><option value="">Facture source (recommandée)</option>{(sel.factures || []).map((invoice) => <option key={invoice.id} value={invoice.id}>{invoice.vendeur} · {eur(invoice.montant)}</option>)}</select>
+                <button disabled={actionLoading || !can('perm_factures_modifier_articles')} className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-slate-100 text-sm font-semibold text-slate-700"><Plus size={14} />Enregistrer l’article</button>
+              </form>
+            </div>
+          </Section></div>}
+          </FacturesPanel>
+          <details className="border-t border-slate-200"><summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-slate-600">Consignes facultatives {selTags.length > 0 ? `· ${selTags.length} choisie(s)` : ''}</summary>          <div className="space-y-2">
+            <p className="text-xs font-semibold text-slate-600">Consignes de préparation</p>
+            <div className="flex flex-wrap gap-2">{TAGS_PREPARATION.map((tag) => <button key={tag} disabled={actionLoading} onClick={() => runAction(async () => { const next = selTags.includes(tag) ? selTags.filter((item) => item !== tag) : [...selTags, tag]; await upd(sel.id, { tagsPreparation: next }); setSelTags(next); })} className={`min-h-11 rounded-full px-3 py-2 text-xs font-semibold ${selTags.includes(tag) ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-600'}`}>{tag}</button>)}</div>
+            <textarea aria-label="Commentaire de préparation" value={commentaire} onChange={(event) => setCommentaire(event.target.value)} placeholder="Instructions utiles à la préparation…" rows={2} className={inputClass} />
+            {commentaire !== (sel.commentairePreparation || '') && <button disabled={actionLoading} className="min-h-11 text-xs font-semibold text-blue-700" onClick={() => runAction(() => upd(sel.id, { commentairePreparation: commentaire }))}>Enregistrer la consigne</button>}
+          </div>
+</details>
+          <div id="quote-fees" className="scroll-mt-24 space-y-2 border-t border-gray-200 pt-4"><p className="text-xs font-semibold text-slate-600">Frais convenus</p>{fraisDivers.map((fee, index) => <div key={index} className="flex items-center gap-2 text-sm"><span className="min-w-0 flex-1 break-words">{fee.libelle}</span><strong>{eur(fee.montant)}</strong><button aria-label={`Retirer ${fee.libelle}`} disabled={actionLoading} className="flex min-h-11 min-w-11 items-center justify-center text-gray-400" onClick={() => runAction(async () => { const next = fraisDivers.filter((_, position) => position !== index); await upd(sel.id, { fraisDivers: next }); setFraisDivers(next); setDevisPrev(false); })}><X size={14} /></button></div>)}
+            <form className="grid grid-cols-[minmax(0,1fr)_6rem] gap-2" onSubmit={(event) => { event.preventDefault(); runAction(async () => { const amount = Number(newFraisMontant); if (!newFraisLibelle.trim() || newFraisMontant === '' || !Number.isFinite(amount) || amount < 0) throw new Error('Indiquez le libellé et un montant positif ou nul.'); const next = [...fraisDivers, { libelle: newFraisLibelle.trim(), montant: amount }]; await upd(sel.id, { fraisDivers: next }); setFraisDivers(next); setNewFraisLibelle(''); setNewFraisMontant(''); setDevisPrev(false); }); }}><input aria-label="Libellé du frais" required value={newFraisLibelle} onChange={(event) => setNewFraisLibelle(event.target.value)} placeholder="Libellé du frais" className={inputClass} /><input aria-label="Montant du frais" required type="number" min="0" step="0.01" value={newFraisMontant} onChange={(event) => setNewFraisMontant(event.target.value)} placeholder="€" className={inputClass} /><button disabled={actionLoading} className="col-span-2 min-h-11 rounded-xl bg-slate-100 text-xs font-semibold text-slate-700">Ajouter le frais</button></form>
+          </div>
+          <div><p className="mb-2 text-xs font-semibold text-slate-600">Photo du colis préparé</p><WebcamCapture colisId={sel.id} colisRef={sel.ref} existingUrl={sel.photoPrep} onCapture={(path) => runAction(() => upd(sel.id, { photoPrep: path }))} /></div>
+          {subExpired && <p className="rounded-xl bg-red-50 p-3 text-xs text-red-700">Abonnement expiré : régularisez l’offre du client avant l’envoi.</p>}
+
+          {quote.ok && quote.warnings.length > 0 && <div className="space-y-1 rounded-xl bg-amber-50 p-3">{quote.warnings.map((warning, index) => <p key={index} className="text-xs text-amber-800">{warning}</p>)}</div>}
+          {quote.ok && <Section title={verified ? 'Brouillon enregistré · vérifier puis envoyer' : 'Estimation du devis'} icon={Eye} color={BRAND.navy}>
+            <div className="space-y-2 text-sm"><Ligne label="Transport" value={eur(quote.amounts.transport)} />{!isPro && <><Ligne label="Octroi de mer" value={eur(quote.amounts.om)} /><Ligne label="Octroi de mer régional" value={eur(quote.amounts.omr)} /><Ligne label={`TVA (${dest.tva} %)`} value={eur(quote.amounts.tva)} /></>}<Ligne label="Frais convenus" value={eur(quote.amounts.fees)} /><div className="border-t border-gray-200 pt-3"><Ligne label="Total à régler" value={<strong className="text-xl" style={{ color: 'var(--brand-text)' }}>{eur(quote.amounts.total)}</strong>} /></div>{quote.patch.economie > 0 && <Ligne label="Économie après optimisation" value={eur(quote.patch.economie)} />}</div>
+          </Section>}
+          <div data-testid="quote-action-bar" className="sticky bottom-0 z-20 -mx-1 border-t border-slate-200 bg-white px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-3px_12px_rgba(0,0,0,0.06)]">
+            <div className="mb-2 flex items-center justify-between gap-3"><div><p className="text-xs font-semibold text-slate-600">Total recalculé</p><p className="text-lg font-bold text-slate-800">{quote.ok ? eur(quote.amounts.total) : 'À compléter'}</p></div><p role="status" className="max-w-[60%] text-right text-xs text-slate-600">{actionLoading ? 'Enregistrement en cours…' : verified ? 'Brouillon enregistré · vérifiez le détail avant envoi' : sel.devisBrouillon ? 'Modifications à enregistrer et vérifier' : 'Calcul non enregistré'}</p></div>
+          {!verified ? <BtnPrimary onClick={() => runAction(handleEnvoyerDevis)} disabled={!quote.ok || actionLoading || subExpired || !can('perm_colis_calculer_devis')}><Eye size={16} />{actionLoading ? 'Enregistrement…' : 'Enregistrer et vérifier le devis'}</BtnPrimary> : <div className="space-y-2"><BtnPrimary color="#15803D" onClick={() => runAction(handleConfirmDevisEnvoye)} disabled={actionLoading || !quote.ok || subExpired || !can('perm_colis_envoyer_devis')}><Send size={16} />{actionLoading ? 'Envoi en cours…' : 'Envoyer le devis au client'}</BtnPrimary><button className="min-h-11 w-full rounded-xl border border-gray-200 text-sm font-semibold text-gray-600" onClick={() => setDevisPrev(false)}>Modifier le brouillon</button></div>}
+          </div>
+        </div>;
       }
 
       // ── 7. DEVIS_ENVOYE ────────────────────────────────────────────────
       // ── 7. DEVIS ENVOYE — en attente de paiement ──────────────────────
+      case 'attente_paiement':
       case 'devis_envoye': {
         const isPro = cl?.type === 'pro';
         const PAY_METHODS = {
@@ -1463,7 +574,7 @@ export default function StaffDetailView() {
             <div className="space-y-4">
               <div className="p-4 rounded-xl bg-amber-50 border border-amber-200">
                 <p className="text-xs font-bold text-amber-700 mb-1">Montant à payer</p>
-                <p className="text-2xl font-black" style={{ color: BRAND.navyD }}>
+                <p className="text-2xl font-black" style={{ color: 'var(--brand-text)' }}>
                   {eur(sel.devisTotal)}
                 </p>
               </div>
@@ -1471,30 +582,13 @@ export default function StaffDetailView() {
                 <>
                   <div className="p-3 rounded-xl bg-blue-50 border border-blue-200">
                     <p className="text-xs font-bold text-blue-800 mb-1">
-                      Client professionnel — paiement par {PAY_METHODS[proPayMethod] || proPayMethod}
+                      Client professionnel — {PAY_METHODS[sel.modePaiementPro] || 'Modalité à vérifier dans le devis'}
                     </p>
                   </div>
-                  <div>
-                    <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wider block mb-1">
-                      Mode de paiement
-                    </label>
-                    <select
-                      value={proPayMethod}
-                      onChange={(e) => setProPayMethod(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-sm outline-none"
-                      style={{ color: BRAND.navy }}
-                    >
-                      {Object.entries(PAY_METHODS).map(([k, v]) => (
-                        <option key={k} value={k}>{v}</option>
-                      ))}
-                    </select>
-                  </div>
+                  <p className="text-xs text-gray-500">Les modalités sont celles du devis envoyé. Pour les modifier, revenez à la préparation et établissez une nouvelle version.</p>
                   <BtnPrimary
-                    onClick={() => {
-                      upd(sel.id, { modePaiementPro: proPayMethod });
-                      payer(sel.id, sel.devisTotal);
-                    }}
-                    disabled={!can('perm_colis_confirmer_paiement')}
+                    onClick={() => runAction(() => payer(sel.id, sel.devisTotal))}
+                    disabled={actionLoading || !sel.devisTotal || !can('perm_colis_confirmer_paiement')}
                     color="#059669"
                   >
                     <Check size={15} />
@@ -1512,28 +606,10 @@ export default function StaffDetailView() {
                     </div>
                   )}
                   {/* Renvoyer le lien */}
-                  <BtnTelegram disabled={actionLoading} onClick={() => {
-                    if (actionLoading) return;
-                    const chatId = cl?.telegramChatId;
-                    const prenom = getPrenom(cl);
-                    const payUrl = sel.payplugPaymentUrl;
-                    if (!chatId) { flash({ msg: 'Client n\'a pas lié Telegram', type: 'warning' }); return; }
-                    setActionLoading(true);
-                    const msg = payUrl
-                      ? `Bonjour ${prenom} 👋\n\n💳 Voici votre lien de paiement pour le colis *${sel.ref}* :\n\n💰 *Montant : ${eur(sel.devisTotal)}*\n\n👉 ${payUrl}\n\n_L'équipe Expedîle_`
-                      : `Bonjour ${prenom} 👋\n\nRappel : votre colis *${sel.ref}* est en attente de paiement.\n\n💰 *Montant : ${eur(sel.devisTotal)}*\n\nMerci de procéder au règlement.\n\n_L'équipe Expedîle_`;
-                    sendTelegram(chatId, msg).then(async (res) => {
-                      try { await sb.insertMessage(sel.id, { type: 'staff', auteur: 'Système', texte: msg, statut: res.ok ? 'envoye' : 'echec' }); } catch (e) {}
-                      flash({ msg: res.ok ? `Lien de paiement renvoyé à ${prenom}` : 'Erreur Telegram', type: res.ok ? 'success' : 'warning' });
-                    }).finally(() => setTimeout(() => setActionLoading(false), 1000));
-                  }}>
+                  <BtnTelegram disabled={actionLoading || !cl?.telegramChatId} onClick={() => runAction(() => sendMsg(sel.id, cl?.id, 'telegram', 'relance_paiement', null))}>
                     {actionLoading ? 'Envoi...' : sel.payplugPaymentUrl ? 'Renvoyer le lien de paiement' : 'Relancer via Telegram'}
                   </BtnTelegram>
-                  <BtnEmail disabled={actionLoading} onClick={() => {
-                    if (actionLoading) return;
-                    setActionLoading(true);
-                    try { sendMsg(sel.id, cl?.id, 'email', 'relance_paiement', null); } finally { setTimeout(() => setActionLoading(false), 1000); }
-                  }}>
+                  <BtnEmail disabled={actionLoading || !cl?.email} onClick={() => runAction(() => sendMsg(sel.id, cl?.id, 'email', 'relance_paiement', null))}>
                     {actionLoading ? 'Envoi...' : 'Relancer par email'}
                   </BtnEmail>
                 </div>
@@ -1545,7 +621,7 @@ export default function StaffDetailView() {
 
       // ── 9. PAYE ────────────────────────────────────────────────────────
       case 'paye': {
-        const availableEnvois = envois.filter((e) => e.statut !== 'parti' && e.statut !== 'archive');
+        const availableEnvois = envois.filter((e) => e.statut !== 'parti' && e.statut !== 'archive' && e.destinationCode === dest?.code);
         return (
           <Section title="Paiement reçu — Expédier" icon={Check} color={borderColor}>
             <div className="space-y-4">
@@ -1563,13 +639,13 @@ export default function StaffDetailView() {
                 </label>
                 <select
                   value={selEnvoi}
-                  onChange={(e) => {
-                    setSelEnvoi(e.target.value);
-                    upd(sel.id, { envoi: e.target.value || null });
-                    flash(e.target.value ? 'Envoi affecté' : 'Envoi retiré');
-                  }}
+                  onChange={(e) => { const envoi = e.target.value; runAction(async () => {
+                    await upd(sel.id, { envoi: envoi || null });
+                    setSelEnvoi(envoi);
+                    flash(envoi ? 'Envoi affecté' : 'Envoi retiré');
+                  }); }}
                   className="w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-sm outline-none"
-                  style={{ color: BRAND.navy }}
+                  style={{ color: 'var(--brand-text)' }}
                 >
                   <option value="">— Choisir un envoi —</option>
                   {availableEnvois.map((e) => {
@@ -1594,7 +670,7 @@ export default function StaffDetailView() {
               )}
 
               <BtnPrimary
-                onClick={() => changerStatut(sel.id, 'expedie')}
+                onClick={() => runAction(() => changerStatut(sel.id, 'expedie'))}
                 disabled={(!sel.envoi && !selEnvoi) || subExpired || !can('perm_colis_expedier')}
                 color="#0891B2"
               >
@@ -1618,7 +694,7 @@ export default function StaffDetailView() {
                 </p>
               </div>
               <BtnPrimary
-                onClick={() => changerStatut(sel.id, 'arrive')}
+                onClick={() => runAction(() => changerStatut(sel.id, 'arrive'))}
                 color="#14B8A6"
               >
                 <Check size={15} />
@@ -1695,17 +771,17 @@ export default function StaffDetailView() {
                 {sel.statut === 'transit' ? (
                   <>
                     <BtnPrimary
-                      onClick={() => changerStatut(sel.id, 'dedouanement')}
+                      onClick={() => runAction(() => changerStatut(sel.id, 'dedouanement'))}
                       color="#8B5CF6"
                     >
                       <Clock size={15} />
                       Passer en dédouanement
                     </BtnPrimary>
                     <BtnPrimary
-                      onClick={() => {
-                        changerStatut(sel.id, 'arrive');
-                        sendMsg(sel.id, cl?.id, cl?.telegramChatId ? 'telegram' : 'email', 'arrive', null);
-                      }}
+                      onClick={() => runAction(async () => {
+                        await changerStatut(sel.id, 'arrive');
+                        await sendMsg(sel.id, cl?.id, cl?.telegramChatId ? 'telegram' : 'email', 'arrive', null);
+                      })}
                       color="#14B8A6"
                     >
                       <Check size={15} />
@@ -1719,10 +795,10 @@ export default function StaffDetailView() {
                     return (
                       <BtnPrimary
                         key={ns}
-                        onClick={() => {
-                          changerStatut(sel.id, ns);
-                          if (tpl) sendMsg(sel.id, cl?.id, cl?.telegramChatId ? 'telegram' : 'email', tpl, null);
-                        }}
+                        onClick={() => runAction(async () => {
+                          await changerStatut(sel.id, ns);
+                          if (tpl) await sendMsg(sel.id, cl?.id, cl?.telegramChatId ? 'telegram' : 'email', tpl, null);
+                        })}
                         color={borderColor}
                       >
                         <Check size={15} />
@@ -1745,17 +821,20 @@ export default function StaffDetailView() {
   // ════════════════════════════════════════════════════════════════════════
   // COMMUNICATION PANEL
   // ════════════════════════════════════════════════════════════════════════
-  const templates = templatesForStatut(sel.statut);
 
   // ════════════════════════════════════════════════════════════════════════
   // FULL RENDER
   // ════════════════════════════════════════════════════════════════════════
 
   return (
-    <div className="flex flex-col gap-4 pb-24 lg:pb-4">
+    <div className="min-w-0 flex flex-col gap-4 pb-24 lg:pb-4">
+      {sel.statut === 'en_preparation' ? <details className="border-b border-slate-200"><summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-slate-600">Suivi : {assignmentLabel}{sel.nextAction ? ` · ${sel.nextAction}` : ''}</summary><StaffAssignment /></details> : <StaffAssignment />}
+      {formErr && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{formErr}</p>}
 
       {/* ── Action block ───────────────────────────────────────────────── */}
       {renderActionBlock()}
+      {['receptionne', 'mesure', 'attente_feu_vert', 'autorise'].includes(sel.statut) && can('perm_colis_receptionner') && <button type="button" onClick={() => setShowAddCarton(true)} className="min-h-11 flex items-center justify-center gap-2 rounded-xl border border-gray-200 px-4 py-3 text-sm font-semibold brand-t"><Plus size={16} />Réceptionner un autre carton</button>}
+      <ColisModal open={showAddCarton} onClose={() => setShowAddCarton(false)} initialColisId={sel.id} />
 
       {/* ── Corrections (collapsible, discreet) ──────────────────────── */}
       {(canRevert || canCancel) && (
@@ -1789,7 +868,7 @@ export default function StaffDetailView() {
               )}
               {sel.archive ? (
                 <button
-                  onClick={() => desarchiverColis(sel.id)}
+                  onClick={() => runAction(() => desarchiverColis(sel.id))}
                   className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border border-blue-200 text-blue-600 bg-blue-50 hover:bg-blue-100 transition-colors"
                 >
                   <Archive size={11} />
@@ -1797,7 +876,7 @@ export default function StaffDetailView() {
                 </button>
               ) : (
                 <button
-                  onClick={() => archiverColis(sel.id)}
+                  onClick={() => runAction(() => archiverColis(sel.id))}
                   className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border border-gray-200 text-gray-500 bg-gray-50 hover:bg-gray-100 transition-colors"
                 >
                   <Archive size={11} />
