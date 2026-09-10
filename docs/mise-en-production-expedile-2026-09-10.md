@@ -26,7 +26,7 @@ L’application est en ligne sur **https://expedile.app**. Les dix points du rap
 - [Réception réelle et séparation des mesures](verification-production-2026-09-10/reception-recipe.json).
 - [Recette authentifiée : droits, documents, OCR, paiement bloqué](verification-production-2026-09-10/backend-recipe.json).
 - [Worker vers OCR et nettoyage](verification-production-2026-09-10/worker-recipe.json).
-- [État base et planification](verification-production-2026-09-10/database-and-worker.json).
+- [État base et planification](verification-production-2026-09-10/database-and-worker.json), [réponse HTTP finale du worker](verification-production-2026-09-10/worker-http-final.json).
 - [Domaine public : 18 contrôles HTTP et connexion simulée](verification-production-2026-09-10/report.json).
 - [Synthèse de restauration et de publication](verification-expedile-2026-09-10/deployment-readiness.json).
 - [Recette navigateur complète du build](verification-ux-ui-2026-09-10/browser-final-summary.json).
@@ -40,3 +40,7 @@ Les recettes de production utilisent des identifiants fictifs bornés et un nett
 Le domaine peut être replacé sur un déploiement Vercel vérifié en cas de régression frontend. Conserver la base migrée et les règles d’accès aux documents privés ; ne pas restaurer aveuglément une sauvegarde pré-migration sur une base qui reçoit de nouvelles opérations. Privilégier une correction SQL compatible, précédée d’une sauvegarde et d’un rejeu isolé. En cas de problème d’automatisation, suspendre uniquement `expedile-worker` via `cron.alter_job`, puis traiter les erreurs visibles avant reprise.
 
 Le [rapport de livraison](livraison-ux-ui-expedile-2026-09-10.md) relie les dix recommandations aux changements et aux décisions. La chaîne de vérification est versionnée dans `.github/workflows/verify-expedile.yml`.
+
+## Conservation du code et revue Git
+
+Le code, les tests et les rapports sont enregistrés dans le commit local `3f4d1a9`. Le dépôt distant connecté est `mmz97441/pinta`, public, et le compte connecté en est administrateur. Le contrôle automatique a refusé la publication directe sur `main`, puis la création d’une branche de livraison, en demandant une autorisation spécifique d’exportation vers GitHub. Aucune publication Git ni exécution GitHub Actions n’est annoncée comme effectuée. Une demande explicite de publication sur branche séparée et revue a été présentée ; la production Vercel a été livrée par CLI et reste disponible indépendamment de cette publication.

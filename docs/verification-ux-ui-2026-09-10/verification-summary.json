@@ -22,5 +22,9 @@
   "restoredProductionReceptionAssertions": 17,
   "receptionSqlOwnerAssertions": 112,
   "receptionQuoteParityCases": 14,
-  "receptionDevisScenarios": 4
+  "receptionDevisScenarios": 4,
+  "measurementDisplayViewports": 2,
+  "browserCoreScenarios": 11,
+  "mobileFocusedMeasurementsFullyVisible": true,
+  "sqlAssertionCountingNote": "281 initial pipeline logged passes plus final owner/reception suite; assertions across repeated suites are not unique."
 }

@@ -120,5 +120,10 @@
   "pending": [
     "Company SMTP credentials and real invitation delivery verification",
     "PayPlug LIVE key and real payment activation"
-  ]
+  ],
+  "git_delivery": {
+    "local_commit": "3f4d1a9",
+    "published": false,
+    "reason": "Automatic approval review rejected direct main and separate-branch publication; explicit GitHub export approval requested."
+  }
 }
