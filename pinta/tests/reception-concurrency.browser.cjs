@@ -35,9 +35,10 @@ async function run() {
     await dialog.getByLabel('Client', { exact: true }).fill('Camille');
     await dialog.getByRole('button').filter({ hasText: /Exemple/ }).first().click();
     await dialog.getByRole('button').filter({ hasText: 'EXP-TEST-001' }).click();
-    await dialog.getByLabel('Numéro de suivi · carton 1').fill('LOCAL-ADDITION');
+    await dialog.getByRole('heading', { name: 'Carton 3', level: 3, exact: true }).waitFor();
+    await dialog.getByLabel('Numéro de suivi · carton 3').fill('LOCAL-ADDITION');
     for (const [label, value, unit] of [['Longueur', '30', 'cm'], ['Largeur', '20', 'cm'], ['Hauteur', '10', 'cm'], ['Poids', '1.5', 'kg']]) {
-      await dialog.getByLabel(`${label} à réception (${unit}) · carton 1`, { exact: true }).fill(value);
+      await dialog.getByLabel(`${label} à réception (${unit}) · carton 3`, { exact: true }).fill(value);
     }
     assert.ok(changesChannel, 'A real provider subscription is connected to the local mock');
     Object.assign(original, { nb_colis: 4, trackings: ['TEST-001', 'TEST-002', 'REMOTE-03', 'REMOTE-04'], updated_at: '2026-09-10T11:59:00Z' });
@@ -47,10 +48,12 @@ async function run() {
     await refresh;
     // Visible dashboard state behind the modal confirms the provider finished its relation fetch.
     await f.page.waitForTimeout(500);
+    await dialog.getByRole('heading', { name: 'Carton 3', level: 3, exact: true }).waitFor();
     await dialog.getByRole('button', { name: 'Rattacher à EXP-TEST-001', exact: true }).click();
     await dialog.getByRole('alert').filter({ hasText: 'modifié par un collègue' }).waitFor();
     assert.equal(patchVersion, `eq.${originalVersion}`, 'The submitted snapshot, not the refreshed cache, guards the write');
     assert.equal(original.nb_colis, 4);
+    assert.equal(original.ref, 'EXP-TEST-001');
     assert.deepEqual(original.trackings, ['TEST-001', 'TEST-002', 'REMOTE-03', 'REMOTE-04']);
     assert.deepEqual(f.errors, []);
     const result = { test: 'concurrent-reception-preserves-colleague-cartons-after-provider-refresh', pass: true, conflictVisible: true, originalSnapshotUsed: true, remoteCartonsPreserved: 4, pageErrors: f.errors, unexpectedNetwork: f.networkDenied };

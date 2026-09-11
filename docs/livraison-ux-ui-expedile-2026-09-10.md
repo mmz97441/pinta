@@ -1,6 +1,8 @@
 # Expedîle — modifications UX/UI et livraison
 
 **Complément du 11 septembre :** correction de la [visibilité des cartons rattachés](correction-visibilite-cartons-2026-09-11.md) dans le panneau de la liste, accès au carton ajouté et détail des mesures conservées.
+La [numérotation du formulaire de rattachement](correction-numerotation-cartons-2026-09-11.md) continue également celle des cartons déjà enregistrés dans la même expédition.
+
 
 État : les dix recommandations UX/UI et les corrections de réception demandées lors de la recette utilisateur sont implémentées et déployées sur **https://expedile.app**. Chaque carton est mesuré à réception ; le devis exige de nouvelles mesures après optimisation. Trois spécialistes ont réalisé les corrections, suivies d’une revue d’intégration et d’une seconde recette complète.
 

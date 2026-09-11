@@ -1,0 +1,29 @@
+{
+  "status": "passed",
+  "results": [
+    {
+      "viewport": "1440x1000",
+      "firstAttachmentStartsAtTwo": true,
+      "consecutiveNumbers": true,
+      "validationNumberAndFocusMatch": true,
+      "removalPreservesMeasures": true,
+      "referenceUnchanged": true,
+      "reopeningContinuesNumbering": true,
+      "physicalCountInsteadOfTrackingCount": true,
+      "switchingExpeditionUpdatesNumbers": true,
+      "newExpeditionStartsAtOne": true
+    },
+    {
+      "viewport": "390x844",
+      "firstAttachmentStartsAtTwo": true,
+      "consecutiveNumbers": true,
+      "validationNumberAndFocusMatch": true,
+      "removalPreservesMeasures": true,
+      "referenceUnchanged": true,
+      "reopeningContinuesNumbering": true,
+      "physicalCountInsteadOfTrackingCount": true,
+      "switchingExpeditionUpdatesNumbers": true,
+      "newExpeditionStartsAtOne": true
+    }
+  ]
+}

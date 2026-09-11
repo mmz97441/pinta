@@ -1,0 +1,57 @@
+{
+  "status": "passed",
+  "results": [
+    {
+      "viewport": "1440x1000",
+      "theme": "light",
+      "inlineList": "passed",
+      "attachmentVisibleWithoutReload": "passed",
+      "reloadPersistence": "passed",
+      "generalReceiptOpensDossier": "passed",
+      "noTrackingCartonVisible": "passed",
+      "originalMeasuresPreserved": "passed",
+      "finalMeasuresSeparate": "passed",
+      "legacyPartialMeasuresVisible": "passed",
+      "accessibilityViolations": 0
+    },
+    {
+      "viewport": "1440x1000",
+      "theme": "dark",
+      "inlineList": "passed",
+      "attachmentVisibleWithoutReload": "passed",
+      "reloadPersistence": "passed",
+      "generalReceiptOpensDossier": "passed",
+      "noTrackingCartonVisible": "passed",
+      "originalMeasuresPreserved": "passed",
+      "finalMeasuresSeparate": "passed",
+      "legacyPartialMeasuresVisible": "passed",
+      "accessibilityViolations": 0
+    },
+    {
+      "viewport": "390x844",
+      "theme": "light",
+      "inlineList": "passed",
+      "attachmentVisibleWithoutReload": "passed",
+      "reloadPersistence": "passed",
+      "generalReceiptOpensDossier": "passed",
+      "noTrackingCartonVisible": "passed",
+      "originalMeasuresPreserved": "passed",
+      "finalMeasuresSeparate": "passed",
+      "legacyPartialMeasuresVisible": "passed",
+      "accessibilityViolations": 0
+    },
+    {
+      "viewport": "390x844",
+      "theme": "dark",
+      "inlineList": "passed",
+      "attachmentVisibleWithoutReload": "passed",
+      "reloadPersistence": "passed",
+      "generalReceiptOpensDossier": "passed",
+      "noTrackingCartonVisible": "passed",
+      "originalMeasuresPreserved": "passed",
+      "finalMeasuresSeparate": "passed",
+      "legacyPartialMeasuresVisible": "passed",
+      "accessibilityViolations": 0
+    }
+  ]
+}

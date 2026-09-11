@@ -1,0 +1,16 @@
+{
+  "date": "2026-09-11",
+  "applicationTests": 69,
+  "lint": "passed",
+  "build": "passed",
+  "numberingBrowserViewports": 2,
+  "hostedBuildBrowserViewports": 2,
+  "receivedCartonsConfigurations": 4,
+  "teamViewports": 2,
+  "concurrency": "passed",
+  "databaseMigrationRequired": false,
+  "dataRepairRequired": false,
+  "deploymentId": "dpl_9K519eTpZ19f98Mqf6xHCNke6XLZ",
+  "deploymentUrl": "https://pinta-fzu83kbls-mmz97441s-projects.vercel.app",
+  "domain": "https://expedile.app"
+}

@@ -17,14 +17,14 @@ export const RECEPTION_MEASURES = [
   { key: 'poids', label: 'Poids', unit: 'kg' },
 ];
 const positive = (value) => value !== '' && value != null && Number.isFinite(Number(value)) && Number(value) > 0;
-export function receptionMeasurementIssues(lines = [], dimensions = {}) {
+export function receptionMeasurementIssues(lines = [], dimensions = {}, cartonOffset = 0) {
   const issues = [];
   lines.forEach((line, index) => {
     const active = String(line.fournisseur || '').trim() || String(line.tracking || '').trim()
       || RECEPTION_MEASURES.some(({ key }) => dimensions[index]?.[key] !== '' && dimensions[index]?.[key] != null);
     if (!active) return;
     RECEPTION_MEASURES.forEach(({ key, label, unit }) => {
-      if (!positive(dimensions[index]?.[key])) issues.push({ index, key, message: `Carton ${index + 1} : ${label.toLowerCase()} à réception (${unit}) requise, avec une valeur supérieure à zéro.` });
+      if (!positive(dimensions[index]?.[key])) issues.push({ index, key, message: `Carton ${cartonOffset + index + 1} : ${label.toLowerCase()} à réception (${unit}) requise, avec une valeur supérieure à zéro.` });
     });
   });
   return issues;

@@ -8,9 +8,9 @@ const path = require('node:path');
 const out = process.env.PINTA_CARTONS_OUT || path.resolve(__dirname, '../../docs/verification-cartons-2026-09-11');
 const initialBoxes = [{ dimL: 40, dimW: 30, dimH: 20, poids: 3 }, { dimL: 30, dimW: 20, dimH: 10, poids: 2 }];
 
-async function fillBox(dialog, measures) {
+async function fillBox(dialog, carton, measures) {
   for (const [index, label] of ['Longueur', 'Largeur', 'Hauteur', 'Poids'].entries()) {
-    await dialog.getByLabel(`${label} à réception (${index === 3 ? 'kg' : 'cm'}) · carton 1`, { exact: true }).fill(String(measures[index]));
+    await dialog.getByLabel(`${label} à réception (${index === 3 ? 'kg' : 'cm'}) · carton ${carton}`, { exact: true }).fill(String(measures[index]));
   }
 }
 async function assertFocusedCarton(page, item) {
@@ -43,9 +43,10 @@ async function main() {
       await measures.getByText('Boutique B', { exact: true }).waitFor();
       await f.page.getByRole('button', { name: 'Réceptionner un autre carton', exact: true }).click();
       const dialog = f.page.getByRole('dialog', { name: 'Réceptionner un colis', exact: true });
-      await dialog.getByLabel('Fournisseur · carton 1', { exact: true }).fill('Boutique C');
-      await dialog.getByLabel('Numéro de suivi · carton 1', { exact: true }).fill('QA-ATTACH-003');
-      await fillBox(dialog, [15, 25, 35, 1.5]);
+      await dialog.getByRole('heading', { name: 'Carton 3', level: 3, exact: true }).waitFor();
+      await dialog.getByLabel('Fournisseur · carton 3', { exact: true }).fill('Boutique C');
+      await dialog.getByLabel('Numéro de suivi · carton 3', { exact: true }).fill('QA-ATTACH-003');
+      await fillBox(dialog, 3, [15, 25, 35, 1.5]);
       await dialog.getByRole('button', { name: 'Rattacher à EXP-TEST-001', exact: true }).click();
       await dialog.waitFor({ state: 'hidden' });
       const third = measures.getByRole('listitem', { name: 'Carton 3', exact: true });
@@ -55,6 +56,7 @@ async function main() {
       await assertFocusedCarton(f.page, third);
       assert.equal(f.tables.colis.length, 1, 'Attaching a carton keeps the same dossier');
       assert.equal(f.tables.colis[0].nb_colis, 3);
+      assert.equal(f.tables.colis[0].ref, 'EXP-TEST-001', 'Carton numbering never changes the dossier reference');
       assert.deepEqual(f.tables.colis[0].dims_par_colis.slice(0, 2), initialBoxes);
       assert.equal(f.tables.colis[0].fin_l, null);
       assert.equal(new URL(f.page.url()).searchParams.get('sort'), 'client');
@@ -71,7 +73,8 @@ async function main() {
       await dialog.getByLabel('Client', { exact: true }).fill('Camille');
       await dialog.getByRole('button').filter({ hasText: /Exemple/ }).first().click();
       await dialog.getByRole('button').filter({ hasText: 'EXP-TEST-001' }).click();
-      await fillBox(dialog, [10, 10, 10, 0.6]);
+      await dialog.getByRole('heading', { name: 'Carton 4', level: 3, exact: true }).waitFor();
+      await fillBox(dialog, 4, [10, 10, 10, 0.6]);
       await dialog.getByRole('button', { name: 'Rattacher à EXP-TEST-001', exact: true }).click();
       await dialog.waitFor({ state: 'hidden' });
       const fourth = measures.getByRole('listitem', { name: 'Carton 4', exact: true });
@@ -82,6 +85,7 @@ async function main() {
       assert.equal(new URL(f.page.url()).searchParams.get('dossier'), ids.P);
       assert.equal(new URL(f.page.url()).searchParams.get('sort'), 'client');
       assert.equal(f.tables.colis.length, 1);
+      assert.equal(f.tables.colis[0].ref, 'EXP-TEST-001');
 
       // Show known historical coordinates and explicitly omit incomplete totals.
       f.tables.colis[0].dims_par_colis[1] = { dimL: 30, dimW: null, dimH: 10, poids: 2 };

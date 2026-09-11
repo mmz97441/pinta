@@ -18,15 +18,15 @@ function ReceptionInput({ label, ...props }) {
   return <label className="block min-w-0"><span className="block text-xs font-semibold text-gray-600 mb-1">{label}</span><input {...props} /></label>;
 }
 
-function CartonFields({ lines, dimensions, setTracking, setDimension, addTracking, removeTracking, inputRefs, dimensionRefs, onScan, issues = [] }) {
+function CartonFields({ lines, dimensions, setTracking, setDimension, addTracking, removeTracking, inputRefs, dimensionRefs, onScan, issues = [], cartonOffset = 0 }) {
   return <div className="space-y-3">
     <p className="text-sm font-semibold text-gray-800">Cartons reçus</p>
     <p className="text-xs text-gray-600">Mesurez et pesez chaque carton reçu ; fournisseur et suivi peuvent être ajoutés si connus. Entrée après un scan ajoute le suivant ; Tab parcourt les mesures.</p>
-    {lines.map((line, idx) => <section key={idx} aria-label={`Carton ${idx + 1}`} className="rounded-xl border border-gray-200 p-3 space-y-3">
-      <div className="flex justify-between items-center"><h3 className="text-sm font-bold text-gray-800">Carton {idx + 1}</h3>{lines.length > 1 && <button type="button" onClick={() => removeTracking(idx)} aria-label={`Supprimer le carton ${idx + 1}`} className="w-11 h-11 -my-2 rounded-lg text-gray-500 hover:bg-red-50 hover:text-red-700 flex items-center justify-center"><X size={16} /></button>}</div>
+    {lines.map((line, idx) => <section key={idx} aria-label={`Carton ${cartonOffset + idx + 1}`} className="rounded-xl border border-gray-200 p-3 space-y-3">
+      <div className="flex justify-between items-center"><h3 className="text-sm font-bold text-gray-800">Carton {cartonOffset + idx + 1}</h3>{lines.length > 1 && <button type="button" onClick={() => removeTracking(idx)} aria-label={`Supprimer le carton ${cartonOffset + idx + 1}`} className="w-11 h-11 -my-2 rounded-lg text-gray-500 hover:bg-red-50 hover:text-red-700 flex items-center justify-center"><X size={16} /></button>}</div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-        <ReceptionInput label={`Fournisseur · carton ${idx + 1}`} placeholder="Amazon, Zara…" value={line.fournisseur} onChange={event => setTracking(idx, 'fournisseur', event.target.value)} className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm" />
-        <label className="block"><span className="block text-xs font-semibold text-gray-600 mb-1">Numéro de suivi · carton {idx + 1}</span><input ref={element => { inputRefs.current[idx] = element; }} value={line.tracking} onChange={event => setTracking(idx, 'tracking', event.target.value)} onKeyDown={event => onScan(event, idx)} placeholder="Scanner ou saisir le numéro" autoComplete="off" aria-invalid={issues.some(issue => issue.index === idx && issue.key === 'tracking')} className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm font-mono" /></label>
+        <ReceptionInput label={`Fournisseur · carton ${cartonOffset + idx + 1}`} placeholder="Amazon, Zara…" value={line.fournisseur} onChange={event => setTracking(idx, 'fournisseur', event.target.value)} className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm" />
+        <label className="block"><span className="block text-xs font-semibold text-gray-600 mb-1">Numéro de suivi · carton {cartonOffset + idx + 1}</span><input ref={element => { inputRefs.current[idx] = element; }} value={line.tracking} onChange={event => setTracking(idx, 'tracking', event.target.value)} onKeyDown={event => onScan(event, idx)} placeholder="Scanner ou saisir le numéro" autoComplete="off" aria-invalid={issues.some(issue => issue.index === idx && issue.key === 'tracking')} className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm font-mono" /></label>
       </div>
       <fieldset className="rounded-lg bg-gray-50 border border-gray-200 p-3">
         <legend className="px-1 text-xs font-bold text-gray-800">Mesures à réception — avant optimisation</legend>
@@ -34,7 +34,7 @@ function CartonFields({ lines, dimensions, setTracking, setDimension, addTrackin
           {RECEPTION_MEASURES.map(({ key, label, unit }) => {
             const error = issues.find(issue => issue.index === idx && issue.key === key);
             return <label key={key} className="block min-w-0"><span className="block text-xs font-semibold text-gray-700 mb-1">{label} ({unit}) <span aria-hidden="true">*</span></span>
-              <input ref={element => { dimensionRefs.current[`${idx}:${key}`] = element; }} aria-label={`${label} à réception (${unit}) · carton ${idx + 1}`} aria-required="true" aria-invalid={!!error} aria-describedby={error ? `reception-${idx}-${key}-error` : undefined} type="number" min="0.01" step="0.01" inputMode="decimal" placeholder={key === 'poids' ? '2,5' : '40'} value={dimensions[idx]?.[key] ?? ''} onChange={event => setDimension(idx, key, event.target.value)} onFocus={event => event.currentTarget.scrollIntoView({ block: 'center' })} className={`w-full min-h-11 rounded-lg border px-2.5 py-2 text-sm bg-white ${error ? 'border-red-500' : 'border-gray-300'}`} />
+              <input ref={element => { dimensionRefs.current[`${idx}:${key}`] = element; }} aria-label={`${label} à réception (${unit}) · carton ${cartonOffset + idx + 1}`} aria-required="true" aria-invalid={!!error} aria-describedby={error ? `reception-${idx}-${key}-error` : undefined} type="number" min="0.01" step="0.01" inputMode="decimal" placeholder={key === 'poids' ? '2,5' : '40'} value={dimensions[idx]?.[key] ?? ''} onChange={event => setDimension(idx, key, event.target.value)} onFocus={event => event.currentTarget.scrollIntoView({ block: 'center' })} className={`w-full min-h-11 rounded-lg border px-2.5 py-2 text-sm bg-white ${error ? 'border-red-500' : 'border-gray-300'}`} />
               {error && <span id={`reception-${idx}-${key}-error`} className="block mt-1 text-xs text-red-700">Valeur supérieure à zéro requise.</span>}
             </label>;
           })}
@@ -135,6 +135,12 @@ export default function ColisModal({ open, onClose, initialColisId }) {
     const url = URL.createObjectURL(nf.photoFile); setPhotoPreview(url);
     return () => URL.revokeObjectURL(url);
   }, [nf.photoFile]);
+  // Validation from a previous expedition must not name its old carton numbers.
+  useEffect(() => {
+    setFormErr({});
+    setSaveError('');
+    setPendingMeasureFocus(null);
+  }, [mode, rattacherTarget?.id]);
   const dialogRef=useDialog(open,()=>{if(!savingRef.current)resetAndClose();});
   const runSave = async action => {
     if(savingRef.current)return;
@@ -176,7 +182,9 @@ export default function ColisModal({ open, onClose, initialColisId }) {
     setNf(prev => ({ ...prev, multiDims: { ...prev.multiDims, [index]: { ...prev.multiDims[index], [key]: value } } }));
     setFormErr(prev => ({ ...prev, measurements: (prev.measurements || []).filter(issue => issue.index !== index || issue.key !== key), dimensions: undefined }));
   };
-  const cartonFields = <CartonFields lines={nf.trackingLines} dimensions={nf.multiDims} setDimension={setDimension} setTracking={setTracking} addTracking={addTracking} removeTracking={removeTracking} inputRefs={trackingRefs} dimensionRefs={dimensionRefs} onScan={onScan} issues={formErr.measurements} />;
+  // Continue the selected expedition's physical carton numbering, independent of tracking coverage.
+  const cartonOffset = mode === 'rattacher' && rattacherTarget ? receptionCartonManifest(rattacherTarget).nbColis : 0;
+  const cartonFields = <CartonFields cartonOffset={cartonOffset} lines={nf.trackingLines} dimensions={nf.multiDims} setDimension={setDimension} setTracking={setTracking} addTracking={addTracking} removeTracking={removeTracking} inputRefs={trackingRefs} dimensionRefs={dimensionRefs} onScan={onScan} issues={formErr.measurements} />;
 
   const resetAndClose = () => {
     setNf(EMPTY_FORM);
@@ -247,7 +255,7 @@ export default function ColisModal({ open, onClose, initialColisId }) {
       if (!selectedClient && !newClientMode) errs.client = 'Sélectionnez un client';
       if (!receptionCartons(nf.trackingLines, nf.multiDims).length) errs.d = 'Ajoutez au moins un carton et ses mesures à réception.';
       if (!rattacher && !nf.casier.trim()) errs.casier = 'Numéro de casier requis';
-      const measurements = receptionMeasurementIssues(nf.trackingLines, nf.multiDims);
+      const measurements = receptionMeasurementIssues(nf.trackingLines, nf.multiDims, cartonOffset);
       if (measurements.length) {
         errs.measurements = measurements;
         errs.dimensions = measurements[0].message;
