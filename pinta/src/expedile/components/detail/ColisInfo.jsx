@@ -5,8 +5,7 @@ import { Edit3, Check, X, ChevronDown, ChevronUp, ClipboardList, Camera, AlertTr
 import { useApp } from '../../context/AppContext';
 import { BRAND, ABONNEMENTS } from '../../constants';
 import { eur, hasTrack, trackStr, trackCount, telegramLink } from '../../utils';
-import { receptionCartonManifest } from '../../domain/reception';
-import { measureShipment, volumetricDivisor } from '../../domain/quote';
+import ReceivedCartons from './ReceivedCartons';
 
 export default function ColisInfo() {
   const { sel, selClient: cl, selDest, isStaff, upd, flash, data, settings } = useApp();
@@ -164,81 +163,7 @@ export default function ColisInfo() {
         )}
       </div>
 
-      {/* ── Cartons (trackings + dimensions combinés) ── */}
-      {(() => {
-        const manifest = receptionCartonManifest(sel);
-        const divisor = volumetricDivisor(settings);
-        const before = measureShipment(manifest.dimsParColis, divisor);
-        const after = measureShipment([{ dimL: sel.finL, dimW: sel.finW, dimH: sel.finH, poids: sel.finP }], divisor);
-        const nbCartons = manifest.nbColis;
-        const cartons = manifest.trackingsDetail.map((detail, index) => ({
-          tracking: detail.number, fournisseur: detail.fournisseur,
-          dims: manifest.dimsParColis[index], weights: measureShipment([manifest.dimsParColis[index]], divisor),
-        }));
-
-        return (
-          <div role="region" aria-label="Mesures des cartons" className="mt-3 pt-3 border-t space-y-2">
-            <p className="text-xs font-bold text-gray-400 uppercase">
-              Mesures à réception — avant optimisation · {nbCartons > 1 ? `${nbCartons} cartons` : '1 carton'}
-            </p>
-            {cartons.map((c, i) => (
-              <div key={i} className="rounded-lg bg-gray-50 p-2.5 space-y-1">
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-black uppercase tracking-wider text-gray-400">
-                    Carton {i + 1}
-                  </span>
-                  {c.fournisseur && (
-                    <span className="text-[11px] font-semibold text-gray-700">{c.fournisseur}</span>
-                  )}
-                </div>
-                {c.tracking && (
-                  <p className="text-xs font-mono text-gray-500">{c.tracking}</p>
-                )}
-                {c.weights ? (
-                  <p className="text-xs text-gray-600">
-                    {c.dims.dimL} × {c.dims.dimW} × {c.dims.dimH} cm · {c.dims.poids} kg
-                    <span className="text-gray-400 ml-1">
-                      (vol : {c.weights.volumetricWeight.toFixed(2)} kg)
-                    </span>
-                  </p>
-                ) : (
-                  <p className="text-[11px] text-gray-500 italic">Mesures à réception incomplètes — à vérifier</p>
-                )}
-              </div>
-            ))}
-
-            {/* Totaux si multi-cartons avec dimensions */}
-            {nbCartons > 1 && before && (
-              <div className="rounded-lg border border-gray-200 p-2 space-y-0.5">
-                <p className="text-[10px] font-bold text-gray-500 uppercase">Totaux à réception</p>
-                <div className="flex justify-between text-xs text-gray-600">
-                  <span>Poids total</span>
-                  <span className="font-semibold">{before.realWeight.toFixed(2)} kg</span>
-                </div>
-                <div className="flex justify-between text-xs text-gray-600">
-                  <span>Vol. total</span>
-                  <span className="font-semibold">{before.volumetricWeight.toFixed(2)} kg</span>
-                </div>
-                <div className="flex justify-between text-xs font-bold" style={{ color: 'var(--brand-text)' }}>
-                  <span>Poids facturable avant optimisation</span>
-                  <span>{before.billableWeight.toFixed(2)} kg</span>
-                </div>
-              </div>
-            )}
-            {!before && <p className="text-xs text-gray-600">Total avant optimisation indisponible tant que les mesures de tous les cartons ne sont pas complètes et le diviseur valide.</p>}
-
-            {/* Dimensions après optimisation */}
-            {(sel.finL || sel.finW || sel.finH || sel.finP) && (
-              <div className="rounded-lg border p-2 space-y-0.5" style={{ borderColor: BRAND.gold + '40', background: BRAND.gold + '08' }}>
-                <p className="text-[10px] font-bold uppercase" style={{ color: 'var(--text-accent)' }}>Après optimisation</p>
-                {after ? <><p className="text-xs">{sel.finL} × {sel.finW} × {sel.finH} cm · {sel.finP} kg</p>
-                <p className="text-xs text-gray-500">Vol : {after.volumetricWeight.toFixed(2)} kg</p></>
-                  : <p className="text-xs text-gray-500">Mesures après optimisation à compléter ; aucun poids calculé.</p>}
-              </div>
-            )}
-          </div>
-        );
-      })()}
+      <div className="mt-3 pt-3 border-t"><ReceivedCartons colis={sel} settings={settings} /></div>
 
       {/* Casier */}
       {(sel.casier || isStaff) && (

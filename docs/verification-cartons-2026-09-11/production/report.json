@@ -1,0 +1,105 @@
+{
+  "startedAt": "2026-09-11T08:12:10.057Z",
+  "origin": "https://expedile.app",
+  "policy": "Public HTTP GET only; browser login is intercepted locally; no real API verification.",
+  "checks": [
+    {
+      "check": "spa-route",
+      "path": "/",
+      "status": 200
+    },
+    {
+      "check": "spa-route",
+      "path": "/colis",
+      "status": 200
+    },
+    {
+      "check": "spa-route",
+      "path": "/colis/00000000-0000-4000-8000-000000000000",
+      "status": 200
+    },
+    {
+      "check": "spa-route",
+      "path": "/clients",
+      "status": 200
+    },
+    {
+      "check": "spa-route",
+      "path": "/clients/new",
+      "status": 200
+    },
+    {
+      "check": "spa-route",
+      "path": "/clients/00000000-0000-4000-8000-000000000000",
+      "status": 200
+    },
+    {
+      "check": "spa-route",
+      "path": "/devis",
+      "status": 200
+    },
+    {
+      "check": "spa-route",
+      "path": "/settings",
+      "status": 200
+    },
+    {
+      "check": "spa-route",
+      "path": "/notifications",
+      "status": 200
+    },
+    {
+      "check": "spa-route",
+      "path": "/profil",
+      "status": 200
+    },
+    {
+      "check": "spa-route",
+      "path": "/password",
+      "status": 200
+    },
+    {
+      "check": "spa-route",
+      "path": "/suivi/pinta-smoke-invalid-token",
+      "status": 200
+    },
+    {
+      "check": "asset",
+      "path": "/favicon.svg",
+      "status": 200
+    },
+    {
+      "check": "asset",
+      "path": "/assets/index-CkNAFzsr.js",
+      "status": 200
+    },
+    {
+      "check": "asset",
+      "path": "/assets/react-vendor-DpfZLGEx.js",
+      "status": 200
+    },
+    {
+      "check": "asset",
+      "path": "/assets/supabase-vendor-DDrlQt8y.js",
+      "status": 200
+    },
+    {
+      "check": "asset",
+      "path": "/assets/index-B6fGfrjk.css",
+      "status": 200
+    },
+    {
+      "check": "missing-asset",
+      "status": 404
+    }
+  ],
+  "browser": {
+    "status": "passed",
+    "fixtureLoginRejected": true,
+    "realLoginAttempts": 0,
+    "blockedRequests": 0,
+    "runtimeErrors": 0
+  },
+  "status": "passed",
+  "finishedAt": "2026-09-11T08:12:27.599Z"
+}

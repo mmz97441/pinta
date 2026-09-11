@@ -1,0 +1,22 @@
+{
+  "results": [
+    {
+      "viewport": "1440x1000",
+      "configuredDivisor": "PASS",
+      "perCartonVolumeSum": "PASS",
+      "legacyGapsHideTotals": "PASS",
+      "incompleteFinalDoesNotFallback": "PASS",
+      "pageErrors": [],
+      "unexpectedNetwork": []
+    },
+    {
+      "viewport": "390x844",
+      "configuredDivisor": "PASS",
+      "perCartonVolumeSum": "PASS",
+      "legacyGapsHideTotals": "PASS",
+      "incompleteFinalDoesNotFallback": "PASS",
+      "pageErrors": [],
+      "unexpectedNetwork": []
+    }
+  ]
+}

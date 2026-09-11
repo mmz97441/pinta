@@ -13,6 +13,7 @@ import { Badge, Etapes } from '../ui';
 import StaffDetailView from './StaffDetailView';
 import KPIDashboard from './KPIDashboard';
 import ColisInfo from '../detail/ColisInfo';
+import ReceivedCartons from '../detail/ReceivedCartons';
 import FacturesPanel from '../detail/FacturesPanel';
 import ChatPanel from '../detail/ChatPanel';
 import AuditLog from '../detail/AuditLog';
@@ -1009,11 +1010,15 @@ export default function StaffColisPage() {
                   ) : <span className="text-xs text-gray-500">Mesures à réception incomplètes</span>}
                 </div>
               </div>
-              <p className="text-xs text-gray-600">{sel.desc || '—'} · {sel.nbColis || 1} carton{sel.nbColis > 1 ? 's' : ''}</p>
+              <p className="text-xs text-gray-600">{sel.desc || '—'} · {receptionManifest.nbColis} carton{receptionManifest.nbColis > 1 ? 's' : ''}</p>
             </div>
 
-            {/* Single column layout — actions first, then factures/historique */}
+            {/* Receipt cartons stay visible before workflow actions; preparation can fold them away. */}
             <div className="px-4 pb-4 space-y-3">
+              <details key={`${sel.id}:${sel.statut}`} open={sel.statut !== 'en_preparation'} className="rounded-xl border border-gray-200 bg-white px-3">
+                <summary className="min-h-11 py-3 cursor-pointer text-sm font-bold text-gray-800">Cartons reçus ({receptionManifest.nbColis})</summary>
+                <div className="pb-3"><ReceivedCartons colis={sel} settings={settings} /></div>
+              </details>
               {/* Actions (StaffDetailView) */}
               <StaffDetailView />
 

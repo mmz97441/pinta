@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { X, FileText, Search, UserPlus, Package, MapPin, Camera } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { BRAND, STATUTS, getDestByCP, PRODUITS_INTERDITS, ABONNEMENTS } from '../constants';
 import { MSG_TEMPLATES } from '../constants/templates';
@@ -80,6 +80,7 @@ function nextRef() {
 
 export default function ColisModal({ open, onClose, initialColisId }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const appCtx = useApp();
   const { isStaff, authCl, clients, data, setData, flash, addNewClient, receptionner, upd, log } = appCtx;
   const produitsInterdits = appCtx.produitsInterdits || PRODUITS_INTERDITS;
@@ -301,8 +302,15 @@ export default function ColisModal({ open, onClose, initialColisId }) {
     if (nf.notesReception?.trim()) changes.notesReception = (existing.notesReception ? existing.notesReception + '\n' : '') + nf.notesReception.trim();
 
     await upd(existing.id, changes, { expectedUpdatedAt: existing.updatedAt });
-    flash(`Carton rattaché à ${existing.ref} — ${changes.nbColis} cartons au total`);
+    flash(`${newCartons.length} carton${newCartons.length > 1 ? 's' : ''} rattaché${newCartons.length > 1 ? 's' : ''} à ${existing.ref} — ${changes.nbColis} cartons au total`);
     resetAndClose();
+    // Open the dossier that actually received the cartons, keeping the current queue context.
+    const sameDetail = location.pathname === `/colis/${existing.id}`;
+    const query = new URLSearchParams(/^\/colis\/?$/.test(location.pathname) ? location.search : '');
+    query.set('dossier', existing.id);
+    navigate(sameDetail ? { pathname: location.pathname, search: location.search } : { pathname: '/colis', search: `?${query}` }, {
+      state: { receivedCarton: { colisId: existing.id, index: receptionCartonManifest(existing).nbColis } },
+    });
   };
 
   // ── submit: staff new colis (reception) ──────────────
