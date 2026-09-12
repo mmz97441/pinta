@@ -98,11 +98,12 @@ export function nextAction(colis, client, now = Date.now()) {
 }
 export function priorityScore(colis, client, now = Date.now()) {
   if (terminal.has(colis.statut) && !needsConversationAction(colis)) return -10000;
+  if (isWaitDue(colis, now) || isActionDue(colis, now)) return 5000 + Math.min(999, Math.max(0, (now - timestamp(isWaitDue(colis, now) ? colis.attenteClientUntil : colis.nextActionAt)) / DAY));
+  if (colis.statut === 'en_preparation') return 4000 + Math.min(999, urgency(colis, now).days || 0);
   if (needsConversationAction(colis)) {
     const opened = timestamp(colis.conversationOpenedAt || colis.conversationUpdatedAt);
-    return 6000 + (Number.isFinite(opened) ? Math.min(999, Math.max(0, (now - opened) / DAY)) : 0);
+    return 3000 + (Number.isFinite(opened) ? Math.min(999, Math.max(0, (now - opened) / DAY)) : 0);
   }
-  if (isWaitDue(colis, now) || isActionDue(colis, now)) return 5000 + Math.min(999, Math.max(0, (now - timestamp(isWaitDue(colis, now) ? colis.attenteClientUntil : colis.nextActionAt)) / DAY));
   if (isClientWaiting(colis, now)) return -1000;
   const event = urgency(colis, now);
   const stage = ['autorise', 'en_preparation'].includes(colis.statut) ? 4000 : ['receptionne', 'mesure', 'paye'].includes(colis.statut) ? 3000 : 1000;

@@ -1,0 +1,130 @@
+{
+  "startedAt": "2026-09-12T01:52:59.441Z",
+  "origin": "https://pinta-8sdwjydw3-mmz97441s-projects.vercel.app",
+  "policy": "Public HTTP GET only; browser login is intercepted locally; no real API verification.",
+  "checks": [
+    {
+      "check": "spa-route",
+      "path": "/",
+      "status": 200
+    },
+    {
+      "check": "spa-route",
+      "path": "/travail",
+      "status": 200
+    },
+    {
+      "check": "spa-route",
+      "path": "/equipe",
+      "status": 200
+    },
+    {
+      "check": "spa-route",
+      "path": "/conversations",
+      "status": 200
+    },
+    {
+      "check": "spa-route",
+      "path": "/departs",
+      "status": 200
+    },
+    {
+      "check": "spa-route",
+      "path": "/plus",
+      "status": 200
+    },
+    {
+      "check": "spa-route",
+      "path": "/colis",
+      "status": 200
+    },
+    {
+      "check": "spa-route",
+      "path": "/colis/00000000-0000-4000-8000-000000000000",
+      "status": 200
+    },
+    {
+      "check": "spa-route",
+      "path": "/clients",
+      "status": 200
+    },
+    {
+      "check": "spa-route",
+      "path": "/clients/new",
+      "status": 200
+    },
+    {
+      "check": "spa-route",
+      "path": "/clients/00000000-0000-4000-8000-000000000000",
+      "status": 200
+    },
+    {
+      "check": "spa-route",
+      "path": "/devis",
+      "status": 200
+    },
+    {
+      "check": "spa-route",
+      "path": "/settings",
+      "status": 200
+    },
+    {
+      "check": "spa-route",
+      "path": "/notifications",
+      "status": 200
+    },
+    {
+      "check": "spa-route",
+      "path": "/profil",
+      "status": 200
+    },
+    {
+      "check": "spa-route",
+      "path": "/password",
+      "status": 200
+    },
+    {
+      "check": "spa-route",
+      "path": "/suivi/pinta-smoke-invalid-token",
+      "status": 200
+    },
+    {
+      "check": "asset",
+      "path": "/favicon.svg",
+      "status": 200
+    },
+    {
+      "check": "asset",
+      "path": "/assets/index-Deb5nCcy.js",
+      "status": 200
+    },
+    {
+      "check": "asset",
+      "path": "/assets/react-vendor-PqRyEL6L.js",
+      "status": 200
+    },
+    {
+      "check": "asset",
+      "path": "/assets/supabase-vendor-DDrlQt8y.js",
+      "status": 200
+    },
+    {
+      "check": "asset",
+      "path": "/assets/index-PRmjf6Pa.css",
+      "status": 200
+    },
+    {
+      "check": "missing-asset",
+      "status": 404
+    }
+  ],
+  "browser": {
+    "status": "passed",
+    "fixtureLoginRejected": true,
+    "realLoginAttempts": 0,
+    "blockedRequests": 0,
+    "runtimeErrors": 0
+  },
+  "status": "passed",
+  "finishedAt": "2026-09-12T01:53:16.943Z"
+}

@@ -19,10 +19,15 @@ export const RECEPTION_MEASURES = [
 const positive = (value) => value !== '' && value != null && Number.isFinite(Number(value)) && Number(value) > 0;
 export function receptionMeasurementIssues(lines = [], dimensions = {}, cartonOffset = 0) {
   const issues = [];
+  const activeIndexes = new Set(receptionCartons(lines, dimensions).map((line) => line.index));
+  const lastActive = Math.max(-1, ...activeIndexes);
   lines.forEach((line, index) => {
     const active = String(line.fournisseur || '').trim() || String(line.tracking || '').trim()
       || RECEPTION_MEASURES.some(({ key }) => dimensions[index]?.[key] !== '' && dimensions[index]?.[key] != null);
-    if (!active) return;
+    if (!active) {
+      if (index < lastActive) issues.push({ index, key: 'tracking', message: `Carton ${cartonOffset + index + 1} : cette ligne est vide avant un carton renseigné. Supprimez-la ou complétez ses mesures avant d’enregistrer.` });
+      return;
+    }
     RECEPTION_MEASURES.forEach(({ key, label, unit }) => {
       if (!positive(dimensions[index]?.[key])) issues.push({ index, key, message: `Carton ${cartonOffset + index + 1} : ${label.toLowerCase()} à réception (${unit}) requise, avec une valeur supérieure à zéro.` });
     });

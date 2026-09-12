@@ -1,13 +1,15 @@
 import React from 'react';
 import { ArrowLeft } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import { Badge } from '../ui';
-import { hasTrack, trackStr, trackCount } from '../../utils';
+import { receptionCartonManifest } from '../../domain/reception';
+import { workspaceReturnPath } from '../../domain/navigation';
 
 export default function DetailHeader() {
   const navigate = useNavigate();
-  const { sel, selClient, selDest, isStaff } = useApp();
+  const location = useLocation();
+  const { sel, selClient, selDest, isStaff, teamUsers = [] } = useApp();
   if (!sel) return null;
 
   return (
@@ -15,7 +17,7 @@ export default function DetailHeader() {
       className="border-b border-white border-opacity-5 px-4 py-3.5 flex items-center gap-3 sticky top-0 z-20"
       style={{ background: 'linear-gradient(135deg, rgba(18,42,54,0.98), rgba(27,58,75,0.98))' }}
     >
-      <button aria-label="Retour aux colis" onClick={() => navigate('/colis')} className="min-w-[44px] min-h-[44px] flex items-center justify-center text-white font-bold text-lg p-1 hover:bg-white hover:bg-opacity-10 rounded-xl transition-all">
+      <button aria-label="Retour à la liste de travail" onClick={() => navigate(workspaceReturnPath(location.search))} className="min-w-[44px] min-h-[44px] flex items-center justify-center text-white font-bold text-lg p-1 hover:bg-white hover:bg-opacity-10 rounded-xl transition-all">
         <ArrowLeft size={22} />
       </button>
       <div className="flex-1">
@@ -29,13 +31,9 @@ export default function DetailHeader() {
           )}
         </div>
         <p className="text-xs text-gray-300">
-          {isStaff && selClient ? `${selClient.nom} — ` : ''}{sel.desc}
+          {isStaff && selClient ? `${selClient.nom} · ` : ''}{receptionCartonManifest(sel).nbColis} carton(s) reçus{sel.casier ? ` · Casier ${sel.casier}` : ''}
         </p>
-        {hasTrack(sel) && (
-          <p className="text-xs font-mono" style={{ color: '#E8B84B' }}>
-            {trackStr(sel)}{trackCount(sel) > 1 ? ` (${trackCount(sel)} colis)` : ''}
-          </p>
-        )}
+        {isStaff && <p className="mt-1 text-xs text-gray-300">Référent : {teamUsers.find((person) => person.authId === sel.responsibleStaffId)?.nom || 'À attribuer'}</p>}
       </div>
     </div>
   );

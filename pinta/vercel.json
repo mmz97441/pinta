@@ -5,6 +5,11 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "rewrites": [
+    { "source": "/travail", "destination": "/index.html" },
+    { "source": "/equipe", "destination": "/index.html" },
+    { "source": "/conversations", "destination": "/index.html" },
+    { "source": "/departs", "destination": "/index.html" },
+    { "source": "/plus", "destination": "/index.html" },
     { "source": "/colis/:path*", "destination": "/index.html" },
     { "source": "/clients/:path*", "destination": "/index.html" },
     { "source": "/devis", "destination": "/index.html" },

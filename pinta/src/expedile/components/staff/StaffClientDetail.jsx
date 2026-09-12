@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useId } from 'react';
 import { useNavigate, useParams, Navigate } from 'react-router-dom';
 import { ArrowLeft, Check, X, AlertTriangle, ExternalLink, Send, Download, FileSpreadsheet, ChevronDown, Crown } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
@@ -9,6 +9,10 @@ import { exportRecapProExcel } from '../../utils/exportRecapPro';
 import ShareLinkPanel from './ShareLinkPanel';
 import { supabase } from '../../lib/supabase';
 import { functionErrorMessage } from '../../services/functionErrors';
+import * as sb from '../../lib/supabaseData';
+import ColisModal from '../ColisModal';
+import { nextAction } from '../../domain/workQueues';
+import { receptionCartonManifest } from '../../domain/reception';
 
 function InviteClientAccess({ client, flash }) {
   const { retryLoad, can } = useApp();
@@ -94,22 +98,26 @@ function TogglePair({ value, onChange, options }) {
 
 // ── Validated input field ────────────────────────────────────────────────────
 function ValidatedField({ label, value, onChange, placeholder, type = 'text', mono, error, valid, hint, colSpan }) {
+  const id = useId();
   const borderColor = error ? 'border-red-400' : valid ? 'border-green-400' : 'border-gray-200';
   const focusBorder = error ? 'focus:border-red-500' : 'focus:border-blue-300';
   return (
     <div className={colSpan === 2 ? 'col-span-2' : ''}>
-      <label className="text-[11px] font-bold text-gray-500 block mb-1 uppercase tracking-wide">
+      <label htmlFor={id} className="text-xs font-semibold text-gray-600 block mb-1">
         {label}
         {valid && <Check size={10} className="inline ml-1 text-green-500" />}
       </label>
       <input
+        id={id}
+        aria-invalid={Boolean(error)}
+        aria-describedby={error ? `${id}-error` : undefined}
         value={value}
         onChange={onChange}
         placeholder={placeholder}
         type={type}
-        className={`w-full px-3 py-2 rounded-xl border-2 ${borderColor} text-sm outline-none ${focusBorder} transition-colors ${mono ? 'font-mono' : ''}`}
+        className={`min-h-11 w-full px-3 py-2 rounded-xl border-2 ${borderColor} text-sm outline-none ${focusBorder} transition-colors ${mono ? 'font-mono' : ''}`}
       />
-      {error && <p className="text-[10px] text-red-500 font-medium mt-0.5">{error}</p>}
+      {error && <p id={`${id}-error`} className="text-xs text-red-700 font-medium mt-1">{error}</p>}
       {hint && !error && <div className="mt-0.5">{hint}</div>}
     </div>
   );
@@ -145,6 +153,7 @@ export default function StaffClientDetail() {
 
   return (
     <EditClientPage
+      key={existing.id}
       cl={existing}
       clients={clients}
       data={data}
@@ -162,11 +171,24 @@ export default function StaffClientDetail() {
 // ─────────────────────────────────────────────────────────────────────────────
 // Edit page — uses the edit form (extracted from previous inline modal)
 // ─────────────────────────────────────────────────────────────────────────────
-function EditClientPage({ cl, clients, data, updateClient, deleteClient, flash, sendMsg, ask, auth, onDone }) {
+function EditClientPage({ cl, clients, data: initialData, updateClient, deleteClient, flash, sendMsg, ask, auth, onDone }) {
   const navigate = useNavigate();
   const { can } = useApp();
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
+  const [panel, setPanel] = useState('overview');
+  const [receiving, setReceiving] = useState(false);
+  const [history, setHistory] = useState(null);
+  const [historyError, setHistoryError] = useState('');
+  const [historyLoading, setHistoryLoading] = useState(true);
+  const data = history || initialData.filter((item) => item.clientId === cl.id);
+  useEffect(() => {
+    let active = true;
+    sb.fetchColis(null, { clientId: cl.id }).then((rows) => { if (active) { setHistory(rows); setHistoryError(''); } })
+      .catch((error) => { if (active) setHistoryError(error.message); })
+      .finally(() => { if (active) setHistoryLoading(false); });
+    return () => { active = false; };
+  }, [cl.id]);
 
   const [clDraft, setClDraft] = useState({
     nom: cl.nomFamille || cl.nom || '',
@@ -175,7 +197,10 @@ function EditClientPage({ cl, clients, data, updateClient, deleteClient, flash, 
     email: cl.email || '',
     ville: cl.ville || '',
     cp: cl.cp || '',
-    adresse: cl.adresse || '',
+    adresseLigne1: cl.adresseLigne1 || cl.adresse || '',
+    adresseLigne2: cl.adresseLigne2 || '',
+    commune: cl.commune || cl.ville || '',
+    infosLivraison: cl.infosLivraison || '',
     telegramUsername: cl.telegramUsername || '',
     canal: cl.canal || 'telegram',
     type: cl.type || 'particulier',
@@ -224,7 +249,7 @@ function EditClientPage({ cl, clients, data, updateClient, deleteClient, flash, 
 
   // ── Helpers ───────────────────────────────────────────────────────────────
   const colis = data.filter((p) => p.clientId === cl.id && p.statut !== 'annule');
-  const actifs = data.filter((p) => p.clientId === cl.id && !['livre', 'annule'].includes(p.statut));
+  const actifs = data.filter((p) => p.clientId === cl.id && !p.archive && !['livre', 'annule'].includes(p.statut));
   const ca = data.filter((p) => p.clientId === cl.id && p.paiementMontant).reduce((sum, p) => sum + (p.paiementMontant || 0), 0);
   const dest = getDestByCP(cl.cp);
   const hasColis = data.some((p) => p.clientId === cl.id && p.statut !== 'annule');
@@ -251,7 +276,7 @@ function EditClientPage({ cl, clients, data, updateClient, deleteClient, flash, 
       return;
     }
     setSaving(true); setSaveError('');
-    try { await updateClient(cl.id, clDraft); onDone(); }
+    try { await updateClient(cl.id, { ...clDraft, adresse: clDraft.adresseLigne1 }); setPanel('overview'); }
     catch (error) { setSaveError(error.message || 'Enregistrement impossible.'); }
     finally { setSaving(false); }
   }
@@ -330,7 +355,7 @@ function EditClientPage({ cl, clients, data, updateClient, deleteClient, flash, 
           </div>
           <div className="flex flex-col items-end flex-shrink-0 gap-0.5">
             <div className="flex items-center gap-1.5">
-              <span className="text-xs text-gray-400">{colis.length} colis</span>
+              <span className="text-xs text-gray-600">{historyLoading ? 'Historique…' : historyError ? 'Historique indisponible' : `${data.length} dossiers au total`}</span>
               {actifs.length > 0 && (
                 <span
                   className="text-[10px] font-bold px-1.5 py-0.5 rounded-full"
@@ -340,12 +365,19 @@ function EditClientPage({ cl, clients, data, updateClient, deleteClient, flash, 
                 </span>
               )}
             </div>
-            {ca > 0 && <span className="text-xs font-bold text-emerald-600">{ca.toFixed(2)} €</span>}
+            {can('perm_clients_voir_finances') && ca > 0 && <span className="text-xs font-bold text-emerald-600">{ca.toFixed(2)} €</span>}
           </div>
         </div>
 
+        <nav aria-label="Sections de la fiche client" className="flex flex-wrap gap-2 border-b border-gray-200 p-3">{[['overview', 'Synthèse'], ['contact', 'Coordonnées'], ['admin', 'Abonnement et administration']].map(([key, label]) => <button key={key} onClick={() => setPanel(key)} aria-pressed={panel === key} className={`min-h-11 rounded-xl px-3 text-sm font-semibold ${panel === key ? 'brand-bg text-white' : 'text-gray-700 hover:bg-gray-100'}`}>{label}</button>)}</nav>
+        {panel === 'overview' && <div className="space-y-5 p-4">
+          <section aria-label="Contact disponible" className="space-y-3"><h2 className="font-bold text-gray-800">Joindre ce client</h2><p className="text-sm text-gray-600">{cl.telegramChatId ? 'Telegram connecté' : 'Telegram non connecté'} · {cl.userId ? 'Espace client activé' : 'Accès au portail à activer'}</p><div className="flex flex-wrap gap-2">{cl.tel && <a href={`tel:${cl.tel}`} className="min-h-11 inline-flex items-center rounded-xl border border-gray-300 px-3 text-sm font-semibold">Appeler</a>}{cl.email && <a href={`mailto:${cl.email}`} className="min-h-11 inline-flex items-center rounded-xl border border-gray-300 px-3 text-sm font-semibold">Préparer un email</a>}{can('perm_colis_receptionner') && <button onClick={() => setReceiving(true)} className="min-h-11 rounded-xl brand-bg px-4 text-sm font-semibold text-white">Réceptionner pour ce client</button>}</div>{!cl.userId && <InviteClientAccess client={cl} flash={flash} />}{!cl.telegramChatId && <TelegramInvitation client={cl} flash={flash} />}</section>
+          <section aria-label="Expéditions ouvertes" className="space-y-3"><h2 className="font-bold text-gray-800">Expéditions ouvertes ({actifs.length})</h2>{actifs.length ? actifs.map((item) => <button key={item.id} onClick={() => handleOpenColis(item.id)} className="flex min-h-20 w-full flex-wrap items-center justify-between gap-3 rounded-xl border border-gray-200 p-3 text-left"><span><strong className="brand-t">{item.ref}</strong><span className="mt-1 block text-sm text-gray-700">{nextAction(item, cl)}</span><span className="mt-1 block text-xs text-gray-600">{receptionCartonManifest(item).nbColis} carton(s) reçus{item.casier ? ` · Casier ${item.casier}` : ''}</span></span><Badge statut={item.statut} /></button>) : <p className="text-sm text-gray-600">Aucune expédition ouverte.</p>}</section>
+          <details className="rounded-xl border border-gray-200 p-3"><summary className="min-h-11 cursor-pointer font-semibold text-gray-800">Historique complet {history ? `(${history.length} dossiers)` : ''}</summary>{historyLoading && <p role="status" className="text-sm text-gray-600">Chargement de l’historique, archives comprises…</p>}{historyError && <p role="alert" className="text-sm text-red-700">Historique indisponible : {historyError}<button onClick={() => window.location.reload()} className="min-h-11 block underline">Réessayer</button></p>}{history?.map((item) => <button key={item.id} onClick={() => handleOpenColis(item.id)} className="flex min-h-14 w-full items-center justify-between gap-2 border-t border-gray-100 text-left text-sm"><span className="font-semibold brand-t">{item.ref}{item.archive ? ' · Archivé' : ''}</span><Badge statut={item.statut} /></button>)}</details>
+        </div>}
+        <ColisModal open={receiving} onClose={() => setReceiving(false)} initialClientId={cl.id} />
         {/* ── Edit form ─────────────────────────────────────────────────── */}
-        <div className="px-4 pb-5 pt-4 space-y-4">
+        <div hidden={panel === 'overview'} className="px-4 pb-5 pt-4 space-y-4">
 
           {/* Duplicate warning */}
           {duplicates.length > 0 && (
@@ -366,6 +398,7 @@ function EditClientPage({ cl, clients, data, updateClient, deleteClient, flash, 
             </div>
           )}
 
+          <fieldset hidden={panel !== 'contact'} disabled={!can('perm_clients_modifier')} className="space-y-4">
           {/* Field grid */}
           <div className="grid grid-cols-2 gap-3">
             <ValidatedField
@@ -441,8 +474,8 @@ function EditClientPage({ cl, clients, data, updateClient, deleteClient, flash, 
                 Adresse de livraison
               </label>
               <textarea
-                value={clDraft.adresse}
-                onChange={(e) => patchDraft('adresse', e.target.value)}
+                aria-label="Adresse de livraison" value={clDraft.adresseLigne1}
+                onChange={(e) => patchDraft('adresseLigne1', e.target.value)}
                 placeholder="N° rue, résidence, étage…"
                 rows={2}
                 className="w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-sm outline-none focus:border-blue-300 transition-colors resize-none"
@@ -450,6 +483,7 @@ function EditClientPage({ cl, clients, data, updateClient, deleteClient, flash, 
             </div>
           </div>
 
+          <div className="grid gap-3 sm:grid-cols-2"><ValidatedField label="Complément d’adresse" value={clDraft.adresseLigne2} onChange={(event) => patchDraft('adresseLigne2', event.target.value)} /><ValidatedField label="Commune de livraison" value={clDraft.commune} onChange={(event) => patchDraft('commune', event.target.value)} /><ValidatedField label="Instructions de livraison" value={clDraft.infosLivraison} onChange={(event) => patchDraft('infosLivraison', event.target.value)} /></div>
           {/* Canal */}
           <div>
             <label className="text-[11px] font-bold text-gray-500 block mb-1.5 uppercase tracking-wide">
@@ -465,6 +499,8 @@ function EditClientPage({ cl, clients, data, updateClient, deleteClient, flash, 
             />
           </div>
 
+          </fieldset>
+          <fieldset hidden={panel !== 'admin'} disabled={!can('perm_clients_modifier')} className="space-y-4">
           {/* Type */}
           <div>
             <label className="text-[11px] font-bold text-gray-500 block mb-1.5 uppercase tracking-wide">
@@ -486,7 +522,7 @@ function EditClientPage({ cl, clients, data, updateClient, deleteClient, flash, 
               Forfait
             </label>
             <select
-              value={clDraft.abonnement}
+              aria-label="Forfait" value={clDraft.abonnement}
               onChange={(e) => patchDraft('abonnement', e.target.value)}
               className="w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-sm outline-none focus:border-blue-300 transition-colors"
               style={{ color: 'var(--brand-text)' }}
@@ -506,7 +542,7 @@ function EditClientPage({ cl, clients, data, updateClient, deleteClient, flash, 
                 </label>
                 <input
                   type="date"
-                  value={clDraft.abonnementDebut || ''}
+                  aria-label="Début abonnement" value={clDraft.abonnementDebut || ''}
                   onChange={(e) => patchDraft('abonnementDebut', e.target.value)}
                   className="w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-sm outline-none focus:border-blue-300 transition-colors"
                 />
@@ -517,7 +553,7 @@ function EditClientPage({ cl, clients, data, updateClient, deleteClient, flash, 
                 </label>
                 <input
                   type="date"
-                  value={clDraft.abonnementFin || ''}
+                  aria-label="Fin abonnement" value={clDraft.abonnementFin || ''}
                   onChange={(e) => patchDraft('abonnementFin', e.target.value)}
                   className="w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-sm outline-none focus:border-blue-300 transition-colors"
                 />
@@ -531,7 +567,7 @@ function EditClientPage({ cl, clients, data, updateClient, deleteClient, flash, 
               Notes internes
             </label>
             <textarea
-              value={clDraft.notes}
+              aria-label="Notes internes" value={clDraft.notes}
               onChange={(e) => patchDraft('notes', e.target.value)}
               placeholder="Informations utiles pour l'équipe…"
               rows={2}
@@ -539,7 +575,8 @@ function EditClientPage({ cl, clients, data, updateClient, deleteClient, flash, 
             />
           </div>
 
-          {cl.id && <><InviteClientAccess client={cl} flash={flash} /><TelegramInvitation client={cl} flash={flash} /></>}
+          </fieldset>
+          {panel === 'contact' && cl.id && <><InviteClientAccess client={cl} flash={flash} /><TelegramInvitation client={cl} flash={flash} /></>}
 
           {saveError && <p role="alert" className="text-sm text-red-600">{saveError}</p>}
           {!can('perm_clients_modifier') && <p className="text-xs text-gray-500">Votre rôle permet de consulter cette fiche. Les modifications sont réservées aux personnes habilitées.</p>}
@@ -555,7 +592,7 @@ function EditClientPage({ cl, clients, data, updateClient, deleteClient, flash, 
               Enregistrer
             </button>
             <button
-              onClick={() => navigate('/clients')}
+              onClick={() => setPanel('overview')}
               className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-bold bg-gray-100 text-gray-600 transition-all active:scale-95 hover:bg-gray-200"
             >
               <X size={14} />
@@ -615,7 +652,7 @@ function EditClientPage({ cl, clients, data, updateClient, deleteClient, flash, 
           )}
 
           {/* Pro billing section */}
-          {cl.type === 'pro' && (
+          {panel === 'admin' && can('perm_clients_voir_finances') && cl.type === 'pro' && (
             <div className="rounded-xl border overflow-hidden" style={{ borderColor: '#A5B4FC', background: '#EEF2FF' }}>
               <button
                 onClick={() => setBillingOpen((p) => !p)}

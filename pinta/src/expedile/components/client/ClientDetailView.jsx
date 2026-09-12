@@ -1,3 +1,4 @@
+import { receptionCartonManifest } from '../../domain/reception';
 import React, { useState, useEffect } from 'react';
 import {
   ArrowLeft, Package, CheckCircle, Wrench, CreditCard, Plane, MapPin,
@@ -139,7 +140,7 @@ export default function ClientDetailView() {
   const journey = clientJourney(sel);
   const published = quotePresentation(sel, authCl, selDest);
   const price = published.colis;
-  const clientWaiting=sel.statut==='attente_feu_vert'&&Boolean(sel.attenteClientDate&&(!sel.attenteClientUntil||Date.parse(sel.attenteClientUntil)>Date.now()));
+  const clientWaiting = journey.waiting;
 
   const toggleStep = (idx) => {
     if (getPhaseState(idx, curPhaseIdx) !== 'future') setTimeOpen((prev) => prev === idx ? null : idx);
@@ -200,7 +201,7 @@ export default function ClientDetailView() {
               {sel.dimsParColis.map((d, i) => (
                 <div key={i} className="rounded-lg bg-white p-2 border border-gray-100">
                   <p className="text-[10px] font-bold text-gray-400 mb-0.5">
-                    {sel.trackings?.filter((t) => t)[i] || `Colis ${i + 1}`}
+                    Carton {i + 1}{receptionCartonManifest(sel).trackingsDetail[i]?.number ? ` · ${receptionCartonManifest(sel).trackingsDetail[i].number}` : ' · Sans numéro de suivi'}
                   </p>
                   <Ligne label="L × W × H" value={`${d.dimL} × ${d.dimW} × ${d.dimH} cm`} />
                   <Ligne label="Poids" value={`${d.poids} kg`} />
@@ -256,7 +257,7 @@ export default function ClientDetailView() {
                   {sel.dimsParColis.map((d, i) => (
                     <div key={i} className="rounded-lg bg-white p-2 border border-gray-100">
                       <p className="text-[10px] font-bold text-gray-400 mb-0.5">
-                        {sel.trackings?.filter((t) => t)[i] || `Colis ${i + 1}`}
+                        Carton {i + 1}{receptionCartonManifest(sel).trackingsDetail[i]?.number ? ` · ${receptionCartonManifest(sel).trackingsDetail[i].number}` : ' · Sans numéro de suivi'}
                       </p>
                       <Ligne label="L × W × H" value={`${d.dimL} × ${d.dimW} × ${d.dimH} cm`} />
                       <Ligne label="Poids" value={`${d.poids} kg`} />
@@ -280,7 +281,7 @@ export default function ClientDetailView() {
                   <p>3. Vous recevez le devis final à payer</p>
                 </div>
               </div>
-              {Boolean(sel.attenteClientDate && (!sel.attenteClientUntil || Date.parse(sel.attenteClientUntil) > Date.now())) && <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700"><p className="font-semibold">Votre demande d’attente est enregistrée</p><p className="mt-1">{sel.attenteClientMotif}{sel.attenteClientUntil ? ` · Jusqu’au ${new Date(sel.attenteClientUntil).toLocaleDateString('fr-FR')}` : ''}</p><p className="text-xs text-gray-500 mt-1">Vous pouvez utiliser le bouton « Autoriser la préparation » dès que vous êtes prêt.</p></div>}
+              {clientWaiting && <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700"><p className="font-semibold">Votre demande d’attente est enregistrée</p><p className="mt-1">{sel.attenteClientMotif}{sel.attenteClientUntil ? ` · Jusqu’au ${new Date(sel.attenteClientUntil).toLocaleDateString('fr-FR')}` : ''}</p><p className="text-xs text-gray-500 mt-1">Vous pouvez utiliser le bouton « Autoriser la préparation » dès que vous êtes prêt.</p></div>}
 </div></details>
               <button disabled={decisionPending} onClick={() => handleFeuVert(false)} className="min-h-11 flex items-center gap-2 text-sm font-semibold text-red-700"><ThumbsDown size={15} />Refuser la préparation</button>
             </>
@@ -451,7 +452,7 @@ export default function ClientDetailView() {
           {!hasDevis && !isPaye && (
             <p className="text-xs text-gray-400 flex items-center gap-1.5 bg-gray-50 rounded-xl px-3 py-2">
               <Clock size={13} />
-              Le devis sera disponible prochainement
+              {journey.quoteNeedsReview ? 'Votre devis est en cours de révision. Aucun règlement n’est demandé pour la version retirée.' : 'Le devis sera disponible prochainement'}
             </p>
           )}
         </div>
@@ -566,6 +567,7 @@ export default function ClientDetailView() {
         <p className="text-sm text-slate-600">{journey.actor && <strong>{journey.actor} · </strong>}{journey.next}</p>
         <p className="text-xs text-slate-500">{journey.event ? `${journey.event.label} le ${new Date(journey.event.date).toLocaleDateString('fr-FR')}` : 'Date du dernier événement non renseignée.'}</p>
       </section>
+      {sel.finalPackages?.length > 0 && <details className="rounded-xl border border-slate-200 p-3"><summary className="min-h-11 cursor-pointer text-sm font-semibold text-slate-700">Après optimisation · {sel.finalPackages.length} colis sortant{sel.finalPackages.length > 1 ? 's' : ''}</summary><div className="space-y-2 text-sm text-slate-600">{sel.finalPackages.map((box,index) => <p key={index}>Colis {index + 1} · {box.dimL} × {box.dimW} × {box.dimH} cm · {box.poids} kg</p>)}</div></details>}
       {/* ── Progress bar (inline, no card wrapper) ── */}
       {sel.statut !== 'annule' && (
         <div className="px-1">

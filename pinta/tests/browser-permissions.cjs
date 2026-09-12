@@ -268,7 +268,7 @@ async function main() {
     });
 
     await scenario('connected-worker-permissions-refresh-on-window-focus', { role: 'preparateur', initial: { perm_colis_receptionner: true } }, async f => {
-      const create = f.page.getByRole('button', { name: 'Nouveau colis', exact: true }); await create.waitFor();
+      const create = f.page.getByRole('button', { name: 'Réceptionner des cartons', exact: true }); await create.waitFor();
       f.write(ids.S, { ...f.records.get(ids.S), perm_colis_receptionner: false });
       const read = f.page.waitForResponse(response => response.request().method() === 'GET' && new URL(response.url()).pathname === '/rest/v1/staff_users');
       await f.page.evaluate(() => window.dispatchEvent(new Event('focus'))); await read;

@@ -1,3 +1,4 @@
+import { useNavigate, useLocation } from 'react-router-dom';
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Ruler, Check, Clock, AlertTriangle, Eye, X, RotateCcw, Send, Mail, Plus, Archive, Package,
@@ -12,7 +13,11 @@ import FacturesPanel from '../detail/FacturesPanel';
 import ColisModal from '../ColisModal';
 import { receptionCartonManifest, receptionMeasurements } from '../../domain/reception';
 import * as sb from '../../lib/supabaseData';
+import { needsQuoteRecalculation } from '../../domain/clientJourney';
 import { calculateQuote, measureShipment, volumetricDivisor, quoteInputFingerprint } from '../../domain/quote';
+
+const preparationDrafts = new Map();
+const savedFinalPackages = (colis) => colis?.finalPackages?.length ? colis.finalPackages.map(box => ({ ...box })) : [{ dimL: colis?.finL ?? '', dimW: colis?.finW ?? '', dimH: colis?.finH ?? '', poids: colis?.finP ?? '' }];
 
 // ── Status border color helper ───────────────────────────────────────────────
 function statusBorderColor(statut) {
@@ -53,13 +58,14 @@ function Section({ title, icon: Icon, color, children }) {
 }
 
 // ── Input field ──────────────────────────────────────────────────────────────
-function Field({ label, type = 'text', value, onChange, onBlur, placeholder, min, step, unit }) {
+function Field({ label, type = 'text', value, onChange, onBlur, placeholder, min, step, unit, disabled = false }) {
   return (
     <div className="flex flex-col gap-1">
       <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">{label}</label>
       <div className="relative flex items-center">
         <input
           type={type}
+          disabled={disabled}
           inputMode={type === 'number' ? 'decimal' : undefined}
           value={value}
           onChange={onChange}
@@ -132,7 +138,9 @@ function BtnEmail({ onClick, children, disabled }) {
 // ════════════════════════════════════════════════════════════════════════════
 // MAIN COMPONENT
 // ════════════════════════════════════════════════════════════════════════════
-export default function StaffDetailView() {
+export default function StaffDetailView({ workspace = false }) {
+  const navigate = useNavigate();
+  const location = useLocation();
   const {
     sel,
     selClient: cl,
@@ -140,6 +148,7 @@ export default function StaffDetailView() {
     isStaff,
     auth,
     teamUsers = [],
+    workActions = [],
     clients,
     upd,
     ask,
@@ -151,12 +160,14 @@ export default function StaffDetailView() {
     desarchiverColis,
     demanderFeuVert,
     envoyerDevis,
+    savePreparationMeasurements,
     confirmerDevis,
     settings = {},
     sendMsg,
     categories,
     getTarif,
     envois,
+    assignDeparture,
     payer,
     setData,
     can,
@@ -178,12 +189,13 @@ export default function StaffDetailView() {
   // One set per physical carton, including cartons without a tracking number.
   const [multiDims, setMultiDims] = useState({});
   // Local fin dims form — initialized from existing sel values
-  const [finDims, setFinDims] = useState({
-    finL: sel?.finL || '',
-    finW: sel?.finW || '',
-    finH: sel?.finH || '',
-    finP: sel?.finP || '',
-  });
+  const [finalPackages, setFinalPackages] = useState(() => savedFinalPackages(sel));
+  const preparationVersion = useRef(sel?.updatedAt);
+  const preparationComposition = useRef(sel?.preparationCompositionVersion);
+  const preparationDirty = useRef(false);
+  const loadedPreparation = useRef(null);
+  const [preparationConflict, setPreparationConflict] = useState(false);
+  const [measuresSaved, setMeasuresSaved] = useState(false);
   // Photo simulation
   // Produits interdits checklist
   // Devis preview mode
@@ -209,18 +221,45 @@ export default function StaffDetailView() {
       setCommentaire(sel.commentairePreparation || '');
       setNewArticle({ desc: '', qte: '1', prix: '', cat: '', factureId: '' });
       setFormErr('');
-      setFinDims({ finL: sel.finL || '', finW: sel.finW || '', finH: sel.finH || '', finP: sel.finP || '' });
+      const draft = preparationDrafts.get(`${auth?.u?.id}:${sel.id}`);
+      setFinalPackages(draft?.finalPackages || savedFinalPackages(sel));
+      preparationDirty.current = !!draft;
+      preparationVersion.current = draft?.version || sel.updatedAt;
+      preparationComposition.current = draft?.composition ?? sel.preparationCompositionVersion;
+      setPreparationConflict(!!draft && draft.version !== sel.updatedAt);
+      setMeasuresSaved(false);
       setSelEnvoi(sel.envoi || '');
       setSelTags(sel.tagsPreparation || []);
-      setFraisDivers(sel.fraisDivers || []);
+      setFraisDivers(preparationDrafts.get(`${auth?.u?.id}:${sel.id}`)?.fraisDivers || sel.fraisDivers || []);
       setShowAddCarton(false);
       setDevisPrev(false);
       setShowCorrections(false);
       // Re-sync canal based on new client
       const newCl = clients.find((x) => x.id === sel.clientId);
-      setProPayMethod(sel.modePaiementPro || newCl?.methodePaiement || 'virement');
+      setProPayMethod(preparationDrafts.get(`${auth?.u?.id}:${sel.id}`)?.proPayMethod || sel.modePaiementPro || newCl?.methodePaiement || 'virement');
+      loadedPreparation.current = JSON.stringify([draft?.finalPackages || savedFinalPackages(sel), draft?.fraisDivers || sel.fraisDivers || [], draft?.proPayMethod || sel.modePaiementPro || newCl?.methodePaiement || 'virement']);
     }
   }, [sel?.id]);
+
+  useEffect(() => {
+    if (!sel || preparationVersion.current === sel.updatedAt) return;
+    if (preparationDirty.current) { setPreparationConflict(true); return; }
+    preparationVersion.current = sel.updatedAt;
+    preparationComposition.current = sel.preparationCompositionVersion;
+    setFinalPackages(savedFinalPackages(sel)); setFraisDivers(sel.fraisDivers || []);
+    setProPayMethod(sel.modePaiementPro || cl?.methodePaiement || 'virement');
+    setPreparationConflict(false); setDevisPrev(false);
+  }, [sel?.id, sel?.updatedAt]);
+
+  useEffect(() => {
+    if (loadedPreparation.current && loadedPreparation.current !== JSON.stringify([finalPackages,fraisDivers,proPayMethod])) return;
+    loadedPreparation.current = null;
+    if (sel && preparationDirty.current) preparationDrafts.set(`${auth?.u?.id}:${sel.id}`, { finalPackages, fraisDivers, proPayMethod, version: preparationVersion.current, composition: preparationComposition.current });
+  }, [sel?.id, finalPackages, fraisDivers, proPayMethod, auth?.u?.id]);
+  useEffect(() => {
+    const guard = event => { if (preparationDirty.current) { event.preventDefault(); event.returnValue = ''; } };
+    window.addEventListener('beforeunload', guard); return () => window.removeEventListener('beforeunload', guard);
+  }, []);
 
   const receptionSignature = JSON.stringify([sel?.id, sel?.nbColis, sel?.trackings, sel?.trackingsDetail, sel?.dimsParColis, sel?.dimL, sel?.dimW, sel?.dimH, sel?.poids]);
   useEffect(() => {
@@ -236,6 +275,16 @@ export default function StaffDetailView() {
     receptionDirty.current = false;
     setReceptionConflict(false);
   }, [receptionSignature]);
+
+  const openingActionId = new URLSearchParams(location.search).get('action');
+  const openingKind = workActions.find(action => action.id === openingActionId && action.colis_id === sel?.id)?.kind;
+  useEffect(() => {
+    const anchor = { preparation: 'quote-measures', documents: 'quote-documents', quote: 'quote-review' }[openingKind];
+    if (!anchor) return;
+    if (openingKind === 'documents') setDocumentTab('document');
+    const frame = requestAnimationFrame(() => document.getElementById(anchor)?.scrollIntoView({ block: 'start' }));
+    return () => cancelAnimationFrame(frame);
+  }, [sel?.id, openingActionId, openingKind]);
 
   if (!sel || !isStaff) return null;
 
@@ -302,18 +351,37 @@ export default function StaffDetailView() {
   }
 
   // Preview and saved quote use exactly the same explicit input values.
-  const finalChanges = { finL: finDims.finL, finW: finDims.finW, finH: finDims.finH, finP: finDims.finP, fraisDivers, ...(cl?.type === 'pro' ? { modePaiementPro: proPayMethod } : {}) };
+  const finalChanges = { finalPackages, fraisDivers, ...(cl?.type === 'pro' ? { modePaiementPro: proPayMethod } : {}) };
   const quote = calculateQuote({ colis: { ...sel, ...finalChanges }, client: cl, destination: dest, tarif, categories, settings });
-
+  const acceptPreparation = saved => {
+    preparationVersion.current = saved.updatedAt;
+    preparationComposition.current = saved.preparationCompositionVersion;
+    preparationDirty.current = false; preparationDrafts.delete(`${auth?.u?.id}:${sel.id}`);
+    setPreparationConflict(false); setFinalPackages(savedFinalPackages(saved));
+  };
+  const reloadPreparation = () => {
+    acceptPreparation(sel); setFraisDivers(sel.fraisDivers || []);
+    setProPayMethod(sel.modePaiementPro || cl?.methodePaiement || 'virement'); setDevisPrev(false); setFormErr('');
+  };
+  async function handleSaveMeasurements() {
+    if (preparationConflict) throw new Error('Le dossier a changé. Comparez votre saisie avec la version enregistrée avant de poursuivre.');
+    const saved = await savePreparationMeasurements(sel.id, { finalPackages }, { expectedUpdatedAt: preparationVersion.current, expectedCompositionVersion: preparationComposition.current });
+    if (saved) { acceptPreparation(saved);
+      if (JSON.stringify(fraisDivers) !== JSON.stringify(saved.fraisDivers || []) || proPayMethod !== (saved.modePaiementPro || cl?.methodePaiement || 'virement')) {
+        preparationDirty.current = true; preparationDrafts.set(`${auth?.u?.id}:${sel.id}`, { finalPackages: savedFinalPackages(saved), fraisDivers, proPayMethod, version: saved.updatedAt, composition: saved.preparationCompositionVersion });
+      }
+      setMeasuresSaved(true); flash('Mesures après optimisation enregistrées. Les documents peuvent être complétés séparément.'); }
+    return saved;
+  }
   async function handleEnvoyerDevis() {
+    if (preparationConflict) throw new Error('Le dossier a changé. Reprenez la version enregistrée avant de calculer le devis.');
     if (!quote.ok) { setFormErr(quote.errors.map((error) => error.message).join(' ')); return false; }
-    const saved = await envoyerDevis(sel.id, finalChanges);
-    if (saved !== false && saved != null) { setSavedInputs(quoteInputFingerprint(quote.snapshot)); setDevisPrev(true); }
+    const saved = await envoyerDevis(sel.id, finalChanges, { expectedUpdatedAt: preparationVersion.current });
+    if (saved !== false && saved != null) { acceptPreparation(saved); setSavedInputs(quoteInputFingerprint(quote.snapshot)); setDevisPrev(true); }
     return saved;
   }
 
   async function handleConfirmDevisEnvoye() {
-    if (cl?.type === 'pro') await upd(sel.id, { modePaiementPro: proPayMethod });
     const result = await confirmerDevis(sel.id, { canal: cl?.telegramChatId ? 'telegram' : 'email' });
     if (result !== false) setDevisPrev(false);
     return result;
@@ -337,7 +405,7 @@ export default function StaffDetailView() {
   // ════════════════════════════════════════════════════════════════════════
 
   function renderActionBlock() {
-    switch (sel.statut) {
+    switch (needsQuoteRecalculation(sel) ? 'en_preparation' : sel.statut) {
 
       // ── 1. RECEPTIONNE ─────────────────────────────────────────────────
       case 'receptionne': {
@@ -494,32 +562,43 @@ export default function StaffDetailView() {
 
       // ── 6. EN_PREPARATION ─────────────────────────────────────────────
       case 'en_preparation': {
-        const verified = devisPrev && quote.ok && savedInputs === quoteInputFingerprint(quote.snapshot);
+        const normalizeBoxes = boxes => JSON.stringify(boxes.map(box => Object.fromEntries(['dimL','dimW','dimH','poids'].map(key => [key,Number(box[key])]))));
+        const measuresChanged = normalizeBoxes(finalPackages) !== normalizeBoxes(savedFinalPackages(sel));
+        const verified = !measuresChanged && devisPrev && quote.ok && savedInputs === quoteInputFingerprint(quote.snapshot);
         const focusBlocker = (field) => {
           const anchor = field.startsWith('dimensions') ? 'quote-measures' : field.startsWith('fraisDivers') ? 'quote-fees' : field.startsWith('lignes') || field.startsWith('lines') ? 'quote-articles' : 'quote-documents';
           setDocumentTab('articles');
           requestAnimationFrame(() => { const target = document.getElementById(anchor); target?.scrollIntoView({ behavior: 'smooth', block: 'start' }); target?.querySelector('input,select,button')?.focus({ preventScroll: true }); });
         };
-        const weights = measureShipment([{ dimL: finDims.finL, dimW: finDims.finW, dimH: finDims.finH, poids: finDims.finP }], divisor);
+        const preparationBlock = sel.archive ? 'Désarchivez le dossier avant de poursuivre sa préparation.' : sel.produitInterdit ? 'Un produit interdit est signalé : faites vérifier le dossier avant de poursuivre.' : sel.feuVert !== 'autorise' ? 'Le feu vert du client doit être enregistré avant de poursuivre la préparation.' : null;
+        const weights = measureShipment(finalPackages, divisor);
         const isPro = cl?.type === 'pro';
         const inputClass = 'min-h-11 min-w-0 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300';
-        const changeFinal = (key, value) => { setFinDims((previous) => ({ ...previous, [key]: value })); setDevisPrev(false); };
-        return <div className="min-w-0 space-y-5">
+        const changeFinal = (index, key, value) => { preparationDirty.current = true; setFinalPackages(previous => previous.map((box,position) => position === index ? { ...box, [key]: value } : box)); setMeasuresSaved(false); setDevisPrev(false); };
+        return <div className={`min-w-0 space-y-5 ${workspace ? "mx-auto w-full max-w-6xl" : ""}`}>
           <div className="border-b border-gray-200 pb-4">
             <p className="text-xs font-bold uppercase tracking-wider text-gray-400">Préparation et devis</p>
             <p className="mt-1 text-sm text-slate-700">{isPro ? 'Client professionnel : transport et frais convenus, sans calcul de taxes dans ce devis.' : 'Vérifiez les pièces et les articles, mesurez le colis optimisé, puis envoyez un devis complet.'}</p>
           </div>
           <nav aria-label="Vérifications du devis" className="flex flex-wrap gap-2">{[['quote-measures','Mesures'],['quote-documents','Documents'],['quote-articles','Articles'],['quote-fees','Frais']].filter(([id]) => !isPro || id !== 'quote-articles').map(([id,label]) => <a key={id} href={`#${id}`} onClick={(event) => { event.preventDefault(); setDocumentTab(id === 'quote-documents' ? 'document' : 'articles'); requestAnimationFrame(() => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })); }} className="inline-flex min-h-11 items-center rounded-xl bg-slate-100 px-3 text-sm font-semibold text-slate-700">{label}</a>)}</nav>
+          {measuresChanged && <p role="status" className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">Enregistrez les mesures modifiées avant de vérifier le devis. Vos documents peuvent être complétés séparément.</p>}
           {!quote.ok && <div className="rounded-xl bg-amber-50 p-3"><p className="text-xs font-semibold text-amber-800">À compléter pour le devis</p><ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-amber-800">{quote.errors.map((error, index) => <li key={index}><button className="min-h-11 text-left underline underline-offset-2" onClick={() => focusBlocker(error.field)}>{error.message}</button></li>)}</ul></div>}
-          {isPro && <label className="block space-y-2 text-xs font-semibold text-slate-600">Modalités de règlement convenues<select aria-label="Modalités de règlement professionnel" value={proPayMethod} onChange={(event) => { setProPayMethod(event.target.value); setDevisPrev(false); }} className={inputClass}>{[['virement', 'Virement bancaire'], ['especes', 'Espèces'], ['30_jours', 'Paiement à 30 jours'], ['fin_de_mois', 'Paiement en fin de mois']].map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select><span className="block text-xs font-normal text-gray-500">Cette modalité figurera dans la version du devis. Le paiement sera confirmé séparément après réception du règlement.</span></label>}
+          {isPro && <label className="block space-y-2 text-xs font-semibold text-slate-600">Modalités de règlement convenues<select aria-label="Modalités de règlement professionnel" value={proPayMethod} onChange={(event) => { preparationDirty.current = true; setProPayMethod(event.target.value); setDevisPrev(false); }} className={inputClass}>{[['virement', 'Virement bancaire'], ['especes', 'Espèces'], ['30_jours', 'Paiement à 30 jours'], ['fin_de_mois', 'Paiement en fin de mois']].map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select><span className="block text-xs font-normal text-gray-500">Cette modalité figurera dans la version du devis. Le paiement sera confirmé séparément après réception du règlement.</span></label>}
           <div id="quote-measures" className="scroll-mt-24"><Section title="Mesures après optimisation" icon={Ruler} color={borderColor}>
-            <div className="grid grid-cols-2 gap-3">{[['finL', 'Longueur', 'cm'], ['finW', 'Largeur', 'cm'], ['finH', 'Hauteur', 'cm'], ['finP', 'Poids réel', 'kg']].map(([key, label, unit]) => <Field key={key} label={label} type="number" min="0.01" step="0.01" value={finDims[key]} onChange={(event) => changeFinal(key, event.target.value)} unit={unit} />)}</div>
-            <p className="mt-2 text-xs text-gray-400">Ces mesures sont enregistrées avec le brouillon du devis.</p>
+            <p className="mb-3 text-sm text-slate-600">Mesurez chaque colis physique après optimisation. Ces valeurs sont indépendantes des cartons reçus et alimentent le devis et le manifeste de départ.</p>
+            {preparationBlock && <p role="alert" className="mb-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">{preparationBlock}</p>}
+            {preparationConflict && <div role="alert" className="mb-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900"><p>Une autre modification a été enregistrée depuis l’ouverture de votre saisie. Votre brouillon est conservé ; aucune mesure ne sera écrasée.</p><p className="mt-2">Version enregistrée : {savedFinalPackages(sel).map((box,index) => `colis ${index + 1} : ${box.dimL || '—'} × ${box.dimW || '—'} × ${box.dimH || '—'} cm / ${box.poids || '—'} kg`).join(' ; ')}</p><button className="min-h-11 font-semibold underline" onClick={reloadPreparation}>Recharger et remplacer mon brouillon</button></div>}
+            {sel.preparationCompositionVersion != null && sel.finalMeasurementsVersion !== sel.preparationCompositionVersion && <p role="status" className="mb-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">La composition des cartons a changé. Mesurez à nouveau l’ensemble préparé puis enregistrez les mesures pour confirmer cette nouvelle préparation.</p>}
+            <div className="space-y-3">{finalPackages.map((box,index) => <fieldset key={index} className="rounded-xl border border-slate-200 p-3"><legend className="px-1 text-sm font-semibold text-slate-700">Colis sortant {index + 1}</legend><div className="grid grid-cols-2 gap-3">{[['dimL', 'Longueur', 'cm'], ['dimW', 'Largeur', 'cm'], ['dimH', 'Hauteur', 'cm'], ['poids', 'Poids réel', 'kg']].map(([key,label,unit]) => <Field key={key} label={`${label} · colis sortant ${index + 1}`} type="number" min="0.01" step="0.01" disabled={actionLoading || !!preparationBlock || !can('perm_colis_preparer')} value={box[key] ?? ''} onChange={event => changeFinal(index,key,event.target.value)} unit={unit} />)}</div>{finalPackages.length > 1 && <button disabled={actionLoading || !!preparationBlock || !can('perm_colis_preparer')} className="min-h-11 text-sm font-semibold text-red-700 disabled:opacity-40" onClick={() => { preparationDirty.current = true; setFinalPackages(previous => previous.filter((_,position) => position !== index)); setDevisPrev(false); }}>Retirer le colis sortant {index + 1}</button>}</fieldset>)}</div>
+            <button disabled={actionLoading || !!preparationBlock || !can('perm_colis_preparer')} className="my-3 min-h-11 w-full rounded-xl border border-dashed border-slate-300 text-sm font-semibold brand-t disabled:opacity-40" onClick={() => { preparationDirty.current = true; setFinalPackages(previous => [...previous,{dimL:'',dimW:'',dimH:'',poids:''}]); setDevisPrev(false); }}>+ Ajouter un colis après optimisation</button>
+            <BtnPrimary disabled={actionLoading || !!preparationBlock || preparationConflict || !weights || !can('perm_colis_preparer')} onClick={() => runAction(handleSaveMeasurements)}><Check size={16} />Enregistrer les mesures de préparation</BtnPrimary>
+            {!can('perm_colis_preparer') && <p className="mt-2 text-sm text-slate-600">Les mesures sont enregistrées par une personne habilitée à préparer. Vous pouvez vérifier les documents et établir le devis dès qu’elles sont confirmées.</p>}
+            <p role="status" className="mt-2 text-xs text-slate-600">{measuresSaved ? 'Mesures enregistrées, même si les documents restent à vérifier.' : 'Les mesures peuvent être enregistrées avant les documents et le devis.'}</p>
             {weights && <div className="mt-4 space-y-1 border-t border-gray-100 pt-3 text-sm"><Ligne label="Poids volumétrique" value={`${weights.volumetricWeight.toFixed(2)} kg`} /><Ligne label="Poids facturable" value={`${weights.billableWeight.toFixed(2)} kg`} /></div>}
           </Section></div>
           <FacturesPanel workspace tab={documentTab} onTabChange={setDocumentTab}>
           {!isPro && <div id="quote-articles" className="scroll-mt-24"><Section title="Articles et catégories" icon={Package} color={borderColor}>
-            <div className="space-y-3">{(sel.lignes || []).map((line) => <div key={line.id} className="space-y-2 border-b border-gray-100 pb-3">
+            <div className="space-y-3">{(sel.lignes || []).filter(line => !line.factureId || !(sel.factures || []).some(invoice => invoice.id === line.factureId && invoice.rejetMotif)).map((line) => <div key={line.id} className="space-y-2 border-b border-gray-100 pb-3">
               <div className="flex items-start justify-between gap-2"><div className="min-w-0"><p className="break-words text-sm font-medium text-slate-700">{line.desc}</p><p className="text-xs text-gray-500">{line.qte} × {eur(line.prix)}</p></div><button aria-label={`Supprimer ${line.desc}`} disabled={actionLoading || !can('perm_factures_modifier_articles')} onClick={() => runAction(async () => { await sb.deleteLigne(line.id); setData((previous) => previous.map((parcel) => parcel.id === sel.id ? { ...parcel, lignes: (parcel.lignes || []).filter((item) => item.id !== line.id) } : parcel)); setDevisPrev(false); })} className="flex min-h-11 min-w-11 items-center justify-center rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600"><X size={15} /></button></div>
               <select aria-label={`Catégorie de ${line.desc}`} disabled={actionLoading || !can('perm_factures_modifier_articles')} value={line.cat || ''} onChange={(event) => { const cat = event.target.value; runAction(async () => { await sb.updateLigne(line.id, { cat }); setData((previous) => previous.map((parcel) => parcel.id === sel.id ? { ...parcel, lignes: (parcel.lignes || []).map((item) => item.id === line.id ? { ...item, cat } : item) } : parcel)); setDevisPrev(false); }); }} className={inputClass}><option value="">Catégorie à vérifier</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.label}</option>)}</select>
             </div>)}
@@ -528,7 +607,7 @@ export default function StaffDetailView() {
                 <input aria-label="Description du nouvel article" required value={newArticle.desc} onChange={(event) => setNewArticle({ ...newArticle, desc: event.target.value })} placeholder="Description de l’article" className={inputClass} />
                 <div className="grid grid-cols-2 gap-2"><label className="text-xs text-gray-500">Quantité<input required aria-label="Quantité du nouvel article" type="number" min="1" step="1" value={newArticle.qte} onChange={(event) => setNewArticle({ ...newArticle, qte: event.target.value })} className={inputClass} /></label><label className="text-xs text-gray-500">Prix unitaire HT (€)<input required aria-label="Prix du nouvel article" type="number" min="0" step="0.01" value={newArticle.prix} onChange={(event) => setNewArticle({ ...newArticle, prix: event.target.value })} className={inputClass} /></label></div>
                 <select required aria-label="Catégorie du nouvel article" value={newArticle.cat} onChange={(event) => setNewArticle({ ...newArticle, cat: event.target.value })} className={inputClass}><option value="">Choisir une catégorie</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.label}</option>)}</select>
-                <select aria-label="Facture source du nouvel article" value={newArticle.factureId} onChange={(event) => setNewArticle({ ...newArticle, factureId: event.target.value })} className={inputClass}><option value="">Facture source (recommandée)</option>{(sel.factures || []).map((invoice) => <option key={invoice.id} value={invoice.id}>{invoice.vendeur} · {eur(invoice.montant)}</option>)}</select>
+                <select aria-label="Facture source du nouvel article" value={newArticle.factureId} onChange={(event) => setNewArticle({ ...newArticle, factureId: event.target.value })} className={inputClass}><option value="">Facture source (recommandée)</option>{(sel.factures || []).filter(invoice => !invoice.rejetMotif).map((invoice) => <option key={invoice.id} value={invoice.id}>{invoice.vendeur} · {eur(invoice.montant)}</option>)}</select>
                 <button disabled={actionLoading || !can('perm_factures_modifier_articles')} className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-slate-100 text-sm font-semibold text-slate-700"><Plus size={14} />Enregistrer l’article</button>
               </form>
             </div>
@@ -541,8 +620,8 @@ export default function StaffDetailView() {
             {commentaire !== (sel.commentairePreparation || '') && <button disabled={actionLoading} className="min-h-11 text-xs font-semibold text-blue-700" onClick={() => runAction(() => upd(sel.id, { commentairePreparation: commentaire }))}>Enregistrer la consigne</button>}
           </div>
 </details>
-          <div id="quote-fees" className="scroll-mt-24 space-y-2 border-t border-gray-200 pt-4"><p className="text-xs font-semibold text-slate-600">Frais convenus</p>{fraisDivers.map((fee, index) => <div key={index} className="flex items-center gap-2 text-sm"><span className="min-w-0 flex-1 break-words">{fee.libelle}</span><strong>{eur(fee.montant)}</strong><button aria-label={`Retirer ${fee.libelle}`} disabled={actionLoading} className="flex min-h-11 min-w-11 items-center justify-center text-gray-400" onClick={() => runAction(async () => { const next = fraisDivers.filter((_, position) => position !== index); await upd(sel.id, { fraisDivers: next }); setFraisDivers(next); setDevisPrev(false); })}><X size={14} /></button></div>)}
-            <form className="grid grid-cols-[minmax(0,1fr)_6rem] gap-2" onSubmit={(event) => { event.preventDefault(); runAction(async () => { const amount = Number(newFraisMontant); if (!newFraisLibelle.trim() || newFraisMontant === '' || !Number.isFinite(amount) || amount < 0) throw new Error('Indiquez le libellé et un montant positif ou nul.'); const next = [...fraisDivers, { libelle: newFraisLibelle.trim(), montant: amount }]; await upd(sel.id, { fraisDivers: next }); setFraisDivers(next); setNewFraisLibelle(''); setNewFraisMontant(''); setDevisPrev(false); }); }}><input aria-label="Libellé du frais" required value={newFraisLibelle} onChange={(event) => setNewFraisLibelle(event.target.value)} placeholder="Libellé du frais" className={inputClass} /><input aria-label="Montant du frais" required type="number" min="0" step="0.01" value={newFraisMontant} onChange={(event) => setNewFraisMontant(event.target.value)} placeholder="€" className={inputClass} /><button disabled={actionLoading} className="col-span-2 min-h-11 rounded-xl bg-slate-100 text-xs font-semibold text-slate-700">Ajouter le frais</button></form>
+          <div id="quote-fees" className="scroll-mt-24 space-y-2 border-t border-gray-200 pt-4"><p className="text-xs font-semibold text-slate-600">Frais convenus</p>{fraisDivers.map((fee, index) => <div key={index} className="flex items-center gap-2 text-sm"><span className="min-w-0 flex-1 break-words">{fee.libelle}</span><strong>{eur(fee.montant)}</strong><button aria-label={`Retirer ${fee.libelle}`} disabled={actionLoading} className="flex min-h-11 min-w-11 items-center justify-center text-gray-400" onClick={() => runAction(async () => { const next = fraisDivers.filter((_, position) => position !== index); preparationDirty.current = true; setFraisDivers(next); setDevisPrev(false); })}><X size={14} /></button></div>)}
+            <form className="grid grid-cols-[minmax(0,1fr)_6rem] gap-2" onSubmit={(event) => { event.preventDefault(); runAction(async () => { const amount = Number(newFraisMontant); if (!newFraisLibelle.trim() || newFraisMontant === '' || !Number.isFinite(amount) || amount < 0) throw new Error('Indiquez le libellé et un montant positif ou nul.'); const next = [...fraisDivers, { libelle: newFraisLibelle.trim(), montant: amount }]; preparationDirty.current = true; setFraisDivers(next); setNewFraisLibelle(''); setNewFraisMontant(''); setDevisPrev(false); }); }}><input aria-label="Libellé du frais" required value={newFraisLibelle} onChange={(event) => setNewFraisLibelle(event.target.value)} placeholder="Libellé du frais" className={inputClass} /><input aria-label="Montant du frais" required type="number" min="0" step="0.01" value={newFraisMontant} onChange={(event) => setNewFraisMontant(event.target.value)} placeholder="€" className={inputClass} /><button disabled={actionLoading} className="col-span-2 min-h-11 rounded-xl bg-slate-100 text-xs font-semibold text-slate-700">Ajouter le frais</button></form>
           </div>
           <div><p className="mb-2 text-xs font-semibold text-slate-600">Photo du colis préparé</p><WebcamCapture colisId={sel.id} colisRef={sel.ref} existingUrl={sel.photoPrep} onCapture={(path) => runAction(() => upd(sel.id, { photoPrep: path }))} /></div>
           {subExpired && <p className="rounded-xl bg-red-50 p-3 text-xs text-red-700">Abonnement expiré : régularisez l’offre du client avant l’envoi.</p>}
@@ -551,9 +630,9 @@ export default function StaffDetailView() {
           {quote.ok && <Section title={verified ? 'Brouillon enregistré · vérifier puis envoyer' : 'Estimation du devis'} icon={Eye} color={BRAND.navy}>
             <div className="space-y-2 text-sm"><Ligne label="Transport" value={eur(quote.amounts.transport)} />{!isPro && <><Ligne label="Octroi de mer" value={eur(quote.amounts.om)} /><Ligne label="Octroi de mer régional" value={eur(quote.amounts.omr)} /><Ligne label={`TVA (${dest.tva} %)`} value={eur(quote.amounts.tva)} /></>}<Ligne label="Frais convenus" value={eur(quote.amounts.fees)} /><div className="border-t border-gray-200 pt-3"><Ligne label="Total à régler" value={<strong className="text-xl" style={{ color: 'var(--brand-text)' }}>{eur(quote.amounts.total)}</strong>} /></div>{quote.patch.economie > 0 && <Ligne label="Économie après optimisation" value={eur(quote.patch.economie)} />}</div>
           </Section>}
-          <div data-testid="quote-action-bar" className="sticky bottom-0 z-20 -mx-1 border-t border-slate-200 bg-white px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-3px_12px_rgba(0,0,0,0.06)]">
+          <div id="quote-review" data-testid="quote-action-bar" className="sticky bottom-0 z-20 -mx-1 border-t border-slate-200 bg-white px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-3px_12px_rgba(0,0,0,0.06)]">
             <div className="mb-2 flex items-center justify-between gap-3"><div><p className="text-xs font-semibold text-slate-600">Total recalculé</p><p className="text-lg font-bold text-slate-800">{quote.ok ? eur(quote.amounts.total) : 'À compléter'}</p></div><p role="status" className="max-w-[60%] text-right text-xs text-slate-600">{actionLoading ? 'Enregistrement en cours…' : verified ? 'Brouillon enregistré · vérifiez le détail avant envoi' : sel.devisBrouillon ? 'Modifications à enregistrer et vérifier' : 'Calcul non enregistré'}</p></div>
-          {!verified ? <BtnPrimary onClick={() => runAction(handleEnvoyerDevis)} disabled={!quote.ok || actionLoading || subExpired || !can('perm_colis_calculer_devis')}><Eye size={16} />{actionLoading ? 'Enregistrement…' : 'Enregistrer et vérifier le devis'}</BtnPrimary> : <div className="space-y-2"><BtnPrimary color="#15803D" onClick={() => runAction(handleConfirmDevisEnvoye)} disabled={actionLoading || !quote.ok || subExpired || !can('perm_colis_envoyer_devis')}><Send size={16} />{actionLoading ? 'Envoi en cours…' : 'Envoyer le devis au client'}</BtnPrimary><button className="min-h-11 w-full rounded-xl border border-gray-200 text-sm font-semibold text-gray-600" onClick={() => setDevisPrev(false)}>Modifier le brouillon</button></div>}
+          {!verified ? <BtnPrimary onClick={() => runAction(handleEnvoyerDevis)} disabled={!quote.ok || measuresChanged || preparationConflict || actionLoading || subExpired || !can('perm_colis_calculer_devis')}><Eye size={16} />{actionLoading ? 'Enregistrement…' : 'Enregistrer et vérifier le devis'}</BtnPrimary> : <div className="space-y-2"><BtnPrimary color="#15803D" onClick={() => runAction(handleConfirmDevisEnvoye)} disabled={actionLoading || preparationConflict || !quote.ok || subExpired || !can('perm_colis_envoyer_devis')}><Send size={16} />{actionLoading ? 'Envoi en cours…' : 'Envoyer le devis au client'}</BtnPrimary><button className="min-h-11 w-full rounded-xl border border-gray-200 text-sm font-semibold text-gray-600" onClick={() => setDevisPrev(false)}>Modifier le brouillon</button></div>}
           </div>
         </div>;
       }
@@ -621,7 +700,13 @@ export default function StaffDetailView() {
 
       // ── 9. PAYE ────────────────────────────────────────────────────────
       case 'paye': {
-        const availableEnvois = envois.filter((e) => e.statut !== 'parti' && e.statut !== 'archive' && e.destinationCode === dest?.code);
+        const destinationCode = sel.devisSnapshot?.inputs?.destination?.code || dest?.code;
+        const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Indian/Reunion' });
+        const departureIssue = departure => !departure ? 'Départ introuvable' : departure.destinationCode !== destinationCode ? 'Destination différente du devis payé' : ['parti','arrive','archive'].includes(departure.statut) ? 'Départ déjà parti, arrivé ou archivé' : !departure.date || departure.date.slice(0,10) < today ? 'Date de départ dépassée ou absente' : departure.loadingClosesAt && Date.parse(departure.loadingClosesAt) <= Date.now() ? 'Chargement clôturé' : null;
+        const availableEnvois = envois.filter(departure => !departureIssue(departure));
+        const assigned = envois.find(departure => departure.id === sel.envoi);
+        const assignmentIssue = sel.envoi ? departureIssue(assigned) : null;
+        const canAssign = can(sel.envoi ? 'perm_envois_reaffecter' : 'perm_colis_affecter_envoi');
         return (
           <Section title="Paiement reçu — Expédier" icon={Check} color={borderColor}>
             <div className="space-y-4">
@@ -638,16 +723,19 @@ export default function StaffDetailView() {
                   Affecter à un envoi
                 </label>
                 <select
+                  aria-label="Départ de cette expédition"
                   value={selEnvoi}
+                  disabled={actionLoading || !canAssign}
                   onChange={(e) => { const envoi = e.target.value; runAction(async () => {
-                    await upd(sel.id, { envoi: envoi || null });
+                    await assignDeparture(sel, envoi || null);
                     setSelEnvoi(envoi);
                     flash(envoi ? 'Envoi affecté' : 'Envoi retiré');
                   }); }}
                   className="w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-sm outline-none"
                   style={{ color: 'var(--brand-text)' }}
                 >
-                  <option value="">— Choisir un envoi —</option>
+                  <option value="">— Choisir un départ compatible —</option>
+                  {assignmentIssue && <option value={sel.envoi} disabled>{assigned?.date || "Départ affecté"} · {assignmentIssue}</option>}
                   {availableEnvois.map((e) => {
                     const d = new Date(e.date + 'T00:00:00');
                     const label = d.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' });
@@ -660,6 +748,9 @@ export default function StaffDetailView() {
                 </select>
               </div>
 
+              {assignmentIssue && <p role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">Affectation à revoir : {assignmentIssue}. Choisissez un départ compatible avant le chargement.</p>}
+              {!canAssign && <p className="text-sm text-slate-600">L’affectation est modifiable par une personne habilitée {sel.envoi ? "à réaffecter les départs" : "à affecter les expéditions"}.</p>}
+              {!availableEnvois.length && <p className="text-sm text-slate-600">Aucun départ ouvert compatible avec la destination du devis payé. La coordination doit prévoir le prochain départ.</p>}
               {subExpired && (
                 <div className="flex items-start gap-2 p-3 rounded-xl bg-red-50 border border-red-300">
                   <AlertTriangle size={14} className="text-red-600 flex-shrink-0 mt-0.5" />
@@ -670,12 +761,12 @@ export default function StaffDetailView() {
               )}
 
               <BtnPrimary
-                onClick={() => runAction(() => changerStatut(sel.id, 'expedie'))}
-                disabled={(!sel.envoi && !selEnvoi) || subExpired || !can('perm_colis_expedier')}
+                onClick={() => navigate(`/departs?envoi=${encodeURIComponent(sel.envoi || selEnvoi)}`)}
+                disabled={(!sel.envoi && !selEnvoi) || !!assignmentIssue || subExpired || !can('perm_envois_voir')}
                 color="#0891B2"
               >
                 <Check size={15} />
-                Expédier ce colis
+                Vérifier le départ et son manifeste
               </BtnPrimary>
             </div>
           </Section>

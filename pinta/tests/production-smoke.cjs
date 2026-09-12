@@ -7,7 +7,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 
 const ID = '00000000-0000-4000-8000-000000000000';
-const ROUTES = ['/', '/colis', `/colis/${ID}`, '/clients', '/clients/new', `/clients/${ID}`, '/devis', '/settings', '/notifications', '/profil', '/password', '/suivi/pinta-smoke-invalid-token'];
+const ROUTES = ['/', '/travail', '/equipe', '/conversations', '/departs', '/plus', '/colis', `/colis/${ID}`, '/clients', '/clients/new', `/clients/${ID}`, '/devis', '/settings', '/notifications', '/profil', '/password', '/suivi/pinta-smoke-invalid-token'];
 const FIXTURE_EMAIL = 'production-smoke@example.invalid';
 const FIXTURE_PASSWORD = 'fixture-never-sent-to-server';
 

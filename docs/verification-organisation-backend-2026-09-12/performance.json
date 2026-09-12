@@ -1,0 +1,165 @@
+{
+  "executed_at": "2026-09-12T01:43:30.337690+00:00",
+  "environment": {
+    "database": "PostgreSQL 17 Alpine, Docker Desktop local",
+    "cpus_limit": 2,
+    "memory_limit": "512 MiB",
+    "shared_buffers": "64 MiB",
+    "external_network": false
+  },
+  "dossiers": 1000,
+  "staff_sessions": 5,
+  "scenarios": [
+    {
+      "name": "normal_no_expired_waits",
+      "simultaneous_sessions": [
+        {
+          "actions": 3000,
+          "session": 1,
+          "json_bytes": 1745000,
+          "refresh_ms": 3.713,
+          "read_and_json_ms": 334.916,
+          "process_wall_ms": 429.99
+        },
+        {
+          "actions": 3000,
+          "session": 2,
+          "json_bytes": 1745000,
+          "refresh_ms": 3.753,
+          "read_and_json_ms": 391.317,
+          "process_wall_ms": 491.12
+        },
+        {
+          "actions": 3000,
+          "session": 3,
+          "json_bytes": 1745000,
+          "refresh_ms": 3.464,
+          "read_and_json_ms": 394.4,
+          "process_wall_ms": 492.25
+        },
+        {
+          "actions": 3000,
+          "session": 4,
+          "json_bytes": 1745000,
+          "refresh_ms": 3.713,
+          "read_and_json_ms": 396.279,
+          "process_wall_ms": 493.47
+        },
+        {
+          "actions": 3000,
+          "session": 5,
+          "json_bytes": 1745000,
+          "refresh_ms": 3.574,
+          "read_and_json_ms": 392.243,
+          "process_wall_ms": 490.49
+        }
+      ],
+      "group_wall_ms": 500.32
+    },
+    {
+      "name": "worst_case_1000_expired_waits_same_time",
+      "simultaneous_sessions": [
+        {
+          "actions": 3000,
+          "session": 1,
+          "json_bytes": 1744891,
+          "refresh_ms": 1116.47,
+          "read_and_json_ms": 100.659,
+          "process_wall_ms": 1309.09
+        },
+        {
+          "actions": 3000,
+          "session": 2,
+          "json_bytes": 1744891,
+          "refresh_ms": 196.759,
+          "read_and_json_ms": 108.477,
+          "process_wall_ms": 393.57
+        },
+        {
+          "actions": 3000,
+          "session": 3,
+          "json_bytes": 1744891,
+          "refresh_ms": 647.302,
+          "read_and_json_ms": 103.182,
+          "process_wall_ms": 840.59
+        },
+        {
+          "actions": 3000,
+          "session": 4,
+          "json_bytes": 1744891,
+          "refresh_ms": 871.303,
+          "read_and_json_ms": 103.657,
+          "process_wall_ms": 1071.72
+        },
+        {
+          "actions": 3000,
+          "session": 5,
+          "json_bytes": 1744891,
+          "refresh_ms": 426.711,
+          "read_and_json_ms": 97.459,
+          "process_wall_ms": 616.1
+        }
+      ],
+      "group_wall_ms": 1309.53
+    },
+    {
+      "name": "after_expired_waits_processed",
+      "simultaneous_sessions": [
+        {
+          "actions": 3000,
+          "session": 1,
+          "json_bytes": 1744891,
+          "refresh_ms": 3.531,
+          "read_and_json_ms": 230.813,
+          "process_wall_ms": 324.29
+        },
+        {
+          "actions": 3000,
+          "session": 2,
+          "json_bytes": 1744891,
+          "refresh_ms": 3.02,
+          "read_and_json_ms": 234.828,
+          "process_wall_ms": 326.76
+        },
+        {
+          "actions": 3000,
+          "session": 3,
+          "json_bytes": 1744891,
+          "refresh_ms": 3.058,
+          "read_and_json_ms": 237.886,
+          "process_wall_ms": 329.76
+        },
+        {
+          "actions": 3000,
+          "session": 4,
+          "json_bytes": 1744891,
+          "refresh_ms": 3.03,
+          "read_and_json_ms": 234.802,
+          "process_wall_ms": 327.15
+        },
+        {
+          "actions": 3000,
+          "session": 5,
+          "json_bytes": 1744891,
+          "refresh_ms": 3.14,
+          "read_and_json_ms": 236.287,
+          "process_wall_ms": 327.5
+        }
+      ],
+      "group_wall_ms": 330.31
+    }
+  ],
+  "fixture_creation_seconds": 0.46,
+  "final_state": {
+    "actions": 3000,
+    "assigned": 0,
+    "expired_remaining": 0,
+    "ready_preparations": 1000
+  },
+  "limitations": [
+    "Local Docker timing, not production benchmark or internet latency.",
+    "Synthetic dossiers have no invoices, documents, photos or historic messages; payload estimate covers work actions only.",
+    "Database statement and JSON materialisation timings are measured; browser rendering and PostgREST pagination latency are excluded.",
+    "1000 simultaneous expired waits are an intentionally stressed case; all sessions use independent PostgreSQL connections."
+  ]
+}

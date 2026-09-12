@@ -40,6 +40,12 @@ export function mapColis(row) {
     finW: row.fin_w ? +row.fin_w : null,
     finH: row.fin_h ? +row.fin_h : null,
     finP: row.fin_p ? +row.fin_p : null,
+    finalPackages: row.final_packages || [],
+    preparationCompositionVersion: row.preparation_composition_version ?? 0,
+    finalMeasurementsVersion: row.final_measurements_version ?? null,
+    finalMeasurementsAt: row.final_measurements_at || null,
+    outgoingParcelCount: row.outgoing_parcel_count ?? null,
+    destinationCode: row.destination_code || null,
     poidsFact: row.poids_facturable ? +row.poids_facturable : null,
     feuVert: row.feu_vert,
     feuVertDate: row.feu_vert_date,
@@ -139,7 +145,7 @@ export function mapClient(row) {
   };
 }
 
-function mapEnvoi(row) {
+export function mapEnvoi(row) {
   return {
     id: row.id,
     ref: row.ref,
@@ -152,6 +158,10 @@ function mapEnvoi(row) {
     poidsTotal: row.poids_total ? +row.poids_total : 0,
     volumeTotal: row.volume_total ? +row.volume_total : 0,
     notes: row.notes,
+    updatedAt: row.updated_at,
+    loadingClosesAt: row.loading_closes_at || null,
+    departedAt: row.departed_at || null,
+    manifestVersion: row.manifest_version || 0,
   };
 }
 
@@ -179,6 +189,7 @@ export function mapFact(row) {
     valide: row.valide || false,
     fichier: row.fichier_url,
     fichierNom: row.fichier_nom,
+    replacesFactureId: row.replaces_facture_id || null,
     rejetMotif: row.rejet_motif || null,
     telegramMsgId: row.telegram_msg_id || null,
     ocrStatus: row.ocr_status || null,
@@ -225,25 +236,28 @@ export function mapMessage(row) {
     statut: row.statut,
     msgId: row.msg_id || row.wa_id,
     lu: row.lu || false,
+    attachmentPath: row.attachment_path || null,
+    attachmentName: row.attachment_name || null,
+    attachmentType: row.attachment_type || null,
   };
 }
 
 // ── Fetch functions ─────────────────────────────────────────────────
 
 // Keyset pagination avoids PostgREST's default row cap and unstable offsets.
-export async function fetchAllRows(table, configure = (query) => query) {
+export async function fetchAllRows(table, configure = (query) => query, cursorKey = 'id') {
   const rows = [];
   let after = null;
   for (;;) {
     let query = configure(supabase.from(readTable(table)).select('*'))
-      .order('id')
+      .order(cursorKey)
       .limit(500);
-    if (after) query = query.gt('id', after);
+    if (after) query = query.gt(cursorKey, after);
     const { data, error } = await query;
     if (error) throw error;
     rows.push(...(data || []));
     if (!data?.length || data.length < 500) break;
-    const next = data[data.length - 1].id;
+    const next = data[data.length - 1][cursorKey];
     if (next === after) throw new Error('Pagination interrompue : curseur inchangé');
     after = next;
   }
@@ -256,8 +270,8 @@ export async function fetchClients() {
     .sort((a, b) => (b.created || '').localeCompare(a.created || ''));
 }
 
-export async function fetchColis(colisId = null, { archived = false } = {}) {
-  const scope = (q) => (colisId ? q.eq('id', colisId) : q.eq('archive', archived));
+export async function fetchColis(colisId = null, { archived = false, clientId = null, envoiId = null } = {}) {
+  const scope = (q) => colisId ? q.eq('id', colisId) : clientId ? q.eq('client_id', clientId) : envoiId ? q.eq('envoi_id', envoiId) : q.eq('archive', archived);
   const colisRows = await fetchAllRows('colis', scope);
   if (!colisRows.length) return [];
   const grouped = { factures: {}, lignes: {}, messages: {} };
@@ -423,15 +437,19 @@ export async function deleteStaffUser(id) {
   if (error) throw error;
 }
 
-export async function fetchNotifications(userId) {
-  const { data, error } = await supabase
+export async function fetchNotificationPage(userId, limit = 50) {
+  const [page, unread] = await Promise.all([supabase
     .from('notifications')
-    .select('*')
+    .select('*', { count: 'exact' })
     .eq('user_id', userId)
     .order('created_at', { ascending: false })
-    .limit(50);
-  if (error) throw error;
-  return data.map((n) => ({
+    .order('id', { ascending: false })
+    .range(0, limit - 1),
+    supabase.from('notifications').select('id', { count: 'exact', head: true }).eq('user_id', userId).eq('lu', false),
+  ]);
+  if (page.error) throw page.error;
+  if (unread.error) throw unread.error;
+  const rows = (page.data || []).map((n) => ({
     id: n.id,
     date: n.created_at,
     titre: n.titre,
@@ -440,6 +458,41 @@ export async function fetchNotifications(userId) {
     colisId: n.colis_id,
     type: n.type || null,
   }));
+  return { rows, total: page.count ?? rows.length, unread: unread.count ?? rows.filter((n) => !n.lu).length };
+}
+
+export async function fetchNotifications(userId) {
+  return (await fetchNotificationPage(userId)).rows;
+}
+
+export async function fetchStaffWork() {
+  const { error } = await supabase.rpc('refresh_staff_work_actions');
+  if (error) throw error;
+  const [actions, preferences] = await Promise.all([
+    fetchAllRows('staff_work_actions', (query) => query.neq('state', 'done')),
+    fetchAllRows('staff_work_preferences', (query) => query, 'staff_id'),
+  ]);
+  return { actions, preferences };
+}
+
+export async function mutateStaffWorkAction(action, command, payload = {}) {
+  const { data, error } = await supabase.rpc('mutate_staff_work_action', {
+    p_action_id: action.id, p_command: command, p_expected_version: action.version, p_payload: payload,
+  });
+  if (error) throw error;
+  const saved = Array.isArray(data) ? data[0] : data;
+  if (!saved?.id) throw new Error('La modification du travail n’a pas été confirmée. Actualisez la liste.');
+  return saved;
+}
+
+export async function saveStaffWorkPreferences(changes, expectedVersion = null) {
+  const { data, error } = await supabase.rpc('save_staff_work_preferences', {
+    p_preferences: changes, p_expected_version: expectedVersion,
+  });
+  if (error) throw error;
+  const saved = Array.isArray(data) ? data[0] : data;
+  if (!saved?.staff_id) throw new Error('Les préférences n’ont pas été confirmées.');
+  return saved;
 }
 
 // ── Mutations ───────────────────────────────────────────────────────
@@ -643,6 +696,7 @@ export async function insertFacture(colisId, factureData) {
       valide: factureData.valide || false,
       fichier_url: factureData.fichierUrl || null,
       fichier_nom: factureData.fichierNom || null,
+      replaces_facture_id: factureData.replacesFactureId || null,
     })
     .select()
     .single();
@@ -695,6 +749,7 @@ export async function insertLigne(colisId, ligneData) {
     qte: data.qte,
     prix: data.prix_unitaire ? +data.prix_unitaire : 0,
     cat: data.categorie_id,
+    factureId: data.facture_id || null,
   };
 }
 
@@ -803,6 +858,7 @@ export async function insertEnvoi(envoiData) {
       date_depart: envoiData.date,
       statut: envoiData.statut || 'planifie',
       destination_code: envoiData.destinationCode || null,
+      loading_closes_at: envoiData.loadingClosesAt || null,
     })
     .select()
     .single();
@@ -810,7 +866,8 @@ export async function insertEnvoi(envoiData) {
   return mapEnvoi(data);
 }
 
-export async function updateEnvoi(id, changes) {
+export async function updateEnvoi(id, changes, expectedUpdatedAt) {
+  if (!expectedUpdatedAt) throw new Error('Rechargez le départ avant de le modifier.');
   const snakeChanges = {};
   const map = {
     date: 'date_depart',
@@ -819,12 +876,16 @@ export async function updateEnvoi(id, changes) {
     transporteur: 'transporteur',
     trackingPrincipal: 'tracking_principal',
     notes: 'notes',
+    loadingClosesAt: 'loading_closes_at',
   };
   for (const [key, val] of Object.entries(changes)) {
     snakeChanges[map[key] || key] = val;
   }
-  const { error } = await supabase.from('envois').update(snakeChanges).eq('id', id);
+  const { data, error } = await supabase.from('envois').update(snakeChanges).eq('id', id)
+    .eq('updated_at', expectedUpdatedAt).select().maybeSingle();
   if (error) throw error;
+  if (!data) throw new Error('Le départ a été modifié par un collègue ou vos permissions ont changé. Actualisez le planning avant de reprendre.');
+  return mapEnvoi(data);
 }
 
 export async function deleteEnvoi(id) {

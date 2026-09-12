@@ -20,10 +20,17 @@ async function processUpdate(update: any): Promise<{ chatId?: number; text?: str
     if (assignment && uuid(assignment[1])) {
       const client = await db.from('clients').select('id,nom,prenom').eq('telegram_chat_id', String(chatId)).single(); throwDb(client);
       const pending = await db.from('client_inbox').select('*').eq('telegram_update_id', Number(assignment[2])).eq('client_id', client.data.id).single(); throwDb(pending);
-      const colis = await db.from('colis').select('id,ref').eq('id', assignment[1]).eq('client_id', client.data.id).single(); throwDb(colis);
+      const colis = await db.from('colis').select('id,ref,statut,paiement_date').eq('id', assignment[1]).eq('client_id', client.data.id).single(); throwDb(colis);
       if (pending.data.status === 'assigned') return { chatId, callbackId: cb.id, text: 'Ce message a déjà été rattaché à son dossier.' };
       const claim = await db.rpc('claim_inbox_assignment',{p_inbox_id:pending.data.id,p_colis_id:colis.data.id}); throwDb(claim);
-      if (claim.data.status !== 'assigned') await saveIncoming(db, client.data, colis.data, pending.data.payload, pending.data.telegram_update_id);
+      if (claim.data.status !== 'assigned') {
+        try { await saveIncoming(db, client.data, colis.data, pending.data.payload, pending.data.telegram_update_id); }
+        catch (error) {
+          if (!(error instanceof HttpError) || error.status !== 400) throw error;
+          throwDb(await db.from('client_inbox').update({ status: 'unassigned', payload: { ...pending.data.payload, intake_error: error.message }, texte: `${colis.data.ref} — ${error.message}` }).eq('id', pending.data.id));
+          return { chatId, callbackId: cb.id, text: `${error.message}. Notre équipe conserve votre demande. Envoyez un fichier compatible.` };
+        }
+      }
       throwDb(await db.from('client_inbox').update({ colis_id: colis.data.id, status: 'assigned' }).eq('id', pending.data.id));
       return { chatId, callbackId: cb.id, text: `Votre message est enregistré dans ${colis.data.ref}. Notre équipe le retrouvera dans ce dossier.` };
     }
@@ -42,21 +49,24 @@ async function processUpdate(update: any): Promise<{ chatId?: number; text?: str
   const customer = await db.from('clients').select('id,nom,prenom').eq('telegram_chat_id', String(chatId)).maybeSingle(); throwDb(customer);
   if (!customer.data) return { chatId, text: 'Liez d’abord votre compte depuis votre profil Expedîle pour recevoir vos informations personnelles.' };
   const client = customer.data;
-  const active = await db.from('colis').select('id,ref,statut').eq('client_id', client.id).not('statut','in','(livre,annule)').order('created_at', { ascending: false }); throwDb(active);
+  const active = await db.from('colis').select('id,ref,statut').eq('client_id', client.id).not('statut','in','(livre,annule)').eq('archive', false).order('created_at', { ascending: false }); throwDb(active);
   if (text === '/statut') return { chatId, text: `Bonjour ${client.prenom || client.nom},\n\n${active.data.map((c: any) => `${c.ref} : ${c.statut.replaceAll('_',' ')}`).join('\n') || 'Aucun dossier actif.'}\n\nL’équipe Expedîle` };
   if (text === '/aide') return { chatId, text: 'Pour envoyer une facture ou un message, répondez à un message du dossier ou indiquez sa référence EXP. Si plusieurs dossiers sont ouverts, nous vous proposerons de choisir. /statut affiche vos dossiers.\n\nL’équipe Expedîle' };
-  let chosen = active.data.length === 1 ? active.data[0] : null;
   const ref = `${text} ${msg.caption || ''}`.match(/\bEXP-[A-Z0-9]+\b/i)?.[0];
-  if (ref) chosen = active.data.find((c: any) => c.ref.toUpperCase() === ref.toUpperCase()) || null;
-  if (!chosen && msg.reply_to_message && active.data.length) {
-    const original = await db.from('messages').select('colis_id').eq('telegram_msg_id', String(msg.reply_to_message.message_id)).in('colis_id', active.data.map((c: any) => c.id)).limit(1).maybeSingle(); throwDb(original);
-    chosen = active.data.find((c: any) => c.id === original.data?.colis_id);
-  }
+  const resolved = await db.rpc('resolve_telegram_message_colis', { p_client_id: client.id, p_reply_message_id: msg.reply_to_message ? String(msg.reply_to_message.message_id) : null, p_ref: ref || null }); throwDb(resolved);
+  const chosen = resolved.data;
   if (!chosen) {
     throwDb(await db.from('client_inbox').upsert({ client_id: client.id, texte: text || msg.caption || 'Document reçu', telegram_update_id: update.update_id, payload: msg }, { onConflict: 'telegram_update_id', ignoreDuplicates: true }));
     return { chatId, text: active.data.length ? 'À quel dossier correspond ce message ou document ? Choisissez ci-dessous pour que notre équipe puisse le traiter.' : 'Votre message est enregistré pour notre équipe. Aucun dossier actif ne permet encore de le rattacher.', markup: { inline_keyboard: active.data.slice(0,10).map((c: any) => [{ text: c.ref, callback_data: `in_${c.id}_${update.update_id}` }]) } };
   }
-  await saveIncoming(db, client, chosen, msg, update.update_id);
+  try {
+    await saveIncoming(db, client, chosen, msg, update.update_id);
+  } catch (error) {
+    if (!(error instanceof HttpError) || error.status !== 400) throw error;
+    // Unsupported documents are a durable team request, not endless webhook retries.
+    throwDb(await db.from('client_inbox').upsert({ client_id: client.id, texte: `${chosen.ref} — ${error.message}`, telegram_update_id: update.update_id, payload: { ...msg, intake_error: error.message } }, { onConflict: 'telegram_update_id', ignoreDuplicates: true }));
+    return { chatId, text: `${error.message}. Votre demande pour ${chosen.ref} a été transmise à notre équipe. Vous pouvez envoyer un document PDF, JPEG, PNG ou WebP de moins de 10 Mo.` };
+  }
   return { chatId, text: `Bonjour ${client.prenom || client.nom}, votre ${msg.document || msg.photo ? 'document' : 'message'} est enregistré pour ${chosen.ref}. Notre équipe le retrouvera dans ce dossier.\n\nL’équipe Expedîle` };
 }
 Deno.serve(async (req: Request) => {

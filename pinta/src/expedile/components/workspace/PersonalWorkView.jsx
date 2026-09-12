@@ -1,0 +1,36 @@
+import React, { useMemo } from 'react';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { ArrowRight, Search, Users, RefreshCw } from 'lucide-react';
+import { useApp } from '../../context/AppContext';
+import { useMinuteNow } from '../../hooks/useMinuteNow';
+import { MISSIONS, PERSONAL_SECTIONS, buildPersonalWork, workTotals, workActionUrl, staffAvailable } from '../../domain/personalWork';
+import WorkActionRow from './WorkActionRow';
+import WorkPreferences from './WorkPreferences';
+
+export default function PersonalWorkView() {
+  const { auth, data = [], clients = [], can, workActions = [], workPreferences = [], workLoading, workError, refreshWork } = useApp();
+  const [params, setParams] = useSearchParams();
+  const location = useLocation(); const navigate = useNavigate(); const now = useMinuteNow();
+  const preference = workPreferences.find(item => item.staff_id === auth?.u?.id);
+  const mission = params.has('mission') ? params.get('mission') : preference?.active_mission || '';
+  const section = PERSONAL_SECTIONS.some(item => item.id === params.get('section')) ? params.get('section') : 'now';
+  const search = params.get('q') || '';
+  const view = useMemo(() => buildPersonalWork({ actions: workActions, dossiers: data, clients, userId: auth?.u?.id, preference, can, mission, search, now }), [workActions, data, clients, auth?.u?.id, preference, can, mission, search, now]);
+  const rows = view.sections[section]; const totals = workTotals(rows, data); const returnTo = location.pathname + location.search;
+  const initialLoading = workLoading && !workActions.length && !workPreferences.length;
+  const setFilter = (key, value) => setParams(old => { const next = new URLSearchParams(old); if (value || key === 'mission') next.set(key, value); else next.delete(key); return next; }, { replace: true });
+  return <main className="mx-auto w-full max-w-6xl p-4 sm:p-6 space-y-5">
+    <header className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Votre espace de travail</p><h1 className="mt-1 text-2xl font-bold text-slate-900">Mon travail</h1><p className="mt-1 text-sm text-slate-600">{auth?.u?.prenom || auth?.u?.nom} · {staffAvailable(preference, now) ? 'Disponible' : 'Indisponibilité déclarée'}</p></div><div className="flex flex-wrap gap-2"><button onClick={() => navigate('/equipe')} className="min-h-11 flex items-center gap-2 rounded-xl border border-slate-200 px-3 text-sm font-semibold"><Users size={16} />Équipe</button><WorkPreferences preference={preference} /></div></header>
+    {workError && <div role="alert" className="rounded-xl border border-red-200 p-3 text-sm text-red-700">{String(workError.message || workError)}<button onClick={() => refreshWork().catch(() => {})} className="ml-3 min-h-11 underline"><RefreshCw size={14} className="inline mr-1" />Réessayer</button></div>}
+    {workLoading && !initialLoading && <p role="status" className="text-xs text-slate-500">Actualisation des actions…</p>}
+    {initialLoading ? <div role="status" className="space-y-3"><p className="text-sm text-slate-600">Chargement des actions…</p>{[1, 2, 3].map(id => <div key={id} className="h-20 animate-pulse rounded-xl bg-slate-100" />)}</div> : <>
+      <div className="flex flex-wrap items-end gap-3"><label className="text-sm font-semibold">Mission<select aria-label="Mission" value={mission} onChange={event => setFilter('mission', event.target.value)} className="mt-1 block min-h-11 rounded-xl border border-slate-200 bg-white px-3"><option value="">Toutes mes missions</option>{MISSIONS.filter(item => view.missions.includes(item.id)).map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label><label className="flex-1 min-w-48 text-sm font-semibold">Rechercher<span className="relative mt-1 block"><Search size={16} className="absolute left-3 top-3.5 text-slate-400" /><input value={search} onChange={event => setFilter('q', event.target.value)} className="min-h-11 w-full rounded-xl border border-slate-200 pl-9 pr-3 font-normal" placeholder="Client, EXP, action…" /></span></label></div>
+      {view.exceptions.length > 0 && <p role="status" className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">{view.exceptions.length} action(s) attribuée(s) hors de vos missions ou permissions actuelles. <button onClick={() => navigate(`/equipe?owner=${auth.u.id}`)} className="min-h-11 underline font-semibold">Organiser un relais</button></p>}
+      {view.outsideMissionDue.length > 0 && <p role="status" className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">{view.outsideMissionDue.length} engagement(s) à revoir dans vos autres missions. <button onClick={() => setFilter('mission', '')} className="min-h-11 underline font-semibold">Voir toutes mes missions</button></p>}
+      {view.handoffs.length > 0 && <section className="rounded-xl border border-blue-200 px-4"><h2 className="pt-4 font-semibold text-slate-900">Relais à accepter · {view.handoffs.length}</h2>{view.handoffs.map(action => <WorkActionRow key={action.id} action={action} dossier={view.dossierById.get(action.colis_id)} client={view.clientById.get(view.dossierById.get(action.colis_id)?.clientId)} returnTo={returnTo} now={now} density="compact" />)}</section>}
+      <nav aria-label="Mes actions" className="grid grid-cols-2 gap-2 sm:grid-cols-4">{PERSONAL_SECTIONS.map(item => <button key={item.id} aria-pressed={section === item.id} onClick={() => setFilter('section', item.id)} className={`min-h-16 rounded-xl border px-3 py-2 text-left ${section === item.id ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 text-slate-700'}`}><span className="block text-xl font-bold">{view.counts[item.id]}</span><span className="text-sm">{item.label}</span></button>)}</nav>
+      <div className="flex flex-wrap items-center justify-between gap-3"><p className="text-sm text-slate-600">{totals.actions} action(s) · {totals.dossiers} dossier(s) · {totals.cartons} carton(s) reçu(s)</p>{rows[0] && <button onClick={() => navigate(workActionUrl(rows[0], returnTo, view.dossierById.get(rows[0].colis_id)))} className="min-h-11 flex items-center gap-2 rounded-xl bg-slate-900 px-4 text-sm font-semibold text-white">Traiter le suivant<ArrowRight size={16} /></button>}</div>
+      {rows.length ? <section aria-label={PERSONAL_SECTIONS.find(item => item.id === section).label}>{rows.map(action => <WorkActionRow key={action.id} action={action} dossier={view.dossierById.get(action.colis_id)} client={view.clientById.get(view.dossierById.get(action.colis_id)?.clientId)} returnTo={returnTo} now={now} density={preference?.density} />)}</section> : <div className="border-y border-slate-200 py-10 text-center"><h2 className="font-semibold text-slate-900">Aucune action dans cette sélection</h2><p className="mt-2 text-sm text-slate-600">{view.missions.length ? 'Changez de mission ou consultez les actions à prendre.' : 'Choisissez une mission autorisée dans vos préférences.'}</p><button onClick={() => { setFilter('section', 'pool'); }} className="mt-3 min-h-11 px-3 text-sm font-semibold underline">Voir les actions à prendre</button></div>}
+    </>}
+  </main>;
+}

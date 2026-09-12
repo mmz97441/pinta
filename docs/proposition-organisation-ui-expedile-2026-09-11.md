@@ -1,0 +1,54 @@
+# Organisation UI proposée — revue du 11 septembre, complétée le 12 septembre 2026
+
+Propositions issues de la lecture du code actif `da51429`, pour une équipe de 3–5 personnes et environ 1 000 cartons mensuels. **Recommandations uniquement : aucune interface modifiée, aucun nouveau test utilisateur réalisé.** Les files cohérentes, responsables, conversations à traitement explicite, cartons visibles, mesures séparées et espace facture/OCR/articles existent déjà. Le travail proposé porte sur leur organisation.
+
+1. **P1 · S/M — Un vocabulaire stable et une navigation centrée sur les opérations.**
+   **Aujourd’hui :** « Colis » désigne la liste des dossiers ; « Nouveau colis » ouvre la réception de plusieurs cartons et permet aussi un rattachement. La navigation mobile du directeur présente cinq rubriques plus le bouton de réception.
+   **Cible :** nommer la liste **« Dossiers d’expédition »**, l’action **« Réceptionner des cartons »**, chaque unité **« Carton 1, 2… »**, et réserver **« Départ »** au regroupement transporteur. Dans la réception : **Client → Ajouter à EXP… / Créer une expédition → Cartons et mesures**. Afficher « 2 expéditions ouvertes » puis le nombre de cartons sur chaque choix. Sur mobile, garder **À traiter / Dossiers / Clients / Plus**, avec une action Réceptionner clairement nommée dans l’en-tête ; déplacer Estimation et Paramètres dans Plus. Sur bureau, placer Paramètres en bas de navigation.
+   **Intérêt :** comprendre immédiatement si l’on ajoute un carton physique ou un dossier, sans modifier les indices de stockage. [App.jsx:190](../pinta/src/expedile/App.jsx#L190), [navigation mobile :298](../pinta/src/expedile/App.jsx#L298), [ColisModal.jsx:654](../pinta/src/expedile/components/ColisModal.jsx#L654).
+
+2. **P1 · M — Une seule liste de travail à l’accueil, personnalisée pour le collaborateur.**
+   **Aujourd’hui :** raccourcis responsables, quatre grandes cartes, messages à rattacher, conversations, puis « À faire maintenant » ; une conversation peut apparaître dans plusieurs blocs. « Ouvrir le prochain dossier » suit l’ordre global, tandis que « Mes dossiers » conduit à une autre page.
+   **Cible :** en tête, **Moi / Toute l’équipe / Non attribués**, puis des compteurs compacts **Répondre / Préparer et chiffrer / Vérifier les pièces / Attentes** ; dessous, une seule liste avec **prochaine action, client, dossier, responsable et date utile**. Le bouton principal devient **« Traiter le suivant »** dans ce contexte. Conserver les KPI déjà repliés ; mettre les étapes logistiques en filtre secondaire plutôt qu’en seconde rangée concurrente dans la page Dossiers.
+   **Intérêt :** faciliter la répartition entre 3–5 personnes, tout en gardant une vue équipe accessible. [StaffSplitView.jsx:306](../pinta/src/expedile/components/staff/StaffSplitView.jsx#L306), [filtres et étapes :574](../pinta/src/expedile/components/staff/StaffSplitView.jsx#L574).
+
+3. **P1 · M/L — Une vraie vue « Répondre », avec le contexte du dossier à côté de la conversation.**
+   **Aujourd’hui :** ouvrir un dossier depuis la file Messages ouvre automatiquement le chat, qui se superpose au panneau de détail. Le traitement durable existe, mais les informations nécessaires à la réponse se retrouvent derrière cette seconde couche.
+   **Cible bureau :** liste des conversations à gauche, échange au centre, résumé du dossier à droite : **cartons reçus, étape, document manquant, attente demandée, dernière demande envoyée**. Sur mobile : conversation principale et bouton **« Voir le dossier »** conservant la position de lecture. Garder les trois états existants **À répondre / Attente client / Terminé** ; placer l’état de livraison du dernier envoi près du composeur. Les messages sans dossier restent dans cette même vue, avec le rattachement au premier plan.
+   **Intérêt :** répondre et passer le relais sans ouvrir/fermer plusieurs panneaux. [ouverture automatique :548](../pinta/src/expedile/components/staff/StaffSplitView.jsx#L548), [superposition :1053](../pinta/src/expedile/components/staff/StaffSplitView.jsx#L1053), [ChatPanel.jsx:161](../pinta/src/expedile/components/detail/ChatPanel.jsx#L161).
+
+4. **P1 · M — Deux formats de dossier assumés : consultation rapide et préparation complète.**
+   **Aujourd’hui :** `/colis?dossier=…` conserve la liste et un panneau ; `/colis/:id` utilise une autre disposition. La préparation dispose déjà du document/OCR/articles et de sa barre d’action.
+   **Cible :** garder le panneau pour réception, vérification d’accord et suivi rapide ; ouvrir **« Préparer et établir le devis »** dans un espace complet, avec un retour explicite à la file conservée. Même en-tête partout : **EXP… · client · N cartons · étape · responsable**. Même ordre : **Cartons reçus → Travail de l’étape → Échanges / Historique**. Pendant la préparation, afficher le résumé réception repliable et les **mesures après optimisation** au premier plan ; réutiliser l’espace devis existant.
+   **Intérêt :** savoir où chercher une information quel que soit le chemin d’ouverture, et réserver l’espace disponible au chiffrage. [App.jsx:97](../pinta/src/expedile/App.jsx#L97), [panneau :923](../pinta/src/expedile/components/staff/StaffSplitView.jsx#L923), [préparation :512](../pinta/src/expedile/components/staff/StaffDetailView.jsx#L512).
+
+5. **P1 · M — Ouvrir la fiche client sur une synthèse opérationnelle.**
+   **Aujourd’hui :** ouvrir un client affiche directement son formulaire d’édition ; ses dossiers viennent après les coordonnées, préférences et actions de sauvegarde.
+   **Cible :** **identité et destination**, puis **contact réellement disponible** (« Telegram lié », « accès portail activé / à inviter »), puis **expéditions ouvertes et actions attendues**, puis l’historique au périmètre explicite. Placer les champs derrière **« Modifier les coordonnées »** ; abonnement et informations administratives dans un second onglet. Actions principales : **Réceptionner pour ce client / Ouvrir son dossier**. L’adresse doit être commune au portail et aux étiquettes : l’écart identifié dans l’audit logique doit être résolu en même temps.
+   **Intérêt :** lors d’un appel ou d’une réception, voir d’abord qui joindre et quel dossier reprendre. [StaffClientDetail.jsx:165](../pinta/src/expedile/components/staff/StaffClientDetail.jsx#L165), [dossiers après le formulaire :589](../pinta/src/expedile/components/staff/StaffClientDetail.jsx#L589).
+
+6. **P1 · S/M — Côté client, commencer par « Votre prochaine étape ».**
+   **Aujourd’hui :** l’accueil place bienvenue, abonnement, attentes volontaires et trois compteurs avant les actions requises. Les choix d’accord ont déjà été remontés dans le détail, mais cette hiérarchie n’est pas encore appliquée à l’accueil.
+   **Cible :** bienvenue courte, puis **« À faire par vous »** — accord, document à fournir, devis à consulter — ; ensuite **« Nous nous en occupons »**, puis **« En attente à votre demande »** et enfin les livraisons terminées. Une carte = **une expédition, N cartons, ce qui manque, une action principale**. Remplacer le terme interne « À traiter » par **« Une action est nécessaire »**. En l’absence d’action, afficher clairement « Vous n’avez rien à faire pour le moment » avec la prochaine étape connue. Abonnement et statistiques restent disponibles dans le profil ou plus bas.
+   **Intérêt :** réduire les questions « que dois-je faire ? » et distinguer une attente choisie d’une réponse encore nécessaire. [ClientAccueil.jsx:42](../pinta/src/expedile/components/client/ClientAccueil.jsx#L42), [attentes et compteurs :98](../pinta/src/expedile/components/client/ClientAccueil.jsx#L98), [actions :138](../pinta/src/expedile/components/client/ClientAccueil.jsx#L138).
+
+7. **P2 · S/M — Réduire les signaux visuels concurrents dans les listes.**
+   **Aujourd’hui :** une ligne combine référence, casier, badge « À revoir », « À répondre », compteur de non-lus animé, statut, prochaine action et responsable. Son fond peut indiquer la sélection, l’urgence ou le type professionnel. Les filtres de travail sont suivis des étapes, puis de la recherche, du regroupement et du tri.
+   **Cible :** une barre principale **recherche + filtres utiles**, avec les options avancées repliées ; une ligne lisible **client / EXP et cartons / prochaine action / responsable / date utile**. Utiliser un fond distinct pour la sélection, un badge localisé pour l’alerte et un texte explicite pour le type de client. Garder une seule action principale par dossier ; rendre les actions secondaires plus discrètes. Réserver trois niveaux typographiques cohérents au titre, au contenu et aux métadonnées, avec des dimensions/unité lisibles et des marges régulières. Le thème sombre doit conserver la même hiérarchie. Cette recommandation de densité ne remet pas en cause les contrôles d’accessibilité déjà livrés.
+   **Intérêt :** repérer l’action utile sans devoir décoder toute la ligne. [Cellules et signaux :169](../pinta/src/expedile/components/staff/StaffSplitView.jsx#L169), [fonds :205](../pinta/src/expedile/components/staff/StaffSplitView.jsx#L205), [barres :574](../pinta/src/expedile/components/staff/StaffSplitView.jsx#L574).
+
+**Organisation cible au quotidien**
+
+| Emplacement | Contenu principal |
+|---|---|
+| Navigation bureau | À traiter · Dossiers d’expédition · Clients · Départs ; Paramètres en bas ; bouton Réceptionner toujours identifiable |
+| Accueil équipe | Contexte Moi/Équipe, compteurs par action, une liste et « Traiter le suivant » |
+| Répondre | Conversations, échange actif et contexte du dossier visibles ensemble |
+| Dossier en préparation | En-tête stable, mesures après optimisation, documents/articles, total et prochaine action |
+| Accueil client | À faire par vous, travail de l’équipe, attente volontaire, historique |
+
+**Règles à préserver :** un dossier client garde sa référence EXP pour tous ses cartons ; un départ groupé ENV regroupe plusieurs dossiers. Les cartons reçus et les colis physiques sortants après optimisation sont des quantités différentes. Aucune mesure finale ne doit être déduite automatiquement des mesures de réception.
+
+Ordre proposé : vocabulaire + accueil client, synthèse client + contexte de travail équipe, puis organisation des conversations et harmonisation des formats de dossier. La présentation visuelle est harmonisée dans chaque étape. Les corrections de logique correspondantes — identité du carton, adresse, état de notification, fraîcheur des mesures — doivent accompagner les écrans concernés.
+
+Recette proposée : deux collaborateurs traitent une réception avec rattachement, une réponse client et un devis interrompu ; des clients testent accord, attente et dépôt de document. Vérifier à chaque fois l’identification du dossier, la prochaine action, la conservation de la saisie et le retour à la file. Les effets attendus doivent être vérifiés sur ces tâches réelles ; aucun gain chiffré n’est annoncé.

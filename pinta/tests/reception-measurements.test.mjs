@@ -59,7 +59,7 @@ test('single reception survives insert/map with individual measurements and neve
   for (const key of ['fin_l', 'fin_w', 'fin_h', 'fin_p']) assert.equal(rows[0][key], undefined);
   const quote = calculateQuote(input(saved));
   assert.equal(quote.ok, false);
-  assert.equal(quote.errors.filter(error => error.field.startsWith('dimensions.')).length, 4);
+  assert.equal(quote.errors.filter(error => error.field.startsWith('dimensions.') && error.field !== 'dimensions.freshness').length, 4);
 });
 
 test('two physical cartons including one without tracking retain order and use the sum of volumes, not the product of maximum dimensions', async () => {
@@ -72,7 +72,7 @@ test('two physical cartons including one without tracking retain order and use t
   assert.deepEqual(plain(rows[0].dims_par_colis), [first, second]);
   assert.equal(saved.trackings.length, 1);
   assert.equal(saved.trackingsDetail.length, 2);
-  const quote = calculateQuote(input({ ...saved, ...final }));
+  const quote = calculateQuote(input({ ...saved, ...final, outgoingParcelCount: 1, finalMeasurementsVersion: saved.preparationCompositionVersion }));
   assert.equal(quote.ok, true);
   assert.equal(quote.before.volumetricWeight, 3.2);
   assert.equal(quote.before.transport, 26);

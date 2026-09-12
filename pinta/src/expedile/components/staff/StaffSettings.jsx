@@ -11,15 +11,13 @@ import {
   Loader2,
   ShieldAlert,
   Plus,
-  Archive,
   Save,
-  Download,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { DESTINATIONS } from '../../constants';
-import { eur } from '../../utils';
 import TemplateEditor from './TemplateEditor';
 import StaffPermissions from './StaffPermissions';
+import StaffDepartures from './StaffDepartures';
 import * as sb from '../../lib/supabaseData';
 
 const DESTINATION_LIST = Object.values(DESTINATIONS);
@@ -40,10 +38,6 @@ const PANELS = [
 export default function StaffSettings() {
   const navigate = useNavigate();
   const {
-    envois,
-    setEnvois,
-    data,
-    clients,
     tarifs,
     setTarifs,
     categories,
@@ -63,10 +57,6 @@ export default function StaffSettings() {
   } = useApp();
   const [tab, setTab] = useState('planning');
   const [busy, setBusy] = useState(false);
-  const [date, setDate] = useState('');
-  const [destination, setDestination] = useState('974');
-  const [weeks, setWeeks] = useState(4);
-  const [archived, setArchived] = useState(false);
   const [tarifDraft, setTarifDraft] = useState(tarifs);
   const [businessDraft, setBusinessDraft] = useState(settings);
   const [newCategory, setNewCategory] = useState('');
@@ -81,47 +71,6 @@ export default function StaffSettings() {
       flash({ msg: error.message, type: 'error' });
     } finally {
       setBusy(false);
-    }
-  };
-  const refreshDepartures = async () => setEnvois(await sb.fetchEnvois());
-  const createDepartures = async (count) => {
-    if (!date) throw new Error('Choisissez une date de départ.');
-    let created = 0;
-    for (let n = 0; n < count; n++) {
-      const d = new Date(`${date}T12:00:00Z`);
-      d.setUTCDate(d.getUTCDate() + n * 7);
-      const target = d.toISOString().slice(0, 10);
-      if (
-        envois.some(
-          (e) => e.date === target && e.destinationCode === destination && e.statut !== 'archive',
-        )
-      )
-        continue;
-      await sb.insertEnvoi({ date: target, destinationCode: destination, statut: 'planifie' });
-      created++;
-    }
-    await refreshDepartures();
-    flash(`${created} départ${created > 1 ? 's' : ''} enregistré${created > 1 ? 's' : ''}`);
-  };
-  const updateDeparture = async (id, statut) => {
-    await sb.updateEnvoi(id, { statut });
-    await refreshDepartures();
-    flash('Départ mis à jour');
-  };
-  const exportDeparture = async (envoi, type) => {
-    const colis = data.filter((c) => c.envoi === envoi.id);
-    if (!colis.length) throw new Error('Aucun colis rattaché à ce départ.');
-    if (type === 'manifest') {
-      const { exportColisExcel } = await import('../../utils/exportExcel');
-      exportColisExcel(colis, clients);
-    }
-    if (type === 'invoice') {
-      const { exportFactureCommerciPDF } = await import('../../utils/exportFactureCommerciPDF');
-      exportFactureCommerciPDF(envoi, colis, clients, categories);
-    }
-    if (type === 'dau') {
-      const { exportDAUData } = await import('../../utils/exportDAU');
-      exportDAUData(envoi, colis, clients, categories);
     }
   };
   const saveBusiness = async () => {
@@ -176,207 +125,7 @@ export default function StaffSettings() {
               Connexion nécessaire pour enregistrer les modifications.
             </p>
           )}
-          {tab === 'planning' && (
-            <>
-              <section className="card p-5 space-y-4">
-                <div>
-                  <h2 className="text-lg font-bold">Planifier les départs</h2>
-                  <p className="text-sm text-gray-500 mt-1">
-                    Choisissez la destination, le premier départ et le nombre de semaines à planifier.
-                  </p>
-                </div>
-                <div className="grid sm:grid-cols-3 gap-3">
-                  <label className="text-sm">
-                    Premier départ
-                    <input
-                      className={FIELD + ' mt-1'}
-                      type="date"
-                      value={date}
-                      onChange={(e) => setDate(e.target.value)}
-                    />
-                  </label>
-                  <label className="text-sm">
-                    Destination
-                    <select
-                      className={FIELD + ' mt-1'}
-                      value={destination}
-                      onChange={(e) => setDestination(e.target.value)}
-                    >
-                      {DESTINATION_LIST.map((d) => (
-                        <option key={d.code} value={d.code}>
-                          {d.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="text-sm">
-                    Nombre de semaines
-                    <select
-                      className={FIELD + ' mt-1'}
-                      value={weeks}
-                      onChange={(e) => setWeeks(Number(e.target.value))}
-                    >
-                      {[1, 2, 4, 8].map((n) => (
-                        <option key={n} value={n}>
-                          {n}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                </div>
-                <button
-                  className={BUTTON + ' bg-[#17324D] text-white'}
-                  disabled={busy || !sbReady || !date}
-                  onClick={() => run(() => createDepartures(weeks))}
-                >
-                  {busy ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}Créer{' '}
-                  {weeks === 1 ? 'le départ' : `les ${weeks} départs`}
-                </button>
-              </section>
-              <div className="flex justify-between items-center">
-                <h2 className="font-bold">
-                  {archived ? 'Historique archivé' : 'Départs en cours'}
-                </h2>
-                <button
-                  className={BUTTON + ' text-gray-500'}
-                  onClick={() => setArchived(!archived)}
-                >
-                  <Archive size={16} />
-                  {archived ? 'Voir les départs actifs' : 'Voir les archives'}
-                </button>
-              </div>
-              {envois
-                .filter((e) => (e.statut === 'archive') === archived)
-                .map((envoi) => {
-                  const parcels = data.filter((c) => c.envoi === envoi.id);
-                  const dest = DESTINATION_LIST.find((d) => d.code === envoi.destinationCode);
-                  return (
-                    <article key={envoi.id} className="card p-4 space-y-3">
-                      <div className="flex flex-wrap items-center justify-between gap-3">
-                        <div>
-                          <h3 className="font-bold">
-                            {new Date(`${envoi.date}T12:00:00`).toLocaleDateString('fr-FR', {
-                              weekday: 'long',
-                              day: 'numeric',
-                              month: 'long',
-                            })}
-                          </h3>
-                          <p className="text-sm text-gray-500">
-                            {dest?.label || 'Destination à renseigner'} · {parcels.length} dossier
-                            {parcels.length > 1 ? 's' : ''}
-                          </p>
-                        </div>
-                        {!archived ? (
-                          <select
-                            aria-label={`Statut départ ${envoi.date}`}
-                            className={FIELD + ' !w-auto'}
-                            value={envoi.statut}
-                            disabled={busy}
-                            onChange={(e) => run(() => updateDeparture(envoi.id, e.target.value))}
-                          >
-                            {['planifie', 'en_preparation', 'pret', 'parti', 'arrive'].map(
-                              (status) => (
-                                <option key={status} value={status}>
-                                  {
-                                    {
-                                      planifie: 'Planifié',
-                                      en_preparation: 'En préparation',
-                                      pret: 'Prêt',
-                                      parti: 'Parti',
-                                      arrive: 'Arrivé',
-                                    }[status]
-                                  }
-                                </option>
-                              ),
-                            )}
-                          </select>
-                        ) : (
-                          <span className="text-xs text-gray-500">Archivé</span>
-                        )}
-                      </div>
-                      {!envoi.destinationCode && !archived && (
-                        <label className="block text-sm text-amber-700">
-                          Compléter la destination
-                          <select
-                            className={FIELD + ' mt-1'}
-                            value=""
-                            onChange={(e) =>
-                              run(async () => {
-                                await sb.updateEnvoi(envoi.id, { destinationCode: e.target.value });
-                                await refreshDepartures();
-                              })
-                            }
-                          >
-                            <option value="">Sélectionner</option>
-                            {DESTINATION_LIST.map((d) => (
-                              <option key={d.code} value={d.code}>
-                                {d.label}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                      )}
-                      <div className="flex flex-wrap gap-2">
-                        {[
-                          ['manifest', 'Liste colis'],
-                          ['invoice', 'Facture commerciale'],
-                          ['dau', 'Données douane'],
-                        ].map(([key, label]) => (
-                          <button
-                            key={key}
-                            disabled={busy || !parcels.length}
-                            className={BUTTON + ' bg-gray-50 dark:bg-gray-800'}
-                            onClick={() => run(() => exportDeparture(envoi, key))}
-                          >
-                            <Download size={14} />
-                            {label}
-                          </button>
-                        ))}
-                        {!archived && (
-                          <button
-                            className={BUTTON + ' text-gray-500'}
-                            onClick={() =>
-                              ask(
-                                'Archiver ce départ',
-                                'Les colis et leur historique restent liés à ce départ.',
-                                () => updateDeparture(envoi.id, 'archive'),
-                              )
-                            }
-                          >
-                            <Archive size={14} />
-                            Archiver
-                          </button>
-                        )}
-                        {!archived && !parcels.length && (
-                          <button
-                            className={BUTTON + ' text-red-600'}
-                            onClick={() =>
-                              ask(
-                                'Supprimer ce départ vide',
-                                'Ce départ ne contient aucun colis.',
-                                async () => {
-                                  await sb.deleteEnvoi(envoi.id);
-                                  await refreshDepartures();
-                                },
-                                { danger: true },
-                              )
-                            }
-                          >
-                            <Trash2 size={14} />
-                            Supprimer
-                          </button>
-                        )}
-                      </div>
-                    </article>
-                  );
-                })}
-              {!envois.some((e) => (e.statut === 'archive') === archived) && (
-                <div className="card p-10 text-center text-gray-500">
-                  Aucun départ {archived ? 'archivé' : 'planifié'}.
-                </div>
-              )}
-            </>
-          )}
+          {tab === 'planning' && <StaffDepartures embedded />}
           {tab === 'tarifs' && director && (
             <section className="card p-5 space-y-4">
               <h2 className="font-bold text-lg">Tarifs de transport</h2>

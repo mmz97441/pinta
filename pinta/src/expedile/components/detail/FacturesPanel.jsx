@@ -72,6 +72,7 @@ export default function FacturesPanel({ workspace = false, tab, onTabChange, chi
   const selectedInvoice = (sel?.factures || []).find((invoice) => invoice.id === selectedId) || sel?.factures?.[0];
   const canResume = isStaff && (can('perm_factures_ocr') || can('perm_factures_valider'));
   const [collapsed, setCollapsed] = useState(false);
+  const [replacesFactureId, setReplacesFactureId] = useState('');
   const [clientFile, setClientFile] = useState(null);
   const uploadedClientDocument = useRef(null);
   const clientFileInput = useRef(null);
@@ -88,7 +89,7 @@ export default function FacturesPanel({ workspace = false, tab, onTabChange, chi
   const [extractions, setExtractions] = useState({});
   const uploadTarget = useRef(null);
   const fileInput = useRef(null);
-  useEffect(() => { setExtractions({}); setClientFile(null); if (clientFileInput.current) clientFileInput.current.value = ''; uploadedClientDocument.current = null; setSelectedId(null); setWorkspaceTab('articles'); setError(''); setNotice(''); setRejectingId(null); setShowAdd(false); }, [sel?.id]);
+  useEffect(() => { setExtractions({}); setReplacesFactureId(''); setClientFile(null); if (clientFileInput.current) clientFileInput.current.value = ''; uploadedClientDocument.current = null; setSelectedId(null); setWorkspaceTab('articles'); setError(''); setNotice(''); setRejectingId(null); setShowAdd(false); }, [sel?.id]);
   useEffect(() => {
     let alive = true;
     const invoice = selectedInvoice;
@@ -149,9 +150,9 @@ export default function FacturesPanel({ workspace = false, tab, onTabChange, chi
       const saved = await sb.uploadDocument('factures', parcelId, clientFile);
       document = { ...saved, file: clientFile, parcelId }; uploadedClientDocument.current = document;
     }
-    const saved = await sb.insertFacture(parcelId, { vendeur: newVendor.trim() || clientFile.name, montant: 0, valide: false, fichierUrl: document.path, fichierNom: clientFile.name });
+    const saved = await sb.insertFacture(parcelId, { vendeur: newVendor.trim() || clientFile.name, montant: 0, valide: false, fichierUrl: document.path, fichierNom: clientFile.name, replacesFactureId: replacesFactureId || null });
     setData((previous) => previous.map((parcel) => parcel.id === parcelId ? { ...parcel, factures: [...(parcel.factures || []).filter((invoice) => invoice.id !== saved.id), saved] } : parcel));
-    if (currentParcel.current === parcelId) { setClientFile(null); if (clientFileInput.current) clientFileInput.current.value = ''; setNewVendor(''); uploadedClientDocument.current = null; setNotice('Facture reçue et enregistrée. Notre équipe vérifiera le document et les articles ; vous n’avez pas besoin de le renvoyer par message.'); }
+    if (currentParcel.current === parcelId) { setReplacesFactureId(''); setClientFile(null); if (clientFileInput.current) clientFileInput.current.value = ''; setNewVendor(''); uploadedClientDocument.current = null; setNotice('Facture reçue et enregistrée. Notre équipe vérifiera le document et les articles ; vous n’avez pas besoin de le renvoyer par message.'); }
   });
   const validate = (invoice) => run(invoice.id, async () => {
     if (!invoice.fichier || !invoice.vendeur?.trim() || !(Number(invoice.montant) > 0)) throw new Error('Joignez un document lisible et renseignez le vendeur et le montant avant de valider.');
@@ -200,7 +201,8 @@ export default function FacturesPanel({ workspace = false, tab, onTabChange, chi
     {notice && <p role="status" className="my-2 rounded-xl bg-blue-50 p-3 text-xs text-blue-800">{notice}</p>}
     {canDeposit && <form aria-label="Déposer une facture" className="my-3 space-y-3 rounded-xl border border-slate-200 p-3" onSubmit={(event) => { event.preventDefault(); depositClientDocument(); }}>
       <p className="text-sm font-semibold text-slate-700">Ajouter une facture à ce dossier</p>
-      <p className="text-xs text-slate-600">PDF ou photo lisible (JPG, PNG, WebP), 20 Mo maximum. Joignez toutes les pages avec les articles et les montants. Pour une correction, déposez la nouvelle version ici.</p>
+      <p className="text-xs text-slate-600">PDF ou photo lisible (JPG, PNG, WebP), 20 Mo maximum. Joignez toutes les pages avec les articles et les montants. Pour une correction, sélectionnez la facture à remplacer : son historique sera conservé et ses anciens articles seront exclus du devis.</p>
+      {(invoices.some(invoice => invoice.rejetMotif)) && <label className="block text-xs font-semibold text-slate-600">Type de dépôt<select aria-label="Facture corrigée" value={replacesFactureId} onChange={event => setReplacesFactureId(event.target.value)} className={INPUT}><option value="">Nouvelle facture</option>{invoices.filter(invoice => invoice.rejetMotif && !invoices.some(other => other.replacesFactureId === invoice.id)).map(invoice => <option key={invoice.id} value={invoice.id}>Corriger : {invoice.vendeur || "Facture rejetée"}</option>)}</select></label>}
       <label className="block text-xs font-semibold text-slate-600">Vendeur (facultatif)<input value={newVendor} onChange={(event) => setNewVendor(event.target.value)} className={INPUT} /></label>
       <label className="block text-xs font-semibold text-slate-600">Facture ou photo<input required ref={clientFileInput} type="file" accept="application/pdf,image/jpeg,image/png,image/webp" onChange={(event) => { setClientFile(event.target.files?.[0] || null); uploadedClientDocument.current = null; }} className="mt-1 block min-h-11 w-full min-w-0 text-xs" /></label>
       {clientFile && <p className="break-words text-xs text-slate-600">Document sélectionné : {clientFile.name}</p>}
@@ -225,6 +227,7 @@ export default function FacturesPanel({ workspace = false, tab, onTabChange, chi
           {isStaff && <p className="mt-2 text-xs text-slate-600">Base attendue : total HT imprimé sur la facture, sans recalculer la TVA. Si seul un montant TTC est disponible, demandez une précision avant validation.</p>}
           {isStaff && <p role="status" className="mt-2 text-xs font-semibold text-slate-600">{resuming && selectedInvoice?.id === invoice.id ? 'Chargement des propositions enregistrées…' : extraction?.status === 'confirmed' ? 'Articles importés et vérifiés' : extraction ? 'Propositions à vérifier' : invoice.ocrStatus === 'queued' ? 'Analyse en attente' : invoice.ocrStatus === 'processing' ? 'Analyse en cours' : invoice.ocrStatus === 'failed' ? 'Analyse en échec · saisie manuelle disponible' : 'Analyse non disponible pour ce document'}</p>}
           {isStaff && invoice.ocrError && <p className="mt-1 text-xs text-amber-700">{invoice.ocrError}</p>}
+          {invoice.replacesFactureId && <p className="mt-2 text-xs text-slate-600">Remplace la facture {invoices.find(original => original.id === invoice.replacesFactureId)?.vendeur || 'corrigée'}.</p>}
           {invoice.rejetMotif && <p className="mt-2 text-xs text-red-700">Correction attendue : {invoice.rejetMotif}</p>}
           <div className="mt-3 flex flex-wrap gap-2">
             {invoice.fichier && (isPdf ? <SecureFileLink href={invoice.fichier} bucket="factures" target="_blank" rel="noopener noreferrer" className={`${BUTTON} bg-slate-100 text-slate-700`}><Eye size={14} />Ouvrir le PDF</SecureFileLink> : <button onClick={() => setPreview(invoice)} className={`${BUTTON} bg-slate-100 text-slate-700`}><Eye size={14} />Voir le document</button>)}

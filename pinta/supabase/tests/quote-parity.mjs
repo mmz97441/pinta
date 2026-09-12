@@ -62,14 +62,15 @@ for (const [index, item] of cases.entries()) {
   sql.push('RESET ROLE;');
   sql.push(`UPDATE app_settings SET value=jsonb_set(value,'{diviseurVolumetrique}',${json(String(item.divisor))}) WHERE key='business';`);
   sql.push(`INSERT INTO clients(id,nom,cp,type) VALUES(${literal(client.id)},${literal(client.nom)},'97400',${literal(client.type)});`);
-  sql.push(`INSERT INTO colis(id,client_id,statut,trackings,nb_colis,dims_par_colis) VALUES(${literal(colis.id)},${literal(client.id)},'en_preparation',ARRAY['FIRST','SECOND'],2,${json(originalBoxes)});`);
+  sql.push(`INSERT INTO colis(id,client_id,statut,feu_vert,trackings,nb_colis,dims_par_colis) VALUES(${literal(colis.id)},${literal(client.id)},'en_preparation','autorise',ARRAY['FIRST','SECOND'],2,${json(originalBoxes)});`);
   if (item.type === 'particulier') {
     sql.push(`INSERT INTO factures(id,colis_id,vendeur,montant,fichier_url,valide) VALUES(${literal(factureId)},${literal(colis.id)},'Parity',91.31,'parity/document.pdf',true);`);
     for (const line of colis.lignes) sql.push(`INSERT INTO lignes(id,colis_id,facture_id,description,qte,prix_unitaire,categorie_id) VALUES(${literal(line.id)},${literal(colis.id)},${literal(factureId)},${literal(line.desc)},${line.qte},${line.prix},${literal(line.cat)});`);
   }
   sql.push('SET LOCAL ROLE authenticated;');
   sql.push(`SELECT set_config('request.jwt.claim.role','authenticated',true),set_config('request.jwt.claim.sub',${literal(staff)},true);`);
-  sql.push(`SELECT save_quote(${literal(colis.id)},${json({ ...quote.snapshot, ...quote.patch, ...item.shape, fraisDivers: colis.fraisDivers, modePaiementPro: 'virement' })});`);
+  sql.push(`SELECT save_preparation_measurements(id,${json(quote.snapshot.inputs.finalPackages)},updated_at,preparation_composition_version) FROM colis WHERE id=${literal(colis.id)};`);
+  sql.push(`SELECT save_quote(id,${json({ ...quote.snapshot, ...quote.patch, ...item.shape, fraisDivers: colis.fraisDivers, modePaiementPro: 'virement' })},updated_at) FROM colis WHERE id=${literal(colis.id)};`);
   const expected = {
     devis_transport: quote.amounts.transport, devis_om: quote.amounts.om, devis_omr: quote.amounts.omr,
     devis_tva: quote.amounts.tva, devis_total: quote.amounts.total, poids_facturable: quote.patch.poidsFact,

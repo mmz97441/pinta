@@ -49,6 +49,17 @@ export function AppProvider({ children }) {
   const [comLog, setComLog] = useState([]);
   const [inboxItems, setInboxItems] = useState([]);
   const [teamUsers, setTeamUsers] = useState([]);
+  const [workActions, setWorkActions] = useState([]);
+  const [workPreferences, setWorkPreferences] = useState([]);
+  const [workLoading, setWorkLoading] = useState(false);
+  const [workError, setWorkError] = useState('');
+  const workSequence = useRef(0);
+  const [notificationTotal, setNotificationTotal] = useState(0);
+  const [unreadNotifs, setUnreadNotifs] = useState(0);
+  const [notificationsLoading, setNotificationsLoading] = useState(false);
+  const [notificationsError, setNotificationsError] = useState('');
+  const notificationLimit = useRef(50);
+  const notificationSequence = useRef(0);
   const [archivesLoaded, setArchivesLoaded] = useState(false);
   const [selId, setSelId] = useState(null);
   const [toast, setToast] = useState('');
@@ -136,6 +147,65 @@ export function AppProvider({ children }) {
     setData(dataRef.current);
     setArchivesLoaded(true);
   }, []);
+  const refreshWork = useCallback(async () => {
+    if (authRef.current?.type !== 'staff') return;
+    const token = generation.current;
+    const sequence = ++workSequence.current;
+    setWorkLoading(true);
+    try {
+      const result = await sb.fetchStaffWork();
+      if (token !== generation.current || sequence !== workSequence.current) return;
+      setWorkActions(result.actions); setWorkPreferences(result.preferences); setWorkError('');
+      return result;
+    } catch (error) {
+      if (token === generation.current && sequence === workSequence.current) setWorkError(error.message);
+      throw error;
+    } finally {
+      if (token === generation.current && sequence === workSequence.current) setWorkLoading(false);
+    }
+  }, []);
+  const mutateWorkAction = useCallback(async (action, command, payload = {}) => {
+    const token = generation.current;
+    const saved = await sb.mutateStaffWorkAction(action, command, payload);
+    if (token !== generation.current) return saved;
+    ++workSequence.current;
+    setWorkActions((previous) => previous.some((item) => item.id === saved.id)
+      ? previous.map((item) => item.id === saved.id ? saved : item) : [...previous, saved]);
+    setWorkLoading(false);
+    setWorkError('');
+    return saved;
+  }, []);
+  const saveWorkPreferences = useCallback(async (changes, { expectedVersion = null } = {}) => {
+    const token = generation.current;
+    const saved = await sb.saveStaffWorkPreferences(changes, expectedVersion);
+    if (token !== generation.current) return saved;
+    ++workSequence.current;
+    setWorkPreferences((previous) => [...previous.filter((row) => row.staff_id !== saved.staff_id), saved]);
+    setWorkLoading(false);
+    return saved;
+  }, []);
+  const refreshNotifications = useCallback(async () => {
+    const identity = authRef.current;
+    if (!identity?.session?.user?.id) return;
+    const token = generation.current;
+    const sequence = ++notificationSequence.current;
+    setNotificationsLoading(true);
+    try {
+      const result = await sb.fetchNotificationPage(identity.session.user.id, notificationLimit.current);
+      if (token !== generation.current || sequence !== notificationSequence.current) return;
+      setNotifs(result.rows); setNotificationTotal(result.total); setUnreadNotifs(result.unread); setNotificationsError('');
+    } catch (error) {
+      if (token === generation.current && sequence === notificationSequence.current) setNotificationsError(error.message);
+      throw error;
+    } finally {
+      if (token === generation.current && sequence === notificationSequence.current) setNotificationsLoading(false);
+    }
+  }, []);
+  const loadMoreNotifications = useCallback(async () => {
+    if (notificationsLoading) return;
+    notificationLimit.current += 50;
+    await refreshNotifications();
+  }, [notificationsLoading, refreshNotifications]);
   const loadData = useCallback(async (identity, token) => {
     setDataLoading(true);
     setDataError('');
@@ -147,7 +217,7 @@ export function AppProvider({ children }) {
           sb.fetchEnvois(),
           sb.fetchCategories(),
           sb.fetchTarifs(),
-          sb.fetchNotifications(identity.session.user.id),
+          sb.fetchNotificationPage(identity.session.user.id),
           sb.fetchSettings(),
         ]);
       if (token !== generation.current) return;
@@ -158,18 +228,21 @@ export function AppProvider({ children }) {
       setEnvois(envoiRows);
       setCategories(catRows);
       setTarifs(tarifRows);
-      setNotifs(notifications);
+      notificationLimit.current = 50;
+      setNotifs(notifications.rows); setNotificationTotal(notifications.total); setUnreadNotifs(notifications.unread);
       setSettings(configuration.settings.business || {});
       setMessageTemplates(configuration.templates);
       setProduitsInterditsState(configuration.settings.produits_interdits || PRODUITS_INTERDITS);
       if (identity.type === 'staff') {
-        const [inbox, team] = await Promise.all([
+        const [inbox, team, work] = await Promise.all([
           sb.fetchAllRows('client_inbox', (q) => q.eq('status', 'unassigned')),
           sb.fetchStaffUsers(),
+          sb.fetchStaffWork(),
         ]);
         if (token !== generation.current) return;
         setInboxItems(inbox);
         setTeamUsers(team);
+        setWorkActions(work.actions); setWorkPreferences(work.preferences); setWorkError('');
       } else setInboxItems([]);
       setSbReady(true);
     } catch (error) {
@@ -194,6 +267,9 @@ export function AppProvider({ children }) {
         setMessageTemplates({});
         setInboxItems([]);
         setTeamUsers([]);
+        setWorkActions([]); setWorkPreferences([]); setWorkError(''); setWorkLoading(false);
+        setNotificationTotal(0); setUnreadNotifs(0); setNotificationsError(''); setNotificationsLoading(false);
+        notificationLimit.current = 50;
         setCategories([]);
         setTarifs({});
         setArchivesLoaded(false);
@@ -361,6 +437,31 @@ export function AppProvider({ children }) {
     };
   }, [sbReady, auth?.type, auth?.u?.id, refreshStaffAccess, reportError]);
   useEffect(() => {
+    if (!sbReady || auth?.type !== 'staff') return;
+    let stopped = false;
+    let busy = false;
+    let timer;
+    const refresh = async () => {
+      if (stopped || busy || document.visibilityState !== 'visible') return;
+      busy = true;
+      try { await refreshWork(); } catch { /* The workspace shows a persistent retryable error. */ }
+      finally { busy = false; }
+    };
+    const schedule = () => { clearTimeout(timer); timer = setTimeout(refresh, 150); };
+    const channel = supabase.channel(`staff-work-${auth.u.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'staff_work_actions' }, schedule)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'staff_work_preferences' }, schedule)
+      .subscribe();
+    window.addEventListener('focus', schedule);
+    document.addEventListener('visibilitychange', schedule);
+    const interval = setInterval(refresh, 60000);
+    return () => {
+      stopped = true; clearTimeout(timer); clearInterval(interval);
+      window.removeEventListener('focus', schedule); document.removeEventListener('visibilitychange', schedule);
+      supabase.removeChannel(channel);
+    };
+  }, [sbReady, auth?.type, auth?.u?.id, refreshWork]);
+  useEffect(() => {
     if (!sbReady || !auth?.session.user.id) return;
     const token = generation.current;
     const timers = new Map();
@@ -458,11 +559,7 @@ export function AppProvider({ children }) {
         )
         .subscribe(),
       sb.subscribeNotifications(auth.session.user.id, (payload) => {
-        sb.fetchNotifications(auth.session.user.id)
-          .then((rows) => {
-            if (token === generation.current) setNotifs(rows);
-          })
-          .catch(reportError);
+        refreshNotifications().catch(reportError);
         if (payload.new?.colis_id) refreshColis(payload.new.colis_id).catch(reportError);
       }),
     ];
@@ -470,7 +567,7 @@ export function AppProvider({ children }) {
       for (const timer of timers.values()) clearTimeout(timer);
       channels.forEach((c) => supabase.removeChannel(c));
     };
-  }, [sbReady, auth?.session.user.id, refreshColis, refreshInbox, reportError]);
+  }, [sbReady, auth?.session.user.id, refreshColis, refreshInbox, refreshNotifications, reportError]);
   // Raw table realtime is intentionally unavailable to clients: read through the safe views.
   useEffect(() => {
     if (!sbReady || auth?.type !== 'client') return;
@@ -524,7 +621,6 @@ export function AppProvider({ children }) {
     () => (sel ? getClientDest(sel.clientId, clients) : null),
     [sel, clients],
   );
-  const unreadNotifs = notifs.filter((n) => !n.lu).length;
   const ask = useCallback(
     (title, msg, onOk, opts) =>
       setCfm({ title, msg, onOk, danger: opts?.danger, okLabel: opts?.okLabel || 'Confirmer' }),
@@ -671,14 +767,20 @@ export function AppProvider({ children }) {
     [produitsInterdits],
   );
   const markNotifRead = useCallback(async (id) => {
+    const token = generation.current;
     await sb.markNotifRead(id);
+    if (token !== generation.current) return;
     setNotifs((prev) => prev.map((n) => (n.id === id ? { ...n, lu: true } : n)));
-  }, []);
+    await refreshNotifications();
+  }, [refreshNotifications]);
   const markAllNotifsRead = useCallback(async () => {
     if (!auth) return;
+    const token = generation.current;
     await sb.markAllNotifsRead(auth.session.user.id);
+    if (token !== generation.current) return;
     setNotifs((prev) => prev.map((n) => ({ ...n, lu: true })));
-  }, [auth]);
+    await refreshNotifications();
+  }, [auth, refreshNotifications]);
   const getPreview = useCallback(
     (key, clientId, colisId, canal) => {
       const client = clients.find((c) => c.id === clientId);
@@ -724,6 +826,7 @@ export function AppProvider({ children }) {
               ]
             : null);
         const actualCanal = canal === 'telegram' && !client.telegramChatId ? 'portal' : canal;
+        if (actualCanal === 'portal' && !client.userId) throw new Error('Le client n’a pas encore accès au portail ni à Telegram. Ouvrez sa fiche pour activer son accès ou préparer un email.');
         const { data: queued, error } = await supabase.rpc('queue_message', {
           p_colis_id: colisId,
           p_text: text,
@@ -880,7 +983,7 @@ export function AppProvider({ children }) {
     [feuVert, flash],
   );
   const envoyerDevis = useCallback(
-    async (id, changes = {}) => {
+    async (id, changes = {}, { expectedUpdatedAt } = {}) => {
       const current = dataRef.current.find((c) => c.id === id);
       if (!current) throw new Error('Dossier introuvable.');
       const colis = { ...current, ...changes };
@@ -902,6 +1005,8 @@ export function AppProvider({ children }) {
         finW: colis.finW,
         finH: colis.finH,
         finP: colis.finP,
+        finalPackages: colis.finalPackages || [],
+        preparationCompositionVersion: colis.preparationCompositionVersion,
       };
       const { data: saved, error } = await supabase.rpc('save_quote', {
         p_colis_id: id,
@@ -911,16 +1016,47 @@ export function AppProvider({ children }) {
           poidsFact: result.patch.poidsFact,
           modePaiementPro: colis.modePaiementPro || null,
         },
-        p_expected_updated_at: current.updatedAt || null,
+        p_expected_updated_at: expectedUpdatedAt ?? current.updatedAt ?? null,
       });
       if (error) throw reportError(error);
-      if (saved.colis) replaceColis(sb.mapColis(saved.colis));
-      await refreshColis(id);
+      if (!saved?.colis) throw new Error('Le devis n’a pas été confirmé par le serveur. Rechargez le dossier.');
+      const canonical = replaceColis(sb.mapColis(saved.colis));
+      let reloaded;
+      try { reloaded = await refreshColis(id); }
+      catch (refreshError) {
+        flash({ msg: `Devis enregistré. Actualisation à réessayer : ${refreshError.message}`, type: 'warning' });
+        return canonical;
+      }
       flash(`Devis enregistré : ${eur(result.amounts.total)}. Vérifiez puis envoyez.`);
-      return true;
+      return reloaded || canonical;
     },
     [clients, tarifs, categories, settings, reportError, replaceColis, refreshColis, flash],
   );
+  const savePreparationMeasurements = useCallback(async (id, changes, { expectedUpdatedAt, expectedCompositionVersion } = {}) => {
+    if (!expectedUpdatedAt || !Number.isInteger(expectedCompositionVersion)) throw new Error('Rechargez le dossier avant d’enregistrer les mesures.');
+    const { data: saved, error } = await supabase.rpc('save_preparation_measurements', {
+      p_colis_id: id,
+      p_final_packages: changes.finalPackages,
+      p_expected_updated_at: expectedUpdatedAt,
+      p_expected_composition_version: expectedCompositionVersion,
+    });
+    if (error) throw error;
+    if (!saved?.colis) throw new Error('Les mesures n’ont pas été confirmées. Rechargez le dossier.');
+    const result = replaceColis(sb.mapColis(saved.colis));
+    refreshWork().catch(() => {});
+    return result;
+  }, [replaceColis, refreshWork]);
+  const assignDeparture = useCallback(async (colis, envoiId) => {
+    const { data: row, error } = await supabase.rpc('assign_colis_departure', {
+      p_colis_id: colis.id, p_envoi_id: envoiId || null, p_expected_updated_at: colis.updatedAt,
+    });
+    if (error) throw error;
+    const canonical = Array.isArray(row) ? row[0] : row;
+    if (!canonical?.id) throw new Error('Affectation non confirmée. Actualisez le dossier.');
+    const saved = replaceColis(sb.mapColis(canonical));
+    refreshWork().catch(() => {});
+    return saved;
+  }, [replaceColis, refreshWork]);
   const confirmerDevis = useCallback(
     async (id, options = {}) => {
       const c = await refreshColis(id);
@@ -1038,6 +1174,13 @@ export function AppProvider({ children }) {
     inboxItems,
     refreshInbox,
     teamUsers,
+    workActions,
+    workPreferences,
+    workLoading,
+    workError,
+    refreshWork,
+    mutateWorkAction,
+    saveWorkPreferences,
     refreshStaffAccess,
     loadArchives,
     archivesLoaded,
@@ -1051,6 +1194,11 @@ export function AppProvider({ children }) {
     sendMsg,
     getPreview,
     notifs,
+    notificationsHasMore: notifs.length < notificationTotal,
+    notificationsLoading,
+    notificationsError,
+    refreshNotifications,
+    loadMoreNotifications,
     unreadNotifs,
     markNotifRead,
     markAllNotifsRead,
@@ -1093,6 +1241,8 @@ export function AppProvider({ children }) {
     feuVert,
     feuVertBulk,
     envoyerDevis,
+    savePreparationMeasurements,
+    assignDeparture,
     confirmerDevis,
     payer,
     envMsg,

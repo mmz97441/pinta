@@ -428,3 +428,8 @@ L’écran dispose désormais d’un bouton **Enregistrer les permissions**, de 
 Les rôles de direction conservent leur accès total et l’écran explique cette règle. Cette livraison traite la persistance des permissions ; l’application des droits fins aux opérations sur les envois reste le point distinct déjà documenté dans l’audit logique.
 
 Validation : 79 tests applicatifs, 45 assertions PostgreSQL, 12 scénarios navigateur sur l’interface locale puis sur le déploiement hébergé, régression générale et quatre vues d’accessibilité réussis. Migration Supabase `20260912000001_staff_permission_save.sql` appliquée ; déploiement Vercel `dpl_2aQ4qBenrnC7X2vde9TL2JkQaYwc` promu. Le [rapport de correction](correction-enregistrement-permissions-2026-09-12.md) contient les décisions, les limites et les preuves du contrôle final du domaine.
+
+
+## Livraison organisation multiutilisateur — 12 septembre 2026
+
+Les huit zones UI et les 22 écarts logiques ont été corrigés puis publiés sur expedile.app. [Rapport complet des modifications, décisions, tests et déploiement](livraison-organisation-equipe-2026-09-12.md). Déploiement Vercel `dpl_G1oRZ2gghCjX5hoNguK4RBqXSunA` ; migrations 00002–00008 et trois fonctions Edge appliquées. 109 tests applicatifs, 73 + 24 assertions SQL, 38 parités JS/SQL, 17 tests Telegram et 44 contrôles navigateur sur la version hébergée réussis. Aucun test n’a envoyé de communication ni de paiement réel.

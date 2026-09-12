@@ -1,3 +1,4 @@
+import { clientWorkState } from '../../domain/clientJourney';
 import React from 'react';
 import { Home, Package, Bell, User } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -6,7 +7,7 @@ import { BRAND } from '../../constants';
 
 const TABS = [
   { key: 'accueil', Icon: Home,    label: 'Accueil',  path: '/' },
-  { key: 'colis',   Icon: Package, label: 'Colis',    path: '/colis' },
+  { key: 'colis',   Icon: Package, label: 'Expéditions',    path: '/colis' },
   { key: 'notifs',  Icon: Bell,    label: 'Notifications',   path: '/notifications' },
   { key: 'profil',  Icon: User,    label: 'Profil',   path: '/profil' },
 ];
@@ -19,7 +20,7 @@ export default function ClientBottomNav() {
   // Count actions needed for badge on "Colis" tab
   const { data, authCl } = useApp();
   const myColis = data.filter((c) => c.clientId === authCl?.id);
-  const mesActions = myColis.filter((c) => (c.statut === 'attente_feu_vert' && !(c.attenteClientDate && (!c.attenteClientUntil || Date.parse(c.attenteClientUntil) > Date.now()))) || ['devis_envoye', 'attente_paiement'].includes(c.statut)).length;
+  const mesActions = myColis.filter(colis => clientWorkState(colis,authCl).section === 'todo').length;
 
   const badges = {
     accueil: 0,

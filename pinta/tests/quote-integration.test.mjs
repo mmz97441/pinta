@@ -50,7 +50,7 @@ test('a stale quote measure save is rejected; the returned row is canonical on s
 });
 
 test('more than 1,000 dossiers and their actual mapped documents remain available to the quote calculation', async () => {
-  const rows = Array.from({ length: 1001 }, (_, index) => ({ id: String(index).padStart(5, '0'), client_id: 'client', archive: false, statut: 'en_preparation', fin_l: 40, fin_w: 30, fin_h: 20, fin_p: 3, dim_l: 40, dim_w: 30, dim_h: 20, poids: 3 }));
+  const rows = Array.from({ length: 1001 }, (_, index) => ({ id: String(index).padStart(5, '0'), client_id: 'client', archive: false, statut: 'en_preparation', preparation_composition_version: 0, final_measurements_version: 0, outgoing_parcel_count: 1, fin_l: 40, fin_w: 30, fin_h: 20, fin_p: 3, dim_l: 40, dim_w: 30, dim_h: 20, poids: 3 }));
   const { api, calls } = service({ colis: rows, factures: [{ id: 'invoice', colis_id: '01000', vendeur: 'Amazon', montant: 100, valide: true, fichier_url: '01000/facture.pdf' }], lignes: [{ id: 'line', colis_id: '01000', facture_id: 'invoice', description: 'Vêtement', qte: 2, prix_unitaire: 50, categorie_id: 'clothes' }], messages: [] });
   const loaded = await api.fetchColis();
   assert.equal(loaded.length, 1001); assert.equal(calls.filter((call) => call.table === 'colis').length, 3);

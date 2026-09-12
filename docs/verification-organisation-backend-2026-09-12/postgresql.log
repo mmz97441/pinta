@@ -1,0 +1,89 @@
+NOTICE:  relation "v_abonnements_alertes" does not exist, skipping
+NOTICE:  policy "Factures read" for relation "storage.objects" does not exist, skipping
+NOTICE:  policy "Public read photos-colis" for relation "storage.objects" does not exist, skipping
+NOTICE:  column "abonnement" of relation "clients" already exists, skipping
+NOTICE:  column "abonnement_debut" of relation "clients" already exists, skipping
+NOTICE:  column "abonnement_fin" of relation "clients" already exists, skipping
+NOTICE:  column "tags_preparation" of relation "colis" already exists, skipping
+NOTICE:  relation "staff_users" already exists, skipping
+NOTICE:  relation "staff_permissions" already exists, skipping
+NOTICE:  column "perm_colis_mesurer" of relation "staff_permissions" already exists, skipping
+NOTICE:  relation "audit_actions" already exists, skipping
+NOTICE:  relation "colis_locks" already exists, skipping
+NOTICE:  policy "Factures upload" for relation "storage.objects" does not exist, skipping
+NOTICE:  policy "Factures update" for relation "storage.objects" does not exist, skipping
+NOTICE:  policy "Auth upload photos-colis" for relation "storage.objects" does not exist, skipping
+NOTICE:  trigger "client_delivery_address_consistency" for relation "clients" does not exist, skipping
+NOTICE:  PASS Preparation ready despite missing invoice
+NOTICE:  PASS Documents await customer independently
+NOTICE:  PASS Quote waits for measurements and invoice
+NOTICE:  PASS Missing client channel is actionable
+NOTICE:  PASS Client cannot read internal actions
+NOTICE:  PASS Client cannot read availability/preferences
+NOTICE:  PASS reject Client cannot claim [42501]
+NOTICE:  PASS First owner claims atomically
+NOTICE:  PASS Action ownership does not change dossier referent
+NOTICE:  PASS reject Direct action creation denied [42501]
+NOTICE:  PASS reject Stale second claimant rejected [40001]
+NOTICE:  PASS reject Current version cannot steal action [40001]
+NOTICE:  PASS Owner starts preparation
+NOTICE:  PASS Requested handoff keeps original owner
+NOTICE:  PASS Handoff sends targeted notification
+NOTICE:  PASS reject Sender cannot accept own outgoing handoff [42501]
+NOTICE:  PASS Named recipient accepts transfer
+NOTICE:  PASS Owner records separate waiting reason
+NOTICE:  PASS Manual wait can resume
+NOTICE:  PASS reject Non-direction cannot force reassignment [42501]
+NOTICE:  PASS Explicit release returns common queue
+NOTICE:  PASS reject Cannot fake completion outside business command [42501]
+NOTICE:  PASS Personal missions and absence saved
+NOTICE:  PASS reject Stale preferences rejected [40001]
+NOTICE:  PASS Document mission never grants document permission
+NOTICE:  PASS reject Forced assignment requires reason [22023]
+NOTICE:  PASS Direction can reassign with trace
+NOTICE:  PASS Reassignment reason audited
+NOTICE:  PASS reject Portal cannot falsely deliver to unlinked client [22023]
+NOTICE:  PASS Linking client channel resolves access action
+NOTICE:  PASS Expired manual wait returns to ready without business approval
+NOTICE:  PASS A dossier refresh preserves explicit task deadline
+NOTICE:  PASS Expired customer wait creates review action
+NOTICE:  PASS Review deadline never grants customer consent
+NOTICE:  PASS Prepared pro transport quote is actionable without tax documents
+NOTICE:  PASS Pro document work remains separate from transport quote readiness
+NOTICE:  PASS Pro quote also respects declared operational content blockage
+NOTICE:  PASS Quote action never bypasses refused client consent
+NOTICE:  PASS Changing client kind recalculates quote prerequisites immediately
+NOTICE:  PASS Initial assignment permitted with dedicated flag
+NOTICE:  PASS reject Reassignment denied without finer flag [42501]
+NOTICE:  PASS reject Direct reassign bypass also denied [42501]
+NOTICE:  PASS Removed edit permission prevents envoi update
+NOTICE:  PASS reject Missing creation permission enforced [42501]
+NOTICE:  PASS reject Past departure assignment rejected [22023]
+NOTICE:  PASS reject Wrong destination assignment rejected [22023]
+NOTICE:  PASS reject Direct departure status bypass rejected [22023]
+NOTICE:  PASS reject Unpaid dossier cannot ship [22023]
+NOTICE:  PASS reject Unloaded dossiers require explicit deferral reason [22023]
+NOTICE:  PASS Atomic departure confirms paid dossier and explicit deferral
+NOTICE:  PASS Loaded dossier receives shipping status and date
+NOTICE:  PASS Deferred dossier keeps preparation state and clears old departure
+NOTICE:  PASS Manifest includes only loaded dossiers
+NOTICE:  PASS Manifest retains explicit deferred list
+NOTICE:  PASS Cancelled historical dossier is excluded instead of falsely deferred
+NOTICE:  PASS Cancelled historical association is preserved
+NOTICE:  PASS Paid destination snapshot survives later client postcode change
+NOTICE:  PASS Legacy one-package confirmation is explicit in frozen manifest
+NOTICE:  PASS reject Confirmed departure cannot move backward [22023]
+NOTICE:  PASS Archiving dossier does not alter historical manifest
+NOTICE:  PASS Confirmed dossier count and physical weight remain frozen after archive
+NOTICE:  PASS Delivery captures business date without erasing shipping date
+NOTICE:  PASS Reply points to delivered dossier despite active dossier
+NOTICE:  PASS Reply cannot cross customer ownership
+NOTICE:  PASS Unresolved explicit reply never falls back to unrelated active dossier
+NOTICE:  PASS Contradictory explicit reference requires attribution
+NOTICE:  PASS Paid attachment creates visible conversation without altering payment
+NOTICE:  PASS reject Paid conversation document cannot change paid invoice [22023]
+NOTICE:  PASS Explicit document import creates pending invoice
+NOTICE:  PASS Repeated import cannot duplicate invoice
+NOTICE:  PASS reject Client cannot read manifest of other clients [42501]
+NOTICE:  PASS Telegram routing helper restricted to webhook service
+NOTICE:  PASS Real two-session concurrent claim has exactly one winner

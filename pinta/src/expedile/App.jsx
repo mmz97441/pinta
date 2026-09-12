@@ -1,6 +1,6 @@
 import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, useNavigate, useParams, useLocation, Navigate } from 'react-router-dom';
-import { Settings, Users, LogOut, LayoutDashboard, Package, ChevronLeft, ChevronRight, Plus, FileText, Key, AlertTriangle } from 'lucide-react';
+import { Settings, Users, LogOut, LayoutDashboard, Package, ChevronLeft, ChevronRight, Plus, FileText, Key, AlertTriangle, MessageCircle, Plane, MoreHorizontal } from 'lucide-react';
 import './brand.css';
 import { getPrenom } from './utils';
 
@@ -16,7 +16,10 @@ import ColisModal from './components/ColisModal';
 import OnboardingOverlay from './components/client/OnboardingOverlay';
 
 const StaffColisPage = lazy(() => import('./components/staff/StaffSplitView'));
-const DashboardPage = lazy(() => import('./components/staff/StaffSplitView').then((m) => ({ default: m.DashboardPage })));
+const PersonalWorkView = lazy(() => import('./components/workspace/PersonalWorkView'));
+const TeamWorkView = lazy(() => import('./components/workspace/TeamWorkView'));
+const ConversationsView = lazy(() => import('./components/workspace/ConversationsView'));
+const StaffDepartures = lazy(() => import('./components/staff/StaffDepartures'));
 const StaffSettings = lazy(() => import('./components/staff/StaffSettings'));
 const StaffClients = lazy(() => import('./components/staff/StaffClients'));
 const StaffClientDetail = lazy(() => import('./components/staff/StaffClientDetail'));
@@ -101,7 +104,7 @@ function StaffColisDetail() {
             <summary className="min-h-11 cursor-pointer px-4 py-3 text-sm font-semibold text-gray-700">Cartons reçus et informations du dossier</summary>
             <div className="px-3 pb-3"><ColisInfo /></div>
           </details>
-          <StaffDetailView />
+          <StaffDetailView workspace />
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-4"><ChatPanel /><AuditLog /></div>
         </> : <div className="flex flex-col lg:flex-row gap-4">
           <div className="w-full lg:w-[420px] lg:flex-shrink-0 lg:order-2">
@@ -188,8 +191,11 @@ function AppContent() {
     const currentPath = location.pathname;
 
     const NAV_ITEMS = [
-      { key: '/', label: 'À traiter', icon: LayoutDashboard },
-      { key: '/colis', label: 'Colis', icon: Package },
+      { key: '/', label: 'Mon travail', icon: LayoutDashboard },
+      { key: '/colis', label: 'Dossiers d’expédition', icon: Package },
+      { key: '/conversations', label: 'Conversations', icon: MessageCircle, visible: can('perm_comm_message_libre') || can('perm_comm_telegram') || can('perm_comm_email') || can('perm_comm_voir_chat_autres') },
+      { key: '/equipe', label: 'Équipe', icon: Users },
+      { key: '/departs', label: 'Départs', icon: Plane, visible: can('perm_envois_voir') },
       { key: '/clients', label: 'Clients', icon: Users, visible: can('perm_clients_voir') || can('perm_clients_creer') },
       { key: '/devis', label: 'Estimation', icon: FileText, visible: can('perm_colis_calculer_devis') },
       { key: '/settings', label: 'Paramètres', icon: Settings, visible: can('perm_admin_parametres') },
@@ -199,7 +205,10 @@ function AppContent() {
       : currentPath.startsWith('/clients') ? '/clients'
       : currentPath === '/devis' ? '/devis'
       : currentPath === '/settings' ? '/settings'
-      : '/';
+      : ['/equipe', '/conversations', '/departs', '/plus'].includes(currentPath) ? currentPath : '/';
+    const mobileItems = NAV_ITEMS.filter((item) => ['/', '/colis', '/clients'].includes(item.key)).map((item) => ({ ...item, label: item.key === '/colis' ? 'Dossiers' : item.label }));
+    mobileItems.push({ key: '/plus', label: 'Plus', icon: MoreHorizontal });
+    const moreItems = NAV_ITEMS.filter((item) => !['/', '/colis', '/clients'].includes(item.key));
 
     return (
       <div style={{ fontFamily: "system-ui, -apple-system, 'Segoe UI', sans-serif" }} className="h-[100dvh] flex overflow-hidden">
@@ -231,18 +240,18 @@ function AppContent() {
           {/* New colis button */}
           <div className="px-3 mb-2" hidden={!can('perm_colis_receptionner')}>
             <button
-              aria-label="Nouveau colis" onClick={() => setModal(true)}
+              aria-label="Réceptionner des cartons" onClick={() => setModal(true)}
               className={`w-full flex items-center gap-2 rounded-xl text-sm font-bold transition-all active:scale-95 ${sidebarCollapsed ? 'justify-center px-2 py-2.5' : 'px-3 py-2.5'}`}
               style={{ background: `linear-gradient(135deg, ${BRAND.gold}, ${BRAND.goldD})`, color: BRAND.navyD }}
             >
               <Plus size={16} strokeWidth={2.5} />
-              {!sidebarCollapsed && 'Nouveau colis'}
+              {!sidebarCollapsed && 'Réceptionner des cartons'}
             </button>
           </div>
 
           {/* Navigation */}
           <nav className="flex-1 px-3 space-y-1">
-            {NAV_ITEMS.map((item) => {
+            {NAV_ITEMS.filter((item) => item.key !== '/settings').map((item) => {
               const Icon = item.icon;
               const isActive = activePath === item.key;
               return (
@@ -266,6 +275,7 @@ function AppContent() {
             })}
           </nav>
 
+          {can('perm_admin_parametres') && <button onClick={() => navigate('/settings')} aria-label="Paramètres" aria-current={activePath === '/settings' ? 'page' : undefined} className={`mx-3 mb-2 flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-semibold ${activePath === '/settings' ? 'bg-white/15 text-white' : 'text-gray-300 hover:bg-white/10'}`}><Settings size={18} />{!sidebarCollapsed && 'Paramètres'}</button>}
           {/* Collapse toggle */}
           <div className="px-3 py-2">
             <button
@@ -295,9 +305,9 @@ function AppContent() {
           className="lg:hidden fixed bottom-0 left-0 right-0 z-50 border-t border-gray-200 flex items-center justify-around py-2 px-1"
           style={{ background: 'var(--bg-elevated)', paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }}
         >
-          {NAV_ITEMS.map((item) => {
+          {mobileItems.map((item) => {
             const Icon = item.icon;
-            const isActive = activePath === item.key;
+            const isActive = activePath === item.key || (item.key === '/plus' && moreItems.some((entry) => entry.key === activePath));
             return (
               <button
                 key={item.key}
@@ -310,27 +320,24 @@ function AppContent() {
               </button>
             );
           })}
-          <button
-            hidden={!can('perm_colis_receptionner')} aria-label="Réceptionner un colis"
-            onClick={() => setModal(true)}
-            className="flex-1 min-h-11 flex flex-col items-center justify-center gap-0.5 px-1 py-1"
-          >
-            <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ background: BRAND.gold }}>
-              <Plus size={18} style={{ color: BRAND.navyD }} strokeWidth={3} />
-            </div>
-          </button>
+
         </div>
 
         {/* ── Main content area ──────────────────────────────────────── */}
         <div className="flex-1 flex flex-col min-w-0 bg-gray-50">
           <div className="lg:hidden min-h-12 px-4 flex items-center justify-between border-b border-gray-200">
             <span className="font-black brand-t">EXPÉD<span className="brand-t-gold">ÎLE</span></span>
-            <div className="flex items-center gap-2"><ThemeToggle compact /><button aria-label="Se déconnecter" onClick={handleLogout} className="min-h-11 min-w-11 flex items-center justify-center text-gray-500"><LogOut size={18} /></button></div>
+            <div className="flex items-center gap-2">{can('perm_colis_receptionner') && <button aria-label="Réceptionner des cartons" onClick={() => setModal(true)} className="min-h-11 inline-flex items-center gap-1 rounded-xl px-2 text-xs font-bold brand-t"><Plus size={18} />Réceptionner</button>}<ThemeToggle compact /><button aria-label="Se déconnecter" onClick={handleLogout} className="min-h-11 min-w-11 flex items-center justify-center text-gray-500"><LogOut size={18} /></button></div>
           </div>
           {loadBanner}
           <div className="flex-1 min-h-0 overflow-y-auto pb-[calc(4.5rem+env(safe-area-inset-bottom))] lg:pb-0">
             {dataLoading ? <LoadingView /> : <Suspense fallback={<LoadingView />}><ScreenBoundary key={location.pathname}>
             <Routes>
+              <Route path="/equipe" element={<TeamWorkView />} />
+              <Route path="/conversations" element={<Permission allowed={can('perm_comm_message_libre') || can('perm_comm_telegram') || can('perm_comm_email') || can('perm_comm_voir_chat_autres')}><ConversationsView /></Permission>} />
+              <Route path="/departs" element={<Permission allowed={can('perm_envois_voir')}><StaffDepartures /></Permission>} />
+              <Route path="/travail" element={<Navigate to="/" replace />} />
+              <Route path="/plus" element={<div className="mx-auto max-w-xl space-y-4 p-5"><h1 className="text-2xl font-bold brand-t">Votre espace</h1><nav aria-label="Autres rubriques" className="grid gap-3">{moreItems.map(({ key, label, icon: Icon }) => <button key={key} onClick={() => navigate(key)} className="flex min-h-14 items-center gap-3 rounded-xl border border-gray-200 bg-white p-4 text-left font-semibold text-gray-800"><Icon size={20} />{label}<ChevronRight size={18} className="ml-auto" /></button>)}</nav></div>} />
               <Route path="/colis/:id" element={<StaffColisDetail />} />
               <Route path="/colis" element={
                 <StaffColisPage />
@@ -369,7 +376,7 @@ function AppContent() {
                 </div>
               } />
               <Route path="/" element={
-                <DashboardPage />
+                <PersonalWorkView />
               } />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>

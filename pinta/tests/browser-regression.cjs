@@ -59,6 +59,11 @@ function fixtures(role) {
         fin_w: 20,
         fin_h: 20,
         fin_p: 3,
+        final_packages: [{ dimL: 30, dimW: 20, dimH: 20, poids: 3 }],
+        preparation_composition_version: 1,
+        final_measurements_version: 1,
+        final_measurements_at: '2026-09-09T08:00:00Z',
+        outgoing_parcel_count: 1,
         feu_vert: role === 'client' ? 'en_attente' : 'autorise',
         archive: false,
         quote_version: 0,
@@ -132,6 +137,8 @@ function fixtures(role) {
       },
     ],
     client_inbox: [],
+    staff_work_actions: [{ id: '77777777-0000-4000-8000-000000000001', colis_id: P, kind: 'preparation', state: 'ready', assignee_id: A, version: 1, created_at: '2026-09-09T08:00:00Z', updated_at: '2026-09-09T08:00:00Z' }],
+    staff_work_preferences: [{ staff_id: A, missions: ['reception','preparation','communication','documents','departures','coordination'], active_mission: 'preparation', density: 'comfortable', available: true, version: 1 }],
     audit_actions: [],
     logs_statut: [],
     staff_permissions: [],
@@ -174,6 +181,7 @@ async function setup(browser, role, { failTable = null } = {}) {
       [...params].every(([key, value]) => {
         if (['select', 'order', 'limit', 'offset', 'on_conflict'].includes(key)) return true;
         if (value.startsWith('eq.')) return String(row[key]) === value.slice(3);
+        if (value.startsWith('neq.')) return String(row[key]) !== value.slice(4);
         if (value.startsWith('gt.')) return String(row[key]) > value.slice(3);
         if (value.startsWith('in.('))
           return value.slice(4, -1).split(',').includes(String(row[key]));
@@ -196,6 +204,7 @@ async function setup(browser, role, { failTable = null } = {}) {
     }
     let body = {},
       status = 200;
+    const responseHeaders = { 'access-control-allow-origin': '*', 'access-control-expose-headers': 'content-range' };
     if (url.pathname.includes('/auth/v1/token')) body = session;
     else if (url.pathname.includes('/auth/v1/user')) body = user;
     else if (url.pathname.includes('/auth/v1/logout')) {
@@ -204,15 +213,25 @@ async function setup(browser, role, { failTable = null } = {}) {
     } else if (url.pathname.includes('/auth/v1/recover')) body = {};
     else if (url.pathname.endsWith('/functions/v1/get-tracking')) body = {
       ok: true, expediteur: 'Camille E.', destination: { cp: '97400', ville: 'Saint-Denis' },
-      colis: [{ ref: 'EXP-TEST-001', desc: 'Deux achats à regrouper', statut: 'attente_paiement', dateReception: '2026-09-08T08:00:00Z', dims: { L: 30, W: 20, H: 20, P: 5 } }],
+      colis: [{ ref: 'EXP-TEST-001', desc: 'Deux achats à regrouper', statut: 'attente_paiement', quoteNeedsReview: false, receivedCount: 2, preparedPackages: [{ L: 30, W: 20, H: 20, P: 5 }], outgoingParcelCount: 1, dateReception: '2026-09-08T08:00:00Z', dims: { L: 30, W: 20, H: 20, P: 5 } }],
     };
     else if (url.pathname.endsWith('/functions/v1/ocr-facture') && input?.action === 'resume') body = { success: true, extraction: null };
     else if (url.pathname.includes('/storage/v1/object/sign/'))
       body = { signedURL: '/storage/v1/object/sign/factures/test.pdf?token=fake' };
     else if (url.pathname.includes('/rest/v1/rpc/')) {
       const rpc = url.pathname.split('/').pop(),
-        colis = tables.colis.find((c) => c.id === input.p_colis_id);
-      if (rpc === 'save_quote') {
+        colis = tables.colis.find((c) => c.id === input?.p_colis_id);
+      if (rpc === 'refresh_staff_work_actions') body = null;
+      else if (rpc === 'save_preparation_measurements') {
+        if (input.p_expected_updated_at !== colis.updated_at || input.p_expected_composition_version !== colis.preparation_composition_version) {
+          status = 409; body = { code: '40001', message: 'Le dossier a changé. Votre brouillon est conservé.' };
+        } else {
+          const boxes = input.p_final_packages;
+          Object.assign(colis, { final_packages: boxes, fin_l: Math.max(...boxes.map(b => +b.dimL)), fin_w: Math.max(...boxes.map(b => +b.dimW)), fin_h: Math.max(...boxes.map(b => +b.dimH)), fin_p: boxes.reduce((n,b) => n + +b.poids, 0), final_measurements_version: colis.preparation_composition_version, final_measurements_at: new Date().toISOString(), outgoing_parcel_count: boxes.length, updated_at: new Date().toISOString() });
+          body = { colis };
+        }
+      }
+      else if (rpc === 'save_quote') {
         const m = {
           devisTransport: 'devis_transport',
           devisOM: 'devis_om',
@@ -228,6 +247,7 @@ async function setup(browser, role, { failTable = null } = {}) {
           finH: 'fin_h',
           finP: 'fin_p',
           fraisDivers: 'frais_divers',
+          finalPackages: 'final_packages',
         };
         for (const [key, value] of Object.entries(input.p_snapshot))
           if (m[key]) colis[m[key]] = value;
@@ -312,7 +332,14 @@ async function setup(browser, role, { failTable = null } = {}) {
         } else if (method === 'DELETE') {
           tables[table] = (tables[table] || []).filter((r) => !rows.includes(r));
           body = [];
-        } else body = rows.slice(0, Number(url.searchParams.get('limit')) || rows.length);
+        } else {
+          const ordering = (url.searchParams.get('order') || '').split(',').filter(Boolean);
+          if (ordering.length) rows.sort((a,b) => { for (const order of ordering) { const [key,direction] = order.split('.'); const compared = String(a[key] ?? '').localeCompare(String(b[key] ?? '')); if (compared) return direction === 'desc' ? -compared : compared; } return 0; });
+          const offset = Number(url.searchParams.get('offset')) || 0;
+          const limit = Number(url.searchParams.get('limit')) || rows.length;
+          body = rows.slice(offset,offset + limit);
+          responseHeaders['content-range'] = `${offset}-${Math.max(offset,offset + body.length - 1)}/${rows.length}`;
+        }
         if (req.headers().accept?.includes('vnd.pgrst.object'))
           body = Array.isArray(body) ? body[0] || null : body;
       }
@@ -325,7 +352,7 @@ async function setup(browser, role, { failTable = null } = {}) {
       status,
       contentType: 'application/json',
       body: status === 204 ? '' : JSON.stringify(body),
-      headers: { 'access-control-allow-origin': '*' },
+      headers: responseHeaders,
     });
   });
   const page = await context.newPage();
@@ -351,7 +378,7 @@ async function main() {
     await f.login();
     await f.page.waitForTimeout(400);
     assert.equal(
-      await f.page.getByRole('heading', { name: 'Les prochaines actions' }).count(),
+      await f.page.getByRole('heading', { name: 'Mon travail' }).count(),
       0,
       'Client must not enter staff dashboard despite forged metadata',
     );
@@ -394,16 +421,16 @@ async function main() {
 
     f = await setup(browser, 'directeur');
     await f.login();
-    await f.page.getByRole('heading', { name: 'Les prochaines actions', exact: true }).waitFor();
+    await f.page.getByRole('heading', { name: 'Mon travail', exact: true }).waitFor();
     await f.page.screenshot({
       path: path.join(output, 'staff-dashboard-desktop.png'),
       fullPage: true,
     });
     await f.page.reload();
-    await f.page.getByRole('heading', { name: 'Les prochaines actions', exact: true }).waitFor();
+    await f.page.getByRole('heading', { name: 'Mon travail', exact: true }).waitFor();
     observations.push({ test: 'staff-session-restored', pass: true });
     await f.page.goto(base + '/settings');
-    await f.page.getByRole('heading', { name: 'Planifier les départs' }).waitFor();
+    await f.page.getByRole('heading', { name: 'Départs' }).waitFor();
     assert.equal(
       f.requests.filter((r) => r.method === 'POST' && r.path.endsWith('/envois')).length,
       0,
@@ -454,6 +481,8 @@ async function main() {
         break;
       }
     assert.ok(changed, 'Final weight field found');
+    await f.page.getByRole('button', { name: 'Enregistrer les mesures de préparation' }).click();
+    await f.page.waitForFunction(() => document.body.innerText.includes('Mesures enregistrées, même si les documents restent à vérifier.'));
     await f.page.getByRole('button', { name: 'Enregistrer et vérifier le devis' }).click();
     await f.page.getByRole('button', { name: 'Envoyer le devis au client' }).waitFor();
     assert.equal(f.tables.colis[0].devis_transport, 50);
@@ -489,7 +518,7 @@ async function main() {
     await f.page.goto(base + '/');
     const openReception = () => f.page.getByRole('button', { name: /Nouveau colis|Réceptionner/ }).first().click();
     await openReception();
-    const reception = f.page.getByRole('dialog', { name: 'Réceptionner un colis', exact: true });
+    const reception = f.page.getByRole('dialog', { name: 'Réceptionner des cartons', exact: true });
     await reception.waitFor();
     await f.page.waitForTimeout(100);
     await f.page.screenshot({ path: path.join(output, 'reception-mobile.png'), fullPage: true });
@@ -518,7 +547,7 @@ async function main() {
     await f.page.keyboard.press('Escape');
     observations.push({ test: 'reception-short-long-scroll-three-close-methods', pass: true });
     await f.page.goto(base + '/settings');
-    await f.page.getByRole('heading', { name: 'Planifier les départs' }).waitFor();
+    await f.page.getByRole('heading', { name: 'Départs' }).waitFor();
     await f.page.waitForTimeout(350);
     const settingsNav = f.page.getByRole('navigation', { name: 'Paramètres', exact: true });
     const compressedTabs = await settingsNav.getByRole('button').evaluateAll(buttons => buttons.filter(b => b.scrollWidth > b.clientWidth + 1).map(b => b.textContent));
@@ -530,7 +559,7 @@ async function main() {
     await f.page.screenshot({ path: path.join(output, 'settings-mobile.png'), fullPage: true });
     await f.page.setViewportSize({ width: 1440, height: 1000 });
     await f.page.goto(base + '/');
-    await f.page.getByRole('heading', { name: 'Les prochaines actions', exact: true }).waitFor();
+    await f.page.getByRole('heading', { name: 'Mon travail', exact: true }).waitFor();
     await f.page.getByRole('button', { name: 'Passer en mode sombre', exact: true }).click();
     await f.page.waitForTimeout(350);
     await f.page.screenshot({ path: path.join(output, 'staff-dashboard-dark.png'), fullPage: true });
@@ -544,7 +573,8 @@ async function main() {
     await f.page.goto(base + '/suivi/fixture-public-token-123456789');
     await f.page.getByText('EXP-TEST-001', { exact: true }).waitFor();
     await f.page.getByText('Devis reçu — en attente de paiement', { exact: true }).waitFor();
-    await f.page.getByText('30×20×20 cm · 5 kg', { exact: true }).waitFor();
+    await f.page.getByText('Cartons et mesures', { exact: true }).click();
+    await f.page.getByText('Colis sortant 1 · 30 × 20 × 20 cm · 5 kg', { exact: true }).waitFor();
     await f.page.getByText('Parcours du colis', { exact: true }).click();
     const timeline = f.page.getByRole('list', { name: 'Progression du colis' });
     assert.equal(await timeline.locator('li').count(), 8, 'All eight lifecycle phases remain available');

@@ -10,7 +10,8 @@ test('consent counts received cartons even with missing or duplicate tracking re
 test('a deliberate pause is not an overdue agreement and no status implies today', () => {
   const now = Date.parse('2026-09-10T10:00:00Z');
   assert.equal(clientJourney({ statut: 'attente_feu_vert', attenteClientDate: '2026-09-08', attenteClientUntil: '2026-09-12' }, now).waiting, true);
-  assert.equal(clientJourney({ statut: 'attente_feu_vert', attenteClientDate: '2026-09-08', attenteClientUntil: '2026-09-09' }, now).waiting, false);
+  assert.equal(clientJourney({ statut: 'attente_feu_vert', attenteClientDate: '2026-09-08', attenteClientUntil: '2026-09-09' }, now).waiting, true);
+  assert.equal(clientJourney({ statut: 'attente_feu_vert', attenteClientDate: '2026-09-08', attenteClientUntil: '2026-09-09' }, now).reviewDue, true);
   assert.equal(clientJourney({ statut: 'en_preparation' }).label, 'Préparation en cours');
   assert.doesNotMatch(clientJourney({ statut: 'livraison' }).next, /aujourd’hui|aujourd'hui/);
   assert.equal(clientJourney({ statut: 'livre' }).actor, null);
@@ -33,4 +34,20 @@ test('published price uses frozen fee, rate and payment terms across later confi
   assert.equal(view.client.type, 'pro');
   assert.equal(JSON.stringify(input), before);
   assert.equal(quotePresentation({ devisTotal: 43 }, {}, { tva: 20 }).destination.tva, null);
+});
+
+test('a withdrawn quote belongs to the team and cannot request a payment', async () => {
+  const { clientWorkState } = await import('./clientJourney.js');
+  const parcel = { statut: 'devis_envoye', devisBrouillon: true, devisTotal: null };
+  assert.equal(clientWorkState(parcel).section, 'team');
+  assert.equal(clientJourney(parcel).quoteNeedsReview, true);
+  assert.match(clientJourney(parcel).next, /Aucun règlement/);
+});
+
+test('a corrected rejected invoice does not ask the client to upload the old document again', async () => {
+  const { clientWorkState } = await import('./clientJourney.js');
+  const parcel = { statut: 'en_preparation', factures: [{id:'old',rejetMotif:'Illisible'}, {id:'new',replacesFactureId:'old'}] };
+  assert.equal(clientWorkState(parcel).section, 'team');
+  parcel.factures[1].rejetMotif = 'Page absente';
+  assert.equal(clientWorkState(parcel).section, 'todo');
 });

@@ -6,6 +6,32 @@ import { BRAND } from '../../constants';
 import * as sb from '../../lib/supabaseData';
 import { setConversationState, markVisibleMessagesRead } from '../../services/conversationApi';
 import { CONVERSATION_STATES, conversationState, conversationLabel } from '../../domain/conversations';
+import { supabase } from '../../lib/supabase';
+import { staffName } from '../workspace/WorkActionRow';
+
+function ConversationAttachment({ message, colis, canImport, onImported }) {
+  const [url, setUrl] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [imported, setImported] = useState(false);
+  const path = message.attachmentPath || message.attachment_path;
+  useEffect(() => {
+    let active = true;
+    setUrl(''); setError('');
+    if (path) sb.signedFileUrl('factures', path).then(value => { if (active) setUrl(value); }).catch(err => { if (active) setError(err.message); });
+    return () => { active = false; };
+  }, [path]);
+  if (!path) return null;
+  const importInvoice = async () => {
+    setBusy(true); setError('');
+    try {
+      const { error: rpcError } = await supabase.rpc('import_conversation_invoice', { p_message_id: message.id });
+      if (rpcError) throw rpcError;
+      setImported(true); await onImported(colis.id);
+    } catch (err) { setError(err.message); } finally { setBusy(false); }
+  };
+  return <div className="mt-2 space-y-2 border-t border-current/20 pt-2">{url ? <a href={url} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center underline">{message.attachmentName || message.attachment_name || 'Télécharger le document'}</a> : !error && <span>Préparation du document…</span>}{canImport && !imported && <button disabled={busy} onClick={importInvoice} className="block min-h-11 rounded-lg border border-current px-2 text-xs">{busy ? 'Import…' : 'Utiliser comme facture'}</button>}{imported && <p>Facture ajoutée, à vérifier dans Documents.</p>}{error && <p role="alert">{error}</p>}</div>;
+}
 
 // ── Status indicator (Telegram-style) ────────────────────────────────────────
 function MsgStatut({ statut }) {
@@ -32,9 +58,13 @@ function MsgStatut({ statut }) {
   return <span className="inline-flex items-center gap-1 text-xs">{icon}{label}</span>;
 }
 
-export default function ChatPanel() {
-  const { sel, selClient, isStaff, auth, envMsg, setData, flash, ask, refreshColis, can, teamUsers=[] } = useApp();
-  const [msgTxt, setMsgTxt] = useState('');
+export default function ChatPanel({ colis, client, embedded = false, active = true }) {
+  const { sel: contextSel, selClient: contextClient, isStaff, auth, envMsg, setData, flash, ask, refreshColis, refreshWork, can, teamUsers=[], workActions=[] } = useApp();
+  const sel = colis || contextSel;
+  const selClient = client || contextClient;
+  const [drafts, setDrafts] = useState({});
+  const msgTxt = drafts[sel?.id] || '';
+  const setMsgTxt = value => setDrafts(previous => ({ ...previous, [sel.id]: value }));
   const [sending,setSending] = useState(false);
   const [changingState,setChangingState] = useState(false);
   const hasMsg = sel?.messages?.length > 0;
@@ -47,11 +77,11 @@ export default function ChatPanel() {
   }, [hasMsg]);
 
   useEffect(() => {
-    if (!isStaff || !expanded || !sel?.messages?.some(m=>m.type==='client'&&!m.lu)) return;
+    if (!isStaff || !active || !sel?.messages?.some(m=>m.type==='client'&&!m.lu)) return;
     const id=sel.id;
     markVisibleMessagesRead(sel).then((ids)=>setData(prev=>prev.map(c=>c.id===id?{...c,messages:c.messages.map(m=>ids.includes(m.id)?{...m,lu:true}:m)}:c)))
       .catch(error=>flash({msg:error.message,type:'error'}));
-  },[expanded,sel?.id,isStaff,sel?.messages?.length]);
+  },[active,sel?.id,isStaff,sel?.messages?.length]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -63,23 +93,26 @@ export default function ChatPanel() {
 
   const handleSend = async () => {
     if (!msgTxt.trim() || sending) return;
-    const txt = msgTxt;setSending(true);
-    try { await envMsg(sel.id,txt,auth,selClient?.tel);setMsgTxt(''); }
+    if (isStaff && !canHandle) return;
+    const txt = msgTxt; const id = sel.id; setSending(true);
+    try { await envMsg(id,txt,auth,selClient?.tel);setDrafts(previous => ({ ...previous, [id]: previous[id] === txt ? '' : previous[id] })); }
     catch(error){flash({msg:error.message,type:'error'});}
     finally {setSending(false);}
   };
   const state=conversationState(sel);
-  const owner=teamUsers.find((person)=>person.authId===sel.responsibleStaffId);
+  const conversationActions=workActions.filter(action=>action.colis_id===sel.id&&action.kind==='conversation');
+  const conversationAction=conversationActions.find(action=>action.state!=='done') || conversationActions.toSorted((a,b)=>Date.parse(b.updated_at)-Date.parse(a.updated_at))[0];
   const canHandle=can('perm_comm_message_libre')||can('perm_comm_telegram')||can('perm_comm_email');
   const changeState=async(next)=>{
     if(changingState||sending)return;
     setChangingState(true);
-    try{await setConversationState(sel,next);await refreshColis(sel.id);flash(`Conversation : ${CONVERSATION_STATES[next].toLowerCase()}`);}
+    try{await setConversationState(sel,next);await refreshColis(sel.id);await refreshWork?.();flash(`Conversation : ${CONVERSATION_STATES[next].toLowerCase()}`);}
     catch(error){await refreshColis(sel.id).catch(()=>{});flash({msg:error.message,type:'error'});}
     finally{setChangingState(false);}
   };
 
   const hasMessages = (sel.messages || []).length > 0;
+  const lastSent = [...(sel.messages || [])].reverse().find(message => message.type === 'staff');
 
   // ── Render text with clickable URLs ─────────────────────────────────────────
   const renderText = (text) => {
@@ -97,7 +130,7 @@ export default function ChatPanel() {
               </a>
             )}
             <a href={part} target="_blank" rel="noopener noreferrer" className="underline text-blue-400 hover:text-blue-600 break-all">
-              {isImage ? '📎 Voir la pièce jointe' : part.length > 50 ? part.slice(0, 50) + '...' : part}
+              {isImage ? 'Voir la pièce jointe' : part.length > 50 ? part.slice(0, 50) + '...' : part}
             </a>
           </span>
         );
@@ -121,7 +154,8 @@ export default function ChatPanel() {
         >
           <p className="text-xs mb-0.5">{m.auteur}</p>
           <p className="whitespace-pre-line">{renderText(m.texte)}</p>
-          {isStaff&&m.statut==='echec'&&<button className="min-h-[44px] text-xs underline" onClick={()=>ask('Réessayer cet envoi','Vérifiez dans Telegram que le client n’a pas reçu ce message, puis confirmez le renvoi.',async()=>{
+          <ConversationAttachment message={m} colis={sel} canImport={isStaff && can('perm_factures_ajouter') && ['receptionne','mesure','attente_feu_vert','autorise','en_preparation','pret','devis_envoye','attente_paiement'].includes(sel.statut)} onImported={async id => { await refreshColis(id); await refreshWork?.(); }} />
+          {isStaff&&m.statut==='echec'&&m.canal==='telegram'&&can('perm_comm_telegram')&&<button className="min-h-[44px] text-xs underline" onClick={()=>ask('Réessayer cet envoi','Vérifiez dans Telegram que le client n’a pas reçu ce message, puis confirmez le renvoi.',async()=>{
             const result=await deliverMessage(sel.id,m.id,{retryConfirmed:true});
             if(!result.ok)throw new Error(result.error || 'L’envoi reste à vérifier.');
             await refreshColis(sel.id);flash('Message envoyé à Telegram');
@@ -159,18 +193,18 @@ export default function ChatPanel() {
   // Staff always sees full panel
   if (isStaff) {
     return (
-      <div className="card p-4 anim-fade" id="conversation-client">
-        <p className="font-bold mb-2 text-sm">Chat avec le client{(() => {
+      <div className={embedded ? 'flex min-h-0 flex-1 flex-col overflow-y-auto p-3' : 'card p-4 anim-fade'} id="conversation-client">
+        <p className={embedded ? 'sr-only' : 'font-bold mb-2 text-sm'}>Chat avec le client{(() => {
           const unread = (sel?.messages || []).filter((m) => m.type === 'client' && !m.lu).length;
           if (unread === 0) return null;
           return <span className="ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-red-500 text-white">{unread}</span>;
         })()}</p>
         <div className="mb-3 rounded-xl border border-gray-200 dark:border-gray-700 p-3 space-y-2">
-          <div className="flex flex-wrap justify-between items-center gap-2"><p className="text-sm font-semibold" role="status">{conversationLabel(sel)}</p><p className="text-xs text-gray-600 dark:text-gray-300">{owner ? `Responsable : ${[owner.prenom,owner.nom].filter(Boolean).join(' ')}` : sel.responsibleStaffId===auth?.u?.id ? 'Responsable : moi' : 'Responsable à attribuer'}</p></div>
-          <p className="text-xs text-gray-600 dark:text-gray-300">{state==='a_traiter' ? 'La demande reste à traiter, même après lecture. Les relances automatiques de ce client sont suspendues.' : state==='attente_client' ? 'Votre réponse a été apportée ; le prochain retour est attendu du client. Les pauses demandées restent respectées.' : 'Le traitement est terminé. Un nouveau message du client rouvrira la conversation.'}</p>
+          <div className="flex flex-wrap justify-between items-center gap-2"><p className="text-sm font-semibold" role="status">{conversationLabel(sel)}</p><p className="text-xs text-gray-600 dark:text-gray-300">{state === 'termine' && !conversationAction ? 'Traitée' : `Conversation : ${staffName(conversationAction?.assignee_id, teamUsers)}`}</p></div>
+          <details className="text-xs text-gray-600 dark:text-gray-300"><summary className="min-h-8 cursor-pointer py-2">Suivi du traitement et relances</summary><p>{state==='a_traiter' ? 'La demande reste à traiter, même après lecture. Les relances automatiques de ce client sont suspendues.' : state==='attente_client' ? 'Votre réponse a été apportée ; le prochain retour est attendu du client. Les pauses demandées restent respectées.' : 'Le traitement est terminé. Un nouveau message du client rouvrira la conversation.'}</p></details>
           {canHandle&&<div className="flex flex-wrap gap-2" aria-label="Traitement de la conversation">{Object.entries(CONVERSATION_STATES).map(([key,label])=><button key={key} type="button" disabled={changingState||sending||state===key} onClick={()=>changeState(key)} className="min-h-11 rounded-lg border border-gray-300 dark:border-gray-600 px-3 text-xs font-semibold disabled:opacity-50">{key==='termine'?'Marquer comme traité':key==='a_traiter'?'À traiter':label}</button>)}</div>}
         </div>
-        <div ref={scrollRef} role="log" aria-label="Messages avec le client" className="space-y-1.5 mb-3 max-h-64 overflow-y-auto">
+        <div ref={scrollRef} role="log" aria-label="Messages avec le client" className={`space-y-1.5 mb-3 overflow-y-auto ${embedded ? 'min-h-24 flex-1' : 'max-h-64'}`}>
           {!hasMessages && (
             <p className="text-xs text-gray-400 italic text-center py-3">Aucun message</p>
           )}
@@ -181,6 +215,7 @@ export default function ChatPanel() {
           <input
             id={`staff-message-${sel.id}`}
             value={msgTxt}
+            disabled={!canHandle}
             onChange={(e) => setMsgTxt(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') handleSend(); }}
             placeholder={selClient?.telegramChatId ? 'Écrire au client via Telegram…' : 'Écrire dans l’espace client…'}
@@ -188,7 +223,7 @@ export default function ChatPanel() {
           />
           <button
             onClick={handleSend}
-            disabled={sending || changingState || !msgTxt.trim()} aria-label="Envoyer le message"
+            disabled={!canHandle || sending || changingState || !msgTxt.trim()} aria-label="Envoyer le message"
             className="px-3 py-2 text-white rounded-xl text-sm font-bold disabled:opacity-30"
             style={{ backgroundColor: BRAND.navy }}
           >
@@ -200,6 +235,7 @@ export default function ChatPanel() {
             ? 'Envoi via Telegram. Envoyer une réponse ne clôture pas automatiquement son traitement.'
             : 'Message dans l’espace client. L’invitation Telegram se trouve dans sa fiche client.'}
         </p>
+        {lastSent && <p className="mt-1 text-xs text-slate-500">Dernier envoi : <MsgStatut statut={lastSent.statut} />{lastSent.canal ? ` · ${lastSent.canal === 'portal' ? 'espace client' : lastSent.canal}` : ''}</p>}
       </div>
     );
   }

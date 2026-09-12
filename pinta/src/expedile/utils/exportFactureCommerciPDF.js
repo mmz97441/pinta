@@ -25,7 +25,7 @@ export function exportFactureCommerciPDF(envoi, colis, clients, categories) {
 
   doc.setFontSize(8);
   doc.setFont('helvetica', 'normal');
-  const today = new Date().toLocaleDateString('fr-FR');
+  const today = new Date(envoi?.confirmedAt || Date.now()).toLocaleDateString('fr-FR');
   doc.text(`N° de facture : ${envoi?.ref || 'FC-' + today.replace(/\//g, '')}`, 120, 28);
   doc.text(`Date : ${today}`, 120, 33);
   doc.text(`Envoi : ${envoi?.ref || '—'}`, 120, 38);

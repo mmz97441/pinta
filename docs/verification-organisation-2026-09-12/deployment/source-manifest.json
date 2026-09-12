@@ -1,0 +1,696 @@
+{
+  "fileCount": 115,
+  "totalSize": 1343341,
+  "files": [
+    {
+      "path": ".vercelignore",
+      "size": 657,
+      "mode": 33188,
+      "sha": "cf7adec7f73b150f471a600484d93e3f14a9b6e9"
+    },
+    {
+      "path": "pinta/.eslintrc.cjs",
+      "size": 544,
+      "mode": 33188,
+      "sha": "fb892cd00be4791c83faf5aec7e3fb2df553271a"
+    },
+    {
+      "path": "pinta/index.html",
+      "size": 563,
+      "mode": 33188,
+      "sha": "b0ce784b079474a35205518e3d78a19353315875"
+    },
+    {
+      "path": "pinta/package-lock.json",
+      "size": 234879,
+      "mode": 33188,
+      "sha": "f0a69f4131e9414d616c2d13eb3474ec0ce7ac8a"
+    },
+    {
+      "path": "pinta/package.json",
+      "size": 1286,
+      "mode": 33188,
+      "sha": "307e53b64127869619061c8684d2c08c61b26222"
+    },
+    {
+      "path": "pinta/postcss.config.js",
+      "size": 80,
+      "mode": 33188,
+      "sha": "211016771cee108602ec598738d916b332ee0f02"
+    },
+    {
+      "path": "pinta/public/favicon.svg",
+      "size": 259,
+      "mode": 33188,
+      "sha": "a2e0d0ff1e7d030d8cda5e0464c9d2ade93d616f"
+    },
+    {
+      "path": "pinta/src/App.jsx",
+      "size": 12567,
+      "mode": 33188,
+      "sha": "163343d2e22db70fda89832769a45fd5c870e3ae"
+    },
+    {
+      "path": "pinta/src/components/ConfirmationScreen.jsx",
+      "size": 1620,
+      "mode": 33188,
+      "sha": "e37ff2de8d4e102eabf299913bcb1bcdd77731f4"
+    },
+    {
+      "path": "pinta/src/components/steps/index.js",
+      "size": 346,
+      "mode": 33188,
+      "sha": "8b39d239a09b7c07e379ac6a8fbe054275c7268e"
+    },
+    {
+      "path": "pinta/src/components/steps/StepData.jsx",
+      "size": 1986,
+      "mode": 33188,
+      "sha": "d3be61c1d3fa766e72c8e76f16bc3d4c0f395d61"
+    },
+    {
+      "path": "pinta/src/components/steps/StepIdentite.jsx",
+      "size": 2876,
+      "mode": 33188,
+      "sha": "3df6a6821b2f48e266292c5c2af960fbfd6422b3"
+    },
+    {
+      "path": "pinta/src/components/steps/StepLogistique.jsx",
+      "size": 2358,
+      "mode": 33188,
+      "sha": "1dddbdf7dc93a89a821c215c358284bbbcfe7074"
+    },
+    {
+      "path": "pinta/src/components/steps/StepMarches.jsx",
+      "size": 1357,
+      "mode": 33188,
+      "sha": "654e1a8a7fe93f805190fe14e702d8d9f84b9016"
+    },
+    {
+      "path": "pinta/src/components/steps/StepPriorisation.jsx",
+      "size": 1766,
+      "mode": 33188,
+      "sha": "ce00053e58262a3b34af184f2ce61d45eb86e930"
+    },
+    {
+      "path": "pinta/src/components/steps/StepVision.jsx",
+      "size": 6127,
+      "mode": 33188,
+      "sha": "99255bd49201cb35363606c2d54f683b54cdc8be"
+    },
+    {
+      "path": "pinta/src/components/ui/index.jsx",
+      "size": 5547,
+      "mode": 33188,
+      "sha": "baff393fbf2b408385002629cd7b3a36ec9adf01"
+    },
+    {
+      "path": "pinta/src/config/firebase.js",
+      "size": 701,
+      "mode": 33188,
+      "sha": "1583d62cc4096408e233b45e2bc1f2cf63035add"
+    },
+    {
+      "path": "pinta/src/expedile/App.jsx",
+      "size": 26786,
+      "mode": 33188,
+      "sha": "97788e0911c7bd7011a1dfd76e14c4623531d3bf"
+    },
+    {
+      "path": "pinta/src/expedile/brand.css",
+      "size": 12476,
+      "mode": 33188,
+      "sha": "6548c980af51ca7760fa2e685ffdb657335dbaa4"
+    },
+    {
+      "path": "pinta/src/expedile/components/client/ClientAccueil.jsx",
+      "size": 3859,
+      "mode": 33188,
+      "sha": "c0cb1b39d05f62372a1a243b91e94137a9640a18"
+    },
+    {
+      "path": "pinta/src/expedile/components/client/ClientBottomNav.jsx",
+      "size": 3466,
+      "mode": 33188,
+      "sha": "6b162e3ee30a4f52221fe30df6d39913b67347a1"
+    },
+    {
+      "path": "pinta/src/expedile/components/client/ClientColis.jsx",
+      "size": 3584,
+      "mode": 33188,
+      "sha": "dd773e482b9d9a899082562fc3f7a15a2d416237"
+    },
+    {
+      "path": "pinta/src/expedile/components/client/ClientDetailView.jsx",
+      "size": 34767,
+      "mode": 33188,
+      "sha": "0c73266ddce941f276c740120317621bf9e1da81"
+    },
+    {
+      "path": "pinta/src/expedile/components/client/ClientNotifs.jsx",
+      "size": 7486,
+      "mode": 33188,
+      "sha": "38c73c53061059ea031c7ab756886805922f581e"
+    },
+    {
+      "path": "pinta/src/expedile/components/client/ClientProfil.jsx",
+      "size": 12665,
+      "mode": 33188,
+      "sha": "7febb8592bbba6078750b4a5f08307eaeedd2d03"
+    },
+    {
+      "path": "pinta/src/expedile/components/client/ClientShipmentCard.jsx",
+      "size": 1917,
+      "mode": 33188,
+      "sha": "9d1d433a748083500a226576111b8ffa3997cf40"
+    },
+    {
+      "path": "pinta/src/expedile/components/client/OnboardingOverlay.jsx",
+      "size": 6853,
+      "mode": 33188,
+      "sha": "f99da2e87f149a623492c5f12c7583cbe20e544a"
+    },
+    {
+      "path": "pinta/src/expedile/components/client/quoteVisibility.js",
+      "size": 316,
+      "mode": 33188,
+      "sha": "d71faf8147b56d664a0d73032a4fc673a311adfc"
+    },
+    {
+      "path": "pinta/src/expedile/components/ColisModal.jsx",
+      "size": 70655,
+      "mode": 33188,
+      "sha": "27f4e1c8ff978337bfdd14305dce6533a313106d"
+    },
+    {
+      "path": "pinta/src/expedile/components/detail/AuditLog.jsx",
+      "size": 4775,
+      "mode": 33188,
+      "sha": "4b9a0045bf9de65a84cdc66067e8e71ae27fec06"
+    },
+    {
+      "path": "pinta/src/expedile/components/detail/ChatPanel.jsx",
+      "size": 16696,
+      "mode": 33188,
+      "sha": "96fa874b27a1ac1345435552bbcf5a8324bf9fee"
+    },
+    {
+      "path": "pinta/src/expedile/components/detail/ColisInfo.jsx",
+      "size": 13009,
+      "mode": 33188,
+      "sha": "5c8a0120027a6f11a1684eda3f5c962ede6016df"
+    },
+    {
+      "path": "pinta/src/expedile/components/detail/DetailHeader.jsx",
+      "size": 1955,
+      "mode": 33188,
+      "sha": "9f079c4b3950530addbed39c12f765d714570303"
+    },
+    {
+      "path": "pinta/src/expedile/components/detail/FacturesPanel.jsx",
+      "size": 30733,
+      "mode": 33188,
+      "sha": "497de15256bc6b60af4af1d1f07fe398abb6ab29"
+    },
+    {
+      "path": "pinta/src/expedile/components/detail/ReceivedCartons.jsx",
+      "size": 5078,
+      "mode": 33188,
+      "sha": "a20722510d768308e9f3ed6b4b42959723602cf6"
+    },
+    {
+      "path": "pinta/src/expedile/components/ForceChangePassword.jsx",
+      "size": 6784,
+      "mode": 33188,
+      "sha": "18efd996efb201fa19f46e8cf7b21b90eeae8a80"
+    },
+    {
+      "path": "pinta/src/expedile/components/LoginPage.jsx",
+      "size": 11411,
+      "mode": 33188,
+      "sha": "4369bc29f29ae73d779e01311bfc3f9f8036845e"
+    },
+    {
+      "path": "pinta/src/expedile/components/public/TrackingPublic.jsx",
+      "size": 12034,
+      "mode": 33188,
+      "sha": "a28a65302ebccae12571bf1a21cd5e229c58702e"
+    },
+    {
+      "path": "pinta/src/expedile/components/staff/DevisProspect.jsx",
+      "size": 8758,
+      "mode": 33188,
+      "sha": "f0a7ab26c63a30e15708bf63f603acf105b39670"
+    },
+    {
+      "path": "pinta/src/expedile/components/staff/KPIDashboard.jsx",
+      "size": 7642,
+      "mode": 33188,
+      "sha": "fe5e8746c6ca009a6400b3b12119cbdd658a0798"
+    },
+    {
+      "path": "pinta/src/expedile/components/staff/ShareLinkPanel.jsx",
+      "size": 16162,
+      "mode": 33188,
+      "sha": "0ee98eade1d9a3f3ddf95b131d5d4a7034c03988"
+    },
+    {
+      "path": "pinta/src/expedile/components/staff/StaffAssignment.jsx",
+      "size": 6894,
+      "mode": 33188,
+      "sha": "ae5ffd51a65b1275d84fc3de2705d61b7481295e"
+    },
+    {
+      "path": "pinta/src/expedile/components/staff/StaffClientDetail.jsx",
+      "size": 57955,
+      "mode": 33188,
+      "sha": "4b269cede2989a13670acb2a9fe0db67d15dd3be"
+    },
+    {
+      "path": "pinta/src/expedile/components/staff/StaffClients.jsx",
+      "size": 42438,
+      "mode": 33188,
+      "sha": "04da1beaf924ea2524686a9634b6a59aa78dae3a"
+    },
+    {
+      "path": "pinta/src/expedile/components/staff/StaffDashboard.jsx",
+      "size": 74809,
+      "mode": 33188,
+      "sha": "cc5398c9728fda3086b21108d8911fde29fa1c9d"
+    },
+    {
+      "path": "pinta/src/expedile/components/staff/StaffDepartures.jsx",
+      "size": 14686,
+      "mode": 33188,
+      "sha": "10be5fc91547d78543c6720c20fdd9d37c80517b"
+    },
+    {
+      "path": "pinta/src/expedile/components/staff/StaffDetailView.jsx",
+      "size": 70661,
+      "mode": 33188,
+      "sha": "b355c29d57fff1d4d79b4f23335fa5fe5b11ab5e"
+    },
+    {
+      "path": "pinta/src/expedile/components/staff/StaffPermissions.jsx",
+      "size": 22815,
+      "mode": 33188,
+      "sha": "1a5d2f935587e675781ed0cbc8f98b8add70ec93"
+    },
+    {
+      "path": "pinta/src/expedile/components/staff/StaffSettings.jsx",
+      "size": 18043,
+      "mode": 33188,
+      "sha": "a40ff0674b4e8e201ee7b48d6c6f87b7055ad997"
+    },
+    {
+      "path": "pinta/src/expedile/components/staff/StaffSplitView.jsx",
+      "size": 67039,
+      "mode": 33188,
+      "sha": "a8757c30a90b6c07c49986ed647169b5308a92fc"
+    },
+    {
+      "path": "pinta/src/expedile/components/staff/TemplateEditor.jsx",
+      "size": 13150,
+      "mode": 33188,
+      "sha": "f9cc209028022a345d6ca110838025084c046172"
+    },
+    {
+      "path": "pinta/src/expedile/components/ui/Badge.jsx",
+      "size": 512,
+      "mode": 33188,
+      "sha": "52fdef6b3eca3aab3a87f937fb287e32b52ed9d9"
+    },
+    {
+      "path": "pinta/src/expedile/components/ui/ConfirmDialog.jsx",
+      "size": 3577,
+      "mode": 33188,
+      "sha": "4f206bc04f1326fa06acb2e737373b47128acb5c"
+    },
+    {
+      "path": "pinta/src/expedile/components/ui/Etapes.jsx",
+      "size": 1947,
+      "mode": 33188,
+      "sha": "38484efb6f21b7ca6fe070b98f95ef5ecaf0b50e"
+    },
+    {
+      "path": "pinta/src/expedile/components/ui/index.js",
+      "size": 348,
+      "mode": 33188,
+      "sha": "c6cc0d3833405a942cae09fc709fb095abb2f16c"
+    },
+    {
+      "path": "pinta/src/expedile/components/ui/Ligne.jsx",
+      "size": 261,
+      "mode": 33188,
+      "sha": "6074d71a720454c9e8925203a062bf616605ff94"
+    },
+    {
+      "path": "pinta/src/expedile/components/ui/PDFPreview.jsx",
+      "size": 5300,
+      "mode": 33188,
+      "sha": "b3052d0fe4e6289bcf83a3c099ef02362ffd7cd7"
+    },
+    {
+      "path": "pinta/src/expedile/components/ui/ProgressBar.jsx",
+      "size": 831,
+      "mode": 33188,
+      "sha": "4016d8aee249566bd2ca739f12787d18546fc939"
+    },
+    {
+      "path": "pinta/src/expedile/components/ui/SecureFile.jsx",
+      "size": 1654,
+      "mode": 33188,
+      "sha": "933bd333d3b9f93790f060df030609060d970834"
+    },
+    {
+      "path": "pinta/src/expedile/components/ui/ThemeToggle.jsx",
+      "size": 743,
+      "mode": 33188,
+      "sha": "0ab1cd4dac844a05ce221036062668c281cb083d"
+    },
+    {
+      "path": "pinta/src/expedile/components/ui/Toast.jsx",
+      "size": 1491,
+      "mode": 33188,
+      "sha": "32c4132eb33ab627303318af16c6361287a8b7cb"
+    },
+    {
+      "path": "pinta/src/expedile/components/ui/useDialog.js",
+      "size": 1788,
+      "mode": 33188,
+      "sha": "996f6775187219122d237a890bd813dc9bae9df0"
+    },
+    {
+      "path": "pinta/src/expedile/components/ui/ViewToggle.jsx",
+      "size": 933,
+      "mode": 33188,
+      "sha": "849db20334cba123e08cff2cc7d2e31273a53655"
+    },
+    {
+      "path": "pinta/src/expedile/components/ui/WebcamCapture.jsx",
+      "size": 7824,
+      "mode": 33188,
+      "sha": "c3f23ad221b66daa9b116cddac405f8b787f5fb6"
+    },
+    {
+      "path": "pinta/src/expedile/components/workspace/ConversationsView.jsx",
+      "size": 13513,
+      "mode": 33188,
+      "sha": "18fce387ab40217287147ab4c974e27ae018149c"
+    },
+    {
+      "path": "pinta/src/expedile/components/workspace/DossierWorkPanel.jsx",
+      "size": 1505,
+      "mode": 33188,
+      "sha": "74670936d35817a7f6a450339c58479f6361edbd"
+    },
+    {
+      "path": "pinta/src/expedile/components/workspace/PersonalWorkView.jsx",
+      "size": 7252,
+      "mode": 33188,
+      "sha": "def4d1be170efcc28975eb31f3951d093f8f463b"
+    },
+    {
+      "path": "pinta/src/expedile/components/workspace/TeamWorkView.jsx",
+      "size": 6508,
+      "mode": 33188,
+      "sha": "1bf5365944441748f6530ff91846e97589cf15e9"
+    },
+    {
+      "path": "pinta/src/expedile/components/workspace/WorkActionRow.jsx",
+      "size": 9941,
+      "mode": 33188,
+      "sha": "4fbbb9a6e8fd41d8a8c99fc11749e641389a7dd5"
+    },
+    {
+      "path": "pinta/src/expedile/components/workspace/WorkPreferences.jsx",
+      "size": 4753,
+      "mode": 33188,
+      "sha": "4b2b860903365a8e8a4d0ce9598d2f76cf0b8dec"
+    },
+    {
+      "path": "pinta/src/expedile/constants/index.js",
+      "size": 14417,
+      "mode": 33188,
+      "sha": "d30f2faff61d2f7167be3e621fd698a124138f8f"
+    },
+    {
+      "path": "pinta/src/expedile/constants/permissions.js",
+      "size": 4932,
+      "mode": 33188,
+      "sha": "549300e5fac2c4d169be6bba6cf2728055780141"
+    },
+    {
+      "path": "pinta/src/expedile/constants/templates.js",
+      "size": 36232,
+      "mode": 33188,
+      "sha": "49512b851c2a72f43d1b31a39f6b8a552d1593d6"
+    },
+    {
+      "path": "pinta/src/expedile/context/AppContext.jsx",
+      "size": 46984,
+      "mode": 33188,
+      "sha": "9ac1f9683e432ac2b65cd5ee718a1e534011fa24"
+    },
+    {
+      "path": "pinta/src/expedile/domain/clientJourney.js",
+      "size": 7111,
+      "mode": 33188,
+      "sha": "4ebc88aea488ee12d6bdd72ca5afcfd635e64c0f"
+    },
+    {
+      "path": "pinta/src/expedile/domain/conversations.js",
+      "size": 1427,
+      "mode": 33188,
+      "sha": "0e945ff5f72ef55a292033bc94968085cde1dc00"
+    },
+    {
+      "path": "pinta/src/expedile/domain/navigation.js",
+      "size": 246,
+      "mode": 33188,
+      "sha": "a1e8465391eef6d143ab0fc854b596c79e62311c"
+    },
+    {
+      "path": "pinta/src/expedile/domain/operations.js",
+      "size": 2561,
+      "mode": 33188,
+      "sha": "ccd0ca62690c0fff08e2daff6dce7f7c17c89646"
+    },
+    {
+      "path": "pinta/src/expedile/domain/permissionDrafts.js",
+      "size": 1397,
+      "mode": 33188,
+      "sha": "026adddf9754121e1b013a6f6798269d2ef5b434"
+    },
+    {
+      "path": "pinta/src/expedile/domain/personalWork.js",
+      "size": 7637,
+      "mode": 33188,
+      "sha": "092c5a71cfa8439a127c2063950dcea4adb66f87"
+    },
+    {
+      "path": "pinta/src/expedile/domain/quote.js",
+      "size": 12644,
+      "mode": 33188,
+      "sha": "9988dad470a8e4eeea36a94fdb8b6baf88e4eb7e"
+    },
+    {
+      "path": "pinta/src/expedile/domain/reception.js",
+      "size": 5776,
+      "mode": 33188,
+      "sha": "25666bc69be29771116e28c52ca5e035c8866b14"
+    },
+    {
+      "path": "pinta/src/expedile/domain/staffPermissions.js",
+      "size": 1168,
+      "mode": 33188,
+      "sha": "722300bf83ad1f583793eff31ca4f85211474ba3"
+    },
+    {
+      "path": "pinta/src/expedile/domain/workQueues.js",
+      "size": 8090,
+      "mode": 33188,
+      "sha": "c9e3254a456cbee1aa6ce9acd2128d5d112b985c"
+    },
+    {
+      "path": "pinta/src/expedile/hooks/useColisLock.js",
+      "size": 1741,
+      "mode": 33188,
+      "sha": "44702d5ce358b8eba1819d8a7989293004b4fc38"
+    },
+    {
+      "path": "pinta/src/expedile/hooks/useMinuteNow.js",
+      "size": 358,
+      "mode": 33188,
+      "sha": "9259dc3576b6ff3b2cc4de90c219d9598c975097"
+    },
+    {
+      "path": "pinta/src/expedile/hooks/usePermissions.js",
+      "size": 1222,
+      "mode": 33188,
+      "sha": "2602bf836f679e89e90c1bb9e33337282e890b9d"
+    },
+    {
+      "path": "pinta/src/expedile/lib/randomId.js",
+      "size": 543,
+      "mode": 33188,
+      "sha": "4f3d1fc7da7630a30c948a70a25eadd3b0678cc0"
+    },
+    {
+      "path": "pinta/src/expedile/lib/supabase.js",
+      "size": 516,
+      "mode": 33188,
+      "sha": "f8705fed0caf9a8580ab15518d419eb2f732c676"
+    },
+    {
+      "path": "pinta/src/expedile/lib/supabaseData.js",
+      "size": 40788,
+      "mode": 33188,
+      "sha": "5b43ee85cdf5df40b45c1d303bc704d1ecb3ca71"
+    },
+    {
+      "path": "pinta/src/expedile/services/conversationApi.js",
+      "size": 1384,
+      "mode": 33188,
+      "sha": "a766ae3bc7137143435fe5f2fd333a8a9fd8c353"
+    },
+    {
+      "path": "pinta/src/expedile/services/departures.js",
+      "size": 3142,
+      "mode": 33188,
+      "sha": "0c9cbbbd3a189ef5509bdc30efc5681a6685735e"
+    },
+    {
+      "path": "pinta/src/expedile/services/functionErrors.js",
+      "size": 660,
+      "mode": 33188,
+      "sha": "68089a381f8f63349abd21be39c39f0902749a43"
+    },
+    {
+      "path": "pinta/src/expedile/services/messageDefaults.js",
+      "size": 7291,
+      "mode": 33188,
+      "sha": "599fe63b957398f21991ba5e7e610ed6e7b6f4d5"
+    },
+    {
+      "path": "pinta/src/expedile/services/messageTemplates.js",
+      "size": 3922,
+      "mode": 33188,
+      "sha": "e2cb91f6bad1b8b0a61d197adf18f8de047c8fbb"
+    },
+    {
+      "path": "pinta/src/expedile/services/telegramApi.js",
+      "size": 2181,
+      "mode": 33188,
+      "sha": "9251fedd16770cbad683315353c1ae62a281a4e0"
+    },
+    {
+      "path": "pinta/src/expedile/services/webhookListener.js",
+      "size": 1810,
+      "mode": 33188,
+      "sha": "070f5ed7947819f01200fa8314bb5717b94cbd67"
+    },
+    {
+      "path": "pinta/src/expedile/utils/exportDAU.js",
+      "size": 3319,
+      "mode": 33188,
+      "sha": "ea7b369245f50bc552551e106c65725e11ab3d41"
+    },
+    {
+      "path": "pinta/src/expedile/utils/exportDevisPDF.js",
+      "size": 5929,
+      "mode": 33188,
+      "sha": "138f114dc2676a571d6c6fad6250210d7c3e77af"
+    },
+    {
+      "path": "pinta/src/expedile/utils/exportEtiquettes.js",
+      "size": 7310,
+      "mode": 33188,
+      "sha": "ed6bf4022e25083b044fbd0bb8703fbbab9d982e"
+    },
+    {
+      "path": "pinta/src/expedile/utils/exportExcel.js",
+      "size": 2015,
+      "mode": 33188,
+      "sha": "e2a3eb48ef72d43e035d961633498f0288bd4044"
+    },
+    {
+      "path": "pinta/src/expedile/utils/exportFactureCommerciale.js",
+      "size": 2241,
+      "mode": 33188,
+      "sha": "ad1c8a3ad747eb473d71e367742533aa21a4ab3b"
+    },
+    {
+      "path": "pinta/src/expedile/utils/exportFactureCommerciPDF.js",
+      "size": 3036,
+      "mode": 33188,
+      "sha": "69b3ba46f7f85f775c1a0a56f7fbb6050c36a845"
+    },
+    {
+      "path": "pinta/src/expedile/utils/exportRecapPro.js",
+      "size": 5755,
+      "mode": 33188,
+      "sha": "ccd93dd41c0aae6d122d68b2f6875736ba2d2800"
+    },
+    {
+      "path": "pinta/src/expedile/utils/importClients.js",
+      "size": 12320,
+      "mode": 33188,
+      "sha": "ded101f98d56bbd3db3eeba34fa233a5d3b1916a"
+    },
+    {
+      "path": "pinta/src/expedile/utils/index.js",
+      "size": 19164,
+      "mode": 33188,
+      "sha": "ca027abbc22972b187affcb28e1c17d51e2ad9ec"
+    },
+    {
+      "path": "pinta/src/hooks/index.js",
+      "size": 2099,
+      "mode": 33188,
+      "sha": "7544aa97ed9582e79e5283a9aee736ce4adf9dfb"
+    },
+    {
+      "path": "pinta/src/index.css",
+      "size": 1476,
+      "mode": 33188,
+      "sha": "45d10cd003672c7d0a1dc9aa50e2e93cb7eb8fbd"
+    },
+    {
+      "path": "pinta/src/main.jsx",
+      "size": 244,
+      "mode": 33188,
+      "sha": "e7c300f1fdd7183f9c39bbd2eec862aa686c10c7"
+    },
+    {
+      "path": "pinta/src/utils/constants.js",
+      "size": 2133,
+      "mode": 33188,
+      "sha": "3c7e6e715b828ce21ca391ad87569b4dcfa4292d"
+    },
+    {
+      "path": "pinta/src/utils/validation.js",
+      "size": 2665,
+      "mode": 33188,
+      "sha": "9183d3d360bfece551b6b322d11f72c46748505d"
+    },
+    {
+      "path": "pinta/tailwind.config.js",
+      "size": 1354,
+      "mode": 33188,
+      "sha": "c6fb1f2c3bb8b03f7334faed3c31aa4582603332"
+    },
+    {
+      "path": "pinta/vercel.json",
+      "size": 998,
+      "mode": 33188,
+      "sha": "d7d3027ca7b46df0938069945e172c4a0ce022c8"
+    },
+    {
+      "path": "pinta/vite.config.js",
+      "size": 546,
+      "mode": 33188,
+      "sha": "22440b491822c0d350ab2b8d128ee7b7a199bc49"
+    }
+  ]
+}

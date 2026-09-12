@@ -33,9 +33,10 @@ for (const [index, item] of cases.entries()) {
   const quote = calculateQuote({ colis, client: { id: client, type: 'pro', cp: '97400' }, destination: { code: '974', nom: 'La Réunion', tva: 8.5 }, tarif: { base: 10, parKg: 5 }, settings: { diviseurVolumetrique: item.divisor } });
   assert.equal(quote.ok, true, item.name);
   sql.push('RESET ROLE;', `UPDATE app_settings SET value=jsonb_set(value,'{diviseurVolumetrique}',${json(String(item.divisor))}) WHERE key='business';`);
-  sql.push(`INSERT INTO colis(id,client_id,statut,nb_colis,trackings,dims_par_colis,dim_l,dim_w,dim_h,poids) VALUES(${literal(colis.id)},${literal(client)},'en_preparation',${item.nbColis},ARRAY[]::text[],${json(item.dimsParColis)},80,10,10,1);`);
+  sql.push(`INSERT INTO colis(id,client_id,statut,feu_vert,nb_colis,trackings,dims_par_colis,dim_l,dim_w,dim_h,poids) VALUES(${literal(colis.id)},${literal(client)},'en_preparation','autorise',${item.nbColis},ARRAY[]::text[],${json(item.dimsParColis)},80,10,10,1);`);
   sql.push('SET LOCAL ROLE authenticated;', `SELECT set_config('request.jwt.claim.role','authenticated',true),set_config('request.jwt.claim.sub',${literal(staff)},true);`);
-  sql.push(`SELECT save_quote(${literal(colis.id)},${json({ ...quote.snapshot, ...quote.patch, finL: 40, finW: 20, finH: 10, finP: 2, modePaiementPro: 'virement' })});`);
+  sql.push(`SELECT save_preparation_measurements(id,${json(quote.snapshot.inputs.finalPackages)},updated_at,preparation_composition_version) FROM colis WHERE id=${literal(colis.id)};`);
+  sql.push(`SELECT save_quote(id,${json({ ...quote.snapshot, ...quote.patch, finL: 40, finW: 20, finH: 10, finP: 2, modePaiementPro: 'virement' })},updated_at) FROM colis WHERE id=${literal(colis.id)};`);
   const expectedBefore = quote.before ? `(devis_snapshot->'before'->>'transport')::numeric=${quote.before.transport}` : "devis_snapshot->'before'='null'::jsonb";
   sql.push(`DO $$ BEGIN IF NOT (SELECT devis_total=${quote.amounts.total} AND economie=${quote.patch.economie} AND avant_optim_transport=${quote.patch.avantOptimTransport} AND ${expectedBefore} AND devis_snapshot->'inputs'->'originalBoxes'=${json(quote.snapshot.inputs.originalBoxes)} AND fin_l=40 AND fin_w=20 AND fin_h=10 AND fin_p=2 FROM colis WHERE id=${literal(colis.id)}) THEN RAISE EXCEPTION 'Reception/quote parity failed: ${item.name}, divisor ${item.divisor}'; END IF; END $$;`);
 }

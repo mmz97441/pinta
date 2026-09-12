@@ -21,8 +21,8 @@ export function exportDAUData(envoi, colis, clients, categories) {
   let totalValeur = 0;
 
   colis.forEach((c) => {
-    const poidsBrut = c.poids || 0;
-    const poidsNet = c.finP || c.poids || 0;
+    const poidsBrut = c.finP || 0;
+    const poidsNet = 0; // Net goods weight is not measured by the parcel preparation workflow.
     totalMasseBrute += poidsBrut;
     totalMasseNette += poidsNet;
 
@@ -56,9 +56,10 @@ export function exportDAUData(envoi, colis, clients, categories) {
   const summary = [
     { 'Champ': 'Envoi', 'Valeur': envoi?.ref || '' },
     { 'Champ': 'Date départ', 'Valeur': envoi?.date || '' },
-    { 'Champ': 'Nb colis total', 'Valeur': colis.length },
+    { 'Champ': 'Colis physiques sortants', 'Valeur': colis.reduce((sum, c) => sum + (c.outgoingParcelCount || 0), 0) },
+    { 'Champ': 'Dossiers d’expédition', 'Valeur': colis.length },
     { 'Champ': 'Masse brute (kg)', 'Valeur': Math.round(totalMasseBrute * 100) / 100 },
-    { 'Champ': 'Masse nette (kg)', 'Valeur': Math.round(totalMasseNette * 100) / 100 },
+    { 'Champ': 'Masse nette marchandises (kg)', 'Valeur': totalMasseNette || 'À renseigner par le déclarant' },
     { 'Champ': 'Valeur totale (€)', 'Valeur': Math.round(totalValeur * 100) / 100 },
     { 'Champ': 'Mode transport', 'Valeur': 'AVION' },
     { 'Champ': 'Pays origine', 'Valeur': 'FRANCE' },

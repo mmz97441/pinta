@@ -72,3 +72,30 @@ test('a default destination cannot hide an incompatible client postal code or an
   input.client.cp = '97400'; input.colis.factures[0].montant = 0;
   assert.equal(calculateQuote(input).ok, false);
 });
+
+test('rejected source articles remain historical but never double the taxable merchandise', () => {
+ const input = fixture();
+ input.colis.factures.push({id:'rejected',rejetMotif:'Illisible',montant:100,valide:false});
+ input.colis.lignes.push({...input.colis.lignes[0],id:'old',factureId:'rejected'});
+ const quote=calculateQuote(input);
+ assert.equal(quote.ok,true); assert.equal(quote.amounts.merchandiseValue,100); assert.equal(quote.amounts.total,55.06);
+ assert.equal(quote.snapshot.inputs.lines.length,1);
+});
+test('final package volumes are summed independently instead of multiplying maximum edges', () => {
+ const input=fixture(); input.client.type='pro';
+ input.colis.finalPackages=[{dimL:40,dimW:10,dimH:10,poids:1},{dimL:10,dimW:40,dimH:10,poids:1}];
+ const quote=calculateQuote(input);
+ assert.equal(quote.ok,true); assert.equal(quote.amounts.volumetricWeight,1.6); assert.equal(quote.amounts.billableWeight,2); assert.equal(quote.amounts.total,20);
+ assert.equal(quote.snapshot.inputs.finalBox,null); assert.equal(quote.snapshot.inputs.finalPackages.length,2);
+});
+test('new received cartons require explicit revalidation of final measures, even when old values remain visible', () => {
+ const input=fixture(); input.colis.preparationCompositionVersion=2; input.colis.finalMeasurementsVersion=1;
+ assert.ok(calculateQuote(input).errors.some(error=>error.field==='dimensions.freshness'));
+ input.colis.finalMeasurementsVersion=2; input.colis.outgoingParcelCount=1; assert.equal(calculateQuote(input).ok,true);
+});
+
+test('a modern quote cannot be published before the physical outgoing count is confirmed', () => {
+ const input=fixture();Object.assign(input.colis,{preparationCompositionVersion:0,finalMeasurementsVersion:0,outgoingParcelCount:null});
+ assert.ok(calculateQuote(input).errors.some(error=>error.field==='dimensions.count'));
+ input.colis.outgoingParcelCount=1;assert.equal(calculateQuote(input).ok,true);
+});

@@ -4,13 +4,15 @@ import {
   AlertTriangle, ChevronRight, Star, TrendingUp, Users, BarChart3, FileText, MessageCircle,
   Settings2, AlertCircle, ChevronLeft, CalendarClock, UserCheck,
 } from 'lucide-react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import { BRAND, STATUTS, ABONNEMENTS, getDestByCP, getSecteurByCP, getSecteurColor } from '../../constants';
 import { eur, fuzzy, labelEnvoi } from '../../utils';
 const exportColisExcel = async (...args) => { const exports = await import('../../utils/exportExcel'); return exports.exportColisExcel(...args); };
 import { Badge, Etapes } from '../ui';
 import StaffDetailView from './StaffDetailView';
+import StaffAssignment from './StaffAssignment';
+import PersonalWorkView from '../workspace/PersonalWorkView';
 import KPIDashboard from './KPIDashboard';
 import ColisInfo from '../detail/ColisInfo';
 import ReceivedCartons from '../detail/ReceivedCartons';
@@ -18,8 +20,6 @@ import FacturesPanel from '../detail/FacturesPanel';
 import ChatPanel from '../detail/ChatPanel';
 import AuditLog from '../detail/AuditLog';
 import { useColisLock } from '../../hooks/useColisLock';
-import { supabase } from '../../lib/supabase';
-import { functionErrorMessage } from '../../services/functionErrors';
 import { WORK_QUEUES, queueContext, matchesWorkQueue, isActiveColis, isClientWaiting, isActionDue, isWaitDue, needsDocuments, nextAction, priorityScore, urgency, matchesOwner } from '../../domain/workQueues';
 import { needsConversationAction } from '../../domain/conversations';
 import { useMinuteNow } from '../../hooks/useMinuteNow';
@@ -55,35 +55,38 @@ function statutBorderColor(s) {
 // ── Table styles ────────────────────────────────────────────────────────────
 const TH = 'px-3 py-3 text-[11px] font-bold uppercase tracking-wider text-gray-500 whitespace-nowrap';
 const TD = 'px-3 py-3 text-xs whitespace-nowrap';
+const usefulDossierDate = c => (c.nextActionSource === 'manual' && c.nextActionAt ? c.nextActionAt : c.statutUpdatedAt || c.dateReception || c.createdAt) || '';
 const DASH = null; // Cellule vide au lieu d'un tiret gris (moins de bruit visuel)
 
 // ── Column definitions ──────────────────────────────────────────────────────
 const ALL_COLUMNS = [
-  { key: 'date', label: 'Date', sortable: true, defaultOn: true },
-  { key: 'ref', label: 'Réf.', sortable: true, defaultOn: true, alwaysOn: true },
-  { key: 'statut', label: 'Statut', sortable: true, defaultOn: true, alwaysOn: true },
-  { key: 'paiement', label: 'Paiem.', defaultOn: false },
+  { key: 'statut', label: 'Action / étape', defaultOn: true, alwaysOn: true },
   { key: 'client', label: 'Client', sortable: true, defaultOn: true, alwaysOn: true },
+  { key: 'ref', label: 'EXP', sortable: true, defaultOn: true, alwaysOn: true },
+  { key: 'cartons', label: 'Cartons reçus', defaultOn: true },
+  { key: 'referent', label: 'Référent', defaultOn: true },
+  { key: 'date', label: 'Date utile', sortable: true, defaultOn: true },
+  { key: 'intitule', label: 'Intitulé', defaultOn: false },
+  { key: 'paiement', label: 'Paiement', defaultOn: false },
   { key: 'prenom', label: 'Prénom', defaultOn: false },
   { key: 'email', label: 'Email', defaultOn: false },
   { key: 'tel', label: 'Tél.', defaultOn: false },
   { key: 'forfait', label: 'Forfait', defaultOn: false },
-  { key: 'intitule', label: 'Intitulé', defaultOn: true },
   { key: 'volCm3', label: 'Vol. réception cm³', sortable: true, align: 'right', defaultOn: false },
   { key: 'volKg', label: 'Vol. réception kg', align: 'right', defaultOn: false },
   { key: 'poids', label: 'Poids réception', align: 'right', defaultOn: false },
   { key: 'transport', label: 'Transport', sortable: true, align: 'right', defaultOn: false },
   { key: 'taxes', label: 'Taxes', sortable: true, align: 'right', defaultOn: false },
-  { key: 'total', label: 'Total', sortable: true, align: 'right', defaultOn: true, alwaysOn: true },
+  { key: 'total', label: 'Total', sortable: true, align: 'right', defaultOn: false },
   { key: 'paye', label: 'Payé', align: 'right', defaultOn: false },
   { key: 'commune', label: 'Commune', defaultOn: false },
   { key: 'cp', label: 'CP', defaultOn: false },
 ];
 
-const LS_COLS_KEY = 'expedile_visible_columns';
-function loadVisibleCols() {
+const LS_COLS_KEY = 'expedile_columns_v2:';
+function loadVisibleCols(userId) {
   try {
-    const saved = localStorage.getItem(LS_COLS_KEY);
+    const saved = localStorage.getItem(LS_COLS_KEY + userId);
     if (saved) return new Set(JSON.parse(saved));
   } catch {}
   return new Set(ALL_COLUMNS.filter((c) => c.defaultOn).map((c) => c.key));
@@ -91,17 +94,17 @@ function loadVisibleCols() {
 
 // ── Default sort options ────────────────────────────────────────────────────
 const SORT_OPTIONS = [
-  { key: 'priority', label: 'Priorité (réponse → préparation → ancien)' },
+  { key: 'priority', label: 'Priorité (échéance → travail commencé → ancienneté)' },
   { key: 'date_desc', label: 'Plus récent d\'abord' },
   { key: 'date_asc', label: 'Plus ancien d\'abord (FIFO)' },
   { key: 'total_desc', label: 'Montant décroissant' },
   { key: 'total_asc', label: 'Montant croissant' },
   { key: 'ref_asc', label: 'Référence (A → Z)' },
 ];
-const LS_SORT_KEY = 'expedile_default_sort';
-function loadDefaultSort() {
+const LS_SORT_KEY = 'expedile_default_sort_v2:';
+function loadDefaultSort(userId) {
   try {
-    const saved = localStorage.getItem(LS_SORT_KEY);
+    const saved = localStorage.getItem(LS_SORT_KEY + userId);
     if (saved && SORT_OPTIONS.some((o) => o.key === saved)) return saved;
   } catch {}
   return 'priority';
@@ -138,7 +141,7 @@ function ColisTableHead({ visibleCols, onSelectAll, allSelected, onSort, sortCol
 
 // ── Table data row ──────────────────────────────────────────────────────────
 function ColisTableRow({ c, client, prevClient, envois, onClick, isSelected, checked, onCheck, visibleCols, now, ownerName, settings }) {
-  const sameClient = prevClient && prevClient.id === client?.id;
+  const sameClient = false;
   const dim = sameClient ? 'text-gray-300' : '';
   const dest = client ? getDestByCP(client.cp) : null;
   const divisor = volumetricDivisor(settings);
@@ -147,11 +150,8 @@ function ColisTableRow({ c, client, prevClient, envois, onClick, isSelected, che
   const volKg = weights?.volumetricWeight.toFixed(2);
   const taxes = (c.devisOM != null || c.devisOMR != null || c.devisTVA != null)
     ? ((c.devisOM || 0) + (c.devisOMR || 0) + (c.devisTVA || 0)) : null;
-  const dateCreation = c.dateReception
-    ? new Date(c.dateReception).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })
-    : c.createdAt
-    ? new Date(c.createdAt).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })
-    : '—';
+  const usefulDate = usefulDossierDate(c);
+  const dateCreation = usefulDate ? new Date(usefulDate).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' }) : 'À préciser';
   const isPaid = c.paiementMontant > 0;
   const abo = client?.abonnement ? (ABONNEMENTS[client.abonnement]?.label || client.abonnement) : '—';
   const prenom = client?.prenom || client?.nom?.split(' ').slice(0, -1).join(' ') || '';
@@ -161,16 +161,18 @@ function ColisTableRow({ c, client, prevClient, envois, onClick, isSelected, che
   const isUrgent = event.overdue;
 
   const cellRenderers = {
-    date: () => <span className="text-gray-500">{dateCreation}</span>,
+    date: () => <div className="text-gray-500"><span>{dateCreation}</span><p className="text-[10px]">{c.nextActionSource === 'manual' && c.nextActionAt ? 'Échéance promise' : 'Étape actuelle'}</p></div>,
+    cartons: () => <span>{receptionCartonManifest(c).nbColis}</span>,
+    referent: () => <span className="text-gray-600">{ownerName}</span>,
     ref: () => (
       <>
         <button onClick={(e) => { e.stopPropagation(); onClick(); }} className="min-h-11 text-left font-bold text-gray-900 hover:underline">{c.ref}</button>
         {c.casier && <span className="text-[8px] font-bold px-1 py-0.5 rounded ml-1" style={{ background: `${BRAND.gold}22`, color: 'var(--text-accent)' }}>{c.casier}</span>}
         {isUrgent && <span title={event.label} className="ml-1 text-xs font-semibold px-1 py-0.5 rounded bg-amber-100 text-amber-800">À revoir</span>}{needsConversationAction(c) && <span className="ml-1 text-xs font-semibold brand-t">À répondre</span>}
-        {(() => { const unread = (c.messages || []).filter((m) => m.type === 'client' && !m.lu).length; return unread > 0 ? <span className="ml-1 text-[8px] font-bold px-1.5 py-0.5 rounded-full bg-red-500 text-white animate-pulse">{unread}</span> : null; })()}
+        {(() => { const unread = (c.messages || []).filter((m) => m.type === 'client' && !m.lu).length; return unread > 0 ? <span className="ml-1 text-[8px] font-bold px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-700">{unread}</span> : null; })()}
       </>
     ),
-    statut: () => <div><Badge statut={c.statut} /><p className="mt-1 text-xs text-gray-500">{nextAction(c, client, now)}</p><p className="mt-1 text-xs text-gray-500">{ownerName}{c.nextActionAt ? ` · ${new Date(c.nextActionAt).toLocaleString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}` : ''}</p></div>,
+    statut: () => <div className="max-w-[220px] whitespace-normal"><p className="mb-1 text-xs font-semibold text-slate-800">{nextAction(c, client, now)}</p><Badge statut={c.statut} /></div>,
     paiement: () => isPaid ? <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-green-100 text-green-700">Payé</span> : c.devisTotal ? <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">En attente</span> : DASH,
     client: () => sameClient ? (
       <span className="text-gray-500 text-xs italic">↑ idem</span>
@@ -202,8 +204,8 @@ function ColisTableRow({ c, client, prevClient, envois, onClick, isSelected, che
   return (
     <tr
       onClick={onClick}
-      className={`border-b border-gray-50 cursor-pointer transition-colors ${isSelected ? 'bg-blue-50' : isUrgent ? 'bg-red-50 hover:bg-red-50' : client?.type === 'pro' ? 'bg-amber-50 hover:bg-amber-50' : 'hover:bg-gray-50'}`}
-      style={{ borderLeft: `3px solid ${isUrgent ? '#EF4444' : statutBorderColor(c.statut)}` }}
+      className={`border-b border-gray-50 cursor-pointer transition-colors ${isSelected ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
+
     >
       <td className="px-2 py-2 w-8" onClick={(e) => e.stopPropagation()}>
         <input aria-label={`Sélectionner le dossier ${c.ref}`} type="checkbox" checked={checked} onChange={onCheck}
@@ -277,80 +279,24 @@ function DetailSlideOver({ onClose }) {
   );
 }
 
-function UnassignedInbox() {
-  const { inboxItems = [], data, getClient, refreshInbox, refreshColis, can } = useApp();
-  const [selected, setSelected] = useState({});
-  const [busy, setBusy] = useState(null);
-  const [error, setError] = useState('');
-  const waiting = inboxItems.filter((item) => item.status === 'unassigned');
-  if (!waiting.length) return null;
-  async function assign(item) {
-    if (!selected[item.id]) return;
-    setBusy(item.id); setError('');
-    try {
-      const { data: result, error: functionError } = await supabase.functions.invoke('telegram-inbox-assign', { body: { inboxId: item.id, colisId: selected[item.id] } });
-      if (functionError || result?.error) throw new Error(await functionErrorMessage({ data: result, error: functionError }, 'Le message n’a pas pu être rattaché.'));
-      await refreshInbox(); await refreshColis(selected[item.id]);
-    } catch (err) { setError(err.message || 'Le message n’a pas pu être rattaché.'); }
-    finally { setBusy(null); }
-  }
-  return <section className="border border-amber-200 rounded-2xl p-4 bg-amber-50/40"><h2 className="font-bold text-gray-900 flex items-center gap-2"><MessageCircle size={18} />Messages à rattacher <span className="text-xs font-semibold text-amber-700">{waiting.length}</span></h2><p className="text-xs text-gray-600 mt-1">Le client a plusieurs dossiers : choisissez celui que concerne son message ou document.</p>{error && <p role="alert" className="text-sm text-red-600 mt-2">{error}</p>}<div className="divide-y divide-gray-200 mt-2">{waiting.map((item) => {
-    const clientId = item.clientId || item.client_id; const client = getClient(clientId); const dossiers = data.filter((c) => c.clientId === clientId && !['annule', 'livre'].includes(c.statut));
-    return <div key={item.id} className="py-3 space-y-2"><p className="text-sm font-bold text-gray-800">{client?.nom || 'Client'}</p><p className="text-sm text-gray-600 whitespace-pre-wrap break-words">{item.texte || 'Document reçu sur Telegram'}</p>{dossiers.length ? <div className="flex flex-wrap gap-2"><select aria-label={`Dossier concerné pour ${client?.nom || 'ce client'}`} value={selected[item.id] || ''} onChange={(event) => setSelected((all) => ({ ...all, [item.id]: event.target.value }))} className="flex-1 min-h-11 px-3 rounded-xl border border-gray-200 text-xs bg-white"><option value="">Choisir le dossier concerné</option>{dossiers.map((c) => <option key={c.id} value={c.id}>{c.ref} · {c.desc || STATUTS[c.statut]?.label}</option>)}</select><button disabled={Boolean(busy) || !selected[item.id] || !can('perm_comm_telegram')} onClick={() => assign(item)} className="min-h-11 px-4 rounded-xl brand-bg text-white text-xs font-semibold disabled:opacity-50">{busy === item.id ? 'Rattachement…' : 'Rattacher'}</button></div> : <p className="text-xs text-amber-800">Aucun dossier actif pour ce client. Créez ou retrouvez son dossier avant de rattacher ce message.</p>}</div>;
-  })}</div></section>;
-}
-
 // ════════════════════════════════════════════════════════════════════════════
 // DASHBOARD PAGE — exported for / route
 // ════════════════════════════════════════════════════════════════════════════
-export function DashboardPage() {
-  const navigate = useNavigate();
-  const { data, clients, getClient, auth, categories, tarifs, settings, teamUsers = [] } = useApp();
-  const now = useMinuteNow();
-  const context = useMemo(() => queueContext({ clients, getClient, categories, tarifs, settings, now }), [clients, getClient, categories, tarifs, settings, now]);
-  const visible = data.filter((c) => !c.archive);
-  const active = visible.filter(isActiveColis);
-  const actionable = visible.filter((c) => needsConversationAction(c) || isWaitDue(c, now) || isActionDue(c, now) || ['receptionne', 'mesure', 'autorise', 'en_preparation', 'paye'].includes(c.statut))
-    .sort((a, b) => priorityScore(b, getClient(b.clientId), now) - priorityScore(a, getClient(a.clientId), now));
-  const conversations = Object.values(visible.filter(needsConversationAction).reduce((all, c) => {
-    if (!all[c.clientId]) all[c.clientId] = { client: getClient(c.clientId), dossiers: [], messages: [] };
-    all[c.clientId].dossiers.push(c);
-    all[c.clientId].messages.push(...(c.messages || []).filter((m) => m.type === 'client'));
-    return all;
-  }, {}));
-  const open = (c) => navigate(`/colis?dossier=${c.id}`);
-  const ownerName = (c) => !c.responsibleStaffId ? 'Non attribué' : c.responsibleStaffId === auth?.u?.id ? 'Vous' : teamUsers.find((person) => person.authId === c.responsibleStaffId)?.nom || 'Équipe';
-  return <div className="h-full overflow-y-auto"><div className="max-w-6xl mx-auto p-4 sm:p-6 space-y-6">
-    <header className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-wider text-gray-500">Le poste de travail de l’équipe</p><h1 className="text-2xl font-black brand-t mt-1">Les prochaines actions</h1><p className="text-sm text-gray-500 mt-1">{active.length} dossiers en cours · {clients.length} clients</p></div>{actionable[0] && <button onClick={() => open(actionable[0])} className="min-h-11 inline-flex items-center justify-center gap-2 px-4 rounded-xl brand-bg text-white text-sm font-bold">Ouvrir le prochain dossier<ChevronRight size={17} /></button>}</header>
-    <div className="flex flex-wrap gap-2" aria-label="Répartition du travail">{[['mine', 'Mes dossiers'], ['unassigned', 'Non attribués']].map(([owner, label]) => <button key={owner} onClick={() => navigate(`/colis?owner=${owner}`)} className="min-h-11 rounded-xl border border-gray-200 px-3 text-sm font-semibold text-gray-700">{label} <span className="ml-1 brand-t">{visible.filter((c) => (isActiveColis(c) || needsConversationAction(c)) && matchesOwner(c, owner, auth?.u?.id)).length}</span></button>)}<button onClick={() => navigate('/colis?work=overdue')} className="min-h-11 rounded-xl border border-gray-200 px-3 text-sm font-semibold text-gray-700">Échéances dues <span className="ml-1 brand-t">{visible.filter((c) => matchesWorkQueue(c, 'overdue', context)).length}</span></button></div>
-    <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">{WORK_QUEUES.slice(0, 4).map((queue) => {
-      const count = visible.filter((c) => matchesWorkQueue(c, queue.key, context)).length; const Icon = QUEUE_ICONS[queue.icon];
-      return <button key={queue.key} onClick={() => navigate(`/colis?work=${queue.key}`)} className={`min-h-32 p-4 border border-gray-200 rounded-2xl text-left hover:bg-gray-50 ${count ? '' : 'bg-gray-50'}`}><div className="flex items-center justify-between"><Icon size={19} className="brand-t" /><span className="text-2xl font-black brand-t">{count}</span></div><h2 className="mt-3 text-sm font-bold text-gray-800">{queue.label}</h2><p className="text-xs text-gray-500 mt-1">{queue.detail}</p></button>;
-    })}</div>
-    <UnassignedInbox />
-    {conversations.length > 0 && <section className="border-y border-gray-200 py-5"><div className="flex items-center justify-between gap-2 mb-3"><h2 className="font-bold text-gray-900">Conversations à traiter</h2><button onClick={() => navigate('/colis?work=messages')} className="min-h-11 text-sm brand-t font-semibold">Tout voir</button></div><div className="divide-y divide-gray-100">{conversations.slice(0, 5).map((conversation) => {
-      const last = [...conversation.messages].sort((a, b) => Date.parse(b.createdAt || 0) - Date.parse(a.createdAt || 0))[0]; const first = conversation.dossiers[0];
-      return <button key={first.clientId} onClick={() => navigate(`/colis?work=messages&client=${first.clientId}&dossier=${first.id}`)} className="w-full flex items-center gap-3 text-left py-3 min-h-16"><MessageCircle size={20} className="brand-t shrink-0" /><div className="flex-1 min-w-0"><p className="font-semibold text-sm text-gray-800">{conversation.client?.nom || 'Client'}</p><p className="text-xs text-gray-500 truncate mt-1">{last?.texte || 'Conversation à reprendre'} · {conversation.dossiers.length} dossier(s)</p></div><span className="rounded-full brand-bg-l px-2 py-1 text-xs font-semibold brand-t">À traiter</span><ChevronRight size={16} className="text-gray-500" /></button>;
-    })}</div></section>}
-    <section><h2 className="font-bold text-gray-900 mb-3">À faire maintenant</h2>{actionable.length ? <div className="divide-y divide-gray-100">{actionable.slice(0, 8).map((c) => {
-      const event = urgency(c, now);
-      return <button key={c.id} onClick={() => open(c)} className="w-full min-h-20 py-3 flex items-center gap-3 text-left"><span className="text-sm font-bold brand-t w-28 shrink-0 break-words">{c.ref}</span><div className="flex-1 min-w-0"><p className="text-sm font-semibold text-gray-800">{nextAction(c, getClient(c.clientId), now)}</p><p className="text-xs text-gray-500 mt-1">{getClient(c.clientId)?.nom} · {ownerName(c)}{c.casier ? ` · Casier ${c.casier}` : ''}</p><p className={`text-xs mt-1 ${event.overdue ? 'text-amber-800 font-semibold' : 'text-gray-500'}`}>{event.label}</p></div><ChevronRight size={18} className="text-gray-500" /></button>;
-    })}</div> : <p className="py-6 flex items-center gap-3 text-gray-500 text-sm"><CheckCircle size={22} className="text-emerald-600" />Aucune action immédiate.</p>}</section>
-    <details className="border-t border-gray-200 pt-4"><summary className="min-h-11 cursor-pointer font-semibold text-gray-700">Voir les dossiers par étape</summary><div className="flex flex-wrap gap-2 mt-3">{PIPELINE.filter((phase) => phase.key !== 'all').map((phase) => <button key={phase.key} onClick={() => navigate(`/colis?tab=${phase.key}`)} className="min-h-11 px-3 border border-gray-200 rounded-xl text-sm text-gray-700">{phase.label} <strong>{visible.filter(phase.filter).length}</strong></button>)}</div></details>
-    <KPIDashboard />
-  </div></div>;
-}
+export function DashboardPage() { return <PersonalWorkView />; }
 
 // ════════════════════════════════════════════════════════════════════════════
 // COLIS PAGE — /colis route: pipeline cards + table + detail slide-over
 // ════════════════════════════════════════════════════════════════════════════
 export default function StaffColisPage() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const returnTo = location.pathname + location.search;
   const { data, clients, getClient, envois, setSelId, sel, changerStatut, flash, can, auth, loadArchives, archivesLoaded, categories, tarifs, settings, teamUsers = [] } = useApp();
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [searchParams, setSearchParams] = useSearchParams();
   const workFilter = searchParams.get('work');
   const clientFilter = searchParams.get('client');
+  const envoiFilter = searchParams.get('envoi');
   const [bulkBusy, setBulkBusy] = useState(false);
 
   const now = useMinuteNow();
@@ -374,33 +320,32 @@ export default function StaffColisPage() {
   const showArchive = searchParams.get('archive') === '1';
   const setShowArchive = (value) => setParam('archive', value ? '1' : null);
   const [archivesBusy, setArchivesBusy] = useState(false);
-  const [showFilters, setShowFilters] = useState(() => Boolean(searchParams.get('owner') || searchParams.get('dest') || searchParams.get('tab')));
+  const [showFilters, setShowFilters] = useState(false);
   const viewMode = ['envoi', 'statut'].includes(searchParams.get('view')) ? searchParams.get('view') : 'priority';
   const setViewMode = (value) => setParam('view', value === 'priority' ? null : value);
   const [navigationOrder, setNavigationOrder] = useState([]);
   const detailScrollRef = useRef(null);
-  const [visibleCols, setVisibleCols] = useState(loadVisibleCols);
+  const [visibleCols, setVisibleCols] = useState(() => loadVisibleCols(auth?.u?.id));
   const [showColPicker, setShowColPicker] = useState(false);
-  const [defaultSort, setDefaultSort] = useState(loadDefaultSort);
+  const [defaultSort, setDefaultSort] = useState(() => loadDefaultSort(auth?.u?.id));
   const [showSortPicker, setShowSortPicker] = useState(false);
 
   const toggleCol = useCallback((key) => {
     setVisibleCols((prev) => {
       const next = new Set(prev);
       if (next.has(key)) next.delete(key); else next.add(key);
-      localStorage.setItem(LS_COLS_KEY, JSON.stringify([...next]));
+      localStorage.setItem(LS_COLS_KEY + auth?.u?.id, JSON.stringify([...next]));
       return next;
     });
   }, []);
 
   const changeDefaultSort = useCallback((key) => {
     setDefaultSort(key);
-    localStorage.setItem(LS_SORT_KEY, key);
+    localStorage.setItem(LS_SORT_KEY + auth?.u?.id, key);
     setShowSortPicker(false);
   }, []);
   const [showFactures, setShowFactures] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
-  const [showChat, setShowChat] = useState(false);
   const [narrowScreen, setNarrowScreen] = useState(() => window.matchMedia('(max-width: 1023px)').matches);
   useEffect(() => { const query = window.matchMedia('(max-width: 1023px)'); const update = () => setNarrowScreen(query.matches); query.addEventListener('change', update); return () => query.removeEventListener('change', update); }, []);
 
@@ -417,11 +362,12 @@ export default function StaffColisPage() {
     let list = showArchive && !workFilter ? data : data.filter((c) => !c.archive);
     if (workFilter) list = list.filter((c) => matchesWorkQueue(c, workFilter, context));
     if (clientFilter) list = list.filter((c) => c.clientId === clientFilter);
+    if (envoiFilter) list = list.filter((c) => c.envoi === envoiFilter);
     if (ownerFilter) list = list.filter((c) => (isActiveColis(c) || needsConversationAction(c)) && matchesOwner(c, ownerFilter, auth?.u?.id));
     if (activeDest) list = list.filter((c) => getDestByCP(getClient(c.clientId)?.cp)?.code === activeDest);
     if (search.trim()) list = list.filter((c) => fuzzy(`${c.ref} ${c.desc || ''} ${getClient(c.clientId)?.nom || ''} ${c.casier || ''} ${c.trackings?.join(' ') || ''}`, search));
     return list;
-  }, [data, showArchive, workFilter, context, clientFilter, ownerFilter, auth?.u?.id, activeDest, getClient, search]);
+  }, [data, showArchive, workFilter, context, clientFilter, envoiFilter, ownerFilter, auth?.u?.id, activeDest, getClient, search]);
   const searched = useMemo(() => {
     if (activeTab === 'all' && (workFilter === 'messages' || ownerFilter)) return scope;
     const phase = PIPELINE.find((item) => item.key === activeTab);
@@ -441,10 +387,10 @@ export default function StaffColisPage() {
           });
           break;
         case 'date_desc':
-          arr.sort((a, b) => (b.dateReception || b.createdAt || '').localeCompare(a.dateReception || a.createdAt || ''));
+          arr.sort((a, b) => usefulDossierDate(b).localeCompare(usefulDossierDate(a)));
           break;
         case 'date_asc':
-          arr.sort((a, b) => (a.dateReception || a.createdAt || '').localeCompare(b.dateReception || b.createdAt || ''));
+          arr.sort((a, b) => usefulDossierDate(a).localeCompare(usefulDossierDate(b)));
           break;
         case 'total_desc':
           arr.sort((a, b) => (b.devisTotal || 0) - (a.devisTotal || 0));
@@ -463,7 +409,7 @@ export default function StaffColisPage() {
     arr.sort((a, b) => {
       let va, vb;
       switch (sortCol) {
-        case 'date': va = a.dateReception || a.createdAt || ''; vb = b.dateReception || b.createdAt || ''; return dir * va.localeCompare(vb);
+        case 'date': va = usefulDossierDate(a); vb = usefulDossierDate(b); return dir * va.localeCompare(vb);
         case 'client': va = (getClient(a.clientId)?.nom || '').toLowerCase(); vb = (getClient(b.clientId)?.nom || '').toLowerCase(); return dir * va.localeCompare(vb, 'fr');
         case 'ref': return dir * (a.ref || '').localeCompare(b.ref || '', 'fr', { numeric: true });
         case 'statut': return dir * (STATUTS[a.statut]?.label || '').localeCompare(STATUTS[b.statut]?.label || '', 'fr');
@@ -551,7 +497,6 @@ export default function StaffColisPage() {
   const selectedFromUrl = searchParams.get('dossier');
   useEffect(() => {
     setSelId(selectedFromUrl || null);
-    if (selectedFromUrl && workFilter === 'messages') setShowChat(true);
     if (detailScrollRef.current) detailScrollRef.current.scrollTop = 0;
   }, [selectedFromUrl, setSelId, workFilter]);
   useEffect(() => {
@@ -561,21 +506,21 @@ export default function StaffColisPage() {
   const nextId = currentPosition >= 0 ? navigationOrder.slice(currentPosition + 1).find((id) => sorted.some((c) => c.id === id)) : sorted.find((c) => c.id !== sel?.id)?.id;
   const previousId = currentPosition > 0 ? navigationOrder.slice(0, currentPosition).reverse().find((id) => sorted.some((c) => c.id === id)) : null;
   const mobileDetailRef = useDialog(Boolean(sel) && narrowScreen, closeDetail);
-  const chatDialogRef = useDialog(Boolean(sel) && showChat, () => setShowChat(false));
-  useEffect(() => { const onKey = (event) => { if (document.activeElement?.closest?.('[role="dialog"]')) return; if (event.key === 'Escape') { if (showChat) setShowChat(false); else if (showColPicker || showSortPicker) { setShowColPicker(false); setShowSortPicker(false); } else if (sel) closeDetail(); } }; window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey); }, [showChat, showColPicker, showSortPicker, sel, closeDetail]);
+  useEffect(() => { const onKey = (event) => { if (document.activeElement?.closest?.('[role="dialog"]')) return; if (event.key === 'Escape') { if (showColPicker || showSortPicker) { setShowColPicker(false); setShowSortPicker(false); } else if (sel) closeDetail(); } }; window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey); }, [showColPicker, showSortPicker, sel, closeDetail]);
 
 
   return (
     <div className="h-full flex flex-col">
 
+      {envoiFilter && <div className="px-4 pt-3 text-sm">Départ filtré : {envois.find(item => item.id === envoiFilter)?.ref || 'Départ sélectionné'}<button onClick={() => setParam('envoi', null)} className="ml-2 min-h-11 underline">Tous les départs</button></div>}
       {workFilter && <div className="px-4 pt-3 pb-2 flex items-center justify-between gap-2"><div><h1 className="font-bold text-gray-900">{WORK_QUEUES.find((q) => q.key === workFilter)?.label || 'File de travail'}</h1><p className="text-xs text-gray-500">{clientFilter ? getClient(clientFilter)?.nom : 'Dossiers à traiter ensemble par l’équipe'}</p></div><button onClick={() => { closeDetail(); navigate('/colis'); }} className="text-xs min-h-11 text-gray-500 inline-flex items-center gap-1">Tous les dossiers<X size={14} /></button></div>}
-      {workFilter === 'messages' && <div className="px-4 py-3 max-h-[35dvh] overflow-y-auto"><UnassignedInbox /></div>}
+      {workFilter === 'messages' && <div className="px-4 py-3"><button onClick={() => navigate('/conversations')} className="min-h-11 rounded-lg border px-3 text-sm font-semibold">Ouvrir les conversations et messages à rattacher</button></div>}
       <div className="shrink-0 px-4 pt-3 flex flex-wrap items-end gap-3">
         <label className="flex-1 lg:flex-none text-xs font-semibold text-gray-600">File de travail<select aria-label="File de travail" value={workFilter || ''} onChange={(e) => { setSearchParams((old) => { const next = new URLSearchParams(old); next.delete('tab'); next.delete('dossier'); next.delete('archive'); if (e.target.value) next.set('work', e.target.value); else next.delete('work'); return next; }); }} className="mt-1 block min-h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm"><option value="">Tous les dossiers</option>{WORK_QUEUES.map((queue) => <option key={queue.key} value={queue.key}>{queue.label}</option>)}</select></label>
-        <button onClick={() => setShowFilters((value) => !value)} aria-expanded={showFilters} className="lg:hidden min-h-11 px-3 rounded-xl border border-gray-200 font-semibold text-sm brand-t">Filtres{ownerFilter || activeDest || activeTab !== 'all' ? ' · actifs' : ''}</button>
-        <div className={`${showFilters ? 'flex' : 'hidden'} lg:flex w-full lg:w-auto flex-wrap items-end gap-3`}>
+        <button onClick={() => setShowFilters((value) => !value)} aria-expanded={showFilters} className="min-h-11 px-3 rounded-xl border border-gray-200 font-semibold text-sm brand-t">Filtres avancés{ownerFilter || activeDest || activeTab !== 'all' ? ' · actifs' : ''}</button>
+        <div className={`${showFilters ? 'flex' : 'hidden'} w-full lg:w-auto flex-wrap items-end gap-3`}>
         <label className="lg:hidden text-xs font-semibold text-gray-600">Étape<select aria-label="Étape" value={activeTab} onChange={(event) => setActiveTab(event.target.value)} className="block mt-1 min-h-11 rounded-xl border border-gray-200 bg-white px-3 text-sm">{PIPELINE.map((phase) => <option key={phase.key} value={phase.key}>{phase.label} ({tabCounts[phase.key] || 0})</option>)}</select></label>
-        <label className="text-xs font-semibold text-gray-600">Responsable<select aria-label="Responsable" value={ownerFilter} onChange={(e) => setParam('owner', e.target.value)} className="mt-1 block min-h-11 rounded-xl border border-gray-200 bg-white px-3 text-sm"><option value="">Toute l’équipe</option><option value="mine">Mes dossiers</option><option value="unassigned">Non attribués</option>{teamUsers.filter((user) => user.authId && user.actif !== false).map((user) => <option key={user.authId} value={user.authId}>{user.nom}</option>)}</select></label>
+        <label className="text-xs font-semibold text-gray-600">Référent<select aria-label="Référent" value={ownerFilter} onChange={(e) => setParam('owner', e.target.value)} className="mt-1 block min-h-11 rounded-xl border border-gray-200 bg-white px-3 text-sm"><option value="">Toute l’équipe</option><option value="mine">Mes dossiers</option><option value="unassigned">Non attribués</option>{teamUsers.filter((user) => user.authId && user.actif !== false).map((user) => <option key={user.authId} value={user.authId}>{user.nom}</option>)}</select></label>
         <label className="text-xs font-semibold text-gray-600">Destination<select aria-label="Destination" value={activeDest || ''} onChange={(e) => setActiveDest(e.target.value)} className="mt-1 block min-h-11 rounded-xl border border-gray-200 bg-white px-3 text-sm"><option value="">Toutes les destinations</option>{['974', '976', '971', '972'].map((code) => <option key={code} value={code}>{getDestByCP(code + '00').nom}</option>)}</select></label>
         {(workFilter || ownerFilter || activeDest || clientFilter || search || activeTab !== 'all') && <button onClick={() => { setSelId(null); setShowFilters(false); setSearchParams({}); }} className="min-h-11 px-2 text-sm font-semibold brand-t underline">Effacer les filtres</button>}
         {clientFilter && <button onClick={() => setParam('client', null)} className="min-h-11 rounded-xl brand-bg-l px-3 text-sm brand-t">{getClient(clientFilter)?.nom || 'Client filtré'} <X size={14} className="inline" /></button>}
@@ -584,7 +529,7 @@ export default function StaffColisPage() {
       {/* Top bar: pipeline cards + search */}
       <div className="flex-shrink-0 px-4 pt-3 pb-2 space-y-3 border-b border-gray-100 bg-white">
         {/* Pipeline cards — clickable filters (taste-skill : tactile feedback, urgence dot, hover lift) */}
-        <div className="hidden lg:flex gap-2 overflow-x-auto pt-2 pb-1">
+        <div className={`${showFilters ? 'hidden lg:flex' : 'hidden'} gap-2 overflow-x-auto pt-2 pb-1`}>
           {PIPELINE.map((p) => {
             const Icon = p.icon;
             const isActive = activeTab === p.key;
@@ -745,7 +690,7 @@ export default function StaffColisPage() {
                     onClick={() => {
                       const defaults = new Set(ALL_COLUMNS.filter((c) => c.defaultOn).map((c) => c.key));
                       setVisibleCols(defaults);
-                      localStorage.setItem(LS_COLS_KEY, JSON.stringify([...defaults]));
+                      localStorage.setItem(LS_COLS_KEY + auth?.u?.id, JSON.stringify([...defaults]));
                     }}
                     className="mt-2 w-full text-center text-[10px] font-bold text-blue-600 hover:text-blue-800 py-1"
                   >
@@ -939,7 +884,7 @@ export default function StaffColisPage() {
           const receptionWeights = measureShipment(receptionManifest.dimsParColis, volumetricDivisor(settings));
           const finalWeights = measureShipment([{ dimL: sel.finL, dimW: sel.finW, dimH: sel.finH, poids: sel.finP }], volumetricDivisor(settings));
           return (
-          <div ref={(element) => { detailScrollRef.current = element; mobileDetailRef.current = element; }} role={narrowScreen ? 'dialog' : 'region'} aria-modal={narrowScreen ? true : undefined} tabIndex={-1} aria-label={`Dossier ${sel.ref}`} className={`fixed inset-0 z-[60] lg:relative lg:inset-auto lg:z-10 w-full ${sel.statut === 'en_preparation' ? 'lg:w-[72%] 2xl:max-w-[1100px]' : 'lg:w-[540px] 2xl:w-[600px]'} flex-shrink-0 border-l border-gray-200 bg-white overflow-y-auto overscroll-contain pb-[env(safe-area-inset-bottom)]`}>
+          <div ref={(element) => { detailScrollRef.current = element; mobileDetailRef.current = element; }} role={narrowScreen ? 'dialog' : 'region'} aria-modal={narrowScreen ? true : undefined} tabIndex={-1} aria-label={`Dossier ${sel.ref}`} className={`fixed inset-0 z-[60] lg:relative lg:inset-auto lg:z-10 w-full lg:w-[500px] 2xl:w-[560px] flex-shrink-0 border-l border-gray-200 bg-white overflow-y-auto overscroll-contain pb-[env(safe-area-inset-bottom)]`}>
             {/* Compact header */}
             <div className="sticky top-0 z-10 bg-white border-b border-gray-100 px-3 py-2 flex items-center justify-between gap-2">
               <div className="flex flex-wrap items-center gap-2">
@@ -952,8 +897,8 @@ export default function StaffColisPage() {
                 {/* Chat toggle */}
                 <div className="relative group">
                   <button
-                    aria-label="Ouvrir la conversation client" onClick={() => setShowChat((p) => !p)}
-                    className={`p-1.5 rounded-lg transition-colors relative ${showChat ? 'bg-blue-100 text-blue-600' : 'hover:bg-gray-100 text-gray-400 hover:text-gray-600'}`}
+                    aria-label="Ouvrir la conversation client" onClick={() => navigate(`/conversations?${new URLSearchParams({ dossier: sel.id, returnTo })}`)}
+                    className="min-h-11 min-w-11 flex items-center justify-center rounded-lg relative text-slate-600 hover:bg-slate-100"
                   >
                     <MessageCircle size={16} />
                     {unreadCount > 0 && (
@@ -961,7 +906,7 @@ export default function StaffColisPage() {
                     )}
                   </button>
                   <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-lg text-[10px] font-bold text-white bg-gray-800 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                    {showChat ? 'Fermer le chat' : unreadCount > 0 ? `Chat (${unreadCount} non lu${unreadCount > 1 ? 's' : ''})` : 'Chat client'}
+                    {unreadCount > 0 ? `Chat (${unreadCount} non lu${unreadCount > 1 ? 's' : ''})` : 'Chat client'}
                   </span>
                 </div>
                 <div className="relative group">
@@ -985,7 +930,7 @@ export default function StaffColisPage() {
               <div className="mx-4 mt-2 px-3 py-2 rounded-xl flex items-center gap-2"
                 style={{ background: '#FEF3C7', border: '2px solid #F59E0B' }}>
                 <AlertTriangle size={17} className="text-amber-700 shrink-0" />
-                <p className="text-xs font-bold text-amber-800">{lockedBy} modifie ce colis</p>
+                <p className="text-xs font-bold text-amber-800">{lockedBy} consulte ce dossier. La consultation ne vaut pas prise en charge.</p>
               </div>
             )}
 
@@ -1019,8 +964,9 @@ export default function StaffColisPage() {
                 <summary className="min-h-11 py-3 cursor-pointer text-sm font-bold text-gray-800">Cartons reçus ({receptionManifest.nbColis})</summary>
                 <div className="pb-3"><ReceivedCartons colis={sel} settings={settings} /></div>
               </details>
-              {/* Actions (StaffDetailView) */}
-              <StaffDetailView />
+              <button onClick={() => navigate(`/colis/${encodeURIComponent(sel.id)}?${new URLSearchParams({ returnTo })}`)} className="min-h-11 w-full rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white">Préparer et établir le devis</button>
+              {sel.statut === 'en_preparation' ? <StaffAssignment /> : <StaffDetailView />}
+
 
               {/* Factures — part of the preparation workspace when active. */}
               {sel.statut !== 'en_preparation' && <><button
@@ -1049,21 +995,6 @@ export default function StaffColisPage() {
               {showHistory && <AuditLog />}
             </div>
 
-            {/* Chat — slide-over overlay from right */}
-            {showChat && (
-              <div className="fixed inset-0 z-[70] flex justify-end">
-                <div aria-hidden="true" className="w-4 sm:w-auto sm:flex-1 flex-shrink-0 bg-black/30 cursor-pointer" onClick={() => setShowChat(false)} />
-                <div ref={chatDialogRef} role="dialog" aria-modal="true" tabIndex={-1} aria-label="Conversation du dossier" className="flex-1 sm:flex-none w-full sm:max-w-xl bg-white border-l border-gray-200 flex flex-col">
-                  <div className="flex items-center justify-between px-4 py-2 border-b border-gray-100">
-                    <span className="text-xs font-bold" style={{ color: 'var(--brand-text)' }}>Chat avec le client</span>
-                    <button aria-label="Fermer la conversation" onClick={() => setShowChat(false)} className="p-1 rounded-lg hover:bg-gray-100 text-gray-400"><X size={14} /></button>
-                  </div>
-                  <div className="flex-1 min-h-0 overflow-y-auto">
-                    <ChatPanel />
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
           );
         })()}

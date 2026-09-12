@@ -1,0 +1,51 @@
+{
+  "verifiedAt": "2026-09-12T01:55:19.335Z",
+  "deploymentId": "dpl_G1oRZ2gghCjX5hoNguK4RBqXSunA",
+  "matches": true,
+  "reports": [
+    {
+      "origin": "https://expedile.app",
+      "htmlSha256": "2b2a20a4a67ca4266eeb42568dce2eef8f9272d15802b469d1d5b407c75b903b",
+      "assets": [
+        {
+          "path": "/assets/index-Deb5nCcy.js",
+          "sha256": "bf36e770f73104d418d3f57b10ead538c31bfea06830326deb547b5bc31dc335"
+        },
+        {
+          "path": "/assets/react-vendor-PqRyEL6L.js",
+          "sha256": "075ba19737a225eaa33b1110ea3dda729e9508e7d0180ba48f6ad644084d7ec1"
+        },
+        {
+          "path": "/assets/supabase-vendor-DDrlQt8y.js",
+          "sha256": "0a7a176b7a50d9c18726b63607069989fb592a3dd6059d16d24922d0feb42628"
+        },
+        {
+          "path": "/assets/index-PRmjf6Pa.css",
+          "sha256": "5b38de49adc2feceb863f61a4e3405928d51172354c11a221b7ba267c229c6b8"
+        }
+      ]
+    },
+    {
+      "origin": "https://pinta-8sdwjydw3-mmz97441s-projects.vercel.app",
+      "htmlSha256": "2b2a20a4a67ca4266eeb42568dce2eef8f9272d15802b469d1d5b407c75b903b",
+      "assets": [
+        {
+          "path": "/assets/index-Deb5nCcy.js",
+          "sha256": "bf36e770f73104d418d3f57b10ead538c31bfea06830326deb547b5bc31dc335"
+        },
+        {
+          "path": "/assets/react-vendor-PqRyEL6L.js",
+          "sha256": "075ba19737a225eaa33b1110ea3dda729e9508e7d0180ba48f6ad644084d7ec1"
+        },
+        {
+          "path": "/assets/supabase-vendor-DDrlQt8y.js",
+          "sha256": "0a7a176b7a50d9c18726b63607069989fb592a3dd6059d16d24922d0feb42628"
+        },
+        {
+          "path": "/assets/index-PRmjf6Pa.css",
+          "sha256": "5b38de49adc2feceb863f61a4e3405928d51172354c11a221b7ba267c229c6b8"
+        }
+      ]
+    }
+  ]
+}

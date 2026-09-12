@@ -1,0 +1,92 @@
+[
+  {
+    "test": "client-safe-view-refresh-on-focus",
+    "pass": true
+  },
+  {
+    "test": "client-login-canonical-role-session-wait",
+    "pass": true
+  },
+  {
+    "test": "staff-session-restored",
+    "pass": true
+  },
+  {
+    "test": "settings-no-implicit-writes-template-durable",
+    "pass": true
+  },
+  {
+    "test": "quote-fields",
+    "fields": [
+      {
+        "value": "30",
+        "placeholder": "",
+        "aria": "Longueur · colis sortant 1 (cm)"
+      },
+      {
+        "value": "20",
+        "placeholder": "",
+        "aria": "Largeur · colis sortant 1 (cm)"
+      },
+      {
+        "value": "20",
+        "placeholder": "",
+        "aria": "Hauteur · colis sortant 1 (cm)"
+      },
+      {
+        "value": "3",
+        "placeholder": "",
+        "aria": "Poids réel · colis sortant 1 (kg)"
+      },
+      {
+        "value": "100",
+        "placeholder": "",
+        "aria": "Total HT de la facture"
+      },
+      {
+        "value": "1",
+        "placeholder": "",
+        "aria": "Quantité du nouvel article"
+      },
+      {
+        "value": "",
+        "placeholder": "",
+        "aria": "Prix du nouvel article"
+      },
+      {
+        "value": "",
+        "placeholder": "€",
+        "aria": "Montant du frais"
+      }
+    ]
+  },
+  {
+    "test": "quote-explicit-latest-weight-persisted",
+    "pass": true,
+    "total": 74.59
+  },
+  {
+    "test": "mobile-detail-controls-and-escape",
+    "pass": true
+  },
+  {
+    "test": "reception-short-long-scroll-three-close-methods",
+    "pass": true
+  },
+  {
+    "test": "mobile-settings-labels-and-horizontal-navigation",
+    "pass": true
+  },
+  {
+    "test": "staff-no-runtime-errors",
+    "pass": true
+  },
+  {
+    "test": "public-tracking-payment-status-and-mobile-timeline",
+    "pass": true
+  },
+  {
+    "test": "failed-related-data-no-demo-fallback",
+    "pass": true
+  }
+]

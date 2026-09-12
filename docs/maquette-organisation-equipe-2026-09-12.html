@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Expedîle — organisation de l’équipe · Maquette</title>
+<style>
+.back-list{display:none}@media(max-width:1100px){.back-list{display:inline-flex;align-items:center;min-height:44px;border:0;background:transparent;color:#234f65;padding:0 0 8px;font-size:13px;font-weight:650}}
+:root{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#20303e;background:#f3f5f7;font-size:15px;--navy:#183b4b;--muted:#5e6b75;--line:#dce2e7;--yellow:#efc34f}*{box-sizing:border-box}body{margin:0}button,select{font:inherit}button{cursor:pointer}button:disabled{cursor:default}button:focus-visible,select:focus-visible,a:focus-visible{outline:3px solid #a86400;outline-offset:3px}a{color:#1c536d}h1,h2,h3,p{margin:0}button,select{min-height:44px}.app{display:grid;grid-template-columns:210px minmax(0,1fr);min-height:100vh}.sidebar{background:var(--navy);color:#fff;padding:28px 20px;display:flex;flex-direction:column;gap:28px}.brand{font-size:23px;font-weight:850;letter-spacing:-1px}.brand span{color:var(--yellow)}.sidebar p{color:#d1dfe5;line-height:1.6;font-size:13px}.sidebar .explain{border-top:1px solid #456575;padding-top:20px;margin-top:auto}.sidebar .pill{background:#2c5365;border:1px solid #557886;color:white;padding:11px;border-radius:9px;font-weight:650;font-size:14px}.workspace{padding:24px 28px;max-width:1680px;width:100%;margin:auto}.demo{padding:10px 14px;border:1px solid #e3ca7d;background:#fff9e8;border-radius:9px;font-size:13px;line-height:1.5;margin-bottom:23px}.heading{display:flex;justify-content:space-between;align-items:center;gap:24px;margin-bottom:22px}.heading h1{font-size:29px;letter-spacing:-.8px}.heading p{color:var(--muted);font-size:14px;margin-top:6px}.person label{display:block;font-size:12px;font-weight:700;margin-bottom:6px}.person select{background:#fff;border:1px solid #b8c4cc;border-radius:9px;padding:10px;min-width:275px;color:#20303e}.metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:22px}.metric{background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px;display:flex;align-items:center;justify-content:space-between;gap:10px}.metric p{font-size:13px;color:var(--muted)}.metric strong{font-size:26px;color:var(--navy)}.context{background:#eaf1f5;border-left:3px solid #386d87;padding:12px 14px;border-radius:5px;font-size:13px;line-height:1.5;margin-bottom:20px}.tabs{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 15px}.tab{border:1px solid transparent;background:transparent;border-radius:9px;padding:9px 13px;color:#4c5b68;font-size:14px;font-weight:650}.tab[aria-pressed=true]{background:var(--navy);color:white}.tab span{font-size:12px;opacity:.9;margin-left:7px}.layout{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(340px,1fr);gap:18px;align-items:start}.list,.detail{background:#fff;border:1px solid var(--line);border-radius:13px;overflow:hidden}.list-head{padding:18px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:12px}.list-head h2{font-size:16px}.list-head p{margin-top:5px;color:var(--muted);font-size:12px}.row{display:block;width:100%;border:0;border-bottom:1px solid #e6ebef;background:white;text-align:left;padding:17px;position:relative;color:inherit}.row:last-child{border-bottom:0}.row:hover{background:#f5f8fa}.row[aria-pressed=true]{background:#edf4f8;box-shadow:inset 3px 0 #1f617e}.row-top{display:flex;align-items:start;justify-content:space-between;gap:9px}.row-title{font-weight:700;font-size:14px;line-height:1.5}.row-meta{font-size:12px;color:var(--muted);margin-top:7px;line-height:1.6}.reason{font-size:12px;margin-top:9px;color:#66491e;line-height:1.5}.tag{font-size:11px;padding:4px 7px;border-radius:5px;white-space:nowrap;background:#edf1f4;color:#445561;font-weight:650}.tag.priority{background:#fff0cf;color:#775207}.tag.running{background:#e6f2ec;color:#256144}.tag.waiting{background:#f0edf7;color:#654d8b}.detail-head{padding:19px;border-bottom:1px solid var(--line)}.detail-head .eyebrow{color:#4a6575;font-size:12px;font-weight:750}.detail-head h2{font-size:20px;margin-top:7px}.detail-head p{font-size:13px;color:var(--muted);line-height:1.65;margin-top:6px}.detail-body{padding:18px}.detail h3{font-size:13px;margin-bottom:9px}.fact{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:19px}.fact div{background:#f5f7f8;border-radius:8px;padding:12px;font-size:13px}.fact small{display:block;color:var(--muted);font-size:11px;margin-bottom:5px}.steps{padding:0;margin:0 0 19px;list-style:none}.step{display:flex;gap:9px;padding:11px 0;border-bottom:1px solid #edf0f2;align-items:start}.step .dot{width:9px;height:9px;border-radius:50%;background:#7c94a3;flex:none;margin-top:5px}.step .dot.active{background:#268463}.step p{font-size:13px;font-weight:600;line-height:1.5}.step small{font-size:12px;color:var(--muted);display:block;font-weight:400;margin-top:3px}.note{font-size:12px;color:#53636e;line-height:1.6;background:#f6f8f9;padding:12px;border-radius:8px;margin-bottom:16px}.primary{background:var(--navy);color:white;border:0;border-radius:8px;padding:12px 15px;font-weight:700;font-size:13px;width:100%}.primary:disabled{background:#e8edf0;color:#576772}.empty{padding:28px 18px;color:var(--muted);font-size:14px;line-height:1.6}.footer{margin-top:20px;color:var(--muted);font-size:12px;line-height:1.7}.legend{font-size:12px;color:#60707b;margin-top:12px;line-height:1.6}.live{min-height:22px;margin-top:10px;font-size:13px;color:#256144}.shortcut{font-size:12px;color:var(--muted);margin-top:14px}.sidebar a{color:#e5eff3;font-size:12px}.mono{font-variant-numeric:tabular-nums}
+@media(max-width:1100px){.app{grid-template-columns:165px 1fr}.sidebar{padding:24px 15px}.workspace{padding:20px}.layout{grid-template-columns:1fr}.person select{min-width:230px}.heading{align-items:start}}
+@media(max-width:700px){.app{display:block}.sidebar{padding:15px 18px;display:flex;flex-direction:row;align-items:center;justify-content:space-between;gap:15px}.sidebar p,.sidebar .explain{display:none}.sidebar .pill{font-size:12px;padding:7px}.brand{font-size:20px}.workspace{padding:17px 12px}.heading{flex-direction:column;gap:14px}.heading h1{font-size:25px}.person{width:100%}.person select{width:100%;min-width:0}.metrics{gap:7px}.metric{padding:11px;display:block}.metric strong{display:block;margin-top:8px;font-size:22px}.metric p{font-size:11px}.layout{display:block}.detail{margin-top:15px}.tabs{gap:2px}.tab{padding:8px;font-size:12px}.tab span{margin-left:4px}.fact{gap:7px}.row-title{font-size:13px}}
+</style>
+</head>
+<body>
+<div class="app">
+<aside class="sidebar"><div class="brand">EXPÉD<span>ÎLE</span></div><div class="pill">Mon travail</div><p>Une équipe.<br>Des missions différentes.<br>Des dossiers communs.</p><div class="explain"><p><strong>1 EXP = 1 dossier client</strong><br>Ses cartons gardent cette référence. Chaque action a son responsable.</p></div></aside>
+<main class="workspace">
+<div class="demo"><strong>Maquette interactive — données fictives.</strong> Changez de collaborateur pour comparer les priorités. Les boutons simulent uniquement la prise en charge ; aucune action réelle. Scénario : lundi, 10 h.</div>
+<header class="heading"><div><h1 id="page-title">Mon travail</h1><p id="mission-text"></p></div><div class="person"><label for="person">Voir l’espace de</label><select id="person"><option value="alex">Alex · Préparation</option><option value="sam">Sam · Relation client et devis</option><option value="camille">Camille · Réception et départs</option><option value="direction">Direction · Coordination</option></select></div></header>
+<div class="metrics" aria-label="Actions dans vos missions"><div class="metric"><p>À faire / en cours<br><span id="metric-unit">actions attribuées</span></p><strong id="metric-ready">0</strong></div><div class="metric"><p>À prendre<br>dans vos missions</p><strong id="metric-pool">0</strong></div><div class="metric"><p>En attente<br>client ou collègue</p><strong id="metric-wait">0</strong></div></div>
+<p class="context" id="context"></p>
+<nav class="tabs" aria-label="Périmètre des actions"><button type="button" class="tab" data-scope="mine" aria-pressed="true">Mon travail<span></span></button><button type="button" class="tab" data-scope="pool" aria-pressed="false">À prendre<span></span></button><button type="button" class="tab" data-scope="waiting" aria-pressed="false">En attente<span></span></button><button type="button" class="tab" data-scope="team" aria-pressed="false">Vue équipe<span></span></button></nav>
+<div class="layout"><section class="list" aria-label="Liste de travail"><header class="list-head"><div><h2 id="list-title">Vos prochaines actions</h2><p id="list-summary"></p></div><span class="tag">Priorité expliquée</span></header><div id="rows"></div></section><section class="detail" id="detail" aria-label="Dossier et responsabilités"></section></div>
+<p class="live" id="feedback" role="status" aria-live="polite"></p>
+<p class="legend">Une attente n’est pas une action immédiatement réalisable. Consulter un dossier ne signifie pas le prendre en charge. Le nombre d’actions est distinct du nombre d’expéditions et de cartons.</p>
+<p class="footer"><a href="organisation-multiutilisateur-expedile-2026-09-12.md">Lire la proposition détaillée</a> · Les profils et horaires illustrent une organisation possible. Ils ne représentent pas les permissions ou les données actuelles de production.</p>
+</main></div>
+<script>
+'use strict';
+const people={
+ alex:{name:'Alex',mission:'Préparation',caps:['prepare'],context:'Votre priorité est de reprendre les préparations autorisées et de tenir les départs. Les questions clients restent visibles dans le dossier ; Sam en est responsable.'},
+ sam:{name:'Sam',mission:'Relation client et devis',caps:['message','document','quote'],context:'Votre priorité est de tenir les réponses promises et de débloquer les devis. Alex peut préparer pendant que vous vérifiez la facture du même dossier.'},
+ camille:{name:'Camille',mission:'Réception et départs',caps:['receipt','dispatch'],context:'Votre priorité est de réceptionner correctement et de vérifier les chargements. Le casier, les cartons et le départ passent au premier plan.'},
+ direction:{name:'Direction',mission:'Coordination',caps:['coordinate'],context:'Votre priorité est d’arbitrer les exceptions et les actions sans responsable. La vue équipe permet de voir les engagements de chacun sans confondre attente et travail en cours.'}
+};
+const dossiers={
+ 'EXP-1042':{client:'Client Exemple A',cartons:3,casier:'A3',ref:'Sam',state:'Accord reçu · préparation en cours',note:'Réception : 3 cartons conservés. Alex enregistre les nouvelles mesures après optimisation. Sam vérifie la facture. Le devis attend ces deux actions.'},
+ 'EXP-1049':{client:'Client Exemple B',cartons:2,casier:'B4',ref:'Sam',state:'Préparation terminée',note:'Les mesures finales et les documents sont prêts. Le devis doit être envoyé selon l’engagement pris avec le client.'},
+ 'EXP-1050':{client:'Client Exemple C',cartons:1,casier:'A6',ref:'Sam',state:'Accord reçu · préparation à prendre',note:'Cette préparation est réalisable. Une clôture de chargement fictive à 10 h 45 justifie la priorité ; le coordinateur doit s’assurer de sa prise en charge.'},
+ 'EXP-1030':{client:'Client Exemple D',cartons:2,casier:'C2',ref:'Sam',state:'Facture à vérifier',note:'Une question sur la facture doit recevoir une réponse. Cela n’attribue pas automatiquement la conversation au préparateur.'},
+ 'EXP-1043':{client:'Client Exemple E',cartons:4,casier:'D1',ref:'Sam',state:'En attente à la demande du client',note:'La pause reste active. Répondre à la nouvelle question ne vaut ni accord client ni fin de pause.'},
+ 'EXP-1032':{client:'Client Exemple F',cartons:2,casier:'B2',ref:'Camille',state:'Réception à compléter',note:'Deux cartons appartiennent déjà au dossier. Le prochain carton reçu sera numéroté 3 et gardera la même référence EXP.'},
+ 'EXP-1038':{client:'Client Exemple G',cartons:3,casier:'Zone départ',ref:'Camille',state:'Payé · chargement à vérifier',note:'Trois cartons ont été reçus. Le nombre de colis physiques sortants doit être confirmé après optimisation, séparément de ce nombre reçu.'},
+ 'EXP-1060':{client:'Client Exemple H',cartons:1,casier:'C4',ref:'Direction',state:'Départ bloqué · adresse à confirmer',note:'Le coordinateur doit obtenir ou faire vérifier l’adresse. Le départ ne doit pas être confirmé tant que ce blocage n’est pas levé.'},
+ 'EXP-1054':{client:'Client Exemple I',cartons:2,casier:'D3',ref:'Sam',state:'Facture reçue',note:'Une facture est disponible pour vérification. Cette action peut être prise par une personne habilitée dans la mission Documents.'}
+};
+const tasks=[
+ {id:'prepare-a',exp:'EXP-1042',type:'prepare',title:'Reprendre l’optimisation des cartons',owner:'alex',state:'running',due:240,age:90,reason:'Préparation commencée par vous · mesures finales à enregistrer'},
+ {id:'document-a',exp:'EXP-1042',type:'document',title:'Vérifier la facture reçue',owner:'sam',state:'ready',due:180,age:60,reason:'Débloque le devis · la préparation avance avec Alex'},
+ {id:'quote-a',exp:'EXP-1042',type:'quote',title:'Établir le devis',owner:'sam',state:'waiting',due:240,age:0,reason:'Attend les mesures finales et la validation de la facture'},
+ {id:'quote-b',exp:'EXP-1049',type:'quote',title:'Envoyer le devis préparé',owner:'sam',state:'ready',due:-10,age:50,reason:'Devis promis à 9 h 50 · échéance dépassée'},
+ {id:'prepare-c',exp:'EXP-1050',type:'prepare',title:'Préparer pour le prochain départ',owner:null,state:'ready',due:45,age:25,reason:'Clôture du chargement à 10 h 45 · accord reçu'},
+ {id:'message-d',exp:'EXP-1030',type:'message',title:'Répondre à la question sur la facture',owner:'sam',state:'ready',due:150,age:30,reason:'Réponse attendue · demande attribuée à la relation client'},
+ {id:'wait-e',exp:'EXP-1043',type:'message',title:'Revoir l’attente mardi',owner:'sam',state:'waiting',due:1440,age:0,reason:'Pause demandée par le client · aucun accord automatique'},
+ {id:'message-e',exp:'EXP-1043',type:'message',title:'Répondre pendant la pause du dossier',owner:'sam',state:'ready',due:160,age:20,reason:'Une nouvelle question reste à traiter sans terminer la pause'},
+ {id:'receipt-f',exp:'EXP-1032',type:'receipt',title:'Réceptionner le carton suivant',owner:'camille',state:'ready',due:180,age:30,reason:'Deux cartons déjà reçus · le prochain est le carton 3'},
+ {id:'dispatch-g',exp:'EXP-1038',type:'dispatch',title:'Vérifier les colis du chargement',owner:'camille',state:'ready',due:90,age:25,reason:'Départ de ce matin · liste d’embarquement à confirmer'},
+ {id:'incident-h',exp:'EXP-1060',type:'coordinate',title:'Faire confirmer l’adresse avant départ',owner:'direction',state:'ready',due:60,age:40,reason:'Départ bloqué · arbitrage de coordination nécessaire',critical:true},
+ {id:'document-i',exp:'EXP-1054',type:'document',title:'Prendre la vérification de la facture',owner:null,state:'ready',due:300,age:15,reason:'Document disponible · en attente d’un responsable'}
+];
+let selectedPerson='alex',scope='mine',selectedTask='prepare-a';
+const $=id=>document.getElementById(id);
+const escapeHTML=value=>String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const canWork=t=>people[selectedPerson].caps.includes(t.type);
+const active=t=>t.state!=='waiting';
+const ownerName=t=>t.owner?people[t.owner].name:'À attribuer';
+const score=t=>t.critical?6000:t.due<0?5000+Math.min(999,-t.due):t.due<=90?4000-t.due:t.state==='running'?3000:1000+t.age;
+function rowsFor(target){
+ if(target==='team')return tasks;
+ if(target==='waiting')return tasks.filter(t=>t.owner===selectedPerson&&!active(t));
+ if(target==='pool')return tasks.filter(t=>!t.owner&&active(t)&&canWork(t));
+ return tasks.filter(t=>t.owner===selectedPerson&&active(t));
+}
+function tag(t){return t.state==='waiting'?['waiting','En attente']:t.critical?['priority','Bloquant']:t.due<0?['priority','Échéance dépassée']:t.state==='running'?['running','En cours']:t.due<=90?['priority','Échéance proche']:['','À faire'];}
+function render(){
+ const person=people[selectedPerson];
+ $('page-title').textContent=selectedPerson==='direction'?'Coordonner l’équipe':'Mon travail';
+ $('mission-text').textContent=person.name+' · '+person.mission;
+ $('context').textContent=person.context;
+ $('metric-ready').textContent=rowsFor('mine').length;
+ $('metric-pool').textContent=rowsFor('pool').length;
+ $('metric-wait').textContent=rowsFor('waiting').length;
+ document.querySelectorAll('[data-scope]').forEach(b=>{b.setAttribute('aria-pressed',String(b.dataset.scope===scope));b.querySelector('span').textContent=rowsFor(b.dataset.scope).length;});
+ const rows=[...rowsFor(scope)].sort((a,b)=>Number(active(b))-Number(active(a))||score(b)-score(a));
+ if(!rows.some(t=>t.id===selectedTask))selectedTask=rows[0]?.id||null;
+ $('list-title').textContent={mine:'Vos prochaines actions',pool:'Actions disponibles à prendre',waiting:'Attentes à suivre',team:'Les actions de toute l’équipe'}[scope];
+ $('list-summary').textContent=rows.length+' action'+(rows.length>1?'s':'')+' · '+new Set(rows.map(t=>t.exp)).size+' expédition(s) concernée(s)';
+ $('rows').innerHTML=rows.length?rows.map(t=>{const state=tag(t),d=dossiers[t.exp];return `<button type="button" class="row" data-task="${t.id}" aria-pressed="${t.id===selectedTask}"><span class="row-top"><span class="row-title">${escapeHTML(t.title)}</span><span class="tag ${state[0]}">${state[1]}</span></span><span class="row-meta" style="display:block">${t.exp} · ${d.client} · ${d.cartons} cartons reçus<br>Responsable : ${ownerName(t)}</span><span class="reason" style="display:block">${escapeHTML(t.reason.replace('par vous',t.owner===selectedPerson?'par vous':'par '+ownerName(t)))}</span></button>`;}).join(''):'<p class="empty">Aucune action dans cette vue. Vous pouvez consulter les actions à prendre ou la vue équipe.</p>';
+ renderDetail();
+}
+function renderDetail(){
+ const t=tasks.find(t=>t.id===selectedTask);
+ if(!t){$('detail').innerHTML='<div class="empty">Sélectionnez une action pour retrouver le dossier et les responsabilités.</div>';return;}
+ const d=dossiers[t.exp],related=tasks.filter(item=>item.exp===t.exp);
+ const eligible=canWork(t)&&active(t)&&(!t.owner||t.owner===selectedPerson);
+ const action=t.state==='waiting'?'Action en attente de ses prérequis':!canWork(t)?'Consultation · autre mission':t.owner&&t.owner!==selectedPerson?'Déjà attribué à '+ownerName(t):t.state==='running'?'Travail en cours · simulation':!t.owner?'Je m’en occupe · simulation':'Commencer cette action · simulation';
+ $('detail').innerHTML=`<header class="detail-head"><button type="button" class="back-list" id="back-list">← Retour à la liste</button><p class="eyebrow">${t.exp} · DOSSIER COMMUN</p><h2 tabindex="-1" id="detail-title">${d.client}</h2><p>${d.state}</p></header><div class="detail-body"><div class="fact"><div><small>Cartons à réception</small><strong>${d.cartons} cartons</strong></div><div><small>Référent du dossier</small><strong>${d.ref}</strong></div><div><small>Casier</small><strong>${d.casier}</strong></div><div><small>Votre vue</small><strong>${people[selectedPerson].mission}</strong></div></div><h3>Qui fait quoi sur cette expédition ?</h3><ul class="steps">${related.map(item=>`<li class="step"><span class="dot ${item.state==='running'?'active':''}" aria-hidden="true"></span><p>${escapeHTML(item.title)}<small>${ownerName(item)} · ${tag(item)[1]}</small></p></li>`).join('')}</ul><p class="note">${d.note}</p><button type="button" class="primary" id="claim" ${!eligible||t.state==='running'?'disabled':''}>${action}</button><p class="shortcut">La responsabilité porte sur cette action. Le référent du dossier reste ${d.ref}.</p></div>`;
+ $('back-list').addEventListener('click',()=>document.querySelector('#rows [aria-pressed="true"]')?.focus());
+ const claim=$('claim');
+ if(claim)claim.addEventListener('click',()=>{if(!eligible||t.state==='running')return;t.owner=selectedPerson;t.state='running';scope='mine';selectedTask=t.id;render();$('feedback').textContent='Simulation : '+people[selectedPerson].name+' prend cette action. Les autres actions du dossier gardent leurs responsables.';});
+}
+document.querySelectorAll('[data-scope]').forEach(b=>b.addEventListener('click',()=>{scope=b.dataset.scope;render();$('feedback').textContent='';}));
+$('person').addEventListener('change',event=>{selectedPerson=event.target.value;scope='mine';render();$('feedback').textContent='';});
+$('rows').addEventListener('click',event=>{const row=event.target.closest('[data-task]');if(row){selectedTask=row.dataset.task;render();if(innerWidth<=1100){$('detail').scrollIntoView({block:'start'});$('detail-title').focus({preventScroll:true});}}});
+render();
+</script>
+</body></html>

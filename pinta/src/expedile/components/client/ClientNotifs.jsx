@@ -34,9 +34,13 @@ function relativeDate(raw) {
 
 export default function ClientNotifs() {
   const navigate = useNavigate();
-  const { notifs, unreadNotifs, markNotifRead, markAllNotifsRead } = useApp();
+  const { notifs, unreadNotifs, markNotifRead, markAllNotifsRead, loadMoreNotifications, notificationsHasMore, notificationsLoading, notificationsError, refreshNotifications } = useApp();
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const handleLoad = async (load) => {
+    try { await load?.(); setError(''); }
+    catch { setError('Le chargement des notifications a échoué. Réessayez.'); }
+  };
 
   // Sort by date, newest first
   const sorted = useMemo(
@@ -82,6 +86,7 @@ export default function ClientNotifs() {
         )}
       </div>
 
+      {notificationsError && <div role="alert" className="text-sm text-red-700">{String(notificationsError.message || notificationsError)}<button className="min-h-11 block underline" onClick={() => handleLoad(refreshNotifications)}>Réessayer le chargement</button></div>}
       {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
       {/* ── Notification list ── */}
       {sorted.length === 0 ? (
@@ -107,7 +112,7 @@ export default function ClientNotifs() {
                   !n.lu ? 'ring-1' : ''
                 }`}
                 style={{
-                  animationDelay: `${i * 0.04}s`,
+                  animationDelay: `${Math.min(i, 8) * 0.04}s`,
                   ...(n.lu ? {} : { ringColor: BRAND.navy + '30' }),
                 }}
               >
@@ -148,6 +153,7 @@ export default function ClientNotifs() {
           })}
         </div>
       )}
+      {notificationsHasMore && <button disabled={notificationsLoading} className="min-h-11 w-full rounded-xl border border-slate-200 px-4 text-sm font-semibold brand-t" onClick={() => handleLoad(loadMoreNotifications)}>{notificationsLoading ? "Chargement…" : "Charger les notifications précédentes"}</button>}
     </div>
   );
 }

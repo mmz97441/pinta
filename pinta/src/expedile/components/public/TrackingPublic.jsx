@@ -123,7 +123,7 @@ export default function TrackingPublic() {
             </div>
           )}
           <p className="text-xs text-gray-400 mt-3">
-            {data.colis.length} colis · informations de suivi
+            {data.colis.length} expédition{data.colis.length > 1 ? 's' : ''} · informations de suivi
           </p>
         </div>
 
@@ -139,10 +139,12 @@ export default function TrackingPublic() {
                   <div className="flex items-center gap-2 mb-1 flex-wrap">
                     <span className="font-black text-base" style={{ color: BRAND.navy }}>{c.ref}</span>
                     <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: '#E0F2FE', color: '#075985' }}>
-                      {STATUTS[c.statut]?.label || c.statut}
+                      {journey.waiting ? 'Attente demandée' : journey.quoteNeedsReview ? 'Devis en révision' : STATUTS[c.statut]?.label || c.statut}
                     </span>
                   </div>
-                  <p className="text-sm text-gray-600 truncate">{c.desc || 'Colis'}</p>
+                  <p className="text-sm text-gray-600 truncate">{c.desc || 'Expédition'}</p>
+                  {c.receivedCount != null && <p className="mt-1 text-xs text-slate-600">{c.receivedCount} carton{c.receivedCount > 1 ? 's' : ''} reçu{c.receivedCount > 1 ? 's' : ''}{c.outgoingParcelCount != null ? ` · ${c.outgoingParcelCount} colis sortant${c.outgoingParcelCount > 1 ? 's' : ''} confirmé${c.outgoingParcelCount > 1 ? 's' : ''}` : ''}</p>}
+                  {c.destinationCode && DESTINATIONS[c.destinationCode] && <p className="mt-1 text-xs text-slate-600">Destination de cette expédition : {DESTINATIONS[c.destinationCode].nom}</p>}
                 </div>
               </div>
 
@@ -172,13 +174,12 @@ export default function TrackingPublic() {
                   </div>
                 )}
 
-                {/* Dimensions */}
-                {c.dims && (
-                  <div className="mt-3 flex items-center gap-2 text-xs text-gray-500">
-                    <Ruler size={12} />
-                    <span>{c.dims.L}×{c.dims.W}×{c.dims.H} cm · {c.dims.P} kg</span>
-                  </div>
-                )}
+                <details className="mt-3 border-t border-slate-200"><summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-slate-600"><Ruler size={14} className="mr-2 inline" />Cartons et mesures</summary>
+                  {c.preparationNeedsReview && <p className="mb-2 text-sm text-slate-600">Les mesures après optimisation sont à confirmer pour la composition actuelle.</p>}
+                  {c.preparedPackages?.length > 0 && <div className="space-y-2"><p className="text-sm font-semibold text-slate-700">Après optimisation</p>{c.preparedPackages.map((box,index) => <p key={index} className="text-sm text-slate-600">Colis sortant {index + 1} · {box.L} × {box.W} × {box.H} cm · {box.P} kg</p>)}</div>}
+                  {c.receptionCartons?.length > 0 && <div className="mt-3 space-y-2"><p className="text-sm font-semibold text-slate-700">À réception</p>{c.receptionCartons.map((box,index) => <p key={index} className="text-sm text-slate-600">Carton {index + 1} · {box ? `${box.L} × ${box.W} × ${box.H} cm · ${box.P} kg` : 'Mesures non renseignées'}</p>)}</div>}
+                  {!c.preparedPackages?.length && !c.receptionCartons?.length && <p className="text-sm text-slate-500">Mesures détaillées non renseignées.</p>}
+                </details>
 
                 {/* Date réception */}
                 {c.dateReception && (

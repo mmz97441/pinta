@@ -39,6 +39,9 @@ export function calculateQuote({ colis = {}, client = {}, destination, tarif, ca
   const fail = (field, message) => errors.push({ field, message });
   const isPro = client.type === 'pro';
   const divisor = volumetricDivisor(settings);
+  if (mode === 'final' && colis.archive) fail('dossier', 'Désarchivez le dossier avant de préparer un nouveau devis.');
+  if (mode === 'final' && colis.produitInterdit) fail('dossier', 'Un produit interdit est signalé : faites vérifier ce blocage avant le devis.');
+  if (mode === 'final' && colis.feuVert !== undefined && colis.feuVert !== 'autorise') fail('dossier', 'Le feu vert du client doit être enregistré avant de préparer le devis.');
   if (!['final', 'estimate'].includes(mode)) fail('mode', 'Mode de calcul inconnu.');
   if (!destination?.code) fail('destination', 'Choisissez une destination prise en charge.');
   if (client.cp && String(client.cp).slice(0, 3) !== destination?.code) fail('destination', 'La destination du devis ne correspond pas au code postal du client.');
@@ -47,12 +50,17 @@ export function calculateQuote({ colis = {}, client = {}, destination, tarif, ca
   if (!tarif || !nonNegative(tarif.base) || !nonNegative(tarif.parKg)) fail('tarif', 'Aucun tarif valide pour cette destination et cette offre.');
   if (!isPro && !nonNegative(destination?.tva)) fail('destination', 'Le taux de TVA de cette destination est absent.');
 
-  const finalBox = { dimL: colis.finL, dimW: colis.finW, dimH: colis.finH, poids: colis.finP };
+  if (mode === 'final' && colis.preparationCompositionVersion != null && colis.finalMeasurementsVersion !== colis.preparationCompositionVersion) fail('dimensions.freshness', 'La composition du dossier a changé : mesurez à nouveau le colis optimisé et enregistrez ces mesures.');
+
+  const finalPackages = Array.isArray(colis.finalPackages) && colis.finalPackages.length
+    ? colis.finalPackages : [{ dimL: colis.finL, dimW: colis.finW, dimH: colis.finH, poids: colis.finP }];
   const labels = { dimL: 'longueur', dimW: 'largeur', dimH: 'hauteur', poids: 'poids' };
-  Object.entries(finalBox).forEach(([key, value]) => {
-    if (!positive(value)) fail(`dimensions.${key}`, `Renseignez une valeur positive pour ${labels[key]}.`);
-  });
-  const after = measureShipment([finalBox], divisor);
+  finalPackages.forEach((box, index) => Object.entries(labels).forEach(([key, label]) => {
+    if (!positive(box?.[key])) fail(`dimensions.${index}.${key}`, `Colis sortant ${index + 1} : renseignez une valeur positive pour ${label}.`);
+  }));
+  const after = measureShipment(finalPackages, divisor);
+  if (mode === 'final' && after && colis.preparationCompositionVersion != null && Number(colis.outgoingParcelCount) !== finalPackages.length) fail('dimensions.count', 'Enregistrez les mesures de préparation pour confirmer le nombre de colis physiques à expédier.');
+  const finalBox = finalPackages.length === 1 ? finalPackages[0] : null;
   if (!after && !errors.some((error) => error.field.startsWith('dimensions') || error.field === 'settings')) fail('dimensions', 'Les dimensions dépassent les limites de calcul.');
 
   const invoices = (colis.factures || []).filter((invoice) => !invoice.rejetMotif);
@@ -63,10 +71,13 @@ export function calculateQuote({ colis = {}, client = {}, destination, tarif, ca
     if (invoices.some((invoice) => !positive(invoice.montant))) fail('factures', 'Les factures validées doivent avoir un montant positif.');
   }
 
+  const rejectedInvoiceIds = new Set((colis.factures || []).filter(invoice => invoice.rejetMotif || invoice.replacedById).map(invoice => invoice.id));
+  const activeLines = (colis.lignes || []).filter(line => !line.factureId || !rejectedInvoiceIds.has(line.factureId));
+  if (activeLines.length !== (colis.lignes || []).length) warnings.push('Les articles des factures rejetées ou remplacées sont exclus de ce devis.');
   const lines = [];
   if (!isPro) {
-    if (!(colis.lignes || []).length) fail('lignes', 'Ajoutez les articles et leur catégorie pour calculer les taxes.');
-    (colis.lignes || []).forEach((line, index) => {
+    if (!activeLines.length) fail('lignes', 'Ajoutez les articles et leur catégorie pour calculer les taxes.');
+    activeLines.forEach((line, index) => {
       const field = `lignes.${index}`;
       const category = categories.find((item) => item.id === line.cat);
       const rates = category?.taux?.[destination?.code];
@@ -133,7 +144,8 @@ export function calculateQuote({ colis = {}, client = {}, destination, tarif, ca
       tarif: { base: number(tarif.base), parKg: number(tarif.parKg) },
       paymentTerms: { mode: isPro ? colis.modePaiementPro || client.methodePaiement || 'virement' : 'payplug' },
       volumetricDivisor: divisor, weightPolicy: 'max_grouped_real_and_volumetric',
-      finalBox: Object.fromEntries(Object.entries(finalBox).map(([key, value]) => [key, number(value)])),
+      finalBox: finalBox ? Object.fromEntries(Object.entries(finalBox).map(([key, value]) => [key, number(value)])) : null,
+      finalPackages: finalPackages.map(box => Object.fromEntries(Object.keys(labels).map(key => [key, number(box[key])]))),
       originalBoxes: beforeWeights ? originalBoxes.map((box) => ({ dimL: number(box.dimL), dimW: number(box.dimW), dimH: number(box.dimH), poids: number(box.poids) })) : [],
       trackings: [...(colis.trackings || [])], invoices: invoices.map((invoice) => ({ id: invoice.id, montant: number(invoice.montant), valide: !!invoice.valide })),
       lines, fees,

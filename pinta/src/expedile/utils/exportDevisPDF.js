@@ -60,7 +60,10 @@ export function exportDevisPDF(colis, client, destination) {
   if (client?.type === 'pro' && snapshot?.inputs?.paymentTerms?.mode) {
     colisDetails.push(['Modalités de règlement', PAYMENT_TERMS[snapshot.inputs.paymentTerms.mode] || snapshot.inputs.paymentTerms.mode]);
   }
-  if (colis.finL) {
+  if (colis.finalPackages?.length) {
+    colisDetails.push(['Colis après optimisation', String(colis.finalPackages.length)]);
+    colis.finalPackages.forEach((box,index) => colisDetails.push([`Colis sortant ${index + 1}`, `${box.dimL} × ${box.dimW} × ${box.dimH} cm · ${box.poids} kg`]));
+  } else if (colis.finL) {
     colisDetails.push(['Dimensions optimisées', `${colis.finL} × ${colis.finW} × ${colis.finH} cm`]);
     colisDetails.push(['Poids après optimisation', `${colis.finP || '—'} kg`]);
   }

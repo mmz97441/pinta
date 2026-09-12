@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { X, FileText, Search, UserPlus, Package, MapPin, Camera } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
@@ -78,7 +79,7 @@ function nextRef() {
   return 'EXP-TMP-' + Date.now().toString(36).toUpperCase();
 }
 
-export default function ColisModal({ open, onClose, initialColisId }) {
+export default function ColisModal({ open, onClose, initialColisId, initialClientId }) {
   const navigate = useNavigate();
   const location = useLocation();
   const appCtx = useApp();
@@ -111,6 +112,14 @@ export default function ColisModal({ open, onClose, initialColisId }) {
   const [pendingFocus, setPendingFocus] = useState(null);
   const [saveError, setSaveError] = useState('');
   const [photoPreview, setPhotoPreview] = useState(null);
+  useEffect(() => {
+    if (!open || !initialClientId || initialColisId || initialisedRef.current) return;
+    const client = clients.find((item) => item.id === initialClientId);
+    if (!client) return;
+    initialisedRef.current = true;
+    setSelectedClient(client); setClientSearchQ(client.nom);
+    setMode(data.some((item) => !item.archive && item.clientId === client.id && ['receptionne', 'mesure', 'attente_feu_vert', 'autorise'].includes(item.statut)) ? null : 'nouveau');
+  }, [open, initialClientId, initialColisId, clients, data]);
   useEffect(() => {
     if (!open) { initialisedRef.current = false; return; }
     if (!initialColisId || initialisedRef.current) return;
@@ -294,6 +303,10 @@ export default function ColisModal({ open, onClose, initialColisId }) {
     const existing = rattacherTarget;
     const changes = mergeReceptionCartons(existing, lines, nf.multiDims);
     if (!changes) throw new Error('Mesures à réception incomplètes : vérifiez chaque nouveau carton.');
+    if (checkedInterdits.length) {
+      changes.checkInterdits = [...new Set([...(existing.checkInterdits || []), ...checkedInterdits])];
+      changes.produitInterdit = true;
+    }
     changes.statut = hasCompleteReceptionMeasurements(changes) ? 'mesure' : 'receptionne';
 
     // Un nouvel accord doit porter sur tous les cartons ; les mesures originales restent conservées.
@@ -405,7 +418,9 @@ export default function ColisModal({ open, onClose, initialColisId }) {
         await sb.updateColis(newColis.id,{photoReception:true,photoReceptionUrl:uploaded.path});
       } catch(error) { flash({msg:`Colis enregistré, photo à ajouter : ${error.message}`,type:'warning'}); }
     }
-    if (sendTG && cl) {
+    if (sendTG && cl && !cl.telegramChatId && !cl.userId) {
+      flash({ msg: `Expédition ${newColis.ref} enregistrée. Accès client à activer : ouvrez sa fiche pour l’inviter ou préparez un email.`, type: 'warning', duration: 12000 });
+    } else if (sendTG && cl) {
       try {
         const {data:queued,error}=await supabase.rpc('queue_message',{
           p_colis_id:newColis.id,p_text:renderTemplate(appCtx.messageTemplates.reception_telegram || DEFAULT_BODIES.reception_telegram,{client:cl,colis:newColis,destination:getDestByCP(cl.cp),settings:appCtx.settings}),
@@ -506,9 +521,10 @@ export default function ColisModal({ open, onClose, initialColisId }) {
   const labelCls = 'block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1';
 
   const isMatchMode = false;
+  const notificationAccessible = !!(selectedClient?.telegramChatId || selectedClient?.userId);
 
   // ─────────────────────────────────────────────────────────
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center px-0 sm:px-4"
       style={{ backgroundColor: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(6px)' }}
@@ -516,12 +532,12 @@ export default function ColisModal({ open, onClose, initialColisId }) {
         if (e.target === e.currentTarget && !saving) resetAndClose();
       }}
     >
-      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Réceptionner un colis" tabIndex={-1} className="bg-white w-full max-w-lg rounded-t-3xl sm:rounded-2xl shadow-2xl flex flex-col max-h-[90dvh]">
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Réceptionner des cartons" tabIndex={-1} className="bg-white w-full max-w-lg rounded-t-3xl sm:rounded-2xl shadow-2xl flex flex-col max-h-[90dvh]">
         {/* ── Header ── */}
         <div className="shrink-0 flex items-center justify-between px-5 pt-5 pb-4 border-b border-gray-100">
           <div>
             <h2 className="text-lg font-black text-gray-900">
-              Réceptionner un colis
+              Réceptionner des cartons
             </h2>
           </div>
           <button
@@ -536,7 +552,7 @@ export default function ColisModal({ open, onClose, initialColisId }) {
         {/* ── Body ── */}
         <div className="flex-1 min-h-0 overflow-y-auto px-5 py-4 space-y-4">
 
-          <fieldset disabled={saving} className="contents">
+          <fieldset disabled={saving} className="min-w-0 space-y-4">
           {/* ── CLIENT (staff only) ── */}
           {isStaff && !newClientMode && (
             <div>
@@ -663,7 +679,7 @@ export default function ColisModal({ open, onClose, initialColisId }) {
                       <div className="flex items-center gap-2">
                         <Package size={14} style={{ color: 'var(--text-accent)' }} />
                         <span className="text-xs font-bold" style={{ color: 'var(--text-accent)' }}>
-                          Ce client a {regroupables.length} colis en entrepôt
+                          Ce client a {regroupables.length} expédition(s) ouverte(s)
                         </span>
                       </div>
                       <p className="text-xs text-gray-600">
@@ -1263,7 +1279,7 @@ export default function ColisModal({ open, onClose, initialColisId }) {
             <div className="mb-3 text-xs text-gray-600" aria-live="polite">
               <p className="font-bold text-sm text-gray-800">{selectedClient?.nom || newClientForm.nom || authCl?.nom} · {mode === 'rattacher' ? rattacherTarget?.ref : 'Nouveau dossier'}</p>
               <p>{receptionCartons(nf.trackingLines, nf.multiDims).filter(({ index }) => receptionMeasurements([nf.trackingLines[index]], { 0: nf.multiDims[index] })).length} / {receptionCartons(nf.trackingLines, nf.multiDims).length} carton(s) mesuré(s) à réception · Casier {nf.casier || rattacherTarget?.casier || 'à renseigner'}</p>
-              {mode === 'nouveau' && <p>Notification proposée : {selectedClient?.telegramChatId ? 'Telegram' : 'message dans l’espace client'}</p>}
+              {mode === 'nouveau' && <p>{notificationAccessible ? `Notification proposée : ${selectedClient?.telegramChatId ? 'Telegram' : 'message dans l’espace client'}` : 'Accès client à activer : une action de contact sera créée pour l’équipe.'}</p>}
               {checkedInterdits.length > 0 && <p className="text-red-700 font-bold">{checkedInterdits.length} produit(s) interdit(s) signalé(s)</p>}
             </div>
             {formErr.dimensions && <p role="alert" className="mb-3 text-sm font-semibold text-red-700">{formErr.dimensions}</p>}
@@ -1294,21 +1310,21 @@ export default function ColisModal({ open, onClose, initialColisId }) {
                     className="order-first w-full sm:order-none sm:w-auto sm:flex-1 py-2.5 rounded-xl font-bold text-sm text-white active:scale-95 transition-all"
                     style={{ background: `linear-gradient(135deg, ${BRAND.navy}, ${BRAND.navyL})` }}
                   >
-                    Réceptionner et notifier le client
+                    {notificationAccessible ? 'Réceptionner et notifier le client' : 'Réceptionner les cartons'}
                   </button>
-                  <button
+                  {notificationAccessible && <button
                     type="button"
                     disabled={saving} onClick={() => runSave(() => handleReceptionner(false))}
                     className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl font-semibold text-sm text-gray-600 bg-gray-100 hover:bg-gray-200 active:scale-95 transition-all"
                   >
                     Sans notification
-                  </button>
+                  </button>}
                 </>
               )}
             </div>
           </div>
         )}
       </div>
-    </div>
+    </div>, document.body
   );
 }

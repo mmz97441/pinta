@@ -1,0 +1,42 @@
+NOTICE:  relation "v_abonnements_alertes" does not exist, skipping
+NOTICE:  policy "Factures read" for relation "storage.objects" does not exist, skipping
+NOTICE:  policy "Public read photos-colis" for relation "storage.objects" does not exist, skipping
+NOTICE:  column "abonnement" of relation "clients" already exists, skipping
+NOTICE:  column "abonnement_debut" of relation "clients" already exists, skipping
+NOTICE:  column "abonnement_fin" of relation "clients" already exists, skipping
+NOTICE:  column "tags_preparation" of relation "colis" already exists, skipping
+NOTICE:  relation "staff_users" already exists, skipping
+NOTICE:  relation "staff_permissions" already exists, skipping
+NOTICE:  column "perm_colis_mesurer" of relation "staff_permissions" already exists, skipping
+NOTICE:  relation "audit_actions" already exists, skipping
+NOTICE:  relation "colis_locks" already exists, skipping
+NOTICE:  policy "Factures upload" for relation "storage.objects" does not exist, skipping
+NOTICE:  policy "Factures update" for relation "storage.objects" does not exist, skipping
+NOTICE:  policy "Auth upload photos-colis" for relation "storage.objects" does not exist, skipping
+NOTICE:  trigger "client_delivery_address_consistency" for relation "clients" does not exist, skipping
+NOTICE:  PASS: anonymous cannot save physical preparation
+NOTICE:  PASS rejected: client cannot set final measures (Permission préparation requise)
+NOTICE:  PASS rejected: logistician cannot bypass preparation permission through legacy measurement columns (Utilisez la sauvegarde des mesures de préparation)
+NOTICE:  PASS rejected: stale open version rejected (Le dossier ou ses cartons ont changé. Reprenez la version enregistrée avant de sauvegarder.)
+NOTICE:  PASS rejected: reception cannot forge certified final packages at insert (Une réception ne certifie aucune préparation sortante)
+NOTICE:  PASS rejected: archived dossier cannot receive preparation measures (Un dossier autorisé et impayé, non archivé et sans produit interdit, en préparation est requis)
+NOTICE:  PASS rejected: prohibited content blocks physical preparation (Un dossier autorisé et impayé, non archivé et sans produit interdit, en préparation est requis)
+NOTICE:  PASS rejected: preparation requires an explicit recorded customer agreement (Un dossier autorisé et impayé, non archivé et sans produit interdit, en préparation est requis)
+NOTICE:  PASS: measure-only save works without invoice and sums independent volumes
+NOTICE:  PASS rejected: withdrawn customer agreement also blocks a quote based on previously confirmed measures (Préparation autorisée d’un dossier impayé, non archivé et sans produit interdit requise)
+NOTICE:  PASS rejected: direct freshness forgery rejected (Utilisez la sauvegarde des mesures de préparation)
+NOTICE:  PASS rejected: replacement cannot be attached twice (duplicate key value violates unique constraint "factures_one_replacement")
+NOTICE:  PASS: SQL excludes rejected invoice articles and freezes both prepared physical units
+NOTICE:  PASS: commercial snapshot identity is canonical despite a forged caller destination/type
+NOTICE:  PASS: document revision returns to preparation instead of empty payment state
+NOTICE:  PASS: new destination invalidates modern unpaid quote
+NOTICE:  PASS: old payment intention is superseded on destination revision
+NOTICE:  PASS: new carton keeps historical final measures but invalidates confirmation and outgoing count
+NOTICE:  PASS rejected: quote cannot reuse final measures from previous carton composition (Enregistrez les nouvelles mesures après optimisation pour la composition actuelle)
+NOTICE:  PASS rejected: stale composition rejected even with current timestamp (Le dossier ou ses cartons ont changé. Reprenez la version enregistrée avant de sauvegarder.)
+NOTICE:  PASS: explicit remeasurement confirms current composition
+NOTICE:  PASS: client safe view exposes actual outgoing units without draft totals
+NOTICE:  PASS: staff address line is mirrored into legacy label address
+NOTICE:  PASS: legacy address correction preserves complement and canonical address
+PASS: 24 JS/PostgreSQL quote cases; transport, taxes, fees, billable weight, before/after and savings match. Fixtures rolled back.
+PASS: 14 reception/quote JS/PostgreSQL cases; reception coverage, original volumes and final measures remain separate. Fixtures rolled back.

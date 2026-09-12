@@ -1,7 +1,8 @@
+import { receptionCartonManifest } from './reception.js';
 /** Client-facing facts only. A status never implies a delivery date. */
 export function cartonManifest(colis) {
   const trackings = [...new Set((colis?.trackings || []).map(String).map((s) => s.trim()).filter(Boolean))];
-  const count = Math.max(1, Number(colis?.nbColis) || 0, colis?.trackingsDetail?.length || 0, colis?.dimsParColis?.length || 0, trackings.length);
+  const count = receptionCartonManifest(colis).nbColis;
   return { id: colis.id, ref: colis.ref, updatedAt: colis.updatedAt, count, trackings };
 }
 
@@ -20,6 +21,7 @@ export function quotePresentation(colis, client = {}, destination = {}) {
   const { inputs, amounts } = snapshot;
   return {
     colis: { ...colis, ref: inputs.reference || colis.ref, desc: inputs.description,
+      finalPackages: inputs.finalPackages || (inputs.finalBox ? [inputs.finalBox] : []),
       trackings: inputs.trackings || [], fraisDivers: inputs.fees || [],
       finL: inputs.finalBox?.dimL, finW: inputs.finalBox?.dimW, finH: inputs.finalBox?.dimH, finP: inputs.finalBox?.poids,
       devisTransport: amounts.transport, devisOM: amounts.om, devisOMR: amounts.omr, devisTVA: amounts.tva,
@@ -51,9 +53,12 @@ const STATES = {
 };
 
 export function clientJourney(colis, now = Date.now()) {
-  const waiting = colis.statut === 'attente_feu_vert' && !!colis.attenteClientDate && (!colis.attenteClientUntil || Date.parse(colis.attenteClientUntil) > now);
+  const waiting = hasClientRequestedWait(colis);
+  const reviewDue = waiting && !!colis.attenteClientUntil && Date.parse(colis.attenteClientUntil) <= now;
+  const quoteNeedsReview = needsQuoteRecalculation(colis);
   const [label, actor, next] = waiting
     ? ['En attente à votre demande', 'À vous, lorsque vous serez prêt', 'Autoriser la préparation lorsque vos achats sont réunis.']
+    : quoteNeedsReview ? ['Devis en cours de révision', 'Notre équipe', 'Vérifier les changements et vous transmettre un nouveau devis. Aucun règlement n’est demandé pour le devis retiré.']
     : STATES[colis.statut] || ['État à préciser', 'Notre équipe', 'Confirmer la prochaine étape du dossier.'];
   const events = [
     ['Réception enregistrée', colis.dateReception], ['Demande d’accord envoyée', colis.demandeFeuVertEnvoyeeAt],
@@ -61,5 +66,29 @@ export function clientJourney(colis, now = Date.now()) {
     ['Devis envoyé', colis.devisEnvoyeLe], ['Paiement reçu', colis.paiementDate], ['Expédition enregistrée', colis.dateExpedition], ['Livraison confirmée', colis.dateLivraison],
   ].filter(([, date]) => date && Number.isFinite(Date.parse(date)) && Date.parse(date) <= now)
     .sort((a, b) => Date.parse(b[1]) - Date.parse(a[1]));
-  return { label, actor, next, waiting, event: events[0] ? { label: events[0][0], date: events[0][1] } : null };
+  return { label, actor, next, waiting, reviewDue, quoteNeedsReview, event: events[0] ? { label: events[0][0], date: events[0][1] } : null };
+}
+
+export function hasClientRequestedWait(colis) {
+  return colis?.statut === 'attente_feu_vert' && !!colis.attenteClientDate;
+}
+
+export function needsQuoteRecalculation(colis) {
+  if (typeof colis?.quoteNeedsReview === 'boolean') return colis.quoteNeedsReview;
+  return !!colis && !colis.paiementDate && (['devis_envoye', 'attente_paiement'].includes(colis.statut) || !!colis.devisEnvoyeLe)
+    && (colis.devisBrouillon === true || !(Number(colis.devisTotal) > 0));
+}
+
+/** One expedition belongs to one section; a withdrawn quote never requests payment. */
+export function clientWorkState(colis, client = {}) {
+  const journey = clientJourney(colis);
+  if (['livre', 'annule'].includes(colis.statut) || colis.archive) return { section: 'history', action: 'Consulter le dossier', journey };
+  if (journey.waiting) return { section: 'waiting', action: 'Consulter mon attente', journey };
+  if (colis.statut === 'attente_feu_vert') return { section: 'todo', action: 'Donner mon accord ou attendre', journey };
+  if (['devis_envoye', 'attente_paiement'].includes(colis.statut) && !journey.quoteNeedsReview && !colis.paiementDate)
+    return { section: 'todo', action: client.type === 'pro' ? 'Consulter les modalités de règlement' : colis.payplugPaymentUrl ? 'Consulter et régler le devis' : 'Consulter le devis et le règlement', journey };
+  const replacements = new Set((colis.factures || []).map(invoice => invoice.replacesFactureId).filter(Boolean));
+  const rejected = (colis.factures || []).some(invoice => invoice.rejetMotif && !replacements.has(invoice.id));
+  if (rejected && !colis.paiementDate) return { section: 'todo', action: 'Corriger une facture', journey };
+  return { section: 'team', action: 'Suivre mon expédition', journey };
 }
