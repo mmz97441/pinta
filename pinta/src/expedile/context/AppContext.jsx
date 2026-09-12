@@ -59,6 +59,7 @@ export function AppProvider({ children }) {
   const dataRef = useRef(data);
   dataRef.current = data;
   const authRef = useRef(auth);
+  const staffAccessSequence = useRef(0);
   authRef.current = auth;
   const generation = useRef(0);
   const queues = useRef(new Map());
@@ -289,6 +290,76 @@ export function AppProvider({ children }) {
     await establishSession(session);
   }, [establishSession]);
   const retryLoad = useCallback(() => auth && loadData(auth, generation.current), [auth, loadData]);
+  const refreshStaffAccess = useCallback(async () => {
+    const identity = authRef.current;
+    if (identity?.type !== 'staff') return [];
+    const token = generation.current;
+    const sequence = ++staffAccessSequence.current;
+    const users = await sb.fetchStaffUsers();
+    if (token !== generation.current || sequence !== staffAccessSequence.current
+      || authRef.current?.u?.id !== identity.u.id) return users;
+    const me = users.find((user) => user.authId === identity.u.id);
+    if (!me || me.actif === false) {
+      await establishSession(null);
+      setAuthError('Votre accès équipe a été désactivé. Contactez la direction.');
+      return users;
+    }
+    setTeamUsers(users);
+    setAuth((current) => current?.type === 'staff' && current.u.id === identity.u.id ? {
+      ...current,
+      u: {
+        ...current.u,
+        staffId: me.id,
+        role: me.role,
+        nom: me.nom,
+        prenom: me.prenom || '',
+        mustChangePassword: me.mustChangePassword,
+        permissions: me.permissions,
+      },
+    } : current);
+    return users;
+  }, [establishSession]);
+  // Another director may change access while this staff session remains open.
+  // Realtime updates are backed by focus/visibility and a visible-page refresh.
+  useEffect(() => {
+    if (!sbReady || auth?.type !== 'staff') return;
+    let timer;
+    let stopped = false;
+    let busy = false;
+    let warned = false;
+    const refreshVisible = async () => {
+      if (document.visibilityState !== 'visible' || busy || stopped) return;
+      busy = true;
+      try {
+        await refreshStaffAccess();
+        warned = false;
+      } catch (error) {
+        if (!stopped && !warned) {
+          warned = true;
+          reportError(new Error(`Actualisation des accès indisponible : ${error.message}`));
+        }
+      } finally { busy = false; }
+    };
+    const schedule = () => {
+      clearTimeout(timer);
+      timer = setTimeout(refreshVisible, 150);
+    };
+    const channel = supabase.channel(`staff-access-${auth.u.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'staff_permissions' }, schedule)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'staff_users' }, schedule)
+      .subscribe();
+    window.addEventListener('focus', schedule);
+    document.addEventListener('visibilitychange', schedule);
+    const interval = setInterval(refreshVisible, 60000);
+    return () => {
+      stopped = true;
+      clearTimeout(timer);
+      clearInterval(interval);
+      window.removeEventListener('focus', schedule);
+      document.removeEventListener('visibilitychange', schedule);
+      supabase.removeChannel(channel);
+    };
+  }, [sbReady, auth?.type, auth?.u?.id, refreshStaffAccess, reportError]);
   useEffect(() => {
     if (!sbReady || !auth?.session.user.id) return;
     const token = generation.current;
@@ -967,6 +1038,7 @@ export function AppProvider({ children }) {
     inboxItems,
     refreshInbox,
     teamUsers,
+    refreshStaffAccess,
     loadArchives,
     archivesLoaded,
     settings,

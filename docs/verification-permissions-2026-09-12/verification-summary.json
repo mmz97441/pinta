@@ -1,0 +1,40 @@
+{
+  "date": "2026-09-12",
+  "scope": "Permission loading, explicit saving and session refresh",
+  "deployment": {
+    "id": "dpl_2aQ4qBenrnC7X2vde9TL2JkQaYwc",
+    "url": "https://pinta-5yy7m7mgx-mmz97441s-projects.vercel.app",
+    "domain": "https://expedile.app",
+    "state": "READY",
+    "promoted": true,
+    "domainAndDeploymentHTMLSha256": "840f39655657b390bd166b11fcfe8ce03efead6949e8f54a7c70c8edf734ae4e"
+  },
+  "migration": {
+    "version": "20260912000001",
+    "remoteApplied": true,
+    "localRemoteVersionsMatch": true
+  },
+  "validation": {
+    "lint": "passed",
+    "build": "passed",
+    "applicationTests": 79,
+    "sqlAssertions": 45,
+    "localBrowserScenarios": 12,
+    "hostedBrowserScenarios": 12,
+    "generalBrowserChecks": 11,
+    "accessibilityViews": 4,
+    "accessibilityViolations": 0,
+    "productionHttpChecks": 18,
+    "productionBrowser": "passed"
+  },
+  "testData": "Browser business APIs intercepted; isolated SQL fixtures; no employee permissions changed for testing.",
+  "limitation": "Fine-grained shipment permission enforcement is a separate existing audit item.",
+  "sourceSha256": {
+    "pinta/src/expedile/components/staff/StaffPermissions.jsx": "c16a75e7bf0481b94f1328edb29a5439fec98f332fc1c7f1189f0f6f80f90663",
+    "pinta/src/expedile/context/AppContext.jsx": "cf78b725d3fd5cce7ba14de18ffb88a4a5772a002f2e933cbf6b3794c089c206",
+    "pinta/src/expedile/lib/supabaseData.js": "b3969ffd35787ae2c5bf5ed67f99902e39f299bc91e68759aa24d59111b41d3e",
+    "pinta/src/expedile/domain/permissionDrafts.js": "cb7a4826b0b43c43868c49c73c56266b1c4d7b5133adcdd9254778d2cc31c4cc",
+    "pinta/src/expedile/domain/staffPermissions.js": "f74b6120db90b8d81c277185e937e3538d9b864e3c0466af6c95341cf76bddcd",
+    "pinta/supabase/migrations/20260912000001_staff_permission_save.sql": "a2f5d9ae36090edb9630f556527228794f980cb79c2a52c23d0bacc2f8fa1cc1"
+  }
+}

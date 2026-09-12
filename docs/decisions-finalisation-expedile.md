@@ -418,3 +418,13 @@ La consigne utilisateur sur les mesures remplace le choix intermédiaire de réc
 Le formulaire de rattachement, l’ancien ajout de suivi dans le dossier, le nombre de cartons sans tracking, les agrégats de réception, les messages automatiques et les affichages de poids/volume ont été revus ensemble. Le pied fixe du dialogue mobile ne masque plus le champ de mesure focalisé. Les [décisions mesures/devis](decisions-mesures-reception-devis.md), les [gardes serveur](decisions-reception-backend.md) et le [journal frontend](decisions-ux-frontend.md) consignent les détails.
 
 Rejeu intégral des 21 migrations sur une copie réelle isolée : données préservées. Les gardes de réception passent aussi sous le propriétaire SQL réel. Les tests applicatifs, SQL et navigateur sont repris dans la [synthèse finale](verification-ux-ui-2026-09-10/verification-summary.json). Les anciennes limites de recette locale dans les annexes décrivent leur date d’exécution ; les preuves de fonctionnement distant sont publiées séparément, sans données clients.
+
+### 12 septembre 2026 : enregistrement des permissions
+
+Le défaut signalé par l’utilisateur a été reproduit : la relation de permissions renvoyée sous forme d’objet était lue comme un tableau dans la liste équipe. Un droit enregistré pouvait apparaître décoché. L’ancien écran effectuait des écritures à chaque clic sans bouton de sauvegarde et ne vérifiait pas l’existence de la ligne modifiée.
+
+L’écran dispose désormais d’un bouton **Enregistrer les permissions**, de brouillons séparés par collaborateur, de compteurs et de messages persistants. Le serveur applique un patch atomique, renvoie la ligne enregistrée, préserve les refus explicites et contrôle les conflits entre administrateurs. Une ligne absente n’est créée qu’avec les droits demandés ; aucun accès réel n’est réattribué par la migration. Les droits des sessions ouvertes sont relus sur changement, retour au premier plan et contrôle périodique de secours.
+
+Les rôles de direction conservent leur accès total et l’écran explique cette règle. Cette livraison traite la persistance des permissions ; l’application des droits fins aux opérations sur les envois reste le point distinct déjà documenté dans l’audit logique.
+
+Validation : 79 tests applicatifs, 45 assertions PostgreSQL, 12 scénarios navigateur sur l’interface locale puis sur le déploiement hébergé, régression générale et quatre vues d’accessibilité réussis. Migration Supabase `20260912000001_staff_permission_save.sql` appliquée ; déploiement Vercel `dpl_2aQ4qBenrnC7X2vde9TL2JkQaYwc` promu. Le [rapport de correction](correction-enregistrement-permissions-2026-09-12.md) contient les décisions, les limites et les preuves du contrôle final du domaine.

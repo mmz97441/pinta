@@ -3,6 +3,7 @@
 // ══════════════════════════════════════════════════════════════════════
 import { supabase } from './supabase';
 import { randomId } from './randomId';
+import { normalizeStaffPermissions, staffPermissionSaveArgs } from '../domain/staffPermissions';
 
 let dataScope = 'staff';
 export function setDataScope(type) {
@@ -319,9 +320,7 @@ export async function resolveIdentity(session) {
         prenom: staff.prenom || '',
         email: session.user.email,
         mustChangePassword: !!staff.must_change_password,
-        permissions: Array.isArray(staff.staff_permissions)
-          ? staff.staff_permissions[0]
-          : staff.staff_permissions,
+        permissions: normalizeStaffPermissions(staff.staff_permissions),
       },
     };
   }
@@ -381,7 +380,7 @@ export async function fetchStaffUsers() {
     role: u.role,
     actif: u.actif,
     mustChangePassword: u.must_change_password || false,
-    permissions: u.staff_permissions?.[0] || null,
+    permissions: normalizeStaffPermissions(u.staff_permissions),
   }));
 }
 
@@ -409,9 +408,14 @@ export async function updateStaffUser(id, changes) {
   if (error) throw error;
 }
 
-export async function updateStaffPermissions(staffId, perms) {
-  const { error } = await supabase.from('staff_permissions').update(perms).eq('staff_id', staffId);
+export async function updateStaffPermissions(staffId, perms, { expectedPermissions } = {}) {
+  const args = staffPermissionSaveArgs(staffId, perms, expectedPermissions);
+  const { data, error } = await supabase.rpc('save_staff_permissions', args);
   if (error) throw error;
+  const saved = normalizeStaffPermissions(data);
+  if (!saved || saved.staff_id !== staffId)
+    throw new Error('Enregistrement non confirmé. Rechargez les permissions pour vérifier leur état.');
+  return saved;
 }
 
 export async function deleteStaffUser(id) {

@@ -1,0 +1,99 @@
+{
+  "base": "http://127.0.0.1:4175",
+  "passed": 12,
+  "total": 12,
+  "results": [
+    {
+      "test": "object-relation-false-persist-reload-double-save",
+      "pass": true,
+      "rpcCalls": 1,
+      "explicitFalse": true,
+      "sameTaskDoubleClickRPCs": 1,
+      "accessReadCountBeforeRelease": 7,
+      "accessReadsAfterSaveAndReload": 12
+    },
+    {
+      "test": "array-relation-compatibility",
+      "pass": true,
+      "rpcCalls": 1,
+      "arrayCompatibility": true
+    },
+    {
+      "test": "missing-row-null-baseline-no-invented-defaults",
+      "pass": true,
+      "rpcCalls": 1,
+      "missingRowCreatedWithOneExplicitPermission": true
+    },
+    {
+      "test": "historical-null-flag-uses-false-baseline",
+      "pass": true,
+      "rpcCalls": 1,
+      "historicalNullNormalizedToBooleanBaseline": true
+    },
+    {
+      "test": "category-tout-aucun-one-rpc-per-save",
+      "pass": true,
+      "rpcCalls": 2,
+      "categorySize": 15,
+      "localBatchActions": 2,
+      "atomicSaves": 2
+    },
+    {
+      "test": "conflict-preserves-draft-until-explicit-reload",
+      "pass": true,
+      "rpcCalls": 1,
+      "conflictVisible": true,
+      "draftRetainedAcrossSelection": true,
+      "explicitReload": true
+    },
+    {
+      "test": "unrelated-concurrent-permission-is-preserved",
+      "pass": true,
+      "rpcCalls": 1,
+      "changedKeysOnly": true,
+      "independentAdministratorChangePreserved": true
+    },
+    {
+      "test": "server-error-retains-draft-and-retry",
+      "pass": true,
+      "rpcCalls": 2,
+      "failureNeverDisplayedAsSuccess": true,
+      "retryPreservesPayload": true
+    },
+    {
+      "test": "successful-save-refresh-failure-retries-read-only",
+      "pass": true,
+      "rpcCalls": 1,
+      "persistedBeforeRefreshFailure": true,
+      "refreshRetryWrites": 0
+    },
+    {
+      "test": "per-user-drafts-and-direction-fixed-access",
+      "pass": true,
+      "rpcCalls": 1,
+      "draftsIsolatedByUser": true,
+      "settingsTabRetainsDraft": true,
+      "directionImmutable": true
+    },
+    {
+      "test": "mobile-save-accessible-after-long-permission-scroll",
+      "pass": true,
+      "rpcCalls": 1,
+      "viewport": "390×844",
+      "saveButton": {
+        "x": 200,
+        "y": 627,
+        "width": 140,
+        "height": 56
+      },
+      "noHorizontalOverflow": true
+    },
+    {
+      "test": "connected-worker-permissions-refresh-on-window-focus",
+      "pass": true,
+      "rpcCalls": 0,
+      "revokedPermissionImmediatelyHiddenAfterFocus": true,
+      "restoredPermissionVisibleAfterFocus": true
+    }
+  ]
+}
