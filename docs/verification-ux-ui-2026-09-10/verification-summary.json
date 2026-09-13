@@ -1,0 +1,30 @@
+{
+  "date": "2026-09-10",
+  "testedBuild": "Vite production build",
+  "unitTests": 69,
+  "edgeTests": 41,
+  "sqlSuites": "migrations, regressions, conversations, document/work guards, activation, parity, compatibility, legacy payments, migration owners, per-carton reception and reception/final quote parity",
+  "sqlLoggedPassAssertions": 281,
+  "restoredProductionMigrations": 21,
+  "restoredProductionCommandAssertions": 48,
+  "browserCoreEntries": 12,
+  "accessibilityViews": 32,
+  "accessibilityFailed": 0,
+  "accessibilityLimitation": "Automated WCAG-tag checks on fixtures, not certification",
+  "pdfScenarios": 4,
+  "devisClientScenarios": 6,
+  "teamViewports": [
+    "1440x1000",
+    "390x844"
+  ],
+  "concurrentReception": "passed",
+  "externalCallsDuringBrowserSuites": false,
+  "restoredProductionReceptionAssertions": 17,
+  "receptionSqlOwnerAssertions": 112,
+  "receptionQuoteParityCases": 14,
+  "receptionDevisScenarios": 4,
+  "measurementDisplayViewports": 2,
+  "browserCoreScenarios": 11,
+  "mobileFocusedMeasurementsFullyVisible": true,
+  "sqlAssertionCountingNote": "281 initial pipeline logged passes plus final owner/reception suite; assertions across repeated suites are not unique."
+}

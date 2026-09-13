@@ -1,0 +1,1504 @@
+CREATE ROLE
+CREATE ROLE
+CREATE ROLE
+CREATE SCHEMA
+CREATE TABLE
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE SCHEMA
+CREATE TABLE
+CREATE TABLE
+ALTER TABLE
+CREATE FUNCTION
+WARNING:  "wal_level" is insufficient to publish logical changes
+HINT:  Set "wal_level" to "logical" before creating subscriptions.
+CREATE PUBLICATION
+Applying 20260326172652_001_types_enums_core_tables.sql
+CREATE TYPE
+CREATE TYPE
+CREATE TYPE
+CREATE TYPE
+CREATE TYPE
+CREATE TYPE
+CREATE TYPE
+CREATE TYPE
+CREATE TYPE
+CREATE TABLE
+COMMENT
+CREATE TABLE
+COMMENT
+CREATE TABLE
+COMMENT
+COMMENT
+CREATE TABLE
+COMMENT
+CREATE TABLE
+COMMENT
+CREATE TABLE
+COMMENT
+CREATE TABLE
+COMMENT
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+Applying 20260326172921_002_colis_envois_operations.sql
+CREATE SEQUENCE
+CREATE SEQUENCE
+CREATE TABLE
+COMMENT
+CREATE TABLE
+COMMENT
+COMMENT
+COMMENT
+CREATE TABLE
+COMMENT
+CREATE TABLE
+COMMENT
+CREATE TABLE
+COMMENT
+COMMENT
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+Applying 20260326173002_003_communication_audit.sql
+CREATE TABLE
+COMMENT
+COMMENT
+CREATE TABLE
+COMMENT
+CREATE TABLE
+COMMENT
+CREATE TABLE
+COMMENT
+CREATE TABLE
+COMMENT
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+ALTER PUBLICATION
+ALTER PUBLICATION
+ALTER PUBLICATION
+ALTER PUBLICATION
+Applying 20260326173055_004_functions_triggers.sql
+CREATE FUNCTION
+CREATE TRIGGER
+CREATE FUNCTION
+CREATE TRIGGER
+CREATE FUNCTION
+CREATE TRIGGER
+CREATE TRIGGER
+CREATE TRIGGER
+CREATE TRIGGER
+CREATE FUNCTION
+CREATE TRIGGER
+CREATE FUNCTION
+CREATE TRIGGER
+CREATE FUNCTION
+CREATE TRIGGER
+CREATE FUNCTION
+CREATE TRIGGER
+CREATE FUNCTION
+CREATE TRIGGER
+CREATE FUNCTION
+CREATE FUNCTION
+Applying 20260326173320_005_vues_metier.sql
+CREATE VIEW
+COMMENT
+CREATE VIEW
+COMMENT
+CREATE VIEW
+COMMENT
+CREATE VIEW
+COMMENT
+CREATE VIEW
+COMMENT
+CREATE VIEW
+COMMENT
+Applying 20260326173420_006_rls_policies.sql
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+ALTER TABLE
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+ALTER TABLE
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+ALTER TABLE
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+ALTER TABLE
+CREATE POLICY
+CREATE POLICY
+ALTER TABLE
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+ALTER TABLE
+CREATE POLICY
+CREATE POLICY
+ALTER TABLE
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+ALTER TABLE
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+ALTER TABLE
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+ALTER TABLE
+CREATE POLICY
+CREATE POLICY
+ALTER TABLE
+CREATE POLICY
+CREATE POLICY
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+Applying 20260326173508_007_seed_data.sql
+INSERT 0 4
+INSERT 0 7
+INSERT 0 4
+INSERT 0 4
+INSERT 0 4
+INSERT 0 4
+INSERT 0 4
+INSERT 0 4
+INSERT 0 4
+INSERT 0 4
+Applying 20260416042051_add_photo_prep_column_and_bucket.sql
+ALTER TABLE
+INSERT 0 1
+Applying 20260419145844_create_share_links_table.sql
+CREATE TABLE
+CREATE INDEX
+CREATE INDEX
+ALTER TABLE
+DO
+DO
+Applying 20260521092941_db_security_hardening.sql
+ALTER VIEW
+NOTICE:  relation "v_abonnements_alertes" does not exist, skipping
+ALTER VIEW
+ALTER VIEW
+ALTER VIEW
+ALTER VIEW
+ALTER VIEW
+ALTER VIEW
+DROP POLICY
+NOTICE:  policy "Factures read" for relation "storage.objects" does not exist, skipping
+DROP POLICY
+DROP POLICY
+NOTICE:  policy "Public read photos-colis" for relation "storage.objects" does not exist, skipping
+Applying 20260908000000_add_attente_client_fields.sql
+ALTER TABLE
+ALTER TABLE
+Applying 20260909000000_reconcile_existing_schema.sql
+DO
+DO
+Applying 20260910000000_application_enums.sql
+ALTER TYPE
+ALTER TYPE
+ALTER TYPE
+ALTER TYPE
+ALTER TYPE
+Applying 20260910000001_application_schema.sql
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+CREATE TABLE
+CREATE TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+CREATE FUNCTION
+INSERT 0 0
+INSERT 0 0
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+ALTER TABLE
+CREATE INDEX
+CREATE TABLE
+CREATE INDEX
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+ALTER TABLE
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE TRIGGER
+CREATE FUNCTION
+CREATE TRIGGER
+UPDATE 0
+DROP POLICY
+DROP POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE FUNCTION
+CREATE TRIGGER
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+INSERT 0 2
+DROP POLICY
+NOTICE:  policy "Factures upload" for relation "storage.objects" does not exist, skipping
+NOTICE:  policy "Factures update" for relation "storage.objects" does not exist, skipping
+DROP POLICY
+NOTICE:  policy "Auth upload photos-colis" for relation "storage.objects" does not exist, skipping
+DROP POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+INSERT 0 1
+Applying 20260910000002_application_commands.sql
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE TRIGGER
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE TRIGGER
+REVOKE
+GRANT
+REVOKE
+GRANT
+Applying 20260910000003_telegram_ocr_jobs.sql
+ALTER TABLE
+ALTER TABLE
+CREATE TABLE
+ALTER TABLE
+CREATE POLICY
+CREATE FUNCTION
+REVOKE
+GRANT
+CREATE FUNCTION
+REVOKE
+GRANT
+Applying 20260910000004_quote_integrity.sql
+CREATE FUNCTION
+CREATE TRIGGER
+CREATE FUNCTION
+CREATE TRIGGER
+CREATE TRIGGER
+CREATE FUNCTION
+CREATE TRIGGER
+CREATE FUNCTION
+REVOKE
+GRANT
+CREATE FUNCTION
+Applying 20260910000005_client_access.sql
+CREATE FUNCTION
+REVOKE
+GRANT
+Applying 20260910000006_permissions_corrections.sql
+DROP POLICY
+CREATE POLICY
+CREATE FUNCTION
+CREATE TRIGGER
+CREATE TRIGGER
+CREATE FUNCTION
+CREATE TRIGGER
+CREATE FUNCTION
+REVOKE
+GRANT
+Applying 20260910000007_client_safe_views.sql
+CREATE FUNCTION
+CREATE VIEW
+CREATE VIEW
+REVOKE
+GRANT
+DROP POLICY
+DROP POLICY
+DROP POLICY
+DROP POLICY
+DROP POLICY
+DROP POLICY
+DROP POLICY
+DROP POLICY
+DROP POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+DROP POLICY
+CREATE POLICY
+DROP POLICY
+CREATE POLICY
+DROP POLICY
+DROP POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE FUNCTION
+REVOKE
+GRANT
+DROP FUNCTION
+CREATE FUNCTION
+REVOKE
+GRANT
+DROP POLICY
+Applying 20260910000008_ocr_queue.sql
+ALTER TABLE
+CREATE TABLE
+ALTER TABLE
+CREATE POLICY
+CREATE FUNCTION
+CREATE TRIGGER
+Applying 20260910000009_inbox_assignment.sql
+ALTER TABLE
+CREATE FUNCTION
+REVOKE
+GRANT
+Applying 20260910000010_insert_guards.sql
+CREATE FUNCTION
+CREATE TRIGGER
+Applying 20260910000012_legacy_payplug_payments.sql
+CREATE TABLE
+ALTER TABLE
+REVOKE
+GRANT
+CREATE FUNCTION
+REVOKE
+INSERT 0 0
+CREATE FUNCTION
+CREATE TRIGGER
+CREATE FUNCTION
+CREATE TRIGGER
+CREATE TRIGGER
+CREATE FUNCTION
+CREATE TRIGGER
+CREATE TRIGGER
+CREATE FUNCTION
+REVOKE
+GRANT
+Applying 20260910000013_reminders_activation.sql
+UPDATE 1
+Applying 20260910000014_conversation_workflow.sql
+UPDATE 0
+ALTER TABLE
+ALTER TABLE
+UPDATE 0
+UPDATE 0
+CREATE INDEX
+ALTER TABLE
+ALTER TABLE
+CREATE FUNCTION
+REVOKE
+GRANT
+CREATE FUNCTION
+CREATE TRIGGER
+CREATE FUNCTION
+CREATE TRIGGER
+CREATE FUNCTION
+CREATE TRIGGER
+CREATE FUNCTION
+CREATE TRIGGER
+CREATE FUNCTION
+CREATE TRIGGER
+UPDATE 0
+CREATE FUNCTION
+REVOKE
+GRANT
+CREATE FUNCTION
+REVOKE
+GRANT
+CREATE FUNCTION
+CREATE VIEW
+Applying 20260910000015_payplug_live_mode.sql
+ALTER TABLE
+CREATE FUNCTION
+REVOKE
+GRANT
+CREATE FUNCTION
+REVOKE
+GRANT
+Applying 20260910000016_ocr_confirmation_document_guard.sql
+ALTER TABLE
+CREATE FUNCTION
+REVOKE
+REVOKE
+GRANT
+Applying 20260910000017_work_action_origin.sql
+ALTER TABLE
+CREATE FUNCTION
+CREATE TRIGGER
+DROP FUNCTION
+CREATE FUNCTION
+REVOKE
+GRANT
+CREATE FUNCTION
+CREATE FUNCTION
+NOTICE:  PASS: Signup ignores mutable role metadata
+NOTICE:  PASS rejected: Client cannot self-promote [Profil: modification administrative requise]
+NOTICE:  PASS: Client only sees own dossiers
+NOTICE:  PASS rejected: Client cannot change loyalty balance [Seules les coordonnées peuvent être modifiées]
+NOTICE:  PASS: Client raw parcel table is inaccessible
+NOTICE:  PASS: Client raw customer table is inaccessible
+NOTICE:  PASS: Client view never exposes internal notes
+NOTICE:  PASS: Client can update allowed contact fields
+NOTICE:  PASS rejected: Client cannot approve another client dossier [Accès refusé]
+NOTICE:  PASS: Private invitation is random and opaque
+NOTICE:  PASS rejected: Browser cannot consume privileged Telegram invitation [permission denied for function consume_telegram_invitation]
+NOTICE:  PASS: Wait decision is durable
+NOTICE:  PASS: First staff owns edit lock
+NOTICE:  PASS: Second staff cannot steal edit lock
+NOTICE:  PASS rejected: Staff cannot insert an already-paid dossier [Un nouveau dossier doit commencer à la réception, sans devis ni paiement]
+NOTICE:  PASS rejected: Preparateur cannot forge a payment ledger entry [new row violates row-level security policy for table "paiements"]
+NOTICE:  PASS rejected: Preparateur cannot bypass quote permission [Permission devis requise]
+NOTICE:  PASS: New receipt resumes request without granting consent
+NOTICE:  PASS: Outbound idempotency avoids duplicate requests
+NOTICE:  PASS rejected: Telegram chat cannot decide another client dossier [Ce dossier ne correspond pas à votre compte]
+NOTICE:  PASS rejected: Old Telegram button cannot authorize new cartons [Les cartons du dossier ont changé. Demandez une nouvelle demande à notre équipe.]
+NOTICE:  PASS: Invitation links only its intended client
+NOTICE:  PASS rejected: Invitation cannot be used twice [Invitation expirée ou déjà utilisée]
+NOTICE:  PASS rejected: Unknown action never means refusal [Décision invalide]
+NOTICE:  PASS: Consent assigns an eligible departure for the correct destination
+NOTICE:  PASS: Consent does not change other client dossiers
+NOTICE:  PASS rejected: Negative/falsified quote components rejected [Composante de devis invalide : devisTransport]
+NOTICE:  PASS: Quote persists an immutable dated version
+NOTICE:  PASS: PDF snapshot total is normalized to server amount
+NOTICE:  PASS rejected: Even direction cannot bypass save_quote with direct patch [Utilisez save_quote pour calculer un devis et le service de paiement pour créer son lien]
+NOTICE:  PASS rejected: Stale editor cannot replace new quote [Dossier modifié par un collègue. Rechargez le devis.]
+NOTICE:  PASS rejected: Partial/wrong manual payment rejected [Le paiement ne correspond pas au devis actif]
+NOTICE:  PASS rejected: Direct paid status cannot bypass ledger command [Utilisez la commande de confirmation du paiement]
+NOTICE:  PASS: Repeated payment confirmation records once
+NOTICE:  PASS: Quote to paid transition is supported
+NOTICE:  PASS rejected: Paid quote inputs are immutable [Les données d’un devis payé sont figées]
+NOTICE:  PASS: OCR confirmation cannot duplicate invoice articles
+NOTICE:  PASS: OCR validation persists invoice approval
+NOTICE:  PASS rejected: Adding a document cannot bypass invoice validation permission [Permission validation facture requise]
+NOTICE:  PASS: Non-validator edit clears previous invoice approval
+NOTICE:  PASS: Server quote rounding matches canonical decimal fixture
+NOTICE:  PASS: Changing articles invalidates quote and payment link
+NOTICE:  PASS: Invalidation preserves previous immutable quote
+NOTICE:  PASS: Invoice upload schedules automatic OCR
+NOTICE:  PASS: Documents and parcel photos are private
+NOTICE:  PASS: New dossier has a real stage timestamp and no invented open question
+NOTICE:  PASS: Customer message opens durable work visible in own safe view
+NOTICE:  PASS rejected: Customer cannot close staff work
+NOTICE:  PASS rejected: Customer cannot hide free-form work under a structured decision marker
+NOTICE:  PASS: Reading never resolves work or changes its version
+NOTICE:  PASS: Incoming question blocks queued reminder on another dossier of the same customer
+NOTICE:  PASS rejected: Direct patch cannot bypass the explicit conversation command
+NOTICE:  PASS rejected: Stale state version cannot hide a new incoming question
+NOTICE:  PASS: Sending a staff reply never implicitly closes work
+NOTICE:  PASS: Staff explicitly hands the next turn to the customer
+NOTICE:  PASS: Explicit handling releases a blocked reminder for a fresh delivery check
+NOTICE:  PASS: Explicit closure is dated and versioned
+NOTICE:  PASS: Conversation transitions are audited
+NOTICE:  PASS rejected: Client account cannot become the staff owner
+NOTICE:  PASS: Valid active owner and next action are saved atomically
+NOTICE:  PASS rejected: Stale assignment cannot replace a colleague follow-up
+NOTICE:  PASS: Owner can be explicitly cleared
+NOTICE:  PASS: A new question reopens a previously completed conversation
+NOTICE:  PASS: Already-executed wait decision does not create an unnecessary reply task
+NOTICE:  PASS: Refusal opens staff follow-up work
+NOTICE:  PASS: Structured messages can be marked read without resolving refusal
+NOTICE:  PASS: Staff invoice upload does not reopen customer conversation
+NOTICE:  PASS: Customer invoice upload reopens conversation and records a customer event
+NOTICE:  PASS: Invoice arrival records one customer message
+NOTICE:  PASS: Another unresolved dossier keeps client-wide reminders blocked
+NOTICE:  PASS rejected: Open customer work cannot be hidden in archives
+NOTICE:  PASS: Historical archived messages do not invisibly block reminders
+NOTICE:  PASS: New customer message reactivates an archived dossier visibly
+NOTICE:  PASS: Reopening an archive is audited
+NOTICE:  PASS rejected: Browser cannot bypass the document guard through the old RPC [permission denied for function confirm_ocr_extraction]
+NOTICE:  PASS rejected: Historical extraction requires verified binding before confirmation [Le document a changé. Reprenez son analyse avant confirmation]
+NOTICE:  PASS rejected: File replacement after Edge hashing rejects the stale confirmation [Le document a changé. Reprenez son analyse avant confirmation]
+NOTICE:  PASS rejected: Supplying a new path cannot rebind an old extraction [Le document a changé. Reprenez son analyse avant confirmation]
+NOTICE:  PASS: Stale confirmation leaves approval and articles unchanged
+NOTICE:  PASS rejected: A mismatched document hash is rejected [Le document a changé. Reprenez son analyse avant confirmation]
+NOTICE:  PASS rejected: The customer cannot validate their own OCR extraction [Permission validation facture requise]
+NOTICE:  PASS: Current document confirms atomically
+NOTICE:  PASS: Repeated current confirmation is idempotent
+NOTICE:  PASS: Repeated OCR confirmation never duplicates invoice lines
+NOTICE:  PASS: New automatic preparation is not an immediately overdue staff deadline
+NOTICE:  PASS: Taking ownership alone does not freeze a system action as manual
+NOTICE:  PASS: A completed stage clears its unchanged automatic action
+NOTICE:  PASS rejected: Direct patches cannot bypass the versioned assignment command [Utilisez la commande de suivi du dossier]
+NOTICE:  PASS: An explicit operator instruction is marked manual
+NOTICE:  PASS: Client approval preserves the staff instruction and deadline
+NOTICE:  PASS: Payment does not erase a pending manual instruction
+NOTICE:  PASS: The operator can explicitly clear a completed instruction
+NOTICE:  PASS: Clearing a manual instruction allows future automatic guidance
+NOTICE:  PASS: configured reminder activation is preserved
+NOTICE:  PASS: missing reminder activation uses deployment timestamp
+PASS: 24 JS/PostgreSQL quote cases; transport, taxes, fees, billable weight, before/after and savings match. Fixtures rolled back.
+CREATE SCHEMA
+CREATE TABLE
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE SCHEMA
+CREATE TABLE
+CREATE TABLE
+ALTER TABLE
+CREATE FUNCTION
+WARNING:  "wal_level" is insufficient to publish logical changes
+HINT:  Set "wal_level" to "logical" before creating subscriptions.
+CREATE PUBLICATION
+CREATE TYPE
+CREATE TYPE
+CREATE TYPE
+CREATE TYPE
+CREATE TYPE
+CREATE TYPE
+CREATE TYPE
+CREATE TYPE
+CREATE TYPE
+CREATE TABLE
+COMMENT
+CREATE TABLE
+COMMENT
+CREATE TABLE
+COMMENT
+COMMENT
+CREATE TABLE
+COMMENT
+CREATE TABLE
+COMMENT
+CREATE TABLE
+COMMENT
+CREATE TABLE
+COMMENT
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE SEQUENCE
+CREATE SEQUENCE
+CREATE TABLE
+COMMENT
+CREATE TABLE
+COMMENT
+COMMENT
+COMMENT
+CREATE TABLE
+COMMENT
+CREATE TABLE
+COMMENT
+CREATE TABLE
+COMMENT
+COMMENT
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE TABLE
+COMMENT
+COMMENT
+CREATE TABLE
+COMMENT
+CREATE TABLE
+COMMENT
+CREATE TABLE
+COMMENT
+CREATE TABLE
+COMMENT
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+ALTER PUBLICATION
+ALTER PUBLICATION
+ALTER PUBLICATION
+ALTER PUBLICATION
+CREATE FUNCTION
+CREATE TRIGGER
+CREATE FUNCTION
+CREATE TRIGGER
+CREATE FUNCTION
+CREATE TRIGGER
+CREATE TRIGGER
+CREATE TRIGGER
+CREATE TRIGGER
+CREATE FUNCTION
+CREATE TRIGGER
+CREATE FUNCTION
+CREATE TRIGGER
+CREATE FUNCTION
+CREATE TRIGGER
+CREATE FUNCTION
+CREATE TRIGGER
+CREATE FUNCTION
+CREATE TRIGGER
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE VIEW
+COMMENT
+CREATE VIEW
+COMMENT
+CREATE VIEW
+COMMENT
+CREATE VIEW
+COMMENT
+CREATE VIEW
+COMMENT
+CREATE VIEW
+COMMENT
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+ALTER TABLE
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+ALTER TABLE
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+ALTER TABLE
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+ALTER TABLE
+CREATE POLICY
+CREATE POLICY
+ALTER TABLE
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+ALTER TABLE
+CREATE POLICY
+CREATE POLICY
+ALTER TABLE
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+ALTER TABLE
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+ALTER TABLE
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+ALTER TABLE
+CREATE POLICY
+CREATE POLICY
+ALTER TABLE
+CREATE POLICY
+CREATE POLICY
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+INSERT 0 4
+INSERT 0 7
+INSERT 0 4
+INSERT 0 4
+INSERT 0 4
+INSERT 0 4
+INSERT 0 4
+INSERT 0 4
+INSERT 0 4
+INSERT 0 4
+ALTER TABLE
+INSERT 0 1
+CREATE TABLE
+CREATE INDEX
+CREATE INDEX
+ALTER TABLE
+DO
+DO
+NOTICE:  relation "v_abonnements_alertes" does not exist, skipping
+ALTER VIEW
+ALTER VIEW
+ALTER VIEW
+ALTER VIEW
+ALTER VIEW
+ALTER VIEW
+ALTER VIEW
+DROP POLICY
+NOTICE:  policy "Factures read" for relation "storage.objects" does not exist, skipping
+DROP POLICY
+NOTICE:  policy "Public read photos-colis" for relation "storage.objects" does not exist, skipping
+DROP POLICY
+CREATE TYPE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE POLICY
+CREATE POLICY
+CREATE TABLE
+CREATE TABLE
+CREATE POLICY
+CREATE POLICY
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+Applying 20260908000000_add_attente_client_fields.sql to synthetic historical schema
+ALTER TABLE
+ALTER TABLE
+Applying 20260909000000_reconcile_existing_schema.sql to synthetic historical schema
+DO
+DO
+Applying 20260910000000_application_enums.sql to synthetic historical schema
+ALTER TYPE
+ALTER TYPE
+ALTER TYPE
+ALTER TYPE
+ALTER TYPE
+Applying 20260910000001_application_schema.sql to synthetic historical schema
+ALTER TABLE
+NOTICE:  column "abonnement" of relation "clients" already exists, skipping
+NOTICE:  column "abonnement_debut" of relation "clients" already exists, skipping
+NOTICE:  column "abonnement_fin" of relation "clients" already exists, skipping
+ALTER TABLE
+ALTER TABLE
+NOTICE:  column "tags_preparation" of relation "colis" already exists, skipping
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+CREATE TABLE
+NOTICE:  relation "staff_users" already exists, skipping
+NOTICE:  relation "staff_permissions" already exists, skipping
+CREATE TABLE
+ALTER TABLE
+NOTICE:  column "perm_colis_mesurer" of relation "staff_permissions" already exists, skipping
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+CREATE FUNCTION
+INSERT 0 0
+INSERT 0 0
+CREATE TABLE
+NOTICE:  relation "audit_actions" already exists, skipping
+NOTICE:  relation "colis_locks" already exists, skipping
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+ALTER TABLE
+CREATE INDEX
+CREATE TABLE
+CREATE INDEX
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+ALTER TABLE
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE TRIGGER
+CREATE FUNCTION
+CREATE TRIGGER
+UPDATE 1
+DROP POLICY
+DROP POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE FUNCTION
+CREATE TRIGGER
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+INSERT 0 2
+DROP POLICY
+NOTICE:  policy "Factures upload" for relation "storage.objects" does not exist, skipping
+DROP POLICY
+NOTICE:  policy "Factures update" for relation "storage.objects" does not exist, skipping
+DROP POLICY
+NOTICE:  policy "Auth upload photos-colis" for relation "storage.objects" does not exist, skipping
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+INSERT 0 1
+Applying 20260910000002_application_commands.sql to synthetic historical schema
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE TRIGGER
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE TRIGGER
+REVOKE
+GRANT
+REVOKE
+GRANT
+Applying 20260910000003_telegram_ocr_jobs.sql to synthetic historical schema
+ALTER TABLE
+ALTER TABLE
+CREATE TABLE
+ALTER TABLE
+CREATE POLICY
+CREATE FUNCTION
+REVOKE
+GRANT
+CREATE FUNCTION
+REVOKE
+GRANT
+Applying 20260910000004_quote_integrity.sql to synthetic historical schema
+CREATE FUNCTION
+CREATE TRIGGER
+CREATE FUNCTION
+CREATE TRIGGER
+CREATE TRIGGER
+CREATE FUNCTION
+CREATE TRIGGER
+CREATE FUNCTION
+REVOKE
+GRANT
+CREATE FUNCTION
+Applying 20260910000005_client_access.sql to synthetic historical schema
+CREATE FUNCTION
+REVOKE
+GRANT
+Applying 20260910000006_permissions_corrections.sql to synthetic historical schema
+DROP POLICY
+CREATE POLICY
+CREATE FUNCTION
+CREATE TRIGGER
+CREATE TRIGGER
+CREATE FUNCTION
+CREATE TRIGGER
+CREATE FUNCTION
+REVOKE
+GRANT
+Applying 20260910000007_client_safe_views.sql to synthetic historical schema
+CREATE FUNCTION
+CREATE VIEW
+CREATE VIEW
+REVOKE
+GRANT
+DROP POLICY
+DROP POLICY
+DROP POLICY
+DROP POLICY
+DROP POLICY
+DROP POLICY
+DROP POLICY
+DROP POLICY
+DROP POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+DROP POLICY
+CREATE POLICY
+DROP POLICY
+CREATE POLICY
+DROP POLICY
+DROP POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE FUNCTION
+REVOKE
+GRANT
+DROP FUNCTION
+CREATE FUNCTION
+REVOKE
+GRANT
+DROP POLICY
+Applying 20260910000008_ocr_queue.sql to synthetic historical schema
+ALTER TABLE
+CREATE TABLE
+ALTER TABLE
+CREATE POLICY
+CREATE FUNCTION
+CREATE TRIGGER
+Applying 20260910000009_inbox_assignment.sql to synthetic historical schema
+ALTER TABLE
+CREATE FUNCTION
+REVOKE
+GRANT
+Applying 20260910000010_insert_guards.sql to synthetic historical schema
+CREATE FUNCTION
+CREATE TRIGGER
+Applying 20260910000012_legacy_payplug_payments.sql to synthetic historical schema
+CREATE TABLE
+ALTER TABLE
+REVOKE
+GRANT
+CREATE FUNCTION
+REVOKE
+INSERT 0 0
+CREATE FUNCTION
+CREATE TRIGGER
+CREATE FUNCTION
+CREATE TRIGGER
+CREATE TRIGGER
+CREATE FUNCTION
+CREATE TRIGGER
+CREATE TRIGGER
+CREATE FUNCTION
+REVOKE
+GRANT
+Applying 20260910000013_reminders_activation.sql to synthetic historical schema
+UPDATE 1
+Applying 20260910000014_conversation_workflow.sql to synthetic historical schema
+UPDATE 0
+ALTER TABLE
+ALTER TABLE
+UPDATE 0
+UPDATE 0
+CREATE INDEX
+ALTER TABLE
+ALTER TABLE
+CREATE FUNCTION
+REVOKE
+GRANT
+CREATE FUNCTION
+CREATE TRIGGER
+CREATE FUNCTION
+CREATE TRIGGER
+CREATE FUNCTION
+CREATE TRIGGER
+CREATE FUNCTION
+CREATE TRIGGER
+CREATE FUNCTION
+CREATE TRIGGER
+UPDATE 0
+CREATE FUNCTION
+REVOKE
+GRANT
+CREATE FUNCTION
+REVOKE
+GRANT
+CREATE FUNCTION
+CREATE VIEW
+Applying 20260910000015_payplug_live_mode.sql to synthetic historical schema
+ALTER TABLE
+CREATE FUNCTION
+REVOKE
+GRANT
+CREATE FUNCTION
+REVOKE
+GRANT
+Applying 20260910000016_ocr_confirmation_document_guard.sql to synthetic historical schema
+ALTER TABLE
+CREATE FUNCTION
+REVOKE
+REVOKE
+GRANT
+Applying 20260910000017_work_action_origin.sql to synthetic historical schema
+ALTER TABLE
+CREATE FUNCTION
+CREATE TRIGGER
+DROP FUNCTION
+CREATE FUNCTION
+REVOKE
+GRANT
+CREATE FUNCTION
+CREATE FUNCTION
+NOTICE:  column "user_id" of relation "audit_actions" already exists, skipping
+NOTICE:  policy "audit_staff_crud" for relation "public.audit_actions" does not exist, skipping
+DO
+NOTICE:  relation "colis_locks_colis_unique" already exists, skipping
+NOTICE:  policy "locks_staff_all" for relation "public.colis_locks" does not exist, skipping
+DO
+NOTICE:  PASS: nine historical schema preservation assertions
+DO
+BEGIN
+WARNING:  there is already a transaction in progress
+INSERT 0 1
+ROLLBACK
+WARNING:  there is no transaction in progress
+NOTICE:  PASS: Signup ignores mutable role metadata
+NOTICE:  PASS rejected: Client cannot self-promote [Profil: modification administrative requise]
+NOTICE:  PASS: Client only sees own dossiers
+NOTICE:  PASS rejected: Client cannot change loyalty balance [Seules les coordonnées peuvent être modifiées]
+NOTICE:  PASS: Client raw parcel table is inaccessible
+NOTICE:  PASS: Client raw customer table is inaccessible
+NOTICE:  PASS: Client view never exposes internal notes
+NOTICE:  PASS: Client can update allowed contact fields
+NOTICE:  PASS rejected: Client cannot approve another client dossier [Accès refusé]
+NOTICE:  PASS: Private invitation is random and opaque
+NOTICE:  PASS rejected: Browser cannot consume privileged Telegram invitation [permission denied for function consume_telegram_invitation]
+NOTICE:  PASS: Wait decision is durable
+NOTICE:  PASS: First staff owns edit lock
+NOTICE:  PASS: Second staff cannot steal edit lock
+NOTICE:  PASS rejected: Staff cannot insert an already-paid dossier [Un nouveau dossier doit commencer à la réception, sans devis ni paiement]
+NOTICE:  PASS rejected: Preparateur cannot forge a payment ledger entry [new row violates row-level security policy for table "paiements"]
+NOTICE:  PASS rejected: Preparateur cannot bypass quote permission [Permission devis requise]
+NOTICE:  PASS: New receipt resumes request without granting consent
+NOTICE:  PASS: Outbound idempotency avoids duplicate requests
+NOTICE:  PASS rejected: Telegram chat cannot decide another client dossier [Ce dossier ne correspond pas à votre compte]
+NOTICE:  PASS rejected: Old Telegram button cannot authorize new cartons [Les cartons du dossier ont changé. Demandez une nouvelle demande à notre équipe.]
+NOTICE:  PASS: Invitation links only its intended client
+NOTICE:  PASS rejected: Invitation cannot be used twice [Invitation expirée ou déjà utilisée]
+NOTICE:  PASS rejected: Unknown action never means refusal [Décision invalide]
+NOTICE:  PASS: Consent assigns an eligible departure for the correct destination
+NOTICE:  PASS: Consent does not change other client dossiers
+NOTICE:  PASS rejected: Negative/falsified quote components rejected [Composante de devis invalide : devisTransport]
+NOTICE:  PASS: Quote persists an immutable dated version
+NOTICE:  PASS: PDF snapshot total is normalized to server amount
+NOTICE:  PASS rejected: Even direction cannot bypass save_quote with direct patch [Utilisez save_quote pour calculer un devis et le service de paiement pour créer son lien]
+NOTICE:  PASS rejected: Stale editor cannot replace new quote [Dossier modifié par un collègue. Rechargez le devis.]
+NOTICE:  PASS rejected: Partial/wrong manual payment rejected [Le paiement ne correspond pas au devis actif]
+NOTICE:  PASS rejected: Direct paid status cannot bypass ledger command [Utilisez la commande de confirmation du paiement]
+NOTICE:  PASS: Repeated payment confirmation records once
+NOTICE:  PASS: Quote to paid transition is supported
+NOTICE:  PASS rejected: Paid quote inputs are immutable [Les données d’un devis payé sont figées]
+NOTICE:  PASS: OCR confirmation cannot duplicate invoice articles
+NOTICE:  PASS: OCR validation persists invoice approval
+NOTICE:  PASS rejected: Adding a document cannot bypass invoice validation permission [Permission validation facture requise]
+NOTICE:  PASS: Non-validator edit clears previous invoice approval
+NOTICE:  PASS: Server quote rounding matches canonical decimal fixture
+NOTICE:  PASS: Changing articles invalidates quote and payment link
+NOTICE:  PASS: Invalidation preserves previous immutable quote
+NOTICE:  PASS: Invoice upload schedules automatic OCR
+NOTICE:  PASS: Documents and parcel photos are private
+WARNING:  "wal_level" is insufficient to publish logical changes
+HINT:  Set "wal_level" to "logical" before creating subscriptions.
+NOTICE:  relation "v_abonnements_alertes" does not exist, skipping
+NOTICE:  policy "Factures read" for relation "storage.objects" does not exist, skipping
+NOTICE:  policy "Public read photos-colis" for relation "storage.objects" does not exist, skipping
+NOTICE:  policy "Factures upload" for relation "storage.objects" does not exist, skipping
+NOTICE:  policy "Factures update" for relation "storage.objects" does not exist, skipping
+NOTICE:  policy "Auth upload photos-colis" for relation "storage.objects" does not exist, skipping
+NOTICE:  PASS: Browser cannot acknowledge legacy test resources
+NOTICE:  PASS: Anonymous cannot acknowledge legacy test resources
+NOTICE:  PASS rejected: Test resource cannot create a legacy receipt through original command
+NOTICE:  PASS rejected: Acknowledgement endpoint cannot credit unpaid historical test link
+NOTICE:  PASS: Pending test link stays unpaid
+NOTICE:  PASS: Test callbacks never create ledger entries
+NOTICE:  PASS: Test callbacks never award loyalty points
+NOTICE:  PASS: Already recorded historical test payment can be acknowledged
+NOTICE:  PASS: Historical test acknowledgement never certifies a live receipt
+NOTICE:  PASS: Repeated historical test acknowledgements create no duplicate ledger
+NOTICE:  PASS: Historical observation date remains unchanged
+NOTICE:  PASS rejected: Test-only acknowledgement rejects a live resource
+NOTICE:  PASS: Verified live resource can still settle the historical quote exactly once
+NOTICE:  PASS: Only eligible historical links were captured
+NOTICE:  PASS: Migration created no payment ledger entry
+NOTICE:  PASS: Migration never marks an unpaid dossier paid
+NOTICE:  PASS: Legacy email transformation matches the historical creator
+NOTICE:  PASS: Browser cannot invoke historical confirmation
+NOTICE:  PASS: Browser cannot read historical identity snapshots
+NOTICE:  PASS rejected: Frozen amount cannot be replaced
+NOTICE:  PASS rejected: Registry cannot enroll any post-migration link
+NOTICE:  PASS rejected: Unknown provider ID rejected
+NOTICE:  PASS rejected: Wrong parcel metadata rejected
+NOTICE:  PASS rejected: Wrong historical reference rejected
+NOTICE:  PASS rejected: Wrong billing customer rejected
+NOTICE:  PASS rejected: Wrong amount rejected
+NOTICE:  PASS rejected: Wrong currency rejected
+NOTICE:  PASS rejected: Unpaid resource rejected
+NOTICE:  PASS rejected: Refunded resource requires reconciliation
+NOTICE:  PASS rejected: Modern version cannot downgrade into legacy
+NOTICE:  PASS rejected: Paid historical invoice cannot be moved out of its dossier
+NOTICE:  PASS rejected: Paid historical article cannot be moved out of its dossier
+NOTICE:  PASS: Already paid historical callback creates no duplicate ledger
+NOTICE:  PASS: Already paid historical callback creates no points
+NOTICE:  PASS: Historical payment date is preserved
+NOTICE:  PASS: Verified unpaid legacy payment records once
+NOTICE:  PASS: Verified legacy payment confirms exact amount
+NOTICE:  PASS: Repeated legacy callback never awards duplicate points
+NOTICE:  PASS rejected: First provider verification stays immutable
+NOTICE:  PASS: Article changes invalidate historical compatibility
+NOTICE:  PASS rejected: Superseded legacy quote cannot be paid
+NOTICE:  PASS rejected: Historical compatibility cannot be reactivated
+NOTICE:  PASS: Reopening a draft invalidates historical compatibility
+NOTICE:  PASS: Destination changes invalidate historical compatibility
+WARNING:  "wal_level" is insufficient to publish logical changes
+HINT:  Set "wal_level" to "logical" before creating subscriptions.
+NOTICE:  relation "v_abonnements_alertes" does not exist, skipping
+NOTICE:  policy "Factures read" for relation "storage.objects" does not exist, skipping
+NOTICE:  policy "Public read photos-colis" for relation "storage.objects" does not exist, skipping
+NOTICE:  column "abonnement" of relation "clients" already exists, skipping
+NOTICE:  column "abonnement_debut" of relation "clients" already exists, skipping
+NOTICE:  column "abonnement_fin" of relation "clients" already exists, skipping
+NOTICE:  column "tags_preparation" of relation "colis" already exists, skipping
+NOTICE:  column "archive" of relation "colis" already exists, skipping
+NOTICE:  column "lu" of relation "messages" already exists, skipping
+NOTICE:  relation "staff_users" already exists, skipping
+NOTICE:  relation "staff_permissions" already exists, skipping
+NOTICE:  column "perm_colis_mesurer" of relation "staff_permissions" already exists, skipping
+NOTICE:  relation "audit_actions" already exists, skipping
+NOTICE:  relation "colis_locks" already exists, skipping
+NOTICE:  policy "Factures upload" for relation "storage.objects" does not exist, skipping
+NOTICE:  policy "Factures update" for relation "storage.objects" does not exist, skipping
+NOTICE:  policy "Auth upload photos-colis" for relation "storage.objects" does not exist, skipping
+NOTICE:  PASS: supabase_admin normalizes historical NULL archives and backfills read but unresolved conversations without a JWT
+NOTICE:  PASS: authenticated cannot impersonate the trusted database owner
+NOTICE:  PASS: Signup ignores mutable role metadata
+NOTICE:  PASS rejected: Client cannot self-promote [Profil: modification administrative requise]
+NOTICE:  PASS: Client only sees own dossiers
+NOTICE:  PASS rejected: Client cannot change loyalty balance [Seules les coordonnées peuvent être modifiées]
+NOTICE:  PASS: Client raw parcel table is inaccessible
+NOTICE:  PASS: Client raw customer table is inaccessible
+NOTICE:  PASS: Client view never exposes internal notes
+NOTICE:  PASS: Client can update allowed contact fields
+NOTICE:  PASS rejected: Client cannot approve another client dossier [Accès refusé]
+NOTICE:  PASS: Private invitation is random and opaque
+NOTICE:  PASS rejected: Browser cannot consume privileged Telegram invitation [permission denied for function consume_telegram_invitation]
+NOTICE:  PASS: Wait decision is durable
+NOTICE:  PASS: First staff owns edit lock
+NOTICE:  PASS: Second staff cannot steal edit lock
+NOTICE:  PASS rejected: Staff cannot insert an already-paid dossier [Un nouveau dossier doit commencer à la réception, sans devis ni paiement]
+NOTICE:  PASS rejected: Preparateur cannot forge a payment ledger entry [new row violates row-level security policy for table "paiements"]
+NOTICE:  PASS rejected: Preparateur cannot bypass quote permission [Permission devis requise]
+NOTICE:  PASS: New receipt resumes request without granting consent
+NOTICE:  PASS: Outbound idempotency avoids duplicate requests
+NOTICE:  PASS rejected: Telegram chat cannot decide another client dossier [Ce dossier ne correspond pas à votre compte]
+NOTICE:  PASS rejected: Old Telegram button cannot authorize new cartons [Les cartons du dossier ont changé. Demandez une nouvelle demande à notre équipe.]
+NOTICE:  PASS: Invitation links only its intended client
+NOTICE:  PASS rejected: Invitation cannot be used twice [Invitation expirée ou déjà utilisée]
+NOTICE:  PASS rejected: Unknown action never means refusal [Décision invalide]
+NOTICE:  PASS: Consent assigns an eligible departure for the correct destination
+NOTICE:  PASS: Consent does not change other client dossiers
+NOTICE:  PASS rejected: Negative/falsified quote components rejected [Composante de devis invalide : devisTransport]
+NOTICE:  PASS: Quote persists an immutable dated version
+NOTICE:  PASS: PDF snapshot total is normalized to server amount
+NOTICE:  PASS rejected: Even direction cannot bypass save_quote with direct patch [Utilisez save_quote pour calculer un devis et le service de paiement pour créer son lien]
+NOTICE:  PASS rejected: Stale editor cannot replace new quote [Dossier modifié par un collègue. Rechargez le devis.]
+NOTICE:  PASS rejected: Partial/wrong manual payment rejected [Le paiement ne correspond pas au devis actif]
+NOTICE:  PASS rejected: Direct paid status cannot bypass ledger command [Utilisez la commande de confirmation du paiement]
+NOTICE:  PASS: Repeated payment confirmation records once
+NOTICE:  PASS: Quote to paid transition is supported
+NOTICE:  PASS rejected: Paid quote inputs are immutable [Les données d’un devis payé sont figées]
+NOTICE:  PASS: OCR confirmation cannot duplicate invoice articles
+NOTICE:  PASS: OCR validation persists invoice approval
+NOTICE:  PASS rejected: Adding a document cannot bypass invoice validation permission [Permission validation facture requise]
+NOTICE:  PASS: Non-validator edit clears previous invoice approval
+NOTICE:  PASS: Server quote rounding matches canonical decimal fixture
+NOTICE:  PASS: Changing articles invalidates quote and payment link
+NOTICE:  PASS: Invalidation preserves previous immutable quote
+NOTICE:  PASS: Invoice upload schedules automatic OCR
+NOTICE:  PASS: Documents and parcel photos are private
+NOTICE:  PASS: New dossier has a real stage timestamp and no invented open question
+NOTICE:  PASS: Customer message opens durable work visible in own safe view
+NOTICE:  PASS rejected: Customer cannot close staff work
+NOTICE:  PASS rejected: Customer cannot hide free-form work under a structured decision marker
+NOTICE:  PASS: Reading never resolves work or changes its version
+NOTICE:  PASS: Incoming question blocks queued reminder on another dossier of the same customer
+NOTICE:  PASS rejected: Direct patch cannot bypass the explicit conversation command
+NOTICE:  PASS rejected: Stale state version cannot hide a new incoming question
+NOTICE:  PASS: Sending a staff reply never implicitly closes work
+NOTICE:  PASS: Staff explicitly hands the next turn to the customer
+NOTICE:  PASS: Explicit handling releases a blocked reminder for a fresh delivery check
+NOTICE:  PASS: Explicit closure is dated and versioned
+NOTICE:  PASS: Conversation transitions are audited
+NOTICE:  PASS rejected: Client account cannot become the staff owner
+NOTICE:  PASS: Valid active owner and next action are saved atomically
+NOTICE:  PASS rejected: Stale assignment cannot replace a colleague follow-up
+NOTICE:  PASS: Owner can be explicitly cleared
+NOTICE:  PASS: A new question reopens a previously completed conversation
+NOTICE:  PASS: Already-executed wait decision does not create an unnecessary reply task
+NOTICE:  PASS: Refusal opens staff follow-up work
+NOTICE:  PASS: Structured messages can be marked read without resolving refusal
+NOTICE:  PASS: Staff invoice upload does not reopen customer conversation
+NOTICE:  PASS: Customer invoice upload reopens conversation and records a customer event
+NOTICE:  PASS: Invoice arrival records one customer message
+NOTICE:  PASS: Another unresolved dossier keeps client-wide reminders blocked
+NOTICE:  PASS rejected: Open customer work cannot be hidden in archives
+NOTICE:  PASS: Historical archived messages do not invisibly block reminders
+NOTICE:  PASS: New customer message reactivates an archived dossier visibly
+NOTICE:  PASS: Reopening an archive is audited
+NOTICE:  PASS rejected: Browser cannot bypass the document guard through the old RPC [permission denied for function confirm_ocr_extraction]
+NOTICE:  PASS rejected: Historical extraction requires verified binding before confirmation [Le document a changé. Reprenez son analyse avant confirmation]
+NOTICE:  PASS rejected: File replacement after Edge hashing rejects the stale confirmation [Le document a changé. Reprenez son analyse avant confirmation]
+NOTICE:  PASS rejected: Supplying a new path cannot rebind an old extraction [Le document a changé. Reprenez son analyse avant confirmation]
+NOTICE:  PASS: Stale confirmation leaves approval and articles unchanged
+NOTICE:  PASS rejected: A mismatched document hash is rejected [Le document a changé. Reprenez son analyse avant confirmation]
+NOTICE:  PASS rejected: The customer cannot validate their own OCR extraction [Permission validation facture requise]
+NOTICE:  PASS: Current document confirms atomically
+NOTICE:  PASS: Repeated current confirmation is idempotent
+NOTICE:  PASS: Repeated OCR confirmation never duplicates invoice lines
+NOTICE:  PASS: New automatic preparation is not an immediately overdue staff deadline
+NOTICE:  PASS: Taking ownership alone does not freeze a system action as manual
+NOTICE:  PASS: A completed stage clears its unchanged automatic action
+NOTICE:  PASS rejected: Direct patches cannot bypass the versioned assignment command [Utilisez la commande de suivi du dossier]
+NOTICE:  PASS: An explicit operator instruction is marked manual
+NOTICE:  PASS: Client approval preserves the staff instruction and deadline
+NOTICE:  PASS: Payment does not erase a pending manual instruction
+NOTICE:  PASS: The operator can explicitly clear a completed instruction
+NOTICE:  PASS: Clearing a manual instruction allows future automatic guidance

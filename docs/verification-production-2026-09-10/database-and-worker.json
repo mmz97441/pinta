@@ -1,0 +1,7 @@
+{
+  "receipt_guard": true,
+  "worker_active": true,
+  "private_documents": true,
+  "migrations_september": 21,
+  "worker_last_sql_success": true
+}

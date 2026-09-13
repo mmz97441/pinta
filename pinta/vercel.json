@@ -1,5 +1,22 @@
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "vite",
+  "installCommand": "npm ci",
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
   "rewrites": [
-    { "source": "/(.*)", "destination": "/" }
+    { "source": "/travail", "destination": "/index.html" },
+    { "source": "/equipe", "destination": "/index.html" },
+    { "source": "/conversations", "destination": "/index.html" },
+    { "source": "/departs", "destination": "/index.html" },
+    { "source": "/plus", "destination": "/index.html" },
+    { "source": "/colis/:path*", "destination": "/index.html" },
+    { "source": "/clients/:path*", "destination": "/index.html" },
+    { "source": "/devis", "destination": "/index.html" },
+    { "source": "/settings", "destination": "/index.html" },
+    { "source": "/notifications", "destination": "/index.html" },
+    { "source": "/profil", "destination": "/index.html" },
+    { "source": "/password", "destination": "/index.html" },
+    { "source": "/suivi/:token", "destination": "/index.html" }
   ]
 }

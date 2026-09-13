@@ -1,0 +1,35 @@
+{
+  "base": "https://pinta-8sdwjydw3-mmz97441s-projects.vercel.app",
+  "passed": 7,
+  "total": 7,
+  "results": [
+    {
+      "test": "client-summary-address-history",
+      "pass": true
+    },
+    {
+      "test": "reception-gap-refused",
+      "pass": true
+    },
+    {
+      "test": "reception-contact-missing-and-forbidden-flag",
+      "pass": true
+    },
+    {
+      "test": "reception-without-client-access-never-announces-notification",
+      "pass": true
+    },
+    {
+      "test": "departure-edit-conflict-preserves-colleague",
+      "pass": true
+    },
+    {
+      "test": "notifications-global-unread-and-pagination",
+      "pass": true
+    },
+    {
+      "test": "departure-selection-frozen-manifest",
+      "pass": true
+    }
+  ]
+}

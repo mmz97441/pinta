@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Bell, CheckCheck, ChevronRight, Package, CheckCircle, CreditCard, MessageCircle } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
@@ -34,7 +34,13 @@ function relativeDate(raw) {
 
 export default function ClientNotifs() {
   const navigate = useNavigate();
-  const { notifs, unreadNotifs, markNotifRead, markAllNotifsRead } = useApp();
+  const { notifs, unreadNotifs, markNotifRead, markAllNotifsRead, loadMoreNotifications, notificationsHasMore, notificationsLoading, notificationsError, refreshNotifications } = useApp();
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const handleLoad = async (load) => {
+    try { await load?.(); setError(''); }
+    catch { setError('Le chargement des notifications a échoué. Réessayez.'); }
+  };
 
   // Sort by date, newest first
   const sorted = useMemo(
@@ -46,8 +52,8 @@ export default function ClientNotifs() {
     [notifs],
   );
 
-  const handleNotifClick = (n) => {
-    markNotifRead(n.id);
+  const handleNotifClick = async (n) => {
+    try { await markNotifRead(n.id); setError(''); } catch { setError('Le suivi de lecture n’a pas pu être enregistré.'); }
     if (n.colisId) {
       navigate(`/colis/${n.colisId}`);
     }
@@ -70,9 +76,9 @@ export default function ClientNotifs() {
         </div>
         {unreadNotifs > 0 && (
           <button
-            onClick={markAllNotifsRead}
+            disabled={busy} onClick={async () => { setBusy(true); try { await markAllNotifsRead(); setError(''); } catch { setError('Les notifications n’ont pas pu être marquées comme lues. Réessayez.'); } finally { setBusy(false); } }}
             className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl transition-all active:scale-95"
-            style={{ color: BRAND.navy, backgroundColor: BRAND.navy + '10' }}
+            style={{ color: 'var(--brand-text)', backgroundColor: BRAND.navy + '10' }}
           >
             <CheckCheck size={13} />
             Tout marquer comme lu
@@ -80,6 +86,8 @@ export default function ClientNotifs() {
         )}
       </div>
 
+      {notificationsError && <div role="alert" className="text-sm text-red-700">{String(notificationsError.message || notificationsError)}<button className="min-h-11 block underline" onClick={() => handleLoad(refreshNotifications)}>Réessayer le chargement</button></div>}
+      {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
       {/* ── Notification list ── */}
       {sorted.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-center">
@@ -87,7 +95,7 @@ export default function ClientNotifs() {
             className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4"
             style={{ backgroundColor: BRAND.navy + '10' }}
           >
-            <Bell size={28} style={{ color: BRAND.navy }} strokeWidth={1.5} />
+            <Bell size={28} style={{ color: 'var(--brand-text)' }} strokeWidth={1.5} />
           </div>
           <p className="font-bold text-gray-700 mb-1">Aucune notification</p>
           <p className="text-xs text-gray-400">Vos notifications apparaîtront ici.</p>
@@ -104,7 +112,7 @@ export default function ClientNotifs() {
                   !n.lu ? 'ring-1' : ''
                 }`}
                 style={{
-                  animationDelay: `${i * 0.04}s`,
+                  animationDelay: `${Math.min(i, 8) * 0.04}s`,
                   ...(n.lu ? {} : { ringColor: BRAND.navy + '30' }),
                 }}
               >
@@ -145,6 +153,7 @@ export default function ClientNotifs() {
           })}
         </div>
       )}
+      {notificationsHasMore && <button disabled={notificationsLoading} className="min-h-11 w-full rounded-xl border border-slate-200 px-4 text-sm font-semibold brand-t" onClick={() => handleLoad(loadMoreNotifications)}>{notificationsLoading ? "Chargement…" : "Charger les notifications précédentes"}</button>}
     </div>
   );
 }

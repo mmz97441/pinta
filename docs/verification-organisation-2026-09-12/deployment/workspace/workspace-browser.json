@@ -1,0 +1,106 @@
+[
+  {
+    "test": "personal-permitted-mission-counts-and-exact-next-route",
+    "pass": true
+  },
+  {
+    "test": "handoff-retains-owner-until-acceptance",
+    "pass": true
+  },
+  {
+    "test": "private-conversation-attachment-is-explicitly-imported-as-unvalidated-invoice",
+    "pass": true
+  },
+  {
+    "test": "conversations-dossier-drafts-read-not-resolved-and-explicit-claim",
+    "pass": true
+  },
+  {
+    "test": "mobile-conversation-context-preserves-draft-without-overlay",
+    "pass": true
+  },
+  {
+    "test": "quick-dossier-links-preparation-and-conversation-preserving-return",
+    "pass": true
+  },
+  {
+    "test": "stale-action-conflict-keeps-colleague-owner-and-offers-refresh",
+    "pass": true
+  },
+  {
+    "test": "unassigned-message-shares-conversation-view-and-explicit-dossier-assignment",
+    "pass": true
+  },
+  {
+    "test": "availability-saved-without-transferring-work-and-absence-date-preserved",
+    "pass": true
+  },
+  {
+    "test": "preference-conflict-is-visible-and-draft-retained",
+    "pass": true
+  },
+  {
+    "test": "departure-url-filter-count-and-rows-share-scope",
+    "pass": true
+  },
+  {
+    "test": "background-focus-refresh-keeps-action-form-draft-mounted",
+    "pass": true
+  },
+  {
+    "test": "closed-conversations-without-active-action-are-treated-not-unassigned",
+    "pass": true
+  },
+  {
+    "test": "axe-Mon travail-1440-light",
+    "pass": true
+  },
+  {
+    "test": "axe-Équipe-1440-light",
+    "pass": true
+  },
+  {
+    "test": "axe-Conversations-1440-light",
+    "pass": true
+  },
+  {
+    "test": "axe-Mon travail-1440-dark",
+    "pass": true
+  },
+  {
+    "test": "axe-Équipe-1440-dark",
+    "pass": true
+  },
+  {
+    "test": "axe-Conversations-1440-dark",
+    "pass": true
+  },
+  {
+    "test": "axe-Mon travail-390-light",
+    "pass": true
+  },
+  {
+    "test": "axe-Équipe-390-light",
+    "pass": true
+  },
+  {
+    "test": "axe-Conversations-390-light",
+    "pass": true
+  },
+  {
+    "test": "axe-Mon travail-390-dark",
+    "pass": true
+  },
+  {
+    "test": "axe-Équipe-390-dark",
+    "pass": true
+  },
+  {
+    "test": "axe-Conversations-390-dark",
+    "pass": true
+  },
+  {
+    "test": "work-loading-failure-visible-with-retry",
+    "pass": true
+  }
+]

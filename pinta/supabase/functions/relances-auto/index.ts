@@ -1,172 +1,91 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { admin, fail, HttpError, json, postOnly, requireStaff, throwDb } from '../_shared/http.ts';
+import { renderMessage } from '../_shared/messageTemplate.ts';
+import { processOcrQueue } from '../_shared/ocrQueue.ts';
+import { dispatchOutbox } from '../_shared/telegram.ts';
+import { isReminderInActiveWindow, reminderTimestamp } from '../_shared/reminderWindow.ts';
 
-const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || '';
-const SUPABASE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
-const TELEGRAM_BOT_TOKEN = Deno.env.get('TELEGRAM_BOT_TOKEN') || '';
-const EDGE_API_SECRET = Deno.env.get('EDGE_API_SECRET') || '';
-
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
-
-async function sendTelegram(chatId: string, text: string) {
-  if (!chatId || !TELEGRAM_BOT_TOKEN) return;
-  await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'Markdown' }),
-  });
+function milestones(value: unknown): number[] {
+  if (typeof value !== 'string') return [];
+  return [...new Set(value.split(',').map((v) => Number(v.trim().replace(/^J\+/i,''))).filter((v) => Number.isFinite(v) && v > 0 && v <= 90))].sort((a,b)=>a-b);
 }
-
-function isAuthorized(req: Request): boolean {
-  // Accept Supabase cron callback authenticated with the service role key.
-  const authHeader = req.headers.get('Authorization') || req.headers.get('authorization') || '';
-  if (authHeader.startsWith('Bearer ') && SUPABASE_KEY && authHeader.slice(7).trim() === SUPABASE_KEY) {
-    return true;
-  }
-
-  // Accept manual / staff invocation authenticated with the shared secret.
-  if (EDGE_API_SECRET) {
-    return req.headers.get('x-api-secret') === EDGE_API_SECRET;
-  }
-
-  // Backward-compat: secret not configured yet — accept (and warn loudly).
-  console.warn('[relances-auto] EDGE_API_SECRET not configured — accepting all requests');
-  return true;
-}
-
 Deno.serve(async (req: Request) => {
-  if (!isAuthorized(req)) {
-    return new Response(JSON.stringify({ ok: false, error: 'Forbidden' }), {
-      status: 403, headers: { 'Content-Type': 'application/json' },
-    });
-  }
-
+  const early = postOnly(req); if (early) return early;
   try {
-    const now = new Date();
-    console.log('[Relances] Running at', now.toISOString());
-
-    // Get all clients with active colis in early statuses
-    const { data: colis } = await supabase
-      .from('colis')
-      .select('id, ref, client_id, statut, date_reception, created_at')
-      .in('statut', ['receptionne', 'mesure', 'attente_feu_vert'])
-      .order('created_at', { ascending: true });
-
-    if (!colis || colis.length === 0) {
-      console.log('[Relances] No colis to process');
-      return new Response(JSON.stringify({ processed: 0 }), { headers: { 'Content-Type': 'application/json' } });
-    }
-
-    // Group by client — use FIRST colis date (not last)
-    const byClient: Record<string, { clientId: string; firstDate: Date; colis: any[] }> = {};
-    for (const c of colis) {
-      const cid = c.client_id;
-      const date = new Date(c.date_reception || c.created_at);
-      if (!byClient[cid]) {
-        byClient[cid] = { clientId: cid, firstDate: date, colis: [] };
-      }
-      if (date < byClient[cid].firstDate) byClient[cid].firstDate = date;
-      byClient[cid].colis.push(c);
-    }
-
-    let relances20 = 0, relances30 = 0, relances60 = 0;
-
-    for (const group of Object.values(byClient)) {
-      const daysSinceFirst = Math.floor((now.getTime() - group.firstDate.getTime()) / (1000 * 60 * 60 * 24));
-
-      // Get client info
-      const { data: client } = await supabase
-        .from('clients')
-        .select('nom, prenom, telegram_chat_id, email, type')
-        .eq('id', group.clientId)
-        .single();
-      if (!client) continue;
-
-      const prenom = client.prenom || client.nom?.split(' ')[0] || 'Client';
-      const refs = group.colis.map((c: any) => c.ref).join(', ');
-      const isPro = client.type === 'pro';
-      const chatId = client.telegram_chat_id;
-
-      // J+20 — First reminder
-      if (daysSinceFirst >= 20 && daysSinceFirst < 30) {
-        // Check if we already sent a J+20 relance (avoid duplicates)
-        const { data: existing } = await supabase
-          .from('messages')
-          .select('id')
-          .eq('colis_id', group.colis[0].id)
-          .ilike('texte', '%stockage%20 jours%')
-          .limit(1);
-        if (existing && existing.length > 0) continue;
-
-        const msg = `Bonjour ${prenom} 👋\n\n⏰ *Rappel* — Vos colis sont dans notre entrepôt depuis *${daysSinceFirst} jours* :\n${refs}\n\nNous attendons votre accord (feu vert) pour lancer la préparation.\n\n📦 *Stockage gratuit : 20 jours.* Au-delà, des frais de stockage peuvent s'appliquer.\n\nMerci de nous donner votre feu vert rapidement !\n\n_L'équipe Expedîle_`;
-
-        if (!isPro && chatId) {
-          await sendTelegram(chatId, msg);
+    const db = admin();
+    const token = req.headers.get('Authorization')?.replace(/^Bearer\s+/i,'');
+    const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    const cronKey = Deno.env.get('RELANCES_CRON_SECRET')?.trim();
+    const trustedCron = Boolean(cronKey && token === cronKey);
+    if (!trustedCron && (!serviceKey || token !== serviceKey)) await requireStaff(req,'perm_admin_parametres',db);
+    const settings = await db.from('app_settings').select('value').eq('key','business').maybeSingle(); throwDb(settings);
+    const params = settings.data?.value || {};
+    let scanned = 0, queued = 0, sent = 0;
+    const remindedClients = new Set<string>();
+    // Cursor pagination: no truncation after Supabase's 1,000-row response cap.
+    let cursor = '';
+    while (true) {
+      let query = db.from('colis').select('*').eq('archive',false).in('statut',['attente_feu_vert','devis_envoye','attente_paiement']).order('id').limit(200);
+      if (cursor) query=query.gt('id',cursor);
+      const batch = await query; throwDb(batch);
+      if (!batch.data.length) break;
+      for (const c of batch.data) {
+        scanned++;
+        if (c.attente_client_date) {
+          if (!c.attente_client_until || new Date(c.attente_client_until).getTime()>Date.now()) continue;
+          throwDb(await db.from('colis').update({ attente_client_date:null,attente_client_motif:null,attente_client_until:null,demande_feu_vert_envoyee_at:null,next_action_source:'system',next_action:'Demande de préparation à renouveler',next_action_at:null }).eq('id',c.id));
+          continue;
         }
-        // Save message
-        await supabase.from('messages').insert({
-          colis_id: group.colis[0].id,
-          type: 'staff', auteur_nom: 'Système (auto)',
-          texte: msg, statut: 'envoye',
-        });
-        relances20++;
-      }
-
-      // J+30 — Second reminder with storage fees warning
-      if (daysSinceFirst >= 30 && daysSinceFirst < 60) {
-        const { data: existing } = await supabase
-          .from('messages')
-          .select('id')
-          .eq('colis_id', group.colis[0].id)
-          .ilike('texte', '%frais de stockage%30 jours%')
-          .limit(1);
-        if (existing && existing.length > 0) continue;
-
-        const msg = `Bonjour ${prenom} 👋\n\n⚠️ *Avertissement stockage* — Vos colis sont dans notre entrepôt depuis *${daysSinceFirst} jours* :\n${refs}\n\n💰 *Des frais de stockage de 1€/jour/colis s'appliquent à partir de 30 jours.*\n\nSans réponse de votre part, les colis seront considérés comme abandonnés après 60 jours.\n\nMerci de nous contacter rapidement.\n\n_L'équipe Expedîle_`;
-
-        if (!isPro && chatId) {
-          await sendTelegram(chatId, msg);
+        if (remindedClients.has(c.client_id)) continue;
+        const feuVert = c.statut==='attente_feu_vert';
+        const since = feuVert ? c.demande_feu_vert_envoyee_at : c.devis_envoye_le;
+        // A deployment must never trigger a batch of reminders for historical
+        // requests. Missing/invalid activation dates disable only generation;
+        // explicit messages in the outbox and OCR still run below.
+        if (!isReminderInActiveWindow(since,params.relancesActivesDepuis)) continue;
+        // A read flag is not a resolution. Any unresolved conversation or
+        // unassigned incoming message for this client suspends follow-ups.
+        const open = await db.rpc('client_has_open_conversation',{p_client_id:c.client_id}); throwDb(open);
+        if (open.data) continue;
+        const outstanding = await db.from('notification_outbox').select('id,messages!inner(template)').eq('client_id',c.client_id).in('messages.template',['relance_feu_vert','relance_paiement']).in('status',['pending','sending','blocked']).limit(1); throwDb(outstanding);
+        if (outstanding.data.length) { remindedClients.add(c.client_id); continue; }
+        const previous = await db.from('notification_outbox').select('id,messages!inner(template)').eq('client_id',c.client_id).in('messages.template',['relance_feu_vert','relance_paiement']).gte('created_at',new Date(Date.now()-86400000).toISOString()).limit(1); throwDb(previous);
+        if (previous.data.length) { remindedClients.add(c.client_id); continue; }
+        const days = (Date.now()-new Date(since).getTime())/86400000;
+        const due = milestones(feuVert ? params.relancesFeuVert : params.relancesPaiement).filter((d)=>d<=days);
+        if (!due.length) continue;
+        const client = await db.from('clients').select('id,prenom,nom,cp,telegram_chat_id,type').eq('id',c.client_id).single(); throwDb(client);
+        if (!client.data.telegram_chat_id || (!feuVert && (client.data.type==='pro' || !c.payplug_payment_url))) continue;
+        // Queue only the most recent due stage after downtime; never burst all missed reminders.
+        const stage = due[due.length-1];
+        const key = `reminder:${c.id}:${feuVert ? since : c.quote_version}:${stage}`;
+        const old = await db.from('notification_outbox').select('id').eq('idempotency_key',key).maybeSingle(); throwDb(old); if (old.data) continue;
+        const prenom = client.data.prenom || client.data.nom;
+        const template = feuVert ? 'relance_feu_vert' : 'relance_paiement';
+        const fallback = feuVert ? renderMessage('Bonjour {{prenom}},\n\nVotre dossier {{ref}} contient {{nb_cartons}} carton(s) :\n{{liste_cartons}}\n\nNous attendons votre choix pour préparer ces cartons, continuer à attendre ou échanger avec notre équipe.\n\nLa préparation commencera après votre accord. Les documents d’achat peuvent être ajoutés dans votre espace ou en réponse à ce message.\n\nL’équipe Expedîle',client.data,c,null,params) : `Bonjour ${prenom},\n\nLe devis de votre dossier ${c.ref} est prêt. Vous pouvez consulter votre espace et régler le montant indiqué : ${c.payplug_payment_url}\n\nSi vous avez une question sur le devis, répondez à ce message. Notre équipe vous accompagne.\n\nL’équipe Expedîle`;
+        const tpl = await db.from('message_templates').select('body').eq('key',template).eq('canal','telegram').maybeSingle(); throwDb(tpl);
+        let text=fallback;
+        if (tpl.data?.body) {
+          const [destination,lines,invoices]=await Promise.all([
+            db.from('destinations').select('*').eq('code',client.data.cp.slice(0,3)).single(),
+            db.from('lignes').select('*').eq('colis_id',c.id),db.from('factures').select('*').eq('colis_id',c.id),
+          ]);[destination,lines,invoices].forEach(throwDb);
+          try { text=renderMessage(tpl.data.body,client.data,c,destination.data,params,lines.data,invoices.data); }
+          catch(error) {
+            throwDb(await db.from('colis').update({next_action_source:'system',next_action:error instanceof Error?error.message:'Modèle de relance à corriger',next_action_at:null}).eq('id',c.id));
+            continue;
+          }
         }
-        await supabase.from('messages').insert({
-          colis_id: group.colis[0].id,
-          type: 'staff', auteur_nom: 'Système (auto)',
-          texte: msg, statut: 'envoye',
-        });
-        relances30++;
+        const markup = feuVert ? { inline_keyboard:[[{text:'Autoriser la préparation',callback_data:`fv_oui_${c.id}`}],[{text:'Attendre d’autres colis',callback_data:`fv_wait_${c.id}`}],[{text:'Refuser',callback_data:`fv_non_${c.id}`}]] } : null;
+        const created = await db.rpc('queue_message',{p_colis_id:c.id,p_text:text,p_template:template,p_idempotency_key:key,p_reply_markup:markup,p_canal:'telegram'}); throwDb(created); queued++; remindedClients.add(c.client_id);
       }
-
-      // J+60 — Destruction warning
-      if (daysSinceFirst >= 60) {
-        const { data: existing } = await supabase
-          .from('messages')
-          .select('id')
-          .eq('colis_id', group.colis[0].id)
-          .ilike('texte', '%destruction%60 jours%')
-          .limit(1);
-        if (existing && existing.length > 0) continue;
-
-        const msg = `Bonjour ${prenom} 👋\n\n🚨 *DERNIER AVERTISSEMENT* — Vos colis sont dans notre entrepôt depuis *${daysSinceFirst} jours* :\n${refs}\n\n❌ *Sans réponse sous 7 jours, vos colis seront détruits conformément à nos conditions générales.*\n\nContactez-nous immédiatement.\n\n_L'équipe Expedîle_`;
-
-        if (!isPro && chatId) {
-          await sendTelegram(chatId, msg);
-        }
-        await supabase.from('messages').insert({
-          colis_id: group.colis[0].id,
-          type: 'staff', auteur_nom: 'Système (auto)',
-          texte: msg, statut: 'envoye',
-        });
-        relances60++;
-      }
+      cursor=batch.data[batch.data.length-1].id;
     }
-
-    console.log(`[Relances] Done: ${relances20} J+20, ${relances30} J+30, ${relances60} J+60`);
-    return new Response(JSON.stringify({ relances20, relances30, relances60 }), {
-      headers: { 'Content-Type': 'application/json' },
-    });
-
-  } catch (err) {
-    console.error('[Relances] Error:', err);
-    return new Response(JSON.stringify({ ok: false, error: String(err) }), {
-      status: 500, headers: { 'Content-Type': 'application/json' },
-    });
-  }
+    // Failed/ambiguous sends require operator review. Never silently resend them.
+    const stale = await db.from('notification_outbox').update({status:'failed',last_error:'Envoi interrompu : vérifier Telegram avant de renvoyer'}).eq('status','sending').lt('locked_at',new Date(Date.now()-300000).toISOString()); throwDb(stale);
+    const pending = await db.from('notification_outbox').select('id').in('status',['pending','blocked']).lte('available_at',new Date().toISOString()).order('created_at').limit(100); throwDb(pending);
+    const dispatchStarted=Date.now();
+    for (const row of pending.data) { if (!Deno.env.get('TELEGRAM_BOT_TOKEN') || Date.now()-dispatchStarted>40000) break; try { const result=await dispatchOutbox(db,row.id); if(result.ok) sent++; } catch { /* failure is durable in outbox, continue other clients */ } }
+    const ocr = await processOcrQueue(db);
+    return json({scanned,queued,sent,ocr,remindersActivationValid:reminderTimestamp(params.relancesActivesDepuis)!==null});
+  } catch (error) { return fail(error); }
 });

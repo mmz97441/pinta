@@ -1,0 +1,22 @@
+[
+  {
+    "name": "client-summary-desktop",
+    "overflow": false,
+    "violations": []
+  },
+  {
+    "name": "client-contact-mobile",
+    "overflow": false,
+    "violations": []
+  },
+  {
+    "name": "client-reception-mobile",
+    "overflow": false,
+    "violations": []
+  },
+  {
+    "name": "departure-manifest-mobile",
+    "overflow": false,
+    "violations": []
+  }
+]

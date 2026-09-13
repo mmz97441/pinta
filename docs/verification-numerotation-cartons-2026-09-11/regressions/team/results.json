@@ -1,0 +1,44 @@
+{
+  "results": [
+    {
+      "viewport": "1440x1000",
+      "filters": "PASS",
+      "nextDossier": "PASS",
+      "scannerFocus": "PASS",
+      "receiptCartons": "PASS",
+      "stickyAction": "PASS",
+      "focusedMeasurementUnobscured": "mobile-only check",
+      "nestedChatKeyboard": "PASS",
+      "mandatoryReceiptMeasurements": "PASS",
+      "newClientReceipt": "PASS",
+      "appendMeasurementsPreserved": "PASS",
+      "cartonWithoutTracking": "PASS",
+      "receptionAndPackingSeparated": "PASS",
+      "prohibitedItemsPersistence": "PASS",
+      "axeReceiptAndDarkFile": "PASS",
+      "darkOverflow": "PASS",
+      "pageErrors": [],
+      "unexpectedNetwork": []
+    },
+    {
+      "viewport": "390x844",
+      "filters": "PASS",
+      "nextDossier": "PASS",
+      "scannerFocus": "PASS",
+      "receiptCartons": "PASS",
+      "stickyAction": "PASS",
+      "focusedMeasurementUnobscured": "PASS new receipt and attachment",
+      "nestedChatKeyboard": "PASS",
+      "mandatoryReceiptMeasurements": "PASS",
+      "newClientReceipt": "PASS",
+      "appendMeasurementsPreserved": "PASS",
+      "cartonWithoutTracking": "PASS",
+      "receptionAndPackingSeparated": "PASS",
+      "prohibitedItemsPersistence": "PASS",
+      "axeReceiptAndDarkFile": "PASS",
+      "darkOverflow": "PASS",
+      "pageErrors": [],
+      "unexpectedNetwork": []
+    }
+  ]
+}

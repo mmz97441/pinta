@@ -1,0 +1,23 @@
+[
+  {
+    "test": "two-distinct-pages-render-and-zoom-within-document",
+    "pass": true,
+    "firstSize": {
+      "width": 566,
+      "height": 800
+    },
+    "zoomedWidth": 1132
+  },
+  {
+    "test": "mobile-tabs-preserve-page-zoom-and-edited-article",
+    "pass": true
+  },
+  {
+    "test": "a-page-render-failure-can-recover-on-next-page",
+    "pass": true
+  },
+  {
+    "test": "rapid-page-and-zoom-changes-cancel-obsolete-rendering",
+    "pass": true
+  }
+]

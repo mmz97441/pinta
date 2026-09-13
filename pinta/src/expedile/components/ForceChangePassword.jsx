@@ -2,13 +2,12 @@ import React, { useState } from 'react';
 import { Eye, EyeOff, Check, Shield } from 'lucide-react';
 import { BRAND } from '../constants';
 import { supabase } from '../lib/supabase';
-import * as sb from '../lib/supabaseData';
 
 /**
  * Écran bloquant affiché à la première connexion.
  * L'utilisateur DOIT changer son mot de passe pour accéder à l'app.
  */
-export default function ForceChangePassword({ staffUser, onDone }) {
+export default function ForceChangePassword({ staffUser, onDone, onCancel, recovery }) {
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [showPwd, setShowPwd] = useState(false);
@@ -16,11 +15,11 @@ export default function ForceChangePassword({ staffUser, onDone }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const isValid = password.length >= 6 && password === confirm;
+  const isValid = password.length >= 12 && password === confirm;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (password.length < 6) { setError('Le mot de passe doit faire au moins 6 caractères'); return; }
+    if (password.length < 12) { setError('Le mot de passe doit faire au moins 12 caractères'); return; }
     if (password !== confirm) { setError('Les mots de passe ne correspondent pas'); return; }
 
     setLoading(true);
@@ -33,10 +32,11 @@ export default function ForceChangePassword({ staffUser, onDone }) {
 
       // Mark as password changed
       if (staffUser?.id) {
-        await sb.updateStaffUser(staffUser.id, { must_change_password: false });
+        const { error: completionError } = await supabase.rpc('complete_password_change');
+        if (completionError) throw completionError;
       }
 
-      onDone();
+      await onDone();
     } catch (err) {
       setError('Erreur : ' + err.message);
     }
@@ -45,11 +45,11 @@ export default function ForceChangePassword({ staffUser, onDone }) {
 
   return (
     <div
-      className="fixed inset-0 z-[999] flex items-center justify-center px-4"
+      className="fixed inset-0 z-[999] flex items-center justify-center px-4 py-6 overflow-y-auto"
       style={{ background: `linear-gradient(160deg, ${BRAND.navy} 0%, ${BRAND.navyD} 100%)` }}
     >
       <div
-        className="w-full max-w-md rounded-2xl p-8"
+        className="w-full max-w-md max-h-full overflow-y-auto rounded-2xl p-6 sm:p-8"
         style={{
           background: 'rgba(255,255,255,0.07)',
           border: '1px solid rgba(255,255,255,0.12)',
@@ -62,50 +62,50 @@ export default function ForceChangePassword({ staffUser, onDone }) {
             <Shield size={20} style={{ color: BRAND.gold }} />
           </div>
           <div>
-            <h2 className="text-lg font-black text-white">Bienvenue !</h2>
+            <h2 className="text-lg font-black text-white">{recovery ? 'Réinitialiser votre mot de passe' : 'Votre mot de passe'}</h2>
             <p className="text-xs text-gray-400">Définissez votre mot de passe personnel pour continuer</p>
           </div>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="text-[11px] font-bold uppercase tracking-wider" style={{ color: BRAND.goldL }}>
+            <label htmlFor="new-password" className="text-[11px] font-bold uppercase tracking-wider" style={{ color: BRAND.goldL }}>
               Nouveau mot de passe
             </label>
             <div className="relative mt-1">
               <input
-                type={showPwd ? 'text' : 'password'}
+                id="new-password" type={showPwd ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Minimum 6 caractères"
+                placeholder="Minimum 12 caractères"
                 className="w-full px-4 py-3 pr-11 rounded-xl text-sm font-medium outline-none"
-                style={{ background: 'rgba(255,255,255,0.08)', border: `1px solid ${password.length >= 6 ? 'rgba(16,185,129,0.5)' : 'rgba(255,255,255,0.15)'}`, color: 'white' }}
-                autoFocus
+                style={{ background: 'rgba(255,255,255,0.08)', border: `1px solid ${password.length >= 12 ? 'rgba(16,185,129,0.5)' : 'rgba(255,255,255,0.15)'}`, color: 'white' }}
+                autoComplete="new-password" required autoFocus
               />
-              <button type="button" onClick={() => setShowPwd((p) => !p)}
+              <button aria-label={showPwd ? 'Masquer le mot de passe' : 'Afficher le mot de passe'} type="button" onClick={() => setShowPwd((p) => !p)}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white transition-colors">
                 {showPwd ? <EyeOff size={18} /> : <Eye size={18} />}
               </button>
             </div>
-            {password.length > 0 && password.length < 6 && (
-              <p className="text-[10px] text-red-400 mt-1">Minimum 6 caractères</p>
+            {password.length > 0 && password.length < 12 && (
+              <p className="text-[10px] text-red-400 mt-1">Minimum 12 caractères</p>
             )}
           </div>
 
           <div>
-            <label className="text-[11px] font-bold uppercase tracking-wider" style={{ color: BRAND.goldL }}>
+            <label htmlFor="confirm-password" className="text-[11px] font-bold uppercase tracking-wider" style={{ color: BRAND.goldL }}>
               Confirmer le mot de passe
             </label>
             <div className="relative mt-1">
               <input
-                type={showConfirm ? 'text' : 'password'}
+                id="confirm-password" type={showConfirm ? 'text' : 'password'}
                 value={confirm}
                 onChange={(e) => setConfirm(e.target.value)}
-                placeholder="Retapez le mot de passe"
+                placeholder="Retapez le mot de passe" autoComplete="new-password" required
                 className="w-full px-4 py-3 pr-11 rounded-xl text-sm font-medium outline-none"
                 style={{ background: 'rgba(255,255,255,0.08)', border: `1px solid ${confirm && confirm === password ? 'rgba(16,185,129,0.5)' : confirm && confirm !== password ? 'rgba(239,68,68,0.5)' : 'rgba(255,255,255,0.15)'}`, color: 'white' }}
               />
-              <button type="button" onClick={() => setShowConfirm((p) => !p)}
+              <button aria-label={showConfirm ? 'Masquer la confirmation' : 'Afficher la confirmation'} type="button" onClick={() => setShowConfirm((p) => !p)}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white transition-colors">
                 {showConfirm ? <EyeOff size={18} /> : <Eye size={18} />}
               </button>
@@ -113,14 +113,14 @@ export default function ForceChangePassword({ staffUser, onDone }) {
             {confirm && confirm !== password && (
               <p className="text-[10px] text-red-400 mt-1">Les mots de passe ne correspondent pas</p>
             )}
-            {confirm && confirm === password && password.length >= 6 && (
+            {confirm && confirm === password && password.length >= 12 && (
               <p className="text-[10px] text-emerald-400 mt-1 flex items-center gap-1"><Check size={10} /> Les mots de passe correspondent</p>
             )}
           </div>
 
           {error && (
             <div className="p-2 rounded-lg" style={{ background: 'rgba(239,68,68,0.15)' }}>
-              <p className="text-xs text-red-300">{error}</p>
+              <p role="alert" className="text-xs text-red-300">{error}</p>
             </div>
           )}
 
@@ -133,6 +133,7 @@ export default function ForceChangePassword({ staffUser, onDone }) {
             <Check size={16} />
             {loading ? 'Enregistrement...' : 'Définir mon mot de passe et continuer'}
           </button>
+          {onCancel && <button type="button" onClick={onCancel} className="w-full min-h-11 text-sm text-white/70">Annuler</button>}
         </form>
       </div>
     </div>

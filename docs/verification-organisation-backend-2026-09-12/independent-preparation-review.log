@@ -1,0 +1,22 @@
+NOTICE:  relation "v_abonnements_alertes" does not exist, skipping
+NOTICE:  policy "Factures read" for relation "storage.objects" does not exist, skipping
+NOTICE:  policy "Public read photos-colis" for relation "storage.objects" does not exist, skipping
+NOTICE:  column "abonnement" of relation "clients" already exists, skipping
+NOTICE:  column "abonnement_debut" of relation "clients" already exists, skipping
+NOTICE:  column "abonnement_fin" of relation "clients" already exists, skipping
+NOTICE:  column "tags_preparation" of relation "colis" already exists, skipping
+NOTICE:  relation "staff_users" already exists, skipping
+NOTICE:  relation "staff_permissions" already exists, skipping
+NOTICE:  column "perm_colis_mesurer" of relation "staff_permissions" already exists, skipping
+NOTICE:  relation "audit_actions" already exists, skipping
+NOTICE:  relation "colis_locks" already exists, skipping
+NOTICE:  policy "Factures upload" for relation "storage.objects" does not exist, skipping
+NOTICE:  policy "Factures update" for relation "storage.objects" does not exist, skipping
+NOTICE:  policy "Auth upload photos-colis" for relation "storage.objects" does not exist, skipping
+NOTICE:  trigger "client_delivery_address_consistency" for relation "clients" does not exist, skipping
+NOTICE:  PASS reject Explicit client refusal blocks preparation RPC [P0001]
+NOTICE:  PASS Refused preparation leaves measurements unconfirmed
+NOTICE:  PASS reject Receipt cannot insert certified preparation metadata [42501]
+NOTICE:  PASS Rejected prepared receipt creates no dossier
+NOTICE:  PASS reject Direct final dimensions update denied without preparation command [42501]
+NOTICE:  PASS Forbidden direct update leaves final measurements unchanged

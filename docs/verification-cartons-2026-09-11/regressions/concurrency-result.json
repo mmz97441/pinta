@@ -1,0 +1,9 @@
+{
+  "test": "concurrent-reception-preserves-colleague-cartons-after-provider-refresh",
+  "pass": true,
+  "conflictVisible": true,
+  "originalSnapshotUsed": true,
+  "remoteCartonsPreserved": 4,
+  "pageErrors": [],
+  "unexpectedNetwork": []
+}

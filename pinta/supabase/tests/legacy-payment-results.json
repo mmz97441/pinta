@@ -1,0 +1,11 @@
+{
+  "date": "2026-09-10",
+  "scope": "Migration 20260910000012 and PayPlug legacy webhook compatibility",
+  "database": "PostgreSQL 15, disposable Docker container with --network none",
+  "legacy_sql_assertions": { "count": 31, "status": "passed after independent backend review" },
+  "legacy_edge_tests": { "count": 7, "status": "passed, provider network mocked" },
+  "existing_edge_tests": { "count": 9, "status": "passed, provider network mocked" },
+  "production_modified": false,
+  "provider_requests_sent": false,
+  "test_container_removed": true
+}

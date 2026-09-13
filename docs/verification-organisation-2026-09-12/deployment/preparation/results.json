@@ -1,0 +1,51 @@
+[
+  {
+    "test": "measure-only save persists without documents and cannot publish an incomplete quote",
+    "pass": true
+  },
+  {
+    "test": "draft survives SPA navigation and detects a colleague version without overwriting it",
+    "pass": true
+  },
+  {
+    "test": "two optimised physical parcels save once and prepare a publishable quote with summed volumes",
+    "pass": true
+  },
+  {
+    "test": "preparation accessibility light 1440",
+    "pass": true,
+    "violations": []
+  },
+  {
+    "test": "preparation accessibility light 390",
+    "pass": true,
+    "violations": []
+  },
+  {
+    "test": "preparation accessibility dark 1440",
+    "pass": true,
+    "violations": []
+  },
+  {
+    "test": "preparation accessibility dark 390",
+    "pass": true,
+    "violations": []
+  },
+  {
+    "test": "preparation desktop and mobile have no horizontal overflow",
+    "pass": true
+  },
+  {
+    "test": "departure assignment uses paid destination, excludes closed or stale departures and persists through the atomic command",
+    "pass": true
+  },
+  {
+    "test": "client home accessibility mobile",
+    "pass": true,
+    "violations": []
+  },
+  {
+    "test": "client home and list preserve expired deliberate waits and never request withdrawn quote payment",
+    "pass": true
+  }
+]

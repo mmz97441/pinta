@@ -1,0 +1,27 @@
+{
+  "date": "2026-09-10",
+  "database": "PostgreSQL 15 Docker, --network none, synthetic Auth/Storage bootstrap",
+  "migrations": {
+    "count": 22,
+    "status": "passed clean replay; last document guard updated and retested"
+  },
+  "sql_assertions": {
+    "count": 45,
+    "status": "passed"
+  },
+  "javascript_postgres_quote_parity": {
+    "cases": 24,
+    "status": "passed"
+  },
+  "edge_tests": {
+    "count": 9,
+    "status": "passed, all network mocked"
+  },
+  "edge_bundles": {
+    "count": 10,
+    "status": "passed"
+  },
+  "production_modified": false,
+  "real_messages_sent": false,
+  "real_payments_created": false
+}

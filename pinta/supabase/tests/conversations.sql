@@ -1,0 +1,72 @@
+BEGIN;
+GRANT USAGE ON SCHEMA public,auth TO authenticated,anon,service_role;
+GRANT ALL ON ALL TABLES IN SCHEMA public TO authenticated,service_role;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO authenticated,service_role;
+CREATE FUNCTION test_conversation_assert(ok boolean,label text) RETURNS void LANGUAGE plpgsql AS $$ BEGIN IF NOT coalesce(ok,false) THEN RAISE EXCEPTION 'FAIL: %',label;END IF;RAISE NOTICE 'PASS: %',label;END; $$;
+CREATE FUNCTION test_conversation_reject(command text,label text) RETURNS void LANGUAGE plpgsql AS $$ BEGIN BEGIN EXECUTE command; EXCEPTION WHEN OTHERS THEN RAISE NOTICE 'PASS rejected: %',label;RETURN;END;RAISE EXCEPTION 'FAIL accepted: %',label;END; $$;
+INSERT INTO auth.users(id,email,raw_user_meta_data) VALUES
+ ('81000000-0000-4000-8000-000000000001','conversation-director@example.test','{"nom":"Direction"}'),
+ ('81000000-0000-4000-8000-000000000002','conversation-client@example.test','{"nom":"Client"}');
+INSERT INTO staff_users(auth_id,nom,email,role,must_change_password) VALUES('81000000-0000-4000-8000-000000000001','Direction','conversation-director@example.test','directeur',false);
+INSERT INTO clients(id,user_id,nom,cp,email,telegram_chat_id) VALUES('82000000-0000-4000-8000-000000000001','81000000-0000-4000-8000-000000000002','Client','97400','conversation-client@example.test','fixture-chat');
+INSERT INTO colis(id,client_id,statut,trackings,nb_colis) VALUES
+ ('83000000-0000-4000-8000-000000000001','82000000-0000-4000-8000-000000000001','attente_feu_vert',ARRAY['ONE'],1),
+ ('83000000-0000-4000-8000-000000000002','82000000-0000-4000-8000-000000000001','attente_feu_vert',ARRAY['TWO'],1);
+SELECT test_conversation_assert((SELECT statut_updated_at IS NOT NULL AND conversation_statut='termine' FROM colis WHERE id='83000000-0000-4000-8000-000000000001'),'New dossier has a real stage timestamp and no invented open question');
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claim.role','authenticated',true),set_config('request.jwt.claim.sub','81000000-0000-4000-8000-000000000001',true);
+SELECT queue_message('83000000-0000-4000-8000-000000000002','Synthetic reminder','relance_feu_vert','conversation-reminder',NULL,'telegram');
+SELECT set_config('request.jwt.claim.sub','81000000-0000-4000-8000-000000000002',true);
+INSERT INTO messages(id,colis_id,type,auteur_id,texte) VALUES('84000000-0000-4000-8000-000000000001','83000000-0000-4000-8000-000000000001','client',auth.uid(),'Synthetic question');
+SELECT test_conversation_assert((SELECT conversation_statut='a_traiter' AND conversation_version=1 FROM client_colis WHERE id='83000000-0000-4000-8000-000000000001'),'Customer message opens durable work visible in own safe view');
+SELECT test_conversation_reject($q$SELECT set_conversation_state('83000000-0000-4000-8000-000000000001','termine',1)$q$,'Customer cannot close staff work');
+SELECT test_conversation_reject($q$INSERT INTO messages(colis_id,type,auteur_id,texte,template) VALUES('83000000-0000-4000-8000-000000000001','client',auth.uid(),'Forged structured choice','client_decision_wait')$q$,'Customer cannot hide free-form work under a structured decision marker');
+SELECT set_config('request.jwt.claim.sub','81000000-0000-4000-8000-000000000001',true);
+UPDATE messages SET lu=true WHERE id='84000000-0000-4000-8000-000000000001';
+SELECT test_conversation_assert((SELECT conversation_statut='a_traiter' AND conversation_version=1 FROM colis WHERE id='83000000-0000-4000-8000-000000000001'),'Reading never resolves work or changes its version');
+SELECT test_conversation_assert((SELECT status='blocked' FROM notification_outbox WHERE idempotency_key='conversation-reminder'),'Incoming question blocks queued reminder on another dossier of the same customer');
+SELECT test_conversation_reject($q$UPDATE colis SET conversation_statut='termine' WHERE id='83000000-0000-4000-8000-000000000001'$q$,'Direct patch cannot bypass the explicit conversation command');
+SELECT test_conversation_reject($q$SELECT set_conversation_state('83000000-0000-4000-8000-000000000001','termine',0)$q$,'Stale state version cannot hide a new incoming question');
+SELECT queue_message('83000000-0000-4000-8000-000000000001','Synthetic staff reply',NULL,'conversation-reply',NULL,'portal');
+SELECT test_conversation_assert((SELECT conversation_statut='a_traiter' FROM colis WHERE id='83000000-0000-4000-8000-000000000001'),'Sending a staff reply never implicitly closes work');
+SELECT set_conversation_state('83000000-0000-4000-8000-000000000001','attente_client',1);
+SELECT test_conversation_assert((SELECT conversation_statut='attente_client' AND conversation_version=2 FROM colis WHERE id='83000000-0000-4000-8000-000000000001'),'Staff explicitly hands the next turn to the customer');
+SELECT test_conversation_assert((SELECT status='pending' FROM notification_outbox WHERE idempotency_key='conversation-reminder'),'Explicit handling releases a blocked reminder for a fresh delivery check');
+SELECT set_conversation_state('83000000-0000-4000-8000-000000000001','termine',2);
+SELECT test_conversation_assert((SELECT conversation_resolved_at IS NOT NULL AND conversation_version=3 FROM colis WHERE id='83000000-0000-4000-8000-000000000001'),'Explicit closure is dated and versioned');
+SELECT test_conversation_assert((SELECT count(*)=2 FROM audit_actions WHERE colis_id='83000000-0000-4000-8000-000000000001' AND action='conversation_state'),'Conversation transitions are audited');
+SELECT test_conversation_reject($q$SELECT assign_colis_work('83000000-0000-4000-8000-000000000001','81000000-0000-4000-8000-000000000002','Impossible owner',NULL,(SELECT updated_at FROM colis WHERE id='83000000-0000-4000-8000-000000000001'))$q$,'Client account cannot become the staff owner');
+SELECT assign_colis_work('83000000-0000-4000-8000-000000000001',auth.uid(),'Verify invoice',now()+interval '1 day',(SELECT updated_at FROM colis WHERE id='83000000-0000-4000-8000-000000000001'));
+SELECT test_conversation_assert((SELECT responsible_staff_id=auth.uid() AND next_action='Verify invoice' FROM colis WHERE id='83000000-0000-4000-8000-000000000001'),'Valid active owner and next action are saved atomically');
+SELECT test_conversation_reject($q$SELECT assign_colis_work('83000000-0000-4000-8000-000000000001',NULL,NULL,NULL,'2000-01-01')$q$,'Stale assignment cannot replace a colleague follow-up');
+SELECT assign_colis_work('83000000-0000-4000-8000-000000000001',NULL,NULL,NULL,(SELECT updated_at FROM colis WHERE id='83000000-0000-4000-8000-000000000001'));
+SELECT test_conversation_assert((SELECT responsible_staff_id IS NULL FROM colis WHERE id='83000000-0000-4000-8000-000000000001'),'Owner can be explicitly cleared');
+SELECT set_config('request.jwt.claim.sub','81000000-0000-4000-8000-000000000002',true);
+INSERT INTO messages(id,colis_id,type,auteur_id,texte) VALUES('84000000-0000-4000-8000-000000000002','83000000-0000-4000-8000-000000000001','client',auth.uid(),'A new question after closure');
+SELECT test_conversation_assert((SELECT conversation_statut='a_traiter' AND conversation_version=4 AND conversation_resolved_at IS NULL FROM client_colis WHERE id='83000000-0000-4000-8000-000000000001'),'A new question reopens a previously completed conversation');
+SELECT client_decision('83000000-0000-4000-8000-000000000002','wait');
+SELECT test_conversation_assert((SELECT conversation_statut='termine' AND attente_client_date IS NOT NULL FROM client_colis WHERE id='83000000-0000-4000-8000-000000000002'),'Already-executed wait decision does not create an unnecessary reply task');
+SELECT client_decision('83000000-0000-4000-8000-000000000002','refuse');
+SELECT test_conversation_assert((SELECT conversation_statut='a_traiter' FROM client_colis WHERE id='83000000-0000-4000-8000-000000000002'),'Refusal opens staff follow-up work');
+SELECT set_config('request.jwt.claim.sub','81000000-0000-4000-8000-000000000001',true);
+UPDATE messages SET lu=true WHERE colis_id='83000000-0000-4000-8000-000000000002';
+SELECT test_conversation_assert((SELECT conversation_statut='a_traiter' FROM colis WHERE id='83000000-0000-4000-8000-000000000002'),'Structured messages can be marked read without resolving refusal');
+SELECT set_conversation_state('83000000-0000-4000-8000-000000000001','termine',4);
+INSERT INTO factures(colis_id,vendeur,montant,valide,fichier_url) VALUES('83000000-0000-4000-8000-000000000001','Staff fixture',0,false,'83000000-0000-4000-8000-000000000001/staff.pdf');
+SELECT test_conversation_assert((SELECT conversation_statut='termine' FROM colis WHERE id='83000000-0000-4000-8000-000000000001'),'Staff invoice upload does not reopen customer conversation');
+SELECT set_config('request.jwt.claim.sub','81000000-0000-4000-8000-000000000002',true);
+INSERT INTO factures(colis_id,vendeur,montant,valide,fichier_url) VALUES('83000000-0000-4000-8000-000000000001','Client fixture',0,false,'83000000-0000-4000-8000-000000000001/client.pdf');
+SELECT test_conversation_assert((SELECT conversation_statut='a_traiter' FROM client_colis WHERE id='83000000-0000-4000-8000-000000000001'),'Customer invoice upload reopens conversation and records a customer event');
+SELECT test_conversation_assert((SELECT count(*)=1 FROM messages WHERE colis_id='83000000-0000-4000-8000-000000000001' AND template='client_document'),'Invoice arrival records one customer message');
+RESET ROLE;
+SELECT test_conversation_assert(client_has_open_conversation('82000000-0000-4000-8000-000000000001'),'Another unresolved dossier keeps client-wide reminders blocked');
+SELECT test_conversation_reject($q$UPDATE colis SET archive=true WHERE id='83000000-0000-4000-8000-000000000001'$q$,'Open customer work cannot be hidden in archives');
+-- A truly handled archive does not block future follow-ups; a new incoming
+-- question brings it back into the visible working set and records that action.
+UPDATE colis SET conversation_statut='termine',archive=true WHERE id='83000000-0000-4000-8000-000000000001';
+UPDATE colis SET conversation_statut='termine' WHERE id='83000000-0000-4000-8000-000000000002';
+SELECT test_conversation_assert(NOT client_has_open_conversation('82000000-0000-4000-8000-000000000001'),'Historical archived messages do not invisibly block reminders');
+INSERT INTO messages(colis_id,type,texte) VALUES('83000000-0000-4000-8000-000000000001','client','New Telegram question on archived dossier');
+SELECT test_conversation_assert((SELECT NOT archive AND conversation_statut='a_traiter' FROM colis WHERE id='83000000-0000-4000-8000-000000000001'),'New customer message reactivates an archived dossier visibly');
+SELECT test_conversation_assert((SELECT count(*)=1 FROM audit_actions WHERE colis_id='83000000-0000-4000-8000-000000000001' AND action='conversation_reopen_archive'),'Reopening an archive is audited');
+ROLLBACK;

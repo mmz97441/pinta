@@ -1,0 +1,22 @@
+{
+  "date": "2026-09-11",
+  "previousBuildBugReproduced": true,
+  "reportedDossierReceiptDataPresent": true,
+  "reportedDossierReadOnlyVerification": true,
+  "applicationTests": 69,
+  "edgeTests": 42,
+  "browserConfigurations": 4,
+  "accessibilityViolations": 0,
+  "lint": "passed",
+  "build": "passed",
+  "relatedBrowserRegressions": "passed",
+  "databaseMigrationRequired": false,
+  "customerDataChangedForRepair": false,
+  "deployment": {
+    "id": "dpl_XoBi7nYWJR8qfZYoRsfVrJSzMJAU",
+    "url": "https://pinta-mbnt6adw2-mmz97441s-projects.vercel.app",
+    "domain": "https://expedile.app",
+    "promoted": true,
+    "fixtureBrowserChecks": "passed"
+  }
+}

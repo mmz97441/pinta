@@ -1,0 +1,53 @@
+{
+  "schemaBackup": {
+    "bytes": 228824,
+    "sha256": "d9e3cc1164eb461f0865e463010c4382be2f195beefb46e06a397252ac5e2762",
+    "private": true
+  },
+  "hostedBackups": [
+    {
+      "id": 1640149852,
+      "inserted_at": "2026-09-11T03:46:54.072Z",
+      "is_physical_backup": true,
+      "status": "COMPLETED"
+    },
+    {
+      "id": 1630229551,
+      "inserted_at": "2026-09-10T03:47:47.737Z",
+      "is_physical_backup": true,
+      "status": "COMPLETED"
+    },
+    {
+      "id": 1620269797,
+      "inserted_at": "2026-09-09T03:44:38.219Z",
+      "is_physical_backup": true,
+      "status": "COMPLETED"
+    },
+    {
+      "id": 1610305636,
+      "inserted_at": "2026-09-08T03:44:22.720Z",
+      "is_physical_backup": true,
+      "status": "COMPLETED"
+    },
+    {
+      "id": 1600382420,
+      "inserted_at": "2026-09-07T03:48:04.629Z",
+      "is_physical_backup": true,
+      "status": "COMPLETED"
+    },
+    {
+      "id": 1590430929,
+      "inserted_at": "2026-09-06T03:44:51.614Z",
+      "is_physical_backup": true,
+      "status": "COMPLETED"
+    },
+    {
+      "id": 1580541453,
+      "inserted_at": "2026-09-05T03:46:49.553Z",
+      "is_physical_backup": true,
+      "status": "COMPLETED"
+    }
+  ],
+  "pitrEnabled": false,
+  "localCustomerDataExported": false
+}

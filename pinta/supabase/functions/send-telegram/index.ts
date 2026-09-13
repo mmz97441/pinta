@@ -1,55 +1,35 @@
-const BOT_TOKEN = Deno.env.get('TELEGRAM_BOT_TOKEN') || '';
-const API_SECRET = Deno.env.get('EDGE_API_SECRET') || '';
-
-const cors = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-api-secret',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Content-Type': 'application/json',
-};
-
-function checkSecret(req: Request): boolean {
-  if (!API_SECRET) return true;
-  const provided = req.headers.get('x-api-secret');
-  return provided === API_SECRET;
-}
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { admin, fail, HttpError, json, postOnly, requireStaff, throwDb, uuid } from '../_shared/http.ts';
+import { dispatchOutbox } from '../_shared/telegram.ts';
 
 Deno.serve(async (req: Request) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
-  if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
-
-  if (!checkSecret(req)) {
-    return new Response(JSON.stringify({ ok: false, error: 'Unauthorized' }), { status: 403, headers: cors });
-  }
-
+  const early = postOnly(req); if (early) return early;
   try {
-    if (!BOT_TOKEN) {
-      return new Response(JSON.stringify({ ok: false, error: 'TELEGRAM_BOT_TOKEN not set' }), { status: 500, headers: cors });
+    const db = admin(); const user = await requireStaff(req, 'perm_comm_telegram', db);
+    const body = await req.json();
+    let outboxId = body.outboxId;
+    if (!outboxId && !body.messageId && body.chatId && body.text) {
+      const clients = await db.from('clients').select('id').eq('telegram_chat_id', String(body.chatId)); throwDb(clients);
+      if (clients.data.length !== 1) throw new HttpError(400, 'Ce chat doit être lié à un seul client');
+      let query = db.from('colis').select('id').eq('client_id', clients.data[0].id);
+      if (body.colisId) query = query.eq('id',body.colisId);
+      else query = query.not('statut','in','(livre,annule)');
+      const colis = await query.limit(2); throwDb(colis);
+      if (colis.data.length !== 1) throw new HttpError(400,'Précisez le dossier du message');
+      const scoped = createClient(Deno.env.get('SUPABASE_URL') || '',Deno.env.get('SUPABASE_ANON_KEY') || '',{global:{headers:{Authorization:`Bearer ${user.token}`}},auth:{persistSession:false}});
+      const queued=await scoped.rpc('queue_message',{p_colis_id:colis.data[0].id,p_text:body.text,p_template:body.template || null,p_idempotency_key:body.idempotencyKey || null,p_reply_markup:body.replyMarkup || null,p_canal:'telegram'}); throwDb(queued);
+      outboxId=queued.data.outbox.id;
     }
-
-    const { chatId, text, replyMarkup, replyToId } = await req.json();
-    if (!chatId || !text) {
-      return new Response(JSON.stringify({ ok: false, error: 'chatId and text required' }), { status: 400, headers: cors });
+    if (!outboxId && body.messageId) {
+      const row = await db.from('notification_outbox').select('id').eq('message_id', body.messageId).single(); throwDb(row); outboxId = row.data.id;
     }
-
-    const body: any = { chat_id: chatId, text, parse_mode: 'Markdown' };
-    if (replyMarkup) body.reply_markup = replyMarkup;
-    if (replyToId) body.reply_to_message_id = replyToId;
-
-    const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    const data = await res.json();
-
-    return new Response(JSON.stringify({
-      ok: data.ok,
-      messageId: data.result?.message_id || null,
-      error: data.ok ? null : (data.description || 'Telegram error'),
-    }), { headers: cors });
-
-  } catch (err) {
-    return new Response(JSON.stringify({ ok: false, error: String(err) }), { status: 500, headers: cors });
-  }
+    if (!uuid(outboxId)) throw new HttpError(400, 'Un message enregistré dans la file d’envoi est requis');
+    const row = await db.from('notification_outbox').select('colis_id,canal').eq('id', outboxId).single(); throwDb(row);
+    if (row.data.canal !== 'telegram' || (body.colisId && body.colisId !== row.data.colis_id)) throw new HttpError(400, 'Message et dossier incompatibles');
+    if (body.retryConfirmed === true) {
+      const retry = await db.from('notification_outbox').update({ status:'pending',available_at:new Date().toISOString(),last_error:null }).eq('id',outboxId).eq('status','failed').select('id').maybeSingle(); throwDb(retry);
+      if (retry.data) throwDb(await db.from('audit_actions').insert({ colis_id:row.data.colis_id,user_id:user.id,user_nom:user.nom,action:'retry_message',detail:'Renvoi manuel après vérification de la réception dans Telegram' }));
+    }
+    return json(await dispatchOutbox(db, outboxId));
+  } catch (error) { return fail(error); }
 });

@@ -141,10 +141,34 @@ function cleanTel(val) {
 /** Parse un fichier Excel ou CSV et retourne les clients mappés */
 export async function parseClientFile(file) {
   if (file.size > 10 * 1024 * 1024) throw new Error('Fichier trop volumineux (max 10 Mo)');
+  const mime = (file.type || '').split(';', 1)[0].trim().toLowerCase();
+  const csv = /\.csv$/i.test(file.name || '') || mime === 'text/csv';
   const validTypes = ['text/csv', 'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', ''];
-  if (file.type && !validTypes.includes(file.type)) throw new Error('Format non supporté (CSV, XLS, XLSX uniquement)');
+  if (!validTypes.includes(mime) && !(csv && mime === 'text/plain')) throw new Error('Format non supporté (CSV, XLS, XLSX uniquement)');
   const buffer = await file.arrayBuffer();
-  const wb = XLSX.read(buffer, { type: 'array', cellDates: false });
+  let wb;
+  if (csv) {
+    // CSV exports are commonly UTF-8 without a BOM. Reading their bytes as a
+    // workbook silently corrupts accented headers, losing columns such as Prénom.
+    const bytes = new Uint8Array(buffer);
+    let text;
+    if (bytes[0] === 0xff && bytes[1] === 0xfe) text = new TextDecoder('utf-16le', { fatal: true }).decode(bytes);
+    else if (bytes[0] === 0xfe && bytes[1] === 0xff) text = new TextDecoder('utf-16be', { fatal: true }).decode(bytes);
+    else {
+      try { text = new TextDecoder('utf-8', { fatal: true }).decode(bytes); }
+      catch {
+        // Normalise C1 mappings explicitly so legacy Windows CSVs decode the
+        // same way in browsers and Node builds with different ICU mappings.
+        const c1 = '€\u0081‚ƒ„…†‡ˆ‰Š‹Œ\u008dŽ\u008f\u0090‘’“”•–—˜™š›œ\u009džŸ';
+        text = new TextDecoder('windows-1252').decode(bytes)
+          .replace(/[\u0080-\u009f]/g, (char) => c1[char.charCodeAt(0) - 0x80]);
+      }
+    }
+    // Preserve phone numbers, postal codes and user-entered dates as text.
+    wb = XLSX.read(text, { type: 'string', raw: true });
+  } else {
+    wb = XLSX.read(buffer, { type: 'array', cellDates: false });
+  }
   const sheet = wb.Sheets[wb.SheetNames[0]];
   const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
 

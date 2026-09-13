@@ -1,0 +1,25 @@
+✔ Protected functions deny missing or forged user sessions even without old shared secret (45.214208ms)
+✔ Scoped cron secret permits only the worker and never accepts empty or incorrect secrets (2.342334ms)
+✔ Editable metadata cannot turn a canonical client into staff (0.484ms)
+✔ the reminder worker excludes archived dossiers even when their reminder date is due (1.717ms)
+✔ Reminder fallback queues every physical carton with its supplier, including cartons without tracking (1.254333ms)
+✔ Telegram webhook fails closed when secret is absent or invalid (4.132875ms)
+✔ Telegram duplicate update is acknowledged without side effects (0.621417ms)
+✔ Official minimal PayPlug notification retrieves provider resource before payment mutation (3.56475ms)
+✔ Forged body payment fields cannot bypass unpaid provider result (0.734166ms)
+✔ PayPlug wrong currency and live mode never mutate payment state (1.140125ms)
+✔ PayPlug unavailable API keeps webhook retryable and no invoice is marked paid (0.447792ms)
+✔ OCR rejects arbitrary URL-only requests before any external download (3.624208ms)
+✔ Actual webhook delegates explicit reply routing before considering the only active dossier (25.20075ms)
+✔ Actual webhook stores paid attachment as readable conversation document without invoice mutation (1.342417ms)
+✔ Ambiguous explicit routing creates durable inbox instead of selecting unrelated active dossier (1.378708ms)
+✔ Unsupported attachment remains a durable team request and does not loop webhook retries (0.904833ms)
+✔ A failed acknowledgement does not replay the already persisted client message (0.676375ms)
+ℹ tests 17
+ℹ suites 0
+ℹ pass 17
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 116.017792

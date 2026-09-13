@@ -1,20 +1,22 @@
 import * as XLSX from 'xlsx';
 
 export function exportColisExcel(colis, clients, columns, filename = 'export-colis.xlsx') {
+  const clientById=typeof clients==='function'?clients:id=>(clients || []).find(client=>client.id===id);
+  if(Array.isArray(columns))columns=undefined;
   const allColumns = {
     ref: (c) => ({ 'Référence': c.ref }),
-    client: (c) => ({ 'Client': (clients.find((x) => x.id === c.clientId))?.nom || '—' }),
+    client: (c) => ({ 'Client': clientById(c.clientId)?.nom || '—' }),
     statut: (c) => ({ 'Statut': c.statut }),
     description: (c) => ({ 'Description': c.desc || '' }),
     dims: (c) => ({ 'Dimensions (cm)': c.dimL ? `${c.dimL}×${c.dimW}×${c.dimH}` : '' }),
     poids: (c) => ({ 'Poids (kg)': c.poids || '' }),
-    transport: (c) => ({ 'Transport (€)': c.devisTransport || '' }),
+    transport: (c) => ({ 'Transport (€)': c.devisTransport ?? '' }),
     taxes: (c) => ({ 'Taxes (€)': (c.devisOM || 0) + (c.devisOMR || 0) + (c.devisTVA || 0) || '' }),
-    total: (c) => ({ 'Total (€)': c.devisTotal || '' }),
+    total: (c) => ({ 'Total (€)': c.devisTotal ?? '' }),
     dateReception: (c) => ({ 'Date réception': c.dateReception ? new Date(c.dateReception).toLocaleDateString('fr-FR') : '' }),
     casier: (c) => ({ 'Casier': c.casier || '' }),
     envoi: (c) => ({ 'Envoi': c.envoi || '' }),
-    fournisseurs: (c) => ({ 'Fournisseurs': (c.fournisseurs || []).join(', ') }),
+    fournisseurs: (c) => ({ 'Fournisseurs': [...new Set((c.trackingsDetail || []).map(t=>t.fournisseur).filter(Boolean))].join(', ') }),
   };
 
   // If no columns specified, include all (backward-compatible)

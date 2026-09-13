@@ -1,0 +1,129 @@
+{
+  "date": "2026-09-10",
+  "status": "production_promoted",
+  "production_domain": "https://expedile.app",
+  "database_rehearsal": {
+    "image": "17.6.1.063",
+    "network": "none",
+    "restore": "passed",
+    "migrations": [
+      {
+        "migration": "20260908000000_add_attente_client_fields.sql",
+        "passed": true
+      },
+      {
+        "migration": "20260909000000_reconcile_existing_schema.sql",
+        "passed": true
+      },
+      {
+        "migration": "20260910000000_application_enums.sql",
+        "passed": true
+      },
+      {
+        "migration": "20260910000001_application_schema.sql",
+        "passed": true
+      },
+      {
+        "migration": "20260910000002_application_commands.sql",
+        "passed": true
+      },
+      {
+        "migration": "20260910000003_telegram_ocr_jobs.sql",
+        "passed": true
+      },
+      {
+        "migration": "20260910000004_quote_integrity.sql",
+        "passed": true
+      },
+      {
+        "migration": "20260910000005_client_access.sql",
+        "passed": true
+      },
+      {
+        "migration": "20260910000006_permissions_corrections.sql",
+        "passed": true
+      },
+      {
+        "migration": "20260910000007_client_safe_views.sql",
+        "passed": true
+      },
+      {
+        "migration": "20260910000008_ocr_queue.sql",
+        "passed": true
+      },
+      {
+        "migration": "20260910000009_inbox_assignment.sql",
+        "passed": true
+      },
+      {
+        "migration": "20260910000010_insert_guards.sql",
+        "passed": true
+      },
+      {
+        "migration": "20260910000012_legacy_payplug_payments.sql",
+        "passed": true
+      },
+      {
+        "migration": "20260910000013_reminders_activation.sql",
+        "passed": true
+      },
+      {
+        "migration": "20260910000014_conversation_workflow.sql",
+        "passed": true
+      },
+      {
+        "migration": "20260910000015_payplug_live_mode.sql",
+        "passed": true
+      },
+      {
+        "migration": "20260910000016_ocr_confirmation_document_guard.sql",
+        "passed": true
+      },
+      {
+        "migration": "20260910000017_work_action_origin.sql",
+        "passed": true
+      },
+      {
+        "migration": "20260910000018_reception_measurements.sql",
+        "passed": true
+      },
+      {
+        "migration": "20260910000019_quote_reception_coverage.sql",
+        "passed": true
+      }
+    ],
+    "business_auth_storage_counts_preserved": true,
+    "storage_binary_backup": true
+  },
+  "frontend_smoke": {
+    "http_checks": 18,
+    "http_status": "passed",
+    "browser": {
+      "status": "passed",
+      "fixtureLoginRejected": true,
+      "realLoginAttempts": 0,
+      "blockedRequests": 0,
+      "runtimeErrors": 0
+    },
+    "real_authenticated_api_validation": true,
+    "authenticated_api_proof": "../verification-production-2026-09-10/backend-recipe.json"
+  },
+  "production_changes": {
+    "vercel_build_settings": "configured",
+    "candidate_frontend": "ready",
+    "custom_domain_promoted": true,
+    "database_migrated": true,
+    "edge_functions_deployed": true,
+    "worker_schedule": "*/5 * * * *",
+    "final_deployment": "dpl_3bj1m8GNBVrH87tGsLcAKx4eF2Cb"
+  },
+  "pending": [
+    "Company SMTP credentials and real invitation delivery verification",
+    "PayPlug LIVE key and real payment activation"
+  ],
+  "git_delivery": {
+    "local_commit": "3f4d1a9",
+    "published": false,
+    "reason": "Automatic approval review rejected direct main and separate-branch publication; explicit GitHub export approval requested."
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "date": "2026-09-10",
+  "migration": "20260910000018_reception_measurements.sql",
+  "quote_integration_migration": "20260910000019_quote_reception_coverage.sql",
+  "postgresql": "17, isolated disposable container, no network",
+  "sql_owner": "supabase_admin",
+  "total_sql_assertions": 112,
+  "reception_sql_assertions": 17,
+  "reception_quote_js_postgresql_cases": 12,
+  "result": "passed",
+  "fixtures": "rolled back",
+  "production_modified_by_backend_agent": false
+}

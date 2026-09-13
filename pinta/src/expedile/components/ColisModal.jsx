@@ -1,13 +1,50 @@
-import React, { useState, useMemo } from 'react';
-import { X, FileText, Search, UserPlus, Ruler, Package, MapPin, Camera } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
+import { X, FileText, Search, UserPlus, Package, MapPin, Camera } from 'lucide-react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { BRAND, STATUTS, getDestByCP, PRODUITS_INTERDITS, ABONNEMENTS } from '../constants';
 import { MSG_TEMPLATES } from '../constants/templates';
 import { uid, searchClients, telegramLink, getPrenom } from '../utils';
 import { Badge } from './ui';
 import * as sb from '../lib/supabaseData';
-import { isTelegramConfigured, sendTelegram } from '../services/telegramApi';
+import { deliverMessage } from '../services/telegramApi';
+import { supabase } from '../lib/supabase';
+import { renderTemplate } from '../services/messageTemplates';
+import { DEFAULT_BODIES } from '../services/messageDefaults';
+import { useDialog } from './ui/useDialog';
+import { receptionCartons, receptionMeasurements, receptionMeasurementIssues, receptionCartonManifest, mergeReceptionCartons, hasCompleteReceptionMeasurements, RECEPTION_MEASURES, removeReceptionCarton } from '../domain/reception';
+
+function ReceptionInput({ label, ...props }) {
+  return <label className="block min-w-0"><span className="block text-xs font-semibold text-gray-600 mb-1">{label}</span><input {...props} /></label>;
+}
+
+function CartonFields({ lines, dimensions, setTracking, setDimension, addTracking, removeTracking, inputRefs, dimensionRefs, onScan, issues = [], cartonOffset = 0 }) {
+  return <div className="space-y-3">
+    <p className="text-sm font-semibold text-gray-800">Cartons reçus</p>
+    <p className="text-xs text-gray-600">Mesurez et pesez chaque carton reçu ; fournisseur et suivi peuvent être ajoutés si connus. Entrée après un scan ajoute le suivant ; Tab parcourt les mesures.</p>
+    {lines.map((line, idx) => <section key={idx} aria-label={`Carton ${cartonOffset + idx + 1}`} className="rounded-xl border border-gray-200 p-3 space-y-3">
+      <div className="flex justify-between items-center"><h3 className="text-sm font-bold text-gray-800">Carton {cartonOffset + idx + 1}</h3>{lines.length > 1 && <button type="button" onClick={() => removeTracking(idx)} aria-label={`Supprimer le carton ${cartonOffset + idx + 1}`} className="w-11 h-11 -my-2 rounded-lg text-gray-500 hover:bg-red-50 hover:text-red-700 flex items-center justify-center"><X size={16} /></button>}</div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        <ReceptionInput label={`Fournisseur · carton ${cartonOffset + idx + 1}`} placeholder="Amazon, Zara…" value={line.fournisseur} onChange={event => setTracking(idx, 'fournisseur', event.target.value)} className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm" />
+        <label className="block"><span className="block text-xs font-semibold text-gray-600 mb-1">Numéro de suivi · carton {cartonOffset + idx + 1}</span><input ref={element => { inputRefs.current[idx] = element; }} value={line.tracking} onChange={event => setTracking(idx, 'tracking', event.target.value)} onKeyDown={event => onScan(event, idx)} placeholder="Scanner ou saisir le numéro" autoComplete="off" aria-invalid={issues.some(issue => issue.index === idx && issue.key === 'tracking')} className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm font-mono" /></label>
+      </div>
+      <fieldset className="rounded-lg bg-gray-50 border border-gray-200 p-3">
+        <legend className="px-1 text-xs font-bold text-gray-800">Mesures à réception — avant optimisation</legend>
+        <div className="grid grid-cols-2 gap-3">
+          {RECEPTION_MEASURES.map(({ key, label, unit }) => {
+            const error = issues.find(issue => issue.index === idx && issue.key === key);
+            return <label key={key} className="block min-w-0"><span className="block text-xs font-semibold text-gray-700 mb-1">{label} ({unit}) <span aria-hidden="true">*</span></span>
+              <input ref={element => { dimensionRefs.current[`${idx}:${key}`] = element; }} aria-label={`${label} à réception (${unit}) · carton ${cartonOffset + idx + 1}`} aria-required="true" aria-invalid={!!error} aria-describedby={error ? `reception-${idx}-${key}-error` : undefined} type="number" min="0.01" step="0.01" inputMode="decimal" placeholder={key === 'poids' ? '2,5' : '40'} value={dimensions[idx]?.[key] ?? ''} onChange={event => setDimension(idx, key, event.target.value)} onFocus={event => event.currentTarget.scrollIntoView({ block: 'center' })} className={`w-full min-h-11 rounded-lg border px-2.5 py-2 text-sm bg-white ${error ? 'border-red-500' : 'border-gray-300'}`} />
+              {error && <span id={`reception-${idx}-${key}-error`} className="block mt-1 text-xs text-red-700">Valeur supérieure à zéro requise.</span>}
+            </label>;
+          })}
+        </div>
+      </fieldset>
+    </section>)}
+    <button type="button" onClick={addTracking} className="w-full rounded-xl border border-dashed border-gray-300 px-3 py-2.5 text-sm font-semibold brand-t">+ Ajouter un carton</button>
+  </div>;
+}
 
 const EMPTY_FORM = {
   trackingLines: [{ fournisseur: '', tracking: '' }],
@@ -21,14 +58,8 @@ const EMPTY_FORM = {
   facMontant: '',
   facFichier: null,
   facFichierNom: '',
-  // Dimensions (optional at reception) — single colis
-  dimL: '',
-  dimW: '',
-  dimH: '',
-  poids: '',
-  // Multi-colis dims keyed by index: { 0: { dimL, dimW, dimH, poids }, 1: ... }
+  // Mandatory original measurements, one entry per physical carton. Never final packing dimensions.
   multiDims: {},
-  showDims: false,
   photoFile: null,
 };
 
@@ -48,8 +79,9 @@ function nextRef() {
   return 'EXP-TMP-' + Date.now().toString(36).toUpperCase();
 }
 
-export default function ColisModal({ open, onClose }) {
+export default function ColisModal({ open, onClose, initialColisId, initialClientId }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const appCtx = useApp();
   const { isStaff, authCl, clients, data, setData, flash, addNewClient, receptionner, upd, log } = appCtx;
   const produitsInterdits = appCtx.produitsInterdits || PRODUITS_INTERDITS;
@@ -71,6 +103,60 @@ export default function ColisModal({ open, onClose }) {
   const [newClientForm, setNewClientForm] = useState(EMPTY_NEW_CLIENT);
   const [newClientErr, setNewClientErr] = useState({});
 
+  const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
+  const trackingRefs = useRef([]);
+  const dimensionRefs = useRef({});
+  const [pendingMeasureFocus, setPendingMeasureFocus] = useState(null);
+  const initialisedRef = useRef(false);
+  const [pendingFocus, setPendingFocus] = useState(null);
+  const [saveError, setSaveError] = useState('');
+  const [photoPreview, setPhotoPreview] = useState(null);
+  useEffect(() => {
+    if (!open || !initialClientId || initialColisId || initialisedRef.current) return;
+    const client = clients.find((item) => item.id === initialClientId);
+    if (!client) return;
+    initialisedRef.current = true;
+    setSelectedClient(client); setClientSearchQ(client.nom);
+    setMode(data.some((item) => !item.archive && item.clientId === client.id && ['receptionne', 'mesure', 'attente_feu_vert', 'autorise'].includes(item.statut)) ? null : 'nouveau');
+  }, [open, initialClientId, initialColisId, clients, data]);
+  useEffect(() => {
+    if (!open) { initialisedRef.current = false; return; }
+    if (!initialColisId || initialisedRef.current) return;
+    const target = data.find(colis => colis.id === initialColisId);
+    const client = target && clients.find(item => item.id === target.clientId);
+    if (!target || !client) return;
+    initialisedRef.current = true;
+    setSelectedClient(client); setClientSearchQ(client.nom); setMode('rattacher'); setRattacherTarget(target);
+  }, [open, initialColisId, data, clients]);
+  useEffect(() => {
+    if (!open || saving || !pendingMeasureFocus) return;
+    const { index, key } = pendingMeasureFocus;
+    const input = key === 'tracking' ? trackingRefs.current[index] : dimensionRefs.current[`${index}:${key}`];
+    input?.focus(); input?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    setPendingMeasureFocus(null);
+  }, [open, saving, pendingMeasureFocus]);
+  useEffect(() => {
+    if (pendingFocus !== null && open) { trackingRefs.current[pendingFocus]?.focus(); setPendingFocus(null); }
+  }, [nf.trackingLines.length, open, pendingFocus]);
+  useEffect(() => {
+    if (!nf.photoFile) { setPhotoPreview(null); return; }
+    const url = URL.createObjectURL(nf.photoFile); setPhotoPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [nf.photoFile]);
+  // Validation from a previous expedition must not name its old carton numbers.
+  useEffect(() => {
+    setFormErr({});
+    setSaveError('');
+    setPendingMeasureFocus(null);
+  }, [mode, rattacherTarget?.id]);
+  const dialogRef=useDialog(open,()=>{if(!savingRef.current)resetAndClose();});
+  const runSave = async action => {
+    if(savingRef.current)return;
+    savingRef.current=true;setSaving(true);setSaveError('');
+    try {await action();} catch(error) {setSaveError(error.message);flash({msg:error.message,type:'error'});}
+    finally {savingRef.current=false;setSaving(false);}
+  };
   if (!open) return null;
 
   // ── helpers ──────────────────────────────────────────────
@@ -86,18 +172,34 @@ export default function ColisModal({ open, onClose }) {
   };
 
   const addTracking = () => {
+    setPendingFocus(nf.trackingLines.length);
     setNf((prev) => ({ ...prev, trackingLines: [...prev.trackingLines, { fournisseur: '', tracking: '' }] }));
   };
 
   const removeTracking = (idx) => {
-    setNf((prev) => {
-      const trackingLines = prev.trackingLines.filter((_, i) => i !== idx);
-      return { ...prev, trackingLines: trackingLines.length > 0 ? trackingLines : [{ fournisseur: '', tracking: '' }] };
-    });
+    setNf((prev) => removeReceptionCarton(prev, idx));
+    setFormErr(prev => ({ ...prev, measurements: undefined, dimensions: undefined }));
   };
+  const onScan = (event, idx) => {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    if (!nf.trackingLines[idx].tracking.trim()) return;
+    if (nf.trackingLines[idx + 1]) trackingRefs.current[idx + 1]?.focus();
+    else addTracking();
+  };
+  const setDimension = (index, key, value) => {
+    setNf(prev => ({ ...prev, multiDims: { ...prev.multiDims, [index]: { ...prev.multiDims[index], [key]: value } } }));
+    setFormErr(prev => ({ ...prev, measurements: (prev.measurements || []).filter(issue => issue.index !== index || issue.key !== key), dimensions: undefined }));
+  };
+  // Continue the selected expedition's physical carton numbering, independent of tracking coverage.
+  const cartonOffset = mode === 'rattacher' && rattacherTarget ? receptionCartonManifest(rattacherTarget).nbColis : 0;
+  const cartonFields = <CartonFields cartonOffset={cartonOffset} lines={nf.trackingLines} dimensions={nf.multiDims} setDimension={setDimension} setTracking={setTracking} addTracking={addTracking} removeTracking={removeTracking} inputRefs={trackingRefs} dimensionRefs={dimensionRefs} onScan={onScan} issues={formErr.measurements} />;
 
   const resetAndClose = () => {
     setNf(EMPTY_FORM);
+    setSaveError('');
+    setPendingFocus(null);
+    setPendingMeasureFocus(null);
     setFormErr({});
     setClientSearchQ('');
     setClientSearchOpen(false);
@@ -119,7 +221,7 @@ export default function ColisModal({ open, onClose }) {
   const STATUTS_REGROUPABLES = ['receptionne', 'mesure', 'attente_feu_vert', 'autorise'];
 
   const regroupables = selectedClient
-    ? data.filter((c) => c.clientId === selectedClient.id && STATUTS_REGROUPABLES.includes(c.statut))
+    ? data.filter((c) => !c.archive && c.clientId === selectedClient.id && STATUTS_REGROUPABLES.includes(c.statut))
     : [];
 
   const handleSelectClient = (cl) => {
@@ -133,7 +235,7 @@ export default function ColisModal({ open, onClose }) {
     setRattacherTarget(null);
     // Check regroupables for this client immediately
     const hasRegroupables = data.some(
-      (c) => c.clientId === cl.id && STATUTS_REGROUPABLES.includes(c.statut)
+      (c) => !c.archive && c.clientId === cl.id && STATUTS_REGROUPABLES.includes(c.statut)
     );
     if (!hasRegroupables) {
       setMode('nouveau');
@@ -148,6 +250,7 @@ export default function ColisModal({ open, onClose }) {
     if (!newClientForm.nom.trim() || newClientForm.nom.trim().length < 2) errs.nom = 'Nom requis (min. 2 car.)';
     if (!newClientForm.cp.trim() || !/^9[7-8]\d{3}$/.test(newClientForm.cp.replace(/\s/g, ''))) errs.cp = 'Code postal DOM-TOM requis (97xxx)';
     if (newClientForm.tel && !/^\+?\d[\d\s\-]{6,18}$/.test(newClientForm.tel.replace(/\s/g, ''))) errs.tel = 'Numéro invalide';
+    if (newClientForm.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newClientForm.email.trim())) errs.contact = 'Adresse email invalide';
     if (!newClientForm.email.trim() && !newClientForm.telegramUsername.trim()) errs.contact = 'Email ou Telegram requis (au moins un moyen de contact)';
     if (newClientForm.type === 'pro' && !newClientForm.raisonSociale.trim()) errs.raisonSociale = 'Raison sociale requise pour un pro';
     setNewClientErr(errs);
@@ -155,66 +258,80 @@ export default function ColisModal({ open, onClose }) {
   };
 
   // ── validation ────────────────────────────────────────────
-  const validate = () => {
+  const validate = (rattacher = false) => {
     const errs = {};
     if (isStaff) {
       if (!selectedClient && !newClientMode) errs.client = 'Sélectionnez un client';
-      const hasFournisseur = nf.trackingLines.some((l) => l.fournisseur.trim());
-      if (!nf.d.trim() && !hasFournisseur) errs.d = 'Saisissez au moins un fournisseur';
-      if (!nf.casier.trim()) errs.casier = 'Numéro de casier requis';
+      if (!receptionCartons(nf.trackingLines, nf.multiDims).length) errs.d = 'Ajoutez au moins un carton et ses mesures à réception.';
+      if (!rattacher && !nf.casier.trim()) errs.casier = 'Numéro de casier requis';
+      const measurements = receptionMeasurementIssues(nf.trackingLines, nf.multiDims, cartonOffset);
+      if (measurements.length) {
+        errs.measurements = measurements;
+        errs.dimensions = measurements[0].message;
+        setPendingMeasureFocus(measurements[0]);
+      }
     } else {
       if (!nf.d.trim()) errs.d = 'Description requise';
     }
+    const numbers=nf.trackingLines.map(l=>l.tracking.trim()).filter(Boolean);
+    const duplicates=numbers.find((number,index)=>numbers.indexOf(number)!==index);
+    if(duplicates)errs.d=`Numéro saisi plusieurs fois : ${duplicates}`;
+    const existing=data.find(c=>!c.archive&&!['livre','annule'].includes(c.statut)&&(c.trackings||[]).some(number=>numbers.includes(number)));
+    if(existing)errs.d=`Ce numéro est déjà rattaché au dossier ${existing.ref}. Ouvrez ce dossier pour compléter la réception.`;
     setFormErr(errs);
     return Object.keys(errs).length === 0;
   };
 
   // ── submit: rattacher à un EXP existant ──────────────
-  const handleRattacher = () => {
+  const handleRattacher = async () => {
     if (!rattacherTarget) return;
+    if (!validate(true)) return;
     const lines = nf.trackingLines || [{ fournisseur: '', tracking: '' }];
-    const newTrackings = lines.filter((l) => l.tracking.trim());
+    const newCartons = receptionCartons(lines, nf.multiDims);
+    const newTrackings = newCartons.filter(l=>l.tracking.trim());
 
-    if (newTrackings.length === 0 && !nf.casier.trim()) {
+    if (newCartons.length === 0 && !nf.casier.trim()) {
       setFormErr({ tracking: 'Saisissez au moins un tracking ou un casier' });
       return;
     }
 
+    const numbers = newTrackings.map((line) => line.tracking.trim());
+    const duplicate = numbers.find((number, index) => numbers.indexOf(number) !== index);
+    const other = data.find((colis) => !colis.archive && !['livre', 'annule'].includes(colis.statut) && (colis.trackings || []).some((number) => numbers.includes(number)));
+    if (duplicate || other) { setFormErr({ tracking: duplicate ? `Numéro saisi plusieurs fois : ${duplicate}` : `Numéro déjà présent dans ${other.ref}. Vérifiez le carton avant rattachement.` }); return; }
+
     const existing = rattacherTarget;
-    const existingTrackings = existing.trackings?.filter((t) => t) || [];
-    const existingDetail = existing.trackingsDetail || [];
+    const changes = mergeReceptionCartons(existing, lines, nf.multiDims);
+    if (!changes) throw new Error('Mesures à réception incomplètes : vérifiez chaque nouveau carton.');
+    if (checkedInterdits.length) {
+      changes.checkInterdits = [...new Set([...(existing.checkInterdits || []), ...checkedInterdits])];
+      changes.produitInterdit = true;
+    }
+    changes.statut = hasCompleteReceptionMeasurements(changes) ? 'mesure' : 'receptionne';
 
-    const updatedTrackings = [
-      ...existingTrackings,
-      ...newTrackings.map((l) => l.tracking.trim()),
-    ];
-    const updatedDetail = [
-      ...existingDetail,
-      ...newTrackings.map((l) => ({ number: l.tracking.trim(), fournisseur: l.fournisseur.trim() })),
-    ];
-
-    const changes = {
-      trackings: updatedTrackings,
-      trackingsDetail: updatedDetail,
-      nbColis: updatedTrackings.length,
-    };
-
-    // Remettre en receptionne si mesuré (il faut re-mesurer)
-    if (existing.statut === 'mesure') {
-      changes.statut = 'receptionne';
-      changes.dimL = null;
-      changes.dimW = null;
-      changes.dimH = null;
-      changes.poids = null;
-      changes.dimsParColis = [];
+    // Un nouvel accord doit porter sur tous les cartons ; les mesures originales restent conservées.
+    if (newCartons.length && ['mesure','autorise','attente_feu_vert'].includes(existing.statut)) {
+      changes.feuVert = 'en_attente';
+      changes.feuVertDate = null;
+      changes.attenteClientUntil = null;
+      changes.attenteClientDate = null;
+      changes.attenteClientMotif = null;
+      changes.demandeFeuVertEnvoyeeAt = null;
     }
 
     if (nf.casier?.trim()) changes.casier = nf.casier.trim();
     if (nf.notesReception?.trim()) changes.notesReception = (existing.notesReception ? existing.notesReception + '\n' : '') + nf.notesReception.trim();
 
-    upd(existing.id, changes);
-    flash(`Carton rattaché à ${existing.ref} — ${updatedTrackings.length} colis au total`);
+    await upd(existing.id, changes, { expectedUpdatedAt: existing.updatedAt });
+    flash(`${newCartons.length} carton${newCartons.length > 1 ? 's' : ''} rattaché${newCartons.length > 1 ? 's' : ''} à ${existing.ref} — ${changes.nbColis} cartons au total`);
     resetAndClose();
+    // Open the dossier that actually received the cartons, keeping the current queue context.
+    const sameDetail = location.pathname === `/colis/${existing.id}`;
+    const query = new URLSearchParams(/^\/colis\/?$/.test(location.pathname) ? location.search : '');
+    query.set('dossier', existing.id);
+    navigate(sameDetail ? { pathname: location.pathname, search: location.search } : { pathname: '/colis', search: `?${query}` }, {
+      state: { receivedCarton: { colisId: existing.id, index: receptionCartonManifest(existing).nbColis } },
+    });
   };
 
   // ── submit: staff new colis (reception) ──────────────
@@ -224,8 +341,7 @@ export default function ColisModal({ open, onClose }) {
     let cl;
     if (newClientMode) {
       if (!validateNewClient()) return;
-      if (!nf.d.trim()) { setFormErr({ d: 'Description requise' }); return; }
-      if (!nf.casier.trim()) { setFormErr({ casier: 'Numéro de casier requis' }); return; }
+      if (!validate()) return;
       clientId = await addNewClient({
         nom: newClientForm.nom.trim(),
         prenom: newClientForm.prenom.trim(),
@@ -255,6 +371,7 @@ export default function ColisModal({ open, onClose }) {
         points: 0,
       });
       cl = { ...newClientForm, id: clientId, nom: newClientForm.nom.trim(), tel: newClientForm.tel.trim() };
+      setSelectedClient(cl); setNewClientMode(false); setClientSearchQ(cl.nom);
     } else {
       if (!validate()) return;
       clientId = selectedClient.id;
@@ -283,96 +400,55 @@ export default function ColisModal({ open, onClose }) {
         dimW: colisTemplate.dimW,
         dimH: colisTemplate.dimH,
         poids: colisTemplate.poids,
-        nbColis: colisTemplate.trackings?.length || 1,
+        nbColis: colisTemplate.nbColis,
         dimsParColis: colisTemplate.dimsParColis,
         statut: colisTemplate.statut,
+        checkInterdits: colisTemplate.checkInterdits,
+        produitInterdit: colisTemplate.produitInterdit,
       });
       newColis = { ...colisTemplate, ...inserted };
     } catch (err) {
-      console.warn('[Supabase] insertColis fallback local:', err.message);
+      throw new Error(`Réception non enregistrée : ${err.message}`);
     }
     setData((prev) => [...prev, newColis]);
 
-    // Auto-group casier: UNIQUEMENT en mode "rattacher" (ajout d'un carton à un EXP existant)
-    // Créer un nouveau EXP = groupe physique indépendant, casier propre
-    if (mode === 'rattacher' && nf.casier.trim()) {
-      const newCasier = nf.casier.trim();
-      data.forEach((c) => {
-        if (c.clientId === clientId && c.id !== newColis.id
-            && c.statut !== 'livre' && c.statut !== 'annule'
-            && c.casier !== newCasier
-            && !c.envoi) { // ONLY move colis without envoi
-          const oldCasier = c.casier;
-          const historique = c.casierHistorique || [];
-          if (oldCasier) {
-            historique.push({ casier: oldCasier, date: new Date().toISOString() });
-          }
-          upd(c.id, { casier: newCasier, casierHistorique: historique });
-        }
-      });
+    if (nf.photoFile) {
+      try {
+        const uploaded = await sb.uploadDocument('photos-colis',newColis.id,nf.photoFile);
+        await sb.updateColis(newColis.id,{photoReception:true,photoReceptionUrl:uploaded.path});
+      } catch(error) { flash({msg:`Colis enregistré, photo à ajouter : ${error.message}`,type:'warning'}); }
     }
-
-    const hasDims = nf.trackingLines.every((_, i) => {
-      const d = nf.multiDims[i] || {};
-      return d.dimL && d.dimW && d.dimH && d.poids;
-    });
-
-    // Envoyer notification DIRECTEMENT (pas via sendMsg qui dépend du state).
-    // On passe par le template centralisé MSG_TEMPLATES.reception pour rester
-    // cohérent avec les autres canaux et éviter la duplication de logique.
-    if (sendTG && cl) {
-      const chatId = cl.telegramChatId;
-      const prenom = getPrenom(cl);
-
-      const expiryWarning = isSubExpired && isAnnuelSub
-        ? `\n\n⚠️ *Attention :* Votre abonnement a expiré. Le traitement de vos colis est suspendu jusqu'au renouvellement. Contactez-nous pour réactiver votre compte.\n`
-        : '';
-
-      const telegramMsg = MSG_TEMPLATES.reception.telegram(cl, newColis) + expiryWarning;
-
-      if (chatId && isTelegramConfigured()) {
-        // Envoyer via API Telegram directement
-        sendTelegram(chatId, telegramMsg).then(async (res) => {
-          // Persister le message dans Supabase
-          try {
-            await sb.insertMessage(newColis.id, {
-              type: 'staff',
-              auteur: appCtx.auth?.u?.nom || 'Système',
-              texte: telegramMsg,
-              statut: res.ok ? 'envoye' : 'echec',
-            });
-          } catch (e) { console.warn('insertMessage error:', e.message); }
+    if (sendTG && cl && !cl.telegramChatId && !cl.userId) {
+      flash({ msg: `Expédition ${newColis.ref} enregistrée. Accès client à activer : ouvrez sa fiche pour l’inviter ou préparez un email.`, type: 'warning', duration: 12000 });
+    } else if (sendTG && cl) {
+      try {
+        const {data:queued,error}=await supabase.rpc('queue_message',{
+          p_colis_id:newColis.id,p_text:renderTemplate(appCtx.messageTemplates.reception_telegram || DEFAULT_BODIES.reception_telegram,{client:cl,colis:newColis,destination:getDestByCP(cl.cp),settings:appCtx.settings}),
+          p_template:'reception',p_idempotency_key:`receipt:${newColis.id}`,
+          p_canal:cl.telegramChatId?'telegram':'portal',
         });
-        flash(`Colis ${newColis.ref} réceptionné — notification Telegram envoyée à ${prenom}`);
-      } else if (cl.email) {
-        // Fallback email — template centralisé aussi
-        const emailMsg = MSG_TEMPLATES.reception.email(cl, newColis);
-        const lines = emailMsg.split('\n');
-        const subject = (lines[0] || '').replace(/^Objet\s*:\s*/, '').trim() || `Votre colis ${newColis.ref} est arrivé`;
-        const body = lines.slice(1).join('\n').trim();
-        window.open(`mailto:${cl.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`, '_blank');
-        flash(`Colis ${newColis.ref} réceptionné — email ouvert pour ${prenom}`);
-      } else {
-        flash(`Colis ${newColis.ref} réceptionné — client non joignable (pas de Telegram ni email)`);
-      }
-    } else {
-      flash(`Colis ${newColis.ref} réceptionné${hasDims ? ' + mesuré' : ''} — casier ${nf.casier.trim()}`);
-    }
+        if(error)throw error;
+        if(cl.telegramChatId){
+          const result=await deliverMessage(newColis.id,queued.message?.id || queued.message_id);
+          if(!result.ok)throw new Error(result.error);
+        }
+        flash(`Colis ${newColis.ref} enregistré — notification ${cl.telegramChatId?'Telegram envoyée':'disponible dans l’espace client'}`);
+      }catch(error){flash({msg:`Colis ${newColis.ref} enregistré. Notification à réessayer : ${error.message}`,type:'warning'});}
+    }else flash(`Colis ${newColis.ref} réceptionné — casier ${nf.casier.trim()}`);
 
     const newId = newColis.id;
     resetAndClose();
     if (isStaff && newId) {
-      setTimeout(() => navigate(`/colis/${newId}`), 100);
+      navigate(`/colis/${newId}`);
     }
   };
 
   // ── build colis object ────────────────────────────────────
   const buildColis = (clientId, statut) => {
     const ref = nextRef();
-    const trackings = nf.trackingLines.map((t) => t.tracking.trim()).filter((t) => t);
-    const trackingsDetail = nf.trackingLines
-      .filter((t) => t.tracking.trim())
-      .map((t) => ({ number: t.tracking.trim(), fournisseur: t.fournisseur.trim() }));
+    const cartons = receptionCartons(nf.trackingLines, nf.multiDims);
+    const trackings = cartons.map((t) => t.tracking).filter(Boolean);
+    const trackingsDetail = cartons.map((t) => ({ number: t.tracking, fournisseur: t.fournisseur }));
     const factures =
       !isStaff && nf.facUploaded && nf.facVendeur.trim()
         ? [
@@ -387,30 +463,9 @@ export default function ColisModal({ open, onClose }) {
           ]
         : [];
 
-    // Detect per-carton dims (always use multiDims keyed by trackingLine index)
-    let hasDims = false;
-    let dimL = null, dimW = null, dimH = null, poids = null;
-    let dimsParColis = [];
-
-    if (isStaff) {
-      const lineCount = nf.trackingLines.length;
-      const allFilled = Array.from({ length: lineCount }, (_, i) => i).every((i) => {
-        const d = nf.multiDims[i] || {};
-        return d.dimL && d.dimW && d.dimH && d.poids;
-      });
-      if (allFilled) {
-        hasDims = true;
-        dimsParColis = Array.from({ length: lineCount }, (_, i) => {
-          const d = nf.multiDims[i];
-          return { dimL: parseFloat(d.dimL), dimW: parseFloat(d.dimW), dimH: parseFloat(d.dimH), poids: parseFloat(d.poids) };
-        });
-        const totalPoids = dimsParColis.reduce((s, d) => s + d.poids, 0);
-        dimL = Math.max(...dimsParColis.map((d) => d.dimL));
-        dimW = Math.max(...dimsParColis.map((d) => d.dimW));
-        dimH = Math.max(...dimsParColis.map((d) => d.dimH));
-        poids = Math.round(totalPoids * 100) / 100;
-      }
-    }
+    const measurements = isStaff ? receptionMeasurements(nf.trackingLines, nf.multiDims) : null;
+    const hasDims = Boolean(measurements);
+    const { dimL = null, dimW = null, dimH = null, poids = null, dimsParColis = [] } = measurements || {};
 
     const finalStatut = hasDims ? 'mesure' : statut;
 
@@ -421,7 +476,8 @@ export default function ColisModal({ open, onClose }) {
       statut: finalStatut,
       trackings,
       trackingsDetail,
-      desc: nf.d.trim() || [...new Set(nf.trackingLines.map((l) => l.fournisseur.trim()).filter(Boolean))].join(' + ') || '',
+      nbColis: Math.max(1, cartons.length),
+      desc: nf.d.trim() || [...new Set(nf.trackingLines.map((l) => l.fournisseur.trim()).filter(Boolean))].join(' + ') || 'Carton reçu',
       notesReception: nf.notesReception.trim() || null,
       valeur: null,
       dimL,
@@ -465,27 +521,28 @@ export default function ColisModal({ open, onClose }) {
   const labelCls = 'block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1';
 
   const isMatchMode = false;
+  const notificationAccessible = !!(selectedClient?.telegramChatId || selectedClient?.userId);
 
   // ─────────────────────────────────────────────────────────
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center px-0 sm:px-4"
+      className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center px-0 sm:px-4"
       style={{ backgroundColor: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(6px)' }}
       onClick={(e) => {
-        if (e.target === e.currentTarget) resetAndClose();
+        if (e.target === e.currentTarget && !saving) resetAndClose();
       }}
     >
-      <div className="bg-white w-full max-w-lg rounded-t-3xl sm:rounded-2xl shadow-2xl flex flex-col max-h-[90vh]">
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Réceptionner des cartons" tabIndex={-1} className="bg-white w-full max-w-lg rounded-t-3xl sm:rounded-2xl shadow-2xl flex flex-col max-h-[90dvh]">
         {/* ── Header ── */}
-        <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-gray-100">
+        <div className="shrink-0 flex items-center justify-between px-5 pt-5 pb-4 border-b border-gray-100">
           <div>
             <h2 className="text-lg font-black text-gray-900">
-              Réceptionner un colis
+              Réceptionner des cartons
             </h2>
           </div>
           <button
             onClick={resetAndClose}
-            className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-700 transition-colors"
+            disabled={saving} className="w-11 h-11 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-700 transition-colors"
             aria-label="Fermer"
           >
             <X size={18} />
@@ -493,12 +550,13 @@ export default function ColisModal({ open, onClose }) {
         </div>
 
         {/* ── Body ── */}
-        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+        <div className="flex-1 min-h-0 overflow-y-auto px-5 py-4 space-y-4">
 
+          <fieldset disabled={saving} className="min-w-0 space-y-4">
           {/* ── CLIENT (staff only) ── */}
           {isStaff && !newClientMode && (
             <div>
-              <label className={labelCls}>Client</label>
+              <label htmlFor="reception-client" className={labelCls}>Client</label>
               <div>
                 <div className="relative">
                   <Search
@@ -507,7 +565,7 @@ export default function ColisModal({ open, onClose }) {
                   />
                   <input
                     type="text"
-                    placeholder="Rechercher un client…"
+                    id="reception-client" aria-invalid={!!formErr.client} placeholder="Rechercher un client…"
                     value={clientSearchQ}
                     onChange={(e) => {
                       setClientSearchQ(e.target.value);
@@ -537,7 +595,7 @@ export default function ColisModal({ open, onClose }) {
                           type="button"
                           onMouseDown={(e) => e.preventDefault()}
                           onClick={() => {
-                            setNewClientMode(true);
+                            setNewClientMode(true); setMode('nouveau');
                             setNewClientForm((prev) => ({ ...prev, nom: clientSearchQ.trim() }));
                             setClientSearchOpen(false);
                           }}
@@ -583,7 +641,7 @@ export default function ColisModal({ open, onClose }) {
                             type="button"
                             onMouseDown={(e) => e.preventDefault()}
                             onClick={() => {
-                              setNewClientMode(true);
+                              setNewClientMode(true); setMode('nouveau');
                               setNewClientForm((prev) => ({ ...prev, nom: clientSearchQ.trim() }));
                               setClientSearchOpen(false);
                             }}
@@ -619,9 +677,9 @@ export default function ColisModal({ open, onClose }) {
                       style={{ borderColor: BRAND.gold + '60', background: BRAND.gold + '08' }}
                     >
                       <div className="flex items-center gap-2">
-                        <Package size={14} style={{ color: BRAND.goldD }} />
-                        <span className="text-xs font-bold" style={{ color: BRAND.goldD }}>
-                          Ce client a {regroupables.length} colis en entrepôt
+                        <Package size={14} style={{ color: 'var(--text-accent)' }} />
+                        <span className="text-xs font-bold" style={{ color: 'var(--text-accent)' }}>
+                          Ce client a {regroupables.length} expédition(s) ouverte(s)
                         </span>
                       </div>
                       <p className="text-xs text-gray-600">
@@ -637,18 +695,18 @@ export default function ColisModal({ open, onClose }) {
                           >
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2">
-                                <span className="font-black text-sm" style={{ color: BRAND.navy }}>{c.ref}</span>
+                                <span className="font-black text-sm" style={{ color: 'var(--brand-text)' }}>{c.ref}</span>
                                 {c.casier && (
-                                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ background: `${BRAND.gold}22`, color: BRAND.goldD }}>
+                                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ background: `${BRAND.gold}22`, color: 'var(--text-accent)' }}>
                                     {c.casier}
                                   </span>
                                 )}
                                 <Badge statut={c.statut} />
                               </div>
                               <p className="text-xs text-gray-500 truncate mt-0.5">{c.desc}</p>
-                              {c.trackings?.filter((t) => t).length > 0 && (
+                              {(c.nbColis || c.trackings?.length || 1) > 0 && (
                                 <p className="text-[10px] text-gray-400 mt-0.5">
-                                  {c.trackings.filter((t) => t).length} carton{c.trackings.filter((t) => t).length > 1 ? 's' : ''} déjà rattaché{c.trackings.filter((t) => t).length > 1 ? 's' : ''}
+                                  {c.nbColis || c.trackings?.length || 1} carton(s) déjà rattaché(s)
                                 </p>
                               )}
                             </div>
@@ -682,7 +740,7 @@ export default function ColisModal({ open, onClose }) {
           {isStaff && newClientMode && (
             <div
               className="rounded-xl border p-4 space-y-4"
-              style={{ borderColor: '#10B981', background: '#F0FDF4' }}
+              style={{ borderColor: '#10B981', background: 'var(--bg-surface)' }}
             >
               <div className="flex items-center justify-between mb-1">
                 <div className="flex items-center gap-2">
@@ -695,6 +753,7 @@ export default function ColisModal({ open, onClose }) {
                     setNewClientMode(false);
                     setNewClientForm(EMPTY_NEW_CLIENT);
                     setNewClientErr({});
+                    setMode(null);
                   }}
                   className="text-xs font-semibold text-gray-400 hover:text-gray-600"
                 >
@@ -716,7 +775,7 @@ export default function ColisModal({ open, onClose }) {
                   ))}
                 </div>
                 <select
-                  value={newClientForm.abonnement}
+                  aria-label="Abonnement" value={newClientForm.abonnement}
                   onChange={(e) => setNCField('abonnement', e.target.value)}
                   className="px-2 py-1.5 rounded-lg border border-gray-200 text-xs font-semibold bg-white"
                 >
@@ -728,7 +787,7 @@ export default function ColisModal({ open, onClose }) {
                   <>
                     <div className="flex items-center gap-1">
                       <span className="text-[10px] text-gray-500">Début :</span>
-                      <input
+                      <ReceptionInput label="Début d’abonnement"
                         type="date"
                         value={newClientForm.abonnementDebut}
                         onChange={(e) => setNCField('abonnementDebut', e.target.value)}
@@ -737,7 +796,7 @@ export default function ColisModal({ open, onClose }) {
                     </div>
                     <div className="flex items-center gap-1">
                       <span className="text-[10px] text-gray-500">Fin :</span>
-                      <input
+                      <ReceptionInput label="Fin d’abonnement"
                         type="date"
                         value={newClientForm.abonnementFin}
                         onChange={(e) => setNCField('abonnementFin', e.target.value)}
@@ -754,7 +813,7 @@ export default function ColisModal({ open, onClose }) {
                   <p className="text-[10px] font-bold text-amber-700 uppercase tracking-wider">Entreprise</p>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <input
+                      <ReceptionInput label="Raison sociale *"
                         type="text"
                         placeholder="Raison sociale *"
                         value={newClientForm.raisonSociale}
@@ -763,7 +822,7 @@ export default function ColisModal({ open, onClose }) {
                       />
                       {newClientErr.raisonSociale && <p className="mt-0.5 text-[10px] text-red-500">{newClientErr.raisonSociale}</p>}
                     </div>
-                    <input
+                    <ReceptionInput label="SIRET"
                       type="text"
                       placeholder="SIRET"
                       value={newClientForm.siret}
@@ -772,7 +831,7 @@ export default function ColisModal({ open, onClose }) {
                       style={{ fontFamily: 'monospace' }}
                     />
                   </div>
-                  <input
+                  <ReceptionInput label="Interlocuteur"
                     type="text"
                     placeholder="Interlocuteur"
                     value={newClientForm.interlocuteur}
@@ -782,7 +841,7 @@ export default function ColisModal({ open, onClose }) {
                   <div>
                     <label className="text-[10px] text-gray-500 font-semibold mb-0.5 block">Mode de paiement</label>
                     <select
-                      value={newClientForm.modePaiement}
+                      aria-label="Mode de paiement" value={newClientForm.modePaiement}
                       onChange={(e) => setNCField('modePaiement', e.target.value)}
                       className="w-full px-2 py-1.5 rounded-lg border border-gray-200 text-xs bg-white"
                     >
@@ -813,9 +872,9 @@ export default function ColisModal({ open, onClose }) {
                     ))}
                   </div>
                 )}
-                <div className={`grid gap-2 ${newClientForm.type === 'particulier' ? 'grid-cols-3' : 'grid-cols-2'}`}>
+                <div className={`grid gap-2 ${newClientForm.type === 'particulier' ? 'grid-cols-2' : 'grid-cols-2'}`}>
                   <div>
-                    <input
+                    <ReceptionInput label="Nom *"
                       type="text"
                       placeholder={newClientForm.type === 'pro' ? 'Nom contact *' : 'Nom *'}
                       value={newClientForm.nom}
@@ -824,7 +883,7 @@ export default function ColisModal({ open, onClose }) {
                     />
                     {newClientErr.nom && <p className="mt-0.5 text-[10px] text-red-500">{newClientErr.nom}</p>}
                   </div>
-                  <input
+                  <ReceptionInput label="Prénom"
                     type="text"
                     placeholder="Prénom"
                     value={newClientForm.prenom}
@@ -832,7 +891,7 @@ export default function ColisModal({ open, onClose }) {
                     className={inputCls(false)}
                   />
                   {newClientForm.type === 'particulier' && (
-                    <input
+                    <ReceptionInput label="Date de naissance"
                       type="date"
                       title="Date de naissance"
                       placeholder="Date naissance"
@@ -850,7 +909,7 @@ export default function ColisModal({ open, onClose }) {
                 {newClientErr.contact && <p className="text-[10px] text-red-500 font-bold bg-red-50 border border-red-200 rounded-lg px-2 py-1">{newClientErr.contact}</p>}
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <input
+                    <ReceptionInput label="Téléphone mobile"
                       type="tel"
                       placeholder="Tél. mobile *"
                       value={newClientForm.tel}
@@ -860,7 +919,7 @@ export default function ColisModal({ open, onClose }) {
                     />
                     {newClientErr.tel && <p className="mt-0.5 text-[10px] text-red-500">{newClientErr.tel}</p>}
                   </div>
-                  <input
+                  <ReceptionInput label="Téléphone fixe"
                     type="tel"
                     placeholder="Tél. fixe"
                     value={newClientForm.telFixe}
@@ -870,14 +929,14 @@ export default function ColisModal({ open, onClose }) {
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-2">
-                  <input
+                  <ReceptionInput label="Email"
                     type="email"
                     placeholder="Email *"
                     value={newClientForm.email}
                     onChange={(e) => setNCField('email', e.target.value)}
                     className={inputCls(false)}
                   />
-                  <input
+                  <ReceptionInput label="Identifiant Telegram"
                     type="text"
                     placeholder="Telegram @username"
                     value={newClientForm.telegramUsername}
@@ -890,14 +949,14 @@ export default function ColisModal({ open, onClose }) {
               {/* ── Adresse livraison ── */}
               <div className="space-y-2">
                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Adresse de livraison</p>
-                <input
+                <ReceptionInput label="Adresse"
                   type="text"
                   placeholder="Adresse ligne 1 *"
                   value={newClientForm.adresseLigne1}
                   onChange={(e) => setNCField('adresseLigne1', e.target.value)}
                   className={inputCls(false)}
                 />
-                <input
+                <ReceptionInput label="Complément d’adresse"
                   type="text"
                   placeholder="Adresse ligne 2 (complément)"
                   value={newClientForm.adresseLigne2}
@@ -906,7 +965,7 @@ export default function ColisModal({ open, onClose }) {
                 />
                 <div className="grid grid-cols-3 gap-2">
                   <div>
-                    <input
+                    <ReceptionInput label="Code postal *"
                       type="text"
                       placeholder="Code postal *"
                       value={newClientForm.cp}
@@ -916,14 +975,14 @@ export default function ColisModal({ open, onClose }) {
                     />
                     {newClientErr.cp && <p className="mt-0.5 text-[10px] text-red-500">{newClientErr.cp}</p>}
                   </div>
-                  <input
+                  <ReceptionInput label="Ville"
                     type="text"
                     placeholder="Ville"
                     value={newClientForm.ville}
                     onChange={(e) => setNCField('ville', e.target.value)}
                     className={inputCls(false)}
                   />
-                  <input
+                  <ReceptionInput label="Commune"
                     type="text"
                     placeholder="Commune"
                     value={newClientForm.commune}
@@ -932,7 +991,7 @@ export default function ColisModal({ open, onClose }) {
                   />
                 </div>
                 <textarea
-                  placeholder="Infos livraison (digicode, étage, horaires...)"
+                  aria-label="Informations de livraison" placeholder="Infos livraison (digicode, étage, horaires...)"
                   value={newClientForm.infosLivraison}
                   onChange={(e) => setNCField('infosLivraison', e.target.value)}
                   rows={2}
@@ -942,7 +1001,7 @@ export default function ColisModal({ open, onClose }) {
 
               {/* ── Notes ── */}
               <textarea
-                placeholder="Notes internes (optionnel)"
+                aria-label="Notes internes" placeholder="Notes internes (optionnel)"
                 value={newClientForm.notes}
                 onChange={(e) => setNCField('notes', e.target.value)}
                 rows={2}
@@ -956,8 +1015,8 @@ export default function ColisModal({ open, onClose }) {
             <>
               <div className="rounded-xl border p-3" style={{ borderColor: BRAND.navy + '30', background: BRAND.navy + '06' }}>
                 <div className="flex items-center gap-2 mb-1">
-                  <Package size={14} style={{ color: BRAND.navy }} />
-                  <span className="text-xs font-bold" style={{ color: BRAND.navy }}>
+                  <Package size={14} style={{ color: 'var(--brand-text)' }} />
+                  <span className="text-xs font-bold" style={{ color: 'var(--brand-text)' }}>
                     Ajouter un carton à {rattacherTarget.ref}
                   </span>
                   <button type="button" onClick={() => { setMode(null); setRattacherTarget(null); }} className="ml-auto text-[10px] text-gray-400 hover:text-gray-600">
@@ -967,46 +1026,23 @@ export default function ColisModal({ open, onClose }) {
                 <p className="text-[11px] text-gray-500">{rattacherTarget.desc} · Casier {rattacherTarget.casier || '—'}</p>
               </div>
 
-              {/* Tracking + fournisseur */}
-              <div>
-                <label className={labelCls}>Nouveau carton</label>
-                {nf.trackingLines.map((line, idx) => (
-                  <div key={idx} className="flex gap-2 mb-2">
-                    <input
-                      type="text"
-                      placeholder="Fournisseur (Amazon, Zara...)"
-                      value={line.fournisseur}
-                      onChange={(e) => setTracking(idx, 'fournisseur', e.target.value)}
-                      className="flex-1 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm outline-none focus:border-blue-400 focus:bg-white"
-                    />
-                    <input
-                      type="text"
-                      placeholder="N° tracking"
-                      value={line.tracking}
-                      onChange={(e) => setTracking(idx, 'tracking', e.target.value)}
-                      className="flex-1 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm outline-none focus:border-blue-400 focus:bg-white"
-                    />
-                    {nf.trackingLines.length > 1 && (
-                      <button type="button" onClick={() => removeTracking(idx)} className="text-gray-300 hover:text-red-500 px-1"><X size={14} /></button>
-                    )}
-                  </div>
-                ))}
-                <button type="button" onClick={addTracking} className="text-xs font-bold" style={{ color: BRAND.navy }}>+ Ajouter un tracking</button>
-              </div>
+              {cartonFields}
+              <p className="text-xs text-gray-600">{receptionCartonManifest(rattacherTarget).nbColis} carton(s) déjà reçu(s) : leurs mesures sont conservées. {!hasCompleteReceptionMeasurements(rattacherTarget) && 'Certaines mesures anciennes restent à compléter dans le dossier avant de demander un accord.'}</p>
 
               {/* Casier optionnel (si on veut changer) */}
               <div>
-                <label className={labelCls}>Casier (laisser vide pour garder {rattacherTarget.casier || 'l\'actuel'})</label>
+                <label htmlFor="reception-casier-existing" className={labelCls}>Casier (laisser vide pour garder {rattacherTarget.casier || 'l\'actuel'})</label>
                 <input
                   type="text"
-                  placeholder={rattacherTarget.casier || 'Ex: A-03'}
+                  id="reception-casier-existing" placeholder={rattacherTarget.casier || 'Ex: A-03'}
                   value={nf.casier}
                   onChange={(e) => setField('casier', e.target.value.toUpperCase())}
                   className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm outline-none focus:border-blue-400 focus:bg-white"
                 />
               </div>
 
-              {formErr.tracking && <p className="text-xs text-red-500">{formErr.tracking}</p>}
+              {formErr.d && <p role="alert" className="text-sm font-semibold text-red-700">{formErr.d}</p>}
+              {formErr.tracking && <p role="alert" className="text-xs text-red-500">{formErr.tracking}</p>}
             </>
           )}
 
@@ -1016,12 +1052,12 @@ export default function ColisModal({ open, onClose }) {
               {/* ── CASIER (staff only, MANDATORY — first field for speed) ── */}
               {isStaff && (
                 <div>
-                  <label className={labelCls}>
+                  <label htmlFor="reception-casier" className={labelCls}>
                     Casier <span className="text-red-400 ml-0.5">*</span>
                   </label>
                   <input
                     type="text"
-                    placeholder="Ex: A-03"
+                    id="reception-casier" aria-invalid={!!formErr.casier} placeholder="Ex: A-03"
                     value={nf.casier}
                     onChange={(e) => {
                       setField('casier', e.target.value);
@@ -1036,61 +1072,20 @@ export default function ColisModal({ open, onClose }) {
                 </div>
               )}
 
-              {/* ── TRACKINGS (fournisseur + numéro par carton) ── */}
-              <div>
-                <label className={labelCls}>
-                  Cartons reçus
-                  <span className="text-red-400 ml-0.5">*</span>
-                </label>
-                <p className="text-[10px] text-gray-400 mb-2">Un fournisseur + tracking par carton reçu</p>
-                <div className="space-y-2">
-                  {nf.trackingLines.map((line, idx) => (
-                    <div key={idx} className="flex items-center gap-2">
-                      <input
-                        type="text"
-                        placeholder="Amazon, Zara..."
-                        value={line.fournisseur}
-                        onChange={(e) => setTracking(idx, 'fournisseur', e.target.value)}
-                        className="w-2/5 rounded-xl border border-gray-200 bg-gray-50 focus:border-blue-400 focus:bg-white px-3 py-2.5 text-sm outline-none transition-colors"
-                      />
-                      <input
-                        type="text"
-                        placeholder="LP123456FR"
-                        value={line.tracking}
-                        onChange={(e) => setTracking(idx, 'tracking', e.target.value)}
-                        className="flex-1 rounded-xl border border-gray-200 bg-gray-50 focus:border-blue-400 focus:bg-white px-3 py-2.5 text-sm outline-none transition-colors font-mono"
-                      />
-                      {nf.trackingLines.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => removeTracking(idx)}
-                          className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors"
-                          aria-label="Supprimer"
-                        >
-                          <X size={15} />
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-                <button
-                  type="button"
-                  onClick={addTracking}
-                  className="mt-2 text-xs font-semibold text-blue-500 hover:text-blue-700 transition-colors"
-                >
-                  + Ajouter un tracking
-                </button>
-              </div>
-
+              {cartonFields}
+              {formErr.d && <p role="alert" className="text-sm font-semibold text-red-700">{formErr.d}</p>}
+              <details className="rounded-xl border border-gray-200 p-3">
+                <summary className="min-h-11 flex items-center cursor-pointer text-sm font-semibold text-gray-700">Compléments de réception{checkedInterdits.length > 0 ? ` · ${checkedInterdits.length} alerte(s)` : nf.notesReception || nf.photoFile ? ' · renseignés' : ' · observations, contrôles, photo'}</summary>
+                <div className="space-y-4 pt-3">
               {/* ── NOTES DE RECEPTION (staff) ── */}
               {isStaff && (
                 <div>
-                  <label className={labelCls}>
+                  <label htmlFor="reception-notes" className={labelCls}>
                     Notes de réception
                     <span className="ml-1 normal-case text-gray-400 font-normal">(facultatif)</span>
                   </label>
                   <textarea
-                    placeholder="Ex: Carton abimé, scotch arraché, colis ouvert..."
+                    id="reception-notes" placeholder="Ex: Carton abimé, scotch arraché, colis ouvert..."
                     value={nf.notesReception}
                     onChange={(e) => setField('notesReception', e.target.value)}
                     rows={2}
@@ -1109,6 +1104,7 @@ export default function ColisModal({ open, onClose }) {
                       return (
                         <button
                           key={item}
+                          aria-pressed={checked}
                           type="button"
                           onClick={() => setCheckedInterdits(prev =>
                             checked ? prev.filter(i => i !== item) : [...prev, item]
@@ -1139,7 +1135,7 @@ export default function ColisModal({ open, onClose }) {
                     <span className="ml-1 normal-case text-gray-400 font-normal">(facultatif)</span>
                   </label>
                   <div className="flex items-center gap-3">
-                    <label className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-dashed border-gray-300 bg-gray-50 cursor-pointer hover:bg-gray-100 transition-colors">
+                    <label className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-dashed focus-within:ring-2 focus-within:ring-blue-600 border-gray-300 bg-gray-50 cursor-pointer hover:bg-gray-100 transition-colors">
                       <Camera size={16} className="text-gray-400" />
                       <span className="text-xs font-semibold text-gray-500">
                         {nf.photoFile ? nf.photoFile.name : 'Prendre une photo / Choisir un fichier'}
@@ -1148,7 +1144,7 @@ export default function ColisModal({ open, onClose }) {
                         type="file"
                         accept="image/*"
                         capture="environment"
-                        className="hidden"
+                        className="sr-only"
                         onChange={(e) => {
                           const file = e.target.files?.[0];
                           if (file) setField('photoFile', file);
@@ -1167,7 +1163,7 @@ export default function ColisModal({ open, onClose }) {
                   </div>
                   {nf.photoFile && (
                     <img
-                      src={URL.createObjectURL(nf.photoFile)}
+                      src={photoPreview}
                       alt="Photo réception"
                       className="mt-2 rounded-xl max-h-32 object-cover"
                     />
@@ -1175,101 +1171,8 @@ export default function ColisModal({ open, onClose }) {
                 </div>
               )}
 
-              {/* ── DIMENSIONS (staff only, optional — saves a step if filled) ── */}
-              {isStaff && (() => {
-                const dimInputCls = "w-full px-2.5 py-2 rounded-lg border border-gray-200 bg-white text-sm outline-none focus:border-blue-400";
-                const updateMultiDim = (idx, field, val) => setNf((prev) => ({
-                  ...prev,
-                  multiDims: {
-                    ...prev.multiDims,
-                    [idx]: { ...(prev.multiDims[idx] || { dimL: '', dimW: '', dimH: '', poids: '' }), [field]: val },
-                  },
-                }));
-
-                if (!nf.showDims) {
-                  return (
-                    <div>
-                      <button
-                        type="button"
-                        onClick={() => setField('showDims', true)}
-                        className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-dashed border-gray-200 text-sm font-bold text-gray-500 hover:border-blue-300 hover:text-blue-600 transition-all"
-                      >
-                        <Ruler size={15} />
-                        Mesurer maintenant
-                        <span className="text-[10px] font-normal text-gray-400 ml-1">(sinon plus tard)</span>
-                      </button>
-                    </div>
-                  );
-                }
-
-                return (
-                  <div className="rounded-xl border border-blue-200 bg-blue-50/50 p-3 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-1.5">
-                        <Ruler size={13} className="text-blue-600" />
-                        <span className="text-xs font-bold text-blue-800">
-                          Dimensions ({nf.trackingLines.length} colis)
-                        </span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setField('showDims', false);
-                          setField('dimL', '');
-                          setField('dimW', '');
-                          setField('dimH', '');
-                          setField('poids', '');
-                          setField('multiDims', {});
-                        }}
-                        className="text-[10px] font-medium text-gray-400 hover:text-gray-600"
-                      >
-                        Mesurer plus tard
-                      </button>
-                    </div>
-
-                    {/* ── Per-carton dims (always one block per tracking line) ── */}
-                    <div className="space-y-3">
-                      {nf.trackingLines.map((line, idx) => {
-                        const d = nf.multiDims[idx] || { dimL: '', dimW: '', dimH: '', poids: '' };
-                        const label = line.fournisseur.trim() || ('Tracking ' + (idx + 1));
-                        return (
-                          <div key={idx} className="rounded-lg border border-blue-100 bg-white p-2.5 space-y-2">
-                            <p className="text-[10px] font-black uppercase tracking-wider text-blue-700">
-                              Colis {idx + 1} — {label}
-                            </p>
-                            <div className="grid grid-cols-4 gap-1.5">
-                              <div>
-                                <label className="text-[9px] font-bold text-gray-400 block mb-0.5">L</label>
-                                <input type="number" min="0" step="0.5" placeholder="40"
-                                  value={d.dimL} onChange={(e) => updateMultiDim(idx, 'dimL', e.target.value)}
-                                  className={dimInputCls} />
-                              </div>
-                              <div>
-                                <label className="text-[9px] font-bold text-gray-400 block mb-0.5">l</label>
-                                <input type="number" min="0" step="0.5" placeholder="30"
-                                  value={d.dimW} onChange={(e) => updateMultiDim(idx, 'dimW', e.target.value)}
-                                  className={dimInputCls} />
-                              </div>
-                              <div>
-                                <label className="text-[9px] font-bold text-gray-400 block mb-0.5">H</label>
-                                <input type="number" min="0" step="0.5" placeholder="20"
-                                  value={d.dimH} onChange={(e) => updateMultiDim(idx, 'dimH', e.target.value)}
-                                  className={dimInputCls} />
-                              </div>
-                              <div>
-                                <label className="text-[9px] font-bold text-gray-400 block mb-0.5">kg</label>
-                                <input type="number" min="0" step="0.1" placeholder="2.5"
-                                  value={d.poids} onChange={(e) => updateMultiDim(idx, 'poids', e.target.value)}
-                                  className={dimInputCls} />
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })()}
+                </div>
+              </details>
 
               {/* ── FACTURE (client only) ── */}
               {!isStaff && (
@@ -1345,7 +1248,7 @@ export default function ColisModal({ open, onClose }) {
                             <input
                               type="file"
                               accept="image/*,.pdf"
-                              className="hidden"
+                              className="sr-only"
                               onChange={(e) => {
                                 const file = e.target.files?.[0];
                                 if (!file) return;
@@ -1367,16 +1270,25 @@ export default function ColisModal({ open, onClose }) {
               )}
             </>
           )}
+          </fieldset>
         </div>
 
         {/* ── Footer / Actions ── */}
         {mode && (
-          <div className="px-5 py-4 border-t border-gray-100 bg-white">
-            <div className="flex gap-3">
+          <div className="shrink-0 px-5 py-3 border-t border-gray-200 bg-white" style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom))' }}>
+            <div className="mb-3 text-xs text-gray-600" aria-live="polite">
+              <p className="font-bold text-sm text-gray-800">{selectedClient?.nom || newClientForm.nom || authCl?.nom} · {mode === 'rattacher' ? rattacherTarget?.ref : 'Nouveau dossier'}</p>
+              <p>{receptionCartons(nf.trackingLines, nf.multiDims).filter(({ index }) => receptionMeasurements([nf.trackingLines[index]], { 0: nf.multiDims[index] })).length} / {receptionCartons(nf.trackingLines, nf.multiDims).length} carton(s) mesuré(s) à réception · Casier {nf.casier || rattacherTarget?.casier || 'à renseigner'}</p>
+              {mode === 'nouveau' && <p>{notificationAccessible ? `Notification proposée : ${selectedClient?.telegramChatId ? 'Telegram' : 'message dans l’espace client'}` : 'Accès client à activer : une action de contact sera créée pour l’équipe.'}</p>}
+              {checkedInterdits.length > 0 && <p className="text-red-700 font-bold">{checkedInterdits.length} produit(s) interdit(s) signalé(s)</p>}
+            </div>
+            {formErr.dimensions && <p role="alert" className="mb-3 text-sm font-semibold text-red-700">{formErr.dimensions}</p>}
+            {saveError && <p role="alert" className="mb-3 text-sm font-semibold text-red-700">{saveError}</p>}
+            <div className="flex flex-wrap sm:flex-nowrap gap-3">
               <button
                 type="button"
-                onClick={mode === 'rattacher' ? () => { setMode(null); setRattacherTarget(null); } : resetAndClose}
-                className="flex-shrink-0 px-4 py-2.5 rounded-xl font-semibold text-sm text-gray-600 bg-gray-100 hover:bg-gray-200 active:scale-95 transition-all"
+                disabled={saving} onClick={mode === 'rattacher' ? () => { setMode(null); setRattacherTarget(null); } : resetAndClose}
+                className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl font-semibold text-sm text-gray-600 bg-gray-100 hover:bg-gray-200 active:scale-95 transition-all"
               >
                 {mode === 'rattacher' ? 'Retour' : 'Annuler'}
               </button>
@@ -1384,7 +1296,7 @@ export default function ColisModal({ open, onClose }) {
               {mode === 'rattacher' ? (
                 <button
                   type="button"
-                  onClick={handleRattacher}
+                  disabled={saving} onClick={() => runSave(handleRattacher)}
                   className="flex-1 py-2.5 rounded-xl font-bold text-sm text-white active:scale-95 transition-all"
                   style={{ background: `linear-gradient(135deg, ${BRAND.navy}, ${BRAND.navyL})` }}
                 >
@@ -1394,25 +1306,25 @@ export default function ColisModal({ open, onClose }) {
                 <>
                   <button
                     type="button"
-                    onClick={() => handleReceptionner(true)}
-                    className="flex-1 py-2.5 rounded-xl font-bold text-sm text-white active:scale-95 transition-all"
+                    disabled={saving} onClick={() => runSave(() => handleReceptionner(true))}
+                    className="order-first w-full sm:order-none sm:w-auto sm:flex-1 py-2.5 rounded-xl font-bold text-sm text-white active:scale-95 transition-all"
                     style={{ background: `linear-gradient(135deg, ${BRAND.navy}, ${BRAND.navyL})` }}
                   >
-                    Réceptionner et notifier le client
+                    {notificationAccessible ? 'Réceptionner et notifier le client' : 'Réceptionner les cartons'}
                   </button>
-                  <button
+                  {notificationAccessible && <button
                     type="button"
-                    onClick={() => handleReceptionner(false)}
-                    className="px-4 py-2.5 rounded-xl font-semibold text-sm text-gray-600 bg-gray-100 hover:bg-gray-200 active:scale-95 transition-all"
+                    disabled={saving} onClick={() => runSave(() => handleReceptionner(false))}
+                    className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl font-semibold text-sm text-gray-600 bg-gray-100 hover:bg-gray-200 active:scale-95 transition-all"
                   >
                     Sans notification
-                  </button>
+                  </button>}
                 </>
               )}
             </div>
           </div>
         )}
       </div>
-    </div>
+    </div>, document.body
   );
 }

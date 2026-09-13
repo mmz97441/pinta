@@ -1,0 +1,66 @@
+{
+  "project": "Expedile",
+  "date": "2026-09-10",
+  "checks": [
+    {
+      "operation": "auth-confirmed-fixtures-password-sessions",
+      "passed": true
+    },
+    {
+      "operation": "rls-client-isolation-and-private-columns",
+      "passed": true
+    },
+    {
+      "operation": "client-cannot-call-staff-command",
+      "passed": true
+    },
+    {
+      "operation": "staff-conversation-read-treatment-cas-and-assignment",
+      "passed": true
+    },
+    {
+      "operation": "private-storage-client-invoice-reopens-conversation",
+      "passed": true
+    },
+    {
+      "operation": "ocr-resume-without-extraction",
+      "passed": true
+    },
+    {
+      "operation": "ocr-one-real-extraction-and-resume",
+      "passed": true
+    },
+    {
+      "operation": "tracking-public-fixture",
+      "passed": true
+    },
+    {
+      "operation": "payplug-live-configuration-503-no-payment-no-intent",
+      "passed": true,
+      "http": 503
+    },
+    {
+      "operation": "no-external-message-queued",
+      "passed": true
+    },
+    {
+      "operation": "recipe-complete",
+      "passed": true
+    },
+    {
+      "operation": "cleanup-complete",
+      "passed": true
+    }
+  ],
+  "realServices": true,
+  "testAccountsOnly": true,
+  "realCustomerMessages": 0,
+  "paymentsCreated": 0,
+  "ocrProviderExtractionsOnSyntheticPdf": 1,
+  "cleanup": "passed",
+  "limitations": [
+    "SMTP not configured",
+    "PayPlug live key unavailable",
+    "Telegram provider/webhook configuration verified without sending a real user message"
+  ]
+}

@@ -1,629 +1,92 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  User, Package, CheckCircle, CreditCard, TrendingUp, Star, Bell,
-  Lock, Download, HelpCircle, LogOut, Trash2, Edit3, X, ChevronRight,
-  FileText, Receipt, Save, BookOpen,
-} from 'lucide-react';
+import { User, Mail, MapPin, Phone, Pencil, Check, X, LogOut, Lock, Download, MessageCircle, FileText, ExternalLink, Trash2 } from 'lucide-react';
+import { hasPublishedQuote } from './quoteVisibility';
 import { useApp } from '../../context/AppContext';
-import { BRAND, getDestByCP } from '../../constants';
-import { eur, fmtMembreDep, validateProfile, getPrenom } from '../../utils';
+import { supabase } from '../../lib/supabase';
+import { BRAND, ABONNEMENTS, getDestByCP } from '../../constants';
+import { eur, getPrenom } from '../../utils';
+import { SecureFileLink } from '../ui/SecureFile';
 
-// ── Tier config ────────────────────────────────────────────────────────────────
-const TIERS = [
-  {
-    key: 'freemium',
-    label: 'Freemium',
-    minPts: 0,
-    maxPts: 200,
-    color: '#64748b',
-    bg: '#f1f5f9',
-    avantages: ['Suivi de colis en temps réel', 'Notifications Telegram', 'Support par email'],
-  },
-  {
-    key: 'premium',
-    label: 'Premium',
-    minPts: 200,
-    maxPts: 500,
-    color: BRAND.goldD,
-    bg: '#fef9ec',
-    avantages: ['Priorité de traitement', 'Réduction 5% sur transport', 'Support prioritaire Telegram', 'Accès aux offres groupées'],
-  },
-  {
-    key: 'vip',
-    label: 'VIP',
-    minPts: 500,
-    maxPts: 1000,
-    color: BRAND.navy,
-    bg: BRAND.navy + '0f',
-    avantages: ['Traitement express', 'Réduction 10% sur transport', 'Conseiller dédié', 'Livraison à domicile offerte', 'Accès aux ventes privées'],
-  },
-];
-
-function getTier(pts) {
-  if (pts >= 500) return TIERS[2];
-  if (pts >= 200) return TIERS[1];
-  return TIERS[0];
-}
-
-function getNextTier(pts) {
-  if (pts >= 500) return null;
-  if (pts >= 200) return TIERS[2];
-  return TIERS[1];
-}
-
-// ── Section wrapper ────────────────────────────────────────────────────────────
-function Section({ title, children }) {
-  return (
-    <div className="card rounded-2xl overflow-hidden">
-      {title && (
-        <div
-          className="px-4 py-3 border-b border-gray-50"
-          style={{ borderBottomColor: 'rgba(0,0,0,0.04)' }}
-        >
-          <h3 className="text-xs font-black uppercase tracking-widest" style={{ color: BRAND.navy }}>
-            {title}
-          </h3>
-        </div>
-      )}
-      {children}
-    </div>
-  );
-}
-
-// ── Setting row ───────────────────────────────────────────────────────────────
-function SettingRow({ icon: Icon, label, sub, children, danger, onClick }) {
-  return (
-    <button
-      className={`w-full flex items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-gray-50 active:bg-gray-100 ${
-        danger ? 'text-red-600' : 'text-gray-800'
-      }`}
-      onClick={onClick}
-    >
-      <div
-        className="flex-shrink-0 w-8 h-8 rounded-xl flex items-center justify-center"
-        style={{ backgroundColor: danger ? '#fee2e2' : BRAND.navy + '10' }}
-      >
-        <Icon size={16} style={{ color: danger ? '#dc2626' : BRAND.navy }} />
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className={`text-sm font-semibold ${danger ? 'text-red-600' : 'text-gray-800'}`}>
-          {label}
-        </p>
-        {sub && <p className="text-xs text-gray-400 mt-0.5">{sub}</p>}
-      </div>
-      {children || <ChevronRight size={14} className="text-gray-300 flex-shrink-0" />}
-    </button>
-  );
-}
-
-const DOC_TABS = [
-  { key: 'devis', label: 'Devis' },
-  { key: 'factures', label: 'Factures' },
-];
-
-const INPUT_CLS = (err) =>
-  `w-full rounded-xl border px-3 py-2.5 text-sm outline-none transition-colors ${
-    err
-      ? 'border-red-400 bg-red-50 focus:border-red-500'
-      : 'border-gray-200 bg-gray-50 focus:border-blue-400 focus:bg-white'
-  }`;
-
-const LABEL_CLS = 'block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1';
+const inputClass = 'w-full min-h-11 px-3 rounded-xl border border-gray-200 bg-white text-sm text-gray-800';
 
 export default function ClientProfil() {
   const navigate = useNavigate();
-  const { authCl, data, clients, updateClient, setAuth, flash, ask } = useApp();
-
-  const cl = authCl;
-  const dest = cl ? getDestByCP(cl.cp) : null;
-  const firstName = getPrenom(cl) || 'Client';
-  const initials = cl
-    ? cl.nom.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase()
-    : '?';
-
-  // ── Profile edit state ──────────────────────────────────────────────────────
-  const [profEdit, setProfEdit] = useState(false);
-  const [profDraft, setProfDraft] = useState({});
-  const [profErr, setProfErr] = useState({});
-
-  // ── Document filter ─────────────────────────────────────────────────────────
-  const [docFilter, setDocFilter] = useState('devis');
-
-  // ── Notif toggle ────────────────────────────────────────────────────────────
-  const [notifsOn, setNotifsOn] = useState(true);
-
-  // ── Stats ───────────────────────────────────────────────────────────────────
-  const myColis = cl ? data.filter((p) => p.clientId === cl.id) : [];
-  const enCours = myColis.filter((p) => p.statut !== 'livre' && p.statut !== 'annule').length;
-  const livres = myColis.filter((p) => p.statut === 'livre').length;
-  const totalPaye = myColis
-    .filter((p) => p.paiementMontant != null)
-    .reduce((s, p) => s + p.paiementMontant, 0);
-  const totalEco = myColis
-    .filter((p) => p.economie != null)
-    .reduce((s, p) => s + p.economie, 0);
-
-  // ── Subscription ────────────────────────────────────────────────────────────
-  const pts = cl?.points || 0;
-  const tier = getTier(pts);
-  const nextTier = getNextTier(pts);
-  const pctToNext = nextTier
-    ? Math.min(100, Math.round(((pts - tier.minPts) / (nextTier.minPts - tier.minPts)) * 100))
-    : 100;
-
-  // ── Documents ───────────────────────────────────────────────────────────────
-  const allDevis = myColis.filter((p) => p.devisTotal != null);
-  const allFactures = myColis.flatMap((p) =>
-    (p.factures || []).map((f) => ({ ...f, colisRef: p.ref }))
-  );
-
-  // ── Edit handlers ────────────────────────────────────────────────────────────
-  const startEdit = () => {
-    if (!cl) return;
-    setProfDraft({ nom: cl.nom, email: cl.email || '', tel: cl.tel || '', cp: cl.cp || '', ville: cl.ville || '' });
-    setProfErr({});
-    setProfEdit(true);
-  };
-
-  const cancelEdit = () => {
-    setProfEdit(false);
-    setProfErr({});
-  };
-
-  const saveEdit = () => {
-    const errs = validateProfile(profDraft);
-    if (Object.keys(errs).length > 0) { setProfErr(errs); return; }
-    updateClient(cl.id, profDraft);
-    setProfEdit(false);
-    setProfErr({});
-  };
-
-  const setDraft = (k, v) => {
-    setProfDraft((prev) => ({ ...prev, [k]: v }));
-    if (profErr[k]) setProfErr((prev) => ({ ...prev, [k]: undefined }));
-  };
-
-  // ── Logout / delete ──────────────────────────────────────────────────────────
-  const handleLogout = () => {
-    ask('Déconnexion', 'Voulez-vous vraiment vous déconnecter ?', () => setAuth(null), { okLabel: 'Déconnexion' });
-  };
-
-  const handleDeleteAccount = () => {
-    ask(
-      'Supprimer le compte',
-      'Cette action est irréversible. Toutes vos données seront supprimées.',
-      () => { flash('Compte supprimé'); setAuth(null); },
-      { danger: true, okLabel: 'Supprimer' }
-    );
-  };
-
+  const { authCl: cl, data, updateClient, signOut, flash, ask } = useApp();
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState({});
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [invitation, setInvitation] = useState(null);
+  const [linking, setLinking] = useState(false);
+  const [documents, setDocuments] = useState('devis');
   if (!cl) return null;
+  const mine = data.filter((c) => c.clientId === cl.id);
+  const active = mine.filter((c) => !['livre', 'annule'].includes(c.statut));
+  const destination = getDestByCP(cl.cp);
+  const invoices = mine.flatMap((c) => (c.factures || []).map((f) => ({ ...f, ref: c.ref })));
+  const estimates = mine.filter(hasPublishedQuote);
 
-  return (
-    <div className="anim-fade space-y-4">
+  const startEdit = () => {
+    setDraft({ nom: cl.nomFamille || '', prenom: cl.prenom || '', email: cl.email || '', tel: cl.tel || '', cp: cl.cp || '', ville: cl.ville || '', adresseLigne1: cl.adresseLigne1 || '', adresseLigne2: cl.adresseLigne2 || '' });
+    setError(''); setEditing(true);
+  };
+  const save = async (event) => {
+    event.preventDefault();
+    if (!draft.nom.trim() || !/^\d{5}$/.test(draft.cp)) { setError('Renseignez votre nom et un code postal à cinq chiffres.'); return; }
+    setSaving(true); setError('');
+    try { await updateClient(cl.id, draft); setEditing(false); }
+    catch (err) { setError(err.message || 'Vos coordonnées n’ont pas été enregistrées. Réessayez.'); }
+    finally { setSaving(false); }
+  };
+  const createInvitation = async () => {
+    setLinking(true); setError('');
+    try {
+      const { data: result, error: rpcError } = await supabase.rpc('create_telegram_invitation', { p_client_id: cl.id });
+      if (rpcError) throw rpcError;
+      const link = Array.isArray(result) ? result[0] : result;
+      if (!link?.url) throw new Error('Le lien de connexion Telegram est indisponible.');
+      setInvitation(link);
+    } catch (err) { setError(err.message || 'Impossible de créer votre invitation Telegram.'); }
+    finally { setLinking(false); }
+  };
+  const exportData = () => {
+    const profileKeys = ['id', 'nom', 'prenom', 'email', 'tel', 'cp', 'ville', 'adresseLigne1', 'adresseLigne2', 'abonnement', 'abonnementDebut', 'abonnementFin', 'telegramUsername'];
+    const parcelKeys = ['id', 'ref', 'desc', 'statut', 'dateReception', 'trackings', 'dimL', 'dimW', 'dimH', 'poids', 'finL', 'finW', 'finH', 'finP', 'devisTransport', 'devisOM', 'devisOMR', 'devisTVA', 'devisTotal', 'quoteVersion', 'paiementDate', 'paiementMontant'];
+    const pick = (record, keys) => Object.fromEntries(keys.filter((key) => record[key] !== undefined).map((key) => [key, record[key]]));
+    const payload = { exporteLe: new Date().toISOString(), profil: pick(cl, profileKeys), dossiers: mine.map((c) => ({ ...pick(c, hasPublishedQuote(c) ? parcelKeys : parcelKeys.filter((key) => !key.startsWith('devis') && key !== 'quoteVersion')), messages: (c.messages || []).filter((m) => ['staff', 'client'].includes(m.type) && !m.interne).map((m) => pick(m, ['createdAt', 'auteur', 'texte', 'type'])) })) };
+    const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }));
+    const a = document.createElement('a'); a.href = url; a.download = `expedile-mes-donnees-${new Date().toISOString().slice(0, 10)}.json`; a.click(); URL.revokeObjectURL(url);
+  };
+  const logout = () => ask('Se déconnecter', 'Vous pourrez retrouver vos dossiers en vous reconnectant.', async () => {
+    try { await signOut(); navigate('/', { replace: true }); }
+    catch (err) { flash({ msg: err.message, type: 'error' }); }
+  }, { okLabel: 'Se déconnecter' });
 
-      {/* ── 1. Profile header ── */}
-      <div
-        className="rounded-2xl p-5 text-white relative overflow-hidden"
-        style={{
-          background: `linear-gradient(135deg, ${BRAND.navy} 0%, ${BRAND.navyL} 60%, ${BRAND.navyD} 100%)`,
-          boxShadow: `0 4px 24px rgba(27,58,75,0.25)`,
-        }}
-      >
-        <div className="absolute -top-6 -right-6 w-32 h-32 rounded-full opacity-10" style={{ background: BRAND.gold }} />
-        <div className="flex items-center gap-4">
-          <div
-            className="w-16 h-16 rounded-2xl flex items-center justify-center text-2xl font-black shadow-lg flex-shrink-0"
-            style={{ background: `linear-gradient(135deg, ${BRAND.gold}, ${BRAND.goldD})`, color: BRAND.navyD }}
-          >
-            {initials}
-          </div>
-          <div className="flex-1 min-w-0">
-            <h2 className="text-xl font-black leading-tight truncate">{cl.nom}</h2>
-            <div className="flex items-center gap-2 mt-1">
-              <span
-                className="text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wide"
-                style={{ backgroundColor: tier.color + '30', color: tier.color === BRAND.navy ? BRAND.goldL : 'white' }}
-              >
-                {tier.label}
-              </span>
-              <span className="text-xs font-medium" style={{ color: 'rgba(255,255,255,0.6)' }}>
-                {cl.type === 'pro' ? 'Professionnel' : 'Particulier'}
-              </span>
-            </div>
-            {dest && (
-              <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.65)' }}>
-                {dest.flag} {dest.nom}
-              </p>
-            )}
-            <p className="text-[10px] mt-0.5" style={{ color: 'rgba(255,255,255,0.45)' }}>
-              {fmtMembreDep(cl.created)}
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* ── 2. Stats ── */}
-      <Section title="Statistiques">
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-0 divide-x divide-y lg:divide-y-0 divide-gray-50">
-          {[
-            { label: 'Colis total', value: myColis.length, icon: Package },
-            { label: 'En cours', value: enCours, icon: TrendingUp },
-            { label: 'Livrés', value: livres, icon: CheckCircle },
-            { label: 'Total payé', value: eur(totalPaye), icon: CreditCard },
-          ].map(({ label, value, icon: Icon }) => (
-            <div key={label} className="p-4 text-center">
-              <div
-                className="w-8 h-8 rounded-xl flex items-center justify-center mx-auto mb-2"
-                style={{ backgroundColor: BRAND.navy + '10' }}
-              >
-                <Icon size={15} style={{ color: BRAND.navy }} />
-              </div>
-              <div className="text-xl font-black" style={{ color: BRAND.navy }}>{value}</div>
-              <div className="text-[10px] text-gray-400 font-medium mt-0.5">{label}</div>
-            </div>
-          ))}
-        </div>
-        {totalEco > 0 && (
-          <div
-            className="mx-4 mb-4 rounded-xl px-4 py-3 flex items-center gap-2"
-            style={{ backgroundColor: '#ecfdf5' }}
-          >
-            <span className="text-emerald-600 font-black text-sm">{eur(totalEco)}</span>
-            <span className="text-xs text-emerald-700">économisés grâce à l'optimisation Expedîle</span>
-          </div>
-        )}
-      </Section>
-
-      {/* ── 3. Subscription ── */}
-      <Section title="Mon abonnement">
-        <div className="p-4 space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Star size={16} style={{ color: tier.color }} />
-              <span className="font-black text-sm" style={{ color: tier.color }}>{tier.label}</span>
-            </div>
-            <span className="text-sm font-bold text-gray-600">{pts} pts</span>
-          </div>
-
-          {nextTier && (
-            <div>
-              <div className="flex justify-between text-[10px] text-gray-400 mb-1.5">
-                <span>{pts} / {nextTier.minPts} pts pour {nextTier.label}</span>
-                <span className="font-bold">{pctToNext}%</span>
-              </div>
-              <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                <div
-                  className="h-full rounded-full transition-all duration-700"
-                  style={{
-                    width: `${pctToNext}%`,
-                    background: `linear-gradient(90deg, ${tier.color}, ${nextTier.color})`,
-                  }}
-                />
-              </div>
-              <p className="text-[10px] text-gray-400 mt-1">
-                Encore {nextTier.minPts - pts} pts pour atteindre {nextTier.label}
-              </p>
-            </div>
-          )}
-          {!nextTier && (
-            <div
-              className="rounded-xl px-3 py-2 text-xs font-semibold text-center"
-              style={{ backgroundColor: BRAND.navy + '0f', color: BRAND.navy }}
-            >
-              Niveau maximum atteint !
-            </div>
-          )}
-
-          <div>
-            <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">Vos avantages</p>
-            <ul className="space-y-1.5">
-              {tier.avantages.map((av) => (
-                <li key={av} className="flex items-center gap-2 text-xs text-gray-700">
-                  <div className="w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0" style={{ backgroundColor: tier.color + '20' }}>
-                    <CheckCircle size={10} style={{ color: tier.color }} />
-                  </div>
-                  {av}
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
-      </Section>
-
-      {/* ── 3b. Récompenses disponibles ── */}
-      <Section title="Récompenses disponibles">
-        <div className="p-4 space-y-3">
-          {[
-            { minPts: 50, label: '-5\u20AC sur le prochain envoi', icon: '🎁' },
-            { minPts: 100, label: '-15\u20AC sur le prochain envoi', icon: '🎉' },
-            { minPts: 200, label: 'Livraison offerte', icon: '🚚' },
-          ].map((reward) => {
-            const available = pts >= reward.minPts;
-            return (
-              <div
-                key={reward.minPts}
-                className={`flex items-center gap-3 p-3 rounded-xl border ${available ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200 opacity-60'}`}
-              >
-                <span className="text-lg flex-shrink-0">{reward.icon}</span>
-                <div className="flex-1 min-w-0">
-                  <p className={`text-sm font-bold ${available ? 'text-green-800' : 'text-gray-500'}`}>
-                    {reward.label}
-                  </p>
-                  <p className={`text-[10px] font-medium ${available ? 'text-green-600' : 'text-gray-400'}`}>
-                    {available ? 'Disponible' : `${reward.minPts - pts} pts restants`}
-                  </p>
-                </div>
-                <span className={`text-xs font-black px-2 py-0.5 rounded-full ${available ? 'bg-green-200 text-green-800' : 'bg-gray-200 text-gray-500'}`}>
-                  {reward.minPts} pts
-                </span>
-              </div>
-            );
-          })}
-          <p className="text-[10px] text-gray-400 text-center mt-2">
-            Les points expirent après 12 mois d'inactivité.
-          </p>
-        </div>
-      </Section>
-
-      {/* ── 4. My information ── */}
-      <Section title="Mes informations">
-        {profEdit ? (
-          <div className="p-4 space-y-3">
-            {[
-              { key: 'nom', label: 'Nom complet', type: 'text', placeholder: 'Votre nom' },
-              { key: 'email', label: 'Email', type: 'email', placeholder: 'votre@email.com' },
-              { key: 'tel', label: 'Téléphone', type: 'tel', placeholder: '+262 692 12 34 56' },
-              { key: 'cp', label: 'Code postal', type: 'text', placeholder: '97400' },
-              { key: 'ville', label: 'Ville', type: 'text', placeholder: 'Saint-Denis' },
-            ].map(({ key, label, type, placeholder }) => (
-              <div key={key}>
-                <label className={LABEL_CLS}>{label}</label>
-                <input
-                  type={type}
-                  value={profDraft[key] || ''}
-                  placeholder={placeholder}
-                  onChange={(e) => setDraft(key, e.target.value)}
-                  className={INPUT_CLS(profErr[key])}
-                />
-                {profErr[key] && (
-                  <p className="mt-1 text-xs text-red-500">{profErr[key]}</p>
-                )}
-              </div>
-            ))}
-            <div className="flex gap-2 pt-1">
-              <button
-                onClick={cancelEdit}
-                className="flex-shrink-0 px-4 py-2.5 rounded-xl font-semibold text-sm text-gray-600 bg-gray-100 hover:bg-gray-200 active:scale-95 transition-all flex items-center gap-1.5"
-              >
-                <X size={14} />
-                Annuler
-              </button>
-              <button
-                onClick={saveEdit}
-                className="flex-1 py-2.5 rounded-xl font-bold text-sm text-white active:scale-95 transition-all flex items-center justify-center gap-1.5"
-                style={{ background: `linear-gradient(135deg, ${BRAND.navy}, ${BRAND.navyL})` }}
-              >
-                <Save size={14} />
-                Enregistrer
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div>
-            {[
-              { label: 'Nom', value: cl.nom },
-              { label: 'Email', value: cl.email || '—' },
-              { label: 'Téléphone', value: cl.tel || '—' },
-              { label: 'Code postal', value: cl.cp },
-              { label: 'Ville', value: cl.ville },
-              { label: 'Destination', value: dest ? `${dest.flag} ${dest.nom}` : '—' },
-            ].map(({ label, value }, i, arr) => (
-              <div
-                key={label}
-                className={`flex items-center justify-between px-4 py-3 ${i < arr.length - 1 ? 'border-b border-gray-50' : ''}`}
-              >
-                <span className="text-xs text-gray-400 font-medium">{label}</span>
-                <span className="text-sm font-semibold text-gray-800 truncate max-w-[180px] text-right">{value}</span>
-              </div>
-            ))}
-            <div className="p-4 pt-2">
-              <button
-                onClick={startEdit}
-                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl font-bold text-sm active:scale-95 transition-all"
-                style={{ color: BRAND.navy, backgroundColor: BRAND.navy + '10' }}
-              >
-                <Edit3 size={14} />
-                Modifier mes informations
-              </button>
-            </div>
-          </div>
-        )}
-      </Section>
-
-      {/* ── 5. Documents ── */}
-      <Section title="Mes documents">
-        {/* Filter tabs */}
-        <div className="flex gap-1.5 p-3 bg-gray-50 border-b border-gray-100">
-          {DOC_TABS.map((tab) => (
-            <button
-              key={tab.key}
-              onClick={() => setDocFilter(tab.key)}
-              className={`flex-1 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                docFilter === tab.key ? 'bg-white shadow-sm' : 'text-gray-400'
-              }`}
-              style={docFilter === tab.key ? { color: BRAND.navy } : {}}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Document list */}
-        <div className="divide-y divide-gray-50">
-          {docFilter === 'devis' && (
-            allDevis.length === 0 ? (
-              <p className="px-4 py-6 text-xs text-gray-400 text-center">Aucun devis disponible</p>
-            ) : (
-              allDevis.map((p) => (
-                <button
-                  key={p.id}
-                  onClick={() => navigate(`/colis/${p.id}`)}
-                  className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 active:bg-gray-100 transition-colors"
-                >
-                  <div
-                    className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0"
-                    style={{ backgroundColor: BRAND.navy + '10' }}
-                  >
-                    <FileText size={15} style={{ color: BRAND.navy }} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-gray-800">{p.ref}</p>
-                    <p className="text-xs text-gray-400 truncate">{p.desc}</p>
-                  </div>
-                  <div className="text-right flex-shrink-0">
-                    <span className="font-black text-sm" style={{ color: BRAND.navy }}>
-                      {eur(p.devisTotal)}
-                    </span>
-                    <p className="text-[9px] font-bold" style={{ color: p.paiementMontant ? '#059669' : '#d97706' }}>
-                      {p.paiementMontant ? 'Payé' : 'En attente'}
-                    </p>
-                  </div>
-                  <ChevronRight size={14} className="text-gray-300 flex-shrink-0" />
-                </button>
-              ))
-            )
-          )}
-          {docFilter === 'factures' && (
-            allFactures.length === 0 ? (
-              <p className="px-4 py-6 text-xs text-gray-400 text-center">Aucune facture disponible</p>
-            ) : (
-              allFactures.map((f) => (
-                <div key={f.id} className="flex items-center gap-3 px-4 py-3">
-                  <div
-                    className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0"
-                    style={{ backgroundColor: f.valide ? '#ecfdf5' : '#fef9ec' }}
-                  >
-                    <Receipt size={15} style={{ color: f.valide ? '#059669' : '#d97706' }} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-gray-800">{f.vendeur}</p>
-                    <p className="text-xs text-gray-400">{f.colisRef}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-black text-sm text-gray-800">{eur(f.montant)}</p>
-                    <p
-                      className="text-[9px] font-bold"
-                      style={{ color: f.valide ? '#059669' : '#d97706' }}
-                    >
-                      {f.valide ? 'Validée' : 'En attente'}
-                    </p>
-                  </div>
-                </div>
-              ))
-            )
-          )}
-        </div>
-      </Section>
-
-      {/* ── 6. Settings ── */}
-      <Section title="Paramètres">
-        <div className="divide-y divide-gray-50">
-          {/* Notifications toggle */}
-          <div className="flex items-center gap-3 px-4 py-3.5">
-            <div
-              className="flex-shrink-0 w-8 h-8 rounded-xl flex items-center justify-center"
-              style={{ backgroundColor: BRAND.navy + '10' }}
-            >
-              <Bell size={16} style={{ color: BRAND.navy }} />
-            </div>
-            <div className="flex-1">
-              <p className="text-sm font-semibold text-gray-800">Notifications</p>
-              <p className="text-xs text-gray-400 mt-0.5">Alertes Telegram et email</p>
-            </div>
-            <button
-              onClick={() => setNotifsOn((v) => !v)}
-              className={`relative w-11 h-6 rounded-full transition-all duration-300 flex-shrink-0 ${
-                notifsOn ? '' : 'bg-gray-200'
-              }`}
-              style={notifsOn ? { backgroundColor: BRAND.navy } : {}}
-            >
-              <span
-                className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow-sm transition-all duration-300 ${
-                  notifsOn ? 'left-6' : 'left-1'
-                }`}
-              />
-            </button>
-          </div>
-
-          <div className="flex items-center gap-3 px-4 py-3.5 opacity-50 cursor-default">
-            <div
-              className="flex-shrink-0 w-8 h-8 rounded-xl flex items-center justify-center"
-              style={{ backgroundColor: '#f3f4f6' }}
-            >
-              <Lock size={16} className="text-gray-400" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <p className="text-sm font-semibold text-gray-500">Changer le mot de passe</p>
-                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-400 uppercase">Bientôt</span>
-              </div>
-              <p className="text-xs text-gray-400 mt-0.5">Sécurisez votre compte</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-3 px-4 py-3.5 opacity-50 cursor-default">
-            <div
-              className="flex-shrink-0 w-8 h-8 rounded-xl flex items-center justify-center"
-              style={{ backgroundColor: '#f3f4f6' }}
-            >
-              <Download size={16} className="text-gray-400" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <p className="text-sm font-semibold text-gray-500">Exporter mes données</p>
-                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-400 uppercase">Bientôt</span>
-              </div>
-              <p className="text-xs text-gray-400 mt-0.5">Télécharger un fichier CSV</p>
-            </div>
-          </div>
-          <SettingRow
-            icon={BookOpen}
-            label="Revoir le tutoriel"
-            sub="Redécouvrir Expédîle"
-            onClick={() => {
-              if (cl) updateClient(cl.id, { onboarded: false }, true);
-              flash('Le tutoriel apparaîtra à votre prochaine visite sur l\'accueil');
-            }}
-          />
-          <SettingRow
-            icon={HelpCircle}
-            label="Aide & Support"
-            sub="FAQ, contact Telegram"
-            onClick={() => flash('Ouverture du support…')}
-          />
-        </div>
-      </Section>
-
-      {/* ── 7. Logout + delete ── */}
-      <div className="space-y-2 pb-2">
-        <button
-          onClick={handleLogout}
-          className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl font-bold text-sm active:scale-95 transition-all"
-          style={{ color: BRAND.navy, backgroundColor: BRAND.navy + '10', border: `1.5px solid ${BRAND.navy}20` }}
-        >
-          <LogOut size={16} />
-          Se déconnecter
-        </button>
-
-        <button
-          onClick={handleDeleteAccount}
-          className="w-full flex items-center justify-center gap-2 py-2.5 text-xs font-semibold text-red-400 hover:text-red-600 transition-colors active:scale-95"
-        >
-          <Trash2 size={12} />
-          Supprimer mon compte
-        </button>
-      </div>
-    </div>
-  );
+  return <div className="space-y-7 pb-6 anim-fade">
+    <header className="rounded-2xl p-5 sm:p-7 text-white" style={{ background: `linear-gradient(120deg, ${BRAND.navy}, ${BRAND.navyL})` }}>
+      <div className="flex items-center gap-4"><div className="w-14 h-14 rounded-2xl flex items-center justify-center text-xl font-black brand-bg-gold" style={{ color: 'var(--brand-text)' }}>{(cl.nom || '?').slice(0, 1).toUpperCase()}</div>
+        <div><p className="text-xs text-white/60">Votre espace personnel</p><h1 className="text-xl font-bold">{getPrenom(cl) || cl.nom}</h1><p className="text-sm text-white/80 mt-1">{destination?.flag} {destination?.nom || cl.ville}</p></div></div>
+      <div className="flex flex-wrap gap-x-6 gap-y-2 mt-6 pt-4 border-t border-white/15 text-sm"><span><b>{active.length}</b> dossier{active.length > 1 ? 's' : ''} en cours</span><span>Formule <b>{ABONNEMENTS[cl.abonnement]?.label || cl.abonnement || 'Freemium'}</b></span>{cl.abonnementFin && <span>Échéance : {new Date(cl.abonnementFin).toLocaleDateString('fr-FR')}</span>}</div>
+    </header>
+    {error && <p role="alert" className="p-3 rounded-xl border border-red-200 bg-red-50 text-red-700 text-sm">{error}</p>}
+    <section aria-labelledby="profile-contact-title">
+      <div className="flex items-center justify-between mb-3"><h2 id="profile-contact-title" className="font-bold text-gray-900">Mes coordonnées</h2>{!editing && <button onClick={startEdit} className="inline-flex items-center gap-2 text-sm font-semibold brand-t min-h-11"><Pencil size={15} />Modifier</button>}</div>
+      {editing ? <form onSubmit={save} className="space-y-4">
+        <div className="grid sm:grid-cols-2 gap-4">{[
+          ['nom', 'Nom de famille', 'text', true], ['prenom', 'Prénom', 'text', false], ['email', 'Email de contact', 'email', true], ['tel', 'Téléphone', 'tel', false], ['adresseLigne1', 'Adresse', 'text', false], ['adresseLigne2', 'Complément d’adresse', 'text', false], ['cp', 'Code postal', 'text', true], ['ville', 'Ville', 'text', false],
+        ].map(([key, label, type, required]) => <label key={key} className="space-y-1 block text-xs font-semibold text-gray-600">{label}<input type={type} required={required} value={draft[key]} onChange={(e) => setDraft((d) => ({ ...d, [key]: e.target.value }))} className={inputClass} /></label>)}</div>
+        <p className="text-xs text-gray-500">L’email de contact sert aux échanges sur vos colis. Votre adresse de connexion reste inchangée.</p>
+        <div className="flex gap-3"><button disabled={saving} className="min-h-11 rounded-xl px-4 brand-bg text-white font-semibold inline-flex items-center gap-2 disabled:opacity-50"><Check size={16} />{saving ? 'Enregistrement…' : 'Enregistrer'}</button><button type="button" disabled={saving} onClick={() => setEditing(false)} className="min-h-11 px-4 text-gray-600 inline-flex items-center gap-2"><X size={16} />Annuler</button></div>
+      </form> : <div className="divide-y divide-gray-100 border-y border-gray-100">{[[User, cl.nom], [Mail, cl.email], [Phone, cl.tel], [MapPin, [cl.adresseLigne1, cl.adresseLigne2, cl.cp, cl.ville].filter(Boolean).join(', ')]].map(([Icon, value], i) => <div key={i} className="flex items-center gap-3 py-3 text-sm text-gray-700"><Icon size={17} className="text-gray-400 shrink-0" /><span className="break-words">{value || 'Non renseigné'}</span></div>)}</div>}
+    </section>
+    <section className="rounded-2xl border border-gray-200 p-4 sm:p-5" aria-labelledby="telegram-title"><div className="flex items-start gap-3"><MessageCircle size={22} className="brand-t shrink-0 mt-1" /><div><h2 id="telegram-title" className="font-bold text-gray-900">Recevoir mes nouvelles sur Telegram</h2><p className="text-sm text-gray-600 mt-1">{cl.telegramChatId ? 'Votre compte est connecté. Les demandes d’accord et les nouvelles de vos dossiers peuvent vous y être envoyées.' : 'Connectez Telegram pour recevoir les demandes de préparation et y répondre rapidement. Vos dossiers restent aussi accessibles ici.'}</p></div></div>
+      {!cl.telegramChatId && <div className="mt-4">{invitation ? <><a href={invitation.url} target="_blank" rel="noopener noreferrer" className="inline-flex gap-2 items-center min-h-11 px-4 rounded-xl brand-bg text-white text-sm font-semibold">Connecter Telegram<ExternalLink size={15} /></a><p className="text-xs text-gray-500 mt-2">Ce lien est personnel et à usage unique. Dans Telegram, appuyez sur « Démarrer ».</p></> : <button disabled={linking} onClick={createInvitation} className="min-h-11 px-4 rounded-xl brand-bg text-white text-sm font-semibold disabled:opacity-50">{linking ? 'Création du lien…' : 'Connecter mon Telegram'}</button>}</div>}
+    </section>
+    <section aria-labelledby="documents-title"><h2 id="documents-title" className="font-bold text-gray-900 mb-3">Mes documents</h2><div className="flex gap-2 border-b border-gray-200 mb-2">{[['devis', 'Devis'], ['factures', 'Factures d’achat']].map(([key, label]) => <button key={key} onClick={() => setDocuments(key)} aria-pressed={documents === key} className={`min-h-11 px-3 text-sm font-semibold border-b-2 ${documents === key ? 'brand-t border-current' : 'text-gray-500 border-transparent'}`}>{label}</button>)}</div>
+      {documents === 'devis' ? (estimates.length ? estimates.map((c) => <button key={c.id} onClick={() => navigate(`/colis/${c.id}`)} className="w-full min-h-14 flex items-center gap-3 py-4 border-b border-gray-100 text-left"><FileText size={18} className="text-gray-400" /><span className="flex-1 font-semibold text-sm text-gray-800">{c.ref}</span><span className="text-sm font-bold brand-t">{eur(c.devisTotal)}</span><ExternalLink size={15} className="text-gray-400" /></button>) : <p className="py-6 text-sm text-gray-500">Vos devis apparaîtront ici une fois vérifiés et envoyés par l’équipe.</p>) : (invoices.length ? invoices.map((f) => <div key={f.id} className="flex flex-wrap gap-3 items-center py-4 border-b border-gray-100"><FileText size={18} className="text-gray-400" /><div className="flex-1"><p className="text-sm font-semibold text-gray-800">{f.vendeur || 'Facture d’achat'}</p><p className="text-xs text-gray-500">{f.ref} · {f.valide ? 'Validée' : f.rejetMotif ? 'À corriger' : 'En cours de vérification'}</p></div>{f.fichier && <SecureFileLink href={f.fichier} className="text-sm min-h-11 inline-flex gap-2 items-center brand-t font-semibold">Consulter<ExternalLink size={14} /></SecureFileLink>}</div>) : <p className="py-6 text-sm text-gray-500">Ajoutez vos factures depuis le dossier concerné.</p>)}
+    </section>
+    <section className="border-t border-gray-200 pt-4 space-y-1"><button onClick={() => navigate('/password')} className="w-full min-h-12 flex items-center gap-3 text-sm text-gray-700"><Lock size={17} />Modifier mon mot de passe</button><button onClick={exportData} className="w-full min-h-12 flex items-center gap-3 text-sm text-gray-700"><Download size={17} />Télécharger mes données accessibles</button><p className="text-xs text-gray-500 pl-7">Export JSON de votre profil et des dossiers chargés dans votre espace.</p><a href="mailto:contact@expedile.fr?subject=Aide%20sur%20mon%20compte%20Expedile" className="w-full min-h-12 flex items-center gap-3 text-sm text-gray-700"><Mail size={17} />Contacter l’équipe par email</a></section>
+    <div className="space-y-2"><button onClick={logout} className="min-h-12 w-full rounded-xl border border-gray-200 brand-t font-semibold flex items-center justify-center gap-2"><LogOut size={17} />Se déconnecter</button><a href={`mailto:contact@expedile.fr?subject=${encodeURIComponent('Demande de suppression de mon compte Expedîle')}&body=${encodeURIComponent(`Bonjour, je souhaite demander la suppression de mon compte associé à ${cl.email || ''}. Merci de m’indiquer les étapes et les données qui doivent être conservées.`)}`} className="min-h-11 flex items-center justify-center gap-2 text-xs text-gray-500"><Trash2 size={14} />Demander la suppression de mon compte</a><p className="text-xs text-gray-500 text-center">Cette demande ouvre votre messagerie. L’équipe vous confirmera sa prise en charge et les éventuelles données à conserver.</p></div>
+  </div>;
 }

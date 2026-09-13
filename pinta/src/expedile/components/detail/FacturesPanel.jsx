@@ -1,725 +1,256 @@
-import React, { useState, useRef } from 'react';
-import { Check, X, RotateCcw, Eye, Upload, FileText, Image as ImageIcon, ZoomIn, Plus, Send, Scan } from 'lucide-react';
+import React, { Suspense, lazy, useEffect, useRef, useState } from 'react';
+import { Check, X, RotateCcw, Eye, Upload, FileText, Plus, Send, Scan, ChevronDown, ChevronRight, Loader2, AlertTriangle } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { BRAND, getDestByCP } from '../../constants';
-import { eur, uid, getPrenom } from '../../utils';
+import { BRAND } from '../../constants';
+import { eur, getPrenom } from '../../utils';
 import * as sb from '../../lib/supabaseData';
 import { supabase } from '../../lib/supabase';
-import { sendTelegramReply } from '../../services/telegramApi';
+import { SecureImage, SecureFileLink, useSignedFile } from '../ui/SecureFile';
+import { functionErrorMessage } from '../../services/functionErrors';
 
-const MOTIFS_REJET = [
-  { key: 'non_conforme', label: 'Non conforme' },
-  { key: 'illisible', label: 'Illisible / mauvaise qualité' },
-  { key: 'montant', label: 'Montant incorrect' },
-  { key: 'date', label: 'Date invalide' },
-  { key: 'nom', label: 'Nom/adresse erroné(e)' },
-];
+const PDFPreview = lazy(() => import('../ui/PDFPreview'));
 
-// ── Lightbox overlay ─────────────────────────────────────────────────────
-function Lightbox({ src, onClose, title }) {
-  return (
-    <div
-      className="fixed inset-0 z-[9999] flex items-center justify-center"
-      style={{ background: 'rgba(0,0,0,0.85)' }}
-      onClick={onClose}
-    >
-      <button
-        onClick={onClose}
-        className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/20 flex items-center justify-center text-white hover:bg-white/30 transition-colors"
-      >
-        <X size={20} />
-      </button>
-      {title && (
-        <div className="absolute top-4 left-4 text-white text-sm font-bold bg-black/40 px-3 py-1.5 rounded-lg">
-          {title}
-        </div>
-      )}
-      <div className="max-w-[90vw] max-h-[85vh] overflow-auto rounded-xl" onClick={(e) => e.stopPropagation()}>
-        <img src={src} alt="Facture" className="max-w-full max-h-[85vh] object-contain rounded-xl" />
-      </div>
-    </div>
-  );
+const INPUT = 'min-h-11 min-w-0 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300';
+const BUTTON = 'min-h-11 inline-flex items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold transition-colors disabled:opacity-40 active:scale-[0.98]';
+const REJECTION_REASONS = ['Document illisible', 'Facture incomplète', 'Montant à vérifier', 'Mauvais document'];
+
+function Lightbox({ src, title, onClose }) {
+  const closeRef = useRef(null);
+  useEffect(() => {
+    const previous = document.activeElement;
+    closeRef.current?.focus();
+    const keydown = (event) => {
+      if (event.key === 'Escape') { event.preventDefault(); event.stopImmediatePropagation(); onClose(); }
+      if (event.key === 'Tab') { event.preventDefault(); event.stopImmediatePropagation(); closeRef.current?.focus(); }
+    };
+    document.addEventListener('keydown', keydown, true);
+    return () => { document.removeEventListener('keydown', keydown, true); previous?.focus?.(); };
+  }, [onClose]);
+  return <div role="dialog" aria-modal="true" aria-label={title || 'Aperçu de la facture'} className="fixed inset-0 z-[9999] flex flex-col bg-slate-950/90 p-4" onClick={onClose}>
+    <div className="flex items-center justify-between gap-3 text-white"><p className="truncate text-sm font-semibold">{title}</p><button ref={closeRef} aria-label="Fermer l’aperçu" onClick={onClose} className={`${BUTTON} bg-white/15`}><X size={20} /></button></div>
+    <div className="min-h-0 flex-1 overflow-auto py-4" onClick={(event) => event.stopPropagation()}><SecureImage bucket="factures" src={src} alt={title || 'Facture'} className="mx-auto max-h-full max-w-full rounded-lg object-contain" /></div>
+  </div>;
 }
 
-export default function FacturesPanel() {
-  const { sel, isStaff, setData, flash, sendMsg, getClient } = useApp();
+function InlineDocument({ invoice }) {
+  const { url, error, loading } = useSignedFile('factures', invoice?.fichier);
+  if (!invoice?.fichier) return <p className="p-4 text-sm text-slate-600">Joignez le document pour vérifier les montants et articles.</p>;
+  if (loading) return <div role="status" aria-label="Chargement du document" className="h-96 animate-pulse rounded-xl bg-slate-100" />;
+  if (error) return <p role="alert" className="p-3 text-sm text-red-700">{error}</p>;
+  const pdf = (invoice.fichierNom || invoice.fichier).split('?')[0].toLowerCase().endsWith('.pdf');
+  return <div className="space-y-2">{pdf
+    ? <Suspense fallback={<p role="status" className="p-3 text-sm text-slate-600">Chargement du lecteur PDF…</p>}><PDFPreview key={invoice.fichier} url={url} title={invoice.vendeur} /></Suspense>
+    : <img src={url} alt={`Facture ${invoice.vendeur}`} className="w-full rounded-lg" />}
+    <a href={url} target="_blank" rel="noopener noreferrer" className={`${BUTTON} text-blue-700`}>Ouvrir le document en grand</a>
+  </div>;
+}
+
+function lineAnomalies(line, categories) {
+  return [!line.desc?.trim() && 'Description manquante', (!Number.isInteger(Number(line.qte)) || Number(line.qte) <= 0) && 'Quantité entière positive requise', (line.prix === '' || line.prix == null || !Number.isFinite(Number(line.prix)) || Number(line.prix) < 0) && 'Prix HT à vérifier', !categories.some((c) => c.id === line.cat) && 'Catégorie à vérifier'].filter(Boolean);
+}
+
+function InvoiceFields({ invoice, busy, onSave }) {
+  const [vendor, setVendor] = useState(invoice.vendeur || '');
+  const [amount, setAmount] = useState(String(invoice.montant ?? ''));
+  useEffect(() => { setVendor(invoice.vendeur || ''); setAmount(String(invoice.montant ?? '')); }, [invoice.id, invoice.vendeur, invoice.montant]);
+  const dirty = vendor !== (invoice.vendeur || '') || amount !== String(invoice.montant ?? '');
+  return <form className="mt-3 grid grid-cols-[minmax(0,1fr)_7rem] gap-2" onSubmit={(event) => { event.preventDefault(); onSave({ vendeur: vendor.trim(), montant: Number(amount), valide: false }); }}>
+    <label className="text-xs text-gray-500">Vendeur<input aria-label="Vendeur de la facture" required value={vendor} onChange={(event) => setVendor(event.target.value)} className={INPUT} /></label>
+    <label className="text-xs text-gray-500">Total HT (€)<input aria-label="Total HT de la facture" required type="number" min="0.01" step="0.01" value={amount} onChange={(event) => setAmount(event.target.value)} className={INPUT} /></label>
+    {dirty && <button disabled={busy || !vendor.trim() || !(Number(amount) > 0)} className={`${BUTTON} col-span-2 bg-slate-100 text-slate-700`}><Check size={14} />Enregistrer la correction</button>}
+  </form>;
+}
+
+export default function FacturesPanel({ workspace = false, tab, onTabChange, children }) {
+  const { sel, isStaff, setData, refreshColis, sendMsg, getClient, categories = [], can } = useApp();
+  const [selectedId, setSelectedId] = useState(null);
+  const [localTab, setLocalTab] = useState('articles');
+  const workspaceTab = tab || localTab;
+  const setWorkspaceTab = (next) => { setLocalTab(next); onTabChange?.(next); };
+  const [resuming, setResuming] = useState(false);
+  const currentParcel = useRef(sel?.id); currentParcel.current = sel?.id;
+  const selectedInvoice = (sel?.factures || []).find((invoice) => invoice.id === selectedId) || sel?.factures?.[0];
+  const canResume = isStaff && (can('perm_factures_ocr') || can('perm_factures_valider'));
+  const [collapsed, setCollapsed] = useState(false);
+  const [replacesFactureId, setReplacesFactureId] = useState('');
+  const [clientFile, setClientFile] = useState(null);
+  const uploadedClientDocument = useRef(null);
+  const clientFileInput = useRef(null);
+  const [newVendor, setNewVendor] = useState('');
+  const [newAmount, setNewAmount] = useState('');
+  const [showAdd, setShowAdd] = useState(false);
+  const [busy, setBusy] = useState(null);
+  const busyRef = useRef(false);
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  const [preview, setPreview] = useState(null);
   const [rejectingId, setRejectingId] = useState(null);
-  const [motifLibre, setMotifLibre] = useState('');
-  const [previewSrc, setPreviewSrc] = useState(null);
-  const [previewTitle, setPreviewTitle] = useState('');
-  const fileInputRef = useRef(null);
-  const [uploadTargetId, setUploadTargetId] = useState(null);
-
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [newVendeur, setNewVendeur] = useState('');
-  const [newMontant, setNewMontant] = useState('');
-  const [ocrLoading, setOcrLoading] = useState(null);
-  const [collapsed, setCollapsed] = useState(true); // factureId being analyzed
-
+  const [reason, setReason] = useState('');
+  const [extractions, setExtractions] = useState({});
+  const uploadTarget = useRef(null);
+  const fileInput = useRef(null);
+  useEffect(() => { setExtractions({}); setReplacesFactureId(''); setClientFile(null); if (clientFileInput.current) clientFileInput.current.value = ''; uploadedClientDocument.current = null; setSelectedId(null); setWorkspaceTab('articles'); setError(''); setNotice(''); setRejectingId(null); setShowAdd(false); }, [sel?.id]);
+  useEffect(() => {
+    let alive = true;
+    const invoice = selectedInvoice;
+    if (!canResume || !invoice?.fichier) { setResuming(false); return undefined; }
+    setResuming(true);
+    supabase.functions.invoke('ocr-facture', { body: { factureId: invoice.id, colisId: sel.id, action: 'resume' } }).then(async ({ data, error: failure }) => {
+      if (!alive) return;
+      if (failure || !data?.success) throw new Error(await functionErrorMessage({ data, error: failure }, 'Reprise indisponible'));
+      setExtractions((previous) => previous[invoice.id]?._dirty ? previous : { ...previous, [invoice.id]: data.extraction });
+    }).catch((failure) => { if (alive) setError(`Les propositions enregistrées n’ont pas pu être chargées : ${failure.message}. Utilisez « Reprendre la vérification » pour réessayer.`); })
+      .finally(() => { if (alive) setResuming(false); });
+    return () => { alive = false; };
+  }, [sel?.id, selectedInvoice?.id, selectedInvoice?.fichier, selectedInvoice?.ocrStatus, canResume]);
   if (!sel) return null;
-
-  const cl = getClient(sel.clientId);
-  const canal = cl?.telegramChatId ? 'telegram' : 'email';
-  const hasFactures = sel.factures && sel.factures.length > 0;
-
-  // ── Add new facture ─────────────────────────────────────────────────
-  const handleAddFacture = async () => {
-    if (!newVendeur.trim()) return;
-    const factureData = {
-      vendeur: newVendeur.trim(),
-      montant: parseFloat(newMontant) || 0,
-      valide: false,
-    };
-    let newFacture;
-    try {
-      newFacture = await sb.insertFacture(sel.id, factureData);
-    } catch (err) {
-      console.warn('[Supabase] insertFacture fallback:', err.message);
-      newFacture = { id: 'f_' + uid(), ...factureData, fichier: null, fichierNom: null };
+  const parcelId = sel.id;
+  const client = getClient(sel.clientId);
+  const invoices = sel.factures || [];
+  const canDeposit = !isStaff && !sel.paiementDate && ['receptionne','mesure','attente_feu_vert','autorise','en_preparation','devis_envoye','attente_paiement'].includes(sel.statut);
+  const canEdit = isStaff && !sel.paiementDate;
+  const canAdd = canEdit && can('perm_factures_ajouter');
+  const canValidate = canEdit && can('perm_factures_valider');
+  const canReject = canEdit && can('perm_factures_refuser');
+  const canAnalyze = canEdit && can('perm_factures_ocr');
+  const replaceInvoice = (invoice) => setData((previous) => previous.map((parcel) => parcel.id === parcelId ? { ...parcel, factures: (parcel.factures || []).map((item) => item.id === invoice.id ? invoice : item) } : parcel));
+  const run = async (key, action) => {
+    if (busyRef.current) return;
+    busyRef.current = true; setBusy(key); setError(''); setNotice('');
+    try { await action(); } catch (failure) { if (currentParcel.current === parcelId) setError(failure.message || 'L’action n’a pas pu être enregistrée. Réessayez.'); }
+    finally { busyRef.current = false; setBusy(null); }
+  };
+  const invokeOCR = async (body) => {
+    const { data, error: failure } = await supabase.functions.invoke('ocr-facture', { body: { ...body, colisId: parcelId } });
+    if (failure || !data?.success) throw new Error(await functionErrorMessage({ data, error: failure }, 'Analyse indisponible. La saisie manuelle reste disponible.'));
+    return data;
+  };
+  const extract = async (invoice, action = 'extract') => {
+    const data = await invokeOCR({ factureId: invoice.id, action });
+    if (currentParcel.current !== parcelId) return;
+    setExtractions((previous) => ({ ...previous, [invoice.id]: data.extraction }));
+    setNotice(data.extraction ? 'Analyse enregistrée. Vérifiez les propositions avant de les importer dans le devis.' : 'Aucune analyse enregistrée pour ce document. Lancez l’analyse ou saisissez les articles.');
+  };
+  const saveInvoice = async (invoice, changes) => {
+    const saved = await sb.updateFacture(invoice.id, changes);
+    replaceInvoice(saved);
+    return saved;
+  };
+  const addInvoice = () => run('add', async () => {
+    const amount = newAmount === '' ? 0 : Number(newAmount);
+    if (!newVendor.trim() || !Number.isFinite(amount) || amount < 0) throw new Error('Renseignez un vendeur et un montant positif ou nul.');
+    const saved = await sb.insertFacture(parcelId, { vendeur: newVendor.trim(), montant: amount, valide: false });
+    setData((previous) => previous.map((parcel) => parcel.id === parcelId ? { ...parcel, factures: [...(parcel.factures || []).filter((invoice) => invoice.id !== saved.id), saved] } : parcel));
+    setNewVendor(''); setNewAmount(''); setShowAdd(false); setNotice('Facture enregistrée. Joignez son document pour la vérifier.');
+  });
+  const depositClientDocument = () => run('client-deposit', async () => {
+    if (!clientFile) throw new Error('Choisissez une facture PDF ou une photo lisible.');
+    let document = uploadedClientDocument.current;
+    if (!document || document.file !== clientFile || document.parcelId !== parcelId) {
+      const saved = await sb.uploadDocument('factures', parcelId, clientFile);
+      document = { ...saved, file: clientFile, parcelId }; uploadedClientDocument.current = document;
     }
-    setData((prev) => prev.map((c) => {
-      if (c.id !== sel.id) return c;
-      return { ...c, factures: [...(c.factures || []), newFacture] };
-    }));
-    setNewVendeur('');
-    setNewMontant('');
-    setShowAddForm(false);
-    flash('Facture ajoutée');
-    sb.insertAuditAction(sel.id, 'Staff', 'Facture ajoutée', `${newVendeur.trim()} — ${parseFloat(newMontant) || 0} €`).catch(() => {});
-  };
-
-  // ── Request facture from client (uses same template as StaffDetailView) ──
-  const handleDemanderFacture = (sendCanal) => {
-    sendMsg(sel.id, sel.clientId, sendCanal, 'facture_manquante', null);
-    flash(`Demande de facture envoyée par ${sendCanal === 'telegram' ? 'Telegram' : 'email'}`);
-  };
-
-  // ── Validate ───────────────────────────────────────────────────────────
-  const validateFacture = (factureId) => {
-    setData((prev) => prev.map((c) => {
-      if (c.id !== sel.id) return c;
-      return { ...c, factures: c.factures.map((f) => (f.id === factureId ? { ...f, valide: true, rejetMotif: null } : f)) };
-    }));
-    sb.updateFacture(factureId, { valide: true }).catch(console.error);
-    flash('Facture validée');
-    sb.insertAuditAction(sel.id, 'Staff', 'Facture validée', `ID: ${factureId}`).catch(() => {});
-    setRejectingId(null);
-  };
-
-  // ── Undo validation ────────────────────────────────────────────────────
-  const unvalidateFacture = (factureId) => {
-    setData((prev) => prev.map((c) => {
-      if (c.id !== sel.id) return c;
-      return { ...c, factures: c.factures.map((f) => (f.id === factureId ? { ...f, valide: false } : f)) };
-    }));
-    sb.updateFacture(factureId, { valide: false }).catch(console.error);
-    flash('Validation annulée');
-  };
-
-  // ── Reject with motif ──────────────────────────────────────────────────
-  const rejectFacture = async (facture, motifLabel) => {
-    // Persist to Supabase
-    sb.updateFacture(facture.id, { valide: false, rejetMotif: motifLabel }).catch(console.error);
-    // Update local state
-    setData((prev) => prev.map((c) => {
-      if (c.id !== sel.id) return c;
-      return { ...c, factures: c.factures.map((f) => (f.id === facture.id ? { ...f, valide: false, rejetMotif: motifLabel } : f)) };
-    }));
-
-    const dest = getDestByCP(cl?.cp);
-    const nom = getPrenom(cl) || '';
-    const chatId = cl?.telegramChatId;
-
-    // Reply to the SPECIFIC Telegram message (if the facture was sent via Telegram)
-    if (chatId && facture.telegramMsgId) {
-      const replyMsg = `⚠️ *Facture "${facture.vendeur}" refusée*\n\n📄 *Motif : ${motifLabel}*\n\n👉 Merci de nous renvoyer une facture conforme (photo ou PDF lisible) pour votre colis *${sel.ref}*.\n\nSans facture validée, nous ne pouvons pas avancer.\n\n_Expedîle${dest ? ` — Paris → ${dest.nom}` : ''}_`;
-      sendTelegramReply(chatId, replyMsg, facture.telegramMsgId);
-      // Also persist the message in chat
-      sb.insertMessage(sel.id, {
-        type: 'staff',
-        auteur: 'Système',
-        texte: `❌ Facture "${facture.vendeur}" refusée — Motif : ${motifLabel}`,
-        statut: 'envoye',
-      }).catch(console.error);
-    } else {
-      // Fallback: send via sendMsg (generic, not reply)
-      const msg = canal === 'telegram'
-        ? `Bonjour ${nom} 👋\n\n⚠️ La facture *${facture.vendeur}* (${eur(facture.montant)}) pour votre colis *${sel.ref}* n'a pas pu être validée.\n\n📄 *Motif : ${motifLabel}*\n\n👉 Merci de nous renvoyer une facture conforme dès que possible.\n\n_Expedîle${dest ? ` — Paris → ${dest.nom}` : ''}_`
-        : `Objet : Facture rejetée — ${sel.ref}\n\nBonjour ${cl?.nom || ''},\n\nLa facture ${facture.vendeur} (${eur(facture.montant)}) pour votre colis ${sel.ref} n'a pas pu être validée.\nMotif : ${motifLabel}.\n\nMerci de nous renvoyer une facture conforme.\n\nCordialement,\nL'équipe Expedîle`;
-      sendMsg(sel.id, sel.clientId, canal, null, msg);
-    }
-
-    flash('Facture refusée — client notifié');
-    sb.insertAuditAction(sel.id, 'Staff', 'Facture refusée', `"${facture.vendeur}" — Motif : ${motifLabel}`).catch(() => {});
-    setRejectingId(null);
-    setMotifLibre('');
-  };
-
-  // ── Upload file ────────────────────────────────────────────────────────
-  const handleFileUpload = (factureId) => {
-    setUploadTargetId(factureId);
-    fileInputRef.current?.click();
-  };
-
-  const handleFileChange = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file || !uploadTargetId) return;
-
-    // Upload to Supabase Storage
-    const ext = file.name.split('.').pop() || 'jpg';
-    const path = `${sel.id}/${uploadTargetId}.${ext}`;
-
-    flash({ msg: 'Upload en cours...', type: 'info' });
-
-    const { error: uploadErr } = await supabase.storage
-      .from('factures')
-      .upload(path, file, { upsert: true });
-
-    if (uploadErr) {
-      console.error('Upload error:', uploadErr);
-      flash({ msg: 'Erreur upload : ' + uploadErr.message, type: 'warning' });
-      e.target.value = '';
-      return;
-    }
-
-    // Get public URL
-    const { data: urlData } = supabase.storage
-      .from('factures')
-      .getPublicUrl(path);
-
-    const publicUrl = urlData?.publicUrl || '';
-    console.log('[FacturesPanel] Upload complete, publicUrl:', publicUrl, 'for facture:', uploadTargetId);
-
-    // Update local state + Supabase
-    setData((prev) => prev.map((c) => {
-      if (c.id !== sel.id) return c;
-      return {
-        ...c,
-        factures: c.factures.map((f) =>
-          f.id === uploadTargetId ? { ...f, fichier: publicUrl, fichierNom: file.name } : f,
-        ),
-      };
-    }));
-
-    // Persist URL to Supabase factures table
-    sb.updateFacture(uploadTargetId, { fichierUrl: publicUrl, fichierNom: file.name }).catch(console.error);
-
-    flash({ msg: 'Fichier joint à la facture', type: 'success' });
-    setUploadTargetId(null);
-    e.target.value = '';
-  };
-
-  // ── Open preview ───────────────────────────────────────────────────────
-  // ── OCR Analysis ────────────────────────────────────────────────────
-  const handleOCR = async (facture) => {
-    if (!facture.fichier) {
-      flash({ msg: 'Aucun fichier joint — joignez la facture d\'abord', type: 'warning' });
-      return;
-    }
-    setOcrLoading(facture.id);
-    try {
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://bqprktzehuhplpqjgjaz.supabase.co';
-      // TODO: Remplacer par JWT Supabase Auth quand verify_jwt sera activé
-      const edgeSecret = import.meta.env.VITE_EDGE_API_SECRET || '';
-      const res = await fetch(`${supabaseUrl}/functions/v1/ocr-facture`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-api-secret': edgeSecret },
-        body: JSON.stringify({
-          imageUrl: facture.fichier,
-          colisId: sel.id,
-          factureId: facture.id,
-        }),
-      });
-      const data = await res.json().catch(() => ({}));
-
-      if (data.error) {
-        flash({
-          msg: `OCR échoué (${data.error}). Saisissez les articles manuellement dans la section « Articles déclarés » en dessous.`,
-          type: 'warning',
-          duration: 8000,
-        });
-        return;
+    const saved = await sb.insertFacture(parcelId, { vendeur: newVendor.trim() || clientFile.name, montant: 0, valide: false, fichierUrl: document.path, fichierNom: clientFile.name, replacesFactureId: replacesFactureId || null });
+    setData((previous) => previous.map((parcel) => parcel.id === parcelId ? { ...parcel, factures: [...(parcel.factures || []).filter((invoice) => invoice.id !== saved.id), saved] } : parcel));
+    if (currentParcel.current === parcelId) { setReplacesFactureId(''); setClientFile(null); if (clientFileInput.current) clientFileInput.current.value = ''; setNewVendor(''); uploadedClientDocument.current = null; setNotice('Facture reçue et enregistrée. Notre équipe vérifiera le document et les articles ; vous n’avez pas besoin de le renvoyer par message.'); }
+  });
+  const validate = (invoice) => run(invoice.id, async () => {
+    if (!invoice.fichier || !invoice.vendeur?.trim() || !(Number(invoice.montant) > 0)) throw new Error('Joignez un document lisible et renseignez le vendeur et le montant avant de valider.');
+    await saveInvoice(invoice, { valide: true, rejetMotif: null }); setNotice('Facture validée et enregistrée.');
+  });
+  const reject = (invoice, rejection) => run(invoice.id, async () => {
+    if (!rejection.trim()) throw new Error('Indiquez la correction attendue du client.');
+    await saveInvoice(invoice, { valide: false, rejetMotif: rejection.trim() });
+    setRejectingId(null); setReason('');
+    const channel = client?.telegramChatId ? 'telegram' : 'email';
+    const text = `Bonjour ${getPrenom(client) || client?.nom || ''},\n\nLa facture ${invoice.vendeur} de votre dossier ${sel.ref} nécessite une correction : ${rejection.trim()}.\n\nMerci de joindre une photo ou un PDF lisible dans votre espace client. Nous pouvons préparer votre dossier dès votre accord ; cette facture est nécessaire pour établir le devis.\n\nL’équipe Expedîle`;
+    try { await sendMsg(parcelId, sel.clientId, channel, null, text, { replyToMessageId: invoice.telegramMsgId || undefined }); setNotice('Refus enregistré. La demande de correction est prise en charge par la messagerie.'); }
+    catch (failure) { setError(`Refus enregistré, mais la notification a échoué : ${failure.message}`); }
+  });
+  const uploadFile = async (event) => {
+    const file = event.target.files?.[0]; const id = uploadTarget.current; event.target.value = '';
+    if (!file || !id) return;
+    await run(id, async () => {
+      const { path } = await sb.uploadDocument('factures', parcelId, file);
+      const saved = await sb.updateFacture(id, { fichierUrl: path, fichierNom: file.name, valide: false, rejetMotif: null });
+      replaceInvoice(saved); setExtractions((previous) => ({ ...previous, [id]: null }));
+      setNotice('Document enregistré. Sa validation doit être renouvelée après remplacement.');
+      if (canAnalyze) {
+        try { await extract(saved); }
+        catch (failure) { setNotice(`Document enregistré. ${failure.message} Vous pouvez compléter les articles manuellement.`); }
       }
-
-      if (data.success) {
-        // Update local state with extracted articles
-        if (data.insertedLignes?.length > 0) {
-          setData((prev) => prev.map((c) => {
-            if (c.id !== sel.id) return c;
-            return { ...c, lignes: [...(c.lignes || []), ...data.insertedLignes] };
-          }));
-        }
-
-        // Update facture montant + vendeur locally
-        if (data.total || data.vendeur) {
-          setData((prev) => prev.map((c) => {
-            if (c.id !== sel.id) return c;
-            return {
-              ...c,
-              factures: c.factures.map((f) =>
-                f.id === facture.id ? {
-                  ...f,
-                  montant: data.total || f.montant,
-                  vendeur: data.vendeur || f.vendeur,
-                } : f
-              ),
-            };
-          }));
-        }
-
-        const nbTotal = data.nb_articles_total || data.nbArticles || 0;
-        const nbLignes = data.nbLignes || data.insertedLignes?.length || 0;
-        const total = data.total_ht || data.total || 0;
-
-        if (nbLignes === 0) {
-          flash({
-            msg: 'OCR terminé mais aucun article n\'a pu être extrait. Saisissez les articles manuellement dans la section « Articles déclarés » en dessous.',
-            type: 'warning',
-            duration: 8000,
-          });
-        } else {
-          flash({
-            msg: `OCR : ${nbTotal} article${nbTotal > 1 ? 's' : ''} → regroupés en ${nbLignes} catégorie${nbLignes > 1 ? 's' : ''} — Total HT: ${eur(total)}`,
-            type: 'success',
-            duration: 6000,
-          });
-        }
-        return;
-      }
-
-      // Réponse sans error ni success → cas non nominal
-      flash({
-        msg: 'OCR indisponible. Saisissez les articles manuellement dans la section « Articles déclarés » en dessous.',
-        type: 'warning',
-        duration: 8000,
-      });
-    } catch (err) {
-      console.error('OCR error:', err);
-      flash({
-        msg: `OCR indisponible (${err.message}). Saisissez les articles manuellement dans la section « Articles déclarés » en dessous.`,
-        type: 'warning',
-        duration: 8000,
-      });
-    } finally {
-      setOcrLoading(null);
-    }
+    });
   };
+  const confirmExtraction = (invoice, extraction) => run(invoice.id, async () => {
+    await invokeOCR({ factureId: invoice.id, action: 'confirm', extractionId: extraction.id, lines: extraction.lines, total: Number(extraction.total), vendeur: extraction.vendeur });
+    await refreshColis(parcelId);
+    setExtractions((previous) => ({ ...previous, [invoice.id]: { ...extraction, status: 'confirmed' } }));
+    setNotice('Articles vérifiés et importés une seule fois. La facture est validée et enregistrée.');
+  });
+  const changeExtraction = (id, changes) => setExtractions((previous) => ({ ...previous, [id]: { ...previous[id], ...changes, _dirty: true } }));
+  const changeLine = (id, index, changes) => setExtractions((previous) => ({ ...previous, [id]: { ...previous[id], _dirty: true, lines: previous[id].lines.map((line, position) => position === index ? { ...line, ...changes } : line) } }));
 
-  const openPreview = (f) => {
-    if (f.fichier) {
-      setPreviewSrc(f.fichier);
-      setPreviewTitle(`${f.vendeur} — ${eur(f.montant)}`);
-    }
-  };
-
-  // ── Hidden file input ──────────────────────────────────────────────────
-  const hiddenInput = (
-    <input
-      ref={fileInputRef}
-      type="file"
-      accept="image/*,.pdf"
-      className="hidden"
-      onChange={handleFileChange}
-    />
-  );
-
-  // ══════════════════════════════════════════════════════════════════════
-  // Client: compact inline view
-  // ══════════════════════════════════════════════════════════════════════
-  if (!isStaff) {
-    if (!hasFactures) return null;
-    return (
-      <div className="card px-4 py-3 anim-fade">
-        {hiddenInput}
-        {previewSrc && <Lightbox src={previewSrc} title={previewTitle} onClose={() => setPreviewSrc(null)} />}
-        <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">Factures d'origine</p>
-        {sel.factures.map((f) => (
-          <div key={f.id} className="flex items-center gap-2 py-1.5 text-xs">
-            {/* Thumbnail / voir */}
-            {f.fichier ? (
-              (f.fichierNom || f.fichier || '').toLowerCase().endsWith('.pdf') ? (
-                <a
-                  href={f.fichier}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex-shrink-0 w-8 h-8 rounded-lg border border-red-200 bg-red-50 flex items-center justify-center hover:ring-2 hover:ring-red-300 transition-all"
-                >
-                  <FileText size={13} className="text-red-500" />
-                </a>
-              ) : (
-                <button
-                  onClick={() => openPreview(f)}
-                  className="flex-shrink-0 w-8 h-8 rounded-lg border border-gray-200 overflow-hidden hover:ring-2 hover:ring-blue-300 transition-all"
-                >
-                  <img src={f.fichier} alt="" className="w-full h-full object-cover" />
-                </button>
-              )
-            ) : (
-              <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center">
-                <FileText size={13} className="text-gray-400" />
-              </div>
-            )}
-            <span className="flex-1 text-gray-700 truncate">{f.vendeur} — {eur(f.montant)}</span>
-            {f.valide ? (
-              <span className="inline-flex items-center gap-0.5 text-emerald-600 font-bold flex-shrink-0">
-                <Check size={11} />Validée
-              </span>
-            ) : f.rejetMotif ? (
-              <span className="inline-flex items-center gap-0.5 text-red-500 font-bold flex-shrink-0">
-                <X size={11} />Refusée
-              </span>
-            ) : (
-              <span className="text-amber-500 font-medium flex-shrink-0">En vérification</span>
-            )}
-          </div>
-        ))}
-      </div>
-    );
-  }
-
-  // ══════════════════════════════════════════════════════════════════════
-  // Staff: full panel with validation/rejection + preview
-  // ══════════════════════════════════════════════════════════════════════
-  return (
-    <div className="card p-4 anim-fade">
-      {hiddenInput}
-      {previewSrc && <Lightbox src={previewSrc} title={previewTitle} onClose={() => setPreviewSrc(null)} />}
-
-      <div className="flex items-center justify-between mb-3">
-        <button
-          onClick={() => setCollapsed(!collapsed)}
-          className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-gray-400 hover:text-gray-600 transition-colors"
-        >
-          <span>{collapsed ? '▶' : '▼'}</span>
-          Factures d'origine {hasFactures ? `(${sel.factures.length})` : ''}
-          {hasFactures && collapsed && (
-            <span className="normal-case font-semibold text-gray-500 ml-1">
-              — {sel.factures.filter(f => f.valide).length} validée{sel.factures.filter(f => f.valide).length > 1 ? 's' : ''}, {sel.factures.filter(f => f.rejetMotif).length} refusée{sel.factures.filter(f => f.rejetMotif).length > 1 ? 's' : ''}
-            </span>
-          )}
-        </button>
-        <div className="flex gap-1.5">
-          {cl?.telegramChatId ? (
-            <button
-              onClick={() => handleDemanderFacture('telegram')}
-              className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold transition-all active:scale-95"
-              style={{ background: '#0088cc15', color: '#0088cc' }}
-            >
-              <Send size={10} />
-              Telegram
-            </button>
-          ) : (
-            <span className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold text-gray-300 bg-gray-50" title="Client n'a pas lié Telegram">
-              <Send size={10} />
-              Telegram
-            </span>
-          )}
-          <button
-            onClick={() => handleDemanderFacture('email')}
-            className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold transition-all active:scale-95"
-            style={{ background: `${BRAND.navy}08`, color: BRAND.navy }}
-          >
-            <Send size={10} />
-            Email
-          </button>
-          <button
-            onClick={() => setShowAddForm(!showAddForm)}
-            className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold transition-all active:scale-95"
-            style={{ background: `${BRAND.navy}10`, color: BRAND.navy }}
-          >
-            <Plus size={10} />
-            Ajouter
-          </button>
-        </div>
-      </div>
-
-      {!collapsed && <>
-      {/* Add facture form */}
-      {showAddForm && (
-        <div className="mb-3 p-3 rounded-xl border-2 border-dashed border-gray-200 bg-gray-50 space-y-2">
-          <div className="flex gap-2">
-            <input
-              autoFocus
-              type="text"
-              value={newVendeur}
-              onChange={(e) => setNewVendeur(e.target.value)}
-              placeholder="Vendeur (Amazon, Zara...)"
-              className="flex-1 px-3 py-2 rounded-lg border border-gray-200 bg-white text-xs outline-none focus:border-blue-400"
-            />
-            <input
-              type="number"
-              value={newMontant}
-              onChange={(e) => setNewMontant(e.target.value)}
-              placeholder="Montant €"
-              className="w-24 px-3 py-2 rounded-lg border border-gray-200 bg-white text-xs outline-none focus:border-blue-400 text-right"
-            />
-          </div>
-          <div className="flex gap-2">
-            <button
-              onClick={handleAddFacture}
-              disabled={!newVendeur.trim()}
-              className="flex-1 py-2 rounded-lg text-xs font-bold text-white disabled:opacity-30 transition-all active:scale-95"
-              style={{ background: BRAND.navy }}
-            >
-              Ajouter la facture
-            </button>
-            <button
-              onClick={() => { setShowAddForm(false); setNewVendeur(''); setNewMontant(''); }}
-              className="px-3 py-2 rounded-lg text-xs font-semibold text-gray-500 bg-gray-100"
-            >
-              Annuler
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* No factures message */}
-      {!hasFactures && !showAddForm && (
-        <div className="py-6 text-center">
-          <FileText size={24} className="mx-auto text-gray-300 mb-2" />
-          <p className="text-xs text-gray-400 mb-1">Aucune facture rattachée</p>
-          <p className="text-[10px] text-gray-400">Ajoutez une facture ou demandez-la au client.</p>
-        </div>
-      )}
-
-      {/* Existing factures */}
-      <div className="space-y-3">
-        {(sel.factures || []).map((f) => (
-          <div
-            key={f.id}
-            className="rounded-xl border-2 overflow-hidden transition-all"
-            style={{
-              borderColor: f.valide ? '#BBF7D0' : f.rejetMotif ? '#FECACA' : '#E5E7EB',
-              background: f.valide ? '#F0FDF4' : f.rejetMotif ? '#FEF2F2' : 'white',
-            }}
-          >
-            {/* Header row with thumbnail */}
-            <div className="px-3 py-2.5 flex items-center gap-3">
-              {/* Thumbnail or upload */}
-              {f.fichier ? (
-                (() => {
-                  const isPdf = (f.fichierNom || f.fichier || '').toLowerCase().endsWith('.pdf');
-                  return isPdf ? (
-                    <a
-                      href={f.fichier}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="relative flex-shrink-0 w-14 h-14 rounded-xl border-2 border-red-200 bg-red-50 flex flex-col items-center justify-center gap-0.5 group hover:border-red-400 transition-all"
-                    >
-                      <FileText size={18} className="text-red-500" />
-                      <span className="text-[7px] font-black text-red-400 uppercase">PDF</span>
-                    </a>
-                  ) : (
-                    <button
-                      onClick={() => openPreview(f)}
-                      className="relative flex-shrink-0 w-14 h-14 rounded-xl border-2 border-gray-200 overflow-hidden group hover:border-blue-400 transition-all"
-                    >
-                      <img src={f.fichier} alt="" className="w-full h-full object-cover" />
-                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all flex items-center justify-center">
-                        <ZoomIn size={16} className="text-white opacity-0 group-hover:opacity-100 transition-opacity" />
-                      </div>
-                    </button>
-                  );
-                })()
-              ) : (
-                <button
-                  onClick={() => handleFileUpload(f.id)}
-                  className="flex-shrink-0 w-14 h-14 rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 flex flex-col items-center justify-center gap-0.5 hover:border-blue-400 hover:bg-blue-50 transition-all"
-                >
-                  <Upload size={14} className="text-gray-400" />
-                  <span className="text-[8px] font-bold text-gray-400 uppercase">Joindre</span>
-                </button>
-              )}
-
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-bold truncate" style={{ color: BRAND.navy }}>{f.vendeur}</p>
-                <p className="text-xs text-gray-500">{eur(f.montant)}</p>
-                {f.fichier && (
-                  <p className="text-[10px] text-gray-400 truncate">{f.fichierNom || 'Fichier joint'}</p>
-                )}
-              </div>
-
-              {/* Status badge */}
-              {f.valide && (
-                <span className="flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-100 px-2 py-1 rounded-lg flex-shrink-0">
-                  <Check size={12} /> Validée
-                </span>
-              )}
-              {!f.valide && f.rejetMotif && (
-                <span className="flex items-center gap-1 text-[11px] font-bold text-red-700 bg-red-100 px-2 py-1 rounded-lg flex-shrink-0">
-                  <X size={12} /> Refusée
-                </span>
-              )}
-            </div>
-
-            {/* Preview button when file exists */}
-            {f.fichier && (() => {
-              const isPdf = (f.fichierNom || f.fichier || '').toLowerCase().endsWith('.pdf');
-              return (
-              <div className="px-3 pb-2 flex gap-2">
-                {isPdf ? (
-                  <a
-                    href={f.fichier}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all active:scale-95"
-                    style={{ background: `${BRAND.navy}10`, color: BRAND.navy }}
-                  >
-                    <Eye size={12} />
-                    Ouvrir PDF
-                  </a>
-                ) : (
-                  <button
-                    onClick={() => openPreview(f)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all active:scale-95"
-                    style={{ background: `${BRAND.navy}10`, color: BRAND.navy }}
-                  >
-                    <Eye size={12} />
-                    Voir
-                  </button>
-                )}
-                <button
-                  onClick={() => handleOCR(f)}
-                  disabled={ocrLoading === f.id}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all active:scale-95 disabled:opacity-50"
-                  style={{ background: '#7C3AED15', color: '#7C3AED' }}
-                >
-                  <Scan size={12} />
-                  {ocrLoading === f.id ? 'Analyse...' : 'Analyser (OCR)'}
-                </button>
-                <button
-                  onClick={() => handleFileUpload(f.id)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold text-gray-500 bg-gray-100 hover:bg-gray-200 transition-all active:scale-95"
-                >
-                  <Upload size={12} />
-                  Remplacer
-                </button>
-              </div>
-              );
-            })()}
-
-            {/* Rejected motif display */}
-            {!f.valide && f.rejetMotif && (
-              <div className="px-3 pb-2">
-                <p className="text-[11px] text-red-600 italic">Motif : {f.rejetMotif}</p>
-              </div>
-            )}
-
-            {/* No file warning */}
-            {!f.fichier && !f.valide && (
-              <div className="px-3 pb-2">
-                <p className="text-[10px] text-amber-600 italic flex items-center gap-1">
-                  <ImageIcon size={10} /> Aucun fichier joint — cliquez sur "Joindre" pour ajouter
-                </p>
-              </div>
-            )}
-
-            {/* Action buttons */}
-            <div className="px-3 pb-3">
-              {f.valide ? (
-                <button
-                  onClick={() => unvalidateFacture(f.id)}
-                  className="flex items-center justify-center gap-1.5 w-full py-2 rounded-xl text-xs font-bold border-2 border-orange-200 text-orange-700 bg-orange-50 hover:bg-orange-100 transition-all active:scale-[0.98]"
-                >
-                  <RotateCcw size={12} />
-                  Annuler la validation
-                </button>
-              ) : f.rejetMotif ? (
-                /* Facture refusée — proposer de re-valider ou demander une nouvelle */
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => validateFacture(f.id)}
-                    className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-bold border-2 border-green-200 text-green-700 bg-green-50 hover:bg-green-100 transition-all active:scale-[0.98]"
-                  >
-                    <Check size={12} />
-                    Re-valider
-                  </button>
-                  <button
-                    onClick={() => handleFileUpload(f.id)}
-                    className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-bold border-2 border-gray-200 text-gray-600 bg-gray-50 hover:bg-gray-100 transition-all active:scale-[0.98]"
-                  >
-                    <Upload size={12} />
-                    Remplacer le fichier
-                  </button>
-                </div>
-              ) : (
-                /* Facture en attente — valider ou refuser */
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => validateFacture(f.id)}
-                    className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-bold transition-all active:scale-[0.98]"
-                    style={{ background: '#16A34A', color: 'white', boxShadow: '0 2px 8px #16A34A30' }}
-                  >
-                    <Check size={13} />
-                    Valider
-                  </button>
-                  <button
-                    onClick={() => {
-                      setRejectingId(rejectingId === f.id ? null : f.id);
-                      setMotifLibre('');
-                    }}
-                    className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-bold transition-all active:scale-[0.98]"
-                    style={{
-                      background: rejectingId === f.id ? '#DC2626' : '#FEF2F2',
-                      color: rejectingId === f.id ? 'white' : '#DC2626',
-                      border: rejectingId === f.id ? 'none' : '2px solid #FECACA',
-                    }}
-                  >
-                    <X size={13} />
-                    Refuser
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {/* Rejection motif picker */}
-            {rejectingId === f.id && !f.valide && (
-              <div className="px-3 pb-3 space-y-2.5 border-t border-red-100 pt-3 anim-slide-down">
-                <p className="text-[11px] font-bold text-red-700">
-                  Motif du refus <span className="font-normal text-red-400">(le client sera notifié par {canal === 'telegram' ? 'Telegram' : 'email'})</span>
-                </p>
-
-                <div className="flex flex-wrap gap-1.5">
-                  {MOTIFS_REJET.map((m) => (
-                    <button
-                      key={m.key}
-                      onClick={() => rejectFacture(f, m.label)}
-                      className="text-[11px] font-semibold px-3 py-1.5 rounded-lg bg-white border-2 border-red-200 text-red-700 hover:bg-red-50 hover:border-red-300 transition-all active:scale-95"
-                    >
-                      {m.label}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={motifLibre}
-                    onChange={(e) => setMotifLibre(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && motifLibre.trim()) {
-                        rejectFacture(f, motifLibre.trim());
-                      }
-                    }}
-                    placeholder="Autre motif..."
-                    className="flex-1 px-3 py-2 rounded-xl border-2 border-gray-200 text-xs outline-none transition-all focus:border-red-300"
-                    style={{ color: BRAND.navy }}
-                  />
-                  <button
-                    onClick={() => motifLibre.trim() && rejectFacture(f, motifLibre.trim())}
-                    disabled={!motifLibre.trim()}
-                    className="px-4 py-2 rounded-xl text-xs font-bold transition-all active:scale-95 disabled:opacity-30"
-                    style={{ background: '#DC2626', color: 'white' }}
-                  >
-                    Envoyer
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
-      </>}
+  return <section id="quote-documents" aria-label="Factures d’achat" className="min-w-0 border-t border-gray-200 py-4">
+    <input ref={fileInput} type="file" accept="application/pdf,image/jpeg,image/png,image/webp" className="hidden" onChange={uploadFile} />
+    {preview && <Lightbox src={preview.fichier} title={preview.vendeur} onClose={() => setPreview(null)} />}
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <button className={`${BUTTON} px-0 text-slate-700`} aria-expanded={!collapsed} onClick={() => setCollapsed(!collapsed)}>{collapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}<FileText size={16} />Factures ({invoices.length})</button>
+      {canAdd && <button className={`${BUTTON} bg-slate-100 text-slate-700`} onClick={() => { setShowAdd(!showAdd); setCollapsed(false); }}><Plus size={14} />Ajouter</button>}
     </div>
-  );
+    {error && <p role="alert" className="my-2 rounded-xl bg-red-50 p-3 text-xs text-red-700">{error}</p>}
+    {notice && <p role="status" className="my-2 rounded-xl bg-blue-50 p-3 text-xs text-blue-800">{notice}</p>}
+    {canDeposit && <form aria-label="Déposer une facture" className="my-3 space-y-3 rounded-xl border border-slate-200 p-3" onSubmit={(event) => { event.preventDefault(); depositClientDocument(); }}>
+      <p className="text-sm font-semibold text-slate-700">Ajouter une facture à ce dossier</p>
+      <p className="text-xs text-slate-600">PDF ou photo lisible (JPG, PNG, WebP), 20 Mo maximum. Joignez toutes les pages avec les articles et les montants. Pour une correction, sélectionnez la facture à remplacer : son historique sera conservé et ses anciens articles seront exclus du devis.</p>
+      {(invoices.some(invoice => invoice.rejetMotif)) && <label className="block text-xs font-semibold text-slate-600">Type de dépôt<select aria-label="Facture corrigée" value={replacesFactureId} onChange={event => setReplacesFactureId(event.target.value)} className={INPUT}><option value="">Nouvelle facture</option>{invoices.filter(invoice => invoice.rejetMotif && !invoices.some(other => other.replacesFactureId === invoice.id)).map(invoice => <option key={invoice.id} value={invoice.id}>Corriger : {invoice.vendeur || "Facture rejetée"}</option>)}</select></label>}
+      <label className="block text-xs font-semibold text-slate-600">Vendeur (facultatif)<input value={newVendor} onChange={(event) => setNewVendor(event.target.value)} className={INPUT} /></label>
+      <label className="block text-xs font-semibold text-slate-600">Facture ou photo<input required ref={clientFileInput} type="file" accept="application/pdf,image/jpeg,image/png,image/webp" onChange={(event) => { setClientFile(event.target.files?.[0] || null); uploadedClientDocument.current = null; }} className="mt-1 block min-h-11 w-full min-w-0 text-xs" /></label>
+      {clientFile && <p className="break-words text-xs text-slate-600">Document sélectionné : {clientFile.name}</p>}
+      <button disabled={!!busy || !clientFile} className={`${BUTTON} w-full bg-slate-700 text-white`}><Upload size={15} />{busy === 'client-deposit' ? 'Enregistrement du document…' : 'Déposer la facture'}</button>
+    </form>}
+    {workspace && <div className="space-y-3 py-3">
+      <label className="block text-xs font-semibold text-slate-600">Facture à vérifier<select aria-label="Facture à vérifier" value={selectedInvoice?.id || ''} onChange={(event) => setSelectedId(event.target.value)} className={INPUT}>{!invoices.length && <option value="">Aucune facture reçue</option>}{invoices.map((invoice) => <option key={invoice.id} value={invoice.id}>{invoice.vendeur || 'Vendeur à renseigner'} · {invoice.valide ? 'Validée' : 'À vérifier'}</option>)}</select></label>
+      <div className="grid grid-cols-2 gap-2 lg:hidden" role="tablist" aria-label="Espace de vérification">{[['document', 'Document'], ['articles', 'Articles et vérification']].map(([key, label]) => <button key={key} role="tab" aria-selected={workspaceTab === key} className={`${BUTTON} ${workspaceTab === key ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-700'}`} onClick={() => setWorkspaceTab(key)}>{label}</button>)}</div>
+    </div>}
+    <div className={workspace ? 'grid min-w-0 grid-cols-1 lg:grid-cols-2 gap-5' : ''}>
+      {workspace && <div role="region" aria-label="Document source" className={`min-w-0 ${workspaceTab === 'document' ? '' : 'hidden lg:block'}`}><InlineDocument invoice={selectedInvoice} /></div>}
+      <div className={`min-w-0 ${workspace && workspaceTab !== 'articles' ? 'hidden lg:block' : ''}`}>
+    {!collapsed && <div className="space-y-3">
+      {isStaff && <div className="flex flex-wrap gap-2"><button disabled={!!busy || !client?.telegramChatId} className={`${BUTTON} text-sky-700 bg-sky-50`} onClick={() => run('request', () => sendMsg(parcelId, sel.clientId, 'telegram', 'facture_manquante', null))}><Send size={13} />Demander par Telegram</button><button disabled={!!busy || !client?.email} className={`${BUTTON} bg-slate-100 text-slate-700`} onClick={() => run('request', () => sendMsg(parcelId, sel.clientId, 'email', 'facture_manquante', null))}>Demander par email</button></div>}
+      {showAdd && canAdd && <form className="rounded-xl border border-dashed border-gray-300 p-3 space-y-2" onSubmit={(event) => { event.preventDefault(); addInvoice(); }}><label className="block text-xs text-gray-500">Vendeur<input required aria-label="Nouveau vendeur" value={newVendor} onChange={(event) => setNewVendor(event.target.value)} className={INPUT} placeholder="Nom du vendeur" /></label><label className="block text-xs text-gray-500">Total HT connu (€)<input aria-label="Nouveau montant" type="number" min="0" step="0.01" value={newAmount} onChange={(event) => setNewAmount(event.target.value)} className={INPUT} placeholder="À compléter après lecture" /></label><button disabled={!!busy || !newVendor.trim()} className={`${BUTTON} w-full text-white`} style={{ background: BRAND.navy }}>Enregistrer la facture</button></form>}
+      {!invoices.length && <div className="py-5 text-center text-gray-500"><FileText size={25} className="mx-auto mb-2 text-gray-300" /><p className="text-sm">Aucune facture reçue</p><p className="mt-1 text-xs">Les documents permettent de calculer un devis complet dès la préparation.</p></div>}
+      {invoices.map((invoice) => {
+        const extraction = extractions[invoice.id];
+        const isPdf = (invoice.fichierNom || invoice.fichier || '').split('?')[0].toLowerCase().endsWith('.pdf');
+        return <article key={invoice.id} className={`rounded-xl border border-gray-200 p-3 ${workspace && selectedInvoice?.id !== invoice.id ? 'hidden' : ''}`}>
+          <div className="flex items-start justify-between gap-2"><div className="min-w-0"><p className="truncate text-sm font-semibold text-slate-800">{invoice.vendeur || 'Vendeur à renseigner'}</p><p className="text-sm text-gray-600">{Number(invoice.montant) > 0 ? `${eur(invoice.montant)}${isStaff ? ' HT' : ''}` : 'Montant à vérifier par l’équipe'}</p><p className="truncate text-xs text-gray-400">{invoice.fichierNom || (invoice.fichier ? 'Document joint' : 'Document manquant')}</p></div><span className={`shrink-0 rounded-lg px-2 py-1 text-xs font-semibold ${invoice.valide ? 'bg-emerald-50 text-emerald-700' : invoice.rejetMotif ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-700'}`}>{invoice.valide ? 'Validée' : invoice.rejetMotif ? 'À remplacer' : 'À vérifier'}</span></div>
+          {isStaff && <p className="mt-2 text-xs text-slate-600">Base attendue : total HT imprimé sur la facture, sans recalculer la TVA. Si seul un montant TTC est disponible, demandez une précision avant validation.</p>}
+          {isStaff && <p role="status" className="mt-2 text-xs font-semibold text-slate-600">{resuming && selectedInvoice?.id === invoice.id ? 'Chargement des propositions enregistrées…' : extraction?.status === 'confirmed' ? 'Articles importés et vérifiés' : extraction ? 'Propositions à vérifier' : invoice.ocrStatus === 'queued' ? 'Analyse en attente' : invoice.ocrStatus === 'processing' ? 'Analyse en cours' : invoice.ocrStatus === 'failed' ? 'Analyse en échec · saisie manuelle disponible' : 'Analyse non disponible pour ce document'}</p>}
+          {isStaff && invoice.ocrError && <p className="mt-1 text-xs text-amber-700">{invoice.ocrError}</p>}
+          {invoice.replacesFactureId && <p className="mt-2 text-xs text-slate-600">Remplace la facture {invoices.find(original => original.id === invoice.replacesFactureId)?.vendeur || 'corrigée'}.</p>}
+          {invoice.rejetMotif && <p className="mt-2 text-xs text-red-700">Correction attendue : {invoice.rejetMotif}</p>}
+          <div className="mt-3 flex flex-wrap gap-2">
+            {invoice.fichier && (isPdf ? <SecureFileLink href={invoice.fichier} bucket="factures" target="_blank" rel="noopener noreferrer" className={`${BUTTON} bg-slate-100 text-slate-700`}><Eye size={14} />Ouvrir le PDF</SecureFileLink> : <button onClick={() => setPreview(invoice)} className={`${BUTTON} bg-slate-100 text-slate-700`}><Eye size={14} />Voir le document</button>)}
+            {canAdd && <button disabled={!!busy} onClick={() => { uploadTarget.current = invoice.id; fileInput.current?.click(); }} className={`${BUTTON} bg-slate-100 text-slate-700`}><Upload size={14} />{invoice.fichier ? 'Remplacer' : 'Joindre le document'}</button>}
+            {canResume && invoice.fichier && <button disabled={!!busy || resuming} onClick={() => run(invoice.id, () => extract(invoice, 'resume'))} className={`${BUTTON} bg-slate-100 text-slate-700`}>Reprendre la vérification</button>}
+            {canAnalyze && invoice.fichier && !extraction && <button disabled={!!busy} onClick={() => run(invoice.id, () => extract(invoice))} className={`${BUTTON} bg-blue-50 text-blue-700`}>{busy === invoice.id ? <Loader2 size={14} className="animate-spin" /> : <Scan size={14} />}Analyser la facture</button>}
+          </div>
+          {canAdd && <InvoiceFields invoice={invoice} busy={!!busy} onSave={(changes) => run(invoice.id, async () => { await saveInvoice(invoice, changes); setNotice('Correction enregistrée. La facture doit être revérifiée.'); })} />}
+          {extraction && extraction.status !== 'confirmed' && <div className="mt-4 border-t border-gray-200 pt-3 space-y-3"><p className="text-sm font-semibold text-slate-800">Propositions de l’analyse · à vérifier</p>{(extraction.warnings || []).map((warning, index) => <p key={index} className="flex gap-1.5 text-xs text-amber-700"><AlertTriangle size={13} className="shrink-0" />{typeof warning === 'string' ? warning : warning.message}</p>)}
+            <label className="block text-xs text-gray-500">Vendeur extrait<input className={INPUT} value={extraction.vendeur || ''} onChange={(event) => changeExtraction(invoice.id, { vendeur: event.target.value })} /></label>
+            <label className="block text-xs text-gray-500">Total HT des articles à importer (€)<input type="number" min="0.01" step="0.01" className={INPUT} value={extraction.total ?? ''} onChange={(event) => changeExtraction(invoice.id, { total: event.target.value })} /></label>
+            {(extraction.lines || []).map((line, index) => <div key={index} className="space-y-2 rounded-xl bg-slate-50 p-2">{lineAnomalies(line, categories).map((message) => <p key={message} role="status" className="text-xs text-amber-800">{message}</p>)}<input aria-label={`Description extraite ${index + 1}`} className={INPUT} value={line.desc || ''} onChange={(event) => changeLine(invoice.id, index, { desc: event.target.value })} /><div className="grid grid-cols-2 gap-2"><label className="text-xs text-gray-500">Quantité<input type="number" min="1" step="1" className={INPUT} value={line.qte ?? ''} onChange={(event) => changeLine(invoice.id, index, { qte: Number(event.target.value) })} /></label><label className="text-xs text-gray-500">Prix unitaire HT (€)<input type="number" min="0" step="0.01" className={INPUT} value={line.prix ?? ''} onChange={(event) => changeLine(invoice.id, index, { prix: Number(event.target.value) })} /></label></div><select aria-label={`Catégorie extraite ${index + 1}`} className={INPUT} value={line.cat || ''} onChange={(event) => changeLine(invoice.id, index, { cat: event.target.value })}><option value="">Catégorie à vérifier</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.label}</option>)}</select></div>)}
+            {Math.abs((extraction.lines || []).reduce((sum, line) => sum + Number(line.qte || 0) * Number(line.prix || 0), 0) - Number(extraction.total)) > 0.02 && <p role="alert" className="text-xs text-amber-800">La somme des articles diffère du total HT. Vérifiez les lignes et le total avant confirmation.</p>}
+            {extraction._dirty && <p className="text-xs text-slate-600">Corrections à confirmer. Elles restent disponibles pendant le changement d’onglet ; confirmez avant de quitter le dossier.</p>}
+            <button disabled={!!busy || !canValidate || !extraction.lines?.length || extraction.lines.some((line) => lineAnomalies(line, categories).length > 0) || !(Number(extraction.total) > 0) || Math.abs(extraction.lines.reduce((sum, line) => sum + Number(line.qte) * Number(line.prix), 0) - Number(extraction.total)) > 0.02} className={`${BUTTON} w-full bg-blue-600 text-white`} onClick={() => confirmExtraction(invoice, extraction)}><Check size={14} />Confirmer les articles vérifiés</button>
+          </div>}
+          {canEdit && <div className="mt-3 flex flex-wrap gap-2 border-t border-gray-100 pt-3">{invoice.valide ? <button disabled={!!busy || !canValidate} className={`${BUTTON} bg-amber-50 text-amber-700`} onClick={() => run(invoice.id, async () => { await saveInvoice(invoice, { valide: false }); setNotice('Validation annulée.'); })}><RotateCcw size={14} />Annuler la validation</button> : <><button disabled={!!busy || !canValidate} onClick={() => validate(invoice)} className={`${BUTTON} flex-1 bg-emerald-600 text-white`}><Check size={14} />Valider la facture</button><button disabled={!!busy || !canReject} onClick={() => { setRejectingId(rejectingId === invoice.id ? null : invoice.id); setReason(''); }} className={`${BUTTON} bg-red-50 text-red-700`}><X size={14} />Demander une correction</button></>}</div>}
+          {canReject && rejectingId === invoice.id && <div className="mt-3 space-y-2"><p className="text-xs text-gray-500">La correction sera demandée au client après enregistrement.</p><div className="flex flex-wrap gap-2">{REJECTION_REASONS.map((item) => <button key={item} disabled={!!busy} className={`${BUTTON} bg-red-50 text-red-700`} onClick={() => reject(invoice, item)}>{item}</button>)}</div><input aria-label="Motif de correction" className={INPUT} value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Précisez la correction attendue" /><button disabled={!!busy || !reason.trim()} onClick={() => reject(invoice, reason)} className={`${BUTTON} bg-red-600 text-white`}>Enregistrer et demander la correction</button></div>}
+        </article>;
+      })}
+    </div>}
+    {children}
+      </div>
+    </div>
+  </section>;
 }

@@ -1,0 +1,35 @@
+# Frontend source only: Vercel project Root Directory is pinta.
+# The root legacy vercel.json is deliberately not uploaded.
+/*
+!/pinta
+!/.vercelignore
+
+# Local credentials, backups and agent/browser working files at any depth.
+**/.env*
+**/.deployment-backups
+**/.gstack
+**/.agents
+**/.codex
+**/.claude
+**/.git
+**/.vercel
+**/.DS_Store
+**/*.log
+**/*.pem
+**/*.key
+
+# Dependencies and build output are recreated by npm ci / npm run build.
+**/node_modules
+**/dist
+**/.vite
+**/coverage
+**/playwright-report
+**/test-results
+
+# Backend deployment, documentation and QA are separate from frontend hosting.
+**/supabase
+**/docs
+**/tests
+**/scripts
+**/*.test.*
+**/*.md

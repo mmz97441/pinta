@@ -1,0 +1,47 @@
+
+> pinta@1.0.0 test
+> node --test src/expedile/domain/*.test.js tests/*.test.mjs
+
+✔ voluntary waits stay separate from clients without a decision, including expired pauses (12.414834ms)
+✔ decision duration requires real timestamps, excludes refusals and never invents zero time (12.749042ms)
+✔ customer unread counts are grouped by client; receiving a payment needs a date and amount (0.557292ms)
+✔ transport, CIF allocation, tax components and total agree to cents (12.835625ms)
+✔ pro identical dimensions never invent VAT savings and need no invoices (7.443584ms)
+✔ missing categories and destination tax rates block instead of falling back to zero or Réunion (0.664333ms)
+✔ nonfinite, negative and incomplete measures are rejected (3.196583ms)
+✔ invalid quantities, prices, invoice and fee data are actionable errors (0.481667ms)
+✔ estimate and final use exactly the same calculation and fees count once (1.124375ms)
+✔ before optimisation recalculates transport allocation and taxes under same rules (0.442916ms)
+✔ configured divisor and grouped carton weights are shared with receiving (0.340917ms)
+✔ snapshot is deterministic and detached from mutable input arrays (0.431542ms)
+✔ input fingerprint ignores relation order and detects document, tariff or article changes (257.743208ms)
+✔ a default destination cannot hide an incompatible client postal code or an invoice with zero value (0.549875ms)
+✔ loads more than the PostgREST row cap without losing the last client (437.193959ms)
+✔ related-table failure rejects a dossier load instead of pretending no invoice exists (45.447583ms)
+✔ archived dossiers are loaded only when explicitly requested (52.533834ms)
+✔ a concurrently changed dossier cannot be reported as saved (68.074708ms)
+✔ unknown fields fail before sending a database mutation (118.959958ms)
+✔ signed documents cannot point to an arbitrary external host (30.58875ms)
+✔ clients cannot become staff through user-editable auth metadata (50.356125ms)
+✔ spreadsheet export contains real clients, financial columns and suppliers (75.537208ms)
+✔ customs export never invents a plausible code for an unclassified article (1.336667ms)
+✔ CSV UTF-8 without BOM preserves accented headers, leading zeros and dates (99.47875ms)
+✔ CSV UTF-8 BOM and text/plain MIME remain importable (2.31975ms)
+✔ CSV Windows-1252 from older Excel exports preserves names and euro signs (16.051334ms)
+✔ CSV UTF-16 little and big endian with BOM preserve columns (0.928ms)
+✔ XLSX and XLS workbook imports keep their binary parsing (349.573834ms)
+✔ Importer rejects unsupported MIME and oversized files before parsing (4.248959ms)
+✔ backend payment waiting status has a visible badge, the payment phase and supported transitions (3.939833ms)
+✔ client detail renders the published quote and payment action while waiting for payment (1102.355167ms)
+✔ quote and invoice writes reject database failures without inventing persisted objects (42.39125ms)
+✔ a stale quote measure save is rejected; the returned row is canonical on success (39.699667ms)
+✔ more than 1,000 dossiers and their actual mapped documents remain available to the quote calculation (143.466917ms)
+✔ PDF reproduces the saved quote version when live customer, parcel, fees and totals have changed (144.2405ms)
+ℹ tests 35
+ℹ suites 0
+ℹ pass 35
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2035.801167

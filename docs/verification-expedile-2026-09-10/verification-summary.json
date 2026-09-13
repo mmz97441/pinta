@@ -1,0 +1,50 @@
+{
+  "date": "2026-09-10",
+  "application_tests": {
+    "passed": 35,
+    "failed": 0
+  },
+  "browser_scenarios": {
+    "passed": 11,
+    "failed": 0,
+    "engine": "Chromium headless, fixtures, every non-local request intercepted"
+  },
+  "lint": "passed",
+  "build": "passed",
+  "database": {
+    "date": "2026-09-10",
+    "database": "PostgreSQL 15 Docker, --network none, synthetic Auth/Storage bootstrap",
+    "migrations": {
+      "count": 22,
+      "status": "passed clean replay; last document guard updated and retested"
+    },
+    "sql_assertions": {
+      "count": 45,
+      "status": "passed"
+    },
+    "javascript_postgres_quote_parity": {
+      "cases": 24,
+      "status": "passed"
+    },
+    "edge_tests": {
+      "count": 9,
+      "status": "passed, all network mocked"
+    },
+    "edge_bundles": {
+      "count": 10,
+      "status": "passed"
+    },
+    "production_modified": false,
+    "real_messages_sent": false,
+    "real_payments_created": false
+  },
+  "dependency_audit": {
+    "all_known_vulnerabilities": 0,
+    "production_known_vulnerabilities": 0
+  },
+  "screenshots": 10,
+  "initial_javascript_gzip_bytes": 196467,
+  "production_deployed": false,
+  "remote_provider_configuration_verified": false,
+  "hosted_ci_executed": false
+}

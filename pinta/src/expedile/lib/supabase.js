@@ -1,6 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://bqprktzehuhplpqjgjaz.supabase.co';
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJxcHJrdHplaHVocGxwcWpnamF6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA2MjUzODYsImV4cCI6MjA4NjIwMTM4Nn0.0uT4Ff-e_WV7IqaYgurvqP3-lHW-eaZIkg2PprrbBzk';
-
-export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const url = import.meta.env.VITE_SUPABASE_URL;
+const key = import.meta.env.VITE_SUPABASE_ANON_KEY;
+export const configurationError = !url || !key
+  ? 'Configuration indisponible : renseignez VITE_SUPABASE_URL et VITE_SUPABASE_ANON_KEY, puis reconstruisez l’application.' : '';
+// An unconfigured build must never silently connect to a production project.
+export const supabase = createClient(url || 'http://127.0.0.1:54321', key || 'configuration-required');

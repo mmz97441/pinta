@@ -1,0 +1,132 @@
+WARNING:  "wal_level" is insufficient to publish logical changes
+HINT:  Set "wal_level" to "logical" before creating subscriptions.
+NOTICE:  relation "v_abonnements_alertes" does not exist, skipping
+NOTICE:  policy "Factures read" for relation "storage.objects" does not exist, skipping
+NOTICE:  policy "Public read photos-colis" for relation "storage.objects" does not exist, skipping
+NOTICE:  column "abonnement" of relation "clients" already exists, skipping
+NOTICE:  column "abonnement_debut" of relation "clients" already exists, skipping
+NOTICE:  column "abonnement_fin" of relation "clients" already exists, skipping
+NOTICE:  column "tags_preparation" of relation "colis" already exists, skipping
+NOTICE:  column "archive" of relation "colis" already exists, skipping
+NOTICE:  column "lu" of relation "messages" already exists, skipping
+NOTICE:  relation "staff_users" already exists, skipping
+NOTICE:  relation "staff_permissions" already exists, skipping
+NOTICE:  column "perm_colis_mesurer" of relation "staff_permissions" already exists, skipping
+NOTICE:  relation "audit_actions" already exists, skipping
+NOTICE:  relation "colis_locks" already exists, skipping
+NOTICE:  policy "Factures upload" for relation "storage.objects" does not exist, skipping
+NOTICE:  policy "Factures update" for relation "storage.objects" does not exist, skipping
+NOTICE:  policy "Auth upload photos-colis" for relation "storage.objects" does not exist, skipping
+NOTICE:  PASS: supabase_admin normalizes historical NULL archives and backfills read but unresolved conversations without a JWT
+NOTICE:  PASS: authenticated cannot impersonate the trusted database owner
+NOTICE:  PASS: Signup ignores mutable role metadata
+NOTICE:  PASS rejected: Client cannot self-promote [Profil: modification administrative requise]
+NOTICE:  PASS: Client only sees own dossiers
+NOTICE:  PASS rejected: Client cannot change loyalty balance [Seules les coordonnées peuvent être modifiées]
+NOTICE:  PASS: Client raw parcel table is inaccessible
+NOTICE:  PASS: Client raw customer table is inaccessible
+NOTICE:  PASS: Client view never exposes internal notes
+NOTICE:  PASS: Client can update allowed contact fields
+NOTICE:  PASS rejected: Client cannot approve another client dossier [Accès refusé]
+NOTICE:  PASS: Private invitation is random and opaque
+NOTICE:  PASS rejected: Browser cannot consume privileged Telegram invitation [permission denied for function consume_telegram_invitation]
+NOTICE:  PASS: Wait decision is durable
+NOTICE:  PASS: First staff owns edit lock
+NOTICE:  PASS: Second staff cannot steal edit lock
+NOTICE:  PASS rejected: Staff cannot insert an already-paid dossier [Un nouveau dossier doit commencer à la réception, sans devis ni paiement]
+NOTICE:  PASS rejected: Preparateur cannot forge a payment ledger entry [new row violates row-level security policy for table "paiements"]
+NOTICE:  PASS rejected: Preparateur cannot bypass quote permission [Permission devis requise]
+NOTICE:  PASS: New receipt resumes request without granting consent
+NOTICE:  PASS: Outbound idempotency avoids duplicate requests
+NOTICE:  PASS rejected: Telegram chat cannot decide another client dossier [Ce dossier ne correspond pas à votre compte]
+NOTICE:  PASS rejected: Old Telegram button cannot authorize new cartons [Les cartons du dossier ont changé. Demandez une nouvelle demande à notre équipe.]
+NOTICE:  PASS: Invitation links only its intended client
+NOTICE:  PASS rejected: Invitation cannot be used twice [Invitation expirée ou déjà utilisée]
+NOTICE:  PASS rejected: Unknown action never means refusal [Décision invalide]
+NOTICE:  PASS: Consent assigns an eligible departure for the correct destination
+NOTICE:  PASS: Consent does not change other client dossiers
+NOTICE:  PASS rejected: Negative/falsified quote components rejected [Composante de devis invalide : devisTransport]
+NOTICE:  PASS: Quote persists an immutable dated version
+NOTICE:  PASS: PDF snapshot total is normalized to server amount
+NOTICE:  PASS rejected: Even direction cannot bypass save_quote with direct patch [Utilisez save_quote pour calculer un devis et le service de paiement pour créer son lien]
+NOTICE:  PASS rejected: Stale editor cannot replace new quote [Dossier modifié par un collègue. Rechargez le devis.]
+NOTICE:  PASS rejected: Partial/wrong manual payment rejected [Le paiement ne correspond pas au devis actif]
+NOTICE:  PASS rejected: Direct paid status cannot bypass ledger command [Utilisez la commande de confirmation du paiement]
+NOTICE:  PASS: Repeated payment confirmation records once
+NOTICE:  PASS: Quote to paid transition is supported
+NOTICE:  PASS rejected: Paid quote inputs are immutable [Les données d’un devis payé sont figées]
+NOTICE:  PASS: OCR confirmation cannot duplicate invoice articles
+NOTICE:  PASS: OCR validation persists invoice approval
+NOTICE:  PASS rejected: Adding a document cannot bypass invoice validation permission [Permission validation facture requise]
+NOTICE:  PASS: Non-validator edit clears previous invoice approval
+NOTICE:  PASS: Server quote rounding matches canonical decimal fixture
+NOTICE:  PASS: Changing articles invalidates quote and payment link
+NOTICE:  PASS: Invalidation preserves previous immutable quote
+NOTICE:  PASS: Invoice upload schedules automatic OCR
+NOTICE:  PASS: Documents and parcel photos are private
+NOTICE:  PASS: New dossier has a real stage timestamp and no invented open question
+NOTICE:  PASS: Customer message opens durable work visible in own safe view
+NOTICE:  PASS rejected: Customer cannot close staff work
+NOTICE:  PASS rejected: Customer cannot hide free-form work under a structured decision marker
+NOTICE:  PASS: Reading never resolves work or changes its version
+NOTICE:  PASS: Incoming question blocks queued reminder on another dossier of the same customer
+NOTICE:  PASS rejected: Direct patch cannot bypass the explicit conversation command
+NOTICE:  PASS rejected: Stale state version cannot hide a new incoming question
+NOTICE:  PASS: Sending a staff reply never implicitly closes work
+NOTICE:  PASS: Staff explicitly hands the next turn to the customer
+NOTICE:  PASS: Explicit handling releases a blocked reminder for a fresh delivery check
+NOTICE:  PASS: Explicit closure is dated and versioned
+NOTICE:  PASS: Conversation transitions are audited
+NOTICE:  PASS rejected: Client account cannot become the staff owner
+NOTICE:  PASS: Valid active owner and next action are saved atomically
+NOTICE:  PASS rejected: Stale assignment cannot replace a colleague follow-up
+NOTICE:  PASS: Owner can be explicitly cleared
+NOTICE:  PASS: A new question reopens a previously completed conversation
+NOTICE:  PASS: Already-executed wait decision does not create an unnecessary reply task
+NOTICE:  PASS: Refusal opens staff follow-up work
+NOTICE:  PASS: Structured messages can be marked read without resolving refusal
+NOTICE:  PASS: Staff invoice upload does not reopen customer conversation
+NOTICE:  PASS: Customer invoice upload reopens conversation and records a customer event
+NOTICE:  PASS: Invoice arrival records one customer message
+NOTICE:  PASS: Another unresolved dossier keeps client-wide reminders blocked
+NOTICE:  PASS rejected: Open customer work cannot be hidden in archives
+NOTICE:  PASS: Historical archived messages do not invisibly block reminders
+NOTICE:  PASS: New customer message reactivates an archived dossier visibly
+NOTICE:  PASS: Reopening an archive is audited
+NOTICE:  PASS rejected: Browser cannot bypass the document guard through the old RPC [permission denied for function confirm_ocr_extraction]
+NOTICE:  PASS rejected: Historical extraction requires verified binding before confirmation [Le document a changé. Reprenez son analyse avant confirmation]
+NOTICE:  PASS rejected: File replacement after Edge hashing rejects the stale confirmation [Le document a changé. Reprenez son analyse avant confirmation]
+NOTICE:  PASS rejected: Supplying a new path cannot rebind an old extraction [Le document a changé. Reprenez son analyse avant confirmation]
+NOTICE:  PASS: Stale confirmation leaves approval and articles unchanged
+NOTICE:  PASS rejected: A mismatched document hash is rejected [Le document a changé. Reprenez son analyse avant confirmation]
+NOTICE:  PASS rejected: The customer cannot validate their own OCR extraction [Permission validation facture requise]
+NOTICE:  PASS: Current document confirms atomically
+NOTICE:  PASS: Repeated current confirmation is idempotent
+NOTICE:  PASS: Repeated OCR confirmation never duplicates invoice lines
+NOTICE:  PASS: New automatic preparation is not an immediately overdue staff deadline
+NOTICE:  PASS: Taking ownership alone does not freeze a system action as manual
+NOTICE:  PASS: A completed stage clears its unchanged automatic action
+NOTICE:  PASS rejected: Direct patches cannot bypass the versioned assignment command [Utilisez la commande de suivi du dossier]
+NOTICE:  PASS: An explicit operator instruction is marked manual
+NOTICE:  PASS: Client approval preserves the staff instruction and deadline
+NOTICE:  PASS: Payment does not erase a pending manual instruction
+NOTICE:  PASS: The operator can explicitly clear a completed instruction
+NOTICE:  PASS: Clearing a manual instruction allows future automatic guidance
+NOTICE:  PASS rejected: Staff cannot receive an unmeasured carton [Une position de mesure est requise pour chaque carton]
+NOTICE:  PASS rejected: A second carton cannot reuse the first carton measurements [Une position de mesure est requise pour chaque carton]
+NOTICE:  PASS rejected: Zero measurements cannot certify a received carton [Renseignez longueur, largeur, hauteur et poids positifs du carton 1]
+NOTICE:  PASS: Non-finite measurements are rejected
+NOTICE:  PASS rejected: Receipt cannot prefill optimization measurements [Les mesures après optimisation seront saisies pendant la préparation]
+NOTICE:  PASS: Receipt persists real dimensions without calculating a quote or optimization measures
+NOTICE:  PASS: Historical notes and storage position remain editable without remeasurement
+NOTICE:  PASS rejected: A status label alone does not prove all cartons were measured [Les anciens cartons doivent aussi être mesurés avant de déclarer le dossier mesuré]
+NOTICE:  PASS rejected: Unknown historical cartons cannot be labelled fully measured after an addition [Les anciens cartons doivent aussi être mesurés avant de déclarer le dossier mesuré]
+NOTICE:  PASS: New measured cartons append without inventing historical measurements or totals
+NOTICE:  PASS: Appending leaves optimization inputs and historical notes unchanged
+NOTICE:  PASS rejected: Appending cannot overwrite known measurements of an older carton [Le rattachement conserve les mesures existantes du carton 1]
+NOTICE:  PASS: Fully measured addition normalizes receipt aggregates and invalidates old consent
+NOTICE:  PASS: Receipt aggregates never replace final package dimensions
+NOTICE:  PASS: A stale receipt CAS cannot append against a newer carton list
+NOTICE:  PASS rejected: Appending cannot erase a known coordinate from a partially measured historical carton [Le rattachement conserve les mesures existantes du carton 1]
+NOTICE:  PASS: Partial historical coordinates are preserved without inventing their missing measurements
+PASS: 14 reception/quote JS/PostgreSQL cases; reception coverage, original volumes and final measures remain separate. Fixtures rolled back.
