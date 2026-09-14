@@ -245,11 +245,11 @@ export function mapMessage(row) {
 // ── Fetch functions ─────────────────────────────────────────────────
 
 // Keyset pagination avoids PostgREST's default row cap and unstable offsets.
-export async function fetchAllRows(table, configure = (query) => query, cursorKey = 'id') {
+export async function fetchAllRows(table, configure = (query) => query, cursorKey = 'id', columns = '*') {
   const rows = [];
   let after = null;
   for (;;) {
-    let query = configure(supabase.from(readTable(table)).select('*'))
+    let query = configure(supabase.from(readTable(table)).select(columns))
       .order(cursorKey)
       .limit(500);
     if (after) query = query.gt(cursorKey, after);
@@ -268,6 +268,27 @@ export async function fetchClients() {
   return (await fetchAllRows('clients'))
     .map(mapClient)
     .sort((a, b) => (b.created || '').localeCompare(a.created || ''));
+}
+
+// Only a complete modern or historical reference triggers a server lookup.
+// Normalize pasted typographic hyphens without treating arbitrary search text as a reference.
+export function normalizeColisReference(value) {
+  const reference = String(value || '').normalize('NFKC').trim().toUpperCase()
+    .replace(/[\u2010-\u2015\u2212\uFE58\uFE63\uFF0D]/g, '-')
+    .replace(/\s*-\s*/g, '-');
+  return /^EXP-(?:[A-Z0-9]{6}|\d{4,})$/.test(reference) ? reference : '';
+}
+
+export async function findColisByReference(value, { signal } = {}) {
+  const reference = normalizeColisReference(value);
+  if (!reference) return null;
+  // RLS enforces staff access. No archive, creator or working-view filter belongs here.
+  let query = supabase.from('colis').select('id,ref,statut,archive').ilike('ref', reference).limit(2);
+  if (signal) query = query.abortSignal(signal);
+  const { data, error } = await query;
+  if (error) throw error;
+  if (data?.length > 1) throw new Error('Plusieurs dossiers portent cette référence. Faites vérifier leur référence par la direction.');
+  return data?.[0] || null;
 }
 
 export async function fetchColis(colisId = null, { archived = false, clientId = null, envoiId = null } = {}) {

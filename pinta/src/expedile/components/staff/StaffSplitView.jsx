@@ -26,6 +26,7 @@ import { useMinuteNow } from '../../hooks/useMinuteNow';
 import { useDialog } from '../ui/useDialog';
 import { receptionCartonManifest } from '../../domain/reception';
 import { measureShipment, volumetricDivisor } from '../../domain/quote';
+import { findColisByReference, normalizeColisReference } from '../../lib/supabaseData';
 const QUEUE_ICONS = { messages: MessageCircle, preparation: Wrench, documents: FileText, waiting: Clock };
 const unreadMessages = (colis) => (colis.messages || []).filter((message) => message.type === 'client' && !message.lu);
 
@@ -312,6 +313,41 @@ export default function StaffColisPage() {
   const setActiveDest = (value) => setParam('dest', value);
   const search = searchParams.get('q') || '';
   const setSearch = (value) => setParam('q', value);
+  const exactReference = normalizeColisReference(search);
+  const [referenceLookup, setReferenceLookup] = useState({ reference: '', status: 'idle', row: null, error: '' });
+  const [referenceAttempt, setReferenceAttempt] = useState(0);
+  const pendingReferenceOpen = useRef(null);
+  useEffect(() => {
+    if (!exactReference) {
+      setReferenceLookup({ reference: '', status: 'idle', row: null, error: '' });
+      return;
+    }
+    let active = true;
+    const controller = new AbortController();
+    setReferenceLookup({ reference: exactReference, status: 'loading', row: null, error: '' });
+    const timer = setTimeout(async () => {
+      try {
+        const row = await findColisByReference(exactReference, { signal: controller.signal });
+        if (active) setReferenceLookup({ reference: exactReference, status: row ? 'found' : 'missing', row, error: '' });
+      } catch (error) {
+        if (active) setReferenceLookup({ reference: exactReference, status: 'error', row: null, error: error.message || 'Connexion au serveur indisponible.' });
+      }
+    }, 400);
+    return () => { active = false; clearTimeout(timer); controller.abort(); };
+  }, [exactReference, referenceAttempt, auth?.u?.id]);
+  const lookup = referenceLookup.reference === exactReference ? referenceLookup : { status: 'loading' };
+  useEffect(() => {
+    const pending = pendingReferenceOpen.current;
+    if (!pending) return;
+    if (pending.query !== search || ['error', 'missing'].includes(lookup.status)) {
+      pendingReferenceOpen.current = null;
+      return;
+    }
+    if (lookup.status === 'found') {
+      pendingReferenceOpen.current = null;
+      navigate(`/colis/${encodeURIComponent(lookup.row.id)}?${new URLSearchParams({ returnTo })}`);
+    }
+  }, [search, lookup.status, lookup.row?.id, navigate, returnTo]);
   const ownerFilter = searchParams.get('owner') || '';
   const sortCol = searchParams.get('sort');
   const setSortCol = (value) => setParam('sort', value);
@@ -329,6 +365,28 @@ export default function StaffColisPage() {
   const [showColPicker, setShowColPicker] = useState(false);
   const [defaultSort, setDefaultSort] = useState(() => loadDefaultSort(auth?.u?.id));
   const [showSortPicker, setShowSortPicker] = useState(false);
+  const activeFilters = [
+    workFilter && { key: 'work', label: `File : ${WORK_QUEUES.find(item => item.key === workFilter)?.label || 'Sélectionnée'}` },
+    clientFilter && { key: 'client', label: `Client : ${getClient(clientFilter)?.nom || 'Sélectionné'}` },
+    envoiFilter && { key: 'envoi', label: `Départ : ${envois.find(item => item.id === envoiFilter)?.ref || 'Sélectionné'}` },
+    ownerFilter && { key: 'owner', label: `Référent : ${ownerFilter === 'mine' ? 'Mes dossiers' : ownerFilter === 'unassigned' ? 'Non attribués' : teamUsers.find(item => item.authId === ownerFilter)?.nom || 'Sélectionné'}` },
+    activeDest && { key: 'dest', label: `Destination : ${getDestByCP(activeDest + '00')?.nom || activeDest}` },
+    activeTab !== 'all' && { key: 'tab', label: `Étape : ${PIPELINE.find(item => item.key === activeTab)?.label}` },
+  ].filter(Boolean);
+  const clearFilters = () => {
+    setSelId(null); setShowFilters(false);
+    setSearchParams(previous => {
+      const next = new URLSearchParams(previous);
+      ['work', 'client', 'envoi', 'owner', 'dest', 'tab', 'archive', 'dossier'].forEach(key => next.delete(key));
+      return next;
+    }, { replace: true });
+  };
+  const openReferenceDossier = () => {
+    if (lookup.status === 'found') {
+      pendingReferenceOpen.current = null;
+      navigate(`/colis/${encodeURIComponent(lookup.row.id)}?${new URLSearchParams({ returnTo })}`);
+    } else if (lookup.status === 'loading') pendingReferenceOpen.current = { query: search };
+  };
 
   const toggleCol = useCallback((key) => {
     setVisibleCols((prev) => {
@@ -365,9 +423,9 @@ export default function StaffColisPage() {
     if (envoiFilter) list = list.filter((c) => c.envoi === envoiFilter);
     if (ownerFilter) list = list.filter((c) => (isActiveColis(c) || needsConversationAction(c)) && matchesOwner(c, ownerFilter, auth?.u?.id));
     if (activeDest) list = list.filter((c) => getDestByCP(getClient(c.clientId)?.cp)?.code === activeDest);
-    if (search.trim()) list = list.filter((c) => fuzzy(`${c.ref} ${c.desc || ''} ${getClient(c.clientId)?.nom || ''} ${c.casier || ''} ${c.trackings?.join(' ') || ''}`, search));
+    if (search.trim()) list = list.filter((c) => fuzzy(`${c.ref} ${c.desc || ''} ${getClient(c.clientId)?.nom || ''} ${c.casier || ''} ${c.trackings?.join(' ') || ''}`, exactReference || search));
     return list;
-  }, [data, showArchive, workFilter, context, clientFilter, envoiFilter, ownerFilter, auth?.u?.id, activeDest, getClient, search]);
+  }, [data, showArchive, workFilter, context, clientFilter, envoiFilter, ownerFilter, auth?.u?.id, activeDest, getClient, search, exactReference]);
   const searched = useMemo(() => {
     if (activeTab === 'all' && (workFilter === 'messages' || ownerFilter)) return scope;
     const phase = PIPELINE.find((item) => item.key === activeTab);
@@ -512,20 +570,21 @@ export default function StaffColisPage() {
   return (
     <div className="h-full flex flex-col">
 
-      {envoiFilter && <div className="px-4 pt-3 text-sm">Départ filtré : {envois.find(item => item.id === envoiFilter)?.ref || 'Départ sélectionné'}<button onClick={() => setParam('envoi', null)} className="ml-2 min-h-11 underline">Tous les départs</button></div>}
-      {workFilter && <div className="px-4 pt-3 pb-2 flex items-center justify-between gap-2"><div><h1 className="font-bold text-gray-900">{WORK_QUEUES.find((q) => q.key === workFilter)?.label || 'File de travail'}</h1><p className="text-xs text-gray-500">{clientFilter ? getClient(clientFilter)?.nom : 'Dossiers à traiter ensemble par l’équipe'}</p></div><button onClick={() => { closeDetail(); navigate('/colis'); }} className="text-xs min-h-11 text-gray-500 inline-flex items-center gap-1">Tous les dossiers<X size={14} /></button></div>}
+      {workFilter && <div className="px-4 pt-3 pb-2 flex items-center justify-between gap-2"><div><h1 className="font-bold text-gray-900">{WORK_QUEUES.find((q) => q.key === workFilter)?.label || 'File de travail'}</h1><p className="text-xs text-gray-500">{clientFilter ? getClient(clientFilter)?.nom : 'Dossiers à traiter ensemble par l’équipe'}</p></div><button onClick={clearFilters} className="text-xs min-h-11 text-gray-500 inline-flex items-center gap-1">Tous les dossiers<X size={14} /></button></div>}
       {workFilter === 'messages' && <div className="px-4 py-3"><button onClick={() => navigate('/conversations')} className="min-h-11 rounded-lg border px-3 text-sm font-semibold">Ouvrir les conversations et messages à rattacher</button></div>}
       <div className="shrink-0 px-4 pt-3 flex flex-wrap items-end gap-3">
         <label className="flex-1 lg:flex-none text-xs font-semibold text-gray-600">File de travail<select aria-label="File de travail" value={workFilter || ''} onChange={(e) => { setSearchParams((old) => { const next = new URLSearchParams(old); next.delete('tab'); next.delete('dossier'); next.delete('archive'); if (e.target.value) next.set('work', e.target.value); else next.delete('work'); return next; }); }} className="mt-1 block min-h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm"><option value="">Tous les dossiers</option>{WORK_QUEUES.map((queue) => <option key={queue.key} value={queue.key}>{queue.label}</option>)}</select></label>
-        <button onClick={() => setShowFilters((value) => !value)} aria-expanded={showFilters} className="min-h-11 px-3 rounded-xl border border-gray-200 font-semibold text-sm brand-t">Filtres avancés{ownerFilter || activeDest || activeTab !== 'all' ? ' · actifs' : ''}</button>
+        <button onClick={() => setShowFilters((value) => !value)} aria-expanded={showFilters} className="min-h-11 px-3 rounded-xl border border-gray-200 font-semibold text-sm brand-t">Filtres avancés{activeFilters.length ? ` · ${activeFilters.length} actif(s)` : ''}</button>
         <div className={`${showFilters ? 'flex' : 'hidden'} w-full lg:w-auto flex-wrap items-end gap-3`}>
         <label className="lg:hidden text-xs font-semibold text-gray-600">Étape<select aria-label="Étape" value={activeTab} onChange={(event) => setActiveTab(event.target.value)} className="block mt-1 min-h-11 rounded-xl border border-gray-200 bg-white px-3 text-sm">{PIPELINE.map((phase) => <option key={phase.key} value={phase.key}>{phase.label} ({tabCounts[phase.key] || 0})</option>)}</select></label>
         <label className="text-xs font-semibold text-gray-600">Référent<select aria-label="Référent" value={ownerFilter} onChange={(e) => setParam('owner', e.target.value)} className="mt-1 block min-h-11 rounded-xl border border-gray-200 bg-white px-3 text-sm"><option value="">Toute l’équipe</option><option value="mine">Mes dossiers</option><option value="unassigned">Non attribués</option>{teamUsers.filter((user) => user.authId && user.actif !== false).map((user) => <option key={user.authId} value={user.authId}>{user.nom}</option>)}</select></label>
         <label className="text-xs font-semibold text-gray-600">Destination<select aria-label="Destination" value={activeDest || ''} onChange={(e) => setActiveDest(e.target.value)} className="mt-1 block min-h-11 rounded-xl border border-gray-200 bg-white px-3 text-sm"><option value="">Toutes les destinations</option>{['974', '976', '971', '972'].map((code) => <option key={code} value={code}>{getDestByCP(code + '00').nom}</option>)}</select></label>
-        {(workFilter || ownerFilter || activeDest || clientFilter || search || activeTab !== 'all') && <button onClick={() => { setSelId(null); setShowFilters(false); setSearchParams({}); }} className="min-h-11 px-2 text-sm font-semibold brand-t underline">Effacer les filtres</button>}
-        {clientFilter && <button onClick={() => setParam('client', null)} className="min-h-11 rounded-xl brand-bg-l px-3 text-sm brand-t">{getClient(clientFilter)?.nom || 'Client filtré'} <X size={14} className="inline" /></button>}
         </div>
       </div>
+      {activeFilters.length > 0 && <div aria-label="Filtres actifs" className="shrink-0 flex flex-wrap items-center gap-2 px-4 pt-3">
+        {activeFilters.map(filter => <button key={filter.key} aria-label={`Retirer le filtre ${filter.label}`} onClick={() => setParam(filter.key, null)} className="inline-flex min-h-11 max-w-full items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-left text-xs font-semibold text-slate-700"><span className="break-words">{filter.label}</span><X size={14} className="shrink-0" /></button>)}
+        <button onClick={clearFilters} className="min-h-11 px-2 text-sm font-semibold brand-t underline">Retirer les filtres</button>
+      </div>}
       {/* Top bar: pipeline cards + search */}
       <div className="flex-shrink-0 px-4 pt-3 pb-2 space-y-3 border-b border-gray-100 bg-white">
         {/* Pipeline cards — clickable filters (taste-skill : tactile feedback, urgence dot, hover lift) */}
@@ -580,26 +639,13 @@ export default function StaffColisPage() {
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
             <input
               type="text" value={search} onChange={(e) => setSearch(e.target.value)}
-              aria-label="Rechercher ou scanner un colis" onKeyDown={(event) => { if (event.key === 'Enter' && sorted.length === 1) openColis(sorted[0].id); }} placeholder="Rechercher ou scanner : référence, client, casier…"
+              aria-label="Rechercher ou scanner un colis" onKeyDown={(event) => { if (event.key !== 'Enter') return; if (exactReference) openReferenceDossier(); else if (sorted.length === 1) openColis(sorted[0].id); }} placeholder="Rechercher ou scanner : référence, client, casier…"
               className="w-full pl-9 pr-8 py-2 text-sm rounded-xl border border-gray-200 outline-none focus:border-blue-400"
               style={{ color: 'var(--brand-text)' }}
             />
             {search && <button aria-label="Effacer la recherche" onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"><X size={14} /></button>}
           </div>
           <span role="status" className="text-xs text-gray-500 font-medium">{sorted.length} dossier(s) affiché(s)</span>
-          {activeDest && (() => {
-            const d = getDestByCP(activeDest === '974' ? '97400' : activeDest === '976' ? '97600' : activeDest === '971' ? '97100' : '97200');
-            return (
-              <button
-                onClick={() => setActiveDest(null)}
-                className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-bold bg-amber-100 text-amber-800 hover:bg-amber-200 transition-all"
-              >
-                {d?.flag} {d?.label || activeDest}
-                <X size={12} />
-              </button>
-            );
-          })()}
-
           <button hidden={Boolean(workFilter)} disabled={archivesBusy || Boolean(workFilter)} title={workFilter ? 'Retirez la file de travail pour consulter les archives.' : undefined} aria-pressed={showArchive} onClick={async () => { if (showArchive) { setShowArchive(false); return; } setArchivesBusy(true); try { if (!archivesLoaded) await loadArchives(); setShowArchive(true); } catch (error) { flash({ msg: 'Les archives n’ont pas pu être chargées. ' + error.message, type: 'error' }); } finally { setArchivesBusy(false); } }} className={`min-h-11 px-2 text-xs font-semibold rounded-lg ${showArchive ? 'brand-bg-l brand-t' : 'text-gray-500'}`}>{archivesBusy ? 'Chargement archives…' : showArchive ? 'Archives incluses' : 'Inclure les archives'}</button>
           {/* Export Excel (all visible) */}
           {can('perm_export_colis') && (
@@ -701,6 +747,16 @@ export default function StaffColisPage() {
             )}
           </div>
         </div>
+        {exactReference && <section aria-label="Recherche de référence dans tous les dossiers" className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm">
+          <p className="font-semibold text-slate-800">Recherche de référence · tous les dossiers, archives incluses</p>
+          {lookup.status === 'loading' && <p role="status" className="mt-1 text-slate-600">Vérification de {exactReference}…</p>}
+          {lookup.status === 'error' && <div role="alert" className="mt-1 text-red-700"><p>Impossible de vérifier cette référence. {lookup.error}</p><button onClick={() => setReferenceAttempt(value => value + 1)} className="mt-1 min-h-11 font-semibold underline">Réessayer la recherche</button></div>}
+          {lookup.status === 'missing' && <p role="status" className="mt-1 text-slate-600">Aucun dossier accessible ne porte la référence {exactReference}. Vérifiez le numéro saisi.</p>}
+          {lookup.status === 'found' && <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
+            <div role="status" className="min-w-0"><p className="font-semibold text-slate-900">{lookup.row.ref} · {STATUTS[lookup.row.statut]?.label || lookup.row.statut}{lookup.row.archive ? ' · Archivé' : ''}</p><p className="mt-1 text-slate-600">{sorted.some(item => item.id === lookup.row.id) ? 'Dossier trouvé dans la liste actuelle.' : 'Dossier trouvé en dehors de la liste actuelle. Vos filtres sont conservés.'}</p></div>
+            <button onClick={openReferenceDossier} className="min-h-11 rounded-xl px-4 py-2 text-sm font-semibold text-white brand-bg">Ouvrir le dossier</button>
+          </div>}
+        </section>}
       </div>
 
       {/* Bulk action bar */}
@@ -786,7 +842,8 @@ export default function StaffColisPage() {
             };
 
             if (groups.length === 0) {
-              return <div className="text-center text-sm text-gray-500 py-8"><p>Aucun dossier ne correspond à ces filtres.</p><button onClick={() => setSearchParams({})} className="min-h-11 mt-2 font-semibold brand-t underline">Effacer les filtres</button></div>;
+              if (exactReference) return null;
+              return <div className="text-center text-sm text-gray-500 py-8"><p>Aucun dossier ne correspond à ces filtres.</p>{activeFilters.length > 0 && <button onClick={clearFilters} className="min-h-11 mt-2 font-semibold brand-t underline">Retirer les filtres</button>}{search && <button onClick={() => setSearch('')} className="min-h-11 mt-2 px-3 font-semibold brand-t underline">Effacer la recherche</button>}</div>;
             }
 
             return <>

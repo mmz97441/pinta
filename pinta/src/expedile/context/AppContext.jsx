@@ -69,6 +69,8 @@ export function AppProvider({ children }) {
   const [cfm, setCfm] = useState(null);
   const dataRef = useRef(data);
   dataRef.current = data;
+  const clientsRef = useRef(clients);
+  clientsRef.current = clients;
   const authRef = useRef(auth);
   const staffAccessSequence = useRef(0);
   authRef.current = auth;
@@ -121,7 +123,15 @@ export function AppProvider({ children }) {
   const refreshColis = useCallback(async (id) => {
     const token = generation.current;
     const rows = await sb.fetchColis(id);
-    if (token !== generation.current || !rows[0]) return;
+    if (token !== generation.current) return;
+    if (!rows[0]) {
+      dataRef.current = dataRef.current.filter((c) => c.id !== id);
+      setData(dataRef.current);
+      return;
+    }
+    const current = dataRef.current.find((c) => c.id === id);
+    // A delayed background read must not replace a more recent saved edit.
+    if (Date.parse(current?.updatedAt) > Date.parse(rows[0].updatedAt)) return current;
     const updated = dataRef.current.some((c) => c.id === id)
       ? dataRef.current.map((c) => (c.id === id ? rows[0] : c))
       : [...dataRef.current, rows[0]];
@@ -568,6 +578,67 @@ export function AppProvider({ children }) {
       channels.forEach((c) => supabase.removeChannel(c));
     };
   }, [sbReady, auth?.session.user.id, refreshColis, refreshInbox, refreshNotifications, reportError]);
+  // Realtime can miss events during sleep or a network interruption. Reconcile
+  // the shared staff list without downloading every dossier's relations again.
+  useEffect(() => {
+    if (!sbReady || auth?.type !== 'staff') return;
+    const token = generation.current;
+    let stopped = false;
+    let busy = false;
+    let timer;
+    const refreshVisible = async () => {
+      if (stopped || busy || document.visibilityState !== 'visible') return;
+      busy = true;
+      try {
+        const index = await sb.fetchAllRows('colis', (q) => q.eq('archive', false), 'id', 'id,updated_at,client_id');
+        if (stopped || token !== generation.current) return;
+        const known = new Map(dataRef.current.map((c) => [c.id, c]));
+        const activeIds = new Set(index.map((c) => c.id));
+        const changedIds = index.filter((c) => !known.has(c.id) || known.get(c.id).updatedAt !== c.updated_at).map((c) => c.id);
+        // An active dossier missing from the index may have been archived or removed.
+        for (const c of known.values()) if (!c.archive && !activeIds.has(c.id)) changedIds.push(c.id);
+        const knownClients = new Set(clientsRef.current.map((c) => c.id));
+        const missingClients = [...new Set(index.map((c) => c.client_id).filter((id) => id && !knownClients.has(id)))];
+        for (let i = 0; i < missingClients.length; i += 100) {
+          const rows = await sb.fetchAllRows('clients', (q) => q.in('id', missingClients.slice(i, i + 100)));
+          if (stopped || token !== generation.current) return;
+          setClients((previous) => {
+            const merged = new Map(previous.map((c) => [c.id, c]));
+            rows.forEach((row) => merged.set(row.id, sb.mapClient(row)));
+            return [...merged.values()];
+          });
+        }
+        // Bound concurrent detail requests, including the first catch-up after a long absence.
+        let cursor = 0;
+        const workers = Array.from({ length: Math.min(3, changedIds.length) }, async () => {
+          while (!stopped && token === generation.current && cursor < changedIds.length) {
+            await refreshColis(changedIds[cursor++]);
+          }
+        });
+        const results = await Promise.allSettled(workers);
+        const failure = results.find((result) => result.status === 'rejected');
+        if (failure) throw failure.reason;
+        if (!stopped && token === generation.current) {
+          setDataError((previous) => previous.startsWith('Actualisation des dossiers impossible') ? '' : previous);
+        }
+      } catch (error) {
+        if (!stopped && token === generation.current) setDataError(`Actualisation des dossiers impossible : ${error.message}`);
+      } finally { busy = false; }
+    };
+    const schedule = () => { clearTimeout(timer); timer = setTimeout(refreshVisible, 150); };
+    window.addEventListener('focus', schedule);
+    window.addEventListener('online', schedule);
+    document.addEventListener('visibilitychange', schedule);
+    const interval = setInterval(refreshVisible, 60000);
+    schedule();
+    return () => {
+      stopped = true;
+      clearTimeout(timer); clearInterval(interval);
+      window.removeEventListener('focus', schedule);
+      window.removeEventListener('online', schedule);
+      document.removeEventListener('visibilitychange', schedule);
+    };
+  }, [sbReady, auth?.type, auth?.session.user.id, refreshColis]);
   // Raw table realtime is intentionally unavailable to clients: read through the safe views.
   useEffect(() => {
     if (!sbReady || auth?.type !== 'client') return;

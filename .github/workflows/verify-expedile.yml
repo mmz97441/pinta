@@ -60,6 +60,8 @@ jobs:
             if curl --silent --fail http://127.0.0.1:4175/ > /dev/null; then break; fi
             sleep 1
           done
+          node tests/browser-staff-sync.cjs
+          node tests/parcel-reference-search.cjs
           npm run test:browser
           node tests/accessibility.cjs
           node tests/ux-team-browser.cjs
