@@ -28,5 +28,17 @@ export async function saveIncoming(db: any, client: any, colis: any, msg: any, u
     text = `Document reçu pour ${colis.ref}${text ? ` : ${text}` : ''}`;
   }
   if (!text) return;
-  throwDb(await db.from('messages').upsert({ colis_id: colis.id, type: 'client', auteur_nom: [client.prenom,client.nom].filter(Boolean).join(' '), texte: text, telegram_msg_id: String(msg.message_id), telegram_event_key: eventKey, canal: 'telegram', ...attachment }, { onConflict: 'telegram_event_key', ignoreDuplicates: true }));
+  // Inbox assignment may happen days later. Invoice intent must use the time
+  // Telegram received the document, not the later time staff selected a dossier.
+  const receivedAt = Number.isSafeInteger(msg.date) && msg.date > 0 && msg.date * 1000 <= Date.now() + 300000
+    ? new Date(msg.date * 1000).toISOString() : undefined;
+  throwDb(await db.from('messages').upsert({ colis_id: colis.id, type: 'client', auteur_nom: [client.prenom,client.nom].filter(Boolean).join(' '), texte: text, telegram_msg_id: String(msg.message_id), telegram_event_key: eventKey, canal: 'telegram', ...(receivedAt ? { created_at: receivedAt } : {}), ...attachment }, { onConflict: 'telegram_event_key', ignoreDuplicates: true }));
+  if (attachment.attachment_path) {
+    // Read by the durable event key even on a webhook retry: ignoreDuplicates
+    // does not return an existing row, and invoice registration may have failed
+    // after the conversation message was saved on the previous attempt.
+    const saved = await db.from('messages').select('id').eq('telegram_event_key', eventKey).single();
+    throwDb(saved);
+    throwDb(await db.rpc('register_requested_invoice', { p_message_id: saved.data.id }));
+  }
 }

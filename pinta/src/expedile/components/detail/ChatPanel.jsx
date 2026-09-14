@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { Suspense, lazy, useState, useRef, useEffect } from 'react';
 import { Send, MessageCircle, ChevronDown, Check, CheckCheck, Clock, AlertCircle } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { deliverMessage } from '../../services/telegramApi';
@@ -9,28 +9,77 @@ import { CONVERSATION_STATES, conversationState, conversationLabel } from '../..
 import { supabase } from '../../lib/supabase';
 import { staffName } from '../workspace/WorkActionRow';
 
-function ConversationAttachment({ message, colis, canImport, onImported }) {
+const AttachmentPDFPreview = lazy(() => import('../ui/PDFPreview'));
+
+export function conversationInvoiceEditable(colis) {
+  return Boolean(colis && !colis.archive && !colis.paiementDate && !colis.paiement_date
+    && ['receptionne','mesure','attente_feu_vert','autorise','en_preparation','pret','devis_envoye','attente_paiement'].includes(colis.statut));
+}
+
+export function conversationAttachmentImported(message, colis) {
+  const path = message.attachmentPath || message.attachment_path;
+  return Boolean(path && (colis.factures || []).some(invoice => (invoice.fichier || invoice.fichierUrl || invoice.fichier_url) === path));
+}
+
+export function pendingInvoiceAttachments(colis) {
+  const paths = new Set();
+  return (colis?.messages || []).filter(message => {
+    const path = message.attachmentPath || message.attachment_path;
+    if (!path || paths.has(path) || conversationAttachmentImported(message, colis)) return false;
+    paths.add(path);
+    return true;
+  });
+}
+
+export function ConversationAttachment({ message, colis, canImport, onImported, importLabel = 'Utiliser comme facture', preview = false }) {
   const [url, setUrl] = useState('');
+  const [fileError, setFileError] = useState('');
+  const [fileAttempt, setFileAttempt] = useState(0);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  const [imported, setImported] = useState(false);
+  const busyRef = useRef(false);
+  const [saved, setSaved] = useState(false);
+  const [needsRefresh, setNeedsRefresh] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
   const path = message.attachmentPath || message.attachment_path;
+  const name = message.attachmentName || message.attachment_name || 'Télécharger le document';
+  const type = message.attachmentType || message.attachment_type || '';
+  const pdf = type === 'application/pdf' || /\.pdf$/i.test(name);
+  const image = type.startsWith('image/') || /\.(jpe?g|png|webp|gif)$/i.test(name);
+  const imported = saved || conversationAttachmentImported(message, colis);
+  const importAllowed = canImport && conversationInvoiceEditable(colis) && !imported;
   useEffect(() => {
     let active = true;
-    setUrl(''); setError('');
-    if (path) sb.signedFileUrl('factures', path).then(value => { if (active) setUrl(value); }).catch(err => { if (active) setError(err.message); });
+    setUrl(''); setFileError('');
+    if (path) sb.signedFileUrl('factures', path).then(value => { if (active) setUrl(value); }).catch(err => { if (active) setFileError(err.message || 'Document indisponible.'); });
     return () => { active = false; };
-  }, [path]);
+  }, [path, fileAttempt]);
   if (!path) return null;
-  const importInvoice = async () => {
-    setBusy(true); setError('');
+  const importInvoice = async (refreshOnly = false) => {
+    if (busyRef.current || (!refreshOnly && !importAllowed)) return;
+    busyRef.current = true; setBusy(true); setError('');
+    let invoiceSaved = refreshOnly;
     try {
-      const { error: rpcError } = await supabase.rpc('import_conversation_invoice', { p_message_id: message.id });
-      if (rpcError) throw rpcError;
-      setImported(true); await onImported(colis.id);
-    } catch (err) { setError(err.message); } finally { setBusy(false); }
+      if (!refreshOnly) {
+        const { error: rpcError } = await supabase.rpc('import_conversation_invoice', { p_message_id: message.id });
+        if (rpcError) throw rpcError;
+        invoiceSaved = true; setSaved(true);
+      }
+      await onImported?.(colis.id); setNeedsRefresh(false);
+    } catch (err) {
+      setNeedsRefresh(invoiceSaved);
+      setError(invoiceSaved ? `Facture enregistrée. Actualisation impossible : ${err.message}` : err.message || 'Ajout impossible. Réessayez.');
+    } finally { busyRef.current = false; setBusy(false); }
   };
-  return <div className="mt-2 space-y-2 border-t border-current/20 pt-2">{url ? <a href={url} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center underline">{message.attachmentName || message.attachment_name || 'Télécharger le document'}</a> : !error && <span>Préparation du document…</span>}{canImport && !imported && <button disabled={busy} onClick={importInvoice} className="block min-h-11 rounded-lg border border-current px-2 text-xs">{busy ? 'Import…' : 'Utiliser comme facture'}</button>}{imported && <p>Facture ajoutée, à vérifier dans Documents.</p>}{error && <p role="alert">{error}</p>}</div>;
+  return <div className="mt-2 min-w-0 space-y-2 border-t border-current/20 pt-2">
+    {url ? <a href={url} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 max-w-full items-center break-all underline">{name}</a> : !fileError && <span role="status">Préparation du document…</span>}
+    {fileError && <div role="alert"><p>{fileError}</p><button onClick={() => setFileAttempt(value => value + 1)} className="min-h-11 font-semibold underline">Réessayer l’ouverture du document</button></div>}
+    {preview && url && (pdf || image) && <div><button onClick={() => setShowPreview(value => !value)} aria-expanded={showPreview} className="min-h-11 rounded-lg border border-current px-3 text-xs font-semibold">{showPreview ? 'Fermer l’aperçu' : 'Voir l’aperçu'}</button>{showPreview && <div className="mt-2 min-w-0">{pdf ? <Suspense fallback={<p role="status">Chargement du lecteur PDF…</p>}><AttachmentPDFPreview url={url} title={name} /></Suspense> : <img src={url} alt={name} className="max-h-96 max-w-full rounded-lg object-contain" />}</div>}</div>}
+    {importAllowed && <button disabled={busy} onClick={() => importInvoice()} className="block min-h-11 rounded-lg border border-current px-3 text-xs font-semibold">{busy ? 'Import…' : importLabel}</button>}
+    {imported && <p>{saved ? 'Facture ajoutée, à vérifier dans Documents.' : 'Document déjà présent dans les factures.'}</p>}
+    {error && <p role="alert">{error}</p>}
+    {needsRefresh && <button disabled={busy} onClick={() => importInvoice(true)} className="min-h-11 font-semibold underline">Réessayer l’actualisation</button>}
+  </div>;
 }
 
 // ── Status indicator (Telegram-style) ────────────────────────────────────────
@@ -154,7 +203,7 @@ export default function ChatPanel({ colis, client, embedded = false, active = tr
         >
           <p className="text-xs mb-0.5">{m.auteur}</p>
           <p className="whitespace-pre-line">{renderText(m.texte)}</p>
-          <ConversationAttachment message={m} colis={sel} canImport={isStaff && can('perm_factures_ajouter') && ['receptionne','mesure','attente_feu_vert','autorise','en_preparation','pret','devis_envoye','attente_paiement'].includes(sel.statut)} onImported={async id => { await refreshColis(id); await refreshWork?.(); }} />
+          <ConversationAttachment message={m} colis={sel} canImport={isStaff && can('perm_factures_ajouter')} onImported={async id => { await refreshColis(id); await refreshWork?.(); }} />
           {isStaff&&m.statut==='echec'&&m.canal==='telegram'&&can('perm_comm_telegram')&&<button className="min-h-[44px] text-xs underline" onClick={()=>ask('Réessayer cet envoi','Vérifiez dans Telegram que le client n’a pas reçu ce message, puis confirmez le renvoi.',async()=>{
             const result=await deliverMessage(sel.id,m.id,{retryConfirmed:true});
             if(!result.ok)throw new Error(result.error || 'L’envoi reste à vérifier.');

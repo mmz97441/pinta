@@ -17,7 +17,7 @@ import KPIDashboard from './KPIDashboard';
 import ColisInfo from '../detail/ColisInfo';
 import ReceivedCartons from '../detail/ReceivedCartons';
 import FacturesPanel from '../detail/FacturesPanel';
-import ChatPanel from '../detail/ChatPanel';
+import ChatPanel, { pendingInvoiceAttachments } from '../detail/ChatPanel';
 import AuditLog from '../detail/AuditLog';
 import { useColisLock } from '../../hooks/useColisLock';
 import { WORK_QUEUES, queueContext, matchesWorkQueue, isActiveColis, isClientWaiting, isActionDue, isWaitDue, needsDocuments, nextAction, priorityScore, urgency, matchesOwner } from '../../domain/workQueues';
@@ -935,6 +935,7 @@ export default function StaffColisPage() {
           const destDetail = clDetail ? getDestByCP(clDetail.cp) : null;
           const unreadCount = (sel.messages || []).filter((m) => m.type === 'client' && !m.lu).length;
           const facturesSummary = sel.factures || [];
+          const pendingDocumentCount = pendingInvoiceAttachments(sel).length;
           const validCount = facturesSummary.filter((f) => f.valide).length;
           const rejetCount = facturesSummary.filter((f) => f.rejetMotif).length;
           const receptionManifest = receptionCartonManifest(sel);
@@ -1028,14 +1029,15 @@ export default function StaffColisPage() {
               {/* Factures — part of the preparation workspace when active. */}
               {sel.statut !== 'en_preparation' && <><button
                 onClick={() => setShowFactures((p) => !p)}
+                aria-expanded={showFactures}
                 className="w-full flex items-center justify-between px-3 py-2 rounded-xl border border-gray-100 hover:bg-gray-50 transition-colors"
               >
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2 text-left">
                   <FileText size={13} className="text-gray-400" />
-                  <span className="text-xs font-bold text-gray-600">Factures ({facturesSummary.length})</span>
+                  <span className="text-xs font-bold text-gray-600">Factures ({facturesSummary.length}){pendingDocumentCount > 0 ? ` · ${pendingDocumentCount} document${pendingDocumentCount > 1 ? 's' : ''} reçu${pendingDocumentCount > 1 ? 's' : ''} à vérifier` : ''}</span>
                   {validCount > 0 && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-green-100 text-green-700">{validCount} validée{validCount > 1 ? 's' : ''}</span>}
                   {rejetCount > 0 && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-red-100 text-red-600">{rejetCount} refusée{rejetCount > 1 ? 's' : ''}</span>}
-                  {facturesSummary.length === 0 && <span className="text-[9px] font-bold text-red-500">Manquante</span>}
+                  {facturesSummary.length === 0 && pendingDocumentCount === 0 && <span className="text-[9px] font-bold text-red-500">Manquante</span>}
                 </div>
                 <span className="text-[10px] text-gray-400">{showFactures ? '▼' : '▸'}</span>
               </button>

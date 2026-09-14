@@ -50,6 +50,7 @@ jobs:
           PINTA_DB_CONTAINER=pinta-finalisation-db ./supabase/tests/run-compatibility.sh
           ./supabase/tests/run-legacy-payments.sh
           ./supabase/tests/run-migration-owners.sh
+          ./supabase/tests/run-telegram-requested-invoice.sh
       - run: npx playwright install --with-deps chromium
       - name: Parcours navigateur sans services externes
         run: |
@@ -62,6 +63,7 @@ jobs:
           done
           node tests/browser-staff-sync.cjs
           node tests/parcel-reference-search.cjs
+          node tests/reçu-documents-factures.cjs
           npm run test:browser
           node tests/accessibility.cjs
           node tests/ux-team-browser.cjs

@@ -7,6 +7,7 @@ import * as sb from '../../lib/supabaseData';
 import { supabase } from '../../lib/supabase';
 import { SecureImage, SecureFileLink, useSignedFile } from '../ui/SecureFile';
 import { functionErrorMessage } from '../../services/functionErrors';
+import { ConversationAttachment, pendingInvoiceAttachments, conversationInvoiceEditable } from './ChatPanel';
 
 const PDFPreview = lazy(() => import('../ui/PDFPreview'));
 
@@ -62,7 +63,7 @@ function InvoiceFields({ invoice, busy, onSave }) {
 }
 
 export default function FacturesPanel({ workspace = false, tab, onTabChange, children }) {
-  const { sel, isStaff, setData, refreshColis, sendMsg, getClient, categories = [], can } = useApp();
+  const { sel, isStaff, setData, refreshColis, refreshWork, sendMsg, getClient, categories = [], can } = useApp();
   const [selectedId, setSelectedId] = useState(null);
   const [localTab, setLocalTab] = useState('articles');
   const workspaceTab = tab || localTab;
@@ -107,8 +108,9 @@ export default function FacturesPanel({ workspace = false, tab, onTabChange, chi
   const parcelId = sel.id;
   const client = getClient(sel.clientId);
   const invoices = sel.factures || [];
+  const receivedDocuments = isStaff ? pendingInvoiceAttachments(sel) : [];
   const canDeposit = !isStaff && !sel.paiementDate && ['receptionne','mesure','attente_feu_vert','autorise','en_preparation','devis_envoye','attente_paiement'].includes(sel.statut);
-  const canEdit = isStaff && !sel.paiementDate;
+  const canEdit = isStaff && conversationInvoiceEditable(sel);
   const canAdd = canEdit && can('perm_factures_ajouter');
   const canValidate = canEdit && can('perm_factures_valider');
   const canReject = canEdit && can('perm_factures_refuser');
@@ -199,6 +201,14 @@ export default function FacturesPanel({ workspace = false, tab, onTabChange, chi
     </div>
     {error && <p role="alert" className="my-2 rounded-xl bg-red-50 p-3 text-xs text-red-700">{error}</p>}
     {notice && <p role="status" className="my-2 rounded-xl bg-blue-50 p-3 text-xs text-blue-800">{notice}</p>}
+    {isStaff && receivedDocuments.length > 0 && <section aria-label="Documents reçus à vérifier" className="my-3 space-y-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-slate-800">
+      <div><h3 className="text-sm font-semibold">Documents reçus à vérifier ({receivedDocuments.length})</h3><p className="mt-1 text-xs text-slate-600">Ces pièces jointes sont déjà dans la conversation du dossier. Vérifiez leur contenu avant de les ajouter aux factures ; elles ne sont pas encore prises en compte dans le devis.</p>
+        {!conversationInvoiceEditable(sel) ? <p className="mt-2 text-xs font-semibold text-slate-600">Consultation uniquement : ce dossier est payé, terminé ou archivé.</p> : !canAdd && <p className="mt-2 text-xs text-slate-600">Un membre de l’équipe autorisé à ajouter des factures peut les intégrer au dossier.</p>}
+      </div>
+      {receivedDocuments.map(message => <article key={message.id} className="min-w-0 rounded-xl border border-amber-200 bg-white p-3 text-xs">
+        <ConversationAttachment message={message} colis={sel} canImport={canAdd} preview importLabel="Ajouter comme facture" onImported={async id => { await refreshWork?.(); await refreshColis(id); }} />
+      </article>)}
+    </section>}
     {canDeposit && <form aria-label="Déposer une facture" className="my-3 space-y-3 rounded-xl border border-slate-200 p-3" onSubmit={(event) => { event.preventDefault(); depositClientDocument(); }}>
       <p className="text-sm font-semibold text-slate-700">Ajouter une facture à ce dossier</p>
       <p className="text-xs text-slate-600">PDF ou photo lisible (JPG, PNG, WebP), 20 Mo maximum. Joignez toutes les pages avec les articles et les montants. Pour une correction, sélectionnez la facture à remplacer : son historique sera conservé et ses anciens articles seront exclus du devis.</p>
@@ -209,7 +219,7 @@ export default function FacturesPanel({ workspace = false, tab, onTabChange, chi
       <button disabled={!!busy || !clientFile} className={`${BUTTON} w-full bg-slate-700 text-white`}><Upload size={15} />{busy === 'client-deposit' ? 'Enregistrement du document…' : 'Déposer la facture'}</button>
     </form>}
     {workspace && <div className="space-y-3 py-3">
-      <label className="block text-xs font-semibold text-slate-600">Facture à vérifier<select aria-label="Facture à vérifier" value={selectedInvoice?.id || ''} onChange={(event) => setSelectedId(event.target.value)} className={INPUT}>{!invoices.length && <option value="">Aucune facture reçue</option>}{invoices.map((invoice) => <option key={invoice.id} value={invoice.id}>{invoice.vendeur || 'Vendeur à renseigner'} · {invoice.valide ? 'Validée' : 'À vérifier'}</option>)}</select></label>
+      <label className="block text-xs font-semibold text-slate-600">Facture à vérifier<select aria-label="Facture à vérifier" value={selectedInvoice?.id || ''} onChange={(event) => setSelectedId(event.target.value)} className={INPUT}>{!invoices.length && <option value="">{receivedDocuments.length ? 'Documents reçus à ajouter aux factures' : 'Aucune facture reçue'}</option>}{invoices.map((invoice) => <option key={invoice.id} value={invoice.id}>{invoice.vendeur || 'Vendeur à renseigner'} · {invoice.valide ? 'Validée' : 'À vérifier'}</option>)}</select></label>
       <div className="grid grid-cols-2 gap-2 lg:hidden" role="tablist" aria-label="Espace de vérification">{[['document', 'Document'], ['articles', 'Articles et vérification']].map(([key, label]) => <button key={key} role="tab" aria-selected={workspaceTab === key} className={`${BUTTON} ${workspaceTab === key ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-700'}`} onClick={() => setWorkspaceTab(key)}>{label}</button>)}</div>
     </div>}
     <div className={workspace ? 'grid min-w-0 grid-cols-1 lg:grid-cols-2 gap-5' : ''}>
@@ -218,7 +228,7 @@ export default function FacturesPanel({ workspace = false, tab, onTabChange, chi
     {!collapsed && <div className="space-y-3">
       {isStaff && <div className="flex flex-wrap gap-2"><button disabled={!!busy || !client?.telegramChatId} className={`${BUTTON} text-sky-700 bg-sky-50`} onClick={() => run('request', () => sendMsg(parcelId, sel.clientId, 'telegram', 'facture_manquante', null))}><Send size={13} />Demander par Telegram</button><button disabled={!!busy || !client?.email} className={`${BUTTON} bg-slate-100 text-slate-700`} onClick={() => run('request', () => sendMsg(parcelId, sel.clientId, 'email', 'facture_manquante', null))}>Demander par email</button></div>}
       {showAdd && canAdd && <form className="rounded-xl border border-dashed border-gray-300 p-3 space-y-2" onSubmit={(event) => { event.preventDefault(); addInvoice(); }}><label className="block text-xs text-gray-500">Vendeur<input required aria-label="Nouveau vendeur" value={newVendor} onChange={(event) => setNewVendor(event.target.value)} className={INPUT} placeholder="Nom du vendeur" /></label><label className="block text-xs text-gray-500">Total HT connu (€)<input aria-label="Nouveau montant" type="number" min="0" step="0.01" value={newAmount} onChange={(event) => setNewAmount(event.target.value)} className={INPUT} placeholder="À compléter après lecture" /></label><button disabled={!!busy || !newVendor.trim()} className={`${BUTTON} w-full text-white`} style={{ background: BRAND.navy }}>Enregistrer la facture</button></form>}
-      {!invoices.length && <div className="py-5 text-center text-gray-500"><FileText size={25} className="mx-auto mb-2 text-gray-300" /><p className="text-sm">Aucune facture reçue</p><p className="mt-1 text-xs">Les documents permettent de calculer un devis complet dès la préparation.</p></div>}
+      {!invoices.length && <div className="py-5 text-center text-gray-500"><FileText size={25} className="mx-auto mb-2 text-gray-300" /><p className="text-sm">{receivedDocuments.length ? 'Aucune facture enregistrée pour ces documents' : 'Aucune facture reçue'}</p><p className="mt-1 text-xs">{receivedDocuments.length ? 'Les pièces jointes reçues sont disponibles ci-dessus.' : 'Les documents permettent de calculer un devis complet dès la préparation.'}</p></div>}
       {invoices.map((invoice) => {
         const extraction = extractions[invoice.id];
         const isPdf = (invoice.fichierNom || invoice.fichier || '').split('?')[0].toLowerCase().endsWith('.pdf');
