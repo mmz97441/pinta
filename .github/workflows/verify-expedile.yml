@@ -64,6 +64,7 @@ jobs:
           node tests/browser-staff-sync.cjs
           node tests/parcel-reference-search.cjs
           node tests/reçu-documents-factures.cjs
+          node tests/invoice-review-indicator.cjs
           npm run test:browser
           node tests/accessibility.cjs
           node tests/ux-team-browser.cjs

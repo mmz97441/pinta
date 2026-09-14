@@ -27,6 +27,7 @@ import { useDialog } from '../ui/useDialog';
 import { receptionCartonManifest } from '../../domain/reception';
 import { measureShipment, volumetricDivisor } from '../../domain/quote';
 import { findColisByReference, normalizeColisReference } from '../../lib/supabaseData';
+import InvoiceReviewIndicator from '../ui/InvoiceReviewIndicator';
 const QUEUE_ICONS = { messages: MessageCircle, preparation: Wrench, documents: FileText, waiting: Clock };
 const unreadMessages = (colis) => (colis.messages || []).filter((message) => message.type === 'client' && !message.lu);
 
@@ -173,7 +174,7 @@ function ColisTableRow({ c, client, prevClient, envois, onClick, isSelected, che
         {(() => { const unread = (c.messages || []).filter((m) => m.type === 'client' && !m.lu).length; return unread > 0 ? <span className="ml-1 text-[8px] font-bold px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-700">{unread}</span> : null; })()}
       </>
     ),
-    statut: () => <div className="max-w-[220px] whitespace-normal"><p className="mb-1 text-xs font-semibold text-slate-800">{nextAction(c, client, now)}</p><Badge statut={c.statut} /></div>,
+    statut: () => <div className="max-w-[220px] whitespace-normal"><p className="mb-1 text-xs font-semibold text-slate-800">{nextAction(c, client, now)}</p><Badge statut={c.statut} /><InvoiceReviewIndicator dossier={c} /></div>,
     paiement: () => isPaid ? <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-green-100 text-green-700">Payé</span> : c.devisTotal ? <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">En attente</span> : DASH,
     client: () => sameClient ? (
       <span className="text-gray-500 text-xs italic">↑ idem</span>
@@ -847,7 +848,21 @@ export default function StaffColisPage() {
             }
 
             return <>
-              <div className="lg:hidden divide-y divide-gray-100 px-4">{sorted.map((c) => { const client = getClient(c.clientId); return <button key={c.id} onClick={() => openColis(c.id)} className="w-full text-left py-4 flex items-start gap-3 min-h-20"><div className="mt-1 w-2 h-2 rounded-full shrink-0" style={{ background: statutBorderColor(c.statut) }} /><div className="flex-1"><div className="flex items-center justify-between gap-2"><span className="font-bold text-sm brand-t">{c.ref}</span>{needsConversationAction(c) && <span className="text-xs font-semibold brand-t">À répondre</span>}</div><p className="text-sm text-gray-700 mt-1">{client?.nom || 'Client'}</p><p className="text-xs text-gray-500 mt-1">{nextAction(c, client, now)}{c.casier ? ` · ${c.casier}` : ''}</p><p className="text-xs text-gray-500 mt-1">{c.responsibleStaffId ? teamUsers.find((user) => user.authId === c.responsibleStaffId)?.nom || 'Équipe' : 'Non attribué'} · {urgency(c, now).label}</p><p className="text-xs text-gray-500 mt-1 truncate">{c.desc || 'Contenu à préciser'}</p></div><ChevronRight size={17} className="text-gray-400 mt-1 shrink-0" /></button>; })}</div>
+              <div className="lg:hidden divide-y divide-gray-100 px-4">{sorted.map(c => {
+                const client = getClient(c.clientId);
+                return <article key={c.id} className="flex min-h-20 items-start gap-3 py-4">
+                  <div className="mt-4 h-2 w-2 shrink-0 rounded-full" style={{ background: statutBorderColor(c.statut) }} />
+                  <div className="min-w-0 flex-1">
+                    <button onClick={() => openColis(c.id)} className="flex min-h-11 w-full items-center justify-between gap-2 text-left"><span className="text-sm font-bold brand-t">{c.ref}</span><ChevronRight size={17} className="shrink-0 text-gray-400" /></button>
+                    {needsConversationAction(c) && <p className="text-xs font-semibold brand-t">À répondre</p>}
+                    <p className="mt-1 text-sm text-gray-700">{client?.nom || 'Client'}</p>
+                    <p className="mt-1 text-xs text-gray-500">{nextAction(c, client, now)}{c.casier ? ` · ${c.casier}` : ''}</p>
+                    <InvoiceReviewIndicator dossier={c} />
+                    <p className="mt-1 text-xs text-gray-500">{c.responsibleStaffId ? teamUsers.find(user => user.authId === c.responsibleStaffId)?.nom || 'Équipe' : 'Non attribué'} · {urgency(c, now).label}</p>
+                    <p className="mt-1 truncate text-xs text-gray-500">{c.desc || 'Contenu à préciser'}</p>
+                  </div>
+                </article>;
+              })}</div>
               <table className="hidden lg:table w-full text-left">
                 <thead>
                   <ColisTableHead

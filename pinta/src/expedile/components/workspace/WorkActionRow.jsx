@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import { WORK_KINDS, WORK_STATES, actionPriority, actionBlocked, canWorkAction, staffAvailable, workActionUrl } from '../../domain/personalWork';
 import { receptionCartonManifest } from '../../domain/reception';
+import InvoiceReviewIndicator from '../ui/InvoiceReviewIndicator';
 
 export const workDate = value => value && Number.isFinite(Date.parse(value)) ? new Date(value).toLocaleString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : null;
 export const staffName = (id, users = []) => { const person = users.find(user => user.authId === id); return person ? [person.prenom, person.nom].filter(Boolean).join(' ') : id ? 'Membre de l’équipe' : 'Non attribué'; };
@@ -81,6 +82,7 @@ export default function WorkActionRow({ action, dossier, client, returnTo, now =
       <div className="min-w-0"><h2 className="font-semibold text-slate-900">{action.action_hint || WORK_KINDS[action.kind]?.label || 'Action à préciser'}</h2><p className="mt-1 text-sm text-slate-600">{(client?.nomFamille ? [client.prenom, client.nomFamille].filter(Boolean).join(' ') : client?.nom) || 'Client'} · {dossier?.ref || 'Dossier à consulter'}{dossier ? ` · ${receptionCartonManifest(dossier).nbColis} carton(s) reçu(s)` : ''}</p></div>
       <span className={`rounded-lg px-2 py-1 text-xs font-semibold ${priority.urgent ? 'bg-amber-50 text-amber-800' : 'bg-slate-100 text-slate-600'}`}>{WORK_STATES[action.state]}</span>
     </div>
+    <InvoiceReviewIndicator dossier={dossier} returnTo={returnTo} />
     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-600"><span>Action : {action.assignee_id === auth?.u?.id ? 'vous' : staffName(action.assignee_id, teamUsers)}</span>{dossier?.responsibleStaffId && <span>Référent : {staffName(dossier.responsibleStaffId, teamUsers)}</span>}<span className={priority.urgent ? 'text-amber-800 font-semibold' : ''}><Clock size={13} className="inline mr-1" />{priority.reason}{action.due_at ? ` · ${workDate(action.due_at)}` : ''}</span></div>
     {waiting && <p className="text-sm text-slate-700"><strong>{action.blocked_reason ? 'Prérequis : ' : 'En attente : '}</strong>{waiting}{action.review_at ? ` · À revoir le ${workDate(action.review_at)}` : ''}</p>}
     {action.handoff_to && <p className="text-sm text-slate-700">Relais proposé à {staffName(action.handoff_to, teamUsers)} · acceptation attendue{action.handoff_note ? ` — ${action.handoff_note}` : ''}</p>}

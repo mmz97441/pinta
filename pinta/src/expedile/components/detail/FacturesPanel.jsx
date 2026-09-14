@@ -1,4 +1,5 @@
 import React, { Suspense, lazy, useEffect, useRef, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Check, X, RotateCcw, Eye, Upload, FileText, Plus, Send, Scan, ChevronDown, ChevronRight, Loader2, AlertTriangle } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { BRAND } from '../../constants';
@@ -64,13 +65,17 @@ function InvoiceFields({ invoice, busy, onSave }) {
 
 export default function FacturesPanel({ workspace = false, tab, onTabChange, children }) {
   const { sel, isStaff, setData, refreshColis, refreshWork, sendMsg, getClient, categories = [], can } = useApp();
+  const location = useLocation();
+  const requestedId = isStaff ? new URLSearchParams(location.search).get('invoice') : null;
+  const requestedInvoice = (sel?.factures || []).find(invoice => invoice.id === requestedId);
+  const documentTarget = useRef(null);
   const [selectedId, setSelectedId] = useState(null);
   const [localTab, setLocalTab] = useState('articles');
   const workspaceTab = tab || localTab;
   const setWorkspaceTab = (next) => { setLocalTab(next); onTabChange?.(next); };
   const [resuming, setResuming] = useState(false);
   const currentParcel = useRef(sel?.id); currentParcel.current = sel?.id;
-  const selectedInvoice = (sel?.factures || []).find((invoice) => invoice.id === selectedId) || sel?.factures?.[0];
+  const selectedInvoice = (sel?.factures || []).find((invoice) => invoice.id === selectedId) || requestedInvoice || sel?.factures?.[0];
   const canResume = isStaff && (can('perm_factures_ocr') || can('perm_factures_valider'));
   const [collapsed, setCollapsed] = useState(false);
   const [replacesFactureId, setReplacesFactureId] = useState('');
@@ -91,6 +96,20 @@ export default function FacturesPanel({ workspace = false, tab, onTabChange, chi
   const uploadTarget = useRef(null);
   const fileInput = useRef(null);
   useEffect(() => { setExtractions({}); setReplacesFactureId(''); setClientFile(null); if (clientFileInput.current) clientFileInput.current.value = ''; uploadedClientDocument.current = null; setSelectedId(null); setWorkspaceTab('articles'); setError(''); setNotice(''); setRejectingId(null); setShowAdd(false); }, [sel?.id]);
+  useEffect(() => {
+    if (!requestedInvoice) return;
+    setSelectedId(requestedInvoice.id);
+    setCollapsed(false);
+    setWorkspaceTab('document');
+  }, [sel?.id, requestedInvoice?.id, location.key]);
+  useEffect(() => {
+    if (!requestedInvoice || collapsed || (workspace && workspaceTab !== 'document')) return undefined;
+    const frame = requestAnimationFrame(() => {
+      documentTarget.current?.scrollIntoView({ block: 'start' });
+      documentTarget.current?.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [sel?.id, requestedInvoice?.id, location.key, collapsed, workspace, workspaceTab]);
   useEffect(() => {
     let alive = true;
     const invoice = selectedInvoice;
@@ -223,7 +242,7 @@ export default function FacturesPanel({ workspace = false, tab, onTabChange, chi
       <div className="grid grid-cols-2 gap-2 lg:hidden" role="tablist" aria-label="Espace de vérification">{[['document', 'Document'], ['articles', 'Articles et vérification']].map(([key, label]) => <button key={key} role="tab" aria-selected={workspaceTab === key} className={`${BUTTON} ${workspaceTab === key ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-700'}`} onClick={() => setWorkspaceTab(key)}>{label}</button>)}</div>
     </div>}
     <div className={workspace ? 'grid min-w-0 grid-cols-1 lg:grid-cols-2 gap-5' : ''}>
-      {workspace && <div role="region" aria-label="Document source" className={`min-w-0 ${workspaceTab === 'document' ? '' : 'hidden lg:block'}`}><InlineDocument invoice={selectedInvoice} /></div>}
+      {workspace && <div ref={documentTarget} tabIndex={-1} role="region" aria-label="Document source" className={`min-w-0 scroll-mt-24 ${workspaceTab === 'document' ? '' : 'hidden lg:block'}`}><InlineDocument invoice={selectedInvoice} /></div>}
       <div className={`min-w-0 ${workspace && workspaceTab !== 'articles' ? 'hidden lg:block' : ''}`}>
     {!collapsed && <div className="space-y-3">
       {isStaff && <div className="flex flex-wrap gap-2"><button disabled={!!busy || !client?.telegramChatId} className={`${BUTTON} text-sky-700 bg-sky-50`} onClick={() => run('request', () => sendMsg(parcelId, sel.clientId, 'telegram', 'facture_manquante', null))}><Send size={13} />Demander par Telegram</button><button disabled={!!busy || !client?.email} className={`${BUTTON} bg-slate-100 text-slate-700`} onClick={() => run('request', () => sendMsg(parcelId, sel.clientId, 'email', 'facture_manquante', null))}>Demander par email</button></div>}
@@ -232,13 +251,14 @@ export default function FacturesPanel({ workspace = false, tab, onTabChange, chi
       {invoices.map((invoice) => {
         const extraction = extractions[invoice.id];
         const isPdf = (invoice.fichierNom || invoice.fichier || '').split('?')[0].toLowerCase().endsWith('.pdf');
-        return <article key={invoice.id} className={`rounded-xl border border-gray-200 p-3 ${workspace && selectedInvoice?.id !== invoice.id ? 'hidden' : ''}`}>
+        return <article key={invoice.id} ref={!workspace && invoice.id === requestedId ? documentTarget : undefined} tabIndex={-1} aria-label={`Facture ${invoice.vendeur || 'à vérifier'}`} className={`scroll-mt-24 rounded-xl border border-gray-200 p-3 ${workspace && selectedInvoice?.id !== invoice.id ? 'hidden' : ''}`}>
           <div className="flex items-start justify-between gap-2"><div className="min-w-0"><p className="truncate text-sm font-semibold text-slate-800">{invoice.vendeur || 'Vendeur à renseigner'}</p><p className="text-sm text-gray-600">{Number(invoice.montant) > 0 ? `${eur(invoice.montant)}${isStaff ? ' HT' : ''}` : 'Montant à vérifier par l’équipe'}</p><p className="truncate text-xs text-gray-400">{invoice.fichierNom || (invoice.fichier ? 'Document joint' : 'Document manquant')}</p></div><span className={`shrink-0 rounded-lg px-2 py-1 text-xs font-semibold ${invoice.valide ? 'bg-emerald-50 text-emerald-700' : invoice.rejetMotif ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-700'}`}>{invoice.valide ? 'Validée' : invoice.rejetMotif ? 'À remplacer' : 'À vérifier'}</span></div>
           {isStaff && <p className="mt-2 text-xs text-slate-600">Base attendue : total HT imprimé sur la facture, sans recalculer la TVA. Si seul un montant TTC est disponible, demandez une précision avant validation.</p>}
           {isStaff && <p role="status" className="mt-2 text-xs font-semibold text-slate-600">{resuming && selectedInvoice?.id === invoice.id ? 'Chargement des propositions enregistrées…' : extraction?.status === 'confirmed' ? 'Articles importés et vérifiés' : extraction ? 'Propositions à vérifier' : invoice.ocrStatus === 'queued' ? 'Analyse en attente' : invoice.ocrStatus === 'processing' ? 'Analyse en cours' : invoice.ocrStatus === 'failed' ? 'Analyse en échec · saisie manuelle disponible' : 'Analyse non disponible pour ce document'}</p>}
           {isStaff && invoice.ocrError && <p className="mt-1 text-xs text-amber-700">{invoice.ocrError}</p>}
           {invoice.replacesFactureId && <p className="mt-2 text-xs text-slate-600">Remplace la facture {invoices.find(original => original.id === invoice.replacesFactureId)?.vendeur || 'corrigée'}.</p>}
           {invoice.rejetMotif && <p className="mt-2 text-xs text-red-700">Correction attendue : {invoice.rejetMotif}</p>}
+          {!workspace && invoice.id === requestedId && <div className="mt-3"><InlineDocument invoice={invoice} /></div>}
           <div className="mt-3 flex flex-wrap gap-2">
             {invoice.fichier && (isPdf ? <SecureFileLink href={invoice.fichier} bucket="factures" target="_blank" rel="noopener noreferrer" className={`${BUTTON} bg-slate-100 text-slate-700`}><Eye size={14} />Ouvrir le PDF</SecureFileLink> : <button onClick={() => setPreview(invoice)} className={`${BUTTON} bg-slate-100 text-slate-700`}><Eye size={14} />Voir le document</button>)}
             {canAdd && <button disabled={!!busy} onClick={() => { uploadTarget.current = invoice.id; fileInput.current?.click(); }} className={`${BUTTON} bg-slate-100 text-slate-700`}><Upload size={14} />{invoice.fichier ? 'Remplacer' : 'Joindre le document'}</button>}
