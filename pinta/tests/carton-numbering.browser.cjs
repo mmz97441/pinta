@@ -26,7 +26,7 @@ async function main() {
       await f.login();
       await f.page.goto(`${base}/colis?dossier=${ids.P}`);
       await f.page.getByRole('button', { name: 'Réceptionner un autre carton', exact: true }).click();
-      const dialog = f.page.getByRole('dialog', { name: 'Réceptionner un colis', exact: true });
+      const dialog = f.page.getByRole('dialog', { name: 'Réceptionner des cartons', exact: true });
       await dialog.getByRole('heading', { name: 'Carton 2', exact: true }).waitFor();
       assert.equal(await dialog.getByRole('heading', { name: 'Carton 1', exact: true }).count(), 0);
       await dialog.getByLabel('Fournisseur · carton 2', { exact: true }).fill('Fournisseur temporaire');

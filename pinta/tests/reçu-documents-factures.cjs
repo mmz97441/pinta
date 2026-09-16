@@ -9,6 +9,13 @@ const { setup, ids, base } = require('./browser-regression.cjs');
 const { P } = ids;
 const output = process.env.PINTA_RECEIVED_DOCS_OUT || path.join(os.tmpdir(), 'pinta-received-documents');
 const results = [];
+async function openReceived(page, count) {
+  const summary = page.locator('#quote-documents summary').filter({ hasText: `Documents reçus à vérifier (${count})` });
+  await summary.waitFor();
+  if (!await summary.locator('..').evaluate(element => element.open)) await summary.click();
+  await page.getByRole('region', { name: 'Documents reçus à vérifier', exact: true }).waitFor();
+}
+
 
 (async () => {
   await fs.mkdir(output, { recursive: true });
@@ -48,15 +55,15 @@ const results = [];
     assert.equal(await collapsedSummary.getAttribute('aria-expanded'), 'false');
     assert.equal(await collapsedSummary.getByText('Manquante', { exact: true }).count(), 0);
     await collapsedSummary.click();
-    await page.getByRole('heading', { name: 'Documents reçus à vérifier (2)', exact: true }).waitFor();
+    await openReceived(page, 2);
     results.push({ test: 'collapsed-dossier-invoice-summary-announces-received-documents-before-opening', pass: true });
     await page.goto(base + '/colis/' + P);
     const invoices = page.getByRole('region', { name: 'Factures d’achat', exact: true });
     const received = invoices.getByRole('region', { name: 'Documents reçus à vérifier', exact: true });
-    await received.getByRole('heading', { name: 'Documents reçus à vérifier (2)', exact: true }).waitFor();
-    assert.equal(await received.locator('article').count(), 2, 'The same storage path in two messages appears only once');
+    await openReceived(page, 2);
+    assert.equal(await received.getByRole('link', { name: /^achat-(un|deux)\.pdf$/ }).count(), 2, 'The same storage path in two messages appears only once');
     assert.equal(await invoices.getByText('Aucune facture reçue', { exact: true }).count(), 0, 'Received documents must not be reported as never received');
-    const firstDocument = received.locator('article').filter({ has: page.getByRole('link', { name: 'achat-un.pdf', exact: true }) });
+    const firstDocument = received.getByRole('link', { name: 'achat-un.pdf', exact: true }).locator('..');
     const privateLink = firstDocument.getByRole('link', { name: 'achat-un.pdf', exact: true });
     await privateLink.waitFor();
     assert.match(await privateLink.getAttribute('href'), /\/storage\/v1\/object\/sign\//);
@@ -72,19 +79,19 @@ const results = [];
     await page.screenshot({ path: path.join(output, 'documents-received-desktop.png') });
 
     await firstDocument.getByRole('button', { name: 'Ajouter comme facture', exact: true }).click();
-    await received.getByRole('heading', { name: 'Documents reçus à vérifier (1)', exact: true }).waitFor();
+    await openReceived(page, 1);
     assert.equal(await received.getByRole('link', { name: 'achat-un.pdf', exact: true }).count(), 0);
     assert.equal(tables.factures.length, 1);
     assert.equal(tables.factures[0].valide, false);
     assert.equal(tables.factures[0].montant, 0);
     assert.equal(tables.factures[0].fichier_url, first.attachment_path);
-    assert.equal(await invoices.getByText('À vérifier', { exact: true }).count(), 1);
+    assert.equal(await invoices.getByRole('navigation', { name: 'Factures du dossier', exact: true }).getByRole('button').filter({ hasText: 'À vérifier' }).count(), 1);
     assert.equal(imports.length, 1);
     assert.equal(await page.locator('#conversation-client').getByRole('button', { name: 'Utiliser comme facture', exact: true }).count(), 1, 'The chat also suppresses import for the newly imported path');
     await page.goto(base + '/colis?dossier=' + P);
     await page.getByRole('button', { name: /^Factures \(1\) · 1 document reçu à vérifier/ }).waitFor();
     await page.goto(base + '/colis/' + P);
-    await received.getByRole('heading', { name: 'Documents reçus à vérifier (1)', exact: true }).waitFor();
+    await openReceived(page, 1);
     results.push({ test: 'import-creates-one-unvalidated-invoice-and-removes-pending-and-chat-duplicates', pass: true });
 
     failImport = true;
@@ -114,10 +121,10 @@ const results = [];
     // A terminal status protects the dossier even if an old payment date is missing.
     tables.colis[0].paiement_date = null;
     await page.goto(base + '/colis/' + P);
-    await received.getByRole('heading', { name: 'Documents reçus à vérifier (2)', exact: true }).waitFor();
+    await openReceived(page, 2);
     await received.getByText('Consultation uniquement : ce dossier est payé, terminé ou archivé.', { exact: true }).waitFor();
     assert.equal(await received.getByRole('button', { name: 'Ajouter comme facture', exact: true }).count(), 0);
-    assert.equal(await invoices.getByRole('button', { name: 'Ajouter', exact: true }).count(), 0);
+    assert.equal(await invoices.getByRole('button', { name: 'Ajouter une facture', exact: true }).count(), 0);
     assert.equal(await page.locator('#conversation-client').getByRole('button', { name: 'Utiliser comme facture', exact: true }).count(), 0);
     await received.getByRole('link', { name: 'achat-un.pdf', exact: true }).waitFor();
     results.push({ test: 'paid-dossier-retains-document-reading-and-disables-all-invoice-import-entry-points', pass: true });
@@ -125,7 +132,7 @@ const results = [];
     for (const changes of [{ statut: 'livre', archive: false, paiement_date: null }, { statut: 'autorise', archive: true, paiement_date: null }, { statut: 'autorise', archive: false, paiement_date: '2026-09-10T10:00:00Z' }]) {
       Object.assign(tables.colis[0], changes);
       await page.goto(base + '/colis/' + P);
-      await received.getByRole('heading', { name: 'Documents reçus à vérifier (2)', exact: true }).waitFor();
+      await openReceived(page, 2);
       assert.equal(await received.getByRole('button', { name: 'Ajouter comme facture', exact: true }).count(), 0);
       assert.equal(await page.locator('#conversation-client').getByRole('button', { name: 'Utiliser comme facture', exact: true }).count(), 0);
     }
@@ -134,7 +141,7 @@ const results = [];
     Object.assign(tables.colis[0], { statut: 'autorise', archive: false, paiement_date: null });
     await page.goto(base + '/colis/' + P);
     await page.setViewportSize({ width: 390, height: 844 });
-    await received.getByRole('heading', { name: 'Documents reçus à vérifier (2)', exact: true }).waitFor();
+    await openReceived(page, 2);
     await received.scrollIntoViewIfNeeded();
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'Received documents fit mobile');
     const mobileButton = received.getByRole('button', { name: 'Ajouter comme facture', exact: true }).first();
@@ -154,7 +161,7 @@ const results = [];
     await fixture.login();
     await fixture.page.goto(base + '/colis/' + P);
     const permissionRestricted = fixture.page.getByRole('region', { name: 'Documents reçus à vérifier', exact: true });
-    await permissionRestricted.getByRole('heading', { name: 'Documents reçus à vérifier (1)', exact: true }).waitFor();
+    await openReceived(fixture.page, 1);
     await permissionRestricted.getByRole('link', { name: 'achat-un.pdf', exact: true }).waitFor();
     assert.equal(await permissionRestricted.getByRole('button', { name: 'Ajouter comme facture', exact: true }).count(), 0);
     assert.equal(await fixture.page.locator('#conversation-client').getByRole('button', { name: 'Utiliser comme facture', exact: true }).count(), 0);

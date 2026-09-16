@@ -26,7 +26,9 @@ SELECT _apply_client_decision('a3000000-0000-4000-8000-000000000002','approve',N
 SELECT test_work_assert((SELECT next_action='Vérifier le transporteur demain' AND next_action_source='manual' AND next_action_at='2030-09-11T10:00:00Z'::timestamptz FROM colis WHERE id='a3000000-0000-4000-8000-000000000002'),'Client approval preserves the staff instruction and deadline');
 SET LOCAL ROLE authenticated;
 UPDATE colis SET statut='en_preparation' WHERE id='a3000000-0000-4000-8000-000000000002';
-SELECT save_quote('a3000000-0000-4000-8000-000000000002',jsonb_build_object('devisTotal',base+2*par_kg,'devisTransport',base+2*par_kg,'devisOM',0,'devisOMR',0,'devisTVA',0,'finL',10,'finW',10,'finH',10,'finP',2,'modePaiementPro','virement','fraisDivers','[]'::jsonb)) FROM tarifs WHERE destination_code='974' AND actif;
+-- The quote uses certified preparation measurements and the current shared version.
+SELECT save_preparation_measurements(id,'[{"dimL":10,"dimW":10,"dimH":10,"poids":2}]',updated_at,preparation_composition_version) FROM colis WHERE id='a3000000-0000-4000-8000-000000000002';
+SELECT save_quote('a3000000-0000-4000-8000-000000000002',jsonb_build_object('devisTotal',base+2*par_kg,'devisTransport',base+2*par_kg,'devisOM',0,'devisOMR',0,'devisTVA',0,'finL',10,'finW',10,'finH',10,'finP',2,'modePaiementPro','virement','fraisDivers','[]'::jsonb),(SELECT updated_at FROM colis WHERE id='a3000000-0000-4000-8000-000000000002')) FROM tarifs WHERE destination_code='974' AND actif;
 UPDATE colis SET statut='devis_envoye' WHERE id='a3000000-0000-4000-8000-000000000002';
 SELECT mark_manual_payment(id,devis_total) FROM colis WHERE id='a3000000-0000-4000-8000-000000000002';
 SELECT test_work_assert((SELECT statut='paye' AND next_action='Vérifier le transporteur demain' AND next_action_source='manual' AND next_action_at='2030-09-11T10:00:00Z'::timestamptz FROM colis WHERE id='a3000000-0000-4000-8000-000000000002'),'Payment does not erase a pending manual instruction');

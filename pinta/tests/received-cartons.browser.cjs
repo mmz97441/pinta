@@ -42,7 +42,7 @@ async function main() {
       assert.equal(await measures.getByRole('listitem').count(), 2, 'Existing cartons are visible in the inline panel');
       await measures.getByText('Boutique B', { exact: true }).waitFor();
       await f.page.getByRole('button', { name: 'Réceptionner un autre carton', exact: true }).click();
-      const dialog = f.page.getByRole('dialog', { name: 'Réceptionner un colis', exact: true });
+      const dialog = f.page.getByRole('dialog', { name: 'Réceptionner des cartons', exact: true });
       await dialog.getByRole('heading', { name: 'Carton 3', level: 3, exact: true }).waitFor();
       await dialog.getByLabel('Fournisseur · carton 3', { exact: true }).fill('Boutique C');
       await dialog.getByLabel('Numéro de suivi · carton 3', { exact: true }).fill('QA-ATTACH-003');
@@ -69,7 +69,7 @@ async function main() {
 
       // A receipt started from the general list must open its actual destination dossier.
       await f.page.goto(`${base}/colis?sort=client&dir=desc`);
-      await f.page.getByRole('button', { name: mobile ? 'Réceptionner un colis' : 'Nouveau colis', exact: true }).click();
+      await f.page.getByRole('button', { name: 'Réceptionner des cartons', exact: true }).click();
       await dialog.getByLabel('Client', { exact: true }).fill('Camille');
       await dialog.getByRole('button').filter({ hasText: /Exemple/ }).first().click();
       await dialog.getByRole('button').filter({ hasText: 'EXP-TEST-001' }).click();

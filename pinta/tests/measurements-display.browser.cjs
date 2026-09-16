@@ -21,7 +21,7 @@ async function main() {
         dims_par_colis: [{ dimL: 80, dimW: 10, dimH: 10, poids: 1 }, { dimL: 10, dimW: 80, dimH: 10, poids: 1 }],
         fin_l: 40, fin_w: 20, fin_h: 10, fin_p: 2,
       });
-      await f.context.addInitScript(() => localStorage.setItem('expedile_visible_columns', JSON.stringify(['ref', 'statut', 'client', 'volCm3', 'volKg', 'poids', 'total'])));
+      await f.context.addInitScript(staffId => localStorage.setItem('expedile_columns_v2:' + staffId, JSON.stringify(['ref', 'statut', 'client', 'volCm3', 'volKg', 'poids', 'total'])), ids.A);
       await f.login();
       if (!mobile) {
         await f.page.goto(base + '/colis');

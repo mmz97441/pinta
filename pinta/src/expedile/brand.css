@@ -285,7 +285,7 @@ label:has(input[type='checkbox']), label:has(input[type='radio']) { min-height: 
 html.dark .bg-blue-50, html.dark .bg-blue-100, html.dark .bg-sky-50 { background-color: #203744 !important; }
 html.dark .text-blue-500, html.dark .text-blue-600, html.dark .text-blue-700, html.dark .text-blue-800, html.dark .text-sky-600, html.dark .text-sky-700 { color: #AFCFFA !important; }
 html.dark .bg-amber-50, html.dark .bg-amber-100, html.dark .bg-yellow-50 { background-color: #3C3020 !important; }
-html.dark .text-amber-500, html.dark .text-amber-600, html.dark .text-amber-700, html.dark .text-amber-800, html.dark .text-yellow-600, html.dark .text-yellow-700 { color: #F4CF8B !important; }
+html.dark .text-amber-500, html.dark .text-amber-600, html.dark .text-amber-700, html.dark .text-amber-900, html.dark .text-amber-800, html.dark .text-yellow-600, html.dark .text-yellow-700 { color: #F4CF8B !important; }
 html.dark .bg-green-50, html.dark .bg-green-100, html.dark .bg-emerald-50, html.dark .bg-emerald-100 { background-color: #203A2D !important; }
 html.dark .text-green-500, html.dark .text-green-600, html.dark .text-green-700, html.dark .text-green-800, html.dark .text-emerald-500, html.dark .text-emerald-600, html.dark .text-emerald-700, html.dark .text-emerald-800 { color: #B0DFC0 !important; }
 html.dark .bg-red-50, html.dark .bg-red-100 { background-color: #44282A !important; }

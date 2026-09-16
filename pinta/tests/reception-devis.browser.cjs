@@ -51,16 +51,19 @@ async function main() {
 
       current = await setup(browser, 'directeur');
       Object.assign(current.tables.clients[0], { type: 'pro' });
-      Object.assign(current.tables.colis[0], { statut: 'en_preparation', nb_colis: 2, trackings: ['TEST-001'], trackings_detail: [{ number: 'TEST-001' }, {}], dims_par_colis: [first, second], dim_l: 80, dim_w: 80, dim_h: 10, poids: 2, fin_l: null, fin_w: null, fin_h: null, fin_p: null, mode_paiement_pro: 'virement' });
+      Object.assign(current.tables.colis[0], { statut: 'en_preparation', nb_colis: 2, trackings: ['TEST-001'], trackings_detail: [{ number: 'TEST-001' }, {}], dims_par_colis: [first, second], dim_l: 80, dim_w: 80, dim_h: 10, poids: 2, fin_l: null, fin_w: null, fin_h: null, fin_p: null, final_packages: [], final_measurements_version: null, outgoing_parcel_count: null, mode_paiement_pro: 'virement' });
       await current.page.setViewportSize(viewport);
       await current.login();
       await current.page.goto(`${base}/colis/${P}`);
       await current.page.getByTestId('quote-action-bar').waitFor();
       const verify = current.page.getByRole('button', { name: 'Enregistrer et vérifier le devis', exact: true });
       assert.equal(await verify.isDisabled(), true);
-      for (const [label, unit] of [['Longueur', 'cm'], ['Largeur', 'cm'], ['Hauteur', 'cm'], ['Poids réel', 'kg']]) assert.equal(await current.page.getByLabel(`${label} (${unit})`, { exact: true }).inputValue(), '');
+      for (const [label, unit] of [['Longueur', 'cm'], ['Largeur', 'cm'], ['Hauteur', 'cm'], ['Poids réel', 'kg']]) assert.equal(await current.page.getByLabel(`${label} · colis sortant 1 (${unit})`, { exact: true }).inputValue(), '');
       await current.page.screenshot({ path: path.join(output, `preparation-separate-${device}.png`), fullPage: true });
-      for (const [label, unit, value] of [['Longueur', 'cm', 40], ['Largeur', 'cm', 20], ['Hauteur', 'cm', 10], ['Poids réel', 'kg', 3]]) await current.page.getByLabel(`${label} (${unit})`, { exact: true }).fill(String(value));
+      for (const [label, unit, value] of [['Longueur', 'cm', 40], ['Largeur', 'cm', 20], ['Hauteur', 'cm', 10], ['Poids réel', 'kg', 3]]) await current.page.getByLabel(`${label} · colis sortant 1 (${unit})`, { exact: true }).fill(String(value));
+      assert.equal(await verify.isDisabled(), true, 'Final measures must be saved explicitly before calculating the quote.');
+      await current.page.getByRole('button', { name: 'Enregistrer les mesures de préparation', exact: true }).click();
+      await current.page.getByText('Mesures enregistrées, même si les documents restent à vérifier.', { exact: true }).waitFor();
       assert.equal(await verify.isDisabled(), false);
       await verify.click();
       await current.page.getByRole('button', { name: 'Envoyer le devis au client', exact: true }).waitFor();

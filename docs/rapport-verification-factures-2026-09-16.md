@@ -44,10 +44,12 @@ Date : 16 septembre 2026. Périmètre : lecture des documents, vérification des
 - Suite générale de non-régression navigateur réussie.
 - Aucune violation détectée par l’audit d’accessibilité du nouvel espace sur ordinateur/mobile et clair/sombre ; inspection visuelle des quatre configurations.
 - Lint et compilation de production réussis.
-- Deux fixtures historiques de devis corrigées : elles omettaient l’accord client et les mesures de préparation désormais obligatoires. Aucune protection de production affaiblie.
+- Des fixtures historiques de devis corrigées : elles omettaient l’accord client et les mesures de préparation désormais obligatoires. Aucune protection de production affaiblie.
 - Migration répétée sur le schéma réel dans une transaction annulée ; sauvegarde privée avant application.
 
-Les essais navigateur utilisent des données fictives et vérifient aussi que le contenu du PDF change avec la facture. Aucun client n’est notifié par ces tests. Les nouvelles suites sont ajoutées à la vérification continue du dépôt.
+Les essais navigateur utilisent des données fictives et vérifient aussi que le contenu du PDF change avec la facture. Aucun client n’est notifié par ces tests. Les nouvelles suites sont ajoutées à la vérification continue du dépôt. Les anciens scénarios de réception et d’organisation ont également été remis en accord avec les écrans actuels, en conservant leurs assertions métier.
+
+Le contrôle élargi a également corrigé le contraste de l’avis de renouvellement d’abonnement en thème sombre et rétabli l’explication de consultation seule pour les pièces reçues d’un dossier figé sans facture enregistrée.
 
 ## Mise en ligne et données existantes
 

@@ -30,9 +30,9 @@ async function run() {
     });
     f.page.setDefaultTimeout(10000);
     await f.login();
-    await f.page.getByRole('button', { name: 'Nouveau colis', exact: true }).click();
-    const dialog = f.page.getByRole('dialog', { name: 'Réceptionner un colis' });
-    await dialog.getByLabel('Client', { exact: true }).fill('Camille');
+    await f.page.getByRole('button', { name: 'Réceptionner des cartons', exact: true }).first().click();
+    const dialog = f.page.getByRole('dialog', { name: 'Réceptionner des cartons' });
+    await dialog.getByPlaceholder('Rechercher un client…').fill('Camille');
     await dialog.getByRole('button').filter({ hasText: /Exemple/ }).first().click();
     await dialog.getByRole('button').filter({ hasText: 'EXP-TEST-001' }).click();
     await dialog.getByRole('heading', { name: 'Carton 3', level: 3, exact: true }).waitFor();
