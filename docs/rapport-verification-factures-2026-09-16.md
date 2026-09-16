@@ -2,6 +2,12 @@
 
 Date : 16 septembre 2026. Périmètre : lecture des documents, vérification des articles, validation et intégration au devis.
 
+## Origine du problème
+
+Le contrôle des enregistrements et des fichiers de stockage a confirmé que les documents reçus étaient présents et lisibles. Un document avait aussi été déposé plusieurs fois : le nombre de fichiers ne correspondait donc pas au nombre de factures distinctes.
+
+L'ancienne interface séparait la confirmation des articles analysés et la validation de la facture. Le montant proposé par l'analyse pouvait être affiché alors que le montant enregistré restait à zéro ; la validation était alors bloquée et son explication pouvait apparaître hors de la zone visible. Une catégorie manquante bloquait également la confirmation des articles. La refonte réunit ces informations et ces actions dans un parcours unique, avec les explications au niveau de la commande concernée.
+
 ## Parcours pour l’équipe
 
 1. Voir **toutes les factures reçues**, avec numéro, nom du fichier, état et progression.
@@ -37,12 +43,15 @@ Date : 16 septembre 2026. Périmètre : lecture des documents, vérification des
 
 ## Vérifications
 
+La [chaîne GitHub complète](https://github.com/mmz97441/pinta/actions/runs/35048982286) a réussi sur la version `35b3aa9` : application, fonctions serveur, migrations, permissions et tous les parcours navigateur. La dernière mise à jour de ce rapport ne modifie pas le code de l'application.
+
 - **121 tests unitaires application réussis**, dont 7 nouveaux sur doublons et remplacements.
 - **117 contrôles SQL réussis**, avec deux validations simultanées réelles : une confirmation, un conflit, un seul article et un seul événement d’audit.
 - **52 tests des fonctions serveur réussis**, dont un fichier changé pendant sa lecture.
 - **29 scénarios navigateur ciblés réussis** : 12 nouvel espace, 7 indicateur, 4 lecteur PDF, 6 parcours devis/client.
 - Suite générale de non-régression navigateur réussie.
 - Aucune violation détectée par l’audit d’accessibilité du nouvel espace sur ordinateur/mobile et clair/sombre ; inspection visuelle des quatre configurations.
+- Audit élargi : **32 configurations d’accessibilité réussies**. Parcours complet de l’équipe vérifié sur ordinateur et mobile.
 - Lint et compilation de production réussis.
 - Démarrage des bases de test fiabilisé : attente du serveur PostgreSQL définitif, pour éviter une course avec le serveur temporaire d’initialisation en CI.
 - Des fixtures historiques de devis corrigées : elles omettaient l’accord client et les mesures de préparation désormais obligatoires. Aucune protection de production affaiblie.
@@ -57,6 +66,8 @@ Le contrôle élargi a également corrigé le contraste de l’avis de renouvell
 ## Mise en ligne et données existantes
 
 La migration est appliquée avant la fonction OCR et l’interface. La publication est effectuée sur la branche principale et vérifiée sur le site déployé.
+
+Les douze scénarios du nouvel espace et les deux parcours complets de l’équipe ont également été rejoués sur l’interface de production, avec toutes les données métier simulées. La disponibilité des documents réels a été contrôlée séparément, en lecture seule.
 
 Les documents, articles et montants existants ne sont pas corrigés automatiquement. L’équipe choisit l’original d’un doublon et retire, après comparaison, les éventuels articles manuels déjà présents dans une facture. La validation ne remplace que les articles attachés à la facture sélectionnée.
 
