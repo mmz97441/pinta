@@ -138,6 +138,9 @@ async function open(f, invoice = B) {
   await f.page.goto(`${base}/colis/${ids.P}?invoice=${invoice}&returnTo=%2Fcolis#quote-documents`);
   await f.page.getByRole('region', { name: 'Vérification de la facture', exact: true, includeHidden: true }).waitFor({ state: 'attached' });
   await f.page.getByLabel('Facture à vérifier', { exact: true }).waitFor({ state: 'attached' });
+  // The region/select render before the async review context and its draft.
+  // Attached (rather than visible) also covers the mobile Document tab.
+  await f.page.getByTestId('invoice-action-bar').waitFor({ state: 'attached' });
 }
 
 async function visibleAndReachable(locator) {
@@ -179,6 +182,7 @@ async function main() {
       await navigation(f).getByRole('button', { name: 'Facture 1 — achat-verifie.pdf', exact: true }).waitFor();
       assert.equal(await navigation(f).getByRole('button', { name: /^Facture \d+ — / }).count(), 3);
       assert.equal(await f.page.getByLabel('Facture à vérifier', { exact: true }).inputValue(), B);
+      await validate(f).waitFor();
       assert.equal(await validate(f).count(), 1);
       assert.equal(await f.page.getByRole('button', { name: /^(Valider la facture|Confirmer les articles vérifiés)$/ }).count(), 0);
       assert.match(await navigation(f).innerText(), /Validée|Vérifiée/);
@@ -189,6 +193,10 @@ async function main() {
       await category(f).waitFor();
       assert.equal(await description(f).inputValue(), 'Organisateur de bureau');
       await canvas.waitFor();
+      await f.page.waitForFunction(previous => {
+        const source = document.querySelector('[aria-label="Document source"] canvas[data-rendered="true"]');
+        return source && source.toDataURL() !== previous;
+      }, firstDocument);
       assert.notEqual(await canvas.evaluate(element => element.toDataURL()), firstDocument, 'Selecting another invoice must render a different source PDF, not only change editable fields.');
       const actions = f.page.getByTestId('invoice-action-bar');
       assert.match(await actions.innerText(), /Facture 3 \/ 3 · autre-achat.pdf/);
@@ -225,7 +233,7 @@ async function main() {
       await f.page.getByRole('tab', { name: 'Articles et vérification', exact: true }).click();
       assert.equal(await description(f).inputValue(), 'Scelleuse relue par Camille');
       await saveDraft(f).click();
-      await f.page.waitForFunction(() => /brouillon.*enregistré/i.test(document.body.innerText));
+      await f.page.getByTestId('invoice-feedback').filter({ hasText: 'Brouillon enregistré pour scelleuse.pdf.' }).waitFor();
       assert.equal(f.tables.factures.find(invoice => invoice.id === B).valide, false);
       assert.equal(f.tables.lignes.length, 1);
       assert.equal(saves(f)[0].input.p_confirm, false);
