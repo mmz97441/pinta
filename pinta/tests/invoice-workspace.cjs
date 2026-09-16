@@ -145,6 +145,16 @@ async function open(f, invoice = B) {
   await f.page.getByTestId('invoice-action-bar').waitFor({ state: 'attached' });
 }
 
+async function openRetired(f, label = 'Facture 3 — autre-achat.pdf') {
+  const history = f.page.locator('details').filter({ has: f.page.locator('summary').filter({ hasText: /^Doublons retirés/ }) });
+  await history.waitFor();
+  // The successful command finishes its refresh (including retries) before
+  // switching to the original and re-enabling navigation.
+  await history.locator('button:enabled').first().waitFor({ state: 'attached' });
+  if (!await history.evaluate(element => element.open)) await history.locator('summary').click();
+  await history.getByRole('button', { name: label, exact: true }).click();
+}
+
 async function visibleAndReachable(locator) {
   await locator.waitFor();
   assert.ok(await locator.evaluate(element => {
@@ -271,6 +281,25 @@ async function main() {
       assert.equal(await f.page.getByLabel('Facture à vérifier', { exact: true }).inputValue(), C);
     });
 
+    await scenario('mobile-next-pending-invoice-keeps-articles-tab-from-document-url', { category: 'cat-test' }, async f => {
+      await f.page.setViewportSize({ width: 390, height: 844 });
+      await open(f, B);
+      assert.equal(new URL(f.page.url()).searchParams.get('invoice'), B);
+      await f.page.getByRole('tab', { name: 'Articles et vérification', exact: true }).click();
+      await validate(f).click(); await confirmed(f);
+      await f.page.getByRole('button', { name: 'Facture suivante à vérifier', exact: true }).click();
+      await description(f).waitFor();
+      assert.equal(await f.page.getByLabel('Facture à vérifier', { exact: true }).inputValue(), C);
+      assert.equal(await f.page.getByRole('tab', { name: 'Articles et vérification', exact: true }).getAttribute('aria-selected'), 'true');
+      assert.equal(await f.page.getByRole('tab', { name: 'Document', exact: true }).getAttribute('aria-selected'), 'false');
+      assert.equal(await description(f).inputValue(), 'Organisateur de bureau');
+      assert.equal(await f.page.getByRole('region', { name: 'Document source', exact: true }).isVisible(), false);
+      assert.equal(f.tables.factures.find(invoice => invoice.id === B).valide, true);
+      assert.equal(f.tables.factures.find(invoice => invoice.id === C).valide, false);
+      assert.equal(f.tables.lignes.filter(line => line.facture_id === B).length, 1);
+      assert.equal(saves(f).length, 1);
+    });
+
     await scenario('unsaved-draft-survives-return-to-list-and-reopening', {}, async f => {
       await open(f);
       await description(f).fill('Correction temporaire pendant un changement de dossier');
@@ -341,6 +370,8 @@ async function main() {
       assert.equal(f.tables.factures.find(invoice => invoice.id === C).duplicate_of_facture_id, undefined);
       await review(f).getByRole('button', { name: 'Retirer cette copie', exact: true }).click();
       await dialog.getByRole('button', { name: 'Retirer le doublon', exact: true }).click();
+      await f.page.getByTestId('invoice-header-feedback').filter({ hasText: 'Facture 3 retirée' }).waitFor();
+      await openRetired(f);
       await review(f).getByRole('button', { name: 'Remettre à vérifier', exact: true }).waitFor();
       assert.equal(f.tables.factures.length, 3);
       assert.equal(f.tables.factures.find(invoice => invoice.id === C).duplicate_of_facture_id, B);
@@ -376,16 +407,16 @@ async function main() {
       await f.page.getByRole('button', { name: 'Vérifier le retrait', exact: true }).click();
       await dialog.getByRole('button', { name: 'Retirer le doublon', exact: true }).click();
       await f.page.getByTestId('invoice-header-feedback').filter({ hasText: 'Facture 3 retirée comme doublon' }).waitFor();
-      assert.equal(f.calls.filter(call => call.kind === 'ocr').length, ocrBefore, 'Withdrawal must not require an analysis or a document download');
+      assert.ok(f.calls.filter(call => call.kind === 'ocr').slice(ocrBefore).every(call => call.input.factureId === B && call.input.action === 'resume'), 'Withdrawal must not analyze/download the copy; opening the retained original may resume its saved proposals.');
       assert.equal(await navigation(f).getByRole('button').count(), 2);
-      await f.page.getByRole('navigation', { name: 'Doublons retirés', exact: true }).getByRole('button', { name: 'Facture 3 — autre-achat.pdf', exact: true }).waitFor();
+      await openRetired(f);
       assert.equal(f.tables.factures.find(invoice => invoice.id === C).duplicate_of_facture_id, B);
       assert.deepEqual(f.tables.factures.filter(invoice => invoice.id !== C), originals);
       assert.deepEqual(f.tables.lignes, lines);
       assert.equal(f.tables.factures.length, 3);
       await f.page.getByRole('tab', { name: 'Articles et vérification', exact: true }).click();
       await review(f).getByRole('button', { name: 'Remettre à vérifier', exact: true }).click();
-      await f.page.getByTestId('invoice-header-feedback').filter({ hasText: 'Facture restaurée' }).waitFor();
+      await f.page.getByTestId('invoice-header-feedback').filter({ hasText: 'Facture remise à vérifier' }).waitFor();
       assert.equal(await navigation(f).getByRole('button').count(), 3);
       assert.equal(f.tables.factures.find(invoice => invoice.id === C).duplicate_of_facture_id, null);
       assert.equal(saves(f).length, 0);
@@ -403,6 +434,7 @@ async function main() {
       const header = f.page.getByTestId('invoice-header-feedback');
       await header.filter({ hasText: failure === 'conflict' ? 'Une facture a changé' : failure === 'network' ? 'Retrait indisponible' : 'Facture 3 retirée' }).waitFor();
       if (failure === 'refresh') {
+        await openRetired(f);
         await f.page.getByTestId('invoice-feedback').filter({ hasText: 'actualisation du dossier a échoué' }).waitFor();
         assert.equal(await navigation(f).getByRole('button').count(), 2, 'Acknowledged withdrawal remains effective despite a refresh failure');
         assert.equal(await f.page.getByRole('button', { name: 'Retirer cette facture en double', exact: true }).count(), 0);
@@ -417,6 +449,43 @@ async function main() {
       }
       assert.equal(f.calls.filter(call => call.kind === 'classify').length, 1);
       assert.equal(saves(f).length, 0);
+    });
+
+    for (const refreshFailure of [false, true]) await scenario(`last-invoice-validation-${refreshFailure ? 'refresh-warning-keeps-commit-recoverable' : 'opens-summary-with-confirmation'}`, { category: 'cat-test' }, async f => {
+      Object.assign(f.tables.factures.find(invoice => invoice.id === C), { valide: true, vendeur: 'Boutique C', montant: 28 });
+      f.tables.lignes.push({ id: 'last-invoice-existing-c', colis_id: ids.P, facture_id: C, description: 'Organisateur de bureau', qte: 1, prix_unitaire: 28, categorie_id: 'cat-test' });
+      const previousLines = clone(f.tables.lignes);
+      await f.page.goto(`${base}/colis/${ids.P}?section=devis&returnTo=%2Fcolis`);
+      await validate(f).waitFor();
+      assert.equal(new URL(f.page.url()).searchParams.has('invoice'), false);
+      assert.equal(await f.page.getByLabel('Facture à vérifier', { exact: true }).inputValue(), B);
+      f.control.failRefresh = refreshFailure;
+      await validate(f).click();
+      const header = f.page.getByTestId('invoice-header-feedback');
+      await header.filter({ hasText: 'facture et articles validés et enregistrés' }).waitFor();
+      await f.page.getByText('Factures vérifiées', { exact: true }).waitFor();
+      if (refreshFailure) {
+        await header.filter({ hasText: 'actualisation du dossier a échoué' }).waitFor();
+        await review(f).getByRole('button', { name: 'Actualiser', exact: true }).waitFor();
+        assert.equal(await validate(f).count(), 0, 'A committed invoice must not invite validation again after refresh fails.');
+        f.control.failRefresh = false;
+        await review(f).getByRole('button', { name: 'Actualiser', exact: true }).click();
+        await f.page.getByTestId('invoice-feedback').filter({ hasText: 'État enregistré rechargé' }).waitFor();
+      } else {
+        await f.page.getByRole('button', { name: 'Consulter les factures', exact: true }).waitFor();
+        assert.equal(await review(f).count(), 0, 'The final review automatically collapses into the completed summary.');
+        await f.page.waitForFunction(() => {
+          const message = document.querySelector('[data-testid="invoice-header-feedback"]');
+          if (!message) return false;
+          const box = message.getBoundingClientRect();
+          return box.top >= 0 && box.bottom <= innerHeight;
+        });
+      }
+      assert.equal(f.tables.factures.every(invoice => invoice.valide), true);
+      assert.deepEqual(f.tables.lignes.filter(line => line.facture_id !== B), previousLines);
+      assert.equal(f.tables.lignes.filter(line => line.facture_id === B).length, 1);
+      assert.equal(saves(f).length, 1);
+      assert.equal(f.tables.colis[0].quote_version, 0);
     });
 
     await scenario('saved-validation-survives-failed-refresh-and-offers-actualisation', { category: 'cat-test' }, async f => {

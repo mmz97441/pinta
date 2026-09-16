@@ -67,6 +67,7 @@ jobs:
           node tests/reçu-documents-factures.cjs
           node tests/invoice-review-indicator.cjs
           node tests/invoice-workspace.cjs
+          node tests/invoice-completion.browser.cjs
           node tests/preparation-autonomous.browser.cjs
           npm run test:browser
           node tests/accessibility.cjs
@@ -92,5 +93,6 @@ jobs:
             /tmp/pinta-received-cartons-results
             /tmp/pinta-carton-numbering-results
             /tmp/pinta-invoice-workspace-20260916
+            /tmp/pinta-invoice-completion
             /tmp/pinta-preparation-autonomous
             /tmp/pinta-preview.log
