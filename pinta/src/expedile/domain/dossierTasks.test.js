@@ -1,8 +1,20 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DOSSIER_TASKS, dossierTaskUrl, resolveDossierTask } from './dossierTasks.js';
+import { DOSSIER_TASKS, dossierTaskUrl, previousDossierTask, resolveDossierTask } from './dossierTasks.js';
 
 const prepared = { id: 'dossier-a', statut: 'en_preparation', preparationCompositionVersion: 2, finalMeasurementsVersion: 2, finalPackages: [{ dimL: 20, dimW: 30, dimH: 10, poids: 2 }], factures: [{ id: 'invoice-a', valide: true }] };
+
+test('previous screen follows the flow, skips inaccessible work and never wraps the first task', () => {
+  assert.equal(previousDossierTask('devis'), 'documents');
+  assert.equal(previousDossierTask('documents'), 'preparation');
+  assert.equal(previousDossierTask('preparation'), 'accord');
+  assert.equal(previousDossierTask('reception'), null);
+  assert.equal(previousDossierTask('unknown'), null);
+  const quoteOnly = permission => permission === 'perm_colis_calculer_devis';
+  assert.equal(previousDossierTask('devis', quoteOnly), 'preparation');
+  assert.equal(previousDossierTask('paiement', () => false), 'preparation');
+  assert.equal(previousDossierTask('devis', permission => permission === 'perm_factures_refuser'), 'documents');
+});
 
 test('deep invoice links and legacy document actions always open verification, never quote', () => {
   const actions = [{ id: 'documents-action', colis_id: prepared.id, kind: 'documents' }, { id: 'quote-action', colis_id: prepared.id, kind: 'quote' }];

@@ -9,6 +9,7 @@ Objectif : permettre à une équipe de 3 à 5 personnes de traiter les dossiers 
 | Accueil équipe | Deux vues principales : **À faire** et **En attente**. Les tâches en cours restent dans À faire. | Une liste lisible, personnalisée selon les missions ; tâches à prendre, relais et exceptions restent accessibles. |
 | Priorités individuelles | Conserver les permissions et préférences de chaque collaborateur. | La recherche globale retrouve aussi un dossier hors de sa mission ; aucune tâche n’est attribuée automatiquement en la consultant. |
 | Navigation | **Liste → tâche dédiée → résultat enregistré**. Le contexte s’ouvre à la demande. | Les filtres de retour sont conservés ; « Retour à ma liste » et « Tâche suivante » évitent de recommencer la recherche. Les anciennes URL restent compatibles. |
+| Retour entre tâches | Un bouton explicite « Revenir aux factures », « Revenir à la préparation », etc., en plus du retour à la liste. | Rouvre l’écran précédent du parcours sans annuler une validation ; conserve brouillons et filtres et saute les tâches non accessibles à cet opérateur. |
 | Réception | Un seul enregistrement des cartons, avec leurs mesures obligatoires ; notification séparée. | L’équipe voit la confirmation et peut ouvrir le carton reçu. Un carton rattaché garde la référence du dossier et poursuit sa numérotation. |
 | Accord client | Regrouper réception, accord de préparation et demande des justificatifs manquants dans le message proposé. | L’opérateur choisit le canal, relit, modifie et confirme. Une attente volontaire n’entraîne pas de relance d’accord proposée. |
 | Préparation | Écran autonome après accord, avec dimensions et poids des colis sortants. | Enregistrer les mesures ne crée ni devis ni notification. Après sauvegarde, un résumé remplace le formulaire ; « Modifier les mesures » le rouvre explicitement. |
@@ -36,7 +37,7 @@ Objectif : permettre à une équipe de 3 à 5 personnes de traiter les dossiers 
 
 Recettes exécutées avec des dossiers fictifs et interception des API métier : aucun essai ne crée de commande ou de notification réelle.
 
-- Tests unitaires et domaine : **142 réussis** ; tests Edge : **53 réussis**.
+- Tests unitaires et domaine : **143 réussis** ; tests Edge : **53 réussis**.
 - Base isolée : **76 assertions** sur le rattachement des justificatifs ; **172 contrôles** dans la suite factures/préparation, dont 26 sur les permissions de consultation. Courses concurrentes vérifiées sur les enregistrements.
 - Factures : **52 scénarios navigateur** couvrant validation, avancement, brouillons, doublons, liens directs, erreurs, permissions, PDF et import depuis les échanges.
 - Parcours par tâches : **5 scénarios**, préparation autonome : **7 scénarios**, notifications manuelles : **8 scénarios**, portail simplifié : **8 scénarios** ; conflits de devis et brouillons manuels : **4 scénarios**.
@@ -54,3 +55,5 @@ Les tests automatiques vérifient les comportements décrits ; ils ne remplacent
 - Fonctions `telegram-webhook` et `telegram-inbox-assign` publiées avec leur authentification existante conservée. La vérification JWT interne, le rôle actif et les permissions métier restent exigés pour le rattachement manuel.
 - Aucun modèle personnalisé ne remplace la demande d’accord dans la base : les nouveaux textes par défaut prennent effet avec cette interface.
 - Les nouvelles recettes sont intégrées au [contrôle GitHub de livraison](https://github.com/mmz97441/pinta/actions/workflows/verify-expedile.yml). La recette après publication utilise également des données fictives interceptées.
+
+La version principale `590911c` a passé le [contrôle GitHub complet](https://github.com/mmz97441/pinta/actions/runs/35130341510) et **57 scénarios après publication**. Le complément de retour entre tâches est vérifié par **6 scénarios ordinateur/mobile** : navigation au clavier, conservation des brouillons d’articles et de mesures, respect des permissions, aucun changement de statut et retour exact à la liste. Ces scénarios sont également intégrés aux recettes de livraison.

@@ -5,7 +5,7 @@ import { useApp } from '../../context/AppContext';
 import { Badge } from '../ui';
 import { receptionCartonManifest } from '../../domain/reception';
 import { workspaceReturnPath } from '../../domain/navigation';
-import { DOSSIER_TASKS, dossierTaskUrl } from '../../domain/dossierTasks';
+import { DOSSIER_TASKS, dossierTaskUrl, previousDossierTask } from '../../domain/dossierTasks';
 
 export default function DetailHeader({ task, onOpenContext }) {
   const navigate = useNavigate();
@@ -18,6 +18,7 @@ export default function DetailHeader({ task, onOpenContext }) {
     const showDocuments = ['perm_factures_voir', 'perm_factures_ajouter', 'perm_factures_valider', 'perm_factures_refuser', 'perm_factures_ocr', 'perm_factures_modifier_articles'].some(permission => can(permission));
     const showQuote = ['perm_colis_calculer_devis', 'perm_colis_envoyer_devis', 'perm_finances_voir_total'].some(permission => can(permission));
     const tasks = Object.entries(DOSSIER_TASKS).filter(([key]) => key === task || (key !== 'documents' || showDocuments) && (key !== 'devis' || showQuote));
+    const previousTask = previousDossierTask(task, can);
     return <header className="sticky top-0 z-20 border-b border-slate-200 bg-white px-3 py-3 sm:px-6 dark:border-slate-700 dark:bg-slate-900" data-testid="dossier-task-header">
       <div className="mx-auto flex max-w-[1600px] flex-wrap items-center gap-2 sm:gap-3">
         <button aria-label="Retour à la liste de travail" onClick={() => navigate(workspaceReturnPath(location.search))} className="flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-xl text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"><ArrowLeft size={21} /></button>
@@ -26,8 +27,9 @@ export default function DetailHeader({ task, onOpenContext }) {
           <p className="truncate text-xs text-slate-600 dark:text-slate-300">{selClient?.nom || 'Client'}{selDest ? ` · ${selDest.label || selDest.nom}` : ''}</p>
         </div>
         <button onClick={() => onOpenContext?.('reception')} aria-haspopup="dialog" className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl border border-slate-300 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"><PanelRightOpen size={17} />Contexte{unread > 0 && <span className="rounded-full bg-blue-100 px-1.5 py-0.5 text-xs text-blue-800" aria-label={`${unread} message${unread > 1 ? 's' : ''} non lu${unread > 1 ? 's' : ''}`}>{unread}</span>}</button>
-        <div className="flex w-full items-center justify-between gap-3 pl-12 sm:w-auto sm:pl-0">
+        <div className="flex w-full flex-wrap items-center justify-between gap-2 sm:w-auto">
           {(sel.archive || ['annule','livre','refuse_client'].includes(sel.statut)) && <Badge statut={sel.statut} />}
+          {previousTask && <button onClick={() => navigate(dossierTaskUrl(sel.id, previousTask, location.search))} className="inline-flex min-h-11 items-center gap-1.5 rounded-xl border border-slate-300 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"><ArrowLeft size={16} />{DOSSIER_TASKS[previousTask].backLabel}</button>}
           <label className="min-w-0"><span className="sr-only">Tâche du dossier</span><select value={task} aria-label="Tâche du dossier" onChange={event => navigate(dossierTaskUrl(sel.id, event.target.value, location.search))} className="min-h-11 max-w-full rounded-xl border border-slate-200 bg-white px-2 text-sm font-semibold text-slate-700 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200">{tasks.map(([key, definition]) => <option key={key} value={key}>{definition.label}</option>)}</select></label>
         </div>
       </div>

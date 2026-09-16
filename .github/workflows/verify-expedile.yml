@@ -70,6 +70,7 @@ jobs:
           node tests/invoice-completion.browser.cjs
           node tests/preparation-autonomous.browser.cjs
           node tests/task-flow.browser.cjs
+          node tests/task-back-navigation.browser.cjs
           node tests/quote-task-conflict.browser.cjs
           node tests/dossier-shell.browser.cjs
           node tests/personal-work.browser.cjs
@@ -105,6 +106,7 @@ jobs:
             /tmp/pinta-invoice-completion
             /tmp/pinta-preparation-autonomous
             /tmp/pinta-quote-task-conflict
+            /tmp/pinta-task-back-navigation
             /tmp/pinta-task-flow
             /tmp/pinta-dossier-shell
             /tmp/pinta-personal-work
