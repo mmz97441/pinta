@@ -77,7 +77,7 @@ function Permission({ allowed, children }) {
 // ── Wrapper: Staff colis detail (reads :id from URL) ──
 function StaffColisDetail() {
   const { id } = useParams();
-  const { setSelId, sel, data, dataLoading, refreshColis } = useApp();
+  const { setSelId, sel, data, dataLoading, refreshColis, can } = useApp();
   const [detailLoading, setDetailLoading] = useState(true);
   const [detailError, setDetailError] = useState('');
   const navigate = useNavigate();
@@ -114,7 +114,7 @@ function StaffColisDetail() {
           </div>
           <div className="flex-1 lg:order-1 space-y-4 min-w-0">
             <ColisInfo />
-            {sel.statut !== 'en_preparation' && <FacturesPanel />}
+            {sel.statut !== 'en_preparation' && ['perm_factures_voir', 'perm_factures_ajouter', 'perm_factures_valider', 'perm_factures_refuser', 'perm_factures_ocr', 'perm_factures_modifier_articles'].some(permission => can(permission)) && <FacturesPanel />}
             <ChatPanel />
             <AuditLog />
           </div>

@@ -76,7 +76,7 @@ export default function ConfirmDialog() {
             <X size={20} />
           </button>
         </div>
-        <p className="text-sm text-gray-600 dark:text-gray-300 mb-6 whitespace-pre-line">
+        <p className="text-sm text-gray-600 dark:text-gray-300 mb-6 whitespace-pre-line break-words">
           {cfm.msg}
         </p>
         <div className="flex gap-3">

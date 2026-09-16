@@ -18,7 +18,7 @@ const emptyLine = () => ({ desc: '', qte: 1, prix: '', cat: '' });
 const reviewDraftCache = new Map();
 const name = invoice => invoice?.fichierNom || invoice?.vendeur || 'Document sans nom';
 const isReplaced = (invoice, invoices) => invoices.some(other => other.replacesFactureId === invoice.id);
-const stateLabel = (invoice, invoices) => invoice.duplicateOfId ? 'Doublon conservé' : isReplaced(invoice, invoices) ? 'Remplacée' : invoice.rejetMotif ? 'À remplacer' : invoice.valide ? 'Validée' : 'À vérifier';
+const stateLabel = (invoice, invoices) => invoice.duplicateOfId ? 'Retirée · doublon' : isReplaced(invoice, invoices) ? 'Remplacée' : invoice.rejetMotif ? 'À remplacer' : invoice.valide ? 'Validée' : 'À vérifier';
 
 function seedDraft(invoice, record, lines) {
   const saved = lines.filter(line => line.factureId === invoice.id);
@@ -70,6 +70,8 @@ export default function InvoiceWorkspace({ workspace = false, tab, onTabChange, 
   const [reloadRequired, setReloadRequired] = useState({});
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState('');
+  const [removingDuplicate, setRemovingDuplicate] = useState(false);
+  const [originalId, setOriginalId] = useState('');
   const uploadRef = useRef(null);
   const uploadTarget = useRef(null);
   const editorRef = useRef(null);
@@ -77,6 +79,8 @@ export default function InvoiceWorkspace({ workspace = false, tab, onTabChange, 
   const documentRef = useRef(null);
   const resumedFiles = useRef(new Set());
   const invoices = sel?.factures || [];
+  const activeInvoices = invoices.filter(invoice => !invoice.duplicateOfId);
+  const retiredInvoices = invoices.filter(invoice => invoice.duplicateOfId);
   const selected = invoices.find(invoice => invoice.id === selectedId) || invoices.find(invoice => !invoice.valide && !invoice.duplicateOfId && !invoice.rejetMotif && !isReplaced(invoice, invoices)) || invoices[0];
   const invoiceId = selected?.id;
   const record = records[invoiceId];
@@ -92,6 +96,11 @@ export default function InvoiceWorkspace({ workspace = false, tab, onTabChange, 
   const pending = invoices.filter(invoice => stateLabel(invoice, invoices) === 'À vérifier');
   const unlinked = (sel?.lignes || []).filter(line => !line.factureId);
   const index = invoices.findIndex(invoice => invoice.id === invoiceId);
+  const navigationInvoices = selected?.duplicateOfId ? retiredInvoices : activeInvoices;
+  const navigationIndex = navigationInvoices.findIndex(invoice => invoice.id === invoiceId);
+  const originalCandidates = activeInvoices.filter(invoice => invoice.id !== invoiceId && invoice.fichier && !invoice.rejetMotif && !isReplaced(invoice, invoices));
+  const chosenOriginal = originalCandidates.find(invoice => invoice.id === originalId);
+  const isOriginalOfCopies = invoices.some(invoice => invoice.duplicateOfId === invoiceId);
   const duplicateCandidates = (record?.duplicateCandidateIds || []).map(id => invoices.find(invoice => invoice.id === id)).filter(invoice => invoice && !invoice.duplicateOfId && !invoice.rejetMotif && !isReplaced(invoice, invoices));
   const contextFingerprint = JSON.stringify([sel?.factures, sel?.lignes]);
   const canResume = can('perm_factures_ocr') || can('perm_factures_valider');
@@ -155,7 +164,7 @@ export default function InvoiceWorkspace({ workspace = false, tab, onTabChange, 
   const feedbackFor = (id, message, type = 'success') => { if (alive.current) setFeedbacks(previous => ({ ...previous, [id || 'general']: { message, type } })); };
   const change = changes => setDrafts(previous => ({ ...previous, [invoiceId]: { ...previous[invoiceId], ...changes, dirty: true } }));
   const changeLine = (position, changes) => change({ lines: draft.lines.map((line, i) => i === position ? { ...line, ...changes } : line) });
-  const choose = id => { setSelectedId(id); setRejecting(false); setReason(''); };
+  const choose = id => { setSelectedId(id); setRejecting(false); setReason(''); setRemovingDuplicate(false); setOriginalId(''); };
   const chooseForReview = id => { choose(id); setTab('articles'); requestAnimationFrame(() => { editorRef.current?.scrollIntoView({ block: 'start' }); editorRef.current?.focus({ preventScroll: true }); }); };
   const focusField = field => { const element = editorRef.current?.querySelector(`[data-field="${field}"]`); element?.focus(); element?.scrollIntoView({ block: 'center', behavior: 'smooth' }); };
   const run = async (key, operation) => {
@@ -165,7 +174,7 @@ export default function InvoiceWorkspace({ workspace = false, tab, onTabChange, 
     try { await operation(); }
     catch (error) {
       feedbackFor(target, error.message || 'Enregistrement interrompu. Votre saisie est conservée. Actualisez pour vérifier le résultat.', 'error');
-      if (key === 'request' || key === 'upload') setHeaderFeedback({ type: 'error', message: error.message || 'L’action n’a pas pu être enregistrée.' });
+      if (['request', 'upload', 'duplicate', 'restore'].includes(key)) setHeaderFeedback({ type: 'error', message: error.message || 'L’action n’a pas pu être enregistrée.' });
       if (error.code === '40001' || /fetch|network|serveur est indisponible/i.test(error.message || '')) setReloadRequired(previous => ({ ...previous, [target]: true }));
     } finally { busyRef.current = false; if (alive.current) setBusy(''); }
   };
@@ -216,12 +225,25 @@ export default function InvoiceWorkspace({ workspace = false, tab, onTabChange, 
     if (draft.dirty || (sel.lignes || []).some(line => line.factureId === invoiceId)) askConfirm({ title: 'Utiliser les propositions de l’analyse ?', msg: 'Le brouillon de cette facture sera remplacé. Les articles enregistrés restent inchangés jusqu’à votre validation.', okLabel: 'Utiliser les propositions', onOk: apply });
     else apply();
   };
-  const classify = original => askConfirm({ title: 'Conserver cette facture comme doublon ?', msg: `« ${name(selected)} » et « ${name(original)} » ont le même contenu. Cette copie et ses articles seront exclus du devis, sans suppression du fichier ni message au client.`, okLabel: 'Conserver comme doublon', onOk: () => run('duplicate', async () => {
-    await invokeOCR(selected, 'resume'); await invokeOCR(original, 'resume');
-    await sb.classifyInvoiceDuplicate(invoiceId, original.id, draft.reviewToken, records[original.id]?.reviewToken);
-    setDrafts(previous => ({ ...previous, [invoiceId]: { ...previous[invoiceId], dirty: false, editing: false } }));
-    await afterCommit(invoiceId, 'Doublon conservé dans l’historique et exclu du devis. Aucun message envoyé au client.');
+  const applyClassification = result => {
+    setData(previous => previous.map(parcel => parcel.id !== sel.id ? parcel : { ...parcel, factures: parcel.factures.map(invoice => invoice.id === invoiceId ? result.facture : invoice) }));
+    setDrafts(previous => ({ ...previous, [invoiceId]: { ...previous[invoiceId], dirty: false, editing: !result.facture.duplicateOfId, reviewToken: result.reviewToken } }));
+    setRecords(previous => ({ ...previous, [invoiceId]: { ...previous[invoiceId], reviewToken: result.reviewToken } }));
+    setReloadRequired(previous => ({ ...previous, [invoiceId]: false }));
+  };
+  const classify = original => askConfirm({ title: 'Retirer cette facture en double ?', msg: `Vous confirmez que ces deux documents correspondent au même achat.\n\nÀ retirer : facture ${index + 1} — ${name(selected)}.\nÀ conserver : facture ${invoices.indexOf(original) + 1} — ${name(original)}.\n\nLa copie et ses articles seront exclus du devis. Elle restera consultable et restaurable dans « Doublons retirés ».${draft?.dirty ? '\nLe brouillon non enregistré de la copie sera abandonné.' : ''}\nAucun message ne sera envoyé au client.`, okLabel: 'Retirer le doublon', danger: true, onOk: () => run('duplicate', async () => {
+    const result = await sb.classifyInvoiceDuplicate(invoiceId, original.id, draft?.reviewToken || record?.reviewToken, records[original.id]?.reviewToken);
+    applyClassification(result); setRemovingDuplicate(false);
+    const message = `Facture ${index + 1} retirée comme doublon. La facture ${invoices.indexOf(original) + 1} est conservée ; la copie et ses articles sont exclus du devis.`;
+    setHeaderFeedback({ type: 'success', message });
+    await afterCommit(invoiceId, message);
   }) });
+  const restore = () => run('restore', async () => {
+    const result = await sb.restoreInvoiceDuplicate(invoiceId, record?.reviewToken);
+    applyClassification(result);
+    setHeaderFeedback({ type: 'success', message: 'Facture restaurée dans les documents du dossier. Vérifiez ses articles avant de valider.' });
+    await afterCommit(invoiceId, 'Facture remise à vérifier. Ses articles seront pris en compte après validation.');
+  });
   const upload = async event => {
     const file = event.target.files?.[0]; event.target.value = '';
     if (!file) return;
@@ -255,10 +277,21 @@ export default function InvoiceWorkspace({ workspace = false, tab, onTabChange, 
   return <section ref={sectionRef} id="quote-documents" aria-label="Factures d’achat" className="invoice-workspace min-w-0 scroll-mt-48 rounded-2xl border border-gray-200 bg-white">
     <input ref={uploadRef} type="file" accept="application/pdf,image/jpeg,image/png,image/webp" className="hidden" onChange={upload} />
     <div className="space-y-3 border-b border-gray-200 p-3 sm:p-4">
-      <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="flex items-center gap-2 text-base font-bold text-slate-800"><FileText size={19} />Factures du dossier <span className="rounded-full bg-slate-100 px-2 py-0.5 text-sm">{invoices.length}</span></h2><p className="mt-1 text-sm text-slate-600">{pending.length ? `${pending.length} à vérifier` : invoices.length ? 'Aucune facture en attente' : 'Ajoutez les factures reçues'} · {invoices.filter(invoice => invoice.valide && !invoice.duplicateOfId).length} validée(s){invoices.some(invoice => invoice.duplicateOfId) && ` · ${invoices.filter(invoice => invoice.duplicateOfId).length} doublon(s)`}</p></div>{canAdd && <button disabled={!!busy} className={SECONDARY} onClick={() => { uploadTarget.current = null; uploadRef.current?.click(); }}><Upload size={16} />Ajouter une facture</button>}</div>
-      {headerFeedback && <p role={headerFeedback.type === 'error' ? 'alert' : 'status'} className={`rounded-xl p-3 text-sm ${headerFeedback.type === 'error' ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'}`}>{headerFeedback.message}</p>}
-      <nav aria-label="Factures du dossier" className="flex gap-2 overflow-x-auto pb-1">{invoices.map((invoice, position) => <button key={invoice.id} disabled={!!busy} aria-label={`Facture ${position + 1} — ${name(invoice)}`} aria-current={invoiceId === invoice.id ? 'true' : undefined} onClick={() => choose(invoice.id)} className={`min-h-20 w-52 shrink-0 rounded-xl border p-3 text-left ${invoice.id === invoiceId ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-white hover:bg-slate-50'}`}><span className="block text-xs font-semibold text-slate-600">Facture {position + 1} · {stateLabel(invoice, invoices)}</span><span className="mt-1 block truncate text-sm font-semibold text-slate-800" title={name(invoice)}>{name(invoice)}</span><span className="block text-xs text-slate-600">{drafts[invoice.id]?.dirty ? 'Modifications non enregistrées' : records[invoice.id]?.draft ? 'Brouillon enregistré' : invoice.montant > 0 ? `${eur(invoice.montant)} HT` : 'Montant à vérifier'}</span></button>)}</nav>
-      {!!invoices.length && <div className="flex flex-wrap items-end gap-2"><label className="min-w-0 flex-1 text-xs font-semibold text-slate-600">Facture à vérifier<select aria-label="Facture à vérifier" disabled={!!busy} value={invoiceId || ''} onChange={event => choose(event.target.value)} className={INPUT}>{invoices.map((invoice, position) => <option key={invoice.id} value={invoice.id}>{position + 1}. {name(invoice)} · {stateLabel(invoice, invoices)}</option>)}</select></label><button aria-label="Facture précédente" className={SECONDARY} disabled={!!busy || index <= 0} onClick={() => choose(invoices[index - 1].id)}><ChevronLeft size={18} /></button><button aria-label="Facture suivante" className={SECONDARY} disabled={!!busy || index >= invoices.length - 1} onClick={() => choose(invoices[index + 1].id)}><ChevronRight size={18} /></button></div>}
+      <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="flex items-center gap-2 text-base font-bold text-slate-800"><FileText size={19} />Factures du dossier <span className="rounded-full bg-slate-100 px-2 py-0.5 text-sm">{activeInvoices.length}</span></h2><p className="mt-1 text-sm text-slate-600">{pending.length ? `${pending.length} à vérifier` : invoices.length ? 'Aucune facture en attente' : 'Ajoutez les factures reçues'} · {invoices.filter(invoice => invoice.valide && !invoice.duplicateOfId).length} validée(s){invoices.some(invoice => invoice.duplicateOfId) && ` · ${retiredInvoices.length} doublon(s) retiré(s)`}</p></div>{canAdd && <button disabled={!!busy} className={SECONDARY} onClick={() => { uploadTarget.current = null; uploadRef.current?.click(); }}><Upload size={16} />Ajouter une facture</button>}</div>
+      {headerFeedback && <p data-testid="invoice-header-feedback" role={headerFeedback.type === 'error' ? 'alert' : 'status'} className={`rounded-xl p-3 text-sm ${headerFeedback.type === 'error' ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'}`}>{headerFeedback.message}</p>}
+      <nav aria-label="Factures du dossier" className="flex gap-2 overflow-x-auto pb-1">{activeInvoices.map(invoice => <button key={invoice.id} disabled={!!busy} aria-label={`Facture ${invoices.indexOf(invoice) + 1} — ${name(invoice)}`} aria-current={invoiceId === invoice.id ? 'true' : undefined} onClick={() => choose(invoice.id)} className={`min-h-20 w-52 shrink-0 rounded-xl border p-3 text-left ${invoice.id === invoiceId ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-white hover:bg-slate-50'}`}><span className="block text-xs font-semibold text-slate-600">Facture {invoices.indexOf(invoice) + 1} · {stateLabel(invoice, invoices)}</span><span className="mt-1 block truncate text-sm font-semibold text-slate-800" title={name(invoice)}>{name(invoice)}</span><span className="block text-xs text-slate-600">{drafts[invoice.id]?.dirty ? 'Modifications non enregistrées' : records[invoice.id]?.draft ? 'Brouillon enregistré' : invoice.montant > 0 ? `${eur(invoice.montant)} HT` : 'Montant à vérifier'}</span></button>)}</nav>
+      {!!invoices.length && <div className="flex flex-wrap items-end gap-2"><label className="min-w-0 flex-1 text-xs font-semibold text-slate-600">Facture à vérifier<select aria-label="Facture à vérifier" disabled={!!busy} value={invoiceId || ''} onChange={event => choose(event.target.value)} className={INPUT}>{invoices.map((invoice, position) => <option key={invoice.id} value={invoice.id}>{position + 1}. {name(invoice)} · {stateLabel(invoice, invoices)}</option>)}</select></label><button aria-label="Facture précédente" className={SECONDARY} disabled={!!busy || navigationIndex <= 0} onClick={() => choose(navigationInvoices[navigationIndex - 1].id)}><ChevronLeft size={18} /></button><button aria-label="Facture suivante" className={SECONDARY} disabled={!!busy || navigationIndex >= navigationInvoices.length - 1} onClick={() => choose(navigationInvoices[navigationIndex + 1].id)}><ChevronRight size={18} /></button></div>}
+      {retiredInvoices.length > 0 && <details open={selected?.duplicateOfId ? true : undefined} className="rounded-xl border border-slate-200 bg-slate-50 p-3"><summary className="min-h-11 cursor-pointer py-2 text-sm font-semibold text-slate-700">Doublons retirés ({retiredInvoices.length})</summary><p className="mb-2 text-xs text-slate-600">Exclus du devis. Ouvrez une copie pour la consulter ou la remettre à vérifier.</p><nav aria-label="Doublons retirés" className="flex flex-wrap gap-2">{retiredInvoices.map(invoice => <button key={invoice.id} disabled={!!busy} aria-current={invoiceId === invoice.id ? 'true' : undefined} className={`${SECONDARY} max-w-full break-all text-left`} onClick={() => choose(invoice.id)}>Facture {invoices.indexOf(invoice) + 1} — {name(invoice)}</button>)}</nav></details>}
+      {selected && !inactive && editable && can('perm_factures_valider') && <div>
+        <button disabled={!!busy || !record || isOriginalOfCopies || !selected.fichier || !originalCandidates.length} aria-expanded={removingDuplicate} className={`${SECONDARY} text-red-700`} onClick={() => { setRemovingDuplicate(!removingDuplicate); setOriginalId(originalCandidates.length === 1 ? originalCandidates[0].id : ''); }}>Retirer cette facture en double</button>
+        {isOriginalOfCopies ? <p className="mt-1 text-xs text-slate-600">Cette facture est l’original de copies déjà retirées. Restaurez ces copies avant de changer d’original.</p> : !originalCandidates.length && <p className="mt-1 text-xs text-slate-600">Une autre facture active doit être présente pour choisir l’original à conserver.</p>}
+        {removingDuplicate && <div role="group" aria-label="Retrait d’une facture en double" className="mt-3 space-y-3 rounded-xl border border-amber-300 bg-amber-50 p-3">
+          <p className="break-words text-sm font-semibold text-slate-800">À retirer : facture {index + 1} — {name(selected)}</p>
+          <label className="block text-sm font-semibold text-slate-700">Facture originale à conserver<select aria-label="Facture originale à conserver" className={INPUT} value={originalId} onChange={event => setOriginalId(event.target.value)} disabled={!!busy}><option value="">Choisir la facture à conserver</option>{originalCandidates.map(invoice => <option key={invoice.id} value={invoice.id}>Facture {invoices.indexOf(invoice) + 1} — {name(invoice)} · {invoice.montant > 0 ? `${eur(invoice.montant)} HT` : 'Montant à vérifier'}</option>)}</select></label>
+          <p className="text-sm text-slate-700">Confirmez qu’il s’agit du même achat, même si le nom du fichier ou le scan diffère. La copie sera exclue du devis et restera restaurable.</p>
+          <div className="flex flex-wrap gap-2"><button disabled={!!busy || !chosenOriginal || !records[originalId]?.reviewToken} className={`${BUTTON} bg-red-700 text-white`} onClick={() => chosenOriginal && classify(chosenOriginal)}>Vérifier le retrait</button><button disabled={!!busy} className={SECONDARY} onClick={() => setRemovingDuplicate(false)}>Annuler le retrait</button></div>
+        </div>}
+      </div>}
       {editable && can('perm_comm_demander_facture') && <details><summary className="min-h-11 cursor-pointer py-2 text-sm text-slate-600">Demander une facture au client</summary><div className="flex flex-wrap gap-2"><button disabled={!!busy || !getClient(sel.clientId)?.telegramChatId || !can('perm_comm_telegram')} className={SECONDARY} onClick={() => requestInvoices('telegram')}>Demander par Telegram</button><button disabled={!!busy || !getClient(sel.clientId)?.email || !can('perm_comm_email')} className={SECONDARY} onClick={() => requestInvoices('email')}>Demander par email</button></div></details>}
       {unlinked.length > 0 && <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-800">{unlinked.length} article(s) saisi(s) sans facture source. Vérifiez le récapitulatif des articles du dossier pour éviter de les compter une seconde fois.</p>}
     </div>
@@ -270,13 +303,13 @@ export default function InvoiceWorkspace({ workspace = false, tab, onTabChange, 
       <div className={`invoice-panes ${workspace ? 'invoice-wide' : ''}`}>
         <div ref={documentRef} id={`invoice-document-${sel.id}`} tabIndex={-1} role="region" aria-label="Document source" className={`invoice-document min-w-0 scroll-mt-32 p-3 sm:p-4 ${activeTab === 'document' ? '' : 'invoice-pane-hidden'}`}><div className="mb-3 flex items-center justify-between gap-2"><p className="min-w-0 break-words text-sm font-semibold text-slate-800">{index + 1} / {invoices.length} · {name(selected)}</p></div><InlineDocument invoice={selected} /></div>
         <div ref={editorRef} id={`invoice-articles-${sel.id}`} tabIndex={-1} role="region" aria-label="Vérification de la facture" className={`invoice-editor min-w-0 space-y-4 p-3 sm:p-4 ${activeTab === 'articles' ? '' : 'invoice-pane-hidden'}`}>
-          <div><h3 className="text-base font-bold text-slate-800">Vérifier la facture {index + 1} sur {invoices.length}</h3><p className="mt-1 break-words text-sm text-slate-600">{name(selected)} · {stateLabel(selected, invoices)}</p></div>
+          <div><h3 className="text-base font-bold text-slate-800">{selected.duplicateOfId ? `Facture ${index + 1} retirée comme doublon` : `Vérifier la facture ${index + 1} sur ${invoices.length}`}</h3><p className="mt-1 break-words text-sm text-slate-600">{name(selected)} · {stateLabel(selected, invoices)}</p></div>
           {!editable && !pendingInvoiceAttachments(sel).length && <p className="rounded-xl bg-slate-100 p-3 text-sm text-slate-700">Consultation uniquement : ce dossier est payé, terminé ou archivé.</p>}
           {editable && !canEdit && <p className="rounded-xl bg-slate-100 p-3 text-sm text-slate-700">Votre rôle permet la consultation. La modification des articles nécessite une autorisation.</p>}
-          {selected.duplicateOfId && <div className="rounded-xl bg-slate-100 p-3 text-sm text-slate-700"><p>Copie de {name(invoices.find(invoice => invoice.id === selected.duplicateOfId))}. Ce document et ses articles sont exclus du devis.</p>{editable && can('perm_factures_valider') && <button className={`${BUTTON} underline`} disabled={!!busy} onClick={() => run('restore', async () => { await sb.restoreInvoiceDuplicate(invoiceId, record?.reviewToken); await afterCommit(invoiceId, 'Facture remise à vérifier. Ses articles seront pris en compte après validation.'); })}>Remettre à vérifier</button>}</div>}
+          {selected.duplicateOfId && <div className="rounded-xl bg-slate-100 p-3 text-sm text-slate-700"><p>Copie de {name(invoices.find(invoice => invoice.id === selected.duplicateOfId))}. Ce document et ses articles sont exclus du devis.</p>{editable && can('perm_factures_valider') && <button className={`${BUTTON} underline`} disabled={!!busy} onClick={restore}>Remettre à vérifier</button>}</div>}
           {isReplaced(selected, invoices) && <p className="rounded-xl bg-slate-100 p-3 text-sm text-slate-700">Ce document a été remplacé. Vérifiez la facture corrigée depuis la liste.</p>}
           {selected.rejetMotif && <p className="rounded-xl bg-red-50 p-3 text-sm text-red-700">Correction attendue : {selected.rejetMotif}</p>}
-          {!!duplicateCandidates.length && !inactive && <div className="space-y-2 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800"><p className="font-semibold">Document identique reçu plusieurs fois</p>{duplicateCandidates.map(original => <div key={original.id}><button className="min-h-11 text-left underline" onClick={() => choose(original.id)}>Voir {name(original)}</button>{editable && can('perm_factures_valider') && <button disabled={!!busy || !draft} className={SECONDARY} onClick={() => classify(original)}>Classer comme doublon</button>}</div>)}<p className="text-xs">Gardez un seul original dans le devis. Le fichier et son historique sont conservés.</p></div>}
+          {!!duplicateCandidates.length && !inactive && !isOriginalOfCopies && <div className="space-y-2 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800"><p className="font-semibold">Document identique reçu plusieurs fois</p>{duplicateCandidates.map(original => <div key={original.id}><button className="min-h-11 text-left underline" onClick={() => choose(original.id)}>Voir {name(original)}</button>{editable && can('perm_factures_valider') && <button disabled={!!busy || !record || !records[original.id]} className={SECONDARY} onClick={() => classify(original)}>Retirer cette copie</button>}</div>)}<p className="text-xs">Gardez un seul original dans le devis. Le fichier et son historique sont conservés.</p></div>}
           {loading && !draft && <p role="status" className="flex items-center gap-2 text-sm text-slate-600"><Loader2 size={16} className="animate-spin" />Chargement de la vérification…</p>}
           {draft && <>
             <div className="flex flex-wrap gap-2">{canAdd && !inactive && <button data-field="document" disabled={!!busy} className={SECONDARY} onClick={() => { const pick = () => { uploadTarget.current = invoiceId; uploadRef.current?.click(); }; if (selected.fichier) askConfirm({ title: 'Remplacer le document source ?', msg: 'La validation sera annulée. Les articles devront être vérifiés à nouveau avec le nouveau fichier.', okLabel: 'Choisir un nouveau document', onOk: pick }); else pick(); }}><Upload size={15} />{selected.fichier ? 'Remplacer le document' : 'Joindre le document'}</button>}{editable && can('perm_factures_ocr') && selected.fichier && !inactive && <button disabled={!!busy} className={SECONDARY} onClick={analyze}><Scan size={15} />{record?.extraction ? 'Reprendre l’analyse' : 'Analyser la facture'}</button>}</div>
@@ -298,7 +331,7 @@ export default function InvoiceWorkspace({ workspace = false, tab, onTabChange, 
               <button data-field="add-line" className={`${SECONDARY} w-full border-dashed`} onClick={() => change({ lines: [...draft.lines, emptyLine()] })}><Plus size={16} />Ajouter un article à cette facture</button>
             </fieldset>
             <div data-testid="invoice-action-bar" className="space-y-3 border-t border-gray-200 pt-4">
-              <div className="flex items-center justify-between gap-2"><p className="min-w-0 break-words text-sm font-semibold text-slate-800">Facture {index + 1} / {invoices.length} · {name(selected)}</p><div className="flex shrink-0 gap-1"><button aria-label="Vérifier la facture précédente" className={SECONDARY} disabled={!!busy || index <= 0} onClick={() => chooseForReview(invoices[index - 1].id)}><ChevronLeft size={16} /></button><button aria-label="Vérifier la facture suivante" className={SECONDARY} disabled={!!busy || index >= invoices.length - 1} onClick={() => chooseForReview(invoices[index + 1].id)}><ChevronRight size={16} /></button></div></div>
+              <div className="flex items-center justify-between gap-2"><p className="min-w-0 break-words text-sm font-semibold text-slate-800">Facture {index + 1} / {invoices.length} · {name(selected)}</p><div className="flex shrink-0 gap-1"><button aria-label="Vérifier la facture précédente" className={SECONDARY} disabled={!!busy || navigationIndex <= 0} onClick={() => chooseForReview(navigationInvoices[navigationIndex - 1].id)}><ChevronLeft size={16} /></button><button aria-label="Vérifier la facture suivante" className={SECONDARY} disabled={!!busy || navigationIndex >= navigationInvoices.length - 1} onClick={() => chooseForReview(navigationInvoices[navigationIndex + 1].id)}><ChevronRight size={16} /></button></div></div>
               {feedback && <p data-testid="invoice-feedback" role={feedback.type === 'error' ? 'alert' : 'status'} className={`rounded-xl p-3 text-sm ${feedback.type === 'error' ? 'bg-red-50 text-red-700' : feedback.type === 'warning' ? 'bg-amber-50 text-amber-800' : 'bg-emerald-50 text-emerald-700'}`}>{feedback.message}</p>}
               {draft.dirty && <p className="text-xs font-semibold text-amber-800">Modifications non enregistrées. Le changement de facture conserve votre saisie ; enregistrez le brouillon avant de quitter le dossier.</p>}
               {record?.reviewToken && draft.reviewToken !== record.reviewToken && draft.dirty && <p role="alert" className="text-sm text-amber-800">La version enregistrée a changé. Votre saisie est conservée ; rechargez pour retrouver les modifications de votre collègue.</p>}

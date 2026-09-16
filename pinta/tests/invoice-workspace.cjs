@@ -41,8 +41,9 @@ async function fixture(browser, options = {}) {
     [C, { factureId: C, reviewToken: 'review-1-c', extraction: { id: EXTRACTION_C, facture_id: C, document_hash: options.duplicates ? 'hash-b' : 'hash-c', document_file_url: ids.P + '/autre-achat.pdf', document_storage_identity: 'stored-c-1', status: 'review', vendeur: 'Boutique C', total: 28, lines: [{ desc: 'Organisateur de bureau', qte: 1, prix: 28, cat: 'cat-test' }], warnings: [] }, draft: null, documentHash: options.duplicates ? 'hash-b' : 'hash-c', duplicateCandidateIds: options.duplicates ? [B] : [] }],
   ]);
   if (options.duplicates) Object.assign(records.get(C).extraction, { vendeur: 'Boutique B', total: 16.64, lines: [{ desc: 'Scelleuse thermique', qte: 1, prix: 16.64, cat: 'cat-test' }] });
+  if (options.noAnalysis) for (const id of [B, C]) Object.assign(records.get(id), { extraction: null, documentHash: null, duplicateCandidateIds: [] });
   const calls = [], mutations = [];
-  const control = { failSave: false, loseResponse: false, failContext: false, failRefresh: false, gate: null };
+  const control = { failSave: false, loseResponse: false, failContext: false, failRefresh: false, failClassify: false, gate: null };
   page.on('request', request => {
     const url = new URL(request.url());
     if (/\/rest\/v1\/(factures|lignes)$/.test(url.pathname) && request.method() !== 'GET') mutations.push({ path: url.pathname, method: request.method(), input: request.postDataJSON() });
@@ -101,8 +102,9 @@ async function fixture(browser, options = {}) {
   });
   await context.route('**/rest/v1/rpc/classify_invoice_duplicate', route => {
     const input = route.request().postDataJSON(); calls.push({ kind: 'classify', input });
+    if (control.failClassify) return answer(route, { message: 'Retrait indisponible. Votre facture est conservée.' }, 503);
     const record = records.get(input.p_facture_id), original = records.get(input.p_original_facture_id);
-    if (record.reviewToken !== input.p_expected_review_token || original.reviewToken !== input.p_expected_original_review_token || record.documentHash !== original.documentHash) return answer(route, { code: '40001', message: 'Vérifiez à nouveau les deux documents avant le classement.' }, 409);
+    if (record.reviewToken !== input.p_expected_review_token || original.reviewToken !== input.p_expected_original_review_token) return answer(route, { code: '40001', message: 'Une facture a changé. Rechargez la comparaison.' }, 409);
     const invoice = tables.factures.find(item => item.id === input.p_facture_id);
     invoice.duplicate_of_facture_id = input.p_original_facture_id; invoice.valide = false;
     record.reviewToken += '-classified'; record.draft = null;
@@ -331,14 +333,14 @@ async function main() {
       const original = clone(f.tables.factures.find(invoice => invoice.id === B));
       const lines = clone(f.tables.lignes);
       await review(f).getByText('Document identique reçu plusieurs fois', { exact: true }).waitFor();
-      await review(f).getByRole('button', { name: 'Classer comme doublon', exact: true }).click();
+      await review(f).getByRole('button', { name: 'Retirer cette copie', exact: true }).click();
       const dialog = f.page.getByRole('dialog');
       await dialog.waitFor();
       assert.equal(f.calls.filter(call => call.kind === 'classify').length, 0);
       await dialog.getByRole('button', { name: 'Annuler', exact: true }).click();
       assert.equal(f.tables.factures.find(invoice => invoice.id === C).duplicate_of_facture_id, undefined);
-      await review(f).getByRole('button', { name: 'Classer comme doublon', exact: true }).click();
-      await dialog.getByRole('button', { name: 'Conserver comme doublon', exact: true }).click();
+      await review(f).getByRole('button', { name: 'Retirer cette copie', exact: true }).click();
+      await dialog.getByRole('button', { name: 'Retirer le doublon', exact: true }).click();
       await review(f).getByRole('button', { name: 'Remettre à vérifier', exact: true }).waitFor();
       assert.equal(f.tables.factures.length, 3);
       assert.equal(f.tables.factures.find(invoice => invoice.id === C).duplicate_of_facture_id, B);
@@ -350,6 +352,71 @@ async function main() {
       assert.equal(f.tables.factures.find(invoice => invoice.id === C).duplicate_of_facture_id, null);
       assert.equal(f.calls.filter(call => call.kind === 'classify').length, 1);
       assert.equal(f.calls.filter(call => call.kind === 'restore').length, 1);
+    });
+
+    await scenario('manual-duplicate-without-analysis-mobile-cancel-withdraw-restore', { noAnalysis: true }, async f => {
+      await f.page.setViewportSize({ width: 390, height: 844 });
+      await open(f, C);
+      const originals = clone(f.tables.factures.filter(invoice => invoice.id !== C));
+      const lines = clone(f.tables.lignes);
+      await f.page.getByRole('button', { name: 'Retirer cette facture en double', exact: true }).click();
+      await f.page.getByLabel('Facture originale à conserver', { exact: true }).selectOption(B);
+      assert.equal(await f.page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false);
+      const audit = await new AxeBuilder({ page: f.page }).include('#quote-documents').withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
+      assert.deepEqual(audit.violations.map(item => item.id), []);
+      await f.page.getByRole('group', { name: 'Retrait d’une facture en double' }).scrollIntoViewIfNeeded();
+      await f.page.screenshot({ path: path.join(output, 'manual-duplicate-mobile.png') });
+      await f.page.getByRole('button', { name: 'Vérifier le retrait', exact: true }).click();
+      const dialog = f.page.getByRole('dialog');
+      assert.match(await dialog.innerText(), /À retirer : facture 3.*autre-achat.pdf/);
+      assert.match(await dialog.innerText(), /À conserver : facture 2.*scelleuse.pdf/);
+      await dialog.getByRole('button', { name: 'Annuler', exact: true }).click();
+      assert.equal(f.calls.filter(call => call.kind === 'classify').length, 0);
+      const ocrBefore = f.calls.filter(call => call.kind === 'ocr').length;
+      await f.page.getByRole('button', { name: 'Vérifier le retrait', exact: true }).click();
+      await dialog.getByRole('button', { name: 'Retirer le doublon', exact: true }).click();
+      await f.page.getByTestId('invoice-header-feedback').filter({ hasText: 'Facture 3 retirée comme doublon' }).waitFor();
+      assert.equal(f.calls.filter(call => call.kind === 'ocr').length, ocrBefore, 'Withdrawal must not require an analysis or a document download');
+      assert.equal(await navigation(f).getByRole('button').count(), 2);
+      await f.page.getByRole('navigation', { name: 'Doublons retirés', exact: true }).getByRole('button', { name: 'Facture 3 — autre-achat.pdf', exact: true }).waitFor();
+      assert.equal(f.tables.factures.find(invoice => invoice.id === C).duplicate_of_facture_id, B);
+      assert.deepEqual(f.tables.factures.filter(invoice => invoice.id !== C), originals);
+      assert.deepEqual(f.tables.lignes, lines);
+      assert.equal(f.tables.factures.length, 3);
+      await f.page.getByRole('tab', { name: 'Articles et vérification', exact: true }).click();
+      await review(f).getByRole('button', { name: 'Remettre à vérifier', exact: true }).click();
+      await f.page.getByTestId('invoice-header-feedback').filter({ hasText: 'Facture restaurée' }).waitFor();
+      assert.equal(await navigation(f).getByRole('button').count(), 3);
+      assert.equal(f.tables.factures.find(invoice => invoice.id === C).duplicate_of_facture_id, null);
+      assert.equal(saves(f).length, 0);
+    });
+
+    for (const failure of ['conflict', 'network', 'refresh']) await scenario(`manual-duplicate-different-files-${failure}`, {}, async f => {
+      await open(f, C);
+      await f.page.getByRole('button', { name: 'Retirer cette facture en double', exact: true }).click();
+      await f.page.getByLabel('Facture originale à conserver', { exact: true }).selectOption(B);
+      await f.page.getByRole('button', { name: 'Vérifier le retrait', exact: true }).click();
+      if (failure === 'conflict') f.records.get(B).reviewToken = 'changed-by-colleague';
+      if (failure === 'network') f.control.failClassify = true;
+      if (failure === 'refresh') f.control.failRefresh = true;
+      await f.page.getByRole('dialog').getByRole('button', { name: 'Retirer le doublon', exact: true }).click();
+      const header = f.page.getByTestId('invoice-header-feedback');
+      await header.filter({ hasText: failure === 'conflict' ? 'Une facture a changé' : failure === 'network' ? 'Retrait indisponible' : 'Facture 3 retirée' }).waitFor();
+      if (failure === 'refresh') {
+        await f.page.getByTestId('invoice-feedback').filter({ hasText: 'actualisation du dossier a échoué' }).waitFor();
+        assert.equal(await navigation(f).getByRole('button').count(), 2, 'Acknowledged withdrawal remains effective despite a refresh failure');
+        assert.equal(await f.page.getByRole('button', { name: 'Retirer cette facture en double', exact: true }).count(), 0);
+        assert.equal(f.tables.factures.find(invoice => invoice.id === C).duplicate_of_facture_id, B);
+        f.control.failRefresh = false;
+        await review(f).getByRole('button', { name: 'Actualiser', exact: true }).click();
+        await f.page.getByTestId('invoice-feedback').filter({ hasText: 'État enregistré rechargé' }).waitFor();
+      } else {
+        assert.equal(await header.getAttribute('role'), 'alert');
+        assert.equal(await navigation(f).getByRole('button').count(), 3);
+        assert.equal(f.tables.factures.find(invoice => invoice.id === C).duplicate_of_facture_id, undefined);
+      }
+      assert.equal(f.calls.filter(call => call.kind === 'classify').length, 1);
+      assert.equal(saves(f).length, 0);
     });
 
     await scenario('saved-validation-survives-failed-refresh-and-offers-actualisation', { category: 'cat-test' }, async f => {
@@ -372,6 +439,7 @@ async function main() {
       await open(f);
       await review(f).waitFor();
       const action = validate(f);
+      assert.equal(await f.page.getByRole('button', { name: 'Retirer cette facture en double', exact: true }).count(), 0);
       assert.ok(await action.count() === 0 || await action.isDisabled());
       const editor = description(f);
       assert.ok(await editor.count() === 0 || await editor.isDisabled() || await editor.getAttribute('readonly') !== null);

@@ -5,7 +5,7 @@ GRANT ALL ON ALL TABLES IN SCHEMA public TO authenticated;
 REVOKE ALL ON invoice_review_drafts FROM authenticated;
 CREATE FUNCTION review_assert(ok boolean,label text) RETURNS void LANGUAGE plpgsql AS $$ BEGIN IF NOT coalesce(ok,false) THEN RAISE EXCEPTION 'FAIL: %',label;END IF;RAISE NOTICE 'PASS: %',label;END; $$;
 CREATE FUNCTION review_reject(command text,label text) RETURNS void LANGUAGE plpgsql AS $$ BEGIN BEGIN EXECUTE command; EXCEPTION WHEN OTHERS THEN RAISE NOTICE 'PASS rejected: % [%]',label,SQLERRM;RETURN;END;RAISE EXCEPTION 'FAIL accepted: %',label;END; $$;
-CREATE FUNCTION review_token(f uuid) RETURNS text LANGUAGE sql AS $$ SELECT value->>'reviewToken' FROM jsonb_array_elements(get_invoice_review_context('e3000000-0000-4000-8000-000000000001')->'invoices') WHERE value->>'factureId'=f::text $$;
+CREATE FUNCTION review_token(f uuid) RETURNS text LANGUAGE sql AS $$ SELECT value->>'reviewToken' FROM jsonb_array_elements(get_invoice_review_context((SELECT colis_id FROM factures WHERE id=f))->'invoices') WHERE value->>'factureId'=f::text $$;
 CREATE FUNCTION review_lines(price numeric DEFAULT 100) RETURNS jsonb LANGUAGE sql AS $$ SELECT jsonb_build_array(jsonb_build_object('desc','Article vérifié','qte',1,'prix',price,'cat','e4000000-0000-4000-8000-000000000001')) $$;
 INSERT INTO auth.users(id,email) VALUES('e1000000-0000-4000-8000-000000000001','review-director@example.test'),('e1000000-0000-4000-8000-000000000002','review-client@example.test'),('e1000000-0000-4000-8000-000000000003','review-preparer@example.test');
 INSERT INTO staff_users(id,auth_id,nom,email,role,must_change_password) VALUES('e1100000-0000-4000-8000-000000000001','e1000000-0000-4000-8000-000000000001','Review director','review-director@example.test','directeur',false),('e1100000-0000-4000-8000-000000000003','e1000000-0000-4000-8000-000000000003','Review preparer','review-preparer@example.test','preparateur',false);
@@ -40,7 +40,8 @@ SELECT review_reject($q$SELECT save_invoice_review('e5000000-0000-4000-8000-0000
 SELECT review_reject($q$SELECT save_invoice_review('e5000000-0000-4000-8000-000000000001',review_token('e5000000-0000-4000-8000-000000000001'),'e3000000-0000-4000-8000-000000000001/original.pdf',review_lines(),101,'Vendor')$q$,'mismatched article total rejected atomically');
 SELECT review_reject($q$SELECT save_invoice_review('e5000000-0000-4000-8000-000000000001',review_token('e5000000-0000-4000-8000-000000000001'),'e3000000-0000-4000-8000-000000000001/original.pdf','[{"desc":"Article","qte":1,"prix":100,"cat":null}]',100,'Vendor')$q$,'uncategorized invoice cannot be approved');
 SELECT review_reject($q$SELECT save_invoice_review('e5000000-0000-4000-8000-000000000001',review_token('e5000000-0000-4000-8000-000000000001'),'e3000000-0000-4000-8000-000000000001/original.pdf',review_lines(),100,'Vendor','e6000000-0000-4000-8000-000000000001')$q$,'historical extraction requires current verified object proof');
-SELECT review_reject($q$SELECT classify_invoice_duplicate('e5000000-0000-4000-8000-000000000002','e5000000-0000-4000-8000-000000000001',review_token('e5000000-0000-4000-8000-000000000002'),review_token('e5000000-0000-4000-8000-000000000001'))$q$,'historical equal hashes alone cannot classify a copy');
+SELECT review_assert(classify_invoice_duplicate('e5000000-0000-4000-8000-000000000002','e5000000-0000-4000-8000-000000000001',review_token('e5000000-0000-4000-8000-000000000002'),review_token('e5000000-0000-4000-8000-000000000001'))->>'proof'='manual','unverified historical hashes allow an explicit manual decision, never a claim of identical bytes');
+SELECT restore_invoice_duplicate('e5000000-0000-4000-8000-000000000002',review_token('e5000000-0000-4000-8000-000000000002'));
 SELECT review_token('e5000000-0000-4000-8000-000000000001') AS storage_old_token \gset
 RESET ROLE;
 UPDATE ocr_extractions SET document_storage_identity=invoice_storage_identity(document_file_url) WHERE id='e6000000-0000-4000-8000-000000000001';
@@ -65,11 +66,12 @@ SELECT save_invoice_review('e5000000-0000-4000-8000-000000000002',review_token('
 RESET ROLE;
 UPDATE ocr_extractions SET document_hash='different-sha256' WHERE id='e6000000-0000-4000-8000-000000000002';
 SET LOCAL ROLE authenticated;
-SELECT review_reject($q$SELECT classify_invoice_duplicate('e5000000-0000-4000-8000-000000000002','e5000000-0000-4000-8000-000000000001',review_token('e5000000-0000-4000-8000-000000000002'),review_token('e5000000-0000-4000-8000-000000000001'))$q$,'different verified files can never be classified as exact copies');
+SELECT review_assert(classify_invoice_duplicate('e5000000-0000-4000-8000-000000000002','e5000000-0000-4000-8000-000000000001',review_token('e5000000-0000-4000-8000-000000000002'),review_token('e5000000-0000-4000-8000-000000000001'))->>'proof'='manual','different scans can be classified explicitly without claiming hash equality');
+SELECT restore_invoice_duplicate('e5000000-0000-4000-8000-000000000002',review_token('e5000000-0000-4000-8000-000000000002'));
 RESET ROLE;
 UPDATE ocr_extractions SET document_hash='exact-sha256' WHERE id='e6000000-0000-4000-8000-000000000002';
 SET LOCAL ROLE authenticated;
-SELECT classify_invoice_duplicate('e5000000-0000-4000-8000-000000000002','e5000000-0000-4000-8000-000000000001',review_token('e5000000-0000-4000-8000-000000000002'),review_token('e5000000-0000-4000-8000-000000000001'));
+SELECT review_assert(classify_invoice_duplicate('e5000000-0000-4000-8000-000000000002','e5000000-0000-4000-8000-000000000001',review_token('e5000000-0000-4000-8000-000000000002'),review_token('e5000000-0000-4000-8000-000000000001'))->>'proof'='identical','matching current document hashes are recorded as additional evidence');
 SELECT review_assert((SELECT duplicate_of_facture_id='e5000000-0000-4000-8000-000000000001' AND rejet_motif IS NULL FROM factures WHERE id='e5000000-0000-4000-8000-000000000002') AND (SELECT count(*)=1 FROM lignes WHERE facture_id='e5000000-0000-4000-8000-000000000002'),'explicit copy classification preserves invoice and article history, never invents rejection');
 SELECT review_reject($q$DELETE FROM factures WHERE id='e5000000-0000-4000-8000-000000000002'$q$,'copy deletion cannot detach its articles back into the quote');
 SELECT review_reject($q$DELETE FROM lignes WHERE facture_id='e5000000-0000-4000-8000-000000000002'$q$,'excluded copy articles cannot be silently changed');
@@ -97,4 +99,70 @@ UPDATE colis SET paiement_date=now(),paiement_montant=51.54 WHERE id='e3000000-0
 SET LOCAL ROLE authenticated;
 SELECT review_reject($q$SELECT save_invoice_review('e5000000-0000-4000-8000-000000000002',review_token('e5000000-0000-4000-8000-000000000002'),'e3000000-0000-4000-8000-000000000001/copy.pdf',review_lines(),100,'Vendor')$q$,'paid dossier cannot be edited through review');
 SELECT review_reject($q$SELECT classify_invoice_duplicate('e5000000-0000-4000-8000-000000000002','e5000000-0000-4000-8000-000000000001',review_token('e5000000-0000-4000-8000-000000000002'),review_token('e5000000-0000-4000-8000-000000000001'))$q$,'paid dossier cannot exclude documents');
+-- Explicit removal of repeated invoices must work without OCR or matching bytes.
+RESET ROLE;
+INSERT INTO colis(id,client_id,statut,feu_vert,nb_colis,dims_par_colis) VALUES('eb000000-0000-4000-8000-000000000001','e2000000-0000-4000-8000-000000000001','en_preparation','autorise',1,'[{"dimL":40,"dimW":30,"dimH":20,"poids":3}]');
+INSERT INTO factures(id,colis_id,vendeur,montant,fichier_url,valide) VALUES
+('eb000000-0000-4000-8000-000000000002','eb000000-0000-4000-8000-000000000001','Manual original',100,'eb000000-0000-4000-8000-000000000001/original.pdf',true),
+('eb000000-0000-4000-8000-000000000003','eb000000-0000-4000-8000-000000000001','Manual second scan',100,'eb000000-0000-4000-8000-000000000001/scan.jpg',true);
+INSERT INTO storage.objects(bucket_id,name) SELECT 'factures',fichier_url FROM factures WHERE colis_id='eb000000-0000-4000-8000-000000000001';
+INSERT INTO lignes(colis_id,facture_id,description,qte,prix_unitaire,categorie_id) SELECT colis_id,id,'Manual reviewed article',1,100,'e4000000-0000-4000-8000-000000000001' FROM factures WHERE colis_id='eb000000-0000-4000-8000-000000000001';
+SELECT review_assert(NOT has_function_privilege('anon','classify_invoice_duplicate(uuid,uuid,text,text)','EXECUTE'),'anonymous cannot classify invoice copies');
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub','e1000000-0000-4000-8000-000000000002',true);
+SELECT review_reject($q$SELECT classify_invoice_duplicate('eb000000-0000-4000-8000-000000000003','eb000000-0000-4000-8000-000000000002','client-token','client-token')$q$,'customer cannot remove their own invoice from the quote');
+SELECT set_config('request.jwt.claim.sub','e1000000-0000-4000-8000-000000000003',true);
+SELECT review_reject($q$SELECT classify_invoice_duplicate('eb000000-0000-4000-8000-000000000003','eb000000-0000-4000-8000-000000000002',review_token('eb000000-0000-4000-8000-000000000003'),review_token('eb000000-0000-4000-8000-000000000002'))$q$,'article editor without validation permission cannot remove invoice copies');
+SELECT set_config('request.jwt.claim.sub','e1000000-0000-4000-8000-000000000001',true);
+SELECT review_reject($q$SELECT classify_invoice_duplicate('eb000000-0000-4000-8000-000000000003','eb000000-0000-4000-8000-000000000002',NULL,review_token('eb000000-0000-4000-8000-000000000002'))$q$,'copy review token remains mandatory without OCR');
+SELECT review_reject($q$SELECT classify_invoice_duplicate('eb000000-0000-4000-8000-000000000003','eb000000-0000-4000-8000-000000000002',review_token('eb000000-0000-4000-8000-000000000003'),NULL)$q$,'original review token remains mandatory without OCR');
+SELECT review_reject($q$SELECT classify_invoice_duplicate('eb000000-0000-4000-8000-000000000003','eb000000-0000-4000-8000-000000000002','stale',review_token('eb000000-0000-4000-8000-000000000002'))$q$,'stale copy token cannot classify a changed document');
+SELECT review_reject($q$SELECT classify_invoice_duplicate('eb000000-0000-4000-8000-000000000003','eb000000-0000-4000-8000-000000000002',review_token('eb000000-0000-4000-8000-000000000003'),'stale')$q$,'stale original token cannot confirm an outdated comparison');
+SELECT review_reject($q$SELECT classify_invoice_duplicate('eb000000-0000-4000-8000-000000000003','e5000000-0000-4000-8000-000000000001',review_token('eb000000-0000-4000-8000-000000000003'),review_token('e5000000-0000-4000-8000-000000000001'))$q$,'original from another dossier is rejected even for the same customer');
+SELECT review_reject($q$SELECT classify_invoice_duplicate('eb000000-0000-4000-8000-000000000002','eb000000-0000-4000-8000-000000000002',review_token('eb000000-0000-4000-8000-000000000002'),review_token('eb000000-0000-4000-8000-000000000002'))$q$,'self classification is rejected');
+SELECT save_preparation_measurements(id,'[{"dimL":40,"dimW":10,"dimH":10,"poids":2}]',updated_at,preparation_composition_version) FROM colis WHERE id='eb000000-0000-4000-8000-000000000001';
+SELECT save_quote(id,'{"devisTransport":20,"devisOM":22,"devisOMR":5.5,"devisTVA":4.04,"devisTotal":51.54}',updated_at) FROM colis WHERE id='eb000000-0000-4000-8000-000000000001';
+SELECT review_assert(NOT EXISTS(SELECT 1 FROM ocr_extractions WHERE facture_id IN ('eb000000-0000-4000-8000-000000000002','eb000000-0000-4000-8000-000000000003')),'manual removal fixture has no OCR analyses or hashes');
+SELECT review_token('eb000000-0000-4000-8000-000000000003') AS manual_before_token \gset
+SELECT review_assert(classify_invoice_duplicate('eb000000-0000-4000-8000-000000000003','eb000000-0000-4000-8000-000000000002',:'manual_before_token',review_token('eb000000-0000-4000-8000-000000000002'))->>'proof'='manual','operator can remove a repeated invoice without any OCR');
+SELECT review_assert((SELECT devis_total IS NULL FROM colis WHERE id='eb000000-0000-4000-8000-000000000001'),'manual duplicate removal invalidates the previously calculated quote');
+SELECT review_reject(format('SELECT classify_invoice_duplicate(%L,%L,%L,review_token(%L))','eb000000-0000-4000-8000-000000000003','eb000000-0000-4000-8000-000000000002',:'manual_before_token','eb000000-0000-4000-8000-000000000002'),'replayed removal cannot silently mutate an already classified copy');
+SELECT save_quote(id,'{"devisTransport":20,"devisOM":12,"devisOMR":3,"devisTVA":2.98,"devisTotal":37.98}',updated_at) FROM colis WHERE id='eb000000-0000-4000-8000-000000000001';
+SELECT review_assert((SELECT devis_total=37.98 AND (devis_snapshot->'amounts'->>'merchandiseValue')::numeric=100 FROM colis WHERE id='eb000000-0000-4000-8000-000000000001'),'manual duplicate and its articles are excluded from actual quote amounts');
+SELECT review_assert((SELECT count(*)=2 FROM factures WHERE colis_id='eb000000-0000-4000-8000-000000000001') AND (SELECT count(*)=2 FROM lignes WHERE colis_id='eb000000-0000-4000-8000-000000000001'),'manual removal preserves both document records and both source articles');
+SELECT review_assert((SELECT count(*)=1 FROM audit_actions WHERE colis_id='eb000000-0000-4000-8000-000000000001' AND action='invoice_duplicate_classified' AND user_id=auth.uid() AND before_data IS NOT NULL AND after_data->>'proof'='manual' AND after_data->'documentHash'='null'::jsonb),'manual removal records actor, original, previous state and honest evidence');
+SELECT review_assert((SELECT state='done' FROM staff_work_actions WHERE colis_id='eb000000-0000-4000-8000-000000000001' AND kind='documents') AND NOT EXISTS(SELECT 1 FROM messages WHERE colis_id='eb000000-0000-4000-8000-000000000001'),'manual removal clears duplicate work without messaging the customer');
+SELECT restore_invoice_duplicate('eb000000-0000-4000-8000-000000000003',review_token('eb000000-0000-4000-8000-000000000003'));
+SELECT review_assert((SELECT duplicate_of_facture_id IS NULL AND NOT valide FROM factures WHERE id='eb000000-0000-4000-8000-000000000003') AND (SELECT devis_total IS NULL FROM colis WHERE id='eb000000-0000-4000-8000-000000000001'),'manual duplicate can be restored with fresh validation required');
+SELECT save_invoice_review('eb000000-0000-4000-8000-000000000003',review_token('eb000000-0000-4000-8000-000000000003'),'eb000000-0000-4000-8000-000000000001/scan.jpg',review_lines(),100,'Manual second scan',NULL,true);
+SELECT save_quote(id,'{"devisTransport":20,"devisOM":22,"devisOMR":5.5,"devisTVA":4.04,"devisTotal":51.54}',updated_at) FROM colis WHERE id='eb000000-0000-4000-8000-000000000001';
+SELECT review_assert((SELECT (devis_snapshot->'amounts'->>'merchandiseValue')::numeric=200 FROM colis WHERE id='eb000000-0000-4000-8000-000000000001'),'restored and revalidated invoice contributes to the quote exactly once');
+SELECT classify_invoice_duplicate('eb000000-0000-4000-8000-000000000003','eb000000-0000-4000-8000-000000000002',review_token('eb000000-0000-4000-8000-000000000003'),review_token('eb000000-0000-4000-8000-000000000002'));
+RESET ROLE;
+INSERT INTO factures(id,colis_id,vendeur,fichier_url) VALUES
+('eb000000-0000-4000-8000-000000000004','eb000000-0000-4000-8000-000000000001','Another invoice','eb000000-0000-4000-8000-000000000001/other.pdf'),
+('eb000000-0000-4000-8000-000000000005','eb000000-0000-4000-8000-000000000001','Rejected invoice','eb000000-0000-4000-8000-000000000001/rejected.pdf');
+UPDATE factures SET rejet_motif='Incorrect invoice' WHERE id='eb000000-0000-4000-8000-000000000005';
+SET LOCAL ROLE authenticated;
+SELECT review_reject($q$SELECT classify_invoice_duplicate('eb000000-0000-4000-8000-000000000002','eb000000-0000-4000-8000-000000000003',review_token('eb000000-0000-4000-8000-000000000002'),review_token('eb000000-0000-4000-8000-000000000003'))$q$,'a reverse classification cannot form a cycle');
+SELECT review_reject($q$SELECT classify_invoice_duplicate('eb000000-0000-4000-8000-000000000004','eb000000-0000-4000-8000-000000000003',review_token('eb000000-0000-4000-8000-000000000004'),review_token('eb000000-0000-4000-8000-000000000003'))$q$,'an excluded copy cannot become an original for another copy');
+SELECT review_reject($q$SELECT classify_invoice_duplicate('eb000000-0000-4000-8000-000000000002','eb000000-0000-4000-8000-000000000004',review_token('eb000000-0000-4000-8000-000000000002'),review_token('eb000000-0000-4000-8000-000000000004'))$q$,'an original with existing copies cannot itself be classified as a copy');
+SELECT review_reject($q$SELECT classify_invoice_duplicate('eb000000-0000-4000-8000-000000000004','eb000000-0000-4000-8000-000000000005',review_token('eb000000-0000-4000-8000-000000000004'),review_token('eb000000-0000-4000-8000-000000000005'))$q$,'a rejected invoice cannot be used as the original');
+RESET ROLE;
+INSERT INTO factures(colis_id,vendeur,fichier_url,replaces_facture_id) VALUES('eb000000-0000-4000-8000-000000000001','Replacement','eb000000-0000-4000-8000-000000000001/replacement.pdf','eb000000-0000-4000-8000-000000000005');
+UPDATE factures SET rejet_motif=NULL WHERE id='eb000000-0000-4000-8000-000000000005';
+SET LOCAL ROLE authenticated;
+SELECT review_reject($q$SELECT classify_invoice_duplicate('eb000000-0000-4000-8000-000000000004','eb000000-0000-4000-8000-000000000005',review_token('eb000000-0000-4000-8000-000000000004'),review_token('eb000000-0000-4000-8000-000000000005'))$q$,'a replaced invoice cannot become an original even if its legacy rejection is cleared');
+RESET ROLE;
+UPDATE factures SET fichier_url=NULL WHERE id='eb000000-0000-4000-8000-000000000004';
+SET LOCAL ROLE authenticated;
+SELECT review_reject($q$SELECT classify_invoice_duplicate('eb000000-0000-4000-8000-000000000004','eb000000-0000-4000-8000-000000000002',review_token('eb000000-0000-4000-8000-000000000004'),review_token('eb000000-0000-4000-8000-000000000002'))$q$,'document-free placeholder cannot be hidden as a duplicate');
+RESET ROLE;
+UPDATE factures SET fichier_url='eb000000-0000-4000-8000-000000000001/other.pdf' WHERE id='eb000000-0000-4000-8000-000000000004';
+UPDATE colis SET archive=true WHERE id='eb000000-0000-4000-8000-000000000001';
+SET LOCAL ROLE authenticated;
+SELECT review_reject($q$SELECT classify_invoice_duplicate('eb000000-0000-4000-8000-000000000004','eb000000-0000-4000-8000-000000000002',review_token('eb000000-0000-4000-8000-000000000004'),review_token('eb000000-0000-4000-8000-000000000002'))$q$,'archived dossier cannot classify new manual copies');
+RESET ROLE;
+SELECT review_assert((SELECT count(*)=2 FROM storage.objects WHERE bucket_id='factures' AND name IN ('eb000000-0000-4000-8000-000000000001/original.pdf','eb000000-0000-4000-8000-000000000001/scan.jpg')),'manual classification and restoration never delete either stored source document');
+
 ROLLBACK;

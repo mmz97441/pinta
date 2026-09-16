@@ -44,6 +44,8 @@ test('absences do not silently make a colleague available or transfer their work
 test('opening work preserves the queue route and rejects external return URLs', () => {
  const url = new URL(workActionUrl(action('a'), '/?section=progress&mission=preparation'), 'https://example.test');
  assert.equal(url.searchParams.get('returnTo'), '/?section=progress&mission=preparation');
+ assert.equal(url.searchParams.get('section'), 'preparation');
+ for (const kind of ['documents', 'quote']) assert.equal(new URL(workActionUrl(action('other', { kind })), 'https://example.test').searchParams.get('section'), 'devis');
  assert.equal(new URL(workActionUrl(action('a'), '//outside.test'), 'https://example.test').searchParams.get('returnTo'), '/');
 });
 test('missing dossier data never creates an invisible personal action', () => {

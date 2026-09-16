@@ -465,6 +465,7 @@ async function main() {
       path: path.join(output, 'staff-detail-desktop.png'),
       fullPage: true,
     });
+    await f.page.getByRole('navigation', { name: 'Organisation du dossier', exact: true }).getByRole('button', { name: 'Préparation', exact: true }).click();
     const num = f.page.locator('input[type="number"]');
     const labels = await num.evaluateAll((inputs) =>
       inputs.map((i) => ({
@@ -487,6 +488,7 @@ async function main() {
     assert.ok(changed, 'Final weight field found');
     await f.page.getByRole('button', { name: 'Enregistrer les mesures de préparation' }).click();
     await f.page.waitForFunction(() => document.body.innerText.includes('Mesures enregistrées, même si les documents restent à vérifier.'));
+    await f.page.getByRole('navigation', { name: 'Organisation du dossier', exact: true }).getByRole('button', { name: 'Factures et devis', exact: true }).click();
     await f.page.getByRole('button', { name: 'Enregistrer et vérifier le devis' }).click();
     await f.page.getByRole('button', { name: 'Envoyer le devis au client' }).waitFor();
     assert.equal(f.tables.colis[0].devis_transport, 50);

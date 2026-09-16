@@ -2,6 +2,8 @@
 
 Date : 16 septembre 2026. Périmètre : lecture des documents, vérification des articles, validation et intégration au devis.
 
+Complément après retour utilisateur : [retrait manuel des doublons et préparation indépendante du devis](doublons-preparation-autonome-2026-09-16.md).
+
 ## Origine du problème
 
 Le contrôle des enregistrements et des fichiers de stockage a confirmé que les documents reçus étaient présents et lisibles. Un document avait aussi été déposé plusieurs fois : le nombre de fichiers ne correspondait donc pas au nombre de factures distinctes.

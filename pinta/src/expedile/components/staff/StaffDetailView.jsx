@@ -16,6 +16,8 @@ import * as sb from '../../lib/supabaseData';
 import { currentInvoices } from '../../domain/invoiceDocuments';
 import { needsQuoteRecalculation } from '../../domain/clientJourney';
 import { calculateQuote, measureShipment, volumetricDivisor, quoteInputFingerprint } from '../../domain/quote';
+import { workspaceReturnPath } from '../../domain/navigation';
+import { staffName } from '../workspace/WorkActionRow';
 
 const preparationDrafts = new Map();
 const savedFinalPackages = (colis) => colis?.finalPackages?.length ? colis.finalPackages.map(box => ({ ...box })) : [{ dimL: colis?.finL ?? '', dimW: colis?.finW ?? '', dimH: colis?.finH ?? '', poids: colis?.finP ?? '' }];
@@ -162,6 +164,7 @@ export default function StaffDetailView({ workspace = false }) {
     demanderFeuVert,
     envoyerDevis,
     savePreparationMeasurements,
+    refreshColis,
     confirmerDevis,
     settings = {},
     sendMsg,
@@ -181,6 +184,7 @@ export default function StaffDetailView({ workspace = false }) {
   const [commentaire, setCommentaire] = useState(sel?.commentairePreparation || '');
   const [newArticle, setNewArticle] = useState({ desc: '', qte: '1', prix: '', cat: '', factureId: '' });
   const [formErr, setFormErr] = useState('');
+  const preparationFeedback = useRef(null);
 
   // Reception measurements remain separate from the optimised final package.
   const receptionVersion = useRef(null);
@@ -193,6 +197,7 @@ export default function StaffDetailView({ workspace = false }) {
   const [finalPackages, setFinalPackages] = useState(() => savedFinalPackages(sel));
   const preparationVersion = useRef(sel?.updatedAt);
   const preparationComposition = useRef(sel?.preparationCompositionVersion);
+  const preparationBaseline = useRef(JSON.stringify(savedFinalPackages(sel)));
   const preparationDirty = useRef(false);
   const loadedPreparation = useRef(null);
   const [preparationConflict, setPreparationConflict] = useState(false);
@@ -227,6 +232,7 @@ export default function StaffDetailView({ workspace = false }) {
       preparationDirty.current = !!draft;
       preparationVersion.current = draft?.version || sel.updatedAt;
       preparationComposition.current = draft?.composition ?? sel.preparationCompositionVersion;
+      preparationBaseline.current = draft?.baseline || JSON.stringify(savedFinalPackages(sel));
       setPreparationConflict(!!draft && draft.version !== sel.updatedAt);
       setMeasuresSaved(false);
       setSelEnvoi(sel.envoi || '');
@@ -247,6 +253,7 @@ export default function StaffDetailView({ workspace = false }) {
     if (preparationDirty.current) { setPreparationConflict(true); return; }
     preparationVersion.current = sel.updatedAt;
     preparationComposition.current = sel.preparationCompositionVersion;
+    preparationBaseline.current = JSON.stringify(savedFinalPackages(sel));
     setFinalPackages(savedFinalPackages(sel)); setFraisDivers(sel.fraisDivers || []);
     setProPayMethod(sel.modePaiementPro || cl?.methodePaiement || 'virement');
     setPreparationConflict(false); setDevisPrev(false);
@@ -255,7 +262,7 @@ export default function StaffDetailView({ workspace = false }) {
   useEffect(() => {
     if (loadedPreparation.current && loadedPreparation.current !== JSON.stringify([finalPackages,fraisDivers,proPayMethod])) return;
     loadedPreparation.current = null;
-    if (sel && preparationDirty.current) preparationDrafts.set(`${auth?.u?.id}:${sel.id}`, { finalPackages, fraisDivers, proPayMethod, version: preparationVersion.current, composition: preparationComposition.current });
+    if (sel && preparationDirty.current) preparationDrafts.set(`${auth?.u?.id}:${sel.id}`, { finalPackages, fraisDivers, proPayMethod, version: preparationVersion.current, composition: preparationComposition.current, baseline: preparationBaseline.current });
   }, [sel?.id, finalPackages, fraisDivers, proPayMethod, auth?.u?.id]);
   useEffect(() => {
     const guard = event => { if (preparationDirty.current) { event.preventDefault(); event.returnValue = ''; } };
@@ -279,13 +286,22 @@ export default function StaffDetailView({ workspace = false }) {
 
   const openingActionId = new URLSearchParams(location.search).get('action');
   const openingKind = workActions.find(action => action.id === openingActionId && action.colis_id === sel?.id)?.kind;
+  const params = new URLSearchParams(location.search);
+  const canInvoiceWorkspace = ['perm_factures_voir', 'perm_factures_ajouter', 'perm_factures_valider', 'perm_factures_refuser', 'perm_factures_ocr', 'perm_factures_modifier_articles'].some(permission => can(permission));
+  const canQuoteWorkspace = canInvoiceWorkspace || can('perm_colis_calculer_devis') || can('perm_colis_envoyer_devis');
+  const preparationView = params.get('section') === 'preparation' || !canQuoteWorkspace || (!params.get('section') && !params.get('invoice') && openingKind === 'preparation');
   useEffect(() => {
-    const anchor = { preparation: 'quote-measures', documents: 'quote-documents', quote: 'quote-review' }[openingKind];
+    const anchor = preparationView ? 'preparation-workspace' : { documents: 'quote-documents', quote: 'quote-review' }[openingKind];
     if (!anchor) return;
     if (openingKind === 'documents') setDocumentTab('document');
     const frame = requestAnimationFrame(() => document.getElementById(anchor)?.scrollIntoView({ block: 'start' }));
     return () => cancelAnimationFrame(frame);
-  }, [sel?.id, openingActionId, openingKind]);
+  }, [sel?.id, openingActionId, openingKind, preparationView]);
+  useEffect(() => {
+    if (!preparationView || (!formErr && !measuresSaved)) return;
+    preparationFeedback.current?.scrollIntoView({ block: 'nearest' });
+    preparationFeedback.current?.focus({ preventScroll: true });
+  }, [formErr, measuresSaved, preparationView]);
 
   if (!sel || !isStaff) return null;
 
@@ -294,6 +310,11 @@ export default function StaffDetailView({ workspace = false }) {
   const dest = selDest || getDestByCP(cl?.cp);
   const tarif = getTarif(dest?.code, cl?.abonnement);
   const divisor = volumetricDivisor(settings);
+  const chooseSection = (section) => {
+    const next = new URLSearchParams(location.search);
+    next.set('section', section); next.delete('invoice'); next.delete('action');
+    navigate(`/colis/${sel.id}?${next}#${section === 'preparation' ? 'preparation-workspace' : 'quote-documents'}`);
+  };
   const runAction = async (action) => {
     if (actionRef.current) return;
     actionRef.current = true; setActionLoading(true); setFormErr('');
@@ -357,6 +378,7 @@ export default function StaffDetailView({ workspace = false }) {
   const acceptPreparation = saved => {
     preparationVersion.current = saved.updatedAt;
     preparationComposition.current = saved.preparationCompositionVersion;
+    preparationBaseline.current = JSON.stringify(savedFinalPackages(saved));
     preparationDirty.current = false; preparationDrafts.delete(`${auth?.u?.id}:${sel.id}`);
     setPreparationConflict(false); setFinalPackages(savedFinalPackages(saved));
   };
@@ -364,9 +386,22 @@ export default function StaffDetailView({ workspace = false }) {
     acceptPreparation(sel); setFraisDivers(sel.fraisDivers || []);
     setProPayMethod(sel.modePaiementPro || cl?.methodePaiement || 'virement'); setDevisPrev(false); setFormErr('');
   };
+  const canKeepPreparationDraft = !sel.archive && !sel.produitInterdit && sel.feuVert === 'autorise' && ['autorise', 'en_preparation'].includes(sel.statut) && preparationComposition.current === sel.preparationCompositionVersion && preparationBaseline.current === JSON.stringify(savedFinalPackages(sel));
+  const keepPreparationDraft = () => {
+    if (!canKeepPreparationDraft) return;
+    preparationVersion.current = sel.updatedAt;
+    setPreparationConflict(false); setFormErr('');
+    preparationDrafts.set(`${auth?.u?.id}:${sel.id}`, { finalPackages, fraisDivers, proPayMethod, version: sel.updatedAt, composition: preparationComposition.current, baseline: preparationBaseline.current });
+  };
   async function handleSaveMeasurements() {
     if (preparationConflict) throw new Error('Le dossier a changé. Comparez votre saisie avec la version enregistrée avant de poursuivre.');
-    const saved = await savePreparationMeasurements(sel.id, { finalPackages }, { expectedUpdatedAt: preparationVersion.current, expectedCompositionVersion: preparationComposition.current });
+    let saved;
+    try {
+      saved = await savePreparationMeasurements(sel.id, { finalPackages }, { expectedUpdatedAt: preparationVersion.current, expectedCompositionVersion: preparationComposition.current });
+    } catch (error) {
+      if (error.code === '40001') { setPreparationConflict(true); await refreshColis(sel.id).catch(() => {}); }
+      throw error;
+    }
     if (saved) { acceptPreparation(saved);
       if (JSON.stringify(fraisDivers) !== JSON.stringify(saved.fraisDivers || []) || proPayMethod !== (saved.modePaiementPro || cl?.methodePaiement || 'virement')) {
         preparationDirty.current = true; preparationDrafts.set(`${auth?.u?.id}:${sel.id}`, { finalPackages: savedFinalPackages(saved), fraisDivers, proPayMethod, version: saved.updatedAt, composition: saved.preparationCompositionVersion });
@@ -533,7 +568,7 @@ export default function StaffDetailView({ workspace = false }) {
               {missingFacture && (
                 <div className="flex items-center gap-2 p-2 rounded-lg bg-amber-50 border border-amber-200">
                   <AlertTriangle size={12} className="text-amber-500 flex-shrink-0" />
-                  <p className="text-[10px] font-semibold text-amber-700">Facture non validée — devis impossible après préparation</p>
+                  <p className="text-[10px] font-semibold text-amber-700">Les factures seront vérifiées séparément avant le devis.</p>
                 </div>
               )}
 
@@ -551,7 +586,7 @@ export default function StaffDetailView({ workspace = false }) {
               )}
 
               <BtnPrimary
-                onClick={() => runAction(() => changerStatut(sel.id, 'en_preparation'))}
+                onClick={() => runAction(async () => { await changerStatut(sel.id, 'en_preparation'); chooseSection('preparation'); })}
                 disabled={actionLoading || subExpired || !can('perm_colis_preparer')} color="#2563EB">
                 <Check size={15} />
                 {actionLoading ? 'En cours...' : 'Commencer la préparation'}
@@ -568,6 +603,7 @@ export default function StaffDetailView({ workspace = false }) {
         const verified = !measuresChanged && devisPrev && quote.ok && savedInputs === quoteInputFingerprint(quote.snapshot);
         const focusBlocker = (field) => {
           const anchor = field.startsWith('dimensions') ? 'quote-measures' : field.startsWith('fraisDivers') ? 'quote-fees' : field.startsWith('lignes') || field.startsWith('lines') ? 'quote-articles' : 'quote-documents';
+          if (field.startsWith('dimensions')) { chooseSection('preparation'); return; }
           setDocumentTab('articles');
           requestAnimationFrame(() => { const target = document.getElementById(anchor); target?.scrollIntoView({ behavior: 'smooth', block: 'start' }); target?.querySelector('input,select,button')?.focus({ preventScroll: true }); });
         };
@@ -576,28 +612,60 @@ export default function StaffDetailView({ workspace = false }) {
         const isPro = cl?.type === 'pro';
         const inputClass = 'min-h-11 min-w-0 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300';
         const changeFinal = (index, key, value) => { preparationDirty.current = true; setFinalPackages(previous => previous.map((box,position) => position === index ? { ...box, [key]: value } : box)); setMeasuresSaved(false); setDevisPrev(false); };
+        const savedWeights = measureShipment(savedFinalPackages(sel), divisor);
+        const measuresCurrent = sel.preparationCompositionVersion != null && sel.finalMeasurementsVersion === sel.preparationCompositionVersion;
+        const sectionNavigation = <nav aria-label="Organisation du dossier" className="flex flex-wrap gap-2"><button aria-current={preparationView ? 'page' : undefined} onClick={() => chooseSection('preparation')} className={`min-h-11 rounded-xl border px-4 py-2 text-sm font-semibold ${preparationView ? 'bg-slate-800 text-white border-slate-800' : 'border-slate-200 text-slate-700'}`}>Préparation</button>{canQuoteWorkspace && <button aria-current={!preparationView ? 'page' : undefined} onClick={() => chooseSection('devis')} className={`min-h-11 rounded-xl border px-4 py-2 text-sm font-semibold ${!preparationView ? 'bg-slate-800 text-white border-slate-800' : 'border-slate-200 text-slate-700'}`}>Factures et devis</button>}</nav>;
+        if (preparationView) return <section id="preparation-workspace" aria-label="Préparation après optimisation" className="mx-auto w-full max-w-3xl scroll-mt-48 space-y-5">
+          {sectionNavigation}
+          <div><h2 className="text-lg font-bold text-slate-800">Préparation</h2><p className="mt-1 text-sm text-slate-600">Optimisez l’emballage, puis pesez et mesurez chaque colis sortant. Enregistrez votre travail pour que la personne chargée du devis puisse prendre la suite.</p><p className="mt-2 text-sm text-slate-600">Les factures peuvent être complétées séparément. Aucun devis ni message client n’est envoyé depuis cet écran.</p></div>
+          <div id="quote-measures" className="scroll-mt-24"><Section title="Mesures après optimisation" icon={Ruler} color={borderColor}>
+            <p className="mb-3 text-sm text-slate-600">Mesurez chaque colis physique après optimisation. Ces valeurs sont indépendantes des cartons reçus et alimentent le devis et le manifeste de départ.</p>
+            {preparationBlock && <p role="alert" className="mb-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">{preparationBlock}</p>}
+            {preparationConflict && <div role="alert" className="mb-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900"><p>Une autre modification a été enregistrée depuis l’ouverture de votre saisie. Votre brouillon est conservé ; aucune mesure ne sera écrasée.</p><p className="mt-2">Version enregistrée : {savedFinalPackages(sel).map((box,index) => `colis ${index + 1} : ${box.dimL || '—'} × ${box.dimW || '—'} × ${box.dimH || '—'} cm / ${box.poids || '—'} kg`).join(' ; ')}</p><div className="mt-2 space-y-2">{canKeepPreparationDraft && <><p>Les mesures enregistrées et la composition des cartons sont inchangées. Vous pouvez conserver votre saisie et reprendre sur la nouvelle version du dossier.</p><button className="min-h-11 block font-semibold underline" onClick={keepPreparationDraft}>Conserver ma saisie et réessayer</button></>}<button className="min-h-11 block font-semibold underline" onClick={reloadPreparation}>Recharger et remplacer mon brouillon</button></div></div>}
+            {sel.preparationCompositionVersion != null && sel.finalMeasurementsVersion !== sel.preparationCompositionVersion && <p role="status" className="mb-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">La composition des cartons a changé. Mesurez à nouveau l’ensemble préparé puis enregistrez les mesures pour confirmer cette nouvelle préparation.</p>}
+            <div className="space-y-3">{finalPackages.map((box,index) => <fieldset key={index} className="rounded-xl border border-slate-200 p-3"><legend className="px-1 text-sm font-semibold text-slate-700">Colis sortant {index + 1}</legend><div className="grid grid-cols-2 gap-3">{[['dimL', 'Longueur', 'cm'], ['dimW', 'Largeur', 'cm'], ['dimH', 'Hauteur', 'cm'], ['poids', 'Poids réel', 'kg']].map(([key,label,unit]) => <Field key={key} label={`${label} · colis sortant ${index + 1}`} type="number" min="0.01" step="0.01" disabled={actionLoading || !!preparationBlock || !can('perm_colis_preparer')} value={box[key] ?? ''} onChange={event => changeFinal(index,key,event.target.value)} unit={unit} />)}</div>{finalPackages.length > 1 && <button disabled={actionLoading || !!preparationBlock || !can('perm_colis_preparer')} className="min-h-11 text-sm font-semibold text-red-700 disabled:opacity-40" onClick={() => { preparationDirty.current = true; setFinalPackages(previous => previous.filter((_,position) => position !== index)); setDevisPrev(false); }}>Retirer le colis sortant {index + 1}</button>}</fieldset>)}</div>
+            <button disabled={actionLoading || !!preparationBlock || !can('perm_colis_preparer')} className="my-3 min-h-11 w-full rounded-xl border border-dashed border-slate-300 text-sm font-semibold brand-t disabled:opacity-40" onClick={() => { preparationDirty.current = true; setFinalPackages(previous => [...previous,{dimL:'',dimW:'',dimH:'',poids:''}]); setDevisPrev(false); }}>+ Ajouter un colis après optimisation</button>
+            <div ref={preparationFeedback} tabIndex={-1} className="scroll-mt-32">{formErr && <p role="alert" className="mb-3 rounded-xl bg-red-50 p-3 text-sm text-red-700">{formErr}</p>}
+            {!weights && <p className="mb-2 text-sm text-amber-800">Renseignez les trois dimensions et un poids positif pour chaque colis sortant avant d’enregistrer.</p>}
+            <BtnPrimary disabled={actionLoading || !!preparationBlock || preparationConflict || !weights || !can('perm_colis_preparer')} onClick={() => runAction(handleSaveMeasurements)}><Check size={16} />Enregistrer les mesures de préparation</BtnPrimary>
+            {!can('perm_colis_preparer') && <p className="mt-2 text-sm text-slate-600">Les mesures sont enregistrées par une personne habilitée à préparer. Vous pouvez vérifier les documents et établir le devis dès qu’elles sont confirmées.</p>}
+            <p role="status" className="mt-2 text-xs text-slate-600">{measuresSaved ? 'Mesures enregistrées, même si les documents restent à vérifier.' : 'Les mesures peuvent être enregistrées avant les documents et le devis.'}</p></div>
+            {weights && <div className="mt-4 space-y-1 border-t border-gray-100 pt-3 text-sm"><Ligne label="Poids volumétrique" value={`${weights.volumetricWeight.toFixed(2)} kg`} /><Ligne label="Poids facturable" value={`${weights.billableWeight.toFixed(2)} kg`} /></div>}
+          </Section></div>
+          {!measuresChanged && savedWeights && measuresCurrent && <section aria-label="Relais après préparation" className="space-y-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+            <h3 className="text-sm font-semibold text-emerald-800">Mesures disponibles pour le devis</h3><p className="text-sm text-emerald-800">{savedFinalPackages(sel).length} colis sortant(s) · {savedWeights.realWeight.toFixed(2)} kg au total. Votre collègue retrouve ces mesures dans « Factures et devis », sans les ressaisir.</p>
+            {workActions.filter(action => action.colis_id === sel.id && ['documents','quote'].includes(action.kind) && action.state !== 'done').map(action => <p key={action.id} className="text-sm text-slate-700">{action.kind === 'documents' ? 'Factures' : 'Devis'} : {action.assignee_id ? staffName(action.assignee_id, teamUsers) : 'à prendre par une personne habilitée'}{action.blocked_reason ? ` · ${action.blocked_reason}` : ''}</p>)}
+            {canQuoteWorkspace && <button onClick={() => chooseSection('devis')} className="min-h-11 rounded-xl bg-slate-800 px-4 py-2 text-sm font-semibold text-white">Continuer vers les factures et le devis</button>}
+            <button onClick={() => navigate(workspaceReturnPath(location.search, '/'))} className="min-h-11 block text-sm font-semibold text-slate-700 underline">Revenir à ma file de travail</button>
+          </section>}
+          {can('perm_colis_preparer') && !preparationBlock && <>
+          <details className="border-t border-slate-200"><summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-slate-600">Consignes facultatives {selTags.length > 0 ? `· ${selTags.length} choisie(s)` : ''}</summary>          <div className="space-y-2">
+            <p className="text-xs font-semibold text-slate-600">Consignes de préparation</p>
+            <div className="flex flex-wrap gap-2">{TAGS_PREPARATION.map((tag) => <button key={tag} disabled={actionLoading} onClick={() => runAction(async () => { const next = selTags.includes(tag) ? selTags.filter((item) => item !== tag) : [...selTags, tag]; await upd(sel.id, { tagsPreparation: next }); setSelTags(next); })} className={`min-h-11 rounded-full px-3 py-2 text-xs font-semibold ${selTags.includes(tag) ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-600'}`}>{tag}</button>)}</div>
+            <textarea aria-label="Commentaire de préparation" value={commentaire} onChange={(event) => setCommentaire(event.target.value)} placeholder="Instructions utiles à la préparation…" rows={2} className={inputClass} />
+            {commentaire !== (sel.commentairePreparation || '') && <button disabled={actionLoading} className="min-h-11 text-xs font-semibold text-blue-700" onClick={() => runAction(() => upd(sel.id, { commentairePreparation: commentaire }))}>Enregistrer la consigne</button>}
+          </div>
+</details>
+          <div><p className="mb-2 text-xs font-semibold text-slate-600">Photo du colis préparé</p><WebcamCapture colisId={sel.id} colisRef={sel.ref} existingUrl={sel.photoPrep} onCapture={(path) => runAction(() => upd(sel.id, { photoPrep: path }))} /></div>
+          </>}
+        </section>;
         return <div className={`min-w-0 space-y-5 ${workspace ? "mx-auto w-full max-w-6xl" : ""}`}>
+          {sectionNavigation}
           <div className="border-b border-gray-200 pb-4">
-            <p className="text-xs font-bold uppercase tracking-wider text-gray-400">Préparation et devis</p>
-            <p className="mt-1 text-sm text-slate-700">{isPro ? 'Client professionnel : transport et frais convenus, sans calcul de taxes dans ce devis.' : 'Vérifiez les pièces et les articles, mesurez le colis optimisé, puis envoyez un devis complet.'}</p>
+            <p className="text-xs font-bold uppercase tracking-wider text-gray-400">Factures et devis</p>
+            <p className="mt-1 text-sm text-slate-700">{isPro ? 'Client professionnel : transport et frais convenus, sans calcul de taxes dans ce devis.' : 'Vérifiez les factures et les articles, puis établissez le devis à partir des mesures enregistrées par la préparation.'}</p>
           </div>
           <nav aria-label="Vérifications du devis" className="flex flex-wrap gap-2">{[['quote-measures','Mesures'],['quote-documents','Documents'],['quote-articles','Articles'],['quote-fees','Frais']].filter(([id]) => !isPro || id !== 'quote-articles').map(([id,label]) => <a key={id} href={`#${id}`} onClick={(event) => { event.preventDefault(); setDocumentTab(id === 'quote-documents' ? 'document' : 'articles'); requestAnimationFrame(() => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })); }} className="inline-flex min-h-11 items-center rounded-xl bg-slate-100 px-3 text-sm font-semibold text-slate-700">{label}</a>)}</nav>
           {measuresChanged && <p role="status" className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">Enregistrez les mesures modifiées avant de vérifier le devis. Vos documents peuvent être complétés séparément.</p>}
           {!quote.ok && <div className="rounded-xl bg-amber-50 p-3"><p className="text-xs font-semibold text-amber-800">À compléter pour le devis</p><ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-amber-800">{quote.errors.map((error, index) => <li key={index}><button className="min-h-11 text-left underline underline-offset-2" onClick={() => focusBlocker(error.field)}>{error.message}</button></li>)}</ul></div>}
           {isPro && <label className="block space-y-2 text-xs font-semibold text-slate-600">Modalités de règlement convenues<select aria-label="Modalités de règlement professionnel" value={proPayMethod} onChange={(event) => { preparationDirty.current = true; setProPayMethod(event.target.value); setDevisPrev(false); }} className={inputClass}>{[['virement', 'Virement bancaire'], ['especes', 'Espèces'], ['30_jours', 'Paiement à 30 jours'], ['fin_de_mois', 'Paiement en fin de mois']].map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select><span className="block text-xs font-normal text-gray-500">Cette modalité figurera dans la version du devis. Le paiement sera confirmé séparément après réception du règlement.</span></label>}
-          <div id="quote-measures" className="scroll-mt-24"><Section title="Mesures après optimisation" icon={Ruler} color={borderColor}>
-            <p className="mb-3 text-sm text-slate-600">Mesurez chaque colis physique après optimisation. Ces valeurs sont indépendantes des cartons reçus et alimentent le devis et le manifeste de départ.</p>
-            {preparationBlock && <p role="alert" className="mb-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">{preparationBlock}</p>}
-            {preparationConflict && <div role="alert" className="mb-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900"><p>Une autre modification a été enregistrée depuis l’ouverture de votre saisie. Votre brouillon est conservé ; aucune mesure ne sera écrasée.</p><p className="mt-2">Version enregistrée : {savedFinalPackages(sel).map((box,index) => `colis ${index + 1} : ${box.dimL || '—'} × ${box.dimW || '—'} × ${box.dimH || '—'} cm / ${box.poids || '—'} kg`).join(' ; ')}</p><button className="min-h-11 font-semibold underline" onClick={reloadPreparation}>Recharger et remplacer mon brouillon</button></div>}
-            {sel.preparationCompositionVersion != null && sel.finalMeasurementsVersion !== sel.preparationCompositionVersion && <p role="status" className="mb-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">La composition des cartons a changé. Mesurez à nouveau l’ensemble préparé puis enregistrez les mesures pour confirmer cette nouvelle préparation.</p>}
-            <div className="space-y-3">{finalPackages.map((box,index) => <fieldset key={index} className="rounded-xl border border-slate-200 p-3"><legend className="px-1 text-sm font-semibold text-slate-700">Colis sortant {index + 1}</legend><div className="grid grid-cols-2 gap-3">{[['dimL', 'Longueur', 'cm'], ['dimW', 'Largeur', 'cm'], ['dimH', 'Hauteur', 'cm'], ['poids', 'Poids réel', 'kg']].map(([key,label,unit]) => <Field key={key} label={`${label} · colis sortant ${index + 1}`} type="number" min="0.01" step="0.01" disabled={actionLoading || !!preparationBlock || !can('perm_colis_preparer')} value={box[key] ?? ''} onChange={event => changeFinal(index,key,event.target.value)} unit={unit} />)}</div>{finalPackages.length > 1 && <button disabled={actionLoading || !!preparationBlock || !can('perm_colis_preparer')} className="min-h-11 text-sm font-semibold text-red-700 disabled:opacity-40" onClick={() => { preparationDirty.current = true; setFinalPackages(previous => previous.filter((_,position) => position !== index)); setDevisPrev(false); }}>Retirer le colis sortant {index + 1}</button>}</fieldset>)}</div>
-            <button disabled={actionLoading || !!preparationBlock || !can('perm_colis_preparer')} className="my-3 min-h-11 w-full rounded-xl border border-dashed border-slate-300 text-sm font-semibold brand-t disabled:opacity-40" onClick={() => { preparationDirty.current = true; setFinalPackages(previous => [...previous,{dimL:'',dimW:'',dimH:'',poids:''}]); setDevisPrev(false); }}>+ Ajouter un colis après optimisation</button>
-            <BtnPrimary disabled={actionLoading || !!preparationBlock || preparationConflict || !weights || !can('perm_colis_preparer')} onClick={() => runAction(handleSaveMeasurements)}><Check size={16} />Enregistrer les mesures de préparation</BtnPrimary>
-            {!can('perm_colis_preparer') && <p className="mt-2 text-sm text-slate-600">Les mesures sont enregistrées par une personne habilitée à préparer. Vous pouvez vérifier les documents et établir le devis dès qu’elles sont confirmées.</p>}
-            <p role="status" className="mt-2 text-xs text-slate-600">{measuresSaved ? 'Mesures enregistrées, même si les documents restent à vérifier.' : 'Les mesures peuvent être enregistrées avant les documents et le devis.'}</p>
-            {weights && <div className="mt-4 space-y-1 border-t border-gray-100 pt-3 text-sm"><Ligne label="Poids volumétrique" value={`${weights.volumetricWeight.toFixed(2)} kg`} /><Ligne label="Poids facturable" value={`${weights.billableWeight.toFixed(2)} kg`} /></div>}
-          </Section></div>
-          <FacturesPanel workspace tab={documentTab} onTabChange={setDocumentTab}>
+          <section id="quote-measures" aria-label="Mesures de préparation enregistrées" className="scroll-mt-24 rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-2">
+            <h3 className="text-sm font-semibold text-slate-800">Mesures après optimisation</h3>
+            {savedWeights && measuresCurrent ? <><p className="text-sm text-slate-700">{savedFinalPackages(sel).map((box,index) => `Colis sortant ${index + 1} : ${box.dimL} × ${box.dimW} × ${box.dimH} cm · ${box.poids} kg`).join(' ; ')}</p><p className="text-xs text-slate-600">Ces mesures enregistrées par la préparation sont utilisées dans ce devis.</p></> : <p className="text-sm text-amber-800">Les mesures après optimisation doivent être enregistrées par la préparation avant de calculer le devis.</p>}
+            {measuresChanged && <p className="text-sm text-amber-800">Un brouillon de mesures n’est pas encore enregistré. Reprenez la préparation pour le terminer.</p>}
+            <button className="min-h-11 text-sm font-semibold text-blue-700 underline" onClick={() => chooseSection('preparation')}>{can('perm_colis_preparer') ? 'Ouvrir la préparation' : 'Consulter la préparation'}</button>
+          </section>
+          {canInvoiceWorkspace && <FacturesPanel workspace tab={documentTab} onTabChange={setDocumentTab}>
           {!isPro && <div id="quote-articles" className="scroll-mt-24"><Section title="Récapitulatif des articles du dossier" icon={Package} color={borderColor}>
             <div className="mb-4 divide-y divide-gray-100">{currentInvoices(sel.factures || []).filter(invoice => !invoice.rejetMotif).map(invoice => {
               const lines = (sel.lignes || []).filter(line => line.factureId === invoice.id);
@@ -618,18 +686,10 @@ export default function StaffDetailView({ workspace = false }) {
               </form></details>
             </div>
           </Section></div>}
-          </FacturesPanel>
-          <details className="border-t border-slate-200"><summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-slate-600">Consignes facultatives {selTags.length > 0 ? `· ${selTags.length} choisie(s)` : ''}</summary>          <div className="space-y-2">
-            <p className="text-xs font-semibold text-slate-600">Consignes de préparation</p>
-            <div className="flex flex-wrap gap-2">{TAGS_PREPARATION.map((tag) => <button key={tag} disabled={actionLoading} onClick={() => runAction(async () => { const next = selTags.includes(tag) ? selTags.filter((item) => item !== tag) : [...selTags, tag]; await upd(sel.id, { tagsPreparation: next }); setSelTags(next); })} className={`min-h-11 rounded-full px-3 py-2 text-xs font-semibold ${selTags.includes(tag) ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-600'}`}>{tag}</button>)}</div>
-            <textarea aria-label="Commentaire de préparation" value={commentaire} onChange={(event) => setCommentaire(event.target.value)} placeholder="Instructions utiles à la préparation…" rows={2} className={inputClass} />
-            {commentaire !== (sel.commentairePreparation || '') && <button disabled={actionLoading} className="min-h-11 text-xs font-semibold text-blue-700" onClick={() => runAction(() => upd(sel.id, { commentairePreparation: commentaire }))}>Enregistrer la consigne</button>}
-          </div>
-</details>
+          </FacturesPanel>}
           <div id="quote-fees" className="scroll-mt-24 space-y-2 border-t border-gray-200 pt-4"><p className="text-xs font-semibold text-slate-600">Frais convenus</p>{fraisDivers.map((fee, index) => <div key={index} className="flex items-center gap-2 text-sm"><span className="min-w-0 flex-1 break-words">{fee.libelle}</span><strong>{eur(fee.montant)}</strong><button aria-label={`Retirer ${fee.libelle}`} disabled={actionLoading} className="flex min-h-11 min-w-11 items-center justify-center text-gray-400" onClick={() => runAction(async () => { const next = fraisDivers.filter((_, position) => position !== index); preparationDirty.current = true; setFraisDivers(next); setDevisPrev(false); })}><X size={14} /></button></div>)}
             <form className="grid grid-cols-[minmax(0,1fr)_6rem] gap-2" onSubmit={(event) => { event.preventDefault(); runAction(async () => { const amount = Number(newFraisMontant); if (!newFraisLibelle.trim() || newFraisMontant === '' || !Number.isFinite(amount) || amount < 0) throw new Error('Indiquez le libellé et un montant positif ou nul.'); const next = [...fraisDivers, { libelle: newFraisLibelle.trim(), montant: amount }]; preparationDirty.current = true; setFraisDivers(next); setNewFraisLibelle(''); setNewFraisMontant(''); setDevisPrev(false); }); }}><input aria-label="Libellé du frais" required value={newFraisLibelle} onChange={(event) => setNewFraisLibelle(event.target.value)} placeholder="Libellé du frais" className={inputClass} /><input aria-label="Montant du frais" required type="number" min="0" step="0.01" value={newFraisMontant} onChange={(event) => setNewFraisMontant(event.target.value)} placeholder="€" className={inputClass} /><button disabled={actionLoading} className="col-span-2 min-h-11 rounded-xl bg-slate-100 text-xs font-semibold text-slate-700">Ajouter le frais</button></form>
           </div>
-          <div><p className="mb-2 text-xs font-semibold text-slate-600">Photo du colis préparé</p><WebcamCapture colisId={sel.id} colisRef={sel.ref} existingUrl={sel.photoPrep} onCapture={(path) => runAction(() => upd(sel.id, { photoPrep: path }))} /></div>
           {subExpired && <p className="rounded-xl bg-red-50 p-3 text-xs text-red-700">Abonnement expiré : régularisez l’offre du client avant l’envoi.</p>}
 
           {quote.ok && quote.warnings.length > 0 && <div className="space-y-1 rounded-xl bg-amber-50 p-3">{quote.warnings.map((warning, index) => <p key={index} className="text-xs text-amber-800">{warning}</p>)}</div>}
@@ -926,7 +986,7 @@ export default function StaffDetailView({ workspace = false }) {
   return (
     <div className="min-w-0 flex flex-col gap-4 pb-24 lg:pb-4">
       {sel.statut === 'en_preparation' ? <details className="border-b border-slate-200"><summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-slate-600">Suivi : {assignmentLabel}{sel.nextAction ? ` · ${sel.nextAction}` : ''}</summary><StaffAssignment /></details> : <StaffAssignment />}
-      {formErr && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{formErr}</p>}
+      {formErr && !(preparationView && (sel.statut === 'en_preparation' || needsQuoteRecalculation(sel))) && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{formErr}</p>}
 
       {/* ── Action block ───────────────────────────────────────────────── */}
       {renderActionBlock()}

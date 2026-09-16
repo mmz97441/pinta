@@ -250,7 +250,7 @@ function GroupHeaderRow({ icon: Icon, color, label, extraLabel, count, allChecke
 // DETAIL SLIDE-OVER
 // ════════════════════════════════════════════════════════════════════════════
 function DetailSlideOver({ onClose }) {
-  const { sel } = useApp();
+  const { sel, can } = useApp();
   if (!sel) return null;
 
   return (
@@ -272,7 +272,7 @@ function DetailSlideOver({ onClose }) {
         <div className="p-4 space-y-4">
           <StaffDetailView />
           <ColisInfo />
-          {sel.statut !== 'en_preparation' && <FacturesPanel />}
+          {sel.statut !== 'en_preparation' && ['perm_factures_voir', 'perm_factures_ajouter', 'perm_factures_valider', 'perm_factures_refuser', 'perm_factures_ocr', 'perm_factures_modifier_articles'].some(permission => can(permission)) && <FacturesPanel />}
           <ChatPanel />
           <AuditLog />
         </div>
@@ -1037,12 +1037,15 @@ export default function StaffColisPage() {
                 <summary className="min-h-11 py-3 cursor-pointer text-sm font-bold text-gray-800">Cartons reçus ({receptionManifest.nbColis})</summary>
                 <div className="pb-3"><ReceivedCartons colis={sel} settings={settings} /></div>
               </details>
-              <button onClick={() => navigate(`/colis/${encodeURIComponent(sel.id)}?${new URLSearchParams({ returnTo })}`)} className="min-h-11 w-full rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white">Préparer et établir le devis</button>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <button onClick={() => navigate(`/colis/${encodeURIComponent(sel.id)}?${new URLSearchParams({ returnTo, section: 'preparation' })}`)} className="min-h-11 rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white">Préparation</button>
+                {['perm_factures_voir', 'perm_factures_ajouter', 'perm_factures_valider', 'perm_factures_refuser', 'perm_factures_ocr', 'perm_factures_modifier_articles', 'perm_colis_calculer_devis', 'perm_colis_envoyer_devis'].some(permission => can(permission)) && <button onClick={() => navigate(`/colis/${encodeURIComponent(sel.id)}?${new URLSearchParams({ returnTo, section: 'devis' })}`)} className="min-h-11 rounded-xl border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-700">Factures et devis</button>}
+              </div>
               {sel.statut === 'en_preparation' ? <StaffAssignment /> : <StaffDetailView />}
 
 
               {/* Factures — part of the preparation workspace when active. */}
-              {sel.statut !== 'en_preparation' && <><button
+              {sel.statut !== 'en_preparation' && ['perm_factures_voir', 'perm_factures_ajouter', 'perm_factures_valider', 'perm_factures_refuser', 'perm_factures_ocr', 'perm_factures_modifier_articles'].some(permission => can(permission)) && <><button
                 onClick={() => setShowFactures((p) => !p)}
                 aria-expanded={showFactures}
                 className="w-full flex items-center justify-between px-3 py-2 rounded-xl border border-gray-100 hover:bg-gray-50 transition-colors"

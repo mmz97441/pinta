@@ -58,12 +58,17 @@ async function main() {
       await current.page.getByTestId('quote-action-bar').waitFor();
       const verify = current.page.getByRole('button', { name: 'Enregistrer et vérifier le devis', exact: true });
       assert.equal(await verify.isDisabled(), true);
+      const sections = current.page.getByRole('navigation', { name: 'Organisation du dossier', exact: true });
+      await sections.getByRole('button', { name: 'Préparation', exact: true }).click();
       for (const [label, unit] of [['Longueur', 'cm'], ['Largeur', 'cm'], ['Hauteur', 'cm'], ['Poids réel', 'kg']]) assert.equal(await current.page.getByLabel(`${label} · colis sortant 1 (${unit})`, { exact: true }).inputValue(), '');
       await current.page.screenshot({ path: path.join(output, `preparation-separate-${device}.png`), fullPage: true });
       for (const [label, unit, value] of [['Longueur', 'cm', 40], ['Largeur', 'cm', 20], ['Hauteur', 'cm', 10], ['Poids réel', 'kg', 3]]) await current.page.getByLabel(`${label} · colis sortant 1 (${unit})`, { exact: true }).fill(String(value));
+      await sections.getByRole('button', { name: 'Factures et devis', exact: true }).click();
       assert.equal(await verify.isDisabled(), true, 'Final measures must be saved explicitly before calculating the quote.');
+      await sections.getByRole('button', { name: 'Préparation', exact: true }).click();
       await current.page.getByRole('button', { name: 'Enregistrer les mesures de préparation', exact: true }).click();
       await current.page.getByText('Mesures enregistrées, même si les documents restent à vérifier.', { exact: true }).waitFor();
+      await sections.getByRole('button', { name: 'Factures et devis', exact: true }).click();
       assert.equal(await verify.isDisabled(), false);
       await verify.click();
       await current.page.getByRole('button', { name: 'Envoyer le devis au client', exact: true }).waitFor();

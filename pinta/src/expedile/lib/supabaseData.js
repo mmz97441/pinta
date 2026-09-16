@@ -734,13 +734,15 @@ export async function classifyInvoiceDuplicate(invoiceId, originalId, token, ori
     p_expected_review_token: token, p_expected_original_review_token: originalToken,
   });
   if (error) throw error;
-  return data;
+  if (!data?.success || !data.facture) throw new Error('Le retrait n’a pas été confirmé. Actualisez pour vérifier l’état de la facture.');
+  return { ...data, facture: mapFact(data.facture) };
 }
 
 export async function restoreInvoiceDuplicate(invoiceId, token) {
   const { data, error } = await supabase.rpc('restore_invoice_duplicate', { p_facture_id: invoiceId, p_expected_review_token: token });
   if (error) throw error;
-  return data;
+  if (!data?.success || !data.facture) throw new Error('La restauration n’a pas été confirmée. Actualisez pour vérifier l’état de la facture.');
+  return { ...data, facture: mapFact(data.facture) };
 }
 
 export async function insertFacture(colisId, factureData) {

@@ -89,6 +89,9 @@ export function workActionUrl(action, returnTo = '/', dossier) {
   const params = new URLSearchParams({ returnTo: safeWorkReturn(returnTo), action: action.id });
   if (action.kind === 'conversation' && action.action_hint === 'Accès client à activer' && dossier?.clientId) return `/clients/${encodeURIComponent(dossier.clientId)}?${params}`;
   if (action.kind === 'conversation') return `/conversations?${new URLSearchParams({ dossier: action.colis_id, action: action.id, returnTo: safeWorkReturn(returnTo) })}`;
-  if (['preparation', 'documents', 'quote'].includes(action.kind)) return `/colis/${encodeURIComponent(action.colis_id)}?${params}`;
+  if (['preparation', 'documents', 'quote'].includes(action.kind)) {
+    params.set('section', action.kind === 'preparation' ? 'preparation' : 'devis');
+    return `/colis/${encodeURIComponent(action.colis_id)}?${params}`;
+  }
   return `/colis?${new URLSearchParams({ dossier: action.colis_id, returnTo: safeWorkReturn(returnTo), action: action.id })}`;
 }

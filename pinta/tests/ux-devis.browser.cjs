@@ -70,6 +70,7 @@ async function main() {
     await current.login();
     await current.page.setViewportSize({ width: 390, height: 844 });
     await current.page.goto(`${base}/colis/${P}`);
+    await current.page.getByRole('navigation', { name: 'Organisation du dossier', exact: true }).getByRole('button', { name: 'Factures et devis', exact: true }).click();
     await current.page.getByTestId('quote-action-bar').waitFor();
     await current.page.getByText('Propositions de l’analyse : vérifiez les articles et leurs catégories.', { exact: true }).waitFor();
     assert.ok(current.calls.some((call) => call.kind === 'context'), 'Existing review is restored through the shared context RPC');
