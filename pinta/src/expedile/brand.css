@@ -296,3 +296,15 @@ html.dark .bg-gray-200, html.dark .bg-slate-200 { background-color: #413C35 !imp
 html .staff-sidebar .text-gray-400, html .staff-sidebar .text-gray-500,
 html .staff-sidebar .text-slate-400, html .staff-sidebar .text-slate-500 { color: #BDC9CD !important; }
 html .staff-sidebar button[aria-current='page'] { background-color: rgba(255,255,255,.15) !important; color: white !important; }
+
+/* Invoice workspace follows the available panel width, including split view. */
+.invoice-workspace { container-type: inline-size; }
+.invoice-pane-hidden { display: none; }
+.invoice-editor { scroll-margin-top: 8rem; }
+@container (min-width: 850px) {
+  .invoice-wide { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
+  .invoice-wide .invoice-pane-hidden { display: block; }
+  .invoice-wide-tabs { display: none; }
+  .invoice-wide .invoice-document { position: sticky; top: 7.5rem; max-height: calc(100dvh - 9rem); overflow-y: auto; }
+  .invoice-wide .invoice-editor { border-left: 1px solid var(--border-color, #e5e7eb); }
+}

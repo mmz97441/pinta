@@ -2,7 +2,8 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const assert = require('node:assert/strict');
-const { setup, base, ids: { P, F } } = require('./browser-regression.cjs');
+const { setup, base, ids: { P } } = require('./browser-regression.cjs');
+const { fixture: invoiceFixture } = require('./invoice-workspace.cjs');
 const { chromium } = require(process.env.PINTA_PLAYWRIGHT_MODULE || 'playwright');
 const output = process.env.PINTA_UX_DEVIS_OUT || path.resolve(__dirname, '../../docs/verification-ux-devis-client-2026-09-10');
 async function main() {
@@ -16,9 +17,11 @@ async function main() {
     current.tables.colis[0].trackings = ['TEST-001'];
     current.tables.colis[0].trackings_detail = [{ number: 'TEST-001' }];
     await current.login();
-    await current.page.getByRole('button', { name: 'Autoriser les dossiers listés (1)' }).click();
+    await current.page.goto(`${base}/colis/${P}`);
+    await current.page.getByRole('button', { name: 'Autoriser la préparation', exact: true }).click();
     await current.page.getByRole('dialog').waitFor();
     assert.match(await current.page.getByRole('dialog').innerText(), /3 carton\(s\)/);
+    assert.match(await current.page.getByRole('dialog').innerText(), /EXP-TEST-001/);
     await current.page.getByRole('button', { name: 'Annuler', exact: true }).click();
     await current.page.setViewportSize({ width: 390, height: 844 });
     await current.page.goto(`${base}/colis/${P}`);
@@ -58,7 +61,7 @@ async function main() {
     results.push({ test: 'client-document-private-deposit-and-failed-insert-retry-no-duplicate-upload', pass: true });
     await current.context.close();
 
-    current = await setup(browser, 'directeur');
+    current = await invoiceFixture(browser);
     const ocrCalls = [];
     await current.context.route('**/functions/v1/ocr-facture', async (route) => {
       const body = route.request().postDataJSON(); ocrCalls.push(body);
@@ -68,21 +71,24 @@ async function main() {
     await current.page.setViewportSize({ width: 390, height: 844 });
     await current.page.goto(`${base}/colis/${P}`);
     await current.page.getByTestId('quote-action-bar').waitFor();
-    await current.page.getByText('Propositions de l’analyse · à vérifier').waitFor();
-    assert.ok(ocrCalls.some((call) => call.action === 'resume' && call.factureId === F));
+    await current.page.getByText('Propositions de l’analyse : vérifiez les articles et leurs catégories.', { exact: true }).waitFor();
+    assert.ok(current.calls.some((call) => call.kind === 'context'), 'Existing review is restored through the shared context RPC');
     assert.ok(!ocrCalls.some((call) => call.action === 'extract'));
+    await current.page.getByTestId('quote-action-bar').scrollIntoViewIfNeeded();
     const barBox = await current.page.getByTestId('quote-action-bar').boundingBox();
-    results.push({ test: 'staff-action-bar-visible-mobile', pass: barBox.y >= 0 && barBox.y + barBox.height <= 845, barBox });
+    results.push({ test: 'staff-action-bar-reachable-mobile', pass: barBox.y >= 0 && barBox.y + barBox.height <= 845, barBox });
     await current.page.screenshot({ path: path.join(output, 'staff-preparation-mobile.png') });
-    await current.page.getByLabel('Description extraite 1').fill('Correction conservée');
+    await current.page.getByLabel('Description de l’article 1').fill('Correction conservée');
     await current.page.getByRole('tab', { name: 'Document', exact: true }).click();
     await current.page.getByRole('tab', { name: 'Articles et vérification', exact: true }).click();
-    assert.equal(await current.page.getByLabel('Description extraite 1').inputValue(), 'Correction conservée');
-    assert.equal(await current.page.getByRole('button', { name: 'Confirmer les articles vérifiés' }).isDisabled(), true);
-    await current.page.getByLabel('Catégorie extraite 1').selectOption('cat-test');
-    assert.equal(await current.page.getByRole('button', { name: 'Confirmer les articles vérifiés' }).isDisabled(), false);
-    await current.page.getByLabel('Total HT des articles à importer (€)').fill('150');
-    assert.equal(await current.page.getByRole('button', { name: 'Confirmer les articles vérifiés' }).isDisabled(), true);
+    assert.equal(await current.page.getByLabel('Description de l’article 1').inputValue(), 'Correction conservée');
+    await current.page.getByRole('button', { name: 'Valider cette facture et ses articles', exact: true }).click();
+    assert.equal(current.calls.filter(call => call.kind === 'save').length, 0);
+    await current.page.getByLabel('Catégorie de l’article 1').selectOption('cat-test');
+    assert.equal(await current.page.getByRole('button', { name: 'Valider cette facture et ses articles', exact: true }).isEnabled(), true);
+    await current.page.getByLabel('Total HT de la facture').fill('150');
+    await current.page.getByRole('button', { name: 'Valider cette facture et ses articles', exact: true }).click();
+    assert.equal(current.calls.filter(call => call.kind === 'save').length, 0);
     results.push({ test: 'ocr-resume-tabs-preserve-correction-and-block-inconsistent-total', pass: true });
     await current.page.setViewportSize({ width: 1440, height: 1000 });
     await current.page.screenshot({ path: path.join(output, 'staff-workspace-desktop.png'), fullPage: true });

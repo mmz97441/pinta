@@ -23,7 +23,7 @@ function database(tables={}, rpc=()=>({data:null,error:null}), authUser={id:'100
 const colisId = '30000000-0000-4000-8000-000000000001';
 const factureId = '40000000-0000-4000-8000-000000000001';
 const env = { SUPABASE_URL: 'https://fixture.supabase.co', SUPABASE_ANON_KEY: 'anon' };
-async function resumeFixture({ role = 'preparateur', permissions = { perm_factures_valider: true }, extraction = true, storedBytes = 'current document' } = {}) {
+async function resumeFixture({ role = 'preparateur', permissions = { perm_factures_valider: true }, extraction = true, storedBytes = 'current document', storedIdentity = 'object-version-1', afterIdentity = 'object-version-1' } = {}) {
   let mutations = 0;
   const bytes = new TextEncoder().encode(storedBytes);
   const hash = Buffer.from(await webcrypto.subtle.digest('SHA-256', bytes)).toString('hex');
@@ -31,8 +31,10 @@ async function resumeFixture({ role = 'preparateur', permissions = { perm_factur
     profiles: { id: '10000000-0000-4000-8000-000000000001', role, actif: true },
     staff_users: { id: 'staff', actif: true }, staff_permissions: permissions,
     factures: { id: factureId, colis_id: colisId, fichier_url: `${colisId}/doc.pdf` },
-    ocr_extractions: ({ filters, mutation }) => { if (mutation) mutations++; if (filters.facture_id) { assert.equal(filters.facture_id, factureId); assert.equal(filters.document_hash, hash); } return { data: extraction ? { id: '50000000-0000-4000-8000-000000000001', facture_id: factureId, document_hash: hash, document_file_url: `${colisId}/doc.pdf`, status: 'review', total: 10, lines: [{ desc: 'Article', qte: 1, prix: 10, cat: null }] } : null, error: null }; },
+    ocr_extractions: ({ filters, mutation }) => { if (mutation) mutations++; if (filters.facture_id) { assert.equal(filters.facture_id, factureId); assert.equal(filters.document_hash, hash); } return { data: extraction ? { id: '50000000-0000-4000-8000-000000000001', facture_id: factureId, document_hash: hash, document_file_url: `${colisId}/doc.pdf`, document_storage_identity: mutation?.document_storage_identity ?? storedIdentity, status: 'review', total: 10, lines: [{ desc: 'Article', qte: 1, prix: 10, cat: null }] } : null, error: null }; },
   });
+  let identityReads = 0;
+  db.rpc = async (name) => { assert.equal(name, 'invoice_storage_identity'); return { data: ++identityReads === 1 ? 'object-version-1' : afterIdentity, error: null }; };
   db.storage = { from: (bucket) => ({ download: async (path) => { assert.equal(bucket, 'factures'); assert.equal(path, `${colisId}/doc.pdf`); return { data: new Blob([bytes]), error: null }; } }) };
   const run = await handler('ocr-facture', { env, db });
   return { run, db, hash, mutations: () => mutations };
@@ -72,4 +74,21 @@ test('OCR confirmation transmits the verified file version to the transactional 
   };
   const response = await fixture.run(req({ colisId, factureId, action: 'confirm', extractionId: '50000000-0000-4000-8000-000000000001' }, { authorization: 'Bearer validator' }));
   assert.equal(response.status, 200); assert.equal(called, true);
+});
+
+
+test('OCR resume binds historical analysis only after rehashing its current storage object', async () => {
+  const f = await resumeFixture({ storedIdentity: null });
+  const response = await f.run(req({ colisId, factureId, action: 'resume' }, { authorization: 'Bearer validator' }));
+  assert.equal(response.status, 200); const body = await response.json();
+  assert.equal(body.extraction.document_storage_identity, 'object-version-1');
+  assert.equal(f.mutations(), 1);
+});
+
+test('OCR resume refuses an object replaced during download before writing a trusted proof', async () => {
+  const f = await resumeFixture({ storedIdentity: null, afterIdentity: 'object-version-2' });
+  const response = await f.run(req({ colisId, factureId, action: 'resume' }, { authorization: 'Bearer validator' }));
+  assert.equal(response.status, 409);
+  assert.match((await response.json()).error, /changé/);
+  assert.equal(f.mutations(), 0);
 });

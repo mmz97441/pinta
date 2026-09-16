@@ -221,7 +221,11 @@ async function setup(browser, role, { failTable = null } = {}) {
     else if (url.pathname.includes('/rest/v1/rpc/')) {
       const rpc = url.pathname.split('/').pop(),
         colis = tables.colis.find((c) => c.id === input?.p_colis_id);
-      if (rpc === 'refresh_staff_work_actions') body = null;
+      if (rpc === 'get_invoice_review_context') body = {
+        invoices: tables.factures.filter(invoice => invoice.colis_id === input.p_colis_id).map(invoice => ({ factureId: invoice.id, reviewToken: 'fixture-review-' + invoice.id, extraction: null, draft: null, documentHash: null, duplicateCandidateIds: [] })),
+        unlinkedLines: tables.lignes.filter(line => line.colis_id === input.p_colis_id && !line.facture_id),
+      };
+      else if (rpc === 'refresh_staff_work_actions') body = null;
       else if (rpc === 'save_preparation_measurements') {
         if (input.p_expected_updated_at !== colis.updated_at || input.p_expected_composition_version !== colis.preparation_composition_version) {
           status = 409; body = { code: '40001', message: 'Le dossier a changé. Votre brouillon est conservé.' };

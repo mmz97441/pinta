@@ -1,4 +1,5 @@
 import { receptionCartonManifest } from './reception.js';
+import { currentInvoices } from './invoiceDocuments.js';
 /** Client-facing facts only. A status never implies a delivery date. */
 export function cartonManifest(colis) {
   const trackings = [...new Set((colis?.trackings || []).map(String).map((s) => s.trim()).filter(Boolean))];
@@ -87,8 +88,7 @@ export function clientWorkState(colis, client = {}) {
   if (colis.statut === 'attente_feu_vert') return { section: 'todo', action: 'Donner mon accord ou attendre', journey };
   if (['devis_envoye', 'attente_paiement'].includes(colis.statut) && !journey.quoteNeedsReview && !colis.paiementDate)
     return { section: 'todo', action: client.type === 'pro' ? 'Consulter les modalités de règlement' : colis.payplugPaymentUrl ? 'Consulter et régler le devis' : 'Consulter le devis et le règlement', journey };
-  const replacements = new Set((colis.factures || []).map(invoice => invoice.replacesFactureId).filter(Boolean));
-  const rejected = (colis.factures || []).some(invoice => invoice.rejetMotif && !replacements.has(invoice.id));
+  const rejected = currentInvoices(colis.factures).some(invoice => invoice.rejetMotif || invoice.rejet_motif);
   if (rejected && !colis.paiementDate) return { section: 'todo', action: 'Corriger une facture', journey };
   return { section: 'team', action: 'Suivre mon expédition', journey };
 }

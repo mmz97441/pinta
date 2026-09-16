@@ -1,4 +1,5 @@
 import { receptionCartonManifest, hasCompleteReceptionMeasurements } from './reception.js';
+import { currentInvoices, excludedInvoiceIds } from './invoiceDocuments.js';
 
 /** Deterministic quote calculation. This module has no network, clock or UI dependency. */
 export const QUOTE_SCHEMA_VERSION = 1;
@@ -63,7 +64,7 @@ export function calculateQuote({ colis = {}, client = {}, destination, tarif, ca
   const finalBox = finalPackages.length === 1 ? finalPackages[0] : null;
   if (!after && !errors.some((error) => error.field.startsWith('dimensions') || error.field === 'settings')) fail('dimensions', 'Les dimensions dépassent les limites de calcul.');
 
-  const invoices = (colis.factures || []).filter((invoice) => !invoice.rejetMotif);
+  const invoices = currentInvoices(colis.factures).filter((invoice) => !(invoice.rejetMotif || invoice.rejet_motif));
   if (!isPro && mode === 'final') {
     if (!invoices.length || !invoices.some((invoice) => invoice.valide)) fail('factures', 'Validez au moins une facture avant de préparer le devis.');
     if (invoices.some((invoice) => !invoice.valide)) fail('factures', 'Vérifiez toutes les factures en attente de ce dossier.');
@@ -71,9 +72,9 @@ export function calculateQuote({ colis = {}, client = {}, destination, tarif, ca
     if (invoices.some((invoice) => !positive(invoice.montant))) fail('factures', 'Les factures validées doivent avoir un montant positif.');
   }
 
-  const rejectedInvoiceIds = new Set((colis.factures || []).filter(invoice => invoice.rejetMotif || invoice.replacedById).map(invoice => invoice.id));
-  const activeLines = (colis.lignes || []).filter(line => !line.factureId || !rejectedInvoiceIds.has(line.factureId));
-  if (activeLines.length !== (colis.lignes || []).length) warnings.push('Les articles des factures rejetées ou remplacées sont exclus de ce devis.');
+  const excludedIds = excludedInvoiceIds(colis.factures);
+  const activeLines = (colis.lignes || []).filter(line => !line.factureId || !excludedIds.has(line.factureId));
+  if (activeLines.length !== (colis.lignes || []).length) warnings.push('Les articles des factures rejetées, remplacées ou classées en doublon sont exclus de ce devis.');
   const lines = [];
   if (!isPro) {
     if (!activeLines.length) fail('lignes', 'Ajoutez les articles et leur catégorie pour calculer les taxes.');

@@ -3,7 +3,8 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const assert = require('node:assert/strict');
 const { chromium } = require(process.env.PINTA_PLAYWRIGHT_MODULE || 'playwright');
-const { setup, base, ids: { P, F } } = require('./browser-regression.cjs');
+const { base, ids: { P, F } } = require('./browser-regression.cjs');
+const { fixture: invoiceFixture } = require('./invoice-workspace.cjs');
 const output = process.env.PINTA_PDF_OUT || path.resolve(__dirname, '../../docs/verification-pdf-2026-09-10');
 async function main() {
   await fs.mkdir(output, { recursive: true });
@@ -11,7 +12,7 @@ async function main() {
   const results = [];
   let fixture;
   try {
-    fixture = await setup(browser, 'directeur');
+    fixture = await invoiceFixture(browser);
     let resumeCalls = 0;
     await fixture.context.route('**/functions/v1/ocr-facture', async (route) => {
       resumeCalls++;
@@ -41,13 +42,13 @@ async function main() {
 
     await fixture.page.setViewportSize({ width: 390, height: 844 });
     await fixture.page.getByRole('tab', { name: 'Articles et vérification', exact: true }).click();
-    await fixture.page.getByLabel('Description extraite 1', { exact: true }).fill('Correction conservée entre les onglets');
+    await fixture.page.getByLabel('Description de l’article 1', { exact: true }).fill('Correction conservée entre les onglets');
     const callsBeforeTabs = resumeCalls;
     await fixture.page.getByRole('tab', { name: 'Document', exact: true }).click();
     await fixture.page.locator('canvas[data-rendered="true"][aria-label*="page 2"]').waitFor();
     assert.equal(await fixture.page.getByLabel('Zoom du document', { exact: true }).inputValue(), '2');
     await fixture.page.getByRole('tab', { name: 'Articles et vérification', exact: true }).click();
-    assert.equal(await fixture.page.getByLabel('Description extraite 1', { exact: true }).inputValue(), 'Correction conservée entre les onglets');
+    assert.equal(await fixture.page.getByLabel('Description de l’article 1', { exact: true }).inputValue(), 'Correction conservée entre les onglets');
     await fixture.page.getByRole('tab', { name: 'Document', exact: true }).click();
     await fixture.page.getByText('Page 2 sur 2', { exact: true }).waitFor();
     assert.equal(resumeCalls, callsBeforeTabs, 'Switching tabs must not reanalyse/reload OCR');

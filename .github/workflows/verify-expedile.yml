@@ -51,6 +51,7 @@ jobs:
           ./supabase/tests/run-legacy-payments.sh
           ./supabase/tests/run-migration-owners.sh
           ./supabase/tests/run-telegram-requested-invoice.sh
+          ./supabase/tests/run-invoice-review.sh
       - run: npx playwright install --with-deps chromium
       - name: Parcours navigateur sans services externes
         run: |
@@ -65,6 +66,7 @@ jobs:
           node tests/parcel-reference-search.cjs
           node tests/reçu-documents-factures.cjs
           node tests/invoice-review-indicator.cjs
+          node tests/invoice-workspace.cjs
           npm run test:browser
           node tests/accessibility.cjs
           node tests/ux-team-browser.cjs
@@ -88,4 +90,5 @@ jobs:
             /tmp/pinta-reception-devis-results
             /tmp/pinta-received-cartons-results
             /tmp/pinta-carton-numbering-results
+            /tmp/pinta-invoice-workspace-20260916
             /tmp/pinta-preview.log

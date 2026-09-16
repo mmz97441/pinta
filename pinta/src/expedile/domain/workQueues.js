@@ -1,6 +1,7 @@
 import { calculateQuote } from './quote.js';
 import { DESTINATIONS, STATUTS } from '../constants/index.js';
 import { needsConversationAction } from './conversations.js';
+import { currentInvoices } from './invoiceDocuments.js';
 
 const DAY = 86400000;
 const terminal = new Set(['annule', 'livre']);
@@ -28,7 +29,7 @@ export function isWaitDue(colis, now = Date.now()) {
 }
 export function needsDocuments(colis, client) {
   if (client?.type === 'pro' || !preQuote.has(colis.statut)) return false;
-  const invoices = (colis.factures || []).filter((invoice) => !invoice.rejetMotif);
+  const invoices = currentInvoices(colis.factures).filter((invoice) => !(invoice.rejetMotif || invoice.rejet_motif));
   return !invoices.length || invoices.some((invoice) => !invoice.valide || !(invoice.fichier || invoice.fichierUrl || invoice.storagePath) || !(Number(invoice.montant) > 0));
 }
 export function isActionDue(colis, now = Date.now()) {

@@ -190,6 +190,8 @@ export function mapFact(row) {
     fichier: row.fichier_url,
     fichierNom: row.fichier_nom,
     replacesFactureId: row.replaces_facture_id || null,
+    duplicateOfId: row.duplicate_of_facture_id || null,
+    duplicateMarkedAt: row.duplicate_marked_at || null,
     rejetMotif: row.rejet_motif || null,
     telegramMsgId: row.telegram_msg_id || null,
     ocrStatus: row.ocr_status || null,
@@ -706,6 +708,40 @@ export async function insertMessage(colisId, msg) {
 }
 
 // ── Factures ─────────────────────────────────────────────────────────
+
+export async function getInvoiceReviewContext(colisId) {
+  const { data, error } = await supabase.rpc('get_invoice_review_context', { p_colis_id: colisId });
+  if (error) throw error;
+  if (!Array.isArray(data?.invoices)) throw new Error('Le contexte de vérification est indisponible. Actualisez avant de continuer.');
+  return data;
+}
+
+export async function saveInvoiceReview(invoice, draft, confirm) {
+  const { data, error } = await supabase.rpc('save_invoice_review', {
+    p_facture_id: invoice.id, p_expected_review_token: draft.reviewToken,
+    p_expected_file_url: invoice.fichier, p_lines: draft.lines,
+    p_total: draft.total === '' ? null : Number(draft.total), p_vendeur: draft.vendeur,
+    p_extraction_id: draft.extractionId || null, p_confirm: confirm,
+  });
+  if (error) throw error;
+  if (!data?.success) throw new Error('La confirmation du serveur est indisponible. Actualisez pour vérifier l’enregistrement.');
+  return { ...data, facture: mapFact(data.facture) };
+}
+
+export async function classifyInvoiceDuplicate(invoiceId, originalId, token, originalToken) {
+  const { data, error } = await supabase.rpc('classify_invoice_duplicate', {
+    p_facture_id: invoiceId, p_original_facture_id: originalId,
+    p_expected_review_token: token, p_expected_original_review_token: originalToken,
+  });
+  if (error) throw error;
+  return data;
+}
+
+export async function restoreInvoiceDuplicate(invoiceId, token) {
+  const { data, error } = await supabase.rpc('restore_invoice_duplicate', { p_facture_id: invoiceId, p_expected_review_token: token });
+  if (error) throw error;
+  return data;
+}
 
 export async function insertFacture(colisId, factureData) {
   const { data, error } = await supabase

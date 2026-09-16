@@ -62,8 +62,11 @@ SELECT test_assert((_apply_client_decision('30000000-0000-4000-8000-000000000001
 SELECT test_assert((SELECT statut='en_preparation' FROM colis WHERE id='30000000-0000-4000-8000-000000000003'),'Consent does not change other client dossiers');
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claim.sub','10000000-0000-4000-8000-000000000001',true);
-SELECT test_reject($q$SELECT save_quote('30000000-0000-4000-8000-000000000003','{"devisTotal":1,"devisTransport":-1,"devisOM":2,"devisOMR":0,"devisTVA":0}')$q$,'Negative/falsified quote components rejected');
-SELECT save_quote('30000000-0000-4000-8000-000000000003',jsonb_build_object('devisTotal',base+2*par_kg,'devisTransport',base+2*par_kg,'devisOM',0,'devisOMR',0,'devisTVA',0,'finL',10,'finW',10,'finH',10,'finP',2,'modePaiementPro','virement','amounts',jsonb_build_object('total',999),'fraisDivers','[]'::jsonb)) FROM tarifs WHERE destination_code='974' AND actif;
+-- Preparation now requires recorded consent and certified final measures.
+UPDATE colis SET feu_vert='autorise' WHERE id='30000000-0000-4000-8000-000000000003';
+SELECT save_preparation_measurements(id,'[{"dimL":10,"dimW":10,"dimH":10,"poids":2}]',updated_at,preparation_composition_version) FROM colis WHERE id='30000000-0000-4000-8000-000000000003';
+SELECT test_reject($q$SELECT save_quote('30000000-0000-4000-8000-000000000003','{"devisTotal":1,"devisTransport":-1,"devisOM":2,"devisOMR":0,"devisTVA":0}',(SELECT updated_at FROM colis WHERE id='30000000-0000-4000-8000-000000000003'))$q$,'Negative/falsified quote components rejected');
+SELECT save_quote('30000000-0000-4000-8000-000000000003',jsonb_build_object('devisTotal',base+2*par_kg,'devisTransport',base+2*par_kg,'devisOM',0,'devisOMR',0,'devisTVA',0,'finL',10,'finW',10,'finH',10,'finP',2,'modePaiementPro','virement','amounts',jsonb_build_object('total',999),'fraisDivers','[]'::jsonb),(SELECT updated_at FROM colis WHERE id='30000000-0000-4000-8000-000000000003')) FROM tarifs WHERE destination_code='974' AND actif;
 SELECT test_assert((SELECT quote_version=1 AND devis_snapshot->>'createdAt' IS NOT NULL FROM colis WHERE id='30000000-0000-4000-8000-000000000003'),'Quote persists an immutable dated version');
 SELECT test_assert((SELECT (devis_snapshot->'amounts'->>'total')::numeric=devis_total FROM colis WHERE id='30000000-0000-4000-8000-000000000003'),'PDF snapshot total is normalized to server amount');
 SELECT test_reject($q$UPDATE colis SET devis_total=999 WHERE id='30000000-0000-4000-8000-000000000003'$q$,'Even direction cannot bypass save_quote with direct patch');
@@ -91,7 +94,9 @@ SELECT test_assert((SELECT NOT valide AND valide_par IS NULL FROM factures WHERE
 SELECT set_config('request.jwt.claim.sub','10000000-0000-4000-8000-000000000001',true);
 UPDATE factures SET montant=100,valide=true WHERE id='40000000-0000-4000-8000-000000000001';
 UPDATE tarifs SET base=12.34,par_kg=8.76 WHERE destination_code='976' AND actif;
-SELECT save_quote('30000000-0000-4000-8000-000000000004','{"devisTotal":44.97,"devisTransport":33.10,"devisOM":6.66,"devisOMR":0,"devisTVA":3.98,"finL":10,"finW":10,"finH":10,"finP":2.37,"fraisDivers":[{"libelle":"Emballage","montant":1.23}]}');
+UPDATE colis SET feu_vert='autorise' WHERE id='30000000-0000-4000-8000-000000000004';
+SELECT save_preparation_measurements(id,'[{"dimL":10,"dimW":10,"dimH":10,"poids":2.37}]',updated_at,preparation_composition_version) FROM colis WHERE id='30000000-0000-4000-8000-000000000004';
+SELECT save_quote('30000000-0000-4000-8000-000000000004','{"devisTotal":44.97,"devisTransport":33.10,"devisOM":6.66,"devisOMR":0,"devisTVA":3.98,"finL":10,"finW":10,"finH":10,"finP":2.37,"fraisDivers":[{"libelle":"Emballage","montant":1.23}]}',(SELECT updated_at FROM colis WHERE id='30000000-0000-4000-8000-000000000004'));
 SELECT test_assert((SELECT devis_total=44.97 AND devis_om=6.66 AND devis_tva=3.98 AND poids_facturable=2.37 FROM colis WHERE id='30000000-0000-4000-8000-000000000004'),'Server quote rounding matches canonical decimal fixture');
 UPDATE lignes SET prix_unitaire=110 WHERE colis_id='30000000-0000-4000-8000-000000000004';
 SELECT test_assert((SELECT devis_total IS NULL AND payplug_payment_url IS NULL AND quote_version=2 FROM colis WHERE id='30000000-0000-4000-8000-000000000004'),'Changing articles invalidates quote and payment link');

@@ -20,6 +20,14 @@ Deno.serve(async (req: Request) => {
     if (!uuid(body.factureId) || !uuid(body.colisId) || !['extract','confirm','resume'].includes(body.action || 'extract')) throw new HttpError(400, 'Facture, dossier et action valides requis');
     const invoice = await db.from('factures').select('*').eq('id', body.factureId).eq('colis_id', body.colisId).single(); throwDb(invoice);
     const path = trustedStoragePath(invoice.data.fichier_url || '', 'factures', body.colisId);
+    // Bind a verified hash to the immutable object version observed around download.
+    // Confirmation through the legacy path retains its existing hash guard.
+    let storageIdentity: string | null = null;
+    if (body.action !== 'confirm') {
+      const identity = await db.rpc('invoice_storage_identity', { p_file_url: path }); throwDb(identity);
+      storageIdentity = identity.data;
+      if (!storageIdentity) throw new HttpError(409, 'Le document est indisponible. Rechargez la facture.');
+    }
     const download = await db.storage.from('factures').download(path); throwDb(download);
     if (download.data.size > 10 * 1024 * 1024) throw new HttpError(400, 'La facture dépasse 10 Mo');
     const bytes = new Uint8Array(await download.data.arrayBuffer());
@@ -34,6 +42,8 @@ Deno.serve(async (req: Request) => {
       if (result.error) throw new HttpError(400, result.error.message);
       return json(result.data);
     }
+    const currentIdentity = await db.rpc('invoice_storage_identity', { p_file_url: path }); throwDb(currentIdentity);
+    if (currentIdentity.data !== storageIdentity) throw new HttpError(409, 'Le document a changé pendant sa lecture. Rechargez la facture.');
     const old = await db.from('ocr_extractions').select('*').eq('facture_id', body.factureId).eq('document_hash', documentHash).maybeSingle(); throwDb(old);
     if (old.data && (!old.data.document_file_url || (old.data.status === 'review' && old.data.document_file_url !== invoice.data.fichier_url))) {
       let binding = db.from('ocr_extractions').update({ document_file_url: invoice.data.fichier_url }).eq('id', old.data.id).eq('status', old.data.status);
@@ -43,6 +53,11 @@ Deno.serve(async (req: Request) => {
       else { const current = await db.from('ocr_extractions').select('*').eq('id', old.data.id).single(); throwDb(current); old.data = current.data; }
     }
     if (old.data && old.data.document_file_url !== invoice.data.fichier_url) throw new HttpError(409, 'Ce document a déjà été confirmé. Vérifiez la facture existante ou validez ses informations manuellement.');
+    if (old.data && old.data.document_storage_identity !== storageIdentity) {
+      const stamped = await db.from('ocr_extractions').update({ document_storage_identity: storageIdentity }).eq('id', old.data.id).eq('document_hash', documentHash).eq('document_file_url', invoice.data.fichier_url).select().maybeSingle(); throwDb(stamped);
+      if (!stamped.data) throw new HttpError(409, 'L’analyse a changé. Rechargez la facture.');
+      old.data = stamped.data;
+    }
     if (body.action === 'resume') return json({ success: true, extraction: old.data || null, insertedLignes: [], reused: !!old.data });
     if (old.data) {
       throwDb(await db.from('factures').update({ocr_status:old.data.status,ocr_error:null}).eq('id',body.factureId));
@@ -78,7 +93,7 @@ Deno.serve(async (req: Request) => {
     });
     const total = typeof parsed.total_ht === 'number' && Number.isFinite(parsed.total_ht) && parsed.total_ht >= 0 ? Math.round(parsed.total_ht*100)/100 : null;
     if (total === null || lines.some((l:any)=>l.prix===null) || Math.abs(lines.reduce((sum:number,l:any)=>sum+(l.prix || 0),0)-(total || 0)) > 0.02) warnings.push('Le total doit être rapproché avec les articles avant validation.');
-    const result = await db.from('ocr_extractions').upsert({ facture_id:body.factureId, document_hash:documentHash, document_file_url:invoice.data.fichier_url, vendeur:String(parsed.vendeur || '').slice(0,200), total, lines, warnings }, { onConflict:'facture_id,document_hash',ignoreDuplicates:true }).select().maybeSingle(); throwDb(result);
+    const result = await db.from('ocr_extractions').upsert({ facture_id:body.factureId, document_hash:documentHash, document_file_url:invoice.data.fichier_url, document_storage_identity:storageIdentity, vendeur:String(parsed.vendeur || '').slice(0,200), total, lines, warnings }, { onConflict:'facture_id,document_hash',ignoreDuplicates:true }).select().maybeSingle(); throwDb(result);
     const extraction = result.data || (await db.from('ocr_extractions').select('*').eq('facture_id',body.factureId).eq('document_hash',documentHash).single()).data;
     throwDb(await db.from('factures').update({ocr_status:extraction.status,ocr_error:null}).eq('id',body.factureId));
     throwDb(await db.from('ocr_jobs').update({status:'review',last_error:null}).eq('facture_id',body.factureId));
