@@ -47,7 +47,7 @@ export function reviewIssues(draft, categories, invoice) {
   return issues;
 }
 
-export default function InvoiceWorkspace({ workspace = false, tab, onTabChange, children }) {
+export default function InvoiceWorkspace({ workspace = false, taskMode = false, onQuote, tab, onTabChange, children }) {
   const { sel, auth, categories = [], can, setData, refreshColis, refreshWork, setCfm: askConfirm, getClient, sendMsg } = useApp();
   const cacheKey = `${auth?.u?.id || auth?.id}:${sel?.id}`;
   const location = useLocation();
@@ -195,6 +195,7 @@ export default function InvoiceWorkspace({ workspace = false, tab, onTabChange, 
   const closeReview = () => {
     setReviewExpanded(false); setSelectedId(null);
     const params = new URLSearchParams(location.search); params.delete('invoice');
+    if (taskMode) params.set('section', 'documents');
     if (requestedId) navigate(`${location.pathname}?${params}#quote-documents`, { replace: true });
     requestAnimationFrame(() => sectionRef.current?.scrollIntoView({ block: 'start' }));
   };
@@ -227,12 +228,13 @@ export default function InvoiceWorkspace({ workspace = false, tab, onTabChange, 
     // The last validation may collapse the editor. Keep its acknowledgement
     // visible in the summary, including a failure of the subsequent refresh.
     setHeaderFeedback({ type, message });
-    try { await refresh(); }
+    try { await refresh(); return true; }
     catch {
       const warning = `${message} L’actualisation du dossier a échoué. Actualisez pour retrouver l’état partagé.`;
       feedbackFor(id, warning, 'warning'); setHeaderFeedback({ type: 'warning', message: warning });
       setSelectedId(id); setReviewExpanded(true);
       setReloadRequired(previous => ({ ...previous, [id]: true }));
+      return false;
     }
   };
   const save = confirm => run('save', async () => {
@@ -247,7 +249,12 @@ export default function InvoiceWorkspace({ workspace = false, tab, onTabChange, 
     }));
     setDrafts(previous => ({ ...previous, [invoiceId]: { ...draft, dirty: false, editing: !confirm, editingExplicit: !confirm, reviewToken: result.reviewToken } }));
     setRecords(previous => ({ ...previous, [invoiceId]: { ...previous[invoiceId], reviewToken: result.reviewToken } }));
-    await afterCommit(invoiceId, confirm ? `Facture ${index + 1} — ${name(selected)} : facture et articles validés et enregistrés.` : `Brouillon enregistré pour ${name(selected)}. Il sera disponible à la prochaine ouverture.`);
+    const refreshed = await afterCommit(invoiceId, confirm ? `Facture ${index + 1} — ${name(selected)} : facture et articles validés et enregistrés.` : `Brouillon enregistré pour ${name(selected)}. Il sera disponible à la prochaine ouverture.`);
+    if (taskMode && confirm && refreshed) {
+      const freshInvoices = parcelRef.current.factures || [];
+      const next = currentInvoices(freshInvoices).find(invoice => invoice.id !== invoiceId && stateLabel(invoice, freshInvoices) === 'À vérifier');
+      if (next) chooseForReview(next.id); else closeReview();
+    }
   });
   const reload = () => run('reload', async () => {
     const saved = await refreshColis(sel.id);
@@ -324,16 +331,16 @@ export default function InvoiceWorkspace({ workspace = false, tab, onTabChange, 
   return <section ref={sectionRef} id="quote-documents" aria-label="Factures d’achat" className="invoice-workspace min-w-0 scroll-mt-48 rounded-2xl border border-gray-200 bg-white">
     <input ref={uploadRef} type="file" accept="application/pdf,image/jpeg,image/png,image/webp" className="hidden" onChange={upload} />
     <div className="space-y-3 border-b border-gray-200 p-3 sm:p-4">
-      <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="flex items-center gap-2 text-base font-bold text-slate-800"><FileText size={19} />Factures du dossier <span className="rounded-full bg-slate-100 px-2 py-0.5 text-sm">{activeInvoices.length}</span></h2><p className="mt-1 text-sm text-slate-600">{pending.length ? `${pending.length} à vérifier` : invoices.length ? 'Aucune facture en attente' : 'Ajoutez les factures reçues'} · {activeInvoices.filter(invoice => invoice.valide).length} validée(s){invoices.some(invoice => invoice.duplicateOfId) && ` · ${retiredInvoices.length} doublon(s) retiré(s)`}</p></div>{canAdd && <button disabled={!!busy} className={SECONDARY} onClick={() => { uploadTarget.current = null; uploadRef.current?.click(); }}><Upload size={16} />Ajouter une facture</button>}</div>
+      <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="flex items-center gap-2 text-base font-bold text-slate-800"><FileText size={19} />{taskMode ? 'Vérifier les factures' : 'Factures du dossier'} <span className="rounded-full bg-slate-100 px-2 py-0.5 text-sm">{activeInvoices.length}</span></h2><p className="mt-1 text-sm text-slate-600">{pending.length ? `${pending.length} à vérifier` : invoices.length ? 'Aucune facture en attente' : 'Ajoutez les factures reçues'} · {activeInvoices.filter(invoice => invoice.valide).length} validée(s){invoices.some(invoice => invoice.duplicateOfId) && ` · ${retiredInvoices.length} doublon(s) retiré(s)`}</p></div>{canAdd && <button disabled={!!busy} className={SECONDARY} onClick={() => { uploadTarget.current = null; uploadRef.current?.click(); }}><Upload size={16} />Ajouter une facture</button>}</div>
       {headerFeedback && <p data-testid="invoice-header-feedback" role={headerFeedback.type === 'error' ? 'alert' : 'status'} className={`rounded-xl p-3 text-sm ${headerFeedback.type === 'error' ? 'bg-red-50 text-red-700' : headerFeedback.type === 'warning' ? 'bg-amber-50 text-amber-800' : 'bg-emerald-50 text-emerald-700'}`}>{headerFeedback.message}</p>}
       {documentsComplete && <div className="space-y-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3">
         <h3 className="font-semibold text-emerald-800">Factures vérifiées</h3>
-        <p className="text-sm text-emerald-800">{activeInvoices.length} facture(s) validée(s) · {eur(activeInvoices.reduce((total, invoice) => total + Number(invoice.montant), 0))} HT. Ces validations sont enregistrées ; vous n’avez pas à les refaire.</p>
-        {workspace && <div className="flex flex-wrap gap-2">{showReview ? <button className={SECONDARY} disabled={!!busy || unfinishedReview} onClick={closeReview}>Revenir au récapitulatif</button> : <button className={SECONDARY} onClick={() => setReviewExpanded(true)}>Consulter les factures</button>}<button className={`${BUTTON} bg-slate-700 text-white`} onClick={() => focusSection('quote-review')}>Passer au devis</button></div>}
+        <p className="text-sm text-emerald-800">{activeInvoices.length} facture(s) validée(s) · {eur(activeInvoices.reduce((total, invoice) => total + Number(invoice.montant), 0))} HT.{!taskMode && ' Ces validations sont enregistrées ; vous n’avez pas à les refaire.'}</p>
+        {workspace && <div className="flex flex-wrap gap-2">{showReview ? <button className={SECONDARY} disabled={!!busy || unfinishedReview} onClick={closeReview}>Revenir au récapitulatif</button> : <button className={SECONDARY} onClick={() => setReviewExpanded(true)}>Consulter les factures</button>}{(!taskMode || onQuote) && <button className={`${BUTTON} bg-slate-700 text-white`} onClick={() => onQuote ? onQuote() : focusSection('quote-review')}>Passer au devis</button>}</div>}
         {unfinishedReview && <p className="text-sm text-amber-800">Une vérification est en cours de modification. Les valeurs déjà validées restent utilisées jusqu’à votre prochaine validation.</p>}
       </div>}
       {showReview && <>
-      <nav aria-label="Factures du dossier" className="flex gap-2 overflow-x-auto pb-1">{activeInvoices.map(invoice => <button key={invoice.id} disabled={!!busy} aria-label={`Facture ${invoices.indexOf(invoice) + 1} — ${name(invoice)}`} aria-current={invoiceId === invoice.id ? 'true' : undefined} onClick={() => choose(invoice.id)} className={`min-h-20 w-52 shrink-0 rounded-xl border p-3 text-left ${invoice.id === invoiceId ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-white hover:bg-slate-50'}`}><span className="block text-xs font-semibold text-slate-600">Facture {invoices.indexOf(invoice) + 1} · {stateLabel(invoice, invoices)}</span><span className="mt-1 block truncate text-sm font-semibold text-slate-800" title={name(invoice)}>{name(invoice)}</span><span className="block text-xs text-slate-600">{drafts[invoice.id]?.dirty ? 'Modifications non enregistrées' : records[invoice.id]?.draft ? 'Brouillon enregistré' : invoice.montant > 0 ? `${eur(invoice.montant)} HT` : 'Montant à vérifier'}</span></button>)}</nav>
+      {!taskMode && <nav aria-label="Factures du dossier" className="flex gap-2 overflow-x-auto pb-1">{activeInvoices.map(invoice => <button key={invoice.id} disabled={!!busy} aria-label={`Facture ${invoices.indexOf(invoice) + 1} — ${name(invoice)}`} aria-current={invoiceId === invoice.id ? 'true' : undefined} onClick={() => choose(invoice.id)} className={`min-h-20 w-52 shrink-0 rounded-xl border p-3 text-left ${invoice.id === invoiceId ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-white hover:bg-slate-50'}`}><span className="block text-xs font-semibold text-slate-600">Facture {invoices.indexOf(invoice) + 1} · {stateLabel(invoice, invoices)}</span><span className="mt-1 block truncate text-sm font-semibold text-slate-800" title={name(invoice)}>{name(invoice)}</span><span className="block text-xs text-slate-600">{drafts[invoice.id]?.dirty ? 'Modifications non enregistrées' : records[invoice.id]?.draft ? 'Brouillon enregistré' : invoice.montant > 0 ? `${eur(invoice.montant)} HT` : 'Montant à vérifier'}</span></button>)}</nav>}
       {!!activeInvoices.length && <div className="flex flex-wrap items-end gap-2"><label className="min-w-0 flex-1 text-xs font-semibold text-slate-600">Facture à vérifier<select aria-label="Facture à vérifier" disabled={!!busy} value={historical ? '' : invoiceId || ''} onChange={event => choose(event.target.value)} className={INPUT}>{historical && <option value="" disabled>Consultation de l’historique</option>}{activeInvoices.map(invoice => <option key={invoice.id} value={invoice.id}>{invoices.indexOf(invoice) + 1}. {name(invoice)} · {stateLabel(invoice, invoices)}</option>)}</select></label><button aria-label="Facture précédente" className={SECONDARY} disabled={!!busy || navigationIndex <= 0} onClick={() => choose(navigationInvoices[navigationIndex - 1].id)}><ChevronLeft size={18} /></button><button aria-label="Facture suivante" className={SECONDARY} disabled={!!busy || navigationIndex >= navigationInvoices.length - 1} onClick={() => choose(navigationInvoices[navigationIndex + 1].id)}><ChevronRight size={18} /></button></div>}
       {retiredInvoices.length > 0 && <details open={selected?.duplicateOfId ? true : undefined} className="rounded-xl border border-slate-200 bg-slate-50 p-3"><summary className="min-h-11 cursor-pointer py-2 text-sm font-semibold text-slate-700">Doublons retirés ({retiredInvoices.length})</summary><p className="mb-2 text-xs text-slate-600">Exclus du devis. Ouvrez une copie pour la consulter ou la remettre à vérifier.</p><nav aria-label="Doublons retirés" className="flex flex-wrap gap-2">{retiredInvoices.map(invoice => <button key={invoice.id} disabled={!!busy} aria-current={invoiceId === invoice.id ? 'true' : undefined} className={`${SECONDARY} max-w-full break-all text-left`} onClick={() => choose(invoice.id)}>Facture {invoices.indexOf(invoice) + 1} — {name(invoice)}</button>)}</nav></details>}
       {replacedInvoices.length > 0 && <details open={historical && !selected?.duplicateOfId ? true : undefined} className="rounded-xl border border-slate-200 bg-slate-50 p-3"><summary className="min-h-11 cursor-pointer py-2 text-sm font-semibold text-slate-700">Documents remplacés ({replacedInvoices.length})</summary><nav aria-label="Documents remplacés" className="flex flex-wrap gap-2">{replacedInvoices.map(invoice => <button key={invoice.id} disabled={!!busy} className={`${SECONDARY} max-w-full break-all text-left`} onClick={() => choose(invoice.id)}>Facture {invoices.indexOf(invoice) + 1} — {name(invoice)}</button>)}</nav></details>}
@@ -404,7 +411,7 @@ export default function InvoiceWorkspace({ workspace = false, tab, onTabChange, 
               {!!reloadRequired[invoiceId] && <button className={SECONDARY} disabled={!!busy} onClick={requestReload}>Actualiser</button>}
               {!inactive && draft.editing && canEdit && <>
                 {!!issues.length && <div id={`invoice-blockers-${invoiceId}`} className="rounded-xl bg-amber-50 p-3 text-sm text-amber-800"><p className="font-semibold">Avant de valider</p><ul className="mt-1 list-disc space-y-1 pl-4">{issues.map((issue, i) => <li key={i}><button className="text-left underline underline-offset-2" onClick={() => focusField(issue.field)}>{issue.message}</button></li>)}</ul></div>}
-                <button aria-describedby={issues.length ? `invoice-blockers-${invoiceId}` : undefined} disabled={!!busy || !canValidate || !!reloadRequired[invoiceId] || !record} onClick={() => save(true)} className={`${BUTTON} w-full bg-emerald-700 text-white`}>{busy === 'save' ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}Valider cette facture et ses articles</button>
+                <button aria-describedby={issues.length ? `invoice-blockers-${invoiceId}` : undefined} disabled={!!busy || !canValidate || !!reloadRequired[invoiceId] || !record} onClick={() => save(true)} className={`${BUTTON} w-full bg-emerald-700 text-white`}>{busy === 'save' ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}{taskMode ? pending.some(invoice => invoice.id !== invoiceId) ? 'Valider et passer à la suivante' : 'Terminer la vérification' : 'Valider cette facture et ses articles'}</button>
                 {!canValidate && <p className="text-xs text-slate-600">Vous pouvez enregistrer le brouillon. La validation nécessite l’autorisation de votre responsable.</p>}
                 <button disabled={!!busy || !!reloadRequired[invoiceId] || !record} onClick={() => save(false)} className={`${SECONDARY} w-full`}>Enregistrer le brouillon</button>
                 <p className="text-xs text-slate-600">La validation enregistre les articles de cette facture dans le devis. Aucun message n’est envoyé au client.</p>

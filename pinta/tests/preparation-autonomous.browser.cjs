@@ -28,9 +28,12 @@ async function prepared(browser, { permissions = { perm_colis_preparer: true }, 
 }
 async function open(f, query = 'section=preparation') {
   await f.page.goto(`${base}/colis/${ids.P}?${query}`);
-  await section(f).waitFor(); await save(f).waitFor();
+  await section(f).waitFor();
+  const edit = section(f).getByRole('button', { name: 'Modifier les mesures', exact: true });
+  if (await edit.isVisible()) await edit.click();
+  await save(f).waitFor();
 }
-async function saved(f) { await section(f).getByText('Mesures enregistrées, même si les documents restent à vérifier.', { exact: true }).waitFor(); }
+async function saved(f) { await section(f).getByRole('region', { name: 'Relais après préparation', exact: true }).waitFor(); }
 async function clean(f) {
   assert.deepEqual(f.errors, []); assert.deepEqual(f.networkDenied, []);
   assert.equal(f.requests.some(request => /\/(save_quote|queue_message|save_invoice_review|confirm_quote)$/.test(request.path)), false, 'Preparing must never save a quote, validate invoices or notify a customer.');
@@ -72,7 +75,7 @@ async function main() {
       assert.deepEqual(audit.violations.map(item => ({ id: item.id, nodes: item.nodes.map(node => node.target) })), []);
       await section(f).scrollIntoViewIfNeeded();
       await f.page.screenshot({ path: path.join(output, `preparation-${mobile ? 'mobile-dark' : 'desktop-light'}.png`), fullPage: true });
-      await section(f).getByRole('button', { name: 'Revenir à ma file de travail', exact: true }).click();
+      await section(f).getByRole('link', { name: 'Retour à ma liste', exact: true }).click();
       await f.page.waitForURL(url => url.pathname === '/' && url.searchParams.get('mission') === 'preparation');
       await open(f); assert.equal(await field(f, 'Longueur', 'cm').inputValue(), '40');
     });
@@ -96,14 +99,17 @@ async function main() {
       f.tables.factures[0].valide = true;
       f.tables.colis[0].final_packages = clone(boxes); f.tables.colis[0].fin_p = 3.75; f.tables.colis[0].outgoing_parcel_count = 2;
       await f.page.goto(`${base}/colis/${ids.P}?section=devis`);
-      const recap = f.page.getByRole('region', { name: 'Mesures de préparation enregistrées', exact: true });
-      await recap.waitFor(); assert.match(await recap.innerText(), /40 × 20 × 10 cm · 2.5 kg/); assert.match(await recap.innerText(), /Colis sortant 2/);
+      const preparation = f.page.getByRole('button', { name: 'Préparation enregistrée ✓', exact: true });
+      await preparation.waitFor();
       const verify = f.page.getByRole('button', { name: 'Enregistrer et vérifier le devis', exact: true });
       await verify.waitFor(); assert.equal(await verify.isEnabled(), true);
       assert.equal(await f.page.getByRole('region', { name: 'Factures d’achat', exact: true }).count(), 0);
       assert.equal(f.requests.some(request => request.path.endsWith('/get_invoice_review_context')), false);
-      await recap.getByRole('button', { name: 'Consulter la préparation', exact: true }).click(); await section(f).waitFor();
-      assert.equal(await field(f, 'Longueur', 'cm').isDisabled(), true); assert.equal(await save(f).isDisabled(), true);
+      await preparation.click(); await section(f).waitFor();
+      const recap = section(f).getByRole('region', { name: 'Relais après préparation', exact: true });
+      assert.match(await recap.innerText(), /40 × 20 × 10 cm · 2.5 kg/); assert.match(await recap.innerText(), /Colis 2/);
+      assert.equal(await field(f, 'Longueur', 'cm').count(), 0); assert.equal(await save(f).count(), 0);
+      assert.equal(await section(f).getByRole('button', { name: 'Modifier les mesures', exact: true }).count(), 0);
       assert.equal(measurementCalls(f).length, 0);
     });
     await scenario('colleague-measurements-preserved-and-local-draft-compared', { empty: false }, async f => {

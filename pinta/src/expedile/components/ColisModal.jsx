@@ -14,6 +14,7 @@ import { renderTemplate } from '../services/messageTemplates';
 import { DEFAULT_BODIES } from '../services/messageDefaults';
 import { useDialog } from './ui/useDialog';
 import { receptionCartons, receptionMeasurements, receptionMeasurementIssues, receptionCartonManifest, mergeReceptionCartons, hasCompleteReceptionMeasurements, RECEPTION_MEASURES, removeReceptionCarton } from '../domain/reception';
+import { safeWorkReturn } from '../domain/personalWork';
 
 function ReceptionInput({ label, ...props }) {
   return <label className="block min-w-0"><span className="block text-xs font-semibold text-gray-600 mb-1">{label}</span><input {...props} /></label>;
@@ -213,6 +214,17 @@ export default function ColisModal({ open, onClose, initialColisId, initialClien
     onClose();
   };
 
+  const openReceivedDossier = (colis, index) => {
+    const current = new URLSearchParams(location.search);
+    const returnTo = location.pathname.startsWith('/colis/')
+      ? safeWorkReturn(current.get('returnTo'), '/colis')
+      : location.pathname + location.search;
+    const query = new URLSearchParams({ returnTo, section: hasCompleteReceptionMeasurements(colis) ? 'accord' : 'reception' });
+    navigate(`/colis/${encodeURIComponent(colis.id)}?${query}`, {
+      state: { receivedCarton: { colisId: colis.id, index } },
+    });
+  };
+
   // ── client search ─────────────────────────────────────────
   const filteredClients = clientSearchQ.trim()
     ? searchClients(clients, clientSearchQ)
@@ -325,17 +337,21 @@ export default function ColisModal({ open, onClose, initialColisId, initialClien
     await upd(existing.id, changes, { expectedUpdatedAt: existing.updatedAt });
     flash(`${newCartons.length} carton${newCartons.length > 1 ? 's' : ''} rattaché${newCartons.length > 1 ? 's' : ''} à ${existing.ref} — ${changes.nbColis} cartons au total`);
     resetAndClose();
-    // Open the dossier that actually received the cartons, keeping the current queue context.
-    const sameDetail = location.pathname === `/colis/${existing.id}`;
-    const query = new URLSearchParams(/^\/colis\/?$/.test(location.pathname) ? location.search : '');
-    query.set('dossier', existing.id);
-    navigate(sameDetail ? { pathname: location.pathname, search: location.search } : { pathname: '/colis', search: `?${query}` }, {
-      state: { receivedCarton: { colisId: existing.id, index: receptionCartonManifest(existing).nbColis } },
-    });
+    // Reception is saved first; the colleague decides when to send the combined request.
+    if (isStaff) openReceivedDossier({ ...existing, ...changes }, receptionCartonManifest(existing).nbColis);
+    else {
+      const sameDetail = location.pathname === `/colis/${existing.id}`;
+      const query = new URLSearchParams(/^\/colis\/?$/.test(location.pathname) ? location.search : '');
+      query.set('dossier', existing.id);
+      navigate(sameDetail ? { pathname: location.pathname, search: location.search } : { pathname: '/colis', search: `?${query}` }, {
+        state: { receivedCarton: { colisId: existing.id, index: receptionCartonManifest(existing).nbColis } },
+      });
+    }
   };
 
   // ── submit: staff new colis (reception) ──────────────
   const handleReceptionner = async (sendTG) => {
+    const sendNotification = !isStaff && sendTG;
     // If in new client mode, create client first
     let clientId;
     let cl;
@@ -418,9 +434,9 @@ export default function ColisModal({ open, onClose, initialColisId, initialClien
         await sb.updateColis(newColis.id,{photoReception:true,photoReceptionUrl:uploaded.path});
       } catch(error) { flash({msg:`Colis enregistré, photo à ajouter : ${error.message}`,type:'warning'}); }
     }
-    if (sendTG && cl && !cl.telegramChatId && !cl.userId) {
+    if (sendNotification && cl && !cl.telegramChatId && !cl.userId) {
       flash({ msg: `Expédition ${newColis.ref} enregistrée. Accès client à activer : ouvrez sa fiche pour l’inviter ou préparez un email.`, type: 'warning', duration: 12000 });
-    } else if (sendTG && cl) {
+    } else if (sendNotification && cl) {
       try {
         const {data:queued,error}=await supabase.rpc('queue_message',{
           p_colis_id:newColis.id,p_text:renderTemplate(appCtx.messageTemplates.reception_telegram || DEFAULT_BODIES.reception_telegram,{client:cl,colis:newColis,destination:getDestByCP(cl.cp),settings:appCtx.settings}),
@@ -439,7 +455,7 @@ export default function ColisModal({ open, onClose, initialColisId, initialClien
     const newId = newColis.id;
     resetAndClose();
     if (isStaff && newId) {
-      navigate(`/colis/${newId}`);
+      openReceivedDossier(newColis, 0);
     }
   };
 
@@ -1279,7 +1295,7 @@ export default function ColisModal({ open, onClose, initialColisId, initialClien
             <div className="mb-3 text-xs text-gray-600" aria-live="polite">
               <p className="font-bold text-sm text-gray-800">{selectedClient?.nom || newClientForm.nom || authCl?.nom} · {mode === 'rattacher' ? rattacherTarget?.ref : 'Nouveau dossier'}</p>
               <p>{receptionCartons(nf.trackingLines, nf.multiDims).filter(({ index }) => receptionMeasurements([nf.trackingLines[index]], { 0: nf.multiDims[index] })).length} / {receptionCartons(nf.trackingLines, nf.multiDims).length} carton(s) mesuré(s) à réception · Casier {nf.casier || rattacherTarget?.casier || 'à renseigner'}</p>
-              {mode === 'nouveau' && <p>{notificationAccessible ? `Notification proposée : ${selectedClient?.telegramChatId ? 'Telegram' : 'message dans l’espace client'}` : 'Accès client à activer : une action de contact sera créée pour l’équipe.'}</p>}
+              {isStaff ? <p>Enregistrez la réception, puis préparez la demande d’accord et de factures. Le message sera envoyé à votre confirmation.</p> : mode === 'nouveau' && <p>{notificationAccessible ? `Notification proposée : ${selectedClient?.telegramChatId ? 'Telegram' : 'message dans l’espace client'}` : 'Accès client à activer : une action de contact sera créée pour l’équipe.'}</p>}
               {checkedInterdits.length > 0 && <p className="text-red-700 font-bold">{checkedInterdits.length} produit(s) interdit(s) signalé(s)</p>}
             </div>
             {formErr.dimensions && <p role="alert" className="mb-3 text-sm font-semibold text-red-700">{formErr.dimensions}</p>}
@@ -1306,13 +1322,13 @@ export default function ColisModal({ open, onClose, initialColisId, initialClien
                 <>
                   <button
                     type="button"
-                    disabled={saving} onClick={() => runSave(() => handleReceptionner(true))}
+                    disabled={saving} onClick={() => runSave(() => handleReceptionner(!isStaff))}
                     className="order-first w-full sm:order-none sm:w-auto sm:flex-1 py-2.5 rounded-xl font-bold text-sm text-white active:scale-95 transition-all"
                     style={{ background: `linear-gradient(135deg, ${BRAND.navy}, ${BRAND.navyL})` }}
                   >
-                    {notificationAccessible ? 'Réceptionner et notifier le client' : 'Réceptionner les cartons'}
+                    {saving ? 'Enregistrement…' : isStaff || !notificationAccessible ? 'Réceptionner les cartons' : 'Réceptionner et notifier le client'}
                   </button>
-                  {notificationAccessible && <button
+                  {!isStaff && notificationAccessible && <button
                     type="button"
                     disabled={saving} onClick={() => runSave(() => handleReceptionner(false))}
                     className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl font-semibold text-sm text-gray-600 bg-gray-100 hover:bg-gray-200 active:scale-95 transition-all"

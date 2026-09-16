@@ -32,14 +32,12 @@ const ClientColis = lazy(() => import('./components/client/ClientColis'));
 const ClientNotifs = lazy(() => import('./components/client/ClientNotifs'));
 const ClientProfil = lazy(() => import('./components/client/ClientProfil'));
 import ClientDetailView from './components/client/ClientDetailView';
+import ClientDossierContext from './components/client/ClientDossierContext';
 import ClientBottomNav from './components/client/ClientBottomNav';
 
 import DetailHeader from './components/detail/DetailHeader';
-import ColisInfo from './components/detail/ColisInfo';
-import FacturesPanel from './components/detail/FacturesPanel';
-import ChatPanel from './components/detail/ChatPanel';
-import AuditLog from './components/detail/AuditLog';
-import { Etapes } from './components/ui';
+import DossierContextPanel from './components/detail/DossierContextPanel';
+import { dossierTaskUrl, resolveDossierTask } from './domain/dossierTasks';
 
 function LoadingView({ label = 'Chargement de votre espace…' }) {
   return <div role="status" aria-live="polite" className="max-w-5xl mx-auto w-full p-6 space-y-5">
@@ -77,10 +75,13 @@ function Permission({ allowed, children }) {
 // ── Wrapper: Staff colis detail (reads :id from URL) ──
 function StaffColisDetail() {
   const { id } = useParams();
-  const { setSelId, sel, data, dataLoading, refreshColis, can } = useApp();
+  const { setSelId, sel, data, dataLoading, refreshColis, can, workActions = [] } = useApp();
   const [detailLoading, setDetailLoading] = useState(true);
   const [detailError, setDetailError] = useState('');
   const navigate = useNavigate();
+  const location = useLocation();
+  const [contextSection, setContextSection] = useState(null);
+  const task = resolveDossierTask(sel || {}, location.search, workActions, can);
 
   useEffect(() => {
     let active = true;
@@ -89,6 +90,17 @@ function StaffColisDetail() {
     return () => { active = false; setSelId(null); };
   }, [id, setSelId, refreshColis]);
 
+  useEffect(() => { setContextSection(null); }, [id]);
+  useEffect(() => {
+    if (detailLoading || !sel || sel.id !== id) return;
+    const params = new URLSearchParams(location.search);
+    if (params.get('section') === task) return;
+    // Pin the opening task: saving measurements or a colleague's update must
+    // not replace the current form before its acknowledgement can be read.
+    params.set('section', task);
+    navigate(`${location.pathname}?${params}${location.hash}`, { replace: true, state: location.state });
+  }, [detailLoading, id, sel?.id, task, location.search, location.hash, location.state, navigate]);
+
   if (dataLoading || detailLoading) return <LoadingView label="Chargement du dossier…" />;
   if (detailError) return <div role="alert" className="p-6 text-sm text-red-700">{detailError}<button onClick={() => window.location.reload()} className="block min-h-11 font-semibold underline">Réessayer</button></div>;
   if (!data.some((c) => c.id === id)) return <MissingColis />;
@@ -96,30 +108,12 @@ function StaffColisDetail() {
 
   return (
     <>
-      <DetailHeader />
-      <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-4 space-y-4">
-        <Etapes statut={sel.statut} />
-        {sel.statut === 'en_preparation' ? <>
-          <details className="rounded-2xl border border-gray-200 bg-white">
-            <summary className="min-h-11 cursor-pointer px-4 py-3 text-sm font-semibold text-gray-700">Cartons reçus et informations du dossier</summary>
-            <div className="px-3 pb-3"><ColisInfo /></div>
-          </details>
-          <StaffDetailView workspace />
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4"><ChatPanel /><AuditLog /></div>
-        </> : <div className="flex flex-col lg:flex-row gap-4">
-          <div className="w-full lg:w-[420px] lg:flex-shrink-0 lg:order-2">
-            <div className="lg:sticky lg:top-4 space-y-4">
-              <StaffDetailView />
-            </div>
-          </div>
-          <div className="flex-1 lg:order-1 space-y-4 min-w-0">
-            <ColisInfo />
-            {sel.statut !== 'en_preparation' && ['perm_factures_voir', 'perm_factures_ajouter', 'perm_factures_valider', 'perm_factures_refuser', 'perm_factures_ocr', 'perm_factures_modifier_articles'].some(permission => can(permission)) && <FacturesPanel />}
-            <ChatPanel />
-            <AuditLog />
-          </div>
-        </div>}
+      <DetailHeader task={task} onOpenContext={setContextSection} />
+      <div className="mx-auto max-w-[1600px] px-4 py-5 sm:px-6 lg:px-8" data-testid="dossier-task-workspace">
+        {location.state?.receivedCarton?.colisId === id && <div role="status" className="mb-4 flex flex-wrap items-center gap-3 rounded-xl bg-emerald-50 px-4 py-2 text-sm text-emerald-800"><span>Carton {location.state.receivedCarton.index + 1} enregistré dans {sel.ref}.</span><button className="min-h-11 font-semibold underline" onClick={() => setContextSection('reception')}>Voir le carton reçu</button></div>}
+        <StaffDetailView workspace task={task} onOpenContext={setContextSection} />
       </div>
+      <DossierContextPanel key={sel.id} section={contextSection} onSectionChange={setContextSection} onClose={() => setContextSection(null)} />
     </>
   );
 }
@@ -146,8 +140,7 @@ function ClientColisDetail() {
   return (
     <div className="space-y-4">
       <ClientDetailView />
-      <FacturesPanel />
-      <section id="client-conversation" className="scroll-mt-24"><ChatPanel /></section>
+      <ClientDossierContext key={sel.id} />
     </div>
   );
 }

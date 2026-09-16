@@ -34,6 +34,11 @@ test('Actual webhook stores paid attachment as readable conversation document wi
 });
 test('An attachment checks invoice intent in the database after its durable message is saved',async()=>{
  const result=await scenario({attachment:true});assert.equal(result.response.status,200);assert.equal(result.rpcCalls.find(x=>x.name==='register_requested_invoice').args.p_message_id,'fixture-message');assert.equal(result.writes.find(x=>x.table==='messages').mutation.created_at,new Date(1789000000*1000).toISOString());
+ assert.equal(Object.hasOwn(result.rpcCalls.find(x=>x.name==='register_requested_invoice').args,'p_reply_message_id'),false);
+});
+test('Explicit attachment reply passes the authenticated Telegram request id to the guarded invoice RPC',async()=>{
+ const result=await scenario({attachment:true,reply:true});assert.equal(result.response.status,200);
+ assert.deepEqual(JSON.parse(JSON.stringify(result.rpcCalls.find(x=>x.name==='register_requested_invoice').args)),{p_message_id:'fixture-message',p_reply_message_id:'90'});
 });
 test('Invoice registration failure keeps the document durable and the update retryable before acknowledgement',async()=>{
  const result=await scenario({attachment:true,invoiceFails:true});assert.equal(result.response.status,500);assert.equal(result.writes.filter(x=>x.table==='messages').length,1);assert.equal(result.writes.find(x=>x.table==='telegram_updates').mutation.status,'failed');assert.equal(result.providerCalls.some(x=>x.url.includes('/sendMessage')),false);

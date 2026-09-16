@@ -83,12 +83,16 @@ export function needsQuoteRecalculation(colis) {
 /** One expedition belongs to one section; a withdrawn quote never requests payment. */
 export function clientWorkState(colis, client = {}) {
   const journey = clientJourney(colis);
-  if (['livre', 'annule'].includes(colis.statut) || colis.archive) return { section: 'history', action: 'Consulter le dossier', journey };
-  if (journey.waiting) return { section: 'waiting', action: 'Consulter mon attente', journey };
-  if (colis.statut === 'attente_feu_vert') return { section: 'todo', action: 'Donner mon accord ou attendre', journey };
+  if (['livre', 'annule'].includes(colis.statut) || colis.archive) return { section: 'history', kind: 'none', action: 'Consulter le dossier', journey };
+  if (journey.waiting) return { section: 'waiting', kind: 'none', action: 'Consulter mon attente', journey };
+  if (colis.statut === 'attente_feu_vert') return { section: 'todo', kind: 'agreement', action: 'Donner mon accord ou attendre', journey };
   if (['devis_envoye', 'attente_paiement'].includes(colis.statut) && !journey.quoteNeedsReview && !colis.paiementDate)
-    return { section: 'todo', action: client.type === 'pro' ? 'Consulter les modalités de règlement' : colis.payplugPaymentUrl ? 'Consulter et régler le devis' : 'Consulter le devis et le règlement', journey };
+    return { section: 'todo', kind: 'payment', action: client.type === 'pro' ? 'Consulter les modalités de règlement' : colis.payplugPaymentUrl ? 'Consulter et régler le devis' : 'Consulter le devis et le règlement', journey };
   const rejected = currentInvoices(colis.factures).some(invoice => invoice.rejetMotif || invoice.rejet_motif);
-  if (rejected && !colis.paiementDate) return { section: 'todo', action: 'Corriger une facture', journey };
-  return { section: 'team', action: 'Suivre mon expédition', journey };
+  if (rejected && !colis.paiementDate && ['receptionne','mesure','attente_feu_vert','autorise','en_preparation','devis_envoye','attente_paiement'].includes(colis.statut)) return { section: 'todo', kind: 'documents', action: 'Corriger une facture', journey };
+  if (!colis.paiementDate && !journey.quoteNeedsReview && ['receptionne','mesure','autorise','en_preparation'].includes(colis.statut)
+    && currentInvoices(colis.factures).length === 0)
+    return { section: 'todo', kind: 'documents', action: 'Transmettre mes factures', journey };
+  if (colis.conversationStatut === 'attente_client') return { section: 'todo', kind: 'messages', action: 'Répondre à l’équipe', journey };
+  return { section: 'team', kind: 'none', action: 'Suivre mon expédition', journey };
 }

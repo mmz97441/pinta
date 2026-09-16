@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildPersonalWork, sortWorkActions, workTotals, availableMissions, workActionUrl, staffAvailable, canWorkAction } from './personalWork.js';
+import { buildPersonalWork, sortWorkActions, workTotals, availableMissions, workActionUrl, staffAvailable, canWorkAction, personalSection, nextPersonalWorkAction, PERSONAL_SECTIONS } from './personalWork.js';
 const now = Date.parse('2026-09-12T12:00:00Z');
 const dossier = { id: 'parcel', clientId: 'client', ref: 'EXP-QA', nbColis: 3, responsibleStaffId: 'referent' };
 const base = { dossiers: [dossier], clients: [{ id: 'client', nom: 'Exemple' }], userId: 'worker', now, can: () => true };
@@ -8,8 +8,8 @@ const action = (id, changes = {}) => ({ id, colis_id: 'parcel', kind: 'preparati
 test('personal buckets and counts describe exactly the same actionable scope', () => {
  const actions = [action('ready'), action('started', { state: 'in_progress' }), action('pool', { assignee_id: null }), action('wait', { state: 'waiting' }), action('blocked', { blocked_reason: 'Accord à revoir' }), action('other', { assignee_id: 'other' }), action('done', { state: 'done' })];
  const view = buildPersonalWork({ ...base, actions });
- assert.deepEqual(view.counts, { now: 1, progress: 1, pool: 1, waiting: 2 });
- assert.deepEqual(view.sections.now.map(row => row.id), ['ready']);
+ assert.deepEqual(view.counts, { now: 2, pool: 1, waiting: 2 });
+ assert.deepEqual(view.sections.now.map(row => row.id), ['started', 'ready']);
  assert.equal(new Set(Object.values(view.sections).flat().map(row => row.id)).size, 5);
  assert.equal(dossier.responsibleStaffId, 'referent');
 });
@@ -45,7 +45,11 @@ test('opening work preserves the queue route and rejects external return URLs', 
  const url = new URL(workActionUrl(action('a'), '/?section=progress&mission=preparation'), 'https://example.test');
  assert.equal(url.searchParams.get('returnTo'), '/?section=progress&mission=preparation');
  assert.equal(url.searchParams.get('section'), 'preparation');
- for (const kind of ['documents', 'quote']) assert.equal(new URL(workActionUrl(action('other', { kind })), 'https://example.test').searchParams.get('section'), 'devis');
+ for (const [kind, section] of [['documents', 'documents'], ['quote', 'devis'], ['departure', 'expedition']]) {
+  const task = new URL(workActionUrl(action('other', { kind })), 'https://example.test');
+  assert.equal(task.searchParams.get('section'), section);
+  assert.equal(task.pathname, '/colis/parcel');
+ }
  assert.equal(new URL(workActionUrl(action('a'), '//outside.test'), 'https://example.test').searchParams.get('returnTo'), '/');
 });
 test('missing dossier data never creates an invisible personal action', () => {
@@ -61,4 +65,55 @@ test('customer access tasks open the client record and require invitation permis
  assert.equal(canWorkAction(item, permission => permission === 'perm_clients_creer'), true);
  assert.equal(new URL(workActionUrl(item, '/', dossier), 'https://example.test').pathname, '/clients/client');
  assert.deepEqual(availableMissions(permission => permission === 'perm_colis_demander_feuvert').map(item => item.id), ['reception']);
+});
+
+test('two main views preserve old progress, now, waiting and pool links', () => {
+ assert.deepEqual(PERSONAL_SECTIONS.map(item => item.id), ['now', 'waiting']);
+ for (const [old, current] of [['progress', 'now'], ['now', 'now'], ['waiting', 'waiting'], ['pool', 'pool'], ['unknown', 'now'], [null, 'now']]) assert.equal(personalSection(old), current);
+});
+test('mission and search filters never hide invitations, exceptional ownership or urgent commitments', () => {
+ const view = buildPersonalWork({ ...base, mission: 'preparation', search: 'unknown', preference: { missions: ['preparation', 'documents'] }, actions: [
+  action('urgent', { kind: 'quote', due_at: '2026-09-11' }),
+  action('outside', { kind: 'departure' }),
+  action('handoff', { kind: 'conversation', assignee_id: 'other', handoff_to: 'worker' }),
+ ] });
+ assert.equal(view.counts.now, 0);
+ assert.deepEqual(view.outsideFilterDue.map(item => item.id), ['urgent']);
+ assert.deepEqual(view.exceptions.map(item => item.id), ['outside']);
+ assert.deepEqual(view.handoffs.map(item => item.id), ['handoff']);
+});
+test('search matches the task instruction, priority reason and full client name', () => {
+ for (const search of ['fragile', 'DUPONT', 'promesse']) {
+  const view = buildPersonalWork({ ...base, clients: [{ id: 'client', prenom: 'Marie', nomFamille: 'Dupont' }], search, actions: [action('find', { action_hint: 'Protéger le contenu fragile', priority_reason: 'Promesse client', priority_until: '2026-09-20' })] });
+  assert.equal(view.counts.now, 1);
+ }
+});
+test('receipt, consent and correction actions open the relevant dossier task directly', () => {
+ for (const [kind, statut, section] of [['reception', 'receptionne', 'reception'], ['reception', 'mesure', 'accord'], ['correction', 'autorise', 'preparation'], ['correction', 'devis_envoye', 'paiement']]) {
+  const url = new URL(workActionUrl(action('task', { kind }), '/?section=pool', { ...dossier, statut, devisTotal: 20 }), 'https://example.test');
+  assert.equal(url.pathname, '/colis/parcel'); assert.equal(url.searchParams.get('section'), section);
+  assert.equal(url.searchParams.get('action'), 'task'); assert.equal(url.searchParams.get('returnTo'), '/?section=pool');
+ }
+ const conversation = new URL(workActionUrl(action('reply', { kind: 'conversation' }), '/?q=Exemple', dossier), 'https://example.test');
+ assert.equal(conversation.pathname, '/conversations'); assert.equal(conversation.searchParams.get('dossier'), 'parcel');
+});
+test('continuation uses the current personal filters and permissions without claiming work', () => {
+ const actions = [action('finished'), action('foreign', { assignee_id: 'other' }), action('forbidden', { kind: 'quote' }), action('blocked', { blocked_reason: 'Accord requis' }), action('waiting', { state: 'waiting' }), action('next'), action('free', { assignee_id: null })];
+ const input = { ...base, actions, currentActionId: 'finished', returnTo: '/?section=progress&mission=preparation&q=Exemple', can: permission => permission === 'perm_colis_preparer' };
+ const before = JSON.stringify(actions);
+ assert.equal(nextPersonalWorkAction(input)?.id, 'next');
+ assert.equal(nextPersonalWorkAction({ ...input, returnTo: '/?section=pool&mission=preparation' })?.id, 'free');
+ assert.equal(nextPersonalWorkAction({ ...input, returnTo: '/?q=missing' }), null);
+ assert.equal(nextPersonalWorkAction({ ...input, returnTo: '/?section=waiting' }), null);
+ assert.equal(nextPersonalWorkAction({ ...input, returnTo: '/equipe?mission=preparation' }), null);
+ assert.equal(nextPersonalWorkAction({ ...input, returnTo: '/colis?q=Exemple' }), null);
+ assert.equal(nextPersonalWorkAction({ ...input, preference: { available: false }, returnTo: '/?section=pool' }), null);
+ assert.equal(JSON.stringify(actions), before);
+});
+test('continuation never reopens the task just completed, including when no action was in the URL', () => {
+ const input = { ...base, currentDossierId: 'parcel', currentKind: 'preparation', actions: [action('prep'), action('documents', { kind: 'documents' })] };
+ assert.equal(nextPersonalWorkAction(input)?.id, 'documents');
+ assert.equal(nextPersonalWorkAction({ ...input, currentKind: undefined }), null);
+ assert.equal(nextPersonalWorkAction({ ...input, preference: { active_mission: 'preparation' } }), null);
+ assert.equal(nextPersonalWorkAction({ ...input, preference: { active_mission: 'preparation' }, returnTo: '/?mission=' })?.id, 'documents');
 });

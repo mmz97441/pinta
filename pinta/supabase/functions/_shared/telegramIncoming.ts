@@ -39,6 +39,9 @@ export async function saveIncoming(db: any, client: any, colis: any, msg: any, u
     // after the conversation message was saved on the previous attempt.
     const saved = await db.from('messages').select('id').eq('telegram_event_key', eventKey).single();
     throwDb(saved);
-    throwDb(await db.rpc('register_requested_invoice', { p_message_id: saved.data.id }));
+    const replyMessageId = msg.reply_to_message?.message_id;
+    throwDb(await db.rpc('register_requested_invoice', { p_message_id: saved.data.id,
+      ...(Number.isSafeInteger(replyMessageId) && replyMessageId > 0 ? { p_reply_message_id: String(replyMessageId) } : {}),
+    }));
   }
 }

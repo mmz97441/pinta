@@ -16,6 +16,12 @@ async function openReceived(page, count) {
   await page.getByRole('region', { name: 'Documents reçus à vérifier', exact: true }).waitFor();
 }
 
+async function openConversation(page) {
+  await page.getByTestId('dossier-task-header').getByRole('button', { name: /^Contexte/ }).click();
+  await page.getByRole('dialog', { name: 'Contexte du dossier', exact: true }).getByRole('button', { name: 'Messages', exact: true }).click();
+  await page.getByRole('log', { name: 'Messages avec le client', exact: true }).waitFor();
+}
+
 
 (async () => {
   await fs.mkdir(output, { recursive: true });
@@ -50,14 +56,14 @@ async function openReceived(page, count) {
     });
     await fixture.login();
     await page.goto(base + '/colis?dossier=' + P);
-    const collapsedSummary = page.getByRole('button', { name: /^Factures \(0\) · 2 documents reçus à vérifier/ });
+    const collapsedSummary = page.getByRole('button', { name: '2 document(s) reçu(s) à vérifier', exact: true });
     await collapsedSummary.waitFor();
-    assert.equal(await collapsedSummary.getAttribute('aria-expanded'), 'false');
+    assert.equal(await page.getByRole('region', { name: 'Factures d’achat', exact: true }).count(), 0, 'The list offers a task link instead of an embedded invoice editor.');
     assert.equal(await collapsedSummary.getByText('Manquante', { exact: true }).count(), 0);
     await collapsedSummary.click();
     await openReceived(page, 2);
     results.push({ test: 'collapsed-dossier-invoice-summary-announces-received-documents-before-opening', pass: true });
-    await page.goto(base + '/colis/' + P);
+    await page.goto(base + '/colis/' + P + '?section=documents');
     const invoices = page.getByRole('region', { name: 'Factures d’achat', exact: true });
     const received = invoices.getByRole('region', { name: 'Documents reçus à vérifier', exact: true });
     await openReceived(page, 2);
@@ -85,12 +91,14 @@ async function openReceived(page, count) {
     assert.equal(tables.factures[0].valide, false);
     assert.equal(tables.factures[0].montant, 0);
     assert.equal(tables.factures[0].fichier_url, first.attachment_path);
-    assert.equal(await invoices.getByRole('navigation', { name: 'Factures du dossier', exact: true }).getByRole('button').filter({ hasText: 'À vérifier' }).count(), 1);
+    assert.equal(await invoices.getByLabel('Facture à vérifier', { exact: true }).locator('option').filter({ hasText: 'À vérifier' }).count(), 1);
     assert.equal(imports.length, 1);
+    await openConversation(page);
     assert.equal(await page.locator('#conversation-client').getByRole('button', { name: 'Utiliser comme facture', exact: true }).count(), 1, 'The chat also suppresses import for the newly imported path');
+    await page.getByRole('button', { name: 'Fermer le contexte du dossier', exact: true }).click();
     await page.goto(base + '/colis?dossier=' + P);
-    await page.getByRole('button', { name: /^Factures \(1\) · 1 document reçu à vérifier/ }).waitFor();
-    await page.goto(base + '/colis/' + P);
+    await page.getByRole('button', { name: '1 document(s) reçu(s) à vérifier', exact: true }).waitFor();
+    await page.goto(base + '/colis/' + P + '?section=documents');
     await openReceived(page, 1);
     results.push({ test: 'import-creates-one-unvalidated-invoice-and-removes-pending-and-chat-duplicates', pass: true });
 
@@ -112,34 +120,37 @@ async function openReceived(page, count) {
     assert.equal(tables.factures.length, 2);
     assert.ok(tables.factures.every(invoice => !invoice.valide));
     await page.goto(base + '/colis?dossier=' + P);
-    const importedSummary = page.getByRole('button', { name: /^Factures \(2\)/ });
-    await importedSummary.waitFor();
-    assert.doesNotMatch(await importedSummary.innerText(), /documents? reçus? à vérifier/);
+    await page.getByRole('link', { name: '2 factures reçues · À vérifier — EXP-TEST-001', exact: true }).filter({ visible: true }).waitFor();
+    assert.equal(await page.getByRole('button', { name: /^\d+ document\(s\) reçu\(s\) à vérifier$/ }).count(), 0);
     results.push({ test: 'failed-import-retains-document-and-successful-import-refresh-can-retry-without-reimport', pass: true });
 
     tables.factures = []; tables.colis[0].statut = 'paye';
     // A terminal status protects the dossier even if an old payment date is missing.
     tables.colis[0].paiement_date = null;
-    await page.goto(base + '/colis/' + P);
+    await page.goto(base + '/colis/' + P + '?section=documents');
     await openReceived(page, 2);
     await received.getByText('Consultation uniquement : ce dossier est payé, terminé ou archivé.', { exact: true }).waitFor();
     assert.equal(await received.getByRole('button', { name: 'Ajouter comme facture', exact: true }).count(), 0);
     assert.equal(await invoices.getByRole('button', { name: 'Ajouter une facture', exact: true }).count(), 0);
+    await openConversation(page);
     assert.equal(await page.locator('#conversation-client').getByRole('button', { name: 'Utiliser comme facture', exact: true }).count(), 0);
+    await page.getByRole('button', { name: 'Fermer le contexte du dossier', exact: true }).click();
     await received.getByRole('link', { name: 'achat-un.pdf', exact: true }).waitFor();
     results.push({ test: 'paid-dossier-retains-document-reading-and-disables-all-invoice-import-entry-points', pass: true });
 
     for (const changes of [{ statut: 'livre', archive: false, paiement_date: null }, { statut: 'autorise', archive: true, paiement_date: null }, { statut: 'autorise', archive: false, paiement_date: '2026-09-10T10:00:00Z' }]) {
       Object.assign(tables.colis[0], changes);
-      await page.goto(base + '/colis/' + P);
+      await page.goto(base + '/colis/' + P + '?section=documents');
       await openReceived(page, 2);
       assert.equal(await received.getByRole('button', { name: 'Ajouter comme facture', exact: true }).count(), 0);
+      await openConversation(page);
       assert.equal(await page.locator('#conversation-client').getByRole('button', { name: 'Utiliser comme facture', exact: true }).count(), 0);
+      await page.getByRole('button', { name: 'Fermer le contexte du dossier', exact: true }).click();
     }
     results.push({ test: 'completed-archived-or-payment-dated-dossiers-share-read-only-guards', pass: true });
 
     Object.assign(tables.colis[0], { statut: 'autorise', archive: false, paiement_date: null });
-    await page.goto(base + '/colis/' + P);
+    await page.goto(base + '/colis/' + P + '?section=documents');
     await page.setViewportSize({ width: 390, height: 844 });
     await openReceived(page, 2);
     await received.scrollIntoViewIfNeeded();
@@ -164,7 +175,7 @@ async function openReceived(page, count) {
     Object.assign(fixture.tables.colis[0], { statut: 'autorise', paiement_date: null });
     fixture.tables.messages = [first];
     await fixture.login();
-    await fixture.page.goto(base + '/colis/' + P);
+    await fixture.page.goto(base + '/colis/' + P + '?section=documents');
     const permissionRestricted = fixture.page.getByRole('region', { name: 'Documents reçus à vérifier', exact: true });
     await openReceived(fixture.page, 1);
     await permissionRestricted.getByRole('link', { name: 'achat-un.pdf', exact: true }).waitFor();

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowRight, Clock, UserCheck, ChevronDown } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import { WORK_KINDS, WORK_STATES, actionPriority, actionBlocked, canWorkAction, staffAvailable, workActionUrl } from '../../domain/personalWork';
 import { receptionCartonManifest } from '../../domain/reception';
@@ -73,19 +73,28 @@ export function WorkActionControls({ action, returnTo = '/', compact = false }) 
   </div>;
 }
 
-export default function WorkActionRow({ action, dossier, client, returnTo, now = Date.now(), density = 'comfortable' }) {
+export default function WorkActionRow({ action, dossier, client, returnTo, now = Date.now(), density = 'comfortable', compactLayout = false, notice }) {
   const { teamUsers = [], auth } = useApp();
   const priority = actionPriority(action, now);
   const waiting = action.blocked_reason || action.waiting_reason;
-  return <article className={`border-b border-slate-200 ${density === 'compact' ? 'py-3' : 'py-5'} space-y-3`}>
-    <div className="flex flex-wrap items-start justify-between gap-2">
-      <div className="min-w-0"><h2 className="font-semibold text-slate-900">{action.action_hint || WORK_KINDS[action.kind]?.label || 'Action à préciser'}</h2><p className="mt-1 text-sm text-slate-600">{(client?.nomFamille ? [client.prenom, client.nomFamille].filter(Boolean).join(' ') : client?.nom) || 'Client'} · {dossier?.ref || 'Dossier à consulter'}{dossier ? ` · ${receptionCartonManifest(dossier).nbColis} carton(s) reçu(s)` : ''}</p></div>
-      <span className={`rounded-lg px-2 py-1 text-xs font-semibold ${priority.urgent ? 'bg-amber-50 text-amber-800' : 'bg-slate-100 text-slate-600'}`}>{WORK_STATES[action.state]}</span>
+  const title = action.action_hint || WORK_KINDS[action.kind]?.label || 'Action à préciser';
+  const compact = compactLayout || density === 'compact';
+  return <article data-work-action={action.id} className={`border-b border-slate-200 ${compact ? `${density === 'compact' ? 'py-2' : 'py-3'} lg:grid lg:grid-cols-[minmax(0,1fr)_auto] lg:gap-x-5` : 'py-5'} space-y-3`}>
+    <div className="min-w-0 space-y-2">
+      <div className={compact ? 'space-y-2 xl:space-y-0 xl:grid xl:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,1fr)] xl:items-center xl:gap-3' : 'space-y-2'}>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <h2 className="min-w-0 font-semibold text-slate-900"><Link to={workActionUrl(action, returnTo, dossier)} aria-label={`Ouvrir ${title} — ${dossier?.ref || 'dossier'}`} className="inline-flex min-h-11 items-center break-words hover:underline">{title}</Link></h2>
+          <span className={`rounded-lg px-2 py-1 text-xs font-semibold ${priority.urgent ? 'bg-amber-50 text-amber-800' : 'bg-slate-100 text-slate-600'}`}>{WORK_STATES[action.state]}</span>
+        </div>
+        <p className="text-sm text-slate-600 break-words"><strong className="font-semibold text-slate-700">{dossier?.ref || 'Dossier à consulter'}</strong> · {(client?.nomFamille ? [client.prenom, client.nomFamille].filter(Boolean).join(' ') : client?.nom) || 'Client'}{!compact && dossier ? ` · ${receptionCartonManifest(dossier).nbColis} carton(s) reçu(s)` : ''}</p>
+        <p className={`text-xs ${priority.urgent ? 'text-amber-800 font-semibold' : 'text-slate-600'}`}><Clock size={13} className="inline mr-1" />{priority.reason}{action.due_at ? ` · ${workDate(action.due_at)}` : ''}</p>
+      </div>
+      {(!compact || action.assignee_id !== auth?.u?.id) && <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-600"><span>Action : {action.assignee_id === auth?.u?.id ? 'vous' : staffName(action.assignee_id, teamUsers)}</span>{dossier?.responsibleStaffId && <span>Référent : {staffName(dossier.responsibleStaffId, teamUsers)}</span>}</div>}
+      {waiting && <p className="text-sm text-slate-700"><strong>{action.blocked_reason ? 'Prérequis : ' : 'En attente : '}</strong>{waiting}{action.review_at ? ` · À revoir le ${workDate(action.review_at)}` : ''}</p>}
+      {notice && <p className="text-sm text-amber-800">{notice}</p>}
+      {action.handoff_to && <p className="text-sm text-slate-700">Relais proposé à {staffName(action.handoff_to, teamUsers)} · acceptation attendue{action.handoff_note ? ` — ${action.handoff_note}` : ''}</p>}
+      <InvoiceReviewIndicator dossier={dossier} returnTo={returnTo} />
     </div>
-    <InvoiceReviewIndicator dossier={dossier} returnTo={returnTo} />
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-600"><span>Action : {action.assignee_id === auth?.u?.id ? 'vous' : staffName(action.assignee_id, teamUsers)}</span>{dossier?.responsibleStaffId && <span>Référent : {staffName(dossier.responsibleStaffId, teamUsers)}</span>}<span className={priority.urgent ? 'text-amber-800 font-semibold' : ''}><Clock size={13} className="inline mr-1" />{priority.reason}{action.due_at ? ` · ${workDate(action.due_at)}` : ''}</span></div>
-    {waiting && <p className="text-sm text-slate-700"><strong>{action.blocked_reason ? 'Prérequis : ' : 'En attente : '}</strong>{waiting}{action.review_at ? ` · À revoir le ${workDate(action.review_at)}` : ''}</p>}
-    {action.handoff_to && <p className="text-sm text-slate-700">Relais proposé à {staffName(action.handoff_to, teamUsers)} · acceptation attendue{action.handoff_note ? ` — ${action.handoff_note}` : ''}</p>}
-    <WorkActionControls action={action} returnTo={returnTo} />
+    <div className={compact ? 'lg:!mt-2 lg:max-w-sm' : ''}><WorkActionControls action={action} returnTo={returnTo} compact={compact} /></div>
   </article>;
 }

@@ -1,4 +1,5 @@
 import { receptionCartonManifest } from './reception.js';
+import { resolveDossierTask } from './dossierTasks.js';
 
 export const MISSIONS = [
   { id: 'reception', label: 'Réception' }, { id: 'preparation', label: 'Préparation' },
@@ -16,9 +17,10 @@ export const WORK_KINDS = {
 };
 export const WORK_STATES = { ready: 'À faire', in_progress: 'En cours', waiting: 'En attente', done: 'Terminé' };
 export const PERSONAL_SECTIONS = [
-  { id: 'now', label: 'À faire maintenant' }, { id: 'progress', label: 'En cours' },
-  { id: 'pool', label: 'À prendre' }, { id: 'waiting', label: 'En attente' },
+  { id: 'now', label: 'À faire' }, { id: 'waiting', label: 'En attente' },
 ];
+// Existing bookmarks for work in progress remain in the combined action list.
+export function personalSection(value) { return ['pool', 'waiting'].includes(value) ? value : 'now'; }
 export const workTime = value => value ? Date.parse(value) : NaN;
 export function canWorkAction(action, can = () => false) {
   if (action.kind === 'conversation' && action.action_hint === 'Accès client à activer') return can('perm_clients_creer');
@@ -61,20 +63,21 @@ export function buildPersonalWork({ actions = [], dossiers = [], clients = [], u
     if (mission && WORK_KINDS[action.kind]?.mission !== mission) return false;
     const dossier = dossierById.get(action.colis_id);
     const client = clientById.get(dossier?.clientId);
-    return !query || [WORK_KINDS[action.kind]?.label, dossier?.ref, client?.nom, client?.prenom, action.waiting_reason, action.blocked_reason].filter(Boolean).join(' ').toLocaleLowerCase('fr').includes(query);
+    return !query || [WORK_KINDS[action.kind]?.label, action.action_hint, dossier?.ref, client?.nom, client?.nomFamille, client?.prenom, action.waiting_reason, action.blocked_reason, action.priority_reason].filter(Boolean).join(' ').toLocaleLowerCase('fr').includes(query);
   }), now);
+  const scopedIds = new Set(scope.map(action => action.id));
   const owned = scope.filter(action => action.assignee_id === userId);
   const sections = {
-    now: owned.filter(action => action.state === 'ready' && !actionBlocked(action)),
-    progress: owned.filter(action => action.state === 'in_progress' && !actionBlocked(action)),
+    now: owned.filter(action => ['ready', 'in_progress'].includes(action.state) && !actionBlocked(action)),
     pool: staffAvailable(preference, now) ? scope.filter(action => !action.assignee_id && action.state === 'ready' && !actionBlocked(action)) : [],
     waiting: owned.filter(action => action.state === 'waiting' || actionBlocked(action)),
   };
   return {
     sections, counts: Object.fromEntries(Object.entries(sections).map(([key, rows]) => [key, rows.length])), scope,
-    handoffs: scope.filter(action => action.handoff_to === userId),
-    exceptions: all.filter(action => action.assignee_id === userId && (!canWorkAction(action, can) || !missions.includes(WORK_KINDS[action.kind]?.mission))),
+    handoffs: sortWorkActions(all.filter(action => action.handoff_to === userId && action.assignee_id !== userId), now),
+    exceptions: sortWorkActions(all.filter(action => action.assignee_id === userId && (!canWorkAction(action, can) || !missions.includes(WORK_KINDS[action.kind]?.mission))), now),
     outsideMissionDue: eligible.filter(action => action.assignee_id === userId && mission && WORK_KINDS[action.kind]?.mission !== mission && actionPriority(action, now).urgent),
+    outsideFilterDue: sortWorkActions(eligible.filter(action => action.assignee_id === userId && !scopedIds.has(action.id) && actionPriority(action, now).urgent), now),
     dossierById, clientById, missions,
   };
 }
@@ -89,9 +92,19 @@ export function workActionUrl(action, returnTo = '/', dossier) {
   const params = new URLSearchParams({ returnTo: safeWorkReturn(returnTo), action: action.id });
   if (action.kind === 'conversation' && action.action_hint === 'Accès client à activer' && dossier?.clientId) return `/clients/${encodeURIComponent(dossier.clientId)}?${params}`;
   if (action.kind === 'conversation') return `/conversations?${new URLSearchParams({ dossier: action.colis_id, action: action.id, returnTo: safeWorkReturn(returnTo) })}`;
-  if (['preparation', 'documents', 'quote'].includes(action.kind)) {
-    params.set('section', action.kind === 'preparation' ? 'preparation' : 'devis');
-    return `/colis/${encodeURIComponent(action.colis_id)}?${params}`;
-  }
-  return `/colis?${new URLSearchParams({ dossier: action.colis_id, returnTo: safeWorkReturn(returnTo), action: action.id })}`;
+  params.set('section', resolveDossierTask({ ...dossier, id: action.colis_id }, params, [action]));
+  return `/colis/${encodeURIComponent(action.colis_id)}?${params}`;
+}
+
+/** Continuation is a suggestion, never a claim or change of responsibility.
+ * Only the caller's personal list can supply its filter and mission scope. */
+export function nextPersonalWorkAction({ returnTo = '/', currentActionId, currentDossierId, currentKind, ...options }) {
+  const url = new URL(safeWorkReturn(returnTo), 'https://pinta.invalid');
+  if (!['/', '/travail'].includes(url.pathname)) return null;
+  const section = personalSection(url.searchParams.get('section'));
+  if (section === 'waiting') return null;
+  const mission = url.searchParams.has('mission') ? url.searchParams.get('mission') : options.preference?.active_mission || '';
+  const view = buildPersonalWork({ ...options, mission, search: url.searchParams.get('q') || '' });
+  return view.sections[section].find(action => action.id !== currentActionId
+    && !(action.colis_id === currentDossierId && (!currentKind || action.kind === currentKind))) || null;
 }

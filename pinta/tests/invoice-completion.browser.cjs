@@ -13,7 +13,7 @@ const invoicePanel = f => f.page.getByRole('region', { name: 'Factures d’achat
 const review = f => f.page.getByRole('region', { name: 'Vérification de la facture', exact: true });
 const noEditor = async f => {
   for (const label of ['Total HT de la facture', 'Description de l’article 1', 'Catégorie de l’article 1']) assert.equal(await f.page.getByLabel(label, { exact: true }).count(), 0, `Completed or retired document must not display a fake editable/disabled field: ${label}`);
-  assert.equal(await f.page.getByRole('button', { name: 'Valider cette facture et ses articles', exact: true }).count(), 0);
+  assert.equal(await f.page.getByRole('button', { name: /^(Valider et passer à la suivante|Terminer la vérification)$/ }).count(), 0);
 };
 async function completedFixture(browser, { manual = false, pending = false } = {}) {
   const f = await fixture(browser, { category: 'cat-test', unlinked: manual, noAnalysis: true });
@@ -29,7 +29,7 @@ async function completedFixture(browser, { manual = false, pending = false } = {
   return f;
 }
 async function open(f, invoice = null) {
-  const params = new URLSearchParams({ section: 'devis', returnTo: '/?mission=documents' });
+  const params = new URLSearchParams({ section: 'documents', returnTo: '/?mission=documents' });
   if (invoice) params.set('invoice', invoice);
   await f.page.goto(`${base}/colis/${ids.P}?${params}#quote-documents`);
   await invoicePanel(f).waitFor();
@@ -79,10 +79,12 @@ async function main() {
       assert.equal(await calculate.isEnabled(), true);
       assert.equal(f.tables.colis[0].quote_version, 0);
       assert.deepEqual(f.tables.lignes, rows);
-      await f.page.reload(); await complete(f); await noEditor(f);
-      await f.page.getByRole('navigation', { name: 'Organisation du dossier', exact: true }).getByRole('button', { name: 'Préparation', exact: true }).click();
+      assert.equal(new URL(f.page.url()).searchParams.get('section'), 'devis');
+      assert.equal(await invoicePanel(f).count(), 0, 'Quote task does not mount a second invoice editor.');
+      await f.page.reload(); await calculate.waitFor(); await noEditor(f);
+      await f.page.getByLabel('Tâche du dossier', { exact: true }).selectOption('preparation');
       await f.page.getByRole('region', { name: 'Préparation après optimisation', exact: true }).waitFor();
-      await f.page.getByRole('navigation', { name: 'Organisation du dossier', exact: true }).getByRole('button', { name: 'Factures et devis', exact: true }).click();
+      await f.page.getByLabel('Tâche du dossier', { exact: true }).selectOption('documents');
       await complete(f); await noEditor(f);
       assert.equal(await f.page.evaluate(() => document.documentElement.classList.contains('dark')), mobile, 'Audit the requested light desktop / dark mobile theme, not only its storage preference.');
       const audit = await new AxeBuilder({ page: f.page }).include('#quote-documents').withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
@@ -101,24 +103,24 @@ async function main() {
       await f.page.getByRole('button', { name: 'Modifier la vérification', exact: true }).waitFor();
       assert.equal(await f.page.getByLabel('Facture à vérifier', { exact: true }).inputValue(), B);
       assert.notEqual(new URL(f.page.url()).searchParams.get('invoice'), ids.F);
-      assert.equal(await f.page.getByRole('button', { name: 'Valider cette facture et ses articles', exact: true }).count(), 0);
+      assert.equal(await f.page.getByRole('button', { name: /^(Valider et passer à la suivante|Terminer la vérification)$/ }).count(), 0);
       await invoicePanel(f).getByRole('button', { name: 'Revenir au récapitulatif', exact: true }).click(); await complete(f); await noEditor(f);
       const url = new URL(f.page.url());
-      assert.equal(url.searchParams.has('invoice'), false); assert.equal(url.searchParams.get('section'), 'devis'); assert.equal(url.searchParams.get('returnTo'), '/?mission=documents');
+      assert.equal(url.searchParams.has('invoice'), false); assert.equal(url.searchParams.get('section'), 'documents'); assert.equal(url.searchParams.get('returnTo'), '/?mission=documents');
     });
     await scenario('explicit-consultation-keeps-validated-documents-readonly', {}, async f => {
       await open(f); await complete(f);
       await invoicePanel(f).getByRole('button', { name: 'Consulter les factures', exact: true }).click();
       await f.page.getByRole('button', { name: 'Modifier la vérification', exact: true }).waitFor();
       assert.notEqual(await f.page.getByLabel('Facture à vérifier', { exact: true }).inputValue(), ids.F);
-      assert.equal(await f.page.getByRole('button', { name: 'Valider cette facture et ses articles', exact: true }).count(), 0);
+      assert.equal(await f.page.getByRole('button', { name: /^(Valider et passer à la suivante|Terminer la vérification)$/ }).count(), 0);
       const editor = f.page.getByLabel('Description de l’article 1', { exact: true });
       if (await editor.count()) assert.equal(await editor.isDisabled(), true);
       await invoicePanel(f).getByRole('button', { name: 'Revenir au récapitulatif', exact: true }).click(); await complete(f); await noEditor(f);
     });
     await scenario('one-original-still-pending-opens-that-review-not-summary-or-copy', { pending: true }, async f => {
       await open(f);
-      await f.page.getByRole('button', { name: 'Valider cette facture et ses articles', exact: true }).waitFor();
+      await f.page.getByRole('button', { name: /^(Valider et passer à la suivante|Terminer la vérification)$/ }).waitFor();
       assert.equal(await f.page.getByLabel('Facture à vérifier', { exact: true }).inputValue(), B);
       assert.equal(await f.page.getByLabel('Description de l’article 1', { exact: true }).inputValue(), 'Scelleuse thermique');
       assert.equal(await invoicePanel(f).getByText('Factures vérifiées', { exact: true }).count(), 0);
@@ -200,7 +202,7 @@ async function main() {
       await f.page.evaluate(() => window.dispatchEvent(new Event('focus')));
       const warning = review(f).getByRole('alert').filter({ hasText: 'Cette facture fait désormais partie de l’historique. Votre saisie locale est conservée' });
       await warning.waitFor();
-      assert.equal(await f.page.getByRole('button', { name: 'Valider cette facture et ses articles', exact: true }).count(), 0);
+      assert.equal(await f.page.getByRole('button', { name: /^(Valider et passer à la suivante|Terminer la vérification)$/ }).count(), 0);
       await review(f).locator('summary').filter({ hasText: 'Voir ma saisie locale' }).click();
       await review(f).getByText('Correction locale après classement par un collègue', { exact: false }).waitFor();
       const discard = review(f).getByRole('button', { name: 'Abandonner la saisie locale', exact: true });

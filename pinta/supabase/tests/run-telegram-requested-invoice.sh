@@ -19,7 +19,7 @@ for migration in "$root"/migrations/202609*.sql; do
  { printf 'SET ROLE supabase_admin;\n';cat "$migration"; } | sql -1
 done
 # Reapplying the isolated additive fix is safe, including its grants.
-{ printf 'SET ROLE supabase_admin;\n';cat "$root/migrations/20260914000001_telegram_requested_invoice.sql"; } | sql -1
+{ printf 'SET ROLE supabase_admin;\n';cat "$root/migrations/20260916000003_combined_invoice_request.sql"; } | sql -1
 sql < "$root/tests/telegram-requested-invoice.sql"
 # Two independent deliveries race to fulfil one invoice request. The dossier
 # lock permits one invoice and keeps the other document in the conversation.
@@ -53,5 +53,37 @@ DO $$ BEGIN
  OR (SELECT count(*) FROM messages WHERE colis_id='d2200000-0000-4000-8000-000000000001' AND attachment_path IS NOT NULL)<>2
  THEN RAISE EXCEPTION 'FAIL: concurrent documents did not fulfil exactly one request'; END IF;
  RAISE NOTICE 'PASS: two concurrent documents create one requested invoice, one audit, and preserve both attachments';
+END; $$;
+SQL
+# Explicit replies to the same delivered request may contain several invoices.
+# Both remain unvalidated and no later unthreaded attachment is reclassified.
+sql <<'SQL'
+UPDATE messages SET telegram_msg_id='request-for-several-invoices'
+WHERE colis_id='d2200000-0000-4000-8000-000000000001' AND type='staff';
+INSERT INTO messages(id,colis_id,type,canal,texte,attachment_path,attachment_type)
+VALUES('d2300000-0000-4000-8000-000000000003','d2200000-0000-4000-8000-000000000001','client','telegram','Facture C','d2200000-0000-4000-8000-000000000001/c.pdf','application/pdf'),
+('d2300000-0000-4000-8000-000000000004','d2200000-0000-4000-8000-000000000001','client','telegram','Facture D','d2200000-0000-4000-8000-000000000001/d.pdf','application/pdf');
+SQL
+register_reply() {
+ sql <<SQL
+BEGIN;
+SET LOCAL ROLE service_role;
+SELECT set_config('request.jwt.claim.role','service_role',true);
+SELECT register_requested_invoice('$1','request-for-several-invoices');
+SELECT pg_sleep(0.2);
+COMMIT;
+SQL
+}
+register_reply d2300000-0000-4000-8000-000000000003 & first_pid=$!
+register_reply d2300000-0000-4000-8000-000000000004 & second_pid=$!
+wait "$first_pid"
+wait "$second_pid"
+sql <<'SQL'
+DO $$ BEGIN
+ IF (SELECT count(*) FROM factures WHERE colis_id='d2200000-0000-4000-8000-000000000001')<>3
+ OR (SELECT count(*) FROM factures WHERE colis_id='d2200000-0000-4000-8000-000000000001' AND valide)<>0
+ OR (SELECT count(*) FROM audit_actions WHERE colis_id='d2200000-0000-4000-8000-000000000001' AND action='telegram_requested_invoice')<>3
+ THEN RAISE EXCEPTION 'FAIL: explicitly threaded invoices were not both preserved for review'; END IF;
+ RAISE NOTICE 'PASS: two explicit concurrent replies preserve both invoices without validation';
 END; $$;
 SQL

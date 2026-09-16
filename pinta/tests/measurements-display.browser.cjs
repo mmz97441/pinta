@@ -32,6 +32,7 @@ async function main() {
         assert.equal(await row.getByText('99 kg', { exact: true }).count(), 0, 'Stale aggregate weight must not replace individual carton weights');
       }
       await f.page.goto(base + '/colis/' + ids.P);
+      await f.page.getByRole('button', { name: 'Contexte', exact: true }).click();
       const measures = f.page.getByRole('region', { name: 'Mesures des cartons', exact: true });
       await measures.getByText('Totaux à réception', { exact: true }).waitFor();
       assert.equal(await measures.getByText('2.67 kg', { exact: true }).count(), 2);
@@ -42,6 +43,7 @@ async function main() {
       f.tables.colis[0].nb_colis = 3;
       f.tables.colis[0].fin_w = null;
       await f.page.reload();
+      await f.page.getByRole('button', { name: 'Contexte', exact: true }).click();
       await measures.getByText(/Total avant optimisation indisponible/).waitFor();
       assert.equal(await measures.getByText('Totaux à réception', { exact: true }).count(), 0);
       await measures.getByText('Mesures après optimisation à compléter ; aucun poids calculé.', { exact: true }).waitFor();

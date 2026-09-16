@@ -1,23 +1,24 @@
 import { useNavigate, useLocation } from 'react-router-dom';
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  Ruler, Check, Clock, AlertTriangle, Eye, X, RotateCcw, Send, Mail, Plus, Archive, Package,
+  Ruler, Check, Clock, AlertTriangle, Eye, X, RotateCcw, Send, Plus, Archive,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { BRAND, STATUTS, TRANSITIONS, TAGS_PREPARATION, getDestByCP } from '../../constants';
 import { eur } from '../../utils';
 import { Ligne } from '../ui';
 import WebcamCapture from '../ui/WebcamCapture';
-import StaffAssignment from './StaffAssignment';
-import FacturesPanel from '../detail/FacturesPanel';
+import DossierDocumentsTask from './DossierDocumentsTask';
+import ReceivedCartons from '../detail/ReceivedCartons';
 import ColisModal from '../ColisModal';
 import { receptionCartonManifest, receptionMeasurements } from '../../domain/reception';
-import * as sb from '../../lib/supabaseData';
 import { currentInvoices } from '../../domain/invoiceDocuments';
 import { needsQuoteRecalculation } from '../../domain/clientJourney';
 import { calculateQuote, measureShipment, volumetricDivisor, quoteInputFingerprint } from '../../domain/quote';
-import { workspaceReturnPath } from '../../domain/navigation';
+import { dossierTaskUrl, resolveDossierTask } from '../../domain/dossierTasks';
+import TaskContinuation from '../workspace/TaskContinuation';
 import { staffName } from '../workspace/WorkActionRow';
+import TaskMessage from './TaskMessage';
 
 const preparationDrafts = new Map();
 const savedFinalPackages = (colis) => colis?.finalPackages?.length ? colis.finalPackages.map(box => ({ ...box })) : [{ dimL: colis?.finL ?? '', dimW: colis?.finW ?? '', dimH: colis?.finH ?? '', poids: colis?.finP ?? '' }];
@@ -108,40 +109,10 @@ function BtnPrimary({ onClick, children, disabled, color }) {
   );
 }
 
-// ── Telegram button ──────────────────────────────────────────────────────────
-function BtnTelegram({ onClick, children, disabled }) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl text-sm font-bold transition-all active:scale-95 disabled:opacity-40"
-      style={{ background: '#0088cc', color: 'white', boxShadow: '0 2px 8px #0088cc40' }}
-    >
-      <Send size={14} />
-      {children}
-    </button>
-  );
-}
-
-// ── Email button ────────────────────────────────────────────────────────────
-function BtnEmail({ onClick, children, disabled }) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl text-sm font-bold transition-all active:scale-95 disabled:opacity-40"
-      style={{ background: `linear-gradient(135deg, ${BRAND.navy}, ${BRAND.navyL})`, color: 'white', boxShadow: '0 2px 8px rgba(27,58,75,0.25)' }}
-    >
-      <Mail size={14} />
-      {children}
-    </button>
-  );
-}
-
 // ════════════════════════════════════════════════════════════════════════════
 // MAIN COMPONENT
 // ════════════════════════════════════════════════════════════════════════════
-export default function StaffDetailView({ workspace = false }) {
+export default function StaffDetailView({ workspace = false, task: requestedTask, onOpenContext }) {
   const navigate = useNavigate();
   const location = useLocation();
   const {
@@ -167,22 +138,18 @@ export default function StaffDetailView({ workspace = false }) {
     refreshColis,
     confirmerDevis,
     settings = {},
-    sendMsg,
     categories,
     getTarif,
     envois,
     assignDeparture,
     payer,
-    setData,
     can,
   } = useApp();
 
   // ── Local state ──────────────────────────────────────────────────────────
-  const [documentTab, setDocumentTab] = useState('articles');
   const [actionLoading, setActionLoading] = useState(false);
   const actionRef = useRef(false);
   const [commentaire, setCommentaire] = useState(sel?.commentairePreparation || '');
-  const [newArticle, setNewArticle] = useState({ desc: '', qte: '1', prix: '', cat: '', factureId: '' });
   const [formErr, setFormErr] = useState('');
   const preparationFeedback = useRef(null);
 
@@ -202,6 +169,7 @@ export default function StaffDetailView({ workspace = false }) {
   const loadedPreparation = useRef(null);
   const [preparationConflict, setPreparationConflict] = useState(false);
   const [measuresSaved, setMeasuresSaved] = useState(false);
+  const [preparationEditing, setPreparationEditing] = useState(false);
   // Photo simulation
   // Produits interdits checklist
   // Devis preview mode
@@ -225,7 +193,6 @@ export default function StaffDetailView({ workspace = false }) {
   useEffect(() => {
     if (sel) {
       setCommentaire(sel.commentairePreparation || '');
-      setNewArticle({ desc: '', qte: '1', prix: '', cat: '', factureId: '' });
       setFormErr('');
       const draft = preparationDrafts.get(`${auth?.u?.id}:${sel.id}`);
       setFinalPackages(draft?.finalPackages || savedFinalPackages(sel));
@@ -235,6 +202,7 @@ export default function StaffDetailView({ workspace = false }) {
       preparationBaseline.current = draft?.baseline || JSON.stringify(savedFinalPackages(sel));
       setPreparationConflict(!!draft && draft.version !== sel.updatedAt);
       setMeasuresSaved(false);
+      setPreparationEditing(false);
       setSelEnvoi(sel.envoi || '');
       setSelTags(sel.tagsPreparation || []);
       setFraisDivers(preparationDrafts.get(`${auth?.u?.id}:${sel.id}`)?.fraisDivers || sel.fraisDivers || []);
@@ -285,18 +253,10 @@ export default function StaffDetailView({ workspace = false }) {
   }, [receptionSignature]);
 
   const openingActionId = new URLSearchParams(location.search).get('action');
-  const openingKind = workActions.find(action => action.id === openingActionId && action.colis_id === sel?.id)?.kind;
-  const params = new URLSearchParams(location.search);
   const canInvoiceWorkspace = ['perm_factures_voir', 'perm_factures_ajouter', 'perm_factures_valider', 'perm_factures_refuser', 'perm_factures_ocr', 'perm_factures_modifier_articles'].some(permission => can(permission));
-  const canQuoteWorkspace = canInvoiceWorkspace || can('perm_colis_calculer_devis') || can('perm_colis_envoyer_devis');
-  const preparationView = params.get('section') === 'preparation' || !canQuoteWorkspace || (!params.get('section') && !params.get('invoice') && openingKind === 'preparation');
-  useEffect(() => {
-    const anchor = preparationView ? 'preparation-workspace' : { documents: 'quote-documents', quote: 'quote-review' }[openingKind];
-    if (!anchor) return;
-    if (openingKind === 'documents') setDocumentTab('document');
-    const frame = requestAnimationFrame(() => document.getElementById(anchor)?.scrollIntoView({ block: 'start' }));
-    return () => cancelAnimationFrame(frame);
-  }, [sel?.id, openingActionId, openingKind, preparationView]);
+  const canQuoteWorkspace = ['perm_colis_calculer_devis', 'perm_colis_envoyer_devis', 'perm_finances_voir_total'].some(permission => can(permission));
+  const task = requestedTask || resolveDossierTask(sel || {}, location.search, workActions, can);
+  const preparationView = task === 'preparation';
   useEffect(() => {
     if (!preparationView || (!formErr && !measuresSaved)) return;
     preparationFeedback.current?.scrollIntoView({ block: 'nearest' });
@@ -305,16 +265,13 @@ export default function StaffDetailView({ workspace = false }) {
 
   if (!sel || !isStaff) return null;
 
-  const assignee = teamUsers.find((user) => user.authId === sel.responsibleStaffId);
-  const assignmentLabel = sel.responsibleStaffId === auth?.u?.id ? 'vous' : assignee ? [assignee.prenom, assignee.nom].filter(Boolean).join(' ') : sel.responsibleStaffId ? 'dossier pris en charge' : 'non attribué';
   const dest = selDest || getDestByCP(cl?.cp);
   const tarif = getTarif(dest?.code, cl?.abonnement);
   const divisor = volumetricDivisor(settings);
-  const chooseSection = (section) => {
-    const next = new URLSearchParams(location.search);
-    next.set('section', section); next.delete('invoice'); next.delete('action');
-    navigate(`/colis/${sel.id}?${next}#${section === 'preparation' ? 'preparation-workspace' : 'quote-documents'}`);
-  };
+  const savedWeights = measureShipment(savedFinalPackages(sel), divisor);
+  const measuresCurrent = sel.preparationCompositionVersion != null && sel.finalMeasurementsVersion === sel.preparationCompositionVersion;
+  const chooseSection = (section, hash) => navigate(dossierTaskUrl(sel.id, section, location.search, { hash }));
+  const continuation = <TaskContinuation currentActionId={openingActionId} currentDossierId={sel.id} currentKind={{documents:'documents',devis:'quote',preparation:'preparation',reception:'reception',accord:'reception',expedition:'departure',livraison:'departure'}[task]} />;
   const runAction = async (action) => {
     if (actionRef.current) return;
     actionRef.current = true; setActionLoading(true); setFormErr('');
@@ -329,11 +286,6 @@ export default function StaffDetailView({ workspace = false }) {
   const subJoursRestants = subFin ? Math.ceil((subFin - new Date()) / (1000 * 60 * 60 * 24)) : null;
   const subExpired = !isFreemium && subJoursRestants !== null && subJoursRestants <= 0;
   const subWarning = !isFreemium && subJoursRestants !== null && subJoursRestants > 0 && subJoursRestants <= 7;
-
-  // ── Missing invoice? ──────────────────────────────────────────────────────
-  // missingFacture = true si AUCUNE facture n'est validée
-  const hasAnyValidFacture = sel.factures && sel.factures.length > 0 && sel.factures.some((f) => f.valide);
-  const missingFacture = cl?.type !== 'pro' && !hasAnyValidFacture;
 
   // ── Revert / Cancel helpers ───────────────────────────────────────────────
   function handleRevert() {
@@ -406,7 +358,7 @@ export default function StaffDetailView({ workspace = false }) {
       if (JSON.stringify(fraisDivers) !== JSON.stringify(saved.fraisDivers || []) || proPayMethod !== (saved.modePaiementPro || cl?.methodePaiement || 'virement')) {
         preparationDirty.current = true; preparationDrafts.set(`${auth?.u?.id}:${sel.id}`, { finalPackages: savedFinalPackages(saved), fraisDivers, proPayMethod, version: saved.updatedAt, composition: saved.preparationCompositionVersion });
       }
-      setMeasuresSaved(true); flash('Mesures après optimisation enregistrées. Les documents peuvent être complétés séparément.'); }
+      setMeasuresSaved(true); setPreparationEditing(false); flash('Préparation enregistrée.'); }
     return saved;
   }
   async function handleEnvoyerDevis() {
@@ -423,15 +375,6 @@ export default function StaffDetailView({ workspace = false }) {
     return result;
   }
 
-  async function addArticle() {
-    const article = { ...newArticle, desc: newArticle.desc.trim(), qte: Number(newArticle.qte), prix: Number(newArticle.prix), factureId: newArticle.factureId || null };
-    if (!article.desc || !Number.isInteger(article.qte) || article.qte <= 0 || newArticle.prix === '' || !Number.isFinite(article.prix) || article.prix < 0 || !article.cat) throw new Error('Renseignez description, quantité entière positive, prix et catégorie.');
-    const saved = await sb.insertLigne(sel.id, article);
-    setData((previous) => previous.map((parcel) => parcel.id === sel.id ? { ...parcel, lignes: [...(parcel.lignes || []).filter((line) => line.id !== saved.id), saved] } : parcel));
-    setNewArticle({ desc: '', qte: '1', prix: '', cat: '', factureId: '' });
-    setDevisPrev(false);
-  }
-
   // ── Correction bar availability ───────────────────────────────────────────
   const canRevert = !!sel.statut && sel.statut !== 'annule' && sel.statut !== 'livre' && can('perm_colis_revenir_arriere');
   const canCancel = !!sel.statut && sel.statut !== 'annule' && sel.statut !== 'livre' && can('perm_colis_annuler');
@@ -441,6 +384,18 @@ export default function StaffDetailView({ workspace = false }) {
   // ════════════════════════════════════════════════════════════════════════
 
   function renderActionBlock() {
+    if (task === 'documents') return canInvoiceWorkspace ? <DossierDocumentsTask key={sel.id} onQuote={canQuoteWorkspace ? () => chooseSection('devis') : undefined}>{continuation}</DossierDocumentsTask> : <p role="alert" className="p-4 text-sm text-slate-700">Vous n’avez pas accès aux factures de ce dossier.</p>;
+    const stage = needsQuoteRecalculation(sel) ? 'en_preparation' : sel.statut;
+    if (task === 'reception' && stage !== 'receptionne') return <section className="space-y-4"><h2 className="text-lg font-bold text-slate-800">Réception enregistrée</h2><ReceivedCartons colis={sel} settings={settings} />{['mesure','attente_feu_vert'].includes(stage) && <BtnPrimary onClick={() => chooseSection('accord')}>Suivre l’accord du client</BtnPrimary>}{continuation}</section>;
+    if (task === 'preparation' && !['autorise','en_preparation'].includes(stage)) return <section className="space-y-4"><h2 className="text-lg font-bold text-slate-800">Préparation</h2>{sel.feuVert === 'autorise' && savedWeights && measuresCurrent ? <p className="text-sm text-slate-700">Mesures enregistrées : {savedFinalPackages(sel).map((box,index) => `Colis ${index + 1} · ${box.dimL} × ${box.dimW} × ${box.dimH} cm · ${box.poids} kg`).join(' ; ')}</p> : <p className="text-sm text-slate-700">La préparation attend l’accord du client.</p>}{continuation}</section>;
+    if (task === 'devis' && stage !== 'en_preparation') {
+      const amounts = sel.devisSnapshot?.amounts;
+      return <section className="space-y-4"><h2 className="text-lg font-bold text-slate-800">{sel.devisTotal ? 'Devis enregistré' : 'Devis à établir'}</h2>{canQuoteWorkspace ? sel.devisTotal ? <div className="space-y-2 rounded-xl border border-slate-200 p-4 text-sm">{amounts && <><Ligne label="Transport" value={eur(amounts.transport)} /><Ligne label="Taxes" value={eur((amounts.om || 0) + (amounts.omr || 0) + (amounts.tva || 0))} /><Ligne label="Frais" value={eur(amounts.fees)} /></>}<Ligne label="Total" value={eur(sel.devisTotal)} /><button className="min-h-11 font-semibold underline" onClick={() => chooseSection('paiement')}>Voir le règlement</button></div> : <p className="text-sm text-slate-700">Le devis sera disponible après l’accord du client et la préparation.</p> : <p role="alert" className="text-sm text-slate-700">Votre rôle ne permet pas de consulter le devis.</p>}{continuation}</section>;
+    }
+    if (task === 'devis' && !canQuoteWorkspace) return <p role="alert" className="p-4 text-sm text-slate-700">Votre rôle ne permet pas d’établir le devis.</p>;
+    if (task === 'paiement' && !['devis_envoye','attente_paiement'].includes(stage)) return <section className="space-y-4"><h2 className="text-lg font-bold text-slate-800">{sel.paiementDate ? 'Paiement confirmé' : 'Règlement'}</h2><p className="text-sm text-slate-700">{sel.paiementDate ? `${eur(sel.paiementMontant || sel.devisTotal)} reçu(s).` : 'Le règlement intervient après l’envoi du devis.'}</p>{continuation}</section>;
+    if (['expedition','livraison'].includes(task) && !['paye','expedie','transit','dedouanement','arrive','livraison','livre'].includes(stage)) return <section className="space-y-4"><h2 className="text-lg font-bold text-slate-800">Expédition à organiser</h2><p className="text-sm text-slate-700">Le dossier doit être préparé et son règlement confirmé avant le départ.</p>{continuation}</section>;
+    if (task === 'accord' && !['mesure','attente_feu_vert','refuse_client'].includes(stage)) return <section className="space-y-4"><h2 className="text-lg font-bold text-slate-800">Accord du client</h2><p className="text-sm text-slate-700">{sel.feuVert === 'autorise' ? 'Accord enregistré pour la préparation.' : 'Les mesures à réception doivent être enregistrées avant la demande.'}</p>{continuation}</section>;
     switch (needsQuoteRecalculation(sel) ? 'en_preparation' : sel.statut) {
 
       // ── 1. RECEPTIONNE ─────────────────────────────────────────────────
@@ -475,85 +430,12 @@ export default function StaffDetailView({ workspace = false }) {
 
       // ── MEASURED AT RECEPTION: request explicit preparation consent ───────
       case 'mesure': {
-        return (
-          <Section title="Demander le feu vert" icon={Clock} color={borderColor}>
-            <div className="space-y-3">
-              {/* Action principale : 2 boutons côte à côte */}
-              <div className="flex gap-2">
-                <BtnTelegram
-                  disabled={actionLoading || !cl?.telegramChatId || !can('perm_colis_demander_feuvert')}
-                  onClick={() => runAction(async () => { await demanderFeuVert(sel.id); await sendMsg(sel.id, cl?.id, 'telegram', 'demande_feu_vert', null); })}
-                >
-                  {actionLoading ? 'Envoi...' : 'Telegram'}
-                </BtnTelegram>
-                <BtnEmail
-                  disabled={actionLoading || !cl?.email || !can('perm_colis_demander_feuvert')}
-                  onClick={() => runAction(async () => { await demanderFeuVert(sel.id); await sendMsg(sel.id, cl?.id, 'email', 'demande_feu_vert', null); })}
-                >
-                  {actionLoading ? 'Envoi...' : 'Email'}
-                </BtnEmail>
-              </div>
-
-              {/* Alerte facture — compacte */}
-              {missingFacture && (
-                <div className="flex items-center gap-2 p-2 rounded-lg bg-amber-50 border border-amber-200">
-                  <AlertTriangle size={12} className="text-amber-500 flex-shrink-0" />
-                  <p className="text-[10px] font-semibold text-amber-700 flex-1">Facture manquante</p>
-                  <button
-                    onClick={() => runAction(() => sendMsg(sel.id, cl?.id, cl?.telegramChatId ? 'telegram' : 'email', 'facture_manquante', null))}
-                    className="text-[10px] font-bold px-2 py-1 rounded bg-amber-200 text-amber-800 hover:bg-amber-300 transition-all active:scale-95"
-                  >
-                    Demander
-                  </button>
-                </div>
-              )}
-
-            </div>
-          </Section>
-        );
+        return <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5"><h2 className="text-lg font-bold text-slate-800">Demander l’accord du client</h2><p className="text-sm text-slate-600">{receptionCartonManifest(sel).nbColis} carton(s) reçus et mesurés · Casier {sel.casier || 'à renseigner'}</p><TaskMessage template="demande_feu_vert" label="Préparer la demande au client" disabled={actionLoading || !can('perm_colis_demander_feuvert')} beforeSend={() => demanderFeuVert(sel.id)} />{continuation}</section>;
       }
-
-      // ── 4. ATTENTE_FEU_VERT ────────────────────────────────────────────
       case 'attente_feu_vert': {
-        return (
-          <Section title="En attente du client" icon={Clock} color={borderColor}>
-            <div className="space-y-3">
-              <div className="flex items-center gap-2 p-2 rounded-lg bg-orange-50 border border-orange-200">
-                <Clock size={12} className="text-orange-500 flex-shrink-0" />
-                <p className="text-[10px] font-medium text-orange-700">
-                  Réponse attendue de {cl?.prenom || cl?.nom || 'votre client'}
-                </p>
-              </div>
-
-              {/* Relancer — 2 boutons côte à côte */}
-              <div className="flex gap-2">
-                <BtnTelegram disabled={actionLoading || !cl?.telegramChatId}
-                  onClick={() => runAction(() => sendMsg(sel.id, cl?.id, 'telegram', 'relance_feu_vert', null))}>
-                  {actionLoading ? 'Envoi...' : 'Relancer Telegram'}
-                </BtnTelegram>
-                <BtnEmail disabled={actionLoading || !cl?.email}
-                  onClick={() => runAction(() => sendMsg(sel.id, cl?.id, 'email', 'relance_feu_vert', null))}>
-                  {actionLoading ? 'Envoi...' : 'Relancer email'}
-                </BtnEmail>
-              </div>
-
-              {/* Alerte facture — compacte */}
-              {missingFacture && (
-                <div className="flex items-center gap-2 p-2 rounded-lg bg-amber-50 border border-amber-200">
-                  <AlertTriangle size={12} className="text-amber-500 flex-shrink-0" />
-                  <p className="text-[10px] font-semibold text-amber-700 flex-1">Facture manquante</p>
-                  <button
-                    onClick={() => runAction(() => sendMsg(sel.id, cl?.id, cl?.telegramChatId ? 'telegram' : 'email', 'facture_manquante', null))}
-                    className="text-[10px] font-bold px-2 py-1 rounded bg-amber-200 text-amber-800 hover:bg-amber-300 transition-all active:scale-95"
-                  >
-                    Demander
-                  </button>
-                </div>
-              )}
-            </div>
-          </Section>
-        );
+        return <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5"><h2 className="text-lg font-bold text-slate-800">En attente du client</h2><p className="text-sm text-slate-600">{!!sel.attenteClientDate ? 'Le client souhaite attendre d’autres cartons.' : 'La demande est enregistrée. L’accord du client est attendu.'}</p>{!sel.attenteClientDate && <TaskMessage template="relance_feu_vert" label="Préparer une relance" disabled={!can('perm_colis_demander_feuvert')} />}{onOpenContext && <button className="min-h-11 text-sm font-semibold text-slate-700 underline" onClick={() => onOpenContext('messages')}>Voir les échanges</button>}{continuation}</section>;
       }
+      case 'refuse_client': return <section className="space-y-4"><h2 className="text-lg font-bold text-slate-800">Préparation refusée par le client</h2><p className="text-sm text-slate-600">Organisez la suite avec le client avant de reprendre le dossier.</p>{onOpenContext && <button className="min-h-11 font-semibold underline" onClick={() => onOpenContext('messages')}>Ouvrir les échanges</button>}{continuation}</section>;
 
       // ── 5. AUTORISE ────────────────────────────────────────────────────
       case 'autorise': {
@@ -564,13 +446,6 @@ export default function StaffDetailView({ workspace = false }) {
                 <Check size={12} className="text-green-500 flex-shrink-0" />
                 <p className="text-[10px] font-bold text-green-700">Accord client reçu</p>
               </div>
-
-              {missingFacture && (
-                <div className="flex items-center gap-2 p-2 rounded-lg bg-amber-50 border border-amber-200">
-                  <AlertTriangle size={12} className="text-amber-500 flex-shrink-0" />
-                  <p className="text-[10px] font-semibold text-amber-700">Les factures seront vérifiées séparément avant le devis.</p>
-                </div>
-              )}
 
               {subExpired && (
                 <div className="flex items-center gap-2 p-2 rounded-lg bg-red-50 border border-red-200">
@@ -602,23 +477,18 @@ export default function StaffDetailView({ workspace = false }) {
         const measuresChanged = normalizeBoxes(finalPackages) !== normalizeBoxes(savedFinalPackages(sel));
         const verified = !measuresChanged && devisPrev && quote.ok && savedInputs === quoteInputFingerprint(quote.snapshot);
         const focusBlocker = (field) => {
-          const anchor = field.startsWith('dimensions') ? 'quote-measures' : field.startsWith('fraisDivers') ? 'quote-fees' : field.startsWith('lignes') || field.startsWith('lines') ? 'quote-articles' : 'quote-documents';
-          if (field.startsWith('dimensions')) { chooseSection('preparation'); return; }
-          setDocumentTab('articles');
-          requestAnimationFrame(() => { const target = document.getElementById(anchor); target?.scrollIntoView({ behavior: 'smooth', block: 'start' }); target?.querySelector('input,select,button')?.focus({ preventScroll: true }); });
+          if (field.startsWith('dimensions')) return chooseSection('preparation');
+          if (field.startsWith('fraisDivers')) return document.getElementById('quote-fees')?.scrollIntoView({ block: 'start' });
+          chooseSection('documents', field.startsWith('lignes') || field.startsWith('lines') ? 'quote-unlinked' : 'quote-documents');
         };
         const preparationBlock = sel.archive ? 'Désarchivez le dossier avant de poursuivre sa préparation.' : sel.produitInterdit ? 'Un produit interdit est signalé : faites vérifier le dossier avant de poursuivre.' : sel.feuVert !== 'autorise' ? 'Le feu vert du client doit être enregistré avant de poursuivre la préparation.' : null;
         const weights = measureShipment(finalPackages, divisor);
         const isPro = cl?.type === 'pro';
         const inputClass = 'min-h-11 min-w-0 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300';
         const changeFinal = (index, key, value) => { preparationDirty.current = true; setFinalPackages(previous => previous.map((box,position) => position === index ? { ...box, [key]: value } : box)); setMeasuresSaved(false); setDevisPrev(false); };
-        const savedWeights = measureShipment(savedFinalPackages(sel), divisor);
-        const measuresCurrent = sel.preparationCompositionVersion != null && sel.finalMeasurementsVersion === sel.preparationCompositionVersion;
-        const sectionNavigation = <nav aria-label="Organisation du dossier" className="flex flex-wrap gap-2"><button aria-current={preparationView ? 'page' : undefined} onClick={() => chooseSection('preparation')} className={`min-h-11 rounded-xl border px-4 py-2 text-sm font-semibold ${preparationView ? 'bg-slate-800 text-white border-slate-800' : 'border-slate-200 text-slate-700'}`}>Préparation</button>{canQuoteWorkspace && <button aria-current={!preparationView ? 'page' : undefined} onClick={() => chooseSection('devis')} className={`min-h-11 rounded-xl border px-4 py-2 text-sm font-semibold ${!preparationView ? 'bg-slate-800 text-white border-slate-800' : 'border-slate-200 text-slate-700'}`}>Factures et devis</button>}</nav>;
         if (preparationView) return <section id="preparation-workspace" aria-label="Préparation après optimisation" className="mx-auto w-full max-w-3xl scroll-mt-48 space-y-5">
-          {sectionNavigation}
-          <div><h2 className="text-lg font-bold text-slate-800">Préparation</h2><p className="mt-1 text-sm text-slate-600">Optimisez l’emballage, puis pesez et mesurez chaque colis sortant. Enregistrez votre travail pour que la personne chargée du devis puisse prendre la suite.</p><p className="mt-2 text-sm text-slate-600">Les factures peuvent être complétées séparément. Aucun devis ni message client n’est envoyé depuis cet écran.</p></div>
-          <div id="quote-measures" className="scroll-mt-24"><Section title="Mesures après optimisation" icon={Ruler} color={borderColor}>
+          <div><h2 className="text-lg font-bold text-slate-800">Préparation</h2><p className="mt-1 text-sm text-slate-600">Saisissez les mesures de chaque colis après optimisation.</p></div>
+          {(preparationEditing || measuresChanged || !savedWeights || !measuresCurrent) && <div id="quote-measures" className="scroll-mt-24"><Section title="Mesures après optimisation" icon={Ruler} color={borderColor}>
             <p className="mb-3 text-sm text-slate-600">Mesurez chaque colis physique après optimisation. Ces valeurs sont indépendantes des cartons reçus et alimentent le devis et le manifeste de départ.</p>
             {preparationBlock && <p role="alert" className="mb-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">{preparationBlock}</p>}
             {preparationConflict && <div role="alert" className="mb-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900"><p>Une autre modification a été enregistrée depuis l’ouverture de votre saisie. Votre brouillon est conservé ; aucune mesure ne sera écrasée.</p><p className="mt-2">Version enregistrée : {savedFinalPackages(sel).map((box,index) => `colis ${index + 1} : ${box.dimL || '—'} × ${box.dimW || '—'} × ${box.dimH || '—'} cm / ${box.poids || '—'} kg`).join(' ; ')}</p><div className="mt-2 space-y-2">{canKeepPreparationDraft && <><p>Les mesures enregistrées et la composition des cartons sont inchangées. Vous pouvez conserver votre saisie et reprendre sur la nouvelle version du dossier.</p><button className="min-h-11 block font-semibold underline" onClick={keepPreparationDraft}>Conserver ma saisie et réessayer</button></>}<button className="min-h-11 block font-semibold underline" onClick={reloadPreparation}>Recharger et remplacer mon brouillon</button></div></div>}
@@ -629,14 +499,15 @@ export default function StaffDetailView({ workspace = false }) {
             {!weights && <p className="mb-2 text-sm text-amber-800">Renseignez les trois dimensions et un poids positif pour chaque colis sortant avant d’enregistrer.</p>}
             <BtnPrimary disabled={actionLoading || !!preparationBlock || preparationConflict || !weights || !can('perm_colis_preparer')} onClick={() => runAction(handleSaveMeasurements)}><Check size={16} />Enregistrer les mesures de préparation</BtnPrimary>
             {!can('perm_colis_preparer') && <p className="mt-2 text-sm text-slate-600">Les mesures sont enregistrées par une personne habilitée à préparer. Vous pouvez vérifier les documents et établir le devis dès qu’elles sont confirmées.</p>}
-            <p role="status" className="mt-2 text-xs text-slate-600">{measuresSaved ? 'Mesures enregistrées, même si les documents restent à vérifier.' : 'Les mesures peuvent être enregistrées avant les documents et le devis.'}</p></div>
+            <p role="status" className="mt-2 text-xs text-slate-600">{measuresSaved ? 'Mesures enregistrées.' : ''}</p></div>
             {weights && <div className="mt-4 space-y-1 border-t border-gray-100 pt-3 text-sm"><Ligne label="Poids volumétrique" value={`${weights.volumetricWeight.toFixed(2)} kg`} /><Ligne label="Poids facturable" value={`${weights.billableWeight.toFixed(2)} kg`} /></div>}
-          </Section></div>
-          {!measuresChanged && savedWeights && measuresCurrent && <section aria-label="Relais après préparation" className="space-y-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
-            <h3 className="text-sm font-semibold text-emerald-800">Mesures disponibles pour le devis</h3><p className="text-sm text-emerald-800">{savedFinalPackages(sel).length} colis sortant(s) · {savedWeights.realWeight.toFixed(2)} kg au total. Votre collègue retrouve ces mesures dans « Factures et devis », sans les ressaisir.</p>
-            {workActions.filter(action => action.colis_id === sel.id && ['documents','quote'].includes(action.kind) && action.state !== 'done').map(action => <p key={action.id} className="text-sm text-slate-700">{action.kind === 'documents' ? 'Factures' : 'Devis'} : {action.assignee_id ? staffName(action.assignee_id, teamUsers) : 'à prendre par une personne habilitée'}{action.blocked_reason ? ` · ${action.blocked_reason}` : ''}</p>)}
-            {canQuoteWorkspace && <button onClick={() => chooseSection('devis')} className="min-h-11 rounded-xl bg-slate-800 px-4 py-2 text-sm font-semibold text-white">Continuer vers les factures et le devis</button>}
-            <button onClick={() => navigate(workspaceReturnPath(location.search, '/'))} className="min-h-11 block text-sm font-semibold text-slate-700 underline">Revenir à ma file de travail</button>
+          </Section></div>}
+          {!preparationEditing && !measuresChanged && savedWeights && measuresCurrent && <section aria-label="Relais après préparation" className="space-y-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+            <p className="text-sm font-semibold text-emerald-800">Préparation enregistrée · {savedFinalPackages(sel).length} colis sortant(s) · {savedWeights.realWeight.toFixed(2)} kg</p>
+            <p className="text-sm text-slate-700">{savedFinalPackages(sel).map((box,index) => `Colis ${index + 1} : ${box.dimL} × ${box.dimW} × ${box.dimH} cm · ${box.poids} kg`).join(' ; ')}</p>
+            {can('perm_colis_preparer') && !preparationBlock && !preparationEditing && <button className="min-h-11 text-sm font-semibold text-slate-700 underline" onClick={() => setPreparationEditing(true)}>Modifier les mesures</button>}
+            {workActions.filter(action => action.colis_id === sel.id && ['documents','quote'].includes(action.kind) && action.state !== 'done').slice(0,1).map(action => <p key={action.id} className="text-sm text-slate-700">{action.kind === 'documents' ? 'Factures à vérifier' : 'Devis à établir'} · {action.assignee_id ? staffName(action.assignee_id, teamUsers) : 'à prendre'}</p>)}
+            {continuation}
           </section>}
           {can('perm_colis_preparer') && !preparationBlock && <>
           <details className="border-t border-slate-200"><summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-slate-600">Consignes facultatives {selTags.length > 0 ? `· ${selTags.length} choisie(s)` : ''}</summary>          <div className="space-y-2">
@@ -646,60 +517,36 @@ export default function StaffDetailView({ workspace = false }) {
             {commentaire !== (sel.commentairePreparation || '') && <button disabled={actionLoading} className="min-h-11 text-xs font-semibold text-blue-700" onClick={() => runAction(() => upd(sel.id, { commentairePreparation: commentaire }))}>Enregistrer la consigne</button>}
           </div>
 </details>
-          <div><p className="mb-2 text-xs font-semibold text-slate-600">Photo du colis préparé</p><WebcamCapture colisId={sel.id} colisRef={sel.ref} existingUrl={sel.photoPrep} onCapture={(path) => runAction(() => upd(sel.id, { photoPrep: path }))} /></div>
+          <details><summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-slate-600">Photo du colis préparé</summary><WebcamCapture colisId={sel.id} colisRef={sel.ref} existingUrl={sel.photoPrep} onCapture={(path) => runAction(() => upd(sel.id, { photoPrep: path }))} /></details>
           </>}
         </section>;
-        return <div className={`min-w-0 space-y-5 ${workspace ? "mx-auto w-full max-w-6xl" : ""}`}>
-          {sectionNavigation}
-          <div className="border-b border-gray-200 pb-4">
-            <p className="text-xs font-bold uppercase tracking-wider text-gray-400">Factures et devis</p>
-            <p className="mt-1 text-sm text-slate-700">{isPro ? 'Client professionnel : transport et frais convenus, sans calcul de taxes dans ce devis.' : 'Vérifiez les factures et les articles, puis établissez le devis à partir des mesures enregistrées par la préparation.'}</p>
+        return <div className={`min-w-0 space-y-5 ${workspace ? "mx-auto w-full max-w-3xl" : ""}`}>
+          <div><h2 className="text-lg font-bold text-slate-800">Établir le devis</h2><p className="mt-1 text-sm text-slate-600">Vérifiez le montant, puis enregistrez le devis avant son envoi.</p></div>
+          {preparationConflict && <div role="alert" className="space-y-2 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+            <p>Le dossier a été modifié depuis votre saisie. Votre brouillon est conservé ; reprenez la version partagée avant d’enregistrer le devis.</p>
+            <p>Frais enregistrés : {(sel.fraisDivers || []).length ? sel.fraisDivers.map(fee => `${fee.libelle} · ${eur(fee.montant)}`).join(' ; ') : 'aucun'}.</p>
+            {canKeepPreparationDraft && <><p>Les mesures et les cartons sont inchangés. Vous pouvez conserver vos frais puis vérifier le nouveau calcul.</p><button className="min-h-11 block font-semibold underline" onClick={keepPreparationDraft}>Conserver mes frais et recalculer</button></>}
+            <button className="min-h-11 block font-semibold underline" onClick={reloadPreparation}>Recharger et remplacer mon brouillon</button>
+          </div>}
+          <div className="flex flex-wrap gap-x-4 gap-y-2 border-y border-slate-200 py-3 text-sm" aria-label="Éléments du devis">
+            <button className="min-h-11 font-semibold text-slate-700 underline" onClick={() => chooseSection('preparation')}>{savedWeights && measuresCurrent ? 'Préparation enregistrée ✓' : 'Préparation à terminer'}</button>
+            {canInvoiceWorkspace && <button className="min-h-11 font-semibold text-slate-700 underline" onClick={() => chooseSection('documents')}>{currentInvoices(sel.factures || []).filter(invoice => invoice.valide).length} facture(s) vérifiée(s)</button>}
           </div>
-          <nav aria-label="Vérifications du devis" className="flex flex-wrap gap-2">{[['quote-measures','Mesures'],['quote-documents','Documents'],['quote-articles','Articles'],['quote-fees','Frais']].filter(([id]) => !isPro || id !== 'quote-articles').map(([id,label]) => <a key={id} href={`#${id}`} onClick={(event) => { event.preventDefault(); setDocumentTab(id === 'quote-documents' ? 'document' : 'articles'); requestAnimationFrame(() => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })); }} className="inline-flex min-h-11 items-center rounded-xl bg-slate-100 px-3 text-sm font-semibold text-slate-700">{label}</a>)}</nav>
-          {measuresChanged && <p role="status" className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">Enregistrez les mesures modifiées avant de vérifier le devis. Vos documents peuvent être complétés séparément.</p>}
-          {!quote.ok && <div className="rounded-xl bg-amber-50 p-3"><p className="text-xs font-semibold text-amber-800">À compléter pour le devis</p><ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-amber-800">{quote.errors.map((error, index) => <li key={index}><button className="min-h-11 text-left underline underline-offset-2" onClick={() => focusBlocker(error.field)}>{error.message}</button></li>)}</ul></div>}
+          {measuresChanged && <p role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">Un brouillon de mesures reste à enregistrer. <button className="min-h-11 font-semibold underline" onClick={() => chooseSection('preparation')}>Reprendre la préparation</button></p>}
+          {!quote.ok && <div className="rounded-xl bg-amber-50 p-3"><p className="text-sm font-semibold text-amber-800">À résoudre avant le devis</p><ul className="mt-2 space-y-1 text-sm text-amber-800">{[...new Map(quote.errors.map(error => [error.message,error])).values()].map((error, index) => <li key={index}><button className="min-h-11 text-left underline underline-offset-2" onClick={() => focusBlocker(error.field)}>{error.message}</button></li>)}</ul></div>}
+          {(sel.lignes || []).some(line => !line.factureId) && <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-800">Articles manuels inclus : {eur((sel.lignes || []).filter(line => !line.factureId).reduce((total,line) => total + Number(line.qte) * Number(line.prix),0))} HT. <button className="min-h-11 font-semibold underline" onClick={() => chooseSection('documents','quote-unlinked')}>Vérifier les articles manuels</button></p>}
           {isPro && <label className="block space-y-2 text-xs font-semibold text-slate-600">Modalités de règlement convenues<select aria-label="Modalités de règlement professionnel" value={proPayMethod} onChange={(event) => { preparationDirty.current = true; setProPayMethod(event.target.value); setDevisPrev(false); }} className={inputClass}>{[['virement', 'Virement bancaire'], ['especes', 'Espèces'], ['30_jours', 'Paiement à 30 jours'], ['fin_de_mois', 'Paiement en fin de mois']].map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select><span className="block text-xs font-normal text-gray-500">Cette modalité figurera dans la version du devis. Le paiement sera confirmé séparément après réception du règlement.</span></label>}
-          <section id="quote-measures" aria-label="Mesures de préparation enregistrées" className="scroll-mt-24 rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-2">
-            <h3 className="text-sm font-semibold text-slate-800">Mesures après optimisation</h3>
-            {savedWeights && measuresCurrent ? <><p className="text-sm text-slate-700">{savedFinalPackages(sel).map((box,index) => `Colis sortant ${index + 1} : ${box.dimL} × ${box.dimW} × ${box.dimH} cm · ${box.poids} kg`).join(' ; ')}</p><p className="text-xs text-slate-600">Ces mesures enregistrées par la préparation sont utilisées dans ce devis.</p></> : <p className="text-sm text-amber-800">Les mesures après optimisation doivent être enregistrées par la préparation avant de calculer le devis.</p>}
-            {measuresChanged && <p className="text-sm text-amber-800">Un brouillon de mesures n’est pas encore enregistré. Reprenez la préparation pour le terminer.</p>}
-            <button className="min-h-11 text-sm font-semibold text-blue-700 underline" onClick={() => chooseSection('preparation')}>{can('perm_colis_preparer') ? 'Ouvrir la préparation' : 'Consulter la préparation'}</button>
-          </section>
-          {canInvoiceWorkspace && <FacturesPanel workspace tab={documentTab} onTabChange={setDocumentTab}>
-          {!isPro && <div id="quote-articles" className="scroll-mt-24"><Section title="Récapitulatif des articles du dossier" icon={Package} color={borderColor}>
-            <div className="mb-4 divide-y divide-gray-100">{currentInvoices(sel.factures || []).filter(invoice => !invoice.rejetMotif).map(invoice => {
-              const lines = (sel.lignes || []).filter(line => line.factureId === invoice.id);
-              return <div key={invoice.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm"><div className="min-w-0"><p className="break-words font-semibold text-slate-700">{invoice.fichierNom || invoice.vendeur}</p><p className="text-xs text-slate-600">{lines.length} article(s) enregistré(s) · {eur(lines.reduce((total, line) => total + Number(line.qte) * Number(line.prix), 0))} HT · {invoice.valide ? 'Validée' : 'À vérifier'}</p></div><button className="min-h-11 text-sm font-semibold text-blue-700" onClick={() => { const params = new URLSearchParams(location.search); params.set('invoice', invoice.id); navigate(`/colis/${sel.id}?${params}#quote-documents`); }}>{invoice.valide ? 'Consulter la facture' : 'Vérifier cette facture'}</button></div>;
-            })}</div>
-            <div id="quote-unlinked" tabIndex={-1} className="scroll-mt-48">
-            {(sel.lignes || []).some(line => !line.factureId) && <h4 className="mb-2 text-sm font-semibold text-amber-800">Articles saisis manuellement · inclus dans le devis</h4>}
-            <div className="space-y-3">{(sel.lignes || []).filter(line => !line.factureId).map((line) => <div key={line.id} className="space-y-2 border-b border-gray-100 pb-3">
-              <div className="flex items-start justify-between gap-2"><div className="min-w-0"><p className="break-words text-sm font-medium text-slate-700">{line.desc}</p><p className="text-xs text-gray-500">{line.qte} × {eur(line.prix)}</p></div><button aria-label={`Supprimer ${line.desc}`} disabled={actionLoading || !can('perm_factures_modifier_articles')} onClick={() => ask('Retirer cet article du devis ?', `L’article « ${line.desc} » sera retiré. Vérifiez qu’il est déjà présent dans une facture si vous corrigez un double comptage.`, () => runAction(async () => { await sb.deleteLigne(line.id); setData((previous) => previous.map((parcel) => parcel.id === sel.id ? { ...parcel, lignes: (parcel.lignes || []).filter((item) => item.id !== line.id) } : parcel)); setDevisPrev(false); }), { danger: true, okLabel: 'Retirer l’article' })} className="flex min-h-11 min-w-11 items-center justify-center rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600"><X size={15} /></button></div>
-              <select aria-label={`Catégorie de ${line.desc}`} disabled={actionLoading || !can('perm_factures_modifier_articles')} value={line.cat || ''} onChange={(event) => { const cat = event.target.value; runAction(async () => { await sb.updateLigne(line.id, { cat }); setData((previous) => previous.map((parcel) => parcel.id === sel.id ? { ...parcel, lignes: (parcel.lignes || []).map((item) => item.id === line.id ? { ...item, cat } : item) } : parcel)); setDevisPrev(false); }); }} className={inputClass}><option value="">Catégorie à vérifier</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.label}</option>)}</select>
-            </div>)}
-              {(sel.lignes || []).some(line => !line.factureId) && <p className="text-xs text-slate-600">Ces articles ont été saisis séparément et s’ajoutent aux articles des factures. Si un article est déjà présent dans une facture validée, retirez sa ligne manuelle pour éviter de le compter deux fois.</p>}
-              <details><summary className="min-h-11 cursor-pointer text-sm font-semibold text-slate-600">Ajouter un article sans facture source</summary><form className="space-y-2" onSubmit={(event) => { event.preventDefault(); runAction(addArticle); }}>
-                <input aria-label="Description du nouvel article" required value={newArticle.desc} onChange={(event) => setNewArticle({ ...newArticle, desc: event.target.value })} placeholder="Description de l’article" className={inputClass} />
-                <div className="grid grid-cols-2 gap-2"><label className="text-xs text-gray-500">Quantité<input required aria-label="Quantité du nouvel article" type="number" min="1" step="1" value={newArticle.qte} onChange={(event) => setNewArticle({ ...newArticle, qte: event.target.value })} className={inputClass} /></label><label className="text-xs text-gray-500">Prix unitaire HT (€)<input required aria-label="Prix du nouvel article" type="number" min="0" step="0.01" value={newArticle.prix} onChange={(event) => setNewArticle({ ...newArticle, prix: event.target.value })} className={inputClass} /></label></div>
-                <select required aria-label="Catégorie du nouvel article" value={newArticle.cat} onChange={(event) => setNewArticle({ ...newArticle, cat: event.target.value })} className={inputClass}><option value="">Choisir une catégorie</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.label}</option>)}</select>
-
-                <button disabled={actionLoading || !can('perm_factures_modifier_articles')} className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-slate-100 text-sm font-semibold text-slate-700"><Plus size={14} />Enregistrer l’article</button>
-              </form></details>
-            </div>
-            </div>
-          </Section></div>}
-          </FacturesPanel>}
           <div id="quote-fees" className="scroll-mt-24 space-y-2 border-t border-gray-200 pt-4"><p className="text-xs font-semibold text-slate-600">Frais convenus</p>{fraisDivers.map((fee, index) => <div key={index} className="flex items-center gap-2 text-sm"><span className="min-w-0 flex-1 break-words">{fee.libelle}</span><strong>{eur(fee.montant)}</strong><button aria-label={`Retirer ${fee.libelle}`} disabled={actionLoading} className="flex min-h-11 min-w-11 items-center justify-center text-gray-400" onClick={() => runAction(async () => { const next = fraisDivers.filter((_, position) => position !== index); preparationDirty.current = true; setFraisDivers(next); setDevisPrev(false); })}><X size={14} /></button></div>)}
-            <form className="grid grid-cols-[minmax(0,1fr)_6rem] gap-2" onSubmit={(event) => { event.preventDefault(); runAction(async () => { const amount = Number(newFraisMontant); if (!newFraisLibelle.trim() || newFraisMontant === '' || !Number.isFinite(amount) || amount < 0) throw new Error('Indiquez le libellé et un montant positif ou nul.'); const next = [...fraisDivers, { libelle: newFraisLibelle.trim(), montant: amount }]; preparationDirty.current = true; setFraisDivers(next); setNewFraisLibelle(''); setNewFraisMontant(''); setDevisPrev(false); }); }}><input aria-label="Libellé du frais" required value={newFraisLibelle} onChange={(event) => setNewFraisLibelle(event.target.value)} placeholder="Libellé du frais" className={inputClass} /><input aria-label="Montant du frais" required type="number" min="0" step="0.01" value={newFraisMontant} onChange={(event) => setNewFraisMontant(event.target.value)} placeholder="€" className={inputClass} /><button disabled={actionLoading} className="col-span-2 min-h-11 rounded-xl bg-slate-100 text-xs font-semibold text-slate-700">Ajouter le frais</button></form>
+            <details><summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-slate-600">Ajouter un frais</summary><form className="grid grid-cols-[minmax(0,1fr)_6rem] gap-2" onSubmit={(event) => { event.preventDefault(); runAction(async () => { const amount = Number(newFraisMontant); if (!newFraisLibelle.trim() || newFraisMontant === '' || !Number.isFinite(amount) || amount < 0) throw new Error('Indiquez le libellé et un montant positif ou nul.'); const next = [...fraisDivers, { libelle: newFraisLibelle.trim(), montant: amount }]; preparationDirty.current = true; setFraisDivers(next); setNewFraisLibelle(''); setNewFraisMontant(''); setDevisPrev(false); }); }}><input aria-label="Libellé du frais" required value={newFraisLibelle} onChange={(event) => setNewFraisLibelle(event.target.value)} placeholder="Libellé du frais" className={inputClass} /><input aria-label="Montant du frais" required type="number" min="0" step="0.01" value={newFraisMontant} onChange={(event) => setNewFraisMontant(event.target.value)} placeholder="€" className={inputClass} /><button disabled={actionLoading} className="col-span-2 min-h-11 rounded-xl bg-slate-100 text-xs font-semibold text-slate-700">Ajouter le frais</button></form></details>
           </div>
           {subExpired && <p className="rounded-xl bg-red-50 p-3 text-xs text-red-700">Abonnement expiré : régularisez l’offre du client avant l’envoi.</p>}
 
           {quote.ok && quote.warnings.length > 0 && <div className="space-y-1 rounded-xl bg-amber-50 p-3">{quote.warnings.map((warning, index) => <p key={index} className="text-xs text-amber-800">{warning}</p>)}</div>}
           {quote.ok && <Section title={verified ? 'Brouillon enregistré · vérifier puis envoyer' : 'Estimation du devis'} icon={Eye} color={BRAND.navy}>
-            <div className="space-y-2 text-sm"><Ligne label="Transport" value={eur(quote.amounts.transport)} />{!isPro && <><Ligne label="Octroi de mer" value={eur(quote.amounts.om)} /><Ligne label="Octroi de mer régional" value={eur(quote.amounts.omr)} /><Ligne label={`TVA (${dest.tva} %)`} value={eur(quote.amounts.tva)} /></>}<Ligne label="Frais convenus" value={eur(quote.amounts.fees)} /><div className="border-t border-gray-200 pt-3"><Ligne label="Total à régler" value={<strong className="text-xl" style={{ color: 'var(--brand-text)' }}>{eur(quote.amounts.total)}</strong>} /></div>{quote.patch.economie > 0 && <Ligne label="Économie après optimisation" value={eur(quote.patch.economie)} />}</div>
+            <div className="space-y-2 text-sm"><Ligne label="Transport" value={eur(quote.amounts.transport)} />{!isPro && <><Ligne label="Octroi de mer" value={eur(quote.amounts.om)} /><Ligne label="Octroi de mer régional" value={eur(quote.amounts.omr)} /><Ligne label={`TVA (${dest.tva} %)`} value={eur(quote.amounts.tva)} /></>}<Ligne label="Frais convenus" value={eur(quote.amounts.fees)} />{quote.patch.economie > 0 && <Ligne label="Économie après optimisation" value={eur(quote.patch.economie)} />}</div>
           </Section>}
-          <div id="quote-review" tabIndex={-1} data-testid="quote-action-bar" className="-mx-1 scroll-mt-48 border-t border-slate-200 bg-white px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-3px_12px_rgba(0,0,0,0.06)]">
-            <div className="mb-2 flex items-center justify-between gap-3"><div><p className="text-xs font-semibold text-slate-600">Total recalculé</p><p className="text-lg font-bold text-slate-800">{quote.ok ? eur(quote.amounts.total) : 'À compléter'}</p></div><p role="status" className="max-w-[60%] text-right text-xs text-slate-600">{actionLoading ? 'Enregistrement en cours…' : verified ? 'Brouillon enregistré · vérifiez le détail avant envoi' : sel.devisBrouillon ? 'Modifications à enregistrer et vérifier' : 'Calcul non enregistré'}</p></div>
+          <div id="quote-review" tabIndex={-1} data-testid="quote-action-bar" className="sticky bottom-16 z-10 -mx-1 scroll-mt-48 border-t border-slate-200 bg-white px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-3px_12px_rgba(0,0,0,0.06)] lg:bottom-0">
+            <div className="mb-2 flex items-center justify-between gap-3"><div><p className="text-xs font-semibold text-slate-600">Total à régler</p><p className="text-lg font-bold text-slate-800">{quote.ok ? eur(quote.amounts.total) : 'À compléter'}</p></div><p role="status" className="max-w-[60%] text-right text-xs text-slate-600">{actionLoading ? 'Enregistrement en cours…' : verified ? 'Brouillon enregistré · vérifiez le détail avant envoi' : sel.devisBrouillon ? 'Modifications à enregistrer et vérifier' : 'Calcul non enregistré'}</p></div>
           {!verified ? <BtnPrimary onClick={() => runAction(handleEnvoyerDevis)} disabled={!quote.ok || measuresChanged || preparationConflict || actionLoading || subExpired || !can('perm_colis_calculer_devis')}><Eye size={16} />{actionLoading ? 'Enregistrement…' : 'Enregistrer et vérifier le devis'}</BtnPrimary> : <div className="space-y-2"><BtnPrimary color="#15803D" onClick={() => runAction(handleConfirmDevisEnvoye)} disabled={actionLoading || preparationConflict || !quote.ok || subExpired || !can('perm_colis_envoyer_devis')}><Send size={16} />{actionLoading ? 'Envoi en cours…' : 'Envoyer le devis au client'}</BtnPrimary><button className="min-h-11 w-full rounded-xl border border-gray-200 text-sm font-semibold text-gray-600" onClick={() => setDevisPrev(false)}>Modifier le brouillon</button></div>}
           </div>
         </div>;
@@ -752,13 +599,7 @@ export default function StaffDetailView({ workspace = false }) {
                         className="text-xs text-blue-600 underline break-all block">{sel.payplugPaymentUrl}</a>
                     </div>
                   )}
-                  {/* Renvoyer le lien */}
-                  <BtnTelegram disabled={actionLoading || !cl?.telegramChatId} onClick={() => runAction(() => sendMsg(sel.id, cl?.id, 'telegram', 'relance_paiement', null))}>
-                    {actionLoading ? 'Envoi...' : sel.payplugPaymentUrl ? 'Renvoyer le lien de paiement' : 'Relancer via Telegram'}
-                  </BtnTelegram>
-                  <BtnEmail disabled={actionLoading || !cl?.email} onClick={() => runAction(() => sendMsg(sel.id, cl?.id, 'email', 'relance_paiement', null))}>
-                    {actionLoading ? 'Envoi...' : 'Relancer par email'}
-                  </BtnEmail>
+                  <TaskMessage template="relance_paiement" label="Préparer une relance de paiement" />
                 </div>
               )}
             </div>
@@ -853,6 +694,7 @@ export default function StaffDetailView({ workspace = false }) {
                 </p>
               </div>
               <BtnPrimary
+                disabled={actionLoading || !can('perm_colis_changer_statut_expedition')}
                 onClick={() => runAction(() => changerStatut(sel.id, 'arrive'))}
                 color="#14B8A6"
               >
@@ -883,53 +725,14 @@ export default function StaffDetailView({ workspace = false }) {
         return (
           <Section title="Suivi d'expédition" icon={Check} color={borderColor}>
             <div className="space-y-4">
-              {/* Timeline */}
-              <div className="space-y-2">
-                {trackingSteps.map((step, idx) => {
-                  const done = idx < currentIdx;
-                  const active = idx === currentIdx;
-                  return (
-                    <div
-                      key={step.key}
-                      className="flex items-center gap-3 px-3 py-2 rounded-xl"
-                      style={{
-                        background: active ? `${borderColor}15` : done ? '#F0FDF4' : '#F9FAFB',
-                        border: active ? `1.5px solid ${borderColor}` : done ? '1.5px solid #BBF7D0' : '1.5px solid #F3F4F6',
-                      }}
-                    >
-                      <div
-                        className="w-5 h-5 rounded-full flex-shrink-0 flex items-center justify-center text-[10px]"
-                        style={{
-                          background: active ? borderColor : done ? '#22C55E' : '#E5E7EB',
-                          color: 'white',
-                        }}
-                      >
-                        {done ? <Check size={10} /> : idx + 1}
-                      </div>
-                      <span
-                        className="text-sm font-semibold"
-                        style={{ color: active ? borderColor : done ? '#16A34A' : '#9CA3AF' }}
-                      >
-                        {step.label}
-                      </span>
-                      {active && (
-                        <span
-                          className="ml-auto text-[10px] font-black px-2 py-0.5 rounded-full"
-                          style={{ background: borderColor, color: 'white' }}
-                        >
-                          EN COURS
-                        </span>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-
+              <p className="text-sm font-semibold text-slate-700">{trackingSteps[currentIdx]?.label || STATUTS[sel.statut]?.label}</p>
+              {sel.tracking && <p className="break-all text-sm text-slate-600">Suivi : {sel.tracking}</p>}
               {/* Next step buttons */}
               <div className="flex flex-col gap-2">
                 {sel.statut === 'transit' ? (
                   <>
                     <BtnPrimary
+                      disabled={actionLoading || !can('perm_colis_changer_statut_expedition')}
                       onClick={() => runAction(() => changerStatut(sel.id, 'dedouanement'))}
                       color="#8B5CF6"
                     >
@@ -937,10 +740,8 @@ export default function StaffDetailView({ workspace = false }) {
                       Passer en dédouanement
                     </BtnPrimary>
                     <BtnPrimary
-                      onClick={() => runAction(async () => {
-                        await changerStatut(sel.id, 'arrive');
-                        await sendMsg(sel.id, cl?.id, cl?.telegramChatId ? 'telegram' : 'email', 'arrive', null);
-                      })}
+                      disabled={actionLoading || !can('perm_colis_changer_statut_expedition')}
+                      onClick={() => runAction(() => changerStatut(sel.id, 'arrive'))}
                       color="#14B8A6"
                     >
                       <Check size={15} />
@@ -949,31 +750,30 @@ export default function StaffDetailView({ workspace = false }) {
                   </>
                 ) : (
                   nextStatuts.map((ns) => {
-                    const step = trackingSteps.find((s) => s.key === ns);
-                    const tpl = step?.tpl;
                     return (
                       <BtnPrimary
                         key={ns}
-                        onClick={() => runAction(async () => {
-                          await changerStatut(sel.id, ns);
-                          if (tpl) await sendMsg(sel.id, cl?.id, cl?.telegramChatId ? 'telegram' : 'email', tpl, null);
-                        })}
+                        disabled={actionLoading || !can('perm_colis_changer_statut_expedition')}
+                        onClick={() => runAction(() => changerStatut(sel.id, ns))}
                         color={borderColor}
                       >
                         <Check size={15} />
-                        {STATUTS[ns]?.actionStaff || STATUTS[ns]?.label}
+                        {{ transit: 'Confirmer le départ en vol', arrive: 'Confirmer l’arrivée à destination', livraison: 'Lancer la livraison', livre: 'Confirmer la livraison' }[ns] || STATUTS[ns]?.label}
                       </BtnPrimary>
                     );
                   })
                 )}
               </div>
+              {trackingSteps[currentIdx]?.tpl && <TaskMessage key={sel.statut} template={trackingSteps[currentIdx].tpl} label="Préparer une information au client" />}
+              {continuation}
             </div>
           </Section>
         );
       }
 
-      default:
-        return null;
+      case 'livre': return <section className="space-y-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-5"><h2 className="text-lg font-bold text-emerald-800">Livraison terminée</h2><p className="text-sm text-slate-700">Le dossier est livré. Les documents et les échanges restent consultables dans son contexte.</p>{continuation}</section>;
+      case 'annule': return <section className="space-y-4"><h2 className="text-lg font-bold text-slate-800">Dossier annulé</h2>{continuation}</section>;
+      default: return null;
     }
   }
 
@@ -987,7 +787,6 @@ export default function StaffDetailView({ workspace = false }) {
 
   return (
     <div className="min-w-0 flex flex-col gap-4 pb-24 lg:pb-4">
-      {sel.statut === 'en_preparation' ? <details className="border-b border-slate-200"><summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-slate-600">Suivi : {assignmentLabel}{sel.nextAction ? ` · ${sel.nextAction}` : ''}</summary><StaffAssignment /></details> : <StaffAssignment />}
       {formErr && !(preparationView && (sel.statut === 'en_preparation' || needsQuoteRecalculation(sel))) && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{formErr}</p>}
 
       {/* ── Action block ───────────────────────────────────────────────── */}

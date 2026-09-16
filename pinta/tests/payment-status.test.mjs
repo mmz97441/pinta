@@ -27,7 +27,7 @@ test('client detail renders the published quote and payment action while waiting
       builder.onResolve({ filter: /\/context\/AppContext$/ }, () => ({ path: 'context', namespace: 'test' }));
       builder.onResolve({ filter: /^react-router-dom$/ }, () => ({ path: 'router', namespace: 'test' }));
       builder.onResolve({ filter: /\/ui\/SecureFile$/ }, () => ({ path: 'files', namespace: 'test' }));
-      builder.onLoad({ filter: /.*/, namespace: 'test' }, ({ path: name }) => ({ contents: name === 'context' ? 'export const useApp=()=>globalThis.testApp;' : name === 'router' ? 'export const useNavigate=()=>()=>{};' : 'export const SecureImage=()=>null;', loader: 'js' }));
+      builder.onLoad({ filter: /.*/, namespace: 'test' }, ({ path: name }) => ({ contents: name === 'context' ? 'export const useApp=()=>globalThis.testApp;' : name === 'router' ? 'export const useNavigate=()=>()=>{}; export const useSearchParams=()=>[null,()=>{}];' : 'export const SecureImage=()=>null;', loader: 'js' }));
     } }],
   });
   const module = { exports: {} };

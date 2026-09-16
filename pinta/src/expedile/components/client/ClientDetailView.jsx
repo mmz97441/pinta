@@ -5,14 +5,14 @@ import {
   ChevronDown, ChevronUp, ChevronRight, AlertCircle, ThumbsUp, ThumbsDown, RotateCcw,
   ExternalLink, Clock, Download, Camera, Shield, Warehouse, Truck,
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { hasPublishedQuote } from './quoteVisibility';
-import { cartonManifest, clientJourney, quotePresentation, PAYMENT_TERMS } from '../../domain/clientJourney';
+import { cartonManifest, clientJourney, clientWorkState, quotePresentation, PAYMENT_TERMS } from '../../domain/clientJourney';
 import { useApp } from '../../context/AppContext';
 import { SecureImage } from '../ui/SecureFile';
 import { BRAND, PHASES_CLIENT, getPhaseIndex, getDestByCP } from '../../constants';
 
-import { eur, trackStr, hasTrack, getCatTaux } from '../../utils';
+import { eur, trackStr, hasTrack } from '../../utils';
 import { Badge, Ligne, ProgressBar } from '../ui';
 
 // ── Phase icons ────────────────────────────────────────────────────────────────
@@ -125,6 +125,7 @@ function PhaseStep({ phase, phaseIdx, state, open, onToggle, children }) {
 // ── Main component ─────────────────────────────────────────────────────────────
 export default function ClientDetailView() {
   const navigate = useNavigate();
+  const [, setParams] = useSearchParams();
   const { sel, selDest, feuVert, ask, flash, authCl } = useApp();
 
   const curPhaseIdx = sel ? getPhaseIndex(sel.statut) : 0;
@@ -138,9 +139,11 @@ export default function ClientDetailView() {
   if (!sel) return null;
   const manifest = cartonManifest(sel);
   const journey = clientJourney(sel);
+  const task = clientWorkState(sel, authCl);
   const published = quotePresentation(sel, authCl, selDest);
   const price = published.colis;
   const clientWaiting = journey.waiting;
+  const openPanel = panel => setParams(previous => { const next = new URLSearchParams(previous); next.set('panel', panel); return next; }, { replace: true });
 
   const toggleStep = (idx) => {
     if (getPhaseState(idx, curPhaseIdx) !== 'future') setTimeOpen((prev) => prev === idx ? null : idx);
@@ -159,12 +162,12 @@ export default function ClientDetailView() {
       () => recordDecision(ok), { danger: !ok, okLabel: ok ? 'J’autorise ce dossier' : 'Confirmer le refus' });
   };
   const handleRevoke = () => {
-    document.getElementById('client-conversation')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    openPanel('messages');
     flash('Précisez votre demande dans la conversation. Notre équipe vous confirmera si la préparation peut encore être arrêtée.');
   };
   const handlePayer = () => {
     if (hasPublishedQuote(sel) && sel.payplugPaymentUrl && /^https:\/\//.test(sel.payplugPaymentUrl)) window.open(sel.payplugPaymentUrl, '_blank', 'noopener,noreferrer');
-    else document.getElementById('client-conversation')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    else openPanel('messages');
   };
 
   // ── Phase content renderers ───────────────────────────────────────────────
@@ -226,7 +229,7 @@ export default function ClientDetailView() {
 
     // Phase 2 – Accord (feu vert)
     if (phaseIdx === 1) {
-      const isFV = sel.statut === 'attente_feu_vert';
+      const isFV = sel.statut === 'attente_feu_vert' && !sel.archive;
       const isAutorise = sel.statut === 'autorise' || (sel.feuVert === 'autorise');
       const isRefuse = sel.statut === 'refuse_client';
 
@@ -238,7 +241,7 @@ export default function ClientDetailView() {
               {decisionError && <p role="alert" className="text-sm text-red-700">{decisionError}</p>}
               <p className="text-sm font-semibold text-slate-700">{manifest.count} carton(s) réceptionné(s) · dossier {sel.ref}</p>
               {manifest.trackings.length > 0 && <p className="break-words text-xs text-slate-600">Références connues : {manifest.trackings.join(' · ')}</p>}
-              <p className="text-xs text-slate-600">Votre accord lance la préparation et l’optimisation. Vous recevrez ensuite le devis final à consulter avant règlement. Les futurs cartons sont exclus de cet accord.</p>
+              <p className="text-sm text-slate-600">Votre accord concerne ces cartons uniquement. Le devis suivra l’optimisation.</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <button disabled={decisionPending} onClick={() => handleFeuVert(true)} className="min-h-11 flex items-center justify-center gap-2 rounded-xl px-3 py-3 font-bold text-sm text-white brand-bg disabled:opacity-50"><ThumbsUp size={16} />{decisionPending ? 'Enregistrement…' : 'Autoriser la préparation'}</button>
                 <button disabled={decisionPending} onClick={() => setShowWait((v) => !v)} aria-expanded={showWait} className="min-h-11 flex items-center justify-center gap-2 rounded-xl border border-slate-300 px-3 py-3 text-sm font-semibold text-slate-700"><Clock size={16} />Attendre d’autres achats</button>
@@ -434,7 +437,7 @@ export default function ClientDetailView() {
             </button>
           )}
 
-          {hasDevis && isPay && !isPaye && (
+          {hasDevis && isPay && !isPaye && !sel.archive && (
             <button
               onClick={handlePayer}
               className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-black text-sm text-white active:scale-95 transition-all"
@@ -562,70 +565,27 @@ export default function ClientDetailView() {
         </div>
       </div>
 
-      <section aria-label="État actuel et prochaine étape" className="border-y border-slate-200 py-3 space-y-1">
-        <h2 className="text-base font-bold text-slate-800">{journey.label}</h2>
-        <p className="text-sm text-slate-600">{journey.actor && <strong>{journey.actor} · </strong>}{journey.next}</p>
-        <p className="text-xs text-slate-500">{journey.event ? `${journey.event.label} le ${new Date(journey.event.date).toLocaleDateString('fr-FR')}` : 'Date du dernier événement non renseignée.'}</p>
+      <section aria-label="État actuel et prochaine étape" className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
+        <div><p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Étape actuelle</p><h2 className="mt-1 text-lg font-bold text-slate-800">{journey.label}</h2></div>
+        {task.kind === 'none' ? <><p className="font-semibold text-slate-700">Aucune action attendue de votre part.</p><p className="text-sm text-slate-600">{journey.next}</p></> : <p className="text-sm font-semibold text-slate-700">À vous · {task.action}</p>}
+        {task.kind === 'agreement' && phaseContent(1)}
+        {task.kind === 'payment' && phaseContent(3)}
+        {['documents','messages'].includes(task.kind) && <button onClick={() => openPanel(task.kind)} className="min-h-11 w-full rounded-xl brand-bg px-4 py-3 text-sm font-semibold text-white">{task.action}</button>}
+        {clientWaiting && <details className="border-t border-slate-200 pt-2"><summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-slate-700">Reprendre ma décision</summary>{phaseContent(1)}</details>}
+        {journey.event && <p className="text-xs text-slate-500">{journey.event.label} le {new Date(journey.event.date).toLocaleDateString('fr-FR')}</p>}
       </section>
-      {sel.finalPackages?.length > 0 && <details className="rounded-xl border border-slate-200 p-3"><summary className="min-h-11 cursor-pointer text-sm font-semibold text-slate-700">Après optimisation · {sel.finalPackages.length} colis sortant{sel.finalPackages.length > 1 ? 's' : ''}</summary><div className="space-y-2 text-sm text-slate-600">{sel.finalPackages.map((box,index) => <p key={index}>Colis {index + 1} · {box.dimL} × {box.dimW} × {box.dimH} cm · {box.poids} kg</p>)}</div></details>}
-      {/* ── Progress bar (inline, no card wrapper) ── */}
-      {sel.statut !== 'annule' && (
-        <div className="px-1">
-          <ProgressBar statut={sel.statut} size="md" showLabel={false} />
-        </div>
-      )}
 
-      {sel.statut === 'annule' && (
-        <div className="card p-3 rounded-2xl flex items-center gap-2 text-sm text-gray-500">
-          <AlertCircle size={15} className="text-red-400 flex-shrink-0" />
-          Ce colis a été annulé.
-        </div>
-      )}
-
-      {/* ── Accordion timeline (done + active phases) ── */}
-      {sel.statut !== 'annule' && <div className="space-y-2">
-        {PHASES_CLIENT.map((phase, idx) => ({ phase, idx })).sort((a, b) => Number(b.idx === curPhaseIdx) - Number(a.idx === curPhaseIdx)).map(({ phase, idx }) => {
+      <details className="rounded-xl border border-slate-200 p-3"><summary className="min-h-11 cursor-pointer py-2 text-sm font-semibold text-slate-700">Suivi et détails de l’expédition</summary><div className="space-y-4 pt-3">
+        {sel.finalPackages?.length > 0 && <details className="rounded-xl border border-slate-200 p-3"><summary className="min-h-11 cursor-pointer text-sm font-semibold text-slate-700">Après optimisation · {sel.finalPackages.length} colis sortant{sel.finalPackages.length > 1 ? 's' : ''}</summary><div className="space-y-2 text-sm text-slate-600">{sel.finalPackages.map((box,index) => <p key={index}>Colis {index + 1} · {box.dimL} × {box.dimW} × {box.dimH} cm · {box.poids} kg</p>)}</div></details>}
+        {sel.statut !== 'annule' && <ProgressBar statut={sel.statut} size="md" showLabel={false} />}
+        {sel.statut === 'annule' && <p className="text-sm text-slate-600">Ce dossier a été annulé. Les documents et échanges restent consultables.</p>}
+        {sel.statut !== 'annule' && <div className="space-y-2">{PHASES_CLIENT.map((phase, idx) => {
           const state = getPhaseState(idx, curPhaseIdx);
-          if (state === 'future') return null;
-          const isOpen = timeOpen === idx;
-
-          return (
-            <PhaseStep
-              key={phase.key}
-              phase={phase}
-              phaseIdx={idx}
-              state={state}
-              open={isOpen}
-              onToggle={() => toggleStep(idx)}
-            >
-              {phaseContent(idx)}
-            </PhaseStep>
-          );
-        })}
-      </div>}
-
-      {/* ── Future phases (compact list) ── */}
-      {!['annule','refuse_client'].includes(sel.statut) && curPhaseIdx < PHASES_CLIENT.length - 1 && (
-        <div className="card rounded-2xl p-3">
-          <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">
-            Prochaines étapes
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {PHASES_CLIENT.slice(curPhaseIdx + 1).map((phase, i) => {
-              const Icon = PHASE_ICONS[curPhaseIdx + 1 + i] || Package;
-              return (
-                <div key={phase.key} className="flex items-center gap-1.5 text-xs text-gray-400 font-medium">
-                  <Icon size={12} strokeWidth={1.5} />
-                  <span>{phase.label}</span>
-                  {i < PHASES_CLIENT.length - curPhaseIdx - 2 && (
-                    <ChevronRight size={10} className="text-gray-300" />
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
+          if (state === 'future' || (idx === 1 && (task.kind === 'agreement' || clientWaiting)) || (idx === 3 && task.kind === 'payment')) return null;
+          return <PhaseStep key={phase.key} phase={phase} phaseIdx={idx} state={state} open={timeOpen === idx} onToggle={() => toggleStep(idx)}>{phaseContent(idx)}</PhaseStep>;
+        })}</div>}
+        {!['annule','refuse_client'].includes(sel.statut) && curPhaseIdx < PHASES_CLIENT.length - 1 && <div><p className="mb-2 text-xs font-semibold text-slate-500">Prochaines étapes</p><div className="flex flex-wrap gap-2">{PHASES_CLIENT.slice(curPhaseIdx + 1).map(phase => <span key={phase.key} className="inline-flex items-center gap-1 text-xs text-slate-600"><ChevronRight size={12} />{phase.label}</span>)}</div></div>}
+      </div></details>
 
       {/* Spacer so last card isn't under bottom nav */}
       <div className="h-2" />

@@ -10,7 +10,7 @@ permissions:
 jobs:
   application:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: pinta
@@ -69,6 +69,15 @@ jobs:
           node tests/invoice-workspace.cjs
           node tests/invoice-completion.browser.cjs
           node tests/preparation-autonomous.browser.cjs
+          node tests/task-flow.browser.cjs
+          node tests/quote-task-conflict.browser.cjs
+          node tests/dossier-shell.browser.cjs
+          node tests/personal-work.browser.cjs
+          node tests/reception-without-notification.browser.cjs
+          node tests/client-lightweight.browser.cjs
+          node tests/task-message.browser.cjs
+          PINTA_WORKSPACE_OUT=/tmp/pinta-workspace-tasks node tests/organisation-workspace.browser.cjs
+          PINTA_PREPARATION_OUT=/tmp/pinta-preparation-client-tasks node tests/browser-preparation-client.cjs
           npm run test:browser
           node tests/accessibility.cjs
           node tests/ux-team-browser.cjs
@@ -95,4 +104,13 @@ jobs:
             /tmp/pinta-invoice-workspace-20260916
             /tmp/pinta-invoice-completion
             /tmp/pinta-preparation-autonomous
+            /tmp/pinta-quote-task-conflict
+            /tmp/pinta-task-flow
+            /tmp/pinta-dossier-shell
+            /tmp/pinta-personal-work
+            /tmp/pinta-receipt-flow
+            /tmp/pinta-client-lightweight
+            /tmp/pinta-task-message
+            /tmp/pinta-workspace-tasks
+            /tmp/pinta-preparation-client-tasks
             /tmp/pinta-preview.log

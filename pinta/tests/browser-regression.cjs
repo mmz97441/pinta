@@ -405,6 +405,7 @@ async function main() {
       'Je souhaite regrouper une dernière commande.',
     );
     f.tables.colis[0].attente_client_motif = 'Attente confirmée depuis un autre appareil.';
+    await f.page.getByText('Reprendre ma décision', { exact: true }).click();
     await f.page.getByText('Mesures et fonctionnement', { exact: true }).click();
     await f.page.evaluate(() => window.dispatchEvent(new Event('focus')));
     await f.page.getByText('Attente confirmée depuis un autre appareil.').waitFor();
@@ -412,6 +413,7 @@ async function main() {
     observations.push({ test: 'client-safe-view-refresh-on-focus', pass: true });
     await f.page.setViewportSize({ width: 390, height: 844 });
     await f.page.reload();
+    await f.page.getByText('Reprendre ma décision', { exact: true }).click();
     await f.page.getByText('Mesures et fonctionnement', { exact: true }).click();
     await f.page.getByText('Attente confirmée depuis un autre appareil.').waitFor();
     await f.page.waitForTimeout(350);
@@ -458,14 +460,15 @@ async function main() {
       f.tables.message_templates[0].body,
     );
     observations.push({ test: 'settings-no-implicit-writes-template-durable', pass: true });
-    await f.page.goto(base + '/colis/' + P);
+    await f.page.goto(base + '/colis/' + P + '?section=devis');
     await f.page.getByRole('button', { name: 'Enregistrer et vérifier le devis' }).waitFor();
     await f.page.waitForTimeout(350);
     await f.page.screenshot({
       path: path.join(output, 'staff-detail-desktop.png'),
       fullPage: true,
     });
-    await f.page.getByRole('navigation', { name: 'Organisation du dossier', exact: true }).getByRole('button', { name: 'Préparation', exact: true }).click();
+    await f.page.getByLabel('Tâche du dossier', { exact: true }).selectOption('preparation');
+    await f.page.getByRole('button', { name: 'Modifier les mesures', exact: true }).click();
     const num = f.page.locator('input[type="number"]');
     const labels = await num.evaluateAll((inputs) =>
       inputs.map((i) => ({
@@ -487,8 +490,8 @@ async function main() {
       }
     assert.ok(changed, 'Final weight field found');
     await f.page.getByRole('button', { name: 'Enregistrer les mesures de préparation' }).click();
-    await f.page.waitForFunction(() => document.body.innerText.includes('Mesures enregistrées, même si les documents restent à vérifier.'));
-    await f.page.getByRole('navigation', { name: 'Organisation du dossier', exact: true }).getByRole('button', { name: 'Factures et devis', exact: true }).click();
+    await f.page.getByRole('button', { name: 'Modifier les mesures', exact: true }).waitFor();
+    await f.page.getByLabel('Tâche du dossier', { exact: true }).selectOption('devis');
     await f.page.getByRole('button', { name: 'Enregistrer et vérifier le devis' }).click();
     await f.page.getByRole('button', { name: 'Envoyer le devis au client' }).waitFor();
     assert.equal(f.tables.colis[0].devis_transport, 50);

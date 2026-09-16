@@ -37,10 +37,12 @@ async function main() {
       await f.login();
       await f.page.goto(`${base}/colis?sort=client&dir=desc&dossier=${ids.P}`);
       await f.page.waitForFunction(isDark => document.documentElement.classList.contains('dark') === isDark, dark);
+      await f.page.locator('summary').filter({ hasText: 'Cartons reçus (2)' }).click();
       const measures = f.page.getByRole('region', { name: 'Mesures des cartons', exact: true });
       await measures.getByRole('listitem', { name: 'Carton 1', exact: true }).waitFor();
       assert.equal(await measures.getByRole('listitem').count(), 2, 'Existing cartons are visible in the inline panel');
       await measures.getByText('Boutique B', { exact: true }).waitFor();
+      await f.page.getByRole('button', { name: 'Suivre l’accord du client', exact: true }).click();
       await f.page.getByRole('button', { name: 'Réceptionner un autre carton', exact: true }).click();
       const dialog = f.page.getByRole('dialog', { name: 'Réceptionner des cartons', exact: true });
       await dialog.getByRole('heading', { name: 'Carton 3', level: 3, exact: true }).waitFor();
@@ -49,6 +51,7 @@ async function main() {
       await fillBox(dialog, 3, [15, 25, 35, 1.5]);
       await dialog.getByRole('button', { name: 'Rattacher à EXP-TEST-001', exact: true }).click();
       await dialog.waitFor({ state: 'hidden' });
+      await f.page.getByRole('button', { name: 'Voir le carton reçu', exact: true }).click();
       const third = measures.getByRole('listitem', { name: 'Carton 3', exact: true });
       await third.getByText('QA-ATTACH-003', { exact: true }).waitFor();
       await third.getByText('Boutique C', { exact: true }).waitFor();
@@ -59,11 +62,14 @@ async function main() {
       assert.equal(f.tables.colis[0].ref, 'EXP-TEST-001', 'Carton numbering never changes the dossier reference');
       assert.deepEqual(f.tables.colis[0].dims_par_colis.slice(0, 2), initialBoxes);
       assert.equal(f.tables.colis[0].fin_l, null);
-      assert.equal(new URL(f.page.url()).searchParams.get('sort'), 'client');
-      assert.equal(new URL(f.page.url()).searchParams.get('dir'), 'desc');
-      assert.equal(new URL(f.page.url()).searchParams.get('dossier'), ids.P);
+      assert.equal(new URL(f.page.url()).pathname, '/colis/' + ids.P);
+      const returned = new URL(new URL(f.page.url()).searchParams.get('returnTo'), base);
+      assert.equal(returned.searchParams.get('sort'), 'client');
+      assert.equal(returned.searchParams.get('dir'), 'desc');
+      assert.equal(returned.searchParams.get('dossier'), ids.P);
       await f.page.screenshot({ path: path.join(out, `carton-attached-${mobile ? 'mobile' : 'desktop'}-${theme}.png`), fullPage: true });
       await f.page.reload();
+      await f.page.getByRole('button', { name: 'Voir le carton reçu', exact: true }).click();
       await third.getByText('QA-ATTACH-003', { exact: true }).waitFor();
       assert.equal(await measures.getByRole('listitem').count(), 3, 'The saved carton remains visible after reload');
 
@@ -77,19 +83,21 @@ async function main() {
       await fillBox(dialog, 4, [10, 10, 10, 0.6]);
       await dialog.getByRole('button', { name: 'Rattacher à EXP-TEST-001', exact: true }).click();
       await dialog.waitFor({ state: 'hidden' });
+      await f.page.getByRole('button', { name: 'Voir le carton reçu', exact: true }).click();
       const fourth = measures.getByRole('listitem', { name: 'Carton 4', exact: true });
       await fourth.getByText('Numéro de suivi non renseigné', { exact: true }).waitFor();
       await fourth.getByText('Fournisseur non renseigné', { exact: true }).waitFor();
       assert.match(await fourth.innerText(), /10 × 10 × 10 cm · 0.6 kg/);
       await assertFocusedCarton(f.page, fourth);
-      assert.equal(new URL(f.page.url()).searchParams.get('dossier'), ids.P);
-      assert.equal(new URL(f.page.url()).searchParams.get('sort'), 'client');
+      assert.equal(new URL(f.page.url()).pathname, '/colis/' + ids.P);
+      assert.equal(new URL(f.page.url()).searchParams.get('returnTo'), '/colis?sort=client&dir=desc');
       assert.equal(f.tables.colis.length, 1);
       assert.equal(f.tables.colis[0].ref, 'EXP-TEST-001');
 
       // Show known historical coordinates and explicitly omit incomplete totals.
       f.tables.colis[0].dims_par_colis[1] = { dimL: 30, dimW: null, dimH: 10, poids: 2 };
       await f.page.reload();
+      await f.page.getByRole('button', { name: 'Voir le carton reçu', exact: true }).click();
       const second = measures.getByRole('listitem', { name: 'Carton 2', exact: true });
       await second.getByText('Mesures à réception incomplètes — à vérifier', { exact: true }).waitFor();
       assert.match(await second.innerText(), /30 × — × 10 cm · 2 kg/);

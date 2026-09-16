@@ -8,16 +8,20 @@ import { eur, hasTrack, trackStr, trackCount, telegramLink } from '../../utils';
 import ReceivedCartons from './ReceivedCartons';
 
 export default function ColisInfo() {
-  const { sel, selClient: cl, selDest, isStaff, upd, flash, data, settings } = useApp();
+  const { sel, selClient: cl, selDest, isStaff, upd, flash, data, settings, can } = useApp();
   const [editCasier, setEditCasier] = useState(false);
   const [casierTmp, setCasierTmp] = useState('');
   const [moveAll, setMoveAll] = useState(false);
   const [showCasierHist, setShowCasierHist] = useState(false);
 
   if (!sel) return null;
+  const canEditCasier = isStaff && !sel.archive && !['livre', 'annule'].includes(sel.statut)
+    && ['perm_colis_receptionner', 'perm_colis_preparer', 'perm_colis_modifier_dims'].some(permission => can(permission));
+  const canInvite = isStaff && (can('perm_comm_telegram') || can('perm_clients_creer'));
 
   // ── Casier save handler (with moveAll support) ──
   const handleSaveCasier = async () => {
+    if (!canEditCasier) return;
     try {
     const newCasier = casierTmp.trim();
     if (!newCasier) { setEditCasier(false); setCasierTmp(''); return; }
@@ -86,13 +90,13 @@ export default function ColisInfo() {
                 </span>
               )}
             </p>
-            {cl && !cl.telegramChatId && (
+            {canInvite && !cl.telegramChatId && !cl.tel && (
               <button
                 onClick={async () => {
                   try{const invitation=await createTelegramInvitation(cl.id);await navigator.clipboard.writeText(invitation.url);flash('Invitation Telegram copiée');}
                   catch(error){flash({msg:error.message,type:'error'});}
                 }}
-                className="text-[10px] font-semibold px-2 py-0.5 rounded bg-orange-100 text-orange-700 hover:bg-orange-200 transition-colors"
+                className="min-h-11 text-xs font-semibold px-3 rounded bg-orange-100 text-orange-700 hover:bg-orange-200 transition-colors"
               >
                 Inviter sur Telegram
               </button>
@@ -152,11 +156,11 @@ export default function ColisInfo() {
             )}
             {isStaff && cl.tel && (
               <div className="mt-1 flex items-center justify-end gap-1.5">
-                <button onClick={async()=>{
+                {canInvite && !cl.telegramChatId && <button onClick={async()=>{
                   try{const invitation=await createTelegramInvitation(cl.id);await navigator.clipboard.writeText(invitation.url);flash('Invitation Telegram copiée. Transmettez-la au client.');}
                   catch(error){flash({msg:error.message,type:'error'});}
-                }} className="inline-flex items-center min-h-[44px] gap-1 text-xs bg-blue-100 text-blue-700 px-3 rounded-xl font-bold">Inviter sur Telegram</button>
-                <a href={`tel:${cl.tel}`} className="text-xs text-gray-400 hover:text-gray-600">Appeler</a>
+                }} className="inline-flex items-center min-h-[44px] gap-1 text-xs bg-blue-100 text-blue-700 px-3 rounded-xl font-bold">Inviter sur Telegram</button>}
+                <a href={`tel:${cl.tel}`} className="inline-flex min-h-11 items-center text-xs text-gray-600 hover:text-gray-800">Appeler</a>
               </div>
             )}
           </div>
@@ -170,20 +174,21 @@ export default function ColisInfo() {
         <div className="mt-2 pt-2 border-t">
           <div className="flex items-center gap-2">
             <span className="text-xs font-bold text-gray-400">Casier :</span>
-            {editCasier && isStaff ? (
+            {editCasier && canEditCasier ? (
               <div className="flex-1 space-y-2">
                 <div className="flex items-center gap-1">
                   <input
+                    aria-label="Casier du dossier"
                     value={casierTmp}
                     onChange={(e) => setCasierTmp(e.target.value.toUpperCase())}
-                    className="px-2 py-1 border-2 border-amber-300 rounded-lg text-sm font-mono w-24"
+                    className="min-h-11 px-2 py-1 border-2 border-amber-300 rounded-lg text-sm font-mono w-24"
                     style={{ outline: 'none' }}
                     autoFocus
                   />
-                  <button onClick={handleSaveCasier} className="p-1 rounded-md text-green-600 hover:bg-green-50 transition-colors">
+                  <button aria-label="Enregistrer le casier" onClick={handleSaveCasier} className="min-h-11 min-w-11 flex items-center justify-center rounded-md text-green-700 hover:bg-green-50 transition-colors">
                     <Check size={16} />
                   </button>
-                  <button onClick={() => { setEditCasier(false); setCasierTmp(''); setMoveAll(false); }} className="p-1 rounded-md text-gray-400 hover:bg-gray-100 transition-colors">
+                  <button aria-label="Annuler la modification du casier" onClick={() => { setEditCasier(false); setCasierTmp(''); setMoveAll(false); }} className="min-h-11 min-w-11 flex items-center justify-center rounded-md text-gray-600 hover:bg-gray-100 transition-colors">
                     <X size={16} />
                   </button>
                 </div>
@@ -201,11 +206,11 @@ export default function ColisInfo() {
               </div>
             ) : (
               <div className="flex items-center gap-1">
-                <span className={`text-sm font-mono font-bold ${sel.casier ? '' : 'text-gray-300 italic'}`} style={sel.casier ? { color: BRAND.navy } : {}}>
+                <span className={`text-sm font-mono font-bold ${sel.casier ? '' : 'text-gray-500 italic'}`} style={sel.casier ? { color: 'var(--brand-text)' } : {}}>
                   {sel.casier || 'Non attribué'}
                 </span>
-                {isStaff && (
-                  <button onClick={() => { setCasierTmp(sel.casier || ''); setEditCasier(true); }} className="text-xs text-gray-400 hover:text-gray-600 ml-1">
+                {canEditCasier && (
+                  <button aria-label="Modifier le casier" onClick={() => { setCasierTmp(sel.casier || ''); setEditCasier(true); }} className="min-h-11 min-w-11 flex items-center justify-center text-xs text-gray-600 hover:text-gray-800 ml-1">
                     <Edit3 size={12} />
                   </button>
                 )}

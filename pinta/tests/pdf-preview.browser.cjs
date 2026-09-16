@@ -19,7 +19,7 @@ async function main() {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ success: true, extraction: { id: '77777777-7777-4777-8777-777777777777', facture_id: F, status: 'review', vendeur: 'Boutique A', total: 100, lines: [{ desc: 'Article à relire', qte: 1, prix: 100, cat: 'cat-test' }], warnings: [] } }) });
     });
     await fixture.login();
-    await fixture.page.goto(`${base}/colis/${P}`);
+    await fixture.page.goto(`${base}/colis/${P}?section=documents`);
     const canvas = fixture.page.locator('canvas[role="img"]');
     await fixture.page.getByRole('region', { name: 'Document source', exact: true }).scrollIntoViewIfNeeded();
     await fixture.page.locator('canvas[data-rendered="true"]').waitFor();

@@ -8,8 +8,9 @@ const { setup, ids, base } = require('./browser-regression.cjs');
 const output = process.env.PINTA_PREPARATION_OUT || path.resolve(__dirname, '../../docs/verification-organisation-preparation-client-2026-09-12');
 const results=[];
 async function navigate(page, destination) { await page.evaluate(to => { window.history.pushState({},'',to); window.dispatchEvent(new PopStateEvent('popstate')); },destination); }
-async function ready(f) { await f.login(); await f.page.goto(`${base}/colis/${ids.P}?section=preparation`); await f.page.getByRole('button',{name:'Enregistrer les mesures de préparation',exact:true}).waitFor(); }
-async function chooseSection(f, name) { await f.page.getByRole('navigation',{name:'Organisation du dossier',exact:true}).getByRole('button',{name,exact:true}).click(); }
+async function editPreparation(f) { const edit=f.page.getByRole('button',{name:'Modifier les mesures',exact:true}); if(await edit.isVisible()) await edit.click(); await f.page.getByRole('button',{name:'Enregistrer les mesures de préparation',exact:true}).waitFor(); }
+async function ready(f) { await f.login(); await f.page.goto(`${base}/colis/${ids.P}?section=preparation`); await f.page.getByTestId('dossier-task-workspace').waitFor(); await editPreparation(f); }
+async function chooseSection(f, name) { await f.page.getByLabel('Tâche du dossier',{exact:true}).selectOption(name); }
 async function staffFixture(browser) {
  const f=await setup(browser,'directeur'); const c=f.tables.colis[0]; c.preparation_composition_version=0;c.final_measurements_version=0;c.final_packages=[{dimL:30,dimW:20,dimH:20,poids:3}]; c.outgoing_parcel_count=1;
  await f.context.route('**/rest/v1/rpc/save_preparation_measurements',async route=>{
@@ -26,12 +27,12 @@ async function staffFixture(browser) {
   f=await staffFixture(browser);f.tables.factures=[];f.tables.lignes=[];await ready(f);
   await f.page.getByLabel('Poids réel · colis sortant 1 (kg)',{exact:true}).fill('4');
   await f.page.getByRole('button',{name:'Enregistrer les mesures de préparation',exact:true}).click();
-  await f.page.getByText('Mesures enregistrées, même si les documents restent à vérifier.',{exact:true}).waitFor();
+  await f.page.getByRole('region',{name:'Relais après préparation',exact:true}).waitFor();
   assert.equal(f.tables.colis[0].fin_p,4);assert.equal(f.requests.filter(r=>r.path.endsWith('/save_quote')).length,0);
-  await chooseSection(f,'Factures et devis');
+  await chooseSection(f,'devis');
   assert.equal(await f.page.getByRole('button',{name:'Enregistrer et vérifier le devis',exact:true}).isDisabled(),true);
-  await chooseSection(f,'Préparation');
-  await f.page.reload();await f.page.getByLabel('Poids réel · colis sortant 1 (kg)',{exact:true}).waitFor();assert.equal(await f.page.getByLabel('Poids réel · colis sortant 1 (kg)',{exact:true}).inputValue(),'4');
+  await chooseSection(f,'preparation');
+  await f.page.reload();await f.page.getByTestId('dossier-task-workspace').waitFor();await editPreparation(f);await f.page.getByLabel('Poids réel · colis sortant 1 (kg)',{exact:true}).waitFor();assert.equal(await f.page.getByLabel('Poids réel · colis sortant 1 (kg)',{exact:true}).inputValue(),'4');
   results.push({test:'measure-only save persists without documents and cannot publish an incomplete quote',pass:true});
   // A local draft retains the exact original version when another person changes the record.
   await f.page.getByLabel('Poids réel · colis sortant 1 (kg)',{exact:true}).fill('5');
@@ -40,19 +41,19 @@ async function staffFixture(browser) {
   await navigate(f.page,`/colis/${ids.P}?section=preparation`);await f.page.getByRole('button',{name:'Recharger et remplacer mon brouillon'}).waitFor();
   assert.equal(await f.page.getByLabel('Poids réel · colis sortant 1 (kg)',{exact:true}).inputValue(),'5');
   assert.equal(await f.page.getByRole('button',{name:'Enregistrer les mesures de préparation',exact:true}).isDisabled(),true);
-  await f.page.getByRole('button',{name:'Recharger et remplacer mon brouillon'}).click();assert.equal(await f.page.getByLabel('Poids réel · colis sortant 1 (kg)',{exact:true}).inputValue(),'9');
+  await f.page.getByRole('button',{name:'Recharger et remplacer mon brouillon'}).click();await editPreparation(f);assert.equal(await f.page.getByLabel('Poids réel · colis sortant 1 (kg)',{exact:true}).inputValue(),'9');
   results.push({test:'draft survives SPA navigation and detects a colleague version without overwriting it',pass:true});
   assert.deepEqual(f.errors,[]);await f.context.close();
   f=await staffFixture(browser);await ready(f);
   await f.page.getByRole('button',{name:'+ Ajouter un colis après optimisation',exact:true}).click();
   for(const [label,value] of [['Longueur','10'],['Largeur','40'],['Hauteur','10'],['Poids réel','1']]) await f.page.getByLabel(`${label} · colis sortant 2 (${label==='Poids réel'?'kg':'cm'})`,{exact:true}).fill(value);
-  await f.page.getByRole('button',{name:'Enregistrer les mesures de préparation',exact:true}).click();await f.page.getByText('Mesures enregistrées, même si les documents restent à vérifier.',{exact:true}).waitFor();
+  await f.page.getByRole('button',{name:'Enregistrer les mesures de préparation',exact:true}).click();await f.page.getByRole('region',{name:'Relais après préparation',exact:true}).waitFor();
   assert.equal(f.tables.colis[0].outgoing_parcel_count,2);
-  await chooseSection(f,'Factures et devis');
+  await chooseSection(f,'devis');
   await f.page.getByRole('button',{name:'Enregistrer et vérifier le devis',exact:true}).click();await f.page.getByRole('button',{name:'Envoyer le devis au client',exact:true}).waitFor();
   const saved=f.requests.find(r=>r.path.endsWith('/save_quote'));assert.equal(saved.input.p_snapshot.inputs.finalPackages.length,2);assert.equal(saved.input.p_snapshot.amounts.volumetricWeight,3.2);assert.equal(saved.input.p_snapshot.amounts.billableWeight,4);
   results.push({test:'two optimised physical parcels save once and prepare a publishable quote with summed volumes',pass:true});
-  await chooseSection(f,'Préparation');
+  await chooseSection(f,'preparation');
   for(const theme of ['light','dark']) for(const width of [1440,390]){await f.page.evaluate(value=>document.documentElement.classList.toggle('dark',value==='dark'),theme);await f.page.setViewportSize({width,height:1000});await f.page.screenshot({path:path.join(output,`preparation-${theme}-${width}.png`),fullPage:true,animations:'disabled'});assert.equal(await f.page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth),false);
    const axe=await new AxeBuilder({page:f.page}).withTags(['wcag2a','wcag2aa','wcag21a','wcag21aa']).analyze(); results.push({test:`preparation accessibility ${theme} ${width}`,pass:axe.violations.length===0,violations:axe.violations.map(v=>({id:v.id,nodes:v.nodes.map(n=>n.target)}))});
   }

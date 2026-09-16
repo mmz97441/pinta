@@ -11,7 +11,7 @@ import { eur, fuzzy, labelEnvoi } from '../../utils';
 const exportColisExcel = async (...args) => { const exports = await import('../../utils/exportExcel'); return exports.exportColisExcel(...args); };
 import { Badge, Etapes } from '../ui';
 import StaffDetailView from './StaffDetailView';
-import StaffAssignment from './StaffAssignment';
+import { dossierTaskUrl, resolveDossierTask, DOSSIER_TASKS } from '../../domain/dossierTasks';
 import PersonalWorkView from '../workspace/PersonalWorkView';
 import KPIDashboard from './KPIDashboard';
 import ColisInfo from '../detail/ColisInfo';
@@ -403,8 +403,6 @@ export default function StaffColisPage() {
     localStorage.setItem(LS_SORT_KEY + auth?.u?.id, key);
     setShowSortPicker(false);
   }, []);
-  const [showFactures, setShowFactures] = useState(false);
-  const [showHistory, setShowHistory] = useState(false);
   const [narrowScreen, setNarrowScreen] = useState(() => window.matchMedia('(max-width: 1023px)').matches);
   useEffect(() => { const query = window.matchMedia('(max-width: 1023px)'); const update = () => setNarrowScreen(query.matches); query.addEventListener('change', update); return () => query.removeEventListener('change', update); }, []);
 
@@ -1031,45 +1029,14 @@ export default function StaffColisPage() {
               <p className="text-xs text-gray-600">{sel.desc || '—'} · {receptionManifest.nbColis} carton{receptionManifest.nbColis > 1 ? 's' : ''}</p>
             </div>
 
-            {/* Receipt cartons stay visible before workflow actions; preparation can fold them away. */}
             <div className="px-4 pb-4 space-y-3">
-              <details key={`${sel.id}:${sel.statut}`} open={sel.statut !== 'en_preparation'} className="rounded-xl border border-gray-200 bg-white px-3">
-                <summary className="min-h-11 py-3 cursor-pointer text-sm font-bold text-gray-800">Cartons reçus ({receptionManifest.nbColis})</summary>
+              <p className="text-sm font-semibold text-slate-800">{nextAction(sel, clDetail, now)}</p>
+              <button onClick={() => navigate(dossierTaskUrl(sel.id, resolveDossierTask(sel, '', [], can), new URLSearchParams({ returnTo }).toString()))} className="min-h-11 w-full rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white">{DOSSIER_TASKS[resolveDossierTask(sel, '', [], can)]?.title || 'Ouvrir le dossier'}</button>
+              {pendingDocumentCount > 0 && ['perm_factures_voir','perm_factures_valider','perm_factures_ajouter'].some(permission => can(permission)) && <button onClick={() => navigate(dossierTaskUrl(sel.id,'documents',new URLSearchParams({ returnTo }).toString()))} className="min-h-11 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700">{pendingDocumentCount} document(s) reçu(s) à vérifier</button>}
+              <details key={sel.id} className="rounded-xl border border-gray-200 bg-white px-3">
+                <summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-slate-700">Cartons reçus ({receptionManifest.nbColis})</summary>
                 <div className="pb-3"><ReceivedCartons colis={sel} settings={settings} /></div>
               </details>
-              <div className="grid gap-2 sm:grid-cols-2">
-                <button onClick={() => navigate(`/colis/${encodeURIComponent(sel.id)}?${new URLSearchParams({ returnTo, section: 'preparation' })}`)} className="min-h-11 rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white">Préparation</button>
-                {['perm_factures_voir', 'perm_factures_ajouter', 'perm_factures_valider', 'perm_factures_refuser', 'perm_factures_ocr', 'perm_factures_modifier_articles', 'perm_colis_calculer_devis', 'perm_colis_envoyer_devis'].some(permission => can(permission)) && <button onClick={() => navigate(`/colis/${encodeURIComponent(sel.id)}?${new URLSearchParams({ returnTo, section: 'devis' })}`)} className="min-h-11 rounded-xl border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-700">Factures et devis</button>}
-              </div>
-              {sel.statut === 'en_preparation' ? <StaffAssignment /> : <StaffDetailView />}
-
-
-              {/* Factures — part of the preparation workspace when active. */}
-              {sel.statut !== 'en_preparation' && ['perm_factures_voir', 'perm_factures_ajouter', 'perm_factures_valider', 'perm_factures_refuser', 'perm_factures_ocr', 'perm_factures_modifier_articles'].some(permission => can(permission)) && <><button
-                onClick={() => setShowFactures((p) => !p)}
-                aria-expanded={showFactures}
-                className="w-full flex items-center justify-between px-3 py-2 rounded-xl border border-gray-100 hover:bg-gray-50 transition-colors"
-              >
-                <div className="flex flex-wrap items-center gap-2 text-left">
-                  <FileText size={13} className="text-gray-400" />
-                  <span className="text-xs font-bold text-gray-600">Factures ({facturesSummary.length}){pendingDocumentCount > 0 ? ` · ${pendingDocumentCount} document${pendingDocumentCount > 1 ? 's' : ''} reçu${pendingDocumentCount > 1 ? 's' : ''} à vérifier` : ''}</span>
-                  {validCount > 0 && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-green-100 text-green-700">{validCount} validée{validCount > 1 ? 's' : ''}</span>}
-                  {rejetCount > 0 && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-red-100 text-red-600">{rejetCount} refusée{rejetCount > 1 ? 's' : ''}</span>}
-                  {facturesSummary.length === 0 && pendingDocumentCount === 0 && <span className="text-[9px] font-bold text-red-500">Manquante</span>}
-                </div>
-                <span className="text-[10px] text-gray-400">{showFactures ? '▼' : '▸'}</span>
-              </button>
-              {showFactures && <FacturesPanel />}</>}
-
-              {/* Historique — collapsed */}
-              <button
-                onClick={() => setShowHistory((p) => !p)}
-                className="w-full flex items-center justify-between px-3 py-2 rounded-xl border border-gray-100 hover:bg-gray-50 transition-colors"
-              >
-                <span className="text-xs font-bold text-gray-600">Historique</span>
-                <span className="text-[10px] text-gray-400">{showHistory ? '▼' : '▸'}</span>
-              </button>
-              {showHistory && <AuditLog />}
             </div>
 
           </div>

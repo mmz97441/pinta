@@ -34,49 +34,84 @@ function ClientFacturesPanel() {
   const { sel, setData } = useApp();
   const [collapsed, setCollapsed] = useState(false);
   const [replacesFactureId, setReplacesFactureId] = useState('');
-  const [clientFile, setClientFile] = useState(null);
+  const [clientFiles, setClientFiles] = useState([]);
   const [newVendor, setNewVendor] = useState('');
   const [preview, setPreview] = useState(null);
   const [busy, setBusy] = useState('');
   const busyRef = useRef(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  const uploadedClientDocument = useRef(null);
+  const uploadedClientDocuments = useRef(new Map());
   const clientFileInput = useRef(null);
+  const selectionVersion = useRef(0);
   if (!sel) return null;
   const invoices = sel.factures || [];
   const parcelId = sel.id;
   const canDeposit = !sel.archive && !sel.paiementDate && ['receptionne','mesure','attente_feu_vert','autorise','en_preparation','devis_envoye','attente_paiement'].includes(sel.statut);
-  const depositClientDocument = async () => {
+  const pendingFiles = clientFiles.filter(item => item.status !== 'saved');
+  const updateFile = (id, patch) => setClientFiles(previous => previous.map(item => item.id === id ? { ...item, ...patch } : item));
+  const clearSelection = () => {
+    setClientFiles([]); uploadedClientDocuments.current.clear();
+    if (clientFileInput.current) clientFileInput.current.value = '';
+    setError(''); setNotice('');
+  };
+  const depositClientDocuments = async () => {
     if (busyRef.current) return;
+    if (!canDeposit) { setError('Ce dossier ne peut plus recevoir de facture. Contactez notre équipe.'); return; }
+    if (!pendingFiles.length) { setError('Choisissez une facture PDF ou une photo lisible.'); return; }
+    if (replacesFactureId && pendingFiles.length !== 1) { setError('Choisissez un seul document pour remplacer cette facture.'); return; }
     busyRef.current = true; setBusy('client-deposit'); setError(''); setNotice('');
+    let savedCount = 0; const failures = [];
     try {
-      if (!clientFile) throw new Error('Choisissez une facture PDF ou une photo lisible.');
-      let document = uploadedClientDocument.current;
-      if (!document || document.file !== clientFile || document.parcelId !== parcelId) {
-        const saved = await sb.uploadDocument('factures', parcelId, clientFile);
-        document = { ...saved, file: clientFile, parcelId }; uploadedClientDocument.current = document;
+      for (const item of pendingFiles) {
+        updateFile(item.id, { status: 'uploading', error: '' });
+        try {
+          let document = uploadedClientDocuments.current.get(item.id);
+          if (!document) {
+            document = await sb.uploadDocument('factures', parcelId, item.file);
+            uploadedClientDocuments.current.set(item.id, document);
+          }
+          // A retry may follow a lost response after a successful insert. Reuse
+          // the invoice with this exact private path before attempting another.
+          const existing = item.status === 'failed'
+            ? await sb.fetchAllRows('factures', query => query.eq('colis_id', parcelId).eq('fichier_url', document.path)) : [];
+          const saved = existing.length ? sb.mapFact(existing[0]) : await sb.insertFacture(parcelId, {
+            vendeur: newVendor.trim() || item.file.name, montant: 0, valide: false,
+            fichierUrl: document.path, fichierNom: item.file.name, replacesFactureId: replacesFactureId || null,
+          });
+          setData(previous => previous.map(parcel => parcel.id === parcelId ? { ...parcel, factures: [...(parcel.factures || []).filter(invoice => invoice.id !== saved.id), saved] } : parcel));
+          updateFile(item.id, { status: 'saved', error: '' }); savedCount++;
+        } catch (failure) {
+          const message = failure.message || 'Enregistrement impossible. Réessayez.';
+          updateFile(item.id, { status: 'failed', error: message }); failures.push(message);
+        }
       }
-      const saved = await sb.insertFacture(parcelId, { vendeur: newVendor.trim() || clientFile.name, montant: 0, valide: false, fichierUrl: document.path, fichierNom: clientFile.name, replacesFactureId: replacesFactureId || null });
-      setData(previous => previous.map(parcel => parcel.id === parcelId ? { ...parcel, factures: [...(parcel.factures || []).filter(invoice => invoice.id !== saved.id), saved] } : parcel));
-      setReplacesFactureId(''); setClientFile(null); if (clientFileInput.current) clientFileInput.current.value = ''; setNewVendor(''); uploadedClientDocument.current = null;
-      setNotice('Facture reçue et enregistrée. Notre équipe vérifiera le document et les articles ; vous n’avez pas besoin de le renvoyer par message.');
-    } catch (failure) { setError(failure.message || 'Le document n’a pas pu être enregistré. Réessayez.'); }
-    finally { busyRef.current = false; setBusy(''); }
+      if (failures.length) setError(failures.length === 1 ? failures[0] : `${failures.length} documents restent à envoyer. Les autres sont enregistrés.`);
+      if (savedCount) setNotice(savedCount === 1 ? 'Facture reçue et enregistrée. Notre équipe la vérifie.' : `${savedCount} factures reçues et enregistrées. Notre équipe les vérifie.`);
+      if (!failures.length) {
+        setReplacesFactureId(''); setNewVendor('');
+        if (clientFileInput.current) clientFileInput.current.value = '';
+      }
+    } finally { busyRef.current = false; setBusy(''); }
   };
   return <section id="quote-documents" aria-label="Factures d’achat" className="min-w-0 border-t border-gray-200 py-4">
     {preview && <Lightbox src={preview.fichier} title={preview.vendeur} onClose={() => setPreview(null)} />}
     <button className={`${BUTTON} px-0 text-slate-700`} aria-expanded={!collapsed} onClick={() => setCollapsed(!collapsed)}>{collapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}<FileText size={16} />Factures ({invoices.length})</button>
     {error && <p role="alert" className="my-2 rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}
     {notice && <p role="status" className="my-2 rounded-xl bg-blue-50 p-3 text-sm text-blue-800">{notice}</p>}
-    {canDeposit && <form aria-label="Déposer une facture" className="my-3 space-y-3 rounded-xl border border-slate-200 p-3" onSubmit={(event) => { event.preventDefault(); depositClientDocument(); }}>
-      <p className="text-sm font-semibold text-slate-700">Ajouter une facture à ce dossier</p>
-      <p className="text-xs text-slate-600">PDF ou photo lisible (JPG, PNG, WebP), 20 Mo maximum. Joignez toutes les pages avec les articles et les montants. Pour une correction, sélectionnez la facture à remplacer : son historique sera conservé et ses anciens articles seront exclus du devis.</p>
-      {(invoices.some(invoice => invoice.rejetMotif)) && <label className="block text-xs font-semibold text-slate-600">Type de dépôt<select aria-label="Facture corrigée" value={replacesFactureId} onChange={event => setReplacesFactureId(event.target.value)} className={INPUT}><option value="">Nouvelle facture</option>{invoices.filter(invoice => invoice.rejetMotif && !invoices.some(other => other.replacesFactureId === invoice.id)).map(invoice => <option key={invoice.id} value={invoice.id}>Corriger : {invoice.vendeur || "Facture rejetée"}</option>)}</select></label>}
-      <label className="block text-xs font-semibold text-slate-600">Vendeur (facultatif)<input value={newVendor} onChange={(event) => setNewVendor(event.target.value)} className={INPUT} /></label>
-      <label className="block text-xs font-semibold text-slate-600">Facture ou photo<input required ref={clientFileInput} type="file" accept="application/pdf,image/jpeg,image/png,image/webp" onChange={(event) => { setClientFile(event.target.files?.[0] || null); uploadedClientDocument.current = null; }} className="mt-1 block min-h-11 w-full min-w-0 text-xs" /></label>
-      {clientFile && <p className="break-words text-xs text-slate-600">Document sélectionné : {clientFile.name}</p>}
-      <button disabled={!!busy || !clientFile} className={`${BUTTON} w-full bg-slate-700 text-white`}><Upload size={15} />{busy === 'client-deposit' ? 'Enregistrement du document…' : 'Déposer la facture'}</button>
+    {canDeposit && <form aria-label="Déposer une facture" className="my-3 space-y-3 rounded-xl border border-slate-200 p-3" onSubmit={(event) => { event.preventDefault(); depositClientDocuments(); }}>
+      <p className="text-sm font-semibold text-slate-700">Ajouter des factures à ce dossier</p>
+      <p className="text-xs text-slate-600">PDF ou photos (JPG, PNG, WebP), 20 Mo par fichier. Vous pouvez sélectionner plusieurs factures.</p>
+      {(invoices.some(invoice => invoice.rejetMotif)) && <label className="block text-xs font-semibold text-slate-600">Type de dépôt<select aria-label="Facture corrigée" disabled={!!busy} value={replacesFactureId} onChange={event => { setReplacesFactureId(event.target.value); clearSelection(); }} className={INPUT}><option value="">Nouvelle facture</option>{invoices.filter(invoice => invoice.rejetMotif && !invoices.some(other => other.replacesFactureId === invoice.id)).map(invoice => <option key={invoice.id} value={invoice.id}>Corriger : {invoice.vendeur || "Facture rejetée"}</option>)}</select></label>}
+      <label className="block text-xs font-semibold text-slate-600">Vendeur (facultatif)<input disabled={!!busy} value={newVendor} onChange={(event) => setNewVendor(event.target.value)} className={INPUT} /></label>
+      {replacesFactureId && <p className="text-xs text-slate-600">Un seul document corrigé. L’ancienne version reste dans l’historique.</p>}
+      <label className="block text-xs font-semibold text-slate-600">Facture ou photo<input ref={clientFileInput} disabled={!!busy} multiple={!replacesFactureId} type="file" accept="application/pdf,image/jpeg,image/png,image/webp" onChange={(event) => {
+        const files = Array.from(event.target.files || []); selectionVersion.current++;
+        uploadedClientDocuments.current.clear(); setError(''); setNotice('');
+        setClientFiles(files.map((file,index) => ({ id: `${selectionVersion.current}-${index}`, file, status: 'ready', error: '' })));
+      }} className="mt-1 block min-h-11 w-full min-w-0 text-xs" /></label>
+      {clientFiles.length > 0 && <ul aria-label="Résultat du dépôt des factures" className="space-y-2">{clientFiles.map(item => <li key={item.id} className="rounded-lg bg-slate-50 p-2 text-xs"><p className="break-words font-semibold text-slate-700">{item.file.name}</p><p role="status" className={item.status === 'failed' ? 'text-red-700' : 'text-slate-600'}>{item.status === 'saved' ? 'Enregistrée · à vérifier par l’équipe' : item.status === 'uploading' ? 'Enregistrement…' : item.status === 'failed' ? item.error : 'Prête à envoyer'}</p></li>)}</ul>}
+      <button disabled={!!busy || !pendingFiles.length} className={`${BUTTON} w-full bg-slate-700 text-white`}><Upload size={15} />{busy === 'client-deposit' ? 'Enregistrement des documents…' : pendingFiles.some(item => item.status === 'failed') ? 'Réessayer les documents en échec' : pendingFiles.length > 1 ? `Déposer les ${pendingFiles.length} factures` : 'Déposer la facture'}</button>
     </form>}
     {!collapsed && <div className="space-y-3">{!invoices.length && <p className="py-4 text-sm text-gray-500">Aucune facture reçue</p>}{invoices.map(invoice => {
       const replaced = invoices.some(other => other.replacesFactureId === invoice.id);

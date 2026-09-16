@@ -19,6 +19,7 @@ for migration in "$root"/migrations/202609*.sql; do
  { printf 'SET ROLE supabase_admin;\n';cat "$migration"; } | sql -1
 done
 sql < "$root/tests/invoice-review.sql"
+sql < "$root/tests/invoice-context-permissions.sql"
 sql < "$root/tests/ocr-document-guard.sql"
 sql < "$root/tests/preparation-workspace.sql"
 sql < "$root/tests/regressions.sql"

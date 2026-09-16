@@ -291,8 +291,8 @@ export default function ChatPanel({ colis, client, embedded = false, active = tr
 
   // Client: collapsible — shows compact bar when no messages, expands on tap
   return (
-    <div className="card anim-fade overflow-hidden">
-      <button
+    <div className={embedded ? 'min-w-0 py-3' : 'card anim-fade overflow-hidden'}>
+      {!embedded && <button
         onClick={() => setExpanded(!expanded)}
         className="w-full flex items-center justify-between px-4 py-3 text-left"
       >
@@ -306,10 +306,10 @@ export default function ChatPanel({ colis, client, embedded = false, active = tr
           size={14}
           className={`text-gray-400 transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`}
         />
-      </button>
+      </button>}
 
-      {expanded && (
-        <div className="px-4 pb-4 anim-slide-down">
+      {(expanded || embedded) && (
+        <div className={embedded ? 'min-w-0' : 'px-4 pb-4 anim-slide-down'}>
           <p className="text-xs text-gray-600 dark:text-gray-300 mb-3">{state==='a_traiter'?'Votre message attend une réponse de notre équipe.':state==='attente_client'?'Notre équipe attend votre retour.':'Vous pouvez nous écrire pour toute question sur ce dossier.'}</p>
           {hasMessages && (
             <div ref={scrollRef} className="space-y-1.5 mb-3 max-h-40 overflow-y-auto">

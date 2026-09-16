@@ -24,7 +24,7 @@ async function main() {
       const other = { ...f.tables.colis[0], id: '77777777-7777-4777-8777-777777777777', ref: 'EXP-NUM-003', nb_colis: 3, trackings: ['ONLY-ONE-TRACKING'], trackings_detail: [{ number: 'ONLY-ONE-TRACKING' }], dims_par_colis: [oldBox, oldBox] };
       f.tables.colis.push(other);
       await f.login();
-      await f.page.goto(`${base}/colis?dossier=${ids.P}`);
+      await f.page.goto(`${base}/colis/${ids.P}?section=accord`);
       await f.page.getByRole('button', { name: 'Réceptionner un autre carton', exact: true }).click();
       const dialog = f.page.getByRole('dialog', { name: 'Réceptionner des cartons', exact: true });
       await dialog.getByRole('heading', { name: 'Carton 2', exact: true }).waitFor();
@@ -48,6 +48,7 @@ async function main() {
       assert.equal(await dialog.getByRole('heading', { name: 'Carton 3', exact: true }).count(), 0);
       await dialog.getByRole('button', { name: 'Rattacher à EXP-TEST-001', exact: true }).click();
       await dialog.waitFor({ state: 'hidden' });
+      await f.page.getByRole('button', { name: 'Voir le carton reçu', exact: true }).click();
       await f.page.getByRole('listitem', { name: 'Carton 2', exact: true }).getByText('SAVED-CARTON', { exact: true }).waitFor();
       assert.equal(f.tables.colis[0].ref, 'EXP-TEST-001');
       assert.equal(f.tables.colis[0].nb_colis, 2);

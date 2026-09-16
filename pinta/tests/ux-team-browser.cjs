@@ -15,7 +15,7 @@ async function assertFocusedMeasurementVisible(dialog, carton) {
   const input = dialog.getByLabel(`Poids à réception (kg) · carton ${carton}`, { exact: true });
   assert.equal(await input.evaluate(node => document.activeElement === node), true);
   const field = await input.boundingBox();
-  const footer = await dialog.getByRole('button', { name: /^(Sans notification|Rattacher à EXP-TEST-002)$/ }).locator('..').locator('..').boundingBox();
+  const footer = await dialog.getByRole('button', { name: /^(Réceptionner les cartons|Rattacher à EXP-TEST-002)$/ }).locator('..').locator('..').boundingBox();
   const header = await dialog.getByRole('heading', { name: 'Réceptionner des cartons', exact: true }).locator('..').locator('..').boundingBox();
   assert.ok(field.y >= header.y + header.height - 1, 'Focused measurement is fully below the fixed dialog header');
   assert.ok(field.y + field.height <= footer.y + 1, 'Focused measurement is fully above the fixed action footer');
@@ -70,7 +70,7 @@ async function run() {
       await dialog.getByPlaceholder('Rechercher un client…').fill('Camille');
       await dialog.getByRole('button').filter({ hasText: /Exemple/ }).first().click();
       await dialog.getByRole('button', { name: /Créer une nouvelle expédition/ }).click();
-      await dialog.getByRole('button', { name: 'Sans notification', exact: true }).waitFor();
+      await dialog.getByRole('button', { name: 'Réceptionner les cartons', exact: true }).waitFor();
       await dialog.getByLabel('Casier', { exact: false }).fill('B-07');
       await dialog.getByLabel('Fournisseur · carton 1').fill('Boutique C');
       await dialog.getByLabel('Numéro de suivi · carton 1').fill('SCAN-01');
@@ -82,14 +82,14 @@ async function run() {
       await dialog.getByText('0 / 2 carton(s) mesuré(s) à réception', { exact: false }).waitFor();
       assert.equal(await dialog.getByRole('button', { name: /Mesurer maintenant|Mesurer plus tard/ }).count(), 0);
       await dialog.getByLabel('Longueur à réception (cm) · carton 1', { exact: true }).fill('20');
-      await dialog.getByRole('button', { name: 'Sans notification', exact: true }).click();
+      await dialog.getByRole('button', { name: 'Réceptionner les cartons', exact: true }).click();
       await dialog.getByRole('alert').filter({ hasText: 'Carton 1 : largeur à réception (cm)' }).waitFor();
       assert.equal(await dialog.getByLabel('Largeur à réception (cm) · carton 1').evaluate(node => document.activeElement === node), true);
       assert.ok(!f.requests.some(request => request.method === 'POST' && request.path === '/rest/v1/colis'));
       await measure(dialog, 1, [20, 30, 40, 2]);
       await measure(dialog, 2, [10, 15, 20, 0.5]);
       await dialog.getByText('2 / 2 carton(s) mesuré(s) à réception', { exact: false }).waitFor();
-      const footer = await dialog.getByRole('button', { name: 'Réceptionner et notifier le client', exact: true }).boundingBox();
+      const footer = await dialog.getByRole('button', { name: 'Réceptionner les cartons', exact: true }).boundingBox();
       const viewport = f.page.viewportSize();
       assert.ok(footer.y >= 0 && footer.y + footer.height <= viewport.height, 'Receipt action remains visible');
       assert.equal(await dialog.locator('details').getAttribute('open'), null);
@@ -100,7 +100,7 @@ async function run() {
       assert.deepEqual(receiptAxe.violations.map(v => ({ id: v.id, nodes: v.nodes.map(n => ({ target: n.target, summary: n.failureSummary })) })), []);
       await dialog.locator('summary').filter({ hasText: 'Compléments de réception' }).click();
       await dialog.getByRole('button', { name: 'Batteries lithium', exact: true }).click();
-      await dialog.getByRole('button', { name: 'Sans notification', exact: true }).click();
+      await dialog.getByRole('button', { name: 'Réceptionner les cartons', exact: true }).click();
       await dialog.waitFor({ state: 'hidden' });
       const inserted = f.requests.find(request => request.method === 'POST' && request.path === '/rest/v1/colis');
       assert.equal(inserted?.input.nb_colis, 2, 'Two physical cartons persisted; scanner blank ignored');
@@ -133,7 +133,7 @@ async function run() {
       assert.equal(secondReceipt.input.desc_contenu, 'Carton reçu');
       assert.deepEqual(secondReceipt.input.dims_par_colis, [{ dimL: 25, dimW: 35, dimH: 45, poids: 3.25 }]);
       // Attach a new physical carton with no known supplier/tracking: measurements identify it.
-      const receiptNotice = f.page.getByText(/Accès client à activer : ouvrez sa fiche/);
+      const receiptNotice = f.page.getByText(/Colis .* réceptionné — casier C-01/);
       assert.equal(await receiptNotice.isVisible(), true, 'The reception notice is still displayed before the next action');
       await f.page.getByRole('button', { name: 'Réceptionner des cartons', exact: true }).first().click();
       await dialog.waitFor();

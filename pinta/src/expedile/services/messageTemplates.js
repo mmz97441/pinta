@@ -1,6 +1,7 @@
 import { eur, getPrenom } from '../utils';
 import { receptionCartonManifest, hasCompleteReceptionMeasurements } from '../domain/reception';
 import { measureShipment, volumetricDivisor } from '../domain/quote';
+import { invoiceRequestText } from '../domain/invoiceRequest';
 
 /** The saved body is the actual body used by preview and delivery. Unknown variables fail visibly. */
 export function renderTemplate(body, { client, colis = {}, destination = {}, settings = {} }) {
@@ -30,12 +31,7 @@ export function renderTemplate(body, { client, colis = {}, destination = {}, set
         '30_jours': 'à 30 jours',
         fin_de_mois: 'en fin de mois',
       }[colis.modePaiementPro] || 'à convenir avec votre interlocuteur',
-    documents_attendus:
-      client.type === 'pro'
-        ? 'Les documents de douane restent nécessaires à l’expédition.'
-        : colis.factures?.some((f) => f.valide)
-          ? 'Facture reçue et vérifiée.'
-          : 'Merci de joindre la facture d’achat (photo lisible ou PDF) pour établir le devis final.',
+    documents_attendus: invoiceRequestText(colis),
     lien_espace:
       typeof window !== 'undefined' ? `${window.location.origin}/colis/${colis.id || ''}` : '',
     ref: colis.ref || '',
