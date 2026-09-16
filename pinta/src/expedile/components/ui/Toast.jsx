@@ -21,7 +21,9 @@ export default function Toast() {
 
   return (
     <div
-      className="fixed top-4 left-4 right-4 z-50 px-5 py-3.5 rounded-2xl text-white text-sm font-semibold text-center whitespace-pre-line anim-slide-down"
+      role={type === 'error' ? 'alert' : 'status'}
+      aria-atomic="true"
+      className="pointer-events-none fixed top-4 left-4 right-4 z-50 px-5 py-3.5 rounded-2xl text-white text-sm font-semibold text-center whitespace-pre-line anim-slide-down"
       style={{
         maxWidth: 440,
         margin: '0 auto',
@@ -34,7 +36,7 @@ export default function Toast() {
       {action && (
         <button
           onClick={() => { action.onClick(); setToast(''); }}
-          className="mt-2 px-4 py-1.5 rounded-lg text-xs font-bold transition-colors"
+          className="pointer-events-auto min-h-11 mt-2 px-4 py-1.5 rounded-lg text-xs font-bold transition-colors"
           style={{ background: 'rgba(255,255,255,0.2)', color: '#fff' }}
         >
           {action.label}

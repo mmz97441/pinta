@@ -133,7 +133,11 @@ async function run() {
       assert.equal(secondReceipt.input.desc_contenu, 'Carton reçu');
       assert.deepEqual(secondReceipt.input.dims_par_colis, [{ dimL: 25, dimW: 35, dimH: 45, poids: 3.25 }]);
       // Attach a new physical carton with no known supplier/tracking: measurements identify it.
+      const receiptNotice = f.page.getByText(/Accès client à activer : ouvrez sa fiche/);
+      assert.equal(await receiptNotice.isVisible(), true, 'The reception notice is still displayed before the next action');
       await f.page.getByRole('button', { name: 'Réceptionner des cartons', exact: true }).first().click();
+      await dialog.waitFor();
+      assert.equal(await receiptNotice.isVisible(), true, 'The next receipt opens while the notice remains displayed, including over the mobile header');
       await dialog.getByPlaceholder('Rechercher un client…').fill('Camille');
       await dialog.getByRole('button').filter({ hasText: /Exemple/ }).first().click();
       await dialog.getByRole('button').filter({ hasText: 'EXP-TEST-002' }).click();
@@ -165,6 +169,8 @@ async function run() {
       const darkAxe = await new AxeBuilder({ page: f.page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
       await fs.writeFile(path.join(out, `axe-file-${mobile ? 'mobile' : 'desktop'}-dark.json`), JSON.stringify(darkAxe.violations, null, 2));
       assert.deepEqual(darkAxe.violations.map(v => ({ id: v.id, nodes: v.nodes.map(n => ({ target: n.target, summary: n.failureSummary })) })), []);
+      assert.deepEqual(f.errors, [], 'No uncaught exception through the complete reception workflow');
+      assert.deepEqual(f.networkDenied, [], 'Every business request stays within the local fixture transport');
       results.push({ viewport: mobile ? '390x844' : '1440x1000', filters: 'PASS', nextDossier: 'PASS', scannerFocus: 'PASS', receiptCartons: 'PASS', stickyAction: 'PASS', focusedMeasurementUnobscured: mobile ? 'PASS new receipt and attachment' : 'mobile-only check', conversationKeyboardAndReturn: 'PASS', mandatoryReceiptMeasurements: 'PASS', newClientReceipt: 'PASS', appendMeasurementsPreserved: 'PASS', cartonWithoutTracking: 'PASS', receptionAndPackingSeparated: 'PASS', prohibitedItemsPersistence: 'PASS', axeReceiptAndDarkFile: 'PASS', darkOverflow: 'PASS', pageErrors: f.errors, unexpectedNetwork: f.networkDenied });
       await f.context.close();
     }

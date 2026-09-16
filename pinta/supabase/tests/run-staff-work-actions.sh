@@ -5,7 +5,7 @@ container=${PINTA_STAFF_WORK_DB_CONTAINER:-pinta-staff-work-db}
 docker run --pull=never --rm --name "$container" --network none -e POSTGRES_HOST_AUTH_METHOD=trust -d postgres:17-alpine -c wal_level=logical > /dev/null
 trap 'docker rm -fv "$container" > /dev/null 2>&1' EXIT
 attempt=0
-until docker exec "$container" pg_isready -U postgres > /dev/null 2>&1; do
+until docker exec "$container" pg_isready -h 127.0.0.1 -U postgres > /dev/null 2>&1; do
  attempt=$((attempt+1));if [ "$attempt" -ge 30 ]; then exit 1; fi;sleep 1
 done
 sql() { docker exec -i "$container" psql -q -U postgres -v ON_ERROR_STOP=1 -o /dev/null "$@"; }
