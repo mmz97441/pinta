@@ -155,6 +155,11 @@ async function openReceived(page, count) {
     await context.close();
 
     fixture = await setup(browser, 'preparateur');
+    // Viewing and importing are separate permissions. A preparation-only user
+    // no longer opens the invoice workspace implicitly.
+    const viewingPermission = { staff_id: fixture.tables.staff_users[0].id, perm_factures_voir: true };
+    fixture.tables.staff_permissions = [viewingPermission];
+    fixture.tables.staff_users[0].staff_permissions = viewingPermission;
     fixture.tables.factures = []; fixture.tables.lignes = [];
     Object.assign(fixture.tables.colis[0], { statut: 'autorise', paiement_date: null });
     fixture.tables.messages = [first];

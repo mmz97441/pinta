@@ -38,6 +38,7 @@ Parcours : sélectionner la copie → **Retirer cette facture en double** → ch
 - 7 scénarios de préparation autonome : ordinateur/mobile, accès limité au préparateur, accord client requis, factures absentes ou non validées, reprise par un collègue chargé du devis et conflits de version.
 - Les recettes générales, réception/devis, organisation de l’équipe et devis/client passent avec la nouvelle navigation. Les assertions métier ont été conservées.
 - Audit d’accessibilité du formulaire de retrait mobile et de la préparation ; 121 tests unitaires application réussis.
+- Les 23 scénarios factures/préparation ont également réussi sur l’interface publiée, avec des API métier fictives et sans agir sur les dossiers réels.
 
 La migration du retrait manuel est appliquée et vérifiée en production après répétition dans une transaction annulée. Les compteurs métier sont restés inchangés.
 
