@@ -2,7 +2,7 @@
 
 Les 85 entrées du rapport ont été traitées : 21 opérations, 16 équipe, 22 client et 26 administration. Les changements et les choix de périmètre sont consignés individuellement dans les annexes ci-dessous. Une entrée d’audit n’équivaut pas à un bug ; certaines demandent une clarification ou une décision produit.
 
-**Publication :** les cinq fonctions serveur et les migrations `20260917000001` à `20260917000003` sont déployées et vérifiées. La publication de l’interface et son contrôle hébergé sont en cours ; la preuve de version sera ajoutée après confirmation.
+**Publication terminée :** interface disponible sur [expedile.app](https://expedile.app), correctifs intégrés à `main` par la [PR n°7](https://github.com/mmz97441/pinta/pull/7). Version fonctionnelle publiée et contrôlée : `e83e6ae2e4dc447484259ed8703c9fc3cf472996` (sources testées `b3551df`). Les cinq fonctions serveur et les migrations `20260917000001` à `20260917000003` sont également déployées et vérifiées.
 
 ## Ce qui change pour l’équipe
 
@@ -59,3 +59,14 @@ Ces contrôles ne constituent pas une étude d’usage auprès d’enfants ou de
 - [Audit de départ](audit-simplification-expedile-2026-09-17.md)
 
 Les scripts de recette sont conservés dans `pinta/tests` et `pinta/supabase/tests`. Les sorties locales `/tmp/...` nommées dans les annexes sont des preuves de session ; les nouvelles suites sont intégrées au workflow GitHub pour une exécution reproductible et des artefacts téléchargeables.
+
+## Preuves de publication
+
+- Vérifications GitHub réussies : [commit de livraison](https://github.com/mmz97441/pinta/actions/runs/35230901685) et [proposition intégrée](https://github.com/mmz97441/pinta/actions/runs/35230990610). Sources de l’application identiques entre le commit testé et le commit de fusion.
+- Déploiement de production contrôlé : `dpl_7RQYmZiU1BGqKm96yg3hSYd2EZ6m`, état `READY`, branche `main`, domaine `expedile.app`.
+- Recette publique après déploiement : **23 contrôles HTTP réussis**, ressources présentes, ressource inexistante bien refusée, connexion visible sur ordinateur/mobile, zéro erreur JavaScript. Échec de connexion simulé localement ; aucune authentification réelle utilisée. Résultat de session : `/tmp/pinta-production-simplicity-20260917/report.json`.
+- Fonctions actives : `send-telegram` 16, `relances-auto` 16, `telegram-inbox-document` 1, `get-tracking` 10, `create-staff-user` 13. Les quatre fonctions réservées au personnel refusent les appels anonymes avec HTTP 401.
+- Huit nouvelles commandes SQL présentes : exécution anonyme interdite, permissions métier contrôlées côté serveur ; aucun ancien rappel automatique en attente.
+- Sauvegarde de déploiement conservée localement dans `.deployment-backups/2026-09-17-simplification`, exclue du dépôt public. Les fichiers utilisateur antérieurs sans lien avec cette livraison restent intacts.
+
+En cas de retour arrière de l’interface, conserver la protection serveur contre les relances automatiques et les sauvegardes métier. Les migrations sont additives ; restaurer une ancienne interface ne nécessite pas d’effacer des dossiers ou de réintroduire les anciens rappels.

@@ -49,7 +49,7 @@ Preuves actuelles :
 - `/tmp/pinta-admin-unit-edge.log` : 15 tests unitaires/import/export/Edge réussis.
 - `npm run build` et ESLint ciblé : réussis avant intégration ; recontrôle global et recette finale figée par root.
 
-Déploiement requis, à effectuer par l’intégrateur après validation globale : migration01 avant le frontend, puis redéploiement de `create-staff-user` avec `APP_URL` HTTPS existant. Aucune nouvelle clé secrète ni nouvelle entrée de fonction n’est requise. Le déploiement de la migration doit être validé et commité avant tout usage des nouvelles valeurs enum d’abonnement.
+Déploiement réalisé par l’intégrateur après validation globale : migration01 enregistrée avant publication du frontend, et `create-staff-user` publié en version13 avec `APP_URL` HTTPS existant. Aucune nouvelle clé secrète ni nouvelle entrée de fonction n’est requise. Le déploiement de la migration doit être validé et commité avant tout usage des nouvelles valeurs enum d’abonnement.
 
 ## Contre-revue indépendante des changements root
 

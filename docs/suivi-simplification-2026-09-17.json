@@ -1,6 +1,23 @@
 {
   "version_depart": "19d20352f288eea2b1f33edfa1cd6ddbea54a8e4",
-  "publication": "Serveur publié et vérifié ; interface en cours de publication.",
+  "publication": {
+    "statut": "publiée et vérifiée",
+    "url": "https://expedile.app",
+    "branche": "main",
+    "version_fonctionnelle": "e83e6ae2e4dc447484259ed8703c9fc3cf472996",
+    "sources_testees": "b3551dfccbfd1b867527d188394ca5fabbf1e928",
+    "pr": "https://github.com/mmz97441/pinta/pull/7",
+    "ci": [
+      "https://github.com/mmz97441/pinta/actions/runs/35230901685",
+      "https://github.com/mmz97441/pinta/actions/runs/35230990610"
+    ],
+    "vercel_deploiement_verifie": "dpl_7RQYmZiU1BGqKm96yg3hSYd2EZ6m",
+    "supabase_migrations": [
+      "20260917000001",
+      "20260917000002",
+      "20260917000003"
+    ]
+  },
   "points": [
     {
       "id": "O01",
@@ -832,6 +849,8 @@
     "edge": 65,
     "a11y_combinaisons": 32,
     "sql_admin_suivi": 50,
-    "messages_reels_envoyes_en_recette": 0
+    "messages_reels_envoyes_en_recette": 0,
+    "production_http": 23,
+    "production_authentifications_reelles": 0
   }
 }

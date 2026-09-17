@@ -4,7 +4,7 @@ Périmètre E01–E16, composants communs et commandes serveur associées. Les t
 
 | Point | Modification et décision | Contrôle |
 |---|---|---|
-| E01 | Navigation mobile : Mon travail, Dossiers, Conversations, Plus. Clients reste dans Plus. Les entrées restent filtrées par les permissions. | Recette mobile ; accès direct Conversations sans attribution d’une tâche. |
+| E01 | Navigation mobile : Mon travail, Dossiers, Conversations, Plus. Clients reste dans Plus. Compteur des conversations à traiter et documents à rattacher, distinct des messages non lus. Les entrées restent filtrées par les permissions. | Recette mobile ; accès direct Conversations sans attribution d’une tâche. |
 | E02 | Recherche courte, filtre Mission replié, organisation en bas de page. La première tâche complète est visible à 390 × 844. | Mesure de la position du premier article, scénarios personnels et accessibilité. |
 | E03 | Prendre cette tâche, Commencer ou Reprendre selon son état. Consultation nommée « Consulter sans commencer ». Prochaine tâche identifiée par client, EXP et action. | Tests de consultation sans mutation, ordre des priorités, relais et retour aux filtres. |
 | E04 | Missions et disponibilité regroupées ; densité et mission initiale sous Options d’affichage. Confirmation persistante après sauvegarde, Annuler séparé. | Conflit de version conserve la saisie ; indisponibilité ne transfère pas les tâches. |
@@ -38,3 +38,5 @@ Périmètre E01–E16, composants communs et commandes serveur associées. Les t
 - `pinta/tests/departure-readiness.test.mjs`, `draft-store.test.mjs`.
 - `pinta/supabase/tests/inbox-preview.edge.test.cjs`, `conversation-outbox.test.cjs`, `client-outgoing-tracking.sql`.
 - Vérification globale et versions publiées : [rapport de livraison](implementation-simplicite-2026-09-17.md).
+
+Clôture intégration : huit recettes équipe réussies, dont les retours dans une liste de 90 dossiers en formats ordinateur et mobile ; 32 combinaisons axe réussies sur le build final. La publication et la recette du domaine public sont attestées dans le rapport principal.
