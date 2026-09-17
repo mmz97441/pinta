@@ -65,11 +65,24 @@ Résultats locaux avant publication :
 
 - Lint et compilation de production réussis ; 166 tests applicatifs et 65 tests des fonctions périphériques réussis.
 - 9 tests d’extraction du référentiel et contrôle de reproduction exacte des 10 790 lignes réussis.
-- 214 assertions SQL, 43 comparaisons de calcul JavaScript/PostgreSQL et deux courses concurrentes réelles réussies.
+- 214 assertions SQL et 43 comparaisons de calcul JavaScript/PostgreSQL réussies ; une course réelle à deux sessions produit un seul enregistrement et un conflit explicite. Une modification d’article entre deux interventions invalide également la version précédente.
 - 12 scénarios navigateur douaniers réussis, dont recherche, correction, conflits, mobile et contrôle d’accessibilité ; 21 scénarios connexes de navigation, factures et conflits de devis également réussis.
-- Migration et import complets répétés sur la base cible dans une transaction annulée. Le même SQL sera appliqué ; les fichiers sont contrôlés par empreinte avant chaque opération.
+- Migration et import complets répétés sur la base cible dans une transaction annulée, puis appliqués avec exactement le même SQL. Les fichiers sont contrôlés par empreinte avant chaque opération.
 
-Les preuves finales de publication sont ajoutées après les contrôles de la version déployée. Aucun devis client réel n’est recalculé pour les tests.
+## Publication vérifiée
+
+- [PR nº 8 fusionnée dans main](https://github.com/mmz97441/pinta/pull/8), code `450285cb70b292eed0946ba548fc6bb3d2bb2478`, fusion `5a6c1c1457bcd4d0c758f9358c1703d89b3f434f`.
+- Deux recettes GitHub complètes réussies avant fusion : [contrôle de branche](https://github.com/mmz97441/pinta/actions/runs/35245588011), [contrôle de fusion proposée](https://github.com/mmz97441/pinta/actions/runs/35245649192). Le code applicatif de main est identique au code testé.
+- Déploiement Vercel de la fusion `dpl_4xutCservpGWwtB56HiqrRQ65njt`, état `READY`, cible `production`, alias **expedile.app**, branche `main`, SHA de fusion ci-dessus.
+- JavaScript effectivement téléchargé : `/assets/index-CclZRJMj.js`, SHA-256 `c2f7945d16c153a428ac5e2792633832fd6e70b3deb84d2fe5f3ecb7fcb2a4f3`. Les libellés du classement, de la correction et les deux nouvelles commandes y sont présents.
+- Après publication : **23 contrôles HTTP réussis**, écran de connexion sur ordinateur et mobile vérifié, aucune erreur JavaScript. Le test d’échec de connexion est simulé localement ; aucune connexion client réelle n’a été tentée.
+- Les deux migrations sont enregistrées en production ; **10 790 références** chargées pour `974`, deux références aux taux incomplets préservées comme telles. Les nouvelles commandes refusent l’accès anonyme et vérifient les permissions métier.
+- La recherche a été exécutée en production dans une transaction en lecture seule : `30063000` renvoie bien la référence générale à 3 %/2 % et son exception à 0 %/0 %, issues de la page 136 du recueil de juin.
+- La table temporaire privée d’import a été supprimée après vérification. Les sauvegardes techniques restent privées, hors du dépôt public.
+
+Aucun devis client réel n’a été recalculé, aucun classement client n’a été créé et aucune notification n’a été envoyée pendant cette recette. Les parcours métier authentifiés ont été vérifiés sur des données fictives ; la recette du site réel est limitée aux accès publics et à la recherche douanière en lecture seule.
+
+Pour voir la nouvelle version dans un onglet déjà ouvert, actualiser la page, puis ouvrir **Dossier → Devis → Classement douanier**. Le droit de calcul du devis et un dossier autorisé, en préparation et non réglé sont nécessaires pour modifier les taux.
 
 ## Fichiers principaux
 
