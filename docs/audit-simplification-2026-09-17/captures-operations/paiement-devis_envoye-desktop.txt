@@ -1,0 +1,42 @@
+EXPÉDÎLE
+Réceptionner des cartons
+Mon travail
+Dossiers d’expédition
+Conversations
+Équipe
+Départs
+Clients
+Estimation
+Paramètres
+Réduire
+C
+
+Camille
+
+Direction
+
+EXP-TEST-001
+Paiement
+
+Exemple Camille · Réunion
+
+Contexte
+Revenir au devis
+Tâche du dossier
+Réception
+Accord client
+Préparation
+Factures
+Devis
+Paiement
+Expédition
+Livraison
+Aller à l’expédition
+En attente de paiement
+
+Montant à payer
+
+62.39 €
+
+Préparer une relance de paiement
+Corrections

@@ -16,6 +16,11 @@ export async function dispatchOutbox(db: any, outboxId: string) {
   }
   const outbox = claimed.data;
   try {
+    if (String(outbox.idempotency_key || '').startsWith('reminder:')) {
+      throwDb(await db.from('notification_outbox').update({ status: 'cancelled', last_error: 'Rappel automatique arrêté : l’équipe décide de l’envoi.' }).eq('id', outbox.id));
+      throwDb(await db.from('messages').update({ statut: 'echec' }).eq('id', outbox.message_id));
+      return { ok: false, status: 'cancelled', messageId: outbox.message_id };
+    }
     const [message, client, colis] = await Promise.all([
       db.from('messages').select('*').eq('id', outbox.message_id).single(),
       db.from('clients').select('telegram_chat_id').eq('id', outbox.client_id).single(),

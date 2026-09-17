@@ -81,13 +81,13 @@ async function main() {
     await dialog.getByRole('button').filter({ hasText: 'EXP-TEST-001' }).first().click();
     await dialog.getByRole('button', { name: '+ Ajouter un carton', exact: true }).click();
     for (const [label, value] of [['Longueur', '20'],['Largeur','20'],['Hauteur','20'],['Poids','2']]) await dialog.getByRole('spinbutton', { name: `${label} à réception (${label === 'Poids' ? 'kg' : 'cm'}) · carton 3`, exact: true }).fill(value);
-    await dialog.getByRole('button', { name: 'Rattacher à EXP-TEST-001', exact: true }).click();
+    await dialog.getByRole('button', { name: /Enregistrer le.*carton.*dans EXP-TEST-001/ }).click();
     await dialog.getByText(/cette ligne est vide avant un carton renseigné/).waitFor();
     assert.equal(f.requests.filter(r => r.method === 'PATCH' && r.path.endsWith('/colis')).length, 0);
     assert.equal(f.tables.colis[0].nb_colis, 1);
     await dialog.getByRole('button', { name: 'Supprimer le carton 2', exact: true }).click();
     assert.equal(await dialog.getByRole('spinbutton', { name: 'Poids à réception (kg) · carton 2', exact: true }).inputValue(), '2');
-    await dialog.getByRole('button', { name: 'Rattacher à EXP-TEST-001', exact: true }).click();
+    await dialog.getByRole('button', { name: /Enregistrer le.*carton.*dans EXP-TEST-001/ }).click();
     await dialog.waitFor({ state: 'hidden' });
     assert.equal(f.tables.colis[0].nb_colis, 2);
     assert.equal(f.tables.colis[0].dims_par_colis[1].poids, 2);
@@ -101,7 +101,7 @@ async function main() {
     await dialog.getByPlaceholder('Rechercher un client…').fill('Camille');
     await dialog.getByRole('button').filter({ hasText: 'Exemple Camille' }).first().click();
     await dialog.getByRole('button').filter({ hasText: 'Créer une nouvelle expédition' }).click();
-    await dialog.getByText(/une action de contact sera créée/).waitFor();
+    await dialog.getByText(/Le message sera envoyé à votre confirmation/).waitFor();
     assert.equal(await dialog.getByRole('button', { name: 'Réceptionner et notifier le client', exact: true }).count(), 0);
     await dialog.getByText(/Compléments de réception/).click();
     await dialog.getByRole('button', { name: 'Batteries lithium', exact: true }).click();
@@ -110,7 +110,7 @@ async function main() {
     await dialog.getByRole('button').filter({ hasText: 'EXP-TEST-001' }).first().click();
     const carton = (f.tables.colis[0].nb_colis || 1) + 1;
     for (const [label, value] of [['Longueur','20'],['Largeur','20'],['Hauteur','20'],['Poids','2']]) await dialog.getByRole('spinbutton', { name: `${label} à réception (${label === 'Poids' ? 'kg' : 'cm'}) · carton ${carton}`, exact: true }).fill(value);
-    await dialog.getByRole('button', { name: 'Rattacher à EXP-TEST-001', exact: true }).click();
+    await dialog.getByRole('button', { name: /Enregistrer le.*carton.*dans EXP-TEST-001/ }).click();
     await dialog.waitFor({ state: 'hidden' });
     assert.equal(f.tables.colis[0].produit_interdit, true);
     assert.ok(f.tables.colis[0].check_interdits.includes('Batteries lithium'));
@@ -128,7 +128,10 @@ async function main() {
     await dialog.waitFor({ state: 'hidden' });
     assert.equal(f.tables.colis.length, 2);
     assert.equal(f.requests.filter(r => r.path.endsWith('/queue_message')).length, 0);
-    await f.page.getByText(/Accès client à activer : ouvrez sa fiche/).waitFor();
+    await f.page.getByTestId('dossier-task-header').waitFor();
+    await f.page.getByRole('button', { name: 'Préparer la demande au client', exact: true }).click();
+    await f.page.getByRole('button', { name: 'Ouvrir le brouillon email', exact: true }).waitFor();
+    assert.equal(f.requests.filter(r => r.path.endsWith('/queue_message')).length, 0);
     assert.equal(await f.page.getByText(/notification disponible dans l’espace client/).count(), 0);
   });
   await scenario('departure-edit-conflict-preserves-colleague', 'directeur', async f => {
@@ -188,6 +191,7 @@ async function main() {
     f.tables.colis[0].archive = true; f.tables.colis[0].devis_total = 888;
     await f.page.reload(); await f.page.getByRole('button', { name: 'Voir le manifeste', exact: true }).click();
     await f.page.getByRole('region', { name: 'Manifeste confirmé' }).waitFor();
+    await f.page.locator('summary').filter({ hasText: 'Documents du départ' }).click();
     const downloadEvent = f.page.waitForEvent('download');
     await f.page.getByRole('button', { name: 'Manifeste Excel', exact: true }).click();
     const download = await downloadEvent; const target = path.join(out, 'manifest-fixture.xlsx'); await download.saveAs(target);

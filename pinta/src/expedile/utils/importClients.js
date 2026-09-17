@@ -2,7 +2,7 @@ import * as XLSX from 'xlsx';
 
 // ══════════ Mapping colonnes fichier → champs app ══════════
 
-const COL_MAP = {
+export const COL_MAP = {
   // Référence
   'reference': 'ref', 'référence': 'ref', 'ref': 'ref', 'ref client': 'ref',
   // N° Commande
@@ -139,7 +139,7 @@ function cleanTel(val) {
 // ══════════ Parse fichier ══════════
 
 /** Parse un fichier Excel ou CSV et retourne les clients mappés */
-export async function parseClientFile(file) {
+export async function parseClientFile(file, overrides = {}) {
   if (file.size > 10 * 1024 * 1024) throw new Error('Fichier trop volumineux (max 10 Mo)');
   const mime = (file.type || '').split(';', 1)[0].trim().toLowerCase();
   const csv = /\.csv$/i.test(file.name || '') || mime === 'text/csv';
@@ -181,7 +181,7 @@ export async function parseClientFile(file) {
   for (const rh of rawHeaders) {
     const normalized = normalizeHeader(rh);
     // Try exact match first, then try normalized without accents
-    const mapped = COL_MAP[normalized] || COL_MAP[normalized.normalize('NFD').replace(/[\u0300-\u036f]/g, '')];
+    const mapped = Object.prototype.hasOwnProperty.call(overrides, rh) ? overrides[rh] : COL_MAP[normalized] || COL_MAP[normalized.normalize('NFD').replace(/[\u0300-\u036f]/g, '')];
     if (mapped) {
       headerMap[rh] = mapped;
     } else {
@@ -203,7 +203,7 @@ export async function parseClientFile(file) {
       abonnement: 'freemium', abonnementDebut: '', abonnementFin: '',
       notes: '', raisonSociale: '', siret: '', interlocuteur: '',
       // Extra fields from import
-      _ref: '', _numCommande: '',
+      _ref: '', _numCommande: '', _sourceRow: i + 2,
     };
 
     for (const [rawCol, fieldKey] of Object.entries(headerMap)) {
@@ -245,6 +245,8 @@ export async function parseClientFile(file) {
       continue;
     }
 
+    if (cl.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cl.email)) { errors.push(`Ligne ${i + 2} (${cl.nom}) : email invalide`); continue; }
+
     // Si pro et pas de raison sociale, mettre le nom
     if (cl.type === 'pro' && !cl.raisonSociale) {
       cl.raisonSociale = cl.nom;
@@ -277,8 +279,8 @@ export async function parseClientFile(file) {
 
 /** Détecte les doublons entre les clients importés et les clients existants */
 export function detectDuplicates(importedClients, existingClients) {
-  return importedClients.map((ic) => {
-    const dup = existingClients.find((ec) => {
+  return importedClients.map((ic, index) => {
+    const dup = [...existingClients, ...importedClients.slice(0, index)].find((ec) => {
       // Match par email
       if (ic.email && ec.email && ic.email.toLowerCase() === ec.email.toLowerCase()) return true;
       // Match par téléphone (derniers 8 chiffres)

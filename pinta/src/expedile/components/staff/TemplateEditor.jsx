@@ -1,6 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Eye, EyeOff, Save, RotateCcw, ChevronDown, ChevronUp } from 'lucide-react';
-import { BRAND } from '../../constants';
+import React, { useState, useRef } from 'react';
+import usePersistentDraft from '../../hooks/usePersistentDraft';
 import { useApp } from '../../context/AppContext';
 import { DEFAULT_BODIES } from '../../services/messageDefaults';
 
@@ -69,9 +68,9 @@ VAR_GROUPS.forEach((g) => g.vars.forEach((v) => { ALL_EXAMPLES[v.key] = v.ex; })
 
 // ── Templates par défaut ──
 const TEMPLATES = [
-  { key: 'reception', label: '📦 Réception', emoji: '📦' },
+  { key: 'reception', label: 'Réception seule (ancien modèle)' , emoji: '📦' },
   { key: 'facture_manquante', label: '📄 Facture manquante', emoji: '📄' },
-  { key: 'demande_feu_vert', label: '🟢 Demande feu vert', emoji: '🟢' },
+  { key: 'demande_feu_vert', label: 'Réception et demande d’accord', emoji: '🟢' },
   { key: 'feu_vert_recu', label: '✅ Feu vert confirmé', emoji: '✅' },
   { key: 'devis_final', label: 'Devis particulier', emoji: '' },
   { key: 'devis_final_pro', label: 'Devis professionnel', emoji: '' },
@@ -92,207 +91,41 @@ function renderPreview(text) {
 // ════════════════════════════════════════════
 // COMPONENT
 // ════════════════════════════════════════════
+const FIELD = 'min-h-11 w-full rounded-xl border border-gray-300 bg-transparent px-3 py-2 text-sm';
+const BUTTON = 'min-h-11 rounded-xl border border-gray-300 px-4 py-2 text-sm font-semibold disabled:opacity-50';
 export default function TemplateEditor() {
-  const {messageTemplates,saveMessageTemplate,flash}=useApp();
-  const [saving,setSaving]=useState(false);
-  const [selKey, setSelKey] = useState('reception');
+  const { messageTemplates, saveMessageTemplate } = useApp();
+  const [selKey, setSelKey] = useState('demande_feu_vert');
   const [canal, setCanal] = useState('telegram');
-  const [bodies, setBodies] = useState(()=>({...DEFAULT_BODIES,...messageTemplates}));
-  const [showPreview, setShowPreview] = useState(false);
-  const [showHistory, setShowHistory] = useState(false);
-  const [versions, setVersions] = useState({});
-  const [saved, setSaved] = useState(false);
-  const textareaRef = useRef(null);
-  useEffect(()=>setBodies(prev=>({...prev,...messageTemplates})),[messageTemplates]);
-
+  const [drafts, setDrafts, { storageAvailable }] = usePersistentDraft('admin:message-templates', {});
+  const [notice, setNotice] = useState(null); const [saving, setSaving] = useState(false); const lock = useRef(false); const textarea = useRef(null);
   const bodyKey = `${selKey}_${canal}`;
-  const corps = bodies[bodyKey] || '';
-
-  const setCorps = (val) => setBodies((prev) => ({ ...prev, [bodyKey]: val }));
-
-  const insertVariable = (varName) => {
-    const ta = textareaRef.current;
-    if (!ta) return;
-    const start = ta.selectionStart;
-    const end = ta.selectionEnd;
-    const insertion = `{{${varName}}}`;
-    const newText = corps.substring(0, start) + insertion + corps.substring(end);
-    setCorps(newText);
-    setTimeout(() => {
-      ta.focus();
-      ta.selectionStart = ta.selectionEnd = start + insertion.length;
-    }, 0);
+  const draft = drafts[bodyKey]; const stored = messageTemplates[bodyKey] ?? null;
+  const body = draft?.value ?? stored ?? DEFAULT_BODIES[bodyKey] ?? '';
+  const dirty = Boolean(draft && draft.value !== (draft.expected ?? DEFAULT_BODIES[bodyKey] ?? ''));
+  const change = value => setDrafts(previous => ({ ...previous, [bodyKey]: { expected: previous[bodyKey]?.expected ?? stored, value } }));
+  const forget = () => { setDrafts(previous => { const next = { ...previous }; delete next[bodyKey]; return next; }); setNotice(null); };
+  const save = async () => {
+    if (lock.current) return; const target = bodyKey; const expected = draft ? draft.expected : stored;
+    lock.current = true; setSaving(true); setNotice(null);
+    try {
+      if (!body.trim()) throw new Error('Le message ne peut pas être vide.');
+      const unknown = [...body.matchAll(/\{\{(\w+)\}\}/g)].map(match => match[1]).filter(key => !(key in ALL_EXAMPLES));
+      if (unknown.length) throw new Error(`Variables inconnues : ${[...new Set(unknown)].join(', ')}.`);
+      await saveMessageTemplate(selKey, canal, body, expected);
+      setDrafts(previous => { const next = { ...previous }; delete next[target]; return next; });
+      setNotice({ key: target, text: 'Modèle enregistré. Aucun message n’a été envoyé.' });
+    } catch (error) { setNotice({ key: target, error: true, text: `${error.message} Votre brouillon est conservé.` }); }
+    finally { lock.current = false; setSaving(false); }
   };
-
-  const handleSave = async () => {
-    if(saving)return;
-    if(!corps.trim()){flash({msg:'Le modèle ne peut pas être vide.',type:'error'});return;}
-    const unknown=[...corps.matchAll(/\{\{(\w+)\}\}/g)].map(m=>m[1]).filter(key=>!(key in ALL_EXAMPLES));
-    if(unknown.length){flash({msg:`Variables inconnues : ${unknown.join(', ')}`,type:'error'});return;}
-    setSaving(true);
-    try { await saveMessageTemplate(selKey,canal,corps); }
-    catch(error){flash({msg:`Modèle non enregistré : ${error.message}`,type:'error'});setSaving(false);return;}
-    setSaving(false);
-    const vKey = bodyKey;
-    const prev = versions[vKey] || [];
-    setVersions((v) => ({
-      ...v,
-      [vKey]: [{ corps, date: new Date().toISOString() }, ...prev].slice(0, 10),
-    }));
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
-  };
-
-  const handleRestore = (version) => {
-    setCorps(version.corps);
-  };
-
-  const handleReset = () => {
-    setCorps(DEFAULT_BODIES[bodyKey] || '');
-  };
-
-  const historyItems = versions[bodyKey] || [];
-
-  return (
-    <div className="flex flex-col sm:flex-row gap-4 min-h-[500px]">
-      {/* ── Left: Template list ── */}
-      <div className="sm:w-48 flex-shrink-0 flex sm:block overflow-x-auto space-y-0.5">
-        {TEMPLATES.map((tpl) => {
-          const isActive = selKey === tpl.key;
-          return (
-            <button
-              key={tpl.key}
-              onClick={() => { setSelKey(tpl.key); setShowPreview(false); }}
-              className={`w-full min-h-[44px] whitespace-nowrap text-left px-3 py-2 rounded-lg text-xs font-semibold transition-all ${
-                isActive ? 'bg-white shadow-sm' : 'text-gray-600 hover:bg-gray-50'
-              }`}
-              style={isActive ? { color: BRAND.navy, borderLeft: `3px solid ${BRAND.navy}` } : {}}
-            >
-              {tpl.label}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* ── Right: Editor ── */}
-      <div className="flex-1 min-w-0 space-y-3">
-        {/* Canal toggle */}
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-bold" style={{ color: BRAND.navy }}>
-            {TEMPLATES.find((t) => t.key === selKey)?.label}
-          </span>
-          <div className="ml-auto flex rounded-lg overflow-hidden border" style={{ borderColor: '#E5E7EB' }}>
-            {['telegram', 'email'].map((c) => (
-              <button
-                key={c}
-                onClick={() => setCanal(c)}
-                className="px-3 py-1.5 text-xs font-bold transition-all"
-                style={canal === c ? { background: BRAND.navy, color: 'white' } : { color: '#6B7280' }}
-              >
-                {c === 'telegram' ? 'Telegram' : 'Email'}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Textarea */}
-        <textarea
-          ref={textareaRef}
-          value={corps}
-          onChange={(e) => setCorps(e.target.value)}
-          rows={12}
-          className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 text-sm leading-relaxed outline-none resize-y transition-all focus:border-blue-400"
-          style={{ color: BRAND.navy, fontFamily: canal === 'telegram' ? 'monospace' : 'inherit' }}
-        />
-
-        {/* Variable pills */}
-        <div className="space-y-2">
-          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Cliquez pour insérer une variable</p>
-          {VAR_GROUPS.map((group) => (
-            <div key={group.label} className="flex flex-wrap items-center gap-1">
-              <span className="text-[9px] font-bold text-gray-400 uppercase w-16 flex-shrink-0">{group.label}</span>
-              {group.vars.map((v) => (
-                <button
-                  key={v.key}
-                  onClick={() => insertVariable(v.key)}
-                  title={`${v.label} — ex: ${v.ex}`}
-                  className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors"
-                >
-                  {`{{${v.key}}}`}
-                </button>
-              ))}
-            </div>
-          ))}
-        </div>
-
-        {/* Actions */}
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setShowPreview((p) => !p)}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold transition-all"
-            style={{ background: showPreview ? BRAND.navy + '15' : '#F3F4F6', color: showPreview ? BRAND.navy : '#6B7280' }}
-          >
-            {showPreview ? <EyeOff size={13} /> : <Eye size={13} />}
-            {showPreview ? 'Masquer aperçu' : 'Aperçu'}
-          </button>
-          <button
-            onClick={handleReset}
-            className="flex items-center gap-1 px-3 py-2 rounded-lg text-xs font-semibold text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-colors"
-          >
-            <RotateCcw size={11} />
-            Réinitialiser
-          </button>
-          <div className="flex-1" />
-          <button
-            onClick={handleSave} disabled={saving}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold text-white transition-all active:scale-95"
-            style={{ background: saved ? '#10B981' : `linear-gradient(135deg, ${BRAND.navy}, ${BRAND.navyL})` }}
-          >
-            <Save size={13} />
-            {saved ? 'Sauvegardé ✓' : 'Sauvegarder'}
-          </button>
-        </div>
-
-        {/* Preview */}
-        {showPreview && (
-          <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 anim-fade">
-            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Aperçu avec données d'exemple</p>
-            <pre className="text-xs text-gray-800 whitespace-pre-wrap leading-relaxed" style={{ fontFamily: canal === 'telegram' ? 'monospace' : 'inherit' }}>
-              {renderPreview(corps)}
-            </pre>
-          </div>
-        )}
-
-        {/* History */}
-        {historyItems.length > 0 && (
-          <div>
-            <button
-              onClick={() => setShowHistory((p) => !p)}
-              className="flex items-center gap-1 text-[11px] text-gray-400 hover:text-gray-600 font-medium transition-colors"
-            >
-              Historique ({historyItems.length} version{historyItems.length > 1 ? 's' : ''})
-              {showHistory ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-            </button>
-            {showHistory && (
-              <div className="mt-2 space-y-1.5 anim-fade">
-                {historyItems.map((v, i) => (
-                  <div key={i} className="flex items-center gap-2 p-2 rounded-lg bg-gray-50 border border-gray-100">
-                    <span className="text-[10px] text-gray-400 flex-1">
-                      {new Date(v.date).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
-                    </span>
-                    <button
-                      onClick={() => handleRestore(v)}
-                      className="text-[10px] font-bold text-orange-600 hover:text-orange-800"
-                    >
-                      Restaurer
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-    </div>
-  );
+  const insert = key => { const field = textarea.current; const start = field?.selectionStart ?? body.length; const end = field?.selectionEnd ?? start; change(body.slice(0, start) + `{{${key}}}` + body.slice(end)); field?.focus(); };
+  return <section className="min-w-0 space-y-4"><header><h2 className="text-lg font-bold">Modèles de messages</h2><p className="mt-1 text-sm text-gray-600">Le message principal confirme la réception, demande l’accord et indique les factures manquantes. L’équipe garde la main sur chaque envoi.</p></header>
+    <div className="grid gap-3 sm:grid-cols-2"><label className="text-sm">Message à modifier<select className={FIELD} value={selKey} disabled={saving} onChange={e => setSelKey(e.target.value)}>{[...TEMPLATES].sort((a, b) => (a.key === 'demande_feu_vert' ? -1 : b.key === 'demande_feu_vert' ? 1 : 0)).map(t => <option key={t.key} value={t.key}>{t.label}{Object.keys(drafts).some(k => k.startsWith(`${t.key}_`)) ? ' · brouillon' : ''}</option>)}</select></label><label className="text-sm">Canal<select className={FIELD} disabled={saving} value={canal} onChange={e => setCanal(e.target.value)}><option value="telegram">Telegram</option><option value="email">Email</option></select></label></div>
+    <p className="text-sm text-gray-600">{dirty ? 'Modifications non enregistrées. ' : ''}Vos brouillons restent disponibles lorsque vous changez de modèle ou de rubrique.{!storageAvailable && ' Stockage du navigateur indisponible : gardez cet onglet ouvert.'}</p>
+    <div className="grid min-w-0 gap-4 xl:grid-cols-2"><label className="min-w-0 text-sm">Texte du message<textarea ref={textarea} disabled={saving} rows={12} className={`${FIELD} mt-1 resize-y font-mono`} value={body} onChange={e => change(e.target.value)} /></label><section className="min-w-0 rounded-xl border bg-gray-50 p-4" aria-label="Aperçu du message"><h3 className="font-semibold">Aperçu avec des données fictives</h3><p className="mt-3 whitespace-pre-wrap break-words text-sm">{renderPreview(body)}</p></section></div>
+    <details className="rounded-xl border p-3"><summary className="min-h-11 cursor-pointer font-semibold">Insérer une information du dossier</summary><div className="space-y-3">{VAR_GROUPS.map(group => <section key={group.label}><h3 className="text-sm font-semibold">{group.label}</h3><div className="mt-1 flex flex-wrap gap-2">{group.vars.map(v => <button key={v.key} disabled={saving} className={BUTTON} onClick={() => insert(v.key)}>{v.label}</button>)}</div></section>)}</div></details>
+    <div className="flex flex-wrap gap-2"><button disabled={saving || !dirty} className={`${BUTTON} brand-bg text-white`} onClick={save}>{saving ? 'Enregistrement…' : 'Enregistrer le modèle'}</button><button disabled={saving || !draft} className={BUTTON} onClick={forget}>Annuler et recharger</button><button disabled={saving} className={BUTTON} onClick={() => change(DEFAULT_BODIES[bodyKey] || '')}>Préparer le modèle par défaut</button></div>
+    {notice?.key === bodyKey && <p role={notice.error ? 'alert' : 'status'} className={`rounded-xl border p-3 text-sm ${notice.error ? 'bg-red-50 text-red-800' : 'bg-green-50 text-green-800'}`}>{notice.text}</p>}
+    <p className="text-xs text-gray-600">Les versions enregistrées sont consignées dans le journal serveur. Cet écran ne présente pas d’historique de restauration.</p>
+  </section>;
 }

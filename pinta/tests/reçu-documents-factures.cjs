@@ -17,7 +17,7 @@ async function openReceived(page, count) {
 }
 
 async function openConversation(page) {
-  await page.getByTestId('dossier-task-header').getByRole('button', { name: /^Contexte/ }).click();
+  await page.getByTestId('dossier-task-header').getByRole('button', { name: /^Détails du dossier/ }).click();
   await page.getByRole('dialog', { name: 'Contexte du dossier', exact: true }).getByRole('button', { name: 'Messages', exact: true }).click();
   await page.getByRole('log', { name: 'Messages avec le client', exact: true }).waitFor();
 }

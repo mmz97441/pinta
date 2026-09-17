@@ -4,14 +4,14 @@ const path = require('node:path');
 const vm = require('node:vm');
 const esbuild = require('../../node_modules/esbuild');
 let compiled;
-async function setup({open=true,template='relance_feu_vert',outboxStatus='pending',parcelStatus='attente_feu_vert',recentSentAt=null,archive=false}={}) {
+async function setup({open=true,template='relance_feu_vert',outboxStatus='pending',parcelStatus='attente_feu_vert',recentSentAt=null,archive=false,idempotencyKey='operator-message'}={}) {
   compiled ||= (await esbuild.build({entryPoints:[path.join(__dirname,'../functions/_shared/telegram.ts')],bundle:true,write:false,format:'cjs',platform:'node',plugins:[{name:'mock-supabase',setup(build){
     build.onResolve({filter:/^https:\/\/esm.sh\/\@supabase\//},()=>({path:'supabase',namespace:'mock'}));
     build.onLoad({filter:/.*/,namespace:'mock'},()=>({contents:'export const createClient=()=>{throw new Error("No external database");};',loader:'js'}));
   }}]})).outputFiles[0].text;
   const snapshot={trackings:['BOX'],trackings_detail:[],nb_colis:1};
   const rows={
-    notification_outbox:{id:'outbox',message_id:'message',colis_id:'parcel',client_id:'client',quote_version:1,status:outboxStatus,attempts:0},
+    notification_outbox:{id:'outbox',message_id:'message',colis_id:'parcel',client_id:'client',quote_version:1,status:outboxStatus,attempts:0,idempotency_key:idempotencyKey},
     messages:{id:'message',texte:'Synthetic message',template,statut:'envoi',request_snapshot:snapshot},
     clients:{id:'client',telegram_chat_id:'fixture-chat'},
     colis:{id:'parcel',statut:parcelStatus,archive,attente_client_date:null,quote_version:1,...snapshot},
@@ -60,4 +60,11 @@ test('archiving after queueing cancels both preparation and payment reminders be
     assert.equal((await fixture.run()).status,'cancelled');assert.equal(fixture.requests,0);
     assert.equal(fixture.rows.notification_outbox.status,'cancelled');
   }
+});
+
+test('historical automatic reminders are cancelled before provider access while operator reminders still work',async()=>{
+ const automatic=await setup({open:false,idempotencyKey:'reminder:parcel:version:2'});
+ assert.equal((await automatic.run()).status,'cancelled');assert.equal(automatic.requests,0);assert.equal(automatic.checks,0);
+ const explicit=await setup({open:false,idempotencyKey:'manual-reminder-by-staff'});
+ assert.equal((await explicit.run()).status,'sent');assert.equal(explicit.requests,1);
 });

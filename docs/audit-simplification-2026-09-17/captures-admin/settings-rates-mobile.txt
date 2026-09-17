@@ -1,0 +1,43 @@
+Mon travail
+Dossiers
+Clients
+Plus
+EXPÉDÎLE
+Réceptionner
+
+CONFIGURATION PARTAGÉE
+
+Paramètres
+Retour
+Départs
+Tarifs
+Catégories
+Équipe et accès
+Telegram
+Messages
+Règles métier
+Produits interdits
+Tarifs de transport
+
+Les devis déjà enregistrés conservent leur version et leurs montants.
+
+Guadeloupe
+
+Forfait (€)
+Prix par kg (€)
+
+Martinique
+
+Forfait (€)
+Prix par kg (€)
+
+Réunion
+
+Forfait (€)
+Prix par kg (€)
+
+Mayotte
+
+Forfait (€)
+Prix par kg (€)
+Enregistrer les tarifs

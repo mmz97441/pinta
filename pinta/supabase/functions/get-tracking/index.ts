@@ -41,7 +41,8 @@ Deno.serve(async (req: Request) => {
       .eq('token', token)
       .maybeSingle();
 
-    if (linkErr || !link) {
+    if (linkErr) throw linkErr;
+    if (!link) {
       return new Response(JSON.stringify({ ok: false, error: 'Lien introuvable' }), { status: 404, headers: cors });
     }
 
@@ -50,12 +51,13 @@ Deno.serve(async (req: Request) => {
     }
 
     // 2. Client (juste nom + prenom)
-    const { data: client } = await supabase
+    const { data: client, error: clientError } = await supabase
       .from('clients')
       .select('id, nom, prenom')
       .eq('id', link.client_id)
       .maybeSingle();
 
+    if (clientError) throw clientError;
     if (!client) {
       return new Response(JSON.stringify({ ok: false, error: 'Client introuvable' }), { status: 404, headers: cors });
     }
@@ -150,6 +152,6 @@ Deno.serve(async (req: Request) => {
     }), { headers: cors });
 
   } catch (err) {
-    return new Response(JSON.stringify({ ok: false, error: String(err) }), { status: 500, headers: cors });
+    return new Response(JSON.stringify({ ok: false, error: 'Le suivi est momentanément indisponible. Réessayez.' }), { status: 500, headers: cors });
   }
 });

@@ -96,3 +96,26 @@ export function clientWorkState(colis, client = {}) {
   if (colis.conversationStatut === 'attente_client') return { section: 'todo', kind: 'messages', action: 'Répondre à l’équipe', journey };
   return { section: 'team', kind: 'none', action: 'Suivre mon expédition', journey };
 }
+
+/** Public readers are observers, never the account holder or payer. */
+export function publicJourney(colis, now) {
+  const journey = clientJourney(colis, now);
+  if (journey.quoteNeedsReview) return { ...journey, actor: 'Équipe Expedîle', next: 'Vérification du devis avant transmission au client.' };
+  if (journey.waiting) return { ...journey, label: 'En attente à la demande du client', actor: 'Client', next: 'La préparation attend un nouvel accord du client.' };
+  if (colis.statut === 'attente_feu_vert') return { ...journey, label: 'Accord du client attendu', actor: 'Client', next: 'Accord nécessaire avant la préparation.' };
+  if (['devis_envoye', 'attente_paiement'].includes(colis.statut)) return { ...journey, label: 'Règlement attendu du client', actor: 'Client', next: 'Le devis et les modalités de règlement sont disponibles dans son espace privé.' };
+  return { ...journey, actor: journey.actor === 'Notre équipe' ? 'Équipe Expedîle' : journey.actor, next: journey.next.replaceAll('votre colis', 'le colis').replaceAll('avec vous', 'avec le client').replaceAll('Consultez les échanges', 'Le client peut consulter ses échanges') };
+}
+
+export function outgoingTracking(colis, departures = []) {
+  if (typeof colis?.outgoingTracking === 'string' && colis.outgoingTracking.trim()) return colis.outgoingTracking.trim();
+  const departure = departures.find(item => item.id === colis?.envoiId);
+  return typeof departure?.trackingPrincipal === 'string' ? departure.trackingPrincipal.trim() : '';
+}
+
+export function latestLogisticsEvent(colis, now = Date.now()) {
+  return [['Livraison confirmée', colis.dateLivraison], ['Expédition enregistrée', colis.dateExpedition], ['Réception enregistrée', colis.dateReception]]
+    .filter(([, date]) => date && Number.isFinite(Date.parse(date)) && Date.parse(date) <= now)
+    .sort((a,b) => Date.parse(b[1]) - Date.parse(a[1]))
+    .map(([label, date]) => ({ label, date }))[0] || null;
+}

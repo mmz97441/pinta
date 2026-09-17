@@ -1,0 +1,73 @@
+Mon travail
+Dossiers
+Clients
+Plus
+EXPÉDÎLE
+Réceptionner
+Mon travail
+
+Test · Disponible
+
+Équipe
+Mes missions et disponibilité
+Mission
+Toutes mes missions
+Réception
+Préparation
+Relation client
+Documents et devis
+Départs
+Coordination
+Rechercher dans mes tâches
+Rechercher dans tous les dossiers
+À faire1
+En attente0
+À prendre0
+À faire
+
+1 action(s) · 1 dossier(s) · 2 carton(s) reçu(s) · Tâches en cours incluses
+
+Traiter le suivant
+Préparer les cartons
+À faire
+
+EXP-TEST-001 · Camille Exemple
+
+Action disponible
+
+Commencer
+Consulter
+Suivi
+Réceptionner des cartons
+CLIENT
+Ajouter un carton à EXP-TEST-001
+Changer
+
+Deux achats à regrouper · Casier A-03
+
+Cartons reçus
+
+Mesurez et pesez chaque carton reçu ; fournisseur et suivi peuvent être ajoutés si connus. Entrée après un scan ajoute le suivant ; Tab parcourt les mesures.
+
+Carton 3
+Fournisseur · carton 3
+Numéro de suivi · carton 3
+Mesures à réception — avant optimisation
+Longueur (cm) *
+Largeur (cm) *
+Hauteur (cm) *
+Poids (kg) *
++ Ajouter un carton
+
+2 carton(s) déjà reçu(s) : leurs mesures sont conservées. Certaines mesures anciennes restent à compléter dans le dossier avant de demander un accord.
+
+CASIER (LAISSER VIDE POUR GARDER A-03)
+
+Exemple Camille · EXP-TEST-001
+
+0 / 0 carton(s) mesuré(s) à réception · Casier A-03
+
+Enregistrez la réception, puis préparez la demande d’accord et de factures. Le message sera envoyé à votre confirmation.
+
+Retour
+Rattacher à EXP-TEST-001

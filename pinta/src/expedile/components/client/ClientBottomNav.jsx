@@ -49,7 +49,7 @@ export default function ClientBottomNav() {
             <button
               key={tab.key}
               aria-current={active ? 'page' : undefined}
-              aria-label={`${tab.label}${badge > 0 ? ` (${badge} actions)` : ''}`}
+              aria-label={`${tab.label}${badge > 0 ? ` (${badge} ${tab.key === 'notifs' ? 'non lues' : 'actions attendues'})` : ''}`}
               onClick={() => navigate(tab.path)}
               className={`flex-1 flex flex-col items-center py-2 relative transition-all duration-200 ${active ? '' : 'text-gray-400'}`}
             >
@@ -65,7 +65,7 @@ export default function ClientBottomNav() {
                 )}
               </div>
               <span
-                className={`text-[10px] mt-0.5 transition-all ${active ? 'font-bold' : 'font-medium'}`}
+                className={`text-sm mt-0.5 transition-all ${active ? 'font-bold' : 'font-medium'}`}
                 style={active ? { color: 'var(--brand-text)' } : {}}
               >
                 {tab.label}

@@ -1,17 +1,18 @@
 import React, { useState, useMemo, useEffect, useId } from 'react';
-import { useNavigate, useParams, Navigate } from 'react-router-dom';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { ArrowLeft, Check, X, AlertTriangle, ExternalLink, Send, Download, FileSpreadsheet, ChevronDown, Crown } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { BRAND, ABONNEMENTS, getDestByCP } from '../../constants';
 import { eur, getPrenom } from '../../utils';
 import { Badge } from '../ui';
-import { exportRecapProExcel } from '../../utils/exportRecapPro';
+import { exportRecapProExcel, clientPaymentLabel, monthlyProDossiers, proRecapDossier } from '../../utils/exportRecapPro';
 import ShareLinkPanel from './ShareLinkPanel';
 import { supabase } from '../../lib/supabase';
 import { functionErrorMessage } from '../../services/functionErrors';
 import * as sb from '../../lib/supabaseData';
 import ColisModal from '../ColisModal';
 import { nextAction } from '../../domain/workQueues';
+import usePersistentDraft from '../../hooks/usePersistentDraft';
 import { receptionCartonManifest } from '../../domain/reception';
 
 function InviteClientAccess({ client, flash }) {
@@ -19,7 +20,7 @@ function InviteClientAccess({ client, flash }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [sent, setSent] = useState(false);
-  if (client.userId) return <p className="text-xs text-emerald-700 flex items-center gap-2"><Check size={14} />Espace client activé</p>;
+  if (client.userId) return <p className="text-xs text-emerald-700 flex items-center gap-2"><Check size={14} />Espace client rattaché à cette fiche</p>;
   async function invite() {
     if (busy) return;
     setBusy(true); setError('');
@@ -35,10 +36,12 @@ function InviteClientAccess({ client, flash }) {
 }
 
 function TelegramInvitation({ client, flash }) {
+  const { can } = useApp();
   const [invitation, setInvitation] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   async function create() {
+    if (busy || !can('perm_clients_modifier')) return;
     setBusy(true); setError('');
     try {
       const { data, error: rpcError } = await supabase.rpc('create_telegram_invitation', { p_client_id: client.id });
@@ -52,7 +55,7 @@ function TelegramInvitation({ client, flash }) {
   return <div className="p-3 rounded-xl border border-gray-200 space-y-2">
     <p className="text-xs font-bold text-gray-800">{client.telegramChatId ? 'Telegram connecté' : 'Connecter le Telegram du client'}</p>
     <p className="text-xs text-gray-500">Le client utilise son lien personnel puis appuie sur « Démarrer ». Le lien expire et ne peut servir qu’une fois.</p>
-    {invitation ? <><input readOnly aria-label="Lien personnel Telegram" value={invitation.url} onClick={(e) => e.target.select()} className="min-h-11 w-full px-3 text-xs bg-white rounded-lg border border-gray-200 text-gray-800" /><div className="flex flex-wrap gap-2"><button onClick={async () => { try { await navigator.clipboard.writeText(invitation.url); flash('Lien copié'); } catch { setError('Sélectionnez le lien pour le copier manuellement.'); } }} className="min-h-11 px-3 rounded-xl brand-bg text-white text-xs font-semibold">Copier le lien</button>{client.email && <a href={`mailto:${client.email}?subject=${encodeURIComponent('Votre connexion Telegram Expedîle')}&body=${encodeURIComponent(`Bonjour ${getPrenom(client)},\n\nConnectez votre Telegram à votre dossier Expedîle avec ce lien personnel : ${invitation.url}\n\nL’équipe Expedîle`)}`} className="min-h-11 inline-flex items-center px-3 text-xs font-semibold brand-t">Préparer un email</a>}<button onClick={create} disabled={busy} className="min-h-11 px-3 text-xs text-gray-500">Renouveler</button></div></> : <button onClick={create} disabled={busy} className="min-h-11 px-3 rounded-xl brand-bg text-white text-xs font-semibold disabled:opacity-50">{busy ? 'Création…' : 'Créer une invitation personnelle'}</button>}
+    {invitation ? <><input readOnly aria-label="Lien personnel Telegram" value={invitation.url} onClick={(e) => e.target.select()} className="min-h-11 w-full px-3 text-xs bg-white rounded-lg border border-gray-200 text-gray-800" /><div className="flex flex-wrap gap-2"><button onClick={async () => { try { await navigator.clipboard.writeText(invitation.url); flash('Lien copié'); } catch { setError('Sélectionnez le lien pour le copier manuellement.'); } }} className="min-h-11 px-3 rounded-xl brand-bg text-white text-xs font-semibold">Copier le lien</button>{client.email && <a href={`mailto:${client.email}?subject=${encodeURIComponent('Votre connexion Telegram Expedîle')}&body=${encodeURIComponent(`Bonjour ${getPrenom(client)},\n\nConnectez votre Telegram à votre dossier Expedîle avec ce lien personnel : ${invitation.url}\n\nL’équipe Expedîle`)}`} className="min-h-11 inline-flex items-center px-3 text-xs font-semibold brand-t">Préparer un email</a>}<button onClick={create} disabled={busy || !can('perm_clients_modifier')} className="min-h-11 px-3 text-xs text-gray-500">Renouveler</button></div></> : <button onClick={create} disabled={busy || !can('perm_clients_modifier')} className="min-h-11 px-3 rounded-xl brand-bg text-white text-xs font-semibold disabled:opacity-50">{busy ? 'Création…' : 'Créer une invitation personnelle'}</button>}
     {error && <p role="alert" className="text-xs text-red-600">{error}</p>}
   </div>;
 }
@@ -139,7 +142,7 @@ export default function StaffClientDetail() {
   // If route is /clients/:id but no such client found, redirect back.
   // Wait for clients to be loaded before deciding (avoid false negatives on first render).
   if (!isNewRoute && !existing && !dataLoading) {
-    return <Navigate to="/clients" replace />;
+    return <section className="p-6 space-y-3"><h1 className="text-xl font-bold">Client introuvable</h1><p>Cette fiche n’est pas disponible ou vous n’avez plus accès à ce client.</p><button className="min-h-11 underline" onClick={() => navigate('/clients')}>Retour aux clients</button></section>;
   }
 
   if (isNewRoute && !can('perm_clients_creer')) return <p role="alert" className="p-6 text-sm text-gray-600">Votre rôle ne permet pas de créer un client.</p>;
@@ -190,7 +193,7 @@ function EditClientPage({ cl, clients, data: initialData, updateClient, deleteCl
     return () => { active = false; };
   }, [cl.id]);
 
-  const [clDraft, setClDraft] = useState({
+  const initialDraft = {
     nom: cl.nomFamille || cl.nom || '',
     prenom: cl.prenom || '',
     tel: cl.tel || '',
@@ -208,7 +211,9 @@ function EditClientPage({ cl, clients, data: initialData, updateClient, deleteCl
     abonnementDebut: cl.abonnementDebut || '',
     abonnementFin: cl.abonnementFin || '',
     notes: cl.notes || '',
-  });
+    raisonSociale: cl.raisonSociale || '', siret: cl.siret || '', interlocuteur: cl.interlocuteur || '', modePaiement: cl.modePaiement || 'colis',
+  };
+  const [clDraft, setClDraft, { clear: clearClientDraft }] = usePersistentDraft(`client:edit:${cl.id}`, initialDraft);
   const [touched, setTouched] = useState({});
   const [billingOpen, setBillingOpen] = useState(false);
   const [billingMonth, setBillingMonth] = useState(new Date().getMonth());
@@ -245,25 +250,16 @@ function EditClientPage({ cl, clients, data: initialData, updateClient, deleteCl
     return errs;
   }, [clDraft, touched]);
 
-  const canSave = clDraft.nom && clDraft.nom.trim().length >= 2 && Object.keys(fieldErrors).length === 0;
+  const canSave = clDraft.nom && clDraft.nom.trim().length >= 2 && Object.keys(fieldErrors).length === 0 && (!clDraft.email || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clDraft.email));
 
   // ── Helpers ───────────────────────────────────────────────────────────────
   const colis = data.filter((p) => p.clientId === cl.id && p.statut !== 'annule');
   const actifs = data.filter((p) => p.clientId === cl.id && !p.archive && !['livre', 'annule'].includes(p.statut));
   const ca = data.filter((p) => p.clientId === cl.id && p.paiementMontant).reduce((sum, p) => sum + (p.paiementMontant || 0), 0);
   const dest = getDestByCP(cl.cp);
-  const hasColis = data.some((p) => p.clientId === cl.id && p.statut !== 'annule');
+  const hasColis = data.some((p) => p.clientId === cl.id);
 
-  function getProBillingData(month, year) {
-    return data.filter((c) => {
-      if (c.clientId !== cl.id) return false;
-      if (!['paye', 'expedie', 'transit', 'dedouanement', 'arrive', 'livraison', 'livre'].includes(c.statut)) return false;
-      const date = c.paiementDate || c.dateReception;
-      if (!date) return false;
-      const d = new Date(date);
-      return d.getMonth() === month && d.getFullYear() === year;
-    });
-  }
+  function getProBillingData(month, year) { return monthlyProDossiers(cl, data, month, year); }
 
   function patchDraft(field, value) {
     setClDraft((prev) => ({ ...prev, [field]: value }));
@@ -276,18 +272,18 @@ function EditClientPage({ cl, clients, data: initialData, updateClient, deleteCl
       return;
     }
     setSaving(true); setSaveError('');
-    try { await updateClient(cl.id, { ...clDraft, adresse: clDraft.adresseLigne1 }); setPanel('overview'); }
+    try { const { abonnement, abonnementDebut, abonnementFin, ...contact } = clDraft; await updateClient(cl.id, { ...contact, adresse: clDraft.adresseLigne1 }); clearClientDraft(); setClDraft(clDraft); setPanel('overview'); }
     catch (error) { setSaveError(error.message || 'Enregistrement impossible.'); }
     finally { setSaving(false); }
   }
 
   async function handleDelete() {
+    if (historyLoading || historyError) { setSaveError('Attendez le chargement complet de l’historique avant de supprimer cette fiche.'); return; }
     if (hasColis) {
       flash('Ce client a des colis actifs, impossible de le supprimer');
       return;
     }
-    try { const deleted = await deleteClient(cl.id); if (deleted) onDone(); }
-    catch (error) { setSaveError(error.message || 'Suppression impossible.'); }
+    ask(`Supprimer définitivement ${cl.nom} ?`, 'Cette fiche client sera supprimée. Aucun dossier existant ne sera supprimé par cette action.', async () => { try { const deleted = await deleteClient(cl.id); if (deleted) onDone(); } catch (error) { setSaveError(error.message || 'Suppression impossible.'); } }, { danger: true });
   }
 
   function handleOpenColis(colisId) {
@@ -371,7 +367,7 @@ function EditClientPage({ cl, clients, data: initialData, updateClient, deleteCl
 
         <nav aria-label="Sections de la fiche client" className="flex flex-wrap gap-2 border-b border-gray-200 p-3">{[['overview', 'Synthèse'], ['contact', 'Coordonnées'], ['admin', 'Abonnement et administration']].map(([key, label]) => <button key={key} onClick={() => setPanel(key)} aria-pressed={panel === key} className={`min-h-11 rounded-xl px-3 text-sm font-semibold ${panel === key ? 'brand-bg text-white' : 'text-gray-700 hover:bg-gray-100'}`}>{label}</button>)}</nav>
         {panel === 'overview' && <div className="space-y-5 p-4">
-          <section aria-label="Contact disponible" className="space-y-3"><h2 className="font-bold text-gray-800">Joindre ce client</h2><p className="text-sm text-gray-600">{cl.telegramChatId ? 'Telegram connecté' : 'Telegram non connecté'} · {cl.userId ? 'Espace client activé' : 'Accès au portail à activer'}</p><div className="flex flex-wrap gap-2">{cl.tel && <a href={`tel:${cl.tel}`} className="min-h-11 inline-flex items-center rounded-xl border border-gray-300 px-3 text-sm font-semibold">Appeler</a>}{cl.email && <a href={`mailto:${cl.email}`} className="min-h-11 inline-flex items-center rounded-xl border border-gray-300 px-3 text-sm font-semibold">Préparer un email</a>}{can('perm_colis_receptionner') && <button onClick={() => setReceiving(true)} className="min-h-11 rounded-xl brand-bg px-4 text-sm font-semibold text-white">Réceptionner pour ce client</button>}</div>{!cl.userId && <InviteClientAccess client={cl} flash={flash} />}{!cl.telegramChatId && <TelegramInvitation client={cl} flash={flash} />}</section>
+          <section aria-label="Contact disponible" className="space-y-3"><h2 className="font-bold text-gray-800">Joindre ce client</h2><p className="text-sm text-gray-600">{cl.telegramChatId ? 'Telegram connecté' : 'Telegram non connecté'} · {cl.userId ? 'Espace client rattaché à cette fiche' : 'Accès au portail à activer'}</p><div className="flex flex-wrap gap-2">{cl.tel && <a href={`tel:${cl.tel}`} className="min-h-11 inline-flex items-center rounded-xl border border-gray-300 px-3 text-sm font-semibold">Appeler</a>}{cl.email && <a href={`mailto:${cl.email}`} className="min-h-11 inline-flex items-center rounded-xl border border-gray-300 px-3 text-sm font-semibold">Préparer un email</a>}{can('perm_colis_receptionner') && <button onClick={() => setReceiving(true)} className="min-h-11 rounded-xl brand-bg px-4 text-sm font-semibold text-white">Réceptionner pour ce client</button>}</div>{!cl.userId && <InviteClientAccess client={cl} flash={flash} />}{!cl.telegramChatId && <TelegramInvitation client={cl} flash={flash} />}</section>
           <section aria-label="Expéditions ouvertes" className="space-y-3"><h2 className="font-bold text-gray-800">Expéditions ouvertes ({actifs.length})</h2>{actifs.length ? actifs.map((item) => <button key={item.id} onClick={() => handleOpenColis(item.id)} className="flex min-h-20 w-full flex-wrap items-center justify-between gap-3 rounded-xl border border-gray-200 p-3 text-left"><span><strong className="brand-t">{item.ref}</strong><span className="mt-1 block text-sm text-gray-700">{nextAction(item, cl)}</span><span className="mt-1 block text-xs text-gray-600">{receptionCartonManifest(item).nbColis} carton(s) reçus{item.casier ? ` · Casier ${item.casier}` : ''}</span></span><Badge statut={item.statut} /></button>) : <p className="text-sm text-gray-600">Aucune expédition ouverte.</p>}</section>
           <details className="rounded-xl border border-gray-200 p-3"><summary className="min-h-11 cursor-pointer font-semibold text-gray-800">Historique complet {history ? `(${history.length} dossiers)` : ''}</summary>{historyLoading && <p role="status" className="text-sm text-gray-600">Chargement de l’historique, archives comprises…</p>}{historyError && <p role="alert" className="text-sm text-red-700">Historique indisponible : {historyError}<button onClick={() => window.location.reload()} className="min-h-11 block underline">Réessayer</button></p>}{history?.map((item) => <button key={item.id} onClick={() => handleOpenColis(item.id)} className="flex min-h-14 w-full items-center justify-between gap-2 border-t border-gray-100 text-left text-sm"><span className="font-semibold brand-t">{item.ref}{item.archive ? ' · Archivé' : ''}</span><Badge statut={item.statut} /></button>)}</details>
         </div>}
@@ -516,51 +512,7 @@ function EditClientPage({ cl, clients, data: initialData, updateClient, deleteCl
             />
           </div>
 
-          {/* Forfait */}
-          <div>
-            <label className="text-[11px] font-bold text-gray-500 block mb-1.5 uppercase tracking-wide">
-              Forfait
-            </label>
-            <select
-              aria-label="Forfait" value={clDraft.abonnement}
-              onChange={(e) => patchDraft('abonnement', e.target.value)}
-              className="w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-sm outline-none focus:border-blue-300 transition-colors"
-              style={{ color: 'var(--brand-text)' }}
-            >
-              <option value="freemium">Freemium</option>
-              <option value="premium_mensuel">Premium Mensuel (13€/mois)</option>
-              <option value="premium_annuel">Premium Annuel (69€/an)</option>
-              <option value="vip">VIP Annuel (149€/an)</option>
-            </select>
-          </div>
-
-          {clDraft.abonnement !== 'freemium' && (
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-[11px] font-bold text-gray-500 block mb-1 uppercase tracking-wide">
-                  Début abonnement
-                </label>
-                <input
-                  type="date"
-                  aria-label="Début abonnement" value={clDraft.abonnementDebut || ''}
-                  onChange={(e) => patchDraft('abonnementDebut', e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-sm outline-none focus:border-blue-300 transition-colors"
-                />
-              </div>
-              <div>
-                <label className="text-[11px] font-bold text-gray-500 block mb-1 uppercase tracking-wide">
-                  Fin abonnement
-                </label>
-                <input
-                  type="date"
-                  aria-label="Fin abonnement" value={clDraft.abonnementFin || ''}
-                  onChange={(e) => patchDraft('abonnementFin', e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-sm outline-none focus:border-blue-300 transition-colors"
-                />
-              </div>
-            </div>
-          )}
-
+          {clDraft.type === 'pro' && <section className="rounded-xl border p-3 space-y-3"><h3 className="font-semibold">Facturation professionnelle</h3>{[['raisonSociale', 'Raison sociale'], ['siret', 'SIRET'], ['interlocuteur', 'Interlocuteur']].map(([key, label]) => <ValidatedField key={key} label={label} value={clDraft[key]} onChange={e => patchDraft(key, e.target.value)} />)}<label className="block text-sm">Modalité de paiement<select className="min-h-11 w-full rounded-xl border px-3" value={clDraft.modePaiement} onChange={e => patchDraft('modePaiement', e.target.value)}>{[['colis','Par colis'],['compte','Sur compte'],['30j','À 30 jours'],['fin_mois','En fin de mois'],['virement','Par virement']].map(([v,l]) => <option key={v} value={v}>{l}</option>)}</select></label></section>}
           {/* Notes internes */}
           <div>
             <label className="text-[11px] font-bold text-gray-500 block mb-1 uppercase tracking-wide">
@@ -576,6 +528,7 @@ function EditClientPage({ cl, clients, data: initialData, updateClient, deleteCl
           </div>
 
           </fieldset>
+          {panel === 'admin' && <SubscriptionEditor client={cl} />}
           {panel === 'contact' && cl.id && <><InviteClientAccess client={cl} flash={flash} /><TelegramInvitation client={cl} flash={flash} /></>}
 
           {saveError && <p role="alert" className="text-sm text-red-600">{saveError}</p>}
@@ -592,7 +545,7 @@ function EditClientPage({ cl, clients, data: initialData, updateClient, deleteCl
               Enregistrer
             </button>
             <button
-              onClick={() => setPanel('overview')}
+              onClick={() => { clearClientDraft(); setTouched({}); setSaveError(''); setPanel('overview'); }}
               className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-bold bg-gray-100 text-gray-600 transition-all active:scale-95 hover:bg-gray-200"
             >
               <X size={14} />
@@ -661,7 +614,7 @@ function EditClientPage({ cl, clients, data: initialData, updateClient, deleteCl
                 <FileSpreadsheet size={13} className="text-indigo-600 flex-shrink-0" />
                 <span className="text-xs font-bold text-indigo-800 flex-1">
                   Facturation
-                  {cl.methodePaiement === '30_jours' ? ' — Paiement 30 jours' : ' — Fin de mois'}
+                  {` — ${clientPaymentLabel(cl)}`}
                 </span>
                 <ChevronDown
                   size={13}
@@ -673,7 +626,7 @@ function EditClientPage({ cl, clients, data: initialData, updateClient, deleteCl
                   {/* Month/year selector */}
                   <div className="flex gap-2">
                     <select
-                      value={billingMonth}
+                      aria-label="Mois du récapitulatif" value={billingMonth}
                       onChange={(e) => setBillingMonth(Number(e.target.value))}
                       className="flex-1 text-xs font-semibold px-2 py-1.5 rounded-lg border border-indigo-200 bg-white text-indigo-800 outline-none"
                     >
@@ -682,7 +635,7 @@ function EditClientPage({ cl, clients, data: initialData, updateClient, deleteCl
                       ))}
                     </select>
                     <select
-                      value={billingYear}
+                      aria-label="Année du récapitulatif" value={billingYear}
                       onChange={(e) => setBillingYear(Number(e.target.value))}
                       className="text-xs font-semibold px-2 py-1.5 rounded-lg border border-indigo-200 bg-white text-indigo-800 outline-none"
                     >
@@ -694,7 +647,7 @@ function EditClientPage({ cl, clients, data: initialData, updateClient, deleteCl
                   {/* Summary */}
                   {(() => {
                     const billingColis = getProBillingData(billingMonth, billingYear);
-                    const total = billingColis.reduce((s, c) => s + (c.devisTotal || 0), 0);
+                    const total = billingColis.reduce((s, c) => s + (proRecapDossier(c).devisTotal || 0), 0);
                     return (
                       <div className="flex items-center gap-3 px-2.5 py-2 rounded-lg" style={{ background: '#F5F3FF' }}>
                         <div className="flex-1">
@@ -706,16 +659,17 @@ function EditClientPage({ cl, clients, data: initialData, updateClient, deleteCl
                           </p>
                         </div>
                         <button
+                          disabled={!can('perm_export_recap_pro') || !billingColis.length || historyLoading || Boolean(historyError)}
                           onClick={() => {
-                            const count = exportRecapProExcel(cl, data, billingMonth, billingYear);
+                            try { const count = exportRecapProExcel(cl, data, billingMonth, billingYear);
                             if (count > 0) flash(`Récap exporté : ${count} colis`);
-                            else flash('Aucun colis pour cette période');
+                            else flash('Aucun colis pour cette période'); } catch (error) { setSaveError(`Export impossible : ${error.message}`); }
                           }}
                           className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all active:scale-95 hover:bg-indigo-200"
                           style={{ background: '#E0E7FF', color: '#3730A3', border: '1px solid #A5B4FC' }}
                         >
                           <Download size={11} />
-                          Excel
+                          Exporter {billingColis.length} dossiers
                         </button>
                       </div>
                     );
@@ -736,7 +690,7 @@ function EditClientPage({ cl, clients, data: initialData, updateClient, deleteCl
           )}
 
           {/* Delete button — only if no colis */}
-          {!hasColis && can('perm_clients_supprimer') && (
+          {!hasColis && !historyLoading && !historyError && can('perm_clients_supprimer') && (
             <button
               onClick={handleDelete}
               className="w-full py-2.5 rounded-xl text-xs font-bold text-red-500 border border-red-200 hover:bg-red-50 transition-colors"
@@ -754,298 +708,22 @@ function EditClientPage({ cl, clients, data: initialData, updateClient, deleteCl
 // New client page — preserves the richer creation form
 // (extracted from previous showNewModal block)
 // ─────────────────────────────────────────────────────────────────────────────
+const FORM_FIELD = 'min-h-11 w-full rounded-xl border border-gray-300 bg-white px-3 py-2';
+function SubscriptionEditor({ client }) {
+  const { can, retryLoad } = useApp();
+  const values = { abonnement: client.abonnement || 'freemium', abonnementDebut: client.abonnementDebut || null, abonnementFin: client.abonnementFin || null };
+  const [draft, setDraft] = usePersistentDraft(`client:subscription:${client.id}`, { baseline: values, values });
+  const [busy, setBusy] = useState(false); const [notice, setNotice] = useState(null);
+  return <section className="rounded-xl border p-4 space-y-3"><h3 className="font-semibold">Offre et abonnement</h3><fieldset disabled={busy || !can('perm_clients_modifier_abonnement')} className="space-y-3"><label className="block text-sm">Offre<select className={FORM_FIELD} value={draft.values.abonnement} onChange={e => setDraft(p => ({ ...p, values: { ...p.values, abonnement: e.target.value } }))}>{draft.values.abonnement === 'premium' && <option value="premium">Premium (offre historique)</option>}{Object.entries(ABONNEMENTS).map(([id, a]) => <option key={id} value={id}>{a.label}</option>)}</select></label><div className="grid gap-3 sm:grid-cols-2">{[['abonnementDebut', 'Début abonnement'], ['abonnementFin', 'Fin abonnement']].map(([key, label]) => <label key={key} className="text-sm">{label}<input className={FORM_FIELD} type="date" value={draft.values[key] || ''} onChange={e => setDraft(p => ({ ...p, values: { ...p.values, [key]: e.target.value || null } }))} /></label>)}</div><button className="min-h-11 rounded-xl brand-bg text-white px-4" onClick={async () => { if (busy) return; setBusy(true); setNotice(null); try { const saved = await sb.saveClientSubscription(client.id, draft.values, draft.baseline); setDraft({ baseline: saved, values: saved }); setNotice({ text: 'Abonnement enregistré.' }); try { await retryLoad(); } catch { setNotice({ text: 'Abonnement enregistré. Actualisation de la fiche à réessayer.' }); } } catch (error) { setNotice({ error: true, text: error.message }); } finally { setBusy(false); } }}>Enregistrer l’abonnement</button></fieldset>{!can('perm_clients_modifier_abonnement') && <p className="text-sm text-gray-600">Vous pouvez consulter l’offre. Sa modification nécessite le droit Abonnement.</p>}{notice && <p role={notice.error ? 'alert' : 'status'}>{notice.text}</p>}</section>;
+}
 function NewClientPage({ onDone, onCancel }) {
-  const { addNewClient, flash } = useApp();
-  const [nd, setNd] = useState(emptyDraft());
-  const [saving, setSaving] = useState(false);
-  const [createError, setCreateError] = useState('');
-  const [justCreated, setJustCreated] = useState(null); // { id, cl } after save
-
-  const set = (k, v) => setNd((p) => ({ ...p, [k]: v }));
-  const isPro = nd.type === 'pro';
-
-  const LBL = 'text-[11px] font-bold text-gray-500 block mb-1 uppercase tracking-wide';
-  const INP = 'w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-sm outline-none focus:border-blue-300 transition-colors';
-
-  async function handleCreate() {
-    if (!nd.nom.trim()) { flash({ msg: 'Le nom est requis', type: 'warning' }); return; }
-    if (!nd.cp.trim() || !/^9[7-8]\d{3}$/.test(nd.cp.replace(/\s/g, ''))) { flash({ msg: 'Code postal DOM-TOM requis (97xxx)', type: 'warning' }); return; }
-    if (!nd.email.trim() && !nd.telegramUsername.trim()) { flash({ msg: 'Email ou Telegram requis — au moins un moyen de contact', type: 'warning' }); return; }
-    if (isPro && !nd.raisonSociale.trim()) { flash({ msg: 'La raison sociale est requise pour un pro', type: 'warning' }); return; }
-
-    if (saving) return;
-    setSaving(true); setCreateError('');
-    try {
-    const id = await addNewClient({
-      ...nd,
-      nom: nd.nom.trim(),
-      prenom: nd.prenom.trim(),
-      cp: nd.cp.trim(),
-      canal: nd.telegramUsername?.trim() ? 'telegram' : (nd.email?.trim() ? 'email' : 'telegram'),
-      modePaiement: isPro ? nd.modePaiement : 'colis', // Particuliers = toujours paiement par colis
-      abonnementDebut: nd.abonnementDebut || null,
-      abonnementFin: nd.abonnementFin || null,
-      dateNaissance: nd.dateNaissance || null,
-      points: 0,
-    });
-    flash({ msg: isPro ? 'Client pro créé avec succès' : 'Client créé avec succès', type: 'success' });
-    if (!id) throw new Error('La création du client n’a pas été confirmée.');
-    setJustCreated({ id, cl: { ...nd, id } });
-    } catch (error) { setCreateError(error.message || 'Création impossible.'); }
-    finally { setSaving(false); }
-  }
-
-  // After creation: show invitation block, then return to list when dismissed
-  if (justCreated) {
-    const cl = justCreated.cl;
-    return (
-      <div className="anim-fade max-w-3xl mx-auto pb-24">
-        <div className="flex items-center justify-between mb-4 pt-1">
-          <button
-            onClick={onDone}
-            className="flex items-center gap-1.5 text-sm font-semibold text-gray-600 hover:text-gray-900 transition-colors px-2 py-1.5 rounded-lg hover:bg-gray-100"
-          >
-            <ArrowLeft size={16} />
-            Retour aux clients
-          </button>
-        </div>
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-4">
-          <div className="flex items-start gap-2 p-3 rounded-xl bg-green-50 border border-green-200">
-            <Check size={14} className="text-green-600 flex-shrink-0 mt-0.5" />
-            <div>
-              <p className="text-xs font-bold text-green-800">Client créé avec succès</p>
-              <p className="text-[11px] text-green-600 mt-0.5">Envoyez-lui une invitation pour accéder à son espace.</p>
-            </div>
-          </div>
-
-          <InviteClientAccess client={cl} flash={flash} />
-          <TelegramInvitation client={cl} flash={flash} />
-
-          {cl.email && (
-            <a
-              href={`mailto:${cl.email}?subject=${encodeURIComponent('Bienvenue chez Expedîle !')}&body=${encodeURIComponent(`Bonjour ${getPrenom(cl)},\n\nVotre fiche client Expedîle a été créée. Contactez notre équipe pour activer votre accès si vous n’avez pas encore reçu vos identifiants.\n\nConnectez-vous ici : ${window.location.origin}\n\nÀ très vite !\nL'équipe Expedîle`)}`}
-              target="_blank"
-              rel="noreferrer"
-              className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl text-sm font-bold bg-blue-50 text-blue-700 border-2 border-blue-200 hover:bg-blue-100 transition-all active:scale-95"
-            >
-              <ExternalLink size={14} />
-              Inviter par email
-            </a>
-          )}
-
-          <button
-            onClick={onDone}
-            className="w-full py-2.5 rounded-xl text-sm font-bold bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors"
-          >
-            Terminer
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="anim-fade max-w-3xl mx-auto pb-24">
-      {/* ── Header ─────────────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between mb-4 pt-1">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={onCancel}
-            className="flex items-center gap-1.5 text-sm font-semibold text-gray-600 hover:text-gray-900 transition-colors px-2 py-1.5 rounded-lg hover:bg-gray-100"
-          >
-            <ArrowLeft size={16} />
-            Retour aux clients
-          </button>
-          <h2 className="text-xl font-black" style={{ color: 'var(--brand-text)' }}>Nouveau client</h2>
-          <div className="flex gap-1 bg-gray-100 rounded-lg p-0.5">
-            <button onClick={() => set('type', 'particulier')}
-              className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${!isPro ? 'bg-blue-500 text-white shadow' : 'text-gray-500'}`}>
-              Particulier
-            </button>
-            <button onClick={() => set('type', 'pro')}
-              className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${isPro ? 'text-white shadow' : 'text-gray-500'}`}
-              style={isPro ? { background: BRAND.goldD } : {}}>
-              Professionnel
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-5">
-
-        {/* ── Section : Abonnement ── */}
-        <div className="space-y-3">
-          <p className="text-xs font-black uppercase tracking-wider" style={{ color: 'var(--brand-text)' }}>Abonnement</p>
-          <div className="grid grid-cols-3 gap-3">
-            <div>
-              <label className={LBL}>Forfait *</label>
-              <select value={nd.abonnement} onChange={(e) => set('abonnement', e.target.value)} className={INP}>
-                <option value="freemium">Freemium</option>
-                <option value="premium_mensuel">Premium Mensuel</option>
-                <option value="premium_annuel">Premium Annuel</option>
-                <option value="vip">VIP Annuel</option>
-              </select>
-            </div>
-            {nd.abonnement !== 'freemium' && <>
-              <div>
-                <label className={LBL}>Date fin abonnement *</label>
-                <input type="date" value={nd.abonnementFin} onChange={(e) => set('abonnementFin', e.target.value)} className={INP} />
-              </div>
-            </>}
-            <div>
-              <label className={LBL}>Paiements *</label>
-              {isPro ? (
-                <select value={nd.modePaiement} onChange={(e) => set('modePaiement', e.target.value)} className={INP}>
-                  <option value="colis">Paiement à chaque colis</option>
-                  <option value="compte">Paiement en compte</option>
-                  <option value="30j">Paiement à 30 jours</option>
-                  <option value="fin_mois">Fin de mois</option>
-                </select>
-              ) : (
-                <div className="flex items-center gap-2 px-3 py-2 rounded-xl border-2 border-gray-200 bg-gray-50 text-sm text-gray-600">
-                  <Check size={14} className="text-green-500" />
-                  Paiement à chaque colis
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* ── Section : Pro fields ── */}
-        {isPro && (
-          <div className="space-y-3 p-4 rounded-xl border-2" style={{ borderColor: `${BRAND.gold}40`, background: `${BRAND.gold}06` }}>
-            <p className="text-xs font-black uppercase tracking-wider" style={{ color: BRAND.goldD }}>Personne morale</p>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className={LBL}>Raison sociale *</label>
-                <input value={nd.raisonSociale} onChange={(e) => set('raisonSociale', e.target.value)} placeholder="Nom de l'entreprise" className={INP} autoFocus />
-              </div>
-              <div>
-                <label className={LBL}>SIRET</label>
-                <input value={nd.siret} onChange={(e) => set('siret', e.target.value)} placeholder="123 456 789 00012" className={`${INP} font-mono`} />
-              </div>
-              <div className="col-span-2">
-                <label className={LBL}>Interlocuteur</label>
-                <input value={nd.interlocuteur} onChange={(e) => set('interlocuteur', e.target.value)} placeholder="Nom du contact principal" className={INP} />
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ── Section : Identité ── */}
-        <div className="space-y-3">
-          <p className="text-xs font-black uppercase tracking-wider" style={{ color: 'var(--brand-text)' }}>{isPro ? 'Contact' : 'Personne physique'}</p>
-          <div className="grid grid-cols-2 gap-3">
-            {!isPro && (
-              <div className="col-span-2">
-                <label className={LBL}>Genre</label>
-                <div className="flex gap-3">
-                  {['Homme', 'Femme'].map((g) => (
-                    <label key={g} className="flex items-center gap-1.5 cursor-pointer">
-                      <input type="radio" name="genre" value={g.toLowerCase()} checked={nd.genre === g.toLowerCase()}
-                        onChange={(e) => set('genre', e.target.value)} className="accent-blue-500" />
-                      <span className="text-sm">{g}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-            )}
-            <div>
-              <label className={LBL}>{isPro ? 'Nom contact *' : 'Nom *'}</label>
-              <input value={nd.nom} onChange={(e) => set('nom', e.target.value)} placeholder="NOM" className={INP} autoFocus={!isPro} />
-            </div>
-            <div>
-              <label className={LBL}>Prénom</label>
-              <input value={nd.prenom} onChange={(e) => set('prenom', e.target.value)} placeholder="Prénom" className={INP} />
-            </div>
-            {!isPro && (
-              <div>
-                <label className={LBL}>Date de naissance</label>
-                <input type="date" value={nd.dateNaissance} onChange={(e) => set('dateNaissance', e.target.value)} className={INP} />
-              </div>
-            )}
-            <div>
-              <label className={LBL}>Téléphone mobile *</label>
-              <input value={nd.tel} onChange={(e) => set('tel', e.target.value)} placeholder="+262 692 12 34 56" className={`${INP} font-mono`} />
-            </div>
-            <div>
-              <label className={LBL}>Téléphone fixe</label>
-              <input value={nd.telFixe} onChange={(e) => set('telFixe', e.target.value)} placeholder="+262 262 12 34 56" className={`${INP} font-mono`} />
-            </div>
-            <div>
-              <label className={LBL}>Email *</label>
-              <input type="email" value={nd.email} onChange={(e) => set('email', e.target.value)} placeholder="adresse@exemple.com" className={INP} />
-            </div>
-            <div>
-              <label className={LBL}>Telegram @</label>
-              <input value={nd.telegramUsername} onChange={(e) => set('telegramUsername', e.target.value)} placeholder="@username" className={INP} />
-            </div>
-          </div>
-        </div>
-
-        {/* ── Section : Adresse livraison ── */}
-        <div className="space-y-3">
-          <p className="text-xs font-black uppercase tracking-wider" style={{ color: 'var(--brand-text)' }}>Adresse livraison</p>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className={LBL}>Département *</label>
-              <select value={nd.cp ? nd.cp.slice(0, 3) : ''} onChange={(e) => set('cp', e.target.value + '00')} className={INP}>
-                <option value="">— Sélectionner —</option>
-                <option value="974">🇷🇪 La Réunion (974)</option>
-                <option value="976">🇾🇹 Mayotte (976)</option>
-                <option value="971">🇬🇵 Guadeloupe (971)</option>
-                <option value="972">🇲🇶 Martinique (972)</option>
-              </select>
-            </div>
-            <div>
-              <label className={LBL}>Commune</label>
-              <input value={nd.commune} onChange={(e) => set('commune', e.target.value)} placeholder="Saint-Denis" className={INP} />
-            </div>
-            <div>
-              <label className={LBL}>Code postal *</label>
-              <input value={nd.cp} onChange={(e) => set('cp', e.target.value)} placeholder="97400" className={`${INP} font-mono`} />
-            </div>
-            <div>
-              <label className={LBL}>Ville</label>
-              <input value={nd.ville} onChange={(e) => set('ville', e.target.value)} placeholder="Saint-Denis" className={INP} />
-            </div>
-            <div className="col-span-2">
-              <label className={LBL}>Adresse ligne 1 *</label>
-              <input value={nd.adresseLigne1} onChange={(e) => set('adresseLigne1', e.target.value)} placeholder="N° et nom de rue" className={INP} />
-            </div>
-            <div className="col-span-2">
-              <label className={LBL}>Adresse ligne 2</label>
-              <input value={nd.adresseLigne2} onChange={(e) => set('adresseLigne2', e.target.value)} placeholder="Résidence, bâtiment, étage…" className={INP} />
-            </div>
-            <div className="col-span-2">
-              <label className={LBL}>Informations pour la livraison</label>
-              <textarea value={nd.infosLivraison} onChange={(e) => set('infosLivraison', e.target.value)}
-                placeholder="Digicode, interphone, horaires…" rows={2} className={`${INP} resize-none`} />
-            </div>
-          </div>
-        </div>
-
-        {/* Notes */}
-        <div>
-          <label className={LBL}>Notes internes</label>
-          <textarea value={nd.notes} onChange={(e) => set('notes', e.target.value)}
-            placeholder="Informations utiles pour l'équipe…" rows={2} className={`${INP} resize-none`} />
-        </div>
-      </div>
-
-      {/* Footer — sticky bottom */}
-      <div className="sticky bottom-0 bg-white border-t border-gray-200 px-6 py-4 mt-6 rounded-b-2xl flex gap-3">
-        <button onClick={onCancel}
-          className="px-6 py-2.5 rounded-xl border-2 border-gray-200 text-sm font-bold text-gray-600 hover:bg-gray-50">
-          Annuler
-        </button>
-        {createError && <p role="alert" className="text-sm text-red-600">{createError}</p>}
-        <button disabled={saving} onClick={handleCreate}
-          className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white active:scale-95 transition-all"
-          style={{ background: isPro ? `linear-gradient(135deg, ${BRAND.goldD}, ${BRAND.gold})` : `linear-gradient(135deg, ${BRAND.navy}, ${BRAND.navyL})` }}>
-          {isPro ? 'Créer le client pro' : 'Créer le client'}
-        </button>
-      </div>
-    </div>
-  );
+  const { addNewClient, flash, can } = useApp(); const location = useLocation(); const navigate = useNavigate();
+  const [nd, setNd, { clear, storageAvailable }] = usePersistentDraft('client:new', { ...emptyDraft(), ...(location.state?.clientPrefill || {}) });
+  const [saving, setSaving] = useState(false); const [createError, setCreateError] = useState(''); const [justCreated, setJustCreated] = useState(null); const [submitted, setSubmitted] = useState(false);
+  const set = (key, value) => setNd(p => ({ ...p, [key]: value }));
+  const errors = { ...(!nd.nom.trim() ? { nom: 'Le nom est requis.' } : {}), ...(!/^9[7-8]\d{3}$/.test(nd.cp.trim()) ? { cp: 'Indiquez un code postal DOM-TOM à cinq chiffres.' } : {}), ...(nd.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(nd.email.trim()) ? { email: 'Indiquez un email valide.' } : {}), ...(!nd.email.trim() && !nd.telegramUsername.trim() ? { email: 'Un email ou un identifiant Telegram est nécessaire.' } : {}), ...(nd.tel && !/^[+()\d\s.-]{6,25}$/.test(nd.tel) ? { tel: 'Vérifiez le numéro de téléphone.' } : {}), ...(nd.type === 'pro' && !nd.raisonSociale.trim() ? { raisonSociale: 'La raison sociale est requise.' } : {}) };
+  const field = (key, label, type = 'text') => <ValidatedField key={key} label={label} type={type} value={nd[key] || ''} onChange={e => set(key, e.target.value)} error={submitted ? errors[key] : undefined} />;
+  const create = async event => { event.preventDefault(); setSubmitted(true); if (saving || Object.keys(errors).length) return; setSaving(true); setCreateError(''); try { const payload = { ...nd, nom: nd.nom.trim(), prenom: nd.prenom.trim(), email: nd.email.trim(), cp: nd.cp.trim(), canal: nd.telegramUsername.trim() ? 'telegram' : 'email', abonnement: can('perm_clients_modifier_abonnement') ? nd.abonnement : 'freemium', abonnementDebut: null, abonnementFin: null, dateNaissance: nd.dateNaissance || null, points: 0 }; const id = await addNewClient(payload); if (!id) throw new Error('La création n’a pas été confirmée.'); setJustCreated({ ...payload, id }); clear(); } catch (error) { setCreateError(error.message || 'Création impossible. Votre brouillon est conservé.'); } finally { setSaving(false); } };
+  if (justCreated) return <section className="mx-auto max-w-2xl space-y-4 pb-12"><h1 className="text-2xl font-bold">Client créé</h1><p role="status">La fiche de {justCreated.prenom} {justCreated.nom} est enregistrée. Aucune invitation n’a été envoyée automatiquement.</p><InviteClientAccess client={justCreated} flash={flash} /><details className="rounded-xl border p-3"><summary className="min-h-11 cursor-pointer font-semibold">Connecter Telegram (facultatif)</summary><TelegramInvitation client={justCreated} flash={flash} /></details><div className="flex flex-wrap gap-2"><button className="min-h-11 rounded-xl brand-bg text-white px-4" onClick={() => navigate(`/clients/${justCreated.id}`)}>Ouvrir la fiche client</button><button className="min-h-11 px-4 underline" onClick={onDone}>Retour aux clients</button></div></section>;
+  return <form onSubmit={create} noValidate className="mx-auto max-w-2xl space-y-5 pb-20"><header><h1 className="text-2xl font-bold">Nouveau client</h1><p className="text-sm text-gray-600">Identité, destination et un moyen de contact suffisent pour commencer. Votre brouillon est conservé.{!storageAvailable && ' Gardez cet onglet ouvert : stockage du navigateur indisponible.'}</p></header><fieldset disabled={saving} className="space-y-5"><section className="card p-4 space-y-4"><h2 className="font-semibold">Identité et destination</h2><label className="block text-sm">Type de client<select className={FORM_FIELD} value={nd.type} onChange={e => set('type', e.target.value)}><option value="particulier">Particulier</option><option value="pro">Professionnel</option></select></label><div className="grid gap-3 sm:grid-cols-2">{field('nom', 'Nom *')}{field('prenom', 'Prénom')}{field('cp', 'Code postal de destination *')}{field('ville', 'Ville')}</div>{nd.type === 'pro' && field('raisonSociale', 'Raison sociale *')}</section><section className="card p-4 space-y-3"><h2 className="font-semibold">Contact</h2><p className="text-sm text-gray-600">Email ou Telegram requis. Le téléphone est facultatif.</p>{field('email', 'Email', 'email')}{field('telegramUsername', 'Identifiant Telegram (sans @)')}{field('tel', 'Téléphone (facultatif)', 'tel')}</section><details className="card p-4"><summary className="min-h-11 cursor-pointer font-semibold">Adresse et informations complémentaires (facultatif)</summary><div className="space-y-3 pt-3">{field('adresseLigne1', 'Adresse')}{field('adresseLigne2', 'Complément d’adresse')}{field('infosLivraison', 'Informations de livraison')}{nd.type === 'pro' && <>{field('siret', 'SIRET')}{field('interlocuteur', 'Interlocuteur')}<label className="block text-sm">Modalité de paiement<select className={FORM_FIELD} value={nd.modePaiement} onChange={e => set('modePaiement', e.target.value)}><option value="colis">Par colis</option><option value="30j">À 30 jours</option><option value="fin_mois">En fin de mois</option><option value="virement">Par virement</option></select></label></>}{can('perm_clients_modifier_abonnement') && <label className="block text-sm">Offre<select className={FORM_FIELD} value={nd.abonnement} onChange={e => set('abonnement', e.target.value)}>{Object.entries(ABONNEMENTS).map(([id, a]) => <option key={id} value={id}>{a.label}</option>)}</select></label>}{field('notes', 'Note interne')}</div></details><div className="flex flex-wrap gap-2"><button type="submit" className="min-h-11 rounded-xl brand-bg px-5 text-white font-semibold">{saving ? 'Création…' : 'Créer le client'}</button><button type="button" className="min-h-11 px-4 underline" onClick={onCancel}>Quitter et garder le brouillon</button><button type="button" className="min-h-11 px-4 text-gray-600" onClick={() => { clear(); onCancel(); }}>Abandonner</button></div></fieldset>{createError && <p role="alert" className="rounded-xl border border-red-200 p-3 text-red-800">{createError}</p>}</form>;
 }

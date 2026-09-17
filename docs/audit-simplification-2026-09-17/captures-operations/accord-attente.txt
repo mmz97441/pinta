@@ -1,0 +1,47 @@
+EXPÉDÎLE
+Réceptionner des cartons
+Mon travail
+Dossiers d’expédition
+Conversations
+Équipe
+Départs
+Clients
+Estimation
+Paramètres
+Réduire
+C
+
+Camille
+
+Direction
+
+EXP-TEST-001
+Accord client
+
+Exemple Camille · Réunion
+
+Contexte
+Revenir à la réception
+Tâche du dossier
+Réception
+Accord client
+Préparation
+Factures
+Devis
+Paiement
+Expédition
+Livraison
+Aller à la préparation
+En attente du client
+
+La demande est enregistrée. L’accord du client est attendu.
+
+Préparer une relance
+Voir les échanges
+Retour à ma liste
+
+Préparer les cartons · EXP-TEST-001
+
+Tâche suivante
+Réceptionner un autre carton
+Corrections

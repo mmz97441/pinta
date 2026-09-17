@@ -1,0 +1,47 @@
+EXPÉDÎLE
+Réceptionner des cartons
+Mon travail
+Dossiers d’expédition
+Conversations
+Équipe
+Départs
+Clients
+Estimation
+Paramètres
+Réduire
+C
+
+Camille
+
+Direction
+
+EXP-TEST-001
+Expédition
+
+Exemple Camille · Réunion
+
+Contexte
+Revenir au paiement
+Tâche du dossier
+Réception
+Accord client
+Préparation
+Factures
+Devis
+Paiement
+Expédition
+Livraison
+Aller à la livraison
+Paiement reçu — Expédier
+
+Paiement reçu
+
+62.39 €
+
+AFFECTER À UN ENVOI
+— Choisir un départ compatible —
+
+Aucun départ ouvert compatible avec la destination du devis payé. La coordination doit prévoir le prochain départ.
+
+Vérifier le départ et son manifeste
+Corrections

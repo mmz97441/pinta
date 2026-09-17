@@ -1,0 +1,1147 @@
+{
+  "version": "19d20352f288eea2b1f33edfa1cd6ddbea54a8e4",
+  "date": "2026-09-17",
+  "donnees": "Fictives, API métier interceptées. Aucune écriture production.",
+  "captures": [
+    {
+      "perimetre": "operations",
+      "fichier": "captures-operations/accord-attente.png",
+      "capture": "accord-attente",
+      "texte": "captures-operations/accord-attente.txt"
+    },
+    {
+      "perimetre": "operations",
+      "fichier": "captures-operations/accord-message-desktop.png",
+      "capture": "accord-message-desktop",
+      "texte": "captures-operations/accord-message-desktop.txt"
+    },
+    {
+      "perimetre": "operations",
+      "fichier": "captures-operations/accord-message-mobile.png",
+      "capture": "accord-message-mobile",
+      "texte": "captures-operations/accord-message-mobile.txt"
+    },
+    {
+      "perimetre": "operations",
+      "fichier": "captures-operations/accord-mesure-desktop.png",
+      "capture": "accord-mesure-desktop",
+      "texte": "captures-operations/accord-mesure-desktop.txt"
+    },
+    {
+      "perimetre": "operations",
+      "fichier": "captures-operations/accord-mesure-mobile.png",
+      "capture": "accord-mesure-mobile",
+      "texte": "captures-operations/accord-mesure-mobile.txt"
+    },
+    {
+      "perimetre": "operations",
+      "fichier": "captures-operations/accord-refus.png",
+      "capture": "accord-refus",
+      "texte": "captures-operations/accord-refus.txt"
+    },
+    {
+      "perimetre": "operations",
+      "fichier": "captures-operations/annule.png",
+      "capture": "annule",
+      "texte": "captures-operations/annule.txt"
+    },
+    {
+      "perimetre": "operations",
+      "fichier": "captures-operations/contexte-documents-desktop.png",
+      "capture": "contexte-documents-desktop",
+      "texte": "captures-operations/contexte-documents-desktop.txt"
+    },
+    {
+      "perimetre": "operations",
+      "fichier": "captures-operations/contexte-documents-mobile.png",
+      "capture": "contexte-documents-mobile",
+      "texte": "captures-operations/contexte-documents-mobile.txt"
+    },
+    {
+      "perimetre": "operations",
+      "fichier": "captures-operations/contexte-historique-desktop.png",
+      "capture": "contexte-historique-desktop",
+      "texte": "captures-operations/contexte-historique-desktop.txt"
+    },
+    {
+      "perimetre": "operations",
+      "fichier": "captures-operations/contexte-historique-mobile.png",
+      "capture": "contexte-historique-mobile",
+      "texte": "captures-operations/contexte-historique-mobile.txt"
+    },
+    {
+      "perimetre": "operations",
+      "fichier": "captures-operations/contexte-messages-desktop.png",
+      "capture": "contexte-messages-desktop",
+      "texte": "captures-operations/contexte-messages-desktop.txt"
+    },
+    {
+      "perimetre": "operations",
+      "fichier": "captures-operations/contexte-messages-mobile.png",
+      "capture": "contexte-messages-mobile",
+      "texte": "captures-operations/contexte-messages-mobile.txt"
+    },
+    {
+      "perimetre": "operations",
+      "fichier": "captures-operations/contexte-reception-desktop.png",
+      "capture": "contexte-reception-desktop",
+      "texte": "captures-operations/contexte-reception-desktop.txt"
+    },
+    {
+      "perimetre": "operations",
+      "fichier": "captures-operations/contexte-reception-mobile.png",
+      "capture": "contexte-reception-mobile",
+      "texte": "captures-operations/contexte-reception-mobile.txt"
+    },
+    {
+      "perimetre": "operations",
+      "fichier": "captures-operations/contexte-équipe-desktop.png",
+      "capture": "contexte-équipe-desktop",
+      "texte": "captures-operations/contexte-équipe-desktop.txt"
+    },
+    {
+      "perimetre": "operations",
+      "fichier": "captures-operations/contexte-équipe-mobile.png",
+      "capture": "contexte-équipe-mobile",
+      "texte": "captures-operations/contexte-équipe-mobile.txt"
+    },
+    {
+      "perimetre": "operations",
+      "fichier": "captures-operations/devis-corrections-desktop.png",
+      "capture": "devis-corrections-desktop",
+      "texte": "captures-operations/devis-corrections-desktop.txt"
+    },
+    {
+      "perimetre": "operations",
+      "fichier": "captures-operations/devis-corrections-mobile.png",
+      "capture": "devis-corrections-mobile",
+      "texte": "captures-operations/devis-corrections-mobile.txt"
+    },
+    {
+      "perimetre": "operations",
+      "fichier": "captures-operations/devis-en_preparation-desktop.png",
+      "capture": "devis-en_preparation-desktop",
+      "texte": "captures-operations/devis-en_preparation-desktop.txt"
+    },
+    {
+      "perimetre": "operations",
+      "fichier": "captures-operations/devis-en_preparation-mobile.png",
+      "capture": "devis-en_preparation-mobile",
+      "texte": "captures-operations/devis-en_preparation-mobile.txt"
+    },
+    {
+      "perimetre": "operations",
+      "fichier": "captures-operations/douane.png",
+      "capture": "douane",
+      "texte": "captures-operations/douane.txt"
+    },
+    {
+      "perimetre": "operations",
+      "fichier": "captures-operations/expedition-paye-desktop.png",
+      "capture": "expedition-paye-desktop",
+      "texte": "captures-operations/expedition-paye-desktop.txt"
+    },
+    {
+      "perimetre": "operations",
+      "fichier": "captures-operations/expedition-paye-mobile.png",
+      "capture": "expedition-paye-mobile",
+      "texte": "captures-operations/expedition-paye-mobile.txt"
+    },
+    {
+      "perimetre": "operations",
+      "fichier": "captures-operations/factures-actions-desktop.png",
+      "capture": "factures-actions-desktop",
+      "texte": "captures-operations/factures-actions-desktop.txt"
+    },
+    {
+      "perimetre": "operations",
+      "fichier": "captures-operations/factures-actions-mobile.png",
+      "capture": "factures-actions-mobile",
+      "texte": "captures-operations/factures-actions-mobile.txt"
+    },
+    {
+      "perimetre": "operations",
+      "fichier": "captures-operations/factures-document-mobile.png",
+      "capture": "factures-document-mobile",
+      "texte": null
+    },
+    {
+      "perimetre": "operations",
+      "fichier": "captures-operations/factures-doublon-desktop.png",
+      "capture": "factures-doublon-desktop",
+      "texte": "captures-operations/factures-doublon-desktop.txt"
+    },
+    {
+      "perimetre": "operations",
+      "fichier": "captures-operations/factures-doublon-mobile.png",
+      "capture": "factures-doublon-mobile",
+      "texte": "captures-operations/factures-doublon-mobile.txt"
+    },
+    {
+      "perimetre": "operations",
+      "fichier": "captures-operations/factures-terminees-desktop.png",
+      "capture": "factures-terminees-desktop",
+      "texte": "captures-operations/factures-terminees-desktop.txt"
+    },
+    {
+      "perimetre": "operations",
+      "fichier": "captures-operations/factures-validation-desktop.png",
+      "capture": "factures-validation-desktop",
+      "texte": "captures-operations/factures-validation-desktop.txt"
+    },
+    {
+      "perimetre": "operations",
+      "fichier": "captures-operations/factures-verification-chargee-desktop.png",
+      "capture": "factures-verification-chargee-desktop",
+      "texte": "captures-operations/factures-verification-chargee-desktop.txt"
+    },
+    {
+      "perimetre": "operations",
+      "fichier": "captures-operations/factures-verification-desktop.png",
+      "capture": "factures-verification-desktop",
+      "texte": "captures-operations/factures-verification-desktop.txt"
+    },
+    {
+      "perimetre": "operations",
+      "fichier": "captures-operations/factures-verification-mobile.png",
+      "capture": "factures-verification-mobile",
+      "texte": "captures-operations/factures-verification-mobile.txt"
+    },
+    {
+      "perimetre": "operations",
+      "fichier": "captures-operations/livraison-arrive-desktop.png",
+      "capture": "livraison-arrive-desktop",
+      "texte": "captures-operations/livraison-arrive-desktop.txt"
+    },
+    {
+      "perimetre": "operations",
+      "fichier": "captures-operations/livraison-arrive-mobile.png",
+      "capture": "livraison-arrive-mobile",
+      "texte": "captures-operations/livraison-arrive-mobile.txt"
+    },
+    {
+      "perimetre": "operations",
+      "fichier": "captures-operations/livraison-avant-arrivee.png",
+      "capture": "livraison-avant-arrivee",
+      "texte": "captures-operations/livraison-avant-arrivee.txt"
+    },
+    {
+      "perimetre": "operations",
+      "fichier": "captures-operations/livre.png",
+      "capture": "livre",
+      "texte": "captures-operations/livre.txt"
+    },
+    {
+      "perimetre": "operations",
+      "fichier": "captures-operations/multi-colis-contexte.png",
+      "capture": "multi-colis-contexte",
+      "texte": "captures-operations/multi-colis-contexte.txt"
+    },
+    {
+      "perimetre": "operations",
+      "fichier": "captures-operations/multi-colis-preparation.png",
+      "capture": "multi-colis-preparation",
+      "texte": "captures-operations/multi-colis-preparation.txt"
+    },
+    {
+      "perimetre": "operations",
+      "fichier": "captures-operations/paiement-devis_envoye-desktop.png",
+      "capture": "paiement-devis_envoye-desktop",
+      "texte": "captures-operations/paiement-devis_envoye-desktop.txt"
+    },
+    {
+      "perimetre": "operations",
+      "fichier": "captures-operations/paiement-devis_envoye-mobile.png",
+      "capture": "paiement-devis_envoye-mobile",
+      "texte": "captures-operations/paiement-devis_envoye-mobile.txt"
+    },
+    {
+      "perimetre": "operations",
+      "fichier": "captures-operations/preparation-autorise-desktop.png",
+      "capture": "preparation-autorise-desktop",
+      "texte": "captures-operations/preparation-autorise-desktop.txt"
+    },
+    {
+      "perimetre": "operations",
+      "fichier": "captures-operations/preparation-autorise-mobile.png",
+      "capture": "preparation-autorise-mobile",
+      "texte": "captures-operations/preparation-autorise-mobile.txt"
+    },
+    {
+      "perimetre": "operations",
+      "fichier": "captures-operations/preparation-en_preparation-desktop.png",
+      "capture": "preparation-en_preparation-desktop",
+      "texte": "captures-operations/preparation-en_preparation-desktop.txt"
+    },
+    {
+      "perimetre": "operations",
+      "fichier": "captures-operations/preparation-en_preparation-mobile.png",
+      "capture": "preparation-en_preparation-mobile",
+      "texte": "captures-operations/preparation-en_preparation-mobile.txt"
+    },
+    {
+      "perimetre": "operations",
+      "fichier": "captures-operations/preparation-formulaire-desktop.png",
+      "capture": "preparation-formulaire-desktop",
+      "texte": "captures-operations/preparation-formulaire-desktop.txt"
+    },
+    {
+      "perimetre": "operations",
+      "fichier": "captures-operations/preparation-formulaire-mobile.png",
+      "capture": "preparation-formulaire-mobile",
+      "texte": "captures-operations/preparation-formulaire-mobile.txt"
+    },
+    {
+      "perimetre": "operations",
+      "fichier": "captures-operations/reception-ajout-carton3-mobile.png",
+      "capture": "reception-ajout-carton3-mobile",
+      "texte": "captures-operations/reception-ajout-carton3-mobile.txt"
+    },
+    {
+      "perimetre": "operations",
+      "fichier": "captures-operations/reception-choix-desktop.png",
+      "capture": "reception-choix-desktop",
+      "texte": "captures-operations/reception-choix-desktop.txt"
+    },
+    {
+      "perimetre": "operations",
+      "fichier": "captures-operations/reception-choix-envoi-mobile.png",
+      "capture": "reception-choix-envoi-mobile",
+      "texte": "captures-operations/reception-choix-envoi-mobile.txt"
+    },
+    {
+      "perimetre": "operations",
+      "fichier": "captures-operations/reception-choix-mobile.png",
+      "capture": "reception-choix-mobile",
+      "texte": "captures-operations/reception-choix-mobile.txt"
+    },
+    {
+      "perimetre": "operations",
+      "fichier": "captures-operations/reception-rattacher-desktop.png",
+      "capture": "reception-rattacher-desktop",
+      "texte": "captures-operations/reception-rattacher-desktop.txt"
+    },
+    {
+      "perimetre": "operations",
+      "fichier": "captures-operations/reception-rattacher-mobile.png",
+      "capture": "reception-rattacher-mobile",
+      "texte": "captures-operations/reception-rattacher-mobile.txt"
+    },
+    {
+      "perimetre": "operations",
+      "fichier": "captures-operations/reception-receptionne-desktop.png",
+      "capture": "reception-receptionne-desktop",
+      "texte": "captures-operations/reception-receptionne-desktop.txt"
+    },
+    {
+      "perimetre": "operations",
+      "fichier": "captures-operations/reception-receptionne-mobile.png",
+      "capture": "reception-receptionne-mobile",
+      "texte": "captures-operations/reception-receptionne-mobile.txt"
+    },
+    {
+      "perimetre": "operations",
+      "fichier": "captures-operations/transit.png",
+      "capture": "transit",
+      "texte": "captures-operations/transit.txt"
+    },
+    {
+      "perimetre": "equipe",
+      "fichier": "captures-equipe/01-mon-travail-desktop.png",
+      "capture": "01-mon-travail-desktop",
+      "texte": "captures-equipe/01-mon-travail-desktop.txt"
+    },
+    {
+      "perimetre": "equipe",
+      "fichier": "captures-equipe/01-mon-travail-mobile.png",
+      "capture": "01-mon-travail-mobile",
+      "texte": "captures-equipe/01-mon-travail-mobile.txt"
+    },
+    {
+      "perimetre": "equipe",
+      "fichier": "captures-equipe/02-preferences-desktop.png",
+      "capture": "02-preferences-desktop",
+      "texte": "captures-equipe/02-preferences-desktop.txt"
+    },
+    {
+      "perimetre": "equipe",
+      "fichier": "captures-equipe/02-preferences-mobile.png",
+      "capture": "02-preferences-mobile",
+      "texte": "captures-equipe/02-preferences-mobile.txt"
+    },
+    {
+      "perimetre": "equipe",
+      "fichier": "captures-equipe/03-a-prendre-desktop.png",
+      "capture": "03-a-prendre-desktop",
+      "texte": "captures-equipe/03-a-prendre-desktop.txt"
+    },
+    {
+      "perimetre": "equipe",
+      "fichier": "captures-equipe/03-a-prendre-mobile.png",
+      "capture": "03-a-prendre-mobile",
+      "texte": "captures-equipe/03-a-prendre-mobile.txt"
+    },
+    {
+      "perimetre": "equipe",
+      "fichier": "captures-equipe/04-equipe-desktop.png",
+      "capture": "04-equipe-desktop",
+      "texte": "captures-equipe/04-equipe-desktop.txt"
+    },
+    {
+      "perimetre": "equipe",
+      "fichier": "captures-equipe/04-equipe-mobile.png",
+      "capture": "04-equipe-mobile",
+      "texte": "captures-equipe/04-equipe-mobile.txt"
+    },
+    {
+      "perimetre": "equipe",
+      "fichier": "captures-equipe/05-reaffecter-desktop.png",
+      "capture": "05-reaffecter-desktop",
+      "texte": "captures-equipe/05-reaffecter-desktop.txt"
+    },
+    {
+      "perimetre": "equipe",
+      "fichier": "captures-equipe/05-reaffecter-mobile.png",
+      "capture": "05-reaffecter-mobile",
+      "texte": "captures-equipe/05-reaffecter-mobile.txt"
+    },
+    {
+      "perimetre": "equipe",
+      "fichier": "captures-equipe/06-dossiers-desktop.png",
+      "capture": "06-dossiers-desktop",
+      "texte": "captures-equipe/06-dossiers-desktop.txt"
+    },
+    {
+      "perimetre": "equipe",
+      "fichier": "captures-equipe/06-dossiers-mobile.png",
+      "capture": "06-dossiers-mobile",
+      "texte": "captures-equipe/06-dossiers-mobile.txt"
+    },
+    {
+      "perimetre": "equipe",
+      "fichier": "captures-equipe/07-filtres-dossiers-desktop.png",
+      "capture": "07-filtres-dossiers-desktop",
+      "texte": "captures-equipe/07-filtres-dossiers-desktop.txt"
+    },
+    {
+      "perimetre": "equipe",
+      "fichier": "captures-equipe/07-filtres-dossiers-mobile.png",
+      "capture": "07-filtres-dossiers-mobile",
+      "texte": "captures-equipe/07-filtres-dossiers-mobile.txt"
+    },
+    {
+      "perimetre": "equipe",
+      "fichier": "captures-equipe/08-dossiers-par-statut-desktop.png",
+      "capture": "08-dossiers-par-statut-desktop",
+      "texte": "captures-equipe/08-dossiers-par-statut-desktop.txt"
+    },
+    {
+      "perimetre": "equipe",
+      "fichier": "captures-equipe/09-dossiers-par-envoi-desktop.png",
+      "capture": "09-dossiers-par-envoi-desktop",
+      "texte": "captures-equipe/09-dossiers-par-envoi-desktop.txt"
+    },
+    {
+      "perimetre": "equipe",
+      "fichier": "captures-equipe/10-apercu-dossier-desktop.png",
+      "capture": "10-apercu-dossier-desktop",
+      "texte": "captures-equipe/10-apercu-dossier-desktop.txt"
+    },
+    {
+      "perimetre": "equipe",
+      "fichier": "captures-equipe/10-apercu-dossier-mobile.png",
+      "capture": "10-apercu-dossier-mobile",
+      "texte": "captures-equipe/10-apercu-dossier-mobile.txt"
+    },
+    {
+      "perimetre": "equipe",
+      "fichier": "captures-equipe/11-conversations-liste-desktop.png",
+      "capture": "11-conversations-liste-desktop",
+      "texte": "captures-equipe/11-conversations-liste-desktop.txt"
+    },
+    {
+      "perimetre": "equipe",
+      "fichier": "captures-equipe/11-conversations-liste-mobile.png",
+      "capture": "11-conversations-liste-mobile",
+      "texte": "captures-equipe/11-conversations-liste-mobile.txt"
+    },
+    {
+      "perimetre": "equipe",
+      "fichier": "captures-equipe/12-conversation-desktop.png",
+      "capture": "12-conversation-desktop",
+      "texte": "captures-equipe/12-conversation-desktop.txt"
+    },
+    {
+      "perimetre": "equipe",
+      "fichier": "captures-equipe/12-conversation-mobile.png",
+      "capture": "12-conversation-mobile",
+      "texte": "captures-equipe/12-conversation-mobile.txt"
+    },
+    {
+      "perimetre": "equipe",
+      "fichier": "captures-equipe/13-conversation-contexte-mobile.png",
+      "capture": "13-conversation-contexte-mobile",
+      "texte": "captures-equipe/13-conversation-contexte-mobile.txt"
+    },
+    {
+      "perimetre": "equipe",
+      "fichier": "captures-equipe/14-message-sans-dossier-desktop.png",
+      "capture": "14-message-sans-dossier-desktop",
+      "texte": "captures-equipe/14-message-sans-dossier-desktop.txt"
+    },
+    {
+      "perimetre": "equipe",
+      "fichier": "captures-equipe/14-message-sans-dossier-mobile.png",
+      "capture": "14-message-sans-dossier-mobile",
+      "texte": "captures-equipe/14-message-sans-dossier-mobile.txt"
+    },
+    {
+      "perimetre": "equipe",
+      "fichier": "captures-equipe/15-departs-desktop.png",
+      "capture": "15-departs-desktop",
+      "texte": "captures-equipe/15-departs-desktop.txt"
+    },
+    {
+      "perimetre": "equipe",
+      "fichier": "captures-equipe/15-departs-mobile.png",
+      "capture": "15-departs-mobile",
+      "texte": "captures-equipe/15-departs-mobile.txt"
+    },
+    {
+      "perimetre": "equipe",
+      "fichier": "captures-equipe/16-planifier-desktop.png",
+      "capture": "16-planifier-desktop",
+      "texte": "captures-equipe/16-planifier-desktop.txt"
+    },
+    {
+      "perimetre": "equipe",
+      "fichier": "captures-equipe/16-planifier-mobile.png",
+      "capture": "16-planifier-mobile",
+      "texte": "captures-equipe/16-planifier-mobile.txt"
+    },
+    {
+      "perimetre": "equipe",
+      "fichier": "captures-equipe/17-chargement-desktop.png",
+      "capture": "17-chargement-desktop",
+      "texte": "captures-equipe/17-chargement-desktop.txt"
+    },
+    {
+      "perimetre": "equipe",
+      "fichier": "captures-equipe/17-chargement-mobile.png",
+      "capture": "17-chargement-mobile",
+      "texte": "captures-equipe/17-chargement-mobile.txt"
+    },
+    {
+      "perimetre": "equipe",
+      "fichier": "captures-equipe/18-navigation-plus-mobile.png",
+      "capture": "18-navigation-plus-mobile",
+      "texte": "captures-equipe/18-navigation-plus-mobile.txt"
+    },
+    {
+      "perimetre": "equipe",
+      "fichier": "captures-equipe/19-brouillon-avant-navigation.png",
+      "capture": "19-brouillon-avant-navigation",
+      "texte": "captures-equipe/19-brouillon-avant-navigation.txt"
+    },
+    {
+      "perimetre": "equipe",
+      "fichier": "captures-equipe/20-brouillon-apres-navigation.png",
+      "capture": "20-brouillon-apres-navigation",
+      "texte": "captures-equipe/20-brouillon-apres-navigation.txt"
+    },
+    {
+      "perimetre": "equipe",
+      "fichier": "captures-equipe/21-mon-travail-mobile-sombre.png",
+      "capture": "21-mon-travail-mobile-sombre",
+      "texte": "captures-equipe/21-mon-travail-mobile-sombre.txt"
+    },
+    {
+      "perimetre": "equipe",
+      "fichier": "captures-equipe/22-conversation-mobile-sombre.png",
+      "capture": "22-conversation-mobile-sombre",
+      "texte": "captures-equipe/22-conversation-mobile-sombre.txt"
+    },
+    {
+      "perimetre": "equipe",
+      "fichier": "captures-equipe/23-dossiers-cent-desktop.png",
+      "capture": "23-dossiers-cent-desktop",
+      "texte": "captures-equipe/23-dossiers-cent-desktop.txt"
+    },
+    {
+      "perimetre": "equipe",
+      "fichier": "captures-equipe/24-recherche-cent-desktop.png",
+      "capture": "24-recherche-cent-desktop",
+      "texte": "captures-equipe/24-recherche-cent-desktop.txt"
+    },
+    {
+      "perimetre": "equipe",
+      "fichier": "captures-equipe/25-preparateur-debutant-mobile.png",
+      "capture": "25-preparateur-debutant-mobile",
+      "texte": "captures-equipe/25-preparateur-debutant-mobile.txt"
+    },
+    {
+      "perimetre": "equipe",
+      "fichier": "captures-equipe/26-preferences-permission-preparation-mobile.png",
+      "capture": "26-preferences-permission-preparation-mobile",
+      "texte": "captures-equipe/26-preferences-permission-preparation-mobile.txt"
+    },
+    {
+      "perimetre": "client",
+      "fichier": "captures-client/01-login-desktop.png",
+      "capture": "01-login-desktop",
+      "texte": null
+    },
+    {
+      "perimetre": "client",
+      "fichier": "captures-client/02-login-mobile.png",
+      "capture": "02-login-mobile",
+      "texte": null
+    },
+    {
+      "perimetre": "client",
+      "fichier": "captures-client/03-forgot-mobile.png",
+      "capture": "03-forgot-mobile",
+      "texte": null
+    },
+    {
+      "perimetre": "client",
+      "fichier": "captures-client/04-password-mobile.png",
+      "capture": "04-password-mobile",
+      "texte": null
+    },
+    {
+      "perimetre": "client",
+      "fichier": "captures-client/05-onboarding-first-mobile.png",
+      "capture": "05-onboarding-first-mobile",
+      "texte": null
+    },
+    {
+      "perimetre": "client",
+      "fichier": "captures-client/06-onboarding-last-mobile.png",
+      "capture": "06-onboarding-last-mobile",
+      "texte": null
+    },
+    {
+      "perimetre": "client",
+      "fichier": "captures-client/07-home-desktop.png",
+      "capture": "07-home-desktop",
+      "texte": null
+    },
+    {
+      "perimetre": "client",
+      "fichier": "captures-client/08-home-mobile.png",
+      "capture": "08-home-mobile",
+      "texte": null
+    },
+    {
+      "perimetre": "client",
+      "fichier": "captures-client/09-list-mobile.png",
+      "capture": "09-list-mobile",
+      "texte": null
+    },
+    {
+      "perimetre": "client",
+      "fichier": "captures-client/10-consent-desktop.png",
+      "capture": "10-consent-desktop",
+      "texte": null
+    },
+    {
+      "perimetre": "client",
+      "fichier": "captures-client/11-consent-mobile.png",
+      "capture": "11-consent-mobile",
+      "texte": null
+    },
+    {
+      "perimetre": "client",
+      "fichier": "captures-client/12-consent-wait-form-mobile.png",
+      "capture": "12-consent-wait-form-mobile",
+      "texte": null
+    },
+    {
+      "perimetre": "client",
+      "fichier": "captures-client/13-consent-confirm-mobile.png",
+      "capture": "13-consent-confirm-mobile",
+      "texte": null
+    },
+    {
+      "perimetre": "client",
+      "fichier": "captures-client/14-profile-desktop.png",
+      "capture": "14-profile-desktop",
+      "texte": null
+    },
+    {
+      "perimetre": "client",
+      "fichier": "captures-client/15-profile-mobile.png",
+      "capture": "15-profile-mobile",
+      "texte": null
+    },
+    {
+      "perimetre": "client",
+      "fichier": "captures-client/16-profile-edit-mobile.png",
+      "capture": "16-profile-edit-mobile",
+      "texte": null
+    },
+    {
+      "perimetre": "client",
+      "fichier": "captures-client/17-notifications-mobile.png",
+      "capture": "17-notifications-mobile",
+      "texte": null
+    },
+    {
+      "perimetre": "client",
+      "fichier": "captures-client/18-documents-mobile.png",
+      "capture": "18-documents-mobile",
+      "texte": null
+    },
+    {
+      "perimetre": "client",
+      "fichier": "captures-client/19-documents-desktop.png",
+      "capture": "19-documents-desktop",
+      "texte": null
+    },
+    {
+      "perimetre": "client",
+      "fichier": "captures-client/20-correction-mobile.png",
+      "capture": "20-correction-mobile",
+      "texte": null
+    },
+    {
+      "perimetre": "client",
+      "fichier": "captures-client/21-notification-destination-mobile.png",
+      "capture": "21-notification-destination-mobile",
+      "texte": null
+    },
+    {
+      "perimetre": "client",
+      "fichier": "captures-client/22-messages-desktop.png",
+      "capture": "22-messages-desktop",
+      "texte": null
+    },
+    {
+      "perimetre": "client",
+      "fichier": "captures-client/22-messages-mobile.png",
+      "capture": "22-messages-mobile",
+      "texte": null
+    },
+    {
+      "perimetre": "client",
+      "fichier": "captures-client/23-payment-desktop.png",
+      "capture": "23-payment-desktop",
+      "texte": null
+    },
+    {
+      "perimetre": "client",
+      "fichier": "captures-client/23-payment-mobile.png",
+      "capture": "23-payment-mobile",
+      "texte": null
+    },
+    {
+      "perimetre": "client",
+      "fichier": "captures-client/24-payment-pro-mobile.png",
+      "capture": "24-payment-pro-mobile",
+      "texte": null
+    },
+    {
+      "perimetre": "client",
+      "fichier": "captures-client/25-delivery-mobile.png",
+      "capture": "25-delivery-mobile",
+      "texte": null
+    },
+    {
+      "perimetre": "client",
+      "fichier": "captures-client/26-delivery-details-mobile.png",
+      "capture": "26-delivery-details-mobile",
+      "texte": null
+    },
+    {
+      "perimetre": "client",
+      "fichier": "captures-client/27-outgoing-tracking-mobile.png",
+      "capture": "27-outgoing-tracking-mobile",
+      "texte": null
+    },
+    {
+      "perimetre": "client",
+      "fichier": "captures-client/28-history-before-load-mobile.png",
+      "capture": "28-history-before-load-mobile",
+      "texte": null
+    },
+    {
+      "perimetre": "client",
+      "fichier": "captures-client/29-history-after-load-mobile.png",
+      "capture": "29-history-after-load-mobile",
+      "texte": null
+    },
+    {
+      "perimetre": "client",
+      "fichier": "captures-client/30-public-tracking-mobile.png",
+      "capture": "30-public-tracking-mobile",
+      "texte": null
+    },
+    {
+      "perimetre": "client",
+      "fichier": "captures-client/31-public-tracking-desktop.png",
+      "capture": "31-public-tracking-desktop",
+      "texte": null
+    },
+    {
+      "perimetre": "client",
+      "fichier": "captures-client/32-public-expired-mobile.png",
+      "capture": "32-public-expired-mobile",
+      "texte": null
+    },
+    {
+      "perimetre": "client",
+      "fichier": "captures-client/33-profile-replaced-document-mobile.png",
+      "capture": "33-profile-replaced-document-mobile",
+      "texte": null
+    },
+    {
+      "perimetre": "client",
+      "fichier": "captures-client/34-empty-home-mobile.png",
+      "capture": "34-empty-home-mobile",
+      "texte": null
+    },
+    {
+      "perimetre": "client",
+      "fichier": "captures-client/35-consent-small-320.png",
+      "capture": "35-consent-small-320",
+      "texte": null
+    },
+    {
+      "perimetre": "client",
+      "fichier": "captures-client/36-consent-dark-mobile.png",
+      "capture": "36-consent-dark-mobile",
+      "texte": null
+    },
+    {
+      "perimetre": "client",
+      "fichier": "captures-client/37-telegram-invitation-mobile.png",
+      "capture": "37-telegram-invitation-mobile",
+      "texte": null
+    },
+    {
+      "perimetre": "client",
+      "fichier": "captures-client/38-login-error-mobile.png",
+      "capture": "38-login-error-mobile",
+      "texte": null
+    },
+    {
+      "perimetre": "client",
+      "fichier": "captures-client/39-recovery-expired-mobile.png",
+      "capture": "39-recovery-expired-mobile",
+      "texte": null
+    },
+    {
+      "perimetre": "client",
+      "fichier": "captures-client/40-session-connected-mobile.png",
+      "capture": "40-session-connected-mobile",
+      "texte": null
+    },
+    {
+      "perimetre": "client",
+      "fichier": "captures-client/41-telegram-already-connected-mobile.png",
+      "capture": "41-telegram-already-connected-mobile",
+      "texte": null
+    },
+    {
+      "perimetre": "client",
+      "fichier": "captures-client/42-tracking-distinct-identifiers-mobile.png",
+      "capture": "42-tracking-distinct-identifiers-mobile",
+      "texte": null
+    },
+    {
+      "perimetre": "client",
+      "fichier": "captures-client/43-message-draft-before.png",
+      "capture": "43-message-draft-before",
+      "texte": null
+    },
+    {
+      "perimetre": "client",
+      "fichier": "captures-client/44-message-draft-after.png",
+      "capture": "44-message-draft-after",
+      "texte": null
+    },
+    {
+      "perimetre": "client",
+      "fichier": "captures-client/45-recovery-valid-mobile.png",
+      "capture": "45-recovery-valid-mobile",
+      "texte": null
+    },
+    {
+      "perimetre": "admin",
+      "fichier": "captures-admin/category-failed-save.png",
+      "capture": "category-failed-save",
+      "texte": "captures-admin/category-failed-save.txt"
+    },
+    {
+      "perimetre": "admin",
+      "fichier": "captures-admin/client-admin-desktop.png",
+      "capture": "client-admin-desktop",
+      "texte": "captures-admin/client-admin-desktop.txt"
+    },
+    {
+      "perimetre": "admin",
+      "fichier": "captures-admin/client-cancel-keeps-draft.png",
+      "capture": "client-cancel-keeps-draft",
+      "texte": "captures-admin/client-cancel-keeps-draft.txt"
+    },
+    {
+      "perimetre": "admin",
+      "fichier": "captures-admin/client-contact-desktop.png",
+      "capture": "client-contact-desktop",
+      "texte": "captures-admin/client-contact-desktop.txt"
+    },
+    {
+      "perimetre": "admin",
+      "fichier": "captures-admin/client-create-desktop.png",
+      "capture": "client-create-desktop",
+      "texte": "captures-admin/client-create-desktop.txt"
+    },
+    {
+      "perimetre": "admin",
+      "fichier": "captures-admin/client-create-invalid-email.png",
+      "capture": "client-create-invalid-email",
+      "texte": "captures-admin/client-create-invalid-email.txt"
+    },
+    {
+      "perimetre": "admin",
+      "fichier": "captures-admin/client-create-mobile.png",
+      "capture": "client-create-mobile",
+      "texte": "captures-admin/client-create-mobile.txt"
+    },
+    {
+      "perimetre": "admin",
+      "fichier": "captures-admin/client-deletion-no-confirm.png",
+      "capture": "client-deletion-no-confirm",
+      "texte": "captures-admin/client-deletion-no-confirm.txt"
+    },
+    {
+      "perimetre": "admin",
+      "fichier": "captures-admin/client-pro-billing.png",
+      "capture": "client-pro-billing",
+      "texte": "captures-admin/client-pro-billing.txt"
+    },
+    {
+      "perimetre": "admin",
+      "fichier": "captures-admin/client-pro-desktop.png",
+      "capture": "client-pro-desktop",
+      "texte": "captures-admin/client-pro-desktop.txt"
+    },
+    {
+      "perimetre": "admin",
+      "fichier": "captures-admin/client-summary-desktop.png",
+      "capture": "client-summary-desktop",
+      "texte": "captures-admin/client-summary-desktop.txt"
+    },
+    {
+      "perimetre": "admin",
+      "fichier": "captures-admin/client-summary-mobile.png",
+      "capture": "client-summary-mobile",
+      "texte": "captures-admin/client-summary-mobile.txt"
+    },
+    {
+      "perimetre": "admin",
+      "fichier": "captures-admin/clients-desktop.png",
+      "capture": "clients-desktop",
+      "texte": "captures-admin/clients-desktop.txt"
+    },
+    {
+      "perimetre": "admin",
+      "fichier": "captures-admin/clients-mobile.png",
+      "capture": "clients-mobile",
+      "texte": "captures-admin/clients-mobile.txt"
+    },
+    {
+      "perimetre": "admin",
+      "fichier": "captures-admin/delegated-admin-missing-tabs.png",
+      "capture": "delegated-admin-missing-tabs",
+      "texte": "captures-admin/delegated-admin-missing-tabs.txt"
+    },
+    {
+      "perimetre": "admin",
+      "fichier": "captures-admin/estimate-empty-desktop.png",
+      "capture": "estimate-empty-desktop",
+      "texte": "captures-admin/estimate-empty-desktop.txt"
+    },
+    {
+      "perimetre": "admin",
+      "fichier": "captures-admin/estimate-empty-mobile.png",
+      "capture": "estimate-empty-mobile",
+      "texte": "captures-admin/estimate-empty-mobile.txt"
+    },
+    {
+      "perimetre": "admin",
+      "fichier": "captures-admin/estimate-filled-desktop.png",
+      "capture": "estimate-filled-desktop",
+      "texte": "captures-admin/estimate-filled-desktop.txt"
+    },
+    {
+      "perimetre": "admin",
+      "fichier": "captures-admin/estimate-filled-mobile.png",
+      "capture": "estimate-filled-mobile",
+      "texte": "captures-admin/estimate-filled-mobile.txt"
+    },
+    {
+      "perimetre": "admin",
+      "fichier": "captures-admin/export-pro-billing-mobile.png",
+      "capture": "export-pro-billing-mobile",
+      "texte": null
+    },
+    {
+      "perimetre": "admin",
+      "fichier": "captures-admin/export-pro-billing.png",
+      "capture": "export-pro-billing",
+      "texte": null
+    },
+    {
+      "perimetre": "admin",
+      "fichier": "captures-admin/import-preview-desktop.png",
+      "capture": "import-preview-desktop",
+      "texte": "captures-admin/import-preview-desktop.txt"
+    },
+    {
+      "perimetre": "admin",
+      "fichier": "captures-admin/import-preview-mobile.png",
+      "capture": "import-preview-mobile",
+      "texte": "captures-admin/import-preview-mobile.txt"
+    },
+    {
+      "perimetre": "admin",
+      "fichier": "captures-admin/import-upload-desktop.png",
+      "capture": "import-upload-desktop",
+      "texte": "captures-admin/import-upload-desktop.txt"
+    },
+    {
+      "perimetre": "admin",
+      "fichier": "captures-admin/more-desktop.png",
+      "capture": "more-desktop",
+      "texte": "captures-admin/more-desktop.txt"
+    },
+    {
+      "perimetre": "admin",
+      "fichier": "captures-admin/more-mobile.png",
+      "capture": "more-mobile",
+      "texte": "captures-admin/more-mobile.txt"
+    },
+    {
+      "perimetre": "admin",
+      "fichier": "captures-admin/password-desktop.png",
+      "capture": "password-desktop",
+      "texte": "captures-admin/password-desktop.txt"
+    },
+    {
+      "perimetre": "admin",
+      "fichier": "captures-admin/password-mobile.png",
+      "capture": "password-mobile",
+      "texte": "captures-admin/password-mobile.txt"
+    },
+    {
+      "perimetre": "admin",
+      "fichier": "captures-admin/rates-partial-save.png",
+      "capture": "rates-partial-save",
+      "texte": "captures-admin/rates-partial-save.txt"
+    },
+    {
+      "perimetre": "admin",
+      "fichier": "captures-admin/settings-business-mobile.png",
+      "capture": "settings-business-mobile",
+      "texte": "captures-admin/settings-business-mobile.txt"
+    },
+    {
+      "perimetre": "admin",
+      "fichier": "captures-admin/settings-business.png",
+      "capture": "settings-business",
+      "texte": "captures-admin/settings-business.txt"
+    },
+    {
+      "perimetre": "admin",
+      "fichier": "captures-admin/settings-categories-mobile.png",
+      "capture": "settings-categories-mobile",
+      "texte": "captures-admin/settings-categories-mobile.txt"
+    },
+    {
+      "perimetre": "admin",
+      "fichier": "captures-admin/settings-categories.png",
+      "capture": "settings-categories",
+      "texte": "captures-admin/settings-categories.txt"
+    },
+    {
+      "perimetre": "admin",
+      "fichier": "captures-admin/settings-departures.png",
+      "capture": "settings-departures",
+      "texte": "captures-admin/settings-departures.txt"
+    },
+    {
+      "perimetre": "admin",
+      "fichier": "captures-admin/settings-forbidden.png",
+      "capture": "settings-forbidden",
+      "texte": "captures-admin/settings-forbidden.txt"
+    },
+    {
+      "perimetre": "admin",
+      "fichier": "captures-admin/settings-permissions-preparer.png",
+      "capture": "settings-permissions-preparer",
+      "texte": "captures-admin/settings-permissions-preparer.txt"
+    },
+    {
+      "perimetre": "admin",
+      "fichier": "captures-admin/settings-rates-mobile.png",
+      "capture": "settings-rates-mobile",
+      "texte": "captures-admin/settings-rates-mobile.txt"
+    },
+    {
+      "perimetre": "admin",
+      "fichier": "captures-admin/settings-rates.png",
+      "capture": "settings-rates",
+      "texte": "captures-admin/settings-rates.txt"
+    },
+    {
+      "perimetre": "admin",
+      "fichier": "captures-admin/settings-telegram.png",
+      "capture": "settings-telegram",
+      "texte": "captures-admin/settings-telegram.txt"
+    },
+    {
+      "perimetre": "admin",
+      "fichier": "captures-admin/settings-templates-mobile.png",
+      "capture": "settings-templates-mobile",
+      "texte": "captures-admin/settings-templates-mobile.txt"
+    },
+    {
+      "perimetre": "admin",
+      "fichier": "captures-admin/settings-templates.png",
+      "capture": "settings-templates",
+      "texte": "captures-admin/settings-templates.txt"
+    },
+    {
+      "perimetre": "admin",
+      "fichier": "captures-admin/settings-user-create.png",
+      "capture": "settings-user-create",
+      "texte": "captures-admin/settings-user-create.txt"
+    },
+    {
+      "perimetre": "admin",
+      "fichier": "captures-admin/settings-users-mobile.png",
+      "capture": "settings-users-mobile",
+      "texte": "captures-admin/settings-users-mobile.txt"
+    },
+    {
+      "perimetre": "admin",
+      "fichier": "captures-admin/settings-users.png",
+      "capture": "settings-users",
+      "texte": "captures-admin/settings-users.txt"
+    },
+    {
+      "perimetre": "admin",
+      "fichier": "captures-admin/template-overlap-mobile.png",
+      "capture": "template-overlap-mobile",
+      "texte": "captures-admin/template-overlap-mobile.txt"
+    },
+    {
+      "perimetre": "admin",
+      "fichier": "captures-admin/template-tab-loses-draft.png",
+      "capture": "template-tab-loses-draft",
+      "texte": "captures-admin/template-tab-loses-draft.txt"
+    }
+  ]
+}

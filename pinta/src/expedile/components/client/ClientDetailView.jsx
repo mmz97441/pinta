@@ -7,13 +7,13 @@ import {
 } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { hasPublishedQuote } from './quoteVisibility';
-import { cartonManifest, clientJourney, clientWorkState, quotePresentation, PAYMENT_TERMS } from '../../domain/clientJourney';
+import { cartonManifest, clientJourney, clientWorkState, quotePresentation, PAYMENT_TERMS, outgoingTracking, latestLogisticsEvent } from '../../domain/clientJourney';
 import { useApp } from '../../context/AppContext';
 import { SecureImage } from '../ui/SecureFile';
 import { BRAND, PHASES_CLIENT, getPhaseIndex, getDestByCP } from '../../constants';
 
-import { eur, trackStr, hasTrack } from '../../utils';
-import { Badge, Ligne, ProgressBar } from '../ui';
+import { eur } from '../../utils';
+import { Ligne, ProgressBar } from '../ui';
 
 // ── Phase icons ────────────────────────────────────────────────────────────────
 const PHASE_ICONS = [Package, CheckCircle, Wrench, CreditCard, Plane, Shield, Warehouse, Truck];
@@ -80,16 +80,16 @@ function PhaseStep({ phase, phaseIdx, state, open, onToggle, children }) {
           <p
             className={`leading-snug ${
               isDone
-                ? 'text-xs font-semibold text-emerald-700'
+                ? 'text-sm font-semibold text-emerald-700'
                 : isActive
                 ? 'text-sm font-black text-gray-900'
-                : 'text-xs font-medium text-gray-400'
+                : 'text-sm font-medium text-gray-400'
             }`}
           >
             {phase.label}
           </p>
           {isActive && (
-            <p className="text-[10px] font-semibold mt-0.5" style={{ color: 'var(--text-accent)' }}>
+            <p className="text-sm font-semibold mt-0.5" style={{ color: 'var(--text-accent)' }}>
               Étape en cours
             </p>
           )}
@@ -126,7 +126,7 @@ function PhaseStep({ phase, phaseIdx, state, open, onToggle, children }) {
 export default function ClientDetailView() {
   const navigate = useNavigate();
   const [, setParams] = useSearchParams();
-  const { sel, selDest, feuVert, ask, flash, authCl } = useApp();
+  const { sel, selDest, feuVert, ask, flash, authCl, envois = [] } = useApp();
 
   const curPhaseIdx = sel ? getPhaseIndex(sel.statut) : 0;
   const [timeOpen, setTimeOpen] = useState(curPhaseIdx);
@@ -143,6 +143,8 @@ export default function ClientDetailView() {
   const published = quotePresentation(sel, authCl, selDest);
   const price = published.colis;
   const clientWaiting = journey.waiting;
+  const trackingOut = outgoingTracking(sel, envois);
+  const logistics = latestLogisticsEvent(sel);
   const openPanel = panel => setParams(previous => { const next = new URLSearchParams(previous); next.set('panel', panel); return next; }, { replace: true });
 
   const toggleStep = (idx) => {
@@ -179,31 +181,31 @@ export default function ClientDetailView() {
       const hasDims = sel.dimL && sel.dimW && sel.dimH && sel.poids;
       return (
         <div className="space-y-3">
-          <p className="text-xs text-gray-500 leading-relaxed">
+          <p className="text-sm text-gray-500 leading-relaxed">
             {curPhaseIdx === 0
               ? 'Votre colis est arrivé à l\'entrepôt. Nous sommes en train de le mesurer.'
               : 'Votre colis a été réceptionné et mesuré.'}
           </p>
           {sel.dateReception && (
-            <p className="text-[10px] font-medium text-gray-400">
+            <p className="text-sm font-medium text-gray-400">
               Reçu le {new Date(sel.dateReception).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
               {' à '}{new Date(sel.dateReception).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
             </p>
           )}
           {sel.casier && (
-            <div className="flex items-center gap-2 text-xs text-gray-600 bg-gray-50 rounded-xl px-3 py-2">
+            <div className="flex items-center gap-2 text-sm text-gray-600 bg-gray-50 rounded-xl px-3 py-2">
               <Package size={13} />
               <span>Casier : <span className="font-black">{sel.casier}</span></span>
             </div>
           )}
           {hasDims && sel.dimsParColis && sel.dimsParColis.length > 1 ? (
             <div className="rounded-xl bg-gray-50 p-3 space-y-2">
-              <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">
+              <p className="text-sm font-black uppercase tracking-widest text-gray-400 mb-1">
                 Dimensions mesurées ({sel.dimsParColis.length} colis)
               </p>
               {sel.dimsParColis.map((d, i) => (
                 <div key={i} className="rounded-lg bg-white p-2 border border-gray-100">
-                  <p className="text-[10px] font-bold text-gray-400 mb-0.5">
+                  <p className="text-sm font-bold text-gray-400 mb-0.5">
                     Carton {i + 1}{receptionCartonManifest(sel).trackingsDetail[i]?.number ? ` · ${receptionCartonManifest(sel).trackingsDetail[i].number}` : ' · Sans numéro de suivi'}
                   </p>
                   <Ligne label="L × W × H" value={`${d.dimL} × ${d.dimW} × ${d.dimH} cm`} />
@@ -213,12 +215,12 @@ export default function ClientDetailView() {
             </div>
           ) : hasDims ? (
             <div className="rounded-xl bg-gray-50 p-3 space-y-1">
-              <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">Dimensions mesurées</p>
+              <p className="text-sm font-black uppercase tracking-widest text-gray-400 mb-2">Dimensions mesurées</p>
               <Ligne label="Dimensions" value={`${sel.dimL} × ${sel.dimW} × ${sel.dimH} cm`} />
               <Ligne label="Poids" value={`${sel.poids} kg`} />
             </div>
           ) : (
-            <p className="text-xs text-amber-600 flex items-center gap-1.5 bg-amber-50 rounded-xl px-3 py-2">
+            <p className="text-sm text-amber-600 flex items-center gap-1.5 bg-amber-50 rounded-xl px-3 py-2">
               <Clock size={13} />
               Mesures en cours…
             </p>
@@ -240,26 +242,26 @@ export default function ClientDetailView() {
               {clientWaiting && <p className="border-l-2 border-slate-300 pl-3 text-sm text-slate-600">Votre attente est enregistrée. Aucune préparation ne commence tant que vous n’avez pas donné votre accord.</p>}
               {decisionError && <p role="alert" className="text-sm text-red-700">{decisionError}</p>}
               <p className="text-sm font-semibold text-slate-700">{manifest.count} carton(s) réceptionné(s) · dossier {sel.ref}</p>
-              {manifest.trackings.length > 0 && <p className="break-words text-xs text-slate-600">Références connues : {manifest.trackings.join(' · ')}</p>}
+              {manifest.trackings.length > 0 && <p className="break-words text-sm text-slate-600">Références connues : {manifest.trackings.join(' · ')}</p>}
               <p className="text-sm text-slate-600">Votre accord concerne ces cartons uniquement. Le devis suivra l’optimisation.</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <button disabled={decisionPending} onClick={() => handleFeuVert(true)} className="min-h-11 flex items-center justify-center gap-2 rounded-xl px-3 py-3 font-bold text-sm text-white brand-bg disabled:opacity-50"><ThumbsUp size={16} />{decisionPending ? 'Enregistrement…' : 'Autoriser la préparation'}</button>
                 <button disabled={decisionPending} onClick={() => setShowWait((v) => !v)} aria-expanded={showWait} className="min-h-11 flex items-center justify-center gap-2 rounded-xl border border-slate-300 px-3 py-3 text-sm font-semibold text-slate-700"><Clock size={16} />Attendre d’autres achats</button>
               </div>
               {showWait && <form className="border border-gray-200 rounded-xl p-3 space-y-3" onSubmit={(event) => { event.preventDefault(); recordDecision('wait', { waitUntil: waitUntil || null, reason: waitReason.trim() }); }}>
-                <p className="text-xs text-gray-600">Nous conservons votre dossier en attente. Cette demande ne déclenche aucune préparation.</p>
-                <label className="block text-xs font-semibold text-gray-600">Votre précision<textarea required maxLength={500} value={waitReason} onChange={(e) => setWaitReason(e.target.value)} className="mt-1 block w-full rounded-lg border border-gray-200 p-2 text-sm bg-white" /></label>
-                <label className="block text-xs font-semibold text-gray-600">Attendre jusqu’au (facultatif)<input type="date" min={new Date().toLocaleDateString('en-CA')} value={waitUntil} onChange={(e) => setWaitUntil(e.target.value)} className="mt-1 block min-h-11 w-full rounded-lg border border-gray-200 px-2 text-sm bg-white" /></label>
+                <p className="text-sm text-gray-600">Nous conservons votre dossier en attente. Cette demande ne déclenche aucune préparation.</p>
+                <label className="block text-sm font-semibold text-gray-600">Votre précision<textarea required maxLength={500} value={waitReason} onChange={(e) => setWaitReason(e.target.value)} className="mt-1 block w-full rounded-lg border border-gray-200 p-2 text-sm bg-white" /></label>
+                <label className="block text-sm font-semibold text-gray-600">Attendre jusqu’au (facultatif)<input type="date" min={new Date().toLocaleDateString('en-CA')} value={waitUntil} onChange={(e) => setWaitUntil(e.target.value)} className="mt-1 block min-h-11 w-full rounded-lg border border-gray-200 px-2 text-sm bg-white" /></label>
                 <button disabled={decisionPending || !waitReason.trim()} className="min-h-11 w-full rounded-xl brand-bg text-white text-sm font-semibold disabled:opacity-50">{decisionPending ? 'Enregistrement…' : 'Enregistrer mon attente'}</button>
               </form>}
               <details className="border-t border-slate-200 pt-2"><summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-slate-600">Mesures et fonctionnement</summary><div className="space-y-3">              {sel.dimsParColis && sel.dimsParColis.length > 1 ? (
                 <div className="rounded-xl bg-gray-50 p-3 space-y-2">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">
+                  <p className="text-sm font-black uppercase tracking-widest text-gray-400 mb-1">
                     Dimensions mesurées ({sel.dimsParColis.length} colis)
                   </p>
                   {sel.dimsParColis.map((d, i) => (
                     <div key={i} className="rounded-lg bg-white p-2 border border-gray-100">
-                      <p className="text-[10px] font-bold text-gray-400 mb-0.5">
+                      <p className="text-sm font-bold text-gray-400 mb-0.5">
                         Carton {i + 1}{receptionCartonManifest(sel).trackingsDetail[i]?.number ? ` · ${receptionCartonManifest(sel).trackingsDetail[i].number}` : ' · Sans numéro de suivi'}
                       </p>
                       <Ligne label="L × W × H" value={`${d.dimL} × ${d.dimW} × ${d.dimH} cm`} />
@@ -269,22 +271,22 @@ export default function ClientDetailView() {
                 </div>
               ) : sel.dimL ? (
                 <div className="rounded-xl bg-gray-50 p-3 space-y-1">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">Dimensions mesurées</p>
+                  <p className="text-sm font-black uppercase tracking-widest text-gray-400 mb-2">Dimensions mesurées</p>
                   <Ligne label="L × W × H" value={`${sel.dimL} × ${sel.dimW} × ${sel.dimH} cm`} />
                   <Ligne label="Poids" value={`${sel.poids} kg`} />
                 </div>
               ) : null}
               <div className="rounded-xl p-3 border border-blue-100" style={{ backgroundColor: BRAND.navy + '06' }}>
-                <p className="text-[10px] font-black uppercase tracking-widest mb-1.5" style={{ color: 'var(--brand-text)' }}>
+                <p className="text-sm font-black uppercase tracking-widest mb-1.5" style={{ color: 'var(--brand-text)' }}>
                   Comment ça marche ?
                 </p>
-                <div className="space-y-1.5 text-xs text-gray-600 leading-relaxed">
+                <div className="space-y-1.5 text-sm text-gray-600 leading-relaxed">
                   <p>1. Vous donnez votre accord ci-dessous</p>
                   <p>2. Nous préparons et optimisons votre colis</p>
                   <p>3. Vous recevez le devis final à payer</p>
                 </div>
               </div>
-              {clientWaiting && <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700"><p className="font-semibold">Votre demande d’attente est enregistrée</p><p className="mt-1">{sel.attenteClientMotif}{sel.attenteClientUntil ? ` · Jusqu’au ${new Date(sel.attenteClientUntil).toLocaleDateString('fr-FR')}` : ''}</p><p className="text-xs text-gray-500 mt-1">Vous pouvez utiliser le bouton « Autoriser la préparation » dès que vous êtes prêt.</p></div>}
+              {clientWaiting && <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700"><p className="font-semibold">Votre demande d’attente est enregistrée</p><p className="mt-1">{sel.attenteClientMotif}{sel.attenteClientUntil ? ` · Jusqu’au ${new Date(sel.attenteClientUntil).toLocaleDateString('fr-FR')}` : ''}</p><p className="text-sm text-gray-500 mt-1">Vous pouvez utiliser le bouton « Autoriser la préparation » dès que vous êtes prêt.</p></div>}
 </div></details>
               <button disabled={decisionPending} onClick={() => handleFeuVert(false)} className="min-h-11 flex items-center gap-2 text-sm font-semibold text-red-700"><ThumbsDown size={15} />Refuser la préparation</button>
             </>
@@ -292,17 +294,17 @@ export default function ClientDetailView() {
           {isAutorise && (
             <>
               <div className="rounded-xl p-3 bg-emerald-50 border border-emerald-100">
-                <p className="text-xs font-bold text-emerald-700 flex items-center gap-1.5 mb-1">
+                <p className="text-sm font-bold text-emerald-700 flex items-center gap-1.5 mb-1">
                   <CheckCircle size={13} />
                   Accord donné
                 </p>
-                <p className="text-xs text-emerald-600 leading-relaxed">
+                <p className="text-sm text-emerald-600 leading-relaxed">
                   Vous avez autorisé la préparation de ce colis. Expedîle va le préparer pour l'expédition.
                 </p>
               </div>
               <button
                 onClick={handleRevoke}
-                className="flex items-center gap-1.5 text-xs font-semibold text-gray-400 hover:text-red-500 transition-colors"
+                className="flex items-center gap-1.5 text-sm font-semibold text-gray-400 hover:text-red-500 transition-colors"
               >
                 <RotateCcw size={11} />
                 Demander l’annulation de mon accord
@@ -311,11 +313,11 @@ export default function ClientDetailView() {
           )}
           {isRefuse && (
             <div className="rounded-xl p-3 bg-red-50 border border-red-100">
-              <p className="text-xs font-bold text-red-700 flex items-center gap-1.5">
+              <p className="text-sm font-bold text-red-700 flex items-center gap-1.5">
                 <AlertCircle size={13} />
                 Préparation refusée
               </p>
-              <p className="text-xs text-red-600 mt-1 leading-relaxed">
+              <p className="text-sm text-red-600 mt-1 leading-relaxed">
                 Vous avez refusé la préparation. Contactez-nous pour toute question.
               </p>
             </div>
@@ -328,19 +330,19 @@ export default function ClientDetailView() {
     if (phaseIdx === 2) {
       return (
         <div className="space-y-2">
-          <p className="text-xs text-gray-500 leading-relaxed">
+          <p className="text-sm text-gray-500 leading-relaxed">
             {curPhaseIdx === 2
               ? 'Votre colis est en cours de préparation et d\'optimisation dans notre entrepôt.'
               : 'La préparation est terminée.'}
           </p>
           {curPhaseIdx === 2 && (
-            <div className="flex items-center gap-2 text-xs text-blue-700 bg-blue-50 rounded-xl px-3 py-2">
+            <div className="flex items-center gap-2 text-sm text-blue-700 bg-blue-50 rounded-xl px-3 py-2">
               <Wrench size={13} />
               Traitement en cours — nous vous informerons dès que le devis est prêt
             </div>
           )}
           {sel.casier && (
-            <div className="flex items-center gap-2 text-xs text-gray-600 bg-gray-50 rounded-xl px-3 py-2">
+            <div className="flex items-center gap-2 text-sm text-gray-600 bg-gray-50 rounded-xl px-3 py-2">
               <Package size={13} />
               <span>Casier : <span className="font-black">{sel.casier}</span></span>
             </div>
@@ -348,7 +350,7 @@ export default function ClientDetailView() {
           {sel.photoPrep && (
             <div className="rounded-xl overflow-hidden border border-gray-200">
               <SecureImage src={sel.photoPrep} alt="Photo de votre colis préparé" className="w-full h-auto" />
-              <div className="px-3 py-2 bg-gray-50 text-[10px] text-gray-500 flex items-center gap-1.5">
+              <div className="px-3 py-2 bg-gray-50 text-sm text-gray-500 flex items-center gap-1.5">
                 <Camera size={11} />
                 Photo de votre colis préparé par notre équipe
               </div>
@@ -366,18 +368,33 @@ export default function ClientDetailView() {
 
       return (
         <div className="space-y-3">
+          {hasDevis && <p className="flex flex-wrap items-baseline justify-between gap-2 text-base font-semibold text-slate-800"><span>{isPaye ? 'Total du devis' : 'Montant à régler'}</span><strong className="text-2xl">{eur(price.devisTotal)}</strong></p>}
+          {hasDevis && isPay && !isPaye && !sel.archive && (
+            <button
+              onClick={handlePayer}
+              className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-black text-sm text-white active:scale-95 transition-all"
+              style={{
+                background: `linear-gradient(135deg, ${BRAND.gold}, ${BRAND.goldD})`,
+                boxShadow: `0 4px 16px rgba(232,184,75,0.35)`,
+                color: BRAND.navyD,
+              }}
+            >
+              <CreditCard size={16} />
+              {sel.payplugPaymentUrl ? `Payer ${hasDevis ? eur(price.devisTotal) : ''}` : published.client.type === 'pro' ? 'Consulter les échanges de règlement' : 'Contacter l’équipe pour le règlement'}
+            </button>
+          )}
           {hasDevis && (
-            <div className="rounded-xl border border-gray-100 overflow-hidden">
-              <div
-                className="px-3 py-2 text-[10px] font-black uppercase tracking-widest"
+            <details className="rounded-xl border border-gray-100 overflow-hidden">
+              <summary
+                className="min-h-11 cursor-pointer px-3 py-3 text-sm font-semibold"
                 style={{ backgroundColor: BRAND.navy + '08', color: 'var(--brand-text)' }}
               >
                 Détail du devis
-              </div>
+              </summary>
               <div className="p-3 space-y-1">
                 {price.avantOptimTransport != null && price.avantOptimTransport !== price.devisTransport && (
                   <>
-                    <div className="flex justify-between text-xs mb-1">
+                    <div className="flex justify-between text-sm mb-1">
                       <span className="text-gray-400 line-through">Transport brut</span>
                       <span className="text-gray-400 line-through">{eur(price.avantOptimTransport)}</span>
                     </div>
@@ -399,29 +416,29 @@ export default function ClientDetailView() {
                     </span>
                   </div>
                   {price.economie != null && price.economie > 0 && (
-                    <div className="mt-1.5 text-[10px] font-bold text-emerald-600 bg-emerald-50 rounded-lg px-2.5 py-1.5 flex items-center gap-1">
+                    <div className="mt-1.5 text-sm font-bold text-emerald-600 bg-emerald-50 rounded-lg px-2.5 py-1.5 flex items-center gap-1">
                       <span>Économie réalisée : {eur(price.economie)}</span>
                     </div>
                   )}
                 </div>
               </div>
-            </div>
+            </details>
           )}
 
           {hasDevis && <div className="border-t border-slate-200 pt-3 text-sm text-slate-600">
             <p className="font-semibold">{published.version ? `Devis publié · version ${published.version}` : 'Devis historique'}</p>
-            {published.issuedAt && <p className="mt-1 text-xs">Établi le {new Date(published.issuedAt).toLocaleDateString('fr-FR')}</p>}
+            {published.issuedAt && <p className="mt-1 text-sm">Établi le {new Date(published.issuedAt).toLocaleDateString('fr-FR')}</p>}
             {published.paymentMode && <p className="mt-2">Modalités convenues : <strong>{PAYMENT_TERMS[published.paymentMode] || published.paymentMode}</strong>.</p>}
-            {published.client.type === 'pro' && !isPaye && <p className="mt-1">Le règlement suit ces modalités. Sa réception sera confirmée ici par l’équipe ; aucune nouvelle autorisation de préparation n’est nécessaire.</p>}
-            {published.client.type === 'pro' && !isPaye && <div className="mt-2 space-y-2"><p className="text-xs">Référence à communiquer pour le règlement : <strong>{price.ref}</strong> · {eur(price.devisTotal)}.</p><button className="min-h-11 rounded-lg border border-slate-300 px-3 text-sm font-semibold" onClick={async () => { try { await navigator.clipboard.writeText(`${price.ref} · ${eur(price.devisTotal)}`); flash('Référence de règlement copiée'); } catch { flash({ msg: 'Copie indisponible. La référence reste affichée ci-dessus.', type: 'error' }); } }}>Copier la référence de règlement</button></div>}
+            {published.client.type === 'pro' && !isPaye && <p className="mt-1">{published.paymentMode === 'virement' ? 'Utilisez les coordonnées bancaires transmises par notre équipe. Si vous ne les avez pas, demandez-les dans les échanges ci-dessous.' : ['30_jours','fin_de_mois'].includes(published.paymentMode) ? 'La date exacte d’échéance est celle communiquée par notre équipe. Consultez les échanges si elle ne figure pas sur votre devis.' : published.paymentMode === 'especes' ? 'Contactez notre équipe pour convenir de la remise du règlement.' : 'Les modalités sont à confirmer avec notre équipe.'} La réception du règlement sera confirmée ici.</p>}
+            {published.client.type === 'pro' && !isPaye && <div className="mt-2 space-y-2"><p className="text-sm">Référence à communiquer pour le règlement : <strong>{price.ref}</strong> · {eur(price.devisTotal)}.</p><button className="min-h-11 rounded-lg border border-slate-300 px-3 text-sm font-semibold" onClick={async () => { try { await navigator.clipboard.writeText(`${price.ref} · ${eur(price.devisTotal)}`); flash('Référence de règlement copiée'); } catch { flash({ msg: 'Copie indisponible. La référence reste affichée ci-dessus.', type: 'error' }); } }}>Copier la référence de règlement</button></div>}
 
           </div>}
           {isPaye && (
             <div className="rounded-xl p-3 bg-emerald-50 border border-emerald-100 flex items-center gap-2">
               <CheckCircle size={15} className="text-emerald-600 flex-shrink-0" />
               <div>
-                <p className="text-xs font-bold text-emerald-700">Paiement confirmé</p>
-                <p className="text-xs text-emerald-600">{eur(sel.paiementMontant)} reçu</p>
+                <p className="text-sm font-bold text-emerald-700">Paiement confirmé</p>
+                <p className="text-sm text-emerald-600">{eur(sel.paiementMontant)} reçu</p>
               </div>
             </div>
           )}
@@ -437,23 +454,10 @@ export default function ClientDetailView() {
             </button>
           )}
 
-          {hasDevis && isPay && !isPaye && !sel.archive && (
-            <button
-              onClick={handlePayer}
-              className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-black text-sm text-white active:scale-95 transition-all"
-              style={{
-                background: `linear-gradient(135deg, ${BRAND.gold}, ${BRAND.goldD})`,
-                boxShadow: `0 4px 16px rgba(232,184,75,0.35)`,
-                color: BRAND.navyD,
-              }}
-            >
-              <CreditCard size={16} />
-              {sel.payplugPaymentUrl ? `Payer ${hasDevis ? eur(price.devisTotal) : ''}` : published.client.type === 'pro' ? 'Consulter les échanges de règlement' : 'Contacter l’équipe pour le règlement'}
-            </button>
-          )}
+
 
           {!hasDevis && !isPaye && (
-            <p className="text-xs text-gray-400 flex items-center gap-1.5 bg-gray-50 rounded-xl px-3 py-2">
+            <p className="text-sm text-gray-400 flex items-center gap-1.5 bg-gray-50 rounded-xl px-3 py-2">
               <Clock size={13} />
               {journey.quoteNeedsReview ? 'Votre devis est en cours de révision. Aucun règlement n’est demandé pour la version retirée.' : 'Le devis sera disponible prochainement'}
             </p>
@@ -466,7 +470,7 @@ export default function ClientDetailView() {
     if (phaseIdx === 4) {
       return (
         <div className="space-y-2">
-          <p className="text-xs text-gray-500 leading-relaxed">
+          <p className="text-sm text-gray-500 leading-relaxed">
             {sel.statut === 'expedie'
               ? 'Votre colis a été remis au transporteur.'
               : sel.statut === 'transit'
@@ -475,25 +479,15 @@ export default function ClientDetailView() {
           </p>
           {sel.statut === 'transit' && (
             <div
-              className="flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold text-white"
+              className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-bold text-white"
               style={{ background: `linear-gradient(135deg, ${BRAND.navy}, #0891B2)` }}
             >
               <Plane size={14} />
               Vol en cours vers {selDest?.nom || 'votre destination'} {selDest?.flag || ''}
             </div>
           )}
-          {hasTrack(sel) && (
-            <a
-              href={`https://parcelsapp.com/en/tracking/${sel.trackings.filter((t) => t)[0]}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-2 text-xs font-semibold px-3 py-2 rounded-xl transition-colors"
-              style={{ color: 'var(--brand-text)', backgroundColor: BRAND.navy + '08' }}
-            >
-              <ExternalLink size={12} />
-              Suivre le colis ({trackStr(sel)})
-            </a>
-          )}
+          {trackingOut ? <a href={`https://parcelsapp.com/fr/tracking/${encodeURIComponent(trackingOut)}`} target="_blank" rel="noopener noreferrer" className="min-h-11 flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold brand-t bg-slate-50"><ExternalLink size={16} />Suivi vers votre adresse · {trackingOut}</a> : <p className="text-sm text-slate-600">Le suivi transporteur vers votre adresse n’est pas encore renseigné. Les étapes de votre expédition restent visibles ici.</p>}
+          {manifest.trackings.length > 0 && <details><summary className="min-h-11 cursor-pointer py-3 text-sm text-slate-600">Suivis fournisseurs vers l’entrepôt</summary>{manifest.trackings.map(number => <a key={number} href={`https://parcelsapp.com/fr/tracking/${encodeURIComponent(number)}`} target="_blank" rel="noopener noreferrer" className="min-h-11 flex items-center gap-2 break-all text-sm underline"><ExternalLink size={16} />{number}</a>)}</details>}
         </div>
       );
     }
@@ -509,13 +503,13 @@ export default function ClientDetailView() {
       return (
         <div className="space-y-3">
           {isArrive && (
-            <div className="flex items-center gap-2 text-xs font-semibold text-teal-700 bg-teal-50 rounded-xl px-3 py-2">
+            <div className="flex items-center gap-2 text-sm font-semibold text-teal-700 bg-teal-50 rounded-xl px-3 py-2">
               <MapPin size={13} />
               Colis arrivé à destination — livraison en cours de planification
             </div>
           )}
           {isEnLivraison && (
-            <div className="flex items-center gap-2 text-xs font-semibold text-lime-700 bg-lime-50 rounded-xl px-3 py-2">
+            <div className="flex items-center gap-2 text-sm font-semibold text-lime-700 bg-lime-50 rounded-xl px-3 py-2">
               <MapPin size={13} />
               Votre colis est en cours de livraison
             </div>
@@ -527,14 +521,14 @@ export default function ClientDetailView() {
               <p className="text-sm text-gray-500">
                 Votre colis a bien été livré à {selDest?.nom || 'votre domicile'}.
               </p>
-              <div className="flex items-center justify-center gap-1.5 text-xs font-bold text-emerald-600">
+              <div className="flex items-center justify-center gap-1.5 text-sm font-bold text-emerald-600">
                 <CheckCircle size={14} />
                 Livraison confirmée
               </div>
             </div>
           )}
           {!isLivre && !isEnLivraison && !isArrive && (
-            <p className="text-xs text-gray-400 flex items-center gap-1.5 bg-gray-50 rounded-xl px-3 py-2">
+            <p className="text-sm text-gray-400 flex items-center gap-1.5 bg-gray-50 rounded-xl px-3 py-2">
               <Clock size={13} />
               La livraison sera programmée à l'arrivée du colis
             </p>
@@ -557,22 +551,24 @@ export default function ClientDetailView() {
           <ArrowLeft size={18} className="text-gray-600" />
         </button>
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-lg font-black text-gray-900 leading-none">{sel.ref}</h2>
-            {clientWaiting ? <span className="rounded-full bg-slate-100 text-slate-600 px-2 py-1 text-[10px] font-semibold">Attente demandée</span> : <Badge statut={sel.statut} />}
+
           </div>
-          <p className="text-xs text-gray-400 truncate mt-0.5">{sel.desc}</p>
+          <p className="text-sm text-gray-400 truncate mt-0.5">{sel.desc}</p>
         </div>
       </div>
 
       <section aria-label="État actuel et prochaine étape" className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
-        <div><p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Étape actuelle</p><h2 className="mt-1 text-lg font-bold text-slate-800">{journey.label}</h2></div>
+        <div><p className="text-sm font-semibold uppercase tracking-wide text-slate-500">Étape actuelle</p><h2 className="mt-1 text-lg font-bold text-slate-800">{journey.label}</h2></div>
         {task.kind === 'none' ? <><p className="font-semibold text-slate-700">Aucune action attendue de votre part.</p><p className="text-sm text-slate-600">{journey.next}</p></> : <p className="text-sm font-semibold text-slate-700">À vous · {task.action}</p>}
         {task.kind === 'agreement' && phaseContent(1)}
         {task.kind === 'payment' && phaseContent(3)}
         {['documents','messages'].includes(task.kind) && <button onClick={() => openPanel(task.kind)} className="min-h-11 w-full rounded-xl brand-bg px-4 py-3 text-sm font-semibold text-white">{task.action}</button>}
+        {clientWaiting && <div className="rounded-xl bg-slate-50 p-3 text-sm text-slate-700"><p>{sel.attenteClientMotif || 'Vous avez demandé à attendre avant la préparation.'}</p><p className="mt-1">Attente enregistrée le {new Date(sel.attenteClientDate).toLocaleDateString('fr-FR')}{sel.attenteClientUntil ? ` · Réexamen prévu le ${new Date(sel.attenteClientUntil).toLocaleDateString('fr-FR')}` : ''}</p></div>}
+        {['expedie','transit','dedouanement','arrive','livraison','livre'].includes(sel.statut) && <p className="text-sm text-slate-600">{logistics ? `Dernier événement logistique renseigné : ${logistics.label.toLocaleLowerCase('fr')} le ${new Date(logistics.date).toLocaleDateString('fr-FR')}.` : 'Date du dernier événement logistique non renseignée.'}{sel.statut !== 'livre' ? ' La date de livraison sera précisée lorsqu’elle sera confirmée.' : ''}</p>}
         {clientWaiting && <details className="border-t border-slate-200 pt-2"><summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-slate-700">Reprendre ma décision</summary>{phaseContent(1)}</details>}
-        {journey.event && <p className="text-xs text-slate-500">{journey.event.label} le {new Date(journey.event.date).toLocaleDateString('fr-FR')}</p>}
+        {journey.event && <p className="text-sm text-slate-500">{journey.event.label} le {new Date(journey.event.date).toLocaleDateString('fr-FR')}</p>}
       </section>
 
       <details className="rounded-xl border border-slate-200 p-3"><summary className="min-h-11 cursor-pointer py-2 text-sm font-semibold text-slate-700">Suivi et détails de l’expédition</summary><div className="space-y-4 pt-3">
@@ -584,7 +580,7 @@ export default function ClientDetailView() {
           if (state === 'future' || (idx === 1 && (task.kind === 'agreement' || clientWaiting)) || (idx === 3 && task.kind === 'payment')) return null;
           return <PhaseStep key={phase.key} phase={phase} phaseIdx={idx} state={state} open={timeOpen === idx} onToggle={() => toggleStep(idx)}>{phaseContent(idx)}</PhaseStep>;
         })}</div>}
-        {!['annule','refuse_client'].includes(sel.statut) && curPhaseIdx < PHASES_CLIENT.length - 1 && <div><p className="mb-2 text-xs font-semibold text-slate-500">Prochaines étapes</p><div className="flex flex-wrap gap-2">{PHASES_CLIENT.slice(curPhaseIdx + 1).map(phase => <span key={phase.key} className="inline-flex items-center gap-1 text-xs text-slate-600"><ChevronRight size={12} />{phase.label}</span>)}</div></div>}
+        {!['annule','refuse_client'].includes(sel.statut) && curPhaseIdx < PHASES_CLIENT.length - 1 && <div><p className="mb-2 text-sm font-semibold text-slate-500">Prochaines étapes</p><div className="flex flex-wrap gap-2">{PHASES_CLIENT.slice(curPhaseIdx + 1).map(phase => <span key={phase.key} className="inline-flex items-center gap-1 text-sm text-slate-600"><ChevronRight size={12} />{phase.label}</span>)}</div></div>}
       </div></details>
 
       {/* Spacer so last card isn't under bottom nav */}

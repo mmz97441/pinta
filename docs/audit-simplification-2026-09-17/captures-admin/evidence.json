@@ -1,0 +1,5498 @@
+{
+  "evidence": [
+    {
+      "name": "clients-desktop",
+      "url": "http://127.0.0.1:4175/clients",
+      "width": 1440,
+      "overflow": false,
+      "scrollWidth": 1440,
+      "inputs": [
+        {
+          "tag": "INPUT",
+          "label": "Rechercher un client",
+          "placeholder": "Rechercher par nom, ville, email, tél…",
+          "type": "text",
+          "value": ""
+        }
+      ],
+      "smallButtons": [
+        {
+          "text": "Réduire",
+          "height": 32,
+          "width": 195
+        },
+        {
+          "text": "Passer en mode sombre",
+          "height": 34,
+          "width": 34
+        },
+        {
+          "text": "Revenir à l’accueil",
+          "height": 34,
+          "width": 34
+        },
+        {
+          "text": "Nouveau client",
+          "height": 36,
+          "width": 150
+        },
+        {
+          "text": "Liste",
+          "height": 23,
+          "width": 45
+        },
+        {
+          "text": "Cartes",
+          "height": 23,
+          "width": 54
+        },
+        {
+          "text": "Nom ▲",
+          "height": 44,
+          "width": 37
+        },
+        {
+          "text": "Type ↕",
+          "height": 44,
+          "width": 36
+        },
+        {
+          "text": "Ville ↕",
+          "height": 44,
+          "width": 34
+        },
+        {
+          "text": "Colis ↕",
+          "height": 44,
+          "width": 37
+        }
+      ],
+      "violations": []
+    },
+    {
+      "name": "client-create-desktop",
+      "url": "http://127.0.0.1:4175/clients/new",
+      "width": 1440,
+      "overflow": false,
+      "scrollWidth": 1440,
+      "inputs": [
+        {
+          "tag": "SELECT",
+          "label": "",
+          "type": "select-one",
+          "value": "freemium"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Homme",
+          "placeholder": "",
+          "type": "radio",
+          "value": "homme"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Femme",
+          "placeholder": "",
+          "type": "radio",
+          "value": "femme"
+        },
+        {
+          "tag": "INPUT",
+          "label": "",
+          "placeholder": "NOM",
+          "type": "text",
+          "value": ""
+        },
+        {
+          "tag": "INPUT",
+          "label": "",
+          "placeholder": "Prénom",
+          "type": "text",
+          "value": ""
+        },
+        {
+          "tag": "INPUT",
+          "label": "",
+          "placeholder": "",
+          "type": "date",
+          "value": ""
+        },
+        {
+          "tag": "INPUT",
+          "label": "",
+          "placeholder": "+262 692 12 34 56",
+          "type": "text",
+          "value": ""
+        },
+        {
+          "tag": "INPUT",
+          "label": "",
+          "placeholder": "+262 262 12 34 56",
+          "type": "text",
+          "value": ""
+        },
+        {
+          "tag": "INPUT",
+          "label": "",
+          "placeholder": "adresse@exemple.com",
+          "type": "email",
+          "value": ""
+        },
+        {
+          "tag": "INPUT",
+          "label": "",
+          "placeholder": "@username",
+          "type": "text",
+          "value": ""
+        },
+        {
+          "tag": "SELECT",
+          "label": "",
+          "type": "select-one",
+          "value": ""
+        },
+        {
+          "tag": "INPUT",
+          "label": "",
+          "placeholder": "Saint-Denis",
+          "type": "text",
+          "value": ""
+        },
+        {
+          "tag": "INPUT",
+          "label": "",
+          "placeholder": "97400",
+          "type": "text",
+          "value": ""
+        },
+        {
+          "tag": "INPUT",
+          "label": "",
+          "placeholder": "Saint-Denis",
+          "type": "text",
+          "value": ""
+        },
+        {
+          "tag": "INPUT",
+          "label": "",
+          "placeholder": "N° et nom de rue",
+          "type": "text",
+          "value": ""
+        },
+        {
+          "tag": "INPUT",
+          "label": "",
+          "placeholder": "Résidence, bâtiment, étage…",
+          "type": "text",
+          "value": ""
+        },
+        {
+          "tag": "TEXTAREA",
+          "label": "",
+          "placeholder": "Digicode, interphone, horaires…",
+          "type": "textarea",
+          "value": ""
+        },
+        {
+          "tag": "TEXTAREA",
+          "label": "",
+          "placeholder": "Informations utiles pour l'équipe…",
+          "type": "textarea",
+          "value": ""
+        }
+      ],
+      "smallButtons": [
+        {
+          "text": "Réduire",
+          "height": 32,
+          "width": 195
+        },
+        {
+          "text": "Passer en mode sombre",
+          "height": 34,
+          "width": 34
+        },
+        {
+          "text": "Retour aux clients",
+          "height": 32,
+          "width": 159
+        },
+        {
+          "text": "Particulier",
+          "height": 24,
+          "width": 87
+        },
+        {
+          "text": "Professionnel",
+          "height": 24,
+          "width": 107
+        }
+      ],
+      "violations": [
+        {
+          "id": "color-contrast",
+          "impact": "serious",
+          "nodes": [
+            {
+              "target": [
+                ".bg-blue-500"
+              ],
+              "summary": "Fix any of the following:\n  Element has insufficient color contrast of 3.48 (foreground color: #ffffff, background color: #4287f6, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1"
+            }
+          ]
+        },
+        {
+          "id": "label",
+          "impact": "critical",
+          "nodes": [
+            {
+              "target": [
+                "input[type=\"date\"]"
+              ],
+              "summary": "Fix any of the following:\n  Element does not have an implicit (wrapped) <label>\n  Element does not have an explicit <label>\n  aria-label attribute does not exist or is empty\n  aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty\n  Element has no title attribute\n  Element has no placeholder attribute\n  Element's default semantics were not overridden with role=\"none\" or role=\"presentation\""
+            }
+          ]
+        },
+        {
+          "id": "select-name",
+          "impact": "critical",
+          "nodes": [
+            {
+              "target": [
+                ".grid-cols-3 > div:nth-child(1) > select"
+              ],
+              "summary": "Fix any of the following:\n  Element does not have an implicit (wrapped) <label>\n  Element does not have an explicit <label>\n  aria-label attribute does not exist or is empty\n  aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty\n  Element has no title attribute\n  Element's default semantics were not overridden with role=\"none\" or role=\"presentation\""
+            },
+            {
+              "target": [
+                ".grid-cols-2.grid.gap-3 > div:nth-child(1) > select"
+              ],
+              "summary": "Fix any of the following:\n  Element does not have an implicit (wrapped) <label>\n  Element does not have an explicit <label>\n  aria-label attribute does not exist or is empty\n  aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty\n  Element has no title attribute\n  Element's default semantics were not overridden with role=\"none\" or role=\"presentation\""
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "client-summary-desktop",
+      "url": "http://127.0.0.1:4175/clients/22222222-2222-4222-8222-222222222222",
+      "width": 1440,
+      "overflow": false,
+      "scrollWidth": 1440,
+      "inputs": [],
+      "smallButtons": [
+        {
+          "text": "Réduire",
+          "height": 32,
+          "width": 195
+        },
+        {
+          "text": "Passer en mode sombre",
+          "height": 34,
+          "width": 34
+        },
+        {
+          "text": "Retour aux clients",
+          "height": 32,
+          "width": 159
+        }
+      ],
+      "violations": []
+    },
+    {
+      "name": "client-pro-desktop",
+      "url": "http://127.0.0.1:4175/clients/22222222-2222-4222-8222-222222222223",
+      "width": 1440,
+      "overflow": false,
+      "scrollWidth": 1440,
+      "inputs": [],
+      "smallButtons": [
+        {
+          "text": "Réduire",
+          "height": 32,
+          "width": 195
+        },
+        {
+          "text": "Passer en mode sombre",
+          "height": 34,
+          "width": 34
+        },
+        {
+          "text": "Retour aux clients",
+          "height": 32,
+          "width": 159
+        }
+      ],
+      "violations": [
+        {
+          "id": "color-contrast",
+          "impact": "serious",
+          "nodes": [
+            {
+              "target": [
+                ".px-1\\.5.py-0\\.5.rounded-full"
+              ],
+              "summary": "Fix any of the following:\n  Element has insufficient color contrast of 2.59 (foreground color: #b8902f, background color: #f8efdb, font size: 7.5pt (10px), font weight: bold). Expected contrast ratio of 4.5:1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "estimate-empty-desktop",
+      "url": "http://127.0.0.1:4175/devis",
+      "width": 1440,
+      "overflow": false,
+      "scrollWidth": 1440,
+      "inputs": [
+        {
+          "tag": "SELECT",
+          "label": "Destination\n🇬🇵 Guadeloupe\n🇲🇶 Martinique\n🇷🇪 La Réunion\n🇾🇹 Mayotte",
+          "type": "select-one",
+          "value": "974"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Longueur (cm)",
+          "placeholder": "",
+          "type": "number",
+          "value": ""
+        },
+        {
+          "tag": "INPUT",
+          "label": "Largeur (cm)",
+          "placeholder": "",
+          "type": "number",
+          "value": ""
+        },
+        {
+          "tag": "INPUT",
+          "label": "Hauteur (cm)",
+          "placeholder": "",
+          "type": "number",
+          "value": ""
+        },
+        {
+          "tag": "INPUT",
+          "label": "Poids (kg)",
+          "placeholder": "",
+          "type": "number",
+          "value": ""
+        },
+        {
+          "tag": "INPUT",
+          "label": "Valeur de la marchandise",
+          "placeholder": "",
+          "type": "number",
+          "value": ""
+        },
+        {
+          "tag": "SELECT",
+          "label": "Catégorie de marchandise\nChoisir une catégorie\nDivers",
+          "type": "select-one",
+          "value": ""
+        },
+        {
+          "tag": "INPUT",
+          "label": "Nom",
+          "placeholder": "",
+          "type": "text",
+          "value": ""
+        },
+        {
+          "tag": "INPUT",
+          "label": "Prénom",
+          "placeholder": "",
+          "type": "text",
+          "value": ""
+        },
+        {
+          "tag": "INPUT",
+          "label": "Email",
+          "placeholder": "",
+          "type": "email",
+          "value": ""
+        }
+      ],
+      "smallButtons": [
+        {
+          "text": "Réduire",
+          "height": 32,
+          "width": 195
+        },
+        {
+          "text": "Passer en mode sombre",
+          "height": 34,
+          "width": 34
+        }
+      ],
+      "violations": []
+    },
+    {
+      "name": "more-desktop",
+      "url": "http://127.0.0.1:4175/plus",
+      "width": 1440,
+      "overflow": false,
+      "scrollWidth": 1440,
+      "inputs": [],
+      "smallButtons": [
+        {
+          "text": "Réduire",
+          "height": 32,
+          "width": 195
+        },
+        {
+          "text": "Passer en mode sombre",
+          "height": 34,
+          "width": 34
+        }
+      ],
+      "violations": []
+    },
+    {
+      "name": "password-desktop",
+      "url": "http://127.0.0.1:4175/password",
+      "width": 1440,
+      "overflow": false,
+      "scrollWidth": 1440,
+      "inputs": [
+        {
+          "tag": "INPUT",
+          "label": "NOUVEAU MOT DE PASSE",
+          "placeholder": "Minimum 12 caractères",
+          "type": "password",
+          "value": ""
+        },
+        {
+          "tag": "INPUT",
+          "label": "CONFIRMER LE MOT DE PASSE",
+          "placeholder": "Retapez le mot de passe",
+          "type": "password",
+          "value": ""
+        }
+      ],
+      "smallButtons": [
+        {
+          "text": "Afficher le mot de passe",
+          "height": 18,
+          "width": 18
+        },
+        {
+          "text": "Afficher la confirmation",
+          "height": 18,
+          "width": 18
+        }
+      ],
+      "violations": [
+        {
+          "id": "target-size",
+          "impact": "serious",
+          "nodes": [
+            {
+              "target": [
+                "button[aria-label=\"Afficher le mot de passe\"]"
+              ],
+              "summary": "Fix any of the following:\n  Target has insufficient size (18px by 18px, should be at least 24px by 24px)\n  Target has insufficient space to its closest neighbors. Safe clickable space has a diameter of 18px instead of at least 24px."
+            },
+            {
+              "target": [
+                "button[aria-label=\"Afficher la confirmation\"]"
+              ],
+              "summary": "Fix any of the following:\n  Target has insufficient size (18px by 18px, should be at least 24px by 24px)\n  Target has insufficient space to its closest neighbors. Safe clickable space has a diameter of 18px instead of at least 24px."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "client-contact-desktop",
+      "url": "http://127.0.0.1:4175/clients/22222222-2222-4222-8222-222222222222",
+      "width": 1440,
+      "overflow": false,
+      "scrollWidth": 1440,
+      "inputs": [
+        {
+          "tag": "INPUT",
+          "label": "Nom *",
+          "placeholder": "NOM",
+          "type": "text",
+          "value": "Exemple"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Prénom",
+          "placeholder": "Prénom",
+          "type": "text",
+          "value": "Camille"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Téléphone",
+          "placeholder": "+262 692 …",
+          "type": "text",
+          "value": ""
+        },
+        {
+          "tag": "INPUT",
+          "label": "Email",
+          "placeholder": "adresse@exemple.com",
+          "type": "email",
+          "value": "camille@example.test"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Telegram @username",
+          "placeholder": "@username",
+          "type": "text",
+          "value": ""
+        },
+        {
+          "tag": "INPUT",
+          "label": "Ville",
+          "placeholder": "Saint-Denis",
+          "type": "text",
+          "value": "Saint-Denis"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Code postal",
+          "placeholder": "97400",
+          "type": "text",
+          "value": "97400"
+        },
+        {
+          "tag": "TEXTAREA",
+          "label": "Adresse de livraison",
+          "placeholder": "N° rue, résidence, étage…",
+          "type": "textarea",
+          "value": "1 rue Exemple"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Complément d’adresse",
+          "placeholder": "",
+          "type": "text",
+          "value": ""
+        },
+        {
+          "tag": "INPUT",
+          "label": "Commune de livraison",
+          "placeholder": "",
+          "type": "text",
+          "value": "Saint-Denis"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Instructions de livraison",
+          "placeholder": "",
+          "type": "text",
+          "value": ""
+        }
+      ],
+      "smallButtons": [
+        {
+          "text": "Réduire",
+          "height": 32,
+          "width": 195
+        },
+        {
+          "text": "Passer en mode sombre",
+          "height": 34,
+          "width": 34
+        },
+        {
+          "text": "Retour aux clients",
+          "height": 32,
+          "width": 159
+        },
+        {
+          "text": "Telegram",
+          "height": 32,
+          "width": 366
+        },
+        {
+          "text": "Email",
+          "height": 32,
+          "width": 366
+        },
+        {
+          "text": "Email",
+          "height": 32,
+          "width": 57
+        },
+        {
+          "text": "Créer le lien de suivi",
+          "height": 32,
+          "width": 169
+        }
+      ],
+      "violations": []
+    },
+    {
+      "name": "client-admin-desktop",
+      "url": "http://127.0.0.1:4175/clients/22222222-2222-4222-8222-222222222222",
+      "width": 1440,
+      "overflow": false,
+      "scrollWidth": 1440,
+      "inputs": [
+        {
+          "tag": "SELECT",
+          "label": "Forfait",
+          "type": "select-one",
+          "value": "freemium"
+        },
+        {
+          "tag": "TEXTAREA",
+          "label": "Notes internes",
+          "placeholder": "Informations utiles pour l'équipe…",
+          "type": "textarea",
+          "value": ""
+        }
+      ],
+      "smallButtons": [
+        {
+          "text": "Réduire",
+          "height": 32,
+          "width": 195
+        },
+        {
+          "text": "Passer en mode sombre",
+          "height": 34,
+          "width": 34
+        },
+        {
+          "text": "Retour aux clients",
+          "height": 32,
+          "width": 159
+        },
+        {
+          "text": "Particulier",
+          "height": 32,
+          "width": 366
+        },
+        {
+          "text": "Pro",
+          "height": 32,
+          "width": 366
+        },
+        {
+          "text": "Email",
+          "height": 32,
+          "width": 57
+        },
+        {
+          "text": "Créer le lien de suivi",
+          "height": 32,
+          "width": 169
+        }
+      ],
+      "violations": []
+    },
+    {
+      "name": "settings-departures",
+      "url": "http://127.0.0.1:4175/settings",
+      "width": 1440,
+      "overflow": false,
+      "scrollWidth": 1440,
+      "inputs": [],
+      "smallButtons": [
+        {
+          "text": "Réduire",
+          "height": 32,
+          "width": 195
+        },
+        {
+          "text": "Passer en mode sombre",
+          "height": 34,
+          "width": 34
+        }
+      ],
+      "violations": []
+    },
+    {
+      "name": "settings-rates",
+      "url": "http://127.0.0.1:4175/settings",
+      "width": 1440,
+      "overflow": false,
+      "scrollWidth": 1440,
+      "inputs": [
+        {
+          "tag": "INPUT",
+          "label": "Forfait (€)",
+          "placeholder": "",
+          "type": "number",
+          "value": ""
+        },
+        {
+          "tag": "INPUT",
+          "label": "Prix par kg (€)",
+          "placeholder": "",
+          "type": "number",
+          "value": ""
+        },
+        {
+          "tag": "INPUT",
+          "label": "Forfait (€)",
+          "placeholder": "",
+          "type": "number",
+          "value": ""
+        },
+        {
+          "tag": "INPUT",
+          "label": "Prix par kg (€)",
+          "placeholder": "",
+          "type": "number",
+          "value": ""
+        },
+        {
+          "tag": "INPUT",
+          "label": "Forfait (€)",
+          "placeholder": "",
+          "type": "number",
+          "value": "25"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Prix par kg (€)",
+          "placeholder": "",
+          "type": "number",
+          "value": "5"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Forfait (€)",
+          "placeholder": "",
+          "type": "number",
+          "value": ""
+        },
+        {
+          "tag": "INPUT",
+          "label": "Prix par kg (€)",
+          "placeholder": "",
+          "type": "number",
+          "value": ""
+        }
+      ],
+      "smallButtons": [
+        {
+          "text": "Réduire",
+          "height": 32,
+          "width": 195
+        },
+        {
+          "text": "Passer en mode sombre",
+          "height": 34,
+          "width": 34
+        }
+      ],
+      "violations": []
+    },
+    {
+      "name": "settings-categories",
+      "url": "http://127.0.0.1:4175/settings",
+      "width": 1440,
+      "overflow": false,
+      "scrollWidth": 1440,
+      "inputs": [
+        {
+          "tag": "INPUT",
+          "label": "Nom de catégorie",
+          "placeholder": "",
+          "type": "text",
+          "value": "Divers"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Code douanier vérifié",
+          "placeholder": "À renseigner avec votre déclarant",
+          "type": "text",
+          "value": ""
+        },
+        {
+          "tag": "INPUT",
+          "label": "OM %",
+          "placeholder": "",
+          "type": "number",
+          "value": ""
+        },
+        {
+          "tag": "INPUT",
+          "label": "OMR %",
+          "placeholder": "",
+          "type": "number",
+          "value": ""
+        },
+        {
+          "tag": "INPUT",
+          "label": "OM %",
+          "placeholder": "",
+          "type": "number",
+          "value": ""
+        },
+        {
+          "tag": "INPUT",
+          "label": "OMR %",
+          "placeholder": "",
+          "type": "number",
+          "value": ""
+        },
+        {
+          "tag": "INPUT",
+          "label": "OM %",
+          "placeholder": "",
+          "type": "number",
+          "value": "10"
+        },
+        {
+          "tag": "INPUT",
+          "label": "OMR %",
+          "placeholder": "",
+          "type": "number",
+          "value": "2.5"
+        },
+        {
+          "tag": "INPUT",
+          "label": "OM %",
+          "placeholder": "",
+          "type": "number",
+          "value": ""
+        },
+        {
+          "tag": "INPUT",
+          "label": "OMR %",
+          "placeholder": "",
+          "type": "number",
+          "value": ""
+        },
+        {
+          "tag": "INPUT",
+          "label": "Nouvelle catégorie",
+          "placeholder": "Nouvelle catégorie",
+          "type": "text",
+          "value": ""
+        }
+      ],
+      "smallButtons": [
+        {
+          "text": "Réduire",
+          "height": 32,
+          "width": 195
+        },
+        {
+          "text": "Passer en mode sombre",
+          "height": 34,
+          "width": 34
+        }
+      ],
+      "violations": []
+    },
+    {
+      "name": "settings-users",
+      "url": "http://127.0.0.1:4175/settings",
+      "width": 1440,
+      "overflow": false,
+      "scrollWidth": 1440,
+      "inputs": [
+        {
+          "tag": "INPUT",
+          "label": "Réceptionner un colis",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Mesurer / peser",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Modifier les dimensions après réception",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Demander le feu vert",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Valider le feu vert manuellement",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Préparer (optimiser l'emballage)",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Calculer le devis",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Envoyer le devis au client",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Confirmer un paiement",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Affecter à un envoi",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Expédier",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Changer le statut d'expédition",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Annuler un colis",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Revenir en arrière (correction)",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Archiver un colis",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Voir les clients",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Créer un client",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Modifier un client",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Supprimer un client",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Modifier l'abonnement",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Voir les infos financières client",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Voir les factures",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Ajouter une facture",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Valider une facture",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Refuser une facture",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Lancer l'OCR",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Modifier les articles / catégories",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Envoyer un message Telegram",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Envoyer un email",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Demander une facture au client",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Envoyer un message libre",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Voir le chat des autres utilisateurs",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Voir les envois",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Créer un envoi",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Modifier un envoi",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Réaffecter un colis à un autre envoi",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Imprimer les étiquettes",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Voir les prix de transport",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Voir les taxes (OM/OMR/TVA)",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Voir le montant total du devis",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Voir le CA / KPIs",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Exporter les données financières",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Modifier les tarifs",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Exporter la liste des colis (Excel)",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Exporter les factures commerciales",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Exporter la DAU",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Exporter le récap pro",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Gérer les utilisateurs et permissions",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Gérer les catégories douanières",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Gérer les templates de messages",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Gérer les produits interdits",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Voir l'historique / audit complet",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Accéder aux paramètres",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        }
+      ],
+      "smallButtons": [
+        {
+          "text": "Réduire",
+          "height": 32,
+          "width": 195
+        },
+        {
+          "text": "Passer en mode sombre",
+          "height": 34,
+          "width": 34
+        }
+      ],
+      "violations": []
+    },
+    {
+      "name": "settings-telegram",
+      "url": "http://127.0.0.1:4175/settings",
+      "width": 1440,
+      "overflow": false,
+      "scrollWidth": 1440,
+      "inputs": [],
+      "smallButtons": [
+        {
+          "text": "Réduire",
+          "height": 32,
+          "width": 195
+        },
+        {
+          "text": "Passer en mode sombre",
+          "height": 34,
+          "width": 34
+        }
+      ],
+      "violations": []
+    },
+    {
+      "name": "settings-templates",
+      "url": "http://127.0.0.1:4175/settings",
+      "width": 1440,
+      "overflow": false,
+      "scrollWidth": 1440,
+      "inputs": [
+        {
+          "tag": "TEXTAREA",
+          "label": "",
+          "placeholder": "",
+          "type": "textarea",
+          "value": "Bonjour {{prenom}} 👋\n\nBonne nouvelle ! Votre colis {{ref}} est bien arrivé à notre entrepôt de Paris 🎉\n\n📦 Contenu : {{desc}}\n{{liste_cartons}}\n🎯 Destination : {{destination_flag}} {{destination}}\n\n📐 Prochaine étape : Nous allons mesurer et peser votre colis.\n\n💡 Pensez à nous envoyer la facture d'achat si ce n'est pas déjà fait.\n\nÀ très vite !\n_L'équipe Expedîle — Paris → {{destination}}_"
+        }
+      ],
+      "smallButtons": [
+        {
+          "text": "Réduire",
+          "height": 32,
+          "width": 195
+        },
+        {
+          "text": "Passer en mode sombre",
+          "height": 34,
+          "width": 34
+        },
+        {
+          "text": "Telegram",
+          "height": 28,
+          "width": 80
+        },
+        {
+          "text": "Email",
+          "height": 28,
+          "width": 57
+        },
+        {
+          "text": "{{prenom}}",
+          "height": 19,
+          "width": 73
+        },
+        {
+          "text": "{{nom_complet}}",
+          "height": 19,
+          "width": 104
+        },
+        {
+          "text": "{{destination_flag}}",
+          "height": 19,
+          "width": 118
+        },
+        {
+          "text": "{{destination}}",
+          "height": 19,
+          "width": 92
+        },
+        {
+          "text": "{{ref}}",
+          "height": 19,
+          "width": 48
+        },
+        {
+          "text": "{{desc}}",
+          "height": 19,
+          "width": 58
+        },
+        {
+          "text": "{{casier}}",
+          "height": 19,
+          "width": 65
+        },
+        {
+          "text": "{{nb_cartons}}",
+          "height": 19,
+          "width": 92
+        },
+        {
+          "text": "{{liste_cartons}}",
+          "height": 19,
+          "width": 101
+        },
+        {
+          "text": "{{dims_brutes}}",
+          "height": 19,
+          "width": 98
+        },
+        {
+          "text": "{{poids_brut}}",
+          "height": 19,
+          "width": 90
+        },
+        {
+          "text": "{{poids_vol_avant}}",
+          "height": 19,
+          "width": 118
+        },
+        {
+          "text": "{{dims_finales}}",
+          "height": 19,
+          "width": 99
+        },
+        {
+          "text": "{{poids_vol_apres}}",
+          "height": 19,
+          "width": 119
+        },
+        {
+          "text": "{{poids_facturable}}",
+          "height": 19,
+          "width": 121
+        },
+        {
+          "text": "{{transport}}",
+          "height": 19,
+          "width": 82
+        },
+        {
+          "text": "{{om}}",
+          "height": 19,
+          "width": 49
+        },
+        {
+          "text": "{{omr}}",
+          "height": 19,
+          "width": 54
+        },
+        {
+          "text": "{{taxes}}",
+          "height": 19,
+          "width": 61
+        },
+        {
+          "text": "{{tva}}",
+          "height": 19,
+          "width": 50
+        },
+        {
+          "text": "{{taux_tva}}",
+          "height": 19,
+          "width": 79
+        },
+        {
+          "text": "{{total}}",
+          "height": 19,
+          "width": 57
+        },
+        {
+          "text": "{{lien_paiement}}",
+          "height": 19,
+          "width": 107
+        },
+        {
+          "text": "{{modalite_paiement}}",
+          "height": 19,
+          "width": 133
+        },
+        {
+          "text": "{{lien_espace}}",
+          "height": 19,
+          "width": 95
+        },
+        {
+          "text": "{{documents_attendus}}",
+          "height": 19,
+          "width": 143
+        },
+        {
+          "text": "{{economie}}",
+          "height": 19,
+          "width": 83
+        },
+        {
+          "text": "{{frais_divers}}",
+          "height": 19,
+          "width": 95
+        },
+        {
+          "text": "{{contenu_declare}}",
+          "height": 19,
+          "width": 120
+        },
+        {
+          "text": "{{date_expedition}}",
+          "height": 19,
+          "width": 117
+        },
+        {
+          "text": "{{motif_rejet}}",
+          "height": 19,
+          "width": 91
+        },
+        {
+          "text": "Aperçu",
+          "height": 32,
+          "width": 86
+        },
+        {
+          "text": "Réinitialiser",
+          "height": 32,
+          "width": 108
+        },
+        {
+          "text": "Sauvegarder",
+          "height": 32,
+          "width": 128
+        }
+      ],
+      "violations": [
+        {
+          "id": "color-contrast",
+          "impact": "serious",
+          "nodes": [
+            {
+              "target": [
+                ".gap-1\\.5.rounded-lg.text-xs:nth-child(1)"
+              ],
+              "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.39 (foreground color: #6b7280, background color: #f3f4f6, font size: 9.0pt (12px), font weight: bold). Expected contrast ratio of 4.5:1"
+            }
+          ]
+        },
+        {
+          "id": "label",
+          "impact": "critical",
+          "nodes": [
+            {
+              "target": [
+                "textarea"
+              ],
+              "summary": "Fix any of the following:\n  Element does not have an implicit (wrapped) <label>\n  Element does not have an explicit <label>\n  aria-label attribute does not exist or is empty\n  aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty\n  Element has no title attribute\n  Element has no placeholder attribute\n  Element's default semantics were not overridden with role=\"none\" or role=\"presentation\""
+            }
+          ]
+        },
+        {
+          "id": "target-size",
+          "impact": "serious",
+          "nodes": [
+            {
+              "target": [
+                "button[title=\"OM — ex: 30.20 €\"]"
+              ],
+              "summary": "Fix any of the following:\n  Target has insufficient size (49.3px by 19px, should be at least 24px by 24px)\n  Target has insufficient space to its closest neighbors. Safe clickable space has a diameter of 23.2px instead of at least 24px."
+            },
+            {
+              "target": [
+                "button[title=\"Taux TVA — ex: 8.5%\"]"
+              ],
+              "summary": "Fix any of the following:\n  Target has insufficient size (78.5px by 19px, should be at least 24px by 24px)\n  Target has insufficient space to its closest neighbors. Safe clickable space has a diameter of 22px instead of at least 24px."
+            },
+            {
+              "target": [
+                ".py-0\\.5.bg-blue-50.text-blue-600:nth-child(10)"
+              ],
+              "summary": "Fix any of the following:\n  Target has insufficient size (132.7px by 19px, should be at least 24px by 24px)\n  Target has insufficient space to its closest neighbors. Safe clickable space has a diameter of 23.8px instead of at least 24px."
+            },
+            {
+              "target": [
+                ".py-0\\.5.bg-blue-50.text-blue-600:nth-child(11)"
+              ],
+              "summary": "Fix any of the following:\n  Target has insufficient size (94.9px by 19px, should be at least 24px by 24px)\n  Target has insufficient space to its closest neighbors. Safe clickable space has a diameter of 23.2px instead of at least 24px."
+            },
+            {
+              "target": [
+                "button[title=\"Économie — ex: 12.50 €\"]"
+              ],
+              "summary": "Fix any of the following:\n  Target has insufficient size (83.3px by 19px, should be at least 24px by 24px)\n  Target has insufficient space to its closest neighbors. Safe clickable space has a diameter of 22px instead of at least 24px."
+            },
+            {
+              "target": [
+                ".py-0\\.5.bg-blue-50.text-blue-600:nth-child(15)"
+              ],
+              "summary": "Fix any of the following:\n  Target has insufficient size (119.8px by 19px, should be at least 24px by 24px)\n  Target has insufficient space to its closest neighbors. Safe clickable space has a diameter of 23.8px instead of at least 24px."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "settings-business",
+      "url": "http://127.0.0.1:4175/settings",
+      "width": 1440,
+      "overflow": false,
+      "scrollWidth": 1440,
+      "inputs": [
+        {
+          "tag": "INPUT",
+          "label": "Diviseur volumétrique",
+          "placeholder": "5000",
+          "type": "text",
+          "value": "5000"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Frais de stockage prévus (€/jour)",
+          "placeholder": "1.50",
+          "type": "text",
+          "value": "1.5"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Jours de stockage gratuit prévus",
+          "placeholder": "14",
+          "type": "text",
+          "value": "14"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Relances accord client",
+          "placeholder": "J+2, J+5, J+7",
+          "type": "text",
+          "value": "J+2, J+5, J+7"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Relances paiement",
+          "placeholder": "J+3, J+7, J+14",
+          "type": "text",
+          "value": "J+3, J+7, J+14"
+        }
+      ],
+      "smallButtons": [
+        {
+          "text": "Réduire",
+          "height": 32,
+          "width": 195
+        },
+        {
+          "text": "Passer en mode sombre",
+          "height": 34,
+          "width": 34
+        }
+      ],
+      "violations": []
+    },
+    {
+      "name": "settings-forbidden",
+      "url": "http://127.0.0.1:4175/settings",
+      "width": 1440,
+      "overflow": false,
+      "scrollWidth": 1440,
+      "inputs": [
+        {
+          "tag": "INPUT",
+          "label": "Produit interdit",
+          "placeholder": "Ajouter un produit",
+          "type": "text",
+          "value": ""
+        }
+      ],
+      "smallButtons": [
+        {
+          "text": "Réduire",
+          "height": 32,
+          "width": 195
+        },
+        {
+          "text": "Passer en mode sombre",
+          "height": 34,
+          "width": 34
+        }
+      ],
+      "violations": []
+    },
+    {
+      "name": "settings-permissions-preparer",
+      "url": "http://127.0.0.1:4175/settings",
+      "width": 1440,
+      "overflow": false,
+      "scrollWidth": 1440,
+      "inputs": [
+        {
+          "tag": "INPUT",
+          "label": "Réceptionner un colis",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Mesurer / peser",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Modifier les dimensions après réception",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Demander le feu vert",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Valider le feu vert manuellement",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Préparer (optimiser l'emballage)",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Calculer le devis",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Envoyer le devis au client",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Confirmer un paiement",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Affecter à un envoi",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Expédier",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Changer le statut d'expédition",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Annuler un colis",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Revenir en arrière (correction)",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Archiver un colis",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Voir les clients",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Créer un client",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Modifier un client",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Supprimer un client",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Modifier l'abonnement",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Voir les infos financières client",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Voir les factures",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Ajouter une facture",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Valider une facture",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Refuser une facture",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Lancer l'OCR",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Modifier les articles / catégories",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Envoyer un message Telegram",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Envoyer un email",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Demander une facture au client",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Envoyer un message libre",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Voir le chat des autres utilisateurs",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Voir les envois",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Créer un envoi",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Modifier un envoi",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Réaffecter un colis à un autre envoi",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Imprimer les étiquettes",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Voir les prix de transport",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Voir les taxes (OM/OMR/TVA)",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Voir le montant total du devis",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Voir le CA / KPIs",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Exporter les données financières",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Modifier les tarifs",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Exporter la liste des colis (Excel)",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Exporter les factures commerciales",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Exporter la DAU",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Exporter le récap pro",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Gérer les utilisateurs et permissions",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Gérer les catégories douanières",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Gérer les templates de messages",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Gérer les produits interdits",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Voir l'historique / audit complet",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Accéder aux paramètres",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        }
+      ],
+      "smallButtons": [
+        {
+          "text": "Réduire",
+          "height": 32,
+          "width": 195
+        },
+        {
+          "text": "Passer en mode sombre",
+          "height": 34,
+          "width": 34
+        }
+      ],
+      "violations": []
+    },
+    {
+      "name": "settings-user-create",
+      "url": "http://127.0.0.1:4175/settings",
+      "width": 1440,
+      "overflow": false,
+      "scrollWidth": 1440,
+      "inputs": [
+        {
+          "tag": "INPUT",
+          "label": "Nom *",
+          "placeholder": "",
+          "type": "text",
+          "value": ""
+        },
+        {
+          "tag": "INPUT",
+          "label": "Prénom",
+          "placeholder": "",
+          "type": "text",
+          "value": ""
+        },
+        {
+          "tag": "INPUT",
+          "label": "Email *",
+          "placeholder": "",
+          "type": "email",
+          "value": ""
+        },
+        {
+          "tag": "INPUT",
+          "label": "Mot de passe initial *",
+          "placeholder": "",
+          "type": "password",
+          "value": ""
+        },
+        {
+          "tag": "SELECT",
+          "label": "Rôle\nDirecteur\nVice-directeur\nLogisticien\nPréparateur",
+          "type": "select-one",
+          "value": "preparateur"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Réceptionner un colis",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Mesurer / peser",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Modifier les dimensions après réception",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Demander le feu vert",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Valider le feu vert manuellement",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Préparer (optimiser l'emballage)",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Calculer le devis",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Envoyer le devis au client",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Confirmer un paiement",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Affecter à un envoi",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Expédier",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Changer le statut d'expédition",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Annuler un colis",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Revenir en arrière (correction)",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Archiver un colis",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Voir les clients",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Créer un client",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Modifier un client",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Supprimer un client",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Modifier l'abonnement",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Voir les infos financières client",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Voir les factures",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Ajouter une facture",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Valider une facture",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Refuser une facture",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Lancer l'OCR",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Modifier les articles / catégories",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Envoyer un message Telegram",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Envoyer un email",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Demander une facture au client",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Envoyer un message libre",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Voir le chat des autres utilisateurs",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Voir les envois",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Créer un envoi",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Modifier un envoi",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Réaffecter un colis à un autre envoi",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Imprimer les étiquettes",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Voir les prix de transport",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Voir les taxes (OM/OMR/TVA)",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Voir le montant total du devis",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Voir le CA / KPIs",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Exporter les données financières",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Modifier les tarifs",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Exporter la liste des colis (Excel)",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Exporter les factures commerciales",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Exporter la DAU",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Exporter le récap pro",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Gérer les utilisateurs et permissions",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Gérer les catégories douanières",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Gérer les templates de messages",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Gérer les produits interdits",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Voir l'historique / audit complet",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Accéder aux paramètres",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        }
+      ],
+      "smallButtons": [
+        {
+          "text": "Réduire",
+          "height": 32,
+          "width": 195
+        },
+        {
+          "text": "Passer en mode sombre",
+          "height": 34,
+          "width": 34
+        }
+      ],
+      "violations": []
+    },
+    {
+      "name": "clients-mobile",
+      "url": "http://127.0.0.1:4175/clients",
+      "width": 390,
+      "overflow": false,
+      "scrollWidth": 390,
+      "inputs": [
+        {
+          "tag": "INPUT",
+          "label": "Rechercher un client",
+          "placeholder": "Rechercher par nom, ville, email, tél…",
+          "type": "text",
+          "value": ""
+        }
+      ],
+      "smallButtons": [
+        {
+          "text": "Nom ▲",
+          "height": 44,
+          "width": 37
+        },
+        {
+          "text": "Type ↕",
+          "height": 44,
+          "width": 36
+        },
+        {
+          "text": "Ville ↕",
+          "height": 44,
+          "width": 34
+        },
+        {
+          "text": "Colis ↕",
+          "height": 44,
+          "width": 37
+        }
+      ],
+      "violations": []
+    },
+    {
+      "name": "client-create-mobile",
+      "url": "http://127.0.0.1:4175/clients/new",
+      "width": 390,
+      "overflow": false,
+      "scrollWidth": 390,
+      "inputs": [
+        {
+          "tag": "SELECT",
+          "label": "",
+          "type": "select-one",
+          "value": "freemium"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Homme",
+          "placeholder": "",
+          "type": "radio",
+          "value": "homme"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Femme",
+          "placeholder": "",
+          "type": "radio",
+          "value": "femme"
+        },
+        {
+          "tag": "INPUT",
+          "label": "",
+          "placeholder": "NOM",
+          "type": "text",
+          "value": ""
+        },
+        {
+          "tag": "INPUT",
+          "label": "",
+          "placeholder": "Prénom",
+          "type": "text",
+          "value": ""
+        },
+        {
+          "tag": "INPUT",
+          "label": "",
+          "placeholder": "",
+          "type": "date",
+          "value": ""
+        },
+        {
+          "tag": "INPUT",
+          "label": "",
+          "placeholder": "+262 692 12 34 56",
+          "type": "text",
+          "value": ""
+        },
+        {
+          "tag": "INPUT",
+          "label": "",
+          "placeholder": "+262 262 12 34 56",
+          "type": "text",
+          "value": ""
+        },
+        {
+          "tag": "INPUT",
+          "label": "",
+          "placeholder": "adresse@exemple.com",
+          "type": "email",
+          "value": ""
+        },
+        {
+          "tag": "INPUT",
+          "label": "",
+          "placeholder": "@username",
+          "type": "text",
+          "value": ""
+        },
+        {
+          "tag": "SELECT",
+          "label": "",
+          "type": "select-one",
+          "value": ""
+        },
+        {
+          "tag": "INPUT",
+          "label": "",
+          "placeholder": "Saint-Denis",
+          "type": "text",
+          "value": ""
+        },
+        {
+          "tag": "INPUT",
+          "label": "",
+          "placeholder": "97400",
+          "type": "text",
+          "value": ""
+        },
+        {
+          "tag": "INPUT",
+          "label": "",
+          "placeholder": "Saint-Denis",
+          "type": "text",
+          "value": ""
+        },
+        {
+          "tag": "INPUT",
+          "label": "",
+          "placeholder": "N° et nom de rue",
+          "type": "text",
+          "value": ""
+        },
+        {
+          "tag": "INPUT",
+          "label": "",
+          "placeholder": "Résidence, bâtiment, étage…",
+          "type": "text",
+          "value": ""
+        },
+        {
+          "tag": "TEXTAREA",
+          "label": "",
+          "placeholder": "Digicode, interphone, horaires…",
+          "type": "textarea",
+          "value": ""
+        },
+        {
+          "tag": "TEXTAREA",
+          "label": "",
+          "placeholder": "Informations utiles pour l'équipe…",
+          "type": "textarea",
+          "value": ""
+        }
+      ],
+      "smallButtons": [],
+      "violations": [
+        {
+          "id": "label",
+          "impact": "critical",
+          "nodes": [
+            {
+              "target": [
+                "input[type=\"date\"]"
+              ],
+              "summary": "Fix any of the following:\n  Element does not have an implicit (wrapped) <label>\n  Element does not have an explicit <label>\n  aria-label attribute does not exist or is empty\n  aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty\n  Element has no title attribute\n  Element has no placeholder attribute\n  Element's default semantics were not overridden with role=\"none\" or role=\"presentation\""
+            }
+          ]
+        },
+        {
+          "id": "select-name",
+          "impact": "critical",
+          "nodes": [
+            {
+              "target": [
+                ".grid-cols-3 > div:nth-child(1) > select"
+              ],
+              "summary": "Fix any of the following:\n  Element does not have an implicit (wrapped) <label>\n  Element does not have an explicit <label>\n  aria-label attribute does not exist or is empty\n  aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty\n  Element has no title attribute\n  Element's default semantics were not overridden with role=\"none\" or role=\"presentation\""
+            },
+            {
+              "target": [
+                ".grid-cols-2.grid.gap-3 > div:nth-child(1) > select"
+              ],
+              "summary": "Fix any of the following:\n  Element does not have an implicit (wrapped) <label>\n  Element does not have an explicit <label>\n  aria-label attribute does not exist or is empty\n  aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty\n  Element has no title attribute\n  Element's default semantics were not overridden with role=\"none\" or role=\"presentation\""
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "client-summary-mobile",
+      "url": "http://127.0.0.1:4175/clients/22222222-2222-4222-8222-222222222222",
+      "width": 390,
+      "overflow": false,
+      "scrollWidth": 390,
+      "inputs": [],
+      "smallButtons": [],
+      "violations": []
+    },
+    {
+      "name": "estimate-empty-mobile",
+      "url": "http://127.0.0.1:4175/devis",
+      "width": 390,
+      "overflow": false,
+      "scrollWidth": 390,
+      "inputs": [
+        {
+          "tag": "SELECT",
+          "label": "Destination\n🇬🇵 Guadeloupe\n🇲🇶 Martinique\n🇷🇪 La Réunion\n🇾🇹 Mayotte",
+          "type": "select-one",
+          "value": "974"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Longueur (cm)",
+          "placeholder": "",
+          "type": "number",
+          "value": ""
+        },
+        {
+          "tag": "INPUT",
+          "label": "Largeur (cm)",
+          "placeholder": "",
+          "type": "number",
+          "value": ""
+        },
+        {
+          "tag": "INPUT",
+          "label": "Hauteur (cm)",
+          "placeholder": "",
+          "type": "number",
+          "value": ""
+        },
+        {
+          "tag": "INPUT",
+          "label": "Poids (kg)",
+          "placeholder": "",
+          "type": "number",
+          "value": ""
+        },
+        {
+          "tag": "INPUT",
+          "label": "Valeur de la marchandise",
+          "placeholder": "",
+          "type": "number",
+          "value": ""
+        },
+        {
+          "tag": "SELECT",
+          "label": "Catégorie de marchandise\nChoisir une catégorie\nDivers",
+          "type": "select-one",
+          "value": ""
+        },
+        {
+          "tag": "INPUT",
+          "label": "Nom",
+          "placeholder": "",
+          "type": "text",
+          "value": ""
+        },
+        {
+          "tag": "INPUT",
+          "label": "Prénom",
+          "placeholder": "",
+          "type": "text",
+          "value": ""
+        },
+        {
+          "tag": "INPUT",
+          "label": "Email",
+          "placeholder": "",
+          "type": "email",
+          "value": ""
+        }
+      ],
+      "smallButtons": [],
+      "violations": []
+    },
+    {
+      "name": "more-mobile",
+      "url": "http://127.0.0.1:4175/plus",
+      "width": 390,
+      "overflow": false,
+      "scrollWidth": 390,
+      "inputs": [],
+      "smallButtons": [],
+      "violations": []
+    },
+    {
+      "name": "password-mobile",
+      "url": "http://127.0.0.1:4175/password",
+      "width": 390,
+      "overflow": false,
+      "scrollWidth": 390,
+      "inputs": [
+        {
+          "tag": "INPUT",
+          "label": "NOUVEAU MOT DE PASSE",
+          "placeholder": "Minimum 12 caractères",
+          "type": "password",
+          "value": ""
+        },
+        {
+          "tag": "INPUT",
+          "label": "CONFIRMER LE MOT DE PASSE",
+          "placeholder": "Retapez le mot de passe",
+          "type": "password",
+          "value": ""
+        }
+      ],
+      "smallButtons": [],
+      "violations": []
+    },
+    {
+      "name": "settings-rates-mobile",
+      "url": "http://127.0.0.1:4175/settings",
+      "width": 390,
+      "overflow": false,
+      "scrollWidth": 390,
+      "inputs": [
+        {
+          "tag": "INPUT",
+          "label": "Forfait (€)",
+          "placeholder": "",
+          "type": "number",
+          "value": ""
+        },
+        {
+          "tag": "INPUT",
+          "label": "Prix par kg (€)",
+          "placeholder": "",
+          "type": "number",
+          "value": ""
+        },
+        {
+          "tag": "INPUT",
+          "label": "Forfait (€)",
+          "placeholder": "",
+          "type": "number",
+          "value": ""
+        },
+        {
+          "tag": "INPUT",
+          "label": "Prix par kg (€)",
+          "placeholder": "",
+          "type": "number",
+          "value": ""
+        },
+        {
+          "tag": "INPUT",
+          "label": "Forfait (€)",
+          "placeholder": "",
+          "type": "number",
+          "value": "25"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Prix par kg (€)",
+          "placeholder": "",
+          "type": "number",
+          "value": "5"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Forfait (€)",
+          "placeholder": "",
+          "type": "number",
+          "value": ""
+        },
+        {
+          "tag": "INPUT",
+          "label": "Prix par kg (€)",
+          "placeholder": "",
+          "type": "number",
+          "value": ""
+        }
+      ],
+      "smallButtons": [],
+      "violations": []
+    },
+    {
+      "name": "settings-categories-mobile",
+      "url": "http://127.0.0.1:4175/settings",
+      "width": 390,
+      "overflow": false,
+      "scrollWidth": 390,
+      "inputs": [
+        {
+          "tag": "INPUT",
+          "label": "Nom de catégorie",
+          "placeholder": "",
+          "type": "text",
+          "value": "Divers"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Code douanier vérifié",
+          "placeholder": "À renseigner avec votre déclarant",
+          "type": "text",
+          "value": ""
+        },
+        {
+          "tag": "INPUT",
+          "label": "OM %",
+          "placeholder": "",
+          "type": "number",
+          "value": ""
+        },
+        {
+          "tag": "INPUT",
+          "label": "OMR %",
+          "placeholder": "",
+          "type": "number",
+          "value": ""
+        },
+        {
+          "tag": "INPUT",
+          "label": "OM %",
+          "placeholder": "",
+          "type": "number",
+          "value": ""
+        },
+        {
+          "tag": "INPUT",
+          "label": "OMR %",
+          "placeholder": "",
+          "type": "number",
+          "value": ""
+        },
+        {
+          "tag": "INPUT",
+          "label": "OM %",
+          "placeholder": "",
+          "type": "number",
+          "value": "10"
+        },
+        {
+          "tag": "INPUT",
+          "label": "OMR %",
+          "placeholder": "",
+          "type": "number",
+          "value": "2.5"
+        },
+        {
+          "tag": "INPUT",
+          "label": "OM %",
+          "placeholder": "",
+          "type": "number",
+          "value": ""
+        },
+        {
+          "tag": "INPUT",
+          "label": "OMR %",
+          "placeholder": "",
+          "type": "number",
+          "value": ""
+        },
+        {
+          "tag": "INPUT",
+          "label": "Nouvelle catégorie",
+          "placeholder": "Nouvelle catégorie",
+          "type": "text",
+          "value": ""
+        }
+      ],
+      "smallButtons": [],
+      "violations": []
+    },
+    {
+      "name": "settings-users-mobile",
+      "url": "http://127.0.0.1:4175/settings",
+      "width": 390,
+      "overflow": false,
+      "scrollWidth": 390,
+      "inputs": [
+        {
+          "tag": "INPUT",
+          "label": "Réceptionner un colis",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Mesurer / peser",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Modifier les dimensions après réception",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Demander le feu vert",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Valider le feu vert manuellement",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Préparer (optimiser l'emballage)",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Calculer le devis",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Envoyer le devis au client",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Confirmer un paiement",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Affecter à un envoi",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Expédier",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Changer le statut d'expédition",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Annuler un colis",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Revenir en arrière (correction)",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Archiver un colis",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Voir les clients",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Créer un client",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Modifier un client",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Supprimer un client",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Modifier l'abonnement",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Voir les infos financières client",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Voir les factures",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Ajouter une facture",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Valider une facture",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Refuser une facture",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Lancer l'OCR",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Modifier les articles / catégories",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Envoyer un message Telegram",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Envoyer un email",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Demander une facture au client",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Envoyer un message libre",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Voir le chat des autres utilisateurs",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Voir les envois",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Créer un envoi",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Modifier un envoi",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Réaffecter un colis à un autre envoi",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Imprimer les étiquettes",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Voir les prix de transport",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Voir les taxes (OM/OMR/TVA)",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Voir le montant total du devis",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Voir le CA / KPIs",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Exporter les données financières",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Modifier les tarifs",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Exporter la liste des colis (Excel)",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Exporter les factures commerciales",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Exporter la DAU",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Exporter le récap pro",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Gérer les utilisateurs et permissions",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Gérer les catégories douanières",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Gérer les templates de messages",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Gérer les produits interdits",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Voir l'historique / audit complet",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Accéder aux paramètres",
+          "placeholder": "",
+          "type": "checkbox",
+          "value": "on"
+        }
+      ],
+      "smallButtons": [],
+      "violations": []
+    },
+    {
+      "name": "settings-templates-mobile",
+      "url": "http://127.0.0.1:4175/settings",
+      "width": 390,
+      "overflow": false,
+      "scrollWidth": 390,
+      "inputs": [
+        {
+          "tag": "TEXTAREA",
+          "label": "",
+          "placeholder": "",
+          "type": "textarea",
+          "value": "Bonjour {{prenom}} 👋\n\nBonne nouvelle ! Votre colis {{ref}} est bien arrivé à notre entrepôt de Paris 🎉\n\n📦 Contenu : {{desc}}\n{{liste_cartons}}\n🎯 Destination : {{destination_flag}} {{destination}}\n\n📐 Prochaine étape : Nous allons mesurer et peser votre colis.\n\n💡 Pensez à nous envoyer la facture d'achat si ce n'est pas déjà fait.\n\nÀ très vite !\n_L'équipe Expedîle — Paris → {{destination}}_"
+        }
+      ],
+      "smallButtons": [
+        {
+          "text": "📦 Réception",
+          "height": 46,
+          "width": 27
+        },
+        {
+          "text": "📄 Facture manquante",
+          "height": 44,
+          "width": 24
+        },
+        {
+          "text": "🟢 Demande feu vert",
+          "height": 44,
+          "width": 24
+        },
+        {
+          "text": "✅ Feu vert confirmé",
+          "height": 44,
+          "width": 24
+        },
+        {
+          "text": "Devis particulier",
+          "height": 44,
+          "width": 24
+        },
+        {
+          "text": "Devis professionnel",
+          "height": 44,
+          "width": 24
+        },
+        {
+          "text": "⏰ Relance feu vert",
+          "height": 44,
+          "width": 24
+        },
+        {
+          "text": "⏰ Relance paiement",
+          "height": 44,
+          "width": 24
+        },
+        {
+          "text": "✈️ Expédié",
+          "height": 44,
+          "width": 24
+        },
+        {
+          "text": "📍 Arrivé",
+          "height": 44,
+          "width": 24
+        },
+        {
+          "text": "🚚 En livraison",
+          "height": 44,
+          "width": 24
+        },
+        {
+          "text": "❌ Facture rejetée",
+          "height": 44,
+          "width": 24
+        },
+        {
+          "text": "📲 Invitation Telegram",
+          "height": 44,
+          "width": 24
+        }
+      ],
+      "violations": [
+        {
+          "id": "label",
+          "impact": "critical",
+          "nodes": [
+            {
+              "target": [
+                "textarea"
+              ],
+              "summary": "Fix any of the following:\n  Element does not have an implicit (wrapped) <label>\n  Element does not have an explicit <label>\n  aria-label attribute does not exist or is empty\n  aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty\n  Element has no title attribute\n  Element has no placeholder attribute\n  Element's default semantics were not overridden with role=\"none\" or role=\"presentation\""
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "settings-business-mobile",
+      "url": "http://127.0.0.1:4175/settings",
+      "width": 390,
+      "overflow": false,
+      "scrollWidth": 390,
+      "inputs": [
+        {
+          "tag": "INPUT",
+          "label": "Diviseur volumétrique",
+          "placeholder": "5000",
+          "type": "text",
+          "value": "5000"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Frais de stockage prévus (€/jour)",
+          "placeholder": "1.50",
+          "type": "text",
+          "value": "1.5"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Jours de stockage gratuit prévus",
+          "placeholder": "14",
+          "type": "text",
+          "value": "14"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Relances accord client",
+          "placeholder": "J+2, J+5, J+7",
+          "type": "text",
+          "value": "J+2, J+5, J+7"
+        },
+        {
+          "tag": "INPUT",
+          "label": "Relances paiement",
+          "placeholder": "J+3, J+7, J+14",
+          "type": "text",
+          "value": "J+3, J+7, J+14"
+        }
+      ],
+      "smallButtons": [],
+      "violations": []
+    }
+  ],
+  "errors": [],
+  "networkDenied": [],
+  "requests": [
+    {
+      "method": "POST",
+      "path": "/auth/v1/token",
+      "input": {
+        "email": "audit@example.test",
+        "password": "test-password-long",
+        "gotrue_meta_security": {}
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/profiles",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/profiles",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/staff_users",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/staff_users",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/colis",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/clients",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/envois",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/categories",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/taux_categories",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/tarifs",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/notifications",
+      "input": null
+    },
+    {
+      "method": "HEAD",
+      "path": "/rest/v1/notifications",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/app_settings",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/message_templates",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/factures",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/lignes",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/messages",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/client_inbox",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/staff_users",
+      "input": null
+    },
+    {
+      "method": "POST",
+      "path": "/rest/v1/rpc/refresh_staff_work_actions",
+      "input": {}
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/staff_work_actions",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/staff_work_preferences",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/profiles",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/staff_users",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/colis",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/clients",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/envois",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/categories",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/taux_categories",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/tarifs",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/notifications",
+      "input": null
+    },
+    {
+      "method": "HEAD",
+      "path": "/rest/v1/notifications",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/app_settings",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/message_templates",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/factures",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/lignes",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/messages",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/client_inbox",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/staff_users",
+      "input": null
+    },
+    {
+      "method": "POST",
+      "path": "/rest/v1/rpc/refresh_staff_work_actions",
+      "input": {}
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/staff_work_actions",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/staff_work_preferences",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/colis",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/profiles",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/staff_users",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/colis",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/clients",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/envois",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/categories",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/taux_categories",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/tarifs",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/notifications",
+      "input": null
+    },
+    {
+      "method": "HEAD",
+      "path": "/rest/v1/notifications",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/app_settings",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/message_templates",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/factures",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/lignes",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/messages",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/client_inbox",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/staff_users",
+      "input": null
+    },
+    {
+      "method": "POST",
+      "path": "/rest/v1/rpc/refresh_staff_work_actions",
+      "input": {}
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/staff_work_actions",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/staff_work_preferences",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/colis",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/profiles",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/staff_users",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/colis",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/clients",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/envois",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/categories",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/taux_categories",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/tarifs",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/notifications",
+      "input": null
+    },
+    {
+      "method": "HEAD",
+      "path": "/rest/v1/notifications",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/app_settings",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/message_templates",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/factures",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/lignes",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/messages",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/client_inbox",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/staff_users",
+      "input": null
+    },
+    {
+      "method": "POST",
+      "path": "/rest/v1/rpc/refresh_staff_work_actions",
+      "input": {}
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/staff_work_actions",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/staff_work_preferences",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/share_links",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/colis",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/share_links",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/colis",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/factures",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/lignes",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/messages",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/factures",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/lignes",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/messages",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/colis",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/profiles",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/staff_users",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/colis",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/clients",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/envois",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/categories",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/taux_categories",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/tarifs",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/notifications",
+      "input": null
+    },
+    {
+      "method": "HEAD",
+      "path": "/rest/v1/notifications",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/app_settings",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/message_templates",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/factures",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/lignes",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/messages",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/client_inbox",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/staff_users",
+      "input": null
+    },
+    {
+      "method": "POST",
+      "path": "/rest/v1/rpc/refresh_staff_work_actions",
+      "input": {}
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/staff_work_actions",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/staff_work_preferences",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/share_links",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/colis",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/share_links",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/colis",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/colis",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/profiles",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/staff_users",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/colis",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/clients",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/envois",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/categories",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/taux_categories",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/tarifs",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/notifications",
+      "input": null
+    },
+    {
+      "method": "HEAD",
+      "path": "/rest/v1/notifications",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/app_settings",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/message_templates",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/factures",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/lignes",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/messages",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/client_inbox",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/staff_users",
+      "input": null
+    },
+    {
+      "method": "POST",
+      "path": "/rest/v1/rpc/refresh_staff_work_actions",
+      "input": {}
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/staff_work_actions",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/staff_work_preferences",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/colis",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/profiles",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/staff_users",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/colis",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/clients",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/envois",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/categories",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/taux_categories",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/tarifs",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/notifications",
+      "input": null
+    },
+    {
+      "method": "HEAD",
+      "path": "/rest/v1/notifications",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/app_settings",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/message_templates",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/factures",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/lignes",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/messages",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/client_inbox",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/staff_users",
+      "input": null
+    },
+    {
+      "method": "POST",
+      "path": "/rest/v1/rpc/refresh_staff_work_actions",
+      "input": {}
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/staff_work_actions",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/staff_work_preferences",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/colis",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/profiles",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/staff_users",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/colis",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/clients",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/envois",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/categories",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/taux_categories",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/tarifs",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/notifications",
+      "input": null
+    },
+    {
+      "method": "HEAD",
+      "path": "/rest/v1/notifications",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/app_settings",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/message_templates",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/factures",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/lignes",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/messages",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/client_inbox",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/staff_users",
+      "input": null
+    },
+    {
+      "method": "POST",
+      "path": "/rest/v1/rpc/refresh_staff_work_actions",
+      "input": {}
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/staff_work_actions",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/staff_work_preferences",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/colis",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/profiles",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/staff_users",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/colis",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/clients",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/envois",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/categories",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/taux_categories",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/tarifs",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/notifications",
+      "input": null
+    },
+    {
+      "method": "HEAD",
+      "path": "/rest/v1/notifications",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/app_settings",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/message_templates",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/factures",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/lignes",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/messages",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/client_inbox",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/staff_users",
+      "input": null
+    },
+    {
+      "method": "POST",
+      "path": "/rest/v1/rpc/refresh_staff_work_actions",
+      "input": {}
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/staff_work_actions",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/staff_work_preferences",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/share_links",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/colis",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/share_links",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/colis",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/factures",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/lignes",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/messages",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/factures",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/lignes",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/messages",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/colis",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/profiles",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/staff_users",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/colis",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/clients",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/envois",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/categories",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/taux_categories",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/tarifs",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/notifications",
+      "input": null
+    },
+    {
+      "method": "HEAD",
+      "path": "/rest/v1/notifications",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/app_settings",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/message_templates",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/factures",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/lignes",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/messages",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/client_inbox",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/staff_users",
+      "input": null
+    },
+    {
+      "method": "POST",
+      "path": "/rest/v1/rpc/refresh_staff_work_actions",
+      "input": {}
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/staff_work_actions",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/staff_work_preferences",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/colis",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/staff_users",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/staff_users",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/staff_users",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/staff_users",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/profiles",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/staff_users",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/colis",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/clients",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/envois",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/categories",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/taux_categories",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/tarifs",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/notifications",
+      "input": null
+    },
+    {
+      "method": "HEAD",
+      "path": "/rest/v1/notifications",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/app_settings",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/message_templates",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/factures",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/lignes",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/messages",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/client_inbox",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/staff_users",
+      "input": null
+    },
+    {
+      "method": "POST",
+      "path": "/rest/v1/rpc/refresh_staff_work_actions",
+      "input": {}
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/staff_work_actions",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/staff_work_preferences",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/colis",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/profiles",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/staff_users",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/colis",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/clients",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/envois",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/categories",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/taux_categories",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/tarifs",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/notifications",
+      "input": null
+    },
+    {
+      "method": "HEAD",
+      "path": "/rest/v1/notifications",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/app_settings",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/message_templates",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/factures",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/lignes",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/messages",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/client_inbox",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/staff_users",
+      "input": null
+    },
+    {
+      "method": "POST",
+      "path": "/rest/v1/rpc/refresh_staff_work_actions",
+      "input": {}
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/staff_work_actions",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/staff_work_preferences",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/colis",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/profiles",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/staff_users",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/colis",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/clients",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/envois",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/categories",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/taux_categories",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/tarifs",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/notifications",
+      "input": null
+    },
+    {
+      "method": "HEAD",
+      "path": "/rest/v1/notifications",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/app_settings",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/message_templates",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/factures",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/lignes",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/messages",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/client_inbox",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/staff_users",
+      "input": null
+    },
+    {
+      "method": "POST",
+      "path": "/rest/v1/rpc/refresh_staff_work_actions",
+      "input": {}
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/staff_work_actions",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/staff_work_preferences",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/share_links",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/colis",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/share_links",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/colis",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/factures",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/lignes",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/messages",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/factures",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/lignes",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/messages",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/colis",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/profiles",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/staff_users",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/colis",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/clients",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/envois",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/categories",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/taux_categories",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/tarifs",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/notifications",
+      "input": null
+    },
+    {
+      "method": "HEAD",
+      "path": "/rest/v1/notifications",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/app_settings",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/message_templates",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/factures",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/lignes",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/messages",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/client_inbox",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/staff_users",
+      "input": null
+    },
+    {
+      "method": "POST",
+      "path": "/rest/v1/rpc/refresh_staff_work_actions",
+      "input": {}
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/staff_work_actions",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/staff_work_preferences",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/colis",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/profiles",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/staff_users",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/colis",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/clients",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/envois",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/categories",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/taux_categories",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/tarifs",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/notifications",
+      "input": null
+    },
+    {
+      "method": "HEAD",
+      "path": "/rest/v1/notifications",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/app_settings",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/message_templates",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/factures",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/lignes",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/messages",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/client_inbox",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/staff_users",
+      "input": null
+    },
+    {
+      "method": "POST",
+      "path": "/rest/v1/rpc/refresh_staff_work_actions",
+      "input": {}
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/staff_work_actions",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/staff_work_preferences",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/colis",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/profiles",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/staff_users",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/colis",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/clients",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/envois",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/categories",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/taux_categories",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/tarifs",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/notifications",
+      "input": null
+    },
+    {
+      "method": "HEAD",
+      "path": "/rest/v1/notifications",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/app_settings",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/message_templates",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/factures",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/lignes",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/messages",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/client_inbox",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/staff_users",
+      "input": null
+    },
+    {
+      "method": "POST",
+      "path": "/rest/v1/rpc/refresh_staff_work_actions",
+      "input": {}
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/staff_work_actions",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/staff_work_preferences",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/colis",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/profiles",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/staff_users",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/colis",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/clients",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/envois",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/categories",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/taux_categories",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/tarifs",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/notifications",
+      "input": null
+    },
+    {
+      "method": "HEAD",
+      "path": "/rest/v1/notifications",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/app_settings",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/message_templates",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/factures",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/lignes",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/messages",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/client_inbox",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/staff_users",
+      "input": null
+    },
+    {
+      "method": "POST",
+      "path": "/rest/v1/rpc/refresh_staff_work_actions",
+      "input": {}
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/staff_work_actions",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/staff_work_preferences",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/colis",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/staff_users",
+      "input": null
+    },
+    {
+      "method": "GET",
+      "path": "/rest/v1/staff_users",
+      "input": null
+    }
+  ]
+}

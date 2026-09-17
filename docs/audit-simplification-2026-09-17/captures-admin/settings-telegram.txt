@@ -1,0 +1,38 @@
+EXPÉDÎLE
+Réceptionner des cartons
+Mon travail
+Dossiers d’expédition
+Conversations
+Équipe
+Départs
+Clients
+Estimation
+Paramètres
+Réduire
+C
+
+Camille
+
+Direction
+
+CONFIGURATION PARTAGÉE
+
+Paramètres
+Retour
+Départs
+Tarifs
+Catégories
+Équipe et accès
+Telegram
+Messages
+Règles métier
+Produits interdits
+Un échange rattaché à chaque dossier
+
+Depuis la fiche client, générez une invitation personnelle. Le client ouvre le bot et confirme la liaison. Les demandes, réponses et documents apparaissent ensuite dans son dossier.
+
+Envoyez une demande complète avec les cartons concernés.
+Le client autorise la préparation, demande d’attendre ou refuse.
+Consultez les réponses dans la file « Messages clients » et traitez les exceptions.
+
+Un message est marqué envoyé après confirmation de Telegram. Les clients sans Telegram retrouvent leurs demandes dans leur espace client.

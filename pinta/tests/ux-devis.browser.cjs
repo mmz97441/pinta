@@ -81,8 +81,8 @@ async function main() {
     results.push({ test: 'staff-invoice-validation-reachable-mobile', pass: barBox.y >= 0 && barBox.y + barBox.height <= 845, barBox });
     await current.page.screenshot({ path: path.join(output, 'staff-preparation-mobile.png') });
     await current.page.getByLabel('Description de l’article 1').fill('Correction conservée');
-    await current.page.getByRole('tab', { name: 'Document', exact: true }).click();
-    await current.page.getByRole('tab', { name: 'Articles et vérification', exact: true }).click();
+    await current.page.getByRole('tab', { name: 'Voir la facture', exact: true }).click();
+    await current.page.getByRole('tab', { name: 'Vérifier les articles', exact: true }).click();
     assert.equal(await current.page.getByLabel('Description de l’article 1').inputValue(), 'Correction conservée');
     await current.page.getByRole('button', { name: 'Valider et passer à la suivante', exact: true }).click();
     assert.equal(current.calls.filter(call => call.kind === 'save').length, 0);

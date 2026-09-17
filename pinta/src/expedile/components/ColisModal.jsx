@@ -23,13 +23,9 @@ function ReceptionInput({ label, ...props }) {
 function CartonFields({ lines, dimensions, setTracking, setDimension, addTracking, removeTracking, inputRefs, dimensionRefs, onScan, issues = [], cartonOffset = 0 }) {
   return <div className="space-y-3">
     <p className="text-sm font-semibold text-gray-800">Cartons reçus</p>
-    <p className="text-xs text-gray-600">Mesurez et pesez chaque carton reçu ; fournisseur et suivi peuvent être ajoutés si connus. Entrée après un scan ajoute le suivant ; Tab parcourt les mesures.</p>
+    <p className="text-xs text-gray-600">Mesurez et pesez chaque carton reçu. Le fournisseur et le suivi sont facultatifs.</p>
     {lines.map((line, idx) => <section key={idx} aria-label={`Carton ${cartonOffset + idx + 1}`} className="rounded-xl border border-gray-200 p-3 space-y-3">
       <div className="flex justify-between items-center"><h3 className="text-sm font-bold text-gray-800">Carton {cartonOffset + idx + 1}</h3>{lines.length > 1 && <button type="button" onClick={() => removeTracking(idx)} aria-label={`Supprimer le carton ${cartonOffset + idx + 1}`} className="w-11 h-11 -my-2 rounded-lg text-gray-500 hover:bg-red-50 hover:text-red-700 flex items-center justify-center"><X size={16} /></button>}</div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-        <ReceptionInput label={`Fournisseur · carton ${cartonOffset + idx + 1}`} placeholder="Amazon, Zara…" value={line.fournisseur} onChange={event => setTracking(idx, 'fournisseur', event.target.value)} className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm" />
-        <label className="block"><span className="block text-xs font-semibold text-gray-600 mb-1">Numéro de suivi · carton {cartonOffset + idx + 1}</span><input ref={element => { inputRefs.current[idx] = element; }} value={line.tracking} onChange={event => setTracking(idx, 'tracking', event.target.value)} onKeyDown={event => onScan(event, idx)} placeholder="Scanner ou saisir le numéro" autoComplete="off" aria-invalid={issues.some(issue => issue.index === idx && issue.key === 'tracking')} className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm font-mono" /></label>
-      </div>
       <fieldset className="rounded-lg bg-gray-50 border border-gray-200 p-3">
         <legend className="px-1 text-xs font-bold text-gray-800">Mesures à réception — avant optimisation</legend>
         <div className="grid grid-cols-2 gap-3">
@@ -42,7 +38,13 @@ function CartonFields({ lines, dimensions, setTracking, setDimension, addTrackin
           })}
         </div>
       </fieldset>
+      <details><summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-gray-600">Fournisseur et suivi{line.fournisseur || line.tracking ? ' · renseignés' : ' · facultatifs'}</summary>      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        <ReceptionInput label={`Fournisseur · carton ${cartonOffset + idx + 1}`} placeholder="Amazon, Zara…" value={line.fournisseur} onChange={event => setTracking(idx, 'fournisseur', event.target.value)} className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm" />
+        <label className="block"><span className="block text-xs font-semibold text-gray-600 mb-1">Numéro de suivi · carton {cartonOffset + idx + 1}</span><input ref={element => { inputRefs.current[idx] = element; }} value={line.tracking} onChange={event => setTracking(idx, 'tracking', event.target.value)} onKeyDown={event => onScan(event, idx)} placeholder="Scanner ou saisir le numéro" autoComplete="off" aria-invalid={issues.some(issue => issue.index === idx && issue.key === 'tracking')} className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm font-mono" /></label>
+      </div>
+</details>
     </section>)}
+    <details><summary className="min-h-11 cursor-pointer py-3 text-xs font-semibold text-gray-600">Aide à la mesure et au scan</summary><p className="text-xs text-gray-600">Longueur : grand côté · Largeur : petit côté · Hauteur : du bas au haut. Mesurez l’extérieur du carton fermé. Entrée après un scan ajoute le suivant ; Tab parcourt les mesures.</p><svg viewBox="0 0 220 110" role="img" aria-label="Repères longueur, largeur et hauteur d’un carton" className="mt-2 h-28 w-full max-w-xs text-gray-600"><path d="M40 40 L120 15 L180 40 L100 65 Z M40 40 V85 L100 105 V65 M100 105 L180 80 V40" fill="none" stroke="currentColor" strokeWidth="2"/><text x="30" y="106" fontSize="10" fill="currentColor">Longueur</text><text x="144" y="101" fontSize="10" fill="currentColor">Largeur</text><text x="184" y="63" fontSize="10" fill="currentColor">Hauteur</text></svg></details>
     <button type="button" onClick={addTracking} className="w-full rounded-xl border border-dashed border-gray-300 px-3 py-2.5 text-sm font-semibold brand-t">+ Ajouter un carton</button>
   </div>;
 }
@@ -138,7 +140,7 @@ export default function ColisModal({ open, onClose, initialColisId, initialClien
     setPendingMeasureFocus(null);
   }, [open, saving, pendingMeasureFocus]);
   useEffect(() => {
-    if (pendingFocus !== null && open) { trackingRefs.current[pendingFocus]?.focus(); setPendingFocus(null); }
+    if (pendingFocus !== null && open) { const input = trackingRefs.current[pendingFocus]; const details = input?.closest('details'); if (details) details.open = true; input?.focus(); setPendingFocus(null); }
   }, [nf.trackingLines.length, open, pendingFocus]);
   useEffect(() => {
     if (!nf.photoFile) { setPhotoPreview(null); return; }
@@ -185,7 +187,7 @@ export default function ColisModal({ open, onClose, initialColisId, initialClien
     if (event.key !== 'Enter') return;
     event.preventDefault();
     if (!nf.trackingLines[idx].tracking.trim()) return;
-    if (nf.trackingLines[idx + 1]) trackingRefs.current[idx + 1]?.focus();
+    if (nf.trackingLines[idx + 1]) setPendingFocus(idx + 1);
     else addTracking();
   };
   const setDimension = (index, key, value) => {
@@ -274,7 +276,7 @@ export default function ColisModal({ open, onClose, initialColisId, initialClien
     const errs = {};
     if (isStaff) {
       if (!selectedClient && !newClientMode) errs.client = 'Sélectionnez un client';
-      if (!receptionCartons(nf.trackingLines, nf.multiDims).length) errs.d = 'Ajoutez au moins un carton et ses mesures à réception.';
+      if (!receptionCartons(nf.trackingLines, nf.multiDims).length) { const first = { index: 0, key: 'dimL' }; errs.dimensions = `Carton ${cartonOffset + 1} : renseignez la longueur à réception, puis les trois autres mesures.`; errs.measurements = [first]; setPendingMeasureFocus(first); }
       if (!rattacher && !nf.casier.trim()) errs.casier = 'Numéro de casier requis';
       const measurements = receptionMeasurementIssues(nf.trackingLines, nf.multiDims, cartonOffset);
       if (measurements.length) {
@@ -1035,18 +1037,18 @@ export default function ColisModal({ open, onClose, initialColisId, initialClien
                   <span className="text-xs font-bold" style={{ color: 'var(--brand-text)' }}>
                     Ajouter un carton à {rattacherTarget.ref}
                   </span>
-                  <button type="button" onClick={() => { setMode(null); setRattacherTarget(null); }} className="ml-auto text-[10px] text-gray-400 hover:text-gray-600">
+                  <button type="button" onClick={() => { setMode(null); setRattacherTarget(null); }} className="ml-auto min-h-11 px-3 text-sm text-gray-600 hover:text-gray-800">
                     Changer
                   </button>
                 </div>
-                <p className="text-[11px] text-gray-500">{rattacherTarget.desc} · Casier {rattacherTarget.casier || '—'}</p>
+                <p className="text-[11px] text-gray-500">{rattacherTarget.desc} · {receptionCartonManifest(rattacherTarget).nbColis} carton(s) déjà reçu(s) · Casier {rattacherTarget.casier || '—'}</p>
               </div>
 
               {cartonFields}
               <p className="text-xs text-gray-600">{receptionCartonManifest(rattacherTarget).nbColis} carton(s) déjà reçu(s) : leurs mesures sont conservées. {!hasCompleteReceptionMeasurements(rattacherTarget) && 'Certaines mesures anciennes restent à compléter dans le dossier avant de demander un accord.'}</p>
 
               {/* Casier optionnel (si on veut changer) */}
-              <div>
+              <details><summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-gray-700">Casier {nf.casier || rattacherTarget.casier || "à renseigner"} · Modifier</summary>
                 <label htmlFor="reception-casier-existing" className={labelCls}>Casier (laisser vide pour garder {rattacherTarget.casier || 'l\'actuel'})</label>
                 <input
                   type="text"
@@ -1055,7 +1057,7 @@ export default function ColisModal({ open, onClose, initialColisId, initialClien
                   onChange={(e) => setField('casier', e.target.value.toUpperCase())}
                   className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm outline-none focus:border-blue-400 focus:bg-white"
                 />
-              </div>
+              </details>
 
               {formErr.d && <p role="alert" className="text-sm font-semibold text-red-700">{formErr.d}</p>}
               {formErr.tracking && <p role="alert" className="text-xs text-red-500">{formErr.tracking}</p>}
@@ -1090,6 +1092,7 @@ export default function ColisModal({ open, onClose, initialColisId, initialClien
 
               {cartonFields}
               {formErr.d && <p role="alert" className="text-sm font-semibold text-red-700">{formErr.d}</p>}
+              {checkedInterdits.length > 0 && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm font-semibold text-red-700">Incident à vérifier : {checkedInterdits.join(", ")}. La préparation reste bloquée tant que le dossier n’est pas régularisé.</p>}
               <details className="rounded-xl border border-gray-200 p-3">
                 <summary className="min-h-11 flex items-center cursor-pointer text-sm font-semibold text-gray-700">Compléments de réception{checkedInterdits.length > 0 ? ` · ${checkedInterdits.length} alerte(s)` : nf.notesReception || nf.photoFile ? ' · renseignés' : ' · observations, contrôles, photo'}</summary>
                 <div className="space-y-4 pt-3">
@@ -1125,7 +1128,7 @@ export default function ColisModal({ open, onClose, initialColisId, initialClien
                           onClick={() => setCheckedInterdits(prev =>
                             checked ? prev.filter(i => i !== item) : [...prev, item]
                           )}
-                          className={`px-2.5 py-1 rounded-full text-[11px] font-bold transition-all ${
+                          className={`min-h-11 px-3 py-2 rounded-full text-xs font-semibold transition-all ${
                             checked ? 'bg-red-100 text-red-700 ring-2 ring-red-400' : 'bg-gray-100 text-gray-600'
                           }`}
                         >
@@ -1150,11 +1153,11 @@ export default function ColisModal({ open, onClose, initialColisId, initialClien
                     Photo de réception
                     <span className="ml-1 normal-case text-gray-400 font-normal">(facultatif)</span>
                   </label>
-                  <div className="flex items-center gap-3">
-                    <label className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-dashed focus-within:ring-2 focus-within:ring-blue-600 border-gray-300 bg-gray-50 cursor-pointer hover:bg-gray-100 transition-colors">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <label className="min-h-11 flex items-center gap-2 px-4 py-2.5 rounded-xl border border-dashed focus-within:ring-2 focus-within:ring-blue-600 border-gray-300 bg-gray-50 cursor-pointer hover:bg-gray-100 transition-colors">
                       <Camera size={16} className="text-gray-400" />
                       <span className="text-xs font-semibold text-gray-500">
-                        {nf.photoFile ? nf.photoFile.name : 'Prendre une photo / Choisir un fichier'}
+                        Prendre une photo
                       </span>
                       <input
                         type="file"
@@ -1167,11 +1170,12 @@ export default function ColisModal({ open, onClose, initialColisId, initialClien
                         }}
                       />
                     </label>
+                    <label className="flex min-h-11 items-center rounded-xl border border-gray-300 px-3 text-sm font-semibold text-gray-600 focus-within:ring-2 focus-within:ring-blue-600">{nf.photoFile ? "Remplacer la photo" : "Choisir une photo"}<input aria-label="Choisir une photo de réception" type="file" accept="image/*" className="sr-only" onChange={event => { const file = event.target.files?.[0]; if(file) setField("photoFile", file); }} /></label>
                     {nf.photoFile && (
                       <button
                         type="button"
                         onClick={() => setField('photoFile', null)}
-                        className="text-xs text-red-500 hover:text-red-700"
+                        className="min-h-11 px-3 text-sm text-red-700"
                       >
                         Supprimer
                       </button>
@@ -1294,7 +1298,7 @@ export default function ColisModal({ open, onClose, initialColisId, initialClien
           <div className="shrink-0 px-5 py-3 border-t border-gray-200 bg-white" style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom))' }}>
             <div className="mb-3 text-xs text-gray-600" aria-live="polite">
               <p className="font-bold text-sm text-gray-800">{selectedClient?.nom || newClientForm.nom || authCl?.nom} · {mode === 'rattacher' ? rattacherTarget?.ref : 'Nouveau dossier'}</p>
-              <p>{receptionCartons(nf.trackingLines, nf.multiDims).filter(({ index }) => receptionMeasurements([nf.trackingLines[index]], { 0: nf.multiDims[index] })).length} / {receptionCartons(nf.trackingLines, nf.multiDims).length} carton(s) mesuré(s) à réception · Casier {nf.casier || rattacherTarget?.casier || 'à renseigner'}</p>
+              <p>{nf.trackingLines.filter((line, index) => receptionMeasurements([line], { 0: nf.multiDims[index] })).length} / {nf.trackingLines.length} carton(s) mesuré(s) à réception · Casier {nf.casier || rattacherTarget?.casier || 'à renseigner'}</p>
               {isStaff ? <p>Enregistrez la réception, puis préparez la demande d’accord et de factures. Le message sera envoyé à votre confirmation.</p> : mode === 'nouveau' && <p>{notificationAccessible ? `Notification proposée : ${selectedClient?.telegramChatId ? 'Telegram' : 'message dans l’espace client'}` : 'Accès client à activer : une action de contact sera créée pour l’équipe.'}</p>}
               {checkedInterdits.length > 0 && <p className="text-red-700 font-bold">{checkedInterdits.length} produit(s) interdit(s) signalé(s)</p>}
             </div>
@@ -1304,7 +1308,7 @@ export default function ColisModal({ open, onClose, initialColisId, initialClien
               <button
                 type="button"
                 disabled={saving} onClick={mode === 'rattacher' ? () => { setMode(null); setRattacherTarget(null); } : resetAndClose}
-                className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl font-semibold text-sm text-gray-600 bg-gray-100 hover:bg-gray-200 active:scale-95 transition-all"
+                className="min-h-11 flex-1 sm:flex-none px-4 py-2.5 rounded-xl font-semibold text-sm text-gray-600 bg-gray-100 hover:bg-gray-200 active:scale-95 transition-all"
               >
                 {mode === 'rattacher' ? 'Retour' : 'Annuler'}
               </button>
@@ -1313,10 +1317,10 @@ export default function ColisModal({ open, onClose, initialColisId, initialClien
                 <button
                   type="button"
                   disabled={saving} onClick={() => runSave(handleRattacher)}
-                  className="flex-1 py-2.5 rounded-xl font-bold text-sm text-white active:scale-95 transition-all"
+                  className="min-h-11 flex-1 py-2.5 rounded-xl font-bold text-sm text-white active:scale-95 transition-all"
                   style={{ background: `linear-gradient(135deg, ${BRAND.navy}, ${BRAND.navyL})` }}
                 >
-                  Rattacher à {rattacherTarget?.ref}
+                  Enregistrer {nf.trackingLines.length > 1 ? "les cartons" : "le carton"} dans {rattacherTarget?.ref}
                 </button>
               ) : (
                 <>
@@ -1331,7 +1335,7 @@ export default function ColisModal({ open, onClose, initialColisId, initialClien
                   {!isStaff && notificationAccessible && <button
                     type="button"
                     disabled={saving} onClick={() => runSave(() => handleReceptionner(false))}
-                    className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl font-semibold text-sm text-gray-600 bg-gray-100 hover:bg-gray-200 active:scale-95 transition-all"
+                    className="min-h-11 flex-1 sm:flex-none px-4 py-2.5 rounded-xl font-semibold text-sm text-gray-600 bg-gray-100 hover:bg-gray-200 active:scale-95 transition-all"
                   >
                     Sans notification
                   </button>}

@@ -1,0 +1,54 @@
+Mon travail
+Dossiers
+Clients
+Plus
+EXPÉDÎLE
+Réceptionner
+Conversations
+
+3 conversations · 1 messages à rattacher dans ces filtres
+
+Camille Exemple
+
+EXP-TEST-001 · Casier A-03
+
+Revenir aux messages
+
+EXP-TEST-001
+
+En cours de préparation
+Référent du dossier
+Alex Martin
+Destination
+97400 · Saint-Denis
+Prochaine action
+Vérifier les achats avant le départ
+17 sept., 12:00
+Mesures à réception — avant optimisation · 2 cartons
+Carton 1
+Boutique A
+
+TEST-001
+
+— × — × — cm · — kg
+
+Mesures à réception incomplètes — à vérifier
+
+Carton 2
+Boutique B
+
+TEST-002
+
+— × — × — cm · — kg
+
+Mesures à réception incomplètes — à vérifier
+
+Total avant optimisation indisponible tant que les mesures de tous les cartons ne sont pas complètes et le diviseur valide.
+
+Après optimisation
+
+30 × 20 × 20 cm · 3 kg
+
+Vol : 2.40 kg
+
+Ouvrir le dossier de travail

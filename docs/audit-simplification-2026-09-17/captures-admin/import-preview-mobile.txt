@@ -1,0 +1,66 @@
+Mon travail
+Dossiers
+Clients
+Plus
+EXPÉDÎLE
+Réceptionner
+Importer des clients
+
+CSV, Excel (.xlsx, .xls)
+
+2
+
+Clients trouvés
+
+1
+
+Doublons détectés
+
+5
+
+Colonnes mappées
+
+0
+
+Erreurs
+
+MAPPING DES COLONNES
+
+Nom → nom
+Prénom → prenom
+Email → email
+Code postal → cp
+Ville → ville
+Champ inconnu (ignoré)
+
+Doublons (email, téléphone ou nom+CP identique)
+
+Ignorer les doublons
+Camille Exemple
+= Camille Exemple (existant)
+
+APERÇU (2 SUR 2)
+
+Nom	Prénom	Type	Forfait	Tél	Email	CP	Statut
+Exemple	Camille	Particulier	Freemium		camille@example.test	97400	Doublon
+Autre	Ana	Particulier	Freemium		ana@example.test	97100	Nouveau
+Changer de fichier
+Annuler
+Importer 1 client
+Clients
+2
+Importer
+Nouveau client
+2
+Total
+0
+Telegram
+1
+Pro
+2 clients
+Liste
+Cartes
+Nom ▲	Prénom ↕	Type ↕	Forfait ↕	Ville ↕	TÉL.	EMAIL	TELEGRAM	Colis ↕	Encaissé ↕	
+Entreprise🇷🇪	Julie	PRO	Freemium	Saint-Denis	—	pro@example.test	Non lié	0	—	
+
+Exemple🇷🇪	Camille	Part.	Freemium	Saint-Denis	—	camille@example.test	Non lié	1	—	

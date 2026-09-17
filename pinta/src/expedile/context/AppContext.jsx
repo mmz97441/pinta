@@ -1,3 +1,4 @@
+import { clearDrafts } from '../lib/draftStore';
 import React, {
   createContext,
   useContext,
@@ -43,6 +44,7 @@ export function AppProvider({ children }) {
   const [logs, setLogs] = useState([]);
   const [sbReady, setSbReady] = useState(false);
   const [settings, setSettings] = useState({});
+  const [adminSettingsBaseline, setAdminSettingsBaseline] = useState({});
   const [messageTemplates, setMessageTemplates] = useState({});
   const [produitsInterdits, setProduitsInterditsState] = useState(PRODUITS_INTERDITS);
   const [notifs, setNotifs] = useState([]);
@@ -241,6 +243,7 @@ export function AppProvider({ children }) {
       notificationLimit.current = 50;
       setNotifs(notifications.rows); setNotificationTotal(notifications.total); setUnreadNotifs(notifications.unread);
       setSettings(configuration.settings.business || {});
+      setAdminSettingsBaseline(configuration.settings);
       setMessageTemplates(configuration.templates);
       setProduitsInterditsState(configuration.settings.produits_interdits || PRODUITS_INTERDITS);
       if (identity.type === 'staff') {
@@ -332,6 +335,7 @@ export function AppProvider({ children }) {
     });
     const { data: subscription } = supabase.auth.onAuthStateChange((event, session) => {
       if (!active || event === 'INITIAL_SESSION') return;
+      if (event === 'SIGNED_OUT') clearDrafts();
       if (event === 'PASSWORD_RECOVERY') setPasswordRecovery(true);
       // Never await another Auth call inside Supabase's auth event lock.
       if (event === 'TOKEN_REFRESHED' && authRef.current?.session.user.id === session?.user.id) {
@@ -364,6 +368,7 @@ export function AppProvider({ children }) {
   const signOut = useCallback(async () => {
     const { error } = await supabase.auth.signOut();
     if (error) throw reportError(error);
+    clearDrafts();
     authRef.current = null;
     setPasswordRecovery(false);
     await establishSession(null);
@@ -510,6 +515,7 @@ export function AppProvider({ children }) {
             ]);
             if (token !== generation.current) return;
             setSettings(config.settings.business || {});
+            setAdminSettingsBaseline(config.settings);
             setMessageTemplates(config.templates);
             setCategories(cats);
             setTarifs(rates);
@@ -780,63 +786,49 @@ export function AppProvider({ children }) {
     },
     [requireReady, flash, reportError],
   );
-  const addCategory = useCallback(
-    async (label, taux) => {
-      requireReady();
-      const saved = await sb.insertCategorie(label);
-      if (taux)
-        for (const [code, t] of Object.entries(taux))
-          await sb.upsertTauxCategorie(saved.id, code, t.om || 0, t.omr || 0);
-      setCategories(await sb.fetchCategories());
-      flash('Catégorie ajoutée');
-      return saved.id;
-    },
-    [requireReady, flash],
-  );
-  const updateCatTaux = useCallback(
-    async (catId, code, field, value) => {
-      const n = Number(value);
-      if (!Number.isFinite(n) || n < 0 || n > 100)
-        throw reportError(new Error('Taux invalide (0 à 100 %).'));
-      const existing = categories.find((c) => c.id === catId)?.taux?.[code] || { om: 0, omr: 0 };
-      const next = { ...existing, [field]: n };
-      await sb.upsertTauxCategorie(catId, code, next.om, next.omr);
-      setCategories(await sb.fetchCategories());
-    },
-    [categories, reportError],
-  );
+  const saveCategory = useCallback(async (id, values, expected) => {
+    requireReady();
+    const saved = await sb.saveAdminCategory(id, values, expected);
+    setCategories(previous => id ? previous.map(cat => cat.id === id ? { ...cat, ...saved } : cat) : [...previous, { ...saved, custom: true }]);
+    return saved;
+  }, [requireReady]);
+  const addCategory = useCallback(async (label, taux = {}) => (await saveCategory(null, { label, codeHs: '', taux }, null)).id, [saveCategory]);
+  const updateCatTaux = useCallback(async (catId, code, field, value) => {
+    const cat = categories.find(c => c.id === catId);
+    if (!cat?.taux?.[code]) throw new Error('Renseignez et enregistrez les deux taux de cette destination depuis les paramètres.');
+    const expected = { label: cat.label, codeHs: cat.codeHs || '', taux: cat.taux };
+    return saveCategory(catId, { ...expected, taux: { ...cat.taux, [code]: { ...cat.taux[code], [field]: Number(value) } } }, expected);
+  }, [categories, saveCategory]);
   const updateCatLabel = useCallback(async (id, label) => {
-    await sb.updateCategorie(id, { label });
-    setCategories(await sb.fetchCategories());
-  }, []);
-  const deleteCategory = useCallback(
-    async (id) => {
-      await sb.deleteCategorie(id);
-      setCategories(await sb.fetchCategories());
-      flash('Catégorie supprimée');
-    },
-    [flash],
-  );
-  const saveSettings = useCallback(
-    async (values) => {
-      await sb.saveSetting('business', values);
-      setSettings(values);
-      flash('Paramètres enregistrés');
-    },
-    [flash],
-  );
-  const saveMessageTemplate = useCallback(async (key, canal, body) => {
-    await sb.saveTemplate(key, canal, body);
-    setMessageTemplates((prev) => ({ ...prev, [`${key}_${canal}`]: body }));
-  }, []);
-  const setProduitsInterdits = useCallback(
-    async (value) => {
-      const next = typeof value === 'function' ? value(produitsInterdits) : value;
-      await sb.saveSetting('produits_interdits', next);
-      setProduitsInterditsState(next);
-    },
-    [produitsInterdits],
-  );
+    const cat = categories.find(c => c.id === id);
+    const expected = { label: cat.label, codeHs: cat.codeHs || '', taux: cat.taux };
+    return saveCategory(id, { ...expected, label }, expected);
+  }, [categories, saveCategory]);
+  const saveTariffs = useCallback(async (values, expected) => {
+    requireReady(); const saved = await sb.saveAdminTariffs(values, expected); setTarifs(saved); return saved;
+  }, [requireReady]);
+  const deleteCategory = useCallback(async id => {
+    const category = categories.find(cat => cat.id === id);
+    if (!category) throw new Error('Catégorie introuvable. Rechargez les paramètres.');
+    await sb.deleteAdminCategory(id, { label: category.label, codeHs: category.codeHs || '', taux: category.taux });
+    setCategories(previous => previous.filter(cat => cat.id !== id));
+    flash('Catégorie supprimée');
+  }, [categories, flash]);
+  const saveSettings = useCallback(async (values, expected = adminSettingsBaseline.business ?? null) => {
+    const saved = await sb.saveSetting('business', values, expected);
+    setSettings(saved); setAdminSettingsBaseline(previous => ({ ...previous, business: saved }));
+    return saved;
+  }, [adminSettingsBaseline]);
+  const saveMessageTemplate = useCallback(async (key, canal, body, expected = messageTemplates[`${key}_${canal}`] ?? null) => {
+    const saved = await sb.saveTemplate(key, canal, body, expected);
+    setMessageTemplates(previous => ({ ...previous, [`${key}_${canal}`]: saved }));
+    return saved;
+  }, [messageTemplates]);
+  const setProduitsInterdits = useCallback(async value => {
+    const next = typeof value === 'function' ? value(produitsInterdits) : value;
+    const saved = await sb.saveSetting('produits_interdits', next, adminSettingsBaseline.produits_interdits ?? null);
+    setProduitsInterditsState(saved); setAdminSettingsBaseline(previous => ({ ...previous, produits_interdits: saved }));
+  }, [produitsInterdits, adminSettingsBaseline]);
   const markNotifRead = useCallback(async (id) => {
     const token = generation.current;
     await sb.markNotifRead(id);
@@ -1199,16 +1191,26 @@ export function AppProvider({ children }) {
     [refreshColis, flash, reportError],
   );
   const envMsg = useCallback(
-    async (id, text, identity) => {
+    async (id, text, identity, options = {}) => {
       if (!text.trim()) return false;
       const c = dataRef.current.find((c) => c.id === id);
-      if (identity.type === 'staff') return sendMsg(id, c.clientId, 'telegram', null, text);
-      await sb.insertMessage(id, {
+      if (identity.type === 'staff') return sendMsg(id, c.clientId, options.channel || 'telegram', null, text, { idempotencyKey: options.idempotencyKey });
+      // A stable client-generated primary key makes a lost insert response
+      // retryable too; RLS still checks dossier ownership and the author.
+      const row = {
+        id: options.idempotencyKey || randomId(),
+        colis_id: id,
         type: 'client',
-        auteur: authCl?.nom || 'Client',
-        auteurId: auth.session.user.id,
+        auteur_nom: authCl?.nom || 'Client',
+        auteur_id: auth.session.user.id,
         texte: text.trim(),
-      });
+      };
+      const { error } = await supabase.from('messages').insert(row);
+      if (error) {
+        if (error.code !== '23505') throw error;
+        const { data: existing, error: readError } = await supabase.from('messages').select('id,colis_id,type,auteur_id,texte').eq('id', row.id).single();
+        if (readError || !existing || existing.colis_id !== id || existing.type !== 'client' || existing.auteur_id !== row.auteur_id || existing.texte !== row.texte) throw error;
+      }
       await refreshColis(id);
       return true;
     },
@@ -1257,6 +1259,9 @@ export function AppProvider({ children }) {
     archivesLoaded,
     settings,
     saveSettings,
+    adminSettingsBaseline,
+    saveCategory,
+    saveTariffs,
     messageTemplates,
     saveMessageTemplate,
     produitsInterdits,

@@ -60,6 +60,7 @@ function assertNoMutation(f) {
    }
   });
   await scenario('filters-never-hide-urgent-owned-actions-handoffs-or-mission-exceptions', async f => {
+   await f.page.locator('summary').filter({ hasText: /^Filtrer/ }).click();
    await f.page.getByLabel('Mission', { exact: true }).selectOption('preparation');
    await f.page.getByLabel('Rechercher dans mes tâches', { exact: true }).fill('aucun-résultat');
    await f.page.getByRole('region', { name: 'Urgences hors filtre', exact: true }).locator('[data-work-action="quote"]').waitFor();
@@ -67,14 +68,15 @@ function assertNoMutation(f) {
    await f.page.getByRole('region', { name: 'Actions hors missions ou permissions', exact: true }).locator('[data-work-action="outside"]').waitFor();
    await f.page.getByRole('button', { name: 'Voir mes tâches sans filtre', exact: true }).click();
    await f.page.waitForURL(url => !url.searchParams.has('q') && url.searchParams.get('mission') === '');
-   await f.page.waitForFunction(() => document.querySelector('input[placeholder="Client, EXP, action…"]')?.value === '');
+   await f.page.waitForFunction(() => document.querySelector('input[placeholder="Client, EXP, tâche…"]')?.value === '');
    assert.equal(await f.page.getByLabel('Rechercher dans mes tâches', { exact: true }).inputValue(), '');
    assert.equal(await f.page.getByLabel('Mission', { exact: true }).inputValue(), '');
   });
   await scenario('global-search-finds-a-colleagues-dossier-independent-of-personal-missions', async f => {
+   await f.page.locator('summary').filter({ hasText: /^Filtrer/ }).click();
    await f.page.getByLabel('Mission', { exact: true }).selectOption('preparation');
    await f.page.getByLabel('Rechercher dans mes tâches', { exact: true }).fill('EXP-AUTRE-EQUIPE');
-   await f.page.getByRole('link', { name: 'Rechercher dans tous les dossiers', exact: true }).click();
+   await f.page.getByRole('link', { name: 'Chercher aussi dans tous les dossiers', exact: true }).click();
    await f.page.waitForURL(url => url.pathname === '/colis' && url.searchParams.get('q') === 'EXP-AUTRE-EQUIPE');
    assert.equal(new URL(f.page.url()).searchParams.has('mission'), false);
    await f.page.getByRole('button', { name: 'EXP-AUTRE-EQUIPE', exact: true }).waitFor();
@@ -89,7 +91,7 @@ function assertNoMutation(f) {
    }
    await f.page.goto(base + '/?section=pool');
    const invitation = row(f, 'pool');
-   await invitation.getByRole('button', { name: 'Consulter', exact: true }).click();
+   await invitation.getByRole('button', { name: 'Consulter sans commencer', exact: true }).click();
    await f.page.waitForURL(url => url.pathname === '/conversations' && url.searchParams.get('action') === 'pool');
    assert.equal(f.tables.staff_work_actions.find(action => action.id === 'pool').assignee_id, null);
   });
@@ -109,9 +111,9 @@ function assertNoMutation(f) {
    const returnTo = '/?section=progress&mission=preparation&q=Exemple';
    await f.page.goto(`${base}/colis/${ids.P}?${new URLSearchParams({ section: 'preparation', action: 'prepare', returnTo })}`);
    const continuation = f.page.getByRole('navigation', { name: 'Après cette tâche', exact: true });
-   await continuation.getByRole('link', { name: 'Tâche suivante', exact: true }).waitFor();
+   await continuation.getByRole('link', { name: /Ouvrir la prochaine tâche/ }).waitFor();
    assert.equal(await continuation.getByRole('link', { name: 'Retour à ma liste', exact: true }).getAttribute('href'), returnTo);
-   await continuation.getByRole('link', { name: 'Tâche suivante', exact: true }).click();
+   await continuation.getByRole('link', { name: /Ouvrir la prochaine tâche/ }).click();
    await f.page.waitForURL(url => url.pathname === '/colis/' + P2 && url.searchParams.get('action') === 'prepare-next');
    assert.equal(new URL(f.page.url()).searchParams.get('returnTo'), returnTo);
    assert.equal(f.tables.staff_work_actions.find(action => action.id === 'prepare-next').state, 'ready');

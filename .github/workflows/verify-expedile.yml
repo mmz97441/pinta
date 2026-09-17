@@ -52,6 +52,7 @@ jobs:
           ./supabase/tests/run-migration-owners.sh
           ./supabase/tests/run-telegram-requested-invoice.sh
           ./supabase/tests/run-invoice-review.sh
+          ./supabase/tests/run-admin-simplification.sh
       - run: npx playwright install --with-deps chromium
       - name: Parcours navigateur sans services externes
         run: |
@@ -89,6 +90,11 @@ jobs:
           node tests/carton-numbering.browser.cjs
           node tests/ux-devis.browser.cjs
           node tests/pdf-preview.browser.cjs
+          node tests/operations-simplicity.browser.cjs
+          node tests/team-simplicity.browser.cjs
+          node tests/client-simplicity.browser.cjs
+          node tests/chat-retry.browser.cjs
+          node tests/admin-simplicity.browser.cjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -116,3 +122,8 @@ jobs:
             /tmp/pinta-workspace-tasks
             /tmp/pinta-preparation-client-tasks
             /tmp/pinta-preview.log
+            /tmp/pinta-operations-simplicity
+            /tmp/pinta-team-simplicity
+            /tmp/pinta-chat-retry
+            /tmp/pinta-client-simplicity
+            /tmp/pinta-admin-simplicity

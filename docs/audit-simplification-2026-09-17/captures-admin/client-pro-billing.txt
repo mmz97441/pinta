@@ -1,0 +1,73 @@
+EXPÉDÎLE
+Réceptionner des cartons
+Mon travail
+Dossiers d’expédition
+Conversations
+Équipe
+Départs
+Clients
+Estimation
+Paramètres
+Réduire
+C
+
+Camille
+
+Direction
+
+Retour aux clients
+E
+CLI-TEST
+Entreprise Julie
+PRO
+Telegram non lié
+🇷🇪
+Saint-Denis
+pro@example.test
+0 dossiers au total
+Synthèse
+Coordonnées
+Abonnement et administration
+TYPE DE CLIENT
+Particulier
+Pro
+FORFAIT
+Freemium
+Premium Mensuel (13€/mois)
+Premium Annuel (69€/an)
+VIP Annuel (149€/an)
+NOTES INTERNES
+Enregistrer
+Annuler
+Email
+Facturation — Fin de mois
+Janvier
+Février
+Mars
+Avril
+Mai
+Juin
+Juillet
+Août
+Septembre
+Octobre
+Novembre
+Décembre
+2025
+2026
+2027
+
+0 colis
+
+0.00 €
+
+Excel
+LIEN DE SUIVI PARTAGÉ
+expire 10j après livraison
+
+Pas encore de lien de suivi
+
+Générez un lien unique que Julie pourra partager avec sa famille. Suivi des colis, sans compte requis.
+
+Créer le lien de suivi
+Supprimer ce client

@@ -1,0 +1,66 @@
+EXPÉDÎLE
+Réceptionner des cartons
+Mon travail
+Dossiers d’expédition
+Conversations
+Équipe
+Départs
+Clients
+Estimation
+Paramètres
+Réduire
+C
+
+Camille
+
+Direction
+
+Importer des clients
+
+CSV, Excel (.xlsx, .xls)
+
+Glissez un fichier ici ou cliquez pour sélectionner
+
+Formats acceptés : .xlsx, .xls, .csv
+
+Colonnes reconnues automatiquement :
+
+Référence
+Type de client
+Raison Sociale
+Civilité
+Nom de famille
+Prénom
+Forfait
+Date Fin Abonnement
+Paiements
+Téléphone Mobile
+Email
+Commune
+Code postal
+Ville
+Adresse
+SIRET
+Telegram
+Notes
+
+Les noms de colonnes sont reconnus même avec des variations (accents, majuscules, tirets).
+
+Annuler
+Clients
+2
+Importer
+Nouveau client
+2
+Total
+0
+Telegram
+1
+Pro
+2 clients
+Liste
+Cartes
+Nom ▲	Prénom ↕	Type ↕	Forfait ↕	Ville ↕	TÉL.	EMAIL	TELEGRAM	Colis ↕	Encaissé ↕	
+Entreprise🇷🇪	Julie	PRO	Freemium	Saint-Denis	—	pro@example.test	Non lié	0	—	
+
+Exemple🇷🇪	Camille	Part.	Freemium	Saint-Denis	—	camille@example.test	Non lié	1	—	

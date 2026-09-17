@@ -1,0 +1,56 @@
+Mon travail
+Dossiers
+Clients
+Plus
+EXPÉDÎLE
+Réceptionner
+EXP-TEST-001
+Devis
+
+Exemple Camille · Réunion
+
+Contexte
+Précédent
+Tâche du dossier
+Réception
+Accord client
+Préparation
+Factures
+Devis
+Paiement
+Expédition
+Livraison
+Suivant
+Établir le devis
+
+Vérifiez le montant, puis enregistrez le devis avant son envoi.
+
+Préparation enregistrée ✓
+1 facture(s) vérifiée(s)
+
+Frais convenus
+
+Ajouter un frais
+
+Mesures de réception incomplètes : aucune économie avant/après annoncée.
+
+Estimation du devis
+Transport
+40.00 €
+Octroi de mer
+14.00 €
+Octroi de mer régional
+3.50 €
+TVA (8.5 %)
+4.89 €
+Frais convenus
+0.00 €
+
+Total à régler
+
+62.39 €
+
+Calcul non enregistré
+
+Enregistrer et vérifier le devis
+Corrections

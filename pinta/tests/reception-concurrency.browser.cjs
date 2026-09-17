@@ -1,3 +1,4 @@
+const { openDetailsFor } = require('./ui-disclosure-helpers.cjs');
 /* Isolated fixture: a second receiver updates the dossier while the first form stays open. */
 const { chromium } = require('playwright');
 const { setup, ids } = require('./browser-regression.cjs');
@@ -36,7 +37,7 @@ async function run() {
     await dialog.getByRole('button').filter({ hasText: /Exemple/ }).first().click();
     await dialog.getByRole('button').filter({ hasText: 'EXP-TEST-001' }).click();
     await dialog.getByRole('heading', { name: 'Carton 3', level: 3, exact: true }).waitFor();
-    await dialog.getByLabel('Numéro de suivi · carton 3').fill('LOCAL-ADDITION');
+    await openDetailsFor(dialog.getByLabel('Numéro de suivi · carton 3')); await dialog.getByLabel('Numéro de suivi · carton 3').fill('LOCAL-ADDITION');
     for (const [label, value, unit] of [['Longueur', '30', 'cm'], ['Largeur', '20', 'cm'], ['Hauteur', '10', 'cm'], ['Poids', '1.5', 'kg']]) {
       await dialog.getByLabel(`${label} à réception (${unit}) · carton 3`, { exact: true }).fill(value);
     }
@@ -49,7 +50,7 @@ async function run() {
     // Visible dashboard state behind the modal confirms the provider finished its relation fetch.
     await f.page.waitForTimeout(500);
     await dialog.getByRole('heading', { name: 'Carton 3', level: 3, exact: true }).waitFor();
-    await dialog.getByRole('button', { name: 'Rattacher à EXP-TEST-001', exact: true }).click();
+    await dialog.getByRole('button', { name: /^Enregistrer (?:le carton|les cartons) dans EXP-TEST-001$/, exact: true }).click();
     await dialog.getByRole('alert').filter({ hasText: 'modifié par un collègue' }).waitFor();
     assert.equal(patchVersion, `eq.${originalVersion}`, 'The submitted snapshot, not the refreshed cache, guards the write');
     assert.equal(original.nb_colis, 4);

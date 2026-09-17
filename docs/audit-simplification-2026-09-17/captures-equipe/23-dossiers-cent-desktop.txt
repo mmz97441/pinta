@@ -1,0 +1,1240 @@
+EXPÉDÎLE
+Réceptionner des cartons
+Mon travail
+Dossiers d’expédition
+Conversations
+Équipe
+Départs
+Clients
+Estimation
+Paramètres
+Réduire
+C
+
+Camille
+
+Direction
+
+File de travail
+Tous les dossiers
+Répondre aux clients
+Préparer les dossiers
+Vérifier les factures
+Attentes demandées
+Accord attendu
+Prêts à chiffrer
+Échéances dépassées
+Attentes à reprendre
+Filtres avancés
+100 dossier(s) affiché(s)
+Inclure les archives
+Export
+Ordre de traitement
+Par statut
+Par envoi
+Tri : Priorité
+	ACTION / ÉTAPE	Client ↕	EXP ↕	CARTONS REÇUS	RÉFÉRENT	Date utile ↕	
+
+Ordre de traitement
+100 colis
+
+	
+
+Répondre au client
+
+En cours de préparation
+Facture reçue · À vérifier
+	Camille Exemple🇷🇪NORD	EXP-TEST-001A-03À répondre1	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En cours de préparation
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-010C-10	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En cours de préparation
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-011C-11	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En cours de préparation
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-013C-13	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En cours de préparation
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-014C-14	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En cours de préparation
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-016C-16	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En cours de préparation
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-017C-17	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En cours de préparation
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-019C-19	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En cours de préparation
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-020C-20	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En cours de préparation
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-022C-22	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En cours de préparation
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-023C-23	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En cours de préparation
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-025C-25	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En cours de préparation
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-026C-26	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En cours de préparation
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-028C-28	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En cours de préparation
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-029C-29	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En cours de préparation
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-031C-31	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En cours de préparation
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-032C-32	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En cours de préparation
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-034C-34	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En cours de préparation
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-035C-35	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En cours de préparation
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-037C-37	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En cours de préparation
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-038C-38	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En cours de préparation
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-040C-40	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En cours de préparation
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-041C-41	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En cours de préparation
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-043C-43	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En cours de préparation
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-044C-44	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En cours de préparation
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-046C-46	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En cours de préparation
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-047C-47	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En cours de préparation
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-049C-49	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En cours de préparation
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-050C-50	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En cours de préparation
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-052C-52	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En cours de préparation
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-053C-53	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En cours de préparation
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-055C-55	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En cours de préparation
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-056C-56	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En cours de préparation
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-058C-58	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En cours de préparation
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-059C-59	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En cours de préparation
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-061C-61	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En cours de préparation
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-062C-62	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En cours de préparation
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-064C-64	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En cours de préparation
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-065C-65	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En cours de préparation
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-067C-67	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En cours de préparation
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-068C-68	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En cours de préparation
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-070C-70	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En cours de préparation
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-071C-71	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En cours de préparation
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-073C-73	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En cours de préparation
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-074C-74	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En cours de préparation
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-076C-76	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En cours de préparation
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-077C-77	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En cours de préparation
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-079C-79	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En cours de préparation
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-080C-80	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En cours de préparation
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-082C-82	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En cours de préparation
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-083C-83	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En cours de préparation
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-085C-85	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En cours de préparation
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-086C-86	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En cours de préparation
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-088C-88	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En cours de préparation
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-089C-89	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En cours de préparation
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-091C-91	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En cours de préparation
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-092C-92	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En cours de préparation
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-094C-94	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En cours de préparation
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-095C-95	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En cours de préparation
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-097C-97	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En cours de préparation
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-098C-98	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En cours de préparation
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-100C-100	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Commencer la préparation
+
+Autorisation reçue
+	Camille Exemple🇷🇪NORD	EXP-AUDIT-008B-7	2	Martin	
+14 sept.
+
+Étape actuelle
+
+	
+
+	
+
+Répondre au client
+
+En attente d'accord client
+	Camille Exemple🇷🇪NORD	EXP-AUDIT-003B-2À répondre	2	Martin	
+09 sept.
+
+Étape actuelle
+
+	
+
+	
+
+Demander l’accord client
+
+Mesuré à réception
+	Camille Exemple🇷🇪NORD	EXP-AUDIT-004B-3	3	Martin	
+10 sept.
+
+Étape actuelle
+
+	
+
+	
+
+Répondre au client
+
+Payé
+	Camille Exemple🇷🇪NORD	EXP-AUDIT-002B-1À répondre1	2	Martin	
+08 sept.
+
+Étape actuelle
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En attente d'accord client
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-009C-9	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En attente d'accord client
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-012C-12	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En attente d'accord client
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-015C-15	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En attente d'accord client
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-018C-18	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En attente d'accord client
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-021C-21	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En attente d'accord client
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-024C-24	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En attente d'accord client
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-027C-27	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En attente d'accord client
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-030C-30	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En attente d'accord client
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-033C-33	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En attente d'accord client
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-036C-36	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En attente d'accord client
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-039C-39	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En attente d'accord client
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-042C-42	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En attente d'accord client
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-045C-45	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En attente d'accord client
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-048C-48	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En attente d'accord client
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-051C-51	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En attente d'accord client
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-054C-54	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En attente d'accord client
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-057C-57	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En attente d'accord client
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-060C-60	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En attente d'accord client
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-063C-63	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En attente d'accord client
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-066C-66	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En attente d'accord client
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-069C-69	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En attente d'accord client
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-072C-72	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En attente d'accord client
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-075C-75	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En attente d'accord client
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-078C-78	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En attente d'accord client
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-081C-81	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En attente d'accord client
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-084C-84	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En attente d'accord client
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-087C-87	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En attente d'accord client
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-090C-90	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En attente d'accord client
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-093C-93	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En attente d'accord client
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-096C-96	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Vérifier les achats avant le départ
+
+En attente d'accord client
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-099C-99	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Règlement attendu
+
+Devis envoyé
+	Camille Exemple🇷🇪NORD	EXP-AUDIT-005B-4	2	Martin	
+11 sept.
+
+Étape actuelle
+
+	
+
+	
+
+En vol
+
+En vol
+	Camille Exemple🇷🇪NORD	EXP-AUDIT-007B-6	3	Martin	
+13 sept.
+
+Étape actuelle
+
+	
+
+	
+
+Livré
+
+Livré
+	Camille Exemple🇷🇪NORD	EXP-AUDIT-006B-5	2	Martin	
+12 sept.
+
+Étape actuelle
+
+	

@@ -69,7 +69,7 @@ async function main() {
     });
     await scenario('manual-article-draft-survives-task-change-and-saves-only-on-explicit-submit', async f => {
       await f.login(); await openDocuments(f);
-      await f.page.getByText('Ajouter un article sans facture source', { exact: true }).click();
+      await f.page.getByText('Ajouter un achat supplémentaire sans facture reliée', { exact: true }).click();
       await articleDescription(f).fill('Achat manuel conservé');
       await f.page.getByLabel('Quantité du nouvel article', { exact: true }).fill('2');
       await f.page.getByLabel('Prix du nouvel article', { exact: true }).fill('19');
@@ -96,9 +96,9 @@ async function main() {
       const otherId = '77777777-7777-4777-8777-777777777777';
       f.tables.colis.push({ ...structuredClone(f.tables.colis[0]), id: otherId, ref: 'EXP-TEST-002' });
       await f.login(); await openDocuments(f);
-      await f.page.getByText('Ajouter un article sans facture source', { exact: true }).click(); await articleDescription(f).fill('Brouillon du premier dossier');
+      await f.page.getByText('Ajouter un achat supplémentaire sans facture reliée', { exact: true }).click(); await articleDescription(f).fill('Brouillon du premier dossier');
       await openDocuments(f, otherId); assert.equal(await articleDescription(f).inputValue(), '');
-      await f.page.getByText('Ajouter un article sans facture source', { exact: true }).click(); await articleDescription(f).fill('Brouillon du second dossier');
+      await f.page.getByText('Ajouter un achat supplémentaire sans facture reliée', { exact: true }).click(); await articleDescription(f).fill('Brouillon du second dossier');
       await openDocuments(f); await articleDescription(f).waitFor(); assert.equal(await articleDescription(f).inputValue(), 'Brouillon du premier dossier');
       await f.page.getByRole('button', { name: 'Effacer la saisie', exact: true }).click();
       await openDocuments(f, otherId); await articleDescription(f).waitFor(); assert.equal(await articleDescription(f).inputValue(), 'Brouillon du second dossier');

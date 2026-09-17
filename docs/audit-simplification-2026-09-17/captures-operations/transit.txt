@@ -1,0 +1,46 @@
+EXPÉDÎLE
+Réceptionner des cartons
+Mon travail
+Dossiers d’expédition
+Conversations
+Équipe
+Départs
+Clients
+Estimation
+Paramètres
+Réduire
+C
+
+Camille
+
+Direction
+
+EXP-TEST-001
+Expédition
+
+Exemple Camille · Réunion
+
+Contexte
+Revenir au paiement
+Tâche du dossier
+Réception
+Accord client
+Préparation
+Factures
+Devis
+Paiement
+Expédition
+Livraison
+Aller à la livraison
+Suivi d'expédition
+
+En vol
+
+Passer en dédouanement
+Arrivé directement (sans dédouanement)
+Retour à ma liste
+
+Préparer les cartons · EXP-TEST-001
+
+Tâche suivante
+Corrections

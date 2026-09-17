@@ -1,0 +1,47 @@
+Mon travail
+Dossiers
+Clients
+Plus
+EXPÉDÎLE
+Réceptionner
+EXP-TEST-001
+Réception
+
+Exemple Camille · Réunion
+
+Contexte
+Tâche du dossier
+Réception
+Accord client
+Préparation
+Factures
+Devis
+Paiement
+Expédition
+Livraison
+Suivant
+Mesures de réception · 2 cartons
+
+Mesurez chaque carton tel qu’il est reçu. Après optimisation de l’emballage, de nouvelles dimensions et un nouveau poids seront saisis pour établir le devis.
+
+Carton 1 · Boutique A · TEST-001
+LONGUEUR · CARTON 1
+cm
+LARGEUR · CARTON 1
+cm
+HAUTEUR · CARTON 1
+cm
+POIDS RÉEL · CARTON 1
+kg
+Carton 2 · Boutique B · TEST-002
+LONGUEUR · CARTON 2
+cm
+LARGEUR · CARTON 2
+cm
+HAUTEUR · CARTON 2
+cm
+POIDS RÉEL · CARTON 2
+kg
+Enregistrer les mesures de réception
+Réceptionner un autre carton
+Corrections

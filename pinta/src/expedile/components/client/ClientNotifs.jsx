@@ -53,34 +53,38 @@ export default function ClientNotifs() {
   );
 
   const handleNotifClick = async (n) => {
-    try { await markNotifRead(n.id); setError(''); } catch { setError('Le suivi de lecture n’a pas pu être enregistré.'); }
     if (n.colisId) {
-      navigate(`/colis/${n.colisId}`);
+      const query = new URLSearchParams({ notification: n.id });
+      if (n.type === 'message') query.set('panel', 'messages');
+      if (['facture', 'facture_rejetee', 'document'].includes(n.type)) query.set('panel', 'documents');
+      navigate(`/colis/${n.colisId}?${query}`);
+      return;
     }
+    try { await markNotifRead(n.id); setError(''); } catch { setError('Le suivi de lecture n’a pas pu être enregistré.'); }
   };
 
   return (
     <div className="anim-fade space-y-4">
       {/* ── Header ── */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <h2 className="text-xl font-black text-gray-900">Notifications</h2>
           {unreadNotifs > 0 && (
             <span
-              className="min-w-[20px] h-5 px-1.5 flex items-center justify-center rounded-full text-[10px] font-black text-white"
+              className="min-w-[20px] h-5 px-1.5 flex items-center justify-center rounded-full text-sm font-black text-white"
               style={{ backgroundColor: BRAND.navy }}
             >
-              {unreadNotifs}
+              {unreadNotifs} non lue{unreadNotifs > 1 ? 's' : ''}
             </span>
           )}
         </div>
         {unreadNotifs > 0 && (
           <button
             disabled={busy} onClick={async () => { setBusy(true); try { await markAllNotifsRead(); setError(''); } catch { setError('Les notifications n’ont pas pu être marquées comme lues. Réessayez.'); } finally { setBusy(false); } }}
-            className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl transition-all active:scale-95"
+            className="flex items-center gap-1.5 min-h-11 text-sm font-semibold px-3 py-2 rounded-xl transition-all active:scale-95"
             style={{ color: 'var(--brand-text)', backgroundColor: BRAND.navy + '10' }}
           >
-            <CheckCheck size={13} />
+            <CheckCheck size={16} />
             Tout marquer comme lu
           </button>
         )}
@@ -98,7 +102,7 @@ export default function ClientNotifs() {
             <Bell size={28} style={{ color: 'var(--brand-text)' }} strokeWidth={1.5} />
           </div>
           <p className="font-bold text-gray-700 mb-1">Aucune notification</p>
-          <p className="text-xs text-gray-400">Vos notifications apparaîtront ici.</p>
+          <p className="text-sm text-gray-400">Vos notifications apparaîtront ici.</p>
         </div>
       ) : (
         <div className="space-y-2.5">
@@ -139,11 +143,11 @@ export default function ClientNotifs() {
                     >
                       {n.titre}
                     </p>
-                    <span className="flex-shrink-0 text-[10px] text-gray-400 font-medium mt-0.5 whitespace-nowrap">
+                    <span className="flex-shrink-0 text-sm text-gray-400 font-medium mt-0.5 whitespace-nowrap">
                       {relativeDate(n.date)}
                     </span>
                   </div>
-                  <p className="text-xs text-gray-500 leading-relaxed">{n.msg}</p>
+                  <p className="text-sm text-gray-500 leading-relaxed">{n.msg}</p>
                 </div>
                 {n.colisId && (
                   <ChevronRight size={14} className="flex-shrink-0 mt-1 text-gray-300" />

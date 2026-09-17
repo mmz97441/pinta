@@ -21,6 +21,8 @@ import ChatPanel, { pendingInvoiceAttachments } from '../detail/ChatPanel';
 import AuditLog from '../detail/AuditLog';
 import { useColisLock } from '../../hooks/useColisLock';
 import { WORK_QUEUES, queueContext, matchesWorkQueue, isActiveColis, isClientWaiting, isActionDue, isWaitDue, needsDocuments, nextAction, priorityScore, urgency, matchesOwner } from '../../domain/workQueues';
+import usePersistentDraft from '../../hooks/usePersistentDraft';
+import { currentInvoices } from '../../domain/invoiceDocuments';
 import { needsConversationAction } from '../../domain/conversations';
 import { useMinuteNow } from '../../hooks/useMinuteNow';
 import { useDialog } from '../ui/useDialog';
@@ -35,8 +37,8 @@ const unreadMessages = (colis) => (colis.messages || []).filter((message) => mes
 const PIPELINE = [
   { key: 'all',         label: 'Tout',            icon: Package,     color: 'var(--brand-text)',  filter: (c) => c.statut !== 'annule' },
   { key: 'reception',   label: 'Réception',       icon: Package,     color: '#F59E0B',   filter: (c) => ['receptionne', 'mesure'].includes(c.statut) },
-  { key: 'feuvert',     label: 'Att. feu vert',   icon: Clock,       color: '#F97316',   filter: (c) => c.statut === 'attente_feu_vert' },
-  { key: 'feuvert_ok',  label: 'Feu vert OK',     icon: CheckCircle, color: '#65A30D',   filter: (c) => ['autorise', 'en_preparation'].includes(c.statut) },
+  { key: 'feuvert',     label: 'Accord attendu',   icon: Clock,       color: '#F97316',   filter: (c) => c.statut === 'attente_feu_vert' },
+  { key: 'feuvert_ok',  label: 'Préparation',     icon: CheckCircle, color: '#65A30D',   filter: (c) => ['autorise', 'en_preparation'].includes(c.statut) },
   { key: 'paiement',    label: 'Att. paiement',   icon: CreditCard,  color: '#D97706',   filter: (c) => ['devis_envoye', 'attente_paiement'].includes(c.statut) },
   { key: 'expedition',  label: 'Expédition',      icon: Plane,       color: '#0891B2',   filter: (c) => ['paye', 'expedie', 'transit', 'dedouanement', 'arrive', 'livraison'].includes(c.statut) },
   { key: 'done',        label: 'Livrés',          icon: Check,       color: '#16A34A',   filter: (c) => c.statut === 'livre' },
@@ -224,7 +226,7 @@ function ColisTableRow({ c, client, prevClient, envois, onClick, isSelected, che
 }
 
 // ── Group header row (colspan toute la largeur) ─────────────────────────────
-function GroupHeaderRow({ icon: Icon, color, label, extraLabel, count, allChecked, onToggleAll, colspan, bgTint }) {
+function GroupHeaderRow({ icon: Icon, color, label, extraLabel, count, allChecked, onToggleAll, colspan, bgTint, collapsed, onToggle }) {
   return (
     <tr className="border-b border-gray-200" style={{ background: 'var(--bg-surface)' }}>
       <td colSpan={colspan} className="px-3 py-2">
@@ -236,7 +238,7 @@ function GroupHeaderRow({ icon: Icon, color, label, extraLabel, count, allChecke
               onClick={(e) => e.stopPropagation()}
               className="w-3.5 h-3.5 rounded accent-blue-500 cursor-pointer" />
             {Icon && <Icon size={13} style={{ color }} />}
-            <span className="text-xs font-bold" style={{ color: 'var(--brand-text)' }}>{label}</span>
+            <button onClick={onToggle} aria-expanded={!collapsed} className="min-h-11 text-sm font-bold" style={{ color: 'var(--brand-text)' }}>{collapsed ? '▸' : '▾'} {label}</button>
             {extraLabel && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">{extraLabel}</span>}
           </div>
           <span className="text-[10px] font-bold text-gray-400">{count} colis</span>
@@ -362,6 +364,21 @@ export default function StaffColisPage() {
   const setViewMode = (value) => setParam('view', value === 'priority' ? null : value);
   const [navigationOrder, setNavigationOrder] = useState([]);
   const detailScrollRef = useRef(null);
+  const listScrollRef = useRef(null);
+  const [collapsedGroups, setCollapsedGroups] = usePersistentDraft('dossiers:groups', []);
+  const [exportError, setExportError] = useState('');
+  const [exportBusy, setExportBusy] = useState(false);
+  const exportRows = async rows => { setExportError(''); setExportBusy(true); try { await exportColisExcel(rows, clients); } catch (error) { setExportError(error.message || 'Export impossible. Réessayez.'); } finally { setExportBusy(false); } };
+  const listMemoryParams = new URLSearchParams(location.search);
+  listMemoryParams.delete('dossier'); listMemoryParams.sort();
+  const listMemoryKey = `expedile:list:${auth?.u?.id}:${location.pathname}:${listMemoryParams.toString()}:${sel ? 'preview' : 'list'}`;
+  useEffect(() => {
+    const element = listScrollRef.current; if (!element) return;
+    try { element.scrollTop = Number(sessionStorage.getItem(listMemoryKey)) || 0; } catch { /* optional preference */ }
+    const save = () => { try { sessionStorage.setItem(listMemoryKey, String(element.scrollTop)); } catch { /* optional preference */ } };
+    element.addEventListener('scroll', save, { passive: true });
+    return () => { element.removeEventListener('scroll', save); };
+  }, [listMemoryKey]);
   const [visibleCols, setVisibleCols] = useState(() => loadVisibleCols(auth?.u?.id));
   const [showColPicker, setShowColPicker] = useState(false);
   const [defaultSort, setDefaultSort] = useState(() => loadDefaultSort(auth?.u?.id));
@@ -511,8 +528,8 @@ export default function StaffColisPage() {
   // Grouped by statut phase (for statut view)
   const STATUT_GROUPS = [
     { label: 'Réception', statuts: ['receptionne', 'mesure'], color: '#F59E0B', icon: Package },
-    { label: 'Attente feu vert', statuts: ['attente_feu_vert'], color: '#F97316', icon: Clock },
-    { label: 'Feu vert OK / Préparation', statuts: ['autorise', 'en_preparation'], color: '#65A30D', icon: CheckCircle },
+    { label: 'Accord attendu', statuts: ['attente_feu_vert'], color: '#F97316', icon: Clock },
+    { label: 'Préparation', statuts: ['autorise', 'en_preparation'], color: '#65A30D', icon: CheckCircle },
     { label: 'Devis / Paiement', statuts: ['devis_envoye', 'attente_paiement'], color: '#D97706', icon: CreditCard },
     { label: 'Payé', statuts: ['paye'], color: '#10B981', icon: Check },
     { label: 'En expédition', statuts: ['expedie', 'transit', 'dedouanement', 'arrive', 'livraison'], color: '#0891B2', icon: Plane },
@@ -649,28 +666,15 @@ export default function StaffColisPage() {
           {/* Export Excel (all visible) */}
           {can('perm_export_colis') && (
             <button
-              onClick={() => exportColisExcel(sorted, clients)}
+              disabled={exportBusy} onClick={() => exportRows(sorted)}
               className="px-2 py-1 rounded-lg text-[10px] font-bold text-gray-500 bg-gray-100 hover:bg-gray-200 transition-all active:scale-95"
             >
-              Export
+              {exportBusy ? 'Export…' : `Exporter ${sorted.length} dossiers filtrés`}
             </button>
           )}
 
           {/* View mode toggle */}
-          <div className="hidden lg:flex items-center gap-1 ml-auto bg-gray-100 rounded-lg p-0.5" aria-label="Regroupement de la liste"><button onClick={() => setViewMode('priority')} aria-pressed={viewMode === 'priority'} className={`min-h-11 px-2.5 rounded-md text-xs font-semibold ${viewMode === 'priority' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500'}`}>Ordre de traitement</button>
-            <button
-              aria-pressed={viewMode === 'statut'} onClick={() => setViewMode('statut')}
-              className={`px-2.5 py-1 rounded-md text-[10px] font-bold transition-all ${viewMode === 'statut' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-400'}`}
-            >
-              Par statut
-            </button>
-            <button
-              aria-pressed={viewMode === 'envoi'} onClick={() => setViewMode('envoi')}
-              className={`px-2.5 py-1 rounded-md text-[10px] font-bold transition-all ${viewMode === 'envoi' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-400'}`}
-            >
-              Par envoi
-            </button>
-          </div>
+          <label className="flex items-center gap-2 text-sm font-semibold">Regrouper<select aria-label="Regrouper les dossiers" value={viewMode} onChange={event => setViewMode(event.target.value)} className="min-h-11 rounded-lg border border-gray-200 bg-white px-2"><option value="priority">Aucun</option><option value="statut">Par étape</option><option value="envoi">Par départ</option></select></label>
 
           {/* Default sort picker */}
           <div className="relative">
@@ -807,11 +811,11 @@ export default function StaffColisPage() {
               onClick={() => {
                 const ids = [...selectedIds];
                 const colisForExport = ids.map((id) => data.find((c) => c.id === id)).filter(Boolean);
-                exportColisExcel(colisForExport, clients);
+                exportRows(colisForExport);
               }}
               className="px-2 py-1 rounded-lg text-[10px] font-bold bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 transition-all active:scale-95"
             >
-              Export Excel
+              Exporter les {selectedIds.size} sélectionnés
             </button>
           )}
           <button onClick={() => setSelectedIds(new Set())} className="ml-auto text-[10px] text-blue-500 hover:text-blue-700 font-semibold">
@@ -820,15 +824,17 @@ export default function StaffColisPage() {
         </div>
       )}
 
+      {exportError && <p role="alert" className="px-4 py-2 text-sm text-red-700">{exportError}</p>}
       {/* Main area: table + detail side by side */}
       <div className="flex-1 flex min-h-0">
 
         {/* Table (scrollable) */}
-        <div className={`overflow-y-auto overflow-x-auto ${sel ? 'hidden lg:block flex-1 min-w-0' : 'flex-1'}`}>
+        <div ref={listScrollRef} className={`overflow-y-auto overflow-x-auto ${sel ? 'hidden lg:block flex-1 min-w-0' : 'flex-1'}`}>
 
           {(() => {
             const groups = viewMode === 'envoi' ? groupedByEnvoi : viewMode === 'statut' ? groupedByStatut : sorted.length ? [{ label: 'Ordre de traitement', icon: Package, color: BRAND.navy, colis: sorted }] : [];
-            const totalColspan = visibleCols.size + 2; // checkbox + N colonnes + chevron
+            const displayCols = sel ? new Set(['client', 'ref', 'statut']) : visibleCols;
+            const totalColspan = displayCols.size + 2; // checkbox + N colonnes + chevron
             const allInGroupSelected = (g) => g.colis.length > 0 && g.colis.every((c) => selectedIds.has(c.id));
             const toggleGroup = (g) => {
               const ids = g.colis.map((c) => c.id);
@@ -846,7 +852,7 @@ export default function StaffColisPage() {
             }
 
             return <>
-              <div className="lg:hidden divide-y divide-gray-100 px-4">{sorted.map(c => {
+              <div className={`${sel ? '' : 'lg:hidden'} divide-y divide-gray-100 px-4`}>{sorted.map(c => {
                 const client = getClient(c.clientId);
                 return <article key={c.id} className="flex min-h-20 items-start gap-3 py-4">
                   <div className="mt-4 h-2 w-2 shrink-0 rounded-full" style={{ background: statutBorderColor(c.statut) }} />
@@ -855,16 +861,17 @@ export default function StaffColisPage() {
                     {needsConversationAction(c) && <p className="text-xs font-semibold brand-t">À répondre</p>}
                     <p className="mt-1 text-sm text-gray-700">{client?.nom || 'Client'}</p>
                     <p className="mt-1 text-xs text-gray-500">{nextAction(c, client, now)}{c.casier ? ` · ${c.casier}` : ''}</p>
+                    <div className="mt-2 flex flex-wrap gap-2 text-sm"><Badge statut={c.statut} /><span>{receptionCartonManifest(c).nbColis} carton(s) reçu(s)</span></div>
                     <InvoiceReviewIndicator dossier={c} />
                     <p className="mt-1 text-xs text-gray-500">{c.responsibleStaffId ? teamUsers.find(user => user.authId === c.responsibleStaffId)?.nom || 'Équipe' : 'Non attribué'} · {urgency(c, now).label}</p>
                     <p className="mt-1 truncate text-xs text-gray-500">{c.desc || 'Contenu à préciser'}</p>
                   </div>
                 </article>;
               })}</div>
-              <table className="hidden lg:table w-full text-left">
+              <table className={`${sel ? 'hidden' : 'hidden lg:table'} w-full text-left`}>
                 <thead>
                   <ColisTableHead
-                    visibleCols={visibleCols}
+                    visibleCols={displayCols}
                     allSelected={sorted.length > 0 && sorted.every((c) => selectedIds.has(c.id))}
                     onSelectAll={() => {
                       if (sorted.every((c) => selectedIds.has(c.id))) setSelectedIds(new Set());
@@ -907,9 +914,11 @@ export default function StaffColisPage() {
                           count={group.colis.length}
                           colspan={totalColspan}
                           allChecked={allInGroupSelected(group)}
+                          collapsed={collapsedGroups.includes(groupKey)}
+                          onToggle={() => setCollapsedGroups(previous => previous.includes(groupKey) ? previous.filter(key => key !== groupKey) : [...previous, groupKey])}
                           onToggleAll={() => toggleGroup(group)}
                         />
-                        {group.colis.map((c, idx) => {
+                        {!collapsedGroups.includes(groupKey) && group.colis.map((c, idx) => {
                           const prevC = idx > 0 ? group.colis[idx - 1] : null;
                           const prevCl = prevC ? getClient(prevC.clientId) : null;
                           return (
@@ -922,7 +931,7 @@ export default function StaffColisPage() {
                               envois={envois}
                               onClick={() => openColis(c.id)}
                               now={now} ownerName={c.responsibleStaffId ? teamUsers.find((user) => user.authId === c.responsibleStaffId)?.nom || 'Équipe' : 'Non attribué'} isSelected={sel?.id === c.id}
-                              visibleCols={visibleCols}
+                              visibleCols={displayCols}
                               checked={selectedIds.has(c.id)}
                               onCheck={() => setSelectedIds((prev) => {
                                 const next = new Set(prev);
@@ -947,15 +956,22 @@ export default function StaffColisPage() {
           const clDetail = getClient(sel.clientId);
           const destDetail = clDetail ? getDestByCP(clDetail.cp) : null;
           const unreadCount = (sel.messages || []).filter((m) => m.type === 'client' && !m.lu).length;
-          const facturesSummary = sel.factures || [];
+          const facturesSummary = currentInvoices(sel.factures);
           const pendingDocumentCount = pendingInvoiceAttachments(sel).length;
           const validCount = facturesSummary.filter((f) => f.valide).length;
           const rejetCount = facturesSummary.filter((f) => f.rejetMotif).length;
           const receptionManifest = receptionCartonManifest(sel);
           const receptionWeights = measureShipment(receptionManifest.dimsParColis, volumetricDivisor(settings));
-          const finalWeights = measureShipment([{ dimL: sel.finL, dimW: sel.finW, dimH: sel.finH, poids: sel.finP }], volumetricDivisor(settings));
+          const packages = sel.finalPackages?.length ? sel.finalPackages : [{ dimL: sel.finL, dimW: sel.finW, dimH: sel.finH, poids: sel.finP }];
+          const finalWeights = measureShipment(packages, volumetricDivisor(settings));
+          const finalMeasuresCurrent = sel.preparationCompositionVersion == null || sel.finalMeasurementsVersion === sel.preparationCompositionVersion;
+          const previewTask = resolveDossierTask(sel, '', [], can);
+          const needsReply = needsConversationAction(sel) && ['perm_comm_message_libre','perm_comm_telegram','perm_comm_email'].some(can);
+          const actionTitle = needsReply ? 'Répondre au client' : DOSSIER_TASKS[previewTask]?.title || 'Ouvrir le dossier';
+          const actionUrl = needsReply ? `/conversations?${new URLSearchParams({ dossier: sel.id, returnTo })}` : dossierTaskUrl(sel.id, previewTask, new URLSearchParams({ returnTo }).toString());
           return (
           <div ref={(element) => { detailScrollRef.current = element; mobileDetailRef.current = element; }} role={narrowScreen ? 'dialog' : 'region'} aria-modal={narrowScreen ? true : undefined} tabIndex={-1} aria-label={`Dossier ${sel.ref}`} className={`fixed inset-0 z-[60] lg:relative lg:inset-auto lg:z-10 w-full lg:w-[500px] 2xl:w-[560px] flex-shrink-0 border-l border-gray-200 bg-white overflow-y-auto overscroll-contain pb-[env(safe-area-inset-bottom)]`}>
+            <button onClick={closeDetail} className="flex min-h-11 items-center gap-2 px-4 text-sm font-semibold lg:hidden"><ChevronLeft size={18} />Retour aux dossiers</button>
             {/* Compact header */}
             <div className="sticky top-0 z-10 bg-white border-b border-gray-100 px-3 py-2 flex items-center justify-between gap-2">
               <div className="flex flex-wrap items-center gap-2">
@@ -1019,8 +1035,8 @@ export default function StaffColisPage() {
                   {sel.casier && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded" style={{ background: `${BRAND.gold}22`, color: 'var(--text-accent)' }}>{sel.casier}</span>}
                 </div>
                 <div className="text-right">
-                  {finalWeights ? (
-                    <span className="text-[10px] text-gray-500 font-mono">Après optimisation : {sel.finL}×{sel.finW}×{sel.finH} cm · {sel.finP} kg</span>
+                  {finalWeights && !finalMeasuresCurrent ? <span className="text-sm font-semibold text-amber-800">Mesures après optimisation à revoir</span> : finalWeights ? (
+                    <span className="text-[10px] text-gray-500 font-mono">Après optimisation : {packages.length} colis · {finalWeights.realWeight.toLocaleString('fr-FR')} kg</span>
                   ) : receptionWeights ? (
                     <span className="text-[10px] text-gray-500 font-mono">Réception : {receptionManifest.nbColis} carton(s) · {receptionWeights.realWeight.toFixed(2)} kg</span>
                   ) : <span className="text-xs text-gray-500">Mesures à réception incomplètes</span>}
@@ -1030,8 +1046,8 @@ export default function StaffColisPage() {
             </div>
 
             <div className="px-4 pb-4 space-y-3">
-              <p className="text-sm font-semibold text-slate-800">{nextAction(sel, clDetail, now)}</p>
-              <button onClick={() => navigate(dossierTaskUrl(sel.id, resolveDossierTask(sel, '', [], can), new URLSearchParams({ returnTo }).toString()))} className="min-h-11 w-full rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white">{DOSSIER_TASKS[resolveDossierTask(sel, '', [], can)]?.title || 'Ouvrir le dossier'}</button>
+              <p className="text-sm font-semibold text-slate-800">{actionTitle}</p>
+              <button onClick={() => navigate(actionUrl)} className="min-h-11 w-full rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white">{actionTitle}</button>
               {pendingDocumentCount > 0 && ['perm_factures_voir','perm_factures_valider','perm_factures_ajouter'].some(permission => can(permission)) && <button onClick={() => navigate(dossierTaskUrl(sel.id,'documents',new URLSearchParams({ returnTo }).toString()))} className="min-h-11 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700">{pendingDocumentCount} document(s) reçu(s) à vérifier</button>}
               <details key={sel.id} className="rounded-xl border border-gray-200 bg-white px-3">
                 <summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-slate-700">Cartons reçus ({receptionManifest.nbColis})</summary>

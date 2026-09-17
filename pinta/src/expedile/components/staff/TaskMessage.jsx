@@ -9,7 +9,7 @@ const contextSignature = (colis, client) => JSON.stringify([
 
 /** Preview and delivery are separate actions. A failed attempt retains its exact
  * payload and idempotency key, including when requesting consent changes status. */
-export default function TaskMessage({ template, label = 'Informer le client', beforeSend, disabled = false }) {
+export default function TaskMessage({ template, message, label = 'Informer le client', beforeSend, disabled = false }) {
   const { sel, selClient: client, can, getPreview, sendMsg } = useApp();
   const channels = [
     { value: 'telegram', label: 'Telegram', available: !!client?.telegramChatId, allowed: can('perm_comm_telegram') },
@@ -27,11 +27,11 @@ export default function TaskMessage({ template, label = 'Informer le client', be
   const live = useRef(null);
   const effectiveTemplate = request.current?.template || template;
   const currentContext = contextSignature(sel, client);
-  const proposed = (key, canal) => getPreview(key, client?.id, sel?.id, canal === 'portal' ? 'email' : canal);
+  const proposed = (key, canal) => message ?? getPreview(key, client?.id, sel?.id, canal === 'portal' ? 'email' : canal);
   const latest = proposed(effectiveTemplate, channel);
   const allowed = channels.some(item => item.value === channel && item.allowed);
   const stale = open && baseline && (baseline.text !== latest || baseline.context !== currentContext);
-  live.current = { context: currentContext, allowed, disabled, dossierId: sel?.id, getPreview };
+  live.current = { context: currentContext, allowed, disabled, dossierId: sel?.id, getPreview, message };
   useEffect(() => {
     request.current = null; setOpen(false); setFeedback(null); setBaseline(null);
   }, [sel?.id]);
@@ -61,7 +61,7 @@ export default function TaskMessage({ template, label = 'Informer le client', be
       if (!attempt.prepared && attempt.beforeSend) await attempt.beforeSend();
       attempt.prepared = true;
       const current = live.current;
-      const currentText = current.getPreview(attempt.template, attempt.clientId, attempt.colisId, attempt.channel === 'portal' ? 'email' : attempt.channel);
+      const currentText = current.message ?? current.getPreview(attempt.template, attempt.clientId, attempt.colisId, attempt.channel === 'portal' ? 'email' : attempt.channel);
       if (current.dossierId !== attempt.colisId || current.context !== attempt.baseline.context || currentText !== attempt.baseline.text || !current.allowed || current.disabled)
         throw new Error('Le dossier ou vos droits ont changé. Vérifiez les échanges avant de reprendre cette demande.');
       attempt.queueStarted = true;
@@ -77,10 +77,12 @@ export default function TaskMessage({ template, label = 'Informer le client', be
   return <section aria-label="Notification au client" className="space-y-3">
     {!open && <button disabled={disabled || busy} onClick={() => preview()} className="min-h-11 rounded-xl border border-slate-300 px-4 text-sm font-semibold text-slate-700 disabled:opacity-40">{label}</button>}
     {open && <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
-      <label className="block text-sm font-semibold text-slate-700">Canal<select aria-label="Canal de notification" value={channel} disabled={busy || !!request.current?.queueStarted} onChange={event => preview(event.target.value)} className="mt-1 min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3">{channels.map(item => <option key={item.value} value={item.value} disabled={!item.allowed}>{item.label}</option>)}{!channels.length && <option value="portal">Aucun canal disponible</option>}</select></label>
+      <label className="block text-sm font-semibold text-slate-700">Envoyer par<select aria-label="Canal de notification" value={channel} disabled={busy || !!request.current?.queueStarted} onChange={event => preview(event.target.value)} className="mt-1 min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3">{channels.map(item => <option key={item.value} value={item.value} disabled={!item.allowed}>{item.label}</option>)}{!channels.length && <option value="portal">Aucun canal disponible</option>}</select></label>
+      <p className="text-sm text-slate-600">Destinataire : <strong>{client?.nom}</strong>{channel === "email" ? ` · ${client?.email || "email non renseigné"}` : channel === "telegram" ? " · compte Telegram lié" : " · espace client personnel"}</p>
       <label className="block text-sm font-semibold text-slate-700">Message pour {client?.prenom || client?.nom}<textarea aria-label="Message à envoyer au client" rows={6} value={draft} disabled={busy || !!request.current?.queueStarted} onChange={event => setDraft(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 bg-white p-3 text-sm font-normal" /></label>
       {stale && <p role="alert" className="text-sm text-amber-800">Le dossier a changé. {!request.current?.queueStarted ? <button className="min-h-11 font-semibold underline" onClick={() => preview()}>Actualiser le message proposé</button> : 'Une tentative existe déjà : vérifiez les échanges du dossier avant un nouvel envoi.'}</p>}
       {!allowed && <p className="text-sm text-amber-800">Ce canal nécessite un accès client et la permission correspondante.</p>}
+      <p className="text-xs text-slate-600">{channel === "email" ? "L’application ouvre un brouillon : vous envoyez l’email dans votre messagerie." : "Vous décidez de l’envoi après lecture de ce message."}</p>
       <div className="flex flex-wrap gap-2"><button disabled={disabled || busy || stale || !allowed || !draft.trim()} onClick={send} className="min-h-11 rounded-xl bg-slate-800 px-4 text-sm font-semibold text-white disabled:opacity-40">{busy ? 'Envoi en cours…' : channel === 'email' ? 'Ouvrir le brouillon email' : request.current ? 'Réessayer cet envoi' : 'Envoyer ce message'}</button><button disabled={busy} className="min-h-11 px-3 text-sm font-semibold text-slate-600" onClick={() => setOpen(false)}>Fermer</button></div>
     </div>}
     {feedback && <p role={feedback.ok ? 'status' : 'alert'} className={`rounded-xl p-3 text-sm ${feedback.ok ? 'bg-emerald-50 text-emerald-800' : 'bg-red-50 text-red-700'}`}>{feedback.text}</p>}

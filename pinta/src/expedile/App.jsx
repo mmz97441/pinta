@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, useNavigate, useParams, useLocation, Navi
 import { Settings, Users, LogOut, LayoutDashboard, Package, ChevronLeft, ChevronRight, Plus, FileText, Key, AlertTriangle, MessageCircle, Plane, MoreHorizontal } from 'lucide-react';
 import './brand.css';
 import { getPrenom } from './utils';
+import { needsConversationAction } from './domain/conversations';
 
 import { AppProvider, useApp } from './context/AppContext';
 import { BRAND } from './constants';
@@ -148,7 +149,8 @@ function ClientColisDetail() {
 function AppContent() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { auth, authLoading, authError, signOut, isStaff, authCl, updateClient, sbReady, dataLoading, dataError, retryLoad, passwordRecovery, completePasswordRecovery, can, flash } = useApp();
+  const { auth, authLoading, authError, signOut, isStaff, authCl, updateClient, sbReady, dataLoading, dataError, retryLoad, passwordRecovery, completePasswordRecovery, can, flash, data = [], inboxItems = [] } = useApp();
+  const conversationCount = data.filter(item => !item.archive && needsConversationAction(item)).length + inboxItems.filter(item => item.status === 'unassigned').length;
   const [modal, setModal] = useState(false);
   const [onboardingDismissed, setOnboardingDismissed] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -191,7 +193,7 @@ function AppContent() {
       { key: '/departs', label: 'Départs', icon: Plane, visible: can('perm_envois_voir') },
       { key: '/clients', label: 'Clients', icon: Users, visible: can('perm_clients_voir') || can('perm_clients_creer') },
       { key: '/devis', label: 'Estimation', icon: FileText, visible: can('perm_colis_calculer_devis') },
-      { key: '/settings', label: 'Paramètres', icon: Settings, visible: can('perm_admin_parametres') },
+      { key: '/settings', label: 'Paramètres', icon: Settings, visible: ['perm_admin_parametres', 'perm_admin_utilisateurs', 'perm_admin_templates', 'perm_finances_modifier_tarifs', 'perm_admin_categories', 'perm_admin_produits_interdits'].some(can) },
     ].filter((item) => item.visible !== false);
 
     const activePath = currentPath.startsWith('/colis') ? '/colis'
@@ -199,9 +201,9 @@ function AppContent() {
       : currentPath === '/devis' ? '/devis'
       : currentPath === '/settings' ? '/settings'
       : ['/equipe', '/conversations', '/departs', '/plus'].includes(currentPath) ? currentPath : '/';
-    const mobileItems = NAV_ITEMS.filter((item) => ['/', '/colis', '/clients'].includes(item.key)).map((item) => ({ ...item, label: item.key === '/colis' ? 'Dossiers' : item.label }));
+    const mobileItems = NAV_ITEMS.filter((item) => ['/', '/colis', '/conversations'].includes(item.key)).map((item) => ({ ...item, label: item.key === '/colis' ? 'Dossiers' : item.label }));
     mobileItems.push({ key: '/plus', label: 'Plus', icon: MoreHorizontal });
-    const moreItems = NAV_ITEMS.filter((item) => !['/', '/colis', '/clients'].includes(item.key));
+    const moreItems = NAV_ITEMS.filter((item) => !['/', '/colis', '/conversations'].includes(item.key));
 
     return (
       <div style={{ fontFamily: "system-ui, -apple-system, 'Segoe UI', sans-serif" }} className="h-[100dvh] flex overflow-hidden">
@@ -251,7 +253,7 @@ function AppContent() {
                 <button
                   key={item.key}
                   onClick={() => navigate(item.key)}
-                  aria-label={item.label} aria-current={isActive ? 'page' : undefined}
+                  aria-label={item.label} aria-description={item.key === '/conversations' ? `${conversationCount} demandes à traiter` : undefined} aria-current={isActive ? 'page' : undefined}
                   className={`w-full flex items-center gap-3 rounded-xl transition-all ${
                     sidebarCollapsed ? 'justify-center px-2 py-2.5' : 'px-3 py-2.5'
                   } ${isActive
@@ -263,12 +265,13 @@ function AppContent() {
                   {!sidebarCollapsed && (
                     <span className="text-sm font-semibold">{item.label}</span>
                   )}
+                  {item.key === '/conversations' && !sidebarCollapsed && conversationCount > 0 && <span aria-hidden="true" className="ml-auto rounded-full bg-white/15 px-2 text-xs text-white">{conversationCount}</span>}
                 </button>
               );
             })}
           </nav>
 
-          {can('perm_admin_parametres') && <button onClick={() => navigate('/settings')} aria-label="Paramètres" aria-current={activePath === '/settings' ? 'page' : undefined} className={`mx-3 mb-2 flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-semibold ${activePath === '/settings' ? 'bg-white/15 text-white' : 'text-gray-300 hover:bg-white/10'}`}><Settings size={18} />{!sidebarCollapsed && 'Paramètres'}</button>}
+          {NAV_ITEMS.some(item => item.key === '/settings') && <button onClick={() => navigate('/settings')} aria-label="Paramètres" aria-current={activePath === '/settings' ? 'page' : undefined} className={`mx-3 mb-2 flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-semibold ${activePath === '/settings' ? 'bg-white/15 text-white' : 'text-gray-300 hover:bg-white/10'}`}><Settings size={18} />{!sidebarCollapsed && 'Paramètres'}</button>}
           {/* Collapse toggle */}
           <div className="px-3 py-2">
             <button
@@ -305,10 +308,10 @@ function AppContent() {
               <button
                 key={item.key}
                 onClick={() => navigate(item.key)}
-                  aria-label={item.label} aria-current={isActive ? 'page' : undefined}
+                  aria-label={item.label} aria-description={item.key === '/conversations' ? `${conversationCount} demandes à traiter` : undefined} aria-current={isActive ? 'page' : undefined}
                 className="flex-1 min-h-11 flex flex-col items-center justify-center gap-0.5 px-1 py-1"
               >
-                <Icon size={20} style={{ color: isActive ? 'var(--brand-text)' : '#9CA3AF' }} strokeWidth={isActive ? 2.5 : 2} />
+                <span className="relative"><Icon size={20} style={{ color: isActive ? 'var(--brand-text)' : '#9CA3AF' }} strokeWidth={isActive ? 2.5 : 2} />{item.key === '/conversations' && conversationCount > 0 && <span aria-hidden="true" className="absolute -right-5 -top-2 rounded-full bg-blue-800 px-1 text-xs font-bold text-white">{conversationCount > 99 ? '99+' : conversationCount}</span>}</span>
                 <span className={`text-[9px] font-bold ${isActive ? 'text-gray-800' : 'text-gray-400'}`}>{item.label}</span>
               </button>
             );
@@ -364,7 +367,7 @@ function AppContent() {
               <Route path="/settings" element={
                 <div className="h-full overflow-y-auto">
                   <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-4 space-y-4">
-                    <Permission allowed={can('perm_admin_parametres')}><StaffSettings /></Permission>
+                    <Permission allowed={['perm_admin_parametres', 'perm_admin_utilisateurs', 'perm_admin_templates', 'perm_finances_modifier_tarifs', 'perm_admin_categories', 'perm_admin_produits_interdits'].some(can)}><StaffSettings /></Permission>
                   </div>
                 </div>
               } />

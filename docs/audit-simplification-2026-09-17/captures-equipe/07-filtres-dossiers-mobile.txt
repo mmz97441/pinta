@@ -1,0 +1,129 @@
+Mon travail
+Dossiers
+Clients
+Plus
+EXPÉDÎLE
+Réceptionner
+File de travail
+Tous les dossiers
+Répondre aux clients
+Préparer les dossiers
+Vérifier les factures
+Attentes demandées
+Accord attendu
+Prêts à chiffrer
+Échéances dépassées
+Attentes à reprendre
+Filtres avancés
+Étape
+Tout (8)
+Réception (1)
+Att. feu vert (1)
+Feu vert OK (2)
+Att. paiement (1)
+Expédition (2)
+Livrés (1)
+Référent
+Toute l’équipe
+Mes dossiers
+Non attribués
+Camille
+Martin
+Morel
+Destination
+Toutes les destinations
+La Réunion
+Mayotte
+Guadeloupe
+Martinique
+8 dossier(s) affiché(s)
+Inclure les archives
+Export
+Tri : Priorité
+EXP-TEST-001
+
+À répondre
+
+Exemple Camille
+
+Répondre au client · A-03
+
+Facture reçue · À vérifier
+
+Martin · Date de l’étape non renseignée
+
+Deux achats à regrouper
+
+EXP-AUDIT-008
+
+Exemple Camille
+
+Commencer la préparation · B-7
+
+Martin · Date de l’étape non renseignée
+
+Livres et vêtements
+
+EXP-AUDIT-003
+
+À répondre
+
+Exemple Camille
+
+Répondre au client · B-2
+
+Martin · Date de l’étape non renseignée
+
+Achats à regrouper
+
+EXP-AUDIT-004
+
+Exemple Camille
+
+Demander l’accord client · B-3
+
+Martin · Date de l’étape non renseignée
+
+Matériel de cuisine
+
+EXP-AUDIT-002
+
+À répondre
+
+Exemple Camille
+
+Répondre au client · B-1
+
+Martin · Date de l’étape non renseignée
+
+Livres et vêtements
+
+EXP-AUDIT-005
+
+Exemple Camille
+
+Règlement attendu · B-4
+
+Martin · Date de l’étape non renseignée
+
+Livres et vêtements
+
+EXP-AUDIT-007
+
+Exemple Camille
+
+En vol · B-6
+
+Martin · Date de l’étape non renseignée
+
+Matériel de cuisine
+
+EXP-AUDIT-006
+
+Exemple Camille
+
+Livré · B-5
+
+Martin ·
+
+Achats à regrouper

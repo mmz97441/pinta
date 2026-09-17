@@ -7,7 +7,7 @@ import { BRAND, ABONNEMENTS } from '../../constants';
 import { eur, hasTrack, trackStr, trackCount, telegramLink } from '../../utils';
 import ReceivedCartons from './ReceivedCartons';
 
-export default function ColisInfo() {
+export default function ColisInfo({ compact = false, onCompleteReception }) {
   const { sel, selClient: cl, selDest, isStaff, upd, flash, data, settings, can } = useApp();
   const [editCasier, setEditCasier] = useState(false);
   const [casierTmp, setCasierTmp] = useState('');
@@ -75,13 +75,13 @@ export default function ColisInfo() {
     <div className="card p-4 anim-fade">
       <div className="flex items-start justify-between mb-2">
         <div>
-          <p className="text-xs font-bold text-gray-400 uppercase">Contenu</p>
+          <p className="text-xs font-bold text-gray-600 uppercase">Contenu</p>
           <p className="font-medium">{sel.desc}</p>
           {sel.valeur > 0 && <p className="text-xs text-gray-500">Valeur déclarée : {eur(sel.valeur)}</p>}
         </div>
-        {cl && (
+        {cl && !compact && (
           <div className="text-right">
-            <p className="text-xs font-bold text-gray-400">Client</p>
+            <p className="text-xs font-bold text-gray-600">Client</p>
             <p className="text-sm">
               {cl.nom}
               {cl.points > 0 && cl.type === 'particulier' && (
@@ -167,13 +167,13 @@ export default function ColisInfo() {
         )}
       </div>
 
-      <div className="mt-3 pt-3 border-t"><ReceivedCartons colis={sel} settings={settings} /></div>
+      <div className="mt-3 pt-3 border-t"><ReceivedCartons colis={sel} settings={settings} onCompleteReception={onCompleteReception} /></div>
 
       {/* Casier */}
       {(sel.casier || isStaff) && (
         <div className="mt-2 pt-2 border-t">
           <div className="flex items-center gap-2">
-            <span className="text-xs font-bold text-gray-400">Casier :</span>
+            <span className="text-xs font-bold text-gray-600">Casier :</span>
             {editCasier && canEditCasier ? (
               <div className="flex-1 space-y-2">
                 <div className="flex items-center gap-1">
@@ -223,7 +223,7 @@ export default function ColisInfo() {
             <div className="mt-1.5">
               <button
                 onClick={() => setShowCasierHist(!showCasierHist)}
-                className="flex items-center gap-1 text-[11px] text-gray-400 hover:text-gray-600 font-medium transition-colors"
+                className="flex items-center gap-1 text-[11px] text-gray-600 hover:text-gray-600 font-medium transition-colors"
               >
                 Historique casier ({sel.casierHistorique.length})
                 {showCasierHist ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
@@ -231,7 +231,7 @@ export default function ColisInfo() {
               {showCasierHist && (
                 <div className="mt-1 pl-2 space-y-0.5">
                   {[...sel.casierHistorique].reverse().map((h, i) => (
-                    <p key={i} className="text-[11px] text-gray-400 font-mono">
+                    <p key={i} className="text-[11px] text-gray-600 font-mono">
                       {h.casier} — {new Date(h.date).toLocaleDateString('fr-FR')}
                     </p>
                   ))}

@@ -38,7 +38,7 @@ function DocumentContext({ onClose }) {
     {invoice.montant > 0 && <p className="text-sm">{eur(invoice.montant)} HT</p>}
     {historical && <p className="text-xs text-slate-600 dark:text-slate-300">Document conservé dans l’historique, exclu du devis.</p>}
     {invoice.rejetMotif && !historical && <p className="text-sm text-amber-800 dark:text-amber-200">Correction attendue : {invoice.rejetMotif}</p>}
-    <div className="flex flex-wrap gap-2">{invoice.fichier && <button className={BUTTON} aria-expanded={previewId === invoice.id} onClick={() => setPreviewId(previous => previous === invoice.id ? null : invoice.id)}>{previewId === invoice.id ? 'Fermer le document' : 'Lire le document'}</button>}<button className={BUTTON} onClick={() => openTask(invoice)}>{historical || invoice.valide ? 'Consulter la facture' : 'Ouvrir la vérification'}</button></div>
+    <div className="flex flex-wrap gap-2">{invoice.fichier && <button className={BUTTON} aria-expanded={previewId === invoice.id} onClick={() => setPreviewId(previous => previous === invoice.id ? null : invoice.id)}>{previewId === invoice.id ? 'Fermer le document' : 'Voir le document'}</button>}{!historical && !invoice.valide && <button className={BUTTON} onClick={() => openTask(invoice)}>Vérifier la facture</button>}</div>
     {previewId === invoice.id && <InlineDocument invoice={invoice} />}
   </article>);
   return <section aria-label="Documents du dossier" className="space-y-3">
@@ -54,6 +54,8 @@ function DocumentContext({ onClose }) {
  * or an assignment draft. Hidden conversations never mark messages as read. */
 export default function DossierContextPanel({ section, onSectionChange, onClose }) {
   const { sel, can } = useApp();
+  const navigate = useNavigate();
+  const location = useLocation();
   const open = Boolean(section);
   const dialogRef = useDialog(open, onClose);
   const [visited, setVisited] = useState(new Set());
@@ -68,14 +70,14 @@ export default function DossierContextPanel({ section, onSectionChange, onClose 
   const unread = (sel.messages || []).filter(message => message.type === 'client' && !message.lu).length;
   return createPortal(<div hidden={!open} className="fixed inset-0 z-40" data-testid="dossier-context">
     <div className="absolute inset-0 bg-slate-950/40" aria-hidden="true" onClick={onClose} />
-    <aside ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="dossier-context-title" className="absolute inset-y-0 right-0 flex w-full max-w-xl flex-col bg-white shadow-2xl dark:bg-slate-900">
-      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 dark:border-slate-700"><div className="min-w-0"><h2 id="dossier-context-title" className="text-base font-bold text-slate-900 dark:text-white">Contexte du dossier</h2><p className="truncate font-mono text-xs text-slate-600 dark:text-slate-300">{sel.ref}</p></div><button className={BUTTON} aria-label="Fermer le contexte du dossier" onClick={onClose}><X size={18} /></button></div>
+    <aside ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Contexte du dossier" className="absolute inset-y-0 right-0 flex w-full max-w-xl flex-col bg-white shadow-2xl dark:bg-slate-900">
+      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 dark:border-slate-700"><div className="min-w-0"><h2 id="dossier-context-title" className="text-base font-bold text-slate-900 dark:text-white">Détails du dossier</h2><p className="truncate font-mono text-xs text-slate-600 dark:text-slate-300">{sel.ref}</p></div><button className={BUTTON} aria-label="Fermer le contexte du dossier" onClick={onClose}><X size={18} /></button></div>
       <nav aria-label="Informations du dossier" className="flex shrink-0 flex-wrap gap-1 border-b border-slate-200 p-2 dark:border-slate-700">{sections.map(item => {
         const Icon = item.icon;
         return <button key={item.id} aria-current={item.id === selected ? 'page' : undefined} onClick={() => onSectionChange(item.id)} className={`inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl px-2 text-xs font-semibold ${item.id === selected ? 'bg-slate-800 text-white dark:bg-slate-200 dark:text-slate-900' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'}`}><Icon size={15} />{item.label}{item.id === 'messages' && unread > 0 && <span className="rounded-full bg-blue-100 px-1.5 py-0.5 text-xs text-blue-800">{unread}</span>}</button>;
       })}</nav>
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 pb-[max(1rem,env(safe-area-inset-bottom))] text-slate-800 dark:text-slate-100">
-        {visited.has('reception') && <div hidden={selected !== 'reception'}><ColisInfo /></div>}
+        {visited.has('reception') && <div hidden={selected !== 'reception'}><ColisInfo compact onCompleteReception={() => { onClose(); navigate(dossierTaskUrl(sel.id, "reception", location.search)); }} /></div>}
         {canDocuments && visited.has('documents') && <div hidden={selected !== 'documents'}><DocumentContext onClose={onClose} /></div>}
         {canMessages && visited.has('messages') && <div hidden={selected !== 'messages'}><ChatPanel embedded active={open && selected === 'messages'} /></div>}
         {visited.has('equipe') && <div hidden={selected !== 'equipe'}><StaffAssignment /></div>}

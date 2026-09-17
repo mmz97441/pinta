@@ -1,3 +1,4 @@
+import { departureReadiness } from '../domain/departureReadiness';
 import { supabase } from '../lib/supabase';
 import { mapColis, mapClient, mapEnvoi, mapLigne, mapFact } from '../lib/supabaseData';
 
@@ -37,7 +38,7 @@ export async function exportDeparture(envoiId, type) {
     const XLSX = await import('xlsx');
     const rows = manifest.colis.map((colis) => ({
       'Expédition': colis.ref, 'Client': manifest.clients.find((client) => client.id === colis.clientId)?.nom,
-      'Colis physiques expédiés': colis.outgoingParcelCount, 'Poids après optimisation (kg)': colis.finP,
+      'Colis physiques expédiés': colis.outgoingParcelCount, 'Poids après optimisation (kg)': departureReadiness(colis).weights?.realWeight ?? '',
       'Cartons reçus': colis.nbColis, 'Embarquement confirmé': manifest.confirmedAt,
       'Transport (€)': colis.devisTransport, 'Total devis (€)': colis.devisTotal,
     }));

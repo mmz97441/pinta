@@ -43,7 +43,7 @@ async function main() {
       assert.equal(current.tables.colis[0].fin_p, null);
       await current.page.getByRole('button', { name: 'Réceptionner un autre carton', exact: true }).click();
       await current.page.getByRole('dialog').waitFor();
-      await current.page.getByRole('dialog').getByRole('button', { name: 'Rattacher à EXP-TEST-001', exact: true }).waitFor();
+      await current.page.getByRole('dialog').getByRole('button', { name: /^Enregistrer (?:le carton|les cartons) dans EXP-TEST-001$/, exact: true }).waitFor();
       assert.match(await current.page.getByRole('dialog').innerText(), /EXP-TEST-001/);
       assert.equal(current.tables.colis[0].dims_par_colis.length, 2, 'opening the mandatory measurement flow cannot append an unmeasured carton');
       await current.page.keyboard.press('Escape');

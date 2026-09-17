@@ -1,0 +1,120 @@
+Mon travail
+Dossiers
+Clients
+Plus
+EXPÉDÎLE
+Réceptionner
+Mon travail
+
+Test · Disponible
+
+Équipe
+Mes missions et disponibilité
+Missions cumulables
+
+Seules les missions permises par vos droits sont proposées. Ce choix organise votre écran.
+
+Réception
+Préparation
+Relation client
+Documents et devis
+Départs
+Coordination
+Densité
+Confortable
+Compacte
+Mission à l’ouverture
+Toutes mes missions
+Réception
+Préparation
+Relation client
+Documents et devis
+Départs
+Coordination
+Disponible pour prendre de nouvelles actions
+
+Vos actions restent attribuées jusqu’à un relais accepté ou une réaffectation explicite.
+
+Enregistrer
+Annuler
+Mission
+Toutes mes missions
+Réception
+Préparation
+Relation client
+Documents et devis
+Départs
+Coordination
+Rechercher dans mes tâches
+Rechercher dans tous les dossiers
+À faire4
+En attente1
+À prendre1
+Relais à accepter (1)
+À faire
+
+4 action(s) · 2 dossier(s) · 4 carton(s) reçu(s) · Tâches en cours incluses
+
+Traiter le suivant
+Établir le devis
+À faire
+
+EXP-TEST-001 · Camille Exemple
+
+Échéance dépassée · 16 sept., 12:00
+
+Facture reçue · À vérifier
+Commencer
+Consulter
+Suivi
+Organiser le départ
+En cours
+
+EXP-AUDIT-002 · Camille Exemple
+
+Travail déjà commencé
+
+Reprendre le travail
+Suivi
+Revoir le dossier
+À faire
+
+EXP-TEST-001 · Camille Exemple
+
+Action disponible
+
+Facture reçue · À vérifier
+Commencer
+Consulter
+Suivi
+Préparer les cartons
+À faire
+
+EXP-TEST-001 · Camille Exemple
+
+Action disponible
+
+Facture reçue · À vérifier
+Commencer
+Consulter
+Suivi
+Relais à accepter · 1
+
+Le collègue reste responsable jusqu’à votre acceptation.
+
+Préparer les cartons
+À faire
+
+EXP-AUDIT-008 · Camille Exemple
+
+Action disponible
+
+Action : Alex Martin
+Référent : Alex Martin
+
+Relais proposé à Test Camille · acceptation attendue — Contrôler le carton fragile avant fermeture.
+
+Accepter le relais
+Décliner
+Consulter
+Suivi

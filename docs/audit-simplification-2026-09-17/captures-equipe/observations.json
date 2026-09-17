@@ -1,0 +1,2477 @@
+[
+  {
+    "name": "01-mon-travail-desktop",
+    "url": "http://127.0.0.1:4175/",
+    "viewport": {
+      "width": 1440,
+      "height": 1000
+    },
+    "metrics": {
+      "overflow": false,
+      "visibleButtons": 33,
+      "visibleInputs": 2
+    }
+  },
+  {
+    "name": "02-preferences-desktop",
+    "url": "http://127.0.0.1:4175/",
+    "viewport": {
+      "width": 1440,
+      "height": 1000
+    },
+    "metrics": {
+      "overflow": false,
+      "visibleButtons": 35,
+      "visibleInputs": 11
+    }
+  },
+  {
+    "name": "03-a-prendre-desktop",
+    "url": "http://127.0.0.1:4175/?section=pool",
+    "viewport": {
+      "width": 1440,
+      "height": 1000
+    },
+    "metrics": {
+      "overflow": false,
+      "visibleButtons": 25,
+      "visibleInputs": 2
+    }
+  },
+  {
+    "name": "04-equipe-desktop",
+    "url": "http://127.0.0.1:4175/equipe",
+    "viewport": {
+      "width": 1440,
+      "height": 1000
+    },
+    "metrics": {
+      "overflow": false,
+      "visibleButtons": 39,
+      "visibleInputs": 4
+    }
+  },
+  {
+    "name": "05-reaffecter-desktop",
+    "url": "http://127.0.0.1:4175/equipe",
+    "viewport": {
+      "width": 1440,
+      "height": 1000
+    },
+    "metrics": {
+      "overflow": false,
+      "visibleButtons": 41,
+      "visibleInputs": 6
+    }
+  },
+  {
+    "name": "06-dossiers-desktop",
+    "url": "http://127.0.0.1:4175/colis",
+    "viewport": {
+      "width": 1440,
+      "height": 1000
+    },
+    "metrics": {
+      "overflow": false,
+      "visibleButtons": 32,
+      "visibleInputs": 12
+    }
+  },
+  {
+    "name": "07-filtres-dossiers-desktop",
+    "url": "http://127.0.0.1:4175/colis",
+    "viewport": {
+      "width": 1440,
+      "height": 1000
+    },
+    "metrics": {
+      "overflow": false,
+      "visibleButtons": 39,
+      "visibleInputs": 14
+    }
+  },
+  {
+    "name": "08-dossiers-par-statut-desktop",
+    "url": "http://127.0.0.1:4175/colis?view=statut",
+    "viewport": {
+      "width": 1440,
+      "height": 1000
+    },
+    "metrics": {
+      "overflow": false,
+      "visibleButtons": 39,
+      "visibleInputs": 20
+    }
+  },
+  {
+    "name": "09-dossiers-par-envoi-desktop",
+    "url": "http://127.0.0.1:4175/colis?view=envoi",
+    "viewport": {
+      "width": 1440,
+      "height": 1000
+    },
+    "metrics": {
+      "overflow": false,
+      "visibleButtons": 39,
+      "visibleInputs": 16
+    }
+  },
+  {
+    "name": "10-apercu-dossier-desktop",
+    "url": "http://127.0.0.1:4175/colis?dossier=33333333-3333-4333-8333-333333333333",
+    "viewport": {
+      "width": 1440,
+      "height": 1000
+    },
+    "metrics": {
+      "overflow": false,
+      "visibleButtons": 37,
+      "visibleInputs": 12
+    }
+  },
+  {
+    "name": "11-conversations-liste-desktop",
+    "url": "http://127.0.0.1:4175/conversations",
+    "viewport": {
+      "width": 1440,
+      "height": 1000
+    },
+    "metrics": {
+      "overflow": false,
+      "visibleButtons": 17,
+      "visibleInputs": 3
+    }
+  },
+  {
+    "name": "12-conversation-desktop",
+    "url": "http://127.0.0.1:4175/conversations?dossier=33333333-3333-4333-8333-333333333333",
+    "viewport": {
+      "width": 1440,
+      "height": 1000
+    },
+    "metrics": {
+      "overflow": false,
+      "visibleButtons": 25,
+      "visibleInputs": 4
+    }
+  },
+  {
+    "name": "14-message-sans-dossier-desktop",
+    "url": "http://127.0.0.1:4175/conversations?inbox=inbox-audit",
+    "viewport": {
+      "width": 1440,
+      "height": 1000
+    },
+    "metrics": {
+      "overflow": false,
+      "visibleButtons": 18,
+      "visibleInputs": 4
+    }
+  },
+  {
+    "name": "15-departs-desktop",
+    "url": "http://127.0.0.1:4175/departs",
+    "viewport": {
+      "width": 1440,
+      "height": 1000
+    },
+    "metrics": {
+      "overflow": false,
+      "visibleButtons": 27,
+      "visibleInputs": 0
+    }
+  },
+  {
+    "name": "16-planifier-desktop",
+    "url": "http://127.0.0.1:4175/departs",
+    "viewport": {
+      "width": 1440,
+      "height": 1000
+    },
+    "metrics": {
+      "overflow": false,
+      "visibleButtons": 28,
+      "visibleInputs": 4
+    }
+  },
+  {
+    "name": "17-chargement-desktop",
+    "url": "http://127.0.0.1:4175/departs?envoi=departure-open",
+    "viewport": {
+      "width": 1440,
+      "height": 1000
+    },
+    "metrics": {
+      "overflow": false,
+      "visibleButtons": 21,
+      "visibleInputs": 3
+    }
+  },
+  {
+    "name": "01-mon-travail-mobile",
+    "url": "http://127.0.0.1:4175/",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "metrics": {
+      "overflow": false,
+      "visibleButtons": 27,
+      "visibleInputs": 2
+    }
+  },
+  {
+    "name": "02-preferences-mobile",
+    "url": "http://127.0.0.1:4175/",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "metrics": {
+      "overflow": false,
+      "visibleButtons": 29,
+      "visibleInputs": 11
+    }
+  },
+  {
+    "name": "03-a-prendre-mobile",
+    "url": "http://127.0.0.1:4175/?section=pool",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "metrics": {
+      "overflow": false,
+      "visibleButtons": 19,
+      "visibleInputs": 2
+    }
+  },
+  {
+    "name": "04-equipe-mobile",
+    "url": "http://127.0.0.1:4175/equipe",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "metrics": {
+      "overflow": false,
+      "visibleButtons": 33,
+      "visibleInputs": 4
+    }
+  },
+  {
+    "name": "05-reaffecter-mobile",
+    "url": "http://127.0.0.1:4175/equipe",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "metrics": {
+      "overflow": false,
+      "visibleButtons": 35,
+      "visibleInputs": 6
+    }
+  },
+  {
+    "name": "06-dossiers-mobile",
+    "url": "http://127.0.0.1:4175/colis",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "metrics": {
+      "overflow": false,
+      "visibleButtons": 19,
+      "visibleInputs": 2
+    }
+  },
+  {
+    "name": "07-filtres-dossiers-mobile",
+    "url": "http://127.0.0.1:4175/colis",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "metrics": {
+      "overflow": false,
+      "visibleButtons": 19,
+      "visibleInputs": 5
+    }
+  },
+  {
+    "name": "10-apercu-dossier-mobile",
+    "url": "http://127.0.0.1:4175/colis?dossier=33333333-3333-4333-8333-333333333333",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "metrics": {
+      "overflow": false,
+      "visibleButtons": 16,
+      "visibleInputs": 2
+    }
+  },
+  {
+    "name": "11-conversations-liste-mobile",
+    "url": "http://127.0.0.1:4175/conversations",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "metrics": {
+      "overflow": false,
+      "visibleButtons": 11,
+      "visibleInputs": 3
+    }
+  },
+  {
+    "name": "12-conversation-mobile",
+    "url": "http://127.0.0.1:4175/conversations?dossier=33333333-3333-4333-8333-333333333333",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "metrics": {
+      "overflow": false,
+      "visibleButtons": 17,
+      "visibleInputs": 1
+    }
+  },
+  {
+    "name": "13-conversation-contexte-mobile",
+    "url": "http://127.0.0.1:4175/conversations?dossier=33333333-3333-4333-8333-333333333333",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "metrics": {
+      "overflow": false,
+      "visibleButtons": 9,
+      "visibleInputs": 0
+    }
+  },
+  {
+    "name": "14-message-sans-dossier-mobile",
+    "url": "http://127.0.0.1:4175/conversations?inbox=inbox-audit",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "metrics": {
+      "overflow": false,
+      "visibleButtons": 9,
+      "visibleInputs": 1
+    }
+  },
+  {
+    "name": "15-departs-mobile",
+    "url": "http://127.0.0.1:4175/departs",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "metrics": {
+      "overflow": false,
+      "visibleButtons": 21,
+      "visibleInputs": 0
+    }
+  },
+  {
+    "name": "16-planifier-mobile",
+    "url": "http://127.0.0.1:4175/departs",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "metrics": {
+      "overflow": false,
+      "visibleButtons": 22,
+      "visibleInputs": 4
+    }
+  },
+  {
+    "name": "17-chargement-mobile",
+    "url": "http://127.0.0.1:4175/departs?envoi=departure-open",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "metrics": {
+      "overflow": false,
+      "visibleButtons": 15,
+      "visibleInputs": 3
+    }
+  },
+  {
+    "name": "18-navigation-plus-mobile",
+    "url": "http://127.0.0.1:4175/plus",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "metrics": {
+      "overflow": false,
+      "visibleButtons": 12,
+      "visibleInputs": 0
+    }
+  },
+  {
+    "name": "19-brouillon-avant-navigation",
+    "url": "http://127.0.0.1:4175/conversations?dossier=33333333-3333-4333-8333-333333333333",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "metrics": {
+      "overflow": false,
+      "visibleButtons": 17,
+      "visibleInputs": 1
+    }
+  },
+  {
+    "test": "conversation-draft-after-leaving-route",
+    "value": ""
+  },
+  {
+    "name": "20-brouillon-apres-navigation",
+    "url": "http://127.0.0.1:4175/conversations?dossier=33333333-3333-4333-8333-333333333333",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "metrics": {
+      "overflow": false,
+      "visibleButtons": 17,
+      "visibleInputs": 1
+    }
+  },
+  {
+    "name": "21-mon-travail-mobile-sombre",
+    "url": "http://127.0.0.1:4175/",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "metrics": {
+      "overflow": false,
+      "visibleButtons": 27,
+      "visibleInputs": 2
+    }
+  },
+  {
+    "name": "22-conversation-mobile-sombre",
+    "url": "http://127.0.0.1:4175/conversations?dossier=33333333-3333-4333-8333-333333333333",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "metrics": {
+      "overflow": false,
+      "visibleButtons": 17,
+      "visibleInputs": 1
+    }
+  },
+  {
+    "errors": [],
+    "networkDenied": [],
+    "businessMutations": [],
+    "requests": [
+      {
+        "method": "POST",
+        "path": "/auth/v1/token"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/profiles"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/profiles"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_users"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_users"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/colis"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/clients"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/envois"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/categories"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/taux_categories"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/tarifs"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/notifications"
+      },
+      {
+        "method": "HEAD",
+        "path": "/rest/v1/notifications"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/app_settings"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/message_templates"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/factures"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/lignes"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/messages"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/client_inbox"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_users"
+      },
+      {
+        "method": "POST",
+        "path": "/rest/v1/rpc/refresh_staff_work_actions"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_work_actions"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_work_preferences"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/profiles"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_users"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/colis"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/clients"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/envois"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/categories"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/taux_categories"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/tarifs"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/notifications"
+      },
+      {
+        "method": "HEAD",
+        "path": "/rest/v1/notifications"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/app_settings"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/message_templates"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/factures"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/lignes"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/messages"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/client_inbox"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_users"
+      },
+      {
+        "method": "POST",
+        "path": "/rest/v1/rpc/refresh_staff_work_actions"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_work_actions"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_work_preferences"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/colis"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/profiles"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_users"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/colis"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/clients"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/envois"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/categories"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/taux_categories"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/tarifs"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/notifications"
+      },
+      {
+        "method": "HEAD",
+        "path": "/rest/v1/notifications"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/app_settings"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/message_templates"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/factures"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/lignes"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/messages"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/client_inbox"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_users"
+      },
+      {
+        "method": "POST",
+        "path": "/rest/v1/rpc/refresh_staff_work_actions"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_work_actions"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_work_preferences"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/colis"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/profiles"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_users"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/colis"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/clients"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/envois"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/categories"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/taux_categories"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/tarifs"
+      },
+      {
+        "method": "HEAD",
+        "path": "/rest/v1/notifications"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/notifications"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/app_settings"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/message_templates"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/factures"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/lignes"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/messages"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/client_inbox"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_users"
+      },
+      {
+        "method": "POST",
+        "path": "/rest/v1/rpc/refresh_staff_work_actions"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_work_actions"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_work_preferences"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/colis"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/profiles"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_users"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/colis"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/clients"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/envois"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/categories"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/taux_categories"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/tarifs"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/notifications"
+      },
+      {
+        "method": "HEAD",
+        "path": "/rest/v1/notifications"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/app_settings"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/message_templates"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/factures"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/lignes"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/messages"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/client_inbox"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_users"
+      },
+      {
+        "method": "POST",
+        "path": "/rest/v1/rpc/refresh_staff_work_actions"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_work_actions"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_work_preferences"
+      },
+      {
+        "method": "POST",
+        "path": "/rest/v1/rpc/acquire_colis_lock"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/colis"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/profiles"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_users"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/colis"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/clients"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/envois"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/categories"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/taux_categories"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/tarifs"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/notifications"
+      },
+      {
+        "method": "HEAD",
+        "path": "/rest/v1/notifications"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/app_settings"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/message_templates"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/factures"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/lignes"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/messages"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/client_inbox"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_users"
+      },
+      {
+        "method": "POST",
+        "path": "/rest/v1/rpc/refresh_staff_work_actions"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_work_actions"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_work_preferences"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/colis"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/profiles"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_users"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/colis"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/clients"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/envois"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/categories"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/taux_categories"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/tarifs"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/notifications"
+      },
+      {
+        "method": "HEAD",
+        "path": "/rest/v1/notifications"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/app_settings"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/message_templates"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/factures"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/lignes"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/messages"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/client_inbox"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_users"
+      },
+      {
+        "method": "POST",
+        "path": "/rest/v1/rpc/refresh_staff_work_actions"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_work_actions"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_work_preferences"
+      },
+      {
+        "method": "PATCH",
+        "path": "/rest/v1/messages"
+      },
+      {
+        "method": "PATCH",
+        "path": "/rest/v1/messages"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/colis"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/profiles"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_users"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/colis"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/clients"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/envois"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/categories"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/taux_categories"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/tarifs"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/notifications"
+      },
+      {
+        "method": "HEAD",
+        "path": "/rest/v1/notifications"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/app_settings"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/message_templates"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/factures"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/lignes"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/messages"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/client_inbox"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_users"
+      },
+      {
+        "method": "POST",
+        "path": "/rest/v1/rpc/refresh_staff_work_actions"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_work_actions"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_work_preferences"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/colis"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/profiles"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_users"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/colis"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/clients"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/envois"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/categories"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/taux_categories"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/tarifs"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/notifications"
+      },
+      {
+        "method": "HEAD",
+        "path": "/rest/v1/notifications"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/app_settings"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/message_templates"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/factures"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/lignes"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/messages"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/client_inbox"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_users"
+      },
+      {
+        "method": "POST",
+        "path": "/rest/v1/rpc/refresh_staff_work_actions"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_work_actions"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_work_preferences"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/colis"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/profiles"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_users"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/colis"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/clients"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/envois"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/categories"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/taux_categories"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/tarifs"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/notifications"
+      },
+      {
+        "method": "HEAD",
+        "path": "/rest/v1/notifications"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/app_settings"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/message_templates"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/factures"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/lignes"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/messages"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/client_inbox"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_users"
+      },
+      {
+        "method": "POST",
+        "path": "/rest/v1/rpc/refresh_staff_work_actions"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_work_actions"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_work_preferences"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/colis"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/colis"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/factures"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/lignes"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/messages"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/envois"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/profiles"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_users"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/colis"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/clients"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/envois"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/categories"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/taux_categories"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/tarifs"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/notifications"
+      },
+      {
+        "method": "HEAD",
+        "path": "/rest/v1/notifications"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/app_settings"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/message_templates"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/factures"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/lignes"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/messages"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/client_inbox"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_users"
+      },
+      {
+        "method": "POST",
+        "path": "/rest/v1/rpc/refresh_staff_work_actions"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_work_actions"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_work_preferences"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/colis"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/profiles"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_users"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/colis"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/clients"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/envois"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/categories"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/taux_categories"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/tarifs"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/notifications"
+      },
+      {
+        "method": "HEAD",
+        "path": "/rest/v1/notifications"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/app_settings"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/message_templates"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/factures"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/lignes"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/messages"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/client_inbox"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_users"
+      },
+      {
+        "method": "POST",
+        "path": "/rest/v1/rpc/refresh_staff_work_actions"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_work_actions"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_work_preferences"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/colis"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/profiles"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_users"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/colis"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/clients"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/envois"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/categories"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/taux_categories"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/tarifs"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/notifications"
+      },
+      {
+        "method": "HEAD",
+        "path": "/rest/v1/notifications"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/app_settings"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/message_templates"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/factures"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/lignes"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/messages"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/client_inbox"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_users"
+      },
+      {
+        "method": "POST",
+        "path": "/rest/v1/rpc/refresh_staff_work_actions"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_work_actions"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_work_preferences"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/colis"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/profiles"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_users"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/colis"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/clients"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/envois"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/categories"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/taux_categories"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/tarifs"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/notifications"
+      },
+      {
+        "method": "HEAD",
+        "path": "/rest/v1/notifications"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/app_settings"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/message_templates"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/factures"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/lignes"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/messages"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/client_inbox"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_users"
+      },
+      {
+        "method": "POST",
+        "path": "/rest/v1/rpc/refresh_staff_work_actions"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_work_actions"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_work_preferences"
+      },
+      {
+        "method": "POST",
+        "path": "/rest/v1/rpc/acquire_colis_lock"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/colis"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/profiles"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_users"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/colis"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/clients"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/envois"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/categories"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/taux_categories"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/tarifs"
+      },
+      {
+        "method": "HEAD",
+        "path": "/rest/v1/notifications"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/notifications"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/app_settings"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/message_templates"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/factures"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/lignes"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/messages"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/client_inbox"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_users"
+      },
+      {
+        "method": "POST",
+        "path": "/rest/v1/rpc/refresh_staff_work_actions"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_work_actions"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_work_preferences"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/colis"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/profiles"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_users"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/colis"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/clients"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/envois"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/categories"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/taux_categories"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/tarifs"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/notifications"
+      },
+      {
+        "method": "HEAD",
+        "path": "/rest/v1/notifications"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/app_settings"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/message_templates"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/factures"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/lignes"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/messages"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/client_inbox"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_users"
+      },
+      {
+        "method": "POST",
+        "path": "/rest/v1/rpc/refresh_staff_work_actions"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_work_actions"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_work_preferences"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/colis"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/profiles"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_users"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/colis"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/clients"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/envois"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/categories"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/taux_categories"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/tarifs"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/notifications"
+      },
+      {
+        "method": "HEAD",
+        "path": "/rest/v1/notifications"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/app_settings"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/message_templates"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/factures"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/lignes"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/messages"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/client_inbox"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_users"
+      },
+      {
+        "method": "POST",
+        "path": "/rest/v1/rpc/refresh_staff_work_actions"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_work_actions"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_work_preferences"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/colis"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/profiles"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_users"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/colis"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/clients"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/envois"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/categories"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/taux_categories"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/tarifs"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/notifications"
+      },
+      {
+        "method": "HEAD",
+        "path": "/rest/v1/notifications"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/app_settings"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/message_templates"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/factures"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/lignes"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/messages"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/client_inbox"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_users"
+      },
+      {
+        "method": "POST",
+        "path": "/rest/v1/rpc/refresh_staff_work_actions"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_work_actions"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_work_preferences"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/colis"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/profiles"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_users"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/colis"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/clients"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/envois"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/categories"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/taux_categories"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/tarifs"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/notifications"
+      },
+      {
+        "method": "HEAD",
+        "path": "/rest/v1/notifications"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/app_settings"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/message_templates"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/factures"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/lignes"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/messages"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/client_inbox"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_users"
+      },
+      {
+        "method": "POST",
+        "path": "/rest/v1/rpc/refresh_staff_work_actions"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_work_actions"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_work_preferences"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/colis"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/colis"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/factures"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/lignes"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/messages"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/envois"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/profiles"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_users"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/colis"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/clients"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/envois"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/categories"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/taux_categories"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/tarifs"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/notifications"
+      },
+      {
+        "method": "HEAD",
+        "path": "/rest/v1/notifications"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/app_settings"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/message_templates"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/factures"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/lignes"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/messages"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/client_inbox"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_users"
+      },
+      {
+        "method": "POST",
+        "path": "/rest/v1/rpc/refresh_staff_work_actions"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_work_actions"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_work_preferences"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/colis"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/profiles"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_users"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/colis"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/clients"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/envois"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/categories"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/taux_categories"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/tarifs"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/notifications"
+      },
+      {
+        "method": "HEAD",
+        "path": "/rest/v1/notifications"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/app_settings"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/message_templates"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/factures"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/lignes"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/messages"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/client_inbox"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_users"
+      },
+      {
+        "method": "POST",
+        "path": "/rest/v1/rpc/refresh_staff_work_actions"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_work_actions"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_work_preferences"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/colis"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/profiles"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_users"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/colis"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/clients"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/envois"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/categories"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/taux_categories"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/tarifs"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/notifications"
+      },
+      {
+        "method": "HEAD",
+        "path": "/rest/v1/notifications"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/app_settings"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/message_templates"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/factures"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/lignes"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/messages"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/client_inbox"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_users"
+      },
+      {
+        "method": "POST",
+        "path": "/rest/v1/rpc/refresh_staff_work_actions"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_work_actions"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_work_preferences"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/colis"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/profiles"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_users"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/colis"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/clients"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/envois"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/categories"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/taux_categories"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/tarifs"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/notifications"
+      },
+      {
+        "method": "HEAD",
+        "path": "/rest/v1/notifications"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/app_settings"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/message_templates"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/factures"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/lignes"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/messages"
+      },
+      {
+        "method": "POST",
+        "path": "/rest/v1/rpc/refresh_staff_work_actions"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/client_inbox"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_users"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_work_actions"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/staff_work_preferences"
+      },
+      {
+        "method": "GET",
+        "path": "/rest/v1/colis"
+      }
+    ]
+  }
+]

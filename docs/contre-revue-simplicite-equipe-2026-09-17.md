@@ -1,0 +1,16 @@
+# Contre-revue complémentaire équipe — 17 septembre 2026
+
+Relecture de `StaffSplitView`, `ConversationsView`, du brouillon partagé `ChatPanel/usePersistentDraft` et des changements globaux de typographie. Recettes sur Chromium et build statique local 4187, API métier entièrement simulées. Aucun client contacté, aucune écriture réelle.
+
+| Point | Constat et correction | Preuve indépendante |
+| --- | --- | --- |
+| E07/E09, retour à la file | Le responsable a corrigé la clé de position en normalisant les paramètres URL et en séparant tableau/liste compacte. | 90 dossiers fictifs, ouverture du 70e. Desktop : 4502 px avant/après aperçu et après plein écran/retour ; liste compacte : 1700 px conservés. Mobile : 13065 px avant/après. Zéro changement métier ou notification. `/tmp/pinta-scroll-crossreview/results.json`. Recette intégrée à `tests/team-simplicity.browser.cjs`, deux nouveaux scénarios sans retirer les six précédents. |
+| E11/C13, brouillon et reprise | Lecture : un nouvel UUID était généré à chaque renvoi, même après perte de la réponse d’un enregistrement réussi. Correctif autorisé : tentative persistée par compte/dossier, même contenu/canal/clé ; une réussite purge cette tentative. Texte changé : avertissement qu’il s’agit d’un nouveau message. | `tests/chat-retry.browser.cjs`, **3/3** sur build statique : réponse staff perdue puis rechargement et reprise sans doublon ; réponse client perdue puis conflit UUID relu strictement ; réponse A terminée après changement de dossier sans effacer brouillon B. `/tmp/pinta-chat-retry-final/results.json`. |
+| E01, accès aux conversations | Navigation mobile directe, compteur visible et description accessible ; nom de bouton stable. | Relecture du code final : conversations à traiter hors archives + messages inbox non rattachés ; permissions de menu conservées. Ce constat est une lecture de code, distincte des parcours navigateur ci-dessus. |
+| UI globale / accessibilité | Taille des textes et formulaires augmentée. | `tests/accessibility.cjs` : **32 combinaisons écran/thème/viewport**, aucune violation axe ni débordement. Préparation : quatre contrôles additionnels clair/sombre, 1440/390 px, réussis. `/tmp/pinta-integrated-accessibility/accessibility-results.json`, `/tmp/pinta-integrated-preparation-client/results.json`. |
+
+Les permissions de lecture/envoi restent celles du serveur. La reprise client avec le même UUID ne considère un conflit comme un succès qu’après relecture autorisée et comparaison exacte du dossier, auteur, type et texte. La clé d’envoi staff exploite l’idempotence existante de `queue_message` ; aucune nouvelle politique SQL n’a été ajoutée pour ce correctif.
+
+Les états de traitement de conversation restent distincts de la lecture et de la saisie. La consultation du contexte n’envoie aucun message. Les brouillons restent locaux à l’onglet ; ce contrôle ne démontre pas leur synchronisation entre appareils et ne simule pas une livraison fournisseur réelle.
+
+Compléments : [contre-revue opérations](contre-revue-simplicite-operations-2026-09-17.md), [réalisation client et contre-recette C10](implementation-simplicite-2026-09-17-client.md). Les défauts R01–R05 et C10 remontés pendant la contre-revue ont été corrigés et repris. Les vérifications serveur et le déploiement final relèvent de l’intégration.

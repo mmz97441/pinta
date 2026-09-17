@@ -57,7 +57,7 @@ function noWrite(f, before) {
     assert.equal(await f.page.getByRole('region', { name: 'Document source', exact: true }).count(), 0);
     const back = header(f).getByRole('button', { name: 'Revenir aux factures', exact: true });
     await back.waitFor(); await back.focus(); await f.page.keyboard.press('Enter'); await task(f, 'documents');
-    await f.page.locator('summary').filter({ hasText: 'Ajouter un article sans facture source' }).click();
+    await f.page.locator('summary').filter({ hasText: 'Ajouter un achat supplémentaire sans facture reliée' }).click();
     const description = f.page.getByLabel('Description du nouvel article', { exact: true });
     await description.fill('Saisie manuelle locale à conserver');
     await f.page.getByLabel('Prix du nouvel article', { exact: true }).fill('12.40');

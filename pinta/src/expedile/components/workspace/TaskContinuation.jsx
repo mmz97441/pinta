@@ -19,8 +19,9 @@ export default function TaskContinuation({ currentActionId, currentDossierId, cu
     returnTo: listUrl, currentActionId: actionId, currentDossierId, currentKind,
   }) : null;
   const dossier = next && data.find(item => item.id === next.colis_id);
+  const client = dossier && clients.find(item => item.id === dossier.clientId);
   return <nav aria-label="Après cette tâche" className={`flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 ${className}`}>
     <Link to={listUrl} className="inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-slate-700"><ArrowLeft size={16} />Retour à ma liste</Link>
-    {next && <div className="min-w-0"><p className="mb-1 text-xs text-slate-600 break-words">{next.action_hint || WORK_KINDS[next.kind]?.label} · {dossier?.ref}</p><Link to={workActionUrl(next, listUrl, dossier)} className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-slate-900 px-3 text-sm font-semibold text-white">Tâche suivante<ArrowRight size={16} /></Link></div>}
+    {next && <div className="min-w-0"><p className="mb-1 text-xs text-slate-600 break-words">{next.action_hint || WORK_KINDS[next.kind]?.label} · {dossier?.ref} · {client?.nom || [client?.prenom, client?.nomFamille].filter(Boolean).join(' ')}</p><Link to={workActionUrl(next, listUrl, dossier)} className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-slate-900 px-3 text-sm font-semibold text-white">Ouvrir la prochaine tâche<ArrowRight size={16} /></Link></div>}
   </nav>;
 }

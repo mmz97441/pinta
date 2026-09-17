@@ -1,0 +1,37 @@
+Mon travail
+Dossiers
+Clients
+Plus
+EXPÉDÎLE
+Réceptionner
+
+CONFIGURATION PARTAGÉE
+
+Paramètres
+Retour
+Départs
+Tarifs
+Catégories
+Équipe et accès
+Telegram
+Messages
+Règles métier
+Produits interdits
+Catégories et taxes
+
+Un taux absent bloque le devis. Renseignez explicitement zéro pour une catégorie exonérée.
+
+Code douanier vérifié
+Guadeloupe
+OM %
+OMR %
+Martinique
+OM %
+OMR %
+Réunion
+OM %
+OMR %
+Mayotte
+OM %
+OMR %
+Ajouter

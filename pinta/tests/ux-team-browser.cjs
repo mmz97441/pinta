@@ -15,7 +15,7 @@ async function assertFocusedMeasurementVisible(dialog, carton) {
   const input = dialog.getByLabel(`Poids à réception (kg) · carton ${carton}`, { exact: true });
   assert.equal(await input.evaluate(node => document.activeElement === node), true);
   const field = await input.boundingBox();
-  const footer = await dialog.getByRole('button', { name: /^(Réceptionner les cartons|Rattacher à EXP-TEST-002)$/ }).locator('..').locator('..').boundingBox();
+  const footer = await dialog.getByRole('button', { name: /^(Réceptionner les cartons|Enregistrer le carton dans EXP-TEST-002)$/ }).locator('..').locator('..').boundingBox();
   const header = await dialog.getByRole('heading', { name: 'Réceptionner des cartons', exact: true }).locator('..').locator('..').boundingBox();
   assert.ok(field.y >= header.y + header.height - 1, 'Focused measurement is fully below the fixed dialog header');
   assert.ok(field.y + field.height <= footer.y + 1, 'Focused measurement is fully above the fixed action footer');
@@ -72,6 +72,7 @@ async function run() {
       await dialog.getByRole('button', { name: /Créer une nouvelle expédition/ }).click();
       await dialog.getByRole('button', { name: 'Réceptionner les cartons', exact: true }).waitFor();
       await dialog.getByLabel('Casier', { exact: false }).fill('B-07');
+      await dialog.getByLabel('Fournisseur · carton 1').locator('xpath=ancestor::details[1]').locator('summary').click();
       await dialog.getByLabel('Fournisseur · carton 1').fill('Boutique C');
       await dialog.getByLabel('Numéro de suivi · carton 1').fill('SCAN-01');
       await dialog.getByLabel('Numéro de suivi · carton 1').press('Enter');
@@ -79,7 +80,7 @@ async function run() {
       await dialog.getByLabel('Fournisseur · carton 2').fill('Boutique D');
       await dialog.getByLabel('Numéro de suivi · carton 2').fill('SCAN-02');
       await dialog.getByLabel('Numéro de suivi · carton 2').press('Enter');
-      await dialog.getByText('0 / 2 carton(s) mesuré(s) à réception', { exact: false }).waitFor();
+      await dialog.getByText('0 / 3 carton(s) mesuré(s) à réception', { exact: false }).waitFor();
       assert.equal(await dialog.getByRole('button', { name: /Mesurer maintenant|Mesurer plus tard/ }).count(), 0);
       await dialog.getByLabel('Longueur à réception (cm) · carton 1', { exact: true }).fill('20');
       await dialog.getByRole('button', { name: 'Réceptionner les cartons', exact: true }).click();
@@ -88,11 +89,11 @@ async function run() {
       assert.ok(!f.requests.some(request => request.method === 'POST' && request.path === '/rest/v1/colis'));
       await measure(dialog, 1, [20, 30, 40, 2]);
       await measure(dialog, 2, [10, 15, 20, 0.5]);
-      await dialog.getByText('2 / 2 carton(s) mesuré(s) à réception', { exact: false }).waitFor();
+      await dialog.getByText('2 / 3 carton(s) mesuré(s) à réception', { exact: false }).waitFor();
       const footer = await dialog.getByRole('button', { name: 'Réceptionner les cartons', exact: true }).boundingBox();
       const viewport = f.page.viewportSize();
       assert.ok(footer.y >= 0 && footer.y + footer.height <= viewport.height, 'Receipt action remains visible');
-      assert.equal(await dialog.locator('details').getAttribute('open'), null);
+      assert.equal(await dialog.locator('summary').filter({ hasText: 'Compléments de réception' }).locator('..').getAttribute('open'), null);
       if (mobile) await assertFocusedMeasurementVisible(dialog, 2);
       await f.page.screenshot({ path: path.join(out, `reception-${mobile ? 'mobile' : 'desktop'}.png`), fullPage: true });
       const receiptAxe = await new AxeBuilder({ page: f.page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
@@ -120,6 +121,7 @@ async function run() {
       await dialog.getByLabel('Email', { exact: true }).fill('nouveau@example.test');
       await dialog.getByLabel('Code postal *', { exact: true }).fill('97400');
       await dialog.getByLabel('Casier', { exact: false }).fill('C-01');
+      await dialog.getByLabel('Numéro de suivi · carton 1').locator('xpath=ancestor::details[1]').locator('summary').click();
       await dialog.getByLabel('Numéro de suivi · carton 1').fill('NEW-SCAN');
       await dialog.getByRole('button', { name: 'Réceptionner les cartons', exact: true }).click();
       await dialog.getByRole('alert').filter({ hasText: 'Carton 1 : longueur à réception (cm)' }).waitFor();
@@ -144,13 +146,13 @@ async function run() {
       await dialog.getByRole('heading', { name: 'Carton 2', level: 3, exact: true }).waitFor();
       await dialog.getByLabel('Poids à réception (kg) · carton 2', { exact: true }).fill('1.25');
       const beforeAttach = f.requests.filter(request => request.method === 'PATCH' && request.path === '/rest/v1/colis').length;
-      await dialog.getByRole('button', { name: 'Rattacher à EXP-TEST-002', exact: true }).click();
+      await dialog.getByRole('button', { name: 'Enregistrer le carton dans EXP-TEST-002', exact: true }).click();
       await dialog.getByRole('alert').filter({ hasText: 'Carton 2 : longueur à réception (cm)' }).waitFor();
       assert.equal(f.requests.filter(request => request.method === 'PATCH' && request.path === '/rest/v1/colis').length, beforeAttach);
       await measure(dialog, 2, [12, 23, 34, 1.25]);
       if (mobile) await assertFocusedMeasurementVisible(dialog, 2);
       await f.page.screenshot({ path: path.join(out, `rattachement-mesures-${mobile ? 'mobile' : 'desktop'}.png`), fullPage: true });
-      await dialog.getByRole('button', { name: 'Rattacher à EXP-TEST-002', exact: true }).click();
+      await dialog.getByRole('button', { name: 'Enregistrer le carton dans EXP-TEST-002', exact: true }).click();
       await dialog.waitFor({ state: 'hidden' });
       const attached = f.requests.filter(request => request.method === 'PATCH' && request.path === '/rest/v1/colis').at(-1).input;
       assert.equal(attached.nb_colis, 2);

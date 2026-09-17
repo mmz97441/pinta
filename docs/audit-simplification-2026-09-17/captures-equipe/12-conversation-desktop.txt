@@ -1,0 +1,118 @@
+EXPÉDÎLE
+Réceptionner des cartons
+Mon travail
+Dossiers d’expédition
+Conversations
+Équipe
+Départs
+Clients
+Estimation
+Paramètres
+Réduire
+C
+
+Camille
+
+Direction
+
+Conversations
+
+3 conversations · 1 messages à rattacher dans ces filtres
+
+Mon travail
+Rechercher un client ou EXP
+Traitement
+Tous
+À répondre
+Attente client
+Terminé
+Responsable
+Tous
+Moi
+Non attribué
+Test Camille
+Alex Martin
+Sam Morel
+Message sans dossier
+Camille Exemple
+Voici ma facture, merci.
+Camille Exemple
+EXP-TEST-001 · À répondre
+Bonjour, avez-vous reçu la facture du deuxième carton ? Je souhaite partir cette semaine.
+Non attribué
+Camille Exemple
+EXP-AUDIT-003 · À répondre
+Documents reçus
+Non attribué
+Camille Exemple
+1 non lu(s)
+EXP-AUDIT-002 · À répondre
+Bonjour, quand est prévu mon départ ?
+Non attribué
+Camille Exemple
+
+EXP-TEST-001 · Casier A-03
+
+Je m’en occupe
+Consulter
+Suivi
+
+Chat avec le client
+
+À répondre
+
+Conversation : Non attribué
+
+Suivi du traitement et relances
+À traiter
+Attente client
+Marquer comme traité
+
+Camille Exemple
+
+Bonjour, avez-vous reçu la facture du deuxième carton ? Je souhaite partir cette semaine.
+
+07:47
+Lu
+Votre réponse au client
+
+Envoi via Telegram. Envoyer une réponse ne clôture pas automatiquement son traitement.
+
+EXP-TEST-001
+
+En cours de préparation
+Référent du dossier
+Alex Martin
+Destination
+97400 · Saint-Denis
+Prochaine action
+Vérifier les achats avant le départ
+17 sept., 12:00
+Mesures à réception — avant optimisation · 2 cartons
+Carton 1
+Boutique A
+
+TEST-001
+
+— × — × — cm · — kg
+
+Mesures à réception incomplètes — à vérifier
+
+Carton 2
+Boutique B
+
+TEST-002
+
+— × — × — cm · — kg
+
+Mesures à réception incomplètes — à vérifier
+
+Total avant optimisation indisponible tant que les mesures de tous les cartons ne sont pas complètes et le diviseur valide.
+
+Après optimisation
+
+30 × 20 × 20 cm · 3 kg
+
+Vol : 2.40 kg
+
+Ouvrir le dossier de travail

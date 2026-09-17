@@ -42,3 +42,6 @@ verify_jwt = false
 verify_jwt = false
 [functions.invite-client-user]
 verify_jwt = false
+
+[functions.telegram-inbox-document]
+verify_jwt = false

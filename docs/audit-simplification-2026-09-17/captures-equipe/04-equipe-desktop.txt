@@ -1,0 +1,175 @@
+EXPÉDÎLE
+Réceptionner des cartons
+Mon travail
+Dossiers d’expédition
+Conversations
+Équipe
+Départs
+Clients
+Estimation
+Paramètres
+Réduire
+C
+
+Camille
+
+Direction
+
+Équipe
+
+Responsables, attentes et relais. La disponibilité est déclarée par chacun.
+
+Mon travail
+Test Camille
+Disponible
+3 à faire
+1 en cours
+1 en attente
+1 action(s) à surveiller
+Alex Martin
+Disponible
+1 à faire
+0 en cours
+0 en attente
+Sam Morel
+Indisponible · retour prévu 20 sept., 12:00
+1 à faire
+0 en cours
+0 en attente
+Responsable de l’action
+Toute l’équipe
+Moi
+Sans responsable
+Test Camille
+Alex Martin
+Sam Morel
+Mission
+Toutes
+Réception
+Préparation
+Relation client
+Documents et devis
+Départs
+Coordination
+État
+Tous
+À faire
+En cours
+En attente
+Points à surveiller
+Tous
+Échéances et priorités
+Relais à accepter
+Prérequis manquants
+
+8 actions · 4 dossiers · 9 cartons reçus
+
+Établir le devis
+À faire
+
+EXP-TEST-001 · Camille Exemple · 2 carton(s) reçu(s)
+
+Échéance dépassée · 16 sept., 12:00
+
+Action : vous
+Référent : Alex Martin
+Facture reçue · À vérifier
+Commencer
+Consulter
+Suivi
+Organiser le départ
+En cours
+
+EXP-AUDIT-002 · Camille Exemple · 2 carton(s) reçu(s)
+
+Travail déjà commencé
+
+Action : vous
+Référent : Alex Martin
+Reprendre le travail
+Suivi
+Répondre au client
+À faire
+
+EXP-TEST-001 · Camille Exemple · 2 carton(s) reçu(s)
+
+Action disponible
+
+Action : Non attribué
+Référent : Alex Martin
+Facture reçue · À vérifier
+Je m’en occupe
+Consulter
+Suivi
+Revoir le dossier
+À faire
+
+EXP-TEST-001 · Camille Exemple · 2 carton(s) reçu(s)
+
+Action disponible
+
+Action : vous
+Référent : Alex Martin
+Facture reçue · À vérifier
+Commencer
+Consulter
+Suivi
+Vérifier les documents
+En attente
+
+EXP-TEST-001 · Camille Exemple · 2 carton(s) reçu(s)
+
+Action disponible
+
+Action : vous
+Référent : Alex Martin
+
+En attente : Facture du deuxième achat attendue · À revoir le 18 sept., 12:00
+
+Facture reçue · À vérifier
+Reprendre l’action
+Consulter
+Suivi
+Préparer les cartons
+À faire
+
+EXP-TEST-001 · Camille Exemple · 2 carton(s) reçu(s)
+
+Action disponible
+
+Action : vous
+Référent : Alex Martin
+Facture reçue · À vérifier
+Commencer
+Consulter
+Suivi
+Préparer les cartons
+À faire
+
+EXP-AUDIT-008 · Camille Exemple · 2 carton(s) reçu(s)
+
+Action disponible
+
+Action : Alex Martin
+Référent : Alex Martin
+
+Relais proposé à Test Camille · acceptation attendue — Contrôler le carton fragile avant fermeture.
+
+Accepter le relais
+Décliner
+Consulter
+Suivi
+Vérifier les documents
+À faire
+
+EXP-AUDIT-004 · Camille Exemple · 3 carton(s) reçu(s)
+
+Facture manquante
+
+Action : Sam Morel
+Référent : Alex Martin
+
+Prérequis : Facture manquante
+
+Consulter
+Suivi

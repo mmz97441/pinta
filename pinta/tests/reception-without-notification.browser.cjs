@@ -1,3 +1,4 @@
+const { openDetailsFor } = require('./ui-disclosure-helpers.cjs');
 /* Staff receipt and later communication are separate; all providers are local fixtures. */
 const { chromium } = require('playwright');
 const { setup, base, ids } = require('./browser-regression.cjs');
@@ -33,7 +34,7 @@ async function open(f, list = '/?mission=reception') {
    const dialog = await open(f);
    assert.equal(await dialog.getByRole('button', { name: /notifier|Sans notification/ }).count(), 0);
    await dialog.getByLabel('Casier', { exact: false }).fill('Z-03');
-   await dialog.getByLabel('Numéro de suivi · carton 1', { exact: true }).fill('RECEIPT-NEW');
+   await openDetailsFor(dialog.getByLabel('Numéro de suivi · carton 1', { exact: true })); await dialog.getByLabel('Numéro de suivi · carton 1', { exact: true }).fill('RECEIPT-NEW');
    const save = dialog.getByRole('button', { name: 'Réceptionner les cartons', exact: true });
    await save.click(); await dialog.getByRole('alert').filter({ hasText: /longueur à réception/ }).waitFor();
    assert.equal(f.tables.colis.length, 1);
@@ -57,7 +58,7 @@ async function open(f, list = '/?mission=reception') {
     await new Promise(resolve => setTimeout(resolve, 150)); return route.fallback();
    });
    const dialog = await open(f); await dialog.getByLabel('Casier', { exact: false }).fill('Z-04'); await measure(dialog, 1);
-   await dialog.getByLabel('Numéro de suivi · carton 1', { exact: true }).fill('RECEIPT-RETRY');
+   await openDetailsFor(dialog.getByLabel('Numéro de suivi · carton 1', { exact: true })); await dialog.getByLabel('Numéro de suivi · carton 1', { exact: true }).fill('RECEIPT-RETRY');
    const save = dialog.getByRole('button', { name: 'Réceptionner les cartons', exact: true });
    await save.click(); await dialog.getByRole('alert').filter({ hasText: /Réception non enregistrée/ }).waitFor();
    assert.equal(await dialog.getByLabel('Numéro de suivi · carton 1', { exact: true }).inputValue(), 'RECEIPT-RETRY');
@@ -74,8 +75,8 @@ async function open(f, list = '/?mission=reception') {
    const dialog = await open(f, '/?section=pool&mission=reception');
    await dialog.getByRole('button').filter({ hasText: 'EXP-TEST-001' }).click();
    await dialog.getByRole('heading', { name: 'Carton 3', exact: true }).waitFor();
-   await measure(dialog, 3); await dialog.getByLabel('Numéro de suivi · carton 3', { exact: true }).fill('RECEIPT-ATTACH');
-   await dialog.getByRole('button', { name: 'Rattacher à EXP-TEST-001', exact: true }).click();
+   await measure(dialog, 3); await openDetailsFor(dialog.getByLabel('Numéro de suivi · carton 3', { exact: true })); await dialog.getByLabel('Numéro de suivi · carton 3', { exact: true }).fill('RECEIPT-ATTACH');
+   await dialog.getByRole('button', { name: /^Enregistrer (?:le carton|les cartons) dans EXP-TEST-001$/, exact: true }).click();
    await dialog.waitFor({ state: 'hidden' });
    await f.page.waitForURL(url => url.pathname === '/colis/' + ids.P && url.searchParams.get('section') === (complete ? 'accord' : 'reception'));
    assert.equal(new URL(f.page.url()).searchParams.get('returnTo'), '/?section=pool&mission=reception');

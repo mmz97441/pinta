@@ -1,0 +1,81 @@
+Mon travail
+Dossiers
+Clients
+Plus
+EXPÉDÎLE
+Réceptionner
+
+CONFIGURATION PARTAGÉE
+
+Paramètres
+Retour
+Départs
+Tarifs
+Catégories
+Équipe et accès
+Telegram
+Messages
+Règles métier
+Produits interdits
+Messages clients
+
+Le modèle enregistré est utilisé pour les aperçus et les prochains envois de l’équipe.
+
+📦 Réception
+📄 Facture manquante
+🟢 Demande feu vert
+✅ Feu vert confirmé
+Devis particulier
+Devis professionnel
+⏰ Relance feu vert
+⏰ Relance paiement
+✈️ Expédié
+📍 Arrivé
+🚚 En livraison
+❌ Facture rejetée
+📲 Invitation Telegram
+📦 Réception
+Telegram
+Email
+
+CLIQUEZ POUR INSÉRER UNE VARIABLE
+
+CLIENT
+{{prenom}}
+{{nom_complet}}
+{{destination_flag}}
+{{destination}}
+COLIS
+{{ref}}
+{{desc}}
+{{casier}}
+{{nb_cartons}}
+{{liste_cartons}}
+DIMENSIONS
+{{dims_brutes}}
+{{poids_brut}}
+{{poids_vol_avant}}
+{{dims_finales}}
+{{poids_vol_apres}}
+{{poids_facturable}}
+DEVIS
+{{transport}}
+{{om}}
+{{omr}}
+{{taxes}}
+{{tva}}
+{{taux_tva}}
+{{total}}
+{{lien_paiement}}
+{{modalite_paiement}}
+{{lien_espace}}
+{{documents_attendus}}
+{{economie}}
+{{frais_divers}}
+{{contenu_declare}}
+DIVERS
+{{date_expedition}}
+{{motif_rejet}}
+Aperçu
+Réinitialiser
+Sauvegarder
