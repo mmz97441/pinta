@@ -13,6 +13,7 @@ for migration in "$root"/migrations/*.sql; do case ${migration##*/} in 202609*) 
 sql -1 < "$root/tests/legacy-schema-fixture.sql"
 for migration in "$root"/migrations/202609*.sql; do { printf 'SET ROLE supabase_admin;\n';cat "$migration"; } | sql -1;done
 sql < "$root/tests/customs-quote.sql"
+sql < "$root/tests/customs-suggestions.sql"
 sql < "$root/tests/invoice-review.sql"
 sql < "$root/tests/invoice-context-permissions.sql"
 sql < "$root/tests/preparation-workspace.sql"

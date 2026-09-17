@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mapCustomsTariff, resolveLineDuty, customsDesignation } from './customs.js';
+import { mapCustomsTariff, mapCustomsSuggestions, resolveLineDuty, customsDesignation } from './customs.js';
 import { calculateQuote, quoteInputFingerprint } from './quote.js';
 
 const duty = () => ({ tariffId: 'source-p1-r1', code: '01012100', label: 'Désignation officielle', destination: '974',
@@ -66,5 +66,32 @@ test('legacy lines use their own destination category; exports prefer frozen cla
 test('rates outside the allowed range and non-numeric values block calculation', () => {
   for (const om of [-1, 101, NaN, Infinity, '', '4', null]) {
     assert.equal(resolveLineDuty({ customDuty: { ...duty(), rates: { om, omr: 2.5 }, overrideReason: 'reason' } }, category, '974').ok, false);
+  }
+});
+
+test('automatic proposals retain reference rates and do not become applied quote choices', () => {
+  const items = [{ lineId: 'line', description: 'Produit de la facture' }];
+  const row = { id: 'ref', code: '01012100', label: 'Libellé officiel', destination_code: '974', om: null, omr: '0', source_id: 'edition', matchReason: 'Mots de la description' };
+  const [result] = mapCustomsSuggestions([{ lineId: 'line', candidates: [row] }], items, '974');
+  assert.deepEqual(result.candidates[0].baseRates, { om: null, omr: 0 });
+  assert.equal(result.candidates[0].matchReason, 'Mots de la description');
+  assert.equal(result.candidates[0].rates, undefined);
+  assert.equal(result.customDuty, undefined);
+  const input = fixture(); delete input.colis.lignes[0].customDuty;
+  const before = calculateQuote(input).snapshot;
+  input.colis.lignes[0].suggestions = result.candidates;
+  assert.deepEqual(calculateQuote(input).snapshot, before);
+});
+test('incomplete or unrelated suggestion batches are not shown as successful analyses', () => {
+  const items = [{ lineId: 'a' }, { lineId: 'b' }];
+  for (const rows of [null, {}, [{ lineId: 'a', candidates: [] }], [{ lineId: 'a', candidates: [] }, { lineId: 'a', candidates: [] }], [{ lineId: 'a', candidates: [] }, { lineId: 'other', candidates: [] }]]) {
+    assert.throws(() => mapCustomsSuggestions(rows, items, '974'));
+  }
+  assert.deepEqual(mapCustomsSuggestions([{ lineId: 'b', candidates: [] }, { lineId: 'a', candidates: [] }], items, '974'), [{ lineId: 'a', candidates: [] }, { lineId: 'b', candidates: [] }]);
+});
+test('a suggestion for another destination or a fabricated reference is rejected', () => {
+  const row = { id: 'r', code: '01012100', label: 'Produit', destination_code: '974', source_id: 'official' };
+  for (const invalid of [{ destination_code: '972' }, { source_id: null }, { code: '123' }, { id: null }]) {
+    assert.throws(() => mapCustomsSuggestions([{ lineId: 'a', candidates: [{ ...row, ...invalid }] }], [{ lineId: 'a' }], '974'));
   }
 });

@@ -14,7 +14,7 @@ import { MSG_TEMPLATES } from '../constants/templates';
 import { eur, mailtoLink, getClientDest, getPrenom } from '../utils';
 import { deliverMessage } from '../services/telegramApi';
 import { calculateQuote, quoteInputFingerprint } from '../domain/quote';
-import { mapCustomsTariff } from '../domain/customs';
+import { mapCustomsTariff, mapCustomsSuggestions } from '../domain/customs';
 import { hasCompleteReceptionMeasurements } from '../domain/reception';
 import { renderTemplate } from '../services/messageTemplates';
 import { DEFAULT_BODIES } from '../services/messageDefaults';
@@ -1102,6 +1102,14 @@ export function AppProvider({ children }) {
     if (error) throw error;
     return (rows || []).map(mapCustomsTariff);
   }, []);
+  const suggestCustomsTariffs = useCallback(async (items, destination) => {
+    if (!Array.isArray(items) || items.length > 50) throw new Error('Analysez au maximum 50 articles à la fois.');
+    if (!items.length) return [];
+    if (!destination) throw new Error('La destination du devis est requise.');
+    const { data: rows, error } = await supabase.rpc('suggest_customs_tariffs', { p_items: items, p_destination: destination });
+    if (error) throw error;
+    return mapCustomsSuggestions(rows, items, destination);
+  }, []);
   const saveQuoteCustoms = useCallback(async (id, changes, { expectedUpdatedAt } = {}) => {
     if (!expectedUpdatedAt) throw new Error('Rechargez le dossier avant de modifier son classement douanier.');
     const { data: saved, error } = await supabase.rpc('save_quote_customs', { p_colis_id: id, p_changes: changes, p_expected_updated_at: expectedUpdatedAt });
@@ -1339,6 +1347,7 @@ export function AppProvider({ children }) {
     feuVertBulk,
     envoyerDevis,
     searchCustomsTariffs,
+    suggestCustomsTariffs,
     saveQuoteCustoms,
     savePreparationMeasurements,
     assignDeparture,
