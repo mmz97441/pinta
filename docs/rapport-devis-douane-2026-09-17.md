@@ -2,6 +2,8 @@
 
 Le devis peut désormais recevoir un classement douanier par article, proposer les taux d’octroi de mer correspondants et permettre leur correction pour ce dossier. Le classement et les taux retenus sont conservés avec la version du devis.
 
+**Complément publié le 17 septembre :** les descriptions des articles préparent désormais automatiquement les propositions de nomenclature et leurs taux externes. Voir le [rapport des propositions automatiques](rapport-propositions-douanieres-2026-09-17.md), qui complète le parcours de recherche manuelle décrit ci-dessous.
+
 ## Vérification du site existant
 
 Avant cette modification, `expedile.app` servait bien la version `main` `875bbf3d37b70f80159e3cff5451e24a94d9c30e`, déploiement Vercel `dpl_C3GPb1chGoRjDqEhTDHCskz81HZ9`, état `READY`, cible `production`. Les nouveaux éléments de parcours, notamment « Détails du dossier », étaient présents dans le JavaScript effectivement téléchargé. Les 23 contrôles HTTP et les contrôles de connexion sur ordinateur/mobile ont réussi.

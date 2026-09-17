@@ -32,4 +32,16 @@ Le lot de 50 descriptions a été mesuré à environ 139 ms dans PostgreSQL loca
 
 Les rapprochements restent limités par le vocabulaire disponible. Des produits ou descriptions ambigus peuvent ne recevoir aucune proposition, notamment certains supports génériques et objets connectés. Un résultat vide appelle une précision ou une recherche manuelle ; il ne signifie pas que le produit n’existe pas dans le tarif.
 
-Le [rapport de contre-revue](contre-revue-suggestions-douanieres-2026-09-17.md) détaille les descriptions commerciales testées et les pièges de correspondance. Les preuves de publication sont ajoutées après vérification du site réel.
+Le [rapport de contre-revue](contre-revue-suggestions-douanieres-2026-09-17.md) détaille les descriptions commerciales testées et les pièges de correspondance. Sur le corpus indépendant fixé de 52 descriptions, les 73 candidats sont fidèles au catalogue ; 15 descriptions conduisent à une abstention. Il s’agit d’une vérification de cohérence, sans prétention de classement douanier certifié.
+
+## Publication vérifiée
+
+- [PR nº 9 fusionnée](https://github.com/mmz97441/pinta/pull/9) le 17 septembre 2026, code `578cea120cb3ef05d6e3d115ec0859d4422f14b6`, fusion dans main `6958e3db07d69c253b7ac5e02f7b7c59af2164a3`. Le code applicatif de la fusion est identique au code testé.
+- Deux recettes GitHub complètes réussies : [contrôle de branche](https://github.com/mmz97441/pinta/actions/runs/35252788655), [contrôle de fusion proposée](https://github.com/mmz97441/pinta/actions/runs/35252824426).
+- Migration `20260917000006` répétée avec ROLLBACK puis appliquée avec le même SQL, SHA-256 `b2d47a46ba47107b39c4f672245d53e8cc46e546a9a8826d088665dfbf335fc6`. Droits contrôlés : accès anonyme refusé, permissions métier vérifiées par la commande.
+- Quatre descriptions fictives vérifiées dans la base de production en lecture seule : T-shirt coton → proposition `61091000` ; scelleuse thermique → proposition `84223000` ; description vague et robe/chaussures regroupées → aucune attribution. Les réponses réelles ont aussi été vérifiées avec le convertisseur de données de l’interface.
+- Déploiement Vercel `dpl_9ULDb8ACKgi56o6vB7wy89dbjwcd`, état `READY`, cible production, alias **expedile.app**, SHA de fusion ci-dessus.
+- JavaScript effectivement servi : `/assets/index-DafJTc6A.js`, SHA-256 `99aaf859a3667601e084ee95be34275a5e7453fc0ccba14fa3a053b4a6aae5b5`. Les propositions, la commande automatique et les deux libellés de taux externes sont présents.
+- Après déploiement : 23 contrôles HTTP et vérifications navigateur de la connexion ordinateur/mobile réussis. Aucun dossier réel modifié ni message client envoyé. Les scénarios métier authentifiés sont testés sur des données fictives ; la vérification de production reste limitée aux accès publics et aux suggestions en lecture seule.
+
+Actualiser un onglet déjà ouvert, puis ouvrir **Dossier → Devis → Classement douanier** pour voir les propositions des articles non classés. Un classement déjà confirmé reste conservé.
