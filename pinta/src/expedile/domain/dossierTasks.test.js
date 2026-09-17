@@ -1,8 +1,26 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DOSSIER_TASKS, dossierTaskUrl, previousDossierTask, resolveDossierTask } from './dossierTasks.js';
+import { DOSSIER_TASKS, dossierTaskUrl, previousDossierTask, nextDossierTask, resolveDossierTask } from './dossierTasks.js';
 
 const prepared = { id: 'dossier-a', statut: 'en_preparation', preparationCompositionVersion: 2, finalMeasurementsVersion: 2, finalPackages: [{ dimL: 20, dimW: 30, dimH: 10, poids: 2 }], factures: [{ id: 'invoice-a', valide: true }] };
+
+test('next screen restores forward navigation after going back without wrapping the final task', () => {
+  assert.equal(nextDossierTask('reception'), 'accord');
+  assert.equal(nextDossierTask('preparation'), 'documents');
+  assert.equal(nextDossierTask('documents'), 'devis');
+  assert.equal(nextDossierTask(previousDossierTask('devis')), 'devis');
+  assert.equal(nextDossierTask('livraison'), null);
+  assert.equal(nextDossierTask('unknown'), null);
+});
+
+test('both directions skip invoice and quote screens not accessible to the operator', () => {
+  const quoteOnly = permission => permission === 'perm_colis_calculer_devis';
+  assert.equal(nextDossierTask('preparation', quoteOnly), 'devis');
+  assert.equal(nextDossierTask(previousDossierTask('devis', quoteOnly), quoteOnly), 'devis');
+  assert.equal(nextDossierTask('preparation', () => false), 'paiement');
+  assert.equal(nextDossierTask('preparation', permission => permission === 'perm_factures_refuser'), 'documents');
+  assert.equal(nextDossierTask('documents', permission => permission === 'perm_factures_refuser'), 'paiement');
+});
 
 test('previous screen follows the flow, skips inaccessible work and never wraps the first task', () => {
   assert.equal(previousDossierTask('devis'), 'documents');

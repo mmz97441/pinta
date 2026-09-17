@@ -3,26 +3,36 @@ import { currentInvoices } from './invoiceDocuments.js';
 import { measureShipment } from './quote.js';
 
 export const DOSSIER_TASKS = {
-  reception: { label: 'Réception', title: 'Vérifier la réception', backLabel: 'Revenir à la réception' },
-  accord: { label: 'Accord client', title: 'Suivre l’accord du client', backLabel: 'Revenir à l’accord client' },
-  preparation: { label: 'Préparation', title: 'Préparer les colis', backLabel: 'Revenir à la préparation' },
-  documents: { label: 'Factures', title: 'Vérifier les factures', backLabel: 'Revenir aux factures' },
-  devis: { label: 'Devis', title: 'Établir le devis', backLabel: 'Revenir au devis' },
-  paiement: { label: 'Paiement', title: 'Suivre le paiement', backLabel: 'Revenir au paiement' },
-  expedition: { label: 'Expédition', title: 'Suivre l’expédition', backLabel: 'Revenir à l’expédition' },
-  livraison: { label: 'Livraison', title: 'Suivre la livraison', backLabel: 'Revenir à la livraison' },
+  reception: { label: 'Réception', title: 'Vérifier la réception', backLabel: 'Revenir à la réception', nextLabel: 'Aller à la réception' },
+  accord: { label: 'Accord client', title: 'Suivre l’accord du client', backLabel: 'Revenir à l’accord client', nextLabel: 'Aller à l’accord client' },
+  preparation: { label: 'Préparation', title: 'Préparer les colis', backLabel: 'Revenir à la préparation', nextLabel: 'Aller à la préparation' },
+  documents: { label: 'Factures', title: 'Vérifier les factures', backLabel: 'Revenir aux factures', nextLabel: 'Aller aux factures' },
+  devis: { label: 'Devis', title: 'Établir le devis', backLabel: 'Revenir au devis', nextLabel: 'Aller au devis' },
+  paiement: { label: 'Paiement', title: 'Suivre le paiement', backLabel: 'Revenir au paiement', nextLabel: 'Aller au paiement' },
+  expedition: { label: 'Expédition', title: 'Suivre l’expédition', backLabel: 'Revenir à l’expédition', nextLabel: 'Aller à l’expédition' },
+  livraison: { label: 'Livraison', title: 'Suivre la livraison', backLabel: 'Revenir à la livraison', nextLabel: 'Aller à la livraison' },
 };
 
 const DOCUMENT_PERMISSIONS = ['perm_factures_voir', 'perm_factures_ajouter', 'perm_factures_valider', 'perm_factures_refuser', 'perm_factures_ocr', 'perm_factures_modifier_articles'];
 const QUOTE_PERMISSIONS = ['perm_colis_calculer_devis', 'perm_colis_envoyer_devis', 'perm_finances_voir_total'];
 
-/** Previous screen in the dossier's operational order. This is navigation,
- * never a business-state rollback, and inaccessible tasks are skipped. */
-export function previousDossierTask(task, can = () => true) {
-  const tasks = Object.keys(DOSSIER_TASKS).filter(key => key === task
+function navigableTaskKeys(task, can) {
+  return Object.keys(DOSSIER_TASKS).filter(key => key === task
     || (key !== 'documents' || DOCUMENT_PERMISSIONS.some(can))
     && (key !== 'devis' || QUOTE_PERMISSIONS.some(can)));
+}
+
+/** Browsing screens never advances or rolls back the business state.
+ * Both directions follow the same order and skip inaccessible tasks. */
+export function previousDossierTask(task, can = () => true) {
+  const tasks = navigableTaskKeys(task, can);
   return tasks[tasks.indexOf(task) - 1] || null;
+}
+
+export function nextDossierTask(task, can = () => true) {
+  const tasks = navigableTaskKeys(task, can);
+  const index = tasks.indexOf(task);
+  return index < 0 ? null : tasks[index + 1] || null;
 }
 
 function afterPreparation(dossier, can) {
