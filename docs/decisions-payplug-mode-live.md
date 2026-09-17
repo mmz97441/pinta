@@ -1,5 +1,7 @@
 # PayPlug — distinguer les encaissements réels des simulations
 
+**Mise à jour du 17 septembre 2026 :** l’utilisateur a confirmé le fonctionnement actuel en préproduction. `PAYPLUG_MODE=test` a été explicitement configuré ; voir le [compte rendu de configuration](configuration-preproduction-payplug-2026-09-17.md). Les règles ci-dessous décrivent les protections conservées et la décision historique du 10 septembre.
+
 Décision du 10 septembre 2026, après constat par le chef d’ingénierie d’une clé PayPlug de test dans la configuration distante. Ce lot prépare le code et les migrations ; son auteur n’a effectué aucun appel PayPlug réel ni écriture de production.
 
 ## Règles appliquées

@@ -43,6 +43,33 @@ test('pending test or unknown-mode intents cannot be reused by a live checkout',
   assert.equal((await run(req({ colisId }, { authorization: 'Bearer staff' }))).status, 409);
  }
 });
+test('explicit test mode creates a simulated payment with the test key and retains its mode', async () => {
+ const mutations = []; let requests = 0;
+ const run = await handler('payplug-create', { env: { ...common, PAYPLUG_SECRET_KEY: 'sk_test_fixture', PAYPLUG_MODE: 'test' }, db: staffDb(null, mutations), fetch: async (_url, options) => {
+  requests++; const sent = JSON.parse(options.body);
+  assert.equal(options.headers.Authorization, 'Bearer sk_test_fixture');
+  return Response.json({ ...payment, is_live: false, metadata: sent.metadata, hosted_payment: { payment_url: 'https://secure.payplug.com/test-fixture' } });
+ } });
+ const response = await run(req({ colisId }, { authorization: 'Bearer staff' }));
+ assert.equal(response.status, 200); assert.equal(requests, 1);
+ assert.equal(mutations[0][1].provider_is_live, false);
+ assert.equal((await response.json()).paymentUrl, 'https://secure.payplug.com/test-fixture');
+});
+test('test mode refuses a live key before creating an intent or calling the provider', async () => {
+ const mutations = [];
+ const run = await handler('payplug-create', { env: { ...common, PAYPLUG_SECRET_KEY: 'sk_live_fixture', PAYPLUG_MODE: 'test' }, db: staffDb(null, mutations) });
+ assert.equal((await run(req({ colisId }, { authorization: 'Bearer staff' }))).status, 503);
+ assert.equal(mutations.length, 0);
+});
+test('modern simulated payment notification is accepted only in the explicit test environment', async () => {
+ let calls = 0;
+ const run = await handler('payplug-webhook', { env: { PAYPLUG_SECRET_KEY: 'sk_test_fixture', PAYPLUG_MODE: 'test' }, db: database({}, (name, args) => {
+  calls++; assert.equal(name, 'confirm_payplug_payment'); assert.equal(args.p_provider_id, payment.id);
+  return { data: { id: colisId }, error: null };
+ }), fetch: async () => Response.json({ ...payment, is_live: false }) });
+ assert.equal((await run(req({ id: payment.id, object: 'payment' }))).status, 200);
+ assert.equal(calls, 1);
+});
 test('live creation records provider mode and validates the returned resource before linking', async () => {
  for (const returnedMode of [true, false]) {
   const mutations = []; const run = await handler('payplug-create', { env: { ...common, PAYPLUG_SECRET_KEY: 'sk_live_fixture', PAYPLUG_MODE: 'live' }, db: staffDb(null, mutations), fetch: async (_url, options) => {
