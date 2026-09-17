@@ -12,6 +12,35 @@ export function mapCustomsTariff(row) {
   };
 }
 
+// Proposals are read-only reference rows, never a saved choice or an estimated tax.
+export function mapCustomsSuggestions(rows, items, destination) {
+  if (!Array.isArray(rows)) throw new Error('Les propositions douanières sont indisponibles. Réessayez.');
+  const requested = new Set(items.map(item => item.lineId));
+  const seen = new Set();
+  const mapped = new Map();
+  for (const row of rows) {
+    if (!requested.has(row?.lineId) || seen.has(row.lineId) || !Array.isArray(row.candidates)) {
+      throw new Error('Les propositions reçues ne correspondent pas aux articles. Réessayez.');
+    }
+    seen.add(row.lineId);
+    const unique = new Set();
+    const candidates = row.candidates.slice(0, 5).map(candidate => {
+      if (!candidate?.id || unique.has(candidate.id) || candidate.destination_code !== destination ||
+          !/^\d{8}(\d{2})?$/.test(candidate.code || '') || !candidate.label || !candidate.source_id) {
+        throw new Error('Une proposition douanière est incomplète. Utilisez la recherche manuelle.');
+      }
+      unique.add(candidate.id);
+      return { ...mapCustomsTariff(candidate), matchReason: typeof candidate.matchReason === 'string' ? candidate.matchReason : '' };
+    });
+    mapped.set(row.lineId, { lineId: row.lineId, candidates,
+      ...(typeof row.notice === 'string' && row.notice ? { notice: row.notice } : {}),
+      ...(typeof row.status === 'string' && row.status ? { status: row.status } : {}),
+    });
+  }
+  if (seen.size !== requested.size) throw new Error('Certains articles n’ont pas été analysés. Réessayez.');
+  return items.map(item => mapped.get(item.lineId));
+}
+
 export function resolveLineDuty(line, category, destinationCode) {
   const duty = line.customDuty;
   if (duty == null) {

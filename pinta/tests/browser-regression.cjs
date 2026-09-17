@@ -222,6 +222,7 @@ async function setup(browser, role, { failTable = null } = {}) {
       const rpc = url.pathname.split('/').pop(),
         colis = tables.colis.find((c) => c.id === input?.p_colis_id);
       if (rpc === 'client_outgoing_tracking') body = tables.colis.filter(c => input.p_colis_ids.includes(c.id) && tables.clients.some(client => client.id === c.client_id && client.user_id === user.id) && ['expedie','transit','dedouanement','arrive','livraison','livre'].includes(c.statut)).map(c => ({ colis_id: c.id, tracking_principal: tables.envois.find(envoi => envoi.id === c.envoi_id)?.tracking_principal || null }));
+      else if (rpc === 'suggest_customs_tariffs') body = (input.p_items || []).map(item => ({ lineId: item.lineId, candidates: [], status: 'no_match', notice: 'Catalogue fictif sans proposition automatique.' }));
       else if (rpc === 'get_invoice_review_context') body = {
         invoices: tables.factures.filter(invoice => invoice.colis_id === input.p_colis_id).map(invoice => ({ factureId: invoice.id, reviewToken: 'fixture-review-' + invoice.id, extraction: null, draft: null, documentHash: null, duplicateCandidateIds: [] })),
         unlinkedLines: tables.lignes.filter(line => line.colis_id === input.p_colis_id && !line.facture_id),
