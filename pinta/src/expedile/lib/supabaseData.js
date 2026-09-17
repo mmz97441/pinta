@@ -209,6 +209,7 @@ export function mapLigne(row) {
     prix: row.prix_unitaire ? +row.prix_unitaire : 0,
     cat: row.categorie_id,
     factureId: row.facture_id || null,
+    customDuty: row.custom_duty || null,
   };
 }
 

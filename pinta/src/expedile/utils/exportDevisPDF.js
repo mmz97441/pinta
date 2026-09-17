@@ -143,5 +143,28 @@ export function exportDevisPDF(colis, client, destination) {
   doc.text('Expedîle — Service de réexpédition Paris → DOM-TOM', 14, 285);
   doc.text(`Généré le ${new Date().toLocaleString('fr-FR')}`, 196, 285, { align: 'right' });
 
+  const classified = (snapshot?.inputs?.lines || []).filter(line => line.customDuty);
+  if (classified.length) {
+    doc.addPage();
+    doc.setTextColor(27, 58, 75); doc.setFontSize(14); doc.setFont('helvetica', 'bold');
+    doc.text('Classement douanier du devis', 14, 20);
+    doc.setFontSize(9); doc.setFont('helvetica', 'normal');
+    doc.text(`${colis.ref}${version ? ` - version ${version}` : ''} - ${destination?.nom || ''}`, 14, 27);
+    doc.text('Taux d’octroi de mer (OM) et d’octroi de mer régional (OMR) à l’importation.', 14, 34);
+    autoTable(doc, {
+      startY: 40,
+      head: [['Article et désignation douanière', 'Code douanier', 'OM', 'OMR', 'Référence et correction']],
+      body: classified.map(line => {
+        const duty = line.customDuty;
+        const percent = value => value == null ? 'Non défini' : `${value} %`;
+        const source = `${duty.source.label}${duty.source.page ? ` · p. ${duty.source.page}` : ''}`;
+        const correction = duty.overrideReason ? `\nTaux source : OM ${percent(duty.baseRates?.om)} ; OMR ${percent(duty.baseRates?.omr)}\nCorrection : ${duty.overrideReason}` : '';
+        return [`${line.description}\n${duty.label}`, duty.code, percent(duty.rates.om), percent(duty.rates.omr), source + correction];
+      }),
+      styles: { fontSize: 7, cellPadding: 2, overflow: 'linebreak' },
+      columnStyles: { 0: { cellWidth: 66 }, 1: { cellWidth: 22 }, 2: { cellWidth: 14 }, 3: { cellWidth: 14 }, 4: { cellWidth: 66 } },
+      headStyles: { fillColor: [27, 58, 75] }, margin: { bottom: 20 },
+    });
+  }
   doc.save(`${isEstimate ? 'estimation' : 'devis'}-${colis.ref}${version ? `-v${version}` : ''}.pdf`);
 }

@@ -35,6 +35,8 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm test
+      - run: node --test scripts/customs/extract-reunion-tariff.test.mjs
+      - run: node scripts/customs/build-seed.mjs --check
       - run: npm run build
       - run: node --test supabase/tests/*.test.cjs
       - name: Migrations, permissions et cohérence des calculs
@@ -53,6 +55,7 @@ jobs:
           ./supabase/tests/run-telegram-requested-invoice.sh
           ./supabase/tests/run-invoice-review.sh
           ./supabase/tests/run-admin-simplification.sh
+          sh ./supabase/tests/run-customs-quote.sh
       - run: npx playwright install --with-deps chromium
       - name: Parcours navigateur sans services externes
         run: |
@@ -73,6 +76,7 @@ jobs:
           node tests/task-flow.browser.cjs
           node tests/task-back-navigation.browser.cjs
           node tests/quote-task-conflict.browser.cjs
+          node tests/customs-quote.browser.cjs
           node tests/dossier-shell.browser.cjs
           node tests/personal-work.browser.cjs
           node tests/reception-without-notification.browser.cjs
@@ -112,6 +116,7 @@ jobs:
             /tmp/pinta-invoice-completion
             /tmp/pinta-preparation-autonomous
             /tmp/pinta-quote-task-conflict
+            /tmp/pinta-customs-quote
             /tmp/pinta-task-back-navigation
             /tmp/pinta-task-flow
             /tmp/pinta-dossier-shell

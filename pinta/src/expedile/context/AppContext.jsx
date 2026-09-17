@@ -14,6 +14,7 @@ import { MSG_TEMPLATES } from '../constants/templates';
 import { eur, mailtoLink, getClientDest, getPrenom } from '../utils';
 import { deliverMessage } from '../services/telegramApi';
 import { calculateQuote, quoteInputFingerprint } from '../domain/quote';
+import { mapCustomsTariff } from '../domain/customs';
 import { hasCompleteReceptionMeasurements } from '../domain/reception';
 import { renderTemplate } from '../services/messageTemplates';
 import { DEFAULT_BODIES } from '../services/messageDefaults';
@@ -105,15 +106,15 @@ export function AppProvider({ children }) {
     },
     [flash],
   );
-  const replaceColis = useCallback((saved) => {
+  const replaceColis = useCallback((saved, relations = {}) => {
     // A mutation result contains the row only; preserve separately loaded relations.
     const previous = dataRef.current.find((c) => c.id === saved.id);
     const next = {
       ...previous,
       ...saved,
-      factures: previous?.factures || saved.factures || [],
-      lignes: previous?.lignes || saved.lignes || [],
-      messages: previous?.messages || saved.messages || [],
+      factures: relations.factures ?? previous?.factures ?? saved.factures ?? [],
+      lignes: relations.lignes ?? previous?.lignes ?? saved.lignes ?? [],
+      messages: relations.messages ?? previous?.messages ?? saved.messages ?? [],
     };
     const updated = previous
       ? dataRef.current.map((c) => (c.id === saved.id ? next : c))
@@ -1095,6 +1096,26 @@ export function AppProvider({ children }) {
     },
     [clients, tarifs, categories, settings, reportError, replaceColis, refreshColis, flash],
   );
+  const searchCustomsTariffs = useCallback(async (query, destination) => {
+    if (!String(query || '').trim() || !destination) return [];
+    const { data: rows, error } = await supabase.rpc('search_customs_tariffs', { p_query: query.trim(), p_destination: destination, p_limit: 20 });
+    if (error) throw error;
+    return (rows || []).map(mapCustomsTariff);
+  }, []);
+  const saveQuoteCustoms = useCallback(async (id, changes, { expectedUpdatedAt } = {}) => {
+    if (!expectedUpdatedAt) throw new Error('Rechargez le dossier avant de modifier son classement douanier.');
+    const { data: saved, error } = await supabase.rpc('save_quote_customs', { p_colis_id: id, p_changes: changes, p_expected_updated_at: expectedUpdatedAt });
+    if (error) throw error;
+    if (!saved?.colis || !Array.isArray(saved.lines)) throw new Error('Le classement n’a pas été confirmé par le serveur. Rechargez le dossier.');
+    const current = dataRef.current.find(row => row.id === id);
+    // Merge the committed line choices immediately, even if a later refresh fails.
+    const canonical = replaceColis(sb.mapColis(saved.colis), { lignes: (current?.lignes || []).map(line => {
+      const updated = saved.lines.find(row => row.id === line.id);
+      return updated ? { ...line, customDuty: updated.custom_duty || null } : line;
+    }) });
+    refreshWork().catch(() => {});
+    return canonical;
+  }, [replaceColis, refreshWork]);
   const savePreparationMeasurements = useCallback(async (id, changes, { expectedUpdatedAt, expectedCompositionVersion } = {}) => {
     if (!expectedUpdatedAt || !Number.isInteger(expectedCompositionVersion)) throw new Error('Rechargez le dossier avant d’enregistrer les mesures.');
     const { data: saved, error } = await supabase.rpc('save_preparation_measurements', {
@@ -1317,6 +1338,8 @@ export function AppProvider({ children }) {
     feuVert,
     feuVertBulk,
     envoyerDevis,
+    searchCustomsTariffs,
+    saveQuoteCustoms,
     savePreparationMeasurements,
     assignDeparture,
     confirmerDevis,

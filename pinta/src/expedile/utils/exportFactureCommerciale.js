@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx';
+import { customsDesignation } from '../domain/customs.js';
 
 /**
  * Generate a commercial invoice Excel for a given envoi (shipment batch).
@@ -17,9 +18,10 @@ export function exportFactureCommerciale(envoi, colis, clients, categories) {
 
     (c.lignes || []).forEach((ligne) => {
       const cat = categories.find((x) => x.id === ligne.cat);
+      const designation = customsDesignation(ligne, cat);
       rows.push({
-        'Code HS': cat?.codeHs || cat?.code_hs || '',
-        'Description': ligne.desc || '',
+        'Code HS': designation.code,
+        'Description': ligne.customDuty ? designation.label : ligne.desc || '',
         'Qté': ligne.qte || 1,
         'P.U HT': ligne.prix || 0,
         'Prix total': (ligne.qte || 1) * (ligne.prix || 0),

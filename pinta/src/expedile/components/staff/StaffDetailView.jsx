@@ -19,6 +19,7 @@ import { dossierTaskUrl, resolveDossierTask } from '../../domain/dossierTasks';
 import TaskContinuation from '../workspace/TaskContinuation';
 import { staffName } from '../workspace/WorkActionRow';
 import TaskMessage from './TaskMessage';
+import QuoteCustomsPanel from './QuoteCustomsPanel';
 
 const preparationDrafts = new Map();
 const preparationCommentDrafts = new Map();
@@ -180,6 +181,7 @@ export default function StaffDetailView({ workspace = false, task: requestedTask
   // Devis preview mode
   const [devisPrev, setDevisPrev] = useState(false);
   const [savedInputs, setSavedInputs] = useState('');
+  const [customsDirty, setCustomsDirty] = useState(false);
   // Envoi assignment
   const [selEnvoi, setSelEnvoi] = useState(sel?.envoi || '');
   const [departureFeedback, setDepartureFeedback] = useState('');
@@ -375,6 +377,7 @@ export default function StaffDetailView({ workspace = false, task: requestedTask
     return saved;
   }
   async function handleEnvoyerDevis() {
+    if (customsDirty) throw new Error('Terminez le classement douanier avant d’enregistrer le devis.');
     if (preparationConflict) throw new Error('Le dossier a changé. Reprenez la version enregistrée avant de calculer le devis.');
     if (!quote.ok) { setFormErr(quote.errors.map((error) => error.message).join(' ')); return false; }
     const saved = await envoyerDevis(sel.id, finalChanges, { expectedUpdatedAt: preparationVersion.current });
@@ -383,10 +386,22 @@ export default function StaffDetailView({ workspace = false, task: requestedTask
   }
 
   async function handleConfirmDevisEnvoye() {
+    if (customsDirty) throw new Error('Terminez le classement douanier avant d’envoyer le devis.');
     const result = await confirmerDevis(sel.id, { canal: cl?.telegramChatId ? 'telegram' : 'email' });
     if (result !== false) setDevisPrev(false);
     return result;
   }
+
+  const customsPanel = cl?.type !== 'pro' && canQuoteWorkspace ? <QuoteCustomsPanel key={sel.id} colis={sel} destination={dest?.code} onDirtyChange={setCustomsDirty} onSaved={saved => {
+    setDevisPrev(false); setSavedInputs(''); setCustomsDirty(false);
+    // Our classification save changes updatedAt, but does not change the
+    // preparer's measures or this operator's unsaved fees. Preserve that draft
+    // only when it was based on the version that has just been saved.
+    if (preparationVersion.current === sel.updatedAt && preparationComposition.current === saved.preparationCompositionVersion && preparationBaseline.current === JSON.stringify(savedFinalPackages(saved))) {
+      preparationVersion.current = saved.updatedAt; setPreparationConflict(false);
+      if (preparationDirty.current) preparationDrafts.set(`${auth?.u?.id}:${sel.id}`, { finalPackages, fraisDivers, proPayMethod, version: saved.updatedAt, composition: preparationComposition.current, baseline: preparationBaseline.current });
+    }
+  }} /> : null;
 
   // ── Correction bar availability ───────────────────────────────────────────
   const canRevert = !!correctionTarget && !sel.archive && can('perm_colis_revenir_arriere');
@@ -404,7 +419,7 @@ export default function StaffDetailView({ workspace = false, task: requestedTask
     if (task === 'preparation' && !['autorise','en_preparation'].includes(stage)) return <section className="space-y-4"><h2 className="text-lg font-bold text-slate-800">Préparation</h2>{sel.feuVert === 'autorise' && savedWeights && measuresCurrent ? <p className="text-sm text-slate-700">Mesures enregistrées : {savedFinalPackages(sel).map((box,index) => `Colis ${index + 1} · ${box.dimL} × ${box.dimW} × ${box.dimH} cm · ${box.poids} kg`).join(' ; ')}</p> : <p className="text-sm text-slate-700">La préparation attend l’accord du client.</p>}{continuation}</section>;
     if (task === 'devis' && stage !== 'en_preparation') {
       const amounts = sel.devisSnapshot?.amounts;
-      return <section className="space-y-4"><h2 className="text-lg font-bold text-slate-800">{sel.devisTotal ? 'Devis enregistré' : 'Devis à établir'}</h2>{canQuoteWorkspace ? sel.devisTotal ? <div className="space-y-2 rounded-xl border border-slate-200 p-4 text-sm">{amounts && <><Ligne label="Transport" value={eur(amounts.transport)} /><Ligne label="Taxes" value={eur((amounts.om || 0) + (amounts.omr || 0) + (amounts.tva || 0))} /><Ligne label="Frais" value={eur(amounts.fees)} /></>}<Ligne label="Total" value={eur(sel.devisTotal)} /><button className="min-h-11 font-semibold underline" onClick={() => chooseSection('paiement')}>Voir le règlement</button></div> : <p className="text-sm text-slate-700">Le devis sera disponible après l’accord du client et la préparation.</p> : <p role="alert" className="text-sm text-slate-700">Votre rôle ne permet pas de consulter le devis.</p>}{continuation}</section>;
+      return <section className="space-y-4"><h2 className="text-lg font-bold text-slate-800">{sel.devisTotal ? 'Devis enregistré' : 'Devis à établir'}</h2>{canQuoteWorkspace ? sel.devisTotal ? <div className="space-y-2 rounded-xl border border-slate-200 p-4 text-sm">{amounts && <><Ligne label="Transport" value={eur(amounts.transport)} /><Ligne label="Taxes" value={eur((amounts.om || 0) + (amounts.omr || 0) + (amounts.tva || 0))} /><Ligne label="Frais" value={eur(amounts.fees)} /></>}<Ligne label="Total" value={eur(sel.devisTotal)} /><button className="min-h-11 font-semibold underline" onClick={() => chooseSection('paiement')}>Voir le règlement</button></div> : <p className="text-sm text-slate-700">Le devis sera disponible après l’accord du client et la préparation.</p> : <p role="alert" className="text-sm text-slate-700">Votre rôle ne permet pas de consulter le devis.</p>}{customsPanel}{continuation}</section>;
     }
     if (task === 'devis' && !canQuoteWorkspace) return <p role="alert" className="p-4 text-sm text-slate-700">Votre rôle ne permet pas d’établir le devis.</p>;
     if (task === 'paiement' && !['devis_envoye','attente_paiement'].includes(stage)) return <section className="space-y-4"><h2 className="text-lg font-bold text-slate-800">{sel.paiementDate ? 'Paiement confirmé' : 'Règlement'}</h2><p className="text-sm text-slate-700">{sel.paiementDate ? `${eur(sel.paiementMontant || sel.devisTotal)} reçu(s).` : 'Le règlement intervient après l’envoi du devis.'}</p>{continuation}</section>;
@@ -492,9 +507,10 @@ export default function StaffDetailView({ workspace = false, task: requestedTask
       case 'en_preparation': {
         const normalizeBoxes = boxes => JSON.stringify(boxes.map(box => Object.fromEntries(['dimL','dimW','dimH','poids'].map(key => [key,Number(box[key])]))));
         const measuresChanged = normalizeBoxes(finalPackages) !== normalizeBoxes(savedFinalPackages(sel));
-        const verified = !measuresChanged && devisPrev && quote.ok && savedInputs === quoteInputFingerprint(quote.snapshot);
+        const verified = !customsDirty && !measuresChanged && devisPrev && quote.ok && savedInputs === quoteInputFingerprint(quote.snapshot);
         const focusBlocker = (field) => {
           if (field.startsWith('dimensions')) return chooseSection('preparation');
+          if (field.includes('customs') || field.includes('customDuty')) { document.getElementById('quote-customs')?.scrollIntoView({ block: 'start' }); document.getElementById('quote-customs')?.focus({ preventScroll: true }); return; }
           if (field.startsWith('fraisDivers')) return document.getElementById('quote-fees')?.scrollIntoView({ block: 'start' });
           chooseSection('documents', field.startsWith('lignes') || field.startsWith('lines') ? 'quote-unlinked' : 'quote-documents');
         };
@@ -554,6 +570,7 @@ export default function StaffDetailView({ workspace = false, task: requestedTask
           {!quote.ok && <div className="rounded-xl bg-amber-50 p-3"><p className="text-sm font-semibold text-amber-800">À résoudre avant le devis</p><ul className="mt-2 space-y-1 text-sm text-amber-800">{[...new Map(quote.errors.map(error => [error.message,error])).values()].map((error, index) => <li key={index}><button className="min-h-11 text-left underline underline-offset-2" onClick={() => focusBlocker(error.field)}>{error.message}</button></li>)}</ul></div>}
           {(sel.lignes || []).some(line => !line.factureId) && <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-800">Articles manuels inclus : {eur((sel.lignes || []).filter(line => !line.factureId).reduce((total,line) => total + Number(line.qte) * Number(line.prix),0))} HT. <button className="min-h-11 font-semibold underline" onClick={() => chooseSection('documents','quote-unlinked')}>Vérifier les articles manuels</button></p>}
           {isPro && <label className="block space-y-2 text-xs font-semibold text-slate-600">Modalités de règlement convenues<select aria-label="Modalités de règlement professionnel" value={proPayMethod} onChange={(event) => { preparationDirty.current = true; setProPayMethod(event.target.value); setDevisPrev(false); }} className={inputClass}>{[['virement', 'Virement bancaire'], ['especes', 'Espèces'], ['30_jours', 'Paiement à 30 jours'], ['fin_de_mois', 'Paiement en fin de mois']].map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select><span className="block text-xs font-normal text-gray-500">Cette modalité figurera dans la version du devis. Le paiement sera confirmé séparément après réception du règlement.</span></label>}
+          {customsPanel}
           <div id="quote-fees" className="scroll-mt-24 space-y-2 border-t border-gray-200 pt-4"><p className="text-xs font-semibold text-slate-600">Frais convenus</p>{fraisDivers.map((fee, index) => <div key={index} className="flex items-center gap-2 text-sm"><span className="min-w-0 flex-1 break-words">{fee.libelle}</span><strong>{eur(fee.montant)}</strong><button aria-label={`Retirer ${fee.libelle}`} disabled={actionLoading} className="flex min-h-11 min-w-11 items-center justify-center text-gray-400" onClick={() => runAction(async () => { const next = fraisDivers.filter((_, position) => position !== index); preparationDirty.current = true; setFraisDivers(next); setDevisPrev(false); })}><X size={14} /></button></div>)}
             <details><summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-slate-600">Ajouter un frais</summary><form className="grid grid-cols-[minmax(0,1fr)_6rem] gap-2" onSubmit={(event) => { event.preventDefault(); runAction(async () => { const amount = Number(newFraisMontant); if (!newFraisLibelle.trim() || newFraisMontant === '' || !Number.isFinite(amount) || amount < 0) throw new Error('Indiquez le libellé et un montant positif ou nul.'); const next = [...fraisDivers, { libelle: newFraisLibelle.trim(), montant: amount }]; preparationDirty.current = true; setFraisDivers(next); setNewFraisLibelle(''); setNewFraisMontant(''); setDevisPrev(false); }); }}><input aria-label="Libellé du frais" required value={newFraisLibelle} onChange={(event) => setNewFraisLibelle(event.target.value)} placeholder="Libellé du frais" className={inputClass} /><input aria-label="Montant du frais" required type="number" min="0" step="0.01" value={newFraisMontant} onChange={(event) => setNewFraisMontant(event.target.value)} placeholder="€" className={inputClass} /><button disabled={actionLoading} className="col-span-2 min-h-11 rounded-xl bg-slate-100 text-xs font-semibold text-slate-700">Ajouter le frais</button></form></details>
           </div>
@@ -565,7 +582,8 @@ export default function StaffDetailView({ workspace = false, task: requestedTask
           </Section>}
           <div id="quote-review" tabIndex={-1} data-testid="quote-action-bar" className="sticky bottom-16 z-10 -mx-1 scroll-mt-48 border-t border-slate-200 bg-white px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-3px_12px_rgba(0,0,0,0.06)] lg:bottom-0">
             <div className="mb-2 flex items-center justify-between gap-3"><div><p className="text-xs font-semibold text-slate-600">Total à régler</p><p className="text-lg font-bold text-slate-800">{quote.ok ? eur(quote.amounts.total) : 'À compléter'}</p></div><p role="status" className="max-w-[60%] text-right text-xs text-slate-600">{actionLoading ? 'Enregistrement en cours…' : verified ? 'Brouillon enregistré · vérifiez le détail avant envoi' : sel.devisBrouillon ? 'Modifications à enregistrer et vérifier' : 'Calcul non enregistré'}</p></div>
-          {!verified ? <BtnPrimary onClick={() => runAction(handleEnvoyerDevis)} disabled={!quote.ok || measuresChanged || preparationConflict || actionLoading || subExpired || !can('perm_colis_calculer_devis')}><Eye size={16} />{actionLoading ? 'Enregistrement…' : 'Enregistrer et vérifier le devis'}</BtnPrimary> : <div className="space-y-2"><p className="text-sm text-slate-700">Pour {cl?.nom} · {eur(sel.devisTotal)} · {cl?.telegramChatId ? "Telegram" : `Email : ${cl?.email || "à renseigner"}`}{isPro ? ` · ${{virement:"Virement bancaire",especes:"Espèces","30_jours":"Paiement à 30 jours",fin_de_mois:"Paiement en fin de mois"}[proPayMethod]}` : " · Règlement avant départ"}</p><BtnPrimary color="#15803D" onClick={() => runAction(handleConfirmDevisEnvoye)} disabled={actionLoading || preparationConflict || !quote.ok || subExpired || !can('perm_colis_envoyer_devis')}><Send size={16} />{actionLoading ? 'Envoi en cours…' : 'Envoyer le devis au client'}</BtnPrimary><button className="min-h-11 w-full rounded-xl border border-gray-200 text-sm font-semibold text-gray-600" onClick={() => setDevisPrev(false)}>Modifier le brouillon</button></div>}
+          {customsDirty && <p className="mb-2 text-sm font-semibold text-amber-800">Terminez le classement douanier avant d’enregistrer le devis.</p>}
+          {!verified ? <BtnPrimary onClick={() => runAction(handleEnvoyerDevis)} disabled={customsDirty || !quote.ok || measuresChanged || preparationConflict || actionLoading || subExpired || !can('perm_colis_calculer_devis')}><Eye size={16} />{actionLoading ? 'Enregistrement…' : 'Enregistrer et vérifier le devis'}</BtnPrimary> : <div className="space-y-2"><p className="text-sm text-slate-700">Pour {cl?.nom} · {eur(sel.devisTotal)} · {cl?.telegramChatId ? "Telegram" : `Email : ${cl?.email || "à renseigner"}`}{isPro ? ` · ${{virement:"Virement bancaire",especes:"Espèces","30_jours":"Paiement à 30 jours",fin_de_mois:"Paiement en fin de mois"}[proPayMethod]}` : " · Règlement avant départ"}</p><BtnPrimary color="#15803D" onClick={() => runAction(handleConfirmDevisEnvoye)} disabled={customsDirty || actionLoading || preparationConflict || !quote.ok || subExpired || !can('perm_colis_envoyer_devis')}><Send size={16} />{actionLoading ? 'Envoi en cours…' : 'Envoyer le devis au client'}</BtnPrimary><button className="min-h-11 w-full rounded-xl border border-gray-200 text-sm font-semibold text-gray-600" onClick={() => setDevisPrev(false)}>Modifier le brouillon</button></div>}
           </div>
         </div>;
       }

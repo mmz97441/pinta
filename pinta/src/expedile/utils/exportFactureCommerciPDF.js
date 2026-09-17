@@ -1,5 +1,6 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { customsDesignation } from '../domain/customs.js';
 
 export function exportFactureCommerciPDF(envoi, colis, clients, categories) {
   const doc = new jsPDF();
@@ -40,11 +41,12 @@ export function exportFactureCommerciPDF(envoi, colis, clients, categories) {
 
     (c.lignes || []).forEach((ligne) => {
       const cat = categories.find((x) => x.id === ligne.cat);
+      const designation = customsDesignation(ligne, cat);
       const total = (ligne.qte || 1) * (ligne.prix || 0);
       sousTotal += total;
       rows.push([
-        cat?.codeHs || cat?.code_hs || '',
-        ligne.desc || '',
+        designation.code,
+        ligne.customDuty ? designation.label : ligne.desc || '',
         ligne.qte || 1,
         `${(ligne.prix || 0).toFixed(2)} €`,
         `${total.toFixed(2)} €`,

@@ -1,5 +1,6 @@
 import { receptionCartonManifest, hasCompleteReceptionMeasurements } from './reception.js';
 import { currentInvoices, excludedInvoiceIds } from './invoiceDocuments.js';
+import { resolveLineDuty } from './customs.js';
 
 /** Deterministic quote calculation. This module has no network, clock or UI dependency. */
 export const QUOTE_SCHEMA_VERSION = 1;
@@ -81,13 +82,13 @@ export function calculateQuote({ colis = {}, client = {}, destination, tarif, ca
     activeLines.forEach((line, index) => {
       const field = `lignes.${index}`;
       const category = categories.find((item) => item.id === line.cat);
-      const rates = category?.taux?.[destination?.code];
+      const duty = resolveLineDuty(line, category, destination?.code);
+      const rates = duty.rates;
       if (!String(line.desc || '').trim()) fail(field, `Article ${index + 1} : ajoutez une description.`);
       if (!positive(line.qte) || !Number.isInteger(number(line.qte))) fail(field, `Article ${index + 1} : la quantité doit être un entier positif.`);
       if (!nonNegative(line.prix)) fail(field, `Article ${index + 1} : corrigez le prix unitaire.`);
-      if (!category) fail(field, `Article ${index + 1} : sélectionnez une catégorie connue.`);
-      else if (!rates || !nonNegative(rates.om) || !nonNegative(rates.omr)) fail(field, `Article ${index + 1} : taux manquants pour ${destination?.nom || 'cette destination'}.`);
-      lines.push({ id: line.id || null, factureId: line.factureId || null, description: String(line.desc || ''), quantity: number(line.qte), unitPrice: number(line.prix), categoryId: category?.id, categoryLabel: category?.label, rates: rates ? { om: number(rates.om), omr: number(rates.omr) } : null });
+      duty.errors.forEach(message => fail(line.customDuty != null ? `customs.${index}` : field, `Article ${index + 1} : ${message}`));
+      lines.push({ id: line.id || null, factureId: line.factureId || null, description: String(line.desc || ''), quantity: number(line.qte), unitPrice: number(line.prix), categoryId: category?.id ?? null, categoryLabel: category?.label ?? null, rates: rates ? { om: number(rates.om), omr: number(rates.omr) } : null, ...(duty.customs ? { customDuty: duty.customs } : {}) });
     });
     if (lines.length && lines.every((line) => Number.isFinite(line.quantity * line.unitPrice)) && lines.reduce((sum, line) => sum + line.quantity * line.unitPrice, 0) <= 0) fail('lignes', 'La valeur totale des marchandises doit être positive.');
   }
