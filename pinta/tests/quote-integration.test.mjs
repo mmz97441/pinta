@@ -65,12 +65,13 @@ test('PDF reproduces the saved quote version when live customer, parcel, fees an
   } }] });
   const captured = { texts: [], tables: [], filename: '' };
   class MockPDF {
+    addPage() { captured.appendix = true; }
     setFontSize() {} setFont() {} setDrawColor() {} setLineWidth() {} line() {} setTextColor() {}
     text(value) { captured.texts.push(value); } save(filename) { captured.filename = filename; }
   }
   const module = { exports: {} };
   vm.runInNewContext(pdfBundle.outputFiles[0].text, { module, exports: module.exports, MockPDF, tables: captured.tables });
-  const quote = calculateQuote({ colis: { ref: 'EXP-SAVED', finL: 40, finW: 30, finH: 20, finP: 3, factures: [{ id: 'invoice', montant: 100, valide: true, fichier: 'invoice.pdf' }], lignes: [{ desc: 'Article vérifié', qte: 1, prix: 100, cat: 'clothes' }] }, client: { type: 'particulier', nom: 'Nom au devis', email: 'old@example.test' }, destination: { code: '974', nom: 'La Réunion', tva: 8.5 }, tarif: { base: 10, parKg: 5 }, categories: [{ id: 'clothes', taux: { '974': { om: 10, omr: 2.5 } } }] });
+  const quote = calculateQuote({ colis: { ref: 'EXP-SAVED', finL: 40, finW: 30, finH: 20, finP: 3, factures: [{ id: 'invoice', montant: 100, valide: true, fichier: 'invoice.pdf' }], lignes: [{ desc: 'Article vérifié', qte: 1, prix: 100, cat: 'clothes', customDuty: { tariffId: 'official-p410-r1', code: '01012100', label: 'Libellé officiel figé', destination: '974', baseRates: { om: 4, omr: 2.5 }, rates: { om: 10, omr: 2.5 }, source: { id: 'official', label: 'Référence figée', page: 410 }, overrideReason: 'Correction vérifiée avec le déclarant' } }] }, client: { type: 'particulier', nom: 'Nom au devis', email: 'old@example.test' }, destination: { code: '974', nom: 'La Réunion', tva: 8.5 }, tarif: { base: 10, parKg: 5 }, categories: [{ id: 'clothes', taux: { '974': { om: 10, omr: 2.5 } } }] });
   module.exports.exportDevisPDF({ ref: 'EXP-CHANGED', devisTotal: 999, fraisDivers: [{ libelle: 'Nouveau frais', montant: 999 }], devisSnapshot: { ...quote.snapshot, version: 2, createdAt: '2026-09-10T00:00:00Z' } }, { nom: 'Nouveau nom', type: 'pro' }, { nom: 'Nouvelle destination', tva: 99 });
   assert.ok(captured.texts.includes('TOTAL : 55.06 €'));
   assert.ok(captured.texts.includes('Nom au devis'));
@@ -78,4 +79,7 @@ test('PDF reproduces the saved quote version when live customer, parcel, fees an
   assert.ok(!captured.texts.includes('Nouveau nom'));
   assert.equal(captured.filename, 'devis-EXP-SAVED-v2.pdf');
   assert.ok(!JSON.stringify(captured.tables).includes('Nouveau frais'));
+  assert.equal(captured.appendix, true);
+  const tables = JSON.stringify(captured.tables);
+  for (const value of ['01012100', 'Libellé officiel figé', 'Référence figée', 'Correction vérifiée avec le déclarant', 'OM 4 %']) assert.ok(tables.includes(value), value);
 });
