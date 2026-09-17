@@ -23,6 +23,7 @@ export function mapColis(row) {
     statut: row.statut,
     desc: row.desc_contenu || '',
     valeur: row.valeur_declaree,
+    outgoingTracking: row.outgoing_tracking || null,
     trackings: row.trackings || [],
     trackingsDetail: row.trackings_detail || [],
     casier: row.casier,
@@ -298,10 +299,17 @@ export async function fetchColis(colisId = null, { archived = false, clientId = 
   const colisRows = await fetchAllRows('colis', scope);
   if (!colisRows.length) return [];
   const grouped = { factures: {}, lignes: {}, messages: {} };
+  const outgoing = new Map();
+  const clientScope = dataScope === 'client';
   const mappers = { factures: mapFact, lignes: mapLigne, messages: mapMessage };
   // Load only relations belonging to the requested working set, in bounded requests.
   for (let i = 0; i < colisRows.length; i += 100) {
     const ids = colisRows.slice(i, i + 100).map((c) => c.id);
+    if (clientScope) {
+      const { data: tracking, error } = await supabase.rpc('client_outgoing_tracking', { p_colis_ids: ids });
+      if (error) throw error;
+      for (const item of Array.isArray(tracking) ? tracking : []) outgoing.set(item.colis_id, item.tracking_principal);
+    }
     const result = await Promise.all(
       Object.keys(grouped).map(async (table) => [
         table,
@@ -317,6 +325,7 @@ export async function fetchColis(colisId = null, { archived = false, clientId = 
     .map((row) =>
       mapColis({
         ...row,
+        outgoing_tracking: outgoing.get(row.id) || null,
         _factures: grouped.factures[row.id] || [],
         _lignes: grouped.lignes[row.id] || [],
         _messages: (grouped.messages[row.id] || []).sort((a, b) =>
@@ -1151,18 +1160,18 @@ export async function fetchSettings() {
     templates: Object.fromEntries((templates || []).map((r) => [`${r.key}_${r.canal}`, r.body])),
   };
 }
-export async function saveSetting(key, value) {
-  const { error } = await supabase
-    .from('app_settings')
-    .upsert({ key, value }, { onConflict: 'key' });
+async function adminCommand(name, args) {
+  const { data, error } = await supabase.rpc(name, args);
   if (error) throw error;
+  return data;
 }
-export async function saveTemplate(key, canal, body) {
-  const { error } = await supabase
-    .from('message_templates')
-    .upsert({ key, canal, body }, { onConflict: 'key,canal' });
-  if (error) throw error;
-}
+export const saveAdminTariffs = (values, expected) => adminCommand('save_admin_tariffs', { p_values: values, p_expected: expected });
+export const saveAdminCategory = (id, values, expected) => adminCommand('save_admin_category', { p_id: id || null, p_values: values, p_expected: expected ?? null });
+export const deleteAdminCategory = (id, expected) => adminCommand('delete_admin_category', { p_id: id, p_expected: expected });
+export const saveClientSubscription = (id, values, expected) => adminCommand('save_client_subscription', { p_id: id, p_values: values, p_expected: expected });
+export const setStaffActive = (id, active, expected) => adminCommand('set_staff_active', { p_id: id, p_active: active, p_expected: expected });
+export const saveSetting = (key, value, expected) => adminCommand('save_admin_setting', { p_key: key, p_value: value, p_expected: expected ?? null });
+export const saveTemplate = (key, canal, body, expected) => adminCommand('save_message_template', { p_key: key, p_canal: canal, p_body: body, p_expected: expected ?? null });
 export async function signedFileUrl(bucket, pathOrUrl) {
   if (!pathOrUrl) return null;
   let path = pathOrUrl;

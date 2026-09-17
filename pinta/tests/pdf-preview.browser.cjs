@@ -41,18 +41,18 @@ async function main() {
     results.push({ test: 'two-distinct-pages-render-and-zoom-within-document', pass: true, firstSize: { width: first.width, height: first.height }, zoomedWidth: zoomed.width });
 
     await fixture.page.setViewportSize({ width: 390, height: 844 });
-    await fixture.page.getByRole('tab', { name: 'Articles et vérification', exact: true }).click();
+    await fixture.page.getByRole('tab', { name: 'Vérifier les articles', exact: true }).click();
     await fixture.page.getByLabel('Description de l’article 1', { exact: true }).fill('Correction conservée entre les onglets');
     const callsBeforeTabs = resumeCalls;
-    await fixture.page.getByRole('tab', { name: 'Document', exact: true }).click();
+    await fixture.page.getByRole('tab', { name: 'Voir la facture', exact: true }).click();
     await fixture.page.locator('canvas[data-rendered="true"][aria-label*="page 2"]').waitFor();
     assert.equal(await fixture.page.getByLabel('Zoom du document', { exact: true }).inputValue(), '2');
-    await fixture.page.getByRole('tab', { name: 'Articles et vérification', exact: true }).click();
+    await fixture.page.getByRole('tab', { name: 'Vérifier les articles', exact: true }).click();
     assert.equal(await fixture.page.getByLabel('Description de l’article 1', { exact: true }).inputValue(), 'Correction conservée entre les onglets');
-    await fixture.page.getByRole('tab', { name: 'Document', exact: true }).click();
+    await fixture.page.getByRole('tab', { name: 'Voir la facture', exact: true }).click();
     await fixture.page.getByText('Page 2 sur 2', { exact: true }).waitFor();
     assert.equal(resumeCalls, callsBeforeTabs, 'Switching tabs must not reanalyse/reload OCR');
-    assert.equal(await fixture.page.getByRole('tab', { name: 'Document', exact: true }).getAttribute('aria-selected'), 'true');
+    assert.equal(await fixture.page.getByRole('tab', { name: 'Voir la facture', exact: true }).getAttribute('aria-selected'), 'true');
     assert.equal(await fixture.page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
     await fixture.page.getByRole('region', { name: 'Document source', exact: true }).scrollIntoViewIfNeeded();
     await fixture.page.waitForTimeout(250);

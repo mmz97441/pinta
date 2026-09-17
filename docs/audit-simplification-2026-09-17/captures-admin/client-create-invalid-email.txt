@@ -1,0 +1,37 @@
+Client créé avec succès
+EXPÉDÎLE
+Réceptionner des cartons
+Mon travail
+Dossiers d’expédition
+Conversations
+Équipe
+Départs
+Clients
+Estimation
+Paramètres
+Réduire
+C
+
+Camille
+
+Direction
+
+Retour aux clients
+
+Client créé avec succès
+
+Envoyez-lui une invitation pour accéder à son espace.
+
+Accès à l’espace client
+
+Invitez le client à définir son mot de passe et à retrouver ses dossiers. Son accès est lié à cette fiche.
+
+Inviter à l’espace client
+
+Connecter le Telegram du client
+
+Le client utilise son lien personnel puis appuie sur « Démarrer ». Le lien expire et ne peut servir qu’une fois.
+
+Créer une invitation personnelle
+Inviter par email
+Terminer

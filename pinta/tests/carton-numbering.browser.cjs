@@ -1,3 +1,4 @@
+const { openDetailsFor } = require('./ui-disclosure-helpers.cjs');
 /* Real form numbering and saved carton positions, with all APIs intercepted as fixtures. */
 const { chromium } = require('playwright');
 const { setup, ids, base } = require('./browser-regression.cjs');
@@ -29,8 +30,8 @@ async function main() {
       const dialog = f.page.getByRole('dialog', { name: 'Réceptionner des cartons', exact: true });
       await dialog.getByRole('heading', { name: 'Carton 2', exact: true }).waitFor();
       assert.equal(await dialog.getByRole('heading', { name: 'Carton 1', exact: true }).count(), 0);
-      await dialog.getByLabel('Fournisseur · carton 2', { exact: true }).fill('Fournisseur temporaire');
-      await dialog.getByRole('button', { name: 'Rattacher à EXP-TEST-001', exact: true }).click();
+      await openDetailsFor(dialog.getByLabel('Fournisseur · carton 2', { exact: true })); await dialog.getByLabel('Fournisseur · carton 2', { exact: true }).fill('Fournisseur temporaire');
+      await dialog.getByRole('button', { name: /^Enregistrer (?:le carton|les cartons) dans EXP-TEST-001$/, exact: true }).click();
       await dialog.getByRole('alert').filter({ hasText: 'Carton 2 : longueur à réception (cm)' }).waitFor();
       const length = dialog.getByLabel('Longueur à réception (cm) · carton 2', { exact: true });
       assert.equal(await length.evaluate(node => document.activeElement === node), true, 'Validation focuses the same visible carton number');
@@ -38,15 +39,15 @@ async function main() {
       await f.page.screenshot({ path: path.join(out, `carton-2-${mobile ? 'mobile' : 'desktop'}.png`), fullPage: true });
       await dialog.getByRole('button', { name: '+ Ajouter un carton', exact: true }).click();
       await dialog.getByRole('heading', { name: 'Carton 3', exact: true }).waitFor();
-      await dialog.getByLabel('Fournisseur · carton 3', { exact: true }).fill('Carton conservé');
-      await dialog.getByLabel('Numéro de suivi · carton 3', { exact: true }).fill('SAVED-CARTON');
+      await openDetailsFor(dialog.getByLabel('Fournisseur · carton 3', { exact: true })); await dialog.getByLabel('Fournisseur · carton 3', { exact: true }).fill('Carton conservé');
+      await openDetailsFor(dialog.getByLabel('Numéro de suivi · carton 3', { exact: true })); await dialog.getByLabel('Numéro de suivi · carton 3', { exact: true }).fill('SAVED-CARTON');
       await measure(dialog, 3, [12, 23, 34, 2.5]);
       // Removing an unsaved line renumbers its successor without changing its measures.
       await dialog.getByRole('button', { name: 'Supprimer le carton 2', exact: true }).click();
       assert.equal(await dialog.getByLabel('Fournisseur · carton 2', { exact: true }).inputValue(), 'Carton conservé');
       assert.equal(await length.inputValue(), '12');
       assert.equal(await dialog.getByRole('heading', { name: 'Carton 3', exact: true }).count(), 0);
-      await dialog.getByRole('button', { name: 'Rattacher à EXP-TEST-001', exact: true }).click();
+      await dialog.getByRole('button', { name: /^Enregistrer (?:le carton|les cartons) dans EXP-TEST-001$/, exact: true }).click();
       await dialog.waitFor({ state: 'hidden' });
       await f.page.getByRole('button', { name: 'Voir le carton reçu', exact: true }).click();
       await f.page.getByRole('listitem', { name: 'Carton 2', exact: true }).getByText('SAVED-CARTON', { exact: true }).waitFor();
@@ -58,14 +59,14 @@ async function main() {
       await f.page.getByRole('button', { name: 'Réceptionner un autre carton', exact: true }).click();
       await dialog.getByRole('heading', { name: 'Carton 3', exact: true }).waitFor();
       await dialog.getByLabel('Poids à réception (kg) · carton 3', { exact: true }).fill('1');
-      await dialog.getByRole('button', { name: 'Rattacher à EXP-TEST-001', exact: true }).click();
+      await dialog.getByRole('button', { name: /^Enregistrer (?:le carton|les cartons) dans EXP-TEST-001$/, exact: true }).click();
       await dialog.getByRole('alert').filter({ hasText: 'Carton 3 : longueur à réception (cm)' }).waitFor();
       // A different expedition has three physical cartons despite incomplete tracking coverage.
       await dialog.getByRole('button', { name: 'Changer', exact: true }).click();
       await dialog.getByRole('button').filter({ hasText: 'EXP-NUM-003' }).click();
       await dialog.getByRole('heading', { name: 'Carton 4', exact: true }).waitFor();
       assert.equal(await dialog.getByRole('alert').count(), 0, 'The previous expedition validation is cleared');
-      await dialog.getByRole('button', { name: 'Rattacher à EXP-NUM-003', exact: true }).click();
+      await dialog.getByRole('button', { name: /^Enregistrer (?:le carton|les cartons) dans EXP-NUM-003$/, exact: true }).click();
       await dialog.getByRole('alert').filter({ hasText: 'Carton 4 : longueur à réception (cm)' }).waitFor();
       await dialog.getByRole('button', { name: 'Changer', exact: true }).click();
       await dialog.getByRole('button', { name: 'Créer une nouvelle expédition (nouveau EXP)', exact: true }).click();

@@ -1,0 +1,8343 @@
+[
+  {
+    "name": "reception-choix-desktop",
+    "url": "http://127.0.0.1:4175/",
+    "headings": [
+      "Mon travail",
+      "À faire",
+      "Préparer les cartons",
+      "Réceptionner des cartons"
+    ],
+    "visibleButtons": [
+      {
+        "text": "Réceptionner des cartons",
+        "disabled": false,
+        "size": "14px",
+        "height": 60
+      },
+      {
+        "text": "Mon travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Dossiers d’expédition",
+        "disabled": false,
+        "size": "16px",
+        "height": 60
+      },
+      {
+        "text": "Conversations",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Équipe",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Départs",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Clients",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Estimation",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Paramètres",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Réduire",
+        "disabled": false,
+        "size": "16px",
+        "height": 32
+      },
+      {
+        "text": "Passer en mode sombre",
+        "disabled": false,
+        "size": "16px",
+        "height": 34
+      },
+      {
+        "text": "Modifier le mot de passe",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Se déconnecter",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Équipe",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Mes missions et disponibilité",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "À faire1",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "En attente0",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "À prendre0",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Commencer",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Consulter",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Suivi",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Fermer",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      }
+    ],
+    "overflow": false,
+    "smallText": [
+      {
+        "text": "Camille",
+        "size": "12px"
+      },
+      {
+        "text": "Direction",
+        "size": "10px"
+      },
+      {
+        "text": "1 action(s) · 1 dossier(s) · 2 carton(s) reçu(s) · Tâches en cours incluses",
+        "size": "12px"
+      },
+      {
+        "text": "Action disponible",
+        "size": "12px"
+      },
+      {
+        "text": "CLIENT",
+        "size": "12px"
+      }
+    ],
+    "errors": [],
+    "denied": []
+  },
+  {
+    "name": "reception-rattacher-desktop",
+    "url": "http://127.0.0.1:4175/",
+    "headings": [
+      "Mon travail",
+      "À faire",
+      "Préparer les cartons",
+      "Réceptionner des cartons",
+      "Carton 1"
+    ],
+    "visibleButtons": [
+      {
+        "text": "Réceptionner des cartons",
+        "disabled": false,
+        "size": "14px",
+        "height": 60
+      },
+      {
+        "text": "Mon travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Dossiers d’expédition",
+        "disabled": false,
+        "size": "16px",
+        "height": 60
+      },
+      {
+        "text": "Conversations",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Équipe",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Départs",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Clients",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Estimation",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Paramètres",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Réduire",
+        "disabled": false,
+        "size": "16px",
+        "height": 32
+      },
+      {
+        "text": "Passer en mode sombre",
+        "disabled": false,
+        "size": "16px",
+        "height": 34
+      },
+      {
+        "text": "Modifier le mot de passe",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Se déconnecter",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Équipe",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Mes missions et disponibilité",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "À faire1",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "En attente0",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "À prendre0",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Commencer",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Consulter",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Suivi",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Fermer",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "+ Ajouter un carton",
+        "disabled": false,
+        "size": "14px",
+        "height": 42
+      },
+      {
+        "text": null,
+        "disabled": false,
+        "size": "11px",
+        "height": 25
+      },
+      {
+        "text": null,
+        "disabled": false,
+        "size": "11px",
+        "height": 25
+      },
+      {
+        "text": null,
+        "disabled": false,
+        "size": "11px",
+        "height": 25
+      },
+      {
+        "text": null,
+        "disabled": false,
+        "size": "11px",
+        "height": 25
+      },
+      {
+        "text": null,
+        "disabled": false,
+        "size": "11px",
+        "height": 25
+      },
+      {
+        "text": null,
+        "disabled": false,
+        "size": "11px",
+        "height": 25
+      },
+      {
+        "text": "Annuler",
+        "disabled": false,
+        "size": "14px",
+        "height": 40
+      },
+      {
+        "text": "Réceptionner les cartons",
+        "disabled": false,
+        "size": "14px",
+        "height": 40
+      }
+    ],
+    "overflow": false,
+    "smallText": [
+      {
+        "text": "Camille",
+        "size": "12px"
+      },
+      {
+        "text": "Direction",
+        "size": "10px"
+      },
+      {
+        "text": "1 action(s) · 1 dossier(s) · 2 carton(s) reçu(s) · Tâches en cours incluses",
+        "size": "12px"
+      },
+      {
+        "text": "Action disponible",
+        "size": "12px"
+      },
+      {
+        "text": "CLIENT",
+        "size": "12px"
+      },
+      {
+        "text": "CASIER *",
+        "size": "12px"
+      },
+      {
+        "text": "Mesurez et pesez chaque carton reçu ; fournisseur et suivi peuvent être ajoutés si connus. Entrée après un scan ajoute le suivant ; Tab parcourt les mesures.",
+        "size": "12px"
+      },
+      {
+        "text": "",
+        "size": "12px"
+      },
+      {
+        "text": "",
+        "size": "12px"
+      },
+      {
+        "text": "",
+        "size": "12px"
+      },
+      {
+        "text": "0 / 0 carton(s) mesuré(s) à réception · Casier à renseigner",
+        "size": "12px"
+      },
+      {
+        "text": "Enregistrez la réception, puis préparez la demande d’accord et de factures. Le message sera envoyé à votre confirmation.",
+        "size": "12px"
+      }
+    ],
+    "errors": [],
+    "denied": []
+  },
+  {
+    "name": "reception-receptionne-desktop",
+    "url": "http://127.0.0.1:4175/colis/33333333-3333-4333-8333-333333333333?section=reception",
+    "headings": [
+      "Réception"
+    ],
+    "visibleButtons": [
+      {
+        "text": "Réceptionner des cartons",
+        "disabled": false,
+        "size": "14px",
+        "height": 60
+      },
+      {
+        "text": "Mon travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Dossiers d’expédition",
+        "disabled": false,
+        "size": "16px",
+        "height": 60
+      },
+      {
+        "text": "Conversations",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Équipe",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Départs",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Clients",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Estimation",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Paramètres",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Réduire",
+        "disabled": false,
+        "size": "16px",
+        "height": 32
+      },
+      {
+        "text": "Passer en mode sombre",
+        "disabled": false,
+        "size": "16px",
+        "height": 34
+      },
+      {
+        "text": "Modifier le mot de passe",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Se déconnecter",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Retour à la liste de travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Contexte",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Aller à l’accord client",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Enregistrer les mesures de réception",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Réceptionner un autre carton",
+        "disabled": false,
+        "size": "14px",
+        "height": 46
+      },
+      {
+        "text": "Corrections",
+        "disabled": false,
+        "size": "11px",
+        "height": 17
+      }
+    ],
+    "overflow": false,
+    "smallText": [
+      {
+        "text": "Camille",
+        "size": "12px"
+      },
+      {
+        "text": "Direction",
+        "size": "10px"
+      },
+      {
+        "text": "Exemple Camille · Réunion",
+        "size": "12px"
+      },
+      {
+        "text": "LONGUEUR · CARTON 1",
+        "size": "11px"
+      },
+      {
+        "text": "LARGEUR · CARTON 1",
+        "size": "11px"
+      },
+      {
+        "text": "HAUTEUR · CARTON 1",
+        "size": "11px"
+      },
+      {
+        "text": "POIDS RÉEL · CARTON 1",
+        "size": "11px"
+      },
+      {
+        "text": "LONGUEUR · CARTON 2",
+        "size": "11px"
+      },
+      {
+        "text": "LARGEUR · CARTON 2",
+        "size": "11px"
+      },
+      {
+        "text": "HAUTEUR · CARTON 2",
+        "size": "11px"
+      },
+      {
+        "text": "POIDS RÉEL · CARTON 2",
+        "size": "11px"
+      }
+    ],
+    "errors": [],
+    "denied": []
+  },
+  {
+    "name": "accord-mesure-desktop",
+    "url": "http://127.0.0.1:4175/colis/33333333-3333-4333-8333-333333333333?section=accord",
+    "headings": [
+      "Accord client",
+      "Demander l’accord du client"
+    ],
+    "visibleButtons": [
+      {
+        "text": "Réceptionner des cartons",
+        "disabled": false,
+        "size": "14px",
+        "height": 60
+      },
+      {
+        "text": "Mon travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Dossiers d’expédition",
+        "disabled": false,
+        "size": "16px",
+        "height": 60
+      },
+      {
+        "text": "Conversations",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Équipe",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Départs",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Clients",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Estimation",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Paramètres",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Réduire",
+        "disabled": false,
+        "size": "16px",
+        "height": 32
+      },
+      {
+        "text": "Passer en mode sombre",
+        "disabled": false,
+        "size": "16px",
+        "height": 34
+      },
+      {
+        "text": "Modifier le mot de passe",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Se déconnecter",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Retour à la liste de travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Contexte",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Revenir à la réception",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Aller à la préparation",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Préparer la demande au client",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Réceptionner un autre carton",
+        "disabled": false,
+        "size": "14px",
+        "height": 46
+      },
+      {
+        "text": "Corrections",
+        "disabled": false,
+        "size": "11px",
+        "height": 17
+      }
+    ],
+    "overflow": false,
+    "smallText": [
+      {
+        "text": "Camille",
+        "size": "12px"
+      },
+      {
+        "text": "Direction",
+        "size": "10px"
+      },
+      {
+        "text": "Exemple Camille · Réunion",
+        "size": "12px"
+      },
+      {
+        "text": "Préparer les cartons · EXP-TEST-001",
+        "size": "12px"
+      }
+    ],
+    "errors": [],
+    "denied": []
+  },
+  {
+    "name": "accord-message-desktop",
+    "url": "http://127.0.0.1:4175/colis/33333333-3333-4333-8333-333333333333?section=accord",
+    "headings": [
+      "Accord client",
+      "Demander l’accord du client"
+    ],
+    "visibleButtons": [
+      {
+        "text": "Réceptionner des cartons",
+        "disabled": false,
+        "size": "14px",
+        "height": 60
+      },
+      {
+        "text": "Mon travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Dossiers d’expédition",
+        "disabled": false,
+        "size": "16px",
+        "height": 60
+      },
+      {
+        "text": "Conversations",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Équipe",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Départs",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Clients",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Estimation",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Paramètres",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Réduire",
+        "disabled": false,
+        "size": "16px",
+        "height": 32
+      },
+      {
+        "text": "Passer en mode sombre",
+        "disabled": false,
+        "size": "16px",
+        "height": 34
+      },
+      {
+        "text": "Modifier le mot de passe",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Se déconnecter",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Retour à la liste de travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Contexte",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Revenir à la réception",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Aller à la préparation",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Ouvrir le brouillon email",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Fermer",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Réceptionner un autre carton",
+        "disabled": false,
+        "size": "14px",
+        "height": 46
+      },
+      {
+        "text": "Corrections",
+        "disabled": false,
+        "size": "11px",
+        "height": 17
+      }
+    ],
+    "overflow": false,
+    "smallText": [
+      {
+        "text": "Camille",
+        "size": "12px"
+      },
+      {
+        "text": "Direction",
+        "size": "10px"
+      },
+      {
+        "text": "Exemple Camille · Réunion",
+        "size": "12px"
+      },
+      {
+        "text": "Préparer les cartons · EXP-TEST-001",
+        "size": "12px"
+      }
+    ],
+    "errors": [],
+    "denied": []
+  },
+  {
+    "name": "preparation-autorise-desktop",
+    "url": "http://127.0.0.1:4175/colis/33333333-3333-4333-8333-333333333333?section=preparation",
+    "headings": [
+      "Préparation"
+    ],
+    "visibleButtons": [
+      {
+        "text": "Réceptionner des cartons",
+        "disabled": false,
+        "size": "14px",
+        "height": 60
+      },
+      {
+        "text": "Mon travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Dossiers d’expédition",
+        "disabled": false,
+        "size": "16px",
+        "height": 60
+      },
+      {
+        "text": "Conversations",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Équipe",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Départs",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Clients",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Estimation",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Paramètres",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Réduire",
+        "disabled": false,
+        "size": "16px",
+        "height": 32
+      },
+      {
+        "text": "Passer en mode sombre",
+        "disabled": false,
+        "size": "16px",
+        "height": 34
+      },
+      {
+        "text": "Modifier le mot de passe",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Se déconnecter",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Retour à la liste de travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Contexte",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Revenir à l’accord client",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Aller aux factures",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Commencer la préparation",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Réceptionner un autre carton",
+        "disabled": false,
+        "size": "14px",
+        "height": 46
+      },
+      {
+        "text": "Corrections",
+        "disabled": false,
+        "size": "11px",
+        "height": 17
+      }
+    ],
+    "overflow": false,
+    "smallText": [
+      {
+        "text": "Camille",
+        "size": "12px"
+      },
+      {
+        "text": "Direction",
+        "size": "10px"
+      },
+      {
+        "text": "Exemple Camille · Réunion",
+        "size": "12px"
+      },
+      {
+        "text": "Accord client reçu",
+        "size": "10px"
+      }
+    ],
+    "errors": [],
+    "denied": []
+  },
+  {
+    "name": "preparation-en_preparation-desktop",
+    "url": "http://127.0.0.1:4175/colis/33333333-3333-4333-8333-333333333333?section=preparation",
+    "headings": [
+      "Préparation",
+      "Préparation"
+    ],
+    "visibleButtons": [
+      {
+        "text": "Réceptionner des cartons",
+        "disabled": false,
+        "size": "14px",
+        "height": 60
+      },
+      {
+        "text": "Mon travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Dossiers d’expédition",
+        "disabled": false,
+        "size": "16px",
+        "height": 60
+      },
+      {
+        "text": "Conversations",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Équipe",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Départs",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Clients",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Estimation",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Paramètres",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Réduire",
+        "disabled": false,
+        "size": "16px",
+        "height": 32
+      },
+      {
+        "text": "Passer en mode sombre",
+        "disabled": false,
+        "size": "16px",
+        "height": 34
+      },
+      {
+        "text": "Modifier le mot de passe",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Se déconnecter",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Retour à la liste de travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Contexte",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Revenir à l’accord client",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Aller aux factures",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Modifier les mesures",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": null,
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": null,
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": null,
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": null,
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": null,
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": null,
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": null,
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": null,
+        "disabled": false,
+        "size": "14px",
+        "height": 48
+      },
+      {
+        "text": "Corrections",
+        "disabled": false,
+        "size": "11px",
+        "height": 17
+      }
+    ],
+    "overflow": false,
+    "smallText": [
+      {
+        "text": "Camille",
+        "size": "12px"
+      },
+      {
+        "text": "Direction",
+        "size": "10px"
+      },
+      {
+        "text": "Exemple Camille · Réunion",
+        "size": "12px"
+      },
+      {
+        "text": "",
+        "size": "12px"
+      }
+    ],
+    "errors": [],
+    "denied": []
+  },
+  {
+    "name": "preparation-formulaire-desktop",
+    "url": "http://127.0.0.1:4175/colis/33333333-3333-4333-8333-333333333333?section=preparation",
+    "headings": [
+      "Préparation",
+      "Préparation"
+    ],
+    "visibleButtons": [
+      {
+        "text": "Réceptionner des cartons",
+        "disabled": false,
+        "size": "14px",
+        "height": 60
+      },
+      {
+        "text": "Mon travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Dossiers d’expédition",
+        "disabled": false,
+        "size": "16px",
+        "height": 60
+      },
+      {
+        "text": "Conversations",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Équipe",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Départs",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Clients",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Estimation",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Paramètres",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Réduire",
+        "disabled": false,
+        "size": "16px",
+        "height": 32
+      },
+      {
+        "text": "Passer en mode sombre",
+        "disabled": false,
+        "size": "16px",
+        "height": 34
+      },
+      {
+        "text": "Modifier le mot de passe",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Se déconnecter",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Retour à la liste de travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Contexte",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Revenir à l’accord client",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Aller aux factures",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "+ Ajouter un colis après optimisation",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Enregistrer les mesures de préparation",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": null,
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": null,
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": null,
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": null,
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": null,
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": null,
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": null,
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": null,
+        "disabled": false,
+        "size": "14px",
+        "height": 48
+      },
+      {
+        "text": "Corrections",
+        "disabled": false,
+        "size": "11px",
+        "height": 17
+      }
+    ],
+    "overflow": false,
+    "smallText": [
+      {
+        "text": "Camille",
+        "size": "12px"
+      },
+      {
+        "text": "Direction",
+        "size": "10px"
+      },
+      {
+        "text": "Exemple Camille · Réunion",
+        "size": "12px"
+      },
+      {
+        "text": "LONGUEUR · COLIS SORTANT 1",
+        "size": "11px"
+      },
+      {
+        "text": "LARGEUR · COLIS SORTANT 1",
+        "size": "11px"
+      },
+      {
+        "text": "HAUTEUR · COLIS SORTANT 1",
+        "size": "11px"
+      },
+      {
+        "text": "POIDS RÉEL · COLIS SORTANT 1",
+        "size": "11px"
+      },
+      {
+        "text": "",
+        "size": "12px"
+      },
+      {
+        "text": "",
+        "size": "12px"
+      }
+    ],
+    "errors": [],
+    "denied": []
+  },
+  {
+    "name": "devis-en_preparation-desktop",
+    "url": "http://127.0.0.1:4175/colis/33333333-3333-4333-8333-333333333333?section=devis",
+    "headings": [
+      "Devis",
+      "Établir le devis"
+    ],
+    "visibleButtons": [
+      {
+        "text": "Réceptionner des cartons",
+        "disabled": false,
+        "size": "14px",
+        "height": 60
+      },
+      {
+        "text": "Mon travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Dossiers d’expédition",
+        "disabled": false,
+        "size": "16px",
+        "height": 60
+      },
+      {
+        "text": "Conversations",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Équipe",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Départs",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Clients",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Estimation",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Paramètres",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Réduire",
+        "disabled": false,
+        "size": "16px",
+        "height": 32
+      },
+      {
+        "text": "Passer en mode sombre",
+        "disabled": false,
+        "size": "16px",
+        "height": 34
+      },
+      {
+        "text": "Modifier le mot de passe",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Se déconnecter",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Retour à la liste de travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Contexte",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Revenir aux factures",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Aller au paiement",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Préparation enregistrée ✓",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "1 facture(s) vérifiée(s)",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": null,
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Enregistrer et vérifier le devis",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Corrections",
+        "disabled": false,
+        "size": "11px",
+        "height": 17
+      }
+    ],
+    "overflow": false,
+    "smallText": [
+      {
+        "text": "Camille",
+        "size": "12px"
+      },
+      {
+        "text": "Direction",
+        "size": "10px"
+      },
+      {
+        "text": "Exemple Camille · Réunion",
+        "size": "12px"
+      },
+      {
+        "text": "Frais convenus",
+        "size": "12px"
+      },
+      {
+        "text": "Mesures de réception incomplètes : aucune économie avant/après annoncée.",
+        "size": "12px"
+      },
+      {
+        "text": "Total à régler",
+        "size": "12px"
+      },
+      {
+        "text": "Calcul non enregistré",
+        "size": "12px"
+      }
+    ],
+    "errors": [],
+    "denied": []
+  },
+  {
+    "name": "devis-corrections-desktop",
+    "url": "http://127.0.0.1:4175/colis/33333333-3333-4333-8333-333333333333?section=devis",
+    "headings": [
+      "Devis",
+      "Établir le devis"
+    ],
+    "visibleButtons": [
+      {
+        "text": "Réceptionner des cartons",
+        "disabled": false,
+        "size": "14px",
+        "height": 60
+      },
+      {
+        "text": "Mon travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Dossiers d’expédition",
+        "disabled": false,
+        "size": "16px",
+        "height": 60
+      },
+      {
+        "text": "Conversations",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Équipe",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Départs",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Clients",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Estimation",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Paramètres",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Réduire",
+        "disabled": false,
+        "size": "16px",
+        "height": 32
+      },
+      {
+        "text": "Passer en mode sombre",
+        "disabled": false,
+        "size": "16px",
+        "height": 34
+      },
+      {
+        "text": "Modifier le mot de passe",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Se déconnecter",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Retour à la liste de travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Contexte",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Revenir aux factures",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Aller au paiement",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Préparation enregistrée ✓",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "1 facture(s) vérifiée(s)",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": null,
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Enregistrer et vérifier le devis",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Masquer les corrections",
+        "disabled": false,
+        "size": "11px",
+        "height": 17
+      },
+      {
+        "text": "Étape précédente",
+        "disabled": false,
+        "size": "11px",
+        "height": 31
+      },
+      {
+        "text": "Annuler le colis",
+        "disabled": false,
+        "size": "11px",
+        "height": 31
+      },
+      {
+        "text": "Archiver",
+        "disabled": false,
+        "size": "11px",
+        "height": 31
+      }
+    ],
+    "overflow": false,
+    "smallText": [
+      {
+        "text": "Camille",
+        "size": "12px"
+      },
+      {
+        "text": "Direction",
+        "size": "10px"
+      },
+      {
+        "text": "Exemple Camille · Réunion",
+        "size": "12px"
+      },
+      {
+        "text": "Frais convenus",
+        "size": "12px"
+      },
+      {
+        "text": "Mesures de réception incomplètes : aucune économie avant/après annoncée.",
+        "size": "12px"
+      },
+      {
+        "text": "Total à régler",
+        "size": "12px"
+      },
+      {
+        "text": "Calcul non enregistré",
+        "size": "12px"
+      }
+    ],
+    "errors": [],
+    "denied": []
+  },
+  {
+    "name": "paiement-devis_envoye-desktop",
+    "url": "http://127.0.0.1:4175/colis/33333333-3333-4333-8333-333333333333?section=paiement",
+    "headings": [
+      "Paiement"
+    ],
+    "visibleButtons": [
+      {
+        "text": "Réceptionner des cartons",
+        "disabled": false,
+        "size": "14px",
+        "height": 60
+      },
+      {
+        "text": "Mon travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Dossiers d’expédition",
+        "disabled": false,
+        "size": "16px",
+        "height": 60
+      },
+      {
+        "text": "Conversations",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Équipe",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Départs",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Clients",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Estimation",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Paramètres",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Réduire",
+        "disabled": false,
+        "size": "16px",
+        "height": 32
+      },
+      {
+        "text": "Passer en mode sombre",
+        "disabled": false,
+        "size": "16px",
+        "height": 34
+      },
+      {
+        "text": "Modifier le mot de passe",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Se déconnecter",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Retour à la liste de travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Contexte",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Revenir au devis",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Aller à l’expédition",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Préparer une relance de paiement",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Corrections",
+        "disabled": false,
+        "size": "11px",
+        "height": 17
+      }
+    ],
+    "overflow": false,
+    "smallText": [
+      {
+        "text": "Camille",
+        "size": "12px"
+      },
+      {
+        "text": "Direction",
+        "size": "10px"
+      },
+      {
+        "text": "Exemple Camille · Réunion",
+        "size": "12px"
+      },
+      {
+        "text": "Montant à payer",
+        "size": "12px"
+      }
+    ],
+    "errors": [],
+    "denied": []
+  },
+  {
+    "name": "expedition-paye-desktop",
+    "url": "http://127.0.0.1:4175/colis/33333333-3333-4333-8333-333333333333?section=expedition",
+    "headings": [
+      "Expédition"
+    ],
+    "visibleButtons": [
+      {
+        "text": "Réceptionner des cartons",
+        "disabled": false,
+        "size": "14px",
+        "height": 60
+      },
+      {
+        "text": "Mon travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Dossiers d’expédition",
+        "disabled": false,
+        "size": "16px",
+        "height": 60
+      },
+      {
+        "text": "Conversations",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Équipe",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Départs",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Clients",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Estimation",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Paramètres",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Réduire",
+        "disabled": false,
+        "size": "16px",
+        "height": 32
+      },
+      {
+        "text": "Passer en mode sombre",
+        "disabled": false,
+        "size": "16px",
+        "height": 34
+      },
+      {
+        "text": "Modifier le mot de passe",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Se déconnecter",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Retour à la liste de travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Contexte",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Revenir au paiement",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Aller à la livraison",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Vérifier le départ et son manifeste",
+        "disabled": true,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Corrections",
+        "disabled": false,
+        "size": "11px",
+        "height": 17
+      }
+    ],
+    "overflow": false,
+    "smallText": [
+      {
+        "text": "Camille",
+        "size": "12px"
+      },
+      {
+        "text": "Direction",
+        "size": "10px"
+      },
+      {
+        "text": "Exemple Camille · Réunion",
+        "size": "12px"
+      },
+      {
+        "text": "Paiement reçu",
+        "size": "12px"
+      },
+      {
+        "text": "AFFECTER À UN ENVOI",
+        "size": "11px"
+      }
+    ],
+    "errors": [],
+    "denied": []
+  },
+  {
+    "name": "livraison-arrive-desktop",
+    "url": "http://127.0.0.1:4175/colis/33333333-3333-4333-8333-333333333333?section=livraison",
+    "headings": [
+      "Livraison"
+    ],
+    "visibleButtons": [
+      {
+        "text": "Réceptionner des cartons",
+        "disabled": false,
+        "size": "14px",
+        "height": 60
+      },
+      {
+        "text": "Mon travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Dossiers d’expédition",
+        "disabled": false,
+        "size": "16px",
+        "height": 60
+      },
+      {
+        "text": "Conversations",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Équipe",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Départs",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Clients",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Estimation",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Paramètres",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Réduire",
+        "disabled": false,
+        "size": "16px",
+        "height": 32
+      },
+      {
+        "text": "Passer en mode sombre",
+        "disabled": false,
+        "size": "16px",
+        "height": 34
+      },
+      {
+        "text": "Modifier le mot de passe",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Se déconnecter",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Retour à la liste de travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Contexte",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Revenir à l’expédition",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Lancer la livraison",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Préparer une information au client",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Corrections",
+        "disabled": false,
+        "size": "11px",
+        "height": 17
+      }
+    ],
+    "overflow": false,
+    "smallText": [
+      {
+        "text": "Camille",
+        "size": "12px"
+      },
+      {
+        "text": "Direction",
+        "size": "10px"
+      },
+      {
+        "text": "Exemple Camille · Réunion",
+        "size": "12px"
+      },
+      {
+        "text": "Préparer les cartons · EXP-TEST-001",
+        "size": "12px"
+      }
+    ],
+    "errors": [],
+    "denied": []
+  },
+  {
+    "name": "factures-verification-desktop",
+    "url": "http://127.0.0.1:4175/colis/33333333-3333-4333-8333-333333333333?section=documents",
+    "headings": [
+      "Factures",
+      "Vérifier les factures\n3",
+      "Vérifier la facture 2 sur 3",
+      "Articles saisis manuellement · inclus dans le devis"
+    ],
+    "visibleButtons": [
+      {
+        "text": "Réceptionner des cartons",
+        "disabled": false,
+        "size": "14px",
+        "height": 60
+      },
+      {
+        "text": "Mon travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Dossiers d’expédition",
+        "disabled": false,
+        "size": "16px",
+        "height": 60
+      },
+      {
+        "text": "Conversations",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Équipe",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Départs",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Clients",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Estimation",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Paramètres",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Réduire",
+        "disabled": false,
+        "size": "16px",
+        "height": 32
+      },
+      {
+        "text": "Passer en mode sombre",
+        "disabled": false,
+        "size": "16px",
+        "height": 34
+      },
+      {
+        "text": "Modifier le mot de passe",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Se déconnecter",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Retour à la liste de travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Contexte",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Revenir à la préparation",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Aller au devis",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Ajouter une facture",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Facture précédente",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Facture suivante",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Retirer cette facture en double",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": null,
+        "disabled": true,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": null,
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Vérifier les articles manuels",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Document",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Articles et vérification",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Remplacer le document",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Reprendre l’analyse",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Saisir les articles manuellement",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      }
+    ],
+    "overflow": false,
+    "smallText": [
+      {
+        "text": "Camille",
+        "size": "12px"
+      },
+      {
+        "text": "Direction",
+        "size": "10px"
+      },
+      {
+        "text": "Exemple Camille · Réunion",
+        "size": "12px"
+      },
+      {
+        "text": "Facture à vérifier\n1. achat-verifie.pdf · Validée\n2. scelleuse.pdf · À vérifier\n3. autre-achat.pdf · À vérifier",
+        "size": "12px"
+      },
+      {
+        "text": "Utilisez les montants HT imprimés, sans recalculer la TVA. Si le HT n’est pas indiqué, demandez une précision au client.",
+        "size": "12px"
+      },
+      {
+        "text": "Vendeur",
+        "size": "12px"
+      },
+      {
+        "text": "Total HT de la facture (€)",
+        "size": "12px"
+      },
+      {
+        "text": "Description",
+        "size": "12px"
+      },
+      {
+        "text": "Quantité",
+        "size": "12px"
+      },
+      {
+        "text": "Prix unitaire HT (€)",
+        "size": "12px"
+      },
+      {
+        "text": "Catégorie\nChoisir une catégorie\nDivers",
+        "size": "12px"
+      },
+      {
+        "text": "Choisissez une catégorie pour cet article.",
+        "size": "12px"
+      },
+      {
+        "text": "La validation enregistre les articles de cette facture dans le devis. Aucun message n’est envoyé au client.",
+        "size": "12px"
+      },
+      {
+        "text": "Catégorie\nCatégorie à vérifier\nDivers",
+        "size": "12px"
+      },
+      {
+        "text": "",
+        "size": "12px"
+      },
+      {
+        "text": "",
+        "size": "12px"
+      },
+      {
+        "text": "Préparer les cartons · EXP-TEST-001",
+        "size": "12px"
+      }
+    ],
+    "errors": [],
+    "denied": []
+  },
+  {
+    "name": "factures-actions-desktop",
+    "url": "http://127.0.0.1:4175/colis/33333333-3333-4333-8333-333333333333?section=documents",
+    "headings": [
+      "Factures",
+      "Vérifier les factures\n3",
+      "Vérifier la facture 2 sur 3",
+      "Articles saisis manuellement · inclus dans le devis"
+    ],
+    "visibleButtons": [
+      {
+        "text": "Réceptionner des cartons",
+        "disabled": false,
+        "size": "14px",
+        "height": 60
+      },
+      {
+        "text": "Mon travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Dossiers d’expédition",
+        "disabled": false,
+        "size": "16px",
+        "height": 60
+      },
+      {
+        "text": "Conversations",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Équipe",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Départs",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Clients",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Estimation",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Paramètres",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Réduire",
+        "disabled": false,
+        "size": "16px",
+        "height": 32
+      },
+      {
+        "text": "Passer en mode sombre",
+        "disabled": false,
+        "size": "16px",
+        "height": 34
+      },
+      {
+        "text": "Modifier le mot de passe",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Se déconnecter",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Retour à la liste de travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Contexte",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Revenir à la préparation",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Aller au devis",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Retirer l’article",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Ajouter un article à cette facture",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Vérifier la facture précédente",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Vérifier la facture suivante",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Article 1 : choisissez une catégorie.",
+        "disabled": false,
+        "size": "14px",
+        "height": 20
+      },
+      {
+        "text": "Valider et passer à la suivante",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Enregistrer le brouillon",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Demander une correction au client",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Supprimer Article saisi avant réception de la facture",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      }
+    ],
+    "overflow": false,
+    "smallText": [
+      {
+        "text": "Camille",
+        "size": "12px"
+      },
+      {
+        "text": "Direction",
+        "size": "10px"
+      },
+      {
+        "text": "Exemple Camille · Réunion",
+        "size": "12px"
+      },
+      {
+        "text": "Facture à vérifier\n1. achat-verifie.pdf · Validée\n2. scelleuse.pdf · À vérifier\n3. autre-achat.pdf · À vérifier",
+        "size": "12px"
+      },
+      {
+        "text": "Zoom \nAjuster\n150 %\n200 %",
+        "size": "12px"
+      },
+      {
+        "text": "Utilisez les montants HT imprimés, sans recalculer la TVA. Si le HT n’est pas indiqué, demandez une précision au client.",
+        "size": "12px"
+      },
+      {
+        "text": "Vendeur",
+        "size": "12px"
+      },
+      {
+        "text": "Total HT de la facture (€)",
+        "size": "12px"
+      },
+      {
+        "text": "Description",
+        "size": "12px"
+      },
+      {
+        "text": "Quantité",
+        "size": "12px"
+      },
+      {
+        "text": "Prix unitaire HT (€)",
+        "size": "12px"
+      },
+      {
+        "text": "Catégorie\nChoisir une catégorie\nDivers",
+        "size": "12px"
+      },
+      {
+        "text": "Choisissez une catégorie pour cet article.",
+        "size": "12px"
+      },
+      {
+        "text": "La validation enregistre les articles de cette facture dans le devis. Aucun message n’est envoyé au client.",
+        "size": "12px"
+      },
+      {
+        "text": "Catégorie\nCatégorie à vérifier\nDivers",
+        "size": "12px"
+      },
+      {
+        "text": "",
+        "size": "12px"
+      },
+      {
+        "text": "",
+        "size": "12px"
+      },
+      {
+        "text": "Préparer les cartons · EXP-TEST-001",
+        "size": "12px"
+      }
+    ],
+    "errors": [],
+    "denied": []
+  },
+  {
+    "name": "factures-doublon-desktop",
+    "url": "http://127.0.0.1:4175/colis/33333333-3333-4333-8333-333333333333?section=documents",
+    "headings": [
+      "Factures",
+      "Vérifier les factures\n3",
+      "Vérifier la facture 2 sur 3",
+      "Articles saisis manuellement · inclus dans le devis"
+    ],
+    "visibleButtons": [
+      {
+        "text": "Réceptionner des cartons",
+        "disabled": false,
+        "size": "14px",
+        "height": 60
+      },
+      {
+        "text": "Mon travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Dossiers d’expédition",
+        "disabled": false,
+        "size": "16px",
+        "height": 60
+      },
+      {
+        "text": "Conversations",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Équipe",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Départs",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Clients",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Estimation",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Paramètres",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Réduire",
+        "disabled": false,
+        "size": "16px",
+        "height": 32
+      },
+      {
+        "text": "Passer en mode sombre",
+        "disabled": false,
+        "size": "16px",
+        "height": 34
+      },
+      {
+        "text": "Modifier le mot de passe",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Se déconnecter",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Retour à la liste de travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Contexte",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Revenir à la préparation",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Aller au devis",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Ajouter une facture",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Facture précédente",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Facture suivante",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Retirer cette facture en double",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Vérifier le retrait",
+        "disabled": true,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Annuler le retrait",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": null,
+        "disabled": true,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": null,
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Vérifier les articles manuels",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Document",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Articles et vérification",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "←",
+        "disabled": true,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "→",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Remplacer le document",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Reprendre l’analyse",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Saisir les articles manuellement",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      }
+    ],
+    "overflow": false,
+    "smallText": [
+      {
+        "text": "Camille",
+        "size": "12px"
+      },
+      {
+        "text": "Direction",
+        "size": "10px"
+      },
+      {
+        "text": "Exemple Camille · Réunion",
+        "size": "12px"
+      },
+      {
+        "text": "Facture à vérifier\n1. achat-verifie.pdf · Validée\n2. scelleuse.pdf · À vérifier\n3. autre-achat.pdf · À vérifier",
+        "size": "12px"
+      },
+      {
+        "text": "Zoom \nAjuster\n150 %\n200 %",
+        "size": "12px"
+      },
+      {
+        "text": "Utilisez les montants HT imprimés, sans recalculer la TVA. Si le HT n’est pas indiqué, demandez une précision au client.",
+        "size": "12px"
+      },
+      {
+        "text": "Vendeur",
+        "size": "12px"
+      },
+      {
+        "text": "Total HT de la facture (€)",
+        "size": "12px"
+      },
+      {
+        "text": "Description",
+        "size": "12px"
+      },
+      {
+        "text": "Quantité",
+        "size": "12px"
+      },
+      {
+        "text": "Prix unitaire HT (€)",
+        "size": "12px"
+      },
+      {
+        "text": "Catégorie\nChoisir une catégorie\nDivers",
+        "size": "12px"
+      },
+      {
+        "text": "Choisissez une catégorie pour cet article.",
+        "size": "12px"
+      },
+      {
+        "text": "La validation enregistre les articles de cette facture dans le devis. Aucun message n’est envoyé au client.",
+        "size": "12px"
+      },
+      {
+        "text": "Catégorie\nCatégorie à vérifier\nDivers",
+        "size": "12px"
+      },
+      {
+        "text": "",
+        "size": "12px"
+      },
+      {
+        "text": "",
+        "size": "12px"
+      },
+      {
+        "text": "Préparer les cartons · EXP-TEST-001",
+        "size": "12px"
+      }
+    ],
+    "errors": [],
+    "denied": []
+  },
+  {
+    "name": "contexte-reception-desktop",
+    "url": "http://127.0.0.1:4175/colis/33333333-3333-4333-8333-333333333333?section=devis",
+    "headings": [
+      "Devis",
+      "Établir le devis",
+      "Contexte du dossier",
+      "Mesures à réception — avant optimisation · 2 cartons"
+    ],
+    "visibleButtons": [
+      {
+        "text": "Réceptionner des cartons",
+        "disabled": false,
+        "size": "14px",
+        "height": 60
+      },
+      {
+        "text": "Mon travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Dossiers d’expédition",
+        "disabled": false,
+        "size": "16px",
+        "height": 60
+      },
+      {
+        "text": "Conversations",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Équipe",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Départs",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Clients",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Estimation",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Paramètres",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Réduire",
+        "disabled": false,
+        "size": "16px",
+        "height": 32
+      },
+      {
+        "text": "Passer en mode sombre",
+        "disabled": false,
+        "size": "16px",
+        "height": 34
+      },
+      {
+        "text": "Modifier le mot de passe",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Se déconnecter",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Retour à la liste de travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Contexte",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Revenir aux factures",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Aller au paiement",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Préparation enregistrée ✓",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "1 facture(s) vérifiée(s)",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Enregistrer et vérifier le devis",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Corrections",
+        "disabled": false,
+        "size": "11px",
+        "height": 17
+      },
+      {
+        "text": "Fermer le contexte du dossier",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Réception",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Documents",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Messages",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Équipe",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Historique",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Inviter sur Telegram",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Modifier le casier",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      }
+    ],
+    "overflow": false,
+    "smallText": [
+      {
+        "text": "Camille",
+        "size": "12px"
+      },
+      {
+        "text": "Direction",
+        "size": "10px"
+      },
+      {
+        "text": "Exemple Camille · Réunion",
+        "size": "12px"
+      },
+      {
+        "text": "Frais convenus",
+        "size": "12px"
+      },
+      {
+        "text": "Mesures de réception incomplètes : aucune économie avant/après annoncée.",
+        "size": "12px"
+      },
+      {
+        "text": "Total à régler",
+        "size": "12px"
+      },
+      {
+        "text": "Calcul non enregistré",
+        "size": "12px"
+      },
+      {
+        "text": "EXP-TEST-001",
+        "size": "12px"
+      },
+      {
+        "text": "CONTENU",
+        "size": "12px"
+      },
+      {
+        "text": "Client",
+        "size": "12px"
+      },
+      {
+        "text": "🇷🇪 La Réunion",
+        "size": "12px"
+      },
+      {
+        "text": "TEST-001",
+        "size": "12px"
+      },
+      {
+        "text": "— × — × — cm · — kg",
+        "size": "12px"
+      },
+      {
+        "text": "Mesures à réception incomplètes — à vérifier",
+        "size": "12px"
+      },
+      {
+        "text": "TEST-002",
+        "size": "12px"
+      },
+      {
+        "text": "— × — × — cm · — kg",
+        "size": "12px"
+      },
+      {
+        "text": "Mesures à réception incomplètes — à vérifier",
+        "size": "12px"
+      },
+      {
+        "text": "Total avant optimisation indisponible tant que les mesures de tous les cartons ne sont pas complètes et le diviseur valide.",
+        "size": "12px"
+      },
+      {
+        "text": "30 × 20 × 20 cm · 3 kg",
+        "size": "12px"
+      },
+      {
+        "text": "Vol : 2.40 kg",
+        "size": "12px"
+      }
+    ],
+    "errors": [],
+    "denied": []
+  },
+  {
+    "name": "contexte-documents-desktop",
+    "url": "http://127.0.0.1:4175/colis/33333333-3333-4333-8333-333333333333?section=devis",
+    "headings": [
+      "Devis",
+      "Établir le devis",
+      "Contexte du dossier",
+      "Boutique A"
+    ],
+    "visibleButtons": [
+      {
+        "text": "Réceptionner des cartons",
+        "disabled": false,
+        "size": "14px",
+        "height": 60
+      },
+      {
+        "text": "Mon travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Dossiers d’expédition",
+        "disabled": false,
+        "size": "16px",
+        "height": 60
+      },
+      {
+        "text": "Conversations",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Équipe",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Départs",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Clients",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Estimation",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Paramètres",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Réduire",
+        "disabled": false,
+        "size": "16px",
+        "height": 32
+      },
+      {
+        "text": "Passer en mode sombre",
+        "disabled": false,
+        "size": "16px",
+        "height": 34
+      },
+      {
+        "text": "Modifier le mot de passe",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Se déconnecter",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Retour à la liste de travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Contexte",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Revenir aux factures",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Aller au paiement",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Préparation enregistrée ✓",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "1 facture(s) vérifiée(s)",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": null,
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Enregistrer et vérifier le devis",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Corrections",
+        "disabled": false,
+        "size": "11px",
+        "height": 17
+      },
+      {
+        "text": "Fermer le contexte du dossier",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Réception",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Documents",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Messages",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Équipe",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Historique",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Lire le document",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Consulter la facture",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Ouvrir la tâche Factures",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      }
+    ],
+    "overflow": false,
+    "smallText": [
+      {
+        "text": "Camille",
+        "size": "12px"
+      },
+      {
+        "text": "Direction",
+        "size": "10px"
+      },
+      {
+        "text": "Exemple Camille · Réunion",
+        "size": "12px"
+      },
+      {
+        "text": "Frais convenus",
+        "size": "12px"
+      },
+      {
+        "text": "Mesures de réception incomplètes : aucune économie avant/après annoncée.",
+        "size": "12px"
+      },
+      {
+        "text": "Total à régler",
+        "size": "12px"
+      },
+      {
+        "text": "Calcul non enregistré",
+        "size": "12px"
+      },
+      {
+        "text": "EXP-TEST-001",
+        "size": "12px"
+      },
+      {
+        "text": "facture.pdf",
+        "size": "12px"
+      }
+    ],
+    "errors": [],
+    "denied": []
+  },
+  {
+    "name": "contexte-messages-desktop",
+    "url": "http://127.0.0.1:4175/colis/33333333-3333-4333-8333-333333333333?section=devis",
+    "headings": [
+      "Devis",
+      "Établir le devis",
+      "Contexte du dossier"
+    ],
+    "visibleButtons": [
+      {
+        "text": "Réceptionner des cartons",
+        "disabled": false,
+        "size": "14px",
+        "height": 60
+      },
+      {
+        "text": "Mon travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Dossiers d’expédition",
+        "disabled": false,
+        "size": "16px",
+        "height": 60
+      },
+      {
+        "text": "Conversations",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Équipe",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Départs",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Clients",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Estimation",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Paramètres",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Réduire",
+        "disabled": false,
+        "size": "16px",
+        "height": 32
+      },
+      {
+        "text": "Passer en mode sombre",
+        "disabled": false,
+        "size": "16px",
+        "height": 34
+      },
+      {
+        "text": "Modifier le mot de passe",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Se déconnecter",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Retour à la liste de travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Contexte",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Revenir aux factures",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Aller au paiement",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Préparation enregistrée ✓",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "1 facture(s) vérifiée(s)",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": null,
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Enregistrer et vérifier le devis",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Corrections",
+        "disabled": false,
+        "size": "11px",
+        "height": 17
+      },
+      {
+        "text": "Fermer le contexte du dossier",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Réception",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Documents",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Messages",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Équipe",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Historique",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "À traiter",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Attente client",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Marquer comme traité",
+        "disabled": true,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Envoyer le message",
+        "disabled": true,
+        "size": "14px",
+        "height": 44
+      }
+    ],
+    "overflow": false,
+    "smallText": [
+      {
+        "text": "Camille",
+        "size": "12px"
+      },
+      {
+        "text": "Direction",
+        "size": "10px"
+      },
+      {
+        "text": "Exemple Camille · Réunion",
+        "size": "12px"
+      },
+      {
+        "text": "Frais convenus",
+        "size": "12px"
+      },
+      {
+        "text": "Mesures de réception incomplètes : aucune économie avant/après annoncée.",
+        "size": "12px"
+      },
+      {
+        "text": "Total à régler",
+        "size": "12px"
+      },
+      {
+        "text": "Calcul non enregistré",
+        "size": "12px"
+      },
+      {
+        "text": "EXP-TEST-001",
+        "size": "12px"
+      },
+      {
+        "text": "Traitée",
+        "size": "12px"
+      },
+      {
+        "text": "Suivi du traitement et relances",
+        "size": "12px"
+      },
+      {
+        "text": "",
+        "size": "12px"
+      },
+      {
+        "text": "Aucun message",
+        "size": "12px"
+      },
+      {
+        "text": "Votre réponse au client",
+        "size": "12px"
+      },
+      {
+        "text": "Message dans l’espace client. L’invitation Telegram se trouve dans sa fiche client.",
+        "size": "12px"
+      }
+    ],
+    "errors": [],
+    "denied": []
+  },
+  {
+    "name": "contexte-équipe-desktop",
+    "url": "http://127.0.0.1:4175/colis/33333333-3333-4333-8333-333333333333?section=devis",
+    "headings": [
+      "Devis",
+      "Établir le devis",
+      "Contexte du dossier",
+      "Actions de l’équipe"
+    ],
+    "visibleButtons": [
+      {
+        "text": "Réceptionner des cartons",
+        "disabled": false,
+        "size": "14px",
+        "height": 60
+      },
+      {
+        "text": "Mon travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Dossiers d’expédition",
+        "disabled": false,
+        "size": "16px",
+        "height": 60
+      },
+      {
+        "text": "Conversations",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Équipe",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Départs",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Clients",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Estimation",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Paramètres",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Réduire",
+        "disabled": false,
+        "size": "16px",
+        "height": 32
+      },
+      {
+        "text": "Passer en mode sombre",
+        "disabled": false,
+        "size": "16px",
+        "height": 34
+      },
+      {
+        "text": "Modifier le mot de passe",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Se déconnecter",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Retour à la liste de travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Contexte",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Revenir aux factures",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Aller au paiement",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Préparation enregistrée ✓",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "1 facture(s) vérifiée(s)",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": null,
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Enregistrer et vérifier le devis",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Corrections",
+        "disabled": false,
+        "size": "11px",
+        "height": 17
+      },
+      {
+        "text": "Fermer le contexte du dossier",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Réception",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Documents",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Messages",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Équipe",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Historique",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Modifier",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Je suis ce dossier",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Commencer",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Consulter",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Suivi",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      }
+    ],
+    "overflow": false,
+    "smallText": [
+      {
+        "text": "Camille",
+        "size": "12px"
+      },
+      {
+        "text": "Direction",
+        "size": "10px"
+      },
+      {
+        "text": "Exemple Camille · Réunion",
+        "size": "12px"
+      },
+      {
+        "text": "Frais convenus",
+        "size": "12px"
+      },
+      {
+        "text": "Mesures de réception incomplètes : aucune économie avant/après annoncée.",
+        "size": "12px"
+      },
+      {
+        "text": "Total à régler",
+        "size": "12px"
+      },
+      {
+        "text": "Calcul non enregistré",
+        "size": "12px"
+      },
+      {
+        "text": "EXP-TEST-001",
+        "size": "12px"
+      },
+      {
+        "text": "Référent du dossier à désigner",
+        "size": "12px"
+      },
+      {
+        "text": "Responsable de cette action : Test Camille",
+        "size": "12px"
+      }
+    ],
+    "errors": [],
+    "denied": []
+  },
+  {
+    "name": "contexte-historique-desktop",
+    "url": "http://127.0.0.1:4175/colis/33333333-3333-4333-8333-333333333333?section=devis",
+    "headings": [
+      "Devis",
+      "Établir le devis",
+      "Contexte du dossier",
+      "Historique du dossier"
+    ],
+    "visibleButtons": [
+      {
+        "text": "Réceptionner des cartons",
+        "disabled": false,
+        "size": "14px",
+        "height": 60
+      },
+      {
+        "text": "Mon travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Dossiers d’expédition",
+        "disabled": false,
+        "size": "16px",
+        "height": 60
+      },
+      {
+        "text": "Conversations",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Équipe",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Départs",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Clients",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Estimation",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Paramètres",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Réduire",
+        "disabled": false,
+        "size": "16px",
+        "height": 32
+      },
+      {
+        "text": "Passer en mode sombre",
+        "disabled": false,
+        "size": "16px",
+        "height": 34
+      },
+      {
+        "text": "Modifier le mot de passe",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Se déconnecter",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Retour à la liste de travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Contexte",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Revenir aux factures",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Aller au paiement",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Préparation enregistrée ✓",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "1 facture(s) vérifiée(s)",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": null,
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Enregistrer et vérifier le devis",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Corrections",
+        "disabled": false,
+        "size": "11px",
+        "height": 17
+      },
+      {
+        "text": "Fermer le contexte du dossier",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Réception",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Documents",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Messages",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Équipe",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Historique",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      }
+    ],
+    "overflow": false,
+    "smallText": [
+      {
+        "text": "Camille",
+        "size": "12px"
+      },
+      {
+        "text": "Direction",
+        "size": "10px"
+      },
+      {
+        "text": "Exemple Camille · Réunion",
+        "size": "12px"
+      },
+      {
+        "text": "Frais convenus",
+        "size": "12px"
+      },
+      {
+        "text": "Mesures de réception incomplètes : aucune économie avant/après annoncée.",
+        "size": "12px"
+      },
+      {
+        "text": "Total à régler",
+        "size": "12px"
+      },
+      {
+        "text": "Calcul non enregistré",
+        "size": "12px"
+      },
+      {
+        "text": "EXP-TEST-001",
+        "size": "12px"
+      }
+    ],
+    "errors": [],
+    "denied": []
+  },
+  {
+    "name": "reception-choix-mobile",
+    "url": "http://127.0.0.1:4175/",
+    "headings": [
+      "Mon travail",
+      "À faire",
+      "Préparer les cartons",
+      "Réceptionner des cartons"
+    ],
+    "visibleButtons": [
+      {
+        "text": "Mon travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Dossiers",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Clients",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Plus",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Réceptionner",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Passer en mode sombre",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Se déconnecter",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Équipe",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Mes missions et disponibilité",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "À faire1",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "En attente0",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "À prendre0",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Commencer",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Consulter",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Suivi",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Fermer",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      }
+    ],
+    "overflow": false,
+    "smallText": [
+      {
+        "text": "1 action(s) · 1 dossier(s) · 2 carton(s) reçu(s) · Tâches en cours incluses",
+        "size": "12px"
+      },
+      {
+        "text": "Action disponible",
+        "size": "12px"
+      },
+      {
+        "text": "CLIENT",
+        "size": "12px"
+      }
+    ],
+    "errors": [],
+    "denied": []
+  },
+  {
+    "name": "reception-rattacher-mobile",
+    "url": "http://127.0.0.1:4175/",
+    "headings": [
+      "Mon travail",
+      "À faire",
+      "Préparer les cartons",
+      "Réceptionner des cartons",
+      "Carton 1"
+    ],
+    "visibleButtons": [
+      {
+        "text": "Mon travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Dossiers",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Clients",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Plus",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Réceptionner",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Passer en mode sombre",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Se déconnecter",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Équipe",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Mes missions et disponibilité",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "À faire1",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "En attente0",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "À prendre0",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Commencer",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Consulter",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Suivi",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Fermer",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "+ Ajouter un carton",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Annuler",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Réceptionner les cartons",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      }
+    ],
+    "overflow": false,
+    "smallText": [
+      {
+        "text": "1 action(s) · 1 dossier(s) · 2 carton(s) reçu(s) · Tâches en cours incluses",
+        "size": "12px"
+      },
+      {
+        "text": "Action disponible",
+        "size": "12px"
+      },
+      {
+        "text": "CLIENT",
+        "size": "12px"
+      },
+      {
+        "text": "CASIER *",
+        "size": "12px"
+      },
+      {
+        "text": "Mesurez et pesez chaque carton reçu ; fournisseur et suivi peuvent être ajoutés si connus. Entrée après un scan ajoute le suivant ; Tab parcourt les mesures.",
+        "size": "12px"
+      },
+      {
+        "text": "",
+        "size": "12px"
+      },
+      {
+        "text": "",
+        "size": "12px"
+      },
+      {
+        "text": "",
+        "size": "12px"
+      },
+      {
+        "text": "0 / 0 carton(s) mesuré(s) à réception · Casier à renseigner",
+        "size": "12px"
+      },
+      {
+        "text": "Enregistrez la réception, puis préparez la demande d’accord et de factures. Le message sera envoyé à votre confirmation.",
+        "size": "12px"
+      }
+    ],
+    "errors": [],
+    "denied": []
+  },
+  {
+    "name": "reception-receptionne-mobile",
+    "url": "http://127.0.0.1:4175/colis/33333333-3333-4333-8333-333333333333?section=reception",
+    "headings": [
+      "Réception"
+    ],
+    "visibleButtons": [
+      {
+        "text": "Mon travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Dossiers",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Clients",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Plus",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Réceptionner",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Passer en mode sombre",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Se déconnecter",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Retour à la liste de travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Contexte",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Suivant",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Enregistrer les mesures de réception",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      }
+    ],
+    "overflow": false,
+    "smallText": [
+      {
+        "text": "Exemple Camille · Réunion",
+        "size": "12px"
+      },
+      {
+        "text": "LONGUEUR · CARTON 1",
+        "size": "11px"
+      },
+      {
+        "text": "LARGEUR · CARTON 1",
+        "size": "11px"
+      },
+      {
+        "text": "HAUTEUR · CARTON 1",
+        "size": "11px"
+      },
+      {
+        "text": "POIDS RÉEL · CARTON 1",
+        "size": "11px"
+      },
+      {
+        "text": "LONGUEUR · CARTON 2",
+        "size": "11px"
+      },
+      {
+        "text": "LARGEUR · CARTON 2",
+        "size": "11px"
+      },
+      {
+        "text": "HAUTEUR · CARTON 2",
+        "size": "11px"
+      },
+      {
+        "text": "POIDS RÉEL · CARTON 2",
+        "size": "11px"
+      }
+    ],
+    "errors": [],
+    "denied": []
+  },
+  {
+    "name": "accord-mesure-mobile",
+    "url": "http://127.0.0.1:4175/colis/33333333-3333-4333-8333-333333333333?section=accord",
+    "headings": [
+      "Accord client",
+      "Demander l’accord du client"
+    ],
+    "visibleButtons": [
+      {
+        "text": "Mon travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Dossiers",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Clients",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Plus",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Réceptionner",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Passer en mode sombre",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Se déconnecter",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Retour à la liste de travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Contexte",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Précédent",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Suivant",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Préparer la demande au client",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Réceptionner un autre carton",
+        "disabled": false,
+        "size": "14px",
+        "height": 46
+      },
+      {
+        "text": "Corrections",
+        "disabled": false,
+        "size": "11px",
+        "height": 44
+      }
+    ],
+    "overflow": false,
+    "smallText": [
+      {
+        "text": "Exemple Camille · Réunion",
+        "size": "12px"
+      },
+      {
+        "text": "Préparer les cartons · EXP-TEST-001",
+        "size": "12px"
+      }
+    ],
+    "errors": [],
+    "denied": []
+  },
+  {
+    "name": "accord-message-mobile",
+    "url": "http://127.0.0.1:4175/colis/33333333-3333-4333-8333-333333333333?section=accord",
+    "headings": [
+      "Accord client",
+      "Demander l’accord du client"
+    ],
+    "visibleButtons": [
+      {
+        "text": "Mon travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Dossiers",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Clients",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Plus",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Réceptionner",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Passer en mode sombre",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Se déconnecter",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Retour à la liste de travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Contexte",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Précédent",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Suivant",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Ouvrir le brouillon email",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Fermer",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      }
+    ],
+    "overflow": false,
+    "smallText": [
+      {
+        "text": "Exemple Camille · Réunion",
+        "size": "12px"
+      },
+      {
+        "text": "Préparer les cartons · EXP-TEST-001",
+        "size": "12px"
+      }
+    ],
+    "errors": [],
+    "denied": []
+  },
+  {
+    "name": "preparation-autorise-mobile",
+    "url": "http://127.0.0.1:4175/colis/33333333-3333-4333-8333-333333333333?section=preparation",
+    "headings": [
+      "Préparation"
+    ],
+    "visibleButtons": [
+      {
+        "text": "Mon travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Dossiers",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Clients",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Plus",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Réceptionner",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Passer en mode sombre",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Se déconnecter",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Retour à la liste de travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Contexte",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Précédent",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Suivant",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Commencer la préparation",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Réceptionner un autre carton",
+        "disabled": false,
+        "size": "14px",
+        "height": 46
+      },
+      {
+        "text": "Corrections",
+        "disabled": false,
+        "size": "11px",
+        "height": 44
+      }
+    ],
+    "overflow": false,
+    "smallText": [
+      {
+        "text": "Exemple Camille · Réunion",
+        "size": "12px"
+      },
+      {
+        "text": "Accord client reçu",
+        "size": "10px"
+      }
+    ],
+    "errors": [],
+    "denied": []
+  },
+  {
+    "name": "preparation-en_preparation-mobile",
+    "url": "http://127.0.0.1:4175/colis/33333333-3333-4333-8333-333333333333?section=preparation",
+    "headings": [
+      "Préparation",
+      "Préparation"
+    ],
+    "visibleButtons": [
+      {
+        "text": "Mon travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Dossiers",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Clients",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Plus",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Réceptionner",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Passer en mode sombre",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Se déconnecter",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Retour à la liste de travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Contexte",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Précédent",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Suivant",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Modifier les mesures",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": null,
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": null,
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": null,
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": null,
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": null,
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": null,
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": null,
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": null,
+        "disabled": false,
+        "size": "14px",
+        "height": 48
+      },
+      {
+        "text": "Corrections",
+        "disabled": false,
+        "size": "11px",
+        "height": 44
+      }
+    ],
+    "overflow": false,
+    "smallText": [
+      {
+        "text": "Exemple Camille · Réunion",
+        "size": "12px"
+      },
+      {
+        "text": "",
+        "size": "12px"
+      }
+    ],
+    "errors": [],
+    "denied": []
+  },
+  {
+    "name": "preparation-formulaire-mobile",
+    "url": "http://127.0.0.1:4175/colis/33333333-3333-4333-8333-333333333333?section=preparation",
+    "headings": [
+      "Préparation",
+      "Préparation"
+    ],
+    "visibleButtons": [
+      {
+        "text": "Mon travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Dossiers",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Clients",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Plus",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Réceptionner",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Passer en mode sombre",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Se déconnecter",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Retour à la liste de travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Contexte",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Précédent",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Suivant",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "+ Ajouter un colis après optimisation",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Enregistrer les mesures de préparation",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      }
+    ],
+    "overflow": false,
+    "smallText": [
+      {
+        "text": "Exemple Camille · Réunion",
+        "size": "12px"
+      },
+      {
+        "text": "LONGUEUR · COLIS SORTANT 1",
+        "size": "11px"
+      },
+      {
+        "text": "LARGEUR · COLIS SORTANT 1",
+        "size": "11px"
+      },
+      {
+        "text": "HAUTEUR · COLIS SORTANT 1",
+        "size": "11px"
+      },
+      {
+        "text": "POIDS RÉEL · COLIS SORTANT 1",
+        "size": "11px"
+      },
+      {
+        "text": "",
+        "size": "12px"
+      },
+      {
+        "text": "",
+        "size": "12px"
+      }
+    ],
+    "errors": [],
+    "denied": []
+  },
+  {
+    "name": "devis-en_preparation-mobile",
+    "url": "http://127.0.0.1:4175/colis/33333333-3333-4333-8333-333333333333?section=devis",
+    "headings": [
+      "Devis",
+      "Établir le devis"
+    ],
+    "visibleButtons": [
+      {
+        "text": "Mon travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Dossiers",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Clients",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Plus",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Réceptionner",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Passer en mode sombre",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Se déconnecter",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Retour à la liste de travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Contexte",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Précédent",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Suivant",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Préparation enregistrée ✓",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "1 facture(s) vérifiée(s)",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": null,
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Enregistrer et vérifier le devis",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      }
+    ],
+    "overflow": false,
+    "smallText": [
+      {
+        "text": "Exemple Camille · Réunion",
+        "size": "12px"
+      },
+      {
+        "text": "Frais convenus",
+        "size": "12px"
+      },
+      {
+        "text": "Mesures de réception incomplètes : aucune économie avant/après annoncée.",
+        "size": "12px"
+      },
+      {
+        "text": "Total à régler",
+        "size": "12px"
+      },
+      {
+        "text": "Calcul non enregistré",
+        "size": "12px"
+      }
+    ],
+    "errors": [],
+    "denied": []
+  },
+  {
+    "name": "devis-corrections-mobile",
+    "url": "http://127.0.0.1:4175/colis/33333333-3333-4333-8333-333333333333?section=devis",
+    "headings": [
+      "Devis",
+      "Établir le devis"
+    ],
+    "visibleButtons": [
+      {
+        "text": "Mon travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Dossiers",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Clients",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Plus",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Réceptionner",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Passer en mode sombre",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Se déconnecter",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Retour à la liste de travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Contexte",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Précédent",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Suivant",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": null,
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Enregistrer et vérifier le devis",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Masquer les corrections",
+        "disabled": false,
+        "size": "11px",
+        "height": 44
+      },
+      {
+        "text": "Étape précédente",
+        "disabled": false,
+        "size": "11px",
+        "height": 44
+      },
+      {
+        "text": "Annuler le colis",
+        "disabled": false,
+        "size": "11px",
+        "height": 44
+      },
+      {
+        "text": "Archiver",
+        "disabled": false,
+        "size": "11px",
+        "height": 44
+      }
+    ],
+    "overflow": false,
+    "smallText": [
+      {
+        "text": "Exemple Camille · Réunion",
+        "size": "12px"
+      },
+      {
+        "text": "Frais convenus",
+        "size": "12px"
+      },
+      {
+        "text": "Mesures de réception incomplètes : aucune économie avant/après annoncée.",
+        "size": "12px"
+      },
+      {
+        "text": "Total à régler",
+        "size": "12px"
+      },
+      {
+        "text": "Calcul non enregistré",
+        "size": "12px"
+      }
+    ],
+    "errors": [],
+    "denied": []
+  },
+  {
+    "name": "paiement-devis_envoye-mobile",
+    "url": "http://127.0.0.1:4175/colis/33333333-3333-4333-8333-333333333333?section=paiement",
+    "headings": [
+      "Paiement"
+    ],
+    "visibleButtons": [
+      {
+        "text": "Mon travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Dossiers",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Clients",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Plus",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Réceptionner",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Passer en mode sombre",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Se déconnecter",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Retour à la liste de travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Contexte",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Précédent",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Suivant",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Préparer une relance de paiement",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Corrections",
+        "disabled": false,
+        "size": "11px",
+        "height": 44
+      }
+    ],
+    "overflow": false,
+    "smallText": [
+      {
+        "text": "Exemple Camille · Réunion",
+        "size": "12px"
+      },
+      {
+        "text": "Montant à payer",
+        "size": "12px"
+      }
+    ],
+    "errors": [],
+    "denied": []
+  },
+  {
+    "name": "expedition-paye-mobile",
+    "url": "http://127.0.0.1:4175/colis/33333333-3333-4333-8333-333333333333?section=expedition",
+    "headings": [
+      "Expédition"
+    ],
+    "visibleButtons": [
+      {
+        "text": "Mon travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Dossiers",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Clients",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Plus",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Réceptionner",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Passer en mode sombre",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Se déconnecter",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Retour à la liste de travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Contexte",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Précédent",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Suivant",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Vérifier le départ et son manifeste",
+        "disabled": true,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Corrections",
+        "disabled": false,
+        "size": "11px",
+        "height": 44
+      }
+    ],
+    "overflow": false,
+    "smallText": [
+      {
+        "text": "Exemple Camille · Réunion",
+        "size": "12px"
+      },
+      {
+        "text": "Paiement reçu",
+        "size": "12px"
+      },
+      {
+        "text": "AFFECTER À UN ENVOI",
+        "size": "11px"
+      }
+    ],
+    "errors": [],
+    "denied": []
+  },
+  {
+    "name": "livraison-arrive-mobile",
+    "url": "http://127.0.0.1:4175/colis/33333333-3333-4333-8333-333333333333?section=livraison",
+    "headings": [
+      "Livraison"
+    ],
+    "visibleButtons": [
+      {
+        "text": "Mon travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Dossiers",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Clients",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Plus",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Réceptionner",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Passer en mode sombre",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Se déconnecter",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Retour à la liste de travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Contexte",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Précédent",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Lancer la livraison",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Préparer une information au client",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Corrections",
+        "disabled": false,
+        "size": "11px",
+        "height": 44
+      }
+    ],
+    "overflow": false,
+    "smallText": [
+      {
+        "text": "Exemple Camille · Réunion",
+        "size": "12px"
+      },
+      {
+        "text": "Préparer les cartons · EXP-TEST-001",
+        "size": "12px"
+      }
+    ],
+    "errors": [],
+    "denied": []
+  },
+  {
+    "name": "factures-verification-mobile",
+    "url": "http://127.0.0.1:4175/colis/33333333-3333-4333-8333-333333333333?section=documents",
+    "headings": [
+      "Factures",
+      "Vérifier les factures\n3",
+      "Vérifier la facture 2 sur 3",
+      "Articles saisis manuellement · inclus dans le devis"
+    ],
+    "visibleButtons": [
+      {
+        "text": "Mon travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Dossiers",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Clients",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Plus",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Réceptionner",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Passer en mode sombre",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Se déconnecter",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Retour à la liste de travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Contexte",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Précédent",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Suivant",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Ajouter une facture",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Facture précédente",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Facture suivante",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Retirer cette facture en double",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": null,
+        "disabled": true,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": null,
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Vérifier les articles manuels",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Document",
+        "disabled": false,
+        "size": "14px",
+        "height": 56
+      },
+      {
+        "text": "Articles et vérification",
+        "disabled": false,
+        "size": "14px",
+        "height": 56
+      },
+      {
+        "text": "Remplacer le document",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      }
+    ],
+    "overflow": false,
+    "smallText": [
+      {
+        "text": "Exemple Camille · Réunion",
+        "size": "12px"
+      },
+      {
+        "text": "Facture à vérifier\n1. achat-verifie.pdf · Validée\n2. scelleuse.pdf · À vérifier\n3. autre-achat.pdf · À vérifier",
+        "size": "12px"
+      },
+      {
+        "text": "Utilisez les montants HT imprimés, sans recalculer la TVA. Si le HT n’est pas indiqué, demandez une précision au client.",
+        "size": "12px"
+      },
+      {
+        "text": "Vendeur",
+        "size": "12px"
+      },
+      {
+        "text": "Total HT de la facture (€)",
+        "size": "12px"
+      },
+      {
+        "text": "Description",
+        "size": "12px"
+      },
+      {
+        "text": "Quantité",
+        "size": "12px"
+      },
+      {
+        "text": "Prix unitaire HT (€)",
+        "size": "12px"
+      },
+      {
+        "text": "Catégorie\nChoisir une catégorie\nDivers",
+        "size": "12px"
+      },
+      {
+        "text": "Choisissez une catégorie pour cet article.",
+        "size": "12px"
+      },
+      {
+        "text": "La validation enregistre les articles de cette facture dans le devis. Aucun message n’est envoyé au client.",
+        "size": "12px"
+      },
+      {
+        "text": "Catégorie\nCatégorie à vérifier\nDivers",
+        "size": "12px"
+      },
+      {
+        "text": "",
+        "size": "12px"
+      },
+      {
+        "text": "",
+        "size": "12px"
+      },
+      {
+        "text": "Préparer les cartons · EXP-TEST-001",
+        "size": "12px"
+      }
+    ],
+    "errors": [],
+    "denied": []
+  },
+  {
+    "name": "factures-actions-mobile",
+    "url": "http://127.0.0.1:4175/colis/33333333-3333-4333-8333-333333333333?section=documents",
+    "headings": [
+      "Factures",
+      "Vérifier les factures\n3",
+      "Vérifier la facture 2 sur 3",
+      "Articles saisis manuellement · inclus dans le devis"
+    ],
+    "visibleButtons": [
+      {
+        "text": "Mon travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Dossiers",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Clients",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Plus",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Réceptionner",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Passer en mode sombre",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Se déconnecter",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Retour à la liste de travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Contexte",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Précédent",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Suivant",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Retirer l’article",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Ajouter un article à cette facture",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Vérifier la facture précédente",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Vérifier la facture suivante",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Article 1 : choisissez une catégorie.",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Valider et passer à la suivante",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Enregistrer le brouillon",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Demander une correction au client",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Supprimer Article saisi avant réception de la facture",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      }
+    ],
+    "overflow": false,
+    "smallText": [
+      {
+        "text": "Exemple Camille · Réunion",
+        "size": "12px"
+      },
+      {
+        "text": "Facture à vérifier\n1. achat-verifie.pdf · Validée\n2. scelleuse.pdf · À vérifier\n3. autre-achat.pdf · À vérifier",
+        "size": "12px"
+      },
+      {
+        "text": "Utilisez les montants HT imprimés, sans recalculer la TVA. Si le HT n’est pas indiqué, demandez une précision au client.",
+        "size": "12px"
+      },
+      {
+        "text": "Vendeur",
+        "size": "12px"
+      },
+      {
+        "text": "Total HT de la facture (€)",
+        "size": "12px"
+      },
+      {
+        "text": "Description",
+        "size": "12px"
+      },
+      {
+        "text": "Quantité",
+        "size": "12px"
+      },
+      {
+        "text": "Prix unitaire HT (€)",
+        "size": "12px"
+      },
+      {
+        "text": "Catégorie\nChoisir une catégorie\nDivers",
+        "size": "12px"
+      },
+      {
+        "text": "Choisissez une catégorie pour cet article.",
+        "size": "12px"
+      },
+      {
+        "text": "La validation enregistre les articles de cette facture dans le devis. Aucun message n’est envoyé au client.",
+        "size": "12px"
+      },
+      {
+        "text": "Catégorie\nCatégorie à vérifier\nDivers",
+        "size": "12px"
+      },
+      {
+        "text": "",
+        "size": "12px"
+      },
+      {
+        "text": "",
+        "size": "12px"
+      },
+      {
+        "text": "Préparer les cartons · EXP-TEST-001",
+        "size": "12px"
+      }
+    ],
+    "errors": [],
+    "denied": []
+  },
+  {
+    "name": "factures-doublon-mobile",
+    "url": "http://127.0.0.1:4175/colis/33333333-3333-4333-8333-333333333333?section=documents",
+    "headings": [
+      "Factures",
+      "Vérifier les factures\n3",
+      "Vérifier la facture 2 sur 3",
+      "Articles saisis manuellement · inclus dans le devis"
+    ],
+    "visibleButtons": [
+      {
+        "text": "Mon travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Dossiers",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Clients",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Plus",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Réceptionner",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Passer en mode sombre",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Se déconnecter",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Retour à la liste de travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Contexte",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Précédent",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Suivant",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Ajouter une facture",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Facture précédente",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Facture suivante",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Retirer cette facture en double",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Vérifier le retrait",
+        "disabled": true,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Annuler le retrait",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": null,
+        "disabled": true,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": null,
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      }
+    ],
+    "overflow": false,
+    "smallText": [
+      {
+        "text": "Exemple Camille · Réunion",
+        "size": "12px"
+      },
+      {
+        "text": "Facture à vérifier\n1. achat-verifie.pdf · Validée\n2. scelleuse.pdf · À vérifier\n3. autre-achat.pdf · À vérifier",
+        "size": "12px"
+      },
+      {
+        "text": "Utilisez les montants HT imprimés, sans recalculer la TVA. Si le HT n’est pas indiqué, demandez une précision au client.",
+        "size": "12px"
+      },
+      {
+        "text": "Vendeur",
+        "size": "12px"
+      },
+      {
+        "text": "Total HT de la facture (€)",
+        "size": "12px"
+      },
+      {
+        "text": "Description",
+        "size": "12px"
+      },
+      {
+        "text": "Quantité",
+        "size": "12px"
+      },
+      {
+        "text": "Prix unitaire HT (€)",
+        "size": "12px"
+      },
+      {
+        "text": "Catégorie\nChoisir une catégorie\nDivers",
+        "size": "12px"
+      },
+      {
+        "text": "Choisissez une catégorie pour cet article.",
+        "size": "12px"
+      },
+      {
+        "text": "La validation enregistre les articles de cette facture dans le devis. Aucun message n’est envoyé au client.",
+        "size": "12px"
+      },
+      {
+        "text": "Catégorie\nCatégorie à vérifier\nDivers",
+        "size": "12px"
+      },
+      {
+        "text": "",
+        "size": "12px"
+      },
+      {
+        "text": "",
+        "size": "12px"
+      },
+      {
+        "text": "Préparer les cartons · EXP-TEST-001",
+        "size": "12px"
+      }
+    ],
+    "errors": [],
+    "denied": []
+  },
+  {
+    "name": "contexte-reception-mobile",
+    "url": "http://127.0.0.1:4175/colis/33333333-3333-4333-8333-333333333333?section=devis",
+    "headings": [
+      "Devis",
+      "Établir le devis",
+      "Contexte du dossier",
+      "Mesures à réception — avant optimisation · 2 cartons"
+    ],
+    "visibleButtons": [
+      {
+        "text": "Mon travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Dossiers",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Clients",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Plus",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Réceptionner",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Passer en mode sombre",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Se déconnecter",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Retour à la liste de travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Contexte",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Précédent",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Suivant",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Préparation enregistrée ✓",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "1 facture(s) vérifiée(s)",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Enregistrer et vérifier le devis",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Fermer le contexte du dossier",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Réception",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Documents",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Messages",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Équipe",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Historique",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Inviter sur Telegram",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Modifier le casier",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      }
+    ],
+    "overflow": false,
+    "smallText": [
+      {
+        "text": "Exemple Camille · Réunion",
+        "size": "12px"
+      },
+      {
+        "text": "Frais convenus",
+        "size": "12px"
+      },
+      {
+        "text": "Mesures de réception incomplètes : aucune économie avant/après annoncée.",
+        "size": "12px"
+      },
+      {
+        "text": "Total à régler",
+        "size": "12px"
+      },
+      {
+        "text": "Calcul non enregistré",
+        "size": "12px"
+      },
+      {
+        "text": "EXP-TEST-001",
+        "size": "12px"
+      },
+      {
+        "text": "CONTENU",
+        "size": "12px"
+      },
+      {
+        "text": "Client",
+        "size": "12px"
+      },
+      {
+        "text": "🇷🇪 La Réunion",
+        "size": "12px"
+      },
+      {
+        "text": "TEST-001",
+        "size": "12px"
+      },
+      {
+        "text": "— × — × — cm · — kg",
+        "size": "12px"
+      },
+      {
+        "text": "Mesures à réception incomplètes — à vérifier",
+        "size": "12px"
+      },
+      {
+        "text": "TEST-002",
+        "size": "12px"
+      },
+      {
+        "text": "— × — × — cm · — kg",
+        "size": "12px"
+      },
+      {
+        "text": "Mesures à réception incomplètes — à vérifier",
+        "size": "12px"
+      },
+      {
+        "text": "Total avant optimisation indisponible tant que les mesures de tous les cartons ne sont pas complètes et le diviseur valide.",
+        "size": "12px"
+      },
+      {
+        "text": "30 × 20 × 20 cm · 3 kg",
+        "size": "12px"
+      },
+      {
+        "text": "Vol : 2.40 kg",
+        "size": "12px"
+      }
+    ],
+    "errors": [],
+    "denied": []
+  },
+  {
+    "name": "contexte-documents-mobile",
+    "url": "http://127.0.0.1:4175/colis/33333333-3333-4333-8333-333333333333?section=devis",
+    "headings": [
+      "Devis",
+      "Établir le devis",
+      "Contexte du dossier",
+      "Boutique A"
+    ],
+    "visibleButtons": [
+      {
+        "text": "Mon travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Dossiers",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Clients",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Plus",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Réceptionner",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Passer en mode sombre",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Se déconnecter",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Retour à la liste de travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Contexte",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Précédent",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Suivant",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Préparation enregistrée ✓",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "1 facture(s) vérifiée(s)",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": null,
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Enregistrer et vérifier le devis",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Fermer le contexte du dossier",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Réception",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Documents",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Messages",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Équipe",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Historique",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Lire le document",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Consulter la facture",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Ouvrir la tâche Factures",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      }
+    ],
+    "overflow": false,
+    "smallText": [
+      {
+        "text": "Exemple Camille · Réunion",
+        "size": "12px"
+      },
+      {
+        "text": "Frais convenus",
+        "size": "12px"
+      },
+      {
+        "text": "Mesures de réception incomplètes : aucune économie avant/après annoncée.",
+        "size": "12px"
+      },
+      {
+        "text": "Total à régler",
+        "size": "12px"
+      },
+      {
+        "text": "Calcul non enregistré",
+        "size": "12px"
+      },
+      {
+        "text": "EXP-TEST-001",
+        "size": "12px"
+      },
+      {
+        "text": "facture.pdf",
+        "size": "12px"
+      }
+    ],
+    "errors": [],
+    "denied": []
+  },
+  {
+    "name": "contexte-messages-mobile",
+    "url": "http://127.0.0.1:4175/colis/33333333-3333-4333-8333-333333333333?section=devis",
+    "headings": [
+      "Devis",
+      "Établir le devis",
+      "Contexte du dossier"
+    ],
+    "visibleButtons": [
+      {
+        "text": "Mon travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Dossiers",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Clients",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Plus",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Réceptionner",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Passer en mode sombre",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Se déconnecter",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Retour à la liste de travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Contexte",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Précédent",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Suivant",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Préparation enregistrée ✓",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "1 facture(s) vérifiée(s)",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": null,
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Enregistrer et vérifier le devis",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Fermer le contexte du dossier",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Réception",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Documents",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Messages",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Équipe",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Historique",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "À traiter",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Attente client",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Marquer comme traité",
+        "disabled": true,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Envoyer le message",
+        "disabled": true,
+        "size": "14px",
+        "height": 44
+      }
+    ],
+    "overflow": false,
+    "smallText": [
+      {
+        "text": "Exemple Camille · Réunion",
+        "size": "12px"
+      },
+      {
+        "text": "Frais convenus",
+        "size": "12px"
+      },
+      {
+        "text": "Mesures de réception incomplètes : aucune économie avant/après annoncée.",
+        "size": "12px"
+      },
+      {
+        "text": "Total à régler",
+        "size": "12px"
+      },
+      {
+        "text": "Calcul non enregistré",
+        "size": "12px"
+      },
+      {
+        "text": "EXP-TEST-001",
+        "size": "12px"
+      },
+      {
+        "text": "Traitée",
+        "size": "12px"
+      },
+      {
+        "text": "Suivi du traitement et relances",
+        "size": "12px"
+      },
+      {
+        "text": "",
+        "size": "12px"
+      },
+      {
+        "text": "Aucun message",
+        "size": "12px"
+      },
+      {
+        "text": "Votre réponse au client",
+        "size": "12px"
+      },
+      {
+        "text": "Message dans l’espace client. L’invitation Telegram se trouve dans sa fiche client.",
+        "size": "12px"
+      }
+    ],
+    "errors": [],
+    "denied": []
+  },
+  {
+    "name": "contexte-équipe-mobile",
+    "url": "http://127.0.0.1:4175/colis/33333333-3333-4333-8333-333333333333?section=devis",
+    "headings": [
+      "Devis",
+      "Établir le devis",
+      "Contexte du dossier",
+      "Actions de l’équipe"
+    ],
+    "visibleButtons": [
+      {
+        "text": "Mon travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Dossiers",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Clients",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Plus",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Réceptionner",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Passer en mode sombre",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Se déconnecter",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Retour à la liste de travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Contexte",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Précédent",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Suivant",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Préparation enregistrée ✓",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "1 facture(s) vérifiée(s)",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": null,
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Enregistrer et vérifier le devis",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Fermer le contexte du dossier",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Réception",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Documents",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Messages",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Équipe",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Historique",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Modifier",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Je suis ce dossier",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Commencer",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Consulter",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Suivi",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      }
+    ],
+    "overflow": false,
+    "smallText": [
+      {
+        "text": "Exemple Camille · Réunion",
+        "size": "12px"
+      },
+      {
+        "text": "Frais convenus",
+        "size": "12px"
+      },
+      {
+        "text": "Mesures de réception incomplètes : aucune économie avant/après annoncée.",
+        "size": "12px"
+      },
+      {
+        "text": "Total à régler",
+        "size": "12px"
+      },
+      {
+        "text": "Calcul non enregistré",
+        "size": "12px"
+      },
+      {
+        "text": "EXP-TEST-001",
+        "size": "12px"
+      },
+      {
+        "text": "Référent du dossier à désigner",
+        "size": "12px"
+      },
+      {
+        "text": "Responsable de cette action : Test Camille",
+        "size": "12px"
+      }
+    ],
+    "errors": [],
+    "denied": []
+  },
+  {
+    "name": "contexte-historique-mobile",
+    "url": "http://127.0.0.1:4175/colis/33333333-3333-4333-8333-333333333333?section=devis",
+    "headings": [
+      "Devis",
+      "Établir le devis",
+      "Contexte du dossier",
+      "Historique du dossier"
+    ],
+    "visibleButtons": [
+      {
+        "text": "Mon travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Dossiers",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Clients",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Plus",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Réceptionner",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Passer en mode sombre",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Se déconnecter",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Retour à la liste de travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Contexte",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Précédent",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Suivant",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Préparation enregistrée ✓",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "1 facture(s) vérifiée(s)",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": null,
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Enregistrer et vérifier le devis",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Fermer le contexte du dossier",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Réception",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Documents",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Messages",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Équipe",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      },
+      {
+        "text": "Historique",
+        "disabled": false,
+        "size": "12px",
+        "height": 44
+      }
+    ],
+    "overflow": false,
+    "smallText": [
+      {
+        "text": "Exemple Camille · Réunion",
+        "size": "12px"
+      },
+      {
+        "text": "Frais convenus",
+        "size": "12px"
+      },
+      {
+        "text": "Mesures de réception incomplètes : aucune économie avant/après annoncée.",
+        "size": "12px"
+      },
+      {
+        "text": "Total à régler",
+        "size": "12px"
+      },
+      {
+        "text": "Calcul non enregistré",
+        "size": "12px"
+      },
+      {
+        "text": "EXP-TEST-001",
+        "size": "12px"
+      }
+    ],
+    "errors": [],
+    "denied": []
+  },
+  {
+    "name": "accord-attente",
+    "url": "http://127.0.0.1:4175/colis/33333333-3333-4333-8333-333333333333?section=accord",
+    "headings": [
+      "Accord client",
+      "En attente du client"
+    ],
+    "visibleButtons": [
+      {
+        "text": "Réceptionner des cartons",
+        "disabled": false,
+        "size": "14px",
+        "height": 60
+      },
+      {
+        "text": "Mon travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Dossiers d’expédition",
+        "disabled": false,
+        "size": "16px",
+        "height": 60
+      },
+      {
+        "text": "Conversations",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Équipe",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Départs",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Clients",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Estimation",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Paramètres",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Réduire",
+        "disabled": false,
+        "size": "16px",
+        "height": 32
+      },
+      {
+        "text": "Passer en mode sombre",
+        "disabled": false,
+        "size": "16px",
+        "height": 34
+      },
+      {
+        "text": "Modifier le mot de passe",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Se déconnecter",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Retour à la liste de travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Contexte",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Revenir à la réception",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Aller à la préparation",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Préparer une relance",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Voir les échanges",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Réceptionner un autre carton",
+        "disabled": false,
+        "size": "14px",
+        "height": 46
+      },
+      {
+        "text": "Corrections",
+        "disabled": false,
+        "size": "11px",
+        "height": 17
+      }
+    ],
+    "overflow": false,
+    "smallText": [
+      {
+        "text": "Camille",
+        "size": "12px"
+      },
+      {
+        "text": "Direction",
+        "size": "10px"
+      },
+      {
+        "text": "Exemple Camille · Réunion",
+        "size": "12px"
+      },
+      {
+        "text": "Préparer les cartons · EXP-TEST-001",
+        "size": "12px"
+      }
+    ],
+    "errors": [],
+    "denied": []
+  },
+  {
+    "name": "accord-refus",
+    "url": "http://127.0.0.1:4175/colis/33333333-3333-4333-8333-333333333333?section=accord",
+    "headings": [
+      "Accord client",
+      "Préparation refusée par le client"
+    ],
+    "visibleButtons": [
+      {
+        "text": "Réceptionner des cartons",
+        "disabled": false,
+        "size": "14px",
+        "height": 60
+      },
+      {
+        "text": "Mon travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Dossiers d’expédition",
+        "disabled": false,
+        "size": "16px",
+        "height": 60
+      },
+      {
+        "text": "Conversations",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Équipe",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Départs",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Clients",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Estimation",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Paramètres",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Réduire",
+        "disabled": false,
+        "size": "16px",
+        "height": 32
+      },
+      {
+        "text": "Passer en mode sombre",
+        "disabled": false,
+        "size": "16px",
+        "height": 34
+      },
+      {
+        "text": "Modifier le mot de passe",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Se déconnecter",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Retour à la liste de travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Contexte",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Revenir à la réception",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Aller à la préparation",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Ouvrir les échanges",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Corrections",
+        "disabled": false,
+        "size": "11px",
+        "height": 17
+      }
+    ],
+    "overflow": false,
+    "smallText": [
+      {
+        "text": "Camille",
+        "size": "12px"
+      },
+      {
+        "text": "Direction",
+        "size": "10px"
+      },
+      {
+        "text": "Exemple Camille · Réunion",
+        "size": "12px"
+      },
+      {
+        "text": "Préparer les cartons · EXP-TEST-001",
+        "size": "12px"
+      }
+    ],
+    "errors": [],
+    "denied": []
+  },
+  {
+    "name": "transit",
+    "url": "http://127.0.0.1:4175/colis/33333333-3333-4333-8333-333333333333?section=expedition",
+    "headings": [
+      "Expédition"
+    ],
+    "visibleButtons": [
+      {
+        "text": "Réceptionner des cartons",
+        "disabled": false,
+        "size": "14px",
+        "height": 60
+      },
+      {
+        "text": "Mon travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Dossiers d’expédition",
+        "disabled": false,
+        "size": "16px",
+        "height": 60
+      },
+      {
+        "text": "Conversations",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Équipe",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Départs",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Clients",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Estimation",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Paramètres",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Réduire",
+        "disabled": false,
+        "size": "16px",
+        "height": 32
+      },
+      {
+        "text": "Passer en mode sombre",
+        "disabled": false,
+        "size": "16px",
+        "height": 34
+      },
+      {
+        "text": "Modifier le mot de passe",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Se déconnecter",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Retour à la liste de travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Contexte",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Revenir au paiement",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Aller à la livraison",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Passer en dédouanement",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Arrivé directement (sans dédouanement)",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Corrections",
+        "disabled": false,
+        "size": "11px",
+        "height": 17
+      }
+    ],
+    "overflow": false,
+    "smallText": [
+      {
+        "text": "Camille",
+        "size": "12px"
+      },
+      {
+        "text": "Direction",
+        "size": "10px"
+      },
+      {
+        "text": "Exemple Camille · Réunion",
+        "size": "12px"
+      },
+      {
+        "text": "Préparer les cartons · EXP-TEST-001",
+        "size": "12px"
+      }
+    ],
+    "errors": [],
+    "denied": []
+  },
+  {
+    "name": "douane",
+    "url": "http://127.0.0.1:4175/colis/33333333-3333-4333-8333-333333333333?section=expedition",
+    "headings": [
+      "Expédition"
+    ],
+    "visibleButtons": [
+      {
+        "text": "Réceptionner des cartons",
+        "disabled": false,
+        "size": "14px",
+        "height": 60
+      },
+      {
+        "text": "Mon travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Dossiers d’expédition",
+        "disabled": false,
+        "size": "16px",
+        "height": 60
+      },
+      {
+        "text": "Conversations",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Équipe",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Départs",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Clients",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Estimation",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Paramètres",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Réduire",
+        "disabled": false,
+        "size": "16px",
+        "height": 32
+      },
+      {
+        "text": "Passer en mode sombre",
+        "disabled": false,
+        "size": "16px",
+        "height": 34
+      },
+      {
+        "text": "Modifier le mot de passe",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Se déconnecter",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Retour à la liste de travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Contexte",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Revenir au paiement",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Aller à la livraison",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Confirmer l'arrivée à destination",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Corrections",
+        "disabled": false,
+        "size": "11px",
+        "height": 17
+      }
+    ],
+    "overflow": false,
+    "smallText": [
+      {
+        "text": "Camille",
+        "size": "12px"
+      },
+      {
+        "text": "Direction",
+        "size": "10px"
+      },
+      {
+        "text": "Exemple Camille · Réunion",
+        "size": "12px"
+      },
+      {
+        "text": "Le colis est en cours de dédouanement à destination.",
+        "size": "12px"
+      }
+    ],
+    "errors": [],
+    "denied": []
+  },
+  {
+    "name": "livre",
+    "url": "http://127.0.0.1:4175/colis/33333333-3333-4333-8333-333333333333?section=livraison",
+    "headings": [
+      "Livraison",
+      "Livraison terminée"
+    ],
+    "visibleButtons": [
+      {
+        "text": "Réceptionner des cartons",
+        "disabled": false,
+        "size": "14px",
+        "height": 60
+      },
+      {
+        "text": "Mon travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Dossiers d’expédition",
+        "disabled": false,
+        "size": "16px",
+        "height": 60
+      },
+      {
+        "text": "Conversations",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Équipe",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Départs",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Clients",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Estimation",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Paramètres",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Réduire",
+        "disabled": false,
+        "size": "16px",
+        "height": 32
+      },
+      {
+        "text": "Passer en mode sombre",
+        "disabled": false,
+        "size": "16px",
+        "height": 34
+      },
+      {
+        "text": "Modifier le mot de passe",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Se déconnecter",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Retour à la liste de travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Contexte",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Revenir à l’expédition",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      }
+    ],
+    "overflow": false,
+    "smallText": [
+      {
+        "text": "Camille",
+        "size": "12px"
+      },
+      {
+        "text": "Direction",
+        "size": "10px"
+      },
+      {
+        "text": "Exemple Camille · Réunion",
+        "size": "12px"
+      },
+      {
+        "text": "Préparer les cartons · EXP-TEST-001",
+        "size": "12px"
+      }
+    ],
+    "errors": [],
+    "denied": []
+  },
+  {
+    "name": "annule",
+    "url": "http://127.0.0.1:4175/colis/33333333-3333-4333-8333-333333333333?section=reception",
+    "headings": [
+      "Réception",
+      "Réception enregistrée",
+      "Mesures à réception — avant optimisation · 2 cartons"
+    ],
+    "visibleButtons": [
+      {
+        "text": "Réceptionner des cartons",
+        "disabled": false,
+        "size": "14px",
+        "height": 60
+      },
+      {
+        "text": "Mon travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Dossiers d’expédition",
+        "disabled": false,
+        "size": "16px",
+        "height": 60
+      },
+      {
+        "text": "Conversations",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Équipe",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Départs",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Clients",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Estimation",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Paramètres",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Réduire",
+        "disabled": false,
+        "size": "16px",
+        "height": 32
+      },
+      {
+        "text": "Passer en mode sombre",
+        "disabled": false,
+        "size": "16px",
+        "height": 34
+      },
+      {
+        "text": "Modifier le mot de passe",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Se déconnecter",
+        "disabled": false,
+        "size": "16px",
+        "height": 40
+      },
+      {
+        "text": "Retour à la liste de travail",
+        "disabled": false,
+        "size": "16px",
+        "height": 44
+      },
+      {
+        "text": "Contexte",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      },
+      {
+        "text": "Aller à l’accord client",
+        "disabled": false,
+        "size": "14px",
+        "height": 44
+      }
+    ],
+    "overflow": false,
+    "smallText": [
+      {
+        "text": "Camille",
+        "size": "12px"
+      },
+      {
+        "text": "Direction",
+        "size": "10px"
+      },
+      {
+        "text": "Exemple Camille · Réunion",
+        "size": "12px"
+      },
+      {
+        "text": "TEST-001",
+        "size": "12px"
+      },
+      {
+        "text": "— × — × — cm · — kg",
+        "size": "12px"
+      },
+      {
+        "text": "Mesures à réception incomplètes — à vérifier",
+        "size": "12px"
+      },
+      {
+        "text": "TEST-002",
+        "size": "12px"
+      },
+      {
+        "text": "— × — × — cm · — kg",
+        "size": "12px"
+      },
+      {
+        "text": "Mesures à réception incomplètes — à vérifier",
+        "size": "12px"
+      },
+      {
+        "text": "Total avant optimisation indisponible tant que les mesures de tous les cartons ne sont pas complètes et le diviseur valide.",
+        "size": "12px"
+      },
+      {
+        "text": "30 × 20 × 20 cm · 3 kg",
+        "size": "12px"
+      },
+      {
+        "text": "Vol : 2.40 kg",
+        "size": "12px"
+      },
+      {
+        "text": "Préparer les cartons · EXP-TEST-001",
+        "size": "12px"
+      }
+    ],
+    "errors": [],
+    "denied": []
+  }
+]

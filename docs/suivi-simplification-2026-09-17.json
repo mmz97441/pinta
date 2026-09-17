@@ -1,0 +1,837 @@
+{
+  "version_depart": "19d20352f288eea2b1f33edfa1cd6ddbea54a8e4",
+  "publication": "Serveur publié et vérifié ; interface en cours de publication.",
+  "points": [
+    {
+      "id": "O01",
+      "sujet": "Navigation dans une expédition",
+      "responsable": "Opérations",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-operations.md",
+        "contre-revue-simplicite-operations-2026-09-17.md"
+      ]
+    },
+    {
+      "id": "O02",
+      "sujet": "Réception : choisir le client et l’expédition",
+      "responsable": "Opérations",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-operations.md",
+        "contre-revue-simplicite-operations-2026-09-17.md"
+      ]
+    },
+    {
+      "id": "O03",
+      "sujet": "Réception : mesures du carton",
+      "responsable": "Opérations",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-operations.md",
+        "contre-revue-simplicite-operations-2026-09-17.md"
+      ]
+    },
+    {
+      "id": "O04",
+      "sujet": "Réception : casier, observations, contrôle, photo",
+      "responsable": "Opérations",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-operations.md",
+        "contre-revue-simplicite-operations-2026-09-17.md"
+      ]
+    },
+    {
+      "id": "O05",
+      "sujet": "Mesures à réception déjà enregistrées",
+      "responsable": "Opérations",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-operations.md",
+        "contre-revue-simplicite-operations-2026-09-17.md"
+      ]
+    },
+    {
+      "id": "O06",
+      "sujet": "Demander l’accord et les factures",
+      "responsable": "Opérations",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-operations.md",
+        "contre-revue-simplicite-operations-2026-09-17.md"
+      ]
+    },
+    {
+      "id": "O07",
+      "sujet": "Attente, demande d’attendre et refus du client",
+      "responsable": "Opérations",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-operations.md",
+        "contre-revue-simplicite-operations-2026-09-17.md"
+      ]
+    },
+    {
+      "id": "O08",
+      "sujet": "Démarrer la préparation",
+      "responsable": "Opérations",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-operations.md",
+        "contre-revue-simplicite-operations-2026-09-17.md"
+      ]
+    },
+    {
+      "id": "O09",
+      "sujet": "Mesures après optimisation",
+      "responsable": "Opérations",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-operations.md",
+        "contre-revue-simplicite-operations-2026-09-17.md"
+      ]
+    },
+    {
+      "id": "O10",
+      "sujet": "Fin de préparation et passage à un collègue",
+      "responsable": "Opérations",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-operations.md",
+        "contre-revue-simplicite-operations-2026-09-17.md"
+      ]
+    },
+    {
+      "id": "O11",
+      "sujet": "Factures : sélection et document à vérifier",
+      "responsable": "Opérations",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-operations.md",
+        "contre-revue-simplicite-operations-2026-09-17.md"
+      ]
+    },
+    {
+      "id": "O12",
+      "sujet": "Factures : lire et vérifier les articles",
+      "responsable": "Opérations",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-operations.md",
+        "contre-revue-simplicite-operations-2026-09-17.md"
+      ]
+    },
+    {
+      "id": "O13",
+      "sujet": "Factures : validation, brouillon, erreur et conflit",
+      "responsable": "Opérations",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-operations.md",
+        "contre-revue-simplicite-operations-2026-09-17.md"
+      ]
+    },
+    {
+      "id": "O14",
+      "sujet": "Factures : doublons, corrections et articles manuels",
+      "responsable": "Opérations",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-operations.md",
+        "contre-revue-simplicite-operations-2026-09-17.md"
+      ]
+    },
+    {
+      "id": "O15",
+      "sujet": "Devis : compléter, vérifier et envoyer",
+      "responsable": "Opérations",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-operations.md",
+        "contre-revue-simplicite-operations-2026-09-17.md"
+      ]
+    },
+    {
+      "id": "O16",
+      "sujet": "Paiement particulier et professionnel",
+      "responsable": "Opérations",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-operations.md",
+        "contre-revue-simplicite-operations-2026-09-17.md"
+      ]
+    },
+    {
+      "id": "O17",
+      "sujet": "Affecter une expédition à un départ",
+      "responsable": "Opérations",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-operations.md",
+        "contre-revue-simplicite-operations-2026-09-17.md"
+      ]
+    },
+    {
+      "id": "O18",
+      "sujet": "Transport, douane, arrivée et livraison",
+      "responsable": "Opérations",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-operations.md",
+        "contre-revue-simplicite-operations-2026-09-17.md"
+      ]
+    },
+    {
+      "id": "O19",
+      "sujet": "Contexte : identité, cartons et mesures",
+      "responsable": "Opérations",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-operations.md",
+        "contre-revue-simplicite-operations-2026-09-17.md"
+      ]
+    },
+    {
+      "id": "O20",
+      "sujet": "Contexte : documents, messages, équipe et historique",
+      "responsable": "Opérations",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-operations.md",
+        "contre-revue-simplicite-operations-2026-09-17.md"
+      ]
+    },
+    {
+      "id": "O21",
+      "sujet": "Corrections, archivage et annulation",
+      "responsable": "Opérations",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-operations.md",
+        "contre-revue-simplicite-operations-2026-09-17.md"
+      ]
+    },
+    {
+      "id": "E01",
+      "sujet": "Menu équipe et Plus sur mobile",
+      "responsable": "CTO / Équipe",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-equipe.md",
+        "contre-revue-simplicite-equipe-2026-09-17.md"
+      ]
+    },
+    {
+      "id": "E02",
+      "sujet": "Mon travail : À faire",
+      "responsable": "CTO / Équipe",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-equipe.md",
+        "contre-revue-simplicite-equipe-2026-09-17.md"
+      ]
+    },
+    {
+      "id": "E03",
+      "sujet": "À prendre, En attente, relais",
+      "responsable": "CTO / Équipe",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-equipe.md",
+        "contre-revue-simplicite-equipe-2026-09-17.md"
+      ]
+    },
+    {
+      "id": "E04",
+      "sujet": "Mes missions et disponibilité",
+      "responsable": "CTO / Équipe",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-equipe.md",
+        "contre-revue-simplicite-equipe-2026-09-17.md"
+      ]
+    },
+    {
+      "id": "E05",
+      "sujet": "Dossiers : liste et recherche",
+      "responsable": "CTO / Équipe",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-equipe.md",
+        "contre-revue-simplicite-equipe-2026-09-17.md"
+      ]
+    },
+    {
+      "id": "E06",
+      "sujet": "Dossiers : cartes mobiles",
+      "responsable": "CTO / Équipe",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-equipe.md",
+        "contre-revue-simplicite-equipe-2026-09-17.md"
+      ]
+    },
+    {
+      "id": "E07",
+      "sujet": "Groupes, filtres, liste dense",
+      "responsable": "CTO / Équipe",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-equipe.md",
+        "contre-revue-simplicite-equipe-2026-09-17.md"
+      ]
+    },
+    {
+      "id": "E08",
+      "sujet": "Aperçu d’un dossier",
+      "responsable": "CTO / Équipe",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-equipe.md",
+        "contre-revue-simplicite-equipe-2026-09-17.md"
+      ]
+    },
+    {
+      "id": "E09",
+      "sujet": "Aperçu et tableau côte à côte",
+      "responsable": "CTO / Équipe",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-equipe.md",
+        "contre-revue-simplicite-equipe-2026-09-17.md"
+      ]
+    },
+    {
+      "id": "E10",
+      "sujet": "Conversations : liste et réponse",
+      "responsable": "CTO / Équipe",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-equipe.md",
+        "contre-revue-simplicite-equipe-2026-09-17.md"
+      ]
+    },
+    {
+      "id": "E11",
+      "sujet": "Conversations : brouillon",
+      "responsable": "CTO / Équipe",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-equipe.md",
+        "contre-revue-simplicite-equipe-2026-09-17.md"
+      ]
+    },
+    {
+      "id": "E12",
+      "sujet": "Message reçu sans dossier",
+      "responsable": "CTO / Équipe",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-equipe.md",
+        "contre-revue-simplicite-equipe-2026-09-17.md"
+      ]
+    },
+    {
+      "id": "E13",
+      "sujet": "Équipe : charge et tâches",
+      "responsable": "CTO / Équipe",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-equipe.md",
+        "contre-revue-simplicite-equipe-2026-09-17.md"
+      ]
+    },
+    {
+      "id": "E14",
+      "sujet": "Attribution, référent et relais",
+      "responsable": "CTO / Équipe",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-equipe.md",
+        "contre-revue-simplicite-equipe-2026-09-17.md"
+      ]
+    },
+    {
+      "id": "E15",
+      "sujet": "Départs : liste et planification",
+      "responsable": "CTO / Équipe",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-equipe.md",
+        "contre-revue-simplicite-equipe-2026-09-17.md"
+      ]
+    },
+    {
+      "id": "E16",
+      "sujet": "Chargement, reports et documents de départ",
+      "responsable": "CTO / Équipe",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-equipe.md",
+        "contre-revue-simplicite-equipe-2026-09-17.md"
+      ]
+    },
+    {
+      "id": "C01",
+      "sujet": "Connexion / première utilisation",
+      "responsable": "Client",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-client.md",
+        "contre-revue-simplicite-client-2026-09-17.md"
+      ]
+    },
+    {
+      "id": "C02",
+      "sujet": "Mot de passe oublié / lien expiré",
+      "responsable": "Client",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-client.md",
+        "contre-revue-simplicite-client-2026-09-17.md"
+      ]
+    },
+    {
+      "id": "C03",
+      "sujet": "Changement de mot de passe / session active",
+      "responsable": "Client",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-client.md",
+        "contre-revue-simplicite-client-2026-09-17.md"
+      ]
+    },
+    {
+      "id": "C04",
+      "sujet": "Présentation de première connexion",
+      "responsable": "Client",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-client.md",
+        "contre-revue-simplicite-client-2026-09-17.md"
+      ]
+    },
+    {
+      "id": "C05",
+      "sujet": "Accueil client / aucun dossier",
+      "responsable": "Client",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-client.md",
+        "contre-revue-simplicite-client-2026-09-17.md"
+      ]
+    },
+    {
+      "id": "C06",
+      "sujet": "Liste des expéditions",
+      "responsable": "Client",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-client.md",
+        "contre-revue-simplicite-client-2026-09-17.md"
+      ]
+    },
+    {
+      "id": "C07",
+      "sujet": "Historique et recherche",
+      "responsable": "Client",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-client.md",
+        "contre-revue-simplicite-client-2026-09-17.md"
+      ]
+    },
+    {
+      "id": "C08",
+      "sujet": "Accord, attente d’autres cartons, refus",
+      "responsable": "Client",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-client.md",
+        "contre-revue-simplicite-client-2026-09-17.md"
+      ]
+    },
+    {
+      "id": "C09",
+      "sujet": "Déposer des factures",
+      "responsable": "Client",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-client.md",
+        "contre-revue-simplicite-client-2026-09-17.md"
+      ]
+    },
+    {
+      "id": "C10",
+      "sujet": "Corriger une facture",
+      "responsable": "Client",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-client.md",
+        "contre-revue-simplicite-client-2026-09-17.md"
+      ]
+    },
+    {
+      "id": "C11",
+      "sujet": "Documents dans le profil",
+      "responsable": "Client",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-client.md",
+        "contre-revue-simplicite-client-2026-09-17.md"
+      ]
+    },
+    {
+      "id": "C12",
+      "sujet": "Notification reçue",
+      "responsable": "Client",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-client.md",
+        "contre-revue-simplicite-client-2026-09-17.md"
+      ]
+    },
+    {
+      "id": "C13",
+      "sujet": "Messages et brouillon",
+      "responsable": "Client",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-client.md",
+        "contre-revue-simplicite-client-2026-09-17.md"
+      ]
+    },
+    {
+      "id": "C14",
+      "sujet": "Devis et paiement particulier",
+      "responsable": "Client",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-client.md",
+        "contre-revue-simplicite-client-2026-09-17.md"
+      ]
+    },
+    {
+      "id": "C15",
+      "sujet": "Règlement professionnel",
+      "responsable": "Client",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-client.md",
+        "contre-revue-simplicite-client-2026-09-17.md"
+      ]
+    },
+    {
+      "id": "C16",
+      "sujet": "Transport et suivi sortant",
+      "responsable": "Client",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-client.md",
+        "contre-revue-simplicite-client-2026-09-17.md"
+      ]
+    },
+    {
+      "id": "C17",
+      "sujet": "Livraison et fin de parcours",
+      "responsable": "Client",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-client.md",
+        "contre-revue-simplicite-client-2026-09-17.md"
+      ]
+    },
+    {
+      "id": "C18",
+      "sujet": "Profil, aide et coordonnées",
+      "responsable": "Client",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-client.md",
+        "contre-revue-simplicite-client-2026-09-17.md"
+      ]
+    },
+    {
+      "id": "C19",
+      "sujet": "Liaison Telegram / compte déjà connecté",
+      "responsable": "Client",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-client.md",
+        "contre-revue-simplicite-client-2026-09-17.md"
+      ]
+    },
+    {
+      "id": "C20",
+      "sujet": "Notifications et navigation",
+      "responsable": "Client",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-client.md",
+        "contre-revue-simplicite-client-2026-09-17.md"
+      ]
+    },
+    {
+      "id": "C21",
+      "sujet": "Suivi public partagé",
+      "responsable": "Client",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-client.md",
+        "contre-revue-simplicite-client-2026-09-17.md"
+      ]
+    },
+    {
+      "id": "C22",
+      "sujet": "Lien public expiré / erreur réseau",
+      "responsable": "Client",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-client.md",
+        "contre-revue-simplicite-client-2026-09-17.md"
+      ]
+    },
+    {
+      "id": "A01",
+      "sujet": "Clients : liste et cartes",
+      "responsable": "Administration",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-admin.md"
+      ]
+    },
+    {
+      "id": "A02",
+      "sujet": "Import : fichier",
+      "responsable": "Administration",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-admin.md"
+      ]
+    },
+    {
+      "id": "A03",
+      "sujet": "Import : aperçu et doublons",
+      "responsable": "Administration",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-admin.md"
+      ]
+    },
+    {
+      "id": "A04",
+      "sujet": "Import : progression et bilan",
+      "responsable": "Administration",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-admin.md"
+      ]
+    },
+    {
+      "id": "A05",
+      "sujet": "Création particulier/pro",
+      "responsable": "Administration",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-admin.md"
+      ]
+    },
+    {
+      "id": "A06",
+      "sujet": "Après création : invitations",
+      "responsable": "Administration",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-admin.md"
+      ]
+    },
+    {
+      "id": "A07",
+      "sujet": "Fiche client : Synthèse",
+      "responsable": "Administration",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-admin.md"
+      ]
+    },
+    {
+      "id": "A08",
+      "sujet": "Fiche client : Coordonnées",
+      "responsable": "Administration",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-admin.md"
+      ]
+    },
+    {
+      "id": "A09",
+      "sujet": "Abonnement et administration",
+      "responsable": "Administration",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-admin.md"
+      ]
+    },
+    {
+      "id": "A10",
+      "sujet": "Supprimer un client",
+      "responsable": "Administration",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-admin.md"
+      ]
+    },
+    {
+      "id": "A11",
+      "sujet": "Pro : récapitulatif et Excel",
+      "responsable": "Administration",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-admin.md"
+      ]
+    },
+    {
+      "id": "A12",
+      "sujet": "Partage du suivi",
+      "responsable": "Administration",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-admin.md"
+      ]
+    },
+    {
+      "id": "A13",
+      "sujet": "Estimation particulier / pro",
+      "responsable": "Administration",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-admin.md"
+      ]
+    },
+    {
+      "id": "A14",
+      "sujet": "Estimation : copie, PDF, email",
+      "responsable": "Administration",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-admin.md"
+      ]
+    },
+    {
+      "id": "A15",
+      "sujet": "Paramètres : navigation",
+      "responsable": "Administration",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-admin.md"
+      ]
+    },
+    {
+      "id": "A16",
+      "sujet": "Tarifs par destination",
+      "responsable": "Administration",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-admin.md"
+      ]
+    },
+    {
+      "id": "A17",
+      "sujet": "Catégories, taxes et code douanier",
+      "responsable": "Administration",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-admin.md"
+      ]
+    },
+    {
+      "id": "A18",
+      "sujet": "Équipe et accès : permissions",
+      "responsable": "Administration",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-admin.md"
+      ]
+    },
+    {
+      "id": "A19",
+      "sujet": "Droits délégués / visibilité des paramètres",
+      "responsable": "Administration",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-admin.md"
+      ]
+    },
+    {
+      "id": "A20",
+      "sujet": "Créer, suspendre ou retirer un équipier",
+      "responsable": "Administration",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-admin.md"
+      ]
+    },
+    {
+      "id": "A21",
+      "sujet": "Telegram et canaux",
+      "responsable": "Administration",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-admin.md"
+      ]
+    },
+    {
+      "id": "A22",
+      "sujet": "Modèles de messages",
+      "responsable": "Administration",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-admin.md"
+      ]
+    },
+    {
+      "id": "A23",
+      "sujet": "Règles métier",
+      "responsable": "Administration",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-admin.md"
+      ]
+    },
+    {
+      "id": "A24",
+      "sujet": "Produits interdits",
+      "responsable": "Administration",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-admin.md"
+      ]
+    },
+    {
+      "id": "A25",
+      "sujet": "Exports de dossiers",
+      "responsable": "Administration",
+      "statut": "traité ; validation et limites consignées",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-admin.md"
+      ]
+    },
+    {
+      "id": "A26",
+      "sujet": "Statistiques / pilotage",
+      "responsable": "Administration",
+      "statut": "décision produit appliquée",
+      "preuves": [
+        "implementation-simplicite-2026-09-17-admin.md"
+      ]
+    }
+  ],
+  "validation": {
+    "javascript": 157,
+    "edge": 65,
+    "a11y_combinaisons": 32,
+    "sql_admin_suivi": 50,
+    "messages_reels_envoyes_en_recette": 0
+  }
+}

@@ -59,7 +59,7 @@ test('the reminder worker excludes archived dossiers even when their reminder da
  const response=await run(req({},{authorization:'Bearer scoped-cron-fixture'}));
  assert.equal(response.status,200);const result=await response.json();assert.equal(result.scanned,0);assert.equal(result.queued,0);
 });
-test('Reminder fallback queues every physical carton with its supplier, including cartons without tracking',async()=>{
+test('worker never creates a reminder even when historical activation and overdue milestones exist',async()=>{
  const client={id:'fixture-client',prenom:'Camille',nom:'Exemple',cp:'97400',type:'particulier',telegram_chat_id:'fixture-chat'};
  const colis={id:'fixture-colis',client_id:client.id,ref:'QA-CARTONS',archive:false,statut:'attente_feu_vert',nb_colis:3,
   demande_feu_vert_envoyee_at:new Date(Date.now()-4*86400000).toISOString(),
@@ -82,12 +82,7 @@ test('Reminder fallback queues every physical carton with its supplier, includin
  }};
  const run=await handler('relances-auto',{db,env:{RELANCES_CRON_SECRET:'scoped-cron-fixture'}});
  const response=await run(req({},{authorization:'Bearer scoped-cron-fixture'}));
- assert.equal(response.status,200);const result=await response.json();assert.equal(result.scanned,1);assert.equal(result.queued,1);assert.equal(queued.length,1);
- const message=queued[0];assert.equal(message.p_colis_id,colis.id);assert.equal(message.p_template,'relance_feu_vert');
- assert.match(message.p_text,/Bonjour Camille,/);
- assert.match(message.p_text,/Votre dossier QA-CARTONS contient 3 carton\(s\) :\n1\. Fournisseur A — SUIVI-A\n2\. Fournisseur B — Sans numéro de suivi\n3\. Sans numéro de suivi\n/);
- assert.doesNotMatch(message.p_text,/\{\{/);
- assert.equal(message.p_reply_markup.inline_keyboard[0][0].callback_data,`fv_oui_${colis.id}`);
+ assert.equal(response.status,200);const result=await response.json();assert.equal(result.scanned,1);assert.equal(result.queued,0);assert.equal(queued.length,0);assert.equal(result.remindersMode,'manual');
 });
 test('Telegram webhook fails closed when secret is absent or invalid',async()=>{
  assert.equal((await(await handler('telegram-webhook'))(req({update_id:1}))).status,503);

@@ -21,7 +21,7 @@ const output = process.env.PINTA_DOSSIER_SHELL_OUT || '/tmp/pinta-dossier-shell'
         await f.page.getByTestId('dossier-task-header').waitFor();
         assert.equal(await f.page.getByRole('region', { name: 'Mesures des cartons', exact: true }).count(), 0, 'Receipt context does not occupy the task page.');
         assert.equal(await f.page.getByRole('log', { name: 'Messages avec le client', exact: true }).count(), 0, 'Conversation is closed until explicitly requested.');
-        const contextButton = f.page.getByRole('button', { name: 'Contexte', exact: true });
+        const contextButton = f.page.getByRole('button', { name: /^Détails(?: du dossier)?$/, exact: true });
         await contextButton.click();
         const panel = f.page.getByRole('dialog', { name: 'Contexte du dossier', exact: true });
         await panel.waitFor();

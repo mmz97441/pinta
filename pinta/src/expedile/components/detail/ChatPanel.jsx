@@ -1,5 +1,6 @@
 import React, { Suspense, lazy, useState, useRef, useEffect } from 'react';
 import { Send, MessageCircle, ChevronDown, Check, CheckCheck, Clock, AlertCircle } from 'lucide-react';
+import usePersistentDraft from '../../hooks/usePersistentDraft';
 import { useApp } from '../../context/AppContext';
 import { deliverMessage } from '../../services/telegramApi';
 import { BRAND } from '../../constants';
@@ -111,9 +112,13 @@ export default function ChatPanel({ colis, client, embedded = false, active = tr
   const { sel: contextSel, selClient: contextClient, isStaff, auth, envMsg, setData, flash, ask, refreshColis, refreshWork, can, teamUsers=[], workActions=[] } = useApp();
   const sel = colis || contextSel;
   const selClient = client || contextClient;
-  const [drafts, setDrafts] = useState({});
-  const msgTxt = drafts[sel?.id] || '';
-  const setMsgTxt = value => setDrafts(previous => ({ ...previous, [sel.id]: value }));
+  const [msgTxt, setMsgTxt, draft] = usePersistentDraft(sel?.id ? `conversation:${sel.id}` : null, '');
+  const [sendAttempt, setSendAttempt, attemptDraft] = usePersistentDraft(sel?.id ? `conversation-send:${sel.id}` : null, null);
+  const [sendError, setSendError] = useState('');
+  const [sendResult, setSendResult] = useState('');
+  const sendGuard = useRef(false);
+  const currentDossier = useRef(sel?.id); currentDossier.current = sel?.id;
+  useEffect(() => { setSendError(''); setSendResult(''); }, [sel?.id]);
   const [sending,setSending] = useState(false);
   const [changingState,setChangingState] = useState(false);
   const hasMsg = sel?.messages?.length > 0;
@@ -141,13 +146,17 @@ export default function ChatPanel({ colis, client, embedded = false, active = tr
   if (!sel) return null;
 
   const handleSend = async () => {
-    if (!msgTxt.trim() || sending) return;
+    if (!msgTxt.trim() || sending || sendGuard.current) return;
     if (isStaff && !canHandle) return;
-    const txt = msgTxt; const id = sel.id; setSending(true);
-    try { await envMsg(id,txt,auth,selClient?.tel);setDrafts(previous => ({ ...previous, [id]: previous[id] === txt ? '' : previous[id] })); }
-    catch(error){flash({msg:error.message,type:'error'});}
-    finally {setSending(false);}
+    const txt = msgTxt; const id = sel.id;
+    const attempt = sendAttempt?.text === txt ? sendAttempt : { key: crypto.randomUUID(), text: txt, channel: isStaff && selClient?.telegramChatId ? 'telegram' : 'portal' };
+    setSendAttempt(attempt); sendGuard.current = true; setSending(true); setSendError(''); setSendResult('');
+    try { await envMsg(id,txt,auth,{ idempotencyKey: attempt.key, channel: attempt.channel }); draft.clear(); attemptDraft.clear(); if (currentDossier.current === id) setSendResult('Message enregistré. Son état d’envoi apparaît dans la conversation.'); }
+    catch(error){if (currentDossier.current === id) setSendError(error.message || 'Envoi impossible. Votre brouillon est conservé.');}
+    finally {sendGuard.current = false; setSending(false);}
   };
+  const clearMessageDraft = () => { draft.clear(); attemptDraft.clear(); setSendError(''); };
+  const retryNotice = sendAttempt && !sending ? <p role="status" className="mt-2 text-sm text-amber-800">{sendAttempt.text === msgTxt ? 'Une tentative d’envoi existe. Vérifiez son état dans la conversation ; réessayer reprend ce même message.' : 'Le texte a changé depuis une tentative d’envoi. Vérifiez la conversation avant d’envoyer ce nouveau message.'}</p> : null;
   const state=conversationState(sel);
   const conversationActions=workActions.filter(action=>action.colis_id===sel.id&&action.kind==='conversation');
   const conversationAction=conversationActions.find(action=>action.state!=='done') || conversationActions.toSorted((a,b)=>Date.parse(b.updated_at)-Date.parse(a.updated_at))[0];
@@ -198,7 +207,7 @@ export default function ChatPanel({ colis, client, embedded = false, active = tr
           <span className="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0" />
         )}
         <div
-          className={`max-w-[75%] px-3 py-2 rounded-2xl text-xs ${isS ? 'text-white' : isFacture ? 'bg-green-50 border border-green-200' : 'bg-gray-100'}`}
+          className={`max-w-[90%] sm:max-w-[80%] px-3 py-2 rounded-2xl text-sm ${isS ? 'text-white' : isFacture ? 'bg-green-50 border border-green-200' : 'bg-gray-100'}`}
           style={isS ? { backgroundColor: BRAND.navy } : {}}
         >
           <p className="text-xs mb-0.5">{m.auteur}</p>
@@ -248,11 +257,11 @@ export default function ChatPanel({ colis, client, embedded = false, active = tr
           if (unread === 0) return null;
           return <span className="ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-red-500 text-white">{unread}</span>;
         })()}</p>
-        <div className="mb-3 rounded-xl border border-gray-200 dark:border-gray-700 p-3 space-y-2">
+        <details className="mb-2 rounded-xl border border-gray-200 dark:border-gray-700 px-3 py-1 space-y-2"><summary className="min-h-11 cursor-pointer py-2 text-sm font-semibold">{conversationLabel(sel)} · Gérer le suivi</summary>
           <div className="flex flex-wrap justify-between items-center gap-2"><p className="text-sm font-semibold" role="status">{conversationLabel(sel)}</p><p className="text-xs text-gray-600 dark:text-gray-300">{state === 'termine' && !conversationAction ? 'Traitée' : `Conversation : ${staffName(conversationAction?.assignee_id, teamUsers)}`}</p></div>
           <details className="text-xs text-gray-600 dark:text-gray-300"><summary className="min-h-8 cursor-pointer py-2">Suivi du traitement et relances</summary><p>{state==='a_traiter' ? 'La demande reste à traiter, même après lecture. Les relances automatiques de ce client sont suspendues.' : state==='attente_client' ? 'Votre réponse a été apportée ; le prochain retour est attendu du client. Les pauses demandées restent respectées.' : 'Le traitement est terminé. Un nouveau message du client rouvrira la conversation.'}</p></details>
           {canHandle&&<div className="flex flex-wrap gap-2" aria-label="Traitement de la conversation">{Object.entries(CONVERSATION_STATES).map(([key,label])=><button key={key} type="button" disabled={changingState||sending||state===key} onClick={()=>changeState(key)} className="min-h-11 rounded-lg border border-gray-300 dark:border-gray-600 px-3 text-xs font-semibold disabled:opacity-50">{key==='termine'?'Marquer comme traité':key==='a_traiter'?'À traiter':label}</button>)}</div>}
-        </div>
+        </details>
         <div ref={scrollRef} role="log" aria-label="Messages avec le client" className={`space-y-1.5 mb-3 overflow-y-auto ${embedded ? 'min-h-24 flex-1' : 'max-h-64'}`}>
           {!hasMessages && (
             <p className="text-xs text-gray-400 italic text-center py-3">Aucun message</p>
@@ -261,12 +270,13 @@ export default function ChatPanel({ colis, client, embedded = false, active = tr
         </div>
         <label htmlFor={`staff-message-${sel.id}`} className="block text-xs font-semibold mb-1">Votre réponse au client</label>
         <div className="flex gap-2">
-          <input
+          <textarea
+            rows={3}
             id={`staff-message-${sel.id}`}
             value={msgTxt}
-            disabled={!canHandle}
+            disabled={!canHandle || sending}
             onChange={(e) => setMsgTxt(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') handleSend(); }}
+            onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); handleSend(); } }}
             placeholder={selClient?.telegramChatId ? 'Écrire au client via Telegram…' : 'Écrire dans l’espace client…'}
             className="flex-1 min-w-0 min-h-[44px] px-3 py-2 rounded-xl border text-sm"
           />
@@ -276,10 +286,14 @@ export default function ChatPanel({ colis, client, embedded = false, active = tr
             className="px-3 py-2 text-white rounded-xl text-sm font-bold disabled:opacity-30"
             style={{ backgroundColor: BRAND.navy }}
           >
-            <Send size={16} />
+            <Send size={16} className="inline mr-1" />{sending ? 'Envoi…' : selClient?.telegramChatId ? 'Envoyer sur Telegram' : 'Envoyer dans l’espace client'}
           </button>
         </div>
-        <p className="text-xs text-gray-600 dark:text-gray-300 mt-2">
+        {msgTxt && <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-sm text-slate-600"><span>{draft.storageAvailable ? (sendAttempt ? 'Saisie conservée dans cet onglet · tentative à vérifier' : 'Brouillon conservé dans cet onglet · non envoyé') : 'Brouillon conservé jusqu’au rechargement de cette page'}</span><button disabled={sending} onClick={() => ask('Effacer ce brouillon ?', 'La saisie sera retirée de cet onglet. Cela ne retire pas un message déjà enregistré : vérifiez la conversation si une tentative d’envoi existe.', clearMessageDraft, { danger: true, okLabel: 'Effacer le brouillon' })} className="min-h-11 underline">Effacer le brouillon</button></div>}
+          {retryNotice}
+          {sendError && <p role="alert" className="mt-2 text-sm text-red-700">{sendError}</p>}
+          {sendResult && <p role="status" className="mt-2 text-sm text-emerald-700">{sendResult}</p>}
+        <p className="text-sm text-gray-600 dark:text-gray-300 mt-2">
           {selClient?.telegramChatId
             ? 'Envoi via Telegram. Envoyer une réponse ne clôture pas automatiquement son traitement.'
             : 'Message dans l’espace client. L’invitation Telegram se trouve dans sa fiche client.'}
@@ -312,17 +326,19 @@ export default function ChatPanel({ colis, client, embedded = false, active = tr
         <div className={embedded ? 'min-w-0' : 'px-4 pb-4 anim-slide-down'}>
           <p className="text-xs text-gray-600 dark:text-gray-300 mb-3">{state==='a_traiter'?'Votre message attend une réponse de notre équipe.':state==='attente_client'?'Notre équipe attend votre retour.':'Vous pouvez nous écrire pour toute question sur ce dossier.'}</p>
           {hasMessages && (
-            <div ref={scrollRef} className="space-y-1.5 mb-3 max-h-40 overflow-y-auto">
+            <div ref={scrollRef} className="space-y-1.5 mb-3 max-h-80 overflow-y-auto">
               {(sel.messages || []).map(renderMessage)}
             </div>
           )}
           <label htmlFor={`client-message-${sel.id}`} className="block text-xs font-semibold mb-1">Votre message à l’équipe</label>
           <div className="flex gap-2">
-            <input
+            <textarea
+              rows={3}
+              disabled={sending}
               id={`client-message-${sel.id}`}
               value={msgTxt}
               onChange={(e) => setMsgTxt(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') handleSend(); }}
+              onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); handleSend(); } }}
               placeholder="Poser une question..."
               className="flex-1 min-w-0 min-h-[44px] px-3 py-2 rounded-xl border text-sm"
             />
@@ -332,9 +348,13 @@ export default function ChatPanel({ colis, client, embedded = false, active = tr
               className="px-3 py-2 text-white rounded-xl text-sm font-bold disabled:opacity-30"
               style={{ backgroundColor: BRAND.navy }}
             >
-              <Send size={16} />
+              <Send size={16} className="inline mr-1" />{sending ? 'Envoi…' : 'Envoyer'}
             </button>
           </div>
+          {msgTxt && <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-sm text-slate-600"><span>{draft.storageAvailable ? (sendAttempt ? 'Saisie conservée dans cet onglet · tentative à vérifier' : 'Brouillon conservé dans cet onglet · non envoyé') : 'Brouillon conservé jusqu’au rechargement de cette page'}</span><button disabled={sending} onClick={() => ask('Effacer ce brouillon ?', 'La saisie sera retirée de cet onglet. Cela ne retire pas un message déjà enregistré : vérifiez la conversation si une tentative d’envoi existe.', clearMessageDraft, { danger: true, okLabel: 'Effacer le brouillon' })} className="min-h-11 underline">Effacer le brouillon</button></div>}
+          {retryNotice}
+          {sendError && <p role="alert" className="mt-2 text-sm text-red-700">{sendError}</p>}
+          {sendResult && <p role="status" className="mt-2 text-sm text-emerald-700">{sendResult}</p>}
         </div>
       )}
     </div>

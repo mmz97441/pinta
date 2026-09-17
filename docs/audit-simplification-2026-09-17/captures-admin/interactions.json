@@ -1,0 +1,229 @@
+[
+  {
+    "name": "import-upload-desktop",
+    "errors": [],
+    "networkDenied": []
+  },
+  {
+    "name": "import-preview-desktop",
+    "errors": [],
+    "networkDenied": []
+  },
+  {
+    "name": "import-preview-mobile",
+    "errors": [],
+    "networkDenied": []
+  },
+  {
+    "name": "client-cancel-keeps-draft",
+    "nameAfterCancel": "Brouillon annulé",
+    "writeRequests": 0,
+    "errors": [],
+    "networkDenied": []
+  },
+  {
+    "name": "client-create-invalid-email",
+    "post": [
+      {
+        "nom": "Essai invalide",
+        "prenom": null,
+        "genre": null,
+        "date_naissance": null,
+        "ville": null,
+        "adresse": null,
+        "adresse_ligne1": null,
+        "adresse_ligne2": null,
+        "commune": null,
+        "infos_livraison": null,
+        "cp": "97400",
+        "tel": null,
+        "tel_fixe": null,
+        "email": "ceci-n-est-pas-un-email",
+        "canal": "email",
+        "type": "particulier",
+        "mode_paiement": "colis",
+        "points": 0,
+        "onboarded": false,
+        "notes": null,
+        "telegram_username": null,
+        "abonnement": "freemium",
+        "abonnement_debut": null,
+        "abonnement_fin": null,
+        "raison_sociale": null,
+        "siret": null,
+        "interlocuteur": null,
+        "ref": "CLI-XHMEK"
+      }
+    ],
+    "errors": [],
+    "networkDenied": []
+  },
+  {
+    "name": "client-pro-billing",
+    "configuredPayment": "30j",
+    "errors": [],
+    "networkDenied": []
+  },
+  {
+    "name": "client-deletion-no-confirm",
+    "dialogs": [],
+    "deleteRequests": 1,
+    "errors": [],
+    "networkDenied": []
+  },
+  {
+    "name": "estimate-filled-desktop",
+    "errors": [],
+    "networkDenied": []
+  },
+  {
+    "name": "estimate-filled-mobile",
+    "errors": [],
+    "networkDenied": []
+  },
+  {
+    "name": "rates-partial-save",
+    "patches": [
+      {
+        "method": "PATCH",
+        "path": "/rest/v1/tarifs",
+        "input": {
+          "base": 40,
+          "par_kg": 5
+        }
+      }
+    ],
+    "currentFixtures": [
+      {
+        "id": "rate-974",
+        "destination_code": "974",
+        "base": 25,
+        "par_kg": 5,
+        "actif": true
+      },
+      {
+        "id": "rate-976",
+        "destination_code": "976",
+        "base": 25,
+        "par_kg": 5,
+        "actif": true
+      },
+      {
+        "id": "rate-971",
+        "destination_code": "971",
+        "base": 40,
+        "par_kg": 5,
+        "actif": true,
+        "updated_at": "2026-09-17T03:49:46.415Z"
+      },
+      {
+        "id": "rate-972",
+        "destination_code": "972",
+        "base": 25,
+        "par_kg": 5,
+        "actif": true
+      }
+    ],
+    "errors": [],
+    "networkDenied": []
+  },
+  {
+    "name": "category-failed-save",
+    "destination": "974",
+    "visibleRate": "17",
+    "storedRate": 10,
+    "errors": [],
+    "networkDenied": []
+  },
+  {
+    "name": "template-tab-loses-draft",
+    "draftSurvived": false,
+    "errors": [],
+    "networkDenied": []
+  },
+  {
+    "name": "template-overlap-mobile",
+    "buttons": [
+      {
+        "text": "Réceptionner",
+        "rect": {
+          "x": 151.296875,
+          "y": 1.5,
+          "width": 118.703125,
+          "height": 44,
+          "top": 1.5,
+          "right": 270,
+          "bottom": 45.5,
+          "left": 151.296875
+        }
+      },
+      {
+        "text": "📦 Réception",
+        "rect": {
+          "x": 37,
+          "y": 317,
+          "width": 27.0625,
+          "height": 46,
+          "top": 317,
+          "right": 64.0625,
+          "bottom": 363,
+          "left": 37
+        }
+      },
+      {
+        "text": "📄 Facture manquante",
+        "rect": {
+          "x": 64.0625,
+          "y": 319,
+          "width": 24.078125,
+          "height": 44,
+          "top": 319,
+          "right": 88.140625,
+          "bottom": 363,
+          "left": 64.0625
+        }
+      },
+      {
+        "text": "🟢 Demande feu vert",
+        "rect": {
+          "x": 88.140625,
+          "y": 319,
+          "width": 24.078125,
+          "height": 44,
+          "top": 319,
+          "right": 112.21875,
+          "bottom": 363,
+          "left": 88.140625
+        }
+      },
+      {
+        "text": "✅ Feu vert confirmé",
+        "rect": {
+          "x": 112.21875,
+          "y": 319,
+          "width": 24.078125,
+          "height": 44,
+          "top": 319,
+          "right": 136.296875,
+          "bottom": 363,
+          "left": 112.21875
+        }
+      }
+    ],
+    "errors": [],
+    "networkDenied": []
+  },
+  {
+    "name": "delegated-admin-missing-tabs",
+    "granted": {
+      "staff_id": "66666666-6666-4666-8666-666666666666",
+      "perm_admin_parametres": true,
+      "perm_admin_utilisateurs": true,
+      "perm_finances_modifier_tarifs": true,
+      "perm_admin_templates": true
+    },
+    "settingsButtons": [],
+    "errors": [],
+    "networkDenied": []
+  }
+]

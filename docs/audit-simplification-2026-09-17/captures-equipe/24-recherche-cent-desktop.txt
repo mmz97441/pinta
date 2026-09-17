@@ -1,0 +1,51 @@
+EXPÉDÎLE
+Réceptionner des cartons
+Mon travail
+Dossiers d’expédition
+Conversations
+Équipe
+Départs
+Clients
+Estimation
+Paramètres
+Réduire
+C
+
+Camille
+
+Direction
+
+File de travail
+Tous les dossiers
+Répondre aux clients
+Préparer les dossiers
+Vérifier les factures
+Attentes demandées
+Accord attendu
+Prêts à chiffrer
+Échéances dépassées
+Attentes à reprendre
+Filtres avancés
+1 dossier(s) affiché(s)
+Inclure les archives
+Export
+Ordre de traitement
+Par statut
+Par envoi
+Tri : Priorité
+	ACTION / ÉTAPE	Client ↕	EXP ↕	CARTONS REÇUS	RÉFÉRENT	Date utile ↕	
+
+Ordre de traitement
+1 colis
+
+	
+
+Vérifier les achats avant le départ
+
+En attente d'accord client
+	Camille Exemple🇷🇪NORD	EXP-VOLUME-099C-99	2	Martin	
+17 sept.
+
+Échéance promise
+
+	

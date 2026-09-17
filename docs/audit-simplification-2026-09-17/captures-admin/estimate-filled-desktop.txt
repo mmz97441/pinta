@@ -1,0 +1,66 @@
+EXPÉDÎLE
+Réceptionner des cartons
+Mon travail
+Dossiers d’expédition
+Conversations
+Équipe
+Départs
+Clients
+Estimation
+Paramètres
+Réduire
+C
+
+Camille
+
+Direction
+
+AVANT RÉCEPTION
+
+Estimation rapide
+
+Le même calcul que le devis définitif, à partir des informations déclarées.
+
+Particulier
+Professionnel
+Destination
+🇬🇵 Guadeloupe
+🇲🇶 Martinique
+🇷🇪 La Réunion
+🇾🇹 Mayotte
+Longueur (cm)
+Largeur (cm)
+Hauteur (cm)
+Poids (kg)
+Valeur de la marchandise (€)
+Catégorie de marchandise
+Choisir une catégorie
+Divers
+
+Pour des achats de plusieurs catégories, établissez le devis détaillé dans un dossier client.
+
+Destinataire (pour partager)
+
+Nom
+Prénom
+Email
+Votre estimation
+
+73.38 €
+
+Transport
+49.00 €
+Octroi de mer
+14.90 €
+Octroi de mer régional
+3.73 €
+TVA (8.5 %)
+5.75 €
+
+Poids facturable : 4.80 kg. Taxes calculées sur la catégorie sélectionnée.
+
+Estimation indicative, à confirmer après réception et vérification. Les frais supplémentaires ne sont ajoutés que s’ils sont convenus et renseignés.
+
+Télécharger l’estimation
+Copier le texte
+Préparer l’email

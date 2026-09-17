@@ -1,0 +1,100 @@
+Mon travail
+Dossiers
+Clients
+Plus
+EXPÉDÎLE
+Réceptionner
+EXP-TEST-001
+Factures
+
+Exemple Camille · Réunion
+
+Contexte
+Précédent
+Tâche du dossier
+Réception
+Accord client
+Préparation
+Factures
+Devis
+Paiement
+Expédition
+Livraison
+Suivant
+Vérifier les factures
+3
+
+2 à vérifier · 1 validée(s)
+
+Ajouter une facture
+Facture à vérifier
+1. achat-verifie.pdf · Validée
+2. scelleuse.pdf · À vérifier
+3. autre-achat.pdf · À vérifier
+Retirer cette facture en double
+Demander une facture au client
+
+1 article(s) saisi(s) manuellement · 12.00 € HT restent inclus dans le devis, en plus des articles des factures. Vérifiez s’il s’agit d’achats supplémentaires ou de doublons.
+
+Vérifier les articles manuels
+Document
+Articles et vérification
+Vérifier la facture 2 sur 3
+
+scelleuse.pdf · À vérifier
+
+Remplacer le document
+Reprendre l’analyse
+
+Propositions de l’analyse : vérifiez les articles et leurs catégories.
+
+Saisir les articles manuellement
+Montants de la facture
+
+Utilisez les montants HT imprimés, sans recalculer la TVA. Si le HT n’est pas indiqué, demandez une précision au client.
+
+Vendeur
+Total HT de la facture (€)
+Articles (1)
+Total : 16.64 € HT
+Article 1
+Description
+Quantité
+Prix unitaire HT (€)
+Catégorie
+Choisir une catégorie
+Divers
+
+Choisissez une catégorie pour cet article.
+
+Retirer l’article
+Ajouter un article à cette facture
+
+Facture 2 / 3 · scelleuse.pdf
+
+Avant de valider
+
+Article 1 : choisissez une catégorie.
+Valider et passer à la suivanteEnregistrer le brouillon
+
+La validation enregistre les articles de cette facture dans le devis. Aucun message n’est envoyé au client.
+
+Demander une correction au client
+Articles saisis manuellement · inclus dans le devis
+
+Vérifiez ces lignes : elles s’ajoutent aux articles des factures.
+
+Article saisi avant réception de la facture
+
+1 × 12.00 € HT
+
+Catégorie
+Catégorie à vérifier
+Divers
+Ajouter un article sans facture source
+Retour à ma liste
+
+Préparer les cartons · EXP-TEST-001
+
+Tâche suivante
+Corrections

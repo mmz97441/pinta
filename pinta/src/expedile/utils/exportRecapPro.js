@@ -1,122 +1,60 @@
 import * as XLSX from 'xlsx';
-import { getDestByCP } from '../constants';
+import { getDestByCP } from '../constants/index.js';
+import { excludedInvoiceIds } from '../domain/invoiceDocuments.js';
+import { measureShipment, roundMoney } from '../domain/quote.js';
+import { quotePresentation } from '../domain/clientJourney.js';
 
-/**
- * Generate a monthly recap Excel for a pro client.
- * Shows all colis delivered/paid in a given month with full cost breakdown.
- */
-export function exportRecapProExcel(client, colis, month, year) {
-  // Filter colis for this client, paid or delivered in the given month
-  const filtered = colis.filter((c) => {
-    if (c.clientId !== client.id) return false;
-    if (!['paye', 'expedie', 'transit', 'dedouanement', 'arrive', 'livraison', 'livre'].includes(c.statut)) return false;
-    // Check if paiement date or expedition date is in the target month
-    const date = c.paiementDate || c.dateReception;
-    if (!date) return false;
-    const d = new Date(date);
-    return d.getMonth() === month && d.getFullYear() === year;
+export const CLIENT_PAYMENT_LABELS = { colis: 'À chaque expédition', compte: 'Paiement en compte', '30j': 'Paiement à 30 jours', '30_jours': 'Paiement à 30 jours', fin_mois: 'Paiement en fin de mois', fin_de_mois: 'Paiement en fin de mois', virement: 'Virement bancaire', especes: 'Espèces' };
+export const clientPaymentLabel = client => CLIENT_PAYMENT_LABELS[client.modePaiement || client.methodePaiement] || 'Modalité à préciser';
+export function monthlyProDossiers(client, dossiers, month, year) {
+  return dossiers.filter(dossier => {
+    const date = new Date(dossier.paiementDate || dossier.dateReception);
+    return dossier.clientId === client.id && ['paye','expedie','transit','dedouanement','arrive','livraison','livre'].includes(dossier.statut) && date.getMonth() === month && date.getFullYear() === year;
   });
-
-  if (filtered.length === 0) return 0;
-
-  const dest = getDestByCP(client.cp);
-
-  // Sheet 1: Recap par colis
-  const recapRows = filtered.map((c) => ({
-    'Référence': c.ref,
-    'Description': c.desc || '',
-    'Date réception': c.dateReception ? new Date(c.dateReception).toLocaleDateString('fr-FR') : '',
-    'Date paiement': c.paiementDate ? new Date(c.paiementDate).toLocaleDateString('fr-FR') : '',
-    'Nb cartons': c.trackings?.filter(t => t).length || 1,
-    'Poids fact. (kg)': c.poidsFact || c.finP || c.poids || '',
-    'Transport (€)': c.devisTransport || 0,
-    'OM (€)': c.devisOM || 0,
-    'OMR (€)': c.devisOMR || 0,
-    'TVA (€)': c.devisTVA || 0,
-    'Frais divers (€)': (c.fraisDivers || []).reduce((s, f) => s + (f.montant || 0), 0),
-    'Total TTC (€)': c.devisTotal || 0,
-  }));
-
-  // Totals row
-  const totals = {
-    'Référence': 'TOTAL',
-    'Description': `${filtered.length} colis`,
-    'Transport (€)': filtered.reduce((s, c) => s + (c.devisTransport || 0), 0),
-    'OM (€)': filtered.reduce((s, c) => s + (c.devisOM || 0), 0),
-    'OMR (€)': filtered.reduce((s, c) => s + (c.devisOMR || 0), 0),
-    'TVA (€)': filtered.reduce((s, c) => s + (c.devisTVA || 0), 0),
-    'Frais divers (€)': filtered.reduce((s, c) => s + (c.fraisDivers || []).reduce((s2, f) => s2 + (f.montant || 0), 0), 0),
-    'Total TTC (€)': filtered.reduce((s, c) => s + (c.devisTotal || 0), 0),
-  };
-  recapRows.push({});
-  recapRows.push(totals);
-
-  // Sheet 2: Cout de revient par article (for resellers)
-  const coutRevientRows = [];
-  filtered.forEach((c) => {
-    (c.lignes || []).forEach((l) => {
-      const prixAchat = (l.qte || 1) * (l.prix || 0);
-      // Proportion of transport/taxes for this line vs total value
-      const totalValeur = (c.lignes || []).reduce((s, li) => s + (li.qte || 1) * (li.prix || 0), 0);
-      const ratio = totalValeur > 0 ? prixAchat / totalValeur : 0;
-      const transportPart = (c.devisTransport || 0) * ratio;
-      const taxesPart = ((c.devisOM || 0) + (c.devisOMR || 0)) * ratio;
-      const tvaPart = (c.devisTVA || 0) * ratio;
-      const fraisPart = (c.fraisDivers || []).reduce((s, f) => s + (f.montant || 0), 0) * ratio;
-      const coutTotal = prixAchat + transportPart + taxesPart + tvaPart + fraisPart;
-
-      coutRevientRows.push({
-        'Réf. colis': c.ref,
-        'Article': l.desc || '',
-        'Qté': l.qte || 1,
-        'Prix achat unitaire (€)': l.prix || 0,
-        'Prix achat total (€)': prixAchat,
-        'Transport prorata (€)': Math.round(transportPart * 100) / 100,
-        'Taxes prorata (€)': Math.round(taxesPart * 100) / 100,
-        'TVA prorata (€)': Math.round(tvaPart * 100) / 100,
-        'Frais prorata (€)': Math.round(fraisPart * 100) / 100,
-        'COÛT DE REVIENT (€)': Math.round(coutTotal * 100) / 100,
-      });
-    });
+}
+// The same saved quote presentation as the client and PDF. Legacy multi-package
+// weights are recomputed only when no saved billable weight exists.
+export function proRecapDossier(dossier) {
+  const snapshot = dossier.devisSnapshot || dossier.quoteSnapshot;
+  const saved = quotePresentation(dossier).colis;
+  const boxes = saved.finalPackages?.length ? saved.finalPackages : [{ dimL:saved.finL,dimW:saved.finW,dimH:saved.finH,poids:saved.finP }];
+  const excluded = excludedInvoiceIds(dossier.factures);
+  const lines = snapshot?.inputs?.lines?.length ? snapshot.inputs.lines.map(line => ({ desc:line.description,qte:line.quantity,prix:line.unitPrice }))
+    : (dossier.lignes || []).filter(line => !excluded.has(line.factureId || line.facture_id));
+  const weight = Number(saved.poidsFact) > 0 ? Number(saved.poidsFact) : measureShipment(boxes, snapshot?.inputs?.volumetricDivisor || 5000)?.billableWeight;
+  return { ...saved, lines, packageCount:boxes.every(box => Number(box.poids)>0) ? boxes.length : null, billableWeight:weight ?? null, fees:(saved.fraisDivers || []).reduce((sum,fee)=>sum+Number(fee.montant||0),0) };
+}
+function allocate(amount, lines) {
+  const total = lines.reduce((sum,line)=>sum+Number(line.qte||0)*Number(line.prix||0),0);
+  let allocated=0;
+  return lines.map((line,index)=>{
+    const cents = index===lines.length-1 ? Math.round(Number(amount||0)*100)-allocated : total>0 ? Math.round(Number(amount||0)*100*Number(line.qte||0)*Number(line.prix||0)/total) : 0;
+    allocated+=cents; return cents/100;
   });
-
-  // Sheet 3: Resume facturation
-  const MOIS = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
-  const resumeRows = [
-    { 'Champ': 'Client', 'Valeur': client.nom + (client.prenom ? ' ' + client.prenom : '') },
-    { 'Champ': 'Type', 'Valeur': client.type || 'pro' },
-    { 'Champ': 'Destination', 'Valeur': dest ? `${dest.flag} ${dest.nom}` : client.cp },
-    { 'Champ': 'Période', 'Valeur': `${MOIS[month]} ${year}` },
-    { 'Champ': 'Nombre de colis', 'Valeur': filtered.length },
-    { 'Champ': 'Total Transport', 'Valeur': totals['Transport (€)'].toFixed(2) + ' €' },
-    { 'Champ': 'Total Taxes (OM+OMR)', 'Valeur': (totals['OM (€)'] + totals['OMR (€)']).toFixed(2) + ' €' },
-    { 'Champ': 'Total TVA', 'Valeur': totals['TVA (€)'].toFixed(2) + ' €' },
-    { 'Champ': 'Total Frais divers', 'Valeur': totals['Frais divers (€)'].toFixed(2) + ' €' },
-    { 'Champ': 'TOTAL TTC', 'Valeur': totals['Total TTC (€)'].toFixed(2) + ' €' },
-    { 'Champ': 'Méthode paiement', 'Valeur': client.methodePaiement || 'fin_de_mois' },
-  ];
-
-  const wb = XLSX.utils.book_new();
-
-  // Sheet 1
-  const ws1 = XLSX.utils.json_to_sheet(recapRows);
-  ws1['!cols'] = Object.keys(recapRows[0] || {}).map(k => ({ wch: Math.max(k.length, 12) + 2 }));
-  XLSX.utils.book_append_sheet(wb, ws1, 'Récap colis');
-
-  // Sheet 2 (only if there are lines)
-  if (coutRevientRows.length > 0) {
-    const ws2 = XLSX.utils.json_to_sheet(coutRevientRows);
-    ws2['!cols'] = Object.keys(coutRevientRows[0] || {}).map(k => ({ wch: Math.max(k.length, 12) + 2 }));
-    XLSX.utils.book_append_sheet(wb, ws2, 'Coût de revient');
+}
+export function buildProRecapWorkbook(client,dossiers,month,year) {
+  const filtered=monthlyProDossiers(client,dossiers,month,year).map(proRecapDossier);
+  if(!filtered.length) return null;
+  const money = value => new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR'}).format(Number(value||0));
+  const fields=[['Transport (€)','devisTransport'],['OM (€)','devisOM'],['OMR (€)','devisOMR'],['TVA (€)','devisTVA'],['Frais divers (€)','fees'],['Total TTC (€)','devisTotal']];
+  const recap=filtered.map(c=>({ 'Référence':c.ref,'Description':c.desc||'','Date réception':c.dateReception?new Date(c.dateReception).toLocaleDateString('fr-FR'):'','Date paiement':c.paiementDate?new Date(c.paiementDate).toLocaleDateString('fr-FR'):'','Colis préparés':c.packageCount??'Non renseigné','Poids fact. (kg)':c.billableWeight==null?'Non renseigné':roundMoney(c.billableWeight),...Object.fromEntries(fields.map(([label,key])=>[label,Number(c[key]||0)])) }));
+  const totals={'Référence':'TOTAL','Description':`${filtered.length} expédition(s)`,...Object.fromEntries(fields.map(([label,key])=>[label,roundMoney(filtered.reduce((sum,c)=>sum+Number(c[key]||0),0))]))};
+  const articles=filtered.flatMap(c=>{
+    const parts={transport:allocate(c.devisTransport,c.lines),taxes:allocate(Number(c.devisOM||0)+Number(c.devisOMR||0),c.lines),tva:allocate(c.devisTVA,c.lines),fees:allocate(c.fees,c.lines)};
+    return c.lines.map((line,i)=>({'Réf. expédition':c.ref,'Article':line.desc,'Qté':line.qte,'Prix achat unitaire (€)':Number(line.prix),'Prix achat total (€)':roundMoney(Number(line.qte)*Number(line.prix)),'Transport prorata (€)':parts.transport[i],'Taxes prorata (€)':parts.taxes[i],'TVA prorata (€)':parts.tva[i],'Frais prorata (€)':parts.fees[i],'COÛT DE REVIENT (€)':roundMoney(Number(line.qte)*Number(line.prix)+parts.transport[i]+parts.taxes[i]+parts.tva[i]+parts.fees[i])}));
+  });
+  const dest=getDestByCP(client.cp);
+  const period=new Date(year,month,1).toLocaleDateString('fr-FR',{month:'long',year:'numeric'});
+  const summary=[['Client',client.nomFamille ? [client.prenom,client.nomFamille].filter(Boolean).join(' ') : client.nom],['Destination',dest.nom],['Période',period],['Règle de période','Date de paiement ; date de réception si aucun paiement daté'],['Nombre d’expéditions',filtered.length],['Méthode de paiement',clientPaymentLabel(client)],...fields.map(([label])=>[label,money(totals[label])])].map(([Champ,Valeur])=>({Champ,Valeur}));
+  const workbook=XLSX.utils.book_new();
+  for(const [name,rows] of [['Récap colis',[...recap,{},totals]],['Coût de revient',articles],['Résumé facturation',summary]]){
+    if(!rows.length)continue;
+    const sheet=XLSX.utils.json_to_sheet(rows);sheet['!cols']=Object.keys(rows[0]).map(key=>({wch:Math.max(key.length,18)+2}));XLSX.utils.book_append_sheet(workbook,sheet,name);
   }
-
-  // Sheet 3
-  const ws3 = XLSX.utils.json_to_sheet(resumeRows);
-  ws3['!cols'] = [{ wch: 25 }, { wch: 30 }];
-  XLSX.utils.book_append_sheet(wb, ws3, 'Résumé facturation');
-
-  const clientName = (client.nom || 'client').replace(/[^a-zA-Z0-9]/g, '_');
-  const filename = `recap-pro-${clientName}-${MOIS[month]}-${year}.xlsx`;
-  XLSX.writeFile(wb, filename);
-  return filtered.length;
+  return {workbook,count:filtered.length};
+}
+export function exportRecapProExcel(client,dossiers,month,year) {
+  const result=buildProRecapWorkbook(client,dossiers,month,year);if(!result)return 0;
+  XLSX.writeFile(result.workbook,`recap-pro-${(client.nomFamille||client.nom||'client').replace(/[^a-zA-Z0-9]/g,'_')}-${year}-${String(month+1).padStart(2,'0')}.xlsx`);
+  return result.count;
 }

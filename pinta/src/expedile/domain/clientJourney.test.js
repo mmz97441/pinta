@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { cartonManifest, clientJourney, quotePresentation } from './clientJourney.js';
+import { cartonManifest, clientJourney, quotePresentation, publicJourney, outgoingTracking, latestLogisticsEvent } from './clientJourney.js';
 
 test('consent counts received cartons even with missing or duplicate tracking references', () => {
   assert.deepEqual(cartonManifest({ id: 'p', ref: 'EXP', nbColis: 3, trackings: [' ONE ', '', 'ONE'], updatedAt: 'version' }), { id: 'p', ref: 'EXP', count: 3, trackings: ['ONE'], updatedAt: 'version' });
@@ -50,4 +50,27 @@ test('a corrected rejected invoice does not ask the client to upload the old doc
   assert.equal(clientWorkState(parcel).section, 'team');
   parcel.factures[1].rejetMotif = 'Page absente';
   assert.equal(clientWorkState(parcel).section, 'todo');
+});
+
+
+test('public readers are never instructed to authorize preparation or make a private payment', () => {
+  const payment = publicJourney({ statut: 'attente_paiement', quoteNeedsReview: false });
+  assert.equal(payment.label, 'Règlement attendu du client');
+  assert.doesNotMatch(payment.next + payment.actor, /À vous|Payer|Autoriser/);
+  assert.equal(publicJourney({ statut: 'attente_feu_vert' }).label, 'Accord du client attendu');
+  assert.match(publicJourney({ statut: 'attente_feu_vert', attenteClientDate: '2026-09-10' }).next, /accord du client/);
+});
+
+test('outgoing tracking never substitutes a supplier reception number', () => {
+  const parcel = { envoiId: 'departure', trackings: ['INBOUND-1', 'INBOUND-2'] };
+  assert.equal(outgoingTracking(parcel), '');
+  assert.equal(outgoingTracking(parcel, [{id:'other', trackingPrincipal:'OTHER'}]), '');
+  assert.equal(outgoingTracking(parcel, [{id:'departure', trackingPrincipal:'OUTBOUND'}]), 'OUTBOUND');
+  assert.equal(outgoingTracking({...parcel, outgoingTracking:'SECURE-PROJECTION'}), 'SECURE-PROJECTION');
+});
+
+test('payment dates do not imply a logistics update or delivery commitment', () => {
+  const parcel = { statut:'transit', dateReception:'2026-09-01', paiementDate:'2026-09-15', updatedAt:'2026-09-17' };
+  assert.deepEqual(latestLogisticsEvent(parcel), { label:'Réception enregistrée', date:'2026-09-01' });
+  assert.equal(latestLogisticsEvent({...parcel, dateReception:'invalid'}), null);
 });

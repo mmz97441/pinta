@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as XLSX from 'xlsx';
-import { parseClientFile } from '../src/expedile/utils/importClients.js';
+import { parseClientFile, detectDuplicates } from '../src/expedile/utils/importClients.js';
 
 const csv = 'Nom;Prénom;Email;Téléphone;Code postal;Date naissance\nLéon;Camille;camille+colis@example.test;0262123456;97400;01/02/1990';
 const makeFile = (content, name = 'clients.csv', type = 'text/csv') => new File([content], name, { type });
@@ -53,4 +53,15 @@ test('XLSX and XLS workbook imports keep their binary parsing', async () => {
 test('Importer rejects unsupported MIME and oversized files before parsing', async () => {
   await assert.rejects(parseClientFile(makeFile(csv, 'clients.pdf', 'application/pdf')), /Format non supporté/);
   await assert.rejects(parseClientFile({ size: 10 * 1024 * 1024 + 1 }), /trop volumineux/);
+});
+
+
+test('Manual mapping restores unrecognised headers and rejects invalid email before import', async () => {
+ const file=makeFile('Customer;Contact\nCamille;camille@example.test\nIncorrect;invalid');
+ const parsed=await parseClientFile(file,{Customer:'nom',Contact:'email'});
+ assert.equal(parsed.clients.length,1);assert.equal(parsed.clients[0]._sourceRow,2);assert.match(parsed.errors[0],/email invalide/);
+});
+test('Importer detects duplicate emails within the same file without creating anything',()=>{
+ const result=detectDuplicates([{nom:'A',email:'same@example.test'},{nom:'B',email:'SAME@example.test'}],[]);
+ assert.equal(result[0].duplicate,null);assert.equal(result[1].duplicate.nom,'A');
 });

@@ -1,0 +1,127 @@
+Mon travail
+Dossiers
+Clients
+Plus
+EXPÉDÎLE
+Réceptionner
+
+CONFIGURATION PARTAGÉE
+
+Paramètres
+Retour
+Départs
+Tarifs
+Catégories
+Équipe et accès
+Telegram
+Messages
+Règles métier
+Produits interdits
+Utilisateurs et permissions
+
+Modifiez les cases, puis enregistrez les permissions de l’utilisateur sélectionné.
+
+Actualiser la liste
+Nouvel utilisateur
+T
+Test Camille
+Directeur
+L
+Lou Martin
+Préparateur
+Lou Martin
+
+lou@example.test
+
+Colis
+1/15
+Tout
+Aucun
+Réceptionner un colis
+Mesurer / peser
+Modifier les dimensions après réception
+Demander le feu vert
+Valider le feu vert manuellement
+Préparer (optimiser l'emballage)
+Calculer le devis
+Envoyer le devis au client
+Confirmer un paiement
+Affecter à un envoi
+Expédier
+Changer le statut d'expédition
+Annuler un colis
+Revenir en arrière (correction)
+Archiver un colis
+Clients
+0/6
+Tout
+Aucun
+Voir les clients
+Créer un client
+Modifier un client
+Supprimer un client
+Modifier l'abonnement
+Voir les infos financières client
+Factures
+1/6
+Tout
+Aucun
+Voir les factures
+Ajouter une facture
+Valider une facture
+Refuser une facture
+Lancer l'OCR
+Modifier les articles / catégories
+Communication
+0/5
+Tout
+Aucun
+Envoyer un message Telegram
+Envoyer un email
+Demander une facture au client
+Envoyer un message libre
+Voir le chat des autres utilisateurs
+Envois
+0/5
+Tout
+Aucun
+Voir les envois
+Créer un envoi
+Modifier un envoi
+Réaffecter un colis à un autre envoi
+Imprimer les étiquettes
+Finances
+0/6
+Tout
+Aucun
+Voir les prix de transport
+Voir les taxes (OM/OMR/TVA)
+Voir le montant total du devis
+Voir le CA / KPIs
+Exporter les données financières
+Modifier les tarifs
+Exports
+0/4
+Tout
+Aucun
+Exporter la liste des colis (Excel)
+Exporter les factures commerciales
+Exporter la DAU
+Exporter le récap pro
+Administration
+0/6
+Tout
+Aucun
+Gérer les utilisateurs et permissions
+Gérer les catégories douanières
+Gérer les templates de messages
+Gérer les produits interdits
+Voir l'historique / audit complet
+Accéder aux paramètres
+
+Lou Martin
+
+Aucune modification en attente
+
+Annuler
+Enregistrer les permissions

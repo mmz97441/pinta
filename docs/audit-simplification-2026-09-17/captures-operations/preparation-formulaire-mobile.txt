@@ -1,0 +1,50 @@
+Mon travail
+Dossiers
+Clients
+Plus
+EXPÉDÎLE
+Réceptionner
+EXP-TEST-001
+Préparation
+
+Exemple Camille · Réunion
+
+Contexte
+Précédent
+Tâche du dossier
+Réception
+Accord client
+Préparation
+Factures
+Devis
+Paiement
+Expédition
+Livraison
+Suivant
+Préparation
+
+Saisissez les mesures de chaque colis après optimisation.
+
+Mesures après optimisation
+
+Mesurez chaque colis physique après optimisation. Ces valeurs sont indépendantes des cartons reçus et alimentent le devis et le manifeste de départ.
+
+Colis sortant 1
+LONGUEUR · COLIS SORTANT 1
+cm
+LARGEUR · COLIS SORTANT 1
+cm
+HAUTEUR · COLIS SORTANT 1
+cm
+POIDS RÉEL · COLIS SORTANT 1
+kg
++ Ajouter un colis après optimisation
+Enregistrer les mesures de préparation
+
+Poids volumétrique
+2.40 kg
+Poids facturable
+3.00 kg
+Consignes facultatives
+Photo du colis préparé
+Corrections

@@ -1,0 +1,44 @@
+Mon travail
+Dossiers
+Clients
+Plus
+EXPÉDÎLE
+Réceptionner
+Retour aux clients
+E
+CLI-TEST
+Exemple Camille
+Particulier
+Telegram non lié
+🇷🇪
+Saint-Denis
+camille@example.test
+1 dossiers au total
+1 actifs
+Synthèse
+Coordonnées
+Abonnement et administration
+Joindre ce client
+
+Telegram non connecté · Accès au portail à activer
+
+Préparer un email
+Réceptionner pour ce client
+
+Accès à l’espace client
+
+Invitez le client à définir son mot de passe et à retrouver ses dossiers. Son accès est lié à cette fiche.
+
+Inviter à l’espace client
+
+Connecter le Telegram du client
+
+Le client utilise son lien personnel puis appuie sur « Démarrer ». Le lien expire et ne peut servir qu’une fois.
+
+Créer une invitation personnelle
+Expéditions ouvertes (1)
+EXP-TEST-001
+Finaliser le devis
+2 carton(s) reçus · Casier A-03
+En cours de préparation
+Historique complet (1 dossiers)

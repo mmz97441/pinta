@@ -2,12 +2,14 @@ import React, { useState } from 'react';
 import { Eye, EyeOff, Check, Shield } from 'lucide-react';
 import { BRAND } from '../constants';
 import { supabase } from '../lib/supabase';
+import { useApp } from '../context/AppContext';
 
 /**
  * Écran bloquant affiché à la première connexion.
  * L'utilisateur DOIT changer son mot de passe pour accéder à l'app.
  */
 export default function ForceChangePassword({ staffUser, onDone, onCancel, recovery }) {
+  const { auth } = useApp();
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [showPwd, setShowPwd] = useState(false);
@@ -62,14 +64,14 @@ export default function ForceChangePassword({ staffUser, onDone, onCancel, recov
             <Shield size={20} style={{ color: BRAND.gold }} />
           </div>
           <div>
-            <h2 className="text-lg font-black text-white">{recovery ? 'Réinitialiser votre mot de passe' : 'Votre mot de passe'}</h2>
-            <p className="text-xs text-gray-400">Définissez votre mot de passe personnel pour continuer</p>
+            <h2 className="text-lg font-black text-white">{recovery ? 'Réinitialiser votre mot de passe' : onCancel ? 'Modifier mon mot de passe' : 'Créer mon mot de passe'}</h2>
+            <p className="text-sm text-gray-300">{auth?.session?.user?.email || "Définissez votre mot de passe personnel pour continuer"}</p>
           </div>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label htmlFor="new-password" className="text-[11px] font-bold uppercase tracking-wider" style={{ color: BRAND.goldL }}>
+            <label htmlFor="new-password" className="text-sm font-bold uppercase tracking-wider" style={{ color: BRAND.goldL }}>
               Nouveau mot de passe
             </label>
             <div className="relative mt-1">
@@ -83,17 +85,17 @@ export default function ForceChangePassword({ staffUser, onDone, onCancel, recov
                 autoComplete="new-password" required autoFocus
               />
               <button aria-label={showPwd ? 'Masquer le mot de passe' : 'Afficher le mot de passe'} type="button" onClick={() => setShowPwd((p) => !p)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white transition-colors">
+                className="absolute right-1 min-h-11 min-w-11 flex items-center justify-center top-1/2 -translate-y-1/2 text-gray-400 hover:text-white transition-colors">
                 {showPwd ? <EyeOff size={18} /> : <Eye size={18} />}
               </button>
             </div>
             {password.length > 0 && password.length < 12 && (
-              <p className="text-[10px] text-red-400 mt-1">Minimum 12 caractères</p>
+              <p className="text-sm text-red-400 mt-1">Minimum 12 caractères</p>
             )}
           </div>
 
           <div>
-            <label htmlFor="confirm-password" className="text-[11px] font-bold uppercase tracking-wider" style={{ color: BRAND.goldL }}>
+            <label htmlFor="confirm-password" className="text-sm font-bold uppercase tracking-wider" style={{ color: BRAND.goldL }}>
               Confirmer le mot de passe
             </label>
             <div className="relative mt-1">
@@ -106,15 +108,15 @@ export default function ForceChangePassword({ staffUser, onDone, onCancel, recov
                 style={{ background: 'rgba(255,255,255,0.08)', border: `1px solid ${confirm && confirm === password ? 'rgba(16,185,129,0.5)' : confirm && confirm !== password ? 'rgba(239,68,68,0.5)' : 'rgba(255,255,255,0.15)'}`, color: 'white' }}
               />
               <button aria-label={showConfirm ? 'Masquer la confirmation' : 'Afficher la confirmation'} type="button" onClick={() => setShowConfirm((p) => !p)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white transition-colors">
+                className="absolute right-1 min-h-11 min-w-11 flex items-center justify-center top-1/2 -translate-y-1/2 text-gray-400 hover:text-white transition-colors">
                 {showConfirm ? <EyeOff size={18} /> : <Eye size={18} />}
               </button>
             </div>
             {confirm && confirm !== password && (
-              <p className="text-[10px] text-red-400 mt-1">Les mots de passe ne correspondent pas</p>
+              <p className="text-sm text-red-400 mt-1">Les mots de passe ne correspondent pas</p>
             )}
             {confirm && confirm === password && password.length >= 12 && (
-              <p className="text-[10px] text-emerald-400 mt-1 flex items-center gap-1"><Check size={10} /> Les mots de passe correspondent</p>
+              <p className="text-sm text-emerald-400 mt-1 flex items-center gap-1"><Check size={10} /> Les mots de passe correspondent</p>
             )}
           </div>
 

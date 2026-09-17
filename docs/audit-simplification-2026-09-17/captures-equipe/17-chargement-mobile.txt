@@ -1,0 +1,33 @@
+Mon travail
+Dossiers
+Clients
+Plus
+EXPÉDÎLE
+Réceptionner
+Départs
+
+Planifier, vérifier le chargement et retrouver les manifestes confirmés.
+
+Actualiser
+Planifier un départ
+Voir tous les départs
+Chargement de ENV-2026-09-18
+
+Cochez les expéditions réellement embarquées. Les autres seront retirées de ce départ et resteront à reprogrammer.
+
+EXP-AUDIT-003 · Exemple Camille
+Paiement et mesures finales confirmées requis avant embarquement
+EXP-AUDIT-002 · Exemple Camille
+1 colis physique(s) sortant(s) · 3 kg
+Motif du report des dossiers non cochés
+Confirmer le départ de 0 expédition(s)
+Annuler la vérification
+ENV-2026-09-18 ·
+
+Réunion · planifie
+
+Clôture : 18/09/2026 12:00:00
+
+2 dossier(s) actif(s)
+Modifier le planning
+Vérifier et confirmer le chargement

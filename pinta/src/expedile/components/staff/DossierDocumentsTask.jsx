@@ -46,8 +46,8 @@ export default function DossierDocumentsTask({ onQuote, children }) {
     <InvoiceWorkspace workspace taskMode onQuote={onQuote}>
       <section id="quote-unlinked" tabIndex={-1} className="scroll-mt-32 space-y-3" aria-label="Articles manuels">
         {manual.length > 0 && <>
-          <h3 className="text-sm font-semibold text-amber-800">Articles saisis manuellement · inclus dans le devis</h3>
-          <p className="text-sm text-slate-600">Vérifiez ces lignes : elles s’ajoutent aux articles des factures.</p>
+          <h3 className="text-sm font-semibold text-amber-800">Achats supplémentaires sans facture reliée</h3>
+          <p className="text-sm text-slate-600">Ces achats ajoutent {eur(manual.reduce((total, line) => total + Number(line.qte) * Number(line.prix), 0))} HT au devis. Vérifiez qu’ils ne figurent pas déjà dans une facture ; rien n’est retiré automatiquement.</p>
           {manual.map(line => <div key={line.id} className="space-y-2 rounded-xl border border-slate-200 p-3">
             <div className="flex items-start justify-between gap-3"><div><p className="text-sm font-semibold text-slate-800">{line.desc}</p><p className="text-sm text-slate-600">{line.qte} × {eur(line.prix)} HT</p></div>
               <button aria-label={`Supprimer ${line.desc}`} disabled={busy || !editable} className="flex min-h-11 min-w-11 items-center justify-center rounded-xl text-red-700 disabled:opacity-40" onClick={() => ask('Retirer cet article du devis ?', `L’article « ${line.desc} » sera retiré. Vérifiez qu’il est déjà présent dans une facture si vous corrigez un double comptage.`, () => run(async () => { await sb.deleteLigne(line.id); setData(previous => previous.map(parcel => parcel.id === sel.id ? { ...parcel, lignes: (parcel.lignes || []).filter(item => item.id !== line.id) } : parcel)); }), { danger: true, okLabel: 'Retirer l’article' })}><X size={18} /></button>
@@ -56,7 +56,7 @@ export default function DossierDocumentsTask({ onQuote, children }) {
           </div>)}
         </>}
         {error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}
-        {editable && <details open={dirty || undefined}><summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-slate-600">Ajouter un article sans facture source</summary>
+        {editable && <details open={dirty || undefined}><summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-slate-600">Ajouter un achat supplémentaire sans facture reliée</summary>
           <form className="space-y-3" onSubmit={event => { event.preventDefault(); run(add); }}>
             <input required aria-label="Description du nouvel article" value={article.desc} onChange={event => setArticle({ ...article, desc: event.target.value })} placeholder="Description de l’article" className={INPUT} />
             <div className="grid grid-cols-2 gap-3"><label className="text-xs text-slate-600">Quantité<input required aria-label="Quantité du nouvel article" type="number" min="1" step="1" value={article.qte} onChange={event => setArticle({ ...article, qte: event.target.value })} className={INPUT} /></label><label className="text-xs text-slate-600">Prix unitaire HT (€)<input required aria-label="Prix du nouvel article" type="number" min="0" step="0.01" value={article.prix} onChange={event => setArticle({ ...article, prix: event.target.value })} className={INPUT} /></label></div>

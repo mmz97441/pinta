@@ -1,0 +1,67 @@
+Mon travail
+Dossiers
+Clients
+Plus
+EXPÉDÎLE
+Réceptionner
+Mon travail
+
+Test · Disponible
+
+Équipe
+Mes missions et disponibilité
+Mission
+Toutes mes missions
+Réception
+Préparation
+Relation client
+Documents et devis
+Départs
+Coordination
+Rechercher dans mes tâches
+Rechercher dans tous les dossiers
+À faire1
+En attente0
+À prendre0
+À faire
+
+1 action(s) · 1 dossier(s) · 2 carton(s) reçu(s) · Tâches en cours incluses
+
+Traiter le suivant
+Préparer les cartons
+À faire
+
+EXP-TEST-001 · Camille Exemple
+
+Action disponible
+
+Commencer
+Consulter
+Suivi
+Réceptionner des cartons
+CLIENT
+CASIER *
+
+Cartons reçus
+
+Mesurez et pesez chaque carton reçu ; fournisseur et suivi peuvent être ajoutés si connus. Entrée après un scan ajoute le suivant ; Tab parcourt les mesures.
+
+Carton 1
+Fournisseur · carton 1
+Numéro de suivi · carton 1
+Mesures à réception — avant optimisation
+Longueur (cm) *
+Largeur (cm) *
+Hauteur (cm) *
+Poids (kg) *
++ Ajouter un carton
+Compléments de réception · observations, contrôles, photo
+
+Exemple Camille · Nouveau dossier
+
+0 / 0 carton(s) mesuré(s) à réception · Casier à renseigner
+
+Enregistrez la réception, puis préparez la demande d’accord et de factures. Le message sera envoyé à votre confirmation.
+
+Annuler
+Réceptionner les cartons

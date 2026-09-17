@@ -1,0 +1,29 @@
+Mon travail
+Dossiers
+Clients
+Plus
+EXPÉDÎLE
+Réceptionner
+Conversations
+
+3 conversations · 1 messages à rattacher dans ces filtres
+
+Camille Exemple
+
+Message à rattacher
+
+Le client n’a pas encore précisé le dossier concerné. Rattachez le message après vérification de son contenu.
+
+Voici ma facture, merci.
+
+Dossier du client
+Choisir un dossier
+EXP-TEST-001 · Deux achats à regrouper · 2 carton(s)
+EXP-AUDIT-003 · Achats à regrouper · 2 carton(s)
+EXP-AUDIT-004 · Matériel de cuisine · 3 carton(s)
+EXP-AUDIT-005 · Livres et vêtements · 2 carton(s)
+EXP-AUDIT-006 · Achats à regrouper · 2 carton(s)
+EXP-AUDIT-007 · Matériel de cuisine · 3 carton(s)
+EXP-AUDIT-008 · Livres et vêtements · 2 carton(s)
+EXP-AUDIT-002 · Livres et vêtements · 2 carton(s)
+Rattacher au dossier

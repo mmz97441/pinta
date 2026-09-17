@@ -1,434 +1,76 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import {
-  ArrowLeft,
-  Plane,
-  CreditCard,
-  FileText,
-  Trash2,
-  Lock,
-  MessageCircle,
-  Loader2,
-  ShieldAlert,
-  Plus,
-  Save,
-} from 'lucide-react';
+import React, { useRef, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import { DESTINATIONS } from '../../constants';
+import usePersistentDraft from '../../hooks/usePersistentDraft';
 import TemplateEditor from './TemplateEditor';
 import StaffPermissions from './StaffPermissions';
-import StaffDepartures from './StaffDepartures';
-import * as sb from '../../lib/supabaseData';
 
-const DESTINATION_LIST = Object.values(DESTINATIONS);
-const FIELD =
-  'min-h-[44px] w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-transparent px-3 py-2 text-sm';
-const BUTTON =
-  'min-h-[44px] rounded-xl px-4 py-2 font-semibold text-sm inline-flex items-center justify-center gap-2 disabled:opacity-50';
+const DESTS = Object.values(DESTINATIONS);
+const FIELD = 'min-h-11 w-full rounded-xl border border-gray-300 bg-transparent px-3 py-2 text-sm';
+const BUTTON = 'min-h-11 rounded-xl border border-gray-300 px-4 py-2 text-sm font-semibold disabled:opacity-50';
 const PANELS = [
-  ['planning', 'Départs', Plane],
-  ['tarifs', 'Tarifs', CreditCard],
-  ['categories', 'Catégories', FileText],
-  ['users', 'Équipe et accès', Lock],
-  ['telegram', 'Telegram', MessageCircle],
-  ['templates', 'Messages', MessageCircle],
-  ['metier', 'Règles métier', FileText],
-  ['interdits', 'Produits interdits', ShieldAlert],
+  ['tarifs', 'Tarifs de transport', 'Tarifs et règles', 'perm_finances_modifier_tarifs'],
+  ['categories', 'Catégories et taxes', 'Tarifs et règles', 'perm_admin_categories'],
+  ['metier', 'Stockage et rappels', 'Tarifs et règles', 'perm_admin_parametres'],
+  ['interdits', 'Produits interdits', 'Tarifs et règles', 'perm_admin_produits_interdits'],
+  ['telegram', 'Canaux de contact', 'Communication', 'perm_admin_parametres'],
+  ['templates', 'Modèles de messages', 'Communication', 'perm_admin_templates'],
+  ['users', 'Équipe et accès', 'Équipe', 'perm_admin_utilisateurs'],
 ];
+function Feedback({ notice }) { return notice ? <p role={notice.error ? 'alert' : 'status'} className={`rounded-xl border p-3 text-sm ${notice.error ? 'border-red-200 bg-red-50 text-red-800' : 'border-green-200 bg-green-50 text-green-800'}`}>{notice.text}</p> : null; }
+function useOperation() {
+  const lock = useRef(false); const [busy, setBusy] = useState(false); const [notice, setNotice] = useState(null);
+  const run = async action => { if (lock.current) return; lock.current = true; setBusy(true); setNotice(null); try { await action(); } catch (error) { setNotice({ error: true, text: `${error.message} Votre saisie est conservée.` }); } finally { lock.current = false; setBusy(false); } };
+  return { run, busy, notice, setNotice };
+}
+function DraftHelp({ storageAvailable }) { return <p className="text-xs text-gray-600">Brouillon conservé lorsque vous changez de rubrique.{!storageAvailable && ' Le stockage du navigateur est indisponible : gardez cet onglet ouvert.'} Les changements ne s’appliquent qu’après enregistrement.</p>; }
+function Tariffs() {
+  const { tarifs, saveTariffs, sbReady } = useApp();
+  const [draft, setDraft, { storageAvailable }] = usePersistentDraft('admin:tariffs', { baseline: tarifs, values: tarifs });
+  const { run, busy, notice, setNotice } = useOperation();
+  const save = () => run(async () => {
+    const values = Object.fromEntries(DESTS.map(d => { const v = draft.values[d.code] || {}; if (![v.base, v.parKg].every(n => n !== '' && n != null && Number.isFinite(Number(n)) && Number(n) >= 0)) throw new Error(`Renseignez les deux tarifs de ${d.label}, positifs ou nuls.`); return [d.code, { base: Number(v.base), parKg: Number(v.parKg) }]; }));
+    const saved = await saveTariffs(values, draft.baseline); setDraft({ values: saved, baseline: saved }); setNotice({ text: 'Tous les tarifs ont été enregistrés ensemble. Les devis existants conservent leurs montants.' });
+  });
+  return <section className="space-y-4"><h2 className="text-lg font-bold">Tarifs de transport</h2><p className="text-sm text-gray-600">Forfait + prix par kilogramme facturable. Les devis déjà enregistrés conservent leur version.</p><DraftHelp storageAvailable={storageAvailable} /><fieldset disabled={busy || !sbReady} className="space-y-4">{DESTS.map(d => <div key={d.code} className="grid gap-3 border-b pb-4 sm:grid-cols-3"><h3 className="self-center font-semibold">{d.label}</h3>{[['base', 'Forfait (€)'], ['parKg', 'Prix par kg (€)']].map(([k, label]) => <label key={k} className="text-sm">{label} · {d.label}<input className={FIELD} type="number" min="0" step="0.01" value={draft.values[d.code]?.[k] ?? ''} onChange={e => setDraft(p => ({ ...p, values: { ...p.values, [d.code]: { ...p.values[d.code], [k]: e.target.value } } }))} /></label>)}</div>)}<div className="flex flex-wrap gap-2"><button className={`${BUTTON} brand-bg text-white`} onClick={save}>{busy ? 'Enregistrement…' : 'Enregistrer les tarifs'}</button><button className={BUTTON} onClick={() => { setDraft({ baseline: tarifs, values: tarifs }); setNotice({ text: 'Valeurs enregistrées rechargées. Le brouillon a été abandonné.' }); }}>Annuler et recharger</button></div></fieldset><Feedback notice={notice} /></section>;
+}
+const categoryValues = cat => ({ label: cat?.label || '', codeHs: cat?.codeHs || '', taux: cat?.taux || {} });
+function CategoryForm({ category, onClose }) {
+  const { saveCategory, sbReady } = useApp();
+  const initial = categoryValues(category);
+  const [draft, setDraft, { clear, storageAvailable }] = usePersistentDraft(`admin:category:${category?.id || 'new'}`, { baseline: category ? initial : null, values: initial });
+  const [dest, setDest] = useState(DESTS[0].code);
+  const { run, busy, notice, setNotice } = useOperation();
+  const save = () => run(async () => {
+    if (draft.values.label.trim().length < 2) throw new Error('Le nom doit contenir au moins deux caractères.');
+    const taux = {}; for (const [code, rates] of Object.entries(draft.values.taux)) { if ([rates.om, rates.omr].every(v => v === '' || v == null)) continue; if (![rates.om, rates.omr].every(v => v !== '' && v != null && Number.isFinite(Number(v)) && Number(v) >= 0 && Number(v) <= 100)) throw new Error(`Renseignez les deux taux de ${DESTINATIONS[code]?.label || code} entre 0 et 100 %.`); taux[code] = { om: Number(rates.om), omr: Number(rates.omr) }; }
+    const saved = await saveCategory(category?.id, { ...draft.values, label: draft.values.label.trim(), taux }, draft.baseline);
+    if (!category) { clear(); onClose(); } else { const v = categoryValues(saved); setDraft({ baseline: v, values: v }); setNotice({ text: 'Catégorie et taux enregistrés.' }); }
+  });
+  return <div className="space-y-4 rounded-xl border p-4"><DraftHelp storageAvailable={storageAvailable} /><fieldset disabled={busy || !sbReady} className="space-y-4"><div className="grid gap-3 sm:grid-cols-2">{[['label', 'Nom de catégorie'], ['codeHs', 'Code douanier (facultatif)']].map(([key, label]) => <label key={key} className="text-sm">{label}<input className={FIELD} value={draft.values[key]} onChange={e => setDraft(p => ({ ...p, values: { ...p.values, [key]: e.target.value } }))} /></label>)}</div><label className="block text-sm">Destination à configurer<select className={FIELD} value={dest} onChange={e => setDest(e.target.value)}>{DESTS.map(d => <option key={d.code} value={d.code}>{d.label}{draft.values.taux[d.code] ? ' · taux renseignés' : ' · à compléter'}</option>)}</select></label><div className="grid gap-3 sm:grid-cols-2">{[['om', 'Octroi de mer (%)'], ['omr', 'Octroi régional (%)']].map(([key, label]) => <label key={key} className="text-sm">{label}<input type="number" min="0" max="100" step="0.01" className={FIELD} value={draft.values.taux[dest]?.[key] ?? ''} onChange={e => setDraft(p => ({ ...p, values: { ...p.values, taux: { ...p.values.taux, [dest]: { ...p.values.taux[dest], [key]: e.target.value } } } }))} /></label>)}</div><p className="text-sm text-gray-600">Deux champs vides : destination non configurée, devis bloqué. Indiquez explicitement 0 pour une exonération.</p><div className="flex flex-wrap gap-2"><button className={`${BUTTON} brand-bg text-white`} onClick={save}>{busy ? 'Enregistrement…' : 'Enregistrer la catégorie'}</button><button className={BUTTON} onClick={() => { clear(); onClose(); }}>Annuler les modifications</button></div></fieldset><Feedback notice={notice} /></div>;
+}
+function Categories() {
+  const { categories, deleteCategory, ask } = useApp(); const [search, setSearch] = useState(''); const [selected, setSelected] = useState(null); const { run, notice, setNotice, busy } = useOperation();
+  return <section className="space-y-4"><h2 className="text-lg font-bold">Catégories et taxes</h2><p className="text-sm text-gray-600">Choisissez une catégorie, puis sa destination. Les taux ne changent pas lorsque vous quittez un champ.</p><label className="block text-sm">Rechercher une catégorie<input className={FIELD} type="search" value={search} onChange={e => setSearch(e.target.value)} /></label><button className={BUTTON} onClick={() => setSelected('new')}>Ajouter une catégorie</button>{selected === 'new' && <CategoryForm key="new" onClose={() => setSelected(null)} />}<Feedback notice={notice} />{categories.filter(c => `${c.label} ${c.codeHs || ''}`.toLowerCase().includes(search.toLowerCase())).map(cat => <article key={cat.id} className="rounded-xl border p-3 space-y-3"><div className="flex flex-wrap items-center justify-between gap-2"><button className={`${BUTTON} text-left`} aria-expanded={selected === cat.id} onClick={() => setSelected(selected === cat.id ? null : cat.id)}>{cat.label} · {Object.keys(cat.taux || {}).length}/{DESTS.length} destinations</button><button disabled={busy} className={`${BUTTON} text-red-700`} onClick={() => ask(`Supprimer « ${cat.label} » ?`, 'Cette action retire la catégorie et ses taux. Une catégorie utilisée par un article doit être conservée.', () => run(async () => { await deleteCategory(cat.id); setNotice({ text: 'Catégorie supprimée.' }); }), { danger: true })}>Supprimer</button></div>{selected === cat.id && <CategoryForm category={cat} onClose={() => setSelected(null)} />}</article>)}</section>;
+}
+function Business() {
+  const { settings, adminSettingsBaseline, saveSettings } = useApp();
+  const initial = { fraisStockage: '', stockageGratuit: '', diviseurVolumetrique: '', relancesFeuVert: 'J+2, J+5', relancesPaiement: 'J+2, J+5', ...settings };
+  const [draft, setDraft, { storageAvailable }] = usePersistentDraft('admin:business', { baseline: adminSettingsBaseline.business ?? null, values: initial });
+  const { run, busy, notice, setNotice } = useOperation();
+  const save = () => run(async () => { const values = { ...draft.values }; for (const key of ['fraisStockage', 'stockageGratuit', 'diviseurVolumetrique']) { const n = Number(values[key]); if (values[key] === '' || !Number.isFinite(n) || n < 0 || (key === 'diviseurVolumetrique' && !n)) throw new Error('Vérifiez les montants et les durées indiqués.'); values[key] = n; } for (const key of ['relancesFeuVert', 'relancesPaiement']) { const days = String(values[key]).replaceAll('J+', '').split(',').map(s => s.trim()); if (!days.length || !days.every(d => /^\d+$/.test(d))) throw new Error('Indiquez des jours séparés par une virgule, par exemple 2, 5, 7.'); values[key] = [...new Set(days.map(Number))].sort((a, b) => a - b).map(d => `J+${d}`).join(', '); } const saved = await saveSettings(values, draft.baseline); setDraft({ baseline: saved, values: saved }); setNotice({ text: 'Règles enregistrées.' }); });
+  return <section className="space-y-4"><h2 className="text-lg font-bold">Stockage et rappels</h2><DraftHelp storageAvailable={storageAvailable} /><fieldset disabled={busy} className="space-y-4">{[['fraisStockage', 'Stockage (€ par jour)'], ['stockageGratuit', 'Durée de stockage gratuit (jours)'], ['diviseurVolumetrique', 'Diviseur du poids volumétrique (cm³/kg)']].map(([key, label]) => <label key={key} className="block text-sm">{label}<input type="number" min={key === 'diviseurVolumetrique' ? 1 : 0} step={key === 'fraisStockage' ? '0.01' : '1'} className={FIELD} value={draft.values[key]} onChange={e => setDraft(p => ({ ...p, values: { ...p.values, [key]: e.target.value } }))} /></label>)}<p className="text-sm text-gray-600">Les rappels créent des tâches pour l’équipe. Aucun message n’est envoyé automatiquement : la personne responsable choisit quand informer le client.</p>{[['relancesFeuVert', 'Rappels après la demande d’accord (jours)'], ['relancesPaiement', 'Rappels après le devis (jours)']].map(([key, label]) => <label key={key} className="block text-sm">{label}<input className={FIELD} value={String(draft.values[key]).replaceAll('J+', '')} placeholder="2, 5, 7" onChange={e => setDraft(p => ({ ...p, values: { ...p.values, [key]: e.target.value } }))} /><span className="text-xs text-gray-600">Exemple : 2, 5, 7 = deux, cinq et sept jours après la demande.</span></label>)}<div className="flex flex-wrap gap-2"><button className={`${BUTTON} brand-bg text-white`} onClick={save}>Enregistrer les règles</button><button className={BUTTON} onClick={() => setDraft({ baseline: adminSettingsBaseline.business ?? null, values: initial })}>Annuler et recharger</button></div></fieldset><Feedback notice={notice} /></section>;
+}
+function Forbidden() {
+  const { produitsInterdits, setProduitsInterdits, ask } = useApp(); const [search, setSearch] = useState(''); const [value, setValue] = usePersistentDraft('admin:forbidden:new', ''); const { run, busy, notice, setNotice } = useOperation();
+  return <section className="space-y-4"><h2 className="text-lg font-bold">Produits interdits</h2><p className="text-sm text-gray-600">Liste de contrôle utilisée lors de la préparation. Décrivez le produit et la raison lorsque c’est utile, par exemple « Aérosols — transport aérien interdit ».</p><label className="block text-sm">Rechercher un produit<input type="search" className={FIELD} value={search} onChange={e => setSearch(e.target.value)} /></label><form className="flex flex-wrap gap-2" onSubmit={e => { e.preventDefault(); run(async () => { if (!value.trim()) throw new Error('Indiquez le produit.'); if (produitsInterdits.some(v => v.toLowerCase() === value.trim().toLowerCase())) throw new Error('Ce produit figure déjà dans la liste.'); await setProduitsInterdits([...produitsInterdits, value.trim()]); setValue(''); setNotice({ text: 'Produit ajouté à la liste de contrôle.' }); }); }}><label className="flex-1 text-sm">Produit à ajouter<input className={FIELD} value={value} onChange={e => setValue(e.target.value)} /></label><button disabled={busy} className={`${BUTTON} self-end`}>Ajouter le produit</button></form><Feedback notice={notice} /><ul className="divide-y">{produitsInterdits.filter(v => v.toLowerCase().includes(search.toLowerCase())).map(value => <li key={value} className="flex items-center justify-between gap-3 py-2"><span className="break-words text-sm">{value}</span><button disabled={busy} className={`${BUTTON} shrink-0 text-red-700`} aria-label={`Retirer ${value}`} onClick={() => ask(`Retirer « ${value} » ?`, 'Ce produit ne figurera plus dans la liste de contrôle de préparation.', () => run(async () => { await setProduitsInterdits(produitsInterdits.filter(v => v !== value)); setNotice({ text: 'Produit retiré de la liste.' }); }), { danger: true })}>Retirer</button></li>)}</ul></section>;
+}
+function Channels() {
+  const { comLog = [], can } = useApp();
+  return <section className="space-y-4"><h2 className="text-lg font-bold">Canaux de contact</h2><p className="text-sm text-gray-600">Les messages sont préparés puis envoyés par l’équipe. Les derniers événements visibles ne constituent pas un contrôle de disponibilité du fournisseur.</p>{[['telegram', 'Telegram', 'perm_comm_telegram'], ['email', 'Email', 'perm_comm_email']].map(([key, label, perm]) => { const last = [...comLog].reverse().find(m => m.canal === key); return <article key={key} className="rounded-xl border p-4"><h3 className="font-semibold">{label}</h3><p className="text-sm">{can(perm) ? 'Vous pouvez envoyer depuis un dossier après prévisualisation.' : 'Votre compte ne dispose pas du droit d’envoi.'}</p><p className="mt-2 text-sm text-gray-600">{last ? `Dernier événement chargé : ${last.date || last.createdAt || 'date non précisée'}${last.statut ? ` · ${last.statut}` : ''}` : 'Aucun événement chargé pour ce canal. Disponibilité non vérifiée.'}</p></article>; })}<Link className={`${BUTTON} inline-flex items-center`} to="/conversations">Consulter les conversations et les erreurs d’envoi</Link></section>;
+}
 export default function StaffSettings() {
-  const navigate = useNavigate();
-  const {
-    tarifs,
-    setTarifs,
-    categories,
-    addCategory,
-    updateCatTaux,
-    updateCatLabel,
-    deleteCategory,
-    flash,
-    ask,
-    produitsInterdits,
-    setProduitsInterdits,
-    authRole,
-    sbReady,
-    settings,
-    saveSettings,
-    setCategories,
-  } = useApp();
-  const [tab, setTab] = useState('planning');
-  const [busy, setBusy] = useState(false);
-  const [tarifDraft, setTarifDraft] = useState(tarifs);
-  const [businessDraft, setBusinessDraft] = useState(settings);
-  const [newCategory, setNewCategory] = useState('');
-  const [newInterdit, setNewInterdit] = useState('');
-  const director = ['directeur', 'vice_directeur'].includes(authRole);
-  const run = async (action) => {
-    if (busy) return;
-    setBusy(true);
-    try {
-      await action();
-    } catch (error) {
-      flash({ msg: error.message, type: 'error' });
-    } finally {
-      setBusy(false);
-    }
-  };
-  const saveBusiness = async () => {
-    for (const key of ['fraisStockage', 'stockageGratuit', 'diviseurVolumetrique']) {
-      const value = Number(businessDraft[key]);
-      if (!Number.isFinite(value) || value < 0 || (key === 'diviseurVolumetrique' && value === 0))
-        throw new Error(`Valeur invalide : ${key}`);
-    }
-    for (const key of ['relancesFeuVert', 'relancesPaiement']) {
-      if (!/^\s*J\+\d+(\s*,\s*J\+\d+)*\s*$/.test(businessDraft[key] || ''))
-        throw new Error('Écrivez les échéances sous la forme J+2, J+5, J+7.');
-    }
-    await saveSettings({ ...businessDraft, timezone: 'Europe/Paris' });
-  };
-  return (
-    <div className="space-y-5 max-w-6xl mx-auto pb-8">
-      <header className="flex items-center justify-between gap-3">
-        <div>
-          <p className="text-xs uppercase tracking-widest text-gray-500">Configuration partagée</p>
-          <h1 className="text-2xl font-bold">Paramètres</h1>
-        </div>
-        <button className={BUTTON + ' bg-gray-100 dark:bg-gray-800'} onClick={() => navigate('/')}>
-          <ArrowLeft size={16} />
-          Retour
-        </button>
-      </header>
-      <div className="flex flex-col md:flex-row gap-6">
-        <nav
-          aria-label="Paramètres"
-          className="md:w-52 shrink-0 flex md:flex-col gap-1 overflow-x-auto"
-        >
-          {PANELS.filter(([key]) => director || ['planning', 'telegram'].includes(key)).map(
-            ([key, label, Icon]) => (
-              <button
-                key={key}
-                onClick={() => setTab(key)}
-                aria-pressed={tab === key}
-                className={
-                  BUTTON +
-                  ` shrink-0 whitespace-nowrap justify-start ${tab === key ? 'bg-[#17324D] text-white' : 'hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500'}`
-                }
-              >
-                <Icon size={17} />
-                {label}
-              </button>
-            ),
-          )}
-        </nav>
-        <main className="flex-1 min-w-0 space-y-4" aria-busy={busy}>
-          {!sbReady && (
-            <p role="alert" className="rounded-xl p-4 bg-amber-50 text-amber-800">
-              Connexion nécessaire pour enregistrer les modifications.
-            </p>
-          )}
-          {tab === 'planning' && <StaffDepartures embedded />}
-          {tab === 'tarifs' && director && (
-            <section className="card p-5 space-y-4">
-              <h2 className="font-bold text-lg">Tarifs de transport</h2>
-              <p className="text-sm text-gray-500">
-                Les devis déjà enregistrés conservent leur version et leurs montants.
-              </p>
-              {DESTINATION_LIST.map((d) => {
-                const t = tarifDraft[d.code] || {};
-                return (
-                  <div
-                    key={d.code}
-                    className="grid sm:grid-cols-3 gap-3 items-end border-b dark:border-gray-700 pb-4"
-                  >
-                    <p className="font-semibold self-center">{d.label}</p>
-                    {[
-                      ['base', 'Forfait (€)'],
-                      ['parKg', 'Prix par kg (€)'],
-                    ].map(([key, label]) => (
-                      <label key={key} className="text-sm">
-                        {label}
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          className={FIELD + ' mt-1'}
-                          value={t[key] ?? ''}
-                          onChange={(e) =>
-                            setTarifDraft((prev) => ({
-                              ...prev,
-                              [d.code]: { ...t, [key]: e.target.value },
-                            }))
-                          }
-                        />
-                      </label>
-                    ))}
-                  </div>
-                );
-              })}
-              <button
-                disabled={busy}
-                className={BUTTON + ' bg-[#17324D] text-white'}
-                onClick={() =>
-                  run(async () => {
-                    for (const [code, t] of Object.entries(tarifDraft)) {
-                      if (
-                        ![t.base, t.parKg].every(
-                          (n) => n !== '' && Number.isFinite(Number(n)) && Number(n) >= 0,
-                        )
-                      )
-                        throw new Error('Tous les tarifs doivent être positifs ou nuls.');
-                      await sb.updateTarif(code, Number(t.base), Number(t.parKg));
-                    }
-                    setTarifs(await sb.fetchTarifs());
-                    flash('Tarifs enregistrés');
-                  })
-                }
-              >
-                <Save size={16} />
-                Enregistrer les tarifs
-              </button>
-            </section>
-          )}
-          {tab === 'categories' && director && (
-            <section className="card p-5 space-y-4">
-              <h2 className="font-bold text-lg">Catégories et taxes</h2>
-              <p className="text-sm text-gray-500">
-                Un taux absent bloque le devis. Renseignez explicitement zéro pour une catégorie
-                exonérée.
-              </p>
-              {categories.map((cat) => (
-                <div key={cat.id} className="border-b dark:border-gray-700 pb-4 space-y-3">
-                  <div className="flex gap-2">
-                    <input
-                      aria-label="Nom de catégorie"
-                      className={FIELD}
-                      defaultValue={cat.label}
-                      key={cat.label}
-                      onBlur={(e) => {
-                        if (e.target.value.trim() && e.target.value !== cat.label)
-                          run(() => updateCatLabel(cat.id, e.target.value.trim()));
-                      }}
-                    />
-                    <button
-                      className={BUTTON + ' text-red-600'}
-                      aria-label={`Supprimer ${cat.label}`}
-                      onClick={() =>
-                        ask(
-                          'Supprimer cette catégorie',
-                          'Les catégories utilisées dans des articles doivent être conservées.',
-                          () => deleteCategory(cat.id),
-                          { danger: true },
-                        )
-                      }
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                  <label className="block text-xs font-semibold">
-                    Code douanier vérifié
-                    <input
-                      className={FIELD + ' mt-1'}
-                      defaultValue={cat.codeHs || ''}
-                      key={cat.codeHs}
-                      placeholder="À renseigner avec votre déclarant"
-                      onBlur={(e) => {
-                        if (e.target.value.trim() !== cat.codeHs)
-                          run(async () => {
-                            await sb.updateCategorie(cat.id, {
-                              code_hs: e.target.value.trim() || null,
-                            });
-                            setCategories(await sb.fetchCategories());
-                          });
-                      }}
-                    />
-                  </label>
-                  <div className="grid sm:grid-cols-2 gap-3">
-                    {DESTINATION_LIST.map((d) => (
-                      <fieldset key={d.code} className="flex gap-2 items-center">
-                        <legend className="text-xs text-gray-500">{d.label}</legend>
-                        {['om', 'omr'].map((key) => (
-                          <label key={key} className="text-xs flex-1 uppercase">
-                            {key} %
-                            <input
-                              type="number"
-                              min="0"
-                              max="100"
-                              step="0.01"
-                              className={FIELD + ' mt-1'}
-                              defaultValue={cat.taux?.[d.code]?.[key] ?? ''}
-                              key={`${key}-${cat.taux?.[d.code]?.[key]}`}
-                              onBlur={(e) => {
-                                if (
-                                  e.target.value !== '' &&
-                                  Number(e.target.value) !== cat.taux?.[d.code]?.[key]
-                                )
-                                  run(() => updateCatTaux(cat.id, d.code, key, e.target.value));
-                              }}
-                            />
-                          </label>
-                        ))}
-                      </fieldset>
-                    ))}
-                  </div>
-                </div>
-              ))}
-              <div className="flex gap-2">
-                <input
-                  className={FIELD}
-                  aria-label="Nouvelle catégorie"
-                  placeholder="Nouvelle catégorie"
-                  value={newCategory}
-                  onChange={(e) => setNewCategory(e.target.value)}
-                />
-                <button
-                  disabled={!newCategory.trim() || busy}
-                  className={BUTTON + ' bg-[#17324D] text-white'}
-                  onClick={() =>
-                    run(async () => {
-                      await addCategory(newCategory.trim(), {});
-                      setNewCategory('');
-                    })
-                  }
-                >
-                  <Plus size={16} />
-                  Ajouter
-                </button>
-              </div>
-            </section>
-          )}
-          {tab === 'users' && director && (
-            <section className="card p-5">
-              <StaffPermissions />
-            </section>
-          )}
-          {tab === 'templates' && director && (
-            <section className="card p-5">
-              <h2 className="font-bold text-lg mb-2">Messages clients</h2>
-              <p className="text-sm text-gray-500 mb-5">
-                Le modèle enregistré est utilisé pour les aperçus et les prochains envois de
-                l’équipe.
-              </p>
-              <TemplateEditor />
-            </section>
-          )}
-          {tab === 'metier' && director && (
-            <section className="card p-5 space-y-4">
-              <h2 className="font-bold text-lg">Règles métier</h2>
-              <p className="text-sm text-gray-500">
-                Relances calculées à partir de la demande envoyée. Une attente demandée par le
-                client suspend les relances de préparation.
-              </p>
-              {[
-                ['diviseurVolumetrique', 'Diviseur volumétrique', '5000'],
-                ['fraisStockage', 'Frais de stockage prévus (€/jour)', '1.50'],
-                ['stockageGratuit', 'Jours de stockage gratuit prévus', '14'],
-                ['relancesFeuVert', 'Relances accord client', 'J+2, J+5, J+7'],
-                ['relancesPaiement', 'Relances paiement', 'J+3, J+7, J+14'],
-              ].map(([key, label, placeholder]) => (
-                <label key={key} className="block text-sm font-semibold">
-                  {label}
-                  <input
-                    className={FIELD + ' mt-1'}
-                    value={businessDraft[key] ?? ''}
-                    placeholder={placeholder}
-                    onChange={(e) =>
-                      setBusinessDraft((prev) => ({ ...prev, [key]: e.target.value }))
-                    }
-                  />
-                </label>
-              ))}
-              <p className="text-xs text-gray-500">
-                Les frais de stockage ne sont pas prélevés automatiquement. Les frais ajoutés au
-                devis doivent être vérifiés par l’équipe. Heure limite des départs : mercredi 17 h,
-                heure de Paris.
-              </p>
-              <button
-                className={BUTTON + ' bg-[#17324D] text-white'}
-                disabled={busy}
-                onClick={() => run(saveBusiness)}
-              >
-                <Save size={16} />
-                Enregistrer les règles
-              </button>
-            </section>
-          )}
-          {tab === 'interdits' && director && (
-            <section className="card p-5 space-y-4">
-              <h2 className="font-bold text-lg">Produits interdits</h2>
-              {produitsInterdits.map((item) => (
-                <div
-                  key={item}
-                  className="flex items-center justify-between border-b dark:border-gray-700 pb-2 gap-3"
-                >
-                  <span className="text-sm">{item}</span>
-                  <button
-                    className={BUTTON + ' text-red-600'}
-                    aria-label={`Retirer ${item}`}
-                    onClick={() =>
-                      ask(
-                        'Retirer ce produit de la liste',
-                        item,
-                        () => setProduitsInterdits(produitsInterdits.filter((x) => x !== item)),
-                        { danger: true },
-                      )
-                    }
-                  >
-                    <Trash2 size={16} />
-                  </button>
-                </div>
-              ))}
-              <div className="flex gap-2">
-                <input
-                  aria-label="Produit interdit"
-                  className={FIELD}
-                  value={newInterdit}
-                  onChange={(e) => setNewInterdit(e.target.value)}
-                  placeholder="Ajouter un produit"
-                />
-                <button
-                  className={BUTTON + ' bg-[#17324D] text-white'}
-                  disabled={busy || !newInterdit.trim()}
-                  onClick={() =>
-                    run(async () => {
-                      if (produitsInterdits.includes(newInterdit.trim()))
-                        throw new Error('Ce produit est déjà présent.');
-                      await setProduitsInterdits([...produitsInterdits, newInterdit.trim()]);
-                      setNewInterdit('');
-                    })
-                  }
-                >
-                  <Plus size={16} />
-                  Ajouter
-                </button>
-              </div>
-            </section>
-          )}
-          {tab === 'telegram' && (
-            <section className="card p-5 space-y-4">
-              <div className="flex items-center gap-3">
-                <MessageCircle size={28} className="text-sky-600" />
-                <h2 className="font-bold text-lg">Un échange rattaché à chaque dossier</h2>
-              </div>
-              <p className="text-sm text-gray-600 dark:text-gray-300">
-                Depuis la fiche client, générez une invitation personnelle. Le client ouvre le bot
-                et confirme la liaison. Les demandes, réponses et documents apparaissent ensuite
-                dans son dossier.
-              </p>
-              <ol className="list-decimal pl-5 space-y-3 text-sm">
-                <li>Envoyez une demande complète avec les cartons concernés.</li>
-                <li>Le client autorise la préparation, demande d’attendre ou refuse.</li>
-                <li>
-                  Consultez les réponses dans la file « Messages clients » et traitez les
-                  exceptions.
-                </li>
-              </ol>
-              <p className="rounded-xl bg-sky-50 text-sky-900 p-4 text-sm">
-                Un message est marqué envoyé après confirmation de Telegram. Les clients sans
-                Telegram retrouvent leurs demandes dans leur espace client.
-              </p>
-            </section>
-          )}
-        </main>
-      </div>
-    </div>
-  );
+  const { can, sbReady } = useApp(); const [params, setParams] = useSearchParams(); const panels = PANELS.filter(([, , , perm]) => can(perm)); const wanted = params.get('tab'); const tab = panels.some(([key]) => key === wanted) ? wanted : panels[0]?.[0];
+  return <div className="mx-auto max-w-6xl space-y-5 pb-8"><header><h1 className="text-2xl font-bold">Paramètres</h1><p className="text-sm text-gray-600">Configuration partagée · <Link className="underline" to="/departs">Organiser les départs</Link></p></header><div className="flex flex-col gap-6 md:flex-row"><nav aria-label="Paramètres" className="shrink-0 space-y-3 md:w-56"><label className="block text-sm md:hidden">Rubrique<select aria-label="Rubrique" className={FIELD} value={tab || ''} onChange={e => setParams({ tab: e.target.value })}>{panels.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label><div className="hidden space-y-4 md:block">{[...new Set(panels.map(p => p[2]))].map(group => <div key={group}><p className="px-3 text-xs font-semibold uppercase text-gray-500">{group}</p>{panels.filter(p => p[2] === group).map(([key, label]) => <button key={key} aria-current={tab === key ? 'page' : undefined} className={`${BUTTON} mt-1 w-full border-transparent text-left ${tab === key ? 'brand-bg text-white' : ''}`} onClick={() => setParams({ tab: key })}>{label}</button>)}</div>)}</div></nav><main className="card min-w-0 flex-1 p-4 sm:p-6">{!sbReady ? <p role="alert">Chargement de la configuration… Les modifications seront disponibles après connexion.</p> : !tab ? <p>Aucune rubrique de paramètres n’est autorisée pour votre compte.</p> : tab === 'tarifs' ? <Tariffs /> : tab === 'categories' ? <Categories /> : tab === 'metier' ? <Business /> : tab === 'interdits' ? <Forbidden /> : tab === 'telegram' ? <Channels /> : tab === 'templates' ? <TemplateEditor /> : <StaffPermissions />}</main></div></div>;
 }

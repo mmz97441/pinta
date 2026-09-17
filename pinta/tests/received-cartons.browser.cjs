@@ -1,3 +1,4 @@
+const { openDetailsFor } = require('./ui-disclosure-helpers.cjs');
 /* Staff attachment visibility; all API traffic uses isolated fixtures, including reloads. */
 const { chromium } = require('playwright');
 const AxeBuilder = require('@axe-core/playwright').default;
@@ -46,10 +47,10 @@ async function main() {
       await f.page.getByRole('button', { name: 'Réceptionner un autre carton', exact: true }).click();
       const dialog = f.page.getByRole('dialog', { name: 'Réceptionner des cartons', exact: true });
       await dialog.getByRole('heading', { name: 'Carton 3', level: 3, exact: true }).waitFor();
-      await dialog.getByLabel('Fournisseur · carton 3', { exact: true }).fill('Boutique C');
-      await dialog.getByLabel('Numéro de suivi · carton 3', { exact: true }).fill('QA-ATTACH-003');
+      await openDetailsFor(dialog.getByLabel('Fournisseur · carton 3', { exact: true })); await dialog.getByLabel('Fournisseur · carton 3', { exact: true }).fill('Boutique C');
+      await openDetailsFor(dialog.getByLabel('Numéro de suivi · carton 3', { exact: true })); await dialog.getByLabel('Numéro de suivi · carton 3', { exact: true }).fill('QA-ATTACH-003');
       await fillBox(dialog, 3, [15, 25, 35, 1.5]);
-      await dialog.getByRole('button', { name: 'Rattacher à EXP-TEST-001', exact: true }).click();
+      await dialog.getByRole('button', { name: /^Enregistrer (?:le carton|les cartons) dans EXP-TEST-001$/, exact: true }).click();
       await dialog.waitFor({ state: 'hidden' });
       await f.page.getByRole('button', { name: 'Voir le carton reçu', exact: true }).click();
       const third = measures.getByRole('listitem', { name: 'Carton 3', exact: true });
@@ -81,7 +82,7 @@ async function main() {
       await dialog.getByRole('button').filter({ hasText: 'EXP-TEST-001' }).click();
       await dialog.getByRole('heading', { name: 'Carton 4', level: 3, exact: true }).waitFor();
       await fillBox(dialog, 4, [10, 10, 10, 0.6]);
-      await dialog.getByRole('button', { name: 'Rattacher à EXP-TEST-001', exact: true }).click();
+      await dialog.getByRole('button', { name: /^Enregistrer (?:le carton|les cartons) dans EXP-TEST-001$/, exact: true }).click();
       await dialog.waitFor({ state: 'hidden' });
       await f.page.getByRole('button', { name: 'Voir le carton reçu', exact: true }).click();
       const fourth = measures.getByRole('listitem', { name: 'Carton 4', exact: true });
@@ -99,7 +100,7 @@ async function main() {
       await f.page.reload();
       await f.page.getByRole('button', { name: 'Voir le carton reçu', exact: true }).click();
       const second = measures.getByRole('listitem', { name: 'Carton 2', exact: true });
-      await second.getByText('Mesures à réception incomplètes — à vérifier', { exact: true }).waitFor();
+      await second.getByText('Mesures à réception incomplètes — carton 2 à compléter', { exact: true }).waitFor();
       assert.match(await second.innerText(), /30 × — × 10 cm · 2 kg/);
       assert.equal(await measures.getByText('Totaux à réception', { exact: true }).count(), 0);
       await f.page.waitForFunction(isDark => document.documentElement.classList.contains('dark') === isDark, dark);

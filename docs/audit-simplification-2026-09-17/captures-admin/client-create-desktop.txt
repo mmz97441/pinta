@@ -1,0 +1,62 @@
+EXPÉDÎLE
+Réceptionner des cartons
+Mon travail
+Dossiers d’expédition
+Conversations
+Équipe
+Départs
+Clients
+Estimation
+Paramètres
+Réduire
+C
+
+Camille
+
+Direction
+
+Retour aux clients
+Nouveau client
+Particulier
+Professionnel
+
+ABONNEMENT
+
+FORFAIT *
+Freemium
+Premium Mensuel
+Premium Annuel
+VIP Annuel
+PAIEMENTS *
+Paiement à chaque colis
+
+PERSONNE PHYSIQUE
+
+GENRE
+Homme
+Femme
+NOM *
+PRÉNOM
+DATE DE NAISSANCE
+TÉLÉPHONE MOBILE *
+TÉLÉPHONE FIXE
+EMAIL *
+TELEGRAM @
+
+ADRESSE LIVRAISON
+
+DÉPARTEMENT *
+— Sélectionner —
+🇷🇪 La Réunion (974)
+🇾🇹 Mayotte (976)
+🇬🇵 Guadeloupe (971)
+🇲🇶 Martinique (972)
+COMMUNE
+CODE POSTAL *
+VILLE
+ADRESSE LIGNE 1 *
+ADRESSE LIGNE 2
+INFORMATIONS POUR LA LIVRAISON
+NOTES INTERNES
+Annuler
+Créer le client

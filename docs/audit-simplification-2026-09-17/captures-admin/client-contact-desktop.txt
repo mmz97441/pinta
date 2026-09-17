@@ -1,0 +1,83 @@
+EXPÉDÎLE
+Réceptionner des cartons
+Mon travail
+Dossiers d’expédition
+Conversations
+Équipe
+Départs
+Clients
+Estimation
+Paramètres
+Réduire
+C
+
+Camille
+
+Direction
+
+Retour aux clients
+E
+CLI-TEST
+Exemple Camille
+Particulier
+Telegram non lié
+🇷🇪
+Saint-Denis
+camille@example.test
+1 dossiers au total
+1 actifs
+Synthèse
+Coordonnées
+Abonnement et administration
+
+Doublon possible
+
+Entreprise Exemple Juliepro@example.test
+
+Nom *
+Prénom
+Téléphone
+Email
+Telegram @username
+Ville
+Code postal
+
+🇷🇪
+La Réunion
+
+ADRESSE DE LIVRAISON
+Complément d’adresse
+Commune de livraison
+Instructions de livraison
+CANAL DE CONTACT
+Telegram
+Email
+
+Accès à l’espace client
+
+Invitez le client à définir son mot de passe et à retrouver ses dossiers. Son accès est lié à cette fiche.
+
+Inviter à l’espace client
+
+Connecter le Telegram du client
+
+Le client utilise son lien personnel puis appuie sur « Démarrer ». Le lien expire et ne peut servir qu’une fois.
+
+Créer une invitation personnelle
+Enregistrer
+Annuler
+Email
+
+COLIS (1)
+
+EXP-TEST-001
+En cours de préparation
+Deux achats à regrouper
+LIEN DE SUIVI PARTAGÉ
+expire 10j après livraison
+
+Pas encore de lien de suivi
+
+Générez un lien unique que Camille pourra partager avec sa famille. Suivi des colis, sans compte requis.
+
+Créer le lien de suivi

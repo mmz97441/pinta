@@ -1,0 +1,163 @@
+EXPÉDÎLE
+Réceptionner des cartons
+Mon travail
+Dossiers d’expédition
+Conversations
+Équipe
+Départs
+Clients
+Estimation
+Paramètres
+Réduire
+C
+
+Camille
+
+Direction
+
+File de travail
+Tous les dossiers
+Répondre aux clients
+Préparer les dossiers
+Vérifier les factures
+Attentes demandées
+Accord attendu
+Prêts à chiffrer
+Échéances dépassées
+Attentes à reprendre
+Filtres avancés
+Référent
+Toute l’équipe
+Mes dossiers
+Non attribués
+Camille
+Martin
+Morel
+Destination
+Toutes les destinations
+La Réunion
+Mayotte
+Guadeloupe
+Martinique
+Tout
+8
+Réception
+1
+Att. feu vert
+1
+Feu vert OK
+2
+Att. paiement
+1
+Expédition
+2
+Livrés
+1
+8 dossier(s) affiché(s)
+Inclure les archives
+Export
+Ordre de traitement
+Par statut
+Par envoi
+Tri : Priorité
+	ACTION / ÉTAPE	Client ↕	EXP ↕	CARTONS REÇUS	RÉFÉRENT	Date utile ↕	
+
+Ordre de traitement
+8 colis
+
+	
+
+Répondre au client
+
+En cours de préparation
+Facture reçue · À vérifier
+	Camille Exemple🇷🇪NORD	EXP-TEST-001A-03À répondre1	2	Martin	
+17 sept.
+
+Échéance promise
+
+	
+
+	
+
+Commencer la préparation
+
+Autorisation reçue
+	Camille Exemple🇷🇪NORD	EXP-AUDIT-008B-7	2	Martin	
+14 sept.
+
+Étape actuelle
+
+	
+
+	
+
+Répondre au client
+
+En attente d'accord client
+	Camille Exemple🇷🇪NORD	EXP-AUDIT-003B-2À répondre	2	Martin	
+09 sept.
+
+Étape actuelle
+
+	
+
+	
+
+Demander l’accord client
+
+Mesuré à réception
+	Camille Exemple🇷🇪NORD	EXP-AUDIT-004B-3	3	Martin	
+10 sept.
+
+Étape actuelle
+
+	
+
+	
+
+Répondre au client
+
+Payé
+	Camille Exemple🇷🇪NORD	EXP-AUDIT-002B-1À répondre1	2	Martin	
+08 sept.
+
+Étape actuelle
+
+	
+
+	
+
+Règlement attendu
+
+Devis envoyé
+	Camille Exemple🇷🇪NORD	EXP-AUDIT-005B-4	2	Martin	
+11 sept.
+
+Étape actuelle
+
+	
+
+	
+
+En vol
+
+En vol
+	Camille Exemple🇷🇪NORD	EXP-AUDIT-007B-6	3	Martin	
+13 sept.
+
+Étape actuelle
+
+	
+
+	
+
+Livré
+
+Livré
+	Camille Exemple🇷🇪NORD	EXP-AUDIT-006B-5	2	Martin	
+12 sept.
+
+Étape actuelle
+
+	

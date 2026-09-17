@@ -5,7 +5,7 @@ import { createPermissionDraft, permissionChanges, permissionChangeCount, mergeP
 import * as sb from '../../lib/supabaseData';
 import { supabase } from '../../lib/supabase';
 import { functionErrorMessage } from '../../services/functionErrors';
-import { Shield, Plus, Trash2, Save, ChevronDown, ChevronRight, Eye, EyeOff, RefreshCw } from 'lucide-react';
+import { Shield, Plus, Save, ChevronDown, ChevronRight, RefreshCw } from 'lucide-react';
 
 const ROLES = [
   { value: 'directeur', label: 'Directeur' }, { value: 'vice_directeur', label: 'Vice-directeur' },
@@ -33,14 +33,14 @@ function Notice({ notice }) {
 }
 
 export default function StaffPermissions() {
-  const { auth, can, refreshStaffAccess } = useApp();
+  const { auth, authRole, can, refreshStaffAccess } = useApp();
   const owner = auth?.u?.id || null;
   const [staffUsers, setStaffUsers] = useState([]);
   const [drafts, setDrafts] = useState(() => retainedDrafts(owner));
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [selectedId, setSelectedId] = useState(null);
-  const [expandedCats, setExpandedCats] = useState(new Set(PERMISSION_CATEGORIES.map((category) => category.key)));
+  const [expandedCats, setExpandedCats] = useState(new Set());
   const [notices, setNotices] = useState({});
   const [generalNotice, setGeneralNotice] = useState(null);
   const [busy, setBusy] = useState(null);
@@ -49,10 +49,9 @@ export default function StaffPermissions() {
   const [showNew, setShowNew] = useState(false);
   const [newForm, setNewForm] = useState(EMPTY_USER);
   const [newError, setNewError] = useState('');
-  const [showNewPwd, setShowNewPwd] = useState(false);
   const totalChanges = Object.values(drafts).reduce((count, draft) => count + permissionChangeCount(draft), 0);
   const dirtyUsers = Object.values(drafts).filter((draft) => permissionChangeCount(draft)).length;
-  const mayManage = can('perm_admin_utilisateurs');
+  const mayManage = can('perm_admin_utilisateurs') && ['directeur', 'vice_directeur'].includes(authRole);
 
   useEffect(() => { if (draftSession.owner === owner) draftSession.drafts = drafts; }, [drafts, owner]);
   useEffect(() => {
@@ -126,18 +125,18 @@ export default function StaffPermissions() {
   const createUser = async (event) => {
     event.preventDefault();
     const form = { ...newForm, nom: newForm.nom.trim(), prenom: newForm.prenom.trim(), email: newForm.email.trim() };
-    if (!form.nom || !/^\S+@\S+\.\S+$/.test(form.email) || !form.password.trim() || form.password.length < 12) { setNewError('Renseignez un nom, un email valide et un mot de passe de 12 caractères minimum.'); return; }
+    if (!form.nom || !/^\S+@\S+\.\S+$/.test(form.email)) { setNewError('Renseignez un nom et un email valide.'); return; }
     const emailKey = form.email.toLowerCase();
     if (staffUsers.some((user) => user.email?.trim().toLowerCase() === emailKey) || createdEmails.current.has(emailKey)) { setNewError('Un compte équipe utilise déjà cet email. Actualisez la liste pour le retrouver.'); return; }
     if (!mayManage || !begin('create')) return;
     setNewError('');
     try {
-      const { data: result, error } = await supabase.functions.invoke('create-staff-user', { body: form });
+      const { data: result, error } = await supabase.functions.invoke('create-staff-user', { body: { ...form, mode: 'invite' } });
       if (error || result?.error || !result?.success) throw new Error(await functionErrorMessage({ data: result, error }, 'Le compte équipe n’a pas pu être créé.'));
       createdEmails.current.add(emailKey);
       // The account exists already; a later refresh failure must never repeat its creation.
-      setShowNew(false); setNewForm(EMPTY_USER); setShowNewPwd(false);
-      setGeneralNotice({ type: 'success', text: `Compte de ${fullName(form)} créé. Le mot de passe devra être changé à la première connexion.` });
+      setShowNew(false); setNewForm(EMPTY_USER);
+      setGeneralNotice({ type: 'success', text: `Compte de ${fullName(form)} créé. Invitation envoyée par email : la personne choisira son mot de passe.` });
       try {
         const users = await refreshAccess(); const created = users.find((user) => user.authId === result.userId || user.email?.toLowerCase() === emailKey);
         if (created) setSelectedId(created.id);
@@ -145,17 +144,24 @@ export default function StaffPermissions() {
     } catch (error) { setNewError(error.message || 'Création impossible.'); }
     finally { finish(); }
   };
-  const deleteUser = async (user) => {
-    if (!mayManage || operation.current || !window.confirm(`Supprimer l’utilisateur ${fullName(user)} ?${permissionChangeCount(drafts[user.id]) ? ' Son brouillon de permissions sera également abandonné.' : ''}`)) return;
-    if (!begin(`delete:${user.id}`)) return;
+  const changeActive = async user => {
+    const active = !user.actif;
+    if (!mayManage || operation.current || !window.confirm(`${active ? 'Réactiver' : 'Suspendre'} l’accès de ${fullName(user)} ? ${active ? 'Cette personne retrouvera ses droits actuels.' : 'Ses dossiers et son historique seront conservés. Réattribuez ses tâches depuis Équipe.'}`)) return;
+    if (!begin(`active:${user.id}`)) return;
     try {
-      await sb.deleteStaffUser(user.id);
-      setStaffUsers((previous) => previous.filter((item) => item.id !== user.id));
-      setDrafts((previous) => { const next = { ...previous }; delete next[user.id]; return next; });
-      setSelectedId(null); setGeneralNotice({ type: 'success', text: `Utilisateur ${fullName(user)} supprimé.` });
-      try { await refreshAccess(); } catch (error) { setGeneralNotice({ type: 'warning', text: `Utilisateur supprimé. Actualisation à réessayer : ${error.message}` }); }
-    } catch (error) { noticeFor(user.id, { type: 'error', text: `Suppression non confirmée : ${error.message}` }); }
+      const saved = await sb.setStaffActive(user.id, active, user.actif);
+      setStaffUsers(previous => previous.map(item => item.id === user.id ? { ...item, actif: saved.active } : item));
+      setGeneralNotice({ type: 'success', text: `${active ? 'Accès réactivé' : 'Accès suspendu'}. ${saved.openActions || 0} tâche(s) affectée(s) conservée(s) ; leur attribution reste à vérifier depuis Équipe.` });
+      try { await refreshAccess(); } catch (error) { setGeneralNotice({ type: 'warning', text: `Changement enregistré. Actualisation à réessayer : ${error.message}` }); }
+    } catch (error) { noticeFor(user.id, { type: 'error', text: error.message }); }
     finally { finish(); }
+  };
+  const applyPreset = (user, kind) => {
+    const enabled = kind === 'preparation' ? ['perm_colis_mesurer','perm_colis_modifier_dims','perm_colis_preparer','perm_factures_voir','perm_clients_voir'] : ['perm_clients_voir','perm_clients_creer','perm_colis_receptionner','perm_colis_mesurer','perm_colis_demander_feuvert','perm_comm_telegram','perm_comm_email','perm_comm_demander_facture','perm_comm_message_libre','perm_factures_voir','perm_factures_ajouter'];
+    const keys = PERMISSION_CATEGORIES.flatMap(category => category.permissions.map(permission => permission.key));
+    if (!mayManage || operation.current) return;
+    setDrafts(previous => { let next = changePermissionValues(previous[user.id] || createPermissionDraft(user.permissions), keys, false); next = changePermissionValues(next, enabled, true); return { ...previous, [user.id]: next }; });
+    noticeFor(user.id, { type: 'info', text: 'Profil préparé dans le brouillon. Vérifiez le résumé puis enregistrez pour l’appliquer.' });
   };
 
   const sel = staffUsers.find((user) => user.id === selectedId);
@@ -165,23 +171,25 @@ export default function StaffPermissions() {
   return <section aria-label="Équipe et permissions" className="space-y-4">
     <header className="flex flex-wrap items-center justify-between gap-3">
       <div><h2 className="text-lg font-bold brand-t">Utilisateurs et permissions</h2><p className="mt-1 text-sm text-gray-600">Modifiez les cases, puis enregistrez les permissions de l’utilisateur sélectionné.</p></div>
-      <div className="flex flex-wrap gap-2"><button type="button" disabled={Boolean(busy) || loading} onClick={retryRefresh} className={`${BUTTON} border border-gray-300 text-gray-700`}><RefreshCw size={16} />Actualiser la liste</button>{mayManage && <button type="button" disabled={Boolean(busy)} onClick={() => { setShowNew(true); setNewError(''); }} className={`${BUTTON} brand-bg text-white`}><Plus size={16} />Nouvel utilisateur</button>}</div>
+      <div className="flex flex-wrap gap-2"><button type="button" disabled={Boolean(busy) || loading} onClick={retryRefresh} className={`${BUTTON} border border-gray-300 text-gray-700`}><RefreshCw size={16} />Actualiser la liste</button>{mayManage && <button type="button" disabled={Boolean(busy)} onClick={() => { setShowNew(true); setNewError(''); }} className={`${BUTTON} brand-bg text-white`}><Plus size={16} />Inviter un utilisateur</button>}</div>
     </header>
+    {!mayManage && <p className="rounded-xl border p-3 text-sm text-gray-600">La direction gère les comptes et les droits. Votre permission permet de consulter cette rubrique, sans modifier les accès.</p>}
     {totalChanges > 0 && <p role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">{totalChanges} modification{totalChanges > 1 ? 's' : ''} non enregistrée{totalChanges > 1 ? 's' : ''} pour {dirtyUsers} utilisateur{dirtyUsers > 1 ? 's' : ''}. Les brouillons restent disponibles lorsque vous changez d’utilisateur ou d’onglet des paramètres.</p>}
     <Notice notice={generalNotice} />
     {loadError && <div className="space-y-2"><Notice notice={{ type: 'error', text: `Accès équipe indisponibles : ${loadError}` }} /><button type="button" disabled={Boolean(busy)} onClick={retryRefresh} className={`${BUTTON} border border-gray-300 text-gray-700`}>Réessayer le chargement</button></div>}
-    {showNew && <form onSubmit={createUser} className="space-y-4 rounded-xl border border-gray-200 p-4" aria-label="Créer un utilisateur"><h3 className="font-semibold text-gray-800">Nouveau compte équipe</h3><fieldset disabled={Boolean(busy)} className="space-y-4">
+    {showNew && <form onSubmit={createUser} className="space-y-4 rounded-xl border border-gray-200 p-4" aria-label="Créer un utilisateur"><h3 className="font-semibold text-gray-800">Inviter une personne dans l’équipe</h3><fieldset disabled={Boolean(busy)} className="space-y-4">
       <div className="grid gap-3 sm:grid-cols-2">{[['nom', 'Nom', 'text', true], ['prenom', 'Prénom', 'text', false], ['email', 'Email', 'email', true]].map(([key, label, type, required]) => <label key={key} className="block space-y-1 text-xs font-semibold text-gray-600">{label}{required ? ' *' : ''}<input type={type} required={required} autoComplete={key === 'email' ? 'off' : undefined} value={newForm[key]} onChange={(event) => setNewForm((previous) => ({ ...previous, [key]: event.target.value }))} className={FIELD} /></label>)}
-        <div><label htmlFor="new-staff-password" className="block text-xs font-semibold text-gray-600 mb-1">Mot de passe initial *</label><div className="relative"><input id="new-staff-password" required minLength={12} autoComplete="new-password" type={showNewPwd ? 'text' : 'password'} value={newForm.password} onChange={(event) => setNewForm((previous) => ({ ...previous, password: event.target.value }))} className={`${FIELD} pr-12`} /><button type="button" onClick={() => setShowNewPwd((previous) => !previous)} aria-label={showNewPwd ? 'Masquer le mot de passe' : 'Afficher le mot de passe'} className="absolute right-0 top-0 flex min-h-11 min-w-11 items-center justify-center text-gray-600">{showNewPwd ? <EyeOff size={17} /> : <Eye size={17} />}</button></div><p className="mt-1 text-xs text-gray-600">12 caractères minimum. À changer à la première connexion.</p></div>
+        <p className="text-sm text-gray-600">Un email permettra à la personne de définir son mot de passe. Aucun mot de passe à transmettre manuellement.</p>
         <label className="block space-y-1 text-xs font-semibold text-gray-600">Rôle<select value={newForm.role} onChange={(event) => setNewForm((previous) => ({ ...previous, role: event.target.value }))} className={FIELD}>{ROLES.map((role) => <option key={role.value} value={role.value}>{role.label}</option>)}</select></label>
-      </div><Notice notice={newError ? { type: 'error', text: newError } : null} /><div className="flex flex-wrap gap-2"><button type="submit" className={`${BUTTON} brand-bg text-white`}>{busy === 'create' ? 'Création…' : 'Créer le compte'}</button><button type="button" onClick={() => { setShowNew(false); setNewForm(EMPTY_USER); setShowNewPwd(false); setNewError(''); }} className={`${BUTTON} border border-gray-300 text-gray-700`}>Annuler la création</button></div>
+      </div><Notice notice={newError ? { type: 'error', text: newError } : null} /><div className="flex flex-wrap gap-2"><button type="submit" className={`${BUTTON} brand-bg text-white`}>{busy === 'create' ? 'Création…' : 'Envoyer l’invitation'}</button><button type="button" onClick={() => { setShowNew(false); setNewForm(EMPTY_USER); setNewError(''); }} className={`${BUTTON} border border-gray-300 text-gray-700`}>Annuler la création</button></div>
     </fieldset></form>}
     {loading ? <div role="status" className="space-y-3 py-4"><p className="text-sm text-gray-600">Chargement des utilisateurs et de leurs permissions…</p><div className="h-12 rounded-xl bg-gray-100 animate-pulse" /><div className="h-36 rounded-xl bg-gray-100 animate-pulse" /></div> : <div className="flex flex-col gap-5 lg:flex-row">
-      <div role="group" aria-label="Utilisateurs de l’équipe" className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:flex lg:w-56 lg:shrink-0 lg:flex-col lg:self-start">{staffUsers.map((user) => { const count = permissionChangeCount(drafts[user.id]); const role = ROLES.find((item) => item.value === user.role); return <button key={user.id} type="button" aria-pressed={sel?.id === user.id} onClick={() => setSelectedId(user.id)} className={`min-h-16 flex w-full items-center gap-3 rounded-xl border p-3 text-left ${sel?.id === user.id ? 'border-slate-400 bg-slate-100' : 'border-gray-200 hover:bg-gray-50'}`}><span className="brand-bg flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white">{fullName(user).charAt(0)}</span><span className="min-w-0 flex-1"><span className="block break-words text-sm font-semibold text-gray-800">{fullName(user)}</span><span className="block text-xs text-gray-600">{role?.label || user.role}{!user.actif ? ' · Inactif' : ''}</span>{count > 0 && <span className="mt-1 block text-xs font-semibold text-amber-800">{count} modification{count > 1 ? 's' : ''}</span>}{busy === `save:${user.id}` && <span className="block text-xs text-gray-600">Enregistrement…</span>}</span></button>; })}{!staffUsers.length && !loadError && <p className="text-sm text-gray-600">Aucun utilisateur équipe. Créez un compte pour lui attribuer des permissions.</p>}</div>
-      {sel && <div className="min-w-0 flex-1 space-y-4"><div className="flex items-start justify-between gap-3"><div><h3 className="text-lg font-bold brand-t">{fullName(sel)}</h3><p className="break-all text-sm text-gray-600">{sel.email}</p></div>{mayManage && <button type="button" disabled={Boolean(busy)} aria-label={`Supprimer l’utilisateur ${fullName(sel)}`} onClick={() => deleteUser(sel)} className="flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-xl text-red-700 hover:bg-red-50 disabled:opacity-50"><Trash2 size={18} /></button>}</div>
+      <div role="group" aria-label="Utilisateurs de l’équipe" className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:flex lg:w-56 lg:shrink-0 lg:flex-col lg:self-start">{staffUsers.map((user) => { const count = permissionChangeCount(drafts[user.id]); const role = ROLES.find((item) => item.value === user.role); return <button key={user.id} type="button" aria-pressed={sel?.id === user.id} onClick={() => setSelectedId(user.id)} className={`min-h-16 flex w-full items-center gap-3 rounded-xl border p-3 text-left ${sel?.id === user.id ? 'border-slate-400 bg-slate-100' : 'border-gray-200 hover:bg-gray-50'}`}><span className="brand-bg flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white">{fullName(user).charAt(0)}</span><span className="min-w-0 flex-1"><span className="block break-words text-sm font-semibold text-gray-800">{fullName(user)}</span><span className="block text-xs text-gray-600">{role?.label || user.role}{!user.actif ? ' · Suspendu' : user.mustChangePassword ? ' · Activation à finaliser' : ' · Actif'}</span>{count > 0 && <span className="mt-1 block text-xs font-semibold text-amber-800">{count} modification{count > 1 ? 's' : ''}</span>}{busy === `save:${user.id}` && <span className="block text-xs text-gray-600">Enregistrement…</span>}</span></button>; })}{!staffUsers.length && !loadError && <p className="text-sm text-gray-600">Aucun utilisateur équipe. Créez un compte pour lui attribuer des permissions.</p>}</div>
+      {sel && <div className="min-w-0 flex-1 space-y-4"><div className="flex items-start justify-between gap-3"><div><h3 className="text-lg font-bold brand-t">{fullName(sel)}</h3><p className="break-all text-sm text-gray-600">{sel.email}</p></div>{mayManage && sel.authId !== owner && <button type="button" disabled={Boolean(busy)} onClick={() => changeActive(sel)} className={`${BUTTON} text-red-700`}>{sel.actif ? 'Suspendre l’accès' : 'Réactiver l’accès'}</button>}</div>
         {fixedRole(sel) ? <div className="space-y-3 rounded-xl border border-gray-200 p-4"><h4 className="flex items-center gap-2 font-semibold text-gray-800"><Shield size={18} />Accès total lié au rôle</h4><p className="text-sm text-gray-600">Les rôles Directeur et Vice-directeur disposent d’un accès total. Les cases de permissions individuelles ne limitent pas cet accès et ne sont donc pas modifiables ici.</p>{changesCount > 0 && <><p className="text-sm text-amber-800">Ce rôle ne permet pas d’appliquer le brouillon précédent.</p><button type="button" disabled={Boolean(busy)} onClick={() => cancelDraft(sel)} className={`${BUTTON} border border-gray-300`}>Annuler ce brouillon</button></>}<Notice notice={selectedNotice} /></div> : <>
           {!mayManage && <p className="text-sm text-gray-600">Votre accès permet uniquement la consultation de ces permissions.</p>}
           {draft.baseline === null && <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">Aucune ligne de permissions enregistrée pour cet utilisateur. Les permissions spécifiques sont désactivées ; enregistrez vos changements pour les attribuer.</p>}
+          <div className="rounded-xl border bg-gray-50 p-3 space-y-3"><p className="text-sm font-semibold">{Object.values(draft.values).filter(Boolean).length} droits activés · {changesCount} modification(s) à enregistrer</p>{mayManage && <div className="flex flex-wrap gap-2"><button disabled={Boolean(busy)} className={BUTTON} onClick={() => applyPreset(sel, 'preparation')}>Préparer un profil Préparation</button><button disabled={Boolean(busy)} className={BUTTON} onClick={() => applyPreset(sel, 'reception')}>Préparer un profil Réception et relation client</button></div>}<p className="text-xs text-gray-600">Ces profils remplacent le brouillon de droits. Ouvrez une rubrique ci-dessous pour ajuster les permissions. Aucun droit d’administration n’est inclus.</p></div>
           {PERMISSION_CATEGORIES.map((category) => { const open = expandedCats.has(category.key); const checked = category.permissions.filter((permission) => draft.values[permission.key]).length; return <section key={category.key} aria-label={category.label} className="rounded-xl border border-gray-200"><div className="flex flex-wrap items-center justify-between gap-1 border-b border-gray-100 px-2">
             <button type="button" aria-expanded={open} aria-controls={`permissions-${category.key}`} onClick={() => setExpandedCats((previous) => { const next = new Set(previous); if (next.has(category.key)) next.delete(category.key); else next.add(category.key); return next; })} className="flex min-h-11 flex-1 items-center gap-2 rounded-lg px-2 text-left text-sm font-semibold text-gray-800">{open ? <ChevronDown size={17} /> : <ChevronRight size={17} />}{category.label}<span className="text-xs font-normal text-gray-600">{checked}/{category.permissions.length}</span></button>
             {mayManage && <div className="flex gap-1"><button type="button" disabled={Boolean(busy) || checked === category.permissions.length} onClick={() => changeValues(sel, category.permissions.map((permission) => permission.key), true)} className={`${BUTTON} text-gray-700 hover:bg-gray-100`}>Tout</button><button type="button" disabled={Boolean(busy) || checked === 0} onClick={() => changeValues(sel, category.permissions.map((permission) => permission.key), false)} className={`${BUTTON} text-gray-700 hover:bg-gray-100`}>Aucun</button></div>}

@@ -1,0 +1,53 @@
+EXPÉDÎLE
+Réceptionner des cartons
+Mon travail
+Dossiers d’expédition
+Conversations
+Équipe
+Départs
+Clients
+Estimation
+Paramètres
+Réduire
+C
+
+Camille
+
+Direction
+
+EXP-TEST-001
+Factures
+
+Exemple Camille · Réunion
+
+Contexte
+Revenir à la préparation
+Tâche du dossier
+Réception
+Accord client
+Préparation
+Factures
+Devis
+Paiement
+Expédition
+Livraison
+Aller au devis
+Vérifier les factures
+1
+
+Aucune facture en attente · 1 validée(s)
+
+Ajouter une facture
+Factures vérifiées
+
+1 facture(s) validée(s) · 100.00 € HT.
+
+Consulter les factures
+Passer au devis
+Ajouter un article sans facture source
+Retour à ma liste
+
+Préparer les cartons · EXP-TEST-001
+
+Tâche suivante
+Corrections

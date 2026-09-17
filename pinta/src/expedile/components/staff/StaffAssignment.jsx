@@ -14,6 +14,7 @@ export default function StaffAssignment({ dossier }) {
   const [busy, setBusy] = useState(false);
   const [draft, setDraft] = useState({ owner: '', action: '', date: '' });
   const [baseline, setBaseline] = useState(null);
+  const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
   useEffect(() => { setExpanded(false); setError(''); }, [sel?.id]);
   useEffect(() => {
@@ -31,12 +32,12 @@ export default function StaffAssignment({ dossier }) {
   const save = async (values) => {
     if (busy) return;
     setBusy(true);
-    setError('');
+    setError(''); setSaved(false);
     try {
       await assignColisWork(expanded ? baseline : sel, values);
       await refreshColis(sel.id);
       setExpanded(false);
-      flash('Suivi du dossier enregistré');
+      setSaved(true); flash('Suivi du dossier enregistré');
     } catch (error) {
       setError(error.message);
       flash({ msg: error.message, type: 'error' });
@@ -51,12 +52,12 @@ export default function StaffAssignment({ dossier }) {
           <UserCheck size={17} className="text-gray-500 shrink-0" />
           <p className="text-xs font-semibold truncate">
             {sel.responsibleStaffId === auth?.u?.id
-              ? 'Référent du dossier : vous'
+              ? 'Suit le dossier : vous'
               : owner
-                ? `Référent : ${owner.prenom || ''} ${owner.nom}`
+                ? `Suit le dossier : ${owner.prenom || ''} ${owner.nom}`
                 : sel.responsibleStaffId
-                  ? 'Référent du dossier attribué'
-                  : 'Référent du dossier à désigner'}
+                  ? 'Suivi du dossier attribué'
+                  : 'Personne qui suit le dossier : à désigner'}
           </p>
         </div>
         <button
@@ -89,6 +90,8 @@ export default function StaffAssignment({ dossier }) {
           })}
         </p>
       )}
+      {saved && !expanded && <p role="status" className="text-sm text-emerald-700">Suivi du dossier enregistré.</p>}
+      {!expanded && error && <p role="alert" className="text-sm text-red-700">{error}</p>}
       {expanded && (
         <form
           onSubmit={(e) => {
@@ -102,7 +105,7 @@ export default function StaffAssignment({ dossier }) {
           className="space-y-2"
         >
           <label className="block text-xs font-semibold">
-            Référent du dossier
+            Personne qui suit le dossier
             <select
               value={draft.owner}
               onChange={(e) => setDraft({ ...draft, owner: e.target.value })}
@@ -147,7 +150,8 @@ export default function StaffAssignment({ dossier }) {
             <Save size={14} />
             {busy ? 'Enregistrement…' : 'Enregistrer le suivi'}
           </button>
-          <p className="text-xs text-slate-600">Le référent assure la continuité du dossier. Les actions de préparation, documents et conversation ont chacune leur responsable.</p>
+          <button type="button" disabled={busy} onClick={() => setExpanded(false)} className="min-h-11 px-3 text-sm underline">Annuler les modifications</button>
+          <p className="text-xs text-slate-600">La personne qui suit le dossier assure sa continuité. Chaque tâche peut être réalisée par un autre collègue.</p>
           {error && <div role="alert" className="text-xs text-red-700">{error}<p>Votre saisie est conservée. Fermez puis rouvrez le formulaire pour repartir des données actualisées.</p></div>}
         </form>
       )}

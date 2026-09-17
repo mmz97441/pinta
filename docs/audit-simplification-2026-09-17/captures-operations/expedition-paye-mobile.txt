@@ -1,0 +1,36 @@
+Mon travail
+Dossiers
+Clients
+Plus
+EXPÉDÎLE
+Réceptionner
+EXP-TEST-001
+Expédition
+
+Exemple Camille · Réunion
+
+Contexte
+Précédent
+Tâche du dossier
+Réception
+Accord client
+Préparation
+Factures
+Devis
+Paiement
+Expédition
+Livraison
+Suivant
+Paiement reçu — Expédier
+
+Paiement reçu
+
+62.39 €
+
+AFFECTER À UN ENVOI
+— Choisir un départ compatible —
+
+Aucun départ ouvert compatible avec la destination du devis payé. La coordination doit prévoir le prochain départ.
+
+Vérifier le départ et son manifeste
+Corrections

@@ -1,0 +1,62 @@
+EXPÉDÎLE
+Réceptionner des cartons
+Mon travail
+Dossiers d’expédition
+Conversations
+Équipe
+Départs
+Clients
+Estimation
+Paramètres
+Réduire
+C
+
+Camille
+
+Direction
+
+Retour aux clients
+E
+CLI-TEST
+Exemple Camille
+Particulier
+Telegram non lié
+🇷🇪
+Saint-Denis
+camille@example.test
+1 dossiers au total
+1 actifs
+Synthèse
+Coordonnées
+Abonnement et administration
+
+Doublon possible
+
+Entreprise Exemple Juliepro@example.test
+
+TYPE DE CLIENT
+Particulier
+Pro
+FORFAIT
+Freemium
+Premium Mensuel (13€/mois)
+Premium Annuel (69€/an)
+VIP Annuel (149€/an)
+NOTES INTERNES
+Enregistrer
+Annuler
+Email
+
+COLIS (1)
+
+EXP-TEST-001
+En cours de préparation
+Deux achats à regrouper
+LIEN DE SUIVI PARTAGÉ
+expire 10j après livraison
+
+Pas encore de lien de suivi
+
+Générez un lien unique que Camille pourra partager avec sa famille. Suivi des colis, sans compte requis.
+
+Créer le lien de suivi

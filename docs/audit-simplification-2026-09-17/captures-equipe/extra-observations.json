@@ -1,0 +1,15 @@
+[
+  {
+    "test": "100-dossiers-list",
+    "rows": 101,
+    "pagination": 0,
+    "metrics": {
+      "height": 7054,
+      "width": 1220
+    }
+  },
+  {
+    "errors": [],
+    "networkDenied": []
+  }
+]

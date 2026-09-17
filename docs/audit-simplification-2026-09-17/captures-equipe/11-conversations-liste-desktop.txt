@@ -1,0 +1,56 @@
+EXPÉDÎLE
+Réceptionner des cartons
+Mon travail
+Dossiers d’expédition
+Conversations
+Équipe
+Départs
+Clients
+Estimation
+Paramètres
+Réduire
+C
+
+Camille
+
+Direction
+
+Conversations
+
+3 conversations · 1 messages à rattacher dans ces filtres
+
+Mon travail
+Rechercher un client ou EXP
+Traitement
+Tous
+À répondre
+Attente client
+Terminé
+Responsable
+Tous
+Moi
+Non attribué
+Test Camille
+Alex Martin
+Sam Morel
+Message sans dossier
+Camille Exemple
+Voici ma facture, merci.
+Camille Exemple
+1 non lu(s)
+EXP-TEST-001 · À répondre
+Bonjour, avez-vous reçu la facture du deuxième carton ? Je souhaite partir cette semaine.
+Non attribué
+Camille Exemple
+EXP-AUDIT-003 · À répondre
+Documents reçus
+Non attribué
+Camille Exemple
+1 non lu(s)
+EXP-AUDIT-002 · À répondre
+Bonjour, quand est prévu mon départ ?
+Non attribué
+
+Sélectionnez une conversation pour répondre et consulter le dossier à côté.
+
+Le contexte du dossier apparaîtra ici.

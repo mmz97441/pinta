@@ -6,13 +6,13 @@ import { BRAND } from '../../constants';
 const STEPS = [
   {
     icon: Package,
-    title: 'Faites vos achats en ligne',
-    desc: 'Passez commande chez Amazon, Nike, Temu, Shein… et faites livrer à notre entrepôt de Paris. On réceptionne votre colis pour vous.',
+    title: 'Préparer mes premiers achats',
+    desc: 'Avant de commander, demandez à notre équipe l’adresse de réception et les consignes à indiquer au vendeur. Conservez la facture complète de chaque achat.',
     color: 'var(--brand-text)',
     illustration: (
       <div className="flex items-center justify-center gap-3 my-4">
         {['Amazon', 'Nike', 'Temu'].map((b) => (
-          <div key={b} className="px-3 py-2 rounded-xl bg-white/80 text-xs font-bold text-gray-700 shadow-sm border border-gray-100">
+          <div key={b} className="px-3 py-2 rounded-xl bg-white/80 text-sm font-bold text-gray-700 shadow-sm border border-gray-100">
             {b}
           </div>
         ))}
@@ -21,17 +21,17 @@ const STEPS = [
   },
   {
     icon: Ruler,
-    title: 'On optimise pour vous',
-    desc: 'Après réception à Paris et votre accord, on prépare et on optimise vos colis pour réduire le volume et donc le prix du transport.',
+    title: 'Factures et accord de préparation',
+    desc: 'Ouvrez votre expédition pour déposer vos factures. Donnez votre accord quand vos achats sont réunis, ou choisissez « Attendre d’autres achats ». Le devis vient après la préparation.',
     color: '#F59E0B',
     illustration: (
       <div className="flex items-center justify-center my-4">
         <div className="flex items-end gap-2">
-          <div className="w-12 h-16 rounded-lg border-2 border-dashed border-amber-300 bg-amber-50 flex items-center justify-center text-amber-600 text-[10px] font-bold">
+          <div className="w-12 h-16 rounded-lg border-2 border-dashed border-amber-300 bg-amber-50 flex items-center justify-center text-amber-600 text-sm font-bold">
             Avant
           </div>
           <ChevronRight size={16} className="text-gray-300 mb-6" />
-          <div className="w-10 h-12 rounded-lg border-2 border-green-400 bg-green-50 flex items-center justify-center text-green-600 text-[10px] font-bold">
+          <div className="w-10 h-12 rounded-lg border-2 border-green-400 bg-green-50 flex items-center justify-center text-green-600 text-sm font-bold">
             Après
           </div>
         </div>
@@ -40,8 +40,8 @@ const STEPS = [
   },
   {
     icon: Plane,
-    title: 'Réception chez vous',
-    desc: 'Votre colis est expédié vers La Réunion, Mayotte ou les Antilles. Suivi en temps réel jusqu\'à la livraison à votre porte.',
+    title: 'Suivre la suite depuis mon espace',
+    desc: 'L’accueil affiche les actions attendues de votre part. Retrouvez les nouvelles et écrivez à notre équipe depuis votre expédition. La livraison est précisée lorsqu’elle est confirmée.',
     color: '#22C55E',
     illustration: (
       <div className="flex items-center justify-center gap-2 my-4">
@@ -80,7 +80,7 @@ export default function OnboardingOverlay({ onDone }) {
         <div className="flex justify-end px-4 pt-3">
           <button
             disabled={saving} onClick={finish}
-            className="text-xs text-gray-400 hover:text-gray-600 font-medium flex items-center gap-1 transition-colors"
+            className="min-h-11 text-sm text-gray-500 hover:text-gray-600 font-medium flex items-center gap-1 transition-colors"
           >
             Passer <X size={12} />
           </button>
@@ -97,7 +97,7 @@ export default function OnboardingOverlay({ onDone }) {
           </div>
 
           {/* Step counter */}
-          <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">
+          <p className="text-sm font-bold uppercase tracking-widest text-gray-400 mb-2">
             Étape {step + 1} sur {STEPS.length}
           </p>
 
@@ -113,13 +113,14 @@ export default function OnboardingOverlay({ onDone }) {
           <p className="text-sm text-gray-600 leading-relaxed mb-4">
             {current.desc}
           </p>
+          {step === 0 && <a className="min-h-11 inline-flex items-center text-sm font-semibold underline mb-3" href="mailto:contact@expedile.fr?subject=Consignes%20de%20r%C3%A9ception">Demander les consignes de réception</a>}
         </div>
 
         <div className="flex items-center justify-center gap-1 pb-2">
           {STEPS.map((_, i) => <button key={i} aria-label={`Voir l’étape ${i + 1}`} aria-current={i === step ? 'step' : undefined} onClick={() => setStep(i)} className="min-w-11 min-h-11 flex items-center justify-center"><span className="h-2 rounded-full transition-all" style={{ width: i === step ? 24 : 8, background: i === step ? 'var(--brand-text)' : 'var(--border-subtle)' }} /></button>)}
         </div>
 
-        {error && <p role="alert" className="text-xs text-red-600 px-6 pb-3">{error}</p>}
+        {error && <p role="alert" className="text-sm text-red-600 px-6 pb-3">{error}</p>}
         {/* Navigation */}
         <div className="flex gap-3 px-6 pb-6">
           {step > 0 && (
@@ -151,7 +152,7 @@ export default function OnboardingOverlay({ onDone }) {
             }}
           >
             {isLast ? (
-              <>C'est parti !</>
+              <>Ouvrir mon espace</>
             ) : (
               <>Suivant <ChevronRight size={14} /></>
             )}

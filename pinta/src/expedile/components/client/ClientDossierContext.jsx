@@ -7,11 +7,22 @@ import ChatPanel from '../detail/ChatPanel';
 
 /** Open only the requested context, then retain drafts while switching panels. */
 export default function ClientDossierContext() {
-  const { sel } = useApp();
+  const { sel, notifs, markNotifRead, flash } = useApp();
   const [params, setParams] = useSearchParams();
   const panel = params.get('panel');
   const [visited, setVisited] = useState({});
   const content = useRef(null);
+  const openedNotification = useRef(null);
+  const notificationId = params.get('notification');
+  useEffect(() => {
+    if (!sel || !notificationId || openedNotification.current === notificationId) return;
+    const notification = notifs?.find(item => item.id === notificationId && item.colisId === sel.id);
+    if (!notification) return;
+    // This component only mounts once the authorized expedition is available.
+    // Message/document panels are rendered before acknowledging the visit.
+    openedNotification.current = notificationId;
+    markNotifRead(notificationId).catch(() => flash({ msg: 'La lecture de la notification n’a pas pu être enregistrée. Vous pouvez la rouvrir depuis Notifications.', type: 'error' }));
+  }, [sel?.id, notificationId, notifs, markNotifRead, flash]);
   useEffect(() => {
     if (!['documents', 'messages'].includes(panel)) return;
     setVisited(previous => ({ ...previous, [panel]: true }));

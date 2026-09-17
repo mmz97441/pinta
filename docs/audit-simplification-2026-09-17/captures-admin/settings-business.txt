@@ -1,0 +1,42 @@
+EXPÉDÎLE
+Réceptionner des cartons
+Mon travail
+Dossiers d’expédition
+Conversations
+Équipe
+Départs
+Clients
+Estimation
+Paramètres
+Réduire
+C
+
+Camille
+
+Direction
+
+CONFIGURATION PARTAGÉE
+
+Paramètres
+Retour
+Départs
+Tarifs
+Catégories
+Équipe et accès
+Telegram
+Messages
+Règles métier
+Produits interdits
+Règles métier
+
+Relances calculées à partir de la demande envoyée. Une attente demandée par le client suspend les relances de préparation.
+
+Diviseur volumétrique
+Frais de stockage prévus (€/jour)
+Jours de stockage gratuit prévus
+Relances accord client
+Relances paiement
+
+Les frais de stockage ne sont pas prélevés automatiquement. Les frais ajoutés au devis doivent être vérifiés par l’équipe. Heure limite des départs : mercredi 17 h, heure de Paris.
+
+Enregistrer les règles

@@ -242,8 +242,8 @@ async function main() {
       await invoiceSelect(f).selectOption(B);
       assert.equal(await description(f).inputValue(), 'Scelleuse relue par Camille');
       await f.page.setViewportSize({ width: 390, height: 844 });
-      await f.page.getByRole('tab', { name: 'Document', exact: true }).click();
-      await f.page.getByRole('tab', { name: 'Articles et vérification', exact: true }).click();
+      await f.page.getByRole('tab', { name: 'Voir la facture', exact: true }).click();
+      await f.page.getByRole('tab', { name: 'Vérifier les articles', exact: true }).click();
       assert.equal(await description(f).inputValue(), 'Scelleuse relue par Camille');
       await saveDraft(f).click();
       await f.page.getByTestId('invoice-feedback').filter({ hasText: 'Brouillon enregistré pour scelleuse.pdf.' }).waitFor();
@@ -251,7 +251,7 @@ async function main() {
       assert.equal(f.tables.lignes.length, 1);
       assert.equal(saves(f)[0].input.p_confirm, false);
       await f.page.reload();
-      await f.page.getByRole('tab', { name: 'Articles et vérification', exact: true }).click();
+      await f.page.getByRole('tab', { name: 'Vérifier les articles', exact: true }).click();
       assert.equal(await description(f).inputValue(), 'Scelleuse relue par Camille');
       assert.equal(await category(f).inputValue(), 'cat-test');
     });
@@ -286,13 +286,13 @@ async function main() {
       await f.page.setViewportSize({ width: 390, height: 844 });
       await open(f, B);
       assert.equal(new URL(f.page.url()).searchParams.get('invoice'), B);
-      await f.page.getByRole('tab', { name: 'Articles et vérification', exact: true }).click();
+      await f.page.getByRole('tab', { name: 'Vérifier les articles', exact: true }).click();
       await validate(f).click(); await confirmed(f);
       await f.page.waitForFunction(id => document.querySelector('[aria-label="Facture à vérifier"]')?.value === id, C);
       await description(f).waitFor();
       assert.equal(await f.page.getByLabel('Facture à vérifier', { exact: true }).inputValue(), C);
-      assert.equal(await f.page.getByRole('tab', { name: 'Articles et vérification', exact: true }).getAttribute('aria-selected'), 'true');
-      assert.equal(await f.page.getByRole('tab', { name: 'Document', exact: true }).getAttribute('aria-selected'), 'false');
+      assert.equal(await f.page.getByRole('tab', { name: 'Vérifier les articles', exact: true }).getAttribute('aria-selected'), 'true');
+      assert.equal(await f.page.getByRole('tab', { name: 'Voir la facture', exact: true }).getAttribute('aria-selected'), 'false');
       assert.equal(await description(f).inputValue(), 'Organisateur de bureau');
       assert.equal(await f.page.getByRole('region', { name: 'Document source', exact: true }).isVisible(), false);
       assert.equal(f.tables.factures.find(invoice => invoice.id === B).valide, true);
@@ -326,6 +326,9 @@ async function main() {
       await description(f).fill('Correction temporaire pendant un changement de dossier');
       await category(f).selectOption('cat-test');
       await f.page.getByRole('button', { name: 'Retour à la liste de travail', exact: true }).click();
+      // The route restores the list after unmounting the document workspace.
+      // Wait for its visible table before locating the responsive invoice link.
+      await f.page.getByRole('columnheader', { name: /Action \/ étape/i }).waitFor();
       await f.page.getByRole('link', { name: '2 factures reçues · À vérifier — EXP-TEST-001', exact: true }).filter({ visible: true }).click();
       await description(f).waitFor();
       assert.equal(await description(f).inputValue(), 'Correction temporaire pendant un changement de dossier');
@@ -411,7 +414,7 @@ async function main() {
       await open(f, C);
       const originals = clone(f.tables.factures.filter(invoice => invoice.id !== C));
       const lines = clone(f.tables.lignes);
-      await f.page.getByRole('button', { name: 'Retirer cette facture en double', exact: true }).click();
+      await f.page.locator('summary').filter({ hasText: 'Autres actions sur cette facture' }).click(); await f.page.getByRole('button', { name: 'Retirer cette facture en double', exact: true }).click();
       await f.page.getByLabel('Facture originale à conserver', { exact: true }).selectOption(B);
       assert.equal(await f.page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false);
       const audit = await new AxeBuilder({ page: f.page }).include('#quote-documents').withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
@@ -435,7 +438,7 @@ async function main() {
       assert.deepEqual(f.tables.factures.filter(invoice => invoice.id !== C), originals);
       assert.deepEqual(f.tables.lignes, lines);
       assert.equal(f.tables.factures.length, 3);
-      await f.page.getByRole('tab', { name: 'Articles et vérification', exact: true }).click();
+      await f.page.getByRole('tab', { name: 'Vérifier les articles', exact: true }).click();
       await review(f).getByRole('button', { name: 'Remettre à vérifier', exact: true }).click();
       await f.page.getByTestId('invoice-header-feedback').filter({ hasText: 'Facture remise à vérifier' }).waitFor();
       assert.equal(await invoiceSelect(f).locator('option').filter({ hasNotText: 'Consultation de l’historique' }).count(), 3);
@@ -445,7 +448,7 @@ async function main() {
 
     for (const failure of ['conflict', 'network', 'refresh']) await scenario(`manual-duplicate-different-files-${failure}`, {}, async f => {
       await open(f, C);
-      await f.page.getByRole('button', { name: 'Retirer cette facture en double', exact: true }).click();
+      await f.page.locator('summary').filter({ hasText: 'Autres actions sur cette facture' }).click(); await f.page.getByRole('button', { name: 'Retirer cette facture en double', exact: true }).click();
       await f.page.getByLabel('Facture originale à conserver', { exact: true }).selectOption(B);
       await f.page.getByRole('button', { name: 'Vérifier le retrait', exact: true }).click();
       if (failure === 'conflict') f.records.get(B).reviewToken = 'changed-by-colleague';
@@ -545,7 +548,7 @@ async function main() {
           await f.page.setViewportSize(mobile ? { width: 390, height: 844 } : { width: 1440, height: 1000 });
           await open(f);
           assert.equal(await f.page.evaluate(() => document.documentElement.classList.contains('dark')), theme === 'dark', 'The requested theme must actually be applied before accessibility checks.');
-          if (mobile) await f.page.getByRole('tab', { name: 'Articles et vérification', exact: true }).click();
+          if (mobile) await f.page.getByRole('tab', { name: 'Vérifier les articles', exact: true }).click();
           await category(f).waitFor();
           assert.equal(await f.page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false);
           await validate(f).scrollIntoViewIfNeeded();

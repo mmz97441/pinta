@@ -12,7 +12,8 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [mode, setMode] = useState('login'); // 'login' | 'forgot'
+  const [recoveryInvalid] = useState(() => window.location.pathname === '/password' && new URLSearchParams(window.location.hash.slice(1)).has('error'));
+  const [mode, setMode] = useState(() => window.location.pathname === '/password' && new URLSearchParams(window.location.hash.slice(1)).has('error') ? 'forgot' : 'login'); // 'login' | 'forgot'
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -111,6 +112,7 @@ export default function LoginPage() {
         </div>
 
         <div className="w-full max-w-sm">
+          {recoveryInvalid && <p role="alert" className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">Ce lien de récupération n’est plus valable. Saisissez votre email pour recevoir un nouveau lien.</p>}
           {mode === 'login' ? (
             <form onSubmit={handleLogin} className="space-y-5">
               <div>
@@ -203,7 +205,7 @@ export default function LoginPage() {
               )}
               {success && (
                 <div className="flex items-center gap-2 p-2.5 rounded-lg bg-emerald-50 border border-emerald-200">
-                  <p className="text-xs text-emerald-700">{success}</p>
+                  <p role="status" className="text-sm text-emerald-700"><strong className="block">Vérifiez votre messagerie</strong>{email.trim()}<br />{success}</p>
                 </div>
               )}
 
@@ -212,11 +214,12 @@ export default function LoginPage() {
                 className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold transition-all active:scale-[0.98] hover:translate-y-[-1px] disabled:opacity-50 disabled:translate-y-0"
                 style={{ background: `linear-gradient(135deg, ${BRAND.gold}, ${BRAND.goldD})`, color: BRAND.navyD, boxShadow: `0 4px 14px -4px ${BRAND.gold}80` }}
               >
-                {loading ? 'Envoi...' : 'Envoyer le lien de réinitialisation'}
+                {loading ? 'Envoi...' : success ? 'Recevoir un nouveau lien' : 'Envoyer le lien de réinitialisation'}
               </button>
             </form>
           )}
 
+          <details className="mt-5 border-t border-slate-200 pt-2"><summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-slate-700">Première connexion ?</summary><p className="text-sm text-slate-600">Utilisez l’email et les instructions d’accès transmis par notre équipe. Vous n’avez pas reçu votre invitation ?</p><a className="inline-flex min-h-11 items-center text-sm font-semibold underline" href="mailto:contact@expedile.fr?subject=Mon%20acc%C3%A8s%20Exped%C3%AEle">Demander mon accès à l’équipe</a></details>
           <p className="mt-8 text-[11px] text-slate-400 text-center md:hidden">© {new Date().getFullYear()} Expedîle</p>
         </div>
       </div>

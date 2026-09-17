@@ -1,0 +1,59 @@
+EXPÉDÎLE
+Réceptionner des cartons
+Mon travail
+Dossiers d’expédition
+Conversations
+Équipe
+Départs
+Clients
+Estimation
+Paramètres
+Réduire
+C
+
+Camille
+
+Direction
+
+AVANT RÉCEPTION
+
+Estimation rapide
+
+Le même calcul que le devis définitif, à partir des informations déclarées.
+
+Particulier
+Professionnel
+Destination
+🇬🇵 Guadeloupe
+🇲🇶 Martinique
+🇷🇪 La Réunion
+🇾🇹 Mayotte
+Longueur (cm)
+Largeur (cm)
+Hauteur (cm)
+Poids (kg)
+Valeur de la marchandise (€)
+Catégorie de marchandise
+Choisir une catégorie
+Divers
+
+Pour des achats de plusieurs catégories, établissez le devis détaillé dans un dossier client.
+
+Destinataire (pour partager)
+
+Nom
+Prénom
+Email
+Votre estimation
+Colis sortant 1 : renseignez une valeur positive pour longueur.
+Colis sortant 1 : renseignez une valeur positive pour largeur.
+Colis sortant 1 : renseignez une valeur positive pour hauteur.
+Colis sortant 1 : renseignez une valeur positive pour poids.
+Article 1 : corrigez le prix unitaire.
+Article 1 : sélectionnez une catégorie connue.
+
+Estimation indicative, à confirmer après réception et vérification. Les frais supplémentaires ne sont ajoutés que s’ils sont convenus et renseignés.
+
+Télécharger l’estimation
+Copier le texte
+Préparer l’email

@@ -80,6 +80,7 @@ async function main() {
       const transition = section(f).getByRole('button', { name: 'Lancer la livraison', exact: true });
       await transition.click();
       await section(f).getByRole('button', { name: 'Confirmer la livraison', exact: true }).click();
+      await f.page.getByRole('dialog').getByRole('button', { name: 'Confirmer la livraison', exact: true }).click();
       await f.page.getByRole('heading', { name: 'Livraison terminée', exact: true }).waitFor();
       assert.equal(f.tables.colis[0].statut, 'livre');
       assert.equal(f.requests.filter(request => request.path.endsWith('/queue_message')).length, before);

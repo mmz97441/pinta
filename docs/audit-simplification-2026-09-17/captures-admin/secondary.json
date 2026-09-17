@@ -1,0 +1,148 @@
+{
+  "delegatedAdmin": {
+    "granted": {
+      "staff_id": "66666666-6666-4666-8666-666666666666",
+      "perm_admin_parametres": true,
+      "perm_admin_utilisateurs": true,
+      "perm_finances_modifier_tarifs": true,
+      "perm_admin_templates": true
+    },
+    "buttons": [
+      "Départs",
+      "Telegram"
+    ],
+    "errors": [],
+    "networkDenied": []
+  },
+  "export": {
+    "sheets": [
+      "Récap colis",
+      "Coût de revient",
+      "Résumé facturation"
+    ],
+    "rows": {
+      "Récap colis": [
+        {
+          "Référence": "EXP-TEST-001",
+          "Description": "Deux achats à regrouper",
+          "Date réception": "08/09/2026",
+          "Date paiement": "17/09/2026",
+          "Nb cartons": 2,
+          "Poids fact. (kg)": 3,
+          "Transport (€)": 40,
+          "OM (€)": 0,
+          "OMR (€)": 0,
+          "TVA (€)": 0,
+          "Frais divers (€)": 0,
+          "Total TTC (€)": 40
+        },
+        {
+          "Référence": "TOTAL",
+          "Description": "1 colis",
+          "Transport (€)": 40,
+          "OM (€)": 0,
+          "OMR (€)": 0,
+          "TVA (€)": 0,
+          "Frais divers (€)": 0,
+          "Total TTC (€)": 40
+        }
+      ],
+      "Coût de revient": [
+        {
+          "Réf. colis": "EXP-TEST-001",
+          "Article": "Article vérifié",
+          "Qté": 1,
+          "Prix achat unitaire (€)": 100,
+          "Prix achat total (€)": 100,
+          "Transport prorata (€)": 35,
+          "Taxes prorata (€)": 0,
+          "TVA prorata (€)": 0,
+          "Frais prorata (€)": 0,
+          "COÛT DE REVIENT (€)": 135
+        },
+        {
+          "Réf. colis": "EXP-TEST-001",
+          "Article": "ARTICLE DOUBLON EXCLU DU DEVIS",
+          "Qté": 1,
+          "Prix achat unitaire (€)": 14.3,
+          "Prix achat total (€)": 14.3,
+          "Transport prorata (€)": 5,
+          "Taxes prorata (€)": 0,
+          "TVA prorata (€)": 0,
+          "Frais prorata (€)": 0,
+          "COÛT DE REVIENT (€)": 19.3
+        }
+      ],
+      "Résumé facturation": [
+        {
+          "Champ": "Client",
+          "Valeur": "Exemple Camille Camille"
+        },
+        {
+          "Champ": "Type",
+          "Valeur": "pro"
+        },
+        {
+          "Champ": "Destination",
+          "Valeur": "🇷🇪 La Réunion"
+        },
+        {
+          "Champ": "Période",
+          "Valeur": "Septembre 2026"
+        },
+        {
+          "Champ": "Nombre de colis",
+          "Valeur": 1
+        },
+        {
+          "Champ": "Total Transport",
+          "Valeur": "40.00 €"
+        },
+        {
+          "Champ": "Total Taxes (OM+OMR)",
+          "Valeur": "0.00 €"
+        },
+        {
+          "Champ": "Total TVA",
+          "Valeur": "0.00 €"
+        },
+        {
+          "Champ": "Total Frais divers",
+          "Valeur": "0.00 €"
+        },
+        {
+          "Champ": "TOTAL TTC",
+          "Valeur": "40.00 €"
+        },
+        {
+          "Champ": "Méthode paiement",
+          "Valeur": "fin_de_mois"
+        }
+      ]
+    },
+    "businessWrites": [
+      {
+        "method": "HEAD",
+        "path": "/rest/v1/notifications",
+        "input": null
+      },
+      {
+        "method": "POST",
+        "path": "/rest/v1/rpc/refresh_staff_work_actions",
+        "input": {}
+      },
+      {
+        "method": "HEAD",
+        "path": "/rest/v1/notifications",
+        "input": null
+      },
+      {
+        "method": "POST",
+        "path": "/rest/v1/rpc/refresh_staff_work_actions",
+        "input": {}
+      }
+    ],
+    "errors": [],
+    "networkDenied": []
+  }
+}

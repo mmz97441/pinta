@@ -221,11 +221,22 @@ async function setup(browser, role, { failTable = null } = {}) {
     else if (url.pathname.includes('/rest/v1/rpc/')) {
       const rpc = url.pathname.split('/').pop(),
         colis = tables.colis.find((c) => c.id === input?.p_colis_id);
-      if (rpc === 'get_invoice_review_context') body = {
+      if (rpc === 'client_outgoing_tracking') body = tables.colis.filter(c => input.p_colis_ids.includes(c.id) && tables.clients.some(client => client.id === c.client_id && client.user_id === user.id) && ['expedie','transit','dedouanement','arrive','livraison','livre'].includes(c.statut)).map(c => ({ colis_id: c.id, tracking_principal: tables.envois.find(envoi => envoi.id === c.envoi_id)?.tracking_principal || null }));
+      else if (rpc === 'get_invoice_review_context') body = {
         invoices: tables.factures.filter(invoice => invoice.colis_id === input.p_colis_id).map(invoice => ({ factureId: invoice.id, reviewToken: 'fixture-review-' + invoice.id, extraction: null, draft: null, documentHash: null, duplicateCandidateIds: [] })),
         unlinkedLines: tables.lignes.filter(line => line.colis_id === input.p_colis_id && !line.facture_id),
       };
       else if (rpc === 'refresh_staff_work_actions') body = null;
+      else if (rpc === 'save_message_template') {
+        const existing = tables.message_templates.find(row => row.key === input.p_key && row.canal === input.p_canal);
+        if ((existing?.body ?? null) !== input.p_expected) {
+          status = 409; body = { code: '40001', message: 'Le modèle a changé. Rechargez sa version enregistrée.' };
+        } else {
+          const saved = { ...(existing || { id: crypto.randomUUID() }), key: input.p_key, canal: input.p_canal, body: input.p_body };
+          if (existing) Object.assign(existing, saved); else tables.message_templates.push(saved);
+          body = saved.body;
+        }
+      }
       else if (rpc === 'save_preparation_measurements') {
         if (input.p_expected_updated_at !== colis.updated_at || input.p_expected_composition_version !== colis.preparation_composition_version) {
           status = 409; body = { code: '40001', message: 'Le dossier a changé. Votre brouillon est conservé.' };
@@ -408,14 +419,14 @@ async function main() {
     await f.page.getByText('Reprendre ma décision', { exact: true }).click();
     await f.page.getByText('Mesures et fonctionnement', { exact: true }).click();
     await f.page.evaluate(() => window.dispatchEvent(new Event('focus')));
-    await f.page.getByText('Attente confirmée depuis un autre appareil.').waitFor();
+    await f.page.locator('details').filter({ has: f.page.locator('summary').filter({ hasText: /^Reprendre ma décision$/ }) }).getByText('Attente confirmée depuis un autre appareil.', { exact: true }).waitFor();
     assert.ok(f.requests.some((r) => r.path.endsWith('/client_colis')), 'Client refresh uses safe views');
     observations.push({ test: 'client-safe-view-refresh-on-focus', pass: true });
     await f.page.setViewportSize({ width: 390, height: 844 });
     await f.page.reload();
     await f.page.getByText('Reprendre ma décision', { exact: true }).click();
     await f.page.getByText('Mesures et fonctionnement', { exact: true }).click();
-    await f.page.getByText('Attente confirmée depuis un autre appareil.').waitFor();
+    await f.page.locator('details').filter({ has: f.page.locator('summary').filter({ hasText: /^Reprendre ma décision$/ }) }).getByText('Attente confirmée depuis un autre appareil.', { exact: true }).waitFor();
     await f.page.waitForTimeout(350);
     await f.page.screenshot({
       path: path.join(output, 'client-detail-mobile.png'),
@@ -436,25 +447,25 @@ async function main() {
     await f.page.getByRole('heading', { name: 'Mon travail', exact: true }).waitFor();
     observations.push({ test: 'staff-session-restored', pass: true });
     await f.page.goto(base + '/settings');
-    await f.page.getByRole('heading', { name: 'Départs' }).waitFor();
+    await f.page.getByRole('heading', { name: 'Paramètres', exact: true }).waitFor();
     assert.equal(
       f.requests.filter((r) => r.method === 'POST' && r.path.endsWith('/envois')).length,
       0,
       'Settings cannot create departures on navigation',
     );
-    await f.page.getByRole('button', { name: 'Messages', exact: true }).click();
+    await f.page.getByRole('button', { name: 'Modèles de messages', exact: true }).click();
     await f.page
       .locator('textarea')
       .first()
       .fill('Bonjour {{prenom}}, votre dossier {{ref}} est disponible.');
-    await f.page.getByRole('button', { name: 'Sauvegarder', exact: true }).click();
-    await f.page.getByRole('button', { name: /Sauvegardé/ }).waitFor();
+    await f.page.getByRole('button', { name: 'Enregistrer le modèle', exact: true }).click();
+    await f.page.getByText('Modèle enregistré. Aucun message n’a été envoyé.', { exact: true }).waitFor();
     assert.equal(
       f.tables.message_templates[0].body,
       'Bonjour {{prenom}}, votre dossier {{ref}} est disponible.',
     );
     await f.page.reload();
-    await f.page.getByRole('button', { name: 'Messages', exact: true }).click();
+    await f.page.getByRole('button', { name: 'Modèles de messages', exact: true }).click();
     assert.equal(
       await f.page.locator('textarea').first().inputValue(),
       f.tables.message_templates[0].body,
@@ -556,15 +567,18 @@ async function main() {
     await f.page.keyboard.press('Escape');
     observations.push({ test: 'reception-short-long-scroll-three-close-methods', pass: true });
     await f.page.goto(base + '/settings');
-    await f.page.getByRole('heading', { name: 'Départs' }).waitFor();
+    await f.page.getByRole('heading', { name: 'Paramètres', exact: true }).waitFor();
     await f.page.waitForTimeout(350);
     const settingsNav = f.page.getByRole('navigation', { name: 'Paramètres', exact: true });
-    const compressedTabs = await settingsNav.getByRole('button').evaluateAll(buttons => buttons.filter(b => b.scrollWidth > b.clientWidth + 1).map(b => b.textContent));
-    assert.deepEqual(compressedTabs, [], 'Settings labels do not overlap on mobile');
-    await settingsNav.getByRole('button').last().scrollIntoViewIfNeeded();
-    assert.ok(await settingsNav.evaluate(e => e.scrollLeft > 0), 'All settings tabs remain reachable by horizontal scrolling');
-    await settingsNav.evaluate(e => { e.scrollLeft = 0; });
-    observations.push({ test: 'mobile-settings-labels-and-horizontal-navigation', pass: true });
+    const settingsSection = settingsNav.getByLabel('Rubrique', { exact: true });
+    const sections = await settingsSection.locator('option').evaluateAll(options => options.map(option => ({ value: option.value, label: option.textContent })));
+    assert.equal(sections.length, 7, 'All seven settings sections remain reachable on mobile');
+    for (const section of sections) {
+      await settingsSection.selectOption(section.value);
+      await f.page.getByRole('heading', { name: section.value === 'users' ? 'Utilisateurs et permissions' : section.label, exact: true }).waitFor();
+      assert.ok(await settingsSection.evaluate(element => { const rect = element.getBoundingClientRect(); return rect.x >= 0 && rect.right <= innerWidth + 1; }), 'Settings selector stays entirely inside mobile viewport');
+    }
+    observations.push({ test: 'mobile-settings-labels-and-section-navigation', pass: true });
     await f.page.screenshot({ path: path.join(output, 'settings-mobile.png'), fullPage: true });
     await f.page.setViewportSize({ width: 1440, height: 1000 });
     await f.page.goto(base + '/');
@@ -581,7 +595,7 @@ async function main() {
     await f.page.setViewportSize({ width: 390, height: 844 });
     await f.page.goto(base + '/suivi/fixture-public-token-123456789');
     await f.page.getByText('EXP-TEST-001', { exact: true }).waitFor();
-    await f.page.getByText('Devis reçu — en attente de paiement', { exact: true }).waitFor();
+    await f.page.getByText('Règlement attendu du client', { exact: true }).waitFor();
     await f.page.getByText('Cartons et mesures', { exact: true }).click();
     await f.page.getByText('Colis sortant 1 · 30 × 20 × 20 cm · 5 kg', { exact: true }).waitFor();
     await f.page.getByText('Parcours du colis', { exact: true }).click();

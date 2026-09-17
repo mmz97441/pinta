@@ -25,7 +25,7 @@ import { getPrenom } from '../../utils';
  *   - Révoquer (avec confirmation)
  */
 export default function ShareLinkPanel({ client, currentUserId, flash, ask }) {
-  const {data,refreshColis}=useApp();
+  const {data,refreshColis,can}=useApp();
   const dossiers=data.filter(c=>c.clientId===client?.id&&!c.archive);
   const [referenceId,setReferenceId]=useState('');
   const dossierId=dossiers.length===1?dossiers[0].id:referenceId;
@@ -93,6 +93,7 @@ export default function ShareLinkPanel({ client, currentUserId, flash, ask }) {
     }
     if (!url) return;
     if(!dossierId){flash?.({msg:'Choisissez le dossier de référence pour cet échange.',type:'warning'});return;}
+    if (!can('perm_comm_telegram')) return;
     setSendingTg(true);
     const prenom = getPrenom(client) || 'bonjour';
     const message = `Bonjour ${prenom} 👋\n\nVoici votre lien de suivi à partager avec votre famille :\n\n${url}\n\nIls pourront suivre l'avancement de chaque colis sans créer de compte.\n\nL'équipe Expedîle`;
@@ -117,7 +118,7 @@ export default function ShareLinkPanel({ client, currentUserId, flash, ask }) {
       return;
     }
     ask(
-      'Révoquer le lien',
+      `Révoquer le lien de ${client.nom} ?`,
       'Le destinataire ne pourra plus accéder au suivi via ce lien. Vous pourrez en créer un nouveau ensuite.',
       doRevoke,
       { danger: true, okLabel: 'Révoquer' },
@@ -173,7 +174,7 @@ export default function ShareLinkPanel({ client, currentUserId, flash, ask }) {
   if (!link) {
     return (
       <Section>
-        <SectionHeader />
+        <SectionHeader /><p className="text-sm text-gray-600">Suivi public destiné aux proches : toute personne possédant ce lien peut consulter l’avancement des dossiers. Il ne donne pas accès à l’espace privé, aux factures ni aux messages.</p>
         <div className="rounded-2xl border border-slate-200/80 bg-gradient-to-br from-slate-50/40 to-white px-5 py-6">
           <div className="flex items-start gap-4">
             <div
@@ -212,7 +213,7 @@ export default function ShareLinkPanel({ client, currentUserId, flash, ask }) {
   if (isRevoked) {
     return (
       <Section>
-        <SectionHeader />
+        <SectionHeader /><p className="text-sm text-gray-600">Suivi public destiné aux proches : toute personne possédant ce lien peut consulter l’avancement des dossiers. Il ne donne pas accès à l’espace privé, aux factures ni aux messages.</p>
         <div className="rounded-2xl border border-slate-200/80 bg-white px-5 py-5">
           <div className="flex items-center gap-3 mb-3">
             <div className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center">
@@ -241,8 +242,9 @@ export default function ShareLinkPanel({ client, currentUserId, flash, ask }) {
   // ── Active ──────────────────────────────────────────────────────────
   return (
     <Section>
-      <SectionHeader />
+      <SectionHeader /><p className="text-sm text-gray-600">Suivi public destiné aux proches : toute personne possédant ce lien peut consulter l’avancement des dossiers. Il ne donne pas accès à l’espace privé, aux factures ni aux messages.</p>
 
+      <a className="inline-flex min-h-11 items-center underline" href={url} target="_blank" rel="noreferrer">Prévisualiser ce que verra le destinataire</a>
       <div className="rounded-2xl border border-slate-200/80 bg-white overflow-hidden">
         {/* Status bar */}
         <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-slate-100 flex-wrap">
@@ -311,7 +313,7 @@ export default function ShareLinkPanel({ client, currentUserId, flash, ask }) {
             </button>
             <button
               onClick={handleTelegramShare}
-              disabled={sendingTg || !client?.telegramChatId || !dossierId}
+              disabled={sendingTg || !client?.telegramChatId || !dossierId || !can('perm_comm_telegram')}
               title={!client?.telegramChatId ? 'Client non lié à Telegram' : 'Envoyer au client via Telegram'}
               className="inline-flex items-center justify-center gap-1.5 text-xs font-bold px-3 py-2.5 rounded-xl text-white transition-all hover:translate-y-[-1px] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:translate-y-0 whitespace-nowrap"
               style={{ background: '#0088cc' }}
@@ -341,7 +343,7 @@ function SectionHeader() {
   return (
     <div className="flex items-baseline justify-between">
       <h3 className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">
-        Lien de suivi partagé
+        Partager le suivi avec un proche
       </h3>
       <span className="text-[10px] text-slate-400">expire 10j après livraison</span>
     </div>

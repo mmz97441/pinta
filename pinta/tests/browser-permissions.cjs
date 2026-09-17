@@ -60,12 +60,17 @@ async function fixture(browser, { relation = 'object', initial = {}, role = 'dir
   return { ...f, calls, directWrites, accessReads, records, write, control };
 }
 async function openPermissions(f, userName = 'Alex Mesures') {
-  await f.page.goto(`${base}/settings`);
-  await f.page.getByRole('button', { name: 'Équipe et accès', exact: true }).click();
+  await f.page.goto(`${base}/settings?tab=users`);
   await selectUser(f, userName);
 }
 async function selectUser(f, name) {
   await f.page.getByRole('group', { name: 'Utilisateurs de l’équipe', exact: true }).getByRole('button').filter({ hasText: name }).click();
+  // Detailed permission groups are intentionally collapsed for normal users.
+  // Expand them explicitly here to preserve the existing all-flags regressions.
+  for (const category of categories) {
+    const toggle = f.page.getByRole('region', { name: category.label, exact: true }).getByRole('button', { expanded: false });
+    if (await toggle.count()) await toggle.first().click();
+  }
 }
 const check = (f, label) => f.page.getByRole('checkbox', { name: label, exact: true });
 const save = f => f.page.getByRole('button', { name: 'Enregistrer les permissions', exact: true });
@@ -243,7 +248,7 @@ async function main() {
       assert.equal(f.calls[0].p_staff_id, TARGET);
       await selectUser(f, 'Jo Transport'); assert.equal(await check(f, 'Voir les envois').isChecked(), true);
       assert.equal(f.records.get(SECOND).perm_envois_voir, false, 'Saving Alex never writes Jo’s draft');
-      await f.page.getByRole('button', { name: 'Messages', exact: true }).click();
+      await f.page.getByRole('button', { name: 'Modèles de messages', exact: true }).click();
       await f.page.getByRole('button', { name: 'Équipe et accès', exact: true }).click();
       await selectUser(f, 'Jo Transport'); assert.equal(await check(f, 'Voir les envois').isChecked(), true, 'A settings-tab change must retain unsaved values');
       await selectUser(f, 'Test Camille'); await f.page.getByText('Accès total lié au rôle', { exact: false }).waitFor();
@@ -268,7 +273,7 @@ async function main() {
     });
 
     await scenario('connected-worker-permissions-refresh-on-window-focus', { role: 'preparateur', initial: { perm_colis_receptionner: true } }, async f => {
-      const create = f.page.getByRole('button', { name: 'Réceptionner des cartons', exact: true }); await create.waitFor();
+      const create = f.page.getByRole('button', { name: /^Réceptionner( des cartons)?$/ }); await create.waitFor();
       f.write(ids.S, { ...f.records.get(ids.S), perm_colis_receptionner: false });
       const read = f.page.waitForResponse(response => response.request().method() === 'GET' && new URL(response.url()).pathname === '/rest/v1/staff_users');
       await f.page.evaluate(() => window.dispatchEvent(new Event('focus'))); await read;

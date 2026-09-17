@@ -4,6 +4,9 @@ import { useApp } from '../../context/AppContext';
 import { STATUTS, BRAND } from '../../constants';
 import { fetchLogsForColis, fetchAuditActions } from '../../lib/supabaseData';
 
+const ACTION_NAMES = {
+  preparation_measured: 'Mesures après préparation enregistrées', quote_saved: 'Devis enregistré', quote_sent: 'Devis envoyé', invoice_review_saved: 'Facture vérifiée', invoice_duplicate: 'Copie de facture retirée', invoice_duplicate_restored: 'Facture remise à vérifier', colis_reverted: 'Étape du dossier corrigée', colis_archived: 'Dossier archivé', colis_cancelled: 'Expédition annulée', payment_confirmed: 'Paiement confirmé', departure_confirmed: 'Départ confirmé', colis_assigned: 'Suivi du dossier attribué', staff_work_action: 'Organisation du travail mise à jour',
+};
 function formatDate(iso) {
   if (!iso) return '';
   const d = new Date(iso);
@@ -111,11 +114,9 @@ export default function AuditLog({ expanded = false, includeAudit }) {
                     <div className="flex items-center gap-1.5">
                       <span className="text-xs font-semibold text-gray-700">{e.user}</span>
                       <span className="text-[10px] text-gray-400">—</span>
-                      <span className="text-[10px] font-bold" style={{ color: BRAND.goldD }}>{e.action}</span>
+                      <span className="text-[10px] font-bold" style={{ color: BRAND.goldD }}>{ACTION_NAMES[e.action] || (String(e.action).includes('_') ? 'Action enregistrée sur le dossier' : e.action)}</span>
                     </div>
-                    {e.detail && (
-                      <pre className="text-[10px] text-gray-500 mt-0.5 whitespace-pre-line font-sans">{e.detail}</pre>
-                    )}
+                    <details className="text-sm text-gray-600"><summary className="min-h-11 cursor-pointer py-2">Détails de cet événement</summary><p className="break-words">{e.action}</p>{e.detail && <pre className="mt-1 whitespace-pre-wrap break-words font-sans">{typeof e.detail === 'string' ? e.detail : JSON.stringify(e.detail, null, 2)}</pre>}</details>
                   </div>
                 )}
                 {e.date && (

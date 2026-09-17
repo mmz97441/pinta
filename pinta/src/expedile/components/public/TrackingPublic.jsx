@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom';
 import { Package, CheckCircle, Clock, CreditCard, Plane, Shield, Warehouse, Truck, Loader2, AlertTriangle, Ruler } from 'lucide-react';
 import { BRAND, STATUTS, DESTINATIONS, getDestByCP } from '../../constants';
 import { configurationError } from '../../lib/supabase';
-import { clientJourney } from '../../domain/clientJourney';
+import { publicJourney } from '../../domain/clientJourney';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
@@ -42,11 +42,13 @@ export default function TrackingPublic() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [retry, setRetry] = useState(0);
+  const [invalidLink, setInvalidLink] = useState(false);
 
   useEffect(() => {
-    setData(null); setError(null); setLoading(true);
+    setData(null); setError(null); setInvalidLink(false); setLoading(true);
     if (configurationError) { setError('Le suivi est momentanément indisponible. Contactez notre équipe.'); setLoading(false); return; }
-    if (!token) { setError('Lien invalide'); setLoading(false); return; }
+    if (!token) { setInvalidLink(true); setError('Ce lien n’est plus valable.'); setLoading(false); return; }
     const controller = new AbortController();
     fetch(`${SUPABASE_URL}/functions/v1/get-tracking?token=${encodeURIComponent(token)}`, {
       signal: controller.signal,
@@ -55,16 +57,16 @@ export default function TrackingPublic() {
         Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
       },
     })
-      .then((r) => r.json())
+      .then(async (r) => { const res = await r.json(); return { ...res, httpStatus: r.status }; })
       .then((res) => {
         if (controller.signal.aborted) return;
-        if (!res.ok) setError(res.error || 'Une erreur est survenue');
+        if (!res.ok) { const invalid = [400, 401, 403, 404, 410].includes(res.httpStatus); setInvalidLink(invalid); setError(invalid ? 'Ce lien n’est plus valable ou n’est pas accessible.' : 'Le service de suivi est momentanément indisponible.'); }
         else setData(res);
         setLoading(false);
       })
       .catch(() => { if (!controller.signal.aborted) { setError('Connexion impossible. Réessayez plus tard.'); setLoading(false); } });
     return () => controller.abort();
-  }, [token]);
+  }, [token, retry]);
 
   if (loading) {
     return (
@@ -86,7 +88,7 @@ export default function TrackingPublic() {
           </div>
           <h1 className="text-lg font-black mb-2" style={{ color: BRAND.navy }}>Suivi indisponible</h1>
           <p className="text-sm text-gray-500">{error}</p>
-          <p className="text-xs text-gray-400 mt-4">Contactez l'expéditeur pour obtenir un nouveau lien.</p>
+          {invalidLink ? <p className="text-sm text-gray-600 mt-4">Contactez l’expéditeur pour obtenir un nouveau lien.</p> : <button className="mt-4 min-h-11 rounded-xl px-4 text-sm font-semibold text-white" style={{ backgroundColor: BRAND.navy }} onClick={() => setRetry(value => value + 1)}>Réessayer le suivi</button>}
         </div>
       </div>
     );
@@ -130,7 +132,7 @@ export default function TrackingPublic() {
         {/* Cards colis */}
         {data.colis.map((c) => {
           const phaseIdx = getPhaseIndex(c.statut);
-          const journey = clientJourney(c);
+          const journey = publicJourney(c);
           return (
             <div key={c.ref} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
               {/* Header du colis */}
