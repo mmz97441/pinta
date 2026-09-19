@@ -35,6 +35,9 @@ async function main() {
         localStorage.setItem('expedile-theme', isDark ? 'dark' : 'light');
       }, dark);
       Object.assign(f.tables.colis[0], { statut: 'mesure', dims_par_colis: initialBoxes, poids: 5, fin_l: null, fin_w: null, fin_h: null, fin_p: null });
+      // Mirror the server projection when moving the fixture back to receipt:
+      // preparation is no longer the active task before client agreement.
+      f.tables.staff_work_actions[0].kind = 'reception';
       await f.login();
       await f.page.goto(`${base}/colis?sort=client&dir=desc&dossier=${ids.P}`);
       await f.page.waitForFunction(isDark => document.documentElement.classList.contains('dark') === isDark, dark);

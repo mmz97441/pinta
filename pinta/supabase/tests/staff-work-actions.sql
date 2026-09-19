@@ -83,6 +83,27 @@ UPDATE colis SET attente_client_date=now()-interval '2 days',attente_client_unti
 SELECT work_assert((SELECT state='ready' AND action_hint='Réexaminer l’attente client' FROM staff_work_actions WHERE colis_id='e4000000-0000-4000-8000-000000000007' AND kind='reception'),'Expired customer wait creates review action');
 SELECT work_assert((SELECT feu_vert='en_attente' FROM colis WHERE id='e4000000-0000-4000-8000-000000000007'),'Review deadline never grants customer consent');
 
+-- Taking responsibility for a customer wait must not start the business work.
+INSERT INTO colis(id,client_id,statut,feu_vert,responsible_staff_id) VALUES
+ ('e4000000-0000-4000-8000-000000000009','e3000000-0000-4000-8000-000000000001','attente_feu_vert','en_attente','e1000000-0000-4000-8000-000000000002');
+SELECT set_config('test.waiting_action',(SELECT id::text FROM staff_work_actions WHERE colis_id='e4000000-0000-4000-8000-000000000009' AND kind='reception'),true);
+SELECT set_config('test.waiting_before',(SELECT to_jsonb(a)::text FROM staff_work_actions a WHERE id=current_setting('test.waiting_action')::uuid),true);
+SELECT set_config('test.waiting_dossier',(SELECT to_jsonb(c)::text FROM colis c WHERE id='e4000000-0000-4000-8000-000000000009'),true);
+SELECT work_assert((SELECT state='waiting' AND assignee_id IS NULL AND blocked_reason='Accord client attendu' FROM staff_work_actions WHERE id=current_setting('test.waiting_action')::uuid),'Customer wait is unassigned and remains a genuine business blockage');
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub','e1000000-0000-4000-8000-000000000002',true);
+SELECT work_reject($q$SELECT mutate_staff_work_action(current_setting('test.waiting_action')::uuid,'claim',(current_setting('test.waiting_before')::jsonb->>'version')::integer)$q$,'Preparation permission does not allow claiming customer agreement work');
+SELECT work_assert((SELECT to_jsonb(a)=current_setting('test.waiting_before')::jsonb FROM staff_work_actions a WHERE id=current_setting('test.waiting_action')::uuid),'Unauthorized claim leaves the waiting task untouched');
+SELECT set_config('request.jwt.claim.sub','e1000000-0000-4000-8000-000000000001',true);
+SELECT work_assert((mutate_staff_work_action(current_setting('test.waiting_action')::uuid,'claim',(current_setting('test.waiting_before')::jsonb->>'version')::integer)).assignee_id=auth.uid(),'Eligible staff can take responsibility for a blocked customer wait');
+SELECT work_assert((SELECT (to_jsonb(a)-ARRAY['assignee_id','version','updated_at'])=(current_setting('test.waiting_before')::jsonb-ARRAY['assignee_id','version','updated_at']) AND version=(current_setting('test.waiting_before')::jsonb->>'version')::integer+1 FROM staff_work_actions a WHERE id=current_setting('test.waiting_action')::uuid),'Claim preserves waiting state, blockage, dates and all business prerequisites');
+SELECT work_assert((SELECT to_jsonb(c)=current_setting('test.waiting_dossier')::jsonb FROM colis c WHERE id='e4000000-0000-4000-8000-000000000009'),'Claim changes neither customer agreement nor dossier referent, measurements or status');
+SELECT work_reject($q$SELECT mutate_staff_work_action(current_setting('test.waiting_action')::uuid,'start',(SELECT version FROM staff_work_actions WHERE id=current_setting('test.waiting_action')::uuid))$q$,'Taking a waiting task does not authorize starting without customer agreement');
+SELECT work_assert((SELECT state='waiting' AND assignee_id=auth.uid() AND started_at IS NULL FROM staff_work_actions WHERE id=current_setting('test.waiting_action')::uuid),'Rejected start keeps claimed customer wait assigned and unstarted');
+SELECT work_assert(EXISTS(SELECT 1 FROM audit_actions WHERE colis_id='e4000000-0000-4000-8000-000000000009' AND action='work_action_claim' AND user_id=auth.uid() AND detail::jsonb#>>'{after,state}'='waiting'),'Claiming customer wait records the actor and preserved waiting state');
+RESET ROLE;
+SELECT work_assert(NOT EXISTS(SELECT 1 FROM messages WHERE colis_id='e4000000-0000-4000-8000-000000000009') AND NOT EXISTS(SELECT 1 FROM notifications WHERE colis_id='e4000000-0000-4000-8000-000000000009') AND NOT EXISTS(SELECT 1 FROM notification_outbox WHERE colis_id='e4000000-0000-4000-8000-000000000009'),'Claiming an unassigned wait queues no customer or colleague notification');
+
 -- Pro transport quotes have distinct commercial prerequisites from customs documents.
 INSERT INTO clients(id,nom,cp,email,type) VALUES('e3000000-0000-4000-8000-000000000003','Pro transport','97400','pro-work@example.test','pro');
 INSERT INTO colis(id,client_id,statut,feu_vert) VALUES('e4000000-0000-4000-8000-000000000008','e3000000-0000-4000-8000-000000000003','en_preparation','autorise');

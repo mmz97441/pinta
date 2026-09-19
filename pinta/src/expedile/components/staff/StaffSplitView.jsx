@@ -30,6 +30,8 @@ import { receptionCartonManifest } from '../../domain/reception';
 import { measureShipment, volumetricDivisor } from '../../domain/quote';
 import { findColisByReference, normalizeColisReference } from '../../lib/supabaseData';
 import InvoiceReviewIndicator from '../ui/InvoiceReviewIndicator';
+import TaskOwnership from '../workspace/TaskOwnership';
+import { findDossierWorkAction, workActionUrl, WORK_KINDS } from '../../domain/personalWork';
 const QUEUE_ICONS = { messages: MessageCircle, preparation: Wrench, documents: FileText, waiting: Clock };
 const unreadMessages = (colis) => (colis.messages || []).filter((message) => message.type === 'client' && !message.lu);
 
@@ -295,7 +297,7 @@ export default function StaffColisPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const returnTo = location.pathname + location.search;
-  const { data, clients, getClient, envois, setSelId, sel, changerStatut, flash, can, auth, loadArchives, archivesLoaded, categories, tarifs, settings, teamUsers = [] } = useApp();
+  const { data, clients, getClient, envois, setSelId, sel, changerStatut, flash, can, auth, loadArchives, archivesLoaded, categories, tarifs, settings, teamUsers = [], workActions = [] } = useApp();
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [searchParams, setSearchParams] = useSearchParams();
   const workFilter = searchParams.get('work');
@@ -863,7 +865,7 @@ export default function StaffColisPage() {
                     <p className="mt-1 text-xs text-gray-500">{nextAction(c, client, now)}{c.casier ? ` · ${c.casier}` : ''}</p>
                     <div className="mt-2 flex flex-wrap gap-2 text-sm"><Badge statut={c.statut} /><span>{receptionCartonManifest(c).nbColis} carton(s) reçu(s)</span></div>
                     <InvoiceReviewIndicator dossier={c} />
-                    <p className="mt-1 text-xs text-gray-500">{c.responsibleStaffId ? teamUsers.find(user => user.authId === c.responsibleStaffId)?.nom || 'Équipe' : 'Non attribué'} · {urgency(c, now).label}</p>
+                    <p className="mt-1 text-xs text-gray-500">Suivi du dossier : {c.responsibleStaffId ? teamUsers.find(user => user.authId === c.responsibleStaffId)?.nom || 'Équipe' : 'à attribuer'} · {urgency(c, now).label}</p>
                     <p className="mt-1 truncate text-xs text-gray-500">{c.desc || 'Contenu à préciser'}</p>
                   </div>
                 </article>;
@@ -965,10 +967,12 @@ export default function StaffColisPage() {
           const packages = sel.finalPackages?.length ? sel.finalPackages : [{ dimL: sel.finL, dimW: sel.finW, dimH: sel.finH, poids: sel.finP }];
           const finalWeights = measureShipment(packages, volumetricDivisor(settings));
           const finalMeasuresCurrent = sel.preparationCompositionVersion == null || sel.finalMeasurementsVersion === sel.preparationCompositionVersion;
-          const previewTask = resolveDossierTask(sel, '', [], can);
           const needsReply = needsConversationAction(sel) && ['perm_comm_message_libre','perm_comm_telegram','perm_comm_email'].some(can);
-          const actionTitle = needsReply ? 'Répondre au client' : DOSSIER_TASKS[previewTask]?.title || 'Ouvrir le dossier';
-          const actionUrl = needsReply ? `/conversations?${new URLSearchParams({ dossier: sel.id, returnTo })}` : dossierTaskUrl(sel.id, previewTask, new URLSearchParams({ returnTo }).toString());
+          const currentAction = findDossierWorkAction(sel, workActions, needsReply ? 'conversation' : undefined, { can });
+          const previewTask = resolveDossierTask(sel, currentAction ? new URLSearchParams({ action: currentAction.id }) : '', workActions, can);
+          const isConversation = needsReply || currentAction?.kind === 'conversation';
+          const actionTitle = currentAction?.action_hint || (currentAction?.kind === 'correction' ? WORK_KINDS.correction.label : isConversation ? 'Répondre au client' : DOSSIER_TASKS[previewTask]?.title || 'Ouvrir le dossier');
+          const actionUrl = currentAction ? workActionUrl(currentAction, returnTo, sel) : isConversation ? `/conversations?${new URLSearchParams({ dossier: sel.id, returnTo })}` : dossierTaskUrl(sel.id, previewTask, new URLSearchParams({ returnTo }).toString());
           return (
           <div ref={(element) => { detailScrollRef.current = element; mobileDetailRef.current = element; }} role={narrowScreen ? 'dialog' : 'region'} aria-modal={narrowScreen ? true : undefined} tabIndex={-1} aria-label={`Dossier ${sel.ref}`} className={`fixed inset-0 z-[60] lg:relative lg:inset-auto lg:z-10 w-full lg:w-[500px] 2xl:w-[560px] flex-shrink-0 border-l border-gray-200 bg-white overflow-y-auto overscroll-contain pb-[env(safe-area-inset-bottom)]`}>
             <button onClick={closeDetail} className="flex min-h-11 items-center gap-2 px-4 text-sm font-semibold lg:hidden"><ChevronLeft size={18} />Retour aux dossiers</button>
@@ -1047,7 +1051,8 @@ export default function StaffColisPage() {
 
             <div className="px-4 pb-4 space-y-3">
               <p className="text-sm font-semibold text-slate-800">{actionTitle}</p>
-              <button onClick={() => navigate(actionUrl)} className="min-h-11 w-full rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white">{actionTitle}</button>
+              <TaskOwnership key={currentAction?.id || sel.id} action={currentAction} />
+              <button onClick={() => navigate(actionUrl)} className={`min-h-11 w-full rounded-xl px-4 py-3 text-sm font-semibold ${currentAction && !currentAction.assignee_id ? 'border border-slate-300 text-slate-700' : 'bg-slate-900 text-white'}`}>{actionTitle}</button>
               {pendingDocumentCount > 0 && ['perm_factures_voir','perm_factures_valider','perm_factures_ajouter'].some(permission => can(permission)) && <button onClick={() => navigate(dossierTaskUrl(sel.id,'documents',new URLSearchParams({ returnTo }).toString()))} className="min-h-11 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700">{pendingDocumentCount} document(s) reçu(s) à vérifier</button>}
               <details key={sel.id} className="rounded-xl border border-gray-200 bg-white px-3">
                 <summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-slate-700">Cartons reçus ({receptionManifest.nbColis})</summary>

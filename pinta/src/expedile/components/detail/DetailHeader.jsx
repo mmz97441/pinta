@@ -7,11 +7,13 @@ import { STATUTS } from '../../constants';
 import { receptionCartonManifest } from '../../domain/reception';
 import { workspaceReturnPath } from '../../domain/navigation';
 import { DOSSIER_TASKS, dossierTaskUrl, previousDossierTask, nextDossierTask } from '../../domain/dossierTasks';
+import { findDossierWorkAction } from '../../domain/personalWork';
+import TaskOwnership from '../workspace/TaskOwnership';
 
 export default function DetailHeader({ task, onOpenContext }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const { sel, selClient, selDest, isStaff, teamUsers = [], can } = useApp();
+  const { sel, selClient, selDest, isStaff, teamUsers = [], can, workActions = [] } = useApp();
   if (!sel) return null;
 
   if (isStaff && task) {
@@ -21,6 +23,7 @@ export default function DetailHeader({ task, onOpenContext }) {
     const tasks = Object.entries(DOSSIER_TASKS).filter(([key]) => key === task || (key !== 'documents' || showDocuments) && (key !== 'devis' || showQuote));
     const previousTask = previousDossierTask(task, can);
     const nextTask = nextDossierTask(task, can);
+    const workAction = findDossierWorkAction(sel, workActions, task, { can, actionId: new URLSearchParams(location.search).get('action') });
     const stepButtonClass = 'inline-flex min-h-11 min-w-0 items-center justify-center gap-1.5 rounded-xl border border-slate-300 px-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 sm:px-3 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800';
     return <header className="sticky top-0 z-20 border-b border-slate-200 bg-white px-3 py-3 sm:px-6 dark:border-slate-700 dark:bg-slate-900" data-testid="dossier-task-header">
       <div className="mx-auto flex max-w-[1600px] flex-wrap items-center gap-2 sm:gap-3">
@@ -37,6 +40,7 @@ export default function DetailHeader({ task, onOpenContext }) {
           {nextTask ? <button aria-label={DOSSIER_TASKS[nextTask].nextLabel} title={DOSSIER_TASKS[nextTask].nextLabel} onClick={() => navigate(dossierTaskUrl(sel.id, nextTask, location.search))} className={stepButtonClass}><span className="sm:hidden">Suivant</span><span className="hidden sm:inline">{DOSSIER_TASKS[nextTask].nextLabel}</span><ArrowRight size={16} className="shrink-0" /></button> : <span aria-hidden="true" className="sm:hidden" />}
         </nav>
       </div>
+      {workAction && <div className="mx-auto mt-3 max-w-[1600px]"><TaskOwnership action={workAction} /></div>}
     </header>;
   }
 

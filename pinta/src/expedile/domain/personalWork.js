@@ -37,6 +37,20 @@ export function staffAvailable(preference, now = Date.now()) {
   return preference?.available !== false && !(workTime(preference?.absent_until) > now);
 }
 export function actionBlocked(action) { return Boolean(action.blocked_reason?.trim()); }
+export function actionWaiting(action) { return action.state === 'waiting' || actionBlocked(action); }
+
+/** A screen may only claim its own active task. The dossier preview can fall
+ * back to another active task when an old quote no longer matches its state. */
+export function findDossierWorkAction(dossier, actions = [], task, { can = () => true, actionId } = {}) {
+  if (!dossier || dossier.archive) return null;
+  const rows = sortWorkActions(actions.filter(action => action.colis_id === dossier.id && action.state !== 'done'));
+  const explicit = rows.find(action => action.id === actionId);
+  if (task && explicit?.kind === 'correction' && resolveDossierTask(dossier, new URLSearchParams({ action: explicit.id }), [explicit], can) === task) return explicit;
+  const kinds = { reception: 'reception', accord: dossier.statut === 'refuse_client' ? 'correction' : 'reception', preparation: 'preparation', documents: 'documents', devis: 'quote', expedition: 'departure', conversation: 'conversation' };
+  const eligible = task ? rows : rows.filter(action => canWorkAction(action, can));
+  const match = eligible.find(action => action.kind === kinds[task || resolveDossierTask(dossier, '', [], can)]);
+  return match || (task ? null : eligible[0]) || null;
+}
 export function actionPriority(action, now = Date.now()) {
   const due = workTime(action.due_at);
   if (action.priority_reason?.trim() && workTime(action.priority_until) > now) return { rank: 500, reason: action.priority_reason, urgent: true };
@@ -69,7 +83,7 @@ export function buildPersonalWork({ actions = [], dossiers = [], clients = [], u
   const owned = scope.filter(action => action.assignee_id === userId);
   const sections = {
     now: owned.filter(action => ['ready', 'in_progress'].includes(action.state) && !actionBlocked(action)),
-    pool: staffAvailable(preference, now) ? scope.filter(action => !action.assignee_id && action.state === 'ready' && !actionBlocked(action)) : [],
+    pool: staffAvailable(preference, now) ? scope.filter(action => !action.assignee_id && ['ready', 'waiting'].includes(action.state)) : [],
     waiting: owned.filter(action => action.state === 'waiting' || actionBlocked(action)),
   };
   return {
@@ -105,6 +119,6 @@ export function nextPersonalWorkAction({ returnTo = '/', currentActionId, curren
   if (section === 'waiting') return null;
   const mission = url.searchParams.has('mission') ? url.searchParams.get('mission') : options.preference?.active_mission || '';
   const view = buildPersonalWork({ ...options, mission, search: url.searchParams.get('q') || '' });
-  return view.sections[section].find(action => action.id !== currentActionId
+  return view.sections[section].find(action => !actionWaiting(action) && action.id !== currentActionId
     && !(action.colis_id === currentDossierId && (!currentKind || action.kind === currentKind))) || null;
 }
