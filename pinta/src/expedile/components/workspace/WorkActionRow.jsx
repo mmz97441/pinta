@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowRight, Clock, UserCheck, ChevronDown } from 'lucide-react';
+import { ArrowRight, Clock, ChevronDown } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import { WORK_KINDS, WORK_STATES, actionPriority, actionBlocked, canWorkAction, staffAvailable, workActionUrl } from '../../domain/personalWork';
 import { receptionCartonManifest } from '../../domain/reception';
 import InvoiceReviewIndicator from '../ui/InvoiceReviewIndicator';
+import { TaskClaimButton } from './TaskOwnership';
 
 export const workDate = value => value && Number.isFinite(Date.parse(value)) ? new Date(value).toLocaleString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : null;
 export const staffName = (id, users = []) => { const person = users.find(user => user.authId === id); return person ? [person.prenom, person.nom].filter(Boolean).join(' ') : id ? 'Membre de l’équipe' : 'Non attribué'; };
@@ -26,7 +27,6 @@ export function WorkActionControls({ action, returnTo = '/', compact = false }) 
   const recipient = action.handoff_to === me;
   const coordinate = ['directeur', 'vice_directeur'].includes(authRole);
   const allowed = canWorkAction(action, can);
-  const preference = workPreferences.find(item => item.staff_id === me);
   const candidates = teamUsers.filter(user => user.authId && user.authId !== action.assignee_id && user.actif !== false
     && staffAvailable(workPreferences.find(item => item.staff_id === user.authId))
     && canWorkAction(action, permission => ['directeur', 'vice_directeur'].includes(user.role) || user.permissions?.[permission] === true));
@@ -51,13 +51,12 @@ export function WorkActionControls({ action, returnTo = '/', compact = false }) 
   return <div className="space-y-2">
     <div className="flex flex-wrap items-center gap-2">
       {recipient && <><button disabled={busy || !allowed} onClick={() => command('accept')} className={controlClass + ' bg-slate-900 text-white'}>Accepter le relais</button><button disabled={busy} onClick={() => command('reject')} className={controlClass}>Décliner</button></>}
-      {!action.assignee_id && allowed && <button disabled={busy || actionBlocked(action) || !staffAvailable(preference) || action.state === 'waiting'} onClick={() => command('claim', {}, true)} className={controlClass + ' bg-slate-900 text-white'}><UserCheck size={15} className="inline mr-2" />Prendre cette tâche</button>}
+      <TaskClaimButton key={action.id} action={action} onClaim={open} />
       {own && allowed && action.state === 'ready' && !actionBlocked(action) && <button disabled={busy} onClick={() => command('start', {}, true)} className={controlClass + ' bg-slate-900 text-white'}>Commencer</button>}
       {own && allowed && action.state === 'waiting' && !actionBlocked(action) && <button disabled={busy} onClick={() => command('resume', {}, true)} className={controlClass}>Reprendre cette tâche</button>}
       <button onClick={open} className={controlClass + (action.state === 'in_progress' && own ? ' bg-slate-900 text-white' : '')}>{action.state === 'in_progress' && own ? 'Reprendre le travail' : 'Consulter sans commencer'}<ArrowRight size={14} className="inline ml-2" /></button>
       {(own || coordinate) && <button aria-expanded={Boolean(mode)} onClick={() => { setFormAction(action); setMode(mode ? '' : 'menu'); }} className={controlClass} disabled={busy}>Suivi<ChevronDown size={14} className="inline ml-1" /></button>}
     </div>
-    {!action.assignee_id && allowed && (actionBlocked(action) || !staffAvailable(preference) || action.state === 'waiting') && <p className="text-sm text-slate-600">{action.blocked_reason || (action.state === 'waiting' ? action.waiting_reason || 'Cette tâche est en attente.' : 'Vous avez déclaré une indisponibilité. Modifiez-la dans Mes missions et disponibilité.')}</p>}
     {mode === 'menu' && <div className="flex flex-wrap gap-2 text-sm">
       {own && <><button onClick={() => setMode('wait')} className={controlClass}>Mettre en attente</button><button onClick={() => setMode('handoff')} className={controlClass}>Proposer un relais</button><button disabled={busy} onClick={() => command('release')} className={controlClass}>Remettre à prendre</button></>}
       {coordinate && <><button onClick={() => setMode('reassign')} className={controlClass}>Réaffecter immédiatement</button><button onClick={() => setMode('prioritize')} className={controlClass}>Signaler une priorité</button></>}

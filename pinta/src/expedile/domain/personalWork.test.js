@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildPersonalWork, sortWorkActions, workTotals, availableMissions, workActionUrl, staffAvailable, canWorkAction, personalSection, nextPersonalWorkAction, PERSONAL_SECTIONS } from './personalWork.js';
+import { buildPersonalWork, sortWorkActions, workTotals, availableMissions, workActionUrl, staffAvailable, canWorkAction, personalSection, nextPersonalWorkAction, PERSONAL_SECTIONS, findDossierWorkAction } from './personalWork.js';
 const now = Date.parse('2026-09-12T12:00:00Z');
 const dossier = { id: 'parcel', clientId: 'client', ref: 'EXP-QA', nbColis: 3, responsibleStaffId: 'referent' };
 const base = { dossiers: [dossier], clients: [{ id: 'client', nom: 'Exemple' }], userId: 'worker', now, can: () => true };
@@ -58,6 +58,52 @@ test('missing dossier data never creates an invisible personal action', () => {
 test('unavailable staff retain owned work while new claims leave the actionable pool', () => {
  const view = buildPersonalWork({ ...base, preference: { available: false }, actions: [action('mine'), action('free', { assignee_id: null })] });
  assert.equal(view.counts.now, 1); assert.equal(view.counts.pool, 0);
+});
+test('unassigned waits remain visible and taking ownership moves them to personal waiting without unblocking', () => {
+ const item = action('consent', { kind: 'reception', state: 'waiting', blocked_reason: 'Accord client attendu', assignee_id: null });
+ const before = buildPersonalWork({ ...base, actions: [item] });
+ assert.deepEqual(before.sections.pool.map(row => row.id), ['consent']);
+ assert.equal(before.counts.now, 0);
+ const after = buildPersonalWork({ ...base, actions: [{ ...item, assignee_id: base.userId }] });
+ assert.equal(after.counts.pool, 0); assert.equal(after.counts.now, 0);
+ assert.deepEqual(after.sections.waiting.map(row => row.id), ['consent']);
+ assert.equal(item.blocked_reason, 'Accord client attendu');
+ for (const overrides of [{ can: () => false }, { preference: { missions: ['preparation'] } }, { preference: { available: false } }]) {
+  assert.equal(buildPersonalWork({ ...base, actions: [item], ...overrides }).counts.pool, 0);
+ }
+});
+test('dossier claim targets the visible task, never a completed quote or another dossier', () => {
+ const current = { ...dossier, statut: 'attente_feu_vert', devisTotal: 30, quoteNeedsReview: true };
+ const consent = action('consent', { kind: 'reception', state: 'waiting', blocked_reason: 'Accord client attendu', assignee_id: null });
+ const actions = [action('old-quote', { kind: 'quote', state: 'done' }), action('foreign', { colis_id: 'other' }), consent];
+ assert.equal(findDossierWorkAction(current, actions)?.id, 'consent');
+ assert.equal(findDossierWorkAction(current, actions, 'accord')?.id, 'consent');
+ assert.equal(findDossierWorkAction(current, actions, 'devis'), null);
+ assert.equal(findDossierWorkAction(current, actions, 'preparation'), null);
+ assert.equal(findDossierWorkAction({ ...current, archive: true }, actions), null);
+ assert.equal(findDossierWorkAction(current, [actions[0]]), null);
+ assert.equal(findDossierWorkAction(current, [{ ...consent, assignee_id: 'colleague' }])?.assignee_id, 'colleague');
+});
+test('pool continuation skips a wait even when its deadline makes it the highest priority', () => {
+ const waiting = action('waiting', { assignee_id: null, state: 'waiting', blocked_reason: 'Accord client attendu', due_at: '2020-01-01' });
+ const input = { ...base, returnTo: '/?section=pool', actions: [waiting, action('ready', { assignee_id: null })] };
+ assert.equal(buildPersonalWork(input).sections.pool[0].id, 'waiting');
+ assert.equal(nextPersonalWorkAction(input)?.id, 'ready');
+ assert.equal(nextPersonalWorkAction({ ...input, actions: [waiting] }), null);
+});
+test('dossier preview selects an authorized task while an explicit screen keeps its own assignment', () => {
+ const current = { ...dossier, statut: 'en_preparation', preparationCompositionVersion: 1, finalMeasurementsVersion: 1, finalPackages: [{ dimL: 20, dimW: 20, dimH: 20, poids: 1 }], factures: [] };
+ const documents = action('documents', { kind: 'documents' });
+ const quote = action('quote', { kind: 'quote', state: 'waiting', blocked_reason: 'Documents à valider' });
+ const can = permission => permission === 'perm_colis_calculer_devis';
+ assert.equal(findDossierWorkAction(current, [documents, quote], undefined, { can })?.id, 'quote');
+ assert.equal(findDossierWorkAction(current, [documents], undefined, { can }), null);
+ assert.equal(findDossierWorkAction(current, [documents, quote], 'documents', { can })?.id, 'documents');
+ const correction = action('correction', { kind: 'correction' });
+ const paidStep = { ...dossier, statut: 'devis_envoye', devisTotal: 30 };
+ assert.equal(findDossierWorkAction(paidStep, [correction])?.id, 'correction');
+ assert.equal(findDossierWorkAction(paidStep, [correction], 'paiement', { actionId: 'correction' })?.id, 'correction');
+ assert.equal(findDossierWorkAction(paidStep, [correction], 'documents', { actionId: 'correction' }), null);
 });
 test('customer access tasks open the client record and require invitation permission', () => {
  const item = action('access', { kind: 'conversation', action_hint: 'Accès client à activer' });

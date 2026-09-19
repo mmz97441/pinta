@@ -47,6 +47,7 @@ jobs:
           ./supabase/tests/run-regressions.sh
           ./supabase/tests/run-conversations.sh
           ./supabase/tests/run-document-work-guards.sh
+          sh ./supabase/tests/run-staff-work-actions.sh
           ./supabase/tests/run-reminder-activation.sh
           node supabase/tests/quote-parity.mjs
           PINTA_DB_CONTAINER=pinta-finalisation-db ./supabase/tests/run-compatibility.sh
@@ -79,6 +80,7 @@ jobs:
           node tests/customs-quote.browser.cjs
           node tests/dossier-shell.browser.cjs
           node tests/personal-work.browser.cjs
+          node tests/task-claim.browser.cjs
           node tests/reception-without-notification.browser.cjs
           node tests/client-lightweight.browser.cjs
           node tests/task-message.browser.cjs
@@ -121,6 +123,7 @@ jobs:
             /tmp/pinta-task-flow
             /tmp/pinta-dossier-shell
             /tmp/pinta-personal-work
+            /tmp/pinta-task-claim
             /tmp/pinta-receipt-flow
             /tmp/pinta-client-lightweight
             /tmp/pinta-task-message
