@@ -23,6 +23,7 @@ Une tâche non attribuée qui attendait l’accord du client était absente de �
 - Aucun débordement horizontal à 390 pixels ; aucune violation détectée par axe dans les contrôles ciblés ordinateur/mobile. Captures inspectées visuellement.
 - Parcours existants « Mon travail », contexte du dossier et organisation de l’équipe revérifiés sur données fictives.
 - Les tests navigateur dédiés et la suite SQL de prise de tâche sont intégrés à la CI.
+- Le contrôle complet a révélé une date fixe expirée dans un ancien jeu de test du suivi transporteur. Ce départ fictif utilise désormais la date du jour ; la règle métier interdisant les départs passés reste inchangée.
 
 ## Périmètre de livraison
 
