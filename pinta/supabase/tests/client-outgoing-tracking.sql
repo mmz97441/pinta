@@ -9,7 +9,7 @@ INSERT INTO clients(id,user_id,nom,cp,type) VALUES
  ('dd200000-0000-4000-8000-000000000002','dd100000-0000-4000-8000-000000000002','Tracking Two','97400','particulier');
 INSERT INTO envois(id,ref,date_depart,statut,destination_code,tracking_principal) VALUES
  -- The fixture exercises tracking visibility, not the prohibition on past departures.
- ('dd400000-0000-4000-8000-000000000001','TEST-TRACKING',CURRENT_DATE,'planifie','974','OUTBOUND-ONLY');
+ ('dd400000-0000-4000-8000-000000000001','TEST-TRACKING',(now() AT TIME ZONE 'Europe/Paris')::date,'planifie','974','OUTBOUND-ONLY');
 INSERT INTO colis(id,client_id,statut,envoi_id,trackings) VALUES
  ('dd300000-0000-4000-8000-000000000001','dd200000-0000-4000-8000-000000000001','expedie','dd400000-0000-4000-8000-000000000001',ARRAY['SUPPLIER-INBOUND']),
  ('dd300000-0000-4000-8000-000000000002','dd200000-0000-4000-8000-000000000002','expedie','dd400000-0000-4000-8000-000000000001',ARRAY['PRIVATE-SUPPLIER']),
