@@ -24,6 +24,7 @@ Une tâche non attribuée qui attendait l’accord du client était absente de �
 - Parcours existants « Mon travail », contexte du dossier et organisation de l’équipe revérifiés sur données fictives.
 - Les tests navigateur dédiés et la suite SQL de prise de tâche sont intégrés à la CI.
 - Le contrôle complet a révélé une date fixe expirée dans un ancien jeu de test du suivi transporteur. Ce départ fictif utilise désormais la date du jour ; la règle métier interdisant les départs passés reste inchangée.
+- Le jeu de test des cartons reçus est aligné sur la projection du serveur : lorsqu’il replace un dossier en réception, sa tâche active est aussi replacée en réception. Les contrôles de conservation et d’affichage des cartons restent identiques.
 
 ## Périmètre de livraison
 
