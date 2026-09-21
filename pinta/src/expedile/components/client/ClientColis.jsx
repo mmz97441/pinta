@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { clientWorkState } from '../../domain/clientJourney';
+import { clientWorkState, clientShipmentPath } from '../../domain/clientJourney';
 import ClientShipmentCard from './ClientShipmentCard';
 const TABS = [['todo', 'À faire'], ['active', 'En cours'], ['history', 'Historique']];
 const MORE = [['all', 'Tout'], ['team', 'Pris en charge'], ['waiting', 'Attente demandée']];
@@ -35,6 +35,6 @@ export default function ClientColis() {
     <details open={MORE.some(([key]) => key === tab) || undefined}><summary className="min-h-11 cursor-pointer py-3 text-sm text-slate-600">Autres filtres{MORE.find(([key]) => key === tab) ? ` · ${MORE.find(([key]) => key === tab)[1]}` : ''}</summary><div className="flex flex-wrap gap-2">{MORE.map(tabButton)}</div></details>
     <p role="status" className="text-sm text-slate-500">{needsHistory && !archivesLoaded ? 'Recherche dans vos expéditions et votre historique…' : `${displayed.length} expédition${displayed.length > 1 ? 's' : ''} affichée${displayed.length > 1 ? 's' : ''}${query.trim() ? ' · Tous les dossiers' : ''}`}</p>
     {archiveError && <div role="alert" className="text-sm text-red-700"><p>{archiveError}</p><button onClick={retrieve} disabled={archivesBusy} className="min-h-11 underline">Réessayer le chargement de l’historique</button></div>}
-    {displayed.length ? <div className="grid gap-3 md:grid-cols-2">{displayed.map(colis => <ClientShipmentCard key={colis.id} colis={colis} client={authCl} onOpen={() => navigate(`/colis/${colis.id}`)} />)}</div> : !(needsHistory && !archivesLoaded) && <p className="rounded-xl border border-dashed border-slate-200 p-6 text-sm text-slate-600">Aucune expédition ne correspond à cette vue.</p>}
+    {displayed.length ? <div className="grid gap-3 md:grid-cols-2">{displayed.map(colis => <ClientShipmentCard key={colis.id} colis={colis} client={authCl} onOpen={() => navigate(clientShipmentPath(colis, authCl))} />)}</div> : !(needsHistory && !archivesLoaded) && <p className="rounded-xl border border-dashed border-slate-200 p-6 text-sm text-slate-600">Aucune expédition ne correspond à cette vue.</p>}
   </div>;
 }

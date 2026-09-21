@@ -45,3 +45,6 @@ verify_jwt = false
 
 [functions.telegram-inbox-document]
 verify_jwt = false
+
+[functions.correct-colis-task]
+verify_jwt = false

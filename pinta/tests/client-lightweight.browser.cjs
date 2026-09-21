@@ -23,7 +23,7 @@ async function main() {
     } finally { await f.context.close(); }
   }
   const open = async f => { await f.login(); await f.page.goto(`${base}/colis/${ids.P}`); await f.page.getByRole('region', { name: 'État actuel et prochaine étape', exact: true }).waitFor(); };
-  const docs = f => f.page.getByRole('button', { name: /^Documents \(/ });
+  const docs = f => f.page.getByRole('button', { name: /^Mes factures \(/ });
   const messages = f => f.page.getByRole('button', { name: /^Messages \(/ });
   const pending = f => { Object.assign(f.tables.colis[0], { statut: 'en_preparation', feu_vert: 'autorise' }); f.tables.factures = []; f.tables.lignes = []; };
   try {

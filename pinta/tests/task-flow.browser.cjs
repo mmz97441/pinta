@@ -51,6 +51,11 @@ async function main() {
       const received = JSON.stringify([f.tables.colis[0].trackings_detail, f.tables.colis[0].dims_par_colis, f.tables.colis[0].poids]);
       await open(f,'preparation');
       await f.page.getByRole('button', { name: 'Modifier les mesures', exact: true }).click();
+      const calculation = section(f).locator('details').filter({ has: f.page.locator('summary').filter({ hasText: 'Comprendre le calcul du transport' }) });
+      assert.equal(await calculation.evaluate(element => element.open), false, 'Measuring does not require reading billing calculations.');
+      await calculation.locator('summary').click();
+      await calculation.getByText('Poids facturable', { exact: true }).waitFor();
+      assert.equal(f.requests.some(request => /\/(save_quote|save_preparation_measurements)$/.test(request.path)), false, 'Reading the calculation never saves anything.');
       await f.page.getByLabel('Longueur · colis sortant 1 (cm)', { exact: true }).fill('38');
       await f.page.getByRole('button', { name: 'Enregistrer les mesures de préparation', exact: true }).click();
       await f.page.getByRole('button', { name: 'Modifier les mesures', exact: true }).waitFor();
@@ -65,7 +70,8 @@ async function main() {
       await f.page.getByRole('button', { name: 'Valider et passer à la suivante', exact: true }).waitFor();
       assert.equal(await f.page.getByTestId('quote-action-bar').count(), 0);
       await selectTask(f, 'preparation');
-      await section(f).getByText('La préparation attend l’accord du client.', { exact: true }).waitFor();
+      await section(f).getByText('L’accord du client est nécessaire avant de modifier les mesures après optimisation.', { exact: true }).waitFor();
+      assert.equal(await section(f).getByRole('button', { name: 'Modifier', exact: true }).count(), 0);
       assert.equal(f.calls.filter(call => call.kind === 'save').length, 0);
       assert.equal(f.requests.some(request => request.path.endsWith('/save_preparation_measurements')), false);
     }, true);

@@ -21,6 +21,18 @@ export function quoteInputFingerprint(snapshot) {
   return JSON.stringify({ schemaVersion: snapshot.schemaVersion, mode: snapshot.mode, inputs });
 }
 
+/** A saved draft can be reviewed by a colleague without recalculating it into
+ * storage. Every current input and amount must still match the saved quote. */
+export function canReviewSavedQuote(colis, quote) {
+  const saved = colis?.devisSnapshot;
+  return Boolean(colis?.devisBrouillon && !colis.archive && !colis.paiementDate
+    && colis.statut === 'en_preparation' && quote?.ok && saved?.amounts && saved?.inputs
+    && quoteInputFingerprint(saved) === quoteInputFingerprint(quote.snapshot)
+    && Number(colis.devisTotal) === quote.amounts.total
+    && Object.entries(quote.amounts).filter(([, value]) => typeof value === 'number')
+      .every(([key, value]) => saved.amounts[key] === value));
+}
+
 export function volumetricDivisor(settings = {}) {
   return number(settings.volumetricDivisor ?? settings.diviseurVolumetrique ?? 5000);
 }

@@ -40,13 +40,13 @@ const STATES = {
   attente_feu_vert: ['Votre accord est attendu', 'À vous', 'Autoriser la préparation ou demander à attendre.'],
   autorise: ['Votre accord est enregistré', 'Notre équipe', 'Commencer la préparation.'],
   refuse_client: ['Préparation refusée', 'Notre équipe', 'Convenir avec vous de la suite du dossier.'],
-  en_preparation: ['Préparation en cours', 'Notre équipe', 'Optimiser le colis et établir le devis final.'],
+  en_preparation: ['Préparation en cours', 'Notre équipe', 'Préparer les achats pour l’envoi et calculer le prix final.'],
   devis_envoye: ['Devis reçu — en attente de paiement', 'À vous', 'Consulter le devis et ses modalités de règlement.'],
   attente_paiement: ['Devis reçu — en attente de paiement', 'À vous', 'Consulter le devis et ses modalités de règlement.'],
   paye: ['Paiement reçu', 'Notre équipe', 'Préparer le départ de votre colis.'],
   expedie: ['Colis expédié', 'Transporteur', 'Acheminer votre colis vers sa destination.'],
   transit: ['Colis en transit', 'Transporteur', 'Acheminer votre colis vers sa destination.'],
-  dedouanement: ['Dédouanement en cours', 'Notre équipe', 'Finaliser le dédouanement avant la mise à disposition locale.'],
+  dedouanement: ['Passage en douane', 'Notre équipe', 'Terminer les démarches de douane avant la livraison.'],
   arrive: ['Colis au dépôt local', 'Notre équipe', 'Organiser la livraison.'],
   livraison: ['Livraison en cours', 'Transporteur', 'Livrer votre colis. La date sera précisée lorsqu’elle sera confirmée.'],
   livre: ['Colis livré', null, 'Le parcours de livraison est terminé.'],
@@ -75,6 +75,9 @@ export function hasClientRequestedWait(colis) {
 }
 
 export function needsQuoteRecalculation(colis) {
+  // A past quote is history when consent or receipt is being reopened. It must
+  // never take precedence over the current task, even on the public projection.
+  if (!['en_preparation', 'devis_envoye', 'attente_paiement'].includes(colis?.statut) || colis.paiementDate) return false;
   if (typeof colis?.quoteNeedsReview === 'boolean') return colis.quoteNeedsReview;
   return !!colis && !colis.paiementDate && (['devis_envoye', 'attente_paiement'].includes(colis.statut) || !!colis.devisEnvoyeLe)
     && (colis.devisBrouillon === true || !(Number(colis.devisTotal) > 0));
@@ -84,17 +87,29 @@ export function needsQuoteRecalculation(colis) {
 export function clientWorkState(colis, client = {}) {
   const journey = clientJourney(colis);
   if (['livre', 'annule'].includes(colis.statut) || colis.archive) return { section: 'history', kind: 'none', action: 'Consulter le dossier', journey };
-  if (journey.waiting) return { section: 'waiting', kind: 'none', action: 'Consulter mon attente', journey };
+  const rejected = currentInvoices(colis.factures).some(invoice => invoice.rejetMotif || invoice.rejet_motif);
+  // A preparation pause never dismisses an independent request for a document
+  // correction or a reply, and completing either request never gives consent.
+  if (journey.waiting) {
+    if (rejected && !colis.paiementDate) return { section: 'todo', kind: 'documents', action: 'Corriger une facture', journey };
+    if (colis.conversationStatut === 'attente_client') return { section: 'todo', kind: 'messages', action: 'Répondre à l’équipe', journey };
+    return { section: 'waiting', kind: 'none', action: 'Consulter mon attente', journey };
+  }
   if (colis.statut === 'attente_feu_vert') return { section: 'todo', kind: 'agreement', action: 'Donner mon accord ou attendre', journey };
   if (['devis_envoye', 'attente_paiement'].includes(colis.statut) && !journey.quoteNeedsReview && !colis.paiementDate)
     return { section: 'todo', kind: 'payment', action: client.type === 'pro' ? 'Consulter les modalités de règlement' : colis.payplugPaymentUrl ? 'Consulter et régler le devis' : 'Consulter le devis et le règlement', journey };
-  const rejected = currentInvoices(colis.factures).some(invoice => invoice.rejetMotif || invoice.rejet_motif);
   if (rejected && !colis.paiementDate && ['receptionne','mesure','attente_feu_vert','autorise','en_preparation','devis_envoye','attente_paiement'].includes(colis.statut)) return { section: 'todo', kind: 'documents', action: 'Corriger une facture', journey };
   if (!colis.paiementDate && !journey.quoteNeedsReview && ['receptionne','mesure','autorise','en_preparation'].includes(colis.statut)
     && currentInvoices(colis.factures).length === 0)
     return { section: 'todo', kind: 'documents', action: 'Transmettre mes factures', journey };
   if (colis.conversationStatut === 'attente_client') return { section: 'todo', kind: 'messages', action: 'Répondre à l’équipe', journey };
   return { section: 'team', kind: 'none', action: 'Suivre mon expédition', journey };
+}
+
+/** The card opens the task it names; opening a screen never performs that task. */
+export function clientShipmentPath(colis, client) {
+  const { kind } = clientWorkState(colis, client);
+  return `/colis/${colis.id}${['documents', 'messages'].includes(kind) ? `?panel=${kind}` : ''}`;
 }
 
 /** Public readers are observers, never the account holder or payer. */

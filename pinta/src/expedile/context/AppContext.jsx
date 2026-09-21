@@ -898,6 +898,7 @@ export function AppProvider({ children }) {
           p_idempotency_key: options.idempotencyKey || randomId(),
           p_reply_markup: buttons ? { inline_keyboard: buttons } : null,
           p_canal: actualCanal,
+          ...(isDecision ? { p_expected_consent_version: options.expectedConsentVersion ?? dataRef.current.find(c => c.id === colisId)?.consentRequestVersion ?? 0 } : {}),
         });
         if (error) throw error;
         await refreshColis(colisId);
@@ -998,11 +999,13 @@ export function AppProvider({ children }) {
     [upd, flash],
   );
   const demanderFeuVert = useCallback(
-    async (id) => {
+    async (id, options = {}) => {
       const c = dataRef.current.find((c) => c.id === id);
       if (!c || !hasCompleteReceptionMeasurements(c))
         throw reportError(new Error('Renseignez les dimensions et le poids à réception de chaque carton, avant optimisation, avant de demander l’accord du client.'));
-      await upd(id, { statut: 'attente_feu_vert', feuVert: 'en_attente' });
+      if (options.expectedConsentVersion != null && options.expectedConsentVersion !== c.consentRequestVersion)
+        throw reportError(new Error('La demande a changé. Préparez un nouvel aperçu avant de l’envoyer.'));
+      await upd(id, { statut: 'attente_feu_vert', feuVert: 'en_attente' }, { expectedUpdatedAt: options.expectedUpdatedAt || c.updatedAt });
       return true;
     },
     [upd, reportError],
@@ -1124,6 +1127,24 @@ export function AppProvider({ children }) {
     refreshWork().catch(() => {});
     return canonical;
   }, [replaceColis, refreshWork]);
+  const correctColisTask = useCallback(async (id, task, values, { expectedUpdatedAt, reason } = {}) => {
+    requireReady();
+    const sessionGeneration = generation.current;
+    if (!expectedUpdatedAt) throw new Error('Rechargez le dossier avant de modifier cette étape.');
+    const result = await supabase.functions.invoke('correct-colis-task', {
+      body: { colisId: id, task, values, expectedUpdatedAt, reason },
+    });
+    if (result.error || result.data?.error) {
+      const error = new Error(await functionErrorMessage(result, 'La modification n’a pas été confirmée. Votre saisie est conservée.'));
+      if (result.error?.context?.status === 409 || result.data?.code === '40001') error.code = '40001';
+      throw error;
+    }
+    if (!result.data?.colis) throw new Error('La modification n’a pas été confirmée. Rechargez le dossier avant de réessayer.');
+    if (sessionGeneration !== generation.current) throw new Error('La session a changé pendant l’enregistrement. Reconnectez-vous au même compte pour vérifier le dossier.');
+    const canonical = replaceColis(sb.mapColis(result.data.colis));
+    refreshWork().catch(() => {});
+    return canonical;
+  }, [requireReady, replaceColis, refreshWork]);
   const savePreparationMeasurements = useCallback(async (id, changes, { expectedUpdatedAt, expectedCompositionVersion } = {}) => {
     if (!expectedUpdatedAt || !Number.isInteger(expectedCompositionVersion)) throw new Error('Rechargez le dossier avant d’enregistrer les mesures.');
     const { data: saved, error } = await supabase.rpc('save_preparation_measurements', {
@@ -1350,6 +1371,7 @@ export function AppProvider({ children }) {
     suggestCustomsTariffs,
     saveQuoteCustoms,
     savePreparationMeasurements,
+    correctColisTask,
     assignDeparture,
     confirmerDevis,
     payer,

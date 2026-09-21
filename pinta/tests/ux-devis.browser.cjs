@@ -40,7 +40,7 @@ async function main() {
     results.push({ test: 'client-deliberate-wait-saved', pass: true });
     let uploads = 0;
     await current.context.route('**/storage/v1/object/factures/**', async (route) => { uploads++; await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ Key: new URL(route.request().url()).pathname }) }); });
-    await current.page.getByRole('button', { name: /^Documents \(/ }).click();
+    await current.page.getByRole('button', { name: /^Mes factures \(/ }).click();
     const upload = current.page.getByLabel('Facture ou photo', { exact: true });
     await upload.setInputFiles({ name: 'achat.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4 fixture') });
     await current.page.getByRole('button', { name: 'Déposer la facture', exact: true }).click();

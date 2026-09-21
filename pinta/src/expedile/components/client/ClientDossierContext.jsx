@@ -4,6 +4,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import FacturesPanel from '../detail/FacturesPanel';
 import ChatPanel from '../detail/ChatPanel';
+import { currentInvoices } from '../../domain/invoiceDocuments';
 
 /** Open only the requested context, then retain drafts while switching panels. */
 export default function ClientDossierContext() {
@@ -37,7 +38,7 @@ export default function ClientDossierContext() {
   }, { replace: true });
   return <section aria-label="Documents et échanges du dossier" className="space-y-3 border-t border-slate-200 pt-4">
     <div className="flex flex-wrap gap-2">
-      <button type="button" aria-expanded={panel === 'documents'} aria-controls="client-documents" onClick={() => open('documents')} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-300 px-4 text-sm font-semibold text-slate-700"><FileText size={16} />Documents ({sel.factures?.length || 0})</button>
+      <button type="button" aria-expanded={panel === 'documents'} aria-controls="client-documents" onClick={() => open('documents')} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-300 px-4 text-sm font-semibold text-slate-700"><FileText size={16} />Mes factures ({currentInvoices(sel.factures).length})</button>
       <button type="button" aria-expanded={panel === 'messages'} aria-controls="client-conversation" onClick={() => open('messages')} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-300 px-4 text-sm font-semibold text-slate-700"><MessageCircle size={16} />Messages ({sel.messages?.length || 0})</button>
     </div>
     <div ref={content} tabIndex={-1} className="scroll-mt-24 focus:outline-none">

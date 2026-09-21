@@ -25,7 +25,7 @@ test('client active phase content matches every lifecycle state and frozen quote
   const app = { sel: { id: 'parcel', ref: 'EXP-TEST', statut: 'attente_paiement', devisBrouillon: false, devisTotal: 55.06, devisTransport: 34, paiementMontant: null, payplugPaymentUrl: 'https://secure.payplug.com/test', factures: [], lignes: [], trackings: [] }, authCl: { type: 'particulier', cp: '97400' }, selDest: { code: '974', tva: 8.5 }, isStaff: false };
   vm.runInNewContext(bundle.outputFiles[0].text, { module, exports: module.exports, require: createRequire(import.meta.url), testApp: app, console, URL, setTimeout, clearTimeout, TextEncoder });
 
-  for (const [statut, expected] of [['en_preparation','en cours de préparation'], ['dedouanement','en cours de dédouanement'], ['arrive','arrivé au dépôt local'], ['livraison','en cours de livraison'], ['livre','Livraison confirmée'], ['refuse_client','Préparation refusée']]) {
+  for (const [statut, expected] of [['en_preparation','Nous regroupons et réemballons vos achats'], ['dedouanement','en cours de dédouanement'], ['arrive','arrivé au dépôt local'], ['livraison','en cours de livraison'], ['livre','Livraison confirmée'], ['refuse_client','Préparation refusée']]) {
     app.sel = { ...app.sel, statut };
     const html = module.exports.render();
     assert.match(html, new RegExp(expected), statut);

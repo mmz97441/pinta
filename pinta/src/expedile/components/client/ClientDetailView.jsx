@@ -133,6 +133,7 @@ export default function ClientDetailView() {
   const [decisionPending, setDecisionPending] = useState(false);
   const [decisionError, setDecisionError] = useState('');
   const [showWait, setShowWait] = useState(false);
+  const [waitVersion, setWaitVersion] = useState(null);
   const [waitUntil, setWaitUntil] = useState('');
   const [waitReason, setWaitReason] = useState('J’attends d’autres achats');
   useEffect(() => { setTimeOpen(curPhaseIdx); setDecisionError(''); setShowWait(false); }, [sel?.id, curPhaseIdx]);
@@ -145,6 +146,7 @@ export default function ClientDetailView() {
   const clientWaiting = journey.waiting;
   const trackingOut = outgoingTracking(sel, envois);
   const logistics = latestLogisticsEvent(sel);
+  const shipmentStarted = ['expedie','transit','dedouanement','arrive','livraison','livre'].includes(sel.statut);
   const openPanel = panel => setParams(previous => { const next = new URLSearchParams(previous); next.set('panel', panel); return next; }, { replace: true });
 
   const toggleStep = (idx) => {
@@ -208,7 +210,7 @@ export default function ClientDetailView() {
                   <p className="text-sm font-bold text-gray-400 mb-0.5">
                     Carton {i + 1}{receptionCartonManifest(sel).trackingsDetail[i]?.number ? ` · ${receptionCartonManifest(sel).trackingsDetail[i].number}` : ' · Sans numéro de suivi'}
                   </p>
-                  <Ligne label="L × W × H" value={`${d.dimL} × ${d.dimW} × ${d.dimH} cm`} />
+                  <Ligne label="Longueur × largeur × hauteur" value={`${d.dimL} × ${d.dimW} × ${d.dimH} cm`} />
                   <Ligne label="Poids" value={`${d.poids} kg`} />
                 </div>
               ))}
@@ -243,12 +245,12 @@ export default function ClientDetailView() {
               {decisionError && <p role="alert" className="text-sm text-red-700">{decisionError}</p>}
               <p className="text-sm font-semibold text-slate-700">{manifest.count} carton(s) réceptionné(s) · dossier {sel.ref}</p>
               {manifest.trackings.length > 0 && <p className="break-words text-sm text-slate-600">Références connues : {manifest.trackings.join(' · ')}</p>}
-              <p className="text-sm text-slate-600">Votre accord concerne ces cartons uniquement. Le devis suivra l’optimisation.</p>
+              <p className="text-sm text-slate-600">Votre accord concerne ces cartons uniquement. Vous recevrez le prix final après la préparation.</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <button disabled={decisionPending} onClick={() => handleFeuVert(true)} className="min-h-11 flex items-center justify-center gap-2 rounded-xl px-3 py-3 font-bold text-sm text-white brand-bg disabled:opacity-50"><ThumbsUp size={16} />{decisionPending ? 'Enregistrement…' : 'Autoriser la préparation'}</button>
-                <button disabled={decisionPending} onClick={() => setShowWait((v) => !v)} aria-expanded={showWait} className="min-h-11 flex items-center justify-center gap-2 rounded-xl border border-slate-300 px-3 py-3 text-sm font-semibold text-slate-700"><Clock size={16} />Attendre d’autres achats</button>
+                <button disabled={decisionPending} onClick={() => { if (!showWait) setWaitVersion(sel.updatedAt); setShowWait(v => !v); }} aria-expanded={showWait} className="min-h-11 flex items-center justify-center gap-2 rounded-xl border border-slate-300 px-3 py-3 text-sm font-semibold text-slate-700"><Clock size={16} />Attendre d’autres achats</button>
               </div>
-              {showWait && <form className="border border-gray-200 rounded-xl p-3 space-y-3" onSubmit={(event) => { event.preventDefault(); recordDecision('wait', { waitUntil: waitUntil || null, reason: waitReason.trim() }); }}>
+              {showWait && <form className="border border-gray-200 rounded-xl p-3 space-y-3" onSubmit={(event) => { event.preventDefault(); recordDecision('wait', { expectedUpdatedAt: waitVersion, waitUntil: waitUntil || null, reason: waitReason.trim() }); }}>
                 <p className="text-sm text-gray-600">Nous conservons votre dossier en attente. Cette demande ne déclenche aucune préparation.</p>
                 <label className="block text-sm font-semibold text-gray-600">Votre précision<textarea required maxLength={500} value={waitReason} onChange={(e) => setWaitReason(e.target.value)} className="mt-1 block w-full rounded-lg border border-gray-200 p-2 text-sm bg-white" /></label>
                 <label className="block text-sm font-semibold text-gray-600">Attendre jusqu’au (facultatif)<input type="date" min={new Date().toLocaleDateString('en-CA')} value={waitUntil} onChange={(e) => setWaitUntil(e.target.value)} className="mt-1 block min-h-11 w-full rounded-lg border border-gray-200 px-2 text-sm bg-white" /></label>
@@ -264,7 +266,7 @@ export default function ClientDetailView() {
                       <p className="text-sm font-bold text-gray-400 mb-0.5">
                         Carton {i + 1}{receptionCartonManifest(sel).trackingsDetail[i]?.number ? ` · ${receptionCartonManifest(sel).trackingsDetail[i].number}` : ' · Sans numéro de suivi'}
                       </p>
-                      <Ligne label="L × W × H" value={`${d.dimL} × ${d.dimW} × ${d.dimH} cm`} />
+                      <Ligne label="Longueur × largeur × hauteur" value={`${d.dimL} × ${d.dimW} × ${d.dimH} cm`} />
                       <Ligne label="Poids" value={`${d.poids} kg`} />
                     </div>
                   ))}
@@ -272,7 +274,7 @@ export default function ClientDetailView() {
               ) : sel.dimL ? (
                 <div className="rounded-xl bg-gray-50 p-3 space-y-1">
                   <p className="text-sm font-black uppercase tracking-widest text-gray-400 mb-2">Dimensions mesurées</p>
-                  <Ligne label="L × W × H" value={`${sel.dimL} × ${sel.dimW} × ${sel.dimH} cm`} />
+                  <Ligne label="Longueur × largeur × hauteur" value={`${sel.dimL} × ${sel.dimW} × ${sel.dimH} cm`} />
                   <Ligne label="Poids" value={`${sel.poids} kg`} />
                 </div>
               ) : null}
@@ -282,7 +284,7 @@ export default function ClientDetailView() {
                 </p>
                 <div className="space-y-1.5 text-sm text-gray-600 leading-relaxed">
                   <p>1. Vous donnez votre accord ci-dessous</p>
-                  <p>2. Nous préparons et optimisons votre colis</p>
+                  <p>2. Nous regroupons et réemballons vos achats</p>
                   <p>3. Vous recevez le devis final à payer</p>
                 </div>
               </div>
@@ -332,7 +334,7 @@ export default function ClientDetailView() {
         <div className="space-y-2">
           <p className="text-sm text-gray-500 leading-relaxed">
             {curPhaseIdx === 2
-              ? 'Votre colis est en cours de préparation et d\'optimisation dans notre entrepôt.'
+              ? 'Nous regroupons et réemballons vos achats pour préparer leur envoi.'
               : 'La préparation est terminée.'}
           </p>
           {curPhaseIdx === 2 && (
@@ -421,13 +423,12 @@ export default function ClientDetailView() {
                     </div>
                   )}
                 </div>
+                <p className="border-t border-slate-200 pt-3 text-sm text-slate-500">{published.version ? `Devis · version ${published.version}` : 'Devis historique'}{published.issuedAt ? ` · Établi le ${new Date(published.issuedAt).toLocaleDateString('fr-FR')}` : ''}</p>
               </div>
             </details>
           )}
 
           {hasDevis && <div className="border-t border-slate-200 pt-3 text-sm text-slate-600">
-            <p className="font-semibold">{published.version ? `Devis publié · version ${published.version}` : 'Devis historique'}</p>
-            {published.issuedAt && <p className="mt-1 text-sm">Établi le {new Date(published.issuedAt).toLocaleDateString('fr-FR')}</p>}
             {published.paymentMode && <p className="mt-2">Modalités convenues : <strong>{PAYMENT_TERMS[published.paymentMode] || published.paymentMode}</strong>.</p>}
             {published.client.type === 'pro' && !isPaye && <p className="mt-1">{published.paymentMode === 'virement' ? 'Utilisez les coordonnées bancaires transmises par notre équipe. Si vous ne les avez pas, demandez-les dans les échanges ci-dessous.' : ['30_jours','fin_de_mois'].includes(published.paymentMode) ? 'La date exacte d’échéance est celle communiquée par notre équipe. Consultez les échanges si elle ne figure pas sur votre devis.' : published.paymentMode === 'especes' ? 'Contactez notre équipe pour convenir de la remise du règlement.' : 'Les modalités sont à confirmer avec notre équipe.'} La réception du règlement sera confirmée ici.</p>}
             {published.client.type === 'pro' && !isPaye && <div className="mt-2 space-y-2"><p className="text-sm">Référence à communiquer pour le règlement : <strong>{price.ref}</strong> · {eur(price.devisTotal)}.</p><button className="min-h-11 rounded-lg border border-slate-300 px-3 text-sm font-semibold" onClick={async () => { try { await navigator.clipboard.writeText(`${price.ref} · ${eur(price.devisTotal)}`); flash('Référence de règlement copiée'); } catch { flash({ msg: 'Copie indisponible. La référence reste affichée ci-dessus.', type: 'error' }); } }}>Copier la référence de règlement</button></div>}
@@ -474,7 +475,7 @@ export default function ClientDetailView() {
             {sel.statut === 'expedie'
               ? 'Votre colis a été remis au transporteur.'
               : sel.statut === 'transit'
-              ? 'Votre colis est en vol vers votre destination !'
+              ? 'Votre colis est en route vers votre destination.'
               : 'Votre colis est en route.'}
           </p>
           {sel.statut === 'transit' && (
@@ -483,10 +484,10 @@ export default function ClientDetailView() {
               style={{ background: `linear-gradient(135deg, ${BRAND.navy}, #0891B2)` }}
             >
               <Plane size={14} />
-              Vol en cours vers {selDest?.nom || 'votre destination'} {selDest?.flag || ''}
+              En route vers {selDest?.nom || 'votre destination'} {selDest?.flag || ''}
             </div>
           )}
-          {trackingOut ? <a href={`https://parcelsapp.com/fr/tracking/${encodeURIComponent(trackingOut)}`} target="_blank" rel="noopener noreferrer" className="min-h-11 flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold brand-t bg-slate-50"><ExternalLink size={16} />Suivi vers votre adresse · {trackingOut}</a> : <p className="text-sm text-slate-600">Le suivi transporteur vers votre adresse n’est pas encore renseigné. Les étapes de votre expédition restent visibles ici.</p>}
+          {trackingOut && <p className="break-words text-sm text-slate-600">Numéro de suivi vers votre adresse : <strong>{trackingOut}</strong></p>}
           {manifest.trackings.length > 0 && <details><summary className="min-h-11 cursor-pointer py-3 text-sm text-slate-600">Suivis fournisseurs vers l’entrepôt</summary>{manifest.trackings.map(number => <a key={number} href={`https://parcelsapp.com/fr/tracking/${encodeURIComponent(number)}`} target="_blank" rel="noopener noreferrer" className="min-h-11 flex items-center gap-2 break-all text-sm underline"><ExternalLink size={16} />{number}</a>)}</details>}
         </div>
       );
@@ -566,13 +567,16 @@ export default function ClientDetailView() {
         {task.kind === 'payment' && phaseContent(3)}
         {['documents','messages'].includes(task.kind) && <button onClick={() => openPanel(task.kind)} className="min-h-11 w-full rounded-xl brand-bg px-4 py-3 text-sm font-semibold text-white">{task.action}</button>}
         {clientWaiting && <div className="rounded-xl bg-slate-50 p-3 text-sm text-slate-700"><p>{sel.attenteClientMotif || 'Vous avez demandé à attendre avant la préparation.'}</p><p className="mt-1">Attente enregistrée le {new Date(sel.attenteClientDate).toLocaleDateString('fr-FR')}{sel.attenteClientUntil ? ` · Réexamen prévu le ${new Date(sel.attenteClientUntil).toLocaleDateString('fr-FR')}` : ''}</p></div>}
-        {['expedie','transit','dedouanement','arrive','livraison','livre'].includes(sel.statut) && <p className="text-sm text-slate-600">{logistics ? `Dernier événement logistique renseigné : ${logistics.label.toLocaleLowerCase('fr')} le ${new Date(logistics.date).toLocaleDateString('fr-FR')}.` : 'Date du dernier événement logistique non renseignée.'}{sel.statut !== 'livre' ? ' La date de livraison sera précisée lorsqu’elle sera confirmée.' : ''}</p>}
+        {shipmentStarted && <>
+          {trackingOut ? <a href={`https://parcelsapp.com/fr/tracking/${encodeURIComponent(trackingOut)}`} target="_blank" rel="noopener noreferrer" className="min-h-11 flex items-center justify-center gap-2 rounded-xl border border-slate-300 px-3 py-3 text-sm font-semibold brand-t"><ExternalLink size={16} />Suivre mon colis</a> : <p className="text-sm text-slate-600">Le suivi transporteur vers votre adresse n’est pas encore renseigné. Les étapes de votre expédition restent visibles ici.</p>}
+          <p className="text-sm text-slate-600">{logistics ? `Dernière nouvelle : ${logistics.label.toLocaleLowerCase('fr')} le ${new Date(logistics.date).toLocaleDateString('fr-FR')}.` : 'La date de la dernière nouvelle n’est pas encore disponible.'}{sel.statut !== 'livre' ? ' La date de livraison sera précisée lorsqu’elle sera confirmée.' : ''}</p>
+        </>}
         {clientWaiting && <details className="border-t border-slate-200 pt-2"><summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-slate-700">Reprendre ma décision</summary>{phaseContent(1)}</details>}
         {journey.event && <p className="text-sm text-slate-500">{journey.event.label} le {new Date(journey.event.date).toLocaleDateString('fr-FR')}</p>}
       </section>
 
       <details className="rounded-xl border border-slate-200 p-3"><summary className="min-h-11 cursor-pointer py-2 text-sm font-semibold text-slate-700">Suivi et détails de l’expédition</summary><div className="space-y-4 pt-3">
-        {sel.finalPackages?.length > 0 && <details className="rounded-xl border border-slate-200 p-3"><summary className="min-h-11 cursor-pointer text-sm font-semibold text-slate-700">Après optimisation · {sel.finalPackages.length} colis sortant{sel.finalPackages.length > 1 ? 's' : ''}</summary><div className="space-y-2 text-sm text-slate-600">{sel.finalPackages.map((box,index) => <p key={index}>Colis {index + 1} · {box.dimL} × {box.dimW} × {box.dimH} cm · {box.poids} kg</p>)}</div></details>}
+        {sel.finalPackages?.length > 0 && <details className="rounded-xl border border-slate-200 p-3"><summary className="min-h-11 cursor-pointer text-sm font-semibold text-slate-700">Colis préparés pour l’envoi · {sel.finalPackages.length} colis sortant{sel.finalPackages.length > 1 ? 's' : ''}</summary><div className="space-y-2 text-sm text-slate-600">{sel.finalPackages.map((box,index) => <p key={index}>Colis {index + 1} · {box.dimL} × {box.dimW} × {box.dimH} cm · {box.poids} kg</p>)}</div></details>}
         {sel.statut !== 'annule' && <ProgressBar statut={sel.statut} size="md" showLabel={false} />}
         {sel.statut === 'annule' && <p className="text-sm text-slate-600">Ce dossier a été annulé. Les documents et échanges restent consultables.</p>}
         {sel.statut !== 'annule' && <div className="space-y-2">{PHASES_CLIENT.map((phase, idx) => {

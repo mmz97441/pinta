@@ -2,9 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { STATUTS, BRAND } from '../../constants';
+import { eur } from '../../utils';
 import { fetchLogsForColis, fetchAuditActions } from '../../lib/supabaseData';
 
 const ACTION_NAMES = {
+  correction_reception: 'Mesures à réception corrigées',
+  correction_preparation: 'Mesures après optimisation corrigées',
+  correction_accord: 'Nouvelle demande d’accord préparée',
+  correction_devis: 'Devis repris pour correction',
   preparation_measured: 'Mesures après préparation enregistrées', quote_saved: 'Devis enregistré', quote_sent: 'Devis envoyé', invoice_review_saved: 'Facture vérifiée', invoice_duplicate: 'Copie de facture retirée', invoice_duplicate_restored: 'Facture remise à vérifier', colis_reverted: 'Étape du dossier corrigée', colis_archived: 'Dossier archivé', colis_cancelled: 'Expédition annulée', payment_confirmed: 'Paiement confirmé', departure_confirmed: 'Départ confirmé', colis_assigned: 'Suivi du dossier attribué', staff_work_action: 'Organisation du travail mise à jour',
 };
 function formatDate(iso) {
@@ -19,6 +24,20 @@ function formatDate(iso) {
   if (msgDay.getTime() === today.getTime()) return `Aujourd'hui ${time}`;
   if (msgDay.getTime() === yesterday.getTime()) return `Hier ${time}`;
   return `${d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' })} ${time}`;
+}
+
+function CorrectionHistory({ entry }) {
+  if (!entry.action.startsWith('correction_') || !entry.before || !entry.after) return null;
+  const values = row => {
+    if (entry.action === 'correction_devis') return row.devis_total == null ? 'À recalculer et vérifier' : eur(row.devis_total);
+    if (entry.action === 'correction_accord') return `${({ autorise: 'Accord donné', refuse: 'Préparation refusée', en_attente: 'Accord à demander' })[row.feu_vert] || 'Accord à vérifier'}${row.feu_vert_date ? ` · ${formatDate(row.feu_vert_date)}` : ''}`;
+    const receipt = entry.action === 'correction_reception';
+    const boxes = receipt ? row.dims_par_colis : row.final_packages;
+    if (boxes?.length) return boxes.map((box, index) => `${receipt ? 'Carton' : 'Colis préparé'} ${index + 1} : ${box.dimL} × ${box.dimW} × ${box.dimH} cm · ${box.poids} kg`).join(' ; ');
+    const [length, width, height, weight] = receipt ? [row.dim_l, row.dim_w, row.dim_h, row.poids] : [row.fin_l, row.fin_w, row.fin_h, row.fin_p];
+    return weight ? `Ancien récapitulatif : ${length ?? '—'} × ${width ?? '—'} × ${height ?? '—'} cm · ${weight} kg` : 'Mesures non renseignées';
+  };
+  return <div className="mt-2 space-y-1 text-sm text-slate-700 dark:text-slate-200"><p><strong>Avant : </strong>{values(entry.before)}</p><p><strong>Après : </strong>{values(entry.after)}</p></div>;
 }
 
 export default function AuditLog({ expanded = false, includeAudit }) {
@@ -57,6 +76,8 @@ export default function AuditLog({ expanded = false, includeAudit }) {
           user: a.user,
           action: a.action,
           detail: a.detail,
+          before: a.before,
+          after: a.after,
           ancienStatut: null,
           nouveauStatut: null,
           date: a.date,
@@ -116,7 +137,7 @@ export default function AuditLog({ expanded = false, includeAudit }) {
                       <span className="text-[10px] text-gray-400">—</span>
                       <span className="text-[10px] font-bold" style={{ color: BRAND.goldD }}>{ACTION_NAMES[e.action] || (String(e.action).includes('_') ? 'Action enregistrée sur le dossier' : e.action)}</span>
                     </div>
-                    <details className="text-sm text-gray-600"><summary className="min-h-11 cursor-pointer py-2">Détails de cet événement</summary><p className="break-words">{e.action}</p>{e.detail && <pre className="mt-1 whitespace-pre-wrap break-words font-sans">{typeof e.detail === 'string' ? e.detail : JSON.stringify(e.detail, null, 2)}</pre>}</details>
+                    <details className="text-sm text-gray-600"><summary className="min-h-11 cursor-pointer py-2">Détails de cet événement</summary>{e.detail && <p className="whitespace-pre-wrap break-words">{typeof e.detail === 'string' ? e.detail : JSON.stringify(e.detail, null, 2)}</p>}<CorrectionHistory entry={e} /></details>
                   </div>
                 )}
                 {e.date && (

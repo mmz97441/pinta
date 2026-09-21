@@ -22,11 +22,14 @@ async function main() {
   async function scenario(name, run, role = 'directeur') {
     if (process.env.PINTA_TASK_MESSAGE_FILTER && !name.includes(process.env.PINTA_TASK_MESSAGE_FILTER)) return;
     const f = await setup(browser, role); f.page.setDefaultTimeout(10000);
-    Object.assign(f.tables.colis[0], { statut: 'mesure', feu_vert: 'en_attente', nb_colis: 1, trackings: ['TEST-001'], trackings_detail: [{ number: 'TEST-001', fournisseur: 'Boutique A' }], dims_par_colis: [{ dimL: 40, dimW: 30, dimH: 20, poids: 3 }] });
+    Object.assign(f.tables.colis[0], { statut: 'mesure', feu_vert: 'en_attente', consent_request_version: 0, nb_colis: 1, trackings: ['TEST-001'], trackings_detail: [{ number: 'TEST-001', fournisseur: 'Boutique A' }], dims_par_colis: [{ dimL: 40, dimW: 30, dimH: 20, poids: 3 }] });
     Object.assign(f.tables.clients[0], { user_id: ids.C, email: null });
     f.queueCalls = []; f.queueByKey = new Map(); f.loseNextQueueResponse = false;
     await f.context.route('**/rest/v1/rpc/queue_message', async route => {
       const input = route.request().postDataJSON(); f.queueCalls.push(input);
+      if (f.beforeQueue) await f.beforeQueue(input);
+      if (['demande_feu_vert', 'relance_feu_vert'].includes(input.p_template) && input.p_expected_consent_version !== f.tables.colis[0].consent_request_version)
+        return route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ code: '40001', message: 'L’accord a changé. Actualisez la demande avant de l’envoyer.' }) });
       let message = f.queueByKey.get(input.p_idempotency_key);
       if (!message) {
         message = { id: crypto.randomUUID(), colis_id: input.p_colis_id, texte: input.p_text, template: input.p_template, canal: input.p_canal, type: 'staff', statut: 'en_attente', created_at: new Date().toISOString() };
@@ -72,6 +75,37 @@ async function main() {
       const refresh = region(f).getByRole('button', { name: 'Actualiser le message proposé', exact: true }); await refresh.waitFor();
       assert.equal(await send(f).isDisabled(), true); assert.equal(f.queueCalls.length, 0);
       await refresh.click(); assert.equal(await field(f).inputValue(), original); assert.equal(await send(f).isEnabled(), true);
+    });
+    await scenario('consent-generation-alone-invalidates-preview-and-refresh-sends-new-generation', async f => {
+      await open(f); const original = await field(f).inputValue();
+      const cartons = JSON.stringify([f.tables.colis[0].nb_colis, f.tables.colis[0].trackings, f.tables.colis[0].trackings_detail, f.tables.colis[0].dims_par_colis]);
+      // Cartons and wording stay identical; the DB revision advances, as its trigger requires.
+      // TaskMessage's context signature excludes updatedAt, so generation must invalidate it.
+      f.tables.colis[0].consent_request_version = 4;
+      f.tables.colis[0].updated_at = '2099-09-16T10:00:00Z';
+      await f.page.evaluate(() => window.dispatchEvent(new Event('focus')));
+      const refresh = region(f).getByRole('button', { name: 'Actualiser le message proposé', exact: true }); await refresh.waitFor();
+      assert.equal(await field(f).inputValue(), original); assert.equal(await send(f).isDisabled(), true);
+      assert.equal(f.queueCalls.length, 0); assert.equal(f.tables.colis[0].statut, 'mesure');
+      assert.equal(JSON.stringify([f.tables.colis[0].nb_colis, f.tables.colis[0].trackings, f.tables.colis[0].trackings_detail, f.tables.colis[0].dims_par_colis]), cartons);
+      await refresh.click(); assert.equal(await field(f).inputValue(), original); assert.equal(await send(f).isEnabled(), true);
+      await send(f).click(); await region(f).getByText('Message disponible dans l’espace client.', { exact: true }).waitFor();
+      assert.equal(f.queueCalls.length, 1); assert.equal(f.queueCalls[0].p_expected_consent_version, 4); assert.equal(f.queueCalls[0].p_text, original);
+    });
+    await scenario('queue-retains-preview-generation-and-rejects-a-new-agreement-created-in-flight', async f => {
+      f.tables.colis[0].consent_request_version = 7; await open(f);
+      const original = await field(f).inputValue();
+      f.beforeQueue = async () => {
+        // A colleague reopens the agreement after the status CAS but before queue_message.
+        Object.assign(f.tables.colis[0], { consent_request_version: 8, statut: 'mesure', feu_vert: 'en_attente', updated_at: '2099-09-16T10:00:00Z' });
+      };
+      await send(f).click();
+      await region(f).getByRole('alert').filter({ hasText: 'L’accord a changé' }).waitFor();
+      assert.equal(f.queueCalls.length, 1); assert.equal(f.queueCalls[0].p_expected_consent_version, 7);
+      assert.equal(f.queueCalls[0].p_text, original); assert.equal(await field(f).inputValue(), original);
+      assert.equal(f.tables.colis[0].consent_request_version, 8); assert.equal(f.tables.colis[0].statut, 'mesure');
+      assert.equal(f.tables.messages.length, 0); assert.equal(f.queueByKey.size, 0);
+      assert.equal(await region(f).getByText('Message disponible dans l’espace client.', { exact: true }).count(), 0);
     });
     await scenario('email-feedback-describes-draft-without-claiming-delivery', async f => {
       f.tables.clients[0].email = 'client@example.test';

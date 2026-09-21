@@ -88,17 +88,17 @@ async function audit(f, name, include = '[data-testid="dossier-task-workspace"]'
    await region(f).getByRole('button',{name:'Enregistrer les mesures de réception',exact:true}).waitFor();assert.equal(new URL(f.page.url()).searchParams.get('section'),'reception');assert.deepEqual(mutations(f),[]);
   });
   await scenario('correction-describes-real-quote-invalidation-without-navigation-mutation',async f=>{
-   Object.assign(f.tables.colis[0],{devis_total:70,devis_snapshot:{amounts:{total:70}}});
+   Object.assign(f.tables.colis[0],{statut:'devis_envoye',devis_brouillon:false,devis_total:70,devis_snapshot:{amounts:{total:70}}});
    await open(f,'devis');
    await f.page.getByRole('button',{name:'Revenir aux factures',exact:true}).click();
    await f.page.getByLabel('Tâche du dossier',{exact:true}).selectOption('devis');
    assert.deepEqual(mutations(f),[]);
-   await region(f).getByRole('button',{name:'Corrections',exact:true}).click();
-   await region(f).getByRole('button',{name:/^Corriger l’étape vers/}).click();
-   const confirmation=f.page.getByRole('dialog').filter({hasText:/Le total et la version enregistrée du devis seront effacés/});
-   await confirmation.waitFor(); assert.match(await confirmation.innerText(),/cartons, mesures et factures sont conservés/);
+   await region(f).getByRole('button',{name:'Modifier le devis',exact:true}).click();
+   const confirmation=region(f).getByRole('region',{name:'Reprise du devis',exact:true});
+   await confirmation.waitFor(); assert.match(await confirmation.innerText(),/articles, les taux, les frais et les mesures seront conservés/); assert.match(await confirmation.innerText(),/Aucun message ne sera envoyé/);
    await confirmation.getByRole('button',{name:'Annuler',exact:true}).click();
-   assert.equal(f.tables.colis[0].statut,'en_preparation'); assert.deepEqual(mutations(f),[]);
+   assert.equal(f.tables.colis[0].statut,'devis_envoye'); assert.deepEqual(mutations(f),[]);
+   await region(f).getByRole('button',{name:'Corrections',exact:true}).click();
    await region(f).getByRole('button',{name:'Archiver',exact:true}).click();
    await f.page.getByRole('dialog').filter({hasText:/masqué des listes courantes/}).getByRole('button',{name:'Annuler',exact:true}).click();
    assert.equal(!!f.tables.colis[0].archive,false);

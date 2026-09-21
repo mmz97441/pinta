@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { X, Eye, Upload, FileText, ChevronDown, ChevronRight } from 'lucide-react';
+import { X, Eye, Upload } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { eur } from '../../utils';
 import * as sb from '../../lib/supabaseData';
@@ -33,7 +33,6 @@ export default function FacturesPanel(props) {
 }
 function ClientFacturesPanel() {
   const { sel, setData } = useApp();
-  const [collapsed, setCollapsed] = useState(false);
   const [replacesFactureId, setReplacesFactureId] = useState(() => { const rejected = currentInvoices(sel?.factures).filter(invoice => invoice.rejetMotif); return rejected.length === 1 ? rejected[0].id : rejected.length > 1 ? 'choose' : ''; });
   const explicitReplacementChoice = useRef(false);
   const [clientFiles, setClientFiles] = useState([]);
@@ -47,6 +46,9 @@ function ClientFacturesPanel() {
   const clientFileInput = useRef(null);
   const selectionVersion = useRef(0);
   const invoices = sel?.factures || [];
+  const activeInvoices = currentInvoices(invoices);
+  const activeIds = new Set(activeInvoices.map(invoice => invoice.id));
+  const pastInvoices = invoices.filter(invoice => !activeIds.has(invoice.id));
   const parcelId = sel?.id;
   const corrections = currentInvoices(invoices).filter(invoice => invoice.rejetMotif);
   const correctionIds = corrections.map(invoice => invoice.id).join('|');
@@ -112,9 +114,18 @@ function ClientFacturesPanel() {
       }
     } finally { busyRef.current = false; setBusy(''); }
   };
+  const invoiceCard = invoice => {
+    const current = activeIds.has(invoice.id);
+    const state = invoice.duplicateOfId ? 'Copie retirée' : !current ? 'Remplacée' : invoice.valide ? 'Validée' : invoice.rejetMotif ? 'À corriger' : 'En cours de vérification';
+    const pdf = (invoice.fichierNom || invoice.fichier || '').toLowerCase().endsWith('.pdf');
+    return <article key={invoice.id} aria-label={`Facture ${invoice.vendeur || 'à vérifier'}`} className="rounded-xl border border-gray-200 p-3">
+      <div className="flex items-start justify-between gap-2"><div className="min-w-0"><p className="text-sm font-semibold text-slate-800">{invoice.vendeur || 'Facture d’achat'}</p><p className="text-sm text-gray-600">{invoice.montant > 0 ? eur(invoice.montant) : 'Montant à vérifier par l’équipe'}</p><p className="break-words text-xs text-gray-500">{invoice.fichierNom || 'Document manquant'}</p></div><span className="rounded-lg bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">{state}</span></div>
+      {invoice.rejetMotif && current && <p className="mt-2 text-xs text-red-700">Correction attendue : {invoice.rejetMotif}</p>}
+      {invoice.fichier && (pdf ? <SecureFileLink href={invoice.fichier} bucket="factures" target="_blank" rel="noopener noreferrer" className={`${BUTTON} mt-2 bg-slate-100 text-slate-700`}><Eye size={14} />Ouvrir le PDF</SecureFileLink> : <button onClick={() => setPreview(invoice)} className={`${BUTTON} mt-2 bg-slate-100 text-slate-700`}><Eye size={14} />Voir le document</button>)}
+    </article>;
+  };
   return <section id="quote-documents" aria-label="Factures d’achat" className="min-w-0 border-t border-gray-200 py-4">
     {preview && <Lightbox src={preview.fichier} title={preview.vendeur} onClose={() => setPreview(null)} />}
-    <button className={`${BUTTON} px-0 text-slate-700`} aria-expanded={!collapsed} onClick={() => setCollapsed(!collapsed)}>{collapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}<FileText size={16} />Mes factures ({invoices.length})</button>
     {error && <p role="alert" className="my-2 rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}
     {notice && <p role="status" className="my-2 rounded-xl bg-blue-50 p-3 text-sm text-blue-800">{notice}</p>}
     {canDeposit && <form aria-label="Déposer une facture" className="my-3 space-y-3 rounded-xl border border-slate-200 p-3" onSubmit={(event) => { event.preventDefault(); depositClientDocuments(); }}>
@@ -132,15 +143,7 @@ function ClientFacturesPanel() {
       {clientFiles.length > 0 && <ul aria-label="Résultat du dépôt des factures" className="space-y-2">{clientFiles.map(item => <li key={item.id} className="rounded-lg bg-slate-50 p-2 text-xs"><p className="break-words font-semibold text-slate-700">{item.file.name}</p><p role="status" className={item.status === 'failed' ? 'text-red-700' : 'text-slate-600'}>{item.status === 'saved' ? 'Enregistrée · à vérifier par l’équipe' : item.status === 'uploading' ? 'Enregistrement…' : item.status === 'failed' ? item.error : 'Prête à envoyer'}</p></li>)}</ul>}
       <button disabled={!!busy || !pendingFiles.length || replacesFactureId === 'choose'} className={`${BUTTON} w-full bg-slate-700 text-white`}><Upload size={15} />{busy === 'client-deposit' ? 'Enregistrement des documents…' : pendingFiles.some(item => item.status === 'failed') ? 'Réessayer les documents en échec' : pendingFiles.length > 1 ? `Déposer les ${pendingFiles.length} factures` : 'Déposer la facture'}</button>
     </form>}
-    {!collapsed && <div className="space-y-3">{!invoices.length && <p className="py-4 text-sm text-gray-500">Aucune facture reçue</p>}{invoices.map(invoice => {
-      const replaced = invoices.some(other => other.replacesFactureId === invoice.id);
-      const state = invoice.duplicateOfId ? 'Copie retirée' : replaced ? 'Remplacée' : invoice.valide ? 'Validée' : invoice.rejetMotif ? 'À corriger' : 'En cours de vérification';
-      const pdf = (invoice.fichierNom || invoice.fichier || '').toLowerCase().endsWith('.pdf');
-      return <article key={invoice.id} aria-label={`Facture ${invoice.vendeur || 'à vérifier'}`} className="rounded-xl border border-gray-200 p-3">
-        <div className="flex items-start justify-between gap-2"><div className="min-w-0"><p className="text-sm font-semibold text-slate-800">{invoice.vendeur || 'Vendeur à renseigner'}</p><p className="text-sm text-gray-600">{invoice.montant > 0 ? eur(invoice.montant) : 'Montant à vérifier par l’équipe'}</p><p className="break-words text-xs text-gray-500">{invoice.fichierNom || 'Document manquant'}</p></div><span className="rounded-lg bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">{state}</span></div>
-        {invoice.rejetMotif && !replaced && <p className="mt-2 text-xs text-red-700">Correction attendue : {invoice.rejetMotif}</p>}
-        {invoice.fichier && (pdf ? <SecureFileLink href={invoice.fichier} bucket="factures" target="_blank" rel="noopener noreferrer" className={`${BUTTON} mt-2 bg-slate-100 text-slate-700`}><Eye size={14} />Ouvrir le PDF</SecureFileLink> : <button onClick={() => setPreview(invoice)} className={`${BUTTON} mt-2 bg-slate-100 text-slate-700`}><Eye size={14} />Voir le document</button>)}
-      </article>;
-    })}</div>}
+    <div className="space-y-3"><h3 className="text-sm font-semibold text-slate-700">Factures envoyées ({activeInvoices.length})</h3>{!activeInvoices.length && <p className="py-4 text-sm text-gray-500">{pastInvoices.length ? 'Aucune facture à utiliser pour cette expédition. Les anciennes copies restent dans l’historique.' : 'Aucune facture reçue'}</p>}{activeInvoices.map(invoiceCard)}</div>
+    {pastInvoices.length > 0 && <details className="mt-3 border-t border-slate-200"><summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-slate-600">Anciennes versions et copies ({pastInvoices.length})</summary><div className="space-y-3">{pastInvoices.map(invoiceCard)}</div></details>}
   </section>;
 }

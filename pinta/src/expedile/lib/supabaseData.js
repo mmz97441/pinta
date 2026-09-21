@@ -43,6 +43,7 @@ export function mapColis(row) {
     finP: row.fin_p ? +row.fin_p : null,
     finalPackages: row.final_packages || [],
     preparationCompositionVersion: row.preparation_composition_version ?? 0,
+    consentRequestVersion: row.consent_request_version ?? 0,
     finalMeasurementsVersion: row.final_measurements_version ?? null,
     finalMeasurementsAt: row.final_measurements_at || null,
     outgoingParcelCount: row.outgoing_parcel_count ?? null,
@@ -1085,6 +1086,8 @@ export async function fetchAuditActions(colisId) {
     user: row.user_nom || '—',
     action: row.action,
     detail: row.detail,
+    before: row.before_data,
+    after: row.after_data,
     date: row.created_at,
   }));
 }
