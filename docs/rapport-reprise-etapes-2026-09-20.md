@@ -46,6 +46,18 @@ La migration a été répétée avec succès sur la base de préproduction dans 
 
 Voir [la recette détaillée](verification-reprise-etapes-2026-09-20.md) et [les contrôles messages/paiement](correction-etapes-securite-client-paiement-2026-09-20.md).
 
-État de livraison : **contrôle final et publication en cours**. Ce document sera complété avec les résultats et la version déployée. Aucun test automatique ne remplace une séance d’observation avec des utilisateurs débutants.
+## Publication du 21 septembre 2026
+
+Les correctifs sont **fusionnés dans `main` et déployés sur [expedile.app](https://expedile.app)**. La [demande de fusion nº 11](https://github.com/mmz97441/pinta/pull/11) a produit le commit applicatif `bb1b7cda9e98da766216c8feecd3ef9b14f5caaa`. Les deux validations GitHub complètes sont réussies, dont [la validation de la demande de fusion](https://github.com/mmz97441/pinta/actions/runs/35553777538).
+
+- Migration `20260920000001` appliquée et enregistrée ; permissions contrôlées et données existantes conservées.
+- Fonctions actives : `correct-colis-task` version 1, `send-telegram` version 18 et `relances-auto` version 18. La nouvelle fonction refuse les appels sans session avec HTTP 401.
+- Domaine contrôlé : Vercel `READY`, déploiement `pinta-f7q4elqdh-mmz97441s-projects.vercel.app`, correspondant au commit fusionné.
+- Contrôle du site : **23 vérifications HTTP réussies**, démarrage et connexion fictive vérifiés sur ordinateur et mobile, sans session ni écriture réelles.
+- Recette sur les fichiers réellement servis par le domaine : **19/19 scénarios de reprise** et **10/10 scénarios de messages** réussis. Le trajet précis « À faire → Reprendre le travail » a également été rejoué avec succès sur ce domaine, jusqu’à l’aperçu de demande d’accord, avec toutes les API métier simulées et aucune écriture ni notification.
+
+Le cas signalé pendant la livraison a aussi été reproduit : un dossier mesuré conservait la date d’un ancien devis sans montant courant. L’ancienne interface lui donnait à tort priorité et masquait la demande d’accord. Le calcul de l’étape donne maintenant priorité au statut actuel. Depuis « Mon travail → À faire → Reprendre le travail », la demande d’accord et son aperçu sont accessibles ; les mesures, factures et historique sont conservés.
+
+Aucun test automatique ne remplace une séance d’observation avec des utilisateurs débutants. Les vérifications navigateur des commandes métier utilisent des données fictives et ne sollicitent ni client ni paiement réel.
 
 Les autres simplifications d’interface de cette livraison sont détaillées dans [le rapport de simplicité](rapport-simplicite-parcours-2026-09-20.md).

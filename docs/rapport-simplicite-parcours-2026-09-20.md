@@ -76,4 +76,4 @@ une attention particulière lors de ces essais.
 
 ## Publication
 
-Ce lot est intégré à la livraison de [reprise ciblée des étapes](rapport-reprise-etapes-2026-09-20.md). Version et contrôles du domaine à consigner après publication.
+Ce lot est intégré à la livraison de [reprise ciblée des étapes](rapport-reprise-etapes-2026-09-20.md), fusionnée dans `main` par la demande nº 11 et mise en ligne sur expedile.app le 21 septembre 2026. Le rapport de livraison consigne la version applicative, la migration, les fonctions et les contrôles du domaine.
