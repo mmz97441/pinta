@@ -72,7 +72,7 @@ export default function QuoteCustomsPanel({ colis, destination, onDirtyChange, o
   const pendingIds = Object.keys(drafts);
   const dirty = pendingIds.length > 0 || activeId != null;
   const currentSignature = signature(lines, destination);
-  const editable = can('perm_colis_calculer_devis') && ['en_preparation', 'devis_envoye', 'attente_paiement'].includes(colis.statut) && !colis.archive && !colis.paiementDate && colis.paiementMontant == null && colis.feuVert === 'autorise' && !colis.produitInterdit;
+  const editable = can('perm_colis_calculer_devis') && ['autorise', 'en_preparation', 'devis_envoye', 'attente_paiement'].includes(colis.statut) && !colis.archive && !colis.paiementDate && colis.paiementMontant == null && colis.feuVert === 'autorise' && !colis.produitInterdit;
   const proposalContext = useRef(null); proposalContext.current = { lines, destination, editable };
   const mounted = useRef(true);
   const active = lines.find(line => line.id === activeId);

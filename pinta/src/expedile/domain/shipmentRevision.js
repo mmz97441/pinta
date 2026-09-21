@@ -34,6 +34,7 @@ export function revisionLockedReason(colis, phase) {
   if (colis.statut === 'annule') return 'Cette expédition est annulée. Ses mesures restent consultables.';
   if (['expedie', 'transit', 'dedouanement', 'arrive', 'livraison', 'livre'].includes(colis.statut)) return 'Le transport a commencé. Les mesures sont en lecture seule.';
   if (colis.paiementDate || colis.statut === 'paye') return 'Le paiement est enregistré. Les mesures sont en lecture seule.';
+  if (phase === 'preparation' && colis.produitInterdit) return 'Un produit interdit est signalé. Faites régulariser le dossier avant de modifier les mesures après optimisation.';
   if (phase === 'preparation' && colis.feuVert !== 'autorise') return 'L’accord du client est nécessaire avant de modifier les mesures après optimisation.';
   return '';
 }

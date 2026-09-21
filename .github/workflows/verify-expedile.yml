@@ -58,6 +58,7 @@ jobs:
           ./supabase/tests/run-admin-simplification.sh
           sh ./supabase/tests/run-customs-quote.sh
           sh ./supabase/tests/run-task-corrections.sh
+          sh ./supabase/tests/run-task-readiness.sh
       - run: npx playwright install --with-deps chromium
       - name: Parcours navigateur sans services externes
         run: |
@@ -76,6 +77,7 @@ jobs:
           node tests/invoice-completion.browser.cjs
           node tests/preparation-autonomous.browser.cjs
           node tests/task-flow.browser.cjs
+          node tests/task-readiness.browser.cjs
           node tests/task-back-navigation.browser.cjs
           node tests/shipment-revision.browser.cjs
           node tests/quote-task-conflict.browser.cjs
@@ -124,6 +126,7 @@ jobs:
             /tmp/pinta-task-back-navigation
             /tmp/pinta-shipment-revision
             /tmp/pinta-task-flow
+            /tmp/pinta-task-readiness
             /tmp/pinta-dossier-shell
             /tmp/pinta-personal-work
             /tmp/pinta-task-claim

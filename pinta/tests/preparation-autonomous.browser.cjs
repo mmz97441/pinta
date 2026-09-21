@@ -89,10 +89,16 @@ async function main() {
     });
     await scenario('missing-customer-agreement-blocks-preparation', {}, async f => {
       f.tables.colis[0].feu_vert = 'en_attente';
-      await open(f);
-      assert.equal(await save(f).isDisabled(), true);
-      assert.equal(await field(f, 'Longueur', 'cm').isDisabled(), true);
-      await section(f).getByRole('alert').filter({ hasText: 'Le feu vert du client doit être enregistré' }).waitFor();
+      const before = clone(f.tables.colis[0]);
+      await f.page.goto(`${base}/colis/${ids.P}?section=preparation`);
+      const waiting = f.page.getByTestId('task-guidance');
+      await waiting.getByRole('heading', { name: 'Préparation en attente', exact: true }).waitFor();
+      await waiting.getByText('La préparation attend l’accord du client. Vous pouvez consulter la demande et les échanges.', { exact: true }).waitFor();
+      assert.equal(await save(f).count(), 0, 'Missing consent shows a precise prerequisite, not an editable preparation form.');
+      assert.equal(await field(f, 'Longueur', 'cm').count(), 0);
+      await waiting.getByRole('button', { name: 'Voir l’accord du client', exact: true }).click();
+      await f.page.waitForURL(url => url.searchParams.get('section') === 'accord');
+      assert.deepEqual(f.tables.colis[0], before, 'Following the prerequisite does not grant consent or start preparation.');
       assert.equal(measurementCalls(f).length, 0);
     });
     await scenario('quote-worker-reads-measures-but-cannot-rewrite-them', { permissions: { perm_colis_calculer_devis: true }, missing: false, empty: false }, async f => {

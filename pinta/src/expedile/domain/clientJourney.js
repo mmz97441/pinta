@@ -57,6 +57,7 @@ export function clientJourney(colis, now = Date.now()) {
   const waiting = hasClientRequestedWait(colis);
   const reviewDue = waiting && !!colis.attenteClientUntil && Date.parse(colis.attenteClientUntil) <= now;
   const quoteNeedsReview = needsQuoteRecalculation(colis);
+  const oldQuote = !!colis.devisEnvoyeLe && (quoteNeedsReview || ['receptionne','mesure','attente_feu_vert','autorise','refuse_client'].includes(colis.statut));
   const [label, actor, next] = waiting
     ? ['En attente à votre demande', 'À vous, lorsque vous serez prêt', 'Autoriser la préparation lorsque vos achats sont réunis.']
     : quoteNeedsReview ? ['Devis en cours de révision', 'Notre équipe', 'Vérifier les changements et vous transmettre un nouveau devis. Aucun règlement n’est demandé pour le devis retiré.']
@@ -64,10 +65,10 @@ export function clientJourney(colis, now = Date.now()) {
   const events = [
     ['Réception enregistrée', colis.dateReception], ['Demande d’accord envoyée', colis.demandeFeuVertEnvoyeeAt],
     ['Attente demandée', colis.attenteClientDate], [colis.feuVert === 'refuse' || colis.statut === 'refuse_client' ? 'Refus enregistré' : 'Accord enregistré', colis.feuVertDate],
-    ['Devis envoyé', colis.devisEnvoyeLe], ['Paiement reçu', colis.paiementDate], ['Expédition enregistrée', colis.dateExpedition], ['Livraison confirmée', colis.dateLivraison],
+    [oldQuote ? 'Ancien devis envoyé' : 'Devis envoyé', colis.devisEnvoyeLe, oldQuote], ['Paiement reçu', colis.paiementDate], ['Expédition enregistrée', colis.dateExpedition], ['Livraison confirmée', colis.dateLivraison],
   ].filter(([, date]) => date && Number.isFinite(Date.parse(date)) && Date.parse(date) <= now)
     .sort((a, b) => Date.parse(b[1]) - Date.parse(a[1]));
-  return { label, actor, next, waiting, reviewDue, quoteNeedsReview, event: events[0] ? { label: events[0][0], date: events[0][1] } : null };
+  return { label, actor, next, waiting, reviewDue, quoteNeedsReview, event: events[0] ? { label: events[0][0], date: events[0][1], ...(events[0][2] ? { historical: true } : {}) } : null };
 }
 
 export function hasClientRequestedWait(colis) {

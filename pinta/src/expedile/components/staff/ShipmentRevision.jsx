@@ -3,6 +3,7 @@ import { Plus, X } from 'lucide-react';
 import { RECEPTION_MEASURES } from '../../domain/reception';
 import { normalizedRevisionBoxes, revisionHasQuote, revisionLockedReason, revisionMeasurementIssues, sameRevisionBoxes, shipmentRevisionBoxes } from '../../domain/shipmentRevision';
 import { draftKey, readDraft, removeDraft, writeDraft } from '../../lib/draftStore';
+import { hasCurrentPreparation } from '../../domain/preparationReadiness';
 
 const BUTTON = 'inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 disabled:opacity-40';
 const PRIMARY = 'inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40';
@@ -41,6 +42,8 @@ function RevisionEditor({ colis, phase, canEdit = false, draftOwnerId, onSave, o
   const fieldRefs = useRef({});
   const savedBoxes = shipmentRevisionBoxes(colis, phase);
   const dirty = !sameRevisionBoxes(boxes, baseline);
+  const needsCertification = phase === 'preparation' && !hasCurrentPreparation(colis);
+  const canSaveChanges = dirty || needsCertification;
   const stale = conflict || editing && expectedUpdatedAt !== colis.updatedAt;
   const locked = revisionLockedReason(colis, phase) || (!canEdit ? 'Votre accès permet de consulter ces mesures, sans les modifier.' : !onSave ? 'La correction des mesures est momentanément indisponible.' : '');
   const receipt = phase === 'reception';
@@ -112,7 +115,7 @@ function RevisionEditor({ colis, phase, canEdit = false, draftOwnerId, onSave, o
   async function save(event) {
     event.preventDefault();
     if (pending.current || locked) return;
-    if (!dirty) { setNotice('Aucune modification à enregistrer. Le dossier reste inchangé.'); return; }
+    if (!canSaveChanges) { setNotice('Aucune modification à enregistrer. Le dossier reste inchangé.'); return; }
     if (stale) { showError('Le dossier a changé. Rechargez les mesures enregistrées avant de poursuivre. Votre saisie reste affichée.'); return; }
     const invalid = revisionMeasurementIssues(boxes, phase, savedBoxes.length);
     if (invalid.length) {
@@ -150,9 +153,9 @@ function RevisionEditor({ colis, phase, canEdit = false, draftOwnerId, onSave, o
         return <label key={field} htmlFor={id} className="block text-sm font-semibold text-slate-700">{label} ({fieldUnit})<input id={id} ref={node => { fieldRefs.current[`${index}:${field}`] = node; }} aria-label={`${label} · ${unit.toLocaleLowerCase('fr')} ${index + 1} (${fieldUnit})`} aria-invalid={invalid || undefined} aria-describedby={invalid ? `${id}-error` : undefined} type="text" inputMode="decimal" disabled={busy || reloading || Boolean(locked)} value={box[field]} onChange={event => change(index, field, event.target.value)} className={`mt-1 min-h-11 min-w-0 w-full rounded-xl border ${invalid ? 'border-red-500' : 'border-slate-300'} bg-white px-3 py-2 text-base font-normal disabled:opacity-50`} />{invalid && <span id={`${id}-error`} className="mt-1 block text-sm font-normal text-red-700">Valeur supérieure à zéro requise.</span>}</label>;
       })}</div>{!receipt && boxes.length > 1 && <button type="button" disabled={busy || reloading || Boolean(locked)} onClick={() => { setBoxes(previous => previous.filter((_, position) => position !== index)); setError(''); setIssues([]); }} className={BUTTON}><X size={16} />Retirer le colis préparé {index + 1}</button>}</fieldset>)}
       {!receipt && <button type="button" disabled={busy || reloading || Boolean(locked) || boxes.length >= 100} onClick={() => { const index = boxes.length; setBoxes(previous => [...previous, emptyBox()]); setNotice(''); focusField(index, 'dimL'); }} className={BUTTON}><Plus size={16} />Ajouter un colis préparé</button>}
-      <div className={`rounded-xl p-3 text-sm ${hasQuote ? 'border border-amber-300 bg-amber-50 text-amber-900' : 'bg-slate-50 text-slate-700'}`} aria-label="Conséquences de la modification"><p className="font-semibold">Avant d’enregistrer</p><p className="mt-1">{hasQuote ? 'Si les mesures changent, le devis enregistré sera retiré, ainsi que son lien de paiement éventuel. Il faudra recalculer, vérifier et envoyer un nouveau devis.' : 'Ces mesures remplaceront les valeurs enregistrées et serviront au prochain calcul du devis.'}</p><p className="mt-2">{receipt ? 'Les mesures après optimisation' : 'Les mesures à réception'}, l’accord du client et les factures sont conservés. Aucun message ne sera envoyé au client.</p></div>
-      {!dirty && <p className="text-sm text-slate-600">Aucune modification à enregistrer.</p>}
-      <div className="flex flex-wrap gap-3"><button type="submit" disabled={busy || reloading || !dirty || stale || Boolean(locked)} className={PRIMARY}>{busy ? 'Enregistrement…' : 'Enregistrer'}</button><button type="button" disabled={busy || reloading} onClick={cancel} className={BUTTON}>Annuler</button></div>
+      <div className={`rounded-xl p-3 text-sm ${hasQuote ? 'border border-amber-300 bg-amber-50 text-amber-900' : 'bg-slate-50 text-slate-700'}`} aria-label="Conséquences de la modification"><p className="font-semibold">Avant d’enregistrer</p><p className="mt-1">{hasQuote ? `${needsCertification ? 'Confirmer cette préparation retirera' : 'Si les mesures changent, la correction retirera'} le devis enregistré et son lien de paiement éventuel. Il faudra recalculer, vérifier et envoyer un nouveau devis.` : 'Ces mesures remplaceront les valeurs enregistrées et serviront au prochain calcul du devis.'}</p><p className="mt-2">{receipt ? 'Les mesures après optimisation' : 'Les mesures à réception'}, l’accord du client et les factures sont conservés. Aucun message ne sera envoyé au client.</p></div>
+      {!dirty && <p className="text-sm text-slate-600">{needsCertification ? 'Vérifiez les mesures conservées, puis enregistrez-les pour confirmer les colis préparés.' : 'Aucune modification à enregistrer.'}</p>}
+      <div className="flex flex-wrap gap-3"><button type="submit" disabled={busy || reloading || !canSaveChanges || stale || Boolean(locked)} className={PRIMARY}>{busy ? 'Enregistrement…' : 'Enregistrer'}</button><button type="button" disabled={busy || reloading} onClick={cancel} className={BUTTON}>Annuler</button></div>
     </form>}
     {!editing && lastSaved && onContinue && <button type="button" onClick={() => onContinue(phase, lastSaved)} className={PRIMARY}>{nextLabel}</button>}
   </section>;

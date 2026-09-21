@@ -1,8 +1,33 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DOSSIER_TASKS, dossierTaskUrl, previousDossierTask, nextDossierTask, resolveDossierTask } from './dossierTasks.js';
+import { DOSSIER_TASKS, dossierTaskUrl, previousDossierTask, nextDossierTask, resolveDossierTask, hasCurrentPreparation, dossierNextTask } from './dossierTasks.js';
 
-const prepared = { id: 'dossier-a', statut: 'en_preparation', preparationCompositionVersion: 2, finalMeasurementsVersion: 2, finalPackages: [{ dimL: 20, dimW: 30, dimH: 10, poids: 2 }], factures: [{ id: 'invoice-a', valide: true }] };
+const prepared = { id: 'dossier-a', statut: 'en_preparation', preparationCompositionVersion: 2, finalMeasurementsVersion: 2, outgoingParcelCount: 1, finalPackages: [{ dimL: 20, dimW: 30, dimH: 10, poids: 2 }], factures: [{ id: 'invoice-a', valide: true }] };
+
+test('new consent reuses certified preparation and opens useful work without changing the dossier', () => {
+  const dossier = { ...prepared, statut: 'autorise', feuVert: 'autorise', devisTotal: null, devisBrouillon: false, devisEnvoyeLe: '2026-09-17' };
+  const before = structuredClone(dossier);
+  assert.equal(resolveDossierTask(dossier), 'devis');
+  assert.equal(dossierNextTask(dossier, permission => permission === 'perm_colis_calculer_devis'), 'devis');
+  assert.equal(dossierNextTask({ ...dossier, finalMeasurementsVersion: 1 }), 'preparation');
+  assert.equal(dossierNextTask({ ...dossier, factures: [] }), 'documents');
+  assert.equal(dossierNextTask({ ...dossier, factures: [] }, undefined, { type: 'pro' }), 'devis');
+  assert.equal(dossierNextTask({ ...dossier, feuVert: 'en_attente' }), 'accord');
+  assert.equal(resolveDossierTask(dossier, '?section=preparation'), 'preparation');
+  assert.deepEqual(dossier, before);
+});
+
+test('preparation certificate requires current versions and the exact physical package count', () => {
+  assert.equal(hasCurrentPreparation(prepared), true);
+  for (const patch of [{ outgoingParcelCount: null }, { outgoingParcelCount: 2 }, { outgoingParcelCount: '1' }, { finalMeasurementsVersion: null }, { preparationCompositionVersion: null }, { finalMeasurementsVersion: 1 }, { finalPackages: [] }, { finalPackages: {} }, { finalPackages: [{ ...prepared.finalPackages[0], poids: 0 }] }, { finalPackages: [{ ...prepared.finalPackages[0], dimL: true }] }]) {
+    assert.equal(hasCurrentPreparation({ ...prepared, ...patch }), false, JSON.stringify(patch));
+    assert.equal(dossierNextTask({ ...prepared, ...patch }), 'preparation');
+  }
+  const legacy = { ...prepared, finalPackages: null, finL: 20, finW: 30, finH: 10, finP: 2 };
+  assert.equal(hasCurrentPreparation(legacy), true);
+  assert.equal(hasCurrentPreparation({ ...legacy, finalPackages: [] }), false);
+  assert.equal(hasCurrentPreparation({ ...legacy, outgoingParcelCount: null }), false);
+});
 
 test('next screen restores forward navigation after going back without wrapping the final task', () => {
   assert.equal(nextDossierTask('reception'), 'accord');
@@ -48,6 +73,8 @@ test('prepared dossiers open pending invoices or quote, without reopening comple
   assert.equal(resolveDossierTask({ ...prepared, factures: [] }), 'documents');
   assert.equal(resolveDossierTask({ ...prepared, factures: [{ id: 'pending', valide: false }] }), 'documents');
   assert.equal(resolveDossierTask({ ...prepared, factures: [{ id: 'rejected', valide: true, rejetMotif: 'Page manquante' }] }), 'documents');
+  assert.equal(resolveDossierTask({ ...prepared, factures: [...prepared.factures, { id: 'rejected', valide: false, rejetMotif: 'Document non pertinent' }] }), 'devis');
+  assert.equal(resolveDossierTask({ ...prepared, factures: [...prepared.factures, { id: 'pending', valide: false }] }), 'documents');
   assert.equal(resolveDossierTask({ ...prepared, factures: [...prepared.factures, { id: 'copy', duplicateOfId: 'invoice-a', valide: false }, { id: 'old', valide: false }, { id: 'replacement', replacesFactureId: 'old', valide: true }] }), 'devis');
 });
 
