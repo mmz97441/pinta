@@ -29,8 +29,17 @@ async function staffFixture(browser) {
   await f.page.getByRole('button',{name:'Enregistrer les mesures de préparation',exact:true}).click();
   await f.page.getByRole('region',{name:'Relais après préparation',exact:true}).waitFor();
   assert.equal(f.tables.colis[0].fin_p,4);assert.equal(f.requests.filter(r=>r.path.endsWith('/save_quote')).length,0);
+  const savedPreparation=JSON.stringify([f.tables.colis,f.tables.factures,f.tables.messages]);
+  const workWrites=()=>f.requests.filter(r=>['save_quote','queue_message','save_preparation_measurements','client_decision'].some(command=>r.path.endsWith('/'+command))).length;
+  const writesBeforeNavigation=workWrites();
   await chooseSection(f,'devis');
-  assert.equal(await f.page.getByRole('button',{name:'Enregistrer et vérifier le devis',exact:true}).isDisabled(),true);
+  await f.page.getByRole('heading',{name:'Factures à vérifier avant le devis',exact:true}).waitFor();
+  assert.equal(await f.page.getByRole('button',{name:'Enregistrer et vérifier le devis',exact:true}).count(),0);
+  await f.page.getByRole('button',{name:'Ouvrir les factures',exact:true}).click();
+  await f.page.getByTestId('documents-task').getByText('Aucune facture enregistrée.',{exact:true}).waitFor();
+  assert.equal(new URL(f.page.url()).searchParams.get('section'),'documents');
+  assert.equal(JSON.stringify([f.tables.colis,f.tables.factures,f.tables.messages]),savedPreparation,'Opening the useful document task preserves measured preparation and consent');
+  assert.equal(workWrites(),writesBeforeNavigation,'Navigation neither saves a quote nor notifies the client');
   await chooseSection(f,'preparation');
   await f.page.reload();await f.page.getByTestId('dossier-task-workspace').waitFor();await editPreparation(f);await f.page.getByLabel('Poids réel · colis sortant 1 (kg)',{exact:true}).waitFor();assert.equal(await f.page.getByLabel('Poids réel · colis sortant 1 (kg)',{exact:true}).inputValue(),'4');
   results.push({test:'measure-only save persists without documents and cannot publish an incomplete quote',pass:true});

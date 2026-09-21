@@ -49,8 +49,17 @@ Le travail a été réparti entre une revue serveur, la correction des écrans �
 
 Les contrôles portent notamment sur : accord renouvelé avec préparation conservée, nombre de colis manquant, anciennes versions de mesures, factures manquantes, rôles préparation et devis séparés, confirmation de mesures inchangées, retours dans les huit étapes, dossiers clos et concurrence entre collègues.
 
-Contrôles locaux déjà réussis : 186 tests JavaScript, 92 tests de fonctions serveur, 36 nouveaux contrôles PostgreSQL de reprise et droits, ainsi que les régressions SQL de correction, préparation, réception et nomenclature. Lint et construction de l’application réussis. La migration a été répétée sur le schéma distant avec annulation complète ; une sauvegarde privée des commandes et des tâches concernées a été conservée.
+Contrôles locaux réussis :
 
-Les résultats navigateur finaux et les références de publication seront consignés après la recette et le déploiement. Les essais automatisés utilisent des données fictives ; ils ne constituent ni un paiement réel ni une étude de compréhension auprès d’utilisateurs débutants.
+- 186 tests JavaScript et 92 tests de fonctions serveur.
+- 36 nouveaux contrôles PostgreSQL de reprise et droits ; régressions SQL de correction, préparation, réception et nomenclature réussies.
+- 20 scénarios navigateur de reprise ; chaîne entière ordinateur/mobile rejouée après les dernières corrections de formulation.
+- Régressions navigateur : nomenclature 22, corrections 19, navigation arrière/avant 10, conflits devis 6, parcours et prise de tâche 28 ; tous réussis.
+- Relecture des captures des huit écrans sur ordinateur et mobile, ainsi que de l’accord et de la livraison côté client. Aucun débordement horizontal constaté sur ces scénarios.
+- Lint et construction de l’application réussis.
+
+La migration a été répétée sur le schéma distant avec annulation complète, puis appliquée et vérifiée : version `20260921000001`, commandes protégées contre l’accès anonyme, projection des tâches cohérente. Une sauvegarde privée des commandes et des tâches concernées a été conservée. La lecture ciblée du dossier signalé confirme un accord reçu, une préparation valide et une tâche devis attribuée sans motif de blocage.
+
+Les références de publication seront consignées après la validation GitHub et le déploiement de l’interface. Les essais automatisés utilisent des données fictives ; ils ne constituent ni un paiement réel ni une étude de compréhension auprès d’utilisateurs débutants.
 
 La [matrice de recette](matrice-parcours-taches-client-2026-09-21.md) détaille les cas vérifiés. Le suivi des paiements et des livraisons reste accessible dans le dossier ; la création de nouveaux types de missions dans « Mon travail » ne fait pas partie de ce correctif.
