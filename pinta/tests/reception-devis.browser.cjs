@@ -26,6 +26,7 @@ async function main() {
       for (const [label, value] of [['Longueur', 10], ['Largeur', 80], ['Hauteur', 10], ['Poids réel', 1]]) {
         await current.page.getByLabel(`${label} · carton 2 (${label === 'Poids réel' ? 'kg' : 'cm'})`, { exact: true }).fill(String(value));
       }
+      await current.page.getByText('Comprendre le calcul du transport', { exact: true }).click();
       await current.page.getByText('3.20 kg', { exact: true }).first().waitFor();
       assert.equal(await current.page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
       await current.page.screenshot({ path: path.join(output, `reception-${device}.png`), fullPage: true });
@@ -35,8 +36,8 @@ async function main() {
       const target = await save.boundingBox();
       assert.ok(target.height >= 44);
       await save.click();
-      await current.page.getByRole('heading', { name: 'Réception enregistrée', exact: true }).waitFor();
-      await current.page.getByRole('button', { name: 'Suivre l’accord du client', exact: true }).click();
+      await current.page.getByRole('heading', { name: 'Mesures à réception — avant optimisation', exact: true }).waitFor();
+      await current.page.getByRole('button', { name: 'Aller à l’accord client', exact: true }).click();
       await current.page.getByRole('heading', { name: 'Demander l’accord du client', exact: true }).waitFor();
       assert.deepEqual(current.tables.colis[0].dims_par_colis, [first, second]);
       assert.equal(current.tables.colis[0].poids, 2);

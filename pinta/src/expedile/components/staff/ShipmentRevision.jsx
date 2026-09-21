@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Plus, X } from 'lucide-react';
 import { RECEPTION_MEASURES } from '../../domain/reception';
 import { normalizedRevisionBoxes, revisionHasQuote, revisionLockedReason, revisionMeasurementIssues, sameRevisionBoxes, shipmentRevisionBoxes } from '../../domain/shipmentRevision';
@@ -32,6 +32,7 @@ function RevisionEditor({ colis, phase, canEdit = false, draftOwnerId, onSave, o
   const [issues, setIssues] = useState([]);
   const [notice, setNotice] = useState('');
   const [lastSaved, setLastSaved] = useState(null);
+  const [focusTarget, setFocusTarget] = useState(null);
   const [storageAvailable, setStorageAvailable] = useState(true);
   const pending = useRef(false);
   const mounted = useRef(false);
@@ -56,20 +57,30 @@ function RevisionEditor({ colis, phase, canEdit = false, draftOwnerId, onSave, o
     window.addEventListener('beforeunload', warn);
     return () => window.removeEventListener('beforeunload', warn);
   }, [key, editing, dirty, boxes, baseline, expectedUpdatedAt]);
-  useEffect(() => { if (error) feedbackRef.current?.focus(); }, [error]);
+  // A single focus owner runs once the requested field and its inline error
+  // exist. A separate error effect must never take focus back from that field.
+  useLayoutEffect(() => {
+    if (!focusTarget) return;
+    const target = focusTarget.kind === 'field'
+      ? fieldRefs.current[`${focusTarget.index}:${focusTarget.name}`]
+      : focusTarget.kind === 'form' ? formRef.current : feedbackRef.current;
+    target?.focus({ preventScroll: true });
+    target?.scrollIntoView({ block: focusTarget.kind === 'field' ? 'center' : 'nearest', behavior: 'auto' });
+  }, [focusTarget]);
 
   function reset(source, message = '') {
     const next = shipmentRevisionBoxes(source, phase);
     setBoxes(copy(next)); setBaseline(copy(next)); setExpectedUpdatedAt(source.updatedAt);
     setConflict(false); setError(''); setIssues([]); setNotice(message);
+    setFocusTarget(null);
     removeDraft(key);
   }
   function focusField(index, name) {
-    requestAnimationFrame(() => {
-      const input = fieldRefs.current[`${index}:${name}`];
-      input?.focus({ preventScroll: true });
-      input?.scrollIntoView({ block: 'center', behavior: 'auto' });
-    });
+    setFocusTarget({ kind: 'field', index, name });
+  }
+  function showError(message) {
+    setError(message);
+    setFocusTarget({ kind: 'feedback' });
   }
   function start() {
     if (locked || pending.current) return;
@@ -93,23 +104,23 @@ function RevisionEditor({ colis, phase, canEdit = false, draftOwnerId, onSave, o
       if (!mounted.current) return;
       if (!fresh?.id || fresh.id !== colis.id || !fresh.updatedAt) throw new Error('Le rechargement n’a pas été confirmé. Votre saisie est conservée.');
       reset(fresh, 'Les mesures enregistrées ont été rechargées. Vous pouvez reprendre votre correction.');
-      requestAnimationFrame(() => formRef.current?.focus());
+      setFocusTarget({ kind: 'form' });
     } catch (failure) {
-      if (mounted.current) setError(failure.message || 'Rechargement impossible. Votre saisie est conservée.');
+      if (mounted.current) showError(failure.message || 'Rechargement impossible. Votre saisie est conservée.');
     } finally { pending.current = false; if (mounted.current) setReloading(false); }
   }
   async function save(event) {
     event.preventDefault();
     if (pending.current || locked) return;
     if (!dirty) { setNotice('Aucune modification à enregistrer. Le dossier reste inchangé.'); return; }
-    if (stale) { setError('Le dossier a changé. Rechargez les mesures enregistrées avant de poursuivre. Votre saisie reste affichée.'); return; }
+    if (stale) { showError('Le dossier a changé. Rechargez les mesures enregistrées avant de poursuivre. Votre saisie reste affichée.'); return; }
     const invalid = revisionMeasurementIssues(boxes, phase, savedBoxes.length);
     if (invalid.length) {
       setIssues(invalid); setError(invalid[0].message);
       focusField(invalid[0].index, invalid[0].key);
       return;
     }
-    if (!expectedUpdatedAt) { setError('Rechargez le dossier avant de corriger ses mesures. Votre saisie est conservée.'); setConflict(true); return; }
+    if (!expectedUpdatedAt) { showError('Rechargez le dossier avant de corriger ses mesures. Votre saisie est conservée.'); setConflict(true); return; }
     pending.current = true; setBusy(true); setError(''); setNotice('');
     try {
       const saved = await onSave(phase, normalizedRevisionBoxes(boxes), expectedUpdatedAt);
@@ -120,7 +131,7 @@ function RevisionEditor({ colis, phase, canEdit = false, draftOwnerId, onSave, o
     } catch (failure) {
       if (!mounted.current) return;
       if (failure.code === '40001') setConflict(true);
-      setError(failure.message || 'Enregistrement impossible. Votre saisie est conservée. Réessayez.');
+      showError(failure.message || 'Enregistrement impossible. Votre saisie est conservée. Réessayez.');
     } finally { pending.current = false; if (mounted.current) setBusy(false); }
   }
 

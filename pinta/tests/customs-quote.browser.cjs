@@ -29,6 +29,12 @@ async function fixture(browser,options={}) {
   return reply(route,response);
  });
  await f.context.route('**/rest/v1/rpc/search_customs_tariffs',route=>{const input=route.request().postDataJSON();f.calls.push({kind:'search',input});return reply(route,catalog.filter(row=>row.destination_code===input.p_destination));});
+ await f.context.route('**/functions/v1/correct-colis-task',route=>{
+  const input=route.request().postDataJSON();f.calls.push({kind:'reopen',input});const row=f.tables.colis.find(p=>p.id===input.colisId);
+  assert.equal(input.task,'devis');assert.equal(input.expectedUpdatedAt,row.updated_at);
+  Object.assign(row,{updated_at:new Date(Math.max(Date.now(),Date.parse(row.updated_at))+1000).toISOString(),statut:'en_preparation',devis_total:null,devis_snapshot:null,devis_brouillon:true,payplug_payment_url:null,payplug_payment_id:null});
+  return reply(route,{colis:row,changed:true,invalidated:['devis']});
+ });
  await f.context.route('**/rest/v1/rpc/save_quote_customs',route=>{
   const input=route.request().postDataJSON();f.calls.push({kind:'save',input});const row=f.tables.colis.find(p=>p.id===input.p_colis_id);
   if(f.control.fail){f.control.fail=false;return reply(route,{message:'Erreur réseau simulée. Votre saisie est conservée.'},503);}
@@ -76,7 +82,14 @@ try{
   await open(f);await f.page.getByText('Ajouter un frais',{exact:true}).click();await f.page.getByLabel('Libellé du frais').fill('Emballage');await f.page.getByLabel('Montant du frais').fill('7');await f.page.getByRole('button',{name:'Ajouter le frais',exact:true}).click();await edit(f);await choose(f);await apply(f).click();await saved(f);const savedVersion=f.tables.colis[0].updated_at;assert.equal(await mainSave(f).isEnabled(),true);await mainSave(f).click();await f.page.getByRole('button',{name:'Envoyer le devis au client',exact:true}).waitFor();const quote=f.requests.find(r=>r.path.endsWith('/save_quote')).input;assert.equal(quote.p_expected_updated_at,savedVersion);assert.equal(quote.p_snapshot.inputs.fees[0].montant,7);assert.equal(quote.p_snapshot.inputs.lines[0].customDuty.code,'01012100');
  });
  await scenario('published-quote-reclassification-requires-withdrawal-confirmation',{},async f=>{
-  Object.assign(f.tables.colis[0],{statut:'devis_envoye',devis_total:77,devis_brouillon:false,payplug_payment_url:'https://example.test/payment'});await open(f);await edit(f);await choose(f);await apply(f).click();const dialog=f.page.getByRole('dialog');await dialog.getByText(/lien de paiement seront retirés/).waitFor();await dialog.getByRole('button',{name:'Annuler',exact:true}).click();assert.equal(f.calls.filter(c=>c.kind==='save').length,0);await apply(f).click();await dialog.getByRole('button',{name:'Retirer le devis et appliquer',exact:true}).click();await mainSave(f).waitFor();assert.equal(f.tables.colis[0].statut,'en_preparation');assert.equal(f.tables.colis[0].payplug_payment_url,null);assert.deepEqual(writes(f),[]);
+  Object.assign(f.tables.colis[0],{statut:'devis_envoye',devis_total:77,devis_brouillon:false,payplug_payment_id:'fixture-unpaid',payplug_payment_url:'https://example.test/payment'});
+  const before=structuredClone(f.tables.colis[0]);await f.login();await f.page.goto(`${base}/colis/${ids.P}?section=devis`);
+  await f.page.getByRole('heading',{name:'Devis enregistré',exact:true}).waitFor();assert.equal(await panel(f).count(),0);
+  const reopen=f.page.getByRole('region',{name:'Reprise du devis',exact:true});await reopen.getByRole('button',{name:'Modifier le devis',exact:true}).click();await reopen.getByText(/lien de paiement seront retirés/).waitFor();
+  await reopen.getByRole('button',{name:'Annuler',exact:true}).click();assert.equal(f.calls.filter(c=>c.kind==='reopen'||c.kind==='save').length,0);assert.deepEqual(f.tables.colis[0],before);
+  await reopen.getByRole('button',{name:'Modifier le devis',exact:true}).click();await reopen.getByRole('button',{name:'Reprendre le devis',exact:true}).click();await panel(f).waitFor();
+  assert.equal(f.calls.filter(c=>c.kind==='reopen').length,1);assert.equal(f.tables.colis[0].payplug_payment_url,null);
+  await edit(f);await choose(f);await apply(f).click();await saved(f);await mainSave(f).waitFor();assert.equal(f.tables.colis[0].statut,'en_preparation');assert.equal(f.calls.filter(c=>c.kind==='save').length,1);assert.deepEqual(writes(f),[]);
  });
  await scenario('calculator-without-invoice-permission-can-classify-mobile', {role:'preparateur',permissions:{perm_colis_calculer_devis:true,perm_factures_voir:false,perm_factures_modifier_articles:false,perm_factures_valider:false}},async f=>{
   await f.page.setViewportSize({width:390,height:844});await open(f);await edit(f);await choose(f);assert.equal(await f.page.getByTestId('documents-task').count(),0);assert.equal(await f.page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false);await panel(f).getByText(/Choisi : 01012100/).scrollIntoViewIfNeeded();await f.page.screenshot({path:`${output}/customs-edit-mobile.png`});await apply(f).click();await saved(f);const axe=await new AxeBuilder({page:f.page}).include('#quote-customs').withTags(['wcag2a','wcag2aa','wcag21aa']).analyze();assert.deepEqual(axe.violations.map(v=>v.id),[]);await panel(f).scrollIntoViewIfNeeded();await f.page.screenshot({path:`${output}/customs-mobile.png`});
@@ -85,7 +98,8 @@ try{
   f.tables.clients[0].cp='97200';await open(f);await panel(f).getByText(/Aucun barème douanier n’est chargé pour cette destination/).waitFor();await edit(f);await panel(f).getByLabel('Rechercher un code ou un libellé douanier').fill('cheval');await panel(f).getByRole('button',{name:'Rechercher la nomenclature'}).click();await panel(f).getByRole('status').filter({hasText:'Aucun résultat'}).waitFor();assert.equal(f.calls.find(c=>c.kind==='search').input.p_destination,'972');assert.equal(f.calls.filter(c=>c.kind==='save').length,0);assert.equal(f.calls.filter(c=>c.kind==='suggest').length,0);assert.deepEqual(writes(f),[]);
  });
  await scenario('read-only-and-paid-dossier-never-offer-editing',{role:'preparateur',permissions:{perm_colis_calculer_devis:false,perm_finances_voir_total:true}},async f=>{
-  f.tables.lignes[0].custom_duty=mapped(catalog[0]);await open(f);assert.equal(await panel(f).getByRole('button',{name:'Classer l’article 1',exact:true}).count(),0);f.tables.staff_permissions[0].perm_colis_calculer_devis=true;Object.assign(f.tables.colis[0],{statut:'paye',paiement_date:new Date().toISOString(),paiement_montant:77});await f.page.reload();await panel(f).waitFor();assert.equal(await panel(f).getByRole('button',{name:'Classer l’article 1',exact:true}).count(),0);assert.equal(f.calls.filter(c=>c.kind==='save').length,0);assert.equal(f.calls.filter(c=>c.kind==='suggest').length,0);
+  f.tables.lignes[0].custom_duty=mapped(catalog[0]);await open(f);assert.equal(await panel(f).getByRole('button',{name:'Classer l’article 1',exact:true}).count(),0);f.tables.staff_permissions[0].perm_colis_calculer_devis=true;Object.assign(f.tables.colis[0],{statut:'paye',devis_total:77,devis_brouillon:false,paiement_date:new Date().toISOString(),paiement_montant:77});await f.page.reload();
+  await f.page.getByRole('heading',{name:'Devis enregistré',exact:true}).waitFor();assert.equal(await panel(f).count(),0);assert.equal(await f.page.getByRole('button',{name:'Modifier le devis',exact:true}).count(),0);assert.equal(await mainSave(f).count(),0);assert.equal(f.calls.filter(c=>['save','suggest','reopen'].includes(c.kind)).length,0);
  });
 
  await scenario('suggestions-automatic-read-only-until-explicit-choice',{suggestions:true},async f=>{

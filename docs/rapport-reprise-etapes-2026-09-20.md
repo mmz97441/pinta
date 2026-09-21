@@ -40,6 +40,8 @@ Vérifications locales : **183 tests JavaScript**, **92 tests Edge** et **19 sc�
 
 Le formulaire de préparation attend aussi le rechargement confirmé après un conflit avant de proposer une comparaison ou une reprise. Un échec de chargement conserve la saisie et permet de réessayer. Une réponse tardive concernant un autre dossier ne remplace pas le dossier ouvert. La comparaison des versions conserve la précision des horodatages de la base.
 
+Le contrôle complet a révélé une concurrence de focus sur mobile : le résumé d’erreur pouvait reprendre le focus au champ invalide. Une seule cible est maintenant choisie après le rendu. La recette vérifie aussi les erreurs successives, les pannes réseau et la reprise de frappe. Les tests douaniers et réception ont été adaptés aux actions explicites et aux détails repliés ; leurs 21 et 4 scénarios passent sans modifier les exigences de calcul ou de conservation des données.
+
 La migration a été répétée avec succès sur la base de préproduction dans une transaction annulée. Les définitions existantes et les fonctions Telegram ont été sauvegardées dans un dossier privé exclu du dépôt public.
 
 Voir [la recette détaillée](verification-reprise-etapes-2026-09-20.md) et [les contrôles messages/paiement](correction-etapes-securite-client-paiement-2026-09-20.md).

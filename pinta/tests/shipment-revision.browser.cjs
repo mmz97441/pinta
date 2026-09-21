@@ -96,6 +96,23 @@ function noImplicitMutation(f) {
   assert.equal(f.requests.some(request => ['POST', 'PATCH', 'PUT', 'DELETE'].includes(request.method) && /^\/rest\/v1\/(colis|factures|lignes|messages)$/.test(request.path)), false, 'Only the dedicated correction command may change the dossier');
   assert.deepEqual(f.errors, []); assert.deepEqual(f.networkDenied, []);
 }
+async function focusedAfterRender(f, element) {
+  await element.waitFor({ state: 'visible' });
+  const node = await element.elementHandle();
+  try {
+    await f.page.waitForFunction(target => target === document.activeElement, node);
+    assert.equal(await node.evaluate(target => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve(target === document.activeElement))))), true, 'Focus stays on the requested target after effects and animation frames settle.');
+  } finally { await node.dispose(); }
+}
+async function invalidFieldVisible(f, element) {
+  await focusedAfterRender(f, element);
+  assert.equal(await element.getAttribute('aria-invalid'), 'true');
+  assert.equal(await element.evaluate(node => {
+    const box = node.getBoundingClientRect();
+    const visible = document.elementFromPoint(box.left + box.width / 2, box.bottom - 2);
+    return box.top >= 0 && box.bottom <= innerHeight && (visible === node || node.contains(visible));
+  }), true, 'The focused invalid field remains visible above the fixed mobile navigation');
+}
 
 (async () => {
   await fs.mkdir(output, { recursive: true });
@@ -174,14 +191,22 @@ function noImplicitMutation(f) {
       const weight = field(f, 'reception', 2, 'Poids', 'kg'); await weight.fill('0');
       await panel.getByRole('button', { name: 'Enregistrer', exact: true }).click();
       await panel.getByRole('alert').filter({ hasText: 'Carton 2' }).waitFor();
-      assert.equal(await weight.getAttribute('aria-invalid'), 'true'); assert.equal(await weight.evaluate(node => node === document.activeElement), true);
+      await invalidFieldVisible(f, weight);
       await panel.getByText('Valeur supérieure à zéro requise.', { exact: true }).waitFor();
       assert.match(await weight.getAttribute('aria-describedby'), /poids-error$/);
-      assert.equal(await weight.evaluate(node => {
-        const box = node.getBoundingClientRect();
-        const visible = document.elementFromPoint(box.left + box.width / 2, box.bottom - 2);
-        return box.top >= 0 && box.bottom <= innerHeight && (visible === node || node.contains(visible));
-      }), true, 'The focused invalid field remains visible above the fixed mobile navigation');
+      // Submitting the very same error must focus the field again, even though
+      // the error text has not changed and clicking Save has moved focus away.
+      await panel.getByRole('button', { name: 'Enregistrer', exact: true }).click();
+      await invalidFieldVisible(f, weight);
+      // The next failed submission targets its own first invalid field, not a
+      // stale target left by the preceding error or the summary announcement.
+      await weight.fill('1.5');
+      const length = field(f, 'reception'); await length.fill('0');
+      await panel.getByRole('button', { name: 'Enregistrer', exact: true }).click();
+      await invalidFieldVisible(f, length);
+      await length.fill('40'); await weight.fill('0');
+      await panel.getByRole('button', { name: 'Enregistrer', exact: true }).click();
+      await invalidFieldVisible(f, weight);
       unchanged(f, before);
       const audit = await new AxeBuilder({ page: f.page }).include('[data-testid="shipment-revision-reception"]').withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
       assert.deepEqual(audit.violations.map(item => ({ id: item.id, nodes: item.nodes.map(node => node.target) })), []);
@@ -201,7 +226,9 @@ function noImplicitMutation(f) {
       await panel.getByRole('button', { name: 'Modifier', exact: true }).click(); await field(f, 'reception').fill('45');
       await panel.getByRole('button', { name: 'Enregistrer', exact: true }).click();
       await panel.getByRole('button', { name: 'Recharger les mesures enregistrées', exact: true }).waitFor();
+      await focusedAfterRender(f, panel.locator('[role="alert"][tabindex="-1"]'));
       assert.equal(await field(f, 'reception').inputValue(), '45'); assert.equal(f.calls.length, 1); assert.equal(f.tables.colis[0].dims_par_colis[0].dimL, 49);
+      await field(f, 'reception').fill('46'); await focusedAfterRender(f, field(f, 'reception'));
       await panel.getByRole('button', { name: 'Recharger les mesures enregistrées', exact: true }).click();
       await f.page.waitForFunction(() => document.querySelector('[aria-label="Longueur · carton 1 (cm)"]')?.value === '49');
       assert.equal(f.calls.length, 1, 'Reloading performs no new correction');
@@ -216,7 +243,10 @@ function noImplicitMutation(f) {
       await panel.getByRole('button', { name: 'Modifier', exact: true }).click(); await field(f, 'reception').fill('48');
       await panel.getByRole('button', { name: 'Enregistrer', exact: true }).click();
       await panel.getByRole('alert').filter({ hasText: /indisponible/ }).waitFor();
+      await focusedAfterRender(f, panel.locator('[role="alert"][tabindex="-1"]'));
       assert.equal(f.calls.length, 1); assert.equal(await field(f, 'reception').inputValue(), '48'); assert.equal(f.tables.colis[0].dims_par_colis[0].dimL, 40);
+      await field(f, 'reception').fill('49'); await focusedAfterRender(f, field(f, 'reception'));
+      await field(f, 'reception').fill('48'); await focusedAfterRender(f, field(f, 'reception'));
       await panel.getByRole('button', { name: 'Enregistrer', exact: true }).click(); await panel.getByRole('status').filter({ hasText: 'enregistrées.' }).waitFor();
       assert.equal(f.calls.length, 2); assert.deepEqual(f.calls[1], f.calls[0]);
     }, { networkError: true });

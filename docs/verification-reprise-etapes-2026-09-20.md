@@ -45,6 +45,14 @@ elle ne remplace pas les tests serveur de droits, de concurrence et de paiement.
    Une réponse tardive d’un autre dossier est ignorée pour la saisie en cours.
    L’ordre des versions conserve les microsecondes PostgreSQL, afin de ne pas
    confondre deux changements dans la même milliseconde.
+5. **Focus du champ invalide instable en CI sur mobile.** Le résumé d’erreur
+   recevait le focus dans un effet, pendant qu’une animation programmée tentait
+   de focaliser le champ. Ces deux commandes pouvaient se concurrencer.
+   Une seule intention de focus s’applique désormais après le rendu : une erreur
+   de mesure ouvre directement le champ à corriger ; une erreur réseau ou un
+   conflit ouvre le résumé. Une seconde soumission de la même valeur invalide
+   replace aussi le focus sur le champ, sans dépendre d’un changement du texte
+   d’erreur. Reprendre la frappe ne déclenche aucune nouvelle prise de focus.
 
 ## Recette complémentaire du conflit de préparation — 21 septembre
 
@@ -69,12 +77,35 @@ restent fonctionnels, sans notification implicite.
 Le test unitaire `recordVersion.test.js` réussit : `.123456` reste antérieur à
 `.123457`, les dates équivalentes avec fuseau sont reconnues, et une date absente
 ou invalide n’autorise pas la comparaison. ESLint ciblé et `git diff --check`
-sont également réussis. Aucun fichier source n’a changé après ces 25 recettes.
+sont également réussis. Ces 25 recettes couvrent le correctif de préparation ;
+le correctif de focus ultérieur est vérifié ci-dessous.
+
+## Stabilisation du focus après échec CI — 21 septembre
+
+Après correction du point 5, le nouveau build réussit **19/19 scénarios de
+reprise**. Le scénario mobile a également été relancé **10 fois**, avec
+**10/10 réussites**. Chaque passage vérifie quatre soumissions invalides : la
+première, la même erreur répétée, un autre champ invalide, puis le retour au
+champ initial. Cela représente **44 soumissions invalides vérifiées**, sans
+écriture métier, avec un focus stable après rendu et visibilité réelle du champ
+au-dessus de la navigation fixe. La recette attend la condition de focus ; elle
+n’utilise aucun délai arbitraire et conserve les assertions de visibilité,
+d’accessibilité et d’absence de requête.
+
+Les cas réseau et conflit vérifient également que le résumé reçoit le focus,
+puis que la saisie suivante conserve celui du champ. La capture mobile finale
+a été relue : poids invalide focalisé et explication locale visibles. ESLint
+ciblé, vérification de syntaxe et build réussissent. La CI distante et la
+publication restent suivies dans le rapport d’intégration.
 
 ## Preuves et limites
 
 - Suite : `pinta/tests/shipment-revision.browser.cjs`.
-- Résultat final : `/tmp/pinta-14-revision-release/results.json` — **19/19**.
+- Résultat final après correction du focus :
+  `/tmp/pinta-14-revision-focus-release/results.json` — **19/19**.
+- Répétitions du scénario mobile :
+  `/tmp/pinta-14-revision-focus-repeat-1/results.json` à
+  `/tmp/pinta-14-revision-focus-repeat-10/results.json` — **10/10**.
 - Captures finales relues : `receipt-edit-error-mobile.png` et
   `new-consent-after-reopen.png` dans le même répertoire.
 - Normalisation, valeurs indépendantes, no-op et verrous : **5 tests unitaires
