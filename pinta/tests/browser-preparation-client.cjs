@@ -1,3 +1,4 @@
+const { openTaskNavigation } = require('./task-navigation.helper.cjs');
 /* Real browser, fixture-only APIs: no provider message, payment or production data. */
 const AxeBuilder = require('@axe-core/playwright').default;
 const { chromium } = require('playwright');
@@ -10,7 +11,7 @@ const results=[];
 async function navigate(page, destination) { await page.evaluate(to => { window.history.pushState({},'',to); window.dispatchEvent(new PopStateEvent('popstate')); },destination); }
 async function editPreparation(f) { const edit=f.page.getByRole('button',{name:'Modifier les mesures',exact:true}); if(await edit.isVisible()) await edit.click(); await f.page.getByRole('button',{name:'Enregistrer les mesures de préparation',exact:true}).waitFor(); }
 async function ready(f) { await f.login(); await f.page.goto(`${base}/colis/${ids.P}?section=preparation`); await f.page.getByTestId('dossier-task-workspace').waitFor(); await editPreparation(f); }
-async function chooseSection(f, name) { await f.page.getByLabel('Tâche du dossier',{exact:true}).selectOption(name); }
+async function chooseSection(f, name) { await openTaskNavigation(f);await f.page.getByLabel('Tâche du dossier',{exact:true}).selectOption(name); }
 async function staffFixture(browser) {
  const f=await setup(browser,'directeur'); const c=f.tables.colis[0]; c.preparation_composition_version=0;c.final_measurements_version=0;c.final_packages=[{dimL:30,dimW:20,dimH:20,poids:3}]; c.outgoing_parcel_count=1;
  await f.context.route('**/rest/v1/rpc/save_preparation_measurements',async route=>{

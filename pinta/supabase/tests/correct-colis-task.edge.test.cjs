@@ -33,6 +33,7 @@ async function fixture(options = {}) {
     staff_users:[{id:'staff-fixture',auth_id:staffId,actif:true}],
     staff_permissions:[{staff_id:'staff-fixture',perm_colis_revenir_arriere:true,perm_colis_mesurer:true,perm_colis_preparer:true,perm_colis_demander_feuvert:true,perm_colis_calculer_devis:true,...options.permissions}],
     colis:[{...clone(baseColis),...options.colis}],
+    staff_work_actions:clone(options.workActions || []),
     payment_intents:clone(options.intents ?? [baseIntent]),
     legacy_payplug_payments:clone(options.legacy || []),paiements:clone(options.paiements || []),envois:clone(options.envois || []),
   };
@@ -119,6 +120,28 @@ test('permissions for both correction and chosen task are enforced before provid
     const f=await fixture(options);assert.equal((await f.run()).status,403);assert.equal(f.provider.length,0);assert.equal(f.calls.length,0);
   }
   const f=await fixture();assert.equal((await f.run({},'')).status,401);
+});
+test('transferred quote or correction refuses before contacting the payment provider',async()=>{
+  for (const kind of ['quote','correction']) {
+    const f=await fixture({workActions:[{colis_id:colisId,kind,state:'in_progress',assignee_id:'another-staff'}]});
+    const result=await f.run();assert.equal(result.status,409);assert.equal(result.body.code,'40001');
+    assert.equal(f.provider.length,0);assert.equal(f.calls.length,0);assert.equal(f.writes.length,0);
+  }
+});
+test('a transfer during provider verification prevents the cancellation request',async()=>{
+  const f=await fixture({fetch:async(_url,_config,state)=>{
+    state.tables.staff_work_actions.push({colis_id:colisId,kind:'quote',state:'in_progress',assignee_id:'another-staff'});
+    return Response.json(basePayment);
+  }});
+  const result=await f.run();assert.equal(result.status,409);assert.equal(result.body.code,'40001');
+  assert.deepEqual(f.provider.map(call=>call.method),['GET']);assert.equal(f.calls.length,0);assert.equal(f.writes.length,0);
+});
+test('another task owner or historical task never prevents an authorized quote correction',async()=>{
+  const f=await fixture({colis:{payplug_payment_id:null,payplug_payment_url:null},intents:[],workActions:[
+    {colis_id:colisId,kind:'documents',state:'in_progress',assignee_id:'another-staff'},
+    {colis_id:colisId,kind:'quote',state:'done',assignee_id:'another-staff'},
+  ]});
+  assert.equal((await f.run()).status,200);assert.equal(f.calls.length,1);assert.equal(f.provider.length,0);
 });
 test('stale dossier comparison retains PostgreSQL microsecond precision before side effects',async()=>{
   const f=await fixture();const result=await f.run({expectedUpdatedAt:'2026-09-20T07:00:00.123455Z'});

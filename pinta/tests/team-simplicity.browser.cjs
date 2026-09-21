@@ -46,12 +46,12 @@ const results = [];
  await scenario('team-filters-and-clear-selection',async f=>{
   f.tables.staff_work_actions.push({id:'blocked',colis_id:ids.P,kind:'documents',state:'ready',assignee_id:null,version:1,blocked_reason:'Facture manquante'});
   await f.page.setViewportSize({width:390,height:844});await f.login();await f.page.goto(base+'/equipe');
-  await f.page.getByRole('button',{name:'À débloquer (1)',exact:true}).click();
-  await f.page.waitForURL(url => url.searchParams.get('exception') === 'blocked');
+  await f.page.getByRole('button',{name:'En attente (1)',exact:true}).click();
+  await f.page.waitForURL(url => url.searchParams.get('queue') === 'waiting');
   await f.page.waitForFunction(() => document.querySelectorAll('[data-work-action]').length === 1);
   assert.equal(await f.page.locator('[data-work-action]').count(),1);
   await f.page.getByLabel('Rechercher une EXP ou un client').fill('EXP-TEST-001');
-  await f.page.getByRole('button',{name:'Afficher toutes les tâches',exact:true}).click();await f.page.waitForFunction(() => document.querySelectorAll('[data-work-action]').length === 2);assert.equal(await f.page.locator('[data-work-action]').count(),2);
+  await f.page.getByRole('button',{name:'Effacer les filtres',exact:true}).click();await f.page.waitForFunction(() => document.querySelectorAll('[data-work-action]').length === 2);assert.equal(await f.page.locator('[data-work-action]').count(),2);
  });
  await scenario('departure-ready-blocked-selection-survives-return',async f=>{
   const departure='99999999-1111-4111-8111-111111111111', second='88888888-1111-4111-8111-111111111111';

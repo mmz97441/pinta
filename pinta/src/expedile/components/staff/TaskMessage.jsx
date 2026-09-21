@@ -1,3 +1,4 @@
+import { useTaskAccess } from '../../context/TaskAccessContext';
 import React, { useEffect, useRef, useState } from 'react';
 import { useApp } from '../../context/AppContext';
 
@@ -10,7 +11,8 @@ const contextSignature = (colis, client) => JSON.stringify([
 /** Preview and delivery are separate actions. A failed attempt retains its exact
  * payload and idempotency key, including when requesting consent changes status. */
 export default function TaskMessage({ template, message, label = 'Informer le client', beforeSend, disabled = false }) {
-  const { sel, selClient: client, can, getPreview, sendMsg } = useApp();
+  const { sel, selClient: client, can: rawCan, getPreview, sendMsg } = useApp();
+  const { taskCan: can } = useTaskAccess(rawCan);
   const channels = [
     { value: 'telegram', label: 'Telegram', available: !!client?.telegramChatId, allowed: can('perm_comm_telegram') },
     { value: 'email', label: 'Email', available: !!client?.email, allowed: can('perm_comm_email') },

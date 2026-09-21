@@ -46,7 +46,7 @@ export default function StaffAssignment({ dossier }) {
     }
   };
   return (
-    <div className="space-y-3"><section className="rounded-xl border border-gray-200 dark:border-gray-700 p-3 space-y-2">
+    <div className="space-y-3"><DossierWorkPanel dossier={sel} /><details><summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-slate-600">Personne de contact et suivi général</summary><section className="rounded-xl border border-gray-200 dark:border-gray-700 p-3 space-y-2">
       <div className="flex items-center justify-between gap-2">
         <div className="flex gap-2 items-center min-w-0">
           <UserCheck size={17} className="text-gray-500 shrink-0" />
@@ -155,6 +155,6 @@ export default function StaffAssignment({ dossier }) {
           {error && <div role="alert" className="text-xs text-red-700">{error}<p>Votre saisie est conservée. Fermez puis rouvrez le formulaire pour repartir des données actualisées.</p></div>}
         </form>
       )}
-    </section><DossierWorkPanel dossier={sel} /></div>
+    </section></details></div>
   );
 }

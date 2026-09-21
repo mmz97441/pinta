@@ -1,3 +1,4 @@
+const { openTaskNavigation } = require('./task-navigation.helper.cjs');
 /* Concurrent quote edits against isolated fixtures; no real notification or quote. */
 const { chromium } = require(process.env.PINTA_PLAYWRIGHT_MODULE || 'playwright');
 const assert = require('node:assert/strict');
@@ -92,6 +93,20 @@ async function main() {
       await f.page.getByRole('button', { name: 'Envoyer le devis au client', exact: true }).waitFor();
       assert.equal(f.requests.find(request => request.path.endsWith('/save_quote')).input.p_snapshot.inputs.fees.length, 0);
     });
+    await scenario('unfinished-fee-survives-work-list-and-blocks-release-until-explicit-discard', async f => {
+      const action=f.tables.staff_work_actions[0];Object.assign(action,{kind:'quote',state:'ready',assignee_id:ids.A});
+      let releases=0;await f.context.route('**/rest/v1/rpc/mutate_staff_work_action',async route=>{
+        const input=route.request().postDataJSON();assert.equal(input.p_command,'release');assert.equal(input.p_expected_version,action.version);releases++;action.assignee_id=null;action.version++;
+        await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(action)});
+      });
+      await open(f);await f.page.goto(`${base}/colis/${ids.P}?section=devis&returnTo=%2F`);await save(f).waitFor();await f.page.getByText('Ajouter un frais',{exact:true}).click();await f.page.getByLabel('Libellé du frais',{exact:true}).fill('Emballage à confirmer');await f.page.getByLabel('Montant du frais',{exact:true}).fill('9');
+      await f.page.getByRole('button',{name:'Retour à la liste de travail',exact:true}).click();const row=f.page.locator(`[data-work-action="${action.id}"]`);await row.getByRole('button',{name:'Options',exact:true}).click();await row.getByRole('button',{name:'Remettre à disposition',exact:true}).click();
+      await row.getByRole('alert').filter({hasText:/Enregistrez ou annulez vos saisies/}).waitFor();assert.equal(releases,0);
+      await row.getByRole('link',{name:/^Ouvrir /}).click();await save(f).waitFor();if(!(await f.page.getByLabel('Libellé du frais',{exact:true}).isVisible()))await f.page.getByText('Ajouter un frais',{exact:true}).click();
+      assert.equal(await f.page.getByLabel('Libellé du frais',{exact:true}).inputValue(),'Emballage à confirmer');assert.equal(await f.page.getByLabel('Montant du frais',{exact:true}).inputValue(),'9');assert.equal(await save(f).isDisabled(),true);
+      await f.page.getByRole('button',{name:'Annuler ce frais',exact:true}).click();await f.page.getByRole('button',{name:'Retour à la liste de travail',exact:true}).click();await row.getByRole('button',{name:'Options',exact:true}).click();await row.getByRole('button',{name:'Remettre à disposition',exact:true}).click();
+      await row.waitFor({state:'hidden'});assert.equal(releases,1);assert.equal(f.requests.filter(request=>request.path.endsWith('/save_quote')).length,0);assert.deepEqual(f.tables.colis[0].frais_divers,[]);
+    });
     await scenario('quote-fee-conflict-explains-recovery-and-rechecks-new-invoice-amounts', async f => {
       await open(f); await addFee(f); assert.equal(await save(f).isEnabled(), true);
       f.tables.colis[0].commentaire_preparation = 'Consigne ajoutée par un collègue'; await colleagueUpdate(f);
@@ -141,8 +156,8 @@ async function main() {
       await f.page.getByLabel('Quantité du nouvel article', { exact: true }).fill('2');
       await f.page.getByLabel('Prix du nouvel article', { exact: true }).fill('19');
       await f.page.getByLabel('Catégorie du nouvel article', { exact: true }).selectOption('cat-test');
-      await f.page.getByLabel('Tâche du dossier', { exact: true }).selectOption('devis');
-      await f.page.getByLabel('Tâche du dossier', { exact: true }).selectOption('documents');
+      await openTaskNavigation(f);await f.page.getByLabel('Tâche du dossier', { exact: true }).selectOption('devis');
+      await openTaskNavigation(f);await f.page.getByLabel('Tâche du dossier', { exact: true }).selectOption('documents');
       await articleDescription(f).waitFor();
       assert.equal(await articleDescription(f).inputValue(), 'Achat manuel conservé');
       assert.equal(await f.page.getByLabel('Quantité du nouvel article', { exact: true }).inputValue(), '2');
@@ -155,8 +170,8 @@ async function main() {
       assert.equal(articleWrites(f).length, 1); assert.equal(f.tables.lignes.length, 2);
       const saved = f.tables.lignes.find(line => line.description === 'Achat manuel conservé');
       assert.equal(saved.colis_id, ids.P); assert.equal(saved.qte, 2); assert.equal(saved.prix_unitaire, 19); assert.equal(saved.facture_id, null);
-      await f.page.getByLabel('Tâche du dossier', { exact: true }).selectOption('devis');
-      await f.page.getByLabel('Tâche du dossier', { exact: true }).selectOption('documents');
+      await openTaskNavigation(f);await f.page.getByLabel('Tâche du dossier', { exact: true }).selectOption('devis');
+      await openTaskNavigation(f);await f.page.getByLabel('Tâche du dossier', { exact: true }).selectOption('documents');
       assert.equal(await articleDescription(f).inputValue(), ''); assert.equal(articleWrites(f).length, 1);
     });
     await scenario('manual-article-drafts-are-isolated-by-dossier-and-explicit-clear-stays-empty', async f => {

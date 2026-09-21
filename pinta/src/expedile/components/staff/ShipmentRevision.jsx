@@ -4,6 +4,7 @@ import { RECEPTION_MEASURES } from '../../domain/reception';
 import { normalizedRevisionBoxes, revisionHasQuote, revisionLockedReason, revisionMeasurementIssues, sameRevisionBoxes, shipmentRevisionBoxes } from '../../domain/shipmentRevision';
 import { draftKey, readDraft, removeDraft, writeDraft } from '../../lib/draftStore';
 import { hasCurrentPreparation } from '../../domain/preparationReadiness';
+import useWorkDraft from '../../hooks/useWorkDraft';
 
 const BUTTON = 'inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 disabled:opacity-40';
 const PRIMARY = 'inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40';
@@ -50,6 +51,7 @@ function RevisionEditor({ colis, phase, canEdit = false, draftOwnerId, onSave, o
   const title = receipt ? 'Mesures à réception — avant optimisation' : 'Mesures après optimisation';
   const unit = receipt ? 'Carton' : 'Colis préparé';
   const hasQuote = revisionHasQuote(colis);
+  const clearWorkDraft = useWorkDraft({ userId: draftOwnerId, dossierId: colis.id, kind: phase === 'reception' ? 'reception' : 'preparation', source: `revision-${phase}`, dirty: editing && dirty, label: `${receipt ? 'Mesures à réception' : 'Mesures après optimisation'} non enregistrées` });
 
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   useEffect(() => {
@@ -77,6 +79,7 @@ function RevisionEditor({ colis, phase, canEdit = false, draftOwnerId, onSave, o
     setConflict(false); setError(''); setIssues([]); setNotice(message);
     setFocusTarget(null);
     removeDraft(key);
+    clearWorkDraft();
   }
   function focusField(index, name) {
     setFocusTarget({ kind: 'field', index, name });
@@ -127,8 +130,9 @@ function RevisionEditor({ colis, phase, canEdit = false, draftOwnerId, onSave, o
     pending.current = true; setBusy(true); setError(''); setNotice('');
     try {
       const saved = await onSave(phase, normalizedRevisionBoxes(boxes), expectedUpdatedAt);
-      if (!mounted.current) return;
       if (!saved?.id || saved.id !== colis.id || !saved.updatedAt) throw new Error('L’enregistrement n’a pas été confirmé. Rechargez le dossier pour vérifier ses mesures.');
+      removeDraft(key); clearWorkDraft();
+      if (!mounted.current) return;
       reset(saved, `${receipt ? 'Mesures à réception' : 'Mesures après optimisation'} enregistrées.${hasQuote ? ' Le devis doit être recalculé et vérifié.' : ''} Aucun message envoyé au client.`);
       setEditing(false); setLastSaved(saved);
     } catch (failure) {

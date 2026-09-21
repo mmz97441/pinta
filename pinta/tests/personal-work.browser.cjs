@@ -47,26 +47,25 @@ function assertNoMutation(f) {
  try {
   await scenario('two-views-merge-current-work-and-preserve-priority-and-old-bookmarks', async f => {
    const nav = f.page.getByRole('navigation', { name: 'Mes tâches', exact: true });
-   await nav.getByRole('button', { name: 'À faire 3', exact: true }).waitFor();
+   await nav.getByRole('button', { name: 'À faire 4', exact: true }).waitFor();
    assert.equal(await nav.getByRole('button').count(), 2);
    const actions = f.page.getByRole('region', { name: 'À faire', exact: true });
-   assert.deepEqual(await actions.locator('article').evaluateAll(rows => rows.map(row => row.dataset.workAction)), ['quote', 'started', 'prepare']);
+   assert.deepEqual(await actions.locator('article').evaluateAll(rows => rows.map(row => row.dataset.workAction)), ['quote', 'started', 'outside', 'prepare']);
    await row(f, 'started').getByText('En cours', { exact: true }).waitFor();
    await row(f, 'quote').getByText(/Échéance dépassée/).waitFor();
-   for (const [legacy, section, count] of [['progress','À faire',3],['now','À faire',3],['waiting','En attente',1],['pool','À prendre',1]]) {
+   for (const [legacy, section, count] of [['progress','À faire',4],['now','À faire',4],['waiting','En attente',1],['pool','À prendre',1]]) {
     await f.page.goto(base + '/?section=' + legacy);
     await f.page.getByRole('region', { name: section, exact: true }).waitFor();
     assert.equal(await f.page.getByRole('region', { name: section, exact: true }).locator('article').count(), count);
    }
   });
-  await scenario('filters-never-hide-urgent-owned-actions-handoffs-or-mission-exceptions', async f => {
+  await scenario('filters-never-hide-urgent-owned-actions-or-handoffs', async f => {
    await f.page.locator('summary').filter({ hasText: /^Filtrer/ }).click();
    await f.page.getByLabel('Mission', { exact: true }).selectOption('preparation');
    await f.page.getByLabel('Rechercher dans mes tâches', { exact: true }).fill('aucun-résultat');
    await f.page.getByRole('region', { name: 'Pourquoi la liste est vide' }).getByRole('heading', { name: 'Des tâches sont masquées par vos filtres' }).waitFor();
    await f.page.getByRole('region', { name: 'Urgences hors filtre', exact: true }).locator('[data-work-action="quote"]').waitFor();
-   await f.page.getByRole('region', { name: 'Relais à accepter', exact: true }).getByRole('button', { name: 'Accepter le relais', exact: true }).waitFor();
-   await f.page.getByRole('region', { name: 'Tâches hors missions ou permissions', exact: true }).locator('[data-work-action="outside"]').waitFor();
+   await f.page.getByRole('region', { name: 'Relais à accepter', exact: true }).getByRole('button', { name: 'Accepter et ouvrir', exact: true }).waitFor();
    await f.page.getByRole('button', { name: 'Voir mes tâches sans filtre', exact: true }).click();
    await f.page.waitForURL(url => !url.searchParams.has('q') && url.searchParams.get('mission') === '');
    await f.page.waitForFunction(() => document.querySelector('input[placeholder="Client, EXP, tâche…"]')?.value === '');
@@ -89,7 +88,7 @@ function assertNoMutation(f) {
    const empty = f.page.getByRole('region', { name: 'Pourquoi la liste est vide' });
    await empty.getByRole('heading', { name: 'Vous n’avez pas de tâche à faire pour le moment' }).waitFor();
    await empty.getByRole('button', { name: 'Voir les tâches à prendre', exact: true }).click();
-   await row(f, 'pool').getByRole('button', { name: 'Prendre cette tâche', exact: true }).waitFor();
+   await row(f, 'pool').getByRole('button', { name: 'Je m’en occupe', exact: true }).waitFor();
    assert.equal(new URL(f.page.url()).searchParams.get('section'), 'pool');
   });
   await scenario('unavailable-pool-explains-cause-and-opens-the-relevant-setting-without-saving', async f => {
@@ -104,28 +103,31 @@ function assertNoMutation(f) {
    assert.equal(f.tables.staff_work_preferences[0].available, false);
    assert.equal(f.requests.some(request => request.path.endsWith('/save_staff_work_preferences')), false);
   });
-  await scenario('no-chosen-mission-opens-missions-without-hiding-owned-exceptions', async f => {
+  await scenario('mission-preferences-never-hide-owned-permitted-work', async f => {
    f.tables.staff_work_preferences[0].missions = [];
+   f.tables.staff_work_preferences[0].active_mission = 'preparation';
    await f.page.reload();
+   const work = f.page.getByRole('region', { name: 'À faire', exact: true });
+   for (const id of ['quote','started','outside','prepare']) await work.locator(`[data-work-action="${id}"]`).waitFor();
+   assert.deepEqual(f.tables.staff_work_preferences[0].missions, [], 'Display does not change saved preferences');
+   await f.page.goto(base + '/?section=pool');
    const empty = f.page.getByRole('region', { name: 'Pourquoi la liste est vide' });
-   await empty.getByRole('heading', { name: 'Choisissez les tâches que vous souhaitez voir' }).waitFor();
+   await empty.getByRole('heading', { name: 'Choisissez les tâches que vous souhaitez prendre' }).waitFor();
    await empty.getByRole('button', { name: 'Choisir mes missions' }).click();
-   await f.page.getByRole('group', { name: 'Missions cumulables' }).waitFor();
-   await f.page.getByRole('region', { name: 'Tâches hors missions ou permissions' }).locator('[data-work-action="prepare"]').waitFor();
-   assert.deepEqual(f.tables.staff_work_preferences[0].missions, []);
+   await f.page.getByRole('group', { name: 'Missions proposées dans À prendre' }).waitFor();
   });
   await scenario('truly-empty-pool-offers-a-working-link-to-all-dossiers', async f => {
    f.tables.staff_work_actions = [];
    await f.page.goto(base + '/?section=pool');
    const empty = f.page.getByRole('region', { name: 'Pourquoi la liste est vide' });
-   await empty.getByRole('heading', { name: 'Aucune tâche à prendre dans vos missions' }).waitFor();
+   await empty.getByRole('heading', { name: 'Aucune tâche prête à prendre' }).waitFor();
    await empty.getByRole('link', { name: 'Voir les dossiers de l’équipe' }).click();
    await f.page.waitForURL(url => url.pathname === '/colis');
    await f.page.getByRole('button', { name: 'EXP-AUTRE-EQUIPE', exact: true }).waitFor();
   });
   await scenario('consulting-an-owned-wait-does-not-resume-or-unblock-it', async f => {
    await f.page.goto(base + '/?section=waiting');
-   await row(f, 'documents').getByRole('button', { name: 'Consulter sans commencer', exact: true }).click();
+   await row(f, 'documents').getByRole('button', { name: 'Voir', exact: true }).click();
    await f.page.waitForURL(url => url.searchParams.get('section') === 'documents');
    const action = f.tables.staff_work_actions.find(item => item.id === 'documents');
    assert.equal(action.state, 'waiting');
@@ -140,7 +142,7 @@ function assertNoMutation(f) {
    }
    await f.page.goto(base + '/?section=pool');
    const invitation = row(f, 'pool');
-   await invitation.getByRole('button', { name: 'Consulter sans commencer', exact: true }).click();
+   await invitation.getByRole('button', { name: 'Voir', exact: true }).click();
    await f.page.waitForURL(url => url.pathname === '/conversations' && url.searchParams.get('action') === 'pool');
    assert.equal(f.tables.staff_work_actions.find(action => action.id === 'pool').assignee_id, null);
   });
@@ -148,7 +150,7 @@ function assertNoMutation(f) {
    await f.page.goto(base + '/?mission=documents');
    const exceptions = f.page.getByRole('region', { name: 'Tâches hors missions ou permissions', exact: true });
    await exceptions.locator('[data-work-action="quote"]').waitFor();
-   assert.equal(await row(f, 'quote').getByRole('button', { name: 'Commencer', exact: true }).count(), 0);
+   assert.equal(await row(f, 'quote').getByRole('button', { name: 'Continuer', exact: true }).count(), 0);
    await row(f, 'quote').getByText('Permission modifiée : organisez un relais avec une personne habilitée.', { exact: true }).waitFor();
    assert.equal(await f.page.getByLabel('Mission', { exact: true }).locator('option[value="documents"]').count(), 0);
    await f.page.goto(base + '/?mission=preparation');

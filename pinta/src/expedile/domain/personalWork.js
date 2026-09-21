@@ -9,7 +9,7 @@ export const MISSIONS = [
 export const WORK_KINDS = {
   reception: { label: 'Réception et accord', mission: 'reception', permissions: ['perm_colis_receptionner', 'perm_colis_mesurer', 'perm_colis_demander_feuvert'] },
   preparation: { label: 'Préparer les cartons', mission: 'preparation', permissions: ['perm_colis_preparer'] },
-  documents: { label: 'Vérifier les documents', mission: 'documents', permissions: ['perm_factures_valider', 'perm_factures_refuser', 'perm_factures_ocr', 'perm_factures_modifier_articles'] },
+  documents: { label: 'Vérifier les factures', mission: 'documents', permissions: ['perm_factures_valider', 'perm_factures_refuser', 'perm_factures_ocr', 'perm_factures_modifier_articles'] },
   conversation: { label: 'Répondre au client', mission: 'communication', permissions: ['perm_comm_message_libre', 'perm_comm_telegram', 'perm_comm_email'] },
   quote: { label: 'Établir le devis', mission: 'documents', permissions: ['perm_colis_calculer_devis', 'perm_colis_envoyer_devis'] },
   departure: { label: 'Organiser le départ', mission: 'departures', permissions: ['perm_colis_affecter_envoi', 'perm_colis_expedier', 'perm_envois_modifier'] },
@@ -72,7 +72,8 @@ export function buildPersonalWork({ actions = [], dossiers = [], clients = [], u
   const missions = effectiveMissions(preference, can);
   const query = search.trim().toLocaleLowerCase('fr');
   const all = actions.filter(action => action.state !== 'done' && dossierById.has(action.colis_id) && !dossierById.get(action.colis_id).archive);
-  const eligible = all.filter(action => canWorkAction(action, can) && missions.includes(WORK_KINDS[action.kind]?.mission));
+  // Display preferences can narrow new suggestions, never hide assigned work.
+  const eligible = all.filter(action => canWorkAction(action, can) && (action.assignee_id === userId || missions.includes(WORK_KINDS[action.kind]?.mission)));
   const scope = sortWorkActions(eligible.filter(action => {
     if (mission && WORK_KINDS[action.kind]?.mission !== mission) return false;
     const dossier = dossierById.get(action.colis_id);
@@ -83,16 +84,38 @@ export function buildPersonalWork({ actions = [], dossiers = [], clients = [], u
   const owned = scope.filter(action => action.assignee_id === userId);
   const sections = {
     now: owned.filter(action => ['ready', 'in_progress'].includes(action.state) && !actionBlocked(action)),
-    pool: staffAvailable(preference, now) ? scope.filter(action => !action.assignee_id && ['ready', 'waiting'].includes(action.state)) : [],
+    pool: staffAvailable(preference, now) ? scope.filter(action => !action.assignee_id && action.state === 'ready' && !actionWaiting(action)) : [],
     waiting: owned.filter(action => action.state === 'waiting' || actionBlocked(action)),
   };
   return {
     sections, counts: Object.fromEntries(Object.entries(sections).map(([key, rows]) => [key, rows.length])), scope,
     handoffs: sortWorkActions(all.filter(action => action.handoff_to === userId && action.assignee_id !== userId), now),
-    exceptions: sortWorkActions(all.filter(action => action.assignee_id === userId && (!canWorkAction(action, can) || !missions.includes(WORK_KINDS[action.kind]?.mission))), now),
+    exceptions: sortWorkActions(all.filter(action => action.assignee_id === userId && !canWorkAction(action, can)), now),
+    outsideFilterOwned: sortWorkActions(eligible.filter(action => action.assignee_id === userId && !scopedIds.has(action.id)), now),
     outsideMissionDue: eligible.filter(action => action.assignee_id === userId && mission && WORK_KINDS[action.kind]?.mission !== mission && actionPriority(action, now).urgent),
     outsideFilterDue: sortWorkActions(eligible.filter(action => action.assignee_id === userId && !scopedIds.has(action.id) && actionPriority(action, now).urgent), now),
     dossierById, clientById, missions,
+  };
+}
+
+/** An unresolved prerequisite is a wait even if a stale action still says ready
+ * or in_progress. Counts describe work, never an estimate of its duration. */
+export function workLoad(actions = []) {
+  const active = actions.filter(action => action.state !== 'done');
+  return {
+    ready: active.filter(action => action.state === 'ready' && !actionWaiting(action)).length,
+    in_progress: active.filter(action => action.state === 'in_progress' && !actionWaiting(action)).length,
+    waiting: active.filter(actionWaiting).length,
+  };
+}
+export function teamWorkQueues(actions = [], now = Date.now()) {
+  const active = sortWorkActions(actions.filter(action => action.state !== 'done'), now);
+  return {
+    unassigned: active.filter(action => !action.assignee_id && action.state === 'ready' && !actionWaiting(action)),
+    waiting: active.filter(actionWaiting),
+    handoff: active.filter(action => Boolean(action.handoff_to)),
+    overdue: active.filter(action => workTime(action.due_at) <= now || (actionWaiting(action) && workTime(action.review_at) <= now)),
+    all: active,
   };
 }
 export function workTotals(actions, dossiers = []) {
@@ -117,7 +140,7 @@ export function nextPersonalWorkAction({ returnTo = '/', currentActionId, curren
   if (!['/', '/travail'].includes(url.pathname)) return null;
   const section = personalSection(url.searchParams.get('section'));
   if (section === 'waiting') return null;
-  const mission = url.searchParams.has('mission') ? url.searchParams.get('mission') : options.preference?.active_mission || '';
+  const mission = url.searchParams.get('mission') || '';
   const view = buildPersonalWork({ ...options, mission, search: url.searchParams.get('q') || '' });
   return view.sections[section].find(action => !actionWaiting(action) && action.id !== currentActionId
     && !(action.colis_id === currentDossierId && (!currentKind || action.kind === currentKind))) || null;

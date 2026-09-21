@@ -34,6 +34,7 @@ async function main() {
       }
       await f.page.goto(base + '/colis/' + ids.P);
       await f.page.getByRole('button', { name: /^Détails(?: du dossier)?$/, exact: true }).click();
+      await f.page.getByRole('dialog', { name: 'Contexte du dossier' }).getByRole('button', { name: 'Réception', exact: true }).click();
       const measures = f.page.getByRole('region', { name: 'Mesures des cartons', exact: true });
       await measures.getByText('Totaux à réception', { exact: true }).waitFor();
       await measures.locator('summary').filter({ hasText: 'Comprendre le poids facturable' }).click();
@@ -47,6 +48,7 @@ async function main() {
       f.tables.colis[0].fin_w = null;
       await f.page.reload();
       await f.page.getByRole('button', { name: /^Détails(?: du dossier)?$/, exact: true }).click();
+      await f.page.getByRole('dialog', { name: 'Contexte du dossier' }).getByRole('button', { name: 'Réception', exact: true }).click();
       await measures.getByText(/Complétez les mesures de chaque carton pour obtenir le total à réception/).waitFor();
       assert.equal(await measures.getByText('Totaux à réception', { exact: true }).count(), 0);
       await measures.getByText('Mesures après optimisation à compléter ; aucun poids calculé.', { exact: true }).waitFor();

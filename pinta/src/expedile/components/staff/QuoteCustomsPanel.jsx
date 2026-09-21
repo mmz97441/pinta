@@ -1,6 +1,8 @@
+import { useTaskAccess } from '../../context/TaskAccessContext';
 import React, { useEffect, useRef, useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { excludedInvoiceIds } from '../../domain/invoiceDocuments';
+import useWorkDraft from '../../hooks/useWorkDraft';
 
 const INPUT = 'min-h-11 min-w-0 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800';
 const BUTTON = 'min-h-11 rounded-xl border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 disabled:opacity-50';
@@ -42,7 +44,8 @@ function Source({ tariff }) {
 /** Classification is saved on the quote's existing articles, never by editing
  * invoice descriptions or the shared tariff catalogue. */
 export default function QuoteCustomsPanel({ colis, destination, onDirtyChange, onSaved }) {
-  const { auth, can, ask, flash, categories = [], searchCustomsTariffs, suggestCustomsTariffs, saveQuoteCustoms, refreshColis } = useApp();
+  const { auth, can: rawCan, ask, flash, categories = [], searchCustomsTariffs, suggestCustomsTariffs, saveQuoteCustoms, refreshColis } = useApp();
+  const { taskCan: can } = useTaskAccess(rawCan);
   const excluded = excludedInvoiceIds(colis.factures);
   const lines = (colis.lignes || []).filter(line => !line.factureId || !excluded.has(line.factureId));
   const key = `${auth?.u?.id}:${colis.id}`;
@@ -71,6 +74,7 @@ export default function QuoteCustomsPanel({ colis, destination, onDirtyChange, o
   const feedback = useRef(null);
   const pendingIds = Object.keys(drafts);
   const dirty = pendingIds.length > 0 || activeId != null;
+  const clearWorkDraft = useWorkDraft({ userId: auth?.u?.id, dossierId: colis.id, kind: 'quote', source: 'customs', dirty: pendingIds.length > 0, label: 'Classement douanier non enregistré' });
   const currentSignature = signature(lines, destination);
   const editable = can('perm_colis_calculer_devis') && ['autorise', 'en_preparation', 'devis_envoye', 'attente_paiement'].includes(colis.statut) && !colis.archive && !colis.paiementDate && colis.paiementMontant == null && colis.feuVert === 'autorise' && !colis.produitInterdit;
   const proposalContext = useRef(null); proposalContext.current = { lines, destination, editable };
@@ -197,7 +201,7 @@ export default function QuoteCustomsPanel({ colis, destination, onDirtyChange, o
     finally { if (sequence === searchSequence.current) setSearching(false); }
   }
   function abandon() {
-    const reset = () => { setDrafts({}); setActiveId(null); setError(''); setNotice('Saisie abandonnée. Le classement enregistré est conservé.'); version.current = colis.updatedAt; baseline.current = currentSignature; setConflict(false); cachedDrafts.delete(key); setSuggestionRetry(value => value + 1); };
+    const reset = () => { setDrafts({}); setActiveId(null); setError(''); setNotice('Saisie abandonnée. Le classement enregistré est conservé.'); version.current = colis.updatedAt; baseline.current = currentSignature; setConflict(false); cachedDrafts.delete(key); clearWorkDraft(); setSuggestionRetry(value => value + 1); };
     if (pendingIds.length) ask('Abandonner la saisie douanière ?', 'Seules vos modifications non enregistrées seront abandonnées. Les factures et le classement déjà enregistré sont conservés.', reset, { okLabel: 'Abandonner la saisie' });
     else reset();
   }
@@ -226,7 +230,7 @@ export default function QuoteCustomsPanel({ colis, destination, onDirtyChange, o
         version.current = saved.updatedAt;
         const excludedSaved = excludedInvoiceIds(saved.factures);
         baseline.current = signature((saved.lignes || []).filter(line => !line.factureId || !excludedSaved.has(line.factureId)), destination);
-        setDrafts({}); setActiveId(null); setConflict(false); cachedDrafts.delete(key);
+        setDrafts({}); setActiveId(null); setConflict(false); cachedDrafts.delete(key); clearWorkDraft();
         onDirtyChange?.(false); onSaved?.(saved);
         setNotice('Classement douanier enregistré. Vérifiez puis enregistrez le nouveau devis.');
         flash('Classement douanier enregistré. Aucun message envoyé au client.');

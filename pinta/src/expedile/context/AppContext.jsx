@@ -1,3 +1,4 @@
+import { clearWorkDrafts } from '../domain/workDrafts';
 import { clearDrafts } from '../lib/draftStore';
 import React, {
   createContext,
@@ -180,7 +181,7 @@ export function AppProvider({ children }) {
   const mutateWorkAction = useCallback(async (action, command, payload = {}) => {
     const token = generation.current;
     const saved = await sb.mutateStaffWorkAction(action, command, payload);
-    if (token !== generation.current) return saved;
+    if (token !== generation.current) return null;
     ++workSequence.current;
     setWorkActions((previous) => previous.some((item) => item.id === saved.id)
       ? previous.map((item) => item.id === saved.id ? saved : item) : [...previous, saved]);
@@ -369,7 +370,7 @@ export function AppProvider({ children }) {
   const signOut = useCallback(async () => {
     const { error } = await supabase.auth.signOut();
     if (error) throw reportError(error);
-    clearDrafts();
+    clearDrafts(); clearWorkDrafts();
     authRef.current = null;
     setPasswordRecovery(false);
     await establishSession(null);

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildPersonalWork, sortWorkActions, workTotals, availableMissions, workActionUrl, staffAvailable, canWorkAction, personalSection, nextPersonalWorkAction, PERSONAL_SECTIONS, findDossierWorkAction } from './personalWork.js';
+import { buildPersonalWork, sortWorkActions, workTotals, availableMissions, workActionUrl, staffAvailable, canWorkAction, personalSection, nextPersonalWorkAction, PERSONAL_SECTIONS, findDossierWorkAction, workLoad, teamWorkQueues } from './personalWork.js';
 const now = Date.parse('2026-09-12T12:00:00Z');
 const dossier = { id: 'parcel', clientId: 'client', ref: 'EXP-QA', nbColis: 3, responsibleStaffId: 'referent' };
 const base = { dossiers: [dossier], clients: [{ id: 'client', nom: 'Exemple' }], userId: 'worker', now, can: () => true };
@@ -59,10 +59,11 @@ test('unavailable staff retain owned work while new claims leave the actionable 
  const view = buildPersonalWork({ ...base, preference: { available: false }, actions: [action('mine'), action('free', { assignee_id: null })] });
  assert.equal(view.counts.now, 1); assert.equal(view.counts.pool, 0);
 });
-test('unassigned waits remain visible and taking ownership moves them to personal waiting without unblocking', () => {
+test('unassigned waits stay in team tracking and never advertise immediately executable work', () => {
  const item = action('consent', { kind: 'reception', state: 'waiting', blocked_reason: 'Accord client attendu', assignee_id: null });
  const before = buildPersonalWork({ ...base, actions: [item] });
- assert.deepEqual(before.sections.pool.map(row => row.id), ['consent']);
+ assert.deepEqual(before.sections.pool, []);
+ assert.deepEqual(teamWorkQueues([item], now).waiting.map(row => row.id), ['consent']);
  assert.equal(before.counts.now, 0);
  const after = buildPersonalWork({ ...base, actions: [{ ...item, assignee_id: base.userId }] });
  assert.equal(after.counts.pool, 0); assert.equal(after.counts.now, 0);
@@ -87,7 +88,7 @@ test('dossier claim targets the visible task, never a completed quote or another
 test('pool continuation skips a wait even when its deadline makes it the highest priority', () => {
  const waiting = action('waiting', { assignee_id: null, state: 'waiting', blocked_reason: 'Accord client attendu', due_at: '2020-01-01' });
  const input = { ...base, returnTo: '/?section=pool', actions: [waiting, action('ready', { assignee_id: null })] };
- assert.equal(buildPersonalWork(input).sections.pool[0].id, 'waiting');
+ assert.equal(buildPersonalWork(input).sections.pool[0].id, 'ready');
  assert.equal(nextPersonalWorkAction(input)?.id, 'ready');
  assert.equal(nextPersonalWorkAction({ ...input, actions: [waiting] }), null);
 });
@@ -117,7 +118,7 @@ test('two main views preserve old progress, now, waiting and pool links', () => 
  assert.deepEqual(PERSONAL_SECTIONS.map(item => item.id), ['now', 'waiting']);
  for (const [old, current] of [['progress', 'now'], ['now', 'now'], ['waiting', 'waiting'], ['pool', 'pool'], ['unknown', 'now'], [null, 'now']]) assert.equal(personalSection(old), current);
 });
-test('mission and search filters never hide invitations, exceptional ownership or urgent commitments', () => {
+test('explicit filters show hidden owned work while invitations and urgent commitments remain visible', () => {
  const view = buildPersonalWork({ ...base, mission: 'preparation', search: 'unknown', preference: { missions: ['preparation', 'documents'] }, actions: [
   action('urgent', { kind: 'quote', due_at: '2026-09-11' }),
   action('outside', { kind: 'departure' }),
@@ -125,7 +126,8 @@ test('mission and search filters never hide invitations, exceptional ownership o
  ] });
  assert.equal(view.counts.now, 0);
  assert.deepEqual(view.outsideFilterDue.map(item => item.id), ['urgent']);
- assert.deepEqual(view.exceptions.map(item => item.id), ['outside']);
+ assert.deepEqual(view.exceptions, []);
+ assert.deepEqual(view.outsideFilterOwned.map(item => item.id), ['urgent', 'outside']);
  assert.deepEqual(view.handoffs.map(item => item.id), ['handoff']);
 });
 test('search matches the task instruction, priority reason and full client name', () => {
@@ -160,6 +162,44 @@ test('continuation never reopens the task just completed, including when no acti
  const input = { ...base, currentDossierId: 'parcel', currentKind: 'preparation', actions: [action('prep'), action('documents', { kind: 'documents' })] };
  assert.equal(nextPersonalWorkAction(input)?.id, 'documents');
  assert.equal(nextPersonalWorkAction({ ...input, currentKind: undefined }), null);
- assert.equal(nextPersonalWorkAction({ ...input, preference: { active_mission: 'preparation' } }), null);
+ assert.equal(nextPersonalWorkAction({ ...input, preference: { active_mission: 'preparation' } })?.id, 'documents');
  assert.equal(nextPersonalWorkAction({ ...input, preference: { active_mission: 'preparation' }, returnTo: '/?mission=' })?.id, 'documents');
+});
+
+test('mission preferences never hide permitted assigned work, including when no new mission is selected', () => {
+ const actions = [action('prepare'), action('quote', { kind: 'quote' }), action('wait', { kind: 'departure', state: 'waiting' }), action('free', { assignee_id: null }), action('freequote', { kind: 'quote', assignee_id: null })];
+ for (const missions of [[], ['preparation']]) {
+  const view = buildPersonalWork({ ...base, preference: { missions }, actions });
+  assert.deepEqual(view.sections.now.map(item => item.id), ['prepare', 'quote']);
+  assert.deepEqual(view.sections.waiting.map(item => item.id), ['wait']);
+  assert.deepEqual(view.sections.pool.map(item => item.id), missions.length ? ['free'] : []);
+  assert.deepEqual(view.exceptions, []);
+ }
+ const restricted = buildPersonalWork({ ...base, preference: { missions: [] }, actions, can: permission => permission === 'perm_colis_preparer' });
+ assert.deepEqual(restricted.sections.now.map(item => item.id), ['prepare']);
+ assert.deepEqual(restricted.exceptions.map(item => item.id), ['quote', 'wait']);
+});
+
+test('the pool excludes stale blocked states, waiting work and tasks owned by colleagues', () => {
+ const actions = [action('ready', { assignee_id: null }), action('blocked', { assignee_id: null, blocked_reason: 'Factures à vérifier' }), action('waiting', { assignee_id: null, state: 'waiting' }), action('started', { assignee_id: null, state: 'in_progress' }), action('colleague', { assignee_id: 'colleague' }), action('done', { assignee_id: null, state: 'done' })];
+ assert.deepEqual(buildPersonalWork({ ...base, actions }).sections.pool.map(item => item.id), ['ready']);
+ assert.deepEqual(teamWorkQueues(actions, now).unassigned.map(item => item.id), ['ready']);
+});
+
+test('team queues retain blocked work, handoffs and missed review dates without changing ownership', () => {
+ const actions = [action('free', { assignee_id: null }), action('blocked', { blocked_reason: 'Factures à vérifier' }), action('wait', { state: 'waiting', review_at: '2026-09-11' }), action('relay', { handoff_to: 'colleague' }), action('late', { due_at: '2026-09-10' }), action('priority', { priority_reason: 'Fragile', priority_until: '2026-09-20' }), action('finished', { state: 'done', due_at: '2026-09-10', handoff_to: 'colleague' })];
+ const before = JSON.stringify(actions);
+ const queues = teamWorkQueues(actions, now);
+ assert.deepEqual(queues.unassigned.map(item => item.id), ['free']);
+ assert.deepEqual(queues.waiting.map(item => item.id), ['wait', 'blocked']);
+ assert.deepEqual(queues.handoff.map(item => item.id), ['relay']);
+ assert.deepEqual(queues.overdue.map(item => item.id), ['late', 'wait']);
+ assert.equal(queues.all.length, 6);
+ assert.equal(JSON.stringify(actions), before);
+});
+
+test('team workload counts dependency blocks as waiting even when their stored state is in progress', () => {
+ const actions = [action('ready'), action('progress', { state: 'in_progress' }), action('blocked-ready', { blocked_reason: 'Accord attendu' }), action('blocked-progress', { state: 'in_progress', blocked_reason: 'Factures attendues' }), action('wait', { state: 'waiting' }), action('done', { state: 'done' })];
+ assert.deepEqual(workLoad(actions), { ready: 1, in_progress: 1, waiting: 3 });
+ assert.deepEqual(workLoad([]), { ready: 0, in_progress: 0, waiting: 0 });
 });

@@ -1,3 +1,4 @@
+const { openTaskNavigation } = require('./task-navigation.helper.cjs');
 /* Correction commands against isolated API fixtures; no real client, quote or payment. */
 const { chromium } = require('playwright');
 const AxeBuilder = require('@axe-core/playwright').default;
@@ -135,7 +136,7 @@ async function invalidFieldVisible(f, element) {
   try {
     await scenario('step-navigation-only-does-not-reopen-or-correct-anything', async f => {
       const before = snapshot(f); await open(f, 'reception'); await revision(f, 'reception').waitFor();
-      const select = f.page.getByLabel('Tâche du dossier', { exact: true });
+      const select = await openTaskNavigation(f);
       for (const task of ['accord', 'preparation', 'documents', 'devis', 'paiement', 'expedition', 'livraison', 'reception']) {
         await select.selectOption(task); await f.page.waitForURL(url => url.searchParams.get('section') === task);
       }
@@ -170,7 +171,7 @@ async function invalidFieldVisible(f, element) {
       independentData(f, before, phase); assert.equal(f.tables.colis[0].devis_snapshot, null); assert.equal(f.tables.colis[0].payplug_payment_url, null);
       await panel.getByRole('button', { name: 'Modifier', exact: true }).waitFor();
       assert.ok(await panel.getByRole('button').count() >= 2, 'Success offers a next action besides editing again');
-      await f.page.getByLabel('Tâche du dossier', { exact: true }).selectOption('documents');
+      await openTaskNavigation(f);await f.page.getByLabel('Tâche du dossier', { exact: true }).selectOption('documents');
       await f.page.getByTestId('documents-task').waitFor();
       assert.equal(f.tables.factures[0].valide, true);
     });
@@ -215,8 +216,8 @@ async function invalidFieldVisible(f, element) {
     await scenario('draft-survives-step-navigation-and-reload-without-save', async f => {
       const before = snapshot(f); await open(f, 'reception'); const panel = revision(f, 'reception');
       await panel.getByRole('button', { name: 'Modifier', exact: true }).click(); await field(f, 'reception').fill('46');
-      await f.page.getByLabel('Tâche du dossier', { exact: true }).selectOption('accord');
-      await f.page.getByLabel('Tâche du dossier', { exact: true }).selectOption('reception');
+      await openTaskNavigation(f);await f.page.getByLabel('Tâche du dossier', { exact: true }).selectOption('accord');
+      await openTaskNavigation(f);await f.page.getByLabel('Tâche du dossier', { exact: true }).selectOption('reception');
       await field(f, 'reception').waitFor(); assert.equal(await field(f, 'reception').inputValue(), '46');
       f.page.once('dialog', dialog => dialog.accept()); await f.page.reload();
       await field(f, 'reception').waitFor(); assert.equal(await field(f, 'reception').inputValue(), '46'); unchanged(f, before);

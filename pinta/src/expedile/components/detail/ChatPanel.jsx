@@ -1,3 +1,4 @@
+import useWorkDraft from '../../hooks/useWorkDraft';
 import React, { Suspense, lazy, useState, useRef, useEffect } from 'react';
 import { Send, MessageCircle, ChevronDown, Check, CheckCheck, Clock, AlertCircle } from 'lucide-react';
 import usePersistentDraft from '../../hooks/usePersistentDraft';
@@ -114,6 +115,7 @@ export default function ChatPanel({ colis, client, embedded = false, active = tr
   const selClient = client || contextClient;
   const [msgTxt, setMsgTxt, draft] = usePersistentDraft(sel?.id ? `conversation:${sel.id}` : null, '');
   const [sendAttempt, setSendAttempt, attemptDraft] = usePersistentDraft(sel?.id ? `conversation-send:${sel.id}` : null, null);
+  const clearWorkDraft = useWorkDraft({ userId: auth?.u?.id, dossierId: sel?.id, kind: 'conversation', source: 'reply', dirty: isStaff && Boolean(msgTxt.trim()), label: 'brouillon de réponse au client' });
   const [sendError, setSendError] = useState('');
   const [sendResult, setSendResult] = useState('');
   const sendGuard = useRef(false);
@@ -151,18 +153,19 @@ export default function ChatPanel({ colis, client, embedded = false, active = tr
     const txt = msgTxt; const id = sel.id;
     const attempt = sendAttempt?.text === txt ? sendAttempt : { key: crypto.randomUUID(), text: txt, channel: isStaff && selClient?.telegramChatId ? 'telegram' : 'portal' };
     setSendAttempt(attempt); sendGuard.current = true; setSending(true); setSendError(''); setSendResult('');
-    try { await envMsg(id,txt,auth,{ idempotencyKey: attempt.key, channel: attempt.channel }); draft.clear(); attemptDraft.clear(); if (currentDossier.current === id) setSendResult('Message enregistré. Son état d’envoi apparaît dans la conversation.'); }
+    try { await envMsg(id,txt,auth,{ idempotencyKey: attempt.key, channel: attempt.channel }); draft.clear(); attemptDraft.clear(); clearWorkDraft(); if (currentDossier.current === id) setSendResult('Message enregistré. Son état d’envoi apparaît dans la conversation.'); }
     catch(error){if (currentDossier.current === id) setSendError(error.message || 'Envoi impossible. Votre brouillon est conservé.');}
     finally {sendGuard.current = false; setSending(false);}
   };
-  const clearMessageDraft = () => { draft.clear(); attemptDraft.clear(); setSendError(''); };
+  const clearMessageDraft = () => { draft.clear(); attemptDraft.clear(); clearWorkDraft(); setSendError(''); };
   const retryNotice = sendAttempt && !sending ? <p role="status" className="mt-2 text-sm text-amber-800">{sendAttempt.text === msgTxt ? 'Une tentative d’envoi existe. Vérifiez son état dans la conversation ; réessayer reprend ce même message.' : 'Le texte a changé depuis une tentative d’envoi. Vérifiez la conversation avant d’envoyer ce nouveau message.'}</p> : null;
   const state=conversationState(sel);
   const conversationActions=workActions.filter(action=>action.colis_id===sel.id&&action.kind==='conversation');
   const conversationAction=conversationActions.find(action=>action.state!=='done') || conversationActions.toSorted((a,b)=>Date.parse(b.updated_at)-Date.parse(a.updated_at))[0];
-  const canHandle=can('perm_comm_message_libre')||can('perm_comm_telegram')||can('perm_comm_email');
+  const colleagueHandling = isStaff && conversationAction?.state !== 'done' && Boolean(conversationAction?.assignee_id && conversationAction.assignee_id !== auth?.u?.id);
+  const canHandle=!colleagueHandling && (can('perm_comm_message_libre')||can('perm_comm_telegram')||can('perm_comm_email'));
   const changeState=async(next)=>{
-    if(changingState||sending)return;
+    if(changingState||sending||!canHandle)return;
     setChangingState(true);
     try{await setConversationState(sel,next);await refreshColis(sel.id);await refreshWork?.();flash(`Conversation : ${CONVERSATION_STATES[next].toLowerCase()}`);}
     catch(error){await refreshColis(sel.id).catch(()=>{});flash({msg:error.message,type:'error'});}
@@ -213,7 +216,7 @@ export default function ChatPanel({ colis, client, embedded = false, active = tr
           <p className="text-xs mb-0.5">{m.auteur}</p>
           <p className="whitespace-pre-line">{renderText(m.texte)}</p>
           <ConversationAttachment message={m} colis={sel} canImport={isStaff && can('perm_factures_ajouter')} onImported={async id => { await refreshColis(id); await refreshWork?.(); }} />
-          {isStaff&&m.statut==='echec'&&m.canal==='telegram'&&can('perm_comm_telegram')&&<button className="min-h-[44px] text-xs underline" onClick={()=>ask('Réessayer cet envoi','Vérifiez dans Telegram que le client n’a pas reçu ce message, puis confirmez le renvoi.',async()=>{
+          {isStaff&&canHandle&&m.statut==='echec'&&m.canal==='telegram'&&can('perm_comm_telegram')&&<button className="min-h-[44px] text-xs underline" onClick={()=>ask('Réessayer cet envoi','Vérifiez dans Telegram que le client n’a pas reçu ce message, puis confirmez le renvoi.',async()=>{
             const result=await deliverMessage(sel.id,m.id,{retryConfirmed:true});
             if(!result.ok)throw new Error(result.error || 'L’envoi reste à vérifier.');
             await refreshColis(sel.id);flash('Message envoyé à Telegram');
@@ -257,6 +260,7 @@ export default function ChatPanel({ colis, client, embedded = false, active = tr
           if (unread === 0) return null;
           return <span className="ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-red-500 text-white">{unread}</span>;
         })()}</p>
+        {colleagueHandling && <p role="status" className="mb-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">{staffName(conversationAction.assignee_id, teamUsers)} s’occupe de cette conversation. Vous pouvez lire les échanges et les pièces jointes. Pour répondre ou terminer le traitement, demandez un relais.</p>}
         <details className="mb-2 rounded-xl border border-gray-200 dark:border-gray-700 px-3 py-1 space-y-2"><summary className="min-h-11 cursor-pointer py-2 text-sm font-semibold">{conversationLabel(sel)} · Gérer le suivi</summary>
           <div className="flex flex-wrap justify-between items-center gap-2"><p className="text-sm font-semibold" role="status">{conversationLabel(sel)}</p><p className="text-xs text-gray-600 dark:text-gray-300">{state === 'termine' && !conversationAction ? 'Traitée' : `Conversation : ${staffName(conversationAction?.assignee_id, teamUsers)}`}</p></div>
           <details className="text-xs text-gray-600 dark:text-gray-300"><summary className="min-h-8 cursor-pointer py-2">Suivi du traitement et relances</summary><p>{state==='a_traiter' ? 'La demande reste à traiter, même après lecture. Les relances automatiques de ce client sont suspendues.' : state==='attente_client' ? 'Votre réponse a été apportée ; le prochain retour est attendu du client. Les pauses demandées restent respectées.' : 'Le traitement est terminé. Un nouveau message du client rouvrira la conversation.'}</p></details>

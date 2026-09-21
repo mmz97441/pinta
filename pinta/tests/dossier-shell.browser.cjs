@@ -1,3 +1,4 @@
+const { openTaskNavigation } = require('./task-navigation.helper.cjs');
 /* Fictitious transport only: this suite never opens a real customer dossier. */
 const { chromium } = require('playwright');
 const AxeBuilder = require('@axe-core/playwright').default;
@@ -25,7 +26,8 @@ const output = process.env.PINTA_DOSSIER_SHELL_OUT || '/tmp/pinta-dossier-shell'
         await contextButton.click();
         const panel = f.page.getByRole('dialog', { name: 'Contexte du dossier', exact: true });
         await panel.waitFor();
-        await panel.getByRole('region', { name: 'Mesures des cartons', exact: true }).waitFor();
+        await panel.getByRole('region', { name: 'Suivi partagé du dossier', exact: true }).waitFor();
+        assert.equal(await panel.getByRole('region', { name: 'Mesures des cartons', exact: true }).count(), 0, 'Shared team work is the initial context; measurements remain in Reception.');
         const close = panel.getByRole('button', { name: 'Fermer le contexte du dossier', exact: true });
         assert.equal(await close.evaluate(element => element === document.activeElement), true);
         await f.page.keyboard.press('Shift+Tab');
@@ -38,6 +40,7 @@ const output = process.env.PINTA_DOSSIER_SHELL_OUT || '/tmp/pinta-dossier-shell'
         const reply = panel.getByLabel('Votre réponse au client', { exact: true });
         await reply.fill('Brouillon local conservé après fermeture du contexte');
         await panel.getByRole('button', { name: 'Réception', exact: true }).click();
+        await panel.getByRole('region', { name: 'Mesures des cartons', exact: true }).waitFor();
         await close.click();
         await contextButton.click();
         await panel.getByRole('button', { name: 'Messages', exact: true }).click();
@@ -53,7 +56,7 @@ const output = process.env.PINTA_DOSSIER_SHELL_OUT || '/tmp/pinta-dossier-shell'
         assert.equal(await f.page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
         await f.page.screenshot({ path: `${output}/context-${mobile ? 'mobile-dark' : 'desktop'}.png` });
         await close.click();
-        await f.page.getByLabel('Tâche du dossier', { exact: true }).selectOption('documents');
+        await openTaskNavigation(f);await f.page.getByLabel('Tâche du dossier', { exact: true }).selectOption('documents');
         assert.equal(new URL(f.page.url()).searchParams.get('returnTo'), '/?mission=preparation');
         assert.equal(new URL(f.page.url()).searchParams.get('section'), 'documents');
         await f.page.goto(`${base}/colis/${ids.P}?returnTo=%2F%3Fmission%3Dpreparation`);
