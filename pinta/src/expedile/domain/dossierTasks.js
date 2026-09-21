@@ -1,6 +1,7 @@
 import { needsQuoteRecalculation } from './clientJourney.js';
 import { currentInvoices } from './invoiceDocuments.js';
-import { measureShipment } from './quote.js';
+import { hasCurrentPreparation } from './preparationReadiness.js';
+export { hasCurrentPreparation } from './preparationReadiness.js';
 
 export const DOSSIER_TASKS = {
   reception: { label: 'Réception', title: 'Vérifier la réception', backLabel: 'Revenir à la réception', nextLabel: 'Aller à la réception' },
@@ -35,23 +36,37 @@ export function nextDossierTask(task, can = () => true) {
   return index < 0 ? null : tasks[index + 1] || null;
 }
 
-function afterPreparation(dossier, can) {
-  const boxes = dossier.finalPackages?.length ? dossier.finalPackages : [{ dimL: dossier.finL, dimW: dossier.finW, dimH: dossier.finH, poids: dossier.finP }];
-  const measured = dossier.preparationCompositionVersion != null
-    && dossier.finalMeasurementsVersion === dossier.preparationCompositionVersion
-    && Boolean(measureShipment(boxes));
-  if (!measured) return 'preparation';
-  const invoices = currentInvoices(dossier.factures);
-  const documentsNeeded = !invoices.length || invoices.some(invoice => !invoice.valide || invoice.rejetMotif || invoice.rejet_motif);
+
+function afterPreparation(dossier, can, client = {}) {
+  if (!hasCurrentPreparation(dossier)) return 'preparation';
+  const invoices = currentInvoices(dossier.factures).filter(invoice => !(invoice.rejetMotif || invoice.rejet_motif));
+  const documentsNeeded = client.type !== 'pro' && (!invoices.length || invoices.some(invoice => !invoice.valide));
   if (documentsNeeded && (!can || DOCUMENT_PERMISSIONS.some(can))) return 'documents';
   if (!can || QUOTE_PERMISSIONS.some(can)) return 'devis';
   if (DOCUMENT_PERMISSIONS.some(can)) return 'documents';
   return 'preparation';
 }
 
+/** The next useful screen is derived from current facts, never from old quote
+ * timestamps. It is a link suggestion, not permission to advance the dossier. */
+export function dossierNextTask(dossier = {}, can, client = {}) {
+  if (dossier.statut === 'annule') return 'reception';
+  if (dossier.paiementDate && ['autorise', 'en_preparation', 'devis_envoye', 'attente_paiement'].includes(dossier.statut)) return 'expedition';
+  if (needsQuoteRecalculation(dossier) || ['autorise', 'en_preparation', 'pret'].includes(dossier.statut)) {
+    if (dossier.feuVert !== undefined && dossier.feuVert !== 'autorise') return 'accord';
+    return afterPreparation(dossier, can, client);
+  }
+  return {
+    receptionne: 'reception', mesure: 'accord', attente_feu_vert: 'accord', refuse_client: 'accord',
+    devis_envoye: 'paiement', attente_paiement: 'paiement', paye: 'expedition',
+    expedie: 'expedition', transit: 'expedition', dedouanement: 'expedition',
+    arrive: 'livraison', livraison: 'livraison', livre: 'livraison',
+  }[dossier.statut] || 'reception';
+}
+
 /** An explicit task remains stable while colleagues update the dossier. Only
  * legacy document actions used an incorrect section=devis hint. */
-export function resolveDossierTask(dossier = {}, search = '', workActions = [], can) {
+export function resolveDossierTask(dossier = {}, search = '', workActions = [], can, client = {}) {
   const params = new URLSearchParams(search);
   if (params.get('invoice')) return 'documents';
   const action = workActions.find(item => item.id === params.get('action') && (item.colis_id || item.colisId) === dossier.id);
@@ -61,13 +76,7 @@ export function resolveDossierTask(dossier = {}, search = '', workActions = [], 
   const actionTask = { documents: 'documents', quote: 'devis', preparation: 'preparation', departure: 'expedition' }[action?.kind];
   if (actionTask) return actionTask;
   if (action?.kind === 'reception') return dossier.statut === 'receptionne' ? 'reception' : 'accord';
-  if (needsQuoteRecalculation(dossier) || dossier.statut === 'en_preparation') return afterPreparation(dossier, can);
-  return {
-    receptionne: 'reception', mesure: 'accord', attente_feu_vert: 'accord', refuse_client: 'accord',
-    autorise: 'preparation', pret: 'devis', devis_envoye: 'paiement', attente_paiement: 'paiement',
-    paye: 'expedition', expedie: 'expedition', transit: 'expedition', dedouanement: 'expedition',
-    arrive: 'livraison', livraison: 'livraison', livre: 'livraison', annule: 'reception',
-  }[dossier.statut] || 'reception';
+  return dossierNextTask(dossier, can, client);
 }
 
 /** Keep the caller's return path and unrelated view state; never carry an old

@@ -76,13 +76,13 @@ function Permission({ allowed, children }) {
 // ── Wrapper: Staff colis detail (reads :id from URL) ──
 function StaffColisDetail() {
   const { id } = useParams();
-  const { setSelId, sel, data, dataLoading, refreshColis, can, workActions = [] } = useApp();
+  const { setSelId, sel, selClient, data, dataLoading, refreshColis, can, workActions = [] } = useApp();
   const [detailLoading, setDetailLoading] = useState(true);
   const [detailError, setDetailError] = useState('');
   const navigate = useNavigate();
   const location = useLocation();
   const [contextSection, setContextSection] = useState(null);
-  const task = resolveDossierTask(sel || {}, location.search, workActions, can);
+  const task = resolveDossierTask(sel || {}, location.search, workActions, can, selClient || {});
 
   useEffect(() => {
     let active = true;

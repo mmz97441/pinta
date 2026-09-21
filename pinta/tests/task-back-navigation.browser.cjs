@@ -99,7 +99,7 @@ function noWrite(f, before) {
     const comment = f.page.getByLabel('Commentaire de préparation', { exact: true });
     await comment.fill('Protéger les articles fragiles avant fermeture.');
     await header(f).getByRole('button', { name: 'Revenir à l’accord client', exact: true }).click(); await task(f, 'accord');
-    await f.page.getByText('Accord enregistré pour la préparation.', { exact: true }).waitFor();
+    await f.page.getByRole('heading', { name: 'Accord du client reçu', exact: true }).waitFor();
     assert.equal(f.tables.colis[0].statut, 'en_preparation'); assert.equal(f.tables.colis[0].feu_vert, 'autorise');
     await header(f).getByRole('button', { name: 'Aller à la préparation', exact: true }).click(); await task(f, 'preparation');
     await length.waitFor(); assert.equal(await length.inputValue(), '39');

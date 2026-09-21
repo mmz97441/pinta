@@ -15,14 +15,16 @@ import { receptionCartonManifest, receptionMeasurements } from '../../domain/rec
 import { currentInvoices } from '../../domain/invoiceDocuments';
 import { needsQuoteRecalculation } from '../../domain/clientJourney';
 import { calculateQuote, measureShipment, volumetricDivisor, quoteInputFingerprint, canReviewSavedQuote } from '../../domain/quote';
-import { dossierTaskUrl, resolveDossierTask } from '../../domain/dossierTasks';
+import { dossierTaskUrl, resolveDossierTask, hasCurrentPreparation, dossierNextTask } from '../../domain/dossierTasks';
 import { recordVersionAtLeast } from '../../domain/recordVersion';
+import { safeWorkReturn } from '../../domain/personalWork';
 import TaskContinuation from '../workspace/TaskContinuation';
 import { staffName } from '../workspace/WorkActionRow';
 import TaskMessage from './TaskMessage';
 import QuoteCustomsPanel from './QuoteCustomsPanel';
 import ShipmentRevision from './ShipmentRevision';
 import TaskReopen from './TaskReopen';
+import TaskGuidance from './TaskGuidance';
 
 const preparationDrafts = new Map();
 const preparationCommentDrafts = new Map();
@@ -279,7 +281,8 @@ export default function StaffDetailView({ workspace = false, task: requestedTask
   const openingActionId = new URLSearchParams(location.search).get('action');
   const canInvoiceWorkspace = ['perm_factures_voir', 'perm_factures_ajouter', 'perm_factures_valider', 'perm_factures_refuser', 'perm_factures_ocr', 'perm_factures_modifier_articles'].some(permission => can(permission));
   const canQuoteWorkspace = ['perm_colis_calculer_devis', 'perm_colis_envoyer_devis', 'perm_finances_voir_total'].some(permission => can(permission));
-  const task = requestedTask || resolveDossierTask(sel || {}, location.search, workActions, can);
+  const canCalculateQuote = can('perm_colis_calculer_devis');
+  const task = requestedTask || resolveDossierTask(sel || {}, location.search, workActions, can, cl || {});
   const preparationView = task === 'preparation';
   useEffect(() => {
     if (!preparationView || (!formErr && !measuresSaved)) return;
@@ -293,9 +296,21 @@ export default function StaffDetailView({ workspace = false, task: requestedTask
   const tarif = getTarif(dest?.code, cl?.abonnement);
   const divisor = volumetricDivisor(settings);
   const savedWeights = measureShipment(savedFinalPackages(sel), divisor);
-  const measuresCurrent = sel.preparationCompositionVersion != null && sel.finalMeasurementsVersion === sel.preparationCompositionVersion;
+  const measuresCurrent = hasCurrentPreparation(sel);
   const chooseSection = (section, hash) => navigate(dossierTaskUrl(sel.id, section, location.search, { hash }));
   const continuation = <TaskContinuation currentActionId={openingActionId} currentDossierId={sel.id} currentKind={{documents:'documents',devis:'quote',preparation:'preparation',reception:'reception',accord:'reception',expedition:'departure',livraison:'departure'}[task]} />;
+  const nextUsefulTask = dossierNextTask(sel, can, cl);
+  const canViewTask = target => target === 'documents' ? canInvoiceWorkspace : target === 'devis' ? canQuoteWorkspace : true;
+  const taskLinkLabels = { reception: 'Voir les mesures à réception', accord: 'Voir l’accord du client', preparation: 'Ouvrir la préparation', documents: 'Ouvrir les factures', devis: 'Ouvrir le devis', paiement: 'Voir le règlement', expedition: 'Voir le transport', livraison: 'Ouvrir la livraison' };
+  const taskOwner = target => {
+    const kind = { reception: 'reception', accord: 'reception', preparation: 'preparation', documents: 'documents', devis: 'quote', expedition: 'departure', livraison: 'departure' }[target];
+    const action = workActions.find(item => item.colis_id === sel.id && item.kind === kind && item.state !== 'done');
+    return action?.assignee_id ? `Cette tâche est suivie par ${action.assignee_id === auth?.u?.id ? 'vous' : staffName(action.assignee_id, teamUsers)}.` : null;
+  };
+  const guidance = (title, message, target = nextUsefulTask, children) => <TaskGuidance title={title} message={message}
+    owner={target && target !== task ? taskOwner(target) : null}
+    actionLabel={target && target !== task && canViewTask(target) ? taskLinkLabels[target] : null}
+    onOpen={target && target !== task && canViewTask(target) ? () => chooseSection(target) : null}>{children}{continuation}</TaskGuidance>;
   const runAction = async (action) => {
     if (actionRef.current) return;
     actionRef.current = true; setActionLoading(true); setFormErr('');
@@ -455,7 +470,7 @@ export default function StaffDetailView({ workspace = false, task: requestedTask
   // ── Correction bar availability ───────────────────────────────────────────
   const canRevert = ['expedie', 'transit', 'dedouanement', 'arrive', 'livraison'].includes(sel.statut) && !!correctionTarget && !sel.archive && can('perm_colis_revenir_arriere');
   const canArchive = can('perm_colis_archiver');
-  const canCancel = !!sel.statut && sel.statut !== 'annule' && sel.statut !== 'livre' && can('perm_colis_annuler');
+  const canCancel = !sel.archive && !!sel.statut && sel.statut !== 'annule' && sel.statut !== 'livre' && can('perm_colis_annuler');
   const canCorrect = permission => can('perm_colis_revenir_arriere') && can(permission);
   const saveRevision = async (phase, boxes, expectedUpdatedAt) => {
     if (phase === 'preparation') setPreparationRevision(true);
@@ -475,11 +490,15 @@ export default function StaffDetailView({ workspace = false, task: requestedTask
     flash(phase === 'accord' ? 'Prêt à redemander l’accord. Préparez le message puis choisissez de l’envoyer.' : 'Devis repris. Vos informations sont conservées pour la correction.');
     return saved;
   };
-  const revisionEditor = phase => <ShipmentRevision colis={sel} phase={phase} draftOwnerId={auth?.u?.id}
-    canEdit={canCorrect(phase === 'reception' ? 'perm_colis_mesurer' : 'perm_colis_preparer')}
-    onSave={saveRevision} onReload={() => refreshColis(sel.id)}
-    onContinue={() => chooseSection(phase === 'reception' ? 'accord' : 'devis')}
-    nextLabel={phase === 'reception' ? 'Voir l’accord du client' : 'Voir le devis'} />;
+  const revisionEditor = phase => {
+    const nextTask = phase === 'reception' ? 'accord' : nextUsefulTask;
+    const mayContinue = nextTask !== phase && canViewTask(nextTask);
+    return <ShipmentRevision colis={sel} phase={phase} draftOwnerId={auth?.u?.id}
+      canEdit={canCorrect(phase === 'reception' ? 'perm_colis_mesurer' : 'perm_colis_preparer')}
+      onSave={saveRevision} onReload={() => refreshColis(sel.id)}
+      onContinue={() => mayContinue ? chooseSection(nextTask) : navigate(safeWorkReturn(new URLSearchParams(location.search).get('returnTo') || '/'))}
+      nextLabel={mayContinue ? taskLinkLabels[nextTask] : 'Retour à ma liste'} />;
+  };
   const reopenControl = phase => <TaskReopen colis={sel} task={phase}
     canEdit={canCorrect(phase === 'accord' ? 'perm_colis_demander_feuvert' : 'perm_colis_calculer_devis')}
     onSave={reopenTask} onReload={() => refreshColis(sel.id)} />;
@@ -489,21 +508,79 @@ export default function StaffDetailView({ workspace = false, task: requestedTask
   // ════════════════════════════════════════════════════════════════════════
 
   function renderActionBlock() {
-    if (task === 'documents') return canInvoiceWorkspace ? <DossierDocumentsTask key={sel.id} onQuote={canQuoteWorkspace ? () => chooseSection('devis') : undefined}>{continuation}</DossierDocumentsTask> : <p role="alert" className="p-4 text-sm text-slate-700">Vous n’avez pas accès aux factures de ce dossier.</p>;
     const stage = needsQuoteRecalculation(sel) ? 'en_preparation' : sel.statut;
-    if (task === 'reception' && stage !== 'receptionne') return <section className="space-y-4">{revisionEditor('reception')}<details><summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-slate-600">Fournisseurs et suivis des cartons</summary><ReceivedCartons colis={sel} settings={settings} /></details>{continuation}</section>;
-    if (task === 'preparation' && !['autorise','en_preparation'].includes(stage) && !savedWeights) return <section className="space-y-4"><h2 className="text-lg font-bold text-slate-800">Préparation</h2><p className="text-sm text-slate-700">La préparation attend l’accord du client.</p>{continuation}</section>;
-    if (task === 'preparation' && (!['autorise','en_preparation'].includes(stage) || preparationRevision || (sel.devisSnapshot && measuresCurrent))) return <section className="space-y-4">{revisionEditor('preparation')}{continuation}</section>;
-    if (task === 'devis' && stage !== 'en_preparation') {
-      const amounts = sel.devisSnapshot?.amounts;
-      return <section className="space-y-4"><h2 className="text-lg font-bold text-slate-800">{sel.devisTotal ? 'Devis enregistré' : 'Devis à établir'}</h2>{canQuoteWorkspace ? sel.devisTotal ? <div className="space-y-2 rounded-xl border border-slate-200 p-4 text-sm">{amounts && <><Ligne label="Transport" value={eur(amounts.transport)} /><Ligne label="Taxes" value={eur((amounts.om || 0) + (amounts.omr || 0) + (amounts.tva || 0))} /><Ligne label="Frais" value={eur(amounts.fees)} /></>}<Ligne label="Total" value={eur(sel.devisTotal)} /><button className="min-h-11 font-semibold underline" onClick={() => chooseSection('paiement')}>Voir le règlement</button></div> : <p className="text-sm text-slate-700">Le devis sera disponible après l’accord du client et la préparation.</p> : <p role="alert" className="text-sm text-slate-700">Votre rôle ne permet pas de consulter le devis.</p>}{canQuoteWorkspace && !!sel.devisTotal && reopenControl('devis')}{continuation}</section>;
+    const inTransport = ['expedie','transit','dedouanement','arrive','livraison','livre'].includes(sel.statut);
+    const paymentRecorded = Boolean(sel.paiementDate) || sel.statut === 'paye';
+    const closed = sel.archive || sel.statut === 'annule';
+    const quoteSummary = Number(sel.devisTotal) > 0 ? <div aria-label="Devis enregistré" className="space-y-2 rounded-xl border border-slate-200 p-4 text-sm">
+      {sel.devisSnapshot?.amounts && <><Ligne label="Transport" value={eur(sel.devisSnapshot.amounts.transport)} /><Ligne label="Taxes" value={eur((sel.devisSnapshot.amounts.om || 0) + (sel.devisSnapshot.amounts.omr || 0) + (sel.devisSnapshot.amounts.tva || 0))} /><Ligne label="Frais" value={eur(sel.devisSnapshot.amounts.fees)} /></>}
+      <Ligne label="Total" value={eur(sel.devisTotal)} />
+    </div> : <p className="text-sm text-slate-600">Aucun devis en cours n’est enregistré dans ce dossier.</p>;
+    // Closed dossiers keep their data available without offering work to restart.
+    // These guards precede task prerequisites so cancellation never looks like
+    // an outstanding agreement, preparation or payment.
+    if (closed) {
+      const title = sel.archive ? 'Dossier archivé' : 'Expédition annulée';
+      const message = sel.archive ? 'Ce dossier est conservé pour consultation. Aucune préparation ni notification n’est attendue.' : 'Cette expédition a été annulée. Les informations restent consultables ; aucune étape n’est à poursuivre.';
+      const content = ['reception','preparation'].includes(task) ? revisionEditor(task)
+        : task === 'documents' && canInvoiceWorkspace ? <DossierDocumentsTask key={sel.id} />
+        : task === 'devis' && canQuoteWorkspace ? quoteSummary : null;
+      return guidance(title, message, null, content);
     }
-    if (task === 'devis' && !canQuoteWorkspace) return <p role="alert" className="p-4 text-sm text-slate-700">Votre rôle ne permet pas d’établir le devis.</p>;
-    if (task === 'paiement' && !['devis_envoye','attente_paiement'].includes(stage)) return <section className="space-y-4"><h2 className="text-lg font-bold text-slate-800">{sel.paiementDate ? 'Paiement confirmé' : 'Règlement'}</h2><p className="text-sm text-slate-700">{sel.paiementDate ? `${eur(sel.paiementMontant || sel.devisTotal)} reçu(s).` : 'Le règlement intervient après l’envoi du devis.'}</p>{continuation}</section>;
-    if (['expedition','livraison'].includes(task) && !['paye','expedie','transit','dedouanement','arrive','livraison','livre'].includes(stage)) return <section className="space-y-4"><h2 className="text-lg font-bold text-slate-800">Expédition à organiser</h2><p className="text-sm text-slate-700">Le dossier doit être préparé et son règlement confirmé avant le départ.</p>{continuation}</section>;
-    if (task === 'accord' && !['mesure','attente_feu_vert','refuse_client'].includes(stage)) return <section className="space-y-4"><h2 className="text-lg font-bold text-slate-800">Accord du client</h2><p className="text-sm text-slate-700">{sel.feuVert === 'autorise' ? 'Accord enregistré pour la préparation.' : 'Les mesures à réception doivent être enregistrées avant la demande.'}</p>{stage !== 'receptionne' && reopenControl('accord')}{continuation}</section>;
-    if (task === 'livraison' && ['paye','expedie','transit','dedouanement'].includes(stage)) return <section className="space-y-4"><h2 className="text-lg font-bold text-slate-800">Livraison non commencée</h2><p className="text-sm text-slate-600">État actuel : {STATUTS[sel.statut]?.label}. La livraison sera organisée après l’arrivée à destination.</p><button className="min-h-11 rounded-xl border border-slate-300 px-4 text-sm font-semibold" onClick={() => chooseSection('expedition')}>Voir le transport</button>{continuation}</section>;
-    switch (needsQuoteRecalculation(sel) ? 'en_preparation' : sel.statut) {
+    if (task === 'documents') return canInvoiceWorkspace
+      ? <DossierDocumentsTask key={sel.id} onQuote={canQuoteWorkspace ? () => chooseSection('devis') : undefined}>{continuation}</DossierDocumentsTask>
+      : guidance('Factures réservées à l’équipe habilitée', 'Vous n’avez pas accès aux factures de ce dossier. La personne chargée de leur vérification doit terminer cette tâche.', nextUsefulTask === 'documents' ? null : nextUsefulTask);
+    if (task === 'reception' && stage !== 'receptionne') return <section className="space-y-4">{revisionEditor('reception')}
+      <TaskGuidance title="Réception enregistrée" message="Les mesures des cartons reçus sont conservées. Consultez la suite utile du dossier sans les ressaisir."
+        actionLabel={nextUsefulTask !== 'reception' && canViewTask(nextUsefulTask) ? taskLinkLabels[nextUsefulTask] : null}
+        onOpen={nextUsefulTask !== 'reception' && canViewTask(nextUsefulTask) ? () => chooseSection(nextUsefulTask) : null} />
+      <details><summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-slate-600">Fournisseurs et suivis des cartons</summary><ReceivedCartons colis={sel} settings={settings} /></details>{continuation}</section>;
+    if (task === 'preparation' && (paymentRecorded || inTransport)) return guidance('Préparation terminée', 'Les mesures préparées sont conservées en lecture seule. Le dossier poursuit son règlement ou son transport.', nextUsefulTask, revisionEditor('preparation'));
+    if (task === 'preparation' && sel.feuVert !== 'autorise') {
+      const receiptNeeded = stage === 'receptionne';
+      const message = receiptNeeded ? 'Enregistrez les mesures à réception, puis demandez l’accord du client avant de préparer.'
+        : stage === 'mesure' ? 'Les cartons sont mesurés. Demandez maintenant l’accord du client avant de préparer.'
+        : stage === 'refuse_client' ? 'Le client a refusé la préparation. La personne qui suit le dossier doit convenir avec lui de la suite.'
+        : sel.attenteClientDate ? 'Le client souhaite attendre d’autres cartons. La préparation reste en attente de son accord.'
+        : 'La préparation attend l’accord du client. Vous pouvez consulter la demande et les échanges.';
+      return guidance('Préparation en attente', message, receiptNeeded ? 'reception' : 'accord', savedWeights ? revisionEditor('preparation') : null);
+    }
+    if (task === 'preparation' && (!['autorise','en_preparation'].includes(stage) || preparationRevision || sel.devisSnapshot?.inputs || (sel.devisSnapshot && measuresCurrent))) return <section className="space-y-4">
+      {!measuresCurrent && <p role="status" className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">Les mesures de préparation ne sont pas confirmées pour les colis actuels. {canCorrect('perm_colis_preparer') ? 'Utilisez « Modifier » pour vérifier puis enregistrer les colis préparés. Le devis précédent devra être recalculé.' : 'Une personne autorisée à corriger la préparation doit les vérifier et les enregistrer avant le devis.'}</p>}{revisionEditor('preparation')}
+      {measuresCurrent && <TaskGuidance title="Préparation enregistrée" message="Les mesures après optimisation sont disponibles pour le devis. Les factures peuvent être vérifiées par un autre membre de l’équipe."
+        owner={nextUsefulTask !== task ? taskOwner(nextUsefulTask) : null} actionLabel={nextUsefulTask !== task && canViewTask(nextUsefulTask) ? taskLinkLabels[nextUsefulTask] : null}
+        onOpen={nextUsefulTask !== task && canViewTask(nextUsefulTask) ? () => chooseSection(nextUsefulTask) : null} />}{continuation}</section>;
+    if (task === 'devis' && !canQuoteWorkspace) return guidance('Devis réservé à l’équipe habilitée', 'Votre rôle ne permet pas de consulter ou d’établir le devis. Une personne chargée du devis doit poursuivre cette tâche.', nextUsefulTask === 'devis' ? null : nextUsefulTask);
+    if (task === 'devis' && (paymentRecorded || inTransport)) return guidance('Devis enregistré', 'Ce devis est conservé en lecture seule après le paiement ou le départ.', nextUsefulTask, quoteSummary);
+    if (task === 'devis' && ['autorise','en_preparation'].includes(stage) && !measuresCurrent) return guidance('Préparation à terminer avant le devis', `${sel.feuVert === 'autorise' ? 'L’accord du client est reçu. ' : ''}${savedWeights ? 'Les mesures visibles doivent être confirmées pour le nombre actuel de colis préparés.' : 'Il reste à enregistrer les mesures après optimisation et le nombre de colis préparés.'} Cette confirmation est nécessaire avant de calculer le devis.`, sel.feuVert === 'autorise' ? 'preparation' : 'accord');
+    // A certified preparation may predate the agreement. Opening the quote is
+    // navigation only; its explicit save performs the authorized status change.
+    const renderStage = stage === 'autorise' && measuresCurrent && ['preparation','devis'].includes(task) ? 'en_preparation' : stage;
+    if (task === 'devis' && renderStage === 'en_preparation' && sel.feuVert !== 'autorise') return guidance('Accord attendu avant le devis', 'Les informations préparées sont conservées. L’accord du client doit être confirmé avant d’établir le devis.', 'accord');
+    if (task === 'devis' && renderStage === 'en_preparation' && quote.errors.some(error => error.field === 'factures')) return guidance('Factures à vérifier avant le devis', canInvoiceWorkspace ? 'Les mesures de préparation sont enregistrées. Il reste à vérifier les factures pour établir un devis complet.' : 'Les mesures de préparation sont enregistrées. Un membre de l’équipe autorisé à vérifier les factures doit les compléter avant le calcul du devis.', 'documents');
+    if (task === 'devis' && renderStage !== 'en_preparation') {
+      if (['devis_envoye','attente_paiement'].includes(stage) && Number(sel.devisTotal) > 0) return guidance('Devis enregistré', 'Le devis est enregistré. Consultez le règlement ou reprenez le devis pour le corriger.', 'paiement', <>{quoteSummary}{reopenControl('devis')}</>);
+      return guidance('Devis en attente', stage === 'receptionne' ? 'Les mesures à réception doivent être enregistrées avant de demander l’accord du client.' : stage === 'refuse_client' ? 'Le client a refusé la préparation. La suite doit être convenue avec lui avant d’établir le devis.' : 'Le devis attend l’accord du client. Les factures et les mesures déjà enregistrées sont conservées.', stage === 'receptionne' ? 'reception' : 'accord');
+    }
+    if (task === 'paiement' && !['devis_envoye','attente_paiement'].includes(stage)) {
+      if (paymentRecorded || inTransport) return guidance('Paiement confirmé', `${eur(sel.paiementMontant || sel.devisTotal)} reçu(s). Vous pouvez consulter la suite du transport.`, nextUsefulTask);
+      const withdrawn = needsQuoteRecalculation(sel);
+      return guidance(withdrawn ? 'Devis à reprendre avant le règlement' : 'Règlement à venir', withdrawn ? 'Le devis précédent a été retiré. Aucun règlement n’est attendu pour cette version ; un nouveau devis doit être vérifié puis envoyé.' : 'Le client pourra régler après réception du devis. Consultez ce qu’il reste à préparer.', nextUsefulTask === 'paiement' ? 'devis' : nextUsefulTask);
+    }
+    if (['expedition','livraison'].includes(task) && !['paye','expedie','transit','dedouanement','arrive','livraison','livre'].includes(stage)) {
+      const message = { reception: 'Les cartons doivent être mesurés à réception avant de poursuivre.', accord: 'L’accord du client est attendu avant la préparation.', preparation: 'La préparation et ses mesures doivent être enregistrées avant le devis et le règlement.', documents: 'Les factures doivent être vérifiées avant de terminer le devis.', devis: 'Le devis doit être vérifié et envoyé avant le règlement.', paiement: 'Le règlement du client est attendu avant le départ.' }[nextUsefulTask] || 'Le départ attend la préparation du dossier et la confirmation du règlement.';
+      return guidance(task === 'livraison' ? 'Livraison à venir' : 'Expédition en attente', message, nextUsefulTask);
+    }
+    if (task === 'accord' && !['mesure','attente_feu_vert','refuse_client'].includes(stage)) {
+      if (paymentRecorded || inTransport) return guidance('Accord du client — historique', 'Cette étape reste consultable après le règlement ou le départ. Aucun nouvel accord n’est attendu.', nextUsefulTask);
+      if (sel.feuVert === 'autorise') return guidance('Accord du client reçu', `Le client a autorisé la préparation${replyDate ? ` le ${replyDate}` : ''}. Les informations déjà enregistrées sont conservées.`, nextUsefulTask,
+        reopenControl('accord'));
+      return stage === 'receptionne' ? guidance('Accord à demander après la réception', 'Enregistrez les mesures de chaque carton reçu avant de préparer la demande au client.', 'reception')
+        : guidance('Accord du client à vérifier', 'L’accord du client n’est pas confirmé. Vérifiez les échanges du dossier avant de préparer une nouvelle demande.', null, <>{onOpenContext && <button className="min-h-11 font-semibold underline" onClick={() => onOpenContext('messages')}>Voir les échanges</button>}{reopenControl('accord')}</>);
+    }
+    if (task === 'livraison' && ['paye','expedie','transit','dedouanement'].includes(stage)) return guidance('Livraison non commencée', `État actuel : ${STATUTS[sel.statut]?.label}. La livraison sera organisée après l’arrivée à destination.`, 'expedition');
+    if (task === 'expedition' && ['arrive','livraison','livre'].includes(stage)) return guidance('Transport arrivé à destination', `Le transport est terminé. ${sel.statut === 'livre' ? 'Les colis ont été remis au client.' : sel.statut === 'livraison' ? 'La livraison au client est en cours.' : 'La livraison au client peut maintenant être organisée.'}`, 'livraison');
+    switch (renderStage) {
 
       // ── 1. RECEPTIONNE ─────────────────────────────────────────────────
       case 'receptionne': {
@@ -520,7 +597,7 @@ export default function StaffDetailView({ workspace = false, task: requestedTask
               const box = multiDims[index] || {};
               return <fieldset key={index} className="rounded-xl border border-gray-200 p-3 space-y-3">
                 <legend className="px-1 text-sm font-semibold brand-t">Carton {index + 1}{carton.fournisseur ? ` · ${carton.fournisseur}` : ''}{carton.number ? ` · ${carton.number}` : ' · Sans numéro de suivi'}</legend>
-                <div className="grid grid-cols-2 gap-3">{[['dimL', 'Longueur', 'cm'], ['dimW', 'Largeur', 'cm'], ['dimH', 'Hauteur', 'cm'], ['poids', 'Poids réel', 'kg']].map(([key, label, unit]) => <Field key={key} label={`${label} · carton ${index + 1}`} type="number" min="0.01" step="0.01" unit={unit} value={box[key] ?? ''} onChange={event => { receptionDirty.current = true; setMultiDims(previous => ({ ...previous, [index]: { ...previous[index], [key]: event.target.value } })); }} />)}</div>
+                <div className="grid grid-cols-2 gap-3">{[['dimL', 'Longueur', 'cm'], ['dimW', 'Largeur', 'cm'], ['dimH', 'Hauteur', 'cm'], ['poids', 'Poids réel', 'kg']].map(([key, label, unit]) => <Field key={key} label={`${label} · carton ${index + 1}`} type="number" min="0.01" step="0.01" unit={unit} disabled={actionLoading || !can('perm_colis_mesurer')} value={box[key] ?? ''} onChange={event => { receptionDirty.current = true; setMultiDims(previous => ({ ...previous, [index]: { ...previous[index], [key]: event.target.value } })); }} />)}</div>
               </fieldset>;
             })}
             {weights && <div className="p-3 rounded-xl bg-gray-50 border border-gray-200 space-y-1 text-sm">
@@ -533,6 +610,8 @@ export default function StaffDetailView({ workspace = false, task: requestedTask
               </div></details>
             </div>}
             <BtnPrimary onClick={() => runAction(handleValiderMesures)} disabled={actionLoading || receptionConflict || !can('perm_colis_mesurer')}><Check size={15} />{actionLoading ? 'Enregistrement…' : 'Enregistrer les mesures de réception'}</BtnPrimary>
+            {!can('perm_colis_mesurer') && <p className="text-sm text-slate-600">Une personne autorisée à mesurer doit enregistrer ces cartons. {taskOwner('reception')}</p>}
+            {continuation}
           </div>
         </Section>;
       }
@@ -549,7 +628,7 @@ export default function StaffDetailView({ workspace = false, task: requestedTask
       // ── 5. AUTORISE ────────────────────────────────────────────────────
       case 'autorise': {
         return (
-          <Section title="Préparer le colis" icon={Check} color={borderColor}>
+          <Section title="Préparer les colis" icon={Check} color={borderColor}>
             <div className="space-y-3">
               <p className="text-sm text-slate-700">{sel.ref} · {cl?.nom} · Casier {sel.casier || "à renseigner"} · {receptionCartonManifest(sel).nbColis} carton(s) reçus</p>
               <div className="flex items-center gap-2 p-2 rounded-lg bg-green-50 border border-green-200">
@@ -577,6 +656,9 @@ export default function StaffDetailView({ workspace = false, task: requestedTask
                 <Check size={15} />
                 {actionLoading ? 'En cours...' : 'Commencer la préparation'}
               </BtnPrimary>
+              {!can('perm_colis_preparer') && <p className="text-sm text-slate-600">La préparation doit être effectuée par une personne habilitée. {taskOwner('preparation')} Les factures peuvent être vérifiées en parallèle.</p>}
+              {!can('perm_colis_preparer') && canInvoiceWorkspace && <button className="min-h-11 font-semibold underline" onClick={() => chooseSection('documents')}>Ouvrir les factures</button>}
+              {continuation}
             </div>
           </Section>
         );
@@ -588,11 +670,16 @@ export default function StaffDetailView({ workspace = false, task: requestedTask
         const measuresChanged = normalizeBoxes(finalPackages) !== normalizeBoxes(savedFinalPackages(sel));
         const verified = !pendingFee && !customsDirty && !measuresChanged && !preparationConflict && quote.ok
           && (devisPrev === null ? canReviewSavedQuote(sel, quote) : devisPrev && savedInputs === quoteInputFingerprint(quote.snapshot));
-        const focusBlocker = (field) => {
-          if (field.startsWith('dimensions')) return chooseSection('preparation');
-          if (field.includes('customs') || field.includes('customDuty')) { document.getElementById('quote-customs')?.scrollIntoView({ block: 'start' }); document.getElementById('quote-customs')?.focus({ preventScroll: true }); return; }
-          if (field.startsWith('fraisDivers')) return document.getElementById('quote-fees')?.scrollIntoView({ block: 'start' });
-          chooseSection('documents', field.startsWith('lignes') || field.startsWith('lines') ? 'quote-unlinked' : 'quote-documents');
+        const blockerAction = ({ field, message }) => {
+          if (field.startsWith('dimensions')) return () => chooseSection('preparation');
+          if (field.includes('customs') || field.includes('customDuty')) return () => { document.getElementById('quote-customs')?.scrollIntoView({ block: 'start' }); document.getElementById('quote-customs')?.focus({ preventScroll: true }); };
+          if (field.startsWith('fraisDivers')) return () => document.getElementById('quote-fees')?.scrollIntoView({ block: 'start' });
+          if (field === 'factures' || field.startsWith('lignes') || field.startsWith('lines')) return canInvoiceWorkspace ? () => chooseSection('documents', field === 'factures' ? 'quote-documents' : 'quote-unlinked') : null;
+          if (field === 'dossier') return sel.feuVert !== 'autorise' ? () => chooseSection('accord') : onOpenContext ? () => onOpenContext('reception') : null;
+          if (field === 'tarif') return can('perm_finances_modifier_tarifs') ? () => navigate('/settings?tab=tarifs') : null;
+          if (field === 'settings') return can('perm_admin_parametres') ? () => navigate('/settings?tab=metier') : null;
+          if ((field === 'client' || field === 'destination') && !message.includes('TVA')) return can('perm_clients_voir') && can('perm_clients_modifier') ? () => navigate(`/clients/${sel.clientId}`) : null;
+          return null;
         };
         const preparationBlock = sel.archive ? 'Désarchivez le dossier avant de poursuivre sa préparation.' : sel.produitInterdit ? 'Un produit interdit est signalé : faites vérifier le dossier avant de poursuivre.' : sel.feuVert !== 'autorise' ? 'Le feu vert du client doit être enregistré avant de poursuivre la préparation.' : null;
         const weights = measureShipment(finalPackages, divisor);
@@ -609,7 +696,7 @@ export default function StaffDetailView({ workspace = false, task: requestedTask
               {preparationConflictNotice}
               {preparationConflictReady && <><p className="mt-2">Version enregistrée : {savedFinalPackages(sel).map((box,index) => `colis ${index + 1} : ${box.dimL || '—'} × ${box.dimW || '—'} × ${box.dimH || '—'} cm / ${box.poids || '—'} kg`).join(' ; ')}</p><div className="mt-2 space-y-2">{canKeepPreparationDraft && <><p>Les mesures enregistrées et la composition des cartons sont inchangées. Vous pouvez conserver votre saisie et reprendre sur la nouvelle version du dossier.</p><button className="min-h-11 block font-semibold underline" onClick={keepPreparationDraft}>Conserver ma saisie et réessayer</button></>}<button className="min-h-11 block font-semibold underline" onClick={reloadPreparation}>Recharger et remplacer mon brouillon</button></div></>}
             </div>}
-            {sel.preparationCompositionVersion != null && sel.finalMeasurementsVersion !== sel.preparationCompositionVersion && <p role="status" className="mb-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">La composition des cartons a changé. Mesurez à nouveau l’ensemble préparé puis enregistrez les mesures pour confirmer cette nouvelle préparation.</p>}
+            {sel.preparationCompositionVersion != null && sel.finalMeasurementsVersion != null && sel.finalMeasurementsVersion !== sel.preparationCompositionVersion ? <p role="status" className="mb-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">La composition des cartons a changé. Mesurez à nouveau l’ensemble préparé puis enregistrez les mesures pour confirmer cette nouvelle préparation.</p> : !measuresCurrent && savedWeights && <p role="status" className="mb-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">Les mesures visibles ne sont pas encore confirmées pour le nombre actuel de colis préparés. Vérifiez chaque colis puis enregistrez les mesures pour terminer la préparation.</p>}
             <div className="space-y-3">{finalPackages.map((box,index) => <fieldset key={index} className="rounded-xl border border-slate-200 p-3"><legend className="px-1 text-sm font-semibold text-slate-700">Colis préparé {index + 1}</legend><div className="grid grid-cols-2 gap-3">{[['dimL', 'Longueur', 'cm'], ['dimW', 'Largeur', 'cm'], ['dimH', 'Hauteur', 'cm'], ['poids', 'Poids réel', 'kg']].map(([key,label,unit]) => <Field key={key} displayLabel={label} label={`${label} · colis sortant ${index + 1}`} type="number" min="0.01" step="0.01" disabled={actionLoading || !!preparationBlock || !can('perm_colis_preparer')} value={box[key] ?? ''} onChange={event => changeFinal(index,key,event.target.value)} unit={unit} />)}</div>{finalPackages.length > 1 && <button disabled={actionLoading || !!preparationBlock || !can('perm_colis_preparer')} className="min-h-11 text-sm font-semibold text-red-700 disabled:opacity-40" onClick={() => { preparationDirty.current = true; setFinalPackages(previous => previous.filter((_,position) => position !== index)); setDevisPrev(false); }}>Retirer le colis sortant {index + 1}</button>}</fieldset>)}</div>
             <button disabled={actionLoading || !!preparationBlock || !can('perm_colis_preparer')} className="my-3 min-h-11 w-full rounded-xl border border-dashed border-slate-300 text-sm font-semibold brand-t disabled:opacity-40" onClick={() => { preparationDirty.current = true; setFinalPackages(previous => [...previous,{dimL:'',dimW:'',dimH:'',poids:''}]); setDevisPrev(false); }}>+ Ajouter un colis après optimisation</button>
             <div ref={preparationFeedback} tabIndex={-1} className="scroll-mt-32">{formErr && <p role="alert" className="mb-3 rounded-xl bg-red-50 p-3 text-sm text-red-700">{formErr}</p>}
@@ -653,12 +740,16 @@ export default function StaffDetailView({ workspace = false, task: requestedTask
             {canInvoiceWorkspace && <button className="min-h-11 font-semibold text-slate-700 underline" onClick={() => chooseSection('documents')}>{currentInvoices(sel.factures || []).filter(invoice => invoice.valide).length} facture(s) vérifiée(s)</button>}
           </div>
           {measuresChanged && <p role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">Un brouillon de mesures reste à enregistrer. <button className="min-h-11 font-semibold underline" onClick={() => chooseSection('preparation')}>Reprendre la préparation</button></p>}
-          {!quote.ok && <div className="rounded-xl bg-amber-50 p-3"><p className="text-sm font-semibold text-amber-800">À résoudre avant le devis</p><ul className="mt-2 space-y-1 text-sm text-amber-800">{[...new Map(quote.errors.map(error => [error.message,error])).values()].map((error, index) => <li key={index}><button className="min-h-11 text-left underline underline-offset-2" onClick={() => focusBlocker(error.field)}>{error.message}</button></li>)}</ul></div>}
-          {(sel.lignes || []).some(line => !line.factureId) && <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-800">Articles manuels inclus : {eur((sel.lignes || []).filter(line => !line.factureId).reduce((total,line) => total + Number(line.qte) * Number(line.prix),0))} HT. <button className="min-h-11 font-semibold underline" onClick={() => chooseSection('documents','quote-unlinked')}>Vérifier les articles manuels</button></p>}
-          {isPro && <label className="block space-y-2 text-xs font-semibold text-slate-600">Modalités de règlement convenues<select aria-label="Modalités de règlement professionnel" value={proPayMethod} onChange={(event) => { preparationDirty.current = true; setProPayMethod(event.target.value); setDevisPrev(false); }} className={inputClass}>{[['virement', 'Virement bancaire'], ['especes', 'Espèces'], ['30_jours', 'Paiement à 30 jours'], ['fin_de_mois', 'Paiement en fin de mois']].map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select><span className="block text-xs font-normal text-gray-500">Cette modalité figurera dans la version du devis. Le paiement sera confirmé séparément après réception du règlement.</span></label>}
+          {!quote.ok && <div className="rounded-xl bg-amber-50 p-3"><p className="text-sm font-semibold text-amber-800">À résoudre avant le devis</p><ul className="mt-2 space-y-1 text-sm text-amber-800">{[...new Map(quote.errors.map(error => [error.message,error])).values()].map((error, index) => {
+            const action = blockerAction(error);
+            return <li key={index}>{action ? <button className="min-h-11 text-left underline underline-offset-2" onClick={action}>{error.message}</button> : <p className="py-2">{error.message} Une personne habilitée doit corriger ce point avant le devis.</p>}</li>;
+          })}</ul></div>}
+          {(sel.lignes || []).some(line => !line.factureId) && <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-800">Articles manuels inclus : {eur((sel.lignes || []).filter(line => !line.factureId).reduce((total,line) => total + Number(line.qte) * Number(line.prix),0))} HT. {canInvoiceWorkspace ? <button className="min-h-11 font-semibold underline" onClick={() => chooseSection('documents','quote-unlinked')}>Vérifier les articles manuels</button> : "La vérification de ces articles est réservée à une personne habilitée à consulter les factures."}</p>}
+          {isPro && <label className="block space-y-2 text-xs font-semibold text-slate-600">Modalités de règlement convenues<select aria-label="Modalités de règlement professionnel" disabled={actionLoading || !canCalculateQuote} value={proPayMethod} onChange={(event) => { preparationDirty.current = true; setProPayMethod(event.target.value); setDevisPrev(false); }} className={inputClass}>{[['virement', 'Virement bancaire'], ['especes', 'Espèces'], ['30_jours', 'Paiement à 30 jours'], ['fin_de_mois', 'Paiement en fin de mois']].map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select><span className="block text-xs font-normal text-gray-500">Cette modalité figurera dans la version du devis. Le paiement sera confirmé séparément après réception du règlement.</span></label>}
           {customsPanel}
-          <div id="quote-fees" className="scroll-mt-24 space-y-2 border-t border-gray-200 pt-4"><p className="text-xs font-semibold text-slate-600">Frais convenus</p>{fraisDivers.map((fee, index) => <div key={index} className="flex items-center gap-2 text-sm"><span className="min-w-0 flex-1 break-words">{fee.libelle}</span><strong>{eur(fee.montant)}</strong><button aria-label={`Retirer ${fee.libelle}`} disabled={actionLoading} className="flex min-h-11 min-w-11 items-center justify-center text-gray-400" onClick={() => runAction(async () => { const next = fraisDivers.filter((_, position) => position !== index); preparationDirty.current = true; setFraisDivers(next); setDevisPrev(false); })}><X size={14} /></button></div>)}
-            <details><summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-slate-600">Ajouter un frais</summary><form className="grid grid-cols-[minmax(0,1fr)_6rem] gap-2" onSubmit={(event) => { event.preventDefault(); runAction(async () => { const amount = Number(newFraisMontant); if (!newFraisLibelle.trim() || newFraisMontant === '' || !Number.isFinite(amount) || amount < 0) throw new Error('Indiquez le libellé et un montant positif ou nul.'); const next = [...fraisDivers, { libelle: newFraisLibelle.trim(), montant: amount }]; preparationDirty.current = true; setFraisDivers(next); setNewFraisLibelle(''); setNewFraisMontant(''); setDevisPrev(false); }); }}><input aria-label="Libellé du frais" required value={newFraisLibelle} onChange={(event) => setNewFraisLibelle(event.target.value)} placeholder="Libellé du frais" className={inputClass} /><input aria-label="Montant du frais" required type="number" min="0" step="0.01" value={newFraisMontant} onChange={(event) => setNewFraisMontant(event.target.value)} placeholder="€" className={inputClass} /><button disabled={actionLoading} className="col-span-2 min-h-11 rounded-xl bg-slate-100 text-xs font-semibold text-slate-700">Ajouter le frais</button>{pendingFee && <button type="button" className="col-span-2 min-h-11 text-sm font-semibold text-slate-600 underline" onClick={() => { setNewFraisLibelle(''); setNewFraisMontant(''); }}>Annuler ce frais</button>}</form></details>
+          <div id="quote-fees" className="scroll-mt-24 space-y-2 border-t border-gray-200 pt-4"><p className="text-xs font-semibold text-slate-600">Frais convenus</p>{fraisDivers.map((fee, index) => <div key={index} className="flex items-center gap-2 text-sm"><span className="min-w-0 flex-1 break-words">{fee.libelle}</span><strong>{eur(fee.montant)}</strong>{canCalculateQuote && <button aria-label={`Retirer ${fee.libelle}`} disabled={actionLoading} className="flex min-h-11 min-w-11 items-center justify-center text-gray-400" onClick={() => runAction(async () => { const next = fraisDivers.filter((_, position) => position !== index); preparationDirty.current = true; setFraisDivers(next); setDevisPrev(false); })}><X size={14} /></button>}</div>)}
+            {canCalculateQuote && <details><summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-slate-600">Ajouter un frais</summary><form className="grid grid-cols-[minmax(0,1fr)_6rem] gap-2" onSubmit={(event) => { event.preventDefault(); runAction(async () => { const amount = Number(newFraisMontant); if (!newFraisLibelle.trim() || newFraisMontant === '' || !Number.isFinite(amount) || amount < 0) throw new Error('Indiquez le libellé et un montant positif ou nul.'); const next = [...fraisDivers, { libelle: newFraisLibelle.trim(), montant: amount }]; preparationDirty.current = true; setFraisDivers(next); setNewFraisLibelle(''); setNewFraisMontant(''); setDevisPrev(false); }); }}><input aria-label="Libellé du frais" required value={newFraisLibelle} onChange={(event) => setNewFraisLibelle(event.target.value)} placeholder="Libellé du frais" className={inputClass} /><input aria-label="Montant du frais" required type="number" min="0" step="0.01" value={newFraisMontant} onChange={(event) => setNewFraisMontant(event.target.value)} placeholder="€" className={inputClass} /><button disabled={actionLoading} className="col-span-2 min-h-11 rounded-xl bg-slate-100 text-xs font-semibold text-slate-700">Ajouter le frais</button>{pendingFee && <button type="button" className="col-span-2 min-h-11 text-sm font-semibold text-slate-600 underline" onClick={() => { setNewFraisLibelle(''); setNewFraisMontant(''); }}>Annuler ce frais</button>}</form></details>}
+            {!canCalculateQuote && <p className="text-sm text-slate-600">Les frais{isPro ? " et les modalités de règlement" : ""} sont consultables. Leur modification doit être enregistrée par une personne chargée du calcul du devis.</p>}
           </div>
           </>}
           {subExpired && <p className="rounded-xl bg-red-50 p-3 text-xs text-red-700">Abonnement expiré : régularisez l’offre du client avant l’envoi.</p>}
@@ -719,6 +810,7 @@ export default function StaffDetailView({ workspace = false, task: requestedTask
                 </>
               ) : (
                 <div className="space-y-2">
+                  {!sel.payplugPaymentUrl && <div className="space-y-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"><p>Le lien de paiement n’est pas disponible. La personne chargée du devis doit le vérifier avant de relancer le client.</p>{canQuoteWorkspace && <button className="min-h-11 font-semibold underline" onClick={() => chooseSection('devis')}>Ouvrir le devis</button>}</div>}
                   {/* Lien de paiement PayPlug */}
                   {sel.payplugPaymentUrl && (
                     <div className="p-3 rounded-xl bg-blue-50 border border-blue-200 space-y-2">
@@ -727,9 +819,11 @@ export default function StaffDetailView({ workspace = false, task: requestedTask
                         className="inline-flex min-h-11 items-center text-sm font-semibold text-blue-700 underline">Ouvrir le lien de paiement</a><button className="min-h-11 px-3 text-sm font-semibold text-blue-700 underline" onClick={async () => { try { await navigator.clipboard.writeText(sel.payplugPaymentUrl); setPaymentFeedback("Lien de paiement copié."); } catch { setPaymentFeedback("Copie impossible. Ouvrez le lien pour le copier depuis votre navigateur."); } }}>Copier le lien de paiement</button>{paymentFeedback && <p role="status" className="text-sm text-slate-600">{paymentFeedback}</p>}
                     </div>
                   )}
-                  <TaskMessage template="relance_paiement" label="Préparer une relance de paiement" />
+                  {sel.payplugPaymentUrl && <TaskMessage template="relance_paiement" label="Préparer une relance de paiement" />}
                 </div>
               )}
+              {isPro && !can('perm_colis_confirmer_paiement') && <p className="text-sm text-slate-600">Une personne autorisée à confirmer les règlements doit enregistrer le paiement reçu. La consultation ne confirme aucun paiement.</p>}
+              {continuation}
             </div>
           </Section>
         );
@@ -807,6 +901,8 @@ export default function StaffDetailView({ workspace = false, task: requestedTask
                 <Check size={15} />
                 Vérifier le départ et son manifeste
               </BtnPrimary>
+              {!can('perm_envois_voir') && <p className="text-sm text-slate-600">L’équipe chargée des départs doit vérifier le manifeste avant l’expédition.</p>}
+              {continuation}
             </div>
           </Section>
         );
@@ -831,6 +927,8 @@ export default function StaffDetailView({ workspace = false, task: requestedTask
                 <Check size={15} />
                 Confirmer l'arrivée à destination
               </BtnPrimary>
+              {!can('perm_colis_changer_statut_expedition') && <p className="text-sm text-slate-600">L’équipe chargée du transport enregistrera l’arrivée une fois le dédouanement terminé.</p>}
+              {continuation}
             </div>
           </Section>
         );
@@ -853,7 +951,7 @@ export default function StaffDetailView({ workspace = false, task: requestedTask
         const currentIdx = trackingSteps.findIndex((s) => s.key === sel.statut);
 
         return (
-          <Section title="Suivi d'expédition" icon={Check} color={borderColor}>
+          <Section title={task === 'livraison' ? 'Suivi de livraison' : 'Suivi du transport'} icon={Check} color={borderColor}>
             <div className="space-y-4">
               <p className="text-sm font-semibold text-slate-700">{trackingSteps[currentIdx]?.label || STATUTS[sel.statut]?.label}</p>
               {sel.tracking && <p className="break-all text-sm text-slate-600">Suivi : {sel.tracking}</p>}
@@ -887,6 +985,7 @@ export default function StaffDetailView({ workspace = false, task: requestedTask
                   })
                 )}
               </div>
+              {!can('perm_colis_changer_statut_expedition') && <p className="text-sm text-slate-600">{task === 'livraison' ? 'La personne chargée de la livraison' : 'L’équipe chargée du transport'} enregistrera la prochaine étape. Vous pouvez consulter le suivi sans le modifier.</p>}
               {trackingSteps[currentIdx]?.tpl && <TaskMessage key={sel.statut} template={trackingSteps[currentIdx].tpl} label="Préparer une information au client" />}
               {continuation}
             </div>
@@ -914,7 +1013,7 @@ export default function StaffDetailView({ workspace = false, task: requestedTask
 
       {/* ── Action block ───────────────────────────────────────────────── */}
       {renderActionBlock()}
-      {['receptionne', 'mesure', 'attente_feu_vert', 'autorise'].includes(sel.statut) && can('perm_colis_receptionner') && <button type="button" onClick={() => setShowAddCarton(true)} className="min-h-11 flex items-center justify-center gap-2 rounded-xl border border-gray-200 px-4 py-3 text-sm font-semibold brand-t"><Plus size={16} />Réceptionner un autre carton</button>}
+      {!sel.archive && ['receptionne', 'mesure', 'attente_feu_vert', 'autorise'].includes(sel.statut) && can('perm_colis_receptionner') && <button type="button" onClick={() => setShowAddCarton(true)} className="min-h-11 flex items-center justify-center gap-2 rounded-xl border border-gray-200 px-4 py-3 text-sm font-semibold brand-t"><Plus size={16} />Réceptionner un autre carton</button>}
       <ColisModal open={showAddCarton} onClose={() => setShowAddCarton(false)} initialColisId={sel.id} />
 
       {/* ── Corrections (collapsible, discreet) ──────────────────────── */}

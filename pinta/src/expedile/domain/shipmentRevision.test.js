@@ -39,6 +39,8 @@ test('paid, shipped, archived or cancelled dossiers remain read-only; preparatio
   }
   assert.notEqual(revisionLockedReason({ ...colis, feuVert: 'attente' }, 'preparation'), '');
   assert.equal(revisionLockedReason({ ...colis, feuVert: 'attente' }, 'reception'), '');
+  assert.match(revisionLockedReason({ ...colis, produitInterdit: true }, 'preparation'), /produit interdit/);
+  assert.equal(revisionLockedReason({ ...colis, produitInterdit: true }, 'reception'), '');
 });
 
 test('quote impact includes a saved draft, sent quote and active payment link', () => {

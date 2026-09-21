@@ -7,8 +7,16 @@ test('reopened consent takes priority over the historical quote on staff and cli
     const dossier = { statut, devisEnvoyeLe: '2026-09-18', devisTotal: null, devisBrouillon: true, quoteNeedsReview: true };
     assert.equal(clientJourney(dossier).quoteNeedsReview, false);
     assert.doesNotMatch(clientJourney(dossier).label, /Devis/);
+    assert.deepEqual(clientJourney(dossier, Date.parse('2026-09-21')).event, { label:'Ancien devis envoyé',date:'2026-09-18',historical:true });
     if (statut === 'attente_feu_vert') assert.equal(clientWorkState(dossier).kind, 'agreement');
   }
+});
+
+test('the current request replaces an older quote in the client summary after reopening', () => {
+  const dossier={statut:'attente_feu_vert',devisEnvoyeLe:'2026-09-17',demandeFeuVertEnvoyeeAt:'2026-09-20',devisBrouillon:true,devisTotal:null};
+  assert.deepEqual(clientJourney(dossier,Date.parse('2026-09-21')).event,{label:'Demande d’accord envoyée',date:'2026-09-20'});
+  assert.equal(clientWorkState(dossier).kind,'agreement');
+  assert.equal(clientJourney({...dossier,statut:'devis_envoye',devisTotal:80,devisBrouillon:false,devisEnvoyeLe:'2026-09-21'},Date.parse('2026-09-21')).event.label,'Devis envoyé');
 });
 
 test('consent counts received cartons even with missing or duplicate tracking references', () => {

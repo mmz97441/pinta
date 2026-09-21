@@ -160,7 +160,7 @@ async function invalidFieldVisible(f, element) {
       const before = { colis: clone(f.tables.colis[0]), factures: clone(f.tables.factures), lignes: clone(f.tables.lignes) };
       await open(f, phase); const panel = revision(f, phase);
       await panel.getByRole('button', { name: 'Modifier', exact: true }).click();
-      await panel.getByText(/le devis enregistré sera retiré, ainsi que son lien de paiement éventuel/).waitFor();
+      await panel.getByText(/la correction retirera le devis enregistré et son lien de paiement éventuel/).waitFor();
       await field(f, phase).fill('42');
       await field(f, phase, 1, 'Poids', 'kg').fill('2,75');
       await panel.getByRole('button', { name: 'Enregistrer', exact: true }).click();

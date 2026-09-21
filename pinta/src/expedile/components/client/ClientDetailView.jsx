@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { hasPublishedQuote } from './quoteVisibility';
+import { hasCurrentPreparation } from '../../domain/preparationReadiness';
 import { cartonManifest, clientJourney, clientWorkState, quotePresentation, PAYMENT_TERMS, outgoingTracking, latestLogisticsEvent } from '../../domain/clientJourney';
 import { useApp } from '../../context/AppContext';
 import { SecureImage } from '../ui/SecureFile';
@@ -147,6 +148,7 @@ export default function ClientDetailView() {
   const trackingOut = outgoingTracking(sel, envois);
   const logistics = latestLogisticsEvent(sel);
   const shipmentStarted = ['expedie','transit','dedouanement','arrive','livraison','livre'].includes(sel.statut);
+  const previousPreparation = !hasCurrentPreparation(sel) || ['receptionne','mesure','attente_feu_vert','refuse_client','annule'].includes(sel.statut);
   const openPanel = panel => setParams(previous => { const next = new URLSearchParams(previous); next.set('panel', panel); return next; }, { replace: true });
 
   const toggleStep = (idx) => {
@@ -184,7 +186,7 @@ export default function ClientDetailView() {
       return (
         <div className="space-y-3">
           <p className="text-sm text-gray-500 leading-relaxed">
-            {curPhaseIdx === 0
+            {sel.statut === 'receptionne'
               ? 'Votre colis est arrivé à l\'entrepôt. Nous sommes en train de le mesurer.'
               : 'Votre colis a été réceptionné et mesuré.'}
           </p>
@@ -572,11 +574,12 @@ export default function ClientDetailView() {
           <p className="text-sm text-slate-600">{logistics ? `Dernière nouvelle : ${logistics.label.toLocaleLowerCase('fr')} le ${new Date(logistics.date).toLocaleDateString('fr-FR')}.` : 'La date de la dernière nouvelle n’est pas encore disponible.'}{sel.statut !== 'livre' ? ' La date de livraison sera précisée lorsqu’elle sera confirmée.' : ''}</p>
         </>}
         {clientWaiting && <details className="border-t border-slate-200 pt-2"><summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-slate-700">Reprendre ma décision</summary>{phaseContent(1)}</details>}
-        {journey.event && <p className="text-sm text-slate-500">{journey.event.label} le {new Date(journey.event.date).toLocaleDateString('fr-FR')}</p>}
+        {journey.event && !journey.event.historical && <p className="text-sm text-slate-500">{journey.event.label} le {new Date(journey.event.date).toLocaleDateString('fr-FR')}</p>}
       </section>
 
       <details className="rounded-xl border border-slate-200 p-3"><summary className="min-h-11 cursor-pointer py-2 text-sm font-semibold text-slate-700">Suivi et détails de l’expédition</summary><div className="space-y-4 pt-3">
-        {sel.finalPackages?.length > 0 && <details className="rounded-xl border border-slate-200 p-3"><summary className="min-h-11 cursor-pointer text-sm font-semibold text-slate-700">Colis préparés pour l’envoi · {sel.finalPackages.length} colis sortant{sel.finalPackages.length > 1 ? 's' : ''}</summary><div className="space-y-2 text-sm text-slate-600">{sel.finalPackages.map((box,index) => <p key={index}>Colis {index + 1} · {box.dimL} × {box.dimW} × {box.dimH} cm · {box.poids} kg</p>)}</div></details>}
+        {journey.event?.historical && <p className="text-sm text-slate-500">Historique · {journey.event.label} le {new Date(journey.event.date).toLocaleDateString('fr-FR')}</p>}
+        {sel.finalPackages?.length > 0 && <details className="rounded-xl border border-slate-200 p-3"><summary className="min-h-11 cursor-pointer text-sm font-semibold text-slate-700">{previousPreparation ? 'Mesures précédentes conservées' : 'Colis préparés pour l’envoi'} · {sel.finalPackages.length} colis{!previousPreparation ? ' sortant' : ''}{sel.finalPackages.length > 1 ? 's' : ''}</summary><div className="space-y-2 text-sm text-slate-600">{previousPreparation && <p>Ces mesures appartiennent à une préparation précédente.</p>}{sel.finalPackages.map((box,index) => <p key={index}>Colis {index + 1} · {box.dimL} × {box.dimW} × {box.dimH} cm · {box.poids} kg</p>)}</div></details>}
         {sel.statut !== 'annule' && <ProgressBar statut={sel.statut} size="md" showLabel={false} />}
         {sel.statut === 'annule' && <p className="text-sm text-slate-600">Ce dossier a été annulé. Les documents et échanges restent consultables.</p>}
         {sel.statut !== 'annule' && <div className="space-y-2">{PHASES_CLIENT.map((phase, idx) => {

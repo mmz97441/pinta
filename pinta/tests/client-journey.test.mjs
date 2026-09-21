@@ -39,4 +39,9 @@ test('client active phase content matches every lifecycle state and frozen quote
   assert.match(html, /Paiement en fin de mois/);
   assert.doesNotMatch(html, /TVA \(8.5%\)/);
   assert.match(html, /version 2/);
+  app.sel={...app.sel,statut:'mesure',devisTotal:null,devisBrouillon:true,devisEnvoyeLe:'2026-09-01',finalPackages:[{dimL:30,dimW:20,dimH:20,poids:3}],preparationCompositionVersion:1,finalMeasurementsVersion:1,outgoingParcelCount:1};
+  const reopened=module.exports.render();
+  assert.match(reopened,/réceptionné et mesuré/);assert.doesNotMatch(reopened,/en train de le mesurer/);
+  assert.match(reopened,/Mesures précédentes conservées/);assert.doesNotMatch(reopened,/Colis préparés pour l’envoi/);
+  assert.match(reopened,/Historique · Ancien devis envoyé/);assert.doesNotMatch(reopened,/Télécharger le devis|Payer /);
 });

@@ -54,6 +54,15 @@ async function updateOther(f){await f.page.evaluate(()=>window.dispatchEvent(new
 const results=[];
 (async()=>{await fs.mkdir(output,{recursive:true});const browser=await chromium.launch({headless:true});async function scenario(name,options,run){if(process.env.PINTA_CUSTOMS_FILTER&&!name.includes(process.env.PINTA_CUSTOMS_FILTER))return;const f=await fixture(browser,options);try{await run(f);assert.deepEqual(f.errors,[]);assert.deepEqual(f.networkDenied,[]);assert.equal(f.requests.some(r=>r.path.endsWith('/queue_message')),false);results.push({test:name,pass:true});}catch(e){results.push({test:name,pass:false,error:e.stack});process.exitCode=1;await f.page.screenshot({path:`${output}/${name}.png`,fullPage:true}).catch(()=>{});await fs.writeFile(`${output}/${name}.txt`,await f.page.locator('body').innerText().catch(()=>''));}finally{await f.context.close();}}
 try{
+ await scenario('renewed-agreement-allows-stale-customs-correction-before-quote',{},async f=>{
+  const row=f.tables.colis[0];Object.assign(row,{statut:'autorise',feu_vert:'autorise'});
+  f.tables.lignes[0].custom_duty={...mapped(catalog[0]),stale:true};
+  const measures=structuredClone(row.final_packages),receipt=structuredClone(row.dims_par_colis);
+  await open(f);assert.equal(row.statut,'autorise');assert.equal(f.calls.filter(c=>c.kind==='save').length,0);
+  assert.equal(await mainSave(f).isDisabled(),true);await edit(f);await choose(f);await apply(f).click();await saved(f);
+  assert.equal(row.statut,'en_preparation');assert.deepEqual(row.final_packages,measures);assert.deepEqual(row.dims_par_colis,receipt);
+  assert.equal(f.calls.filter(c=>c.kind==='save').length,1);assert.equal(await mainSave(f).isEnabled(),true);assert.deepEqual(writes(f),[]);
+ });
  await scenario('search-choice-save-quote-preserves-invoice-and-global-catalogue',{},async f=>{
   await open(f);const original=structuredClone(f.tables.factures);await edit(f);assert.equal(await mainSave(f).isDisabled(),true);
   const query=panel(f).getByLabel('Rechercher un code ou un libellé douanier',{exact:true});await query.fill('chevaux');await query.press('Enter');await panel(f).getByRole('list',{name:'Résultats de nomenclature'}).waitFor();assert.equal(f.calls.filter(c=>c.kind==='save').length,0);await panel(f).getByRole('button',{name:`Choisir ${catalog[0].code} — ${catalog[0].label}`,exact:true}).click();assert.equal(await mainSave(f).isDisabled(),true);await apply(f).click();await saved(f);assert.equal(f.tables.lignes[0].custom_duty.code,'01012100');assert.deepEqual(f.tables.factures,original);assert.deepEqual(writes(f),[]);assert.equal(await mainSave(f).isEnabled(),true);
