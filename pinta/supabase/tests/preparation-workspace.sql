@@ -60,7 +60,8 @@ INSERT INTO payment_intents(colis_id,quote_version,amount_cents,status) SELECT i
 UPDATE clients SET cp='97600' WHERE id='b2000000-0000-4000-8000-000000000001';
 SELECT prep_assert((SELECT statut='en_preparation' AND devis_total IS NULL AND devis_brouillon FROM colis WHERE id='b3000000-0000-4000-8000-000000000001'),'new destination invalidates modern unpaid quote');
 SELECT prep_assert((SELECT status='superseded' FROM payment_intents WHERE colis_id='b3000000-0000-4000-8000-000000000001'),'old payment intention is superseded on destination revision');
-SELECT revert_colis(id,updated_at) FROM colis WHERE id='b3000000-0000-4000-8000-000000000001';
+SELECT prep_reject($q$SELECT revert_colis(id,updated_at) FROM colis WHERE id='b3000000-0000-4000-8000-000000000001'$q$,'legacy revert cannot bypass explicit new agreement');
+SELECT correct_colis_task(id,'accord','{}',updated_at,'Demander un accord pour ajouter un carton') FROM colis WHERE id='b3000000-0000-4000-8000-000000000001';
 UPDATE colis SET nb_colis=2,dims_par_colis='[{"dimL":40,"dimW":30,"dimH":20,"poids":3},{"dimL":50,"dimW":40,"dimH":30,"poids":20}]',trackings_detail='[{"number":"REC-1"},{"number":"REC-2"}]',feu_vert='en_attente',statut='mesure' WHERE id='b3000000-0000-4000-8000-000000000001';
 SELECT prep_assert((SELECT preparation_composition_version=1 AND final_measurements_version IS NULL AND outgoing_parcel_count IS NULL AND fin_p=2 FROM colis WHERE id='b3000000-0000-4000-8000-000000000001'),'new carton keeps historical final measures but invalidates confirmation and outgoing count');
 UPDATE colis SET statut='attente_feu_vert' WHERE id='b3000000-0000-4000-8000-000000000001';

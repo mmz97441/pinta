@@ -46,7 +46,7 @@ function assertNoMutation(f) {
  }
  try {
   await scenario('two-views-merge-current-work-and-preserve-priority-and-old-bookmarks', async f => {
-   const nav = f.page.getByRole('navigation', { name: 'Mes actions', exact: true });
+   const nav = f.page.getByRole('navigation', { name: 'Mes tâches', exact: true });
    await nav.getByRole('button', { name: 'À faire 3', exact: true }).waitFor();
    assert.equal(await nav.getByRole('button').count(), 2);
    const actions = f.page.getByRole('region', { name: 'À faire', exact: true });
@@ -63,9 +63,10 @@ function assertNoMutation(f) {
    await f.page.locator('summary').filter({ hasText: /^Filtrer/ }).click();
    await f.page.getByLabel('Mission', { exact: true }).selectOption('preparation');
    await f.page.getByLabel('Rechercher dans mes tâches', { exact: true }).fill('aucun-résultat');
+   await f.page.getByRole('region', { name: 'Pourquoi la liste est vide' }).getByRole('heading', { name: 'Des tâches sont masquées par vos filtres' }).waitFor();
    await f.page.getByRole('region', { name: 'Urgences hors filtre', exact: true }).locator('[data-work-action="quote"]').waitFor();
    await f.page.getByRole('region', { name: 'Relais à accepter', exact: true }).getByRole('button', { name: 'Accepter le relais', exact: true }).waitFor();
-   await f.page.getByRole('region', { name: 'Actions hors missions ou permissions', exact: true }).locator('[data-work-action="outside"]').waitFor();
+   await f.page.getByRole('region', { name: 'Tâches hors missions ou permissions', exact: true }).locator('[data-work-action="outside"]').waitFor();
    await f.page.getByRole('button', { name: 'Voir mes tâches sans filtre', exact: true }).click();
    await f.page.waitForURL(url => !url.searchParams.has('q') && url.searchParams.get('mission') === '');
    await f.page.waitForFunction(() => document.querySelector('input[placeholder="Client, EXP, tâche…"]')?.value === '');
@@ -82,6 +83,54 @@ function assertNoMutation(f) {
    await f.page.getByRole('button', { name: 'EXP-AUTRE-EQUIPE', exact: true }).waitFor();
    assert.equal(await f.page.getByRole('button', { name: 'EXP-TEST-001', exact: true }).count(), 0);
   });
+  await scenario('empty-personal-list-leads-directly-to-available-work', async f => {
+   f.tables.staff_work_actions = f.tables.staff_work_actions.filter(action => action.id === 'pool');
+   await f.page.reload();
+   const empty = f.page.getByRole('region', { name: 'Pourquoi la liste est vide' });
+   await empty.getByRole('heading', { name: 'Vous n’avez pas de tâche à faire pour le moment' }).waitFor();
+   await empty.getByRole('button', { name: 'Voir les tâches à prendre', exact: true }).click();
+   await row(f, 'pool').getByRole('button', { name: 'Prendre cette tâche', exact: true }).waitFor();
+   assert.equal(new URL(f.page.url()).searchParams.get('section'), 'pool');
+  });
+  await scenario('unavailable-pool-explains-cause-and-opens-the-relevant-setting-without-saving', async f => {
+   f.tables.staff_work_preferences[0].available = false;
+   await f.page.goto(base + '/?section=pool');
+   const empty = f.page.getByRole('region', { name: 'Pourquoi la liste est vide' });
+   await empty.getByRole('heading', { name: 'Vous avez indiqué être indisponible' }).waitFor();
+   await empty.getByRole('button', { name: 'Modifier ma disponibilité' }).click();
+   const availability = f.page.getByLabel('Disponible pour prendre de nouvelles tâches');
+   await availability.waitFor();
+   assert.equal(await availability.isChecked(), false);
+   assert.equal(f.tables.staff_work_preferences[0].available, false);
+   assert.equal(f.requests.some(request => request.path.endsWith('/save_staff_work_preferences')), false);
+  });
+  await scenario('no-chosen-mission-opens-missions-without-hiding-owned-exceptions', async f => {
+   f.tables.staff_work_preferences[0].missions = [];
+   await f.page.reload();
+   const empty = f.page.getByRole('region', { name: 'Pourquoi la liste est vide' });
+   await empty.getByRole('heading', { name: 'Choisissez les tâches que vous souhaitez voir' }).waitFor();
+   await empty.getByRole('button', { name: 'Choisir mes missions' }).click();
+   await f.page.getByRole('group', { name: 'Missions cumulables' }).waitFor();
+   await f.page.getByRole('region', { name: 'Tâches hors missions ou permissions' }).locator('[data-work-action="prepare"]').waitFor();
+   assert.deepEqual(f.tables.staff_work_preferences[0].missions, []);
+  });
+  await scenario('truly-empty-pool-offers-a-working-link-to-all-dossiers', async f => {
+   f.tables.staff_work_actions = [];
+   await f.page.goto(base + '/?section=pool');
+   const empty = f.page.getByRole('region', { name: 'Pourquoi la liste est vide' });
+   await empty.getByRole('heading', { name: 'Aucune tâche à prendre dans vos missions' }).waitFor();
+   await empty.getByRole('link', { name: 'Voir les dossiers de l’équipe' }).click();
+   await f.page.waitForURL(url => url.pathname === '/colis');
+   await f.page.getByRole('button', { name: 'EXP-AUTRE-EQUIPE', exact: true }).waitFor();
+  });
+  await scenario('consulting-an-owned-wait-does-not-resume-or-unblock-it', async f => {
+   await f.page.goto(base + '/?section=waiting');
+   await row(f, 'documents').getByRole('button', { name: 'Consulter sans commencer', exact: true }).click();
+   await f.page.waitForURL(url => url.searchParams.get('section') === 'documents');
+   const action = f.tables.staff_work_actions.find(item => item.id === 'documents');
+   assert.equal(action.state, 'waiting');
+   assert.equal(action.waiting_reason, 'Vérification fournisseur');
+  });
   await scenario('each-task-opens-directly-and-retains-exact-list-filters-without-claim', async f => {
    for (const [id, list, section] of [['prepare','/?section=progress&mission=preparation&q=Exemple','preparation'],['quote','/?mission=documents','devis'],['documents','/?section=waiting&mission=documents','documents'],['started','/?section=now&mission=departures','expedition']]) {
     await f.page.goto(base + list); const item = row(f, id);
@@ -97,7 +146,7 @@ function assertNoMutation(f) {
   });
   await scenario('permissions-remain-distinct-even-when-a-mission-is-requested-in-the-url', async f => {
    await f.page.goto(base + '/?mission=documents');
-   const exceptions = f.page.getByRole('region', { name: 'Actions hors missions ou permissions', exact: true });
+   const exceptions = f.page.getByRole('region', { name: 'Tâches hors missions ou permissions', exact: true });
    await exceptions.locator('[data-work-action="quote"]').waitFor();
    assert.equal(await row(f, 'quote').getByRole('button', { name: 'Commencer', exact: true }).count(), 0);
    await row(f, 'quote').getByText('Permission modifiée : organisez un relais avec une personne habilitée.', { exact: true }).waitFor();
@@ -111,9 +160,9 @@ function assertNoMutation(f) {
    const returnTo = '/?section=progress&mission=preparation&q=Exemple';
    await f.page.goto(`${base}/colis/${ids.P}?${new URLSearchParams({ section: 'preparation', action: 'prepare', returnTo })}`);
    const continuation = f.page.getByRole('navigation', { name: 'Après cette tâche', exact: true });
-   await continuation.getByRole('link', { name: /Ouvrir la prochaine tâche/ }).waitFor();
+   await continuation.getByRole('link', { name: 'Passer à un autre dossier', exact: true }).waitFor();
    assert.equal(await continuation.getByRole('link', { name: 'Retour à ma liste', exact: true }).getAttribute('href'), returnTo);
-   await continuation.getByRole('link', { name: /Ouvrir la prochaine tâche/ }).click();
+   await continuation.getByRole('link', { name: 'Passer à un autre dossier', exact: true }).click();
    await f.page.waitForURL(url => url.pathname === '/colis/' + P2 && url.searchParams.get('action') === 'prepare-next');
    assert.equal(new URL(f.page.url()).searchParams.get('returnTo'), returnTo);
    assert.equal(f.tables.staff_work_actions.find(action => action.id === 'prepare-next').state, 'ready');

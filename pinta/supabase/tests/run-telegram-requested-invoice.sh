@@ -17,9 +17,9 @@ done
 sql -1 < "$root/tests/legacy-schema-fixture.sql"
 for migration in "$root"/migrations/202609*.sql; do
  { printf 'SET ROLE supabase_admin;\n';cat "$migration"; } | sql -1
+ # Test this historical additive fix at its own migration boundary, before later API signatures.
+ case ${migration##*/} in 20260916000003_combined_invoice_request.sql) { printf 'SET ROLE supabase_admin;\n';cat "$migration"; } | sql -1;; esac
 done
-# Reapplying the isolated additive fix is safe, including its grants.
-{ printf 'SET ROLE supabase_admin;\n';cat "$root/migrations/20260916000003_combined_invoice_request.sql"; } | sql -1
 sql < "$root/tests/telegram-requested-invoice.sql"
 # Two independent deliveries race to fulfil one invoice request. The dossier
 # lock permits one invoice and keeps the other document in the conversation.

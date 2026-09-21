@@ -1,6 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { cartonManifest, clientJourney, quotePresentation, publicJourney, outgoingTracking, latestLogisticsEvent } from './clientJourney.js';
+import { cartonManifest, clientJourney, clientWorkState, clientShipmentPath, quotePresentation, publicJourney, outgoingTracking, latestLogisticsEvent } from './clientJourney.js';
+
+test('reopened consent takes priority over the historical quote on staff and client projections', () => {
+  for (const statut of ['receptionne', 'mesure', 'attente_feu_vert', 'autorise', 'refuse_client']) {
+    const dossier = { statut, devisEnvoyeLe: '2026-09-18', devisTotal: null, devisBrouillon: true, quoteNeedsReview: true };
+    assert.equal(clientJourney(dossier).quoteNeedsReview, false);
+    assert.doesNotMatch(clientJourney(dossier).label, /Devis/);
+    if (statut === 'attente_feu_vert') assert.equal(clientWorkState(dossier).kind, 'agreement');
+  }
+});
 
 test('consent counts received cartons even with missing or duplicate tracking references', () => {
   assert.deepEqual(cartonManifest({ id: 'p', ref: 'EXP', nbColis: 3, trackings: [' ONE ', '', 'ONE'], updatedAt: 'version' }), { id: 'p', ref: 'EXP', count: 3, trackings: ['ONE'], updatedAt: 'version' });
@@ -50,6 +59,40 @@ test('a corrected rejected invoice does not ask the client to upload the old doc
   assert.equal(clientWorkState(parcel).section, 'team');
   parcel.factures[1].rejetMotif = 'Page absente';
   assert.equal(clientWorkState(parcel).section, 'todo');
+});
+
+test('a preparation pause keeps independent corrections and replies visible without giving consent', () => {
+  const parcel = { id: 'p', statut: 'attente_feu_vert', attenteClientDate: '2026-09-19', feuVert: null,
+    conversationStatut: 'attente_client', factures: [{ id: 'old', rejetMotif: 'Page manquante' }] };
+  const before = JSON.stringify(parcel);
+  assert.equal(clientWorkState(parcel).kind, 'documents');
+  assert.equal(clientWorkState(parcel).journey.waiting, true);
+  assert.equal(clientShipmentPath(parcel), '/colis/p?panel=documents');
+  assert.equal(JSON.stringify(parcel), before);
+  const corrected = { ...parcel, factures: [...parcel.factures, { id: 'new', replacesFactureId: 'old' }] };
+  assert.equal(clientWorkState(corrected).kind, 'messages');
+  assert.equal(clientShipmentPath(corrected), '/colis/p?panel=messages');
+  const answered = { ...corrected, conversationStatut: 'a_repondre' };
+  assert.equal(clientWorkState(answered).section, 'waiting');
+  assert.equal(clientWorkState(answered).kind, 'none');
+  assert.equal(clientWorkState(answered).journey.waiting, true);
+  assert.equal(clientShipmentPath(answered), '/colis/p');
+  assert.equal(answered.statut, 'attente_feu_vert');
+  assert.equal(answered.feuVert, null);
+});
+
+test('old copies do not interrupt a preparation pause and closed dossiers remain read-only destinations', () => {
+  const parcel = { id: 'p', statut: 'attente_feu_vert', attenteClientDate: '2026-09-19', factures: [
+    { id: 'copy', duplicateOfId: 'current', rejetMotif: 'Ancienne demande' }, { id: 'current', valide: true },
+  ] };
+  assert.equal(clientWorkState(parcel).section, 'waiting');
+  for (const closed of [{ archive: true }, { statut: 'annule' }, { statut: 'livre' }]) {
+    const dossier = { ...parcel, ...closed, conversationStatut: 'attente_client' };
+    assert.equal(clientWorkState(dossier).section, 'history');
+    assert.equal(clientShipmentPath(dossier), '/colis/p');
+  }
+  assert.equal(clientShipmentPath({ id: 'p', statut: 'en_preparation', factures: [] }), '/colis/p?panel=documents');
+  assert.equal(clientShipmentPath({ id: 'p', statut: 'attente_feu_vert', factures: [] }), '/colis/p');
 });
 
 

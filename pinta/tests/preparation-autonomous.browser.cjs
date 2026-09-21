@@ -115,13 +115,51 @@ async function main() {
     await scenario('colleague-measurements-preserved-and-local-draft-compared', { empty: false }, async f => {
       await open(f); await field(f, 'Longueur', 'cm').fill('99');
       f.tables.colis[0].updated_at = '2099-01-01T00:00:00Z'; f.tables.colis[0].final_packages[0].dimL = 55; f.tables.colis[0].fin_l = 55;
-      await save(f).click();
-      await section(f).getByRole('alert').filter({ hasText: 'Version enregistrée' }).waitFor();
+      let releaseRefresh;
+      const refreshGate = new Promise(resolve => { releaseRefresh = resolve; });
+      await f.context.route('**/rest/v1/colis?**', async route => {
+        if (new URL(route.request().url()).searchParams.get('id') === `eq.${ids.P}`) await refreshGate;
+        await route.fallback();
+      });
+      try {
+        await save(f).click();
+        await section(f).getByRole('status').filter({ hasText: 'Chargement de la version à jour' }).waitFor();
+        assert.equal(await field(f, 'Longueur', 'cm').inputValue(), '99');
+        assert.equal(await section(f).getByText(/Version enregistrée :/).count(), 0, 'Never compare the draft against the stale cached measures while a refresh is pending.');
+        assert.equal(await section(f).getByRole('button', { name: 'Conserver ma saisie et réessayer', exact: true }).count(), 0);
+        assert.equal(await section(f).getByRole('button', { name: 'Recharger et remplacer mon brouillon', exact: true }).count(), 0);
+        assert.equal(await save(f).isDisabled(), true);
+      } finally { releaseRefresh(); }
+      await section(f).getByRole('alert').filter({ hasText: /Version enregistrée : colis 1 : 55 ×/ }).waitFor();
       assert.equal(await field(f, 'Longueur', 'cm').inputValue(), '99'); assert.equal(f.tables.colis[0].final_packages[0].dimL, 55);
       assert.equal(await section(f).getByRole('button', { name: 'Conserver ma saisie et réessayer', exact: true }).count(), 0);
       assert.equal(await save(f).isDisabled(), true); assert.equal(measurementCalls(f).length, 1);
       await section(f).getByRole('button', { name: 'Recharger et remplacer mon brouillon', exact: true }).click();
       assert.equal(await field(f, 'Longueur', 'cm').inputValue(), '55');
+    });
+    await scenario('failed-conflict-refresh-preserves-draft-until-explicit-successful-reload', { empty: false }, async f => {
+      await open(f); await field(f, 'Longueur', 'cm').fill('99');
+      f.tables.colis[0].updated_at = '2099-01-01T00:00:00Z'; f.tables.colis[0].final_packages[0].dimL = 55; f.tables.colis[0].fin_l = 55;
+      let failRefresh = true;
+      await f.context.route('**/rest/v1/colis?**', async route => {
+        if (failRefresh && new URL(route.request().url()).searchParams.get('id') === `eq.${ids.P}`) return route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ message: 'Fixture indisponible' }) });
+        await route.fallback();
+      });
+      await save(f).click();
+      await section(f).getByRole('alert').filter({ hasText: 'Impossible de charger la version à jour' }).waitFor();
+      assert.equal(await field(f, 'Longueur', 'cm').inputValue(), '99');
+      assert.equal(await section(f).getByText(/Version enregistrée :/).count(), 0);
+      assert.equal(await section(f).getByRole('button', { name: 'Conserver ma saisie et réessayer', exact: true }).count(), 0);
+      assert.equal(await section(f).getByRole('button', { name: 'Recharger et remplacer mon brouillon', exact: true }).count(), 0);
+      assert.equal(await save(f).isDisabled(), true);
+      failRefresh = false;
+      await section(f).getByRole('button', { name: 'Réessayer le chargement', exact: true }).click();
+      await section(f).getByRole('alert').filter({ hasText: /Version enregistrée : colis 1 : 55 ×/ }).waitFor();
+      assert.equal(await field(f, 'Longueur', 'cm').inputValue(), '99', 'A successful read still requires an explicit choice before replacing the draft.');
+      assert.equal(measurementCalls(f).length, 1, 'Retrying a read never retries the rejected write.');
+      await section(f).getByRole('button', { name: 'Recharger et remplacer mon brouillon', exact: true }).click();
+      assert.equal(await field(f, 'Longueur', 'cm').inputValue(), '55');
+      assert.equal(f.tables.colis[0].final_packages[0].dimL, 55);
     });
     await scenario('invoice-update-allows-explicit-retry-without-losing-measures', { missing: false, empty: false }, async f => {
       await open(f); await field(f, 'Longueur', 'cm').fill('41');
@@ -133,6 +171,37 @@ async function main() {
       assert.equal(await field(f, 'Longueur', 'cm').inputValue(), '41');
       await save(f).click(); await saved(f);
       assert.equal(measurementCalls(f).length, 2); assert.equal(Number(f.tables.colis[0].final_packages[0].dimL), 41); assert.equal(f.tables.factures[0].valide, true);
+    });
+    await scenario('late-conflict-refresh-cannot-replace-another-dossier-draft', { empty: false }, async f => {
+      const otherId = '77777777-7777-4777-8777-777777777777';
+      const other = { ...clone(f.tables.colis[0]), id: otherId, ref: 'EXP-TEST-OTHER', fin_l: 70, final_packages: [{ ...clone(f.tables.colis[0].final_packages[0]), dimL: 70 }] };
+      f.tables.colis.push(other);
+      await f.page.reload();
+      await open(f); await field(f, 'Longueur', 'cm').fill('99');
+      f.tables.colis[0].updated_at = '2099-01-01T00:00:00.123457Z'; f.tables.colis[0].final_packages[0].dimL = 55; f.tables.colis[0].fin_l = 55;
+      let releaseRefresh;
+      const refreshGate = new Promise(resolve => { releaseRefresh = resolve; });
+      await f.context.route('**/rest/v1/colis?**', async route => {
+        if (new URL(route.request().url()).searchParams.get('id') === `eq.${ids.P}`) await refreshGate;
+        await route.fallback();
+      });
+      try {
+        await save(f).click();
+        await section(f).getByRole('status').filter({ hasText: 'Chargement de la version à jour' }).waitFor();
+        await f.page.evaluate(url => { history.pushState({}, '', url); window.dispatchEvent(new PopStateEvent('popstate')); }, `/colis/${otherId}?section=preparation`);
+        await f.page.getByTestId('dossier-task-header').getByText('EXP-TEST-OTHER', { exact: true }).waitFor();
+        await section(f).getByRole('button', { name: 'Modifier les mesures', exact: true }).click();
+        assert.equal(await field(f, 'Longueur', 'cm').inputValue(), '70');
+      } finally { releaseRefresh(); }
+      await field(f, 'Longueur', 'cm').fill('77');
+      assert.equal(await field(f, 'Longueur', 'cm').inputValue(), '77');
+      assert.equal(await section(f).getByRole('alert').count(), 0, 'A delayed result must not attach the previous dossier’s error or comparison to the new draft.');
+      assert.equal(await save(f).isEnabled(), true);
+      assert.equal(measurementCalls(f).length, 1);
+      assert.equal(other.final_packages[0].dimL, 70);
+      await f.page.evaluate(url => { history.pushState({}, '', url); window.dispatchEvent(new PopStateEvent('popstate')); }, `/colis/${ids.P}?section=preparation`);
+      await section(f).getByRole('alert').filter({ hasText: /Version enregistrée : colis 1 : 55 ×/ }).waitFor();
+      assert.equal(await field(f, 'Longueur', 'cm').inputValue(), '99', 'The original dossier keeps its own local draft after the late refresh.');
     });
   } finally { await browser.close(); await fs.writeFile(path.join(output, 'results.json'), JSON.stringify(results, null, 2)); console.log(JSON.stringify(results, null, 2)); }
 }

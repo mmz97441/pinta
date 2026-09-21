@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { calculateQuote, measureShipment, quoteInputFingerprint } from './quote.js';
+import { calculateQuote, measureShipment, quoteInputFingerprint, canReviewSavedQuote } from './quote.js';
 
 const fixture = () => ({
   colis: { id: 'parcel', finL: 40, finW: 30, finH: 20, finP: 3, dimL: 40, dimW: 30, dimH: 20, poids: 3,
@@ -14,6 +14,26 @@ test('transport, CIF allocation, tax components and total agree to cents', () =>
   assert.equal(quote.ok, true);
   assert.deepEqual([quote.amounts.transport, quote.amounts.om, quote.amounts.omr, quote.amounts.tva, quote.amounts.total], [34, 13.4, 3.35, 4.31, 55.06]);
   assert.equal(quote.patch.economie, 0);
+});
+test('a colleague can review an unchanged saved draft, never an obsolete quote or local fee draft', () => {
+  const input = fixture();
+  input.colis.statut = 'en_preparation';
+  const quote = calculateQuote(input);
+  Object.assign(input.colis, { devisBrouillon: true, devisTotal: quote.amounts.total, devisSnapshot: structuredClone(quote.snapshot) });
+  assert.equal(canReviewSavedQuote(input.colis, quote), true);
+  input.colis.fraisDivers = [{ libelle: 'Emballage', montant: 9 }];
+  assert.equal(canReviewSavedQuote(input.colis, calculateQuote(input)), false);
+  input.colis.fraisDivers = [];
+  input.colis.devisSnapshot.amounts.transport += 1;
+  assert.equal(canReviewSavedQuote(input.colis, quote), false);
+  input.colis.devisSnapshot = structuredClone(quote.snapshot);
+  input.colis.devisTotal += 1;
+  assert.equal(canReviewSavedQuote(input.colis, quote), false);
+  input.colis.devisTotal = quote.amounts.total;
+  for (const change of [{ archive: true }, { paiementDate: '2026-09-20' }, { devisBrouillon: false }, { statut: 'devis_envoye' }, { devisSnapshot: null }]) {
+    assert.equal(canReviewSavedQuote({ ...input.colis, ...change }, quote), false);
+  }
+  assert.equal(canReviewSavedQuote(input.colis, { ok: false }), false);
 });
 test('pro identical dimensions never invent VAT savings and need no invoices', () => {
   const input = fixture(); input.client.type = 'pro'; input.colis.factures = []; input.colis.lignes = [];

@@ -31,8 +31,51 @@ const results=[];
   f.tables.colis[0].statut='en_preparation';Object.assign(f.tables.factures[0],{valide:false,rejet_motif:'Dernière page manquante'});await f.context.route('**/storage/v1/object/factures/**',r=>r.fulfill({status:200,contentType:'application/json',body:'{}'}));await open(f);await f.page.getByRole('button',{name:'Corriger une facture',exact:true}).click();assert.equal(await f.page.getByLabel('Facture corrigée',{exact:true}).inputValue(),ids.F);await f.page.getByRole('form',{name:'Déposer une facture'}).getByText(/Correction demandée : Dernière page/).waitFor();assert.equal(await f.page.getByLabel('Facture ou photo',{exact:true}).getAttribute('multiple'),null);
   await f.page.getByLabel('Facture ou photo',{exact:true}).setInputFiles({name:'corrected.pdf',mimeType:'application/pdf',buffer:Buffer.from('%PDF-1.4 synthetic')});await f.page.getByRole('button',{name:'Déposer la facture',exact:true}).click();await f.page.getByRole('status').filter({hasText:'Facture reçue et enregistrée'}).waitFor();assert.equal(f.tables.factures.length,2);assert.equal(f.tables.factures[1].replaces_facture_id,ids.F);assert.equal(f.tables.factures[0].rejet_motif,'Dernière page manquante');
  });
+ await check('paused-preparation-opens-independent-correction-and-reply-directly',async f=>{
+  Object.assign(f.tables.colis[0],{statut:'attente_feu_vert',attente_client_date:'2026-09-19T08:00:00Z',attente_client_motif:'Un achat reste à recevoir',conversation_statut:'attente_client'});
+  Object.assign(f.tables.factures[0],{valide:false,rejet_motif:'Page manquante'});
+  await f.context.route('**/storage/v1/object/factures/**',r=>r.fulfill({status:200,contentType:'application/json',body:'{}'}));
+  await f.login();await f.page.goto(`${base}/`);
+  const card=f.page.getByRole('button').filter({hasText:'EXP-TEST-001'});await card.waitFor();
+  assert.equal((await card.innerText()).split('Corriger une facture').length-1,1);await card.click();
+  const file=f.page.getByLabel('Facture ou photo',{exact:true});await file.waitFor();
+  assert.equal(new URL(f.page.url()).searchParams.get('panel'),'documents');
+  assert.equal(await f.page.getByText('Aucune action attendue de votre part.',{exact:true}).count(),0);
+  assert.equal(await f.page.getByRole('button',{name:'Autoriser la préparation',exact:true}).isVisible(),false);
+  await file.setInputFiles({name:'correction-pause.pdf',mimeType:'application/pdf',buffer:Buffer.from('%PDF-1.4 synthetic')});
+  await f.page.getByRole('button',{name:'Déposer la facture',exact:true}).click();
+  await f.page.getByRole('status').filter({hasText:'Facture reçue et enregistrée'}).waitFor();
+  await f.page.getByRole('button',{name:'Répondre à l’équipe',exact:true}).waitFor();
+  assert.equal(f.tables.colis[0].statut,'attente_feu_vert');
+  assert.equal(f.tables.colis[0].attente_client_date,'2026-09-19T08:00:00Z');
+  assert.equal(f.requests.some(r=>r.path.endsWith('/client_decision')),false);
+  await f.page.goto(`${base}/colis`);await f.page.getByRole('button').filter({hasText:'EXP-TEST-001'}).click();
+  await f.page.getByLabel('Votre message à l’équipe',{exact:true}).waitFor();
+  assert.equal(new URL(f.page.url()).searchParams.get('panel'),'messages');
+  assert.equal(f.requests.filter(r=>r.path.endsWith('/messages')&&r.method==='POST').length,0);
+  await f.page.setViewportSize({width:390,height:844});
+  await f.page.waitForTimeout(450); // Capture after the existing screen/scroll animation.
+  assert.equal(await f.page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false);
+  await f.page.screenshot({path:path.join(output,'paused-client-reply-mobile.png'),fullPage:true});
+ });
+ await check('current-invoices-first-with-retired-copies-in-history',async f=>{
+  f.tables.colis[0].statut='en_preparation';
+  Object.assign(f.tables.factures[0],{valide:false,rejet_motif:'Ancienne correction',vendeur:'Facture initiale'});
+  const current='84444444-4444-4444-8444-444444444444';
+  f.tables.factures.push({...f.tables.factures[0],id:current,replaces_facture_id:ids.F,rejet_motif:null,valide:true,vendeur:'Facture actuelle'});
+  f.tables.factures.push({...f.tables.factures[0],id:'94444444-4444-4444-8444-444444444444',duplicate_of_facture_id:current,vendeur:'Copie en double'});
+  await open(f);await f.page.getByRole('button',{name:'Mes factures (1)',exact:true}).click();
+  await f.page.getByRole('heading',{name:'Factures envoyées (1)',exact:true}).waitFor();
+  await f.page.getByRole('article',{name:'Facture Facture actuelle',exact:true}).waitFor();
+  assert.equal(await f.page.getByRole('article').count(),1);
+  await f.page.getByText('Anciennes versions et copies (2)',{exact:true}).click();
+  assert.equal(await f.page.getByRole('article').count(),3);
+  await f.page.getByText('Copie retirée',{exact:true}).waitFor();await f.page.getByText('Remplacée',{exact:true}).waitFor();
+  assert.equal(await f.page.getByText(/Correction attendue/).count(),0);
+  assert.equal(f.requests.filter(r=>r.path.endsWith('/factures')&&r.method==='POST').length,0);
+ });
  await check('correction-refresh-preserves-files-and-explicit-new-deposit',async f=>{
-  f.tables.colis[0].statut='en_preparation';await open(f);await f.page.getByRole('button',{name:/^Documents \(/}).click();await f.page.getByRole('form',{name:'Déposer une facture'}).waitFor();await f.page.getByRole('button',{name:/^Messages \(/}).click();
+  f.tables.colis[0].statut='en_preparation';await open(f);await f.page.getByRole('button',{name:/^Mes factures \(/}).click();await f.page.getByRole('form',{name:'Déposer une facture'}).waitFor();await f.page.getByRole('button',{name:/^Messages \(/}).click();
   Object.assign(f.tables.factures[0],{valide:false,rejet_motif:'Dernière page manquante'});await f.page.evaluate(()=>window.dispatchEvent(new Event('focus')));await f.page.getByRole('button',{name:'Corriger une facture',exact:true}).click();const choice=f.page.getByLabel('Facture corrigée',{exact:true});await f.page.waitForFunction(id=>document.querySelector('select[aria-label="Facture corrigée"]')?.value===id,ids.F);assert.equal(await choice.inputValue(),ids.F);
   await choice.selectOption('');const files=f.page.getByLabel('Facture ou photo',{exact:true});await files.setInputFiles({name:'nouvel-achat.pdf',mimeType:'application/pdf',buffer:Buffer.from('%PDF-1.4 synthetic')});f.tables.factures.push({...f.tables.factures[0],id:'94444444-4444-4444-8444-444444444444',vendeur:'Autre boutique',rejet_motif:'Date manquante'});await f.page.evaluate(()=>window.dispatchEvent(new Event('focus')));await choice.getByRole('option',{name:'Corriger : Autre boutique'}).waitFor({state:'attached'});assert.equal(await choice.inputValue(),'');assert.equal(await files.evaluate(input=>input.files[0]?.name),'nouvel-achat.pdf');assert.equal(f.requests.filter(r=>r.path.endsWith('/factures')&&r.method==='POST').length,0);
  });
@@ -51,7 +94,9 @@ const results=[];
   f.tables.notifications[0].type='message';f.tables.notifications[0].titre='Nouvelle réponse';f.tables.colis[0].conversation_statut='attente_client';await f.login();await f.page.goto(`${base}/notifications`);await f.page.getByRole('button',{name:/Nouvelle réponse/}).click();const input=f.page.getByLabel('Votre message à l’équipe',{exact:true});await input.waitFor();assert.equal(new URL(f.page.url()).searchParams.get('panel'),'messages');await input.fill('Adresse complète\nBâtiment B');await input.press('Enter');await input.type('Étage 2');const value=await input.inputValue();assert.match(value,/\nÉtage 2/);await f.page.getByRole('button',{name:'Retour à mes colis'}).click();await f.page.getByRole('button').filter({hasText:'EXP-TEST-001'}).click();await f.page.getByRole('button',{name:/^Messages \(/}).click();assert.equal(await input.inputValue(),value);assert.equal(f.requests.filter(r=>r.path.endsWith('/messages')&&r.method==='POST').length,0);await f.page.reload();await input.waitFor();assert.equal(await input.inputValue(),value);
  });
  await check('wait-reason-and-outgoing-versus-supplier-tracking',async f=>{
-  Object.assign(f.tables.colis[0],{attente_client_date:'2026-09-12T08:00:00Z',attente_client_motif:'Encore un achat à recevoir',attente_client_until:'2026-09-20'});await open(f);await f.page.getByText('Encore un achat à recevoir',{exact:true}).first().waitFor();const active=f.page.getByRole('region',{name:'État actuel et prochaine étape'});assert.match(await active.innerText(),/Réexamen prévu/);Object.assign(f.tables.colis[0],{statut:'transit',envoi_id:'depart-test',attente_client_date:null,trackings:['FOURNISSEUR-A','FOURNISSEUR-B'],paiement_date:'2026-09-16T08:00:00Z'});f.tables.envois=[{id:'depart-test',tracking_principal:'TRANSPORT-SORTANT',statut:'parti'}];await f.page.reload();await f.page.getByText('Suivi et détails de l’expédition',{exact:true}).click();const out=f.page.getByRole('link',{name:/Suivi vers votre adresse/});await out.waitFor();assert.match(await out.getAttribute('href'),/TRANSPORT-SORTANT$/);await f.page.getByText('Suivis fournisseurs vers l’entrepôt',{exact:true}).click();assert.match(await f.page.getByRole('link',{name:'FOURNISSEUR-B',exact:true}).getAttribute('href'),/FOURNISSEUR-B$/);assert.match(await active.innerText(),/Dernier événement logistique renseigné : réception/);
+  Object.assign(f.tables.colis[0],{attente_client_date:'2026-09-12T08:00:00Z',attente_client_motif:'Encore un achat à recevoir',attente_client_until:'2026-09-20'});await open(f);await f.page.getByText('Encore un achat à recevoir',{exact:true}).first().waitFor();const active=f.page.getByRole('region',{name:'État actuel et prochaine étape'});assert.match(await active.innerText(),/Réexamen prévu/);Object.assign(f.tables.colis[0],{statut:'transit',envoi_id:'depart-test',attente_client_date:null,trackings:['FOURNISSEUR-A','FOURNISSEUR-B'],paiement_date:'2026-09-16T08:00:00Z'});f.tables.envois=[{id:'depart-test',tracking_principal:'TRANSPORT-SORTANT',statut:'parti'}];await f.page.reload();const out=active.getByRole('link',{name:'Suivre mon colis',exact:true});await out.waitFor();assert.match(await out.getAttribute('href'),/TRANSPORT-SORTANT$/);await f.page.getByText('Suivi et détails de l’expédition',{exact:true}).click();await f.page.getByText('Suivis fournisseurs vers l’entrepôt',{exact:true}).click();assert.match(await f.page.getByRole('link',{name:'FOURNISSEUR-B',exact:true}).getAttribute('href'),/FOURNISSEUR-B$/);assert.match(await active.innerText(),/Dernière nouvelle : réception/);
+  f.tables.colis[0].statut='dedouanement';await f.page.reload();await out.waitFor();assert.match(await out.getAttribute('href'),/TRANSPORT-SORTANT$/);
+  f.tables.envois=[];await f.page.reload();await active.getByText(/Le suivi transporteur vers votre adresse n’est pas encore renseigné/).waitFor();assert.equal(await out.count(),0);
  });
  await check('payment-first-and-mobile-accessibility',async f=>{
   Object.assign(f.tables.colis[0],{statut:'devis_envoye',devis_total:88,devis_transport:88,devis_brouillon:false,devis_envoye_le:'2026-09-16T08:00:00Z',mode_paiement_pro:'virement'});f.tables.clients[0].type='pro';await open(f);await f.page.getByText('Montant à régler',{exact:true}).waitFor();assert.equal(await f.page.getByText('Transport optimisé',{exact:true}).isVisible(),false);await f.page.getByText(/Utilisez les coordonnées bancaires transmises/).waitFor();await f.page.getByText('Détail du devis',{exact:true}).click();await f.page.getByText('Transport optimisé',{exact:true}).waitFor();await f.page.setViewportSize({width:390,height:844});assert.equal(await f.page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false);const axe=await new AxeBuilder({page:f.page}).withTags(['wcag2a','wcag2aa','wcag21aa','wcag22aa']).analyze();assert.deepEqual(axe.violations.map(v=>v.id),[]);await f.page.screenshot({path:path.join(output,'payment-mobile.png'),fullPage:true});

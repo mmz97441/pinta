@@ -46,8 +46,8 @@ SELECT set_config('request.jwt.claim.sub','10000000-0000-4000-8000-000000000001'
 UPDATE colis SET trackings=ARRAY['BOX-1','BOX-2'],trackings_detail='[{"number":"BOX-1"},{"number":"BOX-2"}]',nb_colis=2,statut='mesure',feu_vert='en_attente',dims_par_colis='[{"dimL":10,"dimW":10,"dimH":10,"poids":2},{"dimL":10,"dimW":10,"dimH":10,"poids":1}]' WHERE id='30000000-0000-4000-8000-000000000001';
 SELECT test_assert((SELECT attente_client_date IS NULL AND statut='mesure' FROM colis WHERE id='30000000-0000-4000-8000-000000000001'),'New receipt resumes request without granting consent');
 UPDATE colis SET statut='attente_feu_vert' WHERE id='30000000-0000-4000-8000-000000000001';
-SELECT queue_message('30000000-0000-4000-8000-000000000001','Bonjour, préparez ou attendez.','demande_feu_vert','test-request',NULL,'telegram');
-SELECT queue_message('30000000-0000-4000-8000-000000000001','Bonjour, préparez ou attendez.','demande_feu_vert','test-request',NULL,'telegram');
+SELECT queue_message('30000000-0000-4000-8000-000000000001','Bonjour, préparez ou attendez.','demande_feu_vert','test-request',NULL,'telegram',(SELECT consent_request_version FROM colis WHERE id='30000000-0000-4000-8000-000000000001'));
+SELECT queue_message('30000000-0000-4000-8000-000000000001','Bonjour, préparez ou attendez.','demande_feu_vert','test-request',NULL,'telegram',(SELECT consent_request_version FROM colis WHERE id='30000000-0000-4000-8000-000000000001'));
 SELECT test_assert((SELECT count(*)=1 FROM notification_outbox WHERE idempotency_key='test-request'),'Outbound idempotency avoids duplicate requests');
 RESET ROLE;
 UPDATE messages SET telegram_msg_id='99' WHERE template='demande_feu_vert';

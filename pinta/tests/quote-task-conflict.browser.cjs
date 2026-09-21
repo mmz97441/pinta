@@ -29,12 +29,69 @@ async function openDocuments(f, id = ids.P) {
 async function main() {
   await fs.mkdir(output, { recursive: true }); const browser = await chromium.launch({ headless: true });
   async function scenario(name, run) {
+    if (process.env.PINTA_QUOTE_CONFLICT_FILTER && !name.includes(process.env.PINTA_QUOTE_CONFLICT_FILTER)) return;
     const f = await setup(browser, 'directeur'); f.page.setDefaultTimeout(10000);
     try { await run(f); assert.deepEqual(f.errors, []); assert.deepEqual(f.networkDenied, []); assert.equal(f.requests.some(request => request.path.endsWith('/queue_message')), false); results.push({ test: name, pass: true }); }
     catch (error) { process.exitCode = 1; results.push({ test: name, pass: false, error: error.stack }); await f.page.screenshot({ path: `${output}/${name}-failure.png`, fullPage: true }).catch(() => {}); await fs.writeFile(`${output}/${name}-failure.txt`, await f.page.locator('body').innerText().catch(() => '')); }
     finally { await f.context.close(); }
   }
   try {
+    await scenario('saved-quote-can-be-reviewed-by-send-only-colleague-without-new-save', async f => {
+      // The real save_quote RPC stores devis_brouillon=true. The generic
+      // fixture predates this field; seed it so reloading models that state.
+      f.tables.colis[0].devis_brouillon = true;
+      await open(f); await addFee(f); await save(f).click();
+      const publish = f.page.getByRole('button', { name: 'Envoyer le devis au client', exact: true }); await publish.waitFor();
+      const saved = structuredClone(f.tables.colis[0]);
+      const saveCount = () => f.requests.filter(request => request.path.endsWith('/save_quote')).length;
+      const originalCount = saveCount();
+      const permission = { id: 'send-only-permission', staff_id: ids.S, perm_colis_envoyer_devis: true, perm_colis_calculer_devis: false, perm_factures_voir: false };
+      f.tables.profiles[0].role = 'preparateur'; f.tables.staff_users[0].role = 'preparateur';
+      f.tables.staff_permissions = [permission]; f.tables.staff_users[0].staff_permissions = permission;
+      await f.page.reload(); await publish.waitFor();
+      assert.equal(await publish.isEnabled(), true, 'A saved, current quote can be sent by the colleague who only has sending permission.');
+      assert.equal(saveCount(), originalCount, 'Reviewing a saved quote does not recalculate it into storage.');
+      assert.equal(await save(f).count(), 0);
+      assert.equal(await f.page.getByRole('button', { name: 'Modifier le brouillon', exact: true }).count(), 0, 'A sender must not enter an editor they cannot save.');
+      assert.equal(await f.page.getByRole('region', { name: 'Classement douanier du devis', exact: true }).count(), 0);
+      assert.deepEqual(f.tables.colis[0].devis_snapshot, saved.devis_snapshot);
+      // Re-enable calculation to verify the explicit editing route separately
+      // from the sender's permission to consult the saved quote.
+      permission.perm_colis_calculer_devis = true; await f.page.reload(); await publish.waitFor();
+      await f.page.getByRole('button', { name: 'Modifier le brouillon', exact: true }).click();
+      await save(f).waitFor(); assert.equal(await save(f).isEnabled(), true);
+      assert.equal(await publish.count(), 0); assert.equal(saveCount(), originalCount);
+      await f.page.getByRole('region', { name: 'Classement douanier du devis', exact: true }).waitFor();
+      assert.deepEqual(f.tables.colis[0].devis_snapshot, saved.devis_snapshot, 'Returning to editing never changes the saved quote.');
+      // A published snapshot cannot be promoted just because it exists: a
+      // changed invoice must prevent review by the sender on a fresh visit.
+      permission.perm_colis_calculer_devis = false;
+      f.tables.lignes[0].prix_unitaire = 150; f.tables.factures[0].montant = 150;
+      f.tables.colis[0].updated_at = new Date(Date.now() + 60000).toISOString();
+      await f.page.reload(); await save(f).waitFor();
+      assert.equal(await save(f).isDisabled(), true); assert.equal(await publish.count(), 0);
+      await f.page.getByText('Une personne chargée du calcul doit vérifier et enregistrer ce devis avant son envoi.', { exact: true }).waitFor();
+      assert.equal(saveCount(), originalCount); assert.deepEqual(f.tables.colis[0].devis_snapshot, saved.devis_snapshot);
+    });
+    await scenario('unfinished-fee-cannot-disappear-into-final-quote-review', async f => {
+      await open(f);
+      await f.page.getByText('Ajouter un frais', { exact: true }).click();
+      await f.page.getByLabel('Libellé du frais', { exact: true }).fill('Emballage à confirmer');
+      await f.page.getByLabel('Montant du frais', { exact: true }).fill('9');
+      assert.equal(await save(f).isDisabled(), true);
+      await f.page.getByRole('status').filter({ hasText: 'Un frais est en cours de saisie.' }).waitFor();
+      await f.page.getByText('Ajouter un frais', { exact: true }).click();
+      await f.page.getByRole('button', { name: 'Terminer ou annuler ce frais', exact: true }).click();
+      assert.equal(await f.page.getByLabel('Montant du frais', { exact: true }).inputValue(), '9');
+      assert.equal(await f.page.getByLabel('Libellé du frais', { exact: true }).evaluate(node => node === document.activeElement), true);
+      assert.equal(f.requests.filter(request => request.path.endsWith('/save_quote')).length, 0);
+      await f.page.getByRole('button', { name: 'Annuler ce frais', exact: true }).click();
+      assert.equal(await save(f).isEnabled(), true);
+      assert.equal(await f.page.getByLabel('Montant du frais', { exact: true }).inputValue(), '');
+      await save(f).click();
+      await f.page.getByRole('button', { name: 'Envoyer le devis au client', exact: true }).waitFor();
+      assert.equal(f.requests.find(request => request.path.endsWith('/save_quote')).input.p_snapshot.inputs.fees.length, 0);
+    });
     await scenario('quote-fee-conflict-explains-recovery-and-rechecks-new-invoice-amounts', async f => {
       await open(f); await addFee(f); assert.equal(await save(f).isEnabled(), true);
       f.tables.colis[0].commentaire_preparation = 'Consigne ajoutée par un collègue'; await colleagueUpdate(f);
@@ -44,13 +101,23 @@ async function main() {
       await keep(f).click(); assert.equal(await save(f).isEnabled(), true);
       assert.equal(f.requests.filter(request => request.path.endsWith('/save_quote')).length, 0, 'Rebasing the draft must not publish or save a quote.');
       await save(f).click(); const publish = f.page.getByRole('button', { name: 'Envoyer le devis au client', exact: true }); await publish.waitFor();
+      await f.page.getByRole('heading', { name: 'Vérifier et envoyer le devis', exact: true }).waitFor();
+      assert.equal(await f.page.getByRole('region', { name: 'Classement douanier du devis', exact: true }).count(), 0, 'Final review does not reopen completed classification forms.');
+      assert.equal(await f.page.getByText('Ajouter un frais', { exact: true }).count(), 0);
+      await f.page.locator('summary').filter({ hasText: 'Articles et taux retenus' }).click();
+      assert.match(await f.page.locator('details').filter({ has: f.page.locator('summary').filter({ hasText: 'Articles et taux retenus' }) }).innerText(), /OM .* % · OMR .* %/);
+      await f.page.getByRole('button', { name: 'Modifier le brouillon', exact: true }).click();
+      await f.page.getByRole('region', { name: 'Classement douanier du devis', exact: true }).waitFor();
+      await f.page.getByText('Emballage convenu', { exact: true }).waitFor();
+      assert.equal(f.requests.filter(request => request.path.endsWith('/save_quote')).length, 1, 'Returning to editing never saves or sends.');
+      await save(f).click(); await publish.waitFor();
       const first = f.requests.find(request => request.path.endsWith('/save_quote')).input.p_snapshot;
       assert.equal(first.inputs.fees[0].montant, 7); assert.equal(first.inputs.lines[0].unitPrice, 100);
       f.tables.factures[0].montant = 200; f.tables.lignes[0].prix_unitaire = 200; await colleagueUpdate(f);
       await save(f).waitFor(); assert.equal(await publish.count(), 0, 'A changed invoice must invalidate the saved preview before delivery.');
-      assert.equal(f.requests.filter(request => request.path.endsWith('/save_quote')).length, 1);
+      assert.equal(f.requests.filter(request => request.path.endsWith('/save_quote')).length, 2);
       await save(f).click(); await publish.waitFor();
-      const second = f.requests.filter(request => request.path.endsWith('/save_quote'))[1].input.p_snapshot;
+      const second = f.requests.filter(request => request.path.endsWith('/save_quote'))[2].input.p_snapshot;
       assert.equal(second.inputs.lines[0].unitPrice, 200); assert.equal(second.inputs.fees[0].montant, 7);
       assert.notEqual(second.amounts.total, first.amounts.total);
     });

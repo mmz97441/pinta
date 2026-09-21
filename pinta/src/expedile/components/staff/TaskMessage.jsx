@@ -3,7 +3,7 @@ import { useApp } from '../../context/AppContext';
 
 const contextSignature = (colis, client) => JSON.stringify([
   colis?.id, colis?.nbColis, colis?.trackings, colis?.trackingsDetail, colis?.dimsParColis,
-  colis?.factures, colis?.devisSnapshot, colis?.quoteVersion,
+  colis?.factures, colis?.devisSnapshot, colis?.quoteVersion, colis?.consentRequestVersion,
   client?.id, client?.telegramChatId, client?.email, client?.userId,
 ]);
 
@@ -42,7 +42,7 @@ export default function TaskMessage({ template, message, label = 'Informer le cl
       setChannel(pending.channel); setDraft(pending.text); setBaseline(pending.baseline);
     } else {
       const text = proposed(pending?.template || template, nextChannel);
-      const nextBaseline = { text, context: currentContext };
+      const nextBaseline = { text, context: currentContext, consentVersion: sel?.consentRequestVersion ?? 0, updatedAt: sel?.updatedAt };
       if (pending) Object.assign(pending, { key: crypto.randomUUID(), channel: nextChannel, text, baseline: nextBaseline });
       setChannel(nextChannel); setDraft(text); setBaseline(nextBaseline); setFeedback(null);
     }
@@ -58,14 +58,14 @@ export default function TaskMessage({ template, message, label = 'Informer le cl
     const attempt = request.current;
     if (!attempt.queueStarted) Object.assign(attempt, { channel, text: draft, baseline });
     try {
-      if (!attempt.prepared && attempt.beforeSend) await attempt.beforeSend();
+      if (!attempt.prepared && attempt.beforeSend) await attempt.beforeSend({ expectedUpdatedAt: attempt.baseline.updatedAt, expectedConsentVersion: attempt.baseline.consentVersion });
       attempt.prepared = true;
       const current = live.current;
       const currentText = current.message ?? current.getPreview(attempt.template, attempt.clientId, attempt.colisId, attempt.channel === 'portal' ? 'email' : attempt.channel);
       if (current.dossierId !== attempt.colisId || current.context !== attempt.baseline.context || currentText !== attempt.baseline.text || !current.allowed || current.disabled)
         throw new Error('Le dossier ou vos droits ont changé. Vérifiez les échanges avant de reprendre cette demande.');
       attempt.queueStarted = true;
-      await sendMsg(attempt.colisId, attempt.clientId, attempt.channel, attempt.template, attempt.text, { idempotencyKey: attempt.key });
+      await sendMsg(attempt.colisId, attempt.clientId, attempt.channel, attempt.template, attempt.text, { idempotencyKey: attempt.key, expectedConsentVersion: attempt.baseline.consentVersion });
       request.current = null;
       setFeedback({ ok: true, text: attempt.channel === 'email' ? 'Brouillon ouvert dans votre messagerie. Confirmez l’envoi dans celle-ci.' : attempt.channel === 'portal' ? 'Message disponible dans l’espace client.' : 'Message livré à Telegram.' });
       setOpen(false);

@@ -10,6 +10,7 @@ import { TaskClaimButton } from './TaskOwnership';
 export const workDate = value => value && Number.isFinite(Date.parse(value)) ? new Date(value).toLocaleString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : null;
 export const staffName = (id, users = []) => { const person = users.find(user => user.authId === id); return person ? [person.prenom, person.nom].filter(Boolean).join(' ') : id ? 'Membre de l’équipe' : 'Non attribué'; };
 const controlClass = 'min-h-11 rounded-lg border border-slate-200 px-3 text-sm font-semibold disabled:opacity-40';
+const secondaryClass = 'min-h-11 rounded-lg px-2 text-sm font-semibold text-slate-600 underline underline-offset-4 hover:bg-slate-50 disabled:opacity-40';
 
 export function WorkActionControls({ action, returnTo = '/', compact = false }) {
   const { auth, authRole, can, teamUsers = [], workPreferences = [], data = [], mutateWorkAction, refreshWork } = useApp();
@@ -27,6 +28,8 @@ export function WorkActionControls({ action, returnTo = '/', compact = false }) 
   const recipient = action.handoff_to === me;
   const coordinate = ['directeur', 'vice_directeur'].includes(authRole);
   const allowed = canWorkAction(action, can);
+  const available = staffAvailable(workPreferences.find(item => item.staff_id === me));
+  const hasPrimaryCommand = recipient || allowed && (!action.assignee_id && available || own && (action.state === 'in_progress' || ['ready', 'waiting'].includes(action.state) && !actionBlocked(action)));
   const candidates = teamUsers.filter(user => user.authId && user.authId !== action.assignee_id && user.actif !== false
     && staffAvailable(workPreferences.find(item => item.staff_id === user.authId))
     && canWorkAction(action, permission => ['directeur', 'vice_directeur'].includes(user.role) || user.permissions?.[permission] === true));
@@ -50,12 +53,12 @@ export function WorkActionControls({ action, returnTo = '/', compact = false }) 
   if (action.state === 'done') return null;
   return <div className="space-y-2">
     <div className="flex flex-wrap items-center gap-2">
-      {recipient && <><button disabled={busy || !allowed} onClick={() => command('accept')} className={controlClass + ' bg-slate-900 text-white'}>Accepter le relais</button><button disabled={busy} onClick={() => command('reject')} className={controlClass}>Décliner</button></>}
+      {recipient && <><button disabled={busy || !allowed} onClick={() => command('accept')} className={controlClass + ' bg-slate-900 text-white'}>Accepter le relais</button><button disabled={busy} onClick={() => command('reject')} className={secondaryClass}>Décliner</button></>}
       <TaskClaimButton key={action.id} action={action} onClaim={open} />
       {own && allowed && action.state === 'ready' && !actionBlocked(action) && <button disabled={busy} onClick={() => command('start', {}, true)} className={controlClass + ' bg-slate-900 text-white'}>Commencer</button>}
-      {own && allowed && action.state === 'waiting' && !actionBlocked(action) && <button disabled={busy} onClick={() => command('resume', {}, true)} className={controlClass}>Reprendre cette tâche</button>}
-      <button onClick={open} className={controlClass + (action.state === 'in_progress' && own ? ' bg-slate-900 text-white' : '')}>{action.state === 'in_progress' && own ? 'Reprendre le travail' : 'Consulter sans commencer'}<ArrowRight size={14} className="inline ml-2" /></button>
-      {(own || coordinate) && <button aria-expanded={Boolean(mode)} onClick={() => { setFormAction(action); setMode(mode ? '' : 'menu'); }} className={controlClass} disabled={busy}>Suivi<ChevronDown size={14} className="inline ml-1" /></button>}
+      {own && allowed && action.state === 'waiting' && !actionBlocked(action) && <button disabled={busy} onClick={() => command('resume', {}, true)} className={controlClass + ' bg-slate-900 text-white'}>Reprendre cette tâche</button>}
+      <button onClick={open} className={!hasPrimaryCommand || action.state === 'in_progress' && own && allowed ? controlClass + ' bg-slate-900 text-white' : secondaryClass}>{action.state === 'in_progress' && own && allowed ? 'Reprendre le travail' : 'Consulter sans commencer'}<ArrowRight size={14} className="inline ml-2" /></button>
+      {(own || coordinate) && <button aria-expanded={Boolean(mode)} onClick={() => { setFormAction(action); setMode(mode ? '' : 'menu'); }} className={secondaryClass} disabled={busy}>Organiser<ChevronDown size={14} className="inline ml-1" /></button>}
     </div>
     {mode === 'menu' && <div className="flex flex-wrap gap-2 text-sm">
       {own && <><button onClick={() => setMode('wait')} className={controlClass}>Mettre en attente</button><button onClick={() => setMode('handoff')} className={controlClass}>Proposer un relais</button><button disabled={busy} onClick={() => command('release')} className={controlClass}>Remettre à prendre</button></>}
@@ -71,7 +74,7 @@ export function WorkActionControls({ action, returnTo = '/', compact = false }) 
       {mode === 'wait' && <p className="text-xs text-slate-600">Cette attente concerne le travail de l’équipe. Elle ne constitue pas une pause demandée par le client.</p>}
       <div className="flex gap-2"><button disabled={busy} className={controlClass + ' bg-slate-900 text-white'}>{busy ? 'Enregistrement…' : 'Confirmer'}</button><button type="button" onClick={() => setMode('')} className={controlClass}>Annuler</button></div>
     </form>}
-    {error && <div role="alert" className="text-sm text-red-700">{error}<button onClick={() => refreshWork().catch(err => setError(err.message))} className="ml-2 min-h-11 underline">Actualiser l’action</button></div>}
+    {error && <div role="alert" className="text-sm text-red-700">{error}<button onClick={() => refreshWork().catch(err => setError(err.message))} className="ml-2 min-h-11 underline">Actualiser la tâche</button></div>}
   </div>;
 }
 
