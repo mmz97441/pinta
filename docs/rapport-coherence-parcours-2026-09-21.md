@@ -60,6 +60,16 @@ Contrôles locaux réussis :
 
 La migration a été répétée sur le schéma distant avec annulation complète, puis appliquée et vérifiée : version `20260921000001`, commandes protégées contre l’accès anonyme, projection des tâches cohérente. Une sauvegarde privée des commandes et des tâches concernées a été conservée. La lecture ciblée du dossier signalé confirme un accord reçu, une préparation valide et une tâche devis attribuée sans motif de blocage.
 
-Les références de publication seront consignées après la validation GitHub et le déploiement de l’interface. Les essais automatisés utilisent des données fictives ; ils ne constituent ni un paiement réel ni une étude de compréhension auprès d’utilisateurs débutants.
+Les essais automatisés utilisent des données fictives ; ils ne constituent ni un paiement réel ni une étude de compréhension auprès d’utilisateurs débutants.
 
 La [matrice de recette](matrice-parcours-taches-client-2026-09-21.md) détaille les cas vérifiés. Le suivi des paiements et des livraisons reste accessible dans le dossier ; la création de nouveaux types de missions dans « Mon travail » ne fait pas partie de ce correctif.
+
+## Publication
+
+- [PR #12](https://github.com/mmz97441/pinta/pull/12) fusionnée sur `main` le 21 septembre à 03:38 UTC ; commit applicatif `d41ae5f1e64029a34b176e08fc134adb0637b092`.
+- CI complète réussie sur le [commit de revue](https://github.com/mmz97441/pinta/actions/runs/35557588334) et sur la [pull request](https://github.com/mmz97441/pinta/actions/runs/35557590597). Les deux anciens tests qui attendaient des formulaires désactivés vérifient maintenant le blocage expliqué, sa sortie utile et l’absence de mutation pendant la navigation.
+- Déploiement Vercel `pinta-njviq3gns-mmz97441s-projects.vercel.app` à l’état `READY`, associé à ce commit et au domaine [expedile.app](https://expedile.app).
+- Contrôle public réussi : 23 vérifications HTTP, pages de connexion ordinateur/mobile, absence d’erreur JavaScript et aucun essai de connexion réel. Preuve locale : `/tmp/pinta-readiness-production-smoke/report.json`.
+- Fichier applicatif servi et contrôlé : `/assets/index-kMlpuDY_.js`.
+- Les 20 scénarios de reprise ont également réussi sur les fichiers servis par le domaine public, dont le parcours complet sur ordinateur/mobile. Toutes les API métier de ces essais étaient interceptées avec des données fictives ; ce contrôle ne modifie aucun dossier réel. Preuve locale : `/tmp/pinta-readiness-live-fixtures/results.json`.
+- Mode de paiement inchangé. Aucun message client, règlement réel ou document métier créé par cette recette de publication.
