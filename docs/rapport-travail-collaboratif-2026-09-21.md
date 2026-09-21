@@ -57,7 +57,7 @@ Les contrôles sont réalisés avec des données fictives pour les essais d’é
 
 La recette élargie des anciens parcours a également réussi : indicateurs et vérification des factures, préparation autonome, réception sans notification, messages de tâche (51 contrôles supplémentaires), puis accessibilité, équipe, clients, administration, réception concurrente, numérotation, distinction des mesures, devis et lecteur PDF. Quatre suites historiques ont été adaptées aux nouveaux accès ou libellés : indicateur réservé aux tâches Factures, navigation secondaire, onglet Réception explicite, filtres Équipe. Les assertions de données, droits, mesures et navigation ont été conservées.
 
-Les journaux locaux sont conservés sous `/tmp/pinta-*`. Les tests navigateur utilisent des dossiers fictifs et des services simulés ; les courses SQL utilisent PostgreSQL isolé. La vérification du site publié est consignée après livraison ci-dessous.
+Les journaux locaux sont conservés sous `/tmp/pinta-*`. Les tests navigateur utilisent des dossiers fictifs et des services simulés ; les courses SQL utilisent PostgreSQL isolé. La vérification du site publié est consignée ci-dessous.
 
 ## Aperçus du résultat
 
@@ -70,7 +70,16 @@ Les journaux locaux sont conservés sous `/tmp/pinta-*`. Les tests navigateur ut
 
 Les migrations `20260921000002` et `20260921000003` ont été appliquées après sauvegarde privée et simulation annulée. Les scripts contrôlent dans une transaction que 17 tables métier, tâches, brouillons, paiements et notifications restent inchangées. Les nouvelles commandes conservent les permissions attendues ; le garde interne n’est pas accessible directement aux utilisateurs.
 
-La fonction `correct-colis-task` a été sauvegardée puis publiée. La publication de l’interface et la vérification finale du site sont suivies dans la livraison GitHub associée à ce rapport.
+La fonction `correct-colis-task` a été sauvegardée puis publiée. Son code et ses deux modules partagés ont été retéléchargés et comparés octet par octet avec les sources testées : identiques. Une demande de correction sans session reçoit HTTP 401.
+
+## Livraison vérifiée
+
+- [PR 13 fusionnée sur main](https://github.com/mmz97441/pinta/pull/13), commit applicatif [`4ff552b`](https://github.com/mmz97441/pinta/commit/4ff552b0d8ea024a0e17856c8c1b12a2ec5997c0).
+- Recette GitHub complète réussie sur le contenu fusionné : [contrôle PR](https://github.com/mmz97441/pinta/actions/runs/35600305163) et [contrôle de la branche](https://github.com/mmz97441/pinta/actions/runs/35600300366). Compilation, migrations, permissions, calculs et toutes les suites navigateur sont verts.
+- Domaine [expedile.app](https://expedile.app) vérifié : Vercel `READY`, branche `main`, SHA `4ff552b0d8ea024a0e17856c8c1b12a2ec5997c0`, déploiement `dpl_27vitR4AdCDTx6CyT2gqjVdtZyUD`.
+- Fichier servi : `/assets/index-DhN7lNIu.js`, empreinte SHA-256 `570141dddd1b57a528d6d11d33b739befc098498658412b845e64b051d239a31`. La page publique répond HTTP 200.
+- **14/14 scénarios collaboratifs réussis sur les fichiers réellement servis par expedile.app**, avec toutes les opérations métier interceptées dans le navigateur : aucun dossier client réel utilisé ni modifié. Preuves locales : `/tmp/pinta-collaboration-live/results.json` et `/tmp/pinta-collaboration-served.json`.
+- Les documents locaux préexistants hors de cette livraison ont été conservés. Le mode de paiement de préproduction n’a pas été modifié.
 
 ## Limites connues et recette humaine
 
