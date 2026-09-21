@@ -1,3 +1,4 @@
+const { openTaskNavigation } = require('./task-navigation.helper.cjs');
 /* Network-isolated browser regression suite. Every non-local request is intercepted. */
 const { chromium } = require(process.env.PINTA_PLAYWRIGHT_MODULE || 'playwright');
 const fs = require('node:fs/promises');
@@ -479,7 +480,7 @@ async function main() {
       path: path.join(output, 'staff-detail-desktop.png'),
       fullPage: true,
     });
-    await f.page.getByLabel('Tâche du dossier', { exact: true }).selectOption('preparation');
+    await openTaskNavigation(f);await f.page.getByLabel('Tâche du dossier', { exact: true }).selectOption('preparation');
     await f.page.getByRole('button', { name: 'Modifier les mesures', exact: true }).click();
     const num = f.page.locator('input[type="number"]');
     const labels = await num.evaluateAll((inputs) =>
@@ -503,7 +504,7 @@ async function main() {
     assert.ok(changed, 'Final weight field found');
     await f.page.getByRole('button', { name: 'Enregistrer les mesures de préparation' }).click();
     await f.page.getByRole('button', { name: 'Modifier les mesures', exact: true }).waitFor();
-    await f.page.getByLabel('Tâche du dossier', { exact: true }).selectOption('devis');
+    await openTaskNavigation(f);await f.page.getByLabel('Tâche du dossier', { exact: true }).selectOption('devis');
     await f.page.getByRole('button', { name: 'Enregistrer et vérifier le devis' }).click();
     await f.page.getByRole('button', { name: 'Envoyer le devis au client' }).waitFor();
     assert.equal(f.tables.colis[0].devis_transport, 50);

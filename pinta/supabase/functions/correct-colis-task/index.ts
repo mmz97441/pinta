@@ -8,6 +8,16 @@ const taskPermissions: Record<string, string> = {
 };
 const openStates = ['receptionne','mesure','attente_feu_vert','autorise','refuse_client','en_preparation','devis_envoye','attente_paiement'];
 const boxKeys = ['dimL','dimW','dimH','poids'];
+async function checkTaskOwner(db: any, colisId: string, task: string, staffId: string) {
+  const kind = task === 'accord' ? 'reception' : task === 'devis' ? 'quote' : task;
+  const result = await db.from('staff_work_actions').select('assignee_id')
+    .eq('colis_id', colisId).in('kind', [kind, 'correction']).in('state', ['ready', 'in_progress', 'waiting']);
+  throwDb(result);
+  if (result.data?.some((action: any) => action.assignee_id && action.assignee_id !== staffId)) {
+    const error: any = new HttpError(409, 'Cette tâche est suivie par un collègue. Actualisez le dossier et organisez un relais avant de corriger.');
+    error.code = '40001'; throw error;
+  }
+}
 function measuredBoxes(value: unknown, allowExtraKeys = false): Array<Record<string, number>> | null {
   if (!Array.isArray(value) || value.length < 1 || value.length > 100) return null;
   if (value.some(box => !box || typeof box !== 'object' || Array.isArray(box)
@@ -87,6 +97,10 @@ Deno.serve(async (req: Request) => {
     if (instant(colis.updated_at) !== instant(expectedUpdatedAt)) return json({ ok:false,code:'40001',error:'Le dossier a changé. Votre saisie est conservée ; comparez-la à la version enregistrée.' },409);
     if (colis.archive || colis.paiement_date || colis.paiement_montant != null || colis.date_expedition || !openStates.includes(colis.statut)) throw new HttpError(409, 'La correction est réservée aux dossiers ouverts, non payés et non partis.');
     const unchanged = preflightValues(colis, task, values);
+    // Refuse an already transferred task before touching its payment provider.
+    // SQL checks again under lock; an external cancellation cannot share that
+    // transaction, so the existing cancellation proof/cleanup remains required.
+    await checkTaskOwner(db, colisId, task, user.id);
     const [intentsResult, paidResult, legacyResult] = await Promise.all([
       db.from('payment_intents').select('*').eq('colis_id', colisId),
       db.from('paiements').select('id').eq('colis_id', colisId).eq('statut','confirme').limit(1),
@@ -121,6 +135,7 @@ Deno.serve(async (req: Request) => {
         let payment = await response.json(); verifyPayment(payment,link,colis,expectedLive);
         if (payment.failure?.code !== 'aborted') {
           if (payment.failure) throw new HttpError(409, 'Ce paiement fournisseur est déjà en échec. Faites vérifier sa clôture avant de corriger le dossier.');
+          await checkTaskOwner(db, colisId, task, user.id);
           try { response = await fetch(url,{method:'PATCH',headers,body:JSON.stringify({aborted:true}),signal:AbortSignal.timeout(15000)}); }
           catch { throw new HttpError(502, 'L’annulation PayPlug n’a pas été confirmée. Votre correction n’est pas enregistrée ; réessayez pour vérifier le lien.'); }
           if (!response.ok) throw new HttpError(502, 'PayPlug n’a pas confirmé l’annulation. Vérifiez si le client a payé, puis réessayez.');

@@ -509,6 +509,12 @@ export async function fetchStaffWork() {
   return { actions, preferences };
 }
 
+// The daily queue stays small. Completed work is loaded only for the dossier
+// being consulted, so its actual operator remains visible in the shared summary.
+export async function fetchDossierWork(colisId) {
+  return fetchAllRows('staff_work_actions', query => query.eq('colis_id', colisId));
+}
+
 export async function mutateStaffWorkAction(action, command, payload = {}) {
   const { data, error } = await supabase.rpc('mutate_staff_work_action', {
     p_action_id: action.id, p_command: command, p_expected_version: action.version, p_payload: payload,

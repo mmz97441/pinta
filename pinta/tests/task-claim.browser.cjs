@@ -11,11 +11,11 @@ const B = '88888888-1111-4111-8111-111111111111';
 const TASK = '77777777-0000-4000-8000-000000000001';
 const OLD_QUOTE = '77777777-0000-4000-8000-000000000002';
 const results = [];
-const claimButton = root => root.getByRole('button', { name: 'Prendre cette tâche', exact: true });
+const claimButton = root => root.getByRole('button', { name: 'Je m’en occupe', exact: true });
 const ownership = f => f.page.getByRole('region', { name: 'Prise en charge de la tâche', exact: true });
 const taskRow = f => f.page.locator(`[data-work-action="${TASK}"]`);
 
-async function fixture(browser, { restricted = false, unavailable = false, otherOwner = false, conflict = false, holdClaimResponse = false } = {}) {
+async function fixture(browser, { restricted = false, unavailable = false, otherOwner = false, conflict = false, holdClaimResponse = false, waiting = false } = {}) {
   const f = await setup(browser, restricted ? 'preparateur' : 'directeur');
   f.page.setDefaultTimeout(10000);
   if (restricted) {
@@ -31,15 +31,15 @@ async function fixture(browser, { restricted = false, unavailable = false, other
   // Reproduces the reported regression: old preparation/quote data must not hide
   // the current reception task after a return to waiting for client consent.
   Object.assign(f.tables.colis[0], {
-    statut: 'attente_feu_vert', feu_vert: 'en_attente',
+    statut: waiting ? 'attente_feu_vert' : 'mesure', feu_vert: 'en_attente',
     feu_vert_date: null, demande_feu_vert_envoyee_at: '2026-09-18T02:06:00Z',
     dims_par_colis: [{ dimL: 40, dimW: 30, dimH: 20, poids: 1.5 }, { dimL: 40, dimW: 30, dimH: 20, poids: 1.5 }],
     devis_envoye_le: '2026-09-17T02:06:00Z', devis_brouillon: true, devis_total: 0,
     responsible_staff_id: B,
   });
   f.tables.staff_work_actions = [{
-    id: TASK, colis_id: ids.P, kind: 'reception', state: 'waiting',
-    assignee_id: otherOwner ? B : null, blocked_reason: 'Accord client attendu',
+    id: TASK, colis_id: ids.P, kind: 'reception', state: waiting ? 'waiting' : 'ready',
+    assignee_id: otherOwner ? B : null, blocked_reason: waiting ? 'Accord client attendu' : null,
     waiting_reason: null, review_at: null, version: 4,
     created_at: '2026-09-18T02:06:00Z', updated_at: '2026-09-18T02:06:00Z',
   }, {
@@ -63,11 +63,12 @@ async function fixture(browser, { restricted = false, unavailable = false, other
       }) });
       return;
     }
-    if (input.p_command !== 'claim' || !task || task.assignee_id || input.p_expected_version !== task.version) {
+    if (input.p_command !== 'take' || !task || task.assignee_id || input.p_expected_version !== task.version) {
       await route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ code: '40001', message: 'Prise en charge concurrente ou commande inattendue.' }) });
       return;
     }
     task.assignee_id = ids.A;
+    task.state = 'in_progress';
     task.version += 1;
     recordClaim();
     if (holdClaimResponse) await releaseClaimResponse;
@@ -78,11 +79,11 @@ async function fixture(browser, { restricted = false, unavailable = false, other
 
 function assertPreserved(f, expectedOwner = ids.A) {
   assert.equal(f.claimCalls.length, 1, 'Exactly one explicit claim request');
-  assert.deepEqual(f.claimCalls[0], { p_action_id: TASK, p_command: 'claim', p_expected_version: 4, p_payload: {} });
+  assert.deepEqual(f.claimCalls[0], { p_action_id: TASK, p_command: 'take', p_expected_version: 4, p_payload: {} });
   const task = f.tables.staff_work_actions.find(item => item.id === TASK);
   assert.equal(task.assignee_id, expectedOwner);
-  assert.equal(task.state, 'waiting', 'Taking responsibility does not start waiting work');
-  assert.equal(task.blocked_reason, 'Accord client attendu', 'Claiming never grants client consent');
+  assert.equal(task.state, expectedOwner === ids.A ? 'in_progress' : 'ready', 'Taking starts only the selected ready task; conflict does not start it');
+  assert.equal(task.blocked_reason, null, 'Only work without a blocker can start');
   assert.deepEqual(f.tables.colis, f.originalColis, 'Dossier, consent, measurements and referent remain unchanged');
   assert.equal(f.tables.staff_work_actions.find(item => item.id === OLD_QUOTE).state, 'done');
 }
@@ -124,20 +125,19 @@ async function main() {
     }
   }
   try {
-    await scenario('waiting-unassigned-visible-in-pool-and-one-click-claim', async f => {
+    await scenario('ready-unassigned-one-click-take-opens-work-and-removes-pool-entry', async f => {
       await f.page.goto(`${base}/?section=pool`);
       await f.page.getByRole('region', { name: 'À prendre', exact: true }).waitFor();
       await taskRow(f).waitFor();
-      await taskRow(f).getByText('Accord client attendu', { exact: false }).first().waitFor();
       assert.equal(await claimButton(taskRow(f)).isEnabled(), true);
       await claimButton(taskRow(f)).click();
       await f.page.waitForURL(url => url.pathname === `/colis/${ids.P}` && url.searchParams.get('section') === 'accord');
       assert.equal(new URL(f.page.url()).searchParams.get('action'), TASK);
       await ownership(f).getByText('Vous vous en occupez', { exact: true }).waitFor();
       assertPreserved(f);
-      await f.page.goto(`${base}/?section=waiting`);
+      await f.page.goto(`${base}/?section=now`);
       await taskRow(f).waitFor();
-      await taskRow(f).getByText('En attente', { exact: true }).waitFor();
+      await taskRow(f).getByText('En cours', { exact: true }).waitFor();
       assert.equal(await claimButton(taskRow(f)).count(), 0);
       await f.page.goto(`${base}/?section=pool`);
       assert.equal(await taskRow(f).count(), 0);
@@ -168,12 +168,12 @@ async function main() {
         assert.equal(new URL(f.page.url()).searchParams.get('section'), 'pool', 'The RPC response is still pending');
       } finally { f.releaseClaimResponse(); }
       await f.page.waitForURL(url => url.pathname === `/colis/${ids.P}` && url.searchParams.get('section') === 'accord');
-      await f.page.getByText('Tâche prise en charge. Elle reste en attente.', { exact: true }).waitFor();
+      await f.page.getByText(/Vous vous en occupez|Tâche prise en charge/).first().waitFor();
       await ownership(f).getByText('Vous vous en occupez', { exact: true }).waitFor();
       assertPreserved(f);
     }, { holdClaimResponse: true });
 
-    await scenario('full-detail-one-click-claim-does-not-start-or-approve', async f => {
+    await scenario('full-detail-one-click-take-starts-only-work-without-client-approval', async f => {
       await openDetail(f);
       const before = f.page.url();
       await claimButton(ownership(f)).click();
@@ -220,29 +220,19 @@ async function main() {
       assert.equal(f.claimCalls.length, 0);
     }, { restricted: true });
 
-    await scenario('split-selects-authorized-task-without-claiming-forbidden-reception', async f => {
-      const preparation = '77777777-0000-4000-8000-000000000003';
-      f.tables.staff_work_actions.push({
-        id: preparation, colis_id: ids.P, kind: 'preparation', state: 'waiting',
-        assignee_id: null, blocked_reason: 'Accord client requis', version: 1,
-        created_at: '2026-09-18T02:06:00Z',
-      });
-      await openSplit(f);
-      const panel = f.page.getByRole('region', { name: 'Dossier EXP-TEST-001', exact: true });
-      await panel.getByRole('button', { name: 'Préparer les colis', exact: true }).waitFor();
-      await claimButton(ownership(f)).click();
-      await ownership(f).getByText('Vous vous en occupez', { exact: true }).waitFor();
-      assert.deepEqual(f.claimCalls, [{ p_action_id: preparation, p_command: 'claim', p_expected_version: 1, p_payload: {} }]);
-      assert.equal(f.tables.staff_work_actions.find(item => item.id === preparation).assignee_id, ids.A);
-      assert.equal(f.tables.staff_work_actions.find(item => item.id === preparation).state, 'waiting');
-      assert.equal(f.tables.staff_work_actions.find(item => item.id === TASK).assignee_id, null);
+    await scenario('blocked-task-is-visible-as-wait-without-take-control', async f => {
+      await f.page.goto(`${base}/?section=pool`);
+      await f.page.getByRole('heading', { name: 'Mon travail', exact: true }).waitFor();
+      assert.equal(await taskRow(f).count(), 0, 'Blocked work is not executable pool work');
+      await openDetail(f);
+      await ownership(f).getByText(/Accord client attendu/).waitFor();
+      assert.equal(await claimButton(ownership(f)).count(), 0);
+      assert.equal(f.claimCalls.length, 0);
+      assert.equal(f.tables.staff_work_actions[0].state, 'waiting');
       assert.deepEqual(f.tables.colis, f.originalColis);
-      await panel.getByRole('button', { name: 'Préparer les colis', exact: true }).click();
-      await f.page.waitForURL(url => url.pathname === `/colis/${ids.P}` && url.searchParams.get('section') === 'preparation' && url.searchParams.get('action') === preparation);
-      await ownership(f).getByText('Vous vous en occupez', { exact: true }).waitFor();
-    }, { restricted: true });
+    }, { waiting: true });
 
-    await scenario('unavailable-user-cannot-claim-waiting-task', async f => {
+    await scenario('unavailable-user-cannot-take-ready-task', async f => {
       await openDetail(f);
       const button = claimButton(ownership(f));
       if (await button.count()) assert.equal(await button.isDisabled(), true);

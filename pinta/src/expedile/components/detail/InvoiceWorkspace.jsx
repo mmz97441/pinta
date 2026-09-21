@@ -1,3 +1,4 @@
+import { useTaskAccess } from '../../context/TaskAccessContext';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Check, ChevronLeft, ChevronRight, FileText, Loader2, Plus, Scan, Upload, X } from 'lucide-react';
@@ -10,6 +11,8 @@ import { currentInvoices } from '../../domain/invoiceDocuments';
 import InlineDocument from './InvoiceDocument';
 import TaskMessage from '../staff/TaskMessage';
 import { ConversationAttachment, pendingInvoiceAttachments, conversationInvoiceEditable } from './ChatPanel';
+import useWorkDraft from '../../hooks/useWorkDraft';
+import { registerWorkDraft } from '../../domain/workDrafts';
 
 const INPUT = 'min-h-11 min-w-0 w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:opacity-70';
 const BUTTON = 'min-h-11 inline-flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600';
@@ -54,7 +57,8 @@ export function reviewIssues(draft, categories, invoice) {
 }
 
 export default function InvoiceWorkspace({ workspace = false, taskMode = false, onQuote, tab, onTabChange, children }) {
-  const { sel, auth, categories = [], can, setData, refreshColis, refreshWork, setCfm: askConfirm, getClient } = useApp();
+  const { sel, auth, categories = [], can: rawCan, setData, refreshColis, refreshWork, setCfm: askConfirm, getClient } = useApp();
+  const { taskCan: can } = useTaskAccess(rawCan);
   const cacheKey = `${auth?.u?.id || auth?.id}:${sel?.id}`;
   const location = useLocation();
   const navigate = useNavigate();
@@ -110,6 +114,7 @@ export default function InvoiceWorkspace({ workspace = false, taskMode = false, 
   const unlinkedTotal = unlinked.reduce((total, line) => total + Number(line.qte || 0) * Number(line.prix || 0), 0);
   const documentsComplete = activeInvoices.length > 0 && activeInvoices.every(invoice => invoice.valide && !invoice.rejetMotif && invoice.fichier && invoice.montant > 0) && !pendingInvoiceAttachments(sel).length;
   const unfinishedReview = Object.values(drafts).some(item => item.dirty || item.editing && item.editingExplicit);
+  useWorkDraft({ userId: auth?.u?.id || auth?.id, dossierId: sel?.id, kind: 'documents', source: 'invoice-review', dirty: Object.values(drafts).some(item => item.dirty), label: 'Vérification de facture non enregistrée' });
   const showReview = !workspace || !documentsComplete || reviewExpanded || !!requestedId || unfinishedReview;
   const index = invoices.findIndex(invoice => invoice.id === invoiceId);
   const navigationInvoices = selected?.duplicateOfId ? retiredInvoices : activeInvoices;
@@ -187,6 +192,17 @@ export default function InvoiceWorkspace({ workspace = false, taskMode = false, 
   if (!sel) return null;
   const feedbackFor = (id, message, type = 'success') => { if (alive.current) setFeedbacks(previous => ({ ...previous, [id || 'general']: { message, type } })); };
   const change = changes => setDrafts(previous => ({ ...previous, [invoiceId]: { ...previous[invoiceId], ...changes, dirty: true } }));
+  // An acknowledged save can finish after navigation. Clear only this invoice
+  // from the local pending work; another invoice's edits must remain protected.
+  const settleDraft = (id, value) => {
+    const next = { ...draftsRef.current };
+    if (value) next[id] = value; else delete next[id];
+    draftsRef.current = next;
+    const dirty = Object.values(next).some(item => item.dirty);
+    if (dirty) reviewDraftCache.set(cacheKey, next); else reviewDraftCache.delete(cacheKey);
+    registerWorkDraft(auth?.u?.id || auth?.id, sel.id, 'documents', 'invoice-review', dirty, 'Vérification de facture non enregistrée');
+    if (alive.current) setDrafts(next);
+  };
   const changeLine = (position, changes) => change({ lines: draft.lines.map((line, i) => i === position ? { ...line, ...changes } : line) });
   const choose = (id, nextTab) => {
     setSelectedId(id); setReviewExpanded(true); setRejecting(false); setReason(''); setRemovingDuplicate(false); setOriginalId('');
@@ -207,7 +223,7 @@ export default function InvoiceWorkspace({ workspace = false, taskMode = false, 
   };
   const chooseForReview = id => { choose(id, 'articles'); requestAnimationFrame(() => { editorRef.current?.scrollIntoView({ block: 'start' }); editorRef.current?.focus({ preventScroll: true }); }); };
   const returnToSaved = () => {
-    const close = () => setDrafts(previous => ({ ...previous, [invoiceId]: { ...seedDraft(selected, { ...record, draft: null, extraction: null }, sel.lignes || []), editing: false, editingExplicit: false, viewingSaved: true } }));
+    const close = () => settleDraft(invoiceId, { ...seedDraft(selected, { ...record, draft: null, extraction: null }, sel.lignes || []), editing: false, editingExplicit: false, viewingSaved: true });
     if (!draft?.dirty) return close();
     askConfirm({ title: historical ? 'Abandonner la saisie locale ?' : 'Fermer sans enregistrer ?', msg: 'Vos modifications non enregistrées seront abandonnées. La version enregistrée du dossier est conservée.' + (record?.draft ? ' Le brouillon déjà enregistré restera disponible.' : ''), okLabel: historical ? 'Abandonner la saisie locale' : 'Revenir à la version validée', onOk: close });
   };
@@ -253,7 +269,7 @@ export default function InvoiceWorkspace({ workspace = false, taskMode = false, 
       ...parcel, factures: parcel.factures.map(invoice => invoice.id === invoiceId ? result.facture : invoice),
       lignes: confirm ? [...(parcel.lignes || []).filter(line => line.factureId !== invoiceId), ...(result.insertedLignes || []).map(line => ({ ...line, factureId: invoiceId }))] : parcel.lignes,
     }));
-    setDrafts(previous => ({ ...previous, [invoiceId]: { ...draft, dirty: false, editing: !confirm, editingExplicit: !confirm, reviewToken: result.reviewToken } }));
+    settleDraft(invoiceId, { ...draft, dirty: false, editing: !confirm, editingExplicit: !confirm, reviewToken: result.reviewToken });
     setRecords(previous => ({ ...previous, [invoiceId]: { ...previous[invoiceId], reviewToken: result.reviewToken } }));
     const refreshed = await afterCommit(invoiceId, confirm ? `Facture ${index + 1} — ${name(selected)} : facture et articles validés et enregistrés.` : `Brouillon enregistré pour ${name(selected)}. Il sera disponible à la prochaine ouverture.`);
     if (taskMode && confirm && refreshed) {
@@ -286,7 +302,7 @@ export default function InvoiceWorkspace({ workspace = false, taskMode = false, 
   };
   const applyClassification = result => {
     setData(previous => previous.map(parcel => parcel.id !== sel.id ? parcel : { ...parcel, factures: parcel.factures.map(invoice => invoice.id === invoiceId ? result.facture : invoice) }));
-    setDrafts(previous => ({ ...previous, [invoiceId]: { ...previous[invoiceId], dirty: false, editing: !result.facture.duplicateOfId, editingExplicit: false, reviewToken: result.reviewToken } }));
+    settleDraft(invoiceId, { ...draftsRef.current[invoiceId], dirty: false, editing: !result.facture.duplicateOfId, editingExplicit: false, reviewToken: result.reviewToken });
     setRecords(previous => ({ ...previous, [invoiceId]: { ...previous[invoiceId], reviewToken: result.reviewToken } }));
     setReloadRequired(previous => ({ ...previous, [invoiceId]: false }));
   };
@@ -312,7 +328,7 @@ export default function InvoiceWorkspace({ workspace = false, taskMode = false, 
       const target = uploadTarget.current;
       const saved = target ? await sb.updateFacture(target, { fichierUrl: document.path, fichierNom: file.name, valide: false, rejetMotif: null }) : await sb.insertFacture(sel.id, { vendeur: 'Document à vérifier', montant: 0, fichierUrl: document.path, fichierNom: file.name, valide: false });
       setData(previous => previous.map(parcel => parcel.id === sel.id ? { ...parcel, factures: [...parcel.factures.filter(invoice => invoice.id !== saved.id), saved] } : parcel));
-      setDrafts(previous => { const next = { ...previous }; delete next[saved.id]; return next; });
+      settleDraft(saved.id, null);
       choose(saved.id); setHeaderFeedback({ type: 'success', message: 'Document enregistré. Vous pouvez analyser ou saisir ses articles.' }); await afterCommit(saved.id, 'Document enregistré. Vous pouvez analyser ou saisir ses articles.');
     });
   };
@@ -321,7 +337,7 @@ export default function InvoiceWorkspace({ workspace = false, taskMode = false, 
     const saved = await sb.updateFacture(invoiceId, { valide: false, rejetMotif: reason.trim() });
     choose(invoiceId, 'articles');
     setData(previous => previous.map(parcel => parcel.id === sel.id ? { ...parcel, factures: parcel.factures.map(invoice => invoice.id === invoiceId ? saved : invoice) } : parcel));
-    setDrafts(previous => ({ ...previous, [invoiceId]: { ...previous[invoiceId], dirty: false, editing: false } }));
+    settleDraft(invoiceId, { ...draftsRef.current[invoiceId], dirty: false, editing: false });
     setRejecting(false);
     await afterCommit(invoiceId, 'Correction enregistrée. Préparez la demande au client pour lui transmettre le motif. Aucun message n’a encore été envoyé.');
   });

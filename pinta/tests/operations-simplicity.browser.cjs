@@ -1,3 +1,4 @@
+const { openTaskNavigation } = require('./task-navigation.helper.cjs');
 /* Operations audit O01–O21: fictitious providers intercepted by shared fixtures. */
 const { chromium } = require('playwright');
 const AxeBuilder = require('@axe-core/playwright').default;
@@ -74,6 +75,7 @@ async function audit(f, name, include = '[data-testid="dossier-task-workspace"]'
    await open(f,'preparation');
    await f.page.getByRole('button',{name:/^Détails/}).click();
    const panel=f.page.getByRole('dialog',{name:'Contexte du dossier',exact:true});
+   await panel.getByRole('button',{name:'Réception',exact:true}).click();
    await panel.getByText('Poids total préparé : 8.00 kg',{exact:true}).waitFor();
    assert.match(await panel.innerText(),/2 colis préparés/); assert.match(await panel.innerText(),/Casier.*6.00 kg reçus/);
    assert.equal(await panel.getByRole('button',{name:'Inviter sur Telegram',exact:true}).count(),0);
@@ -83,6 +85,7 @@ async function audit(f, name, include = '[data-testid="dossier-task-workspace"]'
   await scenario('receipt-completion-closes-context-and-stale-preparation-is-labelled',async f=>{
    Object.assign(f.tables.colis[0],{statut:'receptionne',final_packages:[box,{...box,poids:5}],preparation_composition_version:2,final_measurements_version:1,dims_par_colis:[]});
    await open(f,'accord');await f.page.getByRole('button',{name:/^Détails/}).click();const context=f.page.getByRole('dialog',{name:'Contexte du dossier',exact:true});
+   await context.getByRole('button',{name:'Réception',exact:true}).click();
    await context.getByRole('status').filter({hasText:'Mesures précédentes à revoir'}).waitFor();assert.match(await context.innerText(),/Poids des mesures précédentes : 8.00 kg/);assert.equal(await context.getByText('Poids total préparé : 8.00 kg',{exact:true}).count(),0);
    await context.getByRole('button',{name:'Compléter les mesures à réception',exact:true}).click();await context.waitFor({state:'hidden'});
    await region(f).getByRole('button',{name:'Enregistrer les mesures de réception',exact:true}).waitFor();assert.equal(new URL(f.page.url()).searchParams.get('section'),'reception');assert.deepEqual(mutations(f),[]);
@@ -90,8 +93,8 @@ async function audit(f, name, include = '[data-testid="dossier-task-workspace"]'
   await scenario('correction-describes-real-quote-invalidation-without-navigation-mutation',async f=>{
    Object.assign(f.tables.colis[0],{statut:'devis_envoye',devis_brouillon:false,devis_total:70,devis_snapshot:{amounts:{total:70}}});
    await open(f,'devis');
-   await f.page.getByRole('button',{name:'Revenir aux factures',exact:true}).click();
-   await f.page.getByLabel('Tâche du dossier',{exact:true}).selectOption('devis');
+   await openTaskNavigation(f);await f.page.getByRole('button',{name:'Revenir aux factures',exact:true}).click();
+   await openTaskNavigation(f);await f.page.getByLabel('Tâche du dossier',{exact:true}).selectOption('devis');
    assert.deepEqual(mutations(f),[]);
    await region(f).getByRole('button',{name:'Modifier le devis',exact:true}).click();
    const confirmation=region(f).getByRole('region',{name:'Reprise du devis',exact:true});

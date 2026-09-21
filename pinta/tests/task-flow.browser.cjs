@@ -1,3 +1,4 @@
+const { openTaskNavigation } = require('./task-navigation.helper.cjs');
 /* Full task separation, using intercepted fictitious providers only. */
 const { chromium } = require(process.env.PINTA_PLAYWRIGHT_MODULE || 'playwright');
 const AxeBuilder = require('@axe-core/playwright').default;
@@ -7,7 +8,7 @@ const { fixture, B, C } = require('./invoice-workspace.cjs');
 const { setup, base, ids } = require('./browser-regression.cjs');
 const output = process.env.PINTA_TASK_FLOW_OUT || '/tmp/pinta-task-flow';
 const section = f => f.page.getByTestId('dossier-task-workspace');
-const selectTask = (f, task) => f.page.getByLabel('Tâche du dossier', { exact: true }).selectOption(task);
+const selectTask = async (f, task) => (await openTaskNavigation(f)).selectOption(task);
 async function open(f, task) { await f.page.goto(`${base}/colis/${ids.P}?section=${task}&returnTo=${encodeURIComponent('/?mission=documents')}`); await section(f).waitFor(); }
 async function main() {
   await fs.mkdir(output, { recursive: true });

@@ -1,3 +1,4 @@
+const { openTaskNavigation } = require('./task-navigation.helper.cjs');
 /* Navigation-only regression: all APIs are mocked and business state must remain identical. */
 const { chromium } = require('playwright');
 const AxeBuilder = require('@axe-core/playwright').default;
@@ -13,6 +14,7 @@ const returnTo = '/?section=progress&mission=documents&q=Exemple';
 async function open(f, task) {
  await f.page.goto(`${base}/colis/${ids.P}?${new URLSearchParams({ section: task, returnTo })}`);
  await header(f).waitFor();
+ await openTaskNavigation(f);
 }
 async function task(f, expected) {
  await f.page.waitForURL(url => url.pathname === '/colis/' + ids.P && url.searchParams.get('section') === expected);
@@ -139,7 +141,7 @@ function noWrite(f, before) {
    await scenario(`quick-navigation-clears-invoice-action-context-${device}`, mobile, false, async f => {
     const params = new URLSearchParams({ section: 'devis', invoice: ids.F, action: f.tables.staff_work_actions[0].id, returnTo, view: 'compact' });
     await f.page.goto(`${base}/colis/${ids.P}?${params}`);
-    await header(f).getByRole('heading', { name: 'Factures', exact: true }).waitFor();
+    await header(f).getByRole('heading', { name: 'Factures', exact: true }).waitFor();await openTaskNavigation(f);
     await header(f).getByRole('button', { name: 'Aller au devis', exact: true }).click(); await task(f, 'devis');
     let url = new URL(f.page.url());
     assert.equal(url.searchParams.has('invoice'), false, 'The selected invoice must not force the next task back to documents.');

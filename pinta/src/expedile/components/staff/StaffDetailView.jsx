@@ -1,3 +1,4 @@
+import { useTaskAccess } from '../../context/TaskAccessContext';
 import { useNavigate, useLocation } from 'react-router-dom';
 import React, { useState, useEffect, useRef } from 'react';
 import {
@@ -18,6 +19,8 @@ import { calculateQuote, measureShipment, volumetricDivisor, quoteInputFingerpri
 import { dossierTaskUrl, resolveDossierTask, hasCurrentPreparation, dossierNextTask } from '../../domain/dossierTasks';
 import { recordVersionAtLeast } from '../../domain/recordVersion';
 import { safeWorkReturn } from '../../domain/personalWork';
+import { usePersistentDraft } from '../../hooks/usePersistentDraft';
+import useWorkDraft from '../../hooks/useWorkDraft';
 import TaskContinuation from '../workspace/TaskContinuation';
 import { staffName } from '../workspace/WorkActionRow';
 import TaskMessage from './TaskMessage';
@@ -26,6 +29,7 @@ import ShipmentRevision from './ShipmentRevision';
 import TaskReopen from './TaskReopen';
 import TaskGuidance from './TaskGuidance';
 
+const receptionDrafts = new Map();
 const preparationDrafts = new Map();
 const preparationCommentDrafts = new Map();
 const dateLabel = value => value && Number.isFinite(Date.parse(value)) ? new Date(value).toLocaleString('fr-FR', { dateStyle: 'medium', timeStyle: 'short' }) : null;
@@ -154,8 +158,9 @@ export default function StaffDetailView({ workspace = false, task: requestedTask
     envois,
     assignDeparture,
     payer,
-    can,
+    can: rawCan,
   } = useApp();
+  const { taskCan: can, readOnly } = useTaskAccess(rawCan);
 
   // ── Local state ──────────────────────────────────────────────────────────
   const [actionLoading, setActionLoading] = useState(false);
@@ -200,8 +205,11 @@ export default function StaffDetailView({ workspace = false, task: requestedTask
   const [selTags, setSelTags] = useState(sel?.tagsPreparation || []);
   // Frais divers
   const [fraisDivers, setFraisDivers] = useState(sel?.fraisDivers || []);
-  const [newFraisLibelle, setNewFraisLibelle] = useState('');
-  const [newFraisMontant, setNewFraisMontant] = useState('');
+  const [pendingFeeDraft, setPendingFeeDraft] = usePersistentDraft(sel?.id ? `quote-fee:${sel.id}` : null, { libelle: '', montant: '' });
+  const newFraisLibelle = pendingFeeDraft?.libelle || '';
+  const newFraisMontant = pendingFeeDraft?.montant ?? '';
+  const setNewFraisLibelle = value => setPendingFeeDraft(previous => ({ ...previous, libelle: value }));
+  const setNewFraisMontant = value => setPendingFeeDraft(previous => ({ ...previous, montant: value }));
   const pendingFee = Boolean(newFraisLibelle.trim() || newFraisMontant !== '');
   // Pro payment method
   const [proPayMethod, setProPayMethod] = useState(sel?.modePaiementPro || cl?.methodePaiement || 'virement');
@@ -259,9 +267,9 @@ export default function StaffDetailView({ workspace = false, task: requestedTask
     if (sel && preparationDirty.current) preparationDrafts.set(`${auth?.u?.id}:${sel.id}`, { finalPackages, fraisDivers, proPayMethod, version: preparationVersion.current, composition: preparationComposition.current, baseline: preparationBaseline.current });
   }, [sel?.id, finalPackages, fraisDivers, proPayMethod, auth?.u?.id]);
   useEffect(() => {
-    const guard = event => { if (preparationDirty.current || commentDirty.current) { event.preventDefault(); event.returnValue = ''; } };
+    const guard = event => { if (preparationDirty.current || commentDirty.current || receptionDirty.current || pendingFee) { event.preventDefault(); event.returnValue = ''; } };
     window.addEventListener('beforeunload', guard); return () => window.removeEventListener('beforeunload', guard);
-  }, []);
+  }, [pendingFee]);
 
   const receptionSignature = JSON.stringify([sel?.id, sel?.nbColis, sel?.trackings, sel?.trackingsDetail, sel?.dimsParColis, sel?.dimL, sel?.dimW, sel?.dimH, sel?.poids]);
   useEffect(() => {
@@ -270,23 +278,31 @@ export default function StaffDetailView({ workspace = false, task: requestedTask
       setReceptionConflict(true);
       return;
     }
+    const draft = receptionDrafts.get(`${auth?.u?.id}:${sel.id}`);
     const manifest = receptionCartonManifest(sel);
-    setMultiDims(Object.fromEntries(manifest.dimsParColis.map((box, index) => [index, box])));
-    receptionVersion.current = sel.updatedAt;
+    setMultiDims(draft?.multiDims || Object.fromEntries(manifest.dimsParColis.map((box, index) => [index, box])));
+    receptionVersion.current = draft?.version || sel.updatedAt;
     receptionOwner.current = sel.id;
-    receptionDirty.current = false;
-    setReceptionConflict(false);
-  }, [receptionSignature]);
+    receptionDirty.current = Boolean(draft);
+    setReceptionConflict(Boolean(draft && draft.version !== sel.updatedAt));
+  }, [receptionSignature, auth?.u?.id]);
+  useEffect(() => {
+    if (sel && receptionDirty.current && receptionOwner.current === sel.id) receptionDrafts.set(`${auth?.u?.id}:${sel.id}`, { multiDims, version: receptionVersion.current });
+  }, [sel?.id, auth?.u?.id, multiDims]);
+  useWorkDraft({ userId: auth?.u?.id, dossierId: sel?.id, kind: 'reception', source: 'reception-measures', dirty: receptionDirty.current, label: 'mesures à réception' });
+  useWorkDraft({ userId: auth?.u?.id, dossierId: sel?.id, kind: 'preparation', source: 'preparation-measures', dirty: preparationDirty.current && JSON.stringify(finalPackages) !== preparationBaseline.current, label: 'mesures après optimisation' });
+  useWorkDraft({ userId: auth?.u?.id, dossierId: sel?.id, kind: 'preparation', source: 'preparation-comment', dirty: commentDirty.current, label: 'consigne de préparation' });
+  useWorkDraft({ userId: auth?.u?.id, dossierId: sel?.id, kind: 'quote', source: 'quote-fees', dirty: pendingFee || preparationDirty.current && (JSON.stringify(fraisDivers) !== JSON.stringify(sel?.fraisDivers || []) || proPayMethod !== (sel?.modePaiementPro || cl?.methodePaiement || 'virement')), label: 'frais ou modalités du devis' });
 
   const openingActionId = new URLSearchParams(location.search).get('action');
-  const canInvoiceWorkspace = ['perm_factures_voir', 'perm_factures_ajouter', 'perm_factures_valider', 'perm_factures_refuser', 'perm_factures_ocr', 'perm_factures_modifier_articles'].some(permission => can(permission));
-  const canQuoteWorkspace = ['perm_colis_calculer_devis', 'perm_colis_envoyer_devis', 'perm_finances_voir_total'].some(permission => can(permission));
+  const canInvoiceWorkspace = ['perm_factures_voir', 'perm_factures_ajouter', 'perm_factures_valider', 'perm_factures_refuser', 'perm_factures_ocr', 'perm_factures_modifier_articles'].some(permission => rawCan(permission));
+  const canQuoteWorkspace = ['perm_colis_calculer_devis', 'perm_colis_envoyer_devis', 'perm_finances_voir_total'].some(permission => rawCan(permission));
   const canCalculateQuote = can('perm_colis_calculer_devis');
   const task = requestedTask || resolveDossierTask(sel || {}, location.search, workActions, can, cl || {});
   const preparationView = task === 'preparation';
   useEffect(() => {
     if (!preparationView || (!formErr && !measuresSaved)) return;
-    preparationFeedback.current?.scrollIntoView({ block: 'nearest' });
+    preparationFeedback.current?.scrollIntoView({ block: measuresSaved ? 'start' : 'nearest' });
     preparationFeedback.current?.focus({ preventScroll: true });
   }, [formErr, measuresSaved, preparationView]);
 
@@ -298,8 +314,8 @@ export default function StaffDetailView({ workspace = false, task: requestedTask
   const savedWeights = measureShipment(savedFinalPackages(sel), divisor);
   const measuresCurrent = hasCurrentPreparation(sel);
   const chooseSection = (section, hash) => navigate(dossierTaskUrl(sel.id, section, location.search, { hash }));
-  const continuation = <TaskContinuation currentActionId={openingActionId} currentDossierId={sel.id} currentKind={{documents:'documents',devis:'quote',preparation:'preparation',reception:'reception',accord:'reception',expedition:'departure',livraison:'departure'}[task]} />;
-  const nextUsefulTask = dossierNextTask(sel, can, cl);
+  const continuation = <TaskContinuation onOpenTeam={onOpenContext ? () => onOpenContext('equipe') : undefined} currentActionId={openingActionId} currentDossierId={sel.id} currentKind={{documents:'documents',devis:'quote',preparation:'preparation',reception:'reception',accord:'reception',expedition:'departure',livraison:'departure'}[task]} />;
+  const nextUsefulTask = dossierNextTask(sel, rawCan, cl);
   const canViewTask = target => target === 'documents' ? canInvoiceWorkspace : target === 'devis' ? canQuoteWorkspace : true;
   const taskLinkLabels = { reception: 'Voir les mesures à réception', accord: 'Voir l’accord du client', preparation: 'Ouvrir la préparation', documents: 'Ouvrir les factures', devis: 'Ouvrir le devis', paiement: 'Voir le règlement', expedition: 'Voir le transport', livraison: 'Ouvrir la livraison' };
   const taskOwner = target => {
@@ -312,6 +328,7 @@ export default function StaffDetailView({ workspace = false, task: requestedTask
     actionLabel={target && target !== task && canViewTask(target) ? taskLinkLabels[target] : null}
     onOpen={target && target !== task && canViewTask(target) ? () => chooseSection(target) : null}>{children}{continuation}</TaskGuidance>;
   const runAction = async (action) => {
+    if (readOnly) { setFormErr('Cette tâche est suivie par un collègue. Demandez un relais avant de la modifier.'); return false; }
     if (actionRef.current) return;
     actionRef.current = true; setActionLoading(true); setFormErr('');
     try { return await action(); } catch (error) { setFormErr(error.message || 'L’action n’a pas pu être enregistrée. Réessayez.'); return false; }
@@ -362,7 +379,7 @@ export default function StaffDetailView({ workspace = false, task: requestedTask
     }
     const saved = await upd(sel.id, { ...measured, statut: 'mesure' }, { expectedUpdatedAt: receptionVersion.current });
     receptionVersion.current = saved.updatedAt;
-    receptionDirty.current = false;
+    receptionDirty.current = false; receptionDrafts.delete(`${auth?.u?.id}:${sel.id}`);
     setReceptionConflict(false);
     setMultiDims(Object.fromEntries(saved.dimsParColis.map((box, index) => [index, box])));
     flash(`Mesures de réception enregistrées (${manifest.nbColis} carton${manifest.nbColis > 1 ? 's' : ''}). Les mesures après optimisation seront saisies pendant la préparation.`);
@@ -592,7 +609,7 @@ export default function StaffDetailView({ workspace = false, task: requestedTask
         return <Section title={`Mesures de réception · ${manifest.nbColis} carton${manifest.nbColis > 1 ? 's' : ''}`} icon={Ruler} color={borderColor}>
           <div className="space-y-4">
             <p className="text-sm text-gray-600">Mesurez chaque carton tel qu’il est reçu. Après optimisation de l’emballage, de nouvelles dimensions et un nouveau poids seront saisis pour établir le devis.</p>
-            {receptionConflict && <div role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">Un carton ou ses mesures ont été modifiés depuis votre saisie. Vos valeurs saisies restent affichées.<button type="button" className="min-h-11 block font-semibold underline" onClick={() => { setMultiDims(Object.fromEntries(manifest.dimsParColis.map((box, index) => [index, box]))); receptionVersion.current = sel.updatedAt; receptionDirty.current = false; setReceptionConflict(false); setFormErr(''); }}>Reprendre les mesures enregistrées</button></div>}
+            {receptionConflict && <div role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">Un carton ou ses mesures ont été modifiés depuis votre saisie. Vos valeurs saisies restent affichées.<button type="button" className="min-h-11 block font-semibold underline" onClick={() => { setMultiDims(Object.fromEntries(manifest.dimsParColis.map((box, index) => [index, box]))); receptionVersion.current = sel.updatedAt; receptionDirty.current = false; receptionDrafts.delete(`${auth?.u?.id}:${sel.id}`); setReceptionConflict(false); setFormErr(''); }}>Reprendre les mesures enregistrées</button></div>}
             {manifest.trackingsDetail.map((carton, index) => {
               const box = multiDims[index] || {};
               return <fieldset key={index} className="rounded-xl border border-gray-200 p-3 space-y-3">
@@ -706,19 +723,17 @@ export default function StaffDetailView({ workspace = false, task: requestedTask
             <p role="status" className="mt-2 text-xs text-slate-600">{measuresSaved ? 'Mesures enregistrées.' : ''}</p></div>
             {weights && <details className="mt-4 border-t border-gray-100 text-sm"><summary className="min-h-11 cursor-pointer py-3 font-semibold text-slate-600">Comprendre le calcul du transport</summary><div className="space-y-1"><Ligne label="Poids volumétrique" value={`${weights.volumetricWeight.toFixed(2)} kg`} /><Ligne label="Poids facturable" value={`${weights.billableWeight.toFixed(2)} kg`} /></div></details>}
           </Section></div>}
-          {!preparationEditing && !measuresChanged && savedWeights && measuresCurrent && <section aria-label="Relais après préparation" className="space-y-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+          {!preparationEditing && !measuresChanged && savedWeights && measuresCurrent && <section ref={preparationFeedback} tabIndex={-1} aria-label="Relais après préparation" className="scroll-mt-56 space-y-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
             <p className="text-sm font-semibold text-emerald-800">Préparation enregistrée · {savedFinalPackages(sel).length} colis sortant(s) · {savedWeights.realWeight.toFixed(2)} kg</p>{sel.finalMeasurementsAt && <p className="text-xs text-slate-600">Mesures enregistrées le {dateLabel(sel.finalMeasurementsAt)}</p>}
             <p className="text-sm text-slate-700">{savedFinalPackages(sel).map((box,index) => `Colis ${index + 1} : ${box.dimL} × ${box.dimW} × ${box.dimH} cm · ${box.poids} kg`).join(' ; ')}</p>
             {can('perm_colis_preparer') && !preparationBlock && !preparationEditing && <button className="min-h-11 text-sm font-semibold text-slate-700 underline" onClick={() => setPreparationEditing(true)}>Modifier les mesures</button>}
-            {workActions.filter(action => action.colis_id === sel.id && ['documents','quote'].includes(action.kind) && action.state !== 'done').slice(0,1).map(action => <p key={action.id} className="text-sm text-slate-700">{action.kind === 'documents' ? 'Factures à vérifier' : 'Devis à établir'} · {action.assignee_id ? staffName(action.assignee_id, teamUsers) : 'à prendre'}</p>)}
-            <p className="text-sm text-slate-600">Les factures et la préparation peuvent avancer en parallèle. Le devis reprend ces mesures enregistrées.</p><div className="flex flex-wrap gap-2">{canInvoiceWorkspace && <button className="min-h-11 font-semibold underline" onClick={() => chooseSection("documents")}>Ouvrir les factures</button>}{canQuoteWorkspace && <button className="min-h-11 font-semibold underline" onClick={() => chooseSection("devis")}>Ouvrir le devis</button>}</div>
             {continuation}
           </section>}
           {can('perm_colis_preparer') && !preparationBlock && <>
           <details className="border-t border-slate-200"><summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-slate-600">Consignes facultatives {selTags.length > 0 ? `· ${selTags.length} choisie(s)` : ''}</summary>          <div className="space-y-2">
             <p className="text-xs text-slate-600">Les étiquettes s’enregistrent dès le clic. Le commentaire s’enregistre avec « Enregistrer la consigne » ; les mesures ont leur propre bouton.</p>
             <div className="flex flex-wrap gap-2">{TAGS_PREPARATION.map((tag) => <button key={tag} disabled={actionLoading} onClick={() => runAction(async () => { const next = selTags.includes(tag) ? selTags.filter((item) => item !== tag) : [...selTags, tag]; await upd(sel.id, { tagsPreparation: next }); setSelTags(next); })} className={`min-h-11 rounded-full px-3 py-2 text-xs font-semibold ${selTags.includes(tag) ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-600'}`}>{tag}</button>)}</div>
-            <textarea aria-label="Commentaire de préparation" value={commentaire} onChange={(event) => { const value = event.target.value; setCommentaire(value); commentDirty.current = value !== (sel.commentairePreparation || ""); if(commentDirty.current) preparationCommentDrafts.set(`${auth?.u?.id}:${sel.id}`, value); else preparationCommentDrafts.delete(`${auth?.u?.id}:${sel.id}`); }} placeholder="Instructions utiles à la préparation…" rows={2} className={inputClass} />
+            <textarea disabled={actionLoading} aria-label="Commentaire de préparation" value={commentaire} onChange={(event) => { const value = event.target.value; setCommentaire(value); commentDirty.current = value !== (sel.commentairePreparation || ""); if(commentDirty.current) preparationCommentDrafts.set(`${auth?.u?.id}:${sel.id}`, value); else preparationCommentDrafts.delete(`${auth?.u?.id}:${sel.id}`); }} placeholder="Instructions utiles à la préparation…" rows={2} className={inputClass} />
             {commentaire !== (sel.commentairePreparation || '') && <button disabled={actionLoading} className="min-h-11 text-xs font-semibold text-blue-700" onClick={() => runAction(async () => { await upd(sel.id, { commentairePreparation: commentaire }); preparationCommentDrafts.delete(`${auth?.u?.id}:${sel.id}`); commentDirty.current = false; flash("Consigne enregistrée."); })}>Enregistrer la consigne</button>}
           </div>
 </details>

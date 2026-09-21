@@ -5,6 +5,9 @@ import './brand.css';
 import { getPrenom } from './utils';
 import { needsConversationAction } from './domain/conversations';
 
+import { TaskAccessBoundary } from './context/TaskAccessContext';
+import { findDossierWorkAction } from './domain/personalWork';
+import { staffName } from './components/workspace/WorkActionRow';
 import { AppProvider, useApp } from './context/AppContext';
 import { BRAND } from './constants';
 
@@ -76,7 +79,7 @@ function Permission({ allowed, children }) {
 // ── Wrapper: Staff colis detail (reads :id from URL) ──
 function StaffColisDetail() {
   const { id } = useParams();
-  const { setSelId, sel, selClient, data, dataLoading, refreshColis, can, workActions = [] } = useApp();
+  const { setSelId, sel, selClient, data, dataLoading, refreshColis, can, workActions = [], auth, teamUsers = [] } = useApp();
   const [detailLoading, setDetailLoading] = useState(true);
   const [detailError, setDetailError] = useState('');
   const navigate = useNavigate();
@@ -107,12 +110,15 @@ function StaffColisDetail() {
   if (!data.some((c) => c.id === id)) return <MissingColis />;
   if (!sel || sel.id !== id) return <LoadingView label="Ouverture du dossier…" />;
 
+  const taskAction = findDossierWorkAction(sel, workActions, task, { can, actionId: new URLSearchParams(location.search).get('action') });
+  const colleagueWorking = Boolean(taskAction?.assignee_id && taskAction.assignee_id !== auth?.u?.id);
   return (
     <>
       <DetailHeader task={task} onOpenContext={setContextSection} />
       <div className="mx-auto max-w-[1600px] px-4 py-5 sm:px-6 lg:px-8" data-testid="dossier-task-workspace">
         {location.state?.receivedCarton?.colisId === id && <div role="status" className="mb-4 flex flex-wrap items-center gap-3 rounded-xl bg-emerald-50 px-4 py-2 text-sm text-emerald-800"><span>Carton {location.state.receivedCarton.index + 1} enregistré dans {sel.ref}.</span><button className="min-h-11 font-semibold underline" onClick={() => setContextSection('reception')}>Voir le carton reçu</button></div>}
-        <StaffDetailView workspace task={task} onOpenContext={setContextSection} />
+        {colleagueWorking && <p role="status" className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">{staffName(taskAction.assignee_id, teamUsers)} s’occupe de cette tâche. Vous pouvez la consulter. Pour la reprendre, demandez un relais ou utilisez la réaffectation dans les options de la tâche.</p>}
+        <TaskAccessBoundary readOnly={colleagueWorking}><StaffDetailView workspace task={task} onOpenContext={setContextSection} /></TaskAccessBoundary>
       </div>
       <DossierContextPanel key={sel.id} section={contextSection} onSectionChange={setContextSection} onClose={() => setContextSection(null)} />
     </>

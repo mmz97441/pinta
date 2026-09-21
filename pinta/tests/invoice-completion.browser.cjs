@@ -1,3 +1,4 @@
+const { openTaskNavigation } = require('./task-navigation.helper.cjs');
 /* Fictitious completion/consultation fixtures. All provider traffic is intercepted
  * by the shared invoice transport; this suite never opens real customer records. */
 const { chromium } = require(process.env.PINTA_PLAYWRIGHT_MODULE || 'playwright');
@@ -82,9 +83,9 @@ async function main() {
       assert.equal(new URL(f.page.url()).searchParams.get('section'), 'devis');
       assert.equal(await invoicePanel(f).count(), 0, 'Quote task does not mount a second invoice editor.');
       await f.page.reload(); await calculate.waitFor(); await noEditor(f);
-      await f.page.getByLabel('Tâche du dossier', { exact: true }).selectOption('preparation');
+      await openTaskNavigation(f);await f.page.getByLabel('Tâche du dossier', { exact: true }).selectOption('preparation');
       await f.page.getByRole('region', { name: 'Préparation après optimisation', exact: true }).waitFor();
-      await f.page.getByLabel('Tâche du dossier', { exact: true }).selectOption('documents');
+      await openTaskNavigation(f);await f.page.getByLabel('Tâche du dossier', { exact: true }).selectOption('documents');
       await complete(f); await noEditor(f);
       assert.equal(await f.page.evaluate(() => document.documentElement.classList.contains('dark')), mobile, 'Audit the requested light desktop / dark mobile theme, not only its storage preference.');
       const audit = await new AxeBuilder({ page: f.page }).include('#quote-documents').withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
