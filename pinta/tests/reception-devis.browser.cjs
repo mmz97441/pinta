@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const assert = require('node:assert/strict');
 const { setup, base, ids: { P } } = require('./browser-regression.cjs');
+const { openTaskNavigation } = require('./task-navigation.helper.cjs');
 const { chromium } = require(process.env.PINTA_PLAYWRIGHT_MODULE || 'playwright');
 const output = process.env.PINTA_RECEPTION_DEVIS_OUT || path.resolve(__dirname, '../../docs/verification-reception-devis-2026-09-10');
 const first = { dimL: 80, dimW: 10, dimH: 10, poids: 1 };
@@ -37,6 +38,7 @@ async function main() {
       assert.ok(target.height >= 44);
       await save.click();
       await current.page.getByRole('heading', { name: 'Mesures à réception — avant optimisation', exact: true }).waitFor();
+      await openTaskNavigation(current);
       await current.page.getByRole('button', { name: 'Aller à l’accord client', exact: true }).click();
       await current.page.getByRole('heading', { name: 'Demander l’accord du client', exact: true }).waitFor();
       assert.deepEqual(current.tables.colis[0].dims_par_colis, [first, second]);

@@ -2,6 +2,15 @@
 
 Rapport du 21 septembre 2026. Organisation confirmée : trois à cinq collaborateurs se relaient selon le travail à réaliser. L’objectif est de comprendre quoi faire, savoir si le résultat est enregistré et voir qui prend la suite.
 
+## Utilisation quotidienne
+
+1. Ouvrir **Mon travail → À prendre**, puis **Je m’en occupe** sur une tâche disponible. Son écran s’ouvre directement.
+2. Retrouver le travail commencé dans **À faire → Continuer**. Une attente explique ce qui manque avant de poursuivre.
+3. Enregistrer ou valider avec le bouton propre à la tâche. Le résultat enregistré et la suite du dossier apparaissent sans devoir parcourir toutes les étapes.
+4. Ouvrir **Détails du dossier → Équipe** pour voir qui prépare, qui vérifie les factures et ce qui attend encore.
+5. Pour interrompre un travail, enregistrer ses saisies puis ouvrir **Options → Passer à un collègue**, choisir la personne et ajouter une consigne. Elle accepte le relais ; jusque-là, la tâche reste à son responsable actuel.
+6. Utiliser **Parcourir les étapes** pour consulter une étape précédente ou suivante. Cette navigation ne valide rien et n’envoie rien au client.
+
 ## Modifications réalisées
 
 | Sujet | Décision appliquée | Règle préservée |
@@ -45,6 +54,8 @@ Les contrôles sont réalisés avec des données fictives pour les essais d’é
 | Droits d’écriture après attribution | 196 contrôles réussis, incluant les régressions factures, prérequis et corrections. Trois courses réelles : réaffectation avant sauvegarde, sauvegarde avant réaffectation, deux responsables sur préparation et factures. |
 | Parcours navigateur | 205 scénarios distincts réussis pendant la recette. Sur le dernier build figé : collaboration 14/14, prise 12/12, organisation 26/26, travail personnel 15/15, conflits devis 7/7. |
 | Présentation | Captures bureau/mobile, thèmes clair/sombre et contrôles d’accessibilité sur les parcours concernés. |
+
+La recette élargie des anciens parcours a également réussi : indicateurs et vérification des factures, préparation autonome, réception sans notification, messages de tâche (51 contrôles supplémentaires), puis accessibilité, équipe, clients, administration, réception concurrente, numérotation, distinction des mesures, devis et lecteur PDF. Quatre suites historiques ont été adaptées aux nouveaux accès ou libellés : indicateur réservé aux tâches Factures, navigation secondaire, onglet Réception explicite, filtres Équipe. Les assertions de données, droits, mesures et navigation ont été conservées.
 
 Les journaux locaux sont conservés sous `/tmp/pinta-*`. Les tests navigateur utilisent des dossiers fictifs et des services simulés ; les courses SQL utilisent PostgreSQL isolé. La vérification du site publié est consignée après livraison ci-dessous.
 
