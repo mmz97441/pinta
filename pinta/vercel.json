@@ -4,7 +4,12 @@
   "installCommand": "npm ci",
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
+  "headers": [
+    { "source": "/paiement/:path*", "headers": [{ "key": "Referrer-Policy", "value": "no-referrer" }, { "key": "Cache-Control", "value": "no-store" }] },
+    { "source": "/colis/:path*", "headers": [{ "key": "Referrer-Policy", "value": "no-referrer" }] }
+  ],
   "rewrites": [
+    { "source": "/paiement/retour", "destination": "/index.html" },
     { "source": "/travail", "destination": "/index.html" },
     { "source": "/equipe", "destination": "/index.html" },
     { "source": "/conversations", "destination": "/index.html" },

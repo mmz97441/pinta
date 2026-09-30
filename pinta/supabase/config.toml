@@ -27,6 +27,8 @@ verify_jwt = false
 verify_jwt = false
 [functions.payplug-create]
 verify_jwt = false
+[functions.get-payment-return]
+verify_jwt = false
 [functions.ocr-facture]
 verify_jwt = false
 [functions.telegram-inbox-assign]

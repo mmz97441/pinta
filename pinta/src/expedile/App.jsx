@@ -30,6 +30,7 @@ const StaffClientDetail = lazy(() => import('./components/staff/StaffClientDetai
 import StaffDetailView from './components/staff/StaffDetailView';
 const DevisProspect = lazy(() => import('./components/staff/DevisProspect'));
 const TrackingPublic = lazy(() => import('./components/public/TrackingPublic'));
+const PaymentReturn = lazy(() => import('./components/public/PaymentReturn'));
 
 const ClientAccueil = lazy(() => import('./components/client/ClientAccueil'));
 const ClientColis = lazy(() => import('./components/client/ClientColis'));
@@ -453,10 +454,14 @@ function AppContent() {
   );
 }
 
-export default function App() {
+function AppRoutes() {
+  const location = useLocation();
+  const legacyPayment = /^\/colis\/([^/]+)\/?$/.exec(location.pathname);
+  const paymentResult = new URLSearchParams(location.search).get('payment');
+  if (legacyPayment && ['returned', 'cancelled'].includes(paymentResult)) return <Suspense fallback={<LoadingView label="Vérification du paiement…" />}><ScreenBoundary><PaymentReturn colisId={legacyPayment[1]} /></ScreenBoundary></Suspense>;
   return (
-    <BrowserRouter>
       <Routes>
+        <Route path="/paiement/retour" element={<Suspense fallback={<LoadingView label="Vérification du paiement…" />}><ScreenBoundary><PaymentReturn /></ScreenBoundary></Suspense>} />
         {/* Route publique — suivi partagé par token (pas d'auth nécessaire) */}
         <Route path="/suivi/:token" element={<Suspense fallback={<LoadingView />}><ScreenBoundary><TrackingPublic /></ScreenBoundary></Suspense>} />
         {/* Toute autre route passe par l'app authentifiée */}
@@ -466,6 +471,9 @@ export default function App() {
           </AppProvider>
         } />
       </Routes>
-    </BrowserRouter>
   );
+}
+
+export default function App() {
+  return <BrowserRouter><AppRoutes /></BrowserRouter>;
 }

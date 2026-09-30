@@ -61,6 +61,7 @@ jobs:
           sh ./supabase/tests/run-task-readiness.sh
           sh ./supabase/tests/run-team-task-start.sh
           sh ./supabase/tests/run-task-owner-guards.sh
+          sh ./supabase/tests/run-payment-return.sh
       - run: npx playwright install --with-deps chromium
       - name: Parcours navigateur sans services externes
         run: |
@@ -72,6 +73,8 @@ jobs:
             sleep 1
           done
           node tests/browser-staff-sync.cjs
+          node tests/payment-return.browser.cjs
+          node tests/dossier-list-contrast.browser.cjs
           node tests/parcel-reference-search.cjs
           node tests/reçu-documents-factures.cjs
           node tests/invoice-review-indicator.cjs
@@ -134,6 +137,8 @@ jobs:
             /tmp/pinta-personal-work
             /tmp/pinta-task-claim
             /tmp/pinta-collaborative-work
+            /tmp/pinta-payment-return
+            /tmp/pinta-dossier-list-contrast
             /tmp/pinta-receipt-flow
             /tmp/pinta-client-lightweight
             /tmp/pinta-task-message

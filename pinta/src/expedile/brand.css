@@ -292,6 +292,32 @@ html.dark .bg-red-50, html.dark .bg-red-100 { background-color: #44282A !importa
 html.dark .text-red-400, html.dark .text-red-500, html.dark .text-red-600, html.dark .text-red-700, html.dark .text-red-800 { color: #F4B9B9 !important; }
 
 html.dark .bg-gray-200, html.dark .bg-slate-200 { background-color: #413C35 !important; }
+
+/* Dossier lists keep text and interactive surfaces in the same theme. Static
+   utility remapping above does not match Tailwind's hover:bg-* selectors. */
+.dossier-list {
+  --dossier-hover: #F9FAFB;
+  --dossier-selected: #EFF6FF;
+}
+html.dark .dossier-list {
+  --dossier-hover: #35312B;
+  --dossier-selected: #203744;
+}
+.dossier-list-item {
+  color: var(--text-primary);
+  background-color: var(--bg-canvas);
+  border-color: var(--border-subtle);
+}
+.dossier-list-item:hover { background-color: var(--dossier-hover); }
+.dossier-list-item[data-selected='true'],
+.dossier-list-item[data-selected='true']:hover { background-color: var(--dossier-selected); }
+.dossier-list-item:has(:focus-visible) { box-shadow: inset 0 0 0 2px var(--brand-text); }
+.dossier-list-item button:focus-visible,
+.dossier-list-item input:focus-visible { outline-color: var(--brand-text); }
+html.dark .dossier-list .hover\:bg-gray-50:hover,
+html.dark .dossier-list .hover\:bg-gray-100:hover,
+html.dark .dossier-list .hover\:bg-slate-100:hover { background-color: var(--dossier-hover) !important; }
+
 /* The permanent navy navigation is a dark surface in both application themes. */
 html .staff-sidebar .text-gray-400, html .staff-sidebar .text-gray-500,
 html .staff-sidebar .text-slate-400, html .staff-sidebar .text-slate-500 { color: #BDC9CD !important; }
