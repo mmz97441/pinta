@@ -36,7 +36,18 @@ Le retour PayPlug est distinct de la notification de confirmation serveur ; cett
 - Contrôles d’accessibilité du nouvel écran sur téléphone, en thèmes clair et sombre : aucune violation axe détectée, aucun débordement horizontal.
 - Contraste de la liste : quatre configurations ordinateur/téléphone et clair/sombre, 26 états mesurés. Texte au moins 4,71:1 ; focus au moins 8,58:1. Aucune modification métier lors de ces essais.
 
-Les écritures de recette sont effectuées sur des données fictives ou PostgreSQL isolé. Aucun paiement réel ni message client n’est déclenché. La migration distante a été sauvegardée, répétée avec annulation, appliquée et vérifiée : deux colonnes ajoutées, une fonction de lecture réservée au serveur, données métier préservées. La preuve de publication complète est ajoutée après la vérification finale.
+Les écritures de recette sont effectuées sur des données fictives ou PostgreSQL isolé. Aucun paiement réel ni message client n’est déclenché. La migration distante a été sauvegardée, répétée avec annulation, appliquée et vérifiée : deux colonnes ajoutées, une fonction de lecture réservée au serveur, données métier préservées.
+
+## Publication vérifiée
+
+- [Demande de fusion nº 14](https://github.com/mmz97441/pinta/pull/14) fusionnée sur `main` le 30 septembre 2026 : commit `b14b28ce83ffd455179c79ee505fcf4e24ff0b1c`. Le code fusionné est identique au code testé.
+- Validation complète réussie sur la [branche](https://github.com/mmz97441/pinta/actions/runs/36656566389) et sur la [demande de fusion](https://github.com/mmz97441/pinta/actions/runs/36656754183), y compris les parcours navigateur existants.
+- `expedile.app` sert le déploiement Vercel `dpl_BLHuA4qwFGfJzPi3b77NTx5MpSJ1`, état `READY`, rattaché à ce commit. Fichiers publics vérifiés : `index-BkVvcGW2.js` et `PaymentReturn-BgYxfdQO.js`.
+- `/paiement/retour` répond en HTTP 200 avec `Cache-Control: no-store` et `Referrer-Policy: no-referrer`.
+- Les 30 scénarios de paiement et les quatre configurations de contraste ont été rejoués avec succès sur les fichiers réellement servis par le domaine. Les services métier étaient interceptés avec des données fictives : aucune opération sur les clients réels.
+- `get-payment-return` et `payplug-create` ont été déployées puis téléchargées pour comparaison : leurs sources et dépendances correspondent exactement aux fichiers testés. Les nouvelles URL PayPlug ont été activées après la disponibilité de la page.
+- Contrôles directs du serveur : jeton fictif inconnu refusé en 404, jeton malformé en 400, ancien lien sans connexion en 401 ; aucune donnée divulguée, réponses non mises en cache.
+- Sauvegardes et preuves techniques privées conservées dans `.deployment-backups/2026-09-30-payment-return/`, hors dépôt public. Aucun changement des secrets, du mode PayPlug ou du webhook bancaire.
 
 ## Aperçus
 
