@@ -210,8 +210,9 @@ function ColisTableRow({ c, client, prevClient, envois, onClick, isSelected, che
   return (
     <tr
       onClick={onClick}
-      className={`border-b border-gray-50 cursor-pointer transition-colors ${isSelected ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
-
+      data-dossier-row={c.id}
+      data-selected={isSelected || checked ? 'true' : 'false'}
+      className="dossier-list-item border-b cursor-pointer transition-colors"
     >
       <td className="px-2 py-2 w-8" onClick={(e) => e.stopPropagation()}>
         <input aria-label={`Sélectionner le dossier ${c.ref}`} type="checkbox" checked={checked} onChange={onCheck}
@@ -586,7 +587,7 @@ export default function StaffColisPage() {
 
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="dossier-list h-full flex flex-col">
 
       {workFilter && <div className="px-4 pt-3 pb-2 flex items-center justify-between gap-2"><div><h1 className="font-bold text-gray-900">{WORK_QUEUES.find((q) => q.key === workFilter)?.label || 'File de travail'}</h1><p className="text-xs text-gray-500">{clientFilter ? getClient(clientFilter)?.nom : 'Dossiers à traiter ensemble par l’équipe'}</p></div><button onClick={clearFilters} className="text-xs min-h-11 text-gray-500 inline-flex items-center gap-1">Tous les dossiers<X size={14} /></button></div>}
       {workFilter === 'messages' && <div className="px-4 py-3"><button onClick={() => navigate('/conversations')} className="min-h-11 rounded-lg border px-3 text-sm font-semibold">Ouvrir les conversations et messages à rattacher</button></div>}
@@ -856,10 +857,10 @@ export default function StaffColisPage() {
             return <>
               <div className={`${sel ? '' : 'lg:hidden'} divide-y divide-gray-100 px-4`}>{sorted.map(c => {
                 const client = getClient(c.clientId);
-                return <article key={c.id} className="flex min-h-20 items-start gap-3 py-4">
+                return <article key={c.id} data-dossier-card={c.id} data-selected={sel?.id === c.id || selectedIds.has(c.id) ? 'true' : 'false'} className="dossier-list-item -mx-3 flex min-h-20 items-start gap-3 rounded-xl px-3 py-4">
                   <div className="mt-4 h-2 w-2 shrink-0 rounded-full" style={{ background: statutBorderColor(c.statut) }} />
                   <div className="min-w-0 flex-1">
-                    <button onClick={() => openColis(c.id)} className="flex min-h-11 w-full items-center justify-between gap-2 text-left"><span className="text-sm font-bold brand-t">{c.ref}</span><ChevronRight size={17} className="shrink-0 text-gray-400" /></button>
+                    <button onClick={() => openColis(c.id)} aria-current={sel?.id === c.id ? 'true' : undefined} className="flex min-h-11 w-full items-center justify-between gap-2 text-left"><span className="text-sm font-bold brand-t">{c.ref}</span><ChevronRight size={17} className="shrink-0 text-gray-400" /></button>
                     {needsConversationAction(c) && <p className="text-xs font-semibold brand-t">À répondre</p>}
                     <p className="mt-1 text-sm text-gray-700">{client?.nom || 'Client'}</p>
                     <p className="mt-1 text-xs text-gray-500">{nextAction(c, client, now)}{c.casier ? ` · ${c.casier}` : ''}</p>

@@ -1,5 +1,6 @@
 import { admin, fail, HttpError, json, postOnly, requireStaff, throwDb, uuid } from '../_shared/http.ts';
 import { requirePayplugCreationMode } from '../_shared/payplugMode.ts';
+import { createPaymentReturnToken } from '../_shared/paymentReturnToken.ts';
 
 Deno.serve(async (req: Request) => {
   const early = postOnly(req); if (early) return early;
@@ -23,21 +24,24 @@ Deno.serve(async (req: Request) => {
     const old = await db.from('payment_intents').select('*').eq('colis_id', colisId).eq('quote_version', colis.quote_version).maybeSingle(); throwDb(old);
     if (old.data && old.data.provider_is_live !== expectedLive) throw new HttpError(409, 'Le mode de l’ancien lien doit être vérifié. Établissez une nouvelle version du devis avant de créer un paiement.');
     if (old.data?.payment_url && old.data.status === 'pending') return json({ success: true, paymentId: old.data.provider_id, paymentUrl: old.data.payment_url, amount: amount / 100, reused: true });
+    const returnToken = await createPaymentReturnToken();
+    const returnFields = { return_token_hash: returnToken.hash, return_token_expires_at: returnToken.expiresAt };
     let reserved;
     if (old.data?.status === 'failed' && !old.data.provider_id) {
-      reserved=await db.from('payment_intents').update({status:'creating',updated_at:new Date().toISOString()}).eq('id',old.data.id).eq('status','failed').select().maybeSingle(); throwDb(reserved);
+      reserved=await db.from('payment_intents').update({status:'creating',updated_at:new Date().toISOString(),...returnFields}).eq('id',old.data.id).eq('status','failed').select().maybeSingle(); throwDb(reserved);
       if (!reserved.data) throw new HttpError(409,'Nouvelle tentative déjà en cours');
     } else {
       if (old.data) throw new HttpError(409, 'Un paiement pour ce devis est déjà en traitement. Vérifiez son état avant de réessayer.');
-      reserved = await db.from('payment_intents').insert({ colis_id: colisId, quote_version: colis.quote_version, amount_cents: amount, status: 'creating', provider_is_live: expectedLive }).select().single();
+      reserved = await db.from('payment_intents').insert({ colis_id: colisId, quote_version: colis.quote_version, amount_cents: amount, status: 'creating', provider_is_live: expectedLive, ...returnFields }).select().single();
       if (reserved.error?.code === '23505') throw new HttpError(409, 'Création déjà en cours'); throwDb(reserved);
     }
     const country = ({ '974':'RE','976':'YT','971':'GP','972':'MQ' } as Record<string,string>)[client.cp.slice(0,3)] || 'FR';
     const billing = { first_name: client.prenom || client.nom, last_name: client.nom, email: client.email.trim(), address1: address, ...(client.adresse_ligne2 ? { address2: client.adresse_ligne2 } : {}), postcode: client.cp, city, country, language: 'fr' };
+    const returnUrl = `${appUrl.replace(/\/$/, '')}/paiement/retour?token=${returnToken.token}`;
     const response = await fetch('https://api.payplug.com/v1/payments', {
       method: 'POST', signal: AbortSignal.timeout(20000), headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', 'PayPlug-Version': '2019-08-06' },
       body: JSON.stringify({ amount, currency: 'EUR', billing, shipping: { ...billing, delivery_type: 'BILLING' },
-        hosted_payment: { return_url: `${appUrl}/colis/${colisId}?payment=returned`, cancel_url: `${appUrl}/colis/${colisId}?payment=cancelled` },
+        hosted_payment: { return_url: returnUrl, cancel_url: `${returnUrl}&payment=cancelled` },
         notification_url: `${Deno.env.get('SUPABASE_URL')}/functions/v1/payplug-webhook`, metadata: { colis_id: colisId, quote_version: String(colis.quote_version), intent_id: reserved.data.id } }),
     });
     if (!response.ok) {
