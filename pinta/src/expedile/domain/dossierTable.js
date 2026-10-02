@@ -6,6 +6,80 @@ import { actionPriority, actionWaiting, canWorkAction, sortWorkActions } from '.
 import { workTitle, workSituation } from './collaborativeWork.js';
 import { receptionCartonManifest } from './reception.js';
 
+const SORT_TYPES = new Set(['text', 'number', 'date']);
+const naturalTextOrder = new Intl.Collator('fr', { numeric: true, sensitivity: 'base' });
+
+/** A data column must declare its real value and its type once. Adding a column
+ * then enables headers, keyboard sorting and the mobile sorting menu together.
+ * Command columns explicitly opt out: their buttons do not represent data. */
+export function defineDossierTableColumn(column) {
+  if (!column?.key || !column.label) throw new Error('Une colonne doit avoir une clé et un titre.');
+  if (column.kind === 'action') return Object.freeze({ ...column, sort: null });
+  if (!SORT_TYPES.has(column.sort?.type) || typeof column.sort?.value !== 'function')
+    throw new Error(`La colonne ${column.key} doit définir sort.type et sort.value.`);
+  return Object.freeze({ ...column, kind: 'data', sort: Object.freeze({ ...column.sort }) });
+}
+
+const clientName = client => client?.nomFamille ? [client.nomFamille, client.prenom].filter(Boolean).join(' ') : client?.nom || client?.prenom || null;
+const refColumn = defineDossierTableColumn({ key: 'ref', label: 'Référence', sort: { type: 'text', value: ({ dossier }) => dossier.ref } });
+const clientColumn = defineDossierTableColumn({ key: 'client', label: 'Client', sort: { type: 'text', value: ({ client }) => clientName(client) } });
+const actionColumn = defineDossierTableColumn({ key: 'action', label: 'Action', kind: 'action' });
+const financialColumn = (key, label) => defineDossierTableColumn({ key, label, align: 'right', sort: { type: 'number', value: ({ model }) => model?.payment?.[key] } });
+export const TABLE_COLUMNS = Object.freeze({
+  daily: Object.freeze([refColumn, clientColumn,
+    defineDossierTableColumn({ key: 'statut', label: 'Travail à faire', sort: { type: 'text', value: ({ model }) => model?.title === 'Tâches à actualiser' ? null : model?.title } }),
+    defineDossierTableColumn({ key: 'owner', label: 'Qui s’en occupe', sort: { type: 'text', value: ({ model }) => ['—', 'Non attribué', 'Membre de l’équipe'].includes(model?.ownerName) ? null : model?.ownerName } }),
+    defineDossierTableColumn({ key: 'casier', label: 'Casier', sort: { type: 'text', value: ({ dossier }) => dossier.casier } }),
+    defineDossierTableColumn({ key: 'cartons', label: 'Cartons reçus', sort: { type: 'number', value: ({ dossier }) => receptionCartonManifest(dossier).nbColis } }), actionColumn]),
+  payments: Object.freeze([refColumn, clientColumn, financialColumn('requested', 'Demandé'), financialColumn('paid', 'Payé'), financialColumn('remaining', 'Reste à payer'),
+    defineDossierTableColumn({ key: 'sentAt', label: 'Devis envoyé le', sort: { type: 'date', value: ({ model }) => model?.payment?.sentAt } }), actionColumn]),
+  departures: Object.freeze([refColumn, clientColumn,
+    defineDossierTableColumn({ key: 'departure', label: 'Départ prévu', sort: { type: 'date', value: ({ model, envoi }) => /^(Prévu le|Date dépassée)/.test(model?.departure?.label || '') ? envoi?.date : null } }),
+    defineDossierTableColumn({ key: 'destination', label: 'Destination', sort: { type: 'text', value: ({ model }) => model?.departure?.destination === 'Destination à préciser' ? null : model?.departure?.destination } }),
+    defineDossierTableColumn({ key: 'packages', label: 'Colis à expédier', sort: { type: 'number', value: ({ dossier, model }) => model?.optimized ? dossier.outgoingParcelCount : null } }),
+    defineDossierTableColumn({ key: 'readiness', label: 'Prêt à partir ?', sort: { type: 'text', value: ({ model }) => model?.departure?.readinessLabel } }), actionColumn]),
+});
+
+export function isDossierTableColumnSortable(column) {
+  return column?.kind !== 'action' && SORT_TYPES.has(column?.sort?.type) && typeof column.sort.value === 'function';
+}
+
+function normalizedSortValue(value, type) {
+  if (value == null || typeof value === 'boolean' || typeof value === 'string' && !value.trim()) return null;
+  if (type === 'text') return typeof value === 'string' ? value.trim() : null;
+  if (type === 'number') return (typeof value === 'number' || typeof value === 'string') && Number.isFinite(Number(value)) ? Number(value) : null;
+  if (type === 'date') {
+    if (value instanceof Date) return Number.isFinite(value.getTime()) ? value.getTime() : null;
+    if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}(?:$|T)/.test(value)) return null;
+    const date = value.slice(0, 10), timestamp = Date.parse(value);
+    if (!Number.isFinite(timestamp) || !Number.isFinite(Date.parse(`${date}T00:00:00Z`)) || new Date(`${date}T00:00:00Z`).toISOString().slice(0, 10) !== date) return null;
+    return timestamp;
+  }
+  return null;
+}
+
+/** Unknown values stay last in BOTH directions. Equal values retain input
+ * order, accessors run once per dossier and no row/model is rewritten. */
+export function sortDossierTableRows(dossiers, { column, direction = 'asc', models, getClient = () => undefined, envois = [] } = {}) {
+  if (!isDossierTableColumnSortable(column)) return [...dossiers];
+  const envoiById = new Map(envois.map(envoi => [envoi.id, envoi]));
+  const sign = direction === 'desc' ? -1 : 1;
+  return dossiers.map((dossier, index) => ({ dossier, index, value: normalizedSortValue(column.sort.value({
+    dossier, model: models?.get?.(dossier.id), client: getClient(dossier.clientId), envoi: envoiById.get(dossier.envoi || dossier.envoiId),
+  }), column.sort.type) })).sort((left, right) => {
+    if (left.value === null || right.value === null) return left.value !== null ? -1 : right.value !== null ? 1 : left.index - right.index;
+    const order = column.sort.type === 'text' ? naturalTextOrder.compare(left.value, right.value) : left.value - right.value;
+    return sign * order || left.index - right.index;
+  }).map(item => item.dossier);
+}
+
+export function dossierTableSortDirectionLabel(column, direction = 'asc') {
+  const descending = direction === 'desc';
+  return column?.sort?.type === 'date' ? descending ? 'plus récent d’abord' : 'plus ancien d’abord'
+    : column?.sort?.type === 'number' ? descending ? 'du plus grand au plus petit' : 'du plus petit au plus grand'
+    : descending ? 'Z → A' : 'A → Z';
+}
+
 const BEFORE_QUOTE = new Set(['receptionne', 'mesure', 'attente_feu_vert', 'autorise', 'en_preparation', 'refuse_client']);
 const QUOTED = new Set(['devis_envoye', 'attente_paiement', 'paye', 'expedie', 'transit', 'dedouanement', 'arrive', 'livraison', 'livre']);
 const dateTime = value => typeof value === 'string' && value.trim() && Number.isFinite(Date.parse(value)) ? Date.parse(value) : null;

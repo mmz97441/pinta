@@ -42,7 +42,7 @@ async function main() {
       paid(f);const before=originals(f);await f.login();await open(f);
       const text=await overview(f).innerText();assert.match(text,/A-03/);assert.match(text,/2.*carton/);assert.match(text,/3[,.]0*\s*kg|3\s*kg/);assert.match(text,/2[,.]5(?:0)?\s*kg/);assert.match(text,/TEST-001/);assert.match(text,/TEST-002/);
       assert.equal(await step(f,'reception').getAttribute('data-state'),'done');assert.equal(await step(f,'preparation').getAttribute('data-state'),'done');assert.equal(await step(f,'paiement').getAttribute('data-state'),'done');
-      assert.match(await step(f,'documents').innerText(),/2/);assert.doesNotMatch(await step(f,'documents').innerText(),/3 facture/);
+      assert.match(await overview(f).locator('[data-overview="invoices"]').innerText(),/2/);assert.doesNotMatch(await overview(f).locator('[data-overview="invoices"]').innerText(),/3 facture/);
       assert.equal(await overview(f).getByRole('button',{name:/Corriger.*mesures|Modifier.*mesures/i}).count(),0,'Paid measurements stay protected.');
       unchanged(f,before);
     });
@@ -111,17 +111,51 @@ async function main() {
       for(const id of ['documents','devis','paiement']) {assert.equal(await step(f,id).getAttribute('data-state'),'restricted');assert.equal(await step(f,id).getByRole('button').count(),0);}
       assert.doesNotMatch(await overview(f).innerText(),/100[,.]00\s*€/);assert.deepEqual(businessWrites(f),[]);
     },'preparateur');
+    for(const dark of [false,true])await scenario(`status-colours-have-readable-contrast-and-do-not-replace-labels-${dark?'dark':'light'}`,async f=>{
+      received(f);await f.context.addInitScript(dark=>localStorage.setItem('expedile-theme',dark?'dark':'light'),dark);await f.login();
+      const seen=new Set();
+      for(const state of ['waiting','current','review','unknown']){
+        const parcel=f.tables.colis[0];
+        if(state==='waiting')Object.assign(parcel,{statut:'attente_feu_vert',demande_feu_vert_envoyee_at:'2026-10-01T08:00:00Z'});
+        if(state==='current')Object.assign(parcel,{statut:'autorise',feu_vert:'autorise',feu_vert_date:'2026-10-01T09:00:00Z'});
+        if(state==='review')Object.assign(parcel,{final_packages:[{dimL:35,dimW:25,dimH:20,poids:2.5}],outgoing_parcel_count:1,preparation_composition_version:2,final_measurements_version:1});
+        if(state==='unknown')Object.assign(parcel,{statut:'paye',quote_version:1,devis_brouillon:false,devis_total:100,paiement_montant:100,paiement_date:'2026-10-01T09:00:00Z',final_packages:[],final_measurements_version:null});
+        await open(f,state==='waiting'?'accord':'preparation');
+        const evidence=await overview(f).locator('[data-step]').evaluateAll(nodes=>{
+          const luminance=rgb=>{const channels=rgb.match(/[\d.]+/g).slice(0,3).map(Number).map(c=>{const v=c/255;return v<=.04045?v/12.92:((v+.055)/1.055)**2.4;});return .2126*channels[0]+.7152*channels[1]+.0722*channels[2];};
+          return nodes.map(node=>{const box=node.firstElementChild,label=box.querySelector('.dossier-overview-step-state'),style=getComputedStyle(box);const a=luminance(getComputedStyle(label).color),b=luminance(style.backgroundColor);return {state:node.dataset.state,text:label.textContent,ratio:(Math.max(a,b)+.05)/(Math.min(a,b)+.05),icon:!!label.querySelector('svg')};});
+        });
+        assert.ok(evidence.some(item=>item.state===state),`Fixture presents ${state}`);
+        for(const item of evidence){seen.add(item.state);assert.ok(item.ratio>=4.5,`${item.state} actual text contrast ${item.ratio.toFixed(2)}:1`);assert.ok(item.text.trim()&&item.icon,'Status remains understandable without colour.');}
+      }
+      for(const state of ['done','waiting','current','review','unknown','upcoming'])assert.ok(seen.has(state));
+      assert.deepEqual(businessWrites(f),[]);
+    });
     for(const width of [1440,768,390,320])for(const dark of [false,true])await scenario(`overview-accessible-${width}-${dark?'dark':'light'}`,async f=>{
       paid(f);
       if([320,768].includes(width)){f.tables.clients[0].nom='Nom de client composé particulièrement long pour vérifier la lisibilité';f.tables.colis[0].trackings_detail[0].number='TRACKING'+('1234567890'.repeat(12));}
       await f.page.setViewportSize({width,height:width<=390?844:1000});await f.context.addInitScript(dark=>localStorage.setItem('expedile-theme',dark?'dark':'light'),dark);await f.login();await open(f);
       assert.equal(await overview(f).getByRole('navigation',{name:'Parcours du dossier',exact:true}).locator('[data-step]').count(),8);
       assert.equal(await f.page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false);
+      const geometry=await overview(f).getByRole('navigation',{name:'Parcours du dossier',exact:true}).evaluate(node=>{
+        const buttons=[...node.querySelectorAll('[data-step] button')];
+        return {height:node.getBoundingClientRect().height,buttons:buttons.map(button=>{const r=button.getBoundingClientRect();const c=getComputedStyle(button);return {top:Math.round(r.top),width:r.width,height:r.height,color:c.color,background:c.backgroundColor,state:button.parentElement.dataset.state};})};
+      });
+      assert.equal(new Set(geometry.buttons.map(button=>button.top)).size,width===1440?1:width===768?2:4,'Eight steps use one desktop row, two tablet rows or four phone rows.');
+      assert.ok(geometry.buttons.every(button=>button.height>=44&&button.width>=44),'Compact steps retain touch targets.');
+      if(width===1440)assert.ok(geometry.height<=80,`The desktop path remains compact (${geometry.height}px).`);
+      const done=geometry.buttons.find(button=>button.state==='done'),other=geometry.buttons.find(button=>button.state!=='done');
+      assert.ok(done&&other);assert.notEqual(done.background,other.background,'Completed steps are distinguishable while text/icons remain visible.');
+      await step(f,'documents').getByRole('button').click();await f.page.waitForURL(url=>url.searchParams.get('section')==='documents');
+      const context=overview(f).locator('[data-overview="opened-step"]');await context.filter({hasText:/Factures.*2/s}).waitFor();assert.match(await context.innerText(),/Factures.*2/s);
+      assert.equal(await step(f,'documents').getByRole('button').getAttribute('aria-describedby'),await context.getAttribute('id'));
+      assert.equal(await step(f,'documents').getByRole('button').evaluate(node=>getComputedStyle(node).backgroundColor),done.background,'Opening a completed step preserves its factual colour.');
       if([320,768].includes(width))for(const id of ['reception','accord','preparation','documents','devis','paiement','expedition','livraison']){
         await step(f,id).getByRole('button').click();await f.page.waitForURL(url=>url.searchParams.get('section')===id);
         assert.equal(f.tables.colis[0].statut,'paye');assert.equal(await f.page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false);
       }
       const axe=await new AxeBuilder({page:f.page}).withTags(['wcag2a','wcag2aa','wcag21aa','wcag22aa']).analyze();assert.deepEqual(axe.violations.map(v=>({id:v.id,nodes:v.nodes.map(n=>n.target)})),[]);
+      await overview(f).evaluate(node=>{for(let parent=node.parentElement;parent;parent=parent.parentElement)parent.scrollTop=0;});
       await f.page.screenshot({path:`${output}/overview-${width}-${dark?'dark':'light'}.png`,fullPage:true});assert.deepEqual(businessWrites(f),[]);
     });
   } finally {await browser.close();await fs.writeFile(`${output}/results.json`,JSON.stringify(results,null,2));}

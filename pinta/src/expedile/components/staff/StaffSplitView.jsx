@@ -9,10 +9,8 @@ import PersonalWorkView from '../workspace/PersonalWorkView';
 import { WORK_QUEUES, queueContext, matchesWorkQueue, priorityScore } from '../../domain/workQueues';
 import usePersistentDraft from '../../hooks/usePersistentDraft';
 import { useMinuteNow } from '../../hooks/useMinuteNow';
-import { receptionCartonManifest } from '../../domain/reception';
-import { measureShipment, volumetricDivisor } from '../../domain/quote';
 import { findColisByReference, normalizeColisReference } from '../../lib/supabaseData';
-import { buildDossierTableModel } from '../../domain/dossierTable';
+import { buildDossierTableModel, defineDossierTableColumn, isDossierTableColumnSortable, sortDossierTableRows, dossierTableSortDirectionLabel } from '../../domain/dossierTable';
 import { staffAvailable, sortWorkActions, workActionUrl } from '../../domain/personalWork';
 import { TABLE_VIEWS, TABLE_COLUMNS, DossierTableHead, DossierTableRow, DossierTableCard } from './DossierTableRows';
 
@@ -28,6 +26,7 @@ const PIPELINE = [
 ];
 
 const usefulDossierDate = c => (c.nextActionSource === 'manual' && c.nextActionAt ? c.nextActionAt : c.statutUpdatedAt || c.dateReception || c.createdAt) || '';
+const defaultDateColumn = defineDossierTableColumn({ key: 'date', label: 'Activité du dossier', sort: { type: 'date', value: ({ dossier }) => usefulDossierDate(dossier) } });
 
 // ── Default sort options ────────────────────────────────────────────────────
 const SORT_OPTIONS = [
@@ -139,7 +138,6 @@ export default function StaffColisPage() {
     }
   }, [search, lookup.status, lookup.row?.id, navigate, returnTo]);
   const ownerFilter = searchParams.get('owner') || '';
-  const sortCol = searchParams.get('sort');
   const sortDir = searchParams.get('dir') === 'desc' ? 'desc' : 'asc';
   const showArchive = searchParams.get('archive') === '1';
   const setShowArchive = (value) => setParam('archive', value ? '1' : null);
@@ -148,6 +146,12 @@ export default function StaffColisPage() {
   const canSeePayments = ['perm_finances_voir_total', 'perm_colis_calculer_devis', 'perm_colis_envoyer_devis', 'perm_colis_confirmer_paiement'].some(permission => can(permission));
   const tableRequested = TABLE_VIEWS.some(view => view.key === searchParams.get('table')) ? searchParams.get('table') : 'daily';
   const tableView = tableRequested === 'payments' && !canSeePayments ? 'daily' : tableRequested;
+  const sortableColumns = TABLE_COLUMNS[tableView].filter(isDossierTableColumnSortable);
+  // Keep another view's sort in the URL, but never sort on invisible or
+  // inaccessible data. Returning to that view restores its selected column.
+  const sortColumn = sortableColumns.find(column => column.key === searchParams.get('sort'));
+  const sortCol = sortColumn?.key || null;
+  const sortOptions = SORT_OPTIONS.filter(option => canSeePayments || !option.key.startsWith('total_'));
   const canExportView = can('perm_export_colis') && (tableView !== 'payments' || can('perm_finances_exporter'));
   const taskScope = ['mine', 'pool'].includes(searchParams.get('tasks')) ? searchParams.get('tasks') : 'all';
   const available = staffAvailable(workPreferences.find(item => item.staff_id === auth?.u?.id), now);
@@ -192,6 +196,7 @@ export default function StaffColisPage() {
     return () => { element.removeEventListener('scroll', save); };
   }, [listMemoryKey]);
   const [defaultSort, setDefaultSort] = useState(() => loadDefaultSort(auth?.u?.id));
+  const defaultSortKey = canSeePayments || !defaultSort.startsWith('total_') ? defaultSort : 'priority';
   const activeFilters = [
     taskScope !== 'all' && { key: 'tasks', label: taskScope === 'mine' ? 'Mes tâches' : 'À prendre' },
     showArchive && { key: 'archive', label: 'Archives incluses' },
@@ -218,6 +223,7 @@ export default function StaffColisPage() {
   };
 
   const changeDefaultSort = key => {
+    if (!sortOptions.some(option => option.key === key)) return;
     setDefaultSort(key);
     try { localStorage.setItem(LS_SORT_KEY + auth?.u?.id, key); } catch { /* optional preference */ }
     setSearchParams(previous => { const next = new URLSearchParams(previous); next.delete('sort'); next.delete('dir'); return next; }, { replace: true });
@@ -247,14 +253,10 @@ export default function StaffColisPage() {
 
   // Sort
   const sorted = useMemo(() => {
-    const compareAmount = (a, b, key, dir) => {
-      const left = models.get(a.id)?.payment[key]; const right = models.get(b.id)?.payment[key];
-      if (left == null || right == null) return left != null ? -1 : right != null ? 1 : 0;
-      return dir * (left - right);
-    };
-    if (!sortCol) {
-      const arr = [...searched];
-      switch (defaultSort) {
+    const sort = (column, direction) => sortDossierTableRows(searched, { column, direction, models, getClient, envois });
+    if (sortColumn) return sort(sortColumn, sortDir);
+    const arr = [...searched];
+    switch (defaultSortKey) {
         case 'priority': {
           const ranked = new Map(sortWorkActions(searched.map(dossier => models.get(dossier.id)?.action).filter(Boolean), now).map((action, index) => [action.colis_id, index]));
           arr.sort((a, b) => {
@@ -266,48 +268,18 @@ export default function StaffColisPage() {
           break;
         }
         case 'date_desc':
-          arr.sort((a, b) => usefulDossierDate(b).localeCompare(usefulDossierDate(a)));
-          break;
+          return sort(defaultDateColumn, 'desc');
         case 'date_asc':
-          arr.sort((a, b) => usefulDossierDate(a).localeCompare(usefulDossierDate(b)));
-          break;
+          return sort(defaultDateColumn, 'asc');
         case 'total_desc':
-          arr.sort((a, b) => compareAmount(a, b, 'requested', -1));
-          break;
+          return sort(TABLE_COLUMNS.payments.find(column => column.key === 'requested'), 'desc');
         case 'total_asc':
-          arr.sort((a, b) => compareAmount(a, b, 'requested', 1));
-          break;
+          return sort(TABLE_COLUMNS.payments.find(column => column.key === 'requested'), 'asc');
         case 'ref_asc':
-          arr.sort((a, b) => (a.ref || '').localeCompare(b.ref || '', 'fr', { numeric: true }));
-          break;
-      }
-      return arr;
+          return sort(TABLE_COLUMNS[tableView].find(column => column.key === 'ref'), 'asc');
     }
-    const arr = [...searched];
-    const dir = sortDir === 'asc' ? 1 : -1;
-    arr.sort((a, b) => {
-      let va, vb;
-      switch (sortCol) {
-        case 'requested': case 'paid': case 'remaining': return compareAmount(a, b, sortCol, dir);
-        case 'sentAt': return dir * (models.get(a.id)?.payment.sentAt || '').localeCompare(models.get(b.id)?.payment.sentAt || '');
-        case 'date': va = usefulDossierDate(a); vb = usefulDossierDate(b); return dir * va.localeCompare(vb);
-        case 'client': va = (getClient(a.clientId)?.nom || '').toLowerCase(); vb = (getClient(b.clientId)?.nom || '').toLowerCase(); return dir * va.localeCompare(vb, 'fr');
-        case 'ref': return dir * (a.ref || '').localeCompare(b.ref || '', 'fr', { numeric: true });
-        case 'statut': return dir * (STATUTS[a.statut]?.label || '').localeCompare(STATUTS[b.statut]?.label || '', 'fr');
-        case 'dims': {
-          const left = measureShipment(receptionCartonManifest(a).dimsParColis, volumetricDivisor(settings));
-          const right = measureShipment(receptionCartonManifest(b).dimsParColis, volumetricDivisor(settings));
-          if (!left || !right) return left ? -1 : right ? 1 : 0;
-          return dir * (left.volumetricWeight - right.volumetricWeight);
-        }
-        case 'transport': return dir * ((a.devisTransport || 0) - (b.devisTransport || 0));
-        case 'taxes': va = (a.devisOM || 0) + (a.devisOMR || 0) + (a.devisTVA || 0); vb = (b.devisOM || 0) + (b.devisOMR || 0) + (b.devisTVA || 0); return dir * (va - vb);
-        case 'total': return dir * ((a.devisTotal || 0) - (b.devisTotal || 0));
-        default: return 0;
-      }
-    });
     return arr;
-  }, [searched, sortCol, sortDir, getClient, defaultSort, now, settings, models]);
+  }, [searched, sortColumn, sortDir, getClient, defaultSortKey, now, models, envois, tableView]);
 
   // Hidden rows must never remain part of a bulk action after filtering.
   useEffect(() => {
@@ -364,11 +336,12 @@ export default function StaffColisPage() {
     all[phase.key] = scope.filter((c) => phase.key === 'all' && (workFilter === 'messages' || ownerFilter || taskScope !== 'all') ? true : phase.filter(c)).length;
     return all;
   }, {}), [scope, workFilter, ownerFilter, taskScope]);
-  const handleSort = (col) => {
+  const handleSort = (col, direction) => {
+    if (!sortableColumns.some(column => column.key === col)) return;
     setSearchParams((previous) => {
       const next = new URLSearchParams(previous);
       next.set('sort', col);
-      next.set('dir', sortCol === col && sortDir === 'asc' ? 'desc' : 'asc');
+      next.set('dir', direction === 'asc' || direction === 'desc' ? direction : previous.get('sort') === col && previous.get('dir') !== 'desc' ? 'desc' : 'asc');
       return next;
     }, { replace: true });
   };
@@ -422,7 +395,12 @@ export default function StaffColisPage() {
           <label className="text-sm font-medium text-gray-700">Responsable de la tâche<select aria-label="Responsable de la tâche" value={ownerFilter} onChange={e => { setSearchParams(previous => { const next = new URLSearchParams(previous); next.delete('tasks'); if (e.target.value) next.set('owner', e.target.value); else next.delete('owner'); return next; }, { replace: true }); }} className="mt-1 block min-h-11 rounded-lg border border-gray-300 bg-white px-2"><option value="">Toute l’équipe</option><option value="mine">Moi</option><option value="unassigned">Non attribué</option>{teamUsers.filter(user => user.authId && user.actif !== false).map(user => <option key={user.authId} value={user.authId}>{[user.prenom, user.nom].filter(Boolean).join(' ')}</option>)}</select></label>
           <label className="text-sm font-medium text-gray-700">Destination<select aria-label="Destination" value={activeDest || ''} onChange={e => setActiveDest(e.target.value)} className="mt-1 block min-h-11 rounded-lg border border-gray-300 bg-white px-2"><option value="">Toutes les destinations</option>{['974', '976', '971', '972'].map(code => <option key={code} value={code}>{getDestByCP(code + '00').nom}</option>)}</select></label>
           <label className="text-sm font-medium text-gray-700">Regrouper<select aria-label="Regrouper les dossiers" value={viewMode} onChange={event => setViewMode(event.target.value)} className="mt-1 block min-h-11 rounded-lg border border-gray-300 bg-white px-2"><option value="priority">Aucun</option><option value="statut">Par étape</option><option value="envoi">Par départ</option></select></label>
-          <label className="min-w-0 max-w-full text-sm font-medium text-gray-700">Trier<select aria-label="Tri par défaut" value={sortCol ? '' : defaultSort} onChange={e => changeDefaultSort(e.target.value)} className="mt-1 block min-h-11 max-w-full rounded-lg border border-gray-300 bg-white px-2">{sortCol && <option value="" disabled>Colonne sélectionnée</option>}{SORT_OPTIONS.map(option => <option key={option.key} value={option.key}>{option.label}</option>)}</select></label>
+          <label className="min-w-0 max-w-full text-sm font-medium text-gray-700">Trier<select aria-label="Tri par défaut" value={sortCol ? `column:${sortCol}:${sortDir}` : defaultSortKey}
+            onChange={event => { const [kind, key, direction] = event.target.value.split(':'); if (kind === 'column') handleSort(key, direction); else changeDefaultSort(event.target.value); }}
+            className="mt-1 block min-h-11 max-w-full rounded-lg border border-gray-300 bg-white px-2">
+            <optgroup label="Ordres de travail">{sortOptions.map(option => <option key={option.key} value={option.key}>{option.label}</option>)}</optgroup>
+            <optgroup label="Colonnes du tableau">{sortableColumns.flatMap(column => ['asc', 'desc'].map(direction => <option key={`${column.key}:${direction}`} value={`column:${column.key}:${direction}`}>{column.label} · {dossierTableSortDirectionLabel(column, direction)}</option>))}</optgroup>
+          </select></label>
           <button hidden={Boolean(workFilter)} disabled={archivesBusy} aria-pressed={showArchive} onClick={async () => { if (showArchive) { setShowArchive(false); return; } setArchivesBusy(true); try { if (!archivesLoaded) await loadArchives(); setShowArchive(true); } catch (error) { flash({ msg: 'Les archives n’ont pas pu être chargées. ' + error.message, type: 'error' }); } finally { setArchivesBusy(false); } }} className="min-h-11 rounded-lg border border-gray-200 px-3 text-sm font-semibold text-gray-700">{archivesBusy ? 'Chargement archives…' : showArchive ? 'Archives incluses' : 'Inclure les archives'}</button>
           {canExportView && <button disabled={exportBusy || !sorted.length} onClick={() => exportRows(sorted)} className="min-h-11 rounded-lg border border-gray-200 px-3 text-sm font-semibold text-gray-700">{exportBusy ? 'Export…' : `Exporter ${sorted.length} dossiers filtrés`}</button>}
           <button onClick={() => setShowFilters(false)} className="min-h-11 px-3 text-sm font-semibold brand-t underline">Fermer les filtres</button>
@@ -432,6 +410,7 @@ export default function StaffColisPage() {
           <button onClick={clearFilters} className="min-h-11 px-2 text-sm font-semibold brand-t underline">Retirer les filtres</button>
         </div>}
         <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-gray-600"><span role="status">{sorted.length} dossier(s) affiché(s)</span><span className="hidden sm:inline">{tableView === 'daily' ? 'Une ligne par expédition · responsable de la tâche affichée' : tableView === 'payments' ? 'Montants demandés au client et règlements enregistrés' : 'Départs affectés et vérifications restantes'}</span></div>
+        {sortColumn && <p role="status" className="text-sm text-gray-600">Tri : {sortColumn.label} · {dossierTableSortDirectionLabel(sortColumn, sortDir)}{viewMode !== 'priority' ? ' · dans chaque groupe' : ''}</p>}
         {workFilter === 'messages' && <button onClick={() => navigate('/conversations')} className="min-h-11 rounded-lg border px-3 text-sm font-semibold">Ouvrir les conversations et messages à rattacher</button>}
         {exactReference && <section aria-label="Recherche de référence dans tous les dossiers" className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm">
           <p className="font-semibold text-slate-800">Recherche de référence · tous les dossiers, archives incluses</p>
@@ -495,8 +474,7 @@ export default function StaffColisPage() {
           {canExportView && (
             <button
               onClick={() => {
-                const ids = [...selectedIds];
-                const colisForExport = ids.map((id) => data.find((c) => c.id === id)).filter(Boolean);
+                const colisForExport = sorted.filter(dossier => selectedIds.has(dossier.id));
                 exportRows(colisForExport);
               }}
               className="px-2 py-1 rounded-lg text-[10px] font-bold bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 transition-all active:scale-95"

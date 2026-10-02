@@ -92,6 +92,7 @@ jobs:
           node tests/dossier-shell.browser.cjs
           node tests/parcours-dossier.browser.cjs
           node tests/dossier-overview.browser.cjs
+          node tests/conversation-layout.browser.cjs
           node tests/reception-page.browser.cjs
           node tests/personal-work.browser.cjs
           node tests/task-claim.browser.cjs
@@ -141,6 +142,7 @@ jobs:
             /tmp/pinta-dossier-shell
             /tmp/pinta-parcours-dossier
             /tmp/pinta-dossier-overview
+            /tmp/pinta-conversation-layout
             /tmp/pinta-reception-page
             /tmp/pinta-personal-work
             /tmp/pinta-task-claim

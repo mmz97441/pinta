@@ -47,6 +47,7 @@ import DossierOverview from './components/detail/DossierOverview';
 import { buildDossierOverview } from './domain/dossierOverview';
 import { revisionLockedReason } from './domain/shipmentRevision';
 import ChatPanel from './components/detail/ChatPanel';
+import './components/detail/dossierConversation.css';
 import AuditLog from './components/detail/AuditLog';
 import { DOSSIER_TASKS, dossierTaskUrl, resolveDossierTask } from './domain/dossierTasks';
 
@@ -155,9 +156,9 @@ function StaffColisDetail() {
       && (!action?.assignee_id || action.assignee_id === auth?.u?.id);
   };
   return (
-    <>
+    <div className={conversationOpen ? 'dossier-page dossier-page--conversation' : 'dossier-page'}>
       <DetailHeader task={task} conversation={conversationOpen} onOpenContext={openContext} />
-      <div className="mx-auto max-w-[1600px] px-4 pt-4 sm:px-6 lg:px-8">
+      <div className={`w-full shrink-0 px-4 pt-4 sm:px-6 lg:px-8 ${conversationOpen ? '' : 'mx-auto max-w-[1600px]'}`}>
         <nav role="tablist" aria-label="Dossier et conversation" className="flex gap-2 border-b border-slate-200 pb-3" onKeyDown={event => {
           if (!canMessages || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
           event.preventDefault();
@@ -184,12 +185,12 @@ function StaffColisDetail() {
         <TaskAccessBoundary readOnly={colleagueWorking}><StaffDetailView workspace active={!conversationOpen} task={task} onOpenContext={openContext} /></TaskAccessBoundary>
       </div>
       </section>
-      {canMessages && <section role="tabpanel" id="dossier-panel-conversation" aria-labelledby="dossier-tab-conversation" hidden={!conversationOpen} className="mx-auto max-w-5xl space-y-5 px-4 py-5 sm:px-6">
+      {canMessages && <section role="tabpanel" id="dossier-panel-conversation" aria-labelledby="dossier-tab-conversation" hidden={!conversationOpen} className="dossier-conversation">
         {conversationAction && <TaskOwnership key={conversationAction.id} action={conversationAction} />}
-        {(conversationOpen || conversationVisited === id) && <><div className="flex h-[min(38rem,calc(100dvh-24rem))] min-h-80 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white"><ChatPanel key={id} colis={sel} client={selClient} embedded active={conversationOpen} /></div><details className="rounded-xl border border-slate-200 bg-white px-4"><summary className="min-h-12 cursor-pointer py-3 font-semibold text-slate-700">Ce qui a déjà été fait</summary><AuditLog key={id} expanded includeAudit={can('perm_admin_audit')} /></details></>}
+        {(conversationOpen || conversationVisited === id) && <><div className="dossier-conversation__chat rounded-2xl border border-slate-200 bg-white"><ChatPanel key={id} colis={sel} client={selClient} embedded active={conversationOpen} /></div><details className="shrink-0 rounded-xl border border-slate-200 bg-white px-4"><summary className="min-h-12 cursor-pointer py-3 font-semibold text-slate-700">Ce qui a déjà été fait</summary><AuditLog key={id} expanded includeAudit={can('perm_admin_audit')} /></details></>}
       </section>}
       <DossierContextPanel key={sel.id} section={contextSection} onSectionChange={setContextSection} onClose={() => setContextSection(null)} casierEditRequest={casierEditRequest} />
-    </>
+    </div>
   );
 }
 
@@ -398,7 +399,7 @@ function AppContent() {
             <div className="flex items-center gap-2">{can('perm_colis_receptionner') && <button aria-label="Réceptionner des cartons" onClick={() => navigate(`/reception?${new URLSearchParams({ returnTo: location.pathname + location.search })}`)} className="min-h-11 inline-flex items-center gap-1 rounded-xl px-2 text-xs font-bold brand-t"><Plus size={18} />Réceptionner</button>}<ThemeToggle compact /><button aria-label="Se déconnecter" onClick={handleLogout} className="min-h-11 min-w-11 flex items-center justify-center text-gray-500"><LogOut size={18} /></button></div>
           </div>
           {loadBanner}
-          <div className="flex-1 min-h-0 overflow-y-auto pb-[calc(4.5rem+env(safe-area-inset-bottom))] lg:pb-0">
+          <div className="flex-1 min-h-0 overflow-y-auto pb-[calc(4.5rem+env(safe-area-inset-bottom))] scroll-pb-[calc(4.5rem+env(safe-area-inset-bottom))] lg:pb-0 lg:scroll-pb-0">
             {dataLoading ? <LoadingView /> : <Suspense fallback={<LoadingView />}><ScreenBoundary key={location.pathname}>
             <Routes>
               <Route path="/equipe" element={<TeamWorkView />} />

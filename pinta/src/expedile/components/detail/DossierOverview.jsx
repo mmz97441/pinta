@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowUpRight, Check, Clock, AlertTriangle, Lock, Circle, Pencil, Package, Ruler, FileText } from 'lucide-react';
+import { ArrowUpRight, Check, Clock, AlertTriangle, Lock, Circle, Minus, Pencil, Package, Ruler, FileText } from 'lucide-react';
 import { formatDossierTableDate } from '../../domain/dossierTable';
 import './dossierOverview.css';
 
@@ -11,7 +11,7 @@ const STEP_STATES = {
   review: { label: 'À revoir', icon: AlertTriangle },
   unknown: { label: 'À vérifier', icon: AlertTriangle },
   restricted: { label: 'Accès réservé', icon: Lock },
-  not_required: { label: 'Non nécessaire', icon: Check },
+  not_required: { label: 'Non nécessaire', shortLabel: 'Sans objet', icon: Minus },
 };
 const numberFormat = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 3 });
 const positive = value => value !== null && value !== undefined && Number.isFinite(Number(value)) && Number(value) > 0;
@@ -28,24 +28,20 @@ function OverviewAction({ onClick, label, children }) {
   return <button type="button" className="dossier-overview-link" aria-label={label} onClick={onClick}>{children}<ArrowUpRight size={14} aria-hidden="true" /></button>;
 }
 
-function Step({ step, viewedTask, onNavigateTask }) {
+function Step({ step, viewedTask, onNavigateTask, summaryId }) {
   const state = STEP_STATES[step.state] || STEP_STATES.unknown;
   const Icon = state.icon;
   const viewed = viewedTask === step.id;
-  const date = step.date ? formatDossierTableDate(step.date) : null;
-  const actionable = step.current && step.state === 'current';
   const content = <>
-    <span className="dossier-overview-step-label">{step.label}<Icon size={14} aria-hidden="true" /></span>
-    <span className="dossier-overview-step-summary">{step.summary || state.label}</span>
-    {(viewed || actionable || date) && <span className="dossier-overview-step-meta">
-      {viewed && <span>Étape ouverte</span>}{actionable && <span>À faire</span>}{date && <time dateTime={step.date}>{date}</time>}
-    </span>}
+    <span className="dossier-overview-step-label">{step.label}</span>
+    <span className="dossier-overview-step-state"><Icon size={14} aria-hidden="true" />{state.shortLabel || state.label}</span>
   </>;
   const title = [step.summary, step.date ? formatDossierTableDate(step.date) : ''].filter(Boolean).join(' · ');
   return <li data-step={step.id} data-state={step.state}>
     {step.canOpen && onNavigateTask ? <button type="button" className="dossier-overview-step"
       aria-current={viewed ? 'step' : undefined}
       aria-label={`Consulter l’étape ${step.label} — ${state.label}`}
+      aria-describedby={viewed ? summaryId : undefined}
       title={title || undefined} onClick={() => onNavigateTask(step.id)}>{content}</button>
       : <div className="dossier-overview-step dossier-overview-step-readonly" title={title || undefined}>{content}</div>}
   </li>;
@@ -72,6 +68,8 @@ export default function DossierOverview({
   const trackings = (received.boxes || []).filter(box => box.tracking);
   const visibleTrackings = trackings.slice(0, 2);
   const alerts = model.alerts || [];
+  const openedStep = steps.find(step => step.id === viewedTask);
+  const openedStepSummaryId = `dossier-overview-opened-${dossier.id}`;
 
   return <section aria-label="Vue d’ensemble du dossier" data-testid="dossier-overview" className="dossier-overview">
     <div className="dossier-overview-heading">
@@ -120,7 +118,11 @@ export default function DossierOverview({
     </details>}
 
     <nav aria-label="Parcours du dossier" className="dossier-overview-path">
-      <ol>{steps.map(step => <Step key={step.id} step={step} viewedTask={viewedTask} onNavigateTask={onNavigateTask} />)}</ol>
+      <ol>{steps.map(step => <Step key={step.id} step={step} viewedTask={viewedTask} onNavigateTask={onNavigateTask} summaryId={openedStep ? openedStepSummaryId : undefined} />)}</ol>
     </nav>
+    {openedStep && <p id={openedStepSummaryId} data-overview="opened-step" className="dossier-overview-opened-step">
+      <strong>Étape ouverte : {openedStep.label}.</strong>{' '}{openedStep.summary || STEP_STATES[openedStep.state]?.label}
+      {openedStep.date && <>{' · '}<time dateTime={openedStep.date}>{formatDossierTableDate(openedStep.date)}</time></>}
+    </p>}
   </section>;
 }

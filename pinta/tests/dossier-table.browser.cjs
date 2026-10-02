@@ -21,6 +21,7 @@ const cell = (f, id, column) => row(f, id).locator(`[data-column="${column}"]`);
 const take = f => row(f, P).getByRole('button', { name: 'Je m’en occupe', exact: true });
 const businessWrites = f => f.requests.filter(request => ['POST', 'PATCH', 'DELETE'].includes(request.method)
   && request.path.startsWith('/rest/v1/') && !request.path.endsWith('/refresh_staff_work_actions'));
+const orderedIds = f => rows(f).evaluateAll(elements => elements.map(node => node.dataset.dossierRow || node.dataset.dossierCard));
 const allIds = async f => (await rows(f).evaluateAll(elements => elements.map(node => node.dataset.dossierRow || node.dataset.dossierCard))).sort();
 const reply = (route, body, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
 
@@ -123,6 +124,84 @@ async function main() {
       for(const [label,value] of [['Paiements','payments'],['Départs','departures'],['Travail quotidien','daily']]) {
         await selectPreset(f,label,value);assert.deepEqual(await allIds(f),expected,`${label} keeps the same expeditions`);
         assert.equal(await rows(f).count(),6,'Parallel tasks do not create duplicate EXP rows');
+      }
+      await assertNoBusinessChange(f,before);
+    });
+    await scenario('sorting-every-displayed-data-column-is-keyboard-accessible-and-read-only',async f=>{
+      const before=structuredClone(f.tables.colis);await open(f);
+      for(const [label,view] of [['Travail quotidien','daily'],['Paiements','payments'],['Départs','departures']]) {
+        await selectPreset(f,label,view);
+        const table=f.page.getByRole('table',{name:'Dossiers d’expédition',exact:true});
+        // Discover displayed data columns so a future column cannot escape this contract.
+        const keys=await table.locator('thead th[data-column]').evaluateAll(headers=>headers.map(h=>h.dataset.column).filter(key=>!['action','select'].includes(key)));
+        assert.ok(keys.length>=6);
+        for(const key of keys) {
+          const header=table.locator(`th[data-column="${key}"]`),button=header.getByRole('button');
+          assert.equal(await button.count(),1,`${view}/${key} has a native sort button`);
+          for(const direction of ['asc','desc']) {
+            // Reset to a different key first: the next activation must mean ascending.
+            if(direction==='asc'&&new URL(f.page.url()).searchParams.get('sort')===key) {
+              const other=keys.find(value=>value!==key);await table.locator(`th[data-column="${other}"]`).getByRole('button').click();
+            }
+            await button.focus();await button.press(direction==='asc'?'Enter':'Space');
+            await f.page.waitForURL(url=>url.searchParams.get('sort')===key&&url.searchParams.get('dir')===direction);
+            await header.evaluate((node,value)=>new Promise(resolve=>{const check=()=>node.getAttribute('aria-sort')===value?resolve():requestAnimationFrame(check);check();}),direction==='asc'?'ascending':'descending');
+            assert.equal(await table.locator('th[aria-sort="ascending"],th[aria-sort="descending"]').count(),1);
+            assert.deepEqual(await allIds(f),[P,P2,P3,P4,P5,P6].sort());
+          }
+        }
+        assert.equal(await table.locator('th[data-column="action"]').getByRole('button').count(),0);
+        assert.equal(await table.locator('th[data-column="select"]').getAttribute('aria-sort'),null);
+      }
+      await assertNoBusinessChange(f,before);
+    });
+    await scenario('sorting-real-numbers-natural-shelf-names-and-dates-keeps-unknowns-last',async f=>{
+      const parcels=f.tables.colis;
+      parcels.forEach((parcel,index)=>{parcel.casier=['A-2','A-10','A-1',null,'',null][index];});
+      Object.assign(parcels[4],{devis_total:9,paiement_montant:9,devis_envoye_le:'2026-09-10T08:00:00Z'});
+      Object.assign(parcels[5],{devis_total:80,paiement_montant:80,devis_envoye_le:'2026-09-20T08:00:00Z'});
+      const before=structuredClone(parcels);await open(f);
+      const sort=async(key,direction)=>{
+        if(await f.page.getByRole('combobox',{name:'Tri par défaut',exact:true}).count()===0)await f.page.getByRole('button',{name:/^Filtres et options/}).click();
+        await f.page.getByRole('combobox',{name:'Tri par défaut',exact:true}).selectOption(`column:${key}:${direction}`);
+        await f.page.waitForURL(url=>url.searchParams.get('sort')===key&&url.searchParams.get('dir')===direction);
+      };
+      for(const [direction,expected] of [['asc',[P3,P,P2]],['desc',[P2,P,P3]]]) {
+        await sort('casier',direction);assert.deepEqual((await orderedIds(f)).slice(0,3),expected);
+        assert.deepEqual((await orderedIds(f)).slice(3).sort(),[P4,P5,P6].sort());
+      }
+      await selectPreset(f,'Paiements','payments');
+      for(const key of ['requested','sentAt'])for(const [direction,expected] of [['asc',[P5,P6,P4]],['desc',[P4,P6,P5]]]) {
+        await sort(key,direction);assert.deepEqual((await orderedIds(f)).slice(0,3),expected,`${key} sorts real numbers/dates, not their formatted labels`);
+        assert.deepEqual((await orderedIds(f)).slice(3).sort(),[P,P2,P3].sort(),`${key}: unknowns stay last even descending`);
+      }
+      await sort('requested','desc');await f.page.reload();await row(f,P4).waitFor();assert.deepEqual((await orderedIds(f)).slice(0,3),[P4,P6,P5]);
+      await selectPreset(f,'Départs','departures');assert.equal(new URL(f.page.url()).searchParams.get('sort'),'requested');
+      assert.equal(await f.page.locator('thead th[aria-sort="descending"]').count(),0,'An unrelated view does not pretend to sort an invisible amount.');
+      await selectPreset(f,'Paiements','payments');assert.deepEqual((await orderedIds(f)).slice(0,3),[P4,P6,P5]);
+      if(await f.page.getByRole('button',{name:'Fermer les filtres',exact:true}).count())await f.page.getByRole('button',{name:'Fermer les filtres',exact:true}).click();await f.page.screenshot({path:`${output}/payments-sorted-descending.png`,fullPage:true});
+      await assertNoBusinessChange(f,before);
+    });
+    await scenario('mobile-sort-menu-offers-all-data-columns-in-every-view-and-both-directions',async f=>{
+      await f.page.setViewportSize({width:390,height:844});const before=structuredClone(f.tables.colis);await open(f);
+      for(const [label,view,keys] of [
+        ['Travail quotidien','daily',['ref','client','statut','owner','casier','cartons']],
+        ['Paiements','payments',['ref','client','requested','paid','remaining','sentAt']],
+        ['Départs','departures',['ref','client','departure','destination','packages','readiness']],
+      ]) {
+        await selectPreset(f,label,view);
+        if(await f.page.getByRole('combobox',{name:'Tri par défaut',exact:true}).count()===0)await f.page.getByRole('button',{name:/^Filtres et options/}).click();
+        const menu=f.page.getByRole('combobox',{name:'Tri par défaut',exact:true});
+        const available=await menu.locator('option').evaluateAll(options=>options.map(option=>option.value).filter(value=>value.startsWith('column:')));
+        for(const key of keys)for(const direction of ['asc','desc']) {
+          assert.ok(available.includes(`column:${key}:${direction}`));await menu.selectOption(`column:${key}:${direction}`);
+          await f.page.waitForURL(url=>url.searchParams.get('sort')===key&&url.searchParams.get('dir')===direction);
+        }
+        await menu.selectOption('column:ref:desc');await f.page.waitForURL(url=>url.searchParams.get('sort')==='ref'&&url.searchParams.get('dir')==='desc');
+        assert.deepEqual(await orderedIds(f),[P6,P5,P4,P3,P2,P],'Mobile cards follow the chosen descending order.');
+        assert.equal(await f.page.getByRole('table',{name:'Dossiers d’expédition',exact:true}).count(),0);
+        assert.equal(await f.page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false);
+        await f.page.getByRole('button',{name:'Fermer les filtres',exact:true}).click();
       }
       await assertNoBusinessChange(f,before);
     });
@@ -261,9 +340,10 @@ async function main() {
         await selectPreset(f,label,view);
         const downloaded=f.page.waitForEvent('download');await f.page.getByRole('button',{name:'Exporter 6 dossiers filtrés',exact:true}).click();
         const download=await downloaded;assert.equal(await download.failure(),null);
+        const visibleReferences=await rows(f).locator('[data-column="ref"] .dossier-table-reference').allTextContents();
         const workbook=XLSX.read(await fs.readFile(await download.path()),{type:'buffer'});
         const data=XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]],{header:1});
-        assert.deepEqual(data[0],expected[view]);assert.equal(data.length,7);assert.equal(new Set(data.slice(1).map(line=>line[0])).size,6);
+        assert.deepEqual(data[0],expected[view]);assert.deepEqual(data.slice(1).map(line=>line[0]),visibleReferences,'Excel follows the visible row order.');assert.equal(data.length,7);assert.equal(new Set(data.slice(1).map(line=>line[0])).size,6);
         if(view==='payments') {
           const unknown=data.find(line=>line[0]==='EXP-TAB001'),partial=data.find(line=>line[0]==='EXP-TAB004');
           assert.equal(unknown[2],'À calculer');assert.deepEqual(partial.slice(2,5),[100,30,70]);
@@ -284,7 +364,7 @@ async function main() {
         const parcel={...structuredClone(f.tables.colis[1]),id:parcelId(i),ref:`EXP-SCR${i}`,created_at:'2026-10-01T08:00:00Z'};f.tables.colis.push(parcel);
         f.tables.staff_work_actions.push({...f.tables.staff_work_actions[1],id:actionId(i),colis_id:parcel.id});
       }
-      await open(f);await selectScope(f,'Mes tâches','mine');await selectPreset(f,'Paiements','payments');
+      await open(f,'sort=ref&dir=desc');await selectScope(f,'Mes tâches','mine');await selectPreset(f,'Paiements','payments');
       await f.page.getByLabel('Rechercher ou scanner un colis',{exact:true}).fill('Camille');
       await f.page.waitForURL(url=>url.searchParams.get('q')==='Camille');
       const listUrl=f.page.url();const target=row(f,parcelId(60));await target.scrollIntoViewIfNeeded();

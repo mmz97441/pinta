@@ -6,7 +6,7 @@ import { getDestByCP, getSecteurByCP } from '../../constants';
 import { actionWaiting, canWorkAction, staffAvailable } from '../../domain/personalWork';
 import { receptionCartonManifest } from '../../domain/reception';
 import { needsConversationAction } from '../../domain/conversations';
-import { dossierTableMissingAmountLabel, formatDossierTableDate } from '../../domain/dossierTable';
+import { TABLE_COLUMNS, dossierTableMissingAmountLabel, formatDossierTableDate, isDossierTableColumnSortable, dossierTableSortDirectionLabel } from '../../domain/dossierTable';
 import TaskTakeButton from '../workspace/TaskTakeButton';
 import InvoiceReviewIndicator from '../ui/InvoiceReviewIndicator';
 import './dossierTable.css';
@@ -17,27 +17,8 @@ export const TABLE_VIEWS = [
   { key: 'departures', label: 'Départs' },
 ];
 
-const referenceColumn = { key: 'ref', label: 'Référence', sortable: true };
-const clientColumn = { key: 'client', label: 'Client', sortable: true };
-const actionColumn = { key: 'action', label: 'Action' };
-
-export const TABLE_COLUMNS = {
-  daily: [referenceColumn, clientColumn,
-    { key: 'statut', label: 'Travail à faire' },
-    { key: 'owner', label: 'Qui s’en occupe' },
-    { key: 'casier', label: 'Casier' },
-    { key: 'cartons', label: 'Cartons reçus' }, actionColumn],
-  payments: [referenceColumn, clientColumn,
-    { key: 'requested', label: 'Demandé', align: 'right', sortable: true },
-    { key: 'paid', label: 'Payé', align: 'right', sortable: true },
-    { key: 'remaining', label: 'Reste à payer', align: 'right', sortable: true },
-    { key: 'sentAt', label: 'Devis envoyé le', sortable: true }, actionColumn],
-  departures: [referenceColumn, clientColumn,
-    { key: 'departure', label: 'Départ prévu' },
-    { key: 'destination', label: 'Destination' },
-    { key: 'packages', label: 'Colis à expédier' },
-    { key: 'readiness', label: 'Prêt à partir ?' }, actionColumn],
-};
+export { TABLE_COLUMNS };
+const referenceColumn = TABLE_COLUMNS.daily.find(column => column.key === 'ref');
 
 const moneyFormatter = new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' });
 const stopPropagation = event => event.stopPropagation();
@@ -124,8 +105,9 @@ export function DossierTableHead({ columns = TABLE_COLUMNS.daily, onSelectAll, a
     </th>
     {columns.map(column => <th key={column.key} scope="col" data-column={column.key}
       className={column.align === 'right' ? 'dossier-table-align-right' : undefined}
-      aria-sort={column.sortable ? sortCol === column.key ? sortDir === 'desc' ? 'descending' : 'ascending' : 'none' : undefined}>
-      {column.sortable && onSort ? <button type="button" className="dossier-table-sort" onClick={() => onSort(column.key)}>
+      aria-sort={isDossierTableColumnSortable(column) ? sortCol === column.key ? sortDir === 'desc' ? 'descending' : 'ascending' : 'none' : undefined}>
+      {isDossierTableColumnSortable(column) && onSort ? <button type="button" className="dossier-table-sort" onClick={() => onSort(column.key)}
+        title={`Trier ${column.label} : ${dossierTableSortDirectionLabel(column, sortCol === column.key && sortDir === 'asc' ? 'desc' : 'asc')}`}>
         {column.label}{sortCol === column.key ? sortDir === 'desc' ? <ArrowDown size={14} aria-hidden="true" /> : <ArrowUp size={14} aria-hidden="true" /> : <ArrowUpDown size={14} aria-hidden="true" />}
       </button> : column.label}
     </th>)}

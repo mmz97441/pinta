@@ -287,7 +287,7 @@ export default function ChatPanel({ colis, client, embedded = false, active = tr
           <button
             onClick={handleSend}
             disabled={!canHandle || sending || changingState || !msgTxt.trim()} aria-label="Envoyer le message"
-            className="px-3 py-2 text-white rounded-xl text-sm font-bold disabled:opacity-30"
+            className="min-h-11 px-3 py-2 text-white rounded-xl text-sm font-bold disabled:opacity-30"
             style={{ backgroundColor: BRAND.navy }}
           >
             <Send size={16} className="inline mr-1" />{sending ? 'Envoi…' : selClient?.telegramChatId ? 'Envoyer sur Telegram' : 'Envoyer dans l’espace client'}
