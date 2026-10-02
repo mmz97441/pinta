@@ -328,7 +328,7 @@ async function main() {
       await f.page.getByRole('button', { name: 'Retour à la liste de travail', exact: true }).click();
       // The route restores the list after unmounting the document workspace.
       // Wait for its visible table before locating the responsive invoice link.
-      await f.page.getByRole('columnheader', { name: /Action \/ étape/i }).waitFor();
+      await f.page.getByRole('region', { name: 'Tableau des dossiers', exact: true }).waitFor();
       await f.page.getByRole('link', { name: '2 factures reçues · À vérifier — EXP-TEST-001', exact: true }).filter({ visible: true }).click();
       await description(f).waitFor();
       assert.equal(await description(f).inputValue(), 'Correction temporaire pendant un changement de dossier');

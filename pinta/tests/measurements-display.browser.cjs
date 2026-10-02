@@ -1,4 +1,4 @@
-/* Local fixture integration: configured volumes in the table and complete dossier information. */
+/* Local fixture integration: received/prepared measures and configured volumes in dossier details. */
 const { chromium } = require('playwright');
 const { setup, ids, base } = require('./browser-regression.cjs');
 const assert = require('node:assert/strict');
@@ -19,20 +19,19 @@ async function main() {
       Object.assign(f.tables.colis[0], {
         statut: 'mesure', nb_colis: 2, dim_l: 80, dim_w: 80, dim_h: 10, poids: 99,
         dims_par_colis: [{ dimL: 80, dimW: 10, dimH: 10, poids: 1 }, { dimL: 10, dimW: 80, dimH: 10, poids: 1 }],
-        final_packages: [], // Explicit legacy fallback; current prepared parcels have a separate fixture.
+        final_packages: null, // Only legacy NULL can use scalar prepared measurements.
         fin_l: 40, fin_w: 20, fin_h: 10, fin_p: 2,
       });
-      await f.context.addInitScript(staffId => localStorage.setItem('expedile_columns_v2:' + staffId, JSON.stringify(['ref', 'statut', 'client', 'volCm3', 'volKg', 'poids', 'total'])), ids.A);
       await f.login();
       if (!mobile) {
         await f.page.goto(base + '/colis');
         const row = f.page.getByRole('row').filter({ has: f.page.getByRole('button', { name: 'EXP-TEST-001', exact: true }) });
-        await row.getByText('2.67', { exact: true }).waitFor();
-        await row.getByText('2.00 kg', { exact: true }).waitFor();
-        assert.equal(await row.getByText('10.67', { exact: true }).count(), 0, 'Maximum dimensions must not replace the sum of actual carton volumes');
-        assert.equal(await row.getByText('99 kg', { exact: true }).count(), 0, 'Stale aggregate weight must not replace individual carton weights');
+        await row.waitFor();
+        assert.equal((await row.locator('[data-column="cartons"]').innerText()).trim(), '2');
+        assert.equal(await row.getByText('99 kg', { exact: true }).count(), 0, 'The daily table must not revive stale aggregate measurements');
       }
       await f.page.goto(base + '/colis/' + ids.P);
+      await f.page.getByTestId('dossier-overview').locator('[data-overview="received"]').getByText('2 kg reçus', { exact: true }).waitFor();
       await f.page.getByRole('button', { name: /^Détails(?: du dossier)?$/, exact: true }).click();
       await f.page.getByRole('dialog', { name: 'Contexte du dossier' }).getByRole('button', { name: 'Réception', exact: true }).click();
       const measures = f.page.getByRole('region', { name: 'Mesures des cartons', exact: true });
@@ -53,6 +52,12 @@ async function main() {
       assert.equal(await measures.getByText('Totaux à réception', { exact: true }).count(), 0);
       await measures.getByText('Mesures après optimisation à compléter ; aucun poids calculé.', { exact: true }).waitFor();
       assert.equal(await measures.getByText('Poids volumétrique : 1.33 kg · Poids facturable : 2.00 kg', { exact: true }).count(), 0);
+      f.tables.colis[0].final_packages = [];
+      f.tables.colis[0].fin_w = 20;
+      await f.page.reload();
+      await f.page.getByRole('button', { name: /^Détails(?: du dossier)?$/, exact: true }).click();
+      await measures.waitFor();
+      assert.equal(await measures.getByText(/Après optimisation ·/).count(), 0, 'An explicitly empty preparation cannot resurrect old scalar measurements in details.');
       assert.equal(await f.page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
       assert.deepEqual(f.errors, []);
       assert.deepEqual(f.networkDenied, []);

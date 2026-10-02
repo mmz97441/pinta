@@ -44,6 +44,13 @@ Captures : [travail quotidien](verification-tableau-2026-10-02/travail-desktop-c
 
 Les contrôles serveur du parcours précédent restent décrits dans le rapport du 1er octobre : 104 tests serveur et 20 étapes SQL, dont permissions, concurrence et idempotence. Le tableau n’ajoute aucune migration. Un essai observé avec un collaborateur débutant reste nécessaire pour confirmer la compréhension réelle au dépôt.
 
-## Publication
+## Publication vérifiée le 2 octobre 2026
 
-Modifications locales terminées et vérifiées. La référence de publication sera ajoutée après vérification de la branche principale et de l’interface effectivement servie.
+- Autorisation explicite de publication reçue ; push du commit applicatif **[`2580b8d`](https://github.com/mmz97441/pinta/commit/2580b8df4994446a6fdec1058786ceb41e30e00a)** sur **`main`** effectué sans forcer l’historique. Il regroupe le parcours du 1er octobre et le tableau du 2 octobre : 96 fichiers de code, tests, rapports et captures fictives.
+- Les fichiers personnels préexistants et sauvegardes privées sont exclus. Le contrôle des formats de secrets n’a rien détecté dans les ajouts.
+- **Interface en ligne sur [expedile.app](https://expedile.app/colis)**. Déploiement Vercel **`dpl_ATNW4gyXD5QN9VrTTeFvVCUBW6Hc`**, état **READY**, associé au commit publié. Les fichiers servis contiennent bien les vues « Travail quotidien », « Paiements » et la colonne « Qui s’en occupe ».
+- Vérification HTTP : `/`, `/colis`, `/reception`, `/conversations` et `/paiement/retour` répondent avec le document de l’application. Entrée servie : `/assets/index-DPItcyLQ.js` ; tableau : `/assets/StaffSplitView-C-2NiNUO.js`.
+- Navigateur neuf sur le domaine réel : connexion affichée, aucune erreur JavaScript ni débordement horizontal, aucune requête de modification. Les essais métier détaillés restent ceux de la recette avec données fictives ; aucun dossier client réel n’a été modifié pour cette vérification en ligne.
+- Serveur : migration de réception `20261001000001` revérifiée, deux commandes présentes avec leurs contrôles de propriétaire de tâche et leurs droits attendus, registre de reprises privé. Aucune nouvelle migration pour le tableau.
+- PayPlug reste en mode test ; aucune clé ni configuration de paiement n’a été modifiée.
+- [Contrôles GitHub du commit publié](https://github.com/mmz97441/pinta/actions/runs/37036775512) : compilation, tests unitaires, tests serveur et contrôles SQL réussis. La recette navigateur distante a détecté un ancien libellé dans le test de sélection (« colis » au lieu de « dossier ») et une marge verticale insuffisante sur téléphone avec les polices Linux. La correction et la nouvelle vérification sont consignées dans le [rapport de la vue d’ensemble](rapport-vue-ensemble-dossier-2026-10-02.md).

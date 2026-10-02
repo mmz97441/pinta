@@ -215,9 +215,11 @@ async function main() {
     },{restricted:true});
     await scenario('hidden-selected-dossier-is-removed-before-any-bulk-command',async f=>{
       await open(f);await row(f,P).getByRole('checkbox',{name:'Sélectionner le dossier EXP-TAB001',exact:true}).check();
-      await f.page.getByText('1 colis sélectionné',{exact:true}).waitFor();
+      await f.page.getByText('1 dossier sélectionné',{exact:true}).waitFor();
+      assert.equal(await row(f,P).getByRole('checkbox',{name:'Sélectionner le dossier EXP-TAB001',exact:true}).isChecked(),true);
+      assert.equal(await row(f,P).getAttribute('data-selected'),'true');
       await f.page.getByLabel('Rechercher ou scanner un colis',{exact:true}).fill('EXP-TAB002');
-      await row(f,P2).waitFor();await f.page.getByText('1 colis sélectionné',{exact:true}).waitFor({state:'hidden'});
+      await row(f,P2).waitFor();await f.page.getByText('1 dossier sélectionné',{exact:true}).waitFor({state:'hidden'});
       assert.equal(await row(f,P).count(),0);assert.equal(f.claims.length,0);assert.deepEqual(businessWrites(f),[]);
     });
     await scenario('unavailable-person-keeps-owned-work-but-cannot-take-pool-work',async f=>{
@@ -294,6 +296,18 @@ async function main() {
       await target.waitFor();
       const restored=await target.evaluate(node=>{let el=node.parentElement;while(el&&!(el.scrollHeight>el.clientHeight+5&&/(auto|scroll)/.test(getComputedStyle(el).overflowY)))el=el.parentElement;return el?.scrollTop||0;});
       assert.ok(Math.abs(restored-position.top)<=3,`List scroll restored (${position.top} → ${restored}).`);assert.equal(f.claims.length,0);
+    });
+    await scenario('mobile-primary-action-keeps-space-with-alternative-platform-fonts',async f=>{
+      await f.page.setViewportSize({width:390,height:844});await open(f);
+      for(const family of ['Arial','Verdana']) {
+        await f.page.addStyleTag({content:`.dossier-list { font-family: ${family}, sans-serif !important; }`});
+        await f.page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+        const action=await row(f,P2).getByRole('button',{name:'Continuer',exact:true}).boundingBox();
+        const navigation=await f.page.getByRole('button',{name:'Dossiers',exact:true}).locator('..').boundingBox();
+        assert.ok(action.y+action.height<=navigation.y-12,`${family} preserves at least 12px before the mobile navigation (${action.y+action.height} <= ${navigation.y-12}).`);
+        assert.equal(await f.page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false);
+      }
+      assert.deepEqual(businessWrites(f),[]);
     });
     for(const width of [1440,390])for(const dark of [false,true])await scenario(`table-readable-and-accessible-${width}-${dark?'dark':'light'}`,async f=>{
       await f.page.setViewportSize({width,height:width===390?844:1000});await f.context.addInitScript(dark=>localStorage.setItem('expedile-theme',dark?'dark':'light'),dark);

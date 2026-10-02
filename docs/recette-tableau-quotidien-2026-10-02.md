@@ -42,3 +42,7 @@ Données exclusivement fictives : [travail quotidien clair](verification-tableau
 ## Limites
 
 Les essais valident les comportements du navigateur avec réponses serveur simulées. Les garanties de droits, de concurrence et de montant côté serveur reposent sur les contrôles SQL et Edge distincts. Une séance observée avec un collaborateur débutant reste nécessaire pour vérifier la compréhension réelle ; une analyse automatique d’accessibilité ne la démontre pas.
+
+## Complément après contrôle CI
+
+Les écarts de libellé de sélection et de métriques de polices mobiles ont été corrigés sans retirer les assertions. La suite tableau compte maintenant 26 scénarios réussis. Voir [la recette complémentaire et le diagnostic](recette-vue-ensemble-dossier-2026-10-02.md). Les captures mobiles ci-dessus ont été actualisées.

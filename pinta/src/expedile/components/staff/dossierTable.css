@@ -156,3 +156,11 @@ html.dark .dossier-table-open-primary { color: #122a36; background: #c4dae5; bor
 .dossier-table-card-facts dt { font-size: .875rem; color: var(--text-secondary); }
 .dossier-table-card-facts dd { margin: 2px 0 0; overflow-wrap: anywhere; }
 .dossier-table-card .dossier-table-action button { width: 100%; }
+
+/* Keep the primary action in view despite platform font metrics. The owner
+   keeps a full-width line; short reception facts share the next line. */
+.dossier-table-card[data-view='daily'] .dossier-table-card-facts { row-gap: 8px; margin: 12px 0; }
+.dossier-table-card[data-view='daily'] .dossier-table-card-facts > div { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.dossier-table-card[data-view='daily'] .dossier-table-card-facts > [data-column='owner'] { grid-column: 1 / -1; }
+.dossier-table-card[data-view='daily'] .dossier-table-card-facts dt { flex-shrink: 0; }
+.dossier-table-card[data-view='daily'] .dossier-table-card-facts dd { margin: 0; text-align: right; }

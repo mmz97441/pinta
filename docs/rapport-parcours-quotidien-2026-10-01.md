@@ -58,12 +58,10 @@ Ces captures utilisent des personnes et des expéditions fictives.
 - [Conversation sur téléphone](verification-parcours-2026-10-01/conversation-mobile.png)
 
 
-## État de la publication
+## État de la publication — actualisé le 2 octobre 2026
 
-- Serveur : migration `20261001000001_reception_append` appliquée et vérifiée sur le projet Expedîle. Les deux commandes ont les droits attendus ; le registre de reprises est privé. Les empreintes des 17 tables contrôlées sont restées identiques pendant l’application.
+- Serveur : migration `20261001000001_reception_append` appliquée et revérifiée. Les deux commandes ont les droits attendus ; le registre de reprises est privé. Les empreintes des 17 tables contrôlées sont restées identiques pendant l’application initiale.
 - Empreinte SHA-256 de la migration appliquée : `6ce0ffaf1011393483dd3a97a6b4043a7f362a5efcfc92072c8d18777ca2574e`.
-- Interface : version compilée et testée localement, publication GitHub/main/Vercel en attente d’une confirmation explicite demandée par le contrôle automatique d’approbation. Aucune nouvelle version de l’interface n’est annoncée comme en ligne à ce stade.
-- Le contrôle automatique a refusé deux tentatives de publication, faute d’autorisation reconnue pour cet export précis. Le second refus mentionnait aussi une sauvegarde supposée indexée. La vérification explicite des 78 fichiers indexés confirme **zéro sauvegarde, fichier d’environnement ou fichier personnel préexistant**. Le scan des lignes ajoutées n’a trouvé aucun des formats de secrets contrôlés.
-- Les sauvegardes de déploiement restent privées et ignorées par Git. Les captures du rapport représentent uniquement des données fictives.
-
-La référence de commit, le résultat CI distant et le déploiement Vercel seront ajoutés après autorisation et publication. Le mode PayPlug reste celui des tests.
+- Interface : le commit **`2580b8d`**, qui comprend ce parcours et le nouveau tableau quotidien, a été publié sur `main` après autorisation explicite. Vercel sert désormais cette livraison sur **[expedile.app](https://expedile.app)** ; déploiement **`dpl_ATNW4gyXD5QN9VrTTeFvVCUBW6Hc`**, état READY.
+- Les routes réception, dossier, conversation et retour de paiement ont été contrôlées sur le domaine réel. Les sauvegardes privées, fichiers personnels préexistants et secrets sont exclus de la publication. Les captures des rapports représentent des données fictives.
+- Mode PayPlug de test inchangé. Les résultats de contrôle et références de publication sont détaillés dans le [rapport du tableau quotidien](rapport-tableau-quotidien-2026-10-02.md#publication-vérifiée-le-2-octobre-2026).

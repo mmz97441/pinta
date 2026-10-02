@@ -43,9 +43,12 @@ import ClientBottomNav from './components/client/ClientBottomNav';
 
 import DetailHeader from './components/detail/DetailHeader';
 import DossierContextPanel from './components/detail/DossierContextPanel';
+import DossierOverview from './components/detail/DossierOverview';
+import { buildDossierOverview } from './domain/dossierOverview';
+import { revisionLockedReason } from './domain/shipmentRevision';
 import ChatPanel from './components/detail/ChatPanel';
 import AuditLog from './components/detail/AuditLog';
-import { dossierTaskUrl, resolveDossierTask } from './domain/dossierTasks';
+import { DOSSIER_TASKS, dossierTaskUrl, resolveDossierTask } from './domain/dossierTasks';
 
 function LoadingView({ label = 'Chargement de votre espace…' }) {
   return <div role="status" aria-live="polite" className="max-w-5xl mx-auto w-full p-6 space-y-5">
@@ -83,12 +86,13 @@ function Permission({ allowed, children }) {
 // ── Wrapper: Staff colis detail (reads :id from URL) ──
 function StaffColisDetail() {
   const { id } = useParams();
-  const { setSelId, sel, selClient, data, dataLoading, refreshColis, can, workActions = [], auth, teamUsers = [] } = useApp();
+  const { setSelId, sel, selClient, data, dataLoading, refreshColis, can, workActions = [], auth, teamUsers = [], envois = [] } = useApp();
   const [detailLoading, setDetailLoading] = useState(true);
   const [detailError, setDetailError] = useState('');
   const navigate = useNavigate();
   const location = useLocation();
   const [contextSection, setContextSection] = useState(null);
+  const [casierEditRequest, setCasierEditRequest] = useState(0);
   const [conversationVisited, setConversationVisited] = useState(null);
   const canMessages = ['perm_comm_message_libre', 'perm_comm_telegram', 'perm_comm_email', 'perm_comm_voir_chat_autres'].some(can);
   const conversationOpen = canMessages && new URLSearchParams(location.search).get('onglet') === 'conversation';
@@ -100,6 +104,10 @@ function StaffColisDetail() {
     navigate(`${location.pathname}?${params}`, { state: location.state });
   };
   const openContext = section => section === 'messages' ? selectTab('conversation') : setContextSection(section);
+  const openOverviewTask = next => {
+    setContextSection(null);
+    navigate(dossierTaskUrl(id, next, location.search, { hash: 'dossier-work' }));
+  };
 
   useEffect(() => {
     let active = true;
@@ -108,7 +116,16 @@ function StaffColisDetail() {
     return () => { active = false; setSelId(null); };
   }, [id, setSelId, refreshColis]);
 
-  useEffect(() => { setContextSection(null); }, [id]);
+  useEffect(() => { setContextSection(null); setCasierEditRequest(0); }, [id]);
+  useEffect(() => {
+    if (detailLoading || conversationOpen || location.hash !== '#dossier-work') return;
+    const frame = requestAnimationFrame(() => {
+      const workspace = document.getElementById('dossier-work');
+      workspace?.focus({ preventScroll: true });
+      workspace?.scrollIntoView({ block: 'start' });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [detailLoading, conversationOpen, task, location.key, location.hash]);
   useEffect(() => { if (conversationOpen) setConversationVisited(id); }, [id, conversationOpen]);
   useEffect(() => {
     if (detailLoading || !sel || sel.id !== id) return;
@@ -128,6 +145,15 @@ function StaffColisDetail() {
   const taskAction = findDossierWorkAction(sel, workActions, task, { can, actionId: new URLSearchParams(location.search).get('action') });
   const conversationAction = workActions.find(action => action.colis_id === id && action.kind === 'conversation' && action.state !== 'done');
   const colleagueWorking = Boolean(taskAction?.assignee_id && taskAction.assignee_id !== auth?.u?.id);
+  const overview = buildDossierOverview(sel, { client: selClient || {}, envois, can });
+  const canEditCasier = !sel.archive && !['livre', 'annule'].includes(sel.statut)
+    && ['perm_colis_receptionner', 'perm_colis_preparer', 'perm_colis_modifier_dims'].some(can);
+  const canEditMeasures = phase => {
+    const action = findDossierWorkAction(sel, workActions, phase, { can });
+    return !revisionLockedReason(sel, phase) && can('perm_colis_revenir_arriere')
+      && can(phase === 'reception' ? 'perm_colis_mesurer' : 'perm_colis_preparer')
+      && (!action?.assignee_id || action.assignee_id === auth?.u?.id);
+  };
   return (
     <>
       <DetailHeader task={task} conversation={conversationOpen} onOpenContext={openContext} />
@@ -146,7 +172,13 @@ function StaffColisDetail() {
         </nav>
       </div>
       <section role="tabpanel" id="dossier-panel-colis" aria-labelledby="dossier-tab-colis" hidden={conversationOpen}>
-      <div className="mx-auto max-w-[1600px] px-4 py-5 sm:px-6 lg:px-8" data-testid="dossier-task-workspace">
+      <div className="mx-auto max-w-[1600px] px-4 pt-4 sm:px-6 lg:px-8">
+        <DossierOverview dossier={sel} model={overview} currentTask={task}
+          onNavigateTask={openOverviewTask} onCorrect={openOverviewTask} onOpenContext={openContext}
+          canEditCasier={canEditCasier} canEditReception={canEditMeasures('reception')} canEditPreparation={canEditMeasures('preparation')}
+          onEditCasier={() => { setContextSection('reception'); setCasierEditRequest(previous => previous + 1); }} />
+      </div>
+      <div id="dossier-work" tabIndex={-1} className="mx-auto max-w-[1600px] scroll-mt-4 px-4 py-5 outline-none sm:px-6 lg:px-8" aria-label={`Travail : ${DOSSIER_TASKS[task]?.label || task}`} data-testid="dossier-task-workspace">
         {location.state?.receivedCarton?.colisId === id && <div role="status" className="mb-4 flex flex-wrap items-center gap-3 rounded-xl bg-emerald-50 px-4 py-2 text-sm text-emerald-800"><span>Carton {location.state.receivedCarton.index + 1} enregistré dans {sel.ref}.</span><button className="min-h-11 font-semibold underline" onClick={() => setContextSection('reception')}>Voir le carton reçu</button></div>}
         {colleagueWorking && <p role="status" className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">{staffName(taskAction.assignee_id, teamUsers)} s’occupe de cette tâche. Vous pouvez la consulter. Pour la reprendre, demandez un relais ou utilisez la réaffectation dans les options de la tâche.</p>}
         <TaskAccessBoundary readOnly={colleagueWorking}><StaffDetailView workspace active={!conversationOpen} task={task} onOpenContext={openContext} /></TaskAccessBoundary>
@@ -156,7 +188,7 @@ function StaffColisDetail() {
         {conversationAction && <TaskOwnership key={conversationAction.id} action={conversationAction} />}
         {(conversationOpen || conversationVisited === id) && <><div className="flex h-[min(38rem,calc(100dvh-24rem))] min-h-80 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white"><ChatPanel key={id} colis={sel} client={selClient} embedded active={conversationOpen} /></div><details className="rounded-xl border border-slate-200 bg-white px-4"><summary className="min-h-12 cursor-pointer py-3 font-semibold text-slate-700">Ce qui a déjà été fait</summary><AuditLog key={id} expanded includeAudit={can('perm_admin_audit')} /></details></>}
       </section>}
-      <DossierContextPanel key={sel.id} section={contextSection} onSectionChange={setContextSection} onClose={() => setContextSection(null)} />
+      <DossierContextPanel key={sel.id} section={contextSection} onSectionChange={setContextSection} onClose={() => setContextSection(null)} casierEditRequest={casierEditRequest} />
     </>
   );
 }

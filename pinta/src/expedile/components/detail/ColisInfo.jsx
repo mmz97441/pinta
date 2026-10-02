@@ -1,22 +1,44 @@
 import { SecureImage } from '../ui/SecureFile';
 import { createTelegramInvitation } from '../../services/telegramApi';
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Edit3, Check, X, ChevronDown, ChevronUp, ClipboardList, Camera, AlertTriangle } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { BRAND, ABONNEMENTS } from '../../constants';
 import { eur, hasTrack, trackStr, trackCount, telegramLink } from '../../utils';
 import ReceivedCartons from './ReceivedCartons';
 
-export default function ColisInfo({ compact = false, onCompleteReception }) {
+export default function ColisInfo({ compact = false, onCompleteReception, casierEditRequest = 0 }) {
   const { sel, selClient: cl, selDest, isStaff, upd, flash, data, settings, can } = useApp();
   const [editCasier, setEditCasier] = useState(false);
   const [casierTmp, setCasierTmp] = useState('');
   const [moveAll, setMoveAll] = useState(false);
   const [showCasierHist, setShowCasierHist] = useState(false);
+  const casierInput = useRef(null);
+  const casierEditButton = useRef(null);
+  const wasEditingCasier = useRef(false);
+  const handledCasierRequest = useRef(0);
+
+  const canEditCasier = isStaff && sel && !sel.archive && !['livre', 'annule'].includes(sel.statut)
+    && ['perm_colis_receptionner', 'perm_colis_preparer', 'perm_colis_modifier_dims'].some(permission => can(permission));
+  useEffect(() => {
+    if (!canEditCasier || !casierEditRequest || casierEditRequest === handledCasierRequest.current) return;
+    handledCasierRequest.current = casierEditRequest;
+    // A direct overview action opens the existing editor without replacing an
+    // unsaved correction when the live dossier receives a colleague's update.
+    if (!editCasier) { setCasierTmp(sel.casier || ''); setEditCasier(true); }
+  }, [casierEditRequest, canEditCasier, editCasier, sel?.casier]);
+  useEffect(() => {
+    if (!editCasier) {
+      if (wasEditingCasier.current) casierEditButton.current?.focus();
+      wasEditingCasier.current = false;
+      return;
+    }
+    wasEditingCasier.current = true;
+    const frame = requestAnimationFrame(() => { casierInput.current?.focus(); casierInput.current?.scrollIntoView({ block: 'center' }); });
+    return () => cancelAnimationFrame(frame);
+  }, [editCasier, casierEditRequest]);
 
   if (!sel) return null;
-  const canEditCasier = isStaff && !sel.archive && !['livre', 'annule'].includes(sel.statut)
-    && ['perm_colis_receptionner', 'perm_colis_preparer', 'perm_colis_modifier_dims'].some(permission => can(permission));
   const canInvite = isStaff && (can('perm_comm_telegram') || can('perm_clients_creer'));
 
   // ── Casier save handler (with moveAll support) ──
@@ -178,6 +200,7 @@ export default function ColisInfo({ compact = false, onCompleteReception }) {
               <div className="flex-1 space-y-2">
                 <div className="flex items-center gap-1">
                   <input
+                    ref={casierInput}
                     aria-label="Casier du dossier"
                     value={casierTmp}
                     onChange={(e) => setCasierTmp(e.target.value.toUpperCase())}
@@ -210,7 +233,7 @@ export default function ColisInfo({ compact = false, onCompleteReception }) {
                   {sel.casier || 'Non attribué'}
                 </span>
                 {canEditCasier && (
-                  <button aria-label="Modifier le casier" onClick={() => { setCasierTmp(sel.casier || ''); setEditCasier(true); }} className="min-h-11 min-w-11 flex items-center justify-center text-xs text-gray-600 hover:text-gray-800 ml-1">
+                  <button ref={casierEditButton} aria-label="Modifier le casier" onClick={() => { setCasierTmp(sel.casier || ''); setEditCasier(true); }} className="min-h-11 min-w-11 flex items-center justify-center text-xs text-gray-600 hover:text-gray-800 ml-1">
                     <Edit3 size={12} />
                   </button>
                 )}

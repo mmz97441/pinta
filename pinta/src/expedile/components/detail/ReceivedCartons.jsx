@@ -32,7 +32,8 @@ export default function ReceivedCartons({ colis, settings, onCompleteReception }
   const divisor = volumetricDivisor(settings);
   const before = measureShipment(manifest.dimsParColis, divisor);
   const finalBox = { dimL: colis.finL, dimW: colis.finW, dimH: colis.finH, poids: colis.finP };
-  const finalBoxes = colis.finalPackages?.length ? colis.finalPackages : [finalBox];
+  // An explicitly empty preparation must not resurrect legacy scalar values.
+  const finalBoxes = colis.finalPackages == null ? [finalBox] : colis.finalPackages;
   const after = measureShipment(finalBoxes, divisor);
   const hasFinalInput = finalBoxes.some(box => Object.values(box).some(value => value !== null && value !== undefined && value !== ''));
   const completeReceipt = () => onCompleteReception ? onCompleteReception() : navigate(dossierTaskUrl(colis.id, 'reception', location.search));

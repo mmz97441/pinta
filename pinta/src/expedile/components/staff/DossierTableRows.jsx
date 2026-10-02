@@ -147,7 +147,7 @@ export function DossierTableRow({ c, client, model = {}, columns = TABLE_COLUMNS
 export function DossierTableCard({ c, client, model = {}, columns = TABLE_COLUMNS.daily, checked, onCheck, onOpen, returnTo }) {
   const facts = columns.filter(column => !['ref', 'client', 'statut', 'action'].includes(column.key));
   const showActionTitle = !columns.some(column => column.key === 'statut');
-  return <article className="dossier-table-card dossier-list-item" aria-label={`Dossier ${c.ref}`} data-dossier-card={c.id} data-dossier-row={c.id} data-selected={checked ? 'true' : 'false'}>
+  return <article className="dossier-table-card dossier-list-item" aria-label={`Dossier ${c.ref}`} data-view={columns === TABLE_COLUMNS.daily ? 'daily' : undefined} data-dossier-card={c.id} data-dossier-row={c.id} data-selected={checked ? 'true' : 'false'}>
     <div className="dossier-table-card-heading">
       <label className="dossier-table-checkbox"><input type="checkbox" aria-label={`Sélectionner le dossier ${c.ref}`} checked={Boolean(checked)} onChange={onCheck} /></label>
       <div data-column="ref"><CellContent column={referenceColumn} c={c} model={model} onOpen={onOpen} returnTo={returnTo} /></div>

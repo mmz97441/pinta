@@ -49,7 +49,7 @@ function DocumentContext({ onClose }) {
 }
 
 /** Closing context must not discard an assignment draft or document preview. */
-export default function DossierContextPanel({ section, onSectionChange, onClose }) {
+export default function DossierContextPanel({ section, onSectionChange, onClose, casierEditRequest = 0 }) {
   const { sel, can } = useApp();
   const navigate = useNavigate();
   const location = useLocation();
@@ -72,7 +72,7 @@ export default function DossierContextPanel({ section, onSectionChange, onClose 
         return <button key={item.id} aria-current={item.id === selected ? 'page' : undefined} onClick={() => onSectionChange(item.id)} className={`inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl px-2 text-xs font-semibold ${item.id === selected ? 'bg-slate-800 text-white dark:bg-slate-200 dark:text-slate-900' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'}`}><Icon size={15} />{item.label}</button>;
       })}</nav>
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 pb-[max(1rem,env(safe-area-inset-bottom))] text-slate-800 dark:text-slate-100">
-        {visited.has('reception') && <div hidden={selected !== 'reception'}><ColisInfo compact onCompleteReception={() => { onClose(); navigate(dossierTaskUrl(sel.id, "reception", location.search)); }} /></div>}
+        {visited.has('reception') && <div hidden={selected !== 'reception'}><ColisInfo compact casierEditRequest={casierEditRequest} onCompleteReception={() => { onClose(); navigate(dossierTaskUrl(sel.id, "reception", location.search)); }} /></div>}
         {canDocuments && visited.has('documents') && <div hidden={selected !== 'documents'}><DocumentContext onClose={onClose} /></div>}
         {visited.has('equipe') && <div hidden={selected !== 'equipe'}><StaffAssignment /></div>}
         {visited.has('historique') && <div hidden={selected !== 'historique'}><AuditLog expanded includeAudit={can('perm_admin_audit')} /></div>}

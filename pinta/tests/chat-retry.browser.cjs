@@ -64,8 +64,13 @@ const navigate = (page, to) => page.evaluate(url => { window.history.pushState({
     await f.login(); await f.page.goto(`${base}/conversations?dossier=${second}`);
     const field = () => f.page.getByLabel('Votre réponse au client', { exact: true }); await field().fill('Brouillon du second dossier');
     await navigate(f.page, `/conversations?dossier=${ids.P}`); await field().fill('Envoi du premier dossier'); await field().press('Control+Enter'); await pending;
-    await navigate(f.page, `/conversations?dossier=${second}`); assert.equal(await field().inputValue(), 'Brouillon du second dossier'); release();
-    await field().waitFor(); await f.page.waitForFunction(() => document.querySelector('textarea[id^="staff-message-"]')?.disabled === false);
+    await navigate(f.page, `/conversations?dossier=${second}`); assert.equal(await field().inputValue(), 'Brouillon du second dossier');
+    const attemptKey = `expedile:draft:v1:${encodeURIComponent(ids.A)}:${encodeURIComponent(`conversation-send:${ids.P}`)}`;
+    assert.notEqual(await f.page.evaluate(key => sessionStorage.getItem(key), attemptKey), null, 'The first send is still pending before its response is released.');
+    release();
+    // Each full-page dossier has its own composer. The second composer's
+    // enabled state says nothing about the first send still finishing.
+    await f.page.waitForFunction(key => sessionStorage.getItem(key) === null, attemptKey);
     assert.equal(await field().inputValue(), 'Brouillon du second dossier'); await navigate(f.page, `/conversations?dossier=${ids.P}`); assert.equal(await field().inputValue(), '');
   });
   await browser.close(); await fs.writeFile(`${out}/results.json`, JSON.stringify(results, null, 2)); console.log(JSON.stringify(results, null, 2));

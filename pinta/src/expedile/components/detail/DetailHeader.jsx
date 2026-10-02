@@ -24,7 +24,7 @@ export default function DetailHeader({ task, conversation = false, onOpenContext
     const nextTask = nextDossierTask(task, can);
     const workAction = findDossierWorkAction(sel, workActions, task, { can, actionId: new URLSearchParams(location.search).get('action') });
     const stepButtonClass = 'inline-flex min-h-11 min-w-0 items-center justify-center gap-1.5 rounded-xl border border-slate-300 px-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 sm:px-3 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800';
-    return <header className="sticky top-0 z-20 border-b border-slate-200 bg-white px-3 py-3 sm:px-6 dark:border-slate-700 dark:bg-slate-900" data-testid="dossier-task-header">
+    return <header className="border-b border-slate-200 bg-white px-3 py-3 sm:px-6 dark:border-slate-700 dark:bg-slate-900" data-testid="dossier-task-header">
       <div className="mx-auto flex max-w-[1600px] flex-wrap items-center gap-2 sm:gap-3">
         <button aria-label="Retour à la liste de travail" onClick={() => navigate(workspaceReturnPath(location.search))} className="flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-xl text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"><ArrowLeft size={21} /></button>
         <div className="min-w-0 flex-1">

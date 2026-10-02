@@ -52,10 +52,10 @@ async function open(f, list = '/?mission=reception', create = true) {
    assert.equal(f.requests.filter(request => request.method === 'POST' && request.path === '/rest/v1/colis').length, 1);
   });
   await scenario('receipt-failure-preserves-draft-retry-and-double-click-inserts-once', async f => {
-   let fail = true; let attempts = 0;
+   let fail = true; let attempts = 0; const submittedIds = [];
    await f.context.route('**/rest/v1/colis?*', async route => {
     if (route.request().method() !== 'POST') return route.fallback();
-    attempts++;
+    attempts++; submittedIds.push(route.request().postDataJSON().id);
     if (fail) { fail = false; return route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ message: 'Réception indisponible simulée' }) }); }
     await new Promise(resolve => setTimeout(resolve, 150)); return route.fallback();
    });
@@ -65,11 +65,16 @@ async function open(f, list = '/?mission=reception', create = true) {
    await save.click(); await dialog.getByRole('alert').filter({ hasText: /Réception non enregistrée/ }).waitFor();
    assert.equal(await dialog.getByLabel('Numéro de suivi · carton 1', { exact: true }).inputValue(), 'RECEIPT-RETRY');
    assert.equal(await dialog.getByLabel('Poids à réception (kg) · carton 1', { exact: true }).inputValue(), '2');
-   await save.evaluate(node => { node.click(); node.click(); });
+   assert.equal(await save.isDisabled(), true, 'An ambiguous network failure blocks a new creation until verification.');
+   const verify = dialog.getByRole('button', { name: 'Vérifier l’enregistrement', exact: true });
+   await verify.evaluate(node => { node.click(); node.click(); });
    await dialog.waitFor({ state: 'hidden' }); await openSavedReception(f.page);
    await f.page.waitForURL(url => url.searchParams.get('section') === 'accord');
    assert.equal(attempts, 2, 'One failed attempt followed by a single insertion despite double click');
    assert.equal(f.tables.colis.length, 2);
+   assert.equal(submittedIds.length, 2); assert.ok(submittedIds[0]);
+   assert.equal(submittedIds[1], submittedIds[0], 'Verification retries the original receipt identity, never a second expedition.');
+   assert.equal(f.tables.colis.filter(colis => colis.id === submittedIds[0]).length, 1);
   });
   for (const complete of [true, false]) await scenario(`attachment-keeps-reference-numbering-return-and-${complete ? 'agreement' : 'missing-receipt-measures'}`, async f => {
    await f.page.setViewportSize({ width: 390, height: 844 });
