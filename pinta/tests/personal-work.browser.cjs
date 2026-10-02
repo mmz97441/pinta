@@ -143,7 +143,7 @@ function assertNoMutation(f) {
    await f.page.goto(base + '/?section=pool');
    const invitation = row(f, 'pool');
    await invitation.getByRole('button', { name: 'Voir', exact: true }).click();
-   await f.page.waitForURL(url => url.pathname === '/conversations' && url.searchParams.get('action') === 'pool');
+   await f.page.waitForURL(url => url.pathname === '/colis/' + ids.P && url.searchParams.get('onglet') === 'conversation' && url.searchParams.get('action') === 'pool');
    assert.equal(f.tables.staff_work_actions.find(action => action.id === 'pool').assignee_id, null);
   });
   await scenario('permissions-remain-distinct-even-when-a-mission-is-requested-in-the-url', async f => {

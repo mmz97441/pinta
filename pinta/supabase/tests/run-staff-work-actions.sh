@@ -12,10 +12,11 @@ sql() { docker exec -i "$container" psql -q -U postgres -v ON_ERROR_STOP=1 -o /d
 sql < "$root/tests/bootstrap.sql"
 sql -c 'CREATE ROLE supabase_admin SUPERUSER NOLOGIN;'
 for migration in "$root"/migrations/*.sql; do
- case ${migration##*/} in 202609*) ;; *) sql -1 < "$migration";; esac
+ migration_name=${migration##*/}; if [ "${migration_name%%_*}" -lt 20260900000000 ]; then sql -1 < "$migration"; fi
 done
 sql -1 < "$root/tests/legacy-schema-fixture.sql"
-for migration in "$root"/migrations/202609*.sql; do
+for migration in "$root"/migrations/*.sql; do
+ migration_name=${migration##*/}; if [ "${migration_name%%_*}" -lt 20260900000000 ]; then continue; fi
  { printf 'SET ROLE supabase_admin;\n';cat "$migration"; } | sql -1
 done
 sql < "$root/tests/staff-work-actions.sql"

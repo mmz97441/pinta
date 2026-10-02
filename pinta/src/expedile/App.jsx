@@ -8,6 +8,7 @@ import { needsConversationAction } from './domain/conversations';
 import { TaskAccessBoundary } from './context/TaskAccessContext';
 import { findDossierWorkAction } from './domain/personalWork';
 import { staffName } from './components/workspace/WorkActionRow';
+import TaskOwnership from './components/workspace/TaskOwnership';
 import { AppProvider, useApp } from './context/AppContext';
 import { BRAND } from './constants';
 
@@ -16,9 +17,9 @@ import { Toast, ConfirmDialog } from './components/ui';
 import ThemeToggle from './components/ui/ThemeToggle';
 import LoginPage from './components/LoginPage';
 import ForceChangePassword from './components/ForceChangePassword';
-import ColisModal from './components/ColisModal';
 import OnboardingOverlay from './components/client/OnboardingOverlay';
 
+const ReceptionPage = lazy(() => import('./components/staff/ReceptionPage'));
 const StaffColisPage = lazy(() => import('./components/staff/StaffSplitView'));
 const PersonalWorkView = lazy(() => import('./components/workspace/PersonalWorkView'));
 const TeamWorkView = lazy(() => import('./components/workspace/TeamWorkView'));
@@ -42,6 +43,8 @@ import ClientBottomNav from './components/client/ClientBottomNav';
 
 import DetailHeader from './components/detail/DetailHeader';
 import DossierContextPanel from './components/detail/DossierContextPanel';
+import ChatPanel from './components/detail/ChatPanel';
+import AuditLog from './components/detail/AuditLog';
 import { dossierTaskUrl, resolveDossierTask } from './domain/dossierTasks';
 
 function LoadingView({ label = 'Chargement de votre espace…' }) {
@@ -86,7 +89,17 @@ function StaffColisDetail() {
   const navigate = useNavigate();
   const location = useLocation();
   const [contextSection, setContextSection] = useState(null);
+  const [conversationVisited, setConversationVisited] = useState(null);
+  const canMessages = ['perm_comm_message_libre', 'perm_comm_telegram', 'perm_comm_email', 'perm_comm_voir_chat_autres'].some(can);
+  const conversationOpen = canMessages && new URLSearchParams(location.search).get('onglet') === 'conversation';
   const task = resolveDossierTask(sel || {}, location.search, workActions, can, selClient || {});
+  const selectTab = tab => {
+    setContextSection(null);
+    const params = new URLSearchParams(location.search);
+    if (tab === 'conversation') params.set('onglet', 'conversation'); else params.delete('onglet');
+    navigate(`${location.pathname}?${params}`, { state: location.state });
+  };
+  const openContext = section => section === 'messages' ? selectTab('conversation') : setContextSection(section);
 
   useEffect(() => {
     let active = true;
@@ -96,6 +109,7 @@ function StaffColisDetail() {
   }, [id, setSelId, refreshColis]);
 
   useEffect(() => { setContextSection(null); }, [id]);
+  useEffect(() => { if (conversationOpen) setConversationVisited(id); }, [id, conversationOpen]);
   useEffect(() => {
     if (detailLoading || !sel || sel.id !== id) return;
     const params = new URLSearchParams(location.search);
@@ -112,15 +126,36 @@ function StaffColisDetail() {
   if (!sel || sel.id !== id) return <LoadingView label="Ouverture du dossier…" />;
 
   const taskAction = findDossierWorkAction(sel, workActions, task, { can, actionId: new URLSearchParams(location.search).get('action') });
+  const conversationAction = workActions.find(action => action.colis_id === id && action.kind === 'conversation' && action.state !== 'done');
   const colleagueWorking = Boolean(taskAction?.assignee_id && taskAction.assignee_id !== auth?.u?.id);
   return (
     <>
-      <DetailHeader task={task} onOpenContext={setContextSection} />
+      <DetailHeader task={task} conversation={conversationOpen} onOpenContext={openContext} />
+      <div className="mx-auto max-w-[1600px] px-4 pt-4 sm:px-6 lg:px-8">
+        <nav role="tablist" aria-label="Dossier et conversation" className="flex gap-2 border-b border-slate-200 pb-3" onKeyDown={event => {
+          if (!canMessages || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+          event.preventDefault();
+          const next = event.key === 'Home' ? 'colis' : event.key === 'End' ? 'conversation' : conversationOpen ? 'colis' : 'conversation';
+          selectTab(next); document.getElementById(`dossier-tab-${next}`)?.focus();
+        }}>
+          {[['colis', 'Colis'], ...(canMessages ? [['conversation', 'Conversation']] : [])].map(([key, label]) => {
+            const selected = (key === 'conversation') === conversationOpen;
+            const unread = key === 'conversation' ? (sel.messages || []).filter(message => message.type === 'client' && !message.lu).length : 0;
+            return <button key={key} id={`dossier-tab-${key}`} role="tab" aria-selected={selected} aria-controls={`dossier-panel-${key}`} tabIndex={selected ? 0 : -1} onClick={() => selectTab(key)} className={`min-h-12 flex-1 rounded-xl px-4 text-base font-semibold sm:flex-none sm:min-w-40 ${selected ? 'brand-bg text-white' : 'border border-slate-200 bg-white text-slate-700'}`}>{label}{unread > 0 && <span className="ml-2 rounded-full bg-blue-100 px-2 py-0.5 text-sm text-blue-800" aria-label={`${unread} messages non lus`}>{unread}</span>}</button>;
+          })}
+        </nav>
+      </div>
+      <section role="tabpanel" id="dossier-panel-colis" aria-labelledby="dossier-tab-colis" hidden={conversationOpen}>
       <div className="mx-auto max-w-[1600px] px-4 py-5 sm:px-6 lg:px-8" data-testid="dossier-task-workspace">
         {location.state?.receivedCarton?.colisId === id && <div role="status" className="mb-4 flex flex-wrap items-center gap-3 rounded-xl bg-emerald-50 px-4 py-2 text-sm text-emerald-800"><span>Carton {location.state.receivedCarton.index + 1} enregistré dans {sel.ref}.</span><button className="min-h-11 font-semibold underline" onClick={() => setContextSection('reception')}>Voir le carton reçu</button></div>}
         {colleagueWorking && <p role="status" className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">{staffName(taskAction.assignee_id, teamUsers)} s’occupe de cette tâche. Vous pouvez la consulter. Pour la reprendre, demandez un relais ou utilisez la réaffectation dans les options de la tâche.</p>}
-        <TaskAccessBoundary readOnly={colleagueWorking}><StaffDetailView workspace task={task} onOpenContext={setContextSection} /></TaskAccessBoundary>
+        <TaskAccessBoundary readOnly={colleagueWorking}><StaffDetailView workspace active={!conversationOpen} task={task} onOpenContext={openContext} /></TaskAccessBoundary>
       </div>
+      </section>
+      {canMessages && <section role="tabpanel" id="dossier-panel-conversation" aria-labelledby="dossier-tab-conversation" hidden={!conversationOpen} className="mx-auto max-w-5xl space-y-5 px-4 py-5 sm:px-6">
+        {conversationAction && <TaskOwnership key={conversationAction.id} action={conversationAction} />}
+        {(conversationOpen || conversationVisited === id) && <><div className="flex h-[min(38rem,calc(100dvh-24rem))] min-h-80 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white"><ChatPanel key={id} colis={sel} client={selClient} embedded active={conversationOpen} /></div><details className="rounded-xl border border-slate-200 bg-white px-4"><summary className="min-h-12 cursor-pointer py-3 font-semibold text-slate-700">Ce qui a déjà été fait</summary><AuditLog key={id} expanded includeAudit={can('perm_admin_audit')} /></details></>}
+      </section>}
       <DossierContextPanel key={sel.id} section={contextSection} onSectionChange={setContextSection} onClose={() => setContextSection(null)} />
     </>
   );
@@ -158,7 +193,6 @@ function AppContent() {
   const location = useLocation();
   const { auth, authLoading, authError, signOut, isStaff, authCl, updateClient, sbReady, dataLoading, dataError, retryLoad, passwordRecovery, completePasswordRecovery, can, flash, data = [], inboxItems = [] } = useApp();
   const conversationCount = data.filter(item => !item.archive && needsConversationAction(item)).length + inboxItems.filter(item => item.status === 'unassigned').length;
-  const [modal, setModal] = useState(false);
   const [onboardingDismissed, setOnboardingDismissed] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   useEffect(() => { setOnboardingDismissed(false); }, [auth?.session?.user?.id]);
@@ -207,7 +241,7 @@ function AppContent() {
       : currentPath.startsWith('/clients') ? '/clients'
       : currentPath === '/devis' ? '/devis'
       : currentPath === '/settings' ? '/settings'
-      : ['/equipe', '/conversations', '/departs', '/plus'].includes(currentPath) ? currentPath : '/';
+      : ['/equipe', '/conversations', '/departs', '/plus', '/reception'].includes(currentPath) ? currentPath : '/';
     const mobileItems = NAV_ITEMS.filter((item) => ['/', '/colis', '/conversations'].includes(item.key)).map((item) => ({ ...item, label: item.key === '/colis' ? 'Dossiers' : item.label }));
     mobileItems.push({ key: '/plus', label: 'Plus', icon: MoreHorizontal });
     const moreItems = NAV_ITEMS.filter((item) => !['/', '/colis', '/conversations'].includes(item.key));
@@ -216,7 +250,6 @@ function AppContent() {
       <div style={{ fontFamily: "system-ui, -apple-system, 'Segoe UI', sans-serif" }} className="h-[100dvh] flex overflow-hidden">
         <Toast />
         <ConfirmDialog />
-        <ColisModal open={modal} onClose={() => setModal(false)} />
 
         {/* ── Sidebar (desktop) ──────────────────────────────────────── */}
         <div
@@ -242,7 +275,7 @@ function AppContent() {
           {/* New colis button */}
           <div className="px-3 mb-2" hidden={!can('perm_colis_receptionner')}>
             <button
-              aria-label="Réceptionner des cartons" onClick={() => setModal(true)}
+              aria-label="Réceptionner des cartons" onClick={() => navigate(`/reception?${new URLSearchParams({ returnTo: location.pathname + location.search })}`)}
               className={`w-full flex items-center gap-2 rounded-xl text-sm font-bold transition-all active:scale-95 ${sidebarCollapsed ? 'justify-center px-2 py-2.5' : 'px-3 py-2.5'}`}
               style={{ background: `linear-gradient(135deg, ${BRAND.gold}, ${BRAND.goldD})`, color: BRAND.navyD }}
             >
@@ -330,7 +363,7 @@ function AppContent() {
         <div className="flex-1 flex flex-col min-w-0 bg-gray-50">
           <div className="lg:hidden min-h-12 px-4 flex items-center justify-between border-b border-gray-200">
             <span className="font-black brand-t">EXPÉD<span className="brand-t-gold">ÎLE</span></span>
-            <div className="flex items-center gap-2">{can('perm_colis_receptionner') && <button aria-label="Réceptionner des cartons" onClick={() => setModal(true)} className="min-h-11 inline-flex items-center gap-1 rounded-xl px-2 text-xs font-bold brand-t"><Plus size={18} />Réceptionner</button>}<ThemeToggle compact /><button aria-label="Se déconnecter" onClick={handleLogout} className="min-h-11 min-w-11 flex items-center justify-center text-gray-500"><LogOut size={18} /></button></div>
+            <div className="flex items-center gap-2">{can('perm_colis_receptionner') && <button aria-label="Réceptionner des cartons" onClick={() => navigate(`/reception?${new URLSearchParams({ returnTo: location.pathname + location.search })}`)} className="min-h-11 inline-flex items-center gap-1 rounded-xl px-2 text-xs font-bold brand-t"><Plus size={18} />Réceptionner</button>}<ThemeToggle compact /><button aria-label="Se déconnecter" onClick={handleLogout} className="min-h-11 min-w-11 flex items-center justify-center text-gray-500"><LogOut size={18} /></button></div>
           </div>
           {loadBanner}
           <div className="flex-1 min-h-0 overflow-y-auto pb-[calc(4.5rem+env(safe-area-inset-bottom))] lg:pb-0">
@@ -341,6 +374,7 @@ function AppContent() {
               <Route path="/departs" element={<Permission allowed={can('perm_envois_voir')}><StaffDepartures /></Permission>} />
               <Route path="/travail" element={<Navigate to="/" replace />} />
               <Route path="/plus" element={<div className="mx-auto max-w-xl space-y-4 p-5"><h1 className="text-2xl font-bold brand-t">Votre espace</h1><nav aria-label="Autres rubriques" className="grid gap-3">{moreItems.map(({ key, label, icon: Icon }) => <button key={key} onClick={() => navigate(key)} className="flex min-h-14 items-center gap-3 rounded-xl border border-gray-200 bg-white p-4 text-left font-semibold text-gray-800"><Icon size={20} />{label}<ChevronRight size={18} className="ml-auto" /></button>)}</nav></div>} />
+              <Route path="/reception" element={<Permission allowed={can('perm_colis_receptionner')}><ReceptionPage /></Permission>} />
               <Route path="/colis/:id" element={<StaffColisDetail />} />
               <Route path="/colis" element={
                 <StaffColisPage />
@@ -395,7 +429,6 @@ function AppContent() {
     <div style={{ fontFamily: "system-ui, -apple-system, 'Segoe UI', sans-serif", background: 'var(--bg-canvas)' }} className="min-h-[100dvh]">
       <Toast />
       <ConfirmDialog />
-      <ColisModal open={modal} onClose={() => setModal(false)} />
 
       {loadBanner}
 

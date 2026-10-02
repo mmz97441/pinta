@@ -10,7 +10,7 @@ const contextSignature = (colis, client) => JSON.stringify([
 
 /** Preview and delivery are separate actions. A failed attempt retains its exact
  * payload and idempotency key, including when requesting consent changes status. */
-export default function TaskMessage({ template, message, label = 'Informer le client', beforeSend, disabled = false }) {
+export default function TaskMessage({ template, message, label = 'Informer le client', beforeSend, disabled = false, autoPreview = false, sendLabel = 'Envoyer ce message' }) {
   const { sel, selClient: client, can: rawCan, getPreview, sendMsg } = useApp();
   const { taskCan: can } = useTaskAccess(rawCan);
   const channels = [
@@ -35,7 +35,15 @@ export default function TaskMessage({ template, message, label = 'Informer le cl
   const stale = open && baseline && (baseline.text !== latest || baseline.context !== currentContext);
   live.current = { context: currentContext, allowed, disabled, dossierId: sel?.id, getPreview, message };
   useEffect(() => {
-    request.current = null; setOpen(false); setFeedback(null); setBaseline(null);
+    request.current = null; setFeedback(null);
+    const initialChannel = channels.find(item => item.allowed)?.value || channels[0]?.value || 'portal';
+    setChannel(initialChannel);
+    const text = proposed(template, initialChannel);
+    setDraft(autoPreview ? text : '');
+    setBaseline(autoPreview ? { text, context: currentContext, consentVersion: sel?.consentRequestVersion ?? 0, updatedAt: sel?.updatedAt } : null);
+    setOpen(autoPreview);
+    // Only a different dossier resets the preview. A request changing status
+    // must preserve the exact retry payload until delivery is confirmed.
   }, [sel?.id]);
 
   const preview = (nextChannel = channel) => {
@@ -85,7 +93,7 @@ export default function TaskMessage({ template, message, label = 'Informer le cl
       {stale && <p role="alert" className="text-sm text-amber-800">Le dossier a changé. {!request.current?.queueStarted ? <button className="min-h-11 font-semibold underline" onClick={() => preview()}>Actualiser le message proposé</button> : 'Une tentative existe déjà : vérifiez les échanges du dossier avant un nouvel envoi.'}</p>}
       {!allowed && <p className="text-sm text-amber-800">Ce canal nécessite un accès client et la permission correspondante.</p>}
       <p className="text-xs text-slate-600">{channel === "email" ? "L’application ouvre un brouillon : vous envoyez l’email dans votre messagerie." : "Vous décidez de l’envoi après lecture de ce message."}</p>
-      <div className="flex flex-wrap gap-2"><button disabled={disabled || busy || stale || !allowed || !draft.trim()} onClick={send} className="min-h-11 rounded-xl bg-slate-800 px-4 text-sm font-semibold text-white disabled:opacity-40">{busy ? 'Envoi en cours…' : channel === 'email' ? 'Ouvrir le brouillon email' : request.current ? 'Réessayer cet envoi' : 'Envoyer ce message'}</button><button disabled={busy} className="min-h-11 px-3 text-sm font-semibold text-slate-600" onClick={() => setOpen(false)}>Fermer</button></div>
+      <div className="flex flex-wrap gap-2"><button disabled={disabled || busy || stale || !allowed || !draft.trim()} onClick={send} className="min-h-11 rounded-xl bg-slate-800 px-4 text-sm font-semibold text-white disabled:opacity-40">{busy ? 'Envoi en cours…' : channel === 'email' ? 'Ouvrir le brouillon email' : request.current ? 'Réessayer cet envoi' : sendLabel}</button>{!autoPreview && <button disabled={busy} className="min-h-11 px-3 text-sm font-semibold text-slate-600" onClick={() => setOpen(false)}>Fermer</button>}</div>
     </div>}
     {feedback && <p role={feedback.ok ? 'status' : 'alert'} className={`rounded-xl p-3 text-sm ${feedback.ok ? 'bg-emerald-50 text-emerald-800' : 'bg-red-50 text-red-700'}`}>{feedback.text}</p>}
   </section>;

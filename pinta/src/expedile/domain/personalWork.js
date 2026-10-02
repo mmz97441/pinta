@@ -2,13 +2,13 @@ import { receptionCartonManifest } from './reception.js';
 import { resolveDossierTask } from './dossierTasks.js';
 
 export const MISSIONS = [
-  { id: 'reception', label: 'Réception' }, { id: 'preparation', label: 'Préparation' },
+  { id: 'reception', label: 'Réception' }, { id: 'preparation', label: 'Optimisation' },
   { id: 'communication', label: 'Relation client' }, { id: 'documents', label: 'Documents et devis' },
   { id: 'departures', label: 'Départs' }, { id: 'coordination', label: 'Coordination' },
 ];
 export const WORK_KINDS = {
   reception: { label: 'Réception et accord', mission: 'reception', permissions: ['perm_colis_receptionner', 'perm_colis_mesurer', 'perm_colis_demander_feuvert'] },
-  preparation: { label: 'Préparer les cartons', mission: 'preparation', permissions: ['perm_colis_preparer'] },
+  preparation: { label: 'Optimiser les colis', mission: 'preparation', permissions: ['perm_colis_preparer'] },
   documents: { label: 'Vérifier les factures', mission: 'documents', permissions: ['perm_factures_valider', 'perm_factures_refuser', 'perm_factures_ocr', 'perm_factures_modifier_articles'] },
   conversation: { label: 'Répondre au client', mission: 'communication', permissions: ['perm_comm_message_libre', 'perm_comm_telegram', 'perm_comm_email'] },
   quote: { label: 'Établir le devis', mission: 'documents', permissions: ['perm_colis_calculer_devis', 'perm_colis_envoyer_devis'] },
@@ -128,7 +128,7 @@ export function safeWorkReturn(value, fallback = '/') {
 export function workActionUrl(action, returnTo = '/', dossier) {
   const params = new URLSearchParams({ returnTo: safeWorkReturn(returnTo), action: action.id });
   if (action.kind === 'conversation' && action.action_hint === 'Accès client à activer' && dossier?.clientId) return `/clients/${encodeURIComponent(dossier.clientId)}?${params}`;
-  if (action.kind === 'conversation') return `/conversations?${new URLSearchParams({ dossier: action.colis_id, action: action.id, returnTo: safeWorkReturn(returnTo) })}`;
+  if (action.kind === 'conversation') return `/colis/${encodeURIComponent(action.colis_id)}?${new URLSearchParams({ onglet: 'conversation', action: action.id, returnTo: safeWorkReturn(returnTo) })}`;
   params.set('section', resolveDossierTask({ ...dossier, id: action.colis_id }, params, [action]));
   return `/colis/${encodeURIComponent(action.colis_id)}?${params}`;
 }

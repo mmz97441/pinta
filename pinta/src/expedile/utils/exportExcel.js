@@ -1,4 +1,23 @@
 import * as XLSX from 'xlsx';
+import { buildDossierTableExportRows, dossierTableExportColumns } from '../domain/dossierTable.js';
+
+export function exportDossierTableExcel(dossiers, clients, models, view, columns, filename = 'dossiers.xlsx') {
+  const selected = dossierTableExportColumns(view, columns);
+  if (!selected.length) throw new Error('Aucune colonne visible à exporter.');
+  const rows = buildDossierTableExportRows(dossiers, clients, models, view, selected);
+  const ws = XLSX.utils.json_to_sheet(rows, { header: selected.map(column => column.label) });
+  ws['!cols'] = selected.map(({ label }) => ({ wch: Math.min(60, rows.reduce((width, row) => Math.max(width, String(row[label] ?? '').length), label.length)) + 2 }));
+  selected.forEach((column, col) => {
+    if (!['requested', 'paid', 'remaining'].includes(column.key)) return;
+    rows.forEach((row, index) => {
+      const cell = ws[XLSX.utils.encode_cell({ r: index + 1, c: col })];
+      if (cell?.t === 'n') cell.z = '#,##0.00 "€"';
+    });
+  });
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Dossiers');
+  XLSX.writeFile(wb, filename);
+}
 
 export function exportColisExcel(colis, clients, columns, filename = 'export-colis.xlsx') {
   const clientById=typeof clients==='function'?clients:id=>(clients || []).find(client=>client.id===id);

@@ -12,6 +12,8 @@ INSERT INTO clients(id,user_id,nom,cp,email,telegram_chat_id) VALUES('82000000-0
 INSERT INTO colis(id,client_id,statut,trackings,nb_colis) VALUES
  ('83000000-0000-4000-8000-000000000001','82000000-0000-4000-8000-000000000001','attente_feu_vert',ARRAY['ONE'],1),
  ('83000000-0000-4000-8000-000000000002','82000000-0000-4000-8000-000000000001','attente_feu_vert',ARRAY['TWO'],1);
+-- A consent reminder requires actually recorded reception measurements.
+UPDATE colis SET dim_l=20,dim_w=20,dim_h=20,poids=2 WHERE id::text LIKE '83000000%';
 SELECT test_conversation_assert((SELECT statut_updated_at IS NOT NULL AND conversation_statut='termine' FROM colis WHERE id='83000000-0000-4000-8000-000000000001'),'New dossier has a real stage timestamp and no invented open question');
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claim.role','authenticated',true),set_config('request.jwt.claim.sub','81000000-0000-4000-8000-000000000001',true);

@@ -72,7 +72,7 @@ export function WorkActionControls({ action, returnTo = '/', compact = false, in
   return <div className="space-y-2">
     <div className="flex flex-wrap items-center gap-2">
       {recipient && <><button disabled={busy || !allowed} onClick={() => command('accept', { start: !waiting }, true)} className={controlClass + ' bg-slate-900 text-white dark:bg-slate-200 dark:text-slate-900'}>{waiting ? 'Accepter le suivi' : 'Accepter et ouvrir'}</button><button disabled={busy} onClick={() => command('reject')} className={secondaryClass}>Décliner</button></>}
-      {!recipient && <TaskTakeButton key={action.id} action={action} onClaim={inTask ? undefined : open} />}
+      {!recipient && !(inTask && own) && <TaskTakeButton key={action.id} action={action} onClaim={inTask ? undefined : open} />}
       {!inTask && own && allowed && action.state === 'in_progress' && !waiting && <button onClick={open} className={controlClass + ' bg-slate-900 text-white dark:bg-slate-200 dark:text-slate-900'}>Continuer<ArrowRight size={14} className="inline ml-2" /></button>}
       {!inTask && !(own && allowed && action.state === 'in_progress' && !waiting) && <button onClick={open} className={hasPrimaryCommand ? secondaryClass : controlClass}>Voir<ArrowRight size={14} className="inline ml-2" /></button>}
       {(own || coordinate) && <button aria-expanded={Boolean(mode)} onClick={() => { setFormAction(action); setMode(mode ? '' : 'menu'); }} className={secondaryClass} disabled={busy}>Options<ChevronDown size={14} className="inline ml-1" /></button>}

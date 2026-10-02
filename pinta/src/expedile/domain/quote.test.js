@@ -15,6 +15,21 @@ test('transport, CIF allocation, tax components and total agree to cents', () =>
   assert.deepEqual([quote.amounts.transport, quote.amounts.om, quote.amounts.omr, quote.amounts.tva, quote.amounts.total], [34, 13.4, 3.35, 4.31, 55.06]);
   assert.equal(quote.patch.economie, 0);
 });
+test('transport is shared by each article value, with independent SH rates and no equal-per-carton allocation', () => {
+  const input = fixture();
+  const duty = (code, om, omr) => ({ tariffId: `fixture-${code}`, code, label: `Produit ${code}`, destination: '974', baseRates: { om, omr }, rates: { om, omr }, source: { id: 'fixture-source' } });
+  input.tarif = { base: 40, parKg: 0 };
+  input.colis.factures[0].montant = 400;
+  input.colis.lignes = [
+    { id: 'first', desc: 'Deux articles à 50 €', qte: 2, prix: 50, factureId: 'invoice', customDuty: duty('85167970', 10, 2) },
+    { id: 'second', desc: 'Trois articles à 100 €', qte: 3, prix: 100, factureId: 'invoice', customDuty: duty('22029919', 20, 3) },
+  ];
+  const quote = calculateQuote(input);
+  assert.equal(quote.ok, true, JSON.stringify(quote.errors));
+  assert.deepEqual(quote.amounts.taxLines.map(line => [line.value, line.transportShare, line.cif, line.customDuty.code]), [[100, 10, 110, '85167970'], [300, 30, 330, '22029919']]);
+  assert.deepEqual([quote.amounts.transport, quote.amounts.om, quote.amounts.omr, quote.amounts.tva, quote.amounts.total], [40, 77, 12.1, 10.97, 140.07]);
+  assert.equal(quote.amounts.taxLines.reduce((total, line) => total + line.transportShare, 0), quote.amounts.transport);
+});
 test('a colleague can review an unchanged saved draft, never an obsolete quote or local fee draft', () => {
   const input = fixture();
   input.colis.statut = 'en_preparation';

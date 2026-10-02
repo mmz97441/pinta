@@ -79,3 +79,30 @@ export function removeReceptionCarton(form, index) {
   const multiDims = Object.fromEntries(Object.entries(form.multiDims || {}).filter(([key]) => Number(key) !== index).map(([key, value]) => [Number(key) > index ? Number(key) - 1 : Number(key), value]));
   return { ...form, trackingLines: lines.length ? lines : [{ fournisseur: '', tracking: '' }], multiDims };
 }
+
+/** A received box can join an unpaid dossier; later milestones require a deliberate restart. */
+export const RECEPTION_APPEND_STATUSES = ['receptionne', 'mesure', 'attente_feu_vert', 'autorise', 'en_preparation', 'devis_envoye', 'attente_paiement'];
+export function receptionAppendBlockReason(colis = {}) {
+  if (colis.archive) return 'Ce dossier est archivé. Choisissez une autre expédition.';
+  if (colis.paiementDate || colis.paiementMontant > 0 || colis.statut === 'paye') return 'Le paiement est déjà enregistré. Un responsable doit vérifier ce dossier avant tout ajout.';
+  if (!RECEPTION_APPEND_STATUSES.includes(colis.statut)) return 'Cette expédition ne peut plus recevoir de carton. Choisissez une autre expédition.';
+  if (colis.payplugPaymentId || colis.payplugPaymentUrl) return 'Un lien de paiement existe. Corrigez le devis pour désactiver ce lien avant d’ajouter un carton.';
+  return '';
+}
+export function receptionAppendImpact(colis = {}) {
+  if (['devis_envoye', 'attente_paiement'].includes(colis.statut) || colis.devisTotal != null || colis.devisSnapshot) return 'Cet ajout conserve les cartons et les factures. Il faudra redemander l’accord du client, vérifier la préparation et refaire le devis. L’ancien devis sera conservé dans l’historique.';
+  if (colis.statut === 'en_preparation') return 'Cet ajout conserve les cartons et les factures. Il faudra redemander l’accord du client et vérifier la préparation avec le nouveau carton.';
+  if (colis.statut === 'autorise' || colis.statut === 'attente_feu_vert' || colis.feuVert === 'autorise' || colis.demandeFeuVertEnvoyeeAt) return 'Il faudra redemander l’accord du client pour inclure ce nouveau carton. L’ajout n’envoie aucun message.';
+  return '';
+}
+
+/** Reception may return to its source dossier, but the saved dossier must return to its source list. */
+export function receptionDossierReturn(value) {
+  let path = value;
+  for (let depth = 0; depth < 5; depth += 1) {
+    if (typeof path !== 'string' || !path.startsWith('/') || path.startsWith('//') || path.includes('\\')) return '/colis';
+    if (!/^\/colis\/[^/?#]+/.test(path)) return /^\/reception(?:[/?#]|$)/.test(path) ? '/colis' : path;
+    path = new URL(path, 'https://pinta.invalid').searchParams.get('returnTo');
+  }
+  return '/colis';
+}

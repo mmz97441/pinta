@@ -1,3 +1,4 @@
+const { openSavedReception } = require('./reception-page.helper.cjs');
 const { openDetailsFor } = require('./ui-disclosure-helpers.cjs');
 /* Staff attachment visibility; all API traffic uses isolated fixtures, including reloads. */
 const { chromium } = require('playwright');
@@ -41,20 +42,21 @@ async function main() {
       await f.login();
       await f.page.goto(`${base}/colis?sort=client&dir=desc&dossier=${ids.P}`);
       await f.page.waitForFunction(isDark => document.documentElement.classList.contains('dark') === isDark, dark);
-      await f.page.locator('summary').filter({ hasText: 'Cartons reçus (2)' }).click();
+      await f.page.getByRole('button', { name: /^Détails(?: du dossier)?$/ }).click();
+      await f.page.getByRole('button', { name: 'Réception', exact: true }).click();
       const measures = f.page.getByRole('region', { name: 'Mesures des cartons', exact: true });
       await measures.getByRole('listitem', { name: 'Carton 1', exact: true }).waitFor();
       assert.equal(await measures.getByRole('listitem').count(), 2, 'Existing cartons are visible in the inline panel');
       await measures.getByText('Boutique B', { exact: true }).waitFor();
-      await f.page.getByRole('button', { name: 'Suivre l’accord du client', exact: true }).click();
+      await f.page.getByRole('button', { name: 'Fermer le contexte du dossier', exact: true }).click();
       await f.page.getByRole('button', { name: 'Réceptionner un autre carton', exact: true }).click();
-      const dialog = f.page.getByRole('dialog', { name: 'Réceptionner des cartons', exact: true });
+      const dialog = f.page.getByRole('region', { name: 'Réceptionner des cartons', exact: true });
       await dialog.getByRole('heading', { name: 'Carton 3', level: 3, exact: true }).waitFor();
       await openDetailsFor(dialog.getByLabel('Fournisseur · carton 3', { exact: true })); await dialog.getByLabel('Fournisseur · carton 3', { exact: true }).fill('Boutique C');
       await openDetailsFor(dialog.getByLabel('Numéro de suivi · carton 3', { exact: true })); await dialog.getByLabel('Numéro de suivi · carton 3', { exact: true }).fill('QA-ATTACH-003');
       await fillBox(dialog, 3, [15, 25, 35, 1.5]);
-      await dialog.getByRole('button', { name: /^Enregistrer (?:le carton|les cartons) dans EXP-TEST-001$/, exact: true }).click();
-      await dialog.waitFor({ state: 'hidden' });
+      await dialog.getByRole('button', { name: 'Terminer la réception', exact: true }).click();
+      await dialog.waitFor({ state: 'hidden' }); await openSavedReception(f.page);
       await f.page.getByRole('button', { name: 'Voir le carton reçu', exact: true }).click();
       const third = measures.getByRole('listitem', { name: 'Carton 3', exact: true });
       await third.getByText('QA-ATTACH-003', { exact: true }).waitFor();
@@ -70,7 +72,7 @@ async function main() {
       const returned = new URL(new URL(f.page.url()).searchParams.get('returnTo'), base);
       assert.equal(returned.searchParams.get('sort'), 'client');
       assert.equal(returned.searchParams.get('dir'), 'desc');
-      assert.equal(returned.searchParams.get('dossier'), ids.P);
+      assert.equal(returned.searchParams.get('dossier'), null, 'Returning to the list must not immediately reopen the dossier.');
       await f.page.screenshot({ path: path.join(out, `carton-attached-${mobile ? 'mobile' : 'desktop'}-${theme}.png`), fullPage: true });
       await f.page.reload();
       await f.page.getByRole('button', { name: 'Voir le carton reçu', exact: true }).click();
@@ -85,8 +87,8 @@ async function main() {
       await dialog.getByRole('button').filter({ hasText: 'EXP-TEST-001' }).click();
       await dialog.getByRole('heading', { name: 'Carton 4', level: 3, exact: true }).waitFor();
       await fillBox(dialog, 4, [10, 10, 10, 0.6]);
-      await dialog.getByRole('button', { name: /^Enregistrer (?:le carton|les cartons) dans EXP-TEST-001$/, exact: true }).click();
-      await dialog.waitFor({ state: 'hidden' });
+      await dialog.getByRole('button', { name: 'Terminer la réception', exact: true }).click();
+      await dialog.waitFor({ state: 'hidden' }); await openSavedReception(f.page);
       await f.page.getByRole('button', { name: 'Voir le carton reçu', exact: true }).click();
       const fourth = measures.getByRole('listitem', { name: 'Carton 4', exact: true });
       await fourth.getByText('Numéro de suivi non renseigné', { exact: true }).waitFor();

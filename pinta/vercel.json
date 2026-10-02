@@ -9,6 +9,7 @@
     { "source": "/colis/:path*", "headers": [{ "key": "Referrer-Policy", "value": "no-referrer" }] }
   ],
   "rewrites": [
+    { "source": "/reception", "destination": "/index.html" },
     { "source": "/paiement/retour", "destination": "/index.html" },
     { "source": "/travail", "destination": "/index.html" },
     { "source": "/equipe", "destination": "/index.html" },

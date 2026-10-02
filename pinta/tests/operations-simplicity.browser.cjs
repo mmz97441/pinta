@@ -1,3 +1,4 @@
+const { openSavedReception } = require('./reception-page.helper.cjs');
 const { openTaskNavigation } = require('./task-navigation.helper.cjs');
 /* Operations audit O01–O21: fictitious providers intercepted by shared fixtures. */
 const { chromium } = require('playwright');
@@ -35,20 +36,20 @@ async function audit(f, name, include = '[data-testid="dossier-task-workspace"]'
    Object.assign(f.tables.colis[0],{ statut:'autorise', nb_colis:2, dims_par_colis:[box,box] });
    await f.page.goto(`${base}/?mission=reception`);
    await f.page.getByRole('button',{name:'Réceptionner des cartons',exact:true}).filter({visible:true}).first().click();
-   const dialog=f.page.getByRole('dialog',{name:'Réceptionner des cartons',exact:true});
+   const dialog=f.page.getByRole('region',{name:'Réceptionner des cartons',exact:true});
    await dialog.getByPlaceholder('Rechercher un client…').fill('Camille');
    await dialog.getByRole('button').filter({hasText:/Exemple/}).first().click();
    await dialog.getByRole('button').filter({hasText:'EXP-TEST-001'}).click();
    await dialog.getByRole('heading',{name:'Carton 3',exact:true}).waitFor();
    assert.match(await dialog.innerText(),/0 \/ 1 carton/);
-   assert.equal(await dialog.getByLabel('Numéro de suivi · carton 3',{exact:true}).isVisible(),false);
+   assert.equal(await dialog.getByLabel('Numéro de suivi · carton 3',{exact:true}).isVisible(),true);
    assert.equal(await dialog.locator('#reception-casier-existing').isVisible(),false);
-   const save=dialog.getByRole('button',{name:'Enregistrer le carton dans EXP-TEST-001',exact:true});
+   const save=dialog.getByRole('button',{name:'Terminer la réception',exact:true});
    await save.click(); await dialog.getByRole('alert').filter({hasText:/longueur à réception/}).waitFor();
    assert.equal(f.tables.colis.length,1);
    await measure(dialog,3); assert.match(await dialog.innerText(),/1 \/ 1 carton/);
-   await audit(f,`receipt-${mobile?'mobile':'desktop'}`,'[role="dialog"]');
-   await save.click(); await dialog.waitFor({state:'hidden'});
+   await audit(f,`receipt-${mobile?'mobile':'desktop'}`,'[role="region"][aria-label="Réceptionner des cartons"]');
+   await save.click(); await dialog.waitFor({state:'hidden'}); await openSavedReception(f.page);
    await f.page.waitForURL(url=>url.searchParams.get('section')==='accord');
    assert.equal(f.tables.colis.length,1); assert.equal(f.tables.colis[0].ref,'EXP-TEST-001'); assert.equal(f.tables.colis[0].nb_colis,3);
    assert.deepEqual(f.tables.colis[0].dims_par_colis.slice(0,2),[box,box]);
@@ -57,10 +58,10 @@ async function audit(f, name, include = '[data-testid="dossier-task-workspace"]'
   });
   await scenario('receipt-photo-incident-and-scanner-controls-remain-reachable',async f=>{
    await f.page.goto(base); await f.page.getByRole('button',{name:'Réceptionner des cartons',exact:true}).filter({visible:true}).first().click();
-   const dialog=f.page.getByRole('dialog',{name:'Réceptionner des cartons',exact:true});await dialog.getByPlaceholder('Rechercher un client…').fill('Camille');await dialog.getByRole('button').filter({hasText:/Exemple/}).first().click();
+   const dialog=f.page.getByRole('region',{name:'Réceptionner des cartons',exact:true});await dialog.getByPlaceholder('Rechercher un client…').fill('Camille');await dialog.getByRole('button').filter({hasText:/Exemple/}).first().click();
+   await dialog.getByRole('button',{name:'Créer une nouvelle expédition (nouveau EXP)',exact:true}).click();
    await dialog.getByRole('button',{name:'+ Ajouter un carton',exact:true}).click();
    const first=dialog.getByRole('region',{name:'Carton 1',exact:true}),second=dialog.getByRole('region',{name:'Carton 2',exact:true});
-   await second.locator('summary').filter({hasText:'Fournisseur et suivi'}).click(); await first.locator('summary').filter({hasText:'Fournisseur et suivi'}).click();
    await first.getByLabel('Numéro de suivi · carton 1',{exact:true}).fill('SCAN-FIRST');await first.getByLabel('Numéro de suivi · carton 1',{exact:true}).press('Enter');
    assert.equal(await second.getByLabel('Numéro de suivi · carton 2',{exact:true}).evaluate(node=>node===document.activeElement),true);
    await dialog.locator('summary').filter({hasText:'Compléments de réception'}).click();
@@ -127,7 +128,7 @@ async function audit(f, name, include = '[data-testid="dossier-task-workspace"]'
   });
   await scenario('manual-request-preview-shows-recipient-and-email-draft',async f=>{
    Object.assign(f.tables.colis[0],{statut:'mesure',dims_par_colis:[box,box]});
-   await open(f,'accord'); await region(f).getByRole('button',{name:'Préparer la demande au client',exact:true}).click();
+   await open(f,'accord'); await region(f).getByLabel('Message à envoyer au client',{exact:true}).waitFor();
    await region(f).getByLabel('Canal de notification',{exact:true}).selectOption('email');
    assert.match(await region(f).innerText(),/Destinataire :/); assert.match(await region(f).innerText(),/ouvre un brouillon/);
    assert.equal(await region(f).getByRole('button',{name:'Ouvrir le brouillon email',exact:true}).isEnabled(),true);

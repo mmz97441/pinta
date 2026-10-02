@@ -1,102 +1,33 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
-import {
-  Search, X, Package, Clock, CheckCircle, Check, Wrench, CreditCard, Plane,
-  AlertTriangle, ChevronRight, Star, TrendingUp, Users, BarChart3, FileText, MessageCircle,
-  Settings2, AlertCircle, ChevronLeft, CalendarClock, UserCheck,
-} from 'lucide-react';
+import { Search, X, Package, Clock, CheckCircle, Check, CreditCard, Plane, AlertCircle } from 'lucide-react';
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
-import { BRAND, STATUTS, ABONNEMENTS, getDestByCP, getSecteurByCP, getSecteurColor } from '../../constants';
-import { eur, fuzzy, labelEnvoi } from '../../utils';
-const exportColisExcel = async (...args) => { const exports = await import('../../utils/exportExcel'); return exports.exportColisExcel(...args); };
-import { Badge, Etapes } from '../ui';
-import StaffDetailView from './StaffDetailView';
-import { dossierTaskUrl, resolveDossierTask, DOSSIER_TASKS, hasCurrentPreparation } from '../../domain/dossierTasks';
+import { BRAND, STATUTS, getDestByCP } from '../../constants';
+import { fuzzy } from '../../utils';
+const exportDossierTableExcel = async (...args) => { const exports = await import('../../utils/exportExcel'); return exports.exportDossierTableExcel(...args); };
 import PersonalWorkView from '../workspace/PersonalWorkView';
-import KPIDashboard from './KPIDashboard';
-import ColisInfo from '../detail/ColisInfo';
-import ReceivedCartons from '../detail/ReceivedCartons';
-import FacturesPanel from '../detail/FacturesPanel';
-import ChatPanel, { pendingInvoiceAttachments } from '../detail/ChatPanel';
-import AuditLog from '../detail/AuditLog';
-import { useColisLock } from '../../hooks/useColisLock';
-import { WORK_QUEUES, queueContext, matchesWorkQueue, isActiveColis, isClientWaiting, isActionDue, isWaitDue, needsDocuments, nextAction, priorityScore, urgency, matchesOwner } from '../../domain/workQueues';
+import { WORK_QUEUES, queueContext, matchesWorkQueue, priorityScore } from '../../domain/workQueues';
 import usePersistentDraft from '../../hooks/usePersistentDraft';
-import { currentInvoices } from '../../domain/invoiceDocuments';
-import { needsConversationAction } from '../../domain/conversations';
 import { useMinuteNow } from '../../hooks/useMinuteNow';
-import { useDialog } from '../ui/useDialog';
 import { receptionCartonManifest } from '../../domain/reception';
 import { measureShipment, volumetricDivisor } from '../../domain/quote';
 import { findColisByReference, normalizeColisReference } from '../../lib/supabaseData';
-import InvoiceReviewIndicator from '../ui/InvoiceReviewIndicator';
-import TaskOwnership from '../workspace/TaskOwnership';
-import { findDossierWorkAction, workActionUrl, WORK_KINDS } from '../../domain/personalWork';
-const QUEUE_ICONS = { messages: MessageCircle, preparation: Wrench, documents: FileText, waiting: Clock };
-const unreadMessages = (colis) => (colis.messages || []).filter((message) => message.type === 'client' && !message.lu);
+import { buildDossierTableModel } from '../../domain/dossierTable';
+import { staffAvailable, sortWorkActions, workActionUrl } from '../../domain/personalWork';
+import { TABLE_VIEWS, TABLE_COLUMNS, DossierTableHead, DossierTableRow, DossierTableCard } from './DossierTableRows';
 
 // ── Pipeline cards (filters) ────────────────────────────────────────────────
 const PIPELINE = [
   { key: 'all',         label: 'Tout',            icon: Package,     color: 'var(--brand-text)',  filter: (c) => c.statut !== 'annule' },
   { key: 'reception',   label: 'Réception',       icon: Package,     color: '#F59E0B',   filter: (c) => ['receptionne', 'mesure'].includes(c.statut) },
   { key: 'feuvert',     label: 'Accord attendu',   icon: Clock,       color: '#F97316',   filter: (c) => c.statut === 'attente_feu_vert' },
-  { key: 'feuvert_ok',  label: 'Préparation',     icon: CheckCircle, color: '#65A30D',   filter: (c) => ['autorise', 'en_preparation'].includes(c.statut) },
+  { key: 'feuvert_ok',  label: 'Optimisation et factures',     icon: CheckCircle, color: '#65A30D',   filter: (c) => ['autorise', 'en_preparation'].includes(c.statut) },
   { key: 'paiement',    label: 'Att. paiement',   icon: CreditCard,  color: '#D97706',   filter: (c) => ['devis_envoye', 'attente_paiement'].includes(c.statut) },
   { key: 'expedition',  label: 'Expédition',      icon: Plane,       color: '#0891B2',   filter: (c) => ['paye', 'expedie', 'transit', 'dedouanement', 'arrive', 'livraison'].includes(c.statut) },
   { key: 'done',        label: 'Livrés',          icon: Check,       color: '#16A34A',   filter: (c) => c.statut === 'livre' },
 ];
 
-// ── Statut border color ─────────────────────────────────────────────────────
-function statutBorderColor(s) {
-  const map = {
-    receptionne: '#F59E0B', mesure: '#EAB308', attente_feu_vert: '#F97316',
-    autorise: '#22C55E', en_preparation: '#3B82F6', devis_envoye: '#D97706', attente_paiement: '#D97706',
-    paye: '#10B981', expedie: '#06B6D4',
-    transit: '#0EA5E9', dedouanement: '#8B5CF6', arrive: '#14B8A6',
-    livraison: '#84CC16', livre: '#16A34A', annule: '#9CA3AF',
-  };
-  return map[s] || BRAND.navy;
-}
-
-// ── Table styles ────────────────────────────────────────────────────────────
-const TH = 'px-3 py-3 text-[11px] font-bold uppercase tracking-wider text-gray-500 whitespace-nowrap';
-const TD = 'px-3 py-3 text-xs whitespace-nowrap';
 const usefulDossierDate = c => (c.nextActionSource === 'manual' && c.nextActionAt ? c.nextActionAt : c.statutUpdatedAt || c.dateReception || c.createdAt) || '';
-const DASH = null; // Cellule vide au lieu d'un tiret gris (moins de bruit visuel)
-
-// ── Column definitions ──────────────────────────────────────────────────────
-const ALL_COLUMNS = [
-  { key: 'statut', label: 'Action / étape', defaultOn: true, alwaysOn: true },
-  { key: 'client', label: 'Client', sortable: true, defaultOn: true, alwaysOn: true },
-  { key: 'ref', label: 'EXP', sortable: true, defaultOn: true, alwaysOn: true },
-  { key: 'cartons', label: 'Cartons reçus', defaultOn: true },
-  { key: 'referent', label: 'Référent', defaultOn: true },
-  { key: 'date', label: 'Date utile', sortable: true, defaultOn: true },
-  { key: 'intitule', label: 'Intitulé', defaultOn: false },
-  { key: 'paiement', label: 'Paiement', defaultOn: false },
-  { key: 'prenom', label: 'Prénom', defaultOn: false },
-  { key: 'email', label: 'Email', defaultOn: false },
-  { key: 'tel', label: 'Tél.', defaultOn: false },
-  { key: 'forfait', label: 'Forfait', defaultOn: false },
-  { key: 'volCm3', label: 'Vol. réception cm³', sortable: true, align: 'right', defaultOn: false },
-  { key: 'volKg', label: 'Vol. réception kg', align: 'right', defaultOn: false },
-  { key: 'poids', label: 'Poids réception', align: 'right', defaultOn: false },
-  { key: 'transport', label: 'Transport', sortable: true, align: 'right', defaultOn: false },
-  { key: 'taxes', label: 'Taxes', sortable: true, align: 'right', defaultOn: false },
-  { key: 'total', label: 'Total', sortable: true, align: 'right', defaultOn: false },
-  { key: 'paye', label: 'Payé', align: 'right', defaultOn: false },
-  { key: 'commune', label: 'Commune', defaultOn: false },
-  { key: 'cp', label: 'CP', defaultOn: false },
-];
-
-const LS_COLS_KEY = 'expedile_columns_v2:';
-function loadVisibleCols(userId) {
-  try {
-    const saved = localStorage.getItem(LS_COLS_KEY + userId);
-    if (saved) return new Set(JSON.parse(saved));
-  } catch {}
-  return new Set(ALL_COLUMNS.filter((c) => c.defaultOn).map((c) => c.key));
-}
 
 // ── Default sort options ────────────────────────────────────────────────────
 const SORT_OPTIONS = [
@@ -116,120 +47,8 @@ function loadDefaultSort(userId) {
   return 'priority';
 }
 
-// ── Table header row ────────────────────────────────────────────────────────
-function ColisTableHead({ visibleCols, onSelectAll, allSelected, onSort, sortCol, sortDir }) {
-  const indicator = (col) => onSort ? (sortCol === col ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ' ↕') : '';
-  // Sticky : colonnes du tableau restent visibles au scroll (au-dessus des lignes)
-  const stickyBg = 'bg-slate-50'; // ≈ BRAND.navy + 06% sur blanc
-  const thCls = (extra = '') => `${TH} ${stickyBg} sticky top-0 z-[5] ${extra}`;
-
-  return (
-    <tr className="border-b border-gray-200">
-      <th className={`px-2 py-2 w-8 ${stickyBg} sticky top-0 z-[5]`}>
-        <input aria-label="Sélectionner tous les dossiers affichés" type="checkbox" checked={allSelected} onChange={onSelectAll}
-          className="w-3.5 h-3.5 rounded accent-blue-500 cursor-pointer" />
-      </th>
-      {ALL_COLUMNS.filter((col) => visibleCols.has(col.key)).map((col) => {
-        const align = col.align === 'right' ? 'text-right' : '';
-        if (col.sortable && onSort) {
-          return (
-            <th key={col.key} aria-sort={sortCol === (col.key === 'volCm3' ? 'dims' : col.key) ? sortDir === 'asc' ? 'ascending' : 'descending' : 'none'} className={thCls(align)}>
-              <button className="min-h-11 text-left" onClick={() => onSort(col.key === 'volCm3' ? 'dims' : col.key)}>{col.label}{indicator(col.key === 'volCm3' ? 'dims' : col.key)}</button>
-            </th>
-          );
-        }
-        return <th key={col.key} className={thCls(align)}>{col.label}</th>;
-      })}
-      <th className={`w-5 ${stickyBg} sticky top-0 z-[5]`}></th>
-    </tr>
-  );
-}
-
-// ── Table data row ──────────────────────────────────────────────────────────
-function ColisTableRow({ c, client, prevClient, envois, onClick, isSelected, checked, onCheck, visibleCols, now, ownerName, settings }) {
-  const sameClient = false;
-  const dim = sameClient ? 'text-gray-300' : '';
-  const dest = client ? getDestByCP(client.cp) : null;
-  const divisor = volumetricDivisor(settings);
-  const weights = measureShipment(receptionCartonManifest(c).dimsParColis, divisor);
-  const volCm3 = weights ? weights.volumetricWeight * divisor : null;
-  const volKg = weights?.volumetricWeight.toFixed(2);
-  const taxes = (c.devisOM != null || c.devisOMR != null || c.devisTVA != null)
-    ? ((c.devisOM || 0) + (c.devisOMR || 0) + (c.devisTVA || 0)) : null;
-  const usefulDate = usefulDossierDate(c);
-  const dateCreation = usefulDate ? new Date(usefulDate).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' }) : 'À préciser';
-  const isPaid = c.paiementMontant > 0;
-  const abo = client?.abonnement ? (ABONNEMENTS[client.abonnement]?.label || client.abonnement) : '—';
-  const prenom = client?.prenom || client?.nom?.split(' ').slice(0, -1).join(' ') || '';
-  const nom = client?.nomFamille || client?.nom?.split(' ').pop() || client?.nom || '—';
-
-  const event = urgency(c, now);
-  const isUrgent = event.overdue;
-
-  const cellRenderers = {
-    date: () => <div className="text-gray-500"><span>{dateCreation}</span><p className="text-[10px]">{c.nextActionSource === 'manual' && c.nextActionAt ? 'Échéance promise' : 'Étape actuelle'}</p></div>,
-    cartons: () => <span>{receptionCartonManifest(c).nbColis}</span>,
-    referent: () => <span className="text-gray-600">{ownerName}</span>,
-    ref: () => (
-      <>
-        <button onClick={(e) => { e.stopPropagation(); onClick(); }} className="min-h-11 text-left font-bold text-gray-900 hover:underline">{c.ref}</button>
-        {c.casier && <span className="text-[8px] font-bold px-1 py-0.5 rounded ml-1" style={{ background: `${BRAND.gold}22`, color: 'var(--text-accent)' }}>{c.casier}</span>}
-        {isUrgent && <span title={event.label} className="ml-1 text-xs font-semibold px-1 py-0.5 rounded bg-amber-100 text-amber-800">À revoir</span>}{needsConversationAction(c) && <span className="ml-1 text-xs font-semibold brand-t">À répondre</span>}
-        {(() => { const unread = (c.messages || []).filter((m) => m.type === 'client' && !m.lu).length; return unread > 0 ? <span className="ml-1 text-[8px] font-bold px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-700">{unread}</span> : null; })()}
-      </>
-    ),
-    statut: () => <div className="max-w-[220px] whitespace-normal"><p className="mb-1 text-xs font-semibold text-slate-800">{nextAction(c, client, now)}</p><Badge statut={c.statut} /><InvoiceReviewIndicator dossier={c} /></div>,
-    paiement: () => isPaid ? <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-green-100 text-green-700">Payé</span> : c.devisTotal ? <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">En attente</span> : DASH,
-    client: () => sameClient ? (
-      <span className="text-gray-500 text-xs italic">↑ idem</span>
-    ) : (
-      <>
-        <span className="text-gray-700 font-medium">{`${prenom} ${nom}`.trim()}</span>
-        {dest && <span className="ml-1">{dest.flag}</span>}
-        {(() => { const s = getSecteurByCP(client?.cp); return s ? <span className="ml-1 text-[7px] font-black px-1 py-0.5 rounded text-white" style={{ background: getSecteurColor(s) }}>{s}</span> : null; })()}
-        {client?.abonnement === 'vip' && <span className="ml-1 text-[8px] font-black px-1 py-0.5 rounded" style={{ background: 'linear-gradient(135deg, #F59E0B, #D97706)', color: 'white' }}>VIP</span>}
-        {client?.type === 'pro' && client?.abonnement !== 'vip' && <span className="ml-1 text-[8px] font-black px-1 py-0.5 rounded" style={{ background: `${BRAND.gold}30`, color: 'var(--text-accent)' }}>PRO</span>}
-      </>
-    ),
-    prenom: () => sameClient ? null : <span className="text-gray-500">{prenom || ''}</span>,
-    email: () => sameClient ? null : <span className="text-gray-500 text-[10px]">{client?.email || ''}</span>,
-    tel: () => sameClient ? null : <span className="text-gray-500 text-[10px] font-mono">{client?.tel || ''}</span>,
-    forfait: () => sameClient ? null : <span className="text-[9px] font-semibold">{abo === '—' ? '' : abo}</span>,
-    intitule: () => <span className="text-gray-600 truncate block max-w-[120px]">{c.desc || '—'}</span>,
-    volCm3: () => volCm3 ? <span className="text-gray-500 font-mono text-[10px]">{volCm3.toLocaleString()}</span> : DASH,
-    volKg: () => volKg ? <span className="text-gray-500 font-mono text-[10px]">{volKg}</span> : DASH,
-    poids: () => weights ? <span className="text-gray-600 font-mono text-[10px]">{weights.realWeight.toFixed(2)} kg</span> : DASH,
-    transport: () => c.devisTransport != null ? <span className="font-semibold text-gray-700">{eur(c.devisTransport)}</span> : DASH,
-    taxes: () => taxes != null ? <span className="text-gray-600">{eur(taxes)}</span> : DASH,
-    total: () => c.devisTotal != null ? <span className="font-bold" style={{ color: 'var(--brand-text)' }}>{eur(c.devisTotal)}</span> : DASH,
-    paye: () => c.paiementMontant ? <span className="font-bold text-green-700">{eur(c.paiementMontant)}</span> : DASH,
-    commune: () => sameClient ? null : <span className="text-gray-500 text-[10px]">{client?.ville || ''}</span>,
-    cp: () => sameClient ? null : <span className="text-gray-500 text-[10px] font-mono">{client?.cp || ''}</span>,
-  };
-
-  return (
-    <tr
-      onClick={onClick}
-      data-dossier-row={c.id}
-      data-selected={isSelected || checked ? 'true' : 'false'}
-      className="dossier-list-item border-b cursor-pointer transition-colors"
-    >
-      <td className="px-2 py-2 w-8" onClick={(e) => e.stopPropagation()}>
-        <input aria-label={`Sélectionner le dossier ${c.ref}`} type="checkbox" checked={checked} onChange={onCheck}
-          className="w-3.5 h-3.5 rounded accent-blue-500 cursor-pointer" />
-      </td>
-      {ALL_COLUMNS.filter((col) => visibleCols.has(col.key)).map((col) => (
-        <td key={col.key} className={`${TD}${col.align === 'right' ? ' text-right' : ''}`}>
-          {cellRenderers[col.key]?.() || DASH}
-        </td>
-      ))}
-      <td className="pr-1 py-2"><ChevronRight size={12} className="text-gray-300" /></td>
-    </tr>
-  );
-}
-
 // ── Group header row (colspan toute la largeur) ─────────────────────────────
-function GroupHeaderRow({ icon: Icon, color, label, extraLabel, count, allChecked, onToggleAll, colspan, bgTint, collapsed, onToggle }) {
+function GroupHeaderRow({ icon: Icon, color, label, extraLabel, count, allChecked, onToggleAll, colspan, collapsed, onToggle }) {
   return (
     <tr className="border-b border-gray-200" style={{ background: 'var(--bg-surface)' }}>
       <td colSpan={colspan} className="px-3 py-2">
@@ -244,45 +63,10 @@ function GroupHeaderRow({ icon: Icon, color, label, extraLabel, count, allChecke
             <button onClick={onToggle} aria-expanded={!collapsed} className="min-h-11 text-sm font-bold" style={{ color: 'var(--brand-text)' }}>{collapsed ? '▸' : '▾'} {label}</button>
             {extraLabel && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">{extraLabel}</span>}
           </div>
-          <span className="text-[10px] font-bold text-gray-400">{count} colis</span>
+          <span className="text-[10px] font-bold text-gray-400">{count} dossier(s)</span>
         </div>
       </td>
     </tr>
-  );
-}
-
-// ════════════════════════════════════════════════════════════════════════════
-// DETAIL SLIDE-OVER
-// ════════════════════════════════════════════════════════════════════════════
-function DetailSlideOver({ onClose }) {
-  const { sel, can } = useApp();
-  if (!sel) return null;
-
-  return (
-    <>
-      {/* Backdrop */}
-      <div className="fixed inset-0 z-40 bg-black/30" onClick={onClose} />
-      {/* Panel */}
-      <div className="fixed top-0 right-0 bottom-0 z-50 w-full max-w-[560px] bg-white shadow-2xl overflow-y-auto">
-        {/* Header */}
-        <div className="sticky top-0 z-10 bg-white border-b border-gray-100 px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-2.5 h-2.5 rounded-full" style={{ background: statutBorderColor(sel.statut) }} />
-            <span className="text-sm font-black" style={{ color: 'var(--brand-text)' }}>{sel.ref}</span>
-            <Badge statut={sel.statut} />
-          </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400"><X size={18} /></button>
-        </div>
-        <div className="px-4 pt-3"><Etapes statut={sel.statut} /></div>
-        <div className="p-4 space-y-4">
-          <StaffDetailView />
-          <ColisInfo />
-          {sel.statut !== 'en_preparation' && ['perm_factures_voir', 'perm_factures_ajouter', 'perm_factures_valider', 'perm_factures_refuser', 'perm_factures_ocr', 'perm_factures_modifier_articles'].some(permission => can(permission)) && <FacturesPanel />}
-          <ChatPanel />
-          <AuditLog />
-        </div>
-      </div>
-    </>
   );
 }
 
@@ -292,13 +76,13 @@ function DetailSlideOver({ onClose }) {
 export function DashboardPage() { return <PersonalWorkView />; }
 
 // ════════════════════════════════════════════════════════════════════════════
-// COLIS PAGE — /colis route: pipeline cards + table + detail slide-over
+// COLIS PAGE — one row per shipment; task ownership; full-page dossier
 // ════════════════════════════════════════════════════════════════════════════
 export default function StaffColisPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const returnTo = location.pathname + location.search;
-  const { data, clients, getClient, envois, setSelId, sel, changerStatut, flash, can, auth, loadArchives, archivesLoaded, categories, tarifs, settings, teamUsers = [], workActions = [] } = useApp();
+  const { data, clients, getClient, envois, changerStatut, flash, can, auth, loadArchives, archivesLoaded, categories, tarifs, settings, teamUsers = [], workActions = [], workPreferences = [], workLoading, workError, refreshWork } = useApp();
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [searchParams, setSearchParams] = useSearchParams();
   const workFilter = searchParams.get('work');
@@ -356,49 +140,73 @@ export default function StaffColisPage() {
   }, [search, lookup.status, lookup.row?.id, navigate, returnTo]);
   const ownerFilter = searchParams.get('owner') || '';
   const sortCol = searchParams.get('sort');
-  const setSortCol = (value) => setParam('sort', value);
   const sortDir = searchParams.get('dir') === 'desc' ? 'desc' : 'asc';
-  const setSortDir = (value) => setParam('dir', typeof value === 'function' ? value(sortDir) : value);
   const showArchive = searchParams.get('archive') === '1';
   const setShowArchive = (value) => setParam('archive', value ? '1' : null);
   const [archivesBusy, setArchivesBusy] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
+  const canSeePayments = ['perm_finances_voir_total', 'perm_colis_calculer_devis', 'perm_colis_envoyer_devis', 'perm_colis_confirmer_paiement'].some(permission => can(permission));
+  const tableRequested = TABLE_VIEWS.some(view => view.key === searchParams.get('table')) ? searchParams.get('table') : 'daily';
+  const tableView = tableRequested === 'payments' && !canSeePayments ? 'daily' : tableRequested;
+  const canExportView = can('perm_export_colis') && (tableView !== 'payments' || can('perm_finances_exporter'));
+  const taskScope = ['mine', 'pool'].includes(searchParams.get('tasks')) ? searchParams.get('tasks') : 'all';
+  const available = staffAvailable(workPreferences.find(item => item.staff_id === auth?.u?.id), now);
+  const workReady = !workError && !(workLoading && !workActions.length);
+  const actionsByDossier = useMemo(() => {
+    const map = new Map();
+    for (const action of workActions) {
+      if (!map.has(action.colis_id)) map.set(action.colis_id, []);
+      map.get(action.colis_id).push(action);
+    }
+    return map;
+  }, [workActions]);
+  const models = useMemo(() => new Map(data.map(dossier => [dossier.id, buildDossierTableModel(dossier, {
+    actions: actionsByDossier.get(dossier.id) || [], client: getClient(dossier.clientId), me: auth?.u?.id, can, teamUsers, envois,
+    scope: taskScope, view: tableView, available, now, workReady, assigneeFilter: ownerFilter,
+  })])), [data, getClient, actionsByDossier, auth?.u?.id, can, teamUsers, envois, taskScope, tableView, available, now, workReady, ownerFilter]);
   const viewMode = ['envoi', 'statut'].includes(searchParams.get('view')) ? searchParams.get('view') : 'priority';
   const setViewMode = (value) => setParam('view', value === 'priority' ? null : value);
-  const [navigationOrder, setNavigationOrder] = useState([]);
-  const detailScrollRef = useRef(null);
   const listScrollRef = useRef(null);
   const [collapsedGroups, setCollapsedGroups] = usePersistentDraft('dossiers:groups', []);
   const [exportError, setExportError] = useState('');
   const [exportBusy, setExportBusy] = useState(false);
-  const exportRows = async rows => { setExportError(''); setExportBusy(true); try { await exportColisExcel(rows, clients); } catch (error) { setExportError(error.message || 'Export impossible. Réessayez.'); } finally { setExportBusy(false); } };
+  const exportRows = async rows => {
+    if (!canExportView || exportBusy) return;
+    setExportError(''); setExportBusy(true);
+    try { await exportDossierTableExcel(rows, clients, models, tableView, TABLE_COLUMNS[tableView]); }
+    catch (error) { setExportError(error.message || 'Export impossible. Réessayez.'); }
+    finally { setExportBusy(false); }
+  };
   const listMemoryParams = new URLSearchParams(location.search);
   listMemoryParams.delete('dossier'); listMemoryParams.sort();
-  const listMemoryKey = `expedile:list:${auth?.u?.id}:${location.pathname}:${listMemoryParams.toString()}:${sel ? 'preview' : 'list'}`;
+  const listMemoryKey = `expedile:list:${auth?.u?.id}:${location.pathname}:${listMemoryParams.toString()}:list`;
   useEffect(() => {
     const element = listScrollRef.current; if (!element) return;
-    try { element.scrollTop = Number(sessionStorage.getItem(listMemoryKey)) || 0; } catch { /* optional preference */ }
-    const save = () => { try { sessionStorage.setItem(listMemoryKey, String(element.scrollTop)); } catch { /* optional preference */ } };
+    try {
+      const saved = JSON.parse(sessionStorage.getItem(listMemoryKey));
+      element.scrollTop = typeof saved === 'number' ? saved : saved?.top || 0;
+      element.scrollLeft = saved?.left || 0;
+    } catch { /* optional preference */ }
+    const save = () => { try { sessionStorage.setItem(listMemoryKey, JSON.stringify({ top: element.scrollTop, left: element.scrollLeft })); } catch { /* optional preference */ } };
     element.addEventListener('scroll', save, { passive: true });
     return () => { element.removeEventListener('scroll', save); };
   }, [listMemoryKey]);
-  const [visibleCols, setVisibleCols] = useState(() => loadVisibleCols(auth?.u?.id));
-  const [showColPicker, setShowColPicker] = useState(false);
   const [defaultSort, setDefaultSort] = useState(() => loadDefaultSort(auth?.u?.id));
-  const [showSortPicker, setShowSortPicker] = useState(false);
   const activeFilters = [
+    taskScope !== 'all' && { key: 'tasks', label: taskScope === 'mine' ? 'Mes tâches' : 'À prendre' },
+    showArchive && { key: 'archive', label: 'Archives incluses' },
     workFilter && { key: 'work', label: `File : ${WORK_QUEUES.find(item => item.key === workFilter)?.label || 'Sélectionnée'}` },
     clientFilter && { key: 'client', label: `Client : ${getClient(clientFilter)?.nom || 'Sélectionné'}` },
     envoiFilter && { key: 'envoi', label: `Départ : ${envois.find(item => item.id === envoiFilter)?.ref || 'Sélectionné'}` },
-    ownerFilter && { key: 'owner', label: `Référent : ${ownerFilter === 'mine' ? 'Mes dossiers' : ownerFilter === 'unassigned' ? 'Non attribués' : teamUsers.find(item => item.authId === ownerFilter)?.nom || 'Sélectionné'}` },
+    ownerFilter && { key: 'owner', label: `Responsable de tâche : ${ownerFilter === 'mine' ? 'Moi' : ownerFilter === 'unassigned' ? 'Non attribué' : teamUsers.find(item => item.authId === ownerFilter)?.nom || 'Sélectionné'}` },
     activeDest && { key: 'dest', label: `Destination : ${getDestByCP(activeDest + '00')?.nom || activeDest}` },
     activeTab !== 'all' && { key: 'tab', label: `Étape : ${PIPELINE.find(item => item.key === activeTab)?.label}` },
   ].filter(Boolean);
   const clearFilters = () => {
-    setSelId(null); setShowFilters(false);
+    setShowFilters(false);
     setSearchParams(previous => {
       const next = new URLSearchParams(previous);
-      ['work', 'client', 'envoi', 'owner', 'dest', 'tab', 'archive', 'dossier'].forEach(key => next.delete(key));
+      ['work', 'client', 'envoi', 'owner', 'dest', 'tab', 'archive', 'dossier', 'tasks'].forEach(key => next.delete(key));
       return next;
     }, { replace: true });
   };
@@ -409,25 +217,11 @@ export default function StaffColisPage() {
     } else if (lookup.status === 'loading') pendingReferenceOpen.current = { query: search };
   };
 
-  const toggleCol = useCallback((key) => {
-    setVisibleCols((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key); else next.add(key);
-      localStorage.setItem(LS_COLS_KEY + auth?.u?.id, JSON.stringify([...next]));
-      return next;
-    });
-  }, []);
-
-  const changeDefaultSort = useCallback((key) => {
+  const changeDefaultSort = key => {
     setDefaultSort(key);
-    localStorage.setItem(LS_SORT_KEY + auth?.u?.id, key);
-    setShowSortPicker(false);
-  }, []);
-  const [narrowScreen, setNarrowScreen] = useState(() => window.matchMedia('(max-width: 1023px)').matches);
-  useEffect(() => { const query = window.matchMedia('(max-width: 1023px)'); const update = () => setNarrowScreen(query.matches); query.addEventListener('change', update); return () => query.removeEventListener('change', update); }, []);
-
-  // Verrouillage optimiste — affiche un bandeau si quelqu'un d'autre édite le même colis
-  const { lockedBy, isLockedByOther } = useColisLock(sel?.id, auth?.u?.id, auth?.u?.nom);
+    try { localStorage.setItem(LS_SORT_KEY + auth?.u?.id, key); } catch { /* optional preference */ }
+    setSearchParams(previous => { const next = new URLSearchParams(previous); next.delete('sort'); next.delete('dir'); return next; }, { replace: true });
+  };
 
   useEffect(() => {
     if (!showArchive || archivesLoaded || archivesBusy) return;
@@ -440,29 +234,37 @@ export default function StaffColisPage() {
     if (workFilter) list = list.filter((c) => matchesWorkQueue(c, workFilter, context));
     if (clientFilter) list = list.filter((c) => c.clientId === clientFilter);
     if (envoiFilter) list = list.filter((c) => c.envoi === envoiFilter);
-    if (ownerFilter) list = list.filter((c) => (isActiveColis(c) || needsConversationAction(c)) && matchesOwner(c, ownerFilter, auth?.u?.id));
+    if (ownerFilter || taskScope !== 'all') list = list.filter(c => models.get(c.id)?.matchesScope);
     if (activeDest) list = list.filter((c) => getDestByCP(getClient(c.clientId)?.cp)?.code === activeDest);
     if (search.trim()) list = list.filter((c) => fuzzy(`${c.ref} ${c.desc || ''} ${getClient(c.clientId)?.nom || ''} ${c.casier || ''} ${c.trackings?.join(' ') || ''}`, exactReference || search));
     return list;
-  }, [data, showArchive, workFilter, context, clientFilter, envoiFilter, ownerFilter, auth?.u?.id, activeDest, getClient, search, exactReference]);
+  }, [data, showArchive, workFilter, context, clientFilter, envoiFilter, ownerFilter, taskScope, models, activeDest, getClient, search, exactReference]);
   const searched = useMemo(() => {
-    if (activeTab === 'all' && (workFilter === 'messages' || ownerFilter)) return scope;
+    if (activeTab === 'all' && (workFilter === 'messages' || ownerFilter || taskScope !== 'all')) return scope;
     const phase = PIPELINE.find((item) => item.key === activeTab);
     return phase ? scope.filter(phase.filter) : scope;
-  }, [scope, activeTab, workFilter, ownerFilter]);
+  }, [scope, activeTab, workFilter, ownerFilter, taskScope]);
 
   // Sort
   const sorted = useMemo(() => {
+    const compareAmount = (a, b, key, dir) => {
+      const left = models.get(a.id)?.payment[key]; const right = models.get(b.id)?.payment[key];
+      if (left == null || right == null) return left != null ? -1 : right != null ? 1 : 0;
+      return dir * (left - right);
+    };
     if (!sortCol) {
       const arr = [...searched];
       switch (defaultSort) {
-        case 'priority':
+        case 'priority': {
+          const ranked = new Map(sortWorkActions(searched.map(dossier => models.get(dossier.id)?.action).filter(Boolean), now).map((action, index) => [action.colis_id, index]));
           arr.sort((a, b) => {
+            if (ranked.has(a.id) || ranked.has(b.id)) return (ranked.get(a.id) ?? Infinity) - (ranked.get(b.id) ?? Infinity);
             const clA = getClient(a.clientId);
             const clB = getClient(b.clientId);
             return priorityScore(b, clB, now) - priorityScore(a, clA, now);
           });
           break;
+        }
         case 'date_desc':
           arr.sort((a, b) => usefulDossierDate(b).localeCompare(usefulDossierDate(a)));
           break;
@@ -470,10 +272,10 @@ export default function StaffColisPage() {
           arr.sort((a, b) => usefulDossierDate(a).localeCompare(usefulDossierDate(b)));
           break;
         case 'total_desc':
-          arr.sort((a, b) => (b.devisTotal || 0) - (a.devisTotal || 0));
+          arr.sort((a, b) => compareAmount(a, b, 'requested', -1));
           break;
         case 'total_asc':
-          arr.sort((a, b) => (a.devisTotal || 0) - (b.devisTotal || 0));
+          arr.sort((a, b) => compareAmount(a, b, 'requested', 1));
           break;
         case 'ref_asc':
           arr.sort((a, b) => (a.ref || '').localeCompare(b.ref || '', 'fr', { numeric: true }));
@@ -486,6 +288,8 @@ export default function StaffColisPage() {
     arr.sort((a, b) => {
       let va, vb;
       switch (sortCol) {
+        case 'requested': case 'paid': case 'remaining': return compareAmount(a, b, sortCol, dir);
+        case 'sentAt': return dir * (models.get(a.id)?.payment.sentAt || '').localeCompare(models.get(b.id)?.payment.sentAt || '');
         case 'date': va = usefulDossierDate(a); vb = usefulDossierDate(b); return dir * va.localeCompare(vb);
         case 'client': va = (getClient(a.clientId)?.nom || '').toLowerCase(); vb = (getClient(b.clientId)?.nom || '').toLowerCase(); return dir * va.localeCompare(vb, 'fr');
         case 'ref': return dir * (a.ref || '').localeCompare(b.ref || '', 'fr', { numeric: true });
@@ -503,7 +307,16 @@ export default function StaffColisPage() {
       }
     });
     return arr;
-  }, [searched, sortCol, sortDir, getClient, defaultSort, now, settings]);
+  }, [searched, sortCol, sortDir, getClient, defaultSort, now, settings, models]);
+
+  // Hidden rows must never remain part of a bulk action after filtering.
+  useEffect(() => {
+    const visible = new Set(sorted.map(dossier => dossier.id));
+    setSelectedIds(previous => {
+      const next = new Set([...previous].filter(id => visible.has(id)));
+      return next.size === previous.size ? previous : next;
+    });
+  }, [sorted]);
 
   // Grouped by envoi (for envoi view)
   const groupedByEnvoi = useMemo(() => {
@@ -532,7 +345,7 @@ export default function StaffColisPage() {
   const STATUT_GROUPS = [
     { label: 'Réception', statuts: ['receptionne', 'mesure'], color: '#F59E0B', icon: Package },
     { label: 'Accord attendu', statuts: ['attente_feu_vert'], color: '#F97316', icon: Clock },
-    { label: 'Préparation', statuts: ['autorise', 'en_preparation'], color: '#65A30D', icon: CheckCircle },
+    { label: 'Optimisation et factures', statuts: ['autorise', 'en_preparation'], color: '#65A30D', icon: CheckCircle },
     { label: 'Devis / Paiement', statuts: ['devis_envoye', 'attente_paiement'], color: '#D97706', icon: CreditCard },
     { label: 'Payé', statuts: ['paye'], color: '#10B981', icon: Check },
     { label: 'En expédition', statuts: ['expedie', 'transit', 'dedouanement', 'arrive', 'livraison'], color: '#0891B2', icon: Plane },
@@ -548,14 +361,9 @@ export default function StaffColisPage() {
   }, [sorted]);
 
   const tabCounts = useMemo(() => PIPELINE.reduce((all, phase) => {
-    all[phase.key] = scope.filter((c) => phase.key === 'all' && (workFilter === 'messages' || ownerFilter) ? true : phase.filter(c)).length;
+    all[phase.key] = scope.filter((c) => phase.key === 'all' && (workFilter === 'messages' || ownerFilter || taskScope !== 'all') ? true : phase.filter(c)).length;
     return all;
-  }, {}), [scope, workFilter, ownerFilter]);
-  const tabUrgences = useMemo(() => PIPELINE.reduce((all, phase) => {
-    all[phase.key] = scope.filter(phase.filter).filter((c) => urgency(c, now).overdue).length;
-    return all;
-  }, {}), [scope, now]);
-
+  }, {}), [scope, workFilter, ownerFilter, taskScope]);
   const handleSort = (col) => {
     setSearchParams((previous) => {
       const next = new URLSearchParams(previous);
@@ -565,194 +373,66 @@ export default function StaffColisPage() {
     }, { replace: true });
   };
 
-  const openColis = (id, preserveOrder = false) => {
-    if (!preserveOrder) setNavigationOrder(sorted.map((c) => c.id));
-    setSelId(id);
-    setSearchParams((previous) => { const next = new URLSearchParams(previous); next.set('dossier', id); return next; });
+  const toggleSelection = id => setSelectedIds(previous => { const next = new Set(previous); if (next.has(id)) next.delete(id); else next.add(id); return next; });
+  const openColis = (id, claimedAction) => {
+    const dossier = data.find(item => item.id === id);
+    const action = claimedAction || models.get(id)?.action;
+    navigate(action ? workActionUrl(action, returnTo, dossier) : `/colis/${encodeURIComponent(id)}?${new URLSearchParams({ returnTo })}`);
   };
-  const closeDetail = useCallback(() => { setSelId(null); setSearchParams((previous) => { const next = new URLSearchParams(previous); next.delete('dossier'); return next; }, { replace: true }); }, [setSelId, setSearchParams]);
   const selectedFromUrl = searchParams.get('dossier');
   useEffect(() => {
-    setSelId(selectedFromUrl || null);
-    if (detailScrollRef.current) detailScrollRef.current.scrollTop = 0;
-  }, [selectedFromUrl, setSelId, workFilter]);
-  useEffect(() => {
-    if (!selectedFromUrl || !navigationOrder.length) setNavigationOrder(sorted.map((c) => c.id));
-  }, [selectedFromUrl, sorted, navigationOrder.length]);
-  const currentPosition = navigationOrder.indexOf(sel?.id);
-  const nextId = currentPosition >= 0 ? navigationOrder.slice(currentPosition + 1).find((id) => sorted.some((c) => c.id === id)) : sorted.find((c) => c.id !== sel?.id)?.id;
-  const previousId = currentPosition > 0 ? navigationOrder.slice(0, currentPosition).reverse().find((id) => sorted.some((c) => c.id === id)) : null;
-  const mobileDetailRef = useDialog(Boolean(sel) && narrowScreen, closeDetail);
-  useEffect(() => { const onKey = (event) => { if (document.activeElement?.closest?.('[role="dialog"]')) return; if (event.key === 'Escape') { if (showColPicker || showSortPicker) { setShowColPicker(false); setShowSortPicker(false); } else if (sel) closeDetail(); } }; window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey); }, [showColPicker, showSortPicker, sel, closeDetail]);
+    if (!selectedFromUrl) return;
+    const params = new URLSearchParams(location.search);
+    params.delete('dossier');
+    const back = `${location.pathname}${params.size ? `?${params}` : ''}`;
+    navigate(`/colis/${encodeURIComponent(selectedFromUrl)}?${new URLSearchParams({ returnTo: back })}`, { replace: true });
+  }, [selectedFromUrl, location.pathname, location.search, navigate]);
+
 
 
   return (
-    <div className="dossier-list h-full flex flex-col">
+    <div className="dossier-list h-full min-w-0 flex flex-col">
 
-      {workFilter && <div className="px-4 pt-3 pb-2 flex items-center justify-between gap-2"><div><h1 className="font-bold text-gray-900">{WORK_QUEUES.find((q) => q.key === workFilter)?.label || 'File de travail'}</h1><p className="text-xs text-gray-500">{clientFilter ? getClient(clientFilter)?.nom : 'Dossiers à traiter ensemble par l’équipe'}</p></div><button onClick={clearFilters} className="text-xs min-h-11 text-gray-500 inline-flex items-center gap-1">Tous les dossiers<X size={14} /></button></div>}
-      {workFilter === 'messages' && <div className="px-4 py-3"><button onClick={() => navigate('/conversations')} className="min-h-11 rounded-lg border px-3 text-sm font-semibold">Ouvrir les conversations et messages à rattacher</button></div>}
-      <div className="shrink-0 px-4 pt-3 flex flex-wrap items-end gap-3">
-        <label className="flex-1 lg:flex-none text-xs font-semibold text-gray-600">File de travail<select aria-label="File de travail" value={workFilter || ''} onChange={(e) => { setSearchParams((old) => { const next = new URLSearchParams(old); next.delete('tab'); next.delete('dossier'); next.delete('archive'); if (e.target.value) next.set('work', e.target.value); else next.delete('work'); return next; }); }} className="mt-1 block min-h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm"><option value="">Tous les dossiers</option>{WORK_QUEUES.map((queue) => <option key={queue.key} value={queue.key}>{queue.label}</option>)}</select></label>
-        <button onClick={() => setShowFilters((value) => !value)} aria-expanded={showFilters} className="min-h-11 px-3 rounded-xl border border-gray-200 font-semibold text-sm brand-t">Filtres avancés{activeFilters.length ? ` · ${activeFilters.length} actif(s)` : ''}</button>
-        <div className={`${showFilters ? 'flex' : 'hidden'} w-full lg:w-auto flex-wrap items-end gap-3`}>
-        <label className="lg:hidden text-xs font-semibold text-gray-600">Étape<select aria-label="Étape" value={activeTab} onChange={(event) => setActiveTab(event.target.value)} className="block mt-1 min-h-11 rounded-xl border border-gray-200 bg-white px-3 text-sm">{PIPELINE.map((phase) => <option key={phase.key} value={phase.key}>{phase.label} ({tabCounts[phase.key] || 0})</option>)}</select></label>
-        <label className="text-xs font-semibold text-gray-600">Référent<select aria-label="Référent" value={ownerFilter} onChange={(e) => setParam('owner', e.target.value)} className="mt-1 block min-h-11 rounded-xl border border-gray-200 bg-white px-3 text-sm"><option value="">Toute l’équipe</option><option value="mine">Mes dossiers</option><option value="unassigned">Non attribués</option>{teamUsers.filter((user) => user.authId && user.actif !== false).map((user) => <option key={user.authId} value={user.authId}>{user.nom}</option>)}</select></label>
-        <label className="text-xs font-semibold text-gray-600">Destination<select aria-label="Destination" value={activeDest || ''} onChange={(e) => setActiveDest(e.target.value)} className="mt-1 block min-h-11 rounded-xl border border-gray-200 bg-white px-3 text-sm"><option value="">Toutes les destinations</option>{['974', '976', '971', '972'].map((code) => <option key={code} value={code}>{getDestByCP(code + '00').nom}</option>)}</select></label>
+      <header className="max-h-[55dvh] shrink-0 space-y-3 overflow-y-auto overscroll-contain border-b border-gray-200 bg-white px-4 py-4">
+        <h1 className="text-xl font-bold text-gray-900">Dossiers d’expédition</h1>
+        <div aria-label="Vues du tableau" className="flex flex-wrap gap-2">
+          {TABLE_VIEWS.filter(view => view.key !== 'payments' || canSeePayments).map(view => <button key={view.key} aria-pressed={tableView === view.key}
+            onClick={() => { setParam('table', view.key === 'daily' ? null : view.key); setSelectedIds(new Set()); }}
+            className={`min-h-11 rounded-xl px-4 text-sm font-semibold ${tableView === view.key ? 'bg-slate-900 text-white dark:bg-slate-200 dark:text-slate-900' : 'border border-gray-200 text-gray-700'}`}>{view.label}</button>)}
         </div>
-      </div>
-      {activeFilters.length > 0 && <div aria-label="Filtres actifs" className="shrink-0 flex flex-wrap items-center gap-2 px-4 pt-3">
-        {activeFilters.map(filter => <button key={filter.key} aria-label={`Retirer le filtre ${filter.label}`} onClick={() => setParam(filter.key, null)} className="inline-flex min-h-11 max-w-full items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-left text-xs font-semibold text-slate-700"><span className="break-words">{filter.label}</span><X size={14} className="shrink-0" /></button>)}
-        <button onClick={clearFilters} className="min-h-11 px-2 text-sm font-semibold brand-t underline">Retirer les filtres</button>
-      </div>}
-      {/* Top bar: pipeline cards + search */}
-      <div className="flex-shrink-0 px-4 pt-3 pb-2 space-y-3 border-b border-gray-100 bg-white">
-        {/* Pipeline cards — clickable filters (taste-skill : tactile feedback, urgence dot, hover lift) */}
-        <div className={`${showFilters ? 'hidden lg:flex' : 'hidden'} gap-2 overflow-x-auto pt-2 pb-1`}>
-          {PIPELINE.map((p) => {
-            const Icon = p.icon;
-            const isActive = activeTab === p.key;
-            const count = tabCounts[p.key] || 0;
-            const urgent = tabUrgences[p.key] || 0;
-            return (
-              <button
-                key={p.key}
-                onClick={() => setActiveTab(p.key)} aria-pressed={isActive}
-                className={`relative shrink-0 inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all duration-200 ease-out active:scale-[0.97] ${
-                  isActive
-                    ? 'text-white shadow-lg'
-                    : 'bg-white border border-slate-200/70 hover:border-slate-300 hover:-translate-y-[1px] hover:shadow-md'
-                }`}
-                style={isActive
-                  ? { background: BRAND.navy, boxShadow: 'var(--shadow-1)' }
-                  : { color: 'var(--brand-text)' }
-                }
-              >
-                <Icon size={14} strokeWidth={2.25} />
-                <span>{p.label}</span>
-                <span
-                  className={`font-black text-[11px] px-1.5 py-0.5 rounded-full leading-none transition-colors`}
-                  style={isActive
-                    ? { background: 'rgba(255,255,255,0.22)' }
-                    : { background: 'var(--bg-surface)', color: 'var(--brand-text)' }
-                  }
-                >
-                  {count}
-                </span>
-                {urgent > 0 && (
-                  <span
-                    className="absolute -top-1 -right-1 inline-flex items-center justify-center min-w-[16px] h-[16px] px-1 rounded-full text-[9px] font-black text-white"
-                    style={{ background: '#DC2626', boxShadow: '0 0 0 2px white' }}
-                    title={`${urgent} dossier(s) avec échéance dépassée ou étape datée depuis au moins 7 jours`}
-                  >
-                    {urgent}
-                  </span>
-                )}
-              </button>
-            );
-          })}
+        {tableRequested === 'payments' && !canSeePayments && <p role="status" className="text-sm text-gray-700">Votre rôle ne permet pas de consulter les montants. Les dossiers restent accessibles dans Travail quotidien.</p>}
+        <div className="flex flex-wrap items-center gap-3">
+          <div aria-label="Choisir les tâches affichées" className="flex flex-wrap gap-1">
+            {[['all', 'Tous'], ['mine', 'Mes tâches'], ['pool', 'À prendre']].map(([value, label]) => <button key={value} aria-pressed={taskScope === value}
+              onClick={() => { setSearchParams(previous => { const next = new URLSearchParams(previous); next.delete('owner'); if (value === 'all') next.delete('tasks'); else next.set('tasks', value); return next; }, { replace: true }); setSelectedIds(new Set()); }}
+              className={`min-h-11 rounded-lg px-3 text-sm font-semibold ${taskScope === value ? 'brand-bg-l brand-t ring-1 ring-inset ring-slate-300' : 'text-gray-600'}`}>{label}</button>)}
+          </div>
+          <div className="relative min-w-0 flex-1 basis-64">
+            <Search size={18} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+            <input type="search" value={search} onChange={e => setSearch(e.target.value)} aria-label="Rechercher ou scanner un colis"
+              onKeyDown={event => { if (event.key !== 'Enter') return; if (exactReference) openReferenceDossier(); else if (sorted.length === 1) openColis(sorted[0].id); }}
+              placeholder="Référence, client, casier ou suivi…" className="min-h-11 w-full rounded-xl border border-gray-300 bg-white pl-10 pr-10 text-sm text-gray-900" />
+            {search && <button aria-label="Effacer la recherche" onClick={() => setSearch('')} className="absolute right-0 top-0 flex min-h-11 w-10 items-center justify-center text-gray-500"><X size={17} /></button>}
+          </div>
+          <button onClick={() => setShowFilters(value => !value)} aria-expanded={showFilters} className="min-h-11 rounded-xl border border-gray-200 px-3 text-sm font-semibold text-gray-700">Filtres et options{activeFilters.length ? ` · ${activeFilters.length}` : ''}</button>
         </div>
-
-        {/* Search + count */}
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="relative flex-1 basis-56 max-w-md">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-            <input
-              type="text" value={search} onChange={(e) => setSearch(e.target.value)}
-              aria-label="Rechercher ou scanner un colis" onKeyDown={(event) => { if (event.key !== 'Enter') return; if (exactReference) openReferenceDossier(); else if (sorted.length === 1) openColis(sorted[0].id); }} placeholder="Rechercher ou scanner : référence, client, casier…"
-              className="w-full pl-9 pr-8 py-2 text-sm rounded-xl border border-gray-200 outline-none focus:border-blue-400"
-              style={{ color: 'var(--brand-text)' }}
-            />
-            {search && <button aria-label="Effacer la recherche" onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"><X size={14} /></button>}
-          </div>
-          <span role="status" className="text-xs text-gray-500 font-medium">{sorted.length} dossier(s) affiché(s)</span>
-          <button hidden={Boolean(workFilter)} disabled={archivesBusy || Boolean(workFilter)} title={workFilter ? 'Retirez la file de travail pour consulter les archives.' : undefined} aria-pressed={showArchive} onClick={async () => { if (showArchive) { setShowArchive(false); return; } setArchivesBusy(true); try { if (!archivesLoaded) await loadArchives(); setShowArchive(true); } catch (error) { flash({ msg: 'Les archives n’ont pas pu être chargées. ' + error.message, type: 'error' }); } finally { setArchivesBusy(false); } }} className={`min-h-11 px-2 text-xs font-semibold rounded-lg ${showArchive ? 'brand-bg-l brand-t' : 'text-gray-500'}`}>{archivesBusy ? 'Chargement archives…' : showArchive ? 'Archives incluses' : 'Inclure les archives'}</button>
-          {/* Export Excel (all visible) */}
-          {can('perm_export_colis') && (
-            <button
-              disabled={exportBusy} onClick={() => exportRows(sorted)}
-              className="px-2 py-1 rounded-lg text-[10px] font-bold text-gray-500 bg-gray-100 hover:bg-gray-200 transition-all active:scale-95"
-            >
-              {exportBusy ? 'Export…' : `Exporter ${sorted.length} dossiers filtrés`}
-            </button>
-          )}
-
-          {/* View mode toggle */}
-          <label className="flex items-center gap-2 text-sm font-semibold">Regrouper<select aria-label="Regrouper les dossiers" value={viewMode} onChange={event => setViewMode(event.target.value)} className="min-h-11 rounded-lg border border-gray-200 bg-white px-2"><option value="priority">Aucun</option><option value="statut">Par étape</option><option value="envoi">Par départ</option></select></label>
-
-          {/* Default sort picker */}
-          <div className="relative">
-            <button
-              onClick={() => setShowSortPicker((p) => !p)}
-              className={`flex items-center gap-1 px-2 py-1.5 rounded-lg text-[10px] font-bold transition-colors ${showSortPicker ? 'bg-blue-100 text-blue-600' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'}`}
-              aria-label="Tri par défaut" aria-expanded={showSortPicker} title="Tri par défaut"
-            >
-              <span>Tri : {SORT_OPTIONS.find((o) => o.key === defaultSort)?.label.split(' ')[0] || 'Priorité'}</span>
-              <ChevronRight size={12} className={`transition-transform ${showSortPicker ? 'rotate-90' : ''}`} />
-            </button>
-            {showSortPicker && (
-              <>
-                <div className="fixed inset-0 z-30" onClick={() => setShowSortPicker(false)} />
-                <div className="absolute right-0 top-full mt-1 z-40 bg-white rounded-xl shadow-2xl border border-gray-200 p-2 w-72">
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider px-2 py-1">Tri par défaut</p>
-                  {SORT_OPTIONS.map((opt) => (
-                    <button
-                      key={opt.key}
-                      onClick={() => changeDefaultSort(opt.key)}
-                      className={`w-full text-left px-2 py-2 rounded-lg text-xs transition-colors ${defaultSort === opt.key ? 'bg-blue-50 text-blue-700 font-bold' : 'text-gray-700 hover:bg-gray-50'}`}
-                    >
-                      {defaultSort === opt.key && <Check size={12} className="inline mr-1" />}{opt.label}
-                    </button>
-                  ))}
-                  <p className="text-[9px] text-gray-400 px-2 pt-2 border-t mt-1">Cliquer sur une colonne triable reste prioritaire.</p>
-                </div>
-              </>
-            )}
-          </div>
-
-          {/* Column picker */}
-          <div className="hidden lg:block relative">
-            <button
-              onClick={() => setShowColPicker((p) => !p)}
-              className={`p-1.5 rounded-lg transition-colors ${showColPicker ? 'bg-blue-100 text-blue-600' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'}`}
-              aria-label="Colonnes visibles" aria-expanded={showColPicker} title="Colonnes visibles"
-            >
-              <Settings2 size={15} />
-            </button>
-            {showColPicker && (
-              <>
-                <div className="fixed inset-0 z-30" onClick={() => setShowColPicker(false)} />
-                <div className="absolute right-0 top-full mt-1 z-40 bg-white rounded-xl shadow-2xl border border-gray-200 p-3 w-56">
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Colonnes affichées</p>
-                  <div className="space-y-1 max-h-64 overflow-y-auto">
-                    {ALL_COLUMNS.map((col) => (
-                      <label key={col.key} className={`flex items-center gap-2 px-2 py-1 rounded-lg cursor-pointer hover:bg-gray-50 ${col.alwaysOn ? 'opacity-50' : ''}`}>
-                        <input
-                          type="checkbox"
-                          checked={visibleCols.has(col.key)}
-                          onChange={() => !col.alwaysOn && toggleCol(col.key)}
-                          disabled={col.alwaysOn}
-                          className="w-3.5 h-3.5 rounded accent-blue-500"
-                        />
-                        <span className="text-xs text-gray-700">{col.label}</span>
-                        {col.alwaysOn && <span className="text-[8px] text-gray-400 ml-auto">requis</span>}
-                      </label>
-                    ))}
-                  </div>
-                  <button
-                    onClick={() => {
-                      const defaults = new Set(ALL_COLUMNS.filter((c) => c.defaultOn).map((c) => c.key));
-                      setVisibleCols(defaults);
-                      localStorage.setItem(LS_COLS_KEY + auth?.u?.id, JSON.stringify([...defaults]));
-                    }}
-                    className="mt-2 w-full text-center text-[10px] font-bold text-blue-600 hover:text-blue-800 py-1"
-                  >
-                    Réinitialiser par défaut
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
+        {showFilters && <div className="flex flex-wrap items-end gap-3 rounded-xl border border-gray-200 p-3">
+          <label className="max-w-full text-sm font-medium text-gray-700">File de travail<select aria-label="File de travail" value={workFilter || ''} onChange={e => { setSearchParams(previous => { const next = new URLSearchParams(previous); next.delete('tab'); next.delete('archive'); if (e.target.value) next.set('work', e.target.value); else next.delete('work'); return next; }, { replace: true }); }} className="mt-1 block min-h-11 max-w-full rounded-lg border border-gray-300 bg-white px-2"><option value="">Tous les dossiers</option>{WORK_QUEUES.map(queue => <option key={queue.key} value={queue.key}>{queue.label}</option>)}</select></label>
+          <label className="text-sm font-medium text-gray-700">Étape<select aria-label="Étape" value={activeTab} onChange={event => setActiveTab(event.target.value)} className="mt-1 block min-h-11 rounded-lg border border-gray-300 bg-white px-2">{PIPELINE.map(phase => <option key={phase.key} value={phase.key}>{phase.label} ({tabCounts[phase.key] || 0})</option>)}</select></label>
+          <label className="text-sm font-medium text-gray-700">Responsable de la tâche<select aria-label="Responsable de la tâche" value={ownerFilter} onChange={e => { setSearchParams(previous => { const next = new URLSearchParams(previous); next.delete('tasks'); if (e.target.value) next.set('owner', e.target.value); else next.delete('owner'); return next; }, { replace: true }); }} className="mt-1 block min-h-11 rounded-lg border border-gray-300 bg-white px-2"><option value="">Toute l’équipe</option><option value="mine">Moi</option><option value="unassigned">Non attribué</option>{teamUsers.filter(user => user.authId && user.actif !== false).map(user => <option key={user.authId} value={user.authId}>{[user.prenom, user.nom].filter(Boolean).join(' ')}</option>)}</select></label>
+          <label className="text-sm font-medium text-gray-700">Destination<select aria-label="Destination" value={activeDest || ''} onChange={e => setActiveDest(e.target.value)} className="mt-1 block min-h-11 rounded-lg border border-gray-300 bg-white px-2"><option value="">Toutes les destinations</option>{['974', '976', '971', '972'].map(code => <option key={code} value={code}>{getDestByCP(code + '00').nom}</option>)}</select></label>
+          <label className="text-sm font-medium text-gray-700">Regrouper<select aria-label="Regrouper les dossiers" value={viewMode} onChange={event => setViewMode(event.target.value)} className="mt-1 block min-h-11 rounded-lg border border-gray-300 bg-white px-2"><option value="priority">Aucun</option><option value="statut">Par étape</option><option value="envoi">Par départ</option></select></label>
+          <label className="min-w-0 max-w-full text-sm font-medium text-gray-700">Trier<select aria-label="Tri par défaut" value={sortCol ? '' : defaultSort} onChange={e => changeDefaultSort(e.target.value)} className="mt-1 block min-h-11 max-w-full rounded-lg border border-gray-300 bg-white px-2">{sortCol && <option value="" disabled>Colonne sélectionnée</option>}{SORT_OPTIONS.map(option => <option key={option.key} value={option.key}>{option.label}</option>)}</select></label>
+          <button hidden={Boolean(workFilter)} disabled={archivesBusy} aria-pressed={showArchive} onClick={async () => { if (showArchive) { setShowArchive(false); return; } setArchivesBusy(true); try { if (!archivesLoaded) await loadArchives(); setShowArchive(true); } catch (error) { flash({ msg: 'Les archives n’ont pas pu être chargées. ' + error.message, type: 'error' }); } finally { setArchivesBusy(false); } }} className="min-h-11 rounded-lg border border-gray-200 px-3 text-sm font-semibold text-gray-700">{archivesBusy ? 'Chargement archives…' : showArchive ? 'Archives incluses' : 'Inclure les archives'}</button>
+          {canExportView && <button disabled={exportBusy || !sorted.length} onClick={() => exportRows(sorted)} className="min-h-11 rounded-lg border border-gray-200 px-3 text-sm font-semibold text-gray-700">{exportBusy ? 'Export…' : `Exporter ${sorted.length} dossiers filtrés`}</button>}
+          <button onClick={() => setShowFilters(false)} className="min-h-11 px-3 text-sm font-semibold brand-t underline">Fermer les filtres</button>
+        </div>}
+        {activeFilters.length > 0 && <div aria-label="Filtres actifs" className="flex flex-wrap items-center gap-2">
+          {activeFilters.map(filter => <button key={filter.key} aria-label={`Retirer le filtre ${filter.label}`} onClick={() => setParam(filter.key, null)} className="inline-flex min-h-11 max-w-full items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-left text-sm text-gray-700"><span className="break-words">{filter.label}</span><X size={14} className="shrink-0" /></button>)}
+          <button onClick={clearFilters} className="min-h-11 px-2 text-sm font-semibold brand-t underline">Retirer les filtres</button>
+        </div>}
+        <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-gray-600"><span role="status">{sorted.length} dossier(s) affiché(s)</span><span className="hidden sm:inline">{tableView === 'daily' ? 'Une ligne par expédition · responsable de la tâche affichée' : tableView === 'payments' ? 'Montants demandés au client et règlements enregistrés' : 'Départs affectés et vérifications restantes'}</span></div>
+        {workFilter === 'messages' && <button onClick={() => navigate('/conversations')} className="min-h-11 rounded-lg border px-3 text-sm font-semibold">Ouvrir les conversations et messages à rattacher</button>}
         {exactReference && <section aria-label="Recherche de référence dans tous les dossiers" className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm">
           <p className="font-semibold text-slate-800">Recherche de référence · tous les dossiers, archives incluses</p>
           {lookup.status === 'loading' && <p role="status" className="mt-1 text-slate-600">Vérification de {exactReference}…</p>}
@@ -763,12 +443,15 @@ export default function StaffColisPage() {
             <button onClick={openReferenceDossier} className="min-h-11 rounded-xl px-4 py-2 text-sm font-semibold text-white brand-bg">Ouvrir le dossier</button>
           </div>}
         </section>}
-      </div>
+      </header>
 
+      {workError && <div role="alert" className="shrink-0 border-b border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">Les tâches n’ont pas pu être actualisées. Les dossiers restent consultables.<button onClick={() => refreshWork().catch(() => {})} className="ml-3 min-h-11 font-semibold underline">Recharger les tâches</button></div>}
+      {workLoading && <p role="status" className="shrink-0 px-4 py-2 text-sm text-gray-600">Chargement des tâches…</p>}
+      {taskScope === 'pool' && !available && <p className="shrink-0 px-4 py-2 text-sm text-gray-700">Vous êtes indisponible. <button onClick={() => navigate('/?preferences=1')} className="min-h-11 font-semibold underline">Modifier ma disponibilité dans Mon travail</button></p>}
       {/* Bulk action bar */}
       {selectedIds.size > 0 && (
         <div className="flex-shrink-0 px-4 py-2 bg-blue-50 border-b border-blue-200 flex flex-wrap items-center gap-3">
-          <span className="text-xs font-bold text-blue-700">{selectedIds.size} colis sélectionné{selectedIds.size > 1 ? 's' : ''}</span>
+          <span className="text-xs font-bold text-blue-700">{selectedIds.size} dossier sélectionné{selectedIds.size > 1 ? 's' : ''}</span>
           <div className="flex flex-wrap gap-1.5">
             {[
               { label: 'En transit', statut: 'transit', color: '#0EA5E9' },
@@ -809,7 +492,7 @@ export default function StaffColisPage() {
               Étiquettes
             </button>
           )}
-          {can('perm_export_colis') && (
+          {canExportView && (
             <button
               onClick={() => {
                 const ids = [...selectedIds];
@@ -832,12 +515,12 @@ export default function StaffColisPage() {
       <div className="flex-1 flex min-h-0">
 
         {/* Table (scrollable) */}
-        <div ref={listScrollRef} className={`overflow-y-auto overflow-x-auto ${sel ? 'hidden lg:block flex-1 min-w-0' : 'flex-1'}`}>
+        <div ref={listScrollRef} role="region" aria-label="Tableau des dossiers" tabIndex={0} className="min-w-0 flex-1 overflow-y-auto overflow-x-auto">
 
           {(() => {
             const groups = viewMode === 'envoi' ? groupedByEnvoi : viewMode === 'statut' ? groupedByStatut : sorted.length ? [{ label: 'Ordre de traitement', icon: Package, color: BRAND.navy, colis: sorted }] : [];
-            const displayCols = sel ? new Set(['client', 'ref', 'statut']) : visibleCols;
-            const totalColspan = displayCols.size + 2; // checkbox + N colonnes + chevron
+            const displayCols = TABLE_COLUMNS[tableView];
+            const totalColspan = displayCols.length + 1; // checkbox + N colonnes + chevron
             const allInGroupSelected = (g) => g.colis.length > 0 && g.colis.every((c) => selectedIds.has(c.id));
             const toggleGroup = (g) => {
               const ids = g.colis.map((c) => c.id);
@@ -851,30 +534,15 @@ export default function StaffColisPage() {
 
             if (groups.length === 0) {
               if (exactReference) return null;
-              return <div className="text-center text-sm text-gray-500 py-8"><p>Aucun dossier ne correspond à ces filtres.</p>{activeFilters.length > 0 && <button onClick={clearFilters} className="min-h-11 mt-2 font-semibold brand-t underline">Retirer les filtres</button>}{search && <button onClick={() => setSearch('')} className="min-h-11 mt-2 px-3 font-semibold brand-t underline">Effacer la recherche</button>}</div>;
+              return <div className="text-center text-sm text-gray-600 px-4 py-8"><p>{!workReady && taskScope !== 'all' ? 'La liste des tâches est indisponible pour le moment.' : taskScope === 'mine' ? 'Aucune tâche ne vous est attribuée dans cette sélection.' : taskScope === 'pool' ? 'Aucune tâche disponible dans cette sélection.' : 'Aucun dossier ne correspond à ces filtres.'}</p>{taskScope !== 'all' && <button onClick={() => setSearchParams(previous => { const next = new URLSearchParams(previous); next.delete('tasks'); next.delete('owner'); return next; }, { replace: true })} className="mt-2 min-h-11 px-3 font-semibold brand-t underline">Voir tous les dossiers</button>}{activeFilters.length > 0 && <button onClick={clearFilters} className="min-h-11 mt-2 font-semibold brand-t underline">Retirer les filtres</button>}{search && <button onClick={() => setSearch('')} className="min-h-11 mt-2 px-3 font-semibold brand-t underline">Effacer la recherche</button>}</div>;
             }
 
             return <>
-              <div className={`${sel ? '' : 'lg:hidden'} divide-y divide-gray-100 px-4`}>{sorted.map(c => {
-                const client = getClient(c.clientId);
-                return <article key={c.id} data-dossier-card={c.id} data-selected={sel?.id === c.id || selectedIds.has(c.id) ? 'true' : 'false'} className="dossier-list-item -mx-3 flex min-h-20 items-start gap-3 rounded-xl px-3 py-4">
-                  <div className="mt-4 h-2 w-2 shrink-0 rounded-full" style={{ background: statutBorderColor(c.statut) }} />
-                  <div className="min-w-0 flex-1">
-                    <button onClick={() => openColis(c.id)} aria-current={sel?.id === c.id ? 'true' : undefined} className="flex min-h-11 w-full items-center justify-between gap-2 text-left"><span className="text-sm font-bold brand-t">{c.ref}</span><ChevronRight size={17} className="shrink-0 text-gray-400" /></button>
-                    {needsConversationAction(c) && <p className="text-xs font-semibold brand-t">À répondre</p>}
-                    <p className="mt-1 text-sm text-gray-700">{client?.nom || 'Client'}</p>
-                    <p className="mt-1 text-xs text-gray-500">{nextAction(c, client, now)}{c.casier ? ` · ${c.casier}` : ''}</p>
-                    <div className="mt-2 flex flex-wrap gap-2 text-sm"><Badge statut={c.statut} /><span>{receptionCartonManifest(c).nbColis} carton(s) reçu(s)</span></div>
-                    <InvoiceReviewIndicator dossier={c} />
-                    <p className="mt-1 text-xs text-gray-500">Suivi du dossier : {c.responsibleStaffId ? teamUsers.find(user => user.authId === c.responsibleStaffId)?.nom || 'Équipe' : 'à attribuer'} · {urgency(c, now).label}</p>
-                    <p className="mt-1 truncate text-xs text-gray-500">{c.desc || 'Contenu à préciser'}</p>
-                  </div>
-                </article>;
-              })}</div>
-              <table className={`${sel ? 'hidden' : 'hidden lg:table'} w-full text-left`}>
+              <div className="xl:hidden divide-y divide-gray-200 px-4">{sorted.map(c => <DossierTableCard key={c.id} c={c} client={getClient(c.clientId)} model={models.get(c.id)} columns={displayCols} checked={selectedIds.has(c.id)} onCheck={() => toggleSelection(c.id)} onOpen={action => openColis(c.id, action)} returnTo={returnTo} />)}</div>
+              <table aria-label="Dossiers d’expédition" data-view={tableView} className="dossier-data-table hidden w-full text-left xl:table">
                 <thead>
-                  <ColisTableHead
-                    visibleCols={displayCols}
+                  <DossierTableHead
+                    columns={displayCols}
                     allSelected={sorted.length > 0 && sorted.every((c) => selectedIds.has(c.id))}
                     onSelectAll={() => {
                       if (sorted.every((c) => selectedIds.has(c.id))) setSelectedIds(new Set());
@@ -912,7 +580,7 @@ export default function StaffColisPage() {
                     const groupKey = viewMode === 'envoi' ? (group.envoi?.id || 'none') : group.label;
                     return (
                       <React.Fragment key={groupKey}>
-                        <GroupHeaderRow
+                        {viewMode !== 'priority' && <GroupHeaderRow
                           {...headerProps}
                           count={group.colis.length}
                           colspan={totalColspan}
@@ -920,31 +588,8 @@ export default function StaffColisPage() {
                           collapsed={collapsedGroups.includes(groupKey)}
                           onToggle={() => setCollapsedGroups(previous => previous.includes(groupKey) ? previous.filter(key => key !== groupKey) : [...previous, groupKey])}
                           onToggleAll={() => toggleGroup(group)}
-                        />
-                        {!collapsedGroups.includes(groupKey) && group.colis.map((c, idx) => {
-                          const prevC = idx > 0 ? group.colis[idx - 1] : null;
-                          const prevCl = prevC ? getClient(prevC.clientId) : null;
-                          return (
-                            <ColisTableRow
-                              key={c.id}
-                              c={c}
-                              settings={settings}
-                              client={getClient(c.clientId)}
-                              prevClient={prevCl}
-                              envois={envois}
-                              onClick={() => openColis(c.id)}
-                              now={now} ownerName={c.responsibleStaffId ? teamUsers.find((user) => user.authId === c.responsibleStaffId)?.nom || 'Équipe' : 'Non attribué'} isSelected={sel?.id === c.id}
-                              visibleCols={displayCols}
-                              checked={selectedIds.has(c.id)}
-                              onCheck={() => setSelectedIds((prev) => {
-                                const next = new Set(prev);
-                                if (next.has(c.id)) next.delete(c.id);
-                                else next.add(c.id);
-                                return next;
-                              })}
-                            />
-                          );
-                        })}
+                        />}
+                        {(viewMode === 'priority' || !collapsedGroups.includes(groupKey)) && group.colis.map(c => <DossierTableRow key={c.id} c={c} client={getClient(c.clientId)} model={models.get(c.id)} columns={displayCols} checked={selectedIds.has(c.id)} onCheck={() => toggleSelection(c.id)} onOpen={action => openColis(c.id, action)} returnTo={returnTo} />)}
                       </React.Fragment>
                     );
                   })}
@@ -954,116 +599,6 @@ export default function StaffColisPage() {
           })()}
         </div>
 
-        {/* Detail panel (inline, right side) */}
-        {sel && (() => {
-          const clDetail = getClient(sel.clientId);
-          const destDetail = clDetail ? getDestByCP(clDetail.cp) : null;
-          const unreadCount = (sel.messages || []).filter((m) => m.type === 'client' && !m.lu).length;
-          const facturesSummary = currentInvoices(sel.factures);
-          const pendingDocumentCount = pendingInvoiceAttachments(sel).length;
-          const validCount = facturesSummary.filter((f) => f.valide).length;
-          const rejetCount = facturesSummary.filter((f) => f.rejetMotif).length;
-          const receptionManifest = receptionCartonManifest(sel);
-          const receptionWeights = measureShipment(receptionManifest.dimsParColis, volumetricDivisor(settings));
-          const packages = sel.finalPackages?.length ? sel.finalPackages : [{ dimL: sel.finL, dimW: sel.finW, dimH: sel.finH, poids: sel.finP }];
-          const finalWeights = measureShipment(packages, volumetricDivisor(settings));
-          const finalMeasuresCurrent = hasCurrentPreparation(sel);
-          const needsReply = needsConversationAction(sel) && ['perm_comm_message_libre','perm_comm_telegram','perm_comm_email'].some(can);
-          const currentAction = findDossierWorkAction(sel, workActions, needsReply ? 'conversation' : undefined, { can });
-          const previewTask = resolveDossierTask(sel, currentAction ? new URLSearchParams({ action: currentAction.id }) : '', workActions, can, clDetail || {});
-          const isConversation = needsReply || currentAction?.kind === 'conversation';
-          const actionTitle = currentAction?.action_hint || (currentAction?.kind === 'correction' ? WORK_KINDS.correction.label : isConversation ? 'Répondre au client' : DOSSIER_TASKS[previewTask]?.title || 'Ouvrir le dossier');
-          const actionUrl = currentAction ? workActionUrl(currentAction, returnTo, sel) : isConversation ? `/conversations?${new URLSearchParams({ dossier: sel.id, returnTo })}` : dossierTaskUrl(sel.id, previewTask, new URLSearchParams({ returnTo }).toString());
-          return (
-          <div ref={(element) => { detailScrollRef.current = element; mobileDetailRef.current = element; }} role={narrowScreen ? 'dialog' : 'region'} aria-modal={narrowScreen ? true : undefined} tabIndex={-1} aria-label={`Dossier ${sel.ref}`} className={`fixed inset-0 z-[60] lg:relative lg:inset-auto lg:z-10 w-full lg:w-[500px] 2xl:w-[560px] flex-shrink-0 border-l border-gray-200 bg-white overflow-y-auto overscroll-contain pb-[env(safe-area-inset-bottom)]`}>
-            <button onClick={closeDetail} className="flex min-h-11 items-center gap-2 px-4 text-sm font-semibold lg:hidden"><ChevronLeft size={18} />Retour aux dossiers</button>
-            {/* Compact header */}
-            <div className="sticky top-0 z-10 bg-white border-b border-gray-100 px-3 py-2 flex items-center justify-between gap-2">
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="w-2.5 h-2.5 rounded-full" style={{ background: statutBorderColor(sel.statut) }} />
-                <span className="text-sm font-black" style={{ color: 'var(--brand-text)' }}>{sel.ref}</span>
-                <Badge statut={sel.statut} />
-                {sel.devisTotal > 0 && <span className="text-xs font-bold" style={{ color: 'var(--brand-text)' }}>{eur(sel.devisTotal)}</span>}
-              </div>
-              <div className="flex items-center gap-1">
-                {/* Chat toggle */}
-                <div className="relative group">
-                  <button
-                    aria-label="Ouvrir la conversation client" onClick={() => navigate(`/conversations?${new URLSearchParams({ dossier: sel.id, returnTo })}`)}
-                    className="min-h-11 min-w-11 flex items-center justify-center rounded-lg relative text-slate-600 hover:bg-slate-100"
-                  >
-                    <MessageCircle size={16} />
-                    {unreadCount > 0 && (
-                      <span className="absolute -top-0.5 -right-0.5 text-[8px] font-bold px-1 py-0.5 rounded-full bg-red-500 text-white min-w-[14px] text-center leading-none">{unreadCount}</span>
-                    )}
-                  </button>
-                  <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-lg text-[10px] font-bold text-white bg-gray-800 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                    {unreadCount > 0 ? `Chat (${unreadCount} non lu${unreadCount > 1 ? 's' : ''})` : 'Chat client'}
-                  </span>
-                </div>
-                <div className="relative group">
-                  <button aria-label="Fermer le dossier" onClick={closeDetail} className="min-w-11 min-h-11 flex items-center justify-center p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600">
-                    <X size={18} />
-                  </button>
-                  <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-lg text-[10px] font-bold text-white bg-gray-800 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                    Fermer
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <nav aria-label="Parcourir cette file" className="flex items-center gap-2 border-b border-gray-100 px-3 py-2">
-              <button disabled={!previousId} onClick={() => openColis(previousId, true)} className="min-h-11 px-2 flex items-center gap-1 text-xs font-semibold brand-t disabled:opacity-40"><ChevronLeft size={16} />Précédent</button>
-              <span className="flex-1 text-center text-xs text-gray-500">{sorted.some((c) => c.id === sel.id) ? `${currentPosition + 1} / ${navigationOrder.length}` : 'Dossier sorti de cette file'}</span>
-              <button disabled={!nextId} onClick={() => openColis(nextId, true)} className="min-h-11 px-2 flex items-center gap-1 text-xs font-semibold brand-t disabled:opacity-40">Dossier suivant<ChevronRight size={16} /></button>
-            </nav>
-            {/* Lock warning banner */}
-            {isLockedByOther && (
-              <div className="mx-4 mt-2 px-3 py-2 rounded-xl flex items-center gap-2"
-                style={{ background: '#FEF3C7', border: '2px solid #F59E0B' }}>
-                <AlertTriangle size={17} className="text-amber-700 shrink-0" />
-                <p className="text-xs font-bold text-amber-800">{lockedBy} consulte ce dossier. La consultation ne vaut pas prise en charge.</p>
-              </div>
-            )}
-
-            {/* Client + colis summary — compact inline */}
-            <div className="px-4 py-3 space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-sm font-bold" style={{ color: 'var(--brand-text)' }}>{clDetail?.nom || '—'}</span>
-                  {destDetail && <span>{destDetail.flag}</span>}
-                  {clDetail?.abonnement && clDetail.abonnement !== 'freemium' && (
-                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${ABONNEMENTS[clDetail.abonnement]?.couleur || ''}`}>
-                      {ABONNEMENTS[clDetail.abonnement]?.label}
-                    </span>
-                  )}
-                  {sel.casier && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded" style={{ background: `${BRAND.gold}22`, color: 'var(--text-accent)' }}>{sel.casier}</span>}
-                </div>
-                <div className="text-right">
-                  {finalWeights && !finalMeasuresCurrent ? <span className="text-sm font-semibold text-amber-800">Mesures après optimisation à revoir</span> : finalWeights ? (
-                    <span className="text-[10px] text-gray-500 font-mono">Après optimisation : {packages.length} colis · {finalWeights.realWeight.toLocaleString('fr-FR')} kg</span>
-                  ) : receptionWeights ? (
-                    <span className="text-[10px] text-gray-500 font-mono">Réception : {receptionManifest.nbColis} carton(s) · {receptionWeights.realWeight.toFixed(2)} kg</span>
-                  ) : <span className="text-xs text-gray-500">Mesures à réception incomplètes</span>}
-                </div>
-              </div>
-              <p className="text-xs text-gray-600">{sel.desc || '—'} · {receptionManifest.nbColis} carton{receptionManifest.nbColis > 1 ? 's' : ''}</p>
-            </div>
-
-            <div className="px-4 pb-4 space-y-3">
-              <p className="text-sm font-semibold text-slate-800">{actionTitle}</p>
-              <TaskOwnership key={currentAction?.id || sel.id} action={currentAction} />
-              <button onClick={() => navigate(actionUrl)} className={`min-h-11 w-full rounded-xl px-4 py-3 text-sm font-semibold ${currentAction && !currentAction.assignee_id ? 'border border-slate-300 text-slate-700' : 'bg-slate-900 text-white'}`}>{actionTitle}</button>
-              {pendingDocumentCount > 0 && ['perm_factures_voir','perm_factures_valider','perm_factures_ajouter'].some(permission => can(permission)) && <button onClick={() => navigate(dossierTaskUrl(sel.id,'documents',new URLSearchParams({ returnTo }).toString()))} className="min-h-11 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700">{pendingDocumentCount} document(s) reçu(s) à vérifier</button>}
-              <details key={sel.id} className="rounded-xl border border-gray-200 bg-white px-3">
-                <summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-slate-700">Cartons reçus ({receptionManifest.nbColis})</summary>
-                <div className="pb-3"><ReceivedCartons colis={sel} settings={settings} /></div>
-              </details>
-            </div>
-
-          </div>
-          );
-        })()}
       </div>
     </div>
   );

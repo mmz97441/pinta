@@ -10,7 +10,7 @@ const clone = value => JSON.parse(JSON.stringify(value));
 const boxes = [{ dimL: 40, dimW: 20, dimH: 10, poids: 2.5 }, { dimL: 25, dimW: 20, dimH: 15, poids: 1.25 }];
 const section = f => f.page.getByRole('region', { name: 'Préparation après optimisation', exact: true });
 const field = (f, label, unit, index = 1) => section(f).getByLabel(`${label} · colis sortant ${index} (${unit})`, { exact: true });
-const save = f => section(f).getByRole('button', { name: 'Enregistrer les mesures de préparation', exact: true });
+const save = f => section(f).getByRole('button', { name: 'Enregistrer l’optimisation', exact: true });
 const measurementCalls = f => f.requests.filter(request => request.path.endsWith('/save_preparation_measurements'));
 async function fillBox(f, box, index = 1) {
   for (const [key, label, unit] of [['dimL', 'Longueur', 'cm'], ['dimW', 'Largeur', 'cm'], ['dimH', 'Hauteur', 'cm'], ['poids', 'Poids réel', 'kg']]) await field(f, label, unit, index).fill(String(box[key]));
@@ -81,10 +81,11 @@ async function main() {
     });
     await scenario('agreement-starts-preparation-without-invoice-permission', { status: 'autorise' }, async f => {
       await f.page.goto(`${base}/colis/${ids.P}?section=preparation`);
-      await f.page.getByRole('button', { name: 'Commencer la préparation', exact: true }).click();
+      assert.equal(await f.page.getByRole('button', { name: 'Commencer la préparation', exact: true }).count(), 0);
       await section(f).waitFor();
-      assert.equal(f.tables.colis[0].statut, 'en_preparation');
+      assert.equal(f.tables.colis[0].statut, 'autorise'); assert.equal(measurementCalls(f).length, 0);
       await fillBox(f, boxes[0]); await save(f).click(); await saved(f);
+      assert.equal(f.tables.colis[0].statut, 'en_preparation');
       assert.equal(f.tables.factures.length, 0);
     });
     await scenario('missing-customer-agreement-blocks-preparation', {}, async f => {

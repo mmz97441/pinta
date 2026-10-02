@@ -16,8 +16,8 @@ CREATE FUNCTION invoice_fixture(
 DECLARE customer_id uuid;dossier_id uuid;message_id uuid;
 BEGIN
  INSERT INTO clients(nom,prenom,cp,type) VALUES('Facture test','Camille','97400','particulier') RETURNING id INTO customer_id;
- INSERT INTO colis(client_id,statut,nb_colis,feu_vert)
- VALUES(customer_id,dossier_status,1,'autorise') RETURNING id INTO dossier_id;
+ INSERT INTO colis(client_id,statut,nb_colis,feu_vert,dims_par_colis)
+ VALUES(customer_id,dossier_status,1,'autorise','[{"dimL":20,"dimW":20,"dimH":20,"poids":2}]') RETURNING id INTO dossier_id;
  IF template_name IS NOT NULL THEN
   INSERT INTO messages(colis_id,type,canal,template,statut,texte,created_at)
   VALUES(dossier_id,'staff','telegram',template_name,request_status,'Merci de transmettre la facture',now()-request_age);
@@ -143,7 +143,7 @@ SELECT invoice_assert(has_function_privilege('service_role','register_requested_
 DO $$
 DECLARE message_id uuid; dossier_id uuid; request_id uuid; second_id uuid; third_id uuid; other_message_id uuid; result jsonb; invoice factures; original_id uuid; replacement_id uuid;
 BEGIN
- message_id:=invoice_fixture(NULL);
+ message_id:=invoice_fixture(NULL,'mesure');
  SELECT colis_id INTO dossier_id FROM messages WHERE id=message_id;
  UPDATE clients SET telegram_chat_id='fictitious-chat' WHERE id=(SELECT client_id FROM colis WHERE id=dossier_id);
  result:=queue_message(dossier_id,'Réception et accord, merci de joindre vos factures.','demande_feu_vert','combined-missing');
@@ -175,7 +175,7 @@ BEGIN
  result:=queue_message(dossier_id,'Idempotent retry text','demande_feu_vert','combined-missing');
  PERFORM invoice_assert((result->'message'->>'id')::uuid=request_id AND result->'message'->'request_snapshot'->'invoice_requested'='true'::jsonb,'idempotent send preserves the original request snapshot after invoices arrive');
 
- message_id:=invoice_fixture(NULL);
+ message_id:=invoice_fixture(NULL,'mesure');
  SELECT colis_id INTO dossier_id FROM messages WHERE id=message_id;
  UPDATE clients SET telegram_chat_id='fictitious-chat' WHERE id=(SELECT client_id FROM colis WHERE id=dossier_id);
  INSERT INTO factures(colis_id,vendeur,montant,valide) VALUES(dossier_id,'Facture enregistrée historique',0,false) RETURNING id INTO original_id;

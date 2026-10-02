@@ -54,7 +54,7 @@ const results = [];
     });
     await fixture.login();
     await page.getByRole('button', { name: 'Dossiers d’expédition', exact: true }).click();
-    const search = page.getByRole('textbox', { name: 'Rechercher ou scanner un colis' });
+    const search = page.getByLabel('Rechercher ou scanner un colis', { exact: true });
     const panel = page.getByRole('region', { name: 'Recherche de référence dans tous les dossiers' });
     await search.fill('EXP-ZYX');
     await page.waitForTimeout(600);
@@ -84,9 +84,9 @@ const results = [];
     const filters = { q: 'EXP-ZYX987', owner: 'mine', client: C, envoi: DEPARTURE, dest: '976', tab: 'done', work: 'preparation' };
     await page.goto(base + '/colis?' + new URLSearchParams(filters));
     await panel.getByRole('button', { name: 'Ouvrir le dossier', exact: true }).waitFor();
-    assert.equal(await page.getByRole('button', { name: /Filtres avancés/ }).getAttribute('aria-expanded'), 'false');
+    assert.equal(await page.getByRole('button', { name: /Filtres et options/ }).getAttribute('aria-expanded'), 'false');
     const activeFilters = page.locator('[aria-label="Filtres actifs"]');
-    for (const label of ['File : Préparer les dossiers', 'Client : Exemple Camille', 'Départ : ENV-TEST', 'Référent : Mes dossiers', 'Destination : Mayotte', 'Étape : Livrés']) {
+    for (const label of ['File : Préparer les dossiers', 'Client : Exemple Camille', 'Départ : ENV-TEST', 'Responsable de tâche : Moi', 'Destination : Mayotte', 'Étape : Livrés']) {
       await activeFilters.getByText(label, { exact: true }).waitFor();
     }
     assert.deepEqual(Object.fromEntries(new URL(page.url()).searchParams), filters, 'The global result must preserve every active filter');

@@ -537,6 +537,22 @@ export async function saveStaffWorkPreferences(changes, expectedVersion = null) 
 
 // ── Mutations ───────────────────────────────────────────────────────
 
+/** Append only the new cartons. The server owns numbering and invalidation. */
+export async function appendReceptionCartons(id, cartons, options = {}) {
+  const { data, error } = await supabase.rpc('append_reception_cartons', {
+    p_colis_id: id, p_cartons: cartons, p_expected_updated_at: options.expectedUpdatedAt ?? null,
+    p_casier: options.casier || null, p_notes_reception: options.notesReception || null,
+    p_check_interdits: options.checkInterdits || [],
+    p_request_id: options.requestId || randomId(),
+  });
+  if (error) throw error;
+  if (!data?.colis?.id) throw new Error('Le rattachement des cartons n’a pas été confirmé. Actualisez le dossier.');
+  const saved = mapColis(data.colis);
+  // This RPC updates the dossier only; absent relation arrays are not deletions.
+  delete saved.factures; delete saved.lignes; delete saved.messages;
+  return saved;
+}
+
 export async function updateColis(id, changes, expectedUpdatedAt) {
   // Convert camelCase to snake_case
   const snakeChanges = {};
@@ -620,7 +636,27 @@ function generateRandomRef() {
   );
 }
 
-export async function insertColis(colisData) {
+// The draft UUID identifies one physical receipt, even if the HTTP response is
+// lost. Compare receipt inputs before recovering it; never reuse an id for a
+// different client or set of cartons. Workflow progress is deliberately ignored.
+function sameInitialReceipt(stored, expected) {
+  const canonical = value => Array.isArray(value) ? value.map(canonical)
+    : value && typeof value === 'object' ? Object.fromEntries(Object.keys(value).sort().map(key => [key, canonical(value[key])])) : value;
+  const shape = row => ({
+    client: row.client_id, description: row.desc_contenu || null,
+    trackings: row.trackings || [], details: row.trackings_detail || [],
+    casier: row.casier || null, notes: row.notes_reception || null,
+    count: Number(row.nb_colis || 1), value: row.valeur_declaree == null ? null : Number(row.valeur_declaree),
+    dimensions: [row.dim_l, row.dim_w, row.dim_h, row.poids].map(value => value == null ? null : Number(value)),
+    boxes: (row.dims_par_colis || []).map(box => Object.fromEntries(['dimL', 'dimW', 'dimH', 'poids'].map(key => [key, box[key] == null ? null : Number(box[key])]))),
+    checks: [...(row.check_interdits || [])].sort(), prohibited: Boolean(row.produit_interdit),
+    ...(colisDate(expected.date_reception) == null ? {} : { receivedAt: colisDate(row.date_reception) }),
+  });
+  return JSON.stringify(canonical(shape(stored))) === JSON.stringify(canonical(shape(expected)));
+}
+const colisDate = value => value ? new Date(value).getTime() : null;
+
+export async function insertColis(colisData, options = {}) {
   const row = {
     client_id: colisData.clientId,
     desc_contenu: colisData.desc || null,
@@ -644,11 +680,37 @@ export async function insertColis(colisData) {
   // Override statut if provided (e.g., 'mesure' when dims are filled at reception)
   if (colisData.statut && colisData.statut !== 'receptionne') row.statut = colisData.statut;
 
+  if (options.createId) {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(options.createId))
+      throw Object.assign(new Error('Identifiant du brouillon invalide.'), { code: '22023' });
+    row.id = options.createId;
+  }
+  const recover = async () => {
+    if (!row.id) return null;
+    const { data, error } = await supabase.from('colis').select('*').eq('id', row.id).maybeSingle();
+    if (error) throw error;
+    if (!data) return null;
+    const expected = colisData.dateReception ? row : { ...row, date_reception: null };
+    if (!sameInitialReceipt(data, expected))
+      throw Object.assign(new Error('Cette réception existe déjà et son contenu a changé. Ouvrez le dossier avant de continuer.'), { code: '40001' });
+    // A colleague may have progressed the dossier during the outage: preserve
+    // its invoices, articles and messages instead of returning empty relations.
+    const recovered = await fetchColis(row.id);
+    if (!recovered[0]) throw new Error('La réception est enregistrée, mais sa relecture est indisponible. Réessayez la vérification.');
+    return recovered[0];
+  };
+  const existing = await recover();
+  if (existing) return existing;
+
   // Retry with new ref on unique constraint violation (max 5 attempts)
   for (let attempt = 0; attempt < 5; attempt++) {
     row.ref = generateRandomRef();
     const { data, error } = await supabase.from('colis').insert(row).select().single();
-    if (error && error.code === '23505') continue; // unique violation → retry
+    if (error && row.id) {
+      const recovered = await recover();
+      if (recovered) return recovered;
+    }
+    if (error && error.code === '23505') continue; // ref collision; stable receipt id is kept
     if (error) throw error;
     return mapColis({ ...data, _factures: [], _lignes: [], _messages: [] });
   }

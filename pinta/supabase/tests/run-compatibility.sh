@@ -9,13 +9,12 @@ docker exec "$container" createdb -U postgres "$database"
 # Roles are cluster-wide and already created by run-migrations.sh in postgres.
 sed '/^CREATE ROLE /d' "$root/tests/bootstrap.sql" | docker exec -i "$container" psql -U postgres -d "$database" -v ON_ERROR_STOP=1
 for migration in "$root"/migrations/*.sql; do
- case ${migration##*/} in
-  202609*) ;;
-  *) docker exec -i "$container" psql -U postgres -d "$database" -v ON_ERROR_STOP=1 -1 < "$migration" ;;
- esac
+ migration_name=${migration##*/}
+ if [ "${migration_name%%_*}" -lt 20260900000000 ]; then docker exec -i "$container" psql -U postgres -d "$database" -v ON_ERROR_STOP=1 -1 < "$migration"; fi
 done
 docker exec -i "$container" psql -U postgres -d "$database" -v ON_ERROR_STOP=1 -1 < "$root/tests/legacy-schema-fixture.sql"
-for migration in "$root"/migrations/202609*.sql; do
+for migration in "$root"/migrations/*.sql; do
+ migration_name=${migration##*/}; if [ "${migration_name%%_*}" -lt 20260900000000 ]; then continue; fi
  printf 'Applying %s to synthetic historical schema\n' "${migration##*/}"
  docker exec -i "$container" psql -U postgres -d "$database" -v ON_ERROR_STOP=1 -1 < "$migration"
 done

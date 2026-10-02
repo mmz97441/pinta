@@ -88,9 +88,10 @@ function assertPreserved(f, expectedOwner = ids.A) {
   assert.equal(f.tables.staff_work_actions.find(item => item.id === OLD_QUOTE).state, 'done');
 }
 
-async function openSplit(f) {
+async function openLegacyDetail(f) {
   await f.page.goto(`${base}/colis?dossier=${ids.P}`);
-  await f.page.getByRole('region', { name: 'Dossier EXP-TEST-001', exact: true }).waitFor();
+  await f.page.getByTestId('dossier-task-header').waitFor();
+  assert.equal(new URL(f.page.url()).pathname, `/colis/${ids.P}`, 'Legacy dossier links open the full page');
   await ownership(f).waitFor();
 }
 
@@ -143,8 +144,8 @@ async function main() {
       assert.equal(await taskRow(f).count(), 0);
     });
 
-    await scenario('split-direct-claim-stays-in-dossier-and-persists-after-reload', async f => {
-      await openSplit(f);
+    await scenario('legacy-link-direct-claim-stays-in-dossier-and-persists-after-reload', async f => {
+      await openLegacyDetail(f);
       const before = f.page.url();
       assert.equal(f.claimCalls.length, 0, 'Consultation never claims');
       await claimButton(ownership(f)).click();
@@ -192,7 +193,7 @@ async function main() {
     });
 
     await scenario('colleagues-task-shows-owner-without-steal-button', async f => {
-      await openSplit(f);
+      await openLegacyDetail(f);
       await ownership(f).getByText('Pris en charge par Madly', { exact: true }).waitFor();
       assert.equal(await claimButton(ownership(f)).count(), 0);
       await openDetail(f);
@@ -202,7 +203,7 @@ async function main() {
     }, { otherOwner: true });
 
     await scenario('concurrent-claim-shows-error-and-refreshes-colleague-without-retry', async f => {
-      await openSplit(f);
+      await openLegacyDetail(f);
       const before = f.page.url();
       await claimButton(ownership(f)).click();
       await f.page.getByRole('alert').filter({ hasText: /tâche a changé/ }).first().waitFor();
@@ -242,7 +243,7 @@ async function main() {
 
     for (const mobile of [false, true]) await scenario(`one-click-claim-accessibility-${mobile ? 'mobile' : 'desktop'}`, async f => {
       await f.page.setViewportSize(mobile ? { width: 390, height: 844 } : { width: 1440, height: 1000 });
-      if (mobile) await openDetail(f); else await openSplit(f);
+      if (mobile) await openDetail(f); else await openLegacyDetail(f);
       const button = claimButton(ownership(f));
       await button.scrollIntoViewIfNeeded();
       const bounds = await button.boundingBox();
@@ -250,7 +251,7 @@ async function main() {
       assert.equal(await f.page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false, 'No horizontal overflow');
       const axe = await new AxeBuilder({ page: f.page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
       assert.deepEqual(axe.violations.map(item => ({ id: item.id, nodes: item.nodes.map(node => node.target) })), []);
-      await f.page.screenshot({ path: path.join(output, `${mobile ? 'mobile-detail' : 'desktop-split'}.png`), fullPage: true });
+      await f.page.screenshot({ path: path.join(output, `${mobile ? 'mobile-detail' : 'desktop-detail'}.png`), fullPage: true });
       await button.focus();
       await f.page.keyboard.press('Enter');
       await ownership(f).getByText('Vous vous en occupez', { exact: true }).waitFor();

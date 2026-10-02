@@ -13,7 +13,7 @@ sql() { docker exec -i "$container" psql -q -U postgres -v ON_ERROR_STOP=1 -o /d
 sql < "$root/tests/bootstrap.sql"
 sql -c 'CREATE ROLE supabase_admin SUPERUSER NOLOGIN; CREATE ROLE fixture_authenticator NOLOGIN NOINHERIT; GRANT authenticated TO fixture_authenticator;'
 for migration in "$root"/migrations/*.sql; do
- case ${migration##*/} in 202609*) ;; *) sql -1 < "$migration";; esac
+ migration_name=${migration##*/}; if [ "${migration_name%%_*}" -lt 20260900000000 ]; then sql -1 < "$migration"; fi
 done
 sql -1 < "$root/tests/legacy-schema-fixture.sql"
 sql -1 <<'SQL'
@@ -23,7 +23,8 @@ INSERT INTO clients(id,nom,cp,email) VALUES('b2000000-0000-4000-8000-00000000000
 INSERT INTO colis(id,client_id,statut,archive) VALUES('b3000000-0000-4000-8000-000000000001','b2000000-0000-4000-8000-000000000001','attente_feu_vert',NULL);
 INSERT INTO messages(colis_id,type,texte,lu) VALUES('b3000000-0000-4000-8000-000000000001','client','Historical unresolved question',true);
 SQL
-for migration in "$root"/migrations/202609*.sql; do
+for migration in "$root"/migrations/*.sql; do
+ migration_name=${migration##*/}; if [ "${migration_name%%_*}" -lt 20260900000000 ]; then continue; fi
  # Match the actual Management API/restoration owner, without any JWT role.
  { printf 'SET ROLE supabase_admin;\n';cat "$migration"; } | sql -1
 done

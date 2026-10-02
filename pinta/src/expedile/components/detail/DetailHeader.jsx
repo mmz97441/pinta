@@ -10,14 +10,13 @@ import { DOSSIER_TASKS, dossierTaskUrl, previousDossierTask, nextDossierTask } f
 import { findDossierWorkAction } from '../../domain/personalWork';
 import TaskOwnership from '../workspace/TaskOwnership';
 
-export default function DetailHeader({ task, onOpenContext }) {
+export default function DetailHeader({ task, conversation = false, onOpenContext }) {
   const navigate = useNavigate();
   const location = useLocation();
   const { sel, selClient, selDest, isStaff, teamUsers = [], can, workActions = [] } = useApp();
   if (!sel) return null;
 
   if (isStaff && task) {
-    const unread = (sel.messages || []).filter(message => message.type === 'client' && !message.lu).length;
     const showDocuments = ['perm_factures_voir', 'perm_factures_ajouter', 'perm_factures_valider', 'perm_factures_refuser', 'perm_factures_ocr', 'perm_factures_modifier_articles'].some(permission => can(permission));
     const showQuote = ['perm_colis_calculer_devis', 'perm_colis_envoyer_devis', 'perm_finances_voir_total'].some(permission => can(permission));
     const tasks = Object.entries(DOSSIER_TASKS).filter(([key]) => key === task || (key !== 'documents' || showDocuments) && (key !== 'devis' || showQuote));
@@ -29,11 +28,11 @@ export default function DetailHeader({ task, onOpenContext }) {
       <div className="mx-auto flex max-w-[1600px] flex-wrap items-center gap-2 sm:gap-3">
         <button aria-label="Retour à la liste de travail" onClick={() => navigate(workspaceReturnPath(location.search))} className="flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-xl text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"><ArrowLeft size={21} /></button>
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1"><span className="font-mono text-sm font-bold text-slate-700 dark:text-slate-200">{sel.ref}</span><h1 className="text-base font-bold text-slate-900 dark:text-white">{DOSSIER_TASKS[task]?.label || 'Dossier'}</h1></div>
+          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1"><span className="font-mono text-sm font-bold text-slate-700 dark:text-slate-200">{sel.ref}</span><h1 className="text-base font-bold text-slate-900 dark:text-white">{conversation ? 'Conversation' : DOSSIER_TASKS[task]?.label || 'Dossier'}</h1></div>
           <p className="truncate text-xs text-slate-600 dark:text-slate-300">{selClient?.nom || 'Client'}{selDest ? ` · ${selDest.label || selDest.nom}` : ''}</p>
         </div>
-        <button onClick={() => onOpenContext?.('equipe')} aria-haspopup="dialog" className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl border border-slate-300 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"><PanelRightOpen size={17} /><span className="hidden sm:inline">Détails du dossier</span><span className="sm:hidden">Détails</span>{unread > 0 && <span className="rounded-full bg-blue-100 px-1.5 py-0.5 text-xs text-blue-800" aria-label={`${unread} message${unread > 1 ? 's' : ''} non lu${unread > 1 ? 's' : ''}`}>{unread}</span>}</button>
-        <details className="w-full border-t border-slate-100 pt-1 dark:border-slate-700">
+        <button onClick={() => onOpenContext?.('reception')} aria-haspopup="dialog" className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl border border-slate-300 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"><PanelRightOpen size={17} /><span className="hidden sm:inline">Détails du dossier</span><span className="sm:hidden">Détails</span></button>
+        {!conversation && <details className="w-full border-t border-slate-100 pt-1 dark:border-slate-700">
           <summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-slate-600 dark:text-slate-300">Parcourir les étapes</summary>
         <nav aria-label="Étapes du dossier" className="grid w-full min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 sm:flex sm:w-auto sm:flex-wrap">
           {previousTask ? <button aria-label={DOSSIER_TASKS[previousTask].backLabel} title={DOSSIER_TASKS[previousTask].backLabel} onClick={() => navigate(dossierTaskUrl(sel.id, previousTask, location.search))} className={stepButtonClass}><ArrowLeft size={16} className="shrink-0" /><span className="sm:hidden">Précédent</span><span className="hidden sm:inline">{DOSSIER_TASKS[previousTask].backLabel}</span></button> : <span aria-hidden="true" className="sm:hidden" />}
@@ -41,9 +40,9 @@ export default function DetailHeader({ task, onOpenContext }) {
           {nextTask ? <button aria-label={DOSSIER_TASKS[nextTask].nextLabel} title={DOSSIER_TASKS[nextTask].nextLabel} onClick={() => navigate(dossierTaskUrl(sel.id, nextTask, location.search))} className={stepButtonClass}><span className="sm:hidden">Suivant</span><span className="hidden sm:inline">{DOSSIER_TASKS[nextTask].nextLabel}</span><ArrowRight size={16} className="shrink-0" /></button> : <span aria-hidden="true" className="sm:hidden" />}
         </nav>
         <p aria-label="État actuel du dossier" className="w-full pl-1 text-xs text-slate-600 dark:text-slate-300">État actuel : {STATUTS[sel.statut]?.label || sel.statut}{sel.archive ? ' · Archivé' : ''}<span> · Consulter une étape ne modifie pas le dossier.</span></p>
-        </details>
+        </details>}
       </div>
-      {workAction && <div className="mx-auto mt-3 max-w-[1600px]"><TaskOwnership action={workAction} /></div>}
+      {!conversation && workAction && <div className="mx-auto mt-3 max-w-[1600px]"><TaskOwnership action={workAction} /></div>}
     </header>;
   }
 

@@ -6,7 +6,7 @@ export { hasCurrentPreparation } from './preparationReadiness.js';
 export const DOSSIER_TASKS = {
   reception: { label: 'Réception', title: 'Vérifier la réception', backLabel: 'Revenir à la réception', nextLabel: 'Aller à la réception' },
   accord: { label: 'Accord client', title: 'Suivre l’accord du client', backLabel: 'Revenir à l’accord client', nextLabel: 'Aller à l’accord client' },
-  preparation: { label: 'Préparation', title: 'Préparer les colis', backLabel: 'Revenir à la préparation', nextLabel: 'Aller à la préparation' },
+  preparation: { label: 'Optimisation', title: 'Optimiser les colis', backLabel: 'Revenir à l’optimisation', nextLabel: 'Aller à l’optimisation' },
   documents: { label: 'Factures', title: 'Vérifier les factures', backLabel: 'Revenir aux factures', nextLabel: 'Aller aux factures' },
   devis: { label: 'Devis', title: 'Établir le devis', backLabel: 'Revenir au devis', nextLabel: 'Aller au devis' },
   paiement: { label: 'Paiement', title: 'Suivre le paiement', backLabel: 'Revenir au paiement', nextLabel: 'Aller au paiement' },
@@ -83,7 +83,7 @@ export function resolveDossierTask(dossier = {}, search = '', workActions = [], 
  * action or invoice into a different task. No navigation mutates business data. */
 export function dossierTaskUrl(dossierId, task, search = '', options = {}) {
   const params = new URLSearchParams(search);
-  params.delete('invoice'); params.delete('action');
+  params.delete('invoice'); params.delete('action'); params.delete('onglet');
   const section = options.invoiceId ? 'documents' : Object.hasOwn(DOSSIER_TASKS, task) ? task : 'reception';
   params.set('section', section);
   if (options.invoiceId) params.set('invoice', options.invoiceId);

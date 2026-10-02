@@ -239,12 +239,53 @@ async function setup(browser, role, { failTable = null } = {}) {
           body = saved.body;
         }
       }
+      else if (rpc === 'append_reception_cartons') {
+        // Model the command boundary used by receipt UI tests. SQL tests cover
+        // locking, provider evidence, permissions and all validation branches.
+        const cartons = input.p_cartons || [];
+        if (input.p_expected_updated_at !== colis?.updated_at) {
+          status = 409; body = { code: '40001', message: 'Le dossier a été modifié par un collègue. Actualisez-le ; vos saisies sont conservées.' };
+        } else if (colis.paiement_date || colis.paiement_montant != null || colis.archive || !['receptionne','mesure','attente_feu_vert','autorise','en_preparation','devis_envoye','attente_paiement'].includes(colis.statut)) {
+          status = 400; body = { code: '22023', message: 'Ajoutez les cartons à un dossier ouvert, avant paiement et départ.' };
+        } else if (colis.payplug_payment_url || colis.payplug_payment_id) {
+          status = 400; body = { code: '22023', message: 'Un lien de paiement existe. Ouvrez Corriger le montant pour le fermer avant d’ajouter un carton. Aucun carton n’a été ajouté.' };
+        } else {
+          const oldCount = Math.max(colis.nb_colis || 0, colis.trackings_detail?.length || 0, colis.trackings?.length || 0, colis.dims_par_colis?.length || 0, 1);
+          const details = Array.from({ length: oldCount }, (_, index) => colis.trackings_detail?.[index] || { number: colis.trackings?.[index] || '', fournisseur: '' });
+          const boxes = Array.from({ length: oldCount }, (_, index) => colis.dims_par_colis?.[index] || (oldCount === 1 ? { dimL: colis.dim_l, dimW: colis.dim_w, dimH: colis.dim_h, poids: colis.poids } : {}));
+          const keys = ['dimL','dimW','dimH','poids'];
+          for (const carton of cartons) {
+            boxes.push(Object.fromEntries(keys.map(key => [key, Number(carton[key])])));
+            details.push({ number: carton.tracking || '', fournisseur: carton.fournisseur || '' });
+          }
+          const complete = boxes.every(box => keys.every(key => Number(box[key]) > 0));
+          Object.assign(colis, {
+            nb_colis: boxes.length, dims_par_colis: boxes, trackings_detail: details,
+            trackings: [...(colis.trackings || []), ...cartons.map(carton => carton.tracking).filter(Boolean)],
+            dim_l: complete ? Math.max(...boxes.map(box => +box.dimL)) : null,
+            dim_w: complete ? Math.max(...boxes.map(box => +box.dimW)) : null,
+            dim_h: complete ? Math.max(...boxes.map(box => +box.dimH)) : null,
+            poids: complete ? Math.round(boxes.reduce((sum, box) => sum + +box.poids, 0) * 100) / 100 : null,
+            statut: complete ? 'mesure' : 'receptionne', feu_vert: 'en_attente', feu_vert_date: null,
+            attente_client_date: null, attente_client_until: null, demande_feu_vert_envoyee_at: null,
+            preparation_composition_version: (colis.preparation_composition_version || 0) + 1,
+            final_measurements_version: null, final_measurements_at: null,
+            devis_total: null, devis_snapshot: null, devis_brouillon: true,
+            updated_at: new Date(Math.max(Date.now(), Date.parse(colis.updated_at)) + 1000).toISOString(),
+          });
+          if (input.p_casier?.trim()) colis.casier = input.p_casier.trim();
+          if (input.p_notes_reception?.trim()) colis.notes_reception = [colis.notes_reception, input.p_notes_reception.trim()].filter(Boolean).join('\n');
+          colis.check_interdits = [...new Set([...(colis.check_interdits || []), ...(input.p_check_interdits || [])])];
+          colis.produit_interdit = colis.produit_interdit || colis.check_interdits.length > 0;
+          body = { colis, added: cartons.length, firstCarton: oldCount + 1, lastCarton: boxes.length };
+        }
+      }
       else if (rpc === 'save_preparation_measurements') {
         if (input.p_expected_updated_at !== colis.updated_at || input.p_expected_composition_version !== colis.preparation_composition_version) {
           status = 409; body = { code: '40001', message: 'Le dossier a changé. Votre brouillon est conservé.' };
         } else {
           const boxes = input.p_final_packages;
-          Object.assign(colis, { final_packages: boxes, fin_l: Math.max(...boxes.map(b => +b.dimL)), fin_w: Math.max(...boxes.map(b => +b.dimW)), fin_h: Math.max(...boxes.map(b => +b.dimH)), fin_p: boxes.reduce((n,b) => n + +b.poids, 0), final_measurements_version: colis.preparation_composition_version, final_measurements_at: new Date().toISOString(), outgoing_parcel_count: boxes.length, updated_at: new Date().toISOString() });
+          Object.assign(colis, { statut: 'en_preparation', final_packages: boxes, fin_l: Math.max(...boxes.map(b => +b.dimL)), fin_w: Math.max(...boxes.map(b => +b.dimW)), fin_h: Math.max(...boxes.map(b => +b.dimH)), fin_p: boxes.reduce((n,b) => n + +b.poids, 0), final_measurements_version: colis.preparation_composition_version, final_measurements_at: new Date().toISOString(), outgoing_parcel_count: boxes.length, updated_at: new Date().toISOString() });
           body = { colis };
         }
       }
@@ -502,7 +543,7 @@ async function main() {
         break;
       }
     assert.ok(changed, 'Final weight field found');
-    await f.page.getByRole('button', { name: 'Enregistrer les mesures de préparation' }).click();
+    await f.page.getByRole('button', { name: 'Enregistrer l’optimisation' }).click();
     await f.page.getByRole('button', { name: 'Modifier les mesures', exact: true }).waitFor();
     await openTaskNavigation(f);await f.page.getByLabel('Tâche du dossier', { exact: true }).selectOption('devis');
     await f.page.getByRole('button', { name: 'Enregistrer et vérifier le devis' }).click();
@@ -517,7 +558,7 @@ async function main() {
     });
     await f.page.setViewportSize({ width: 390, height: 844 });
     await f.page.goto(base + '/colis?dossier=' + P);
-    await f.page.getByRole('button', { name: 'Fermer le dossier', exact: true }).waitFor();
+    await f.page.getByTestId('dossier-task-header').waitFor();
     await f.page.waitForTimeout(350);
     await f.page.screenshot({ path: path.join(output, 'staff-detail-mobile.png'), fullPage: true });
     const visibleControls = await f.page
@@ -533,41 +574,36 @@ async function main() {
           .filter((r) => r.x < 0 || r.right > window.innerWidth + 1),
       );
     assert.deepEqual(visibleControls, [], 'No visible detail control clipped offscreen');
-    await f.page.keyboard.press('Escape');
-    await f.page.waitForTimeout(200);
-    assert.ok(!f.page.url().includes(P), 'Escape closes mobile detail');
-    observations.push({ test: 'mobile-detail-controls-and-escape', pass: true });
+    await f.page.getByRole('button', { name: 'Retour à la liste de travail', exact: true }).click();
+    await f.page.waitForURL(url => url.pathname === '/colis');
+    assert.ok(!f.page.url().includes(P), 'Explicit return restores list without reopening dossier');
+    observations.push({ test: 'mobile-full-page-detail-controls-and-return', pass: true });
     await f.page.goto(base + '/');
     const openReception = () => f.page.getByRole('button', { name: /Nouveau colis|Réceptionner/ }).first().click();
     await openReception();
-    const reception = f.page.getByRole('dialog', { name: 'Réceptionner des cartons', exact: true });
+    const reception = f.page.getByRole('region', { name: 'Réceptionner des cartons', exact: true });
     await reception.waitFor();
     await f.page.waitForTimeout(100);
     await f.page.screenshot({ path: path.join(output, 'reception-mobile.png'), fullPage: true });
     await f.page.keyboard.press('Escape');
-    assert.equal(await reception.count(), 0, 'Escape closes reception');
-    await openReception();
-    await reception.getByRole('button', { name: 'Fermer', exact: true }).click();
-    assert.equal(await reception.count(), 0, 'Close button closes reception');
-    await openReception();
-    await f.page.mouse.click(2, 2);
-    assert.equal(await reception.count(), 0, 'Backdrop closes reception');
-    await openReception();
+    assert.equal(await reception.count(), 1, 'Escape does not discard a full-page receipt.');
     await reception.getByPlaceholder('Rechercher un client…').fill('Camille');
     await reception.getByRole('button').filter({ hasText: 'Exemple Camille' }).first().click();
-    const scroller = reception.locator('.overflow-y-auto').first();
-    const scroll = await scroller.evaluate(e => {
-      e.scrollTop = e.scrollHeight;
-      return { top: e.scrollTop, height: e.clientHeight, total: e.scrollHeight };
-    });
-    assert.ok(scroll.top > 0 && scroll.total > scroll.height, 'Long reception form scrolls internally');
+    await reception.getByRole('button', { name: 'Créer une nouvelle expédition (nouveau EXP)', exact: true }).click();
+    const receiptWeight = reception.getByLabel('Poids à réception (kg) · carton 1', { exact: true });
+    await receiptWeight.fill('2.75');
+    await f.page.getByRole('button', { name: 'Retour à ma liste, conserver le brouillon', exact: true }).click();
+    await f.page.waitForURL(url => url.pathname === '/');
+    await openReception(); await receiptWeight.waitFor();
+    assert.equal(await receiptWeight.inputValue(), '2.75', 'Explicit departure and reopening preserve the receipt draft.');
+    await reception.getByRole('button', { name: 'Terminer la réception', exact: true }).scrollIntoViewIfNeeded();
     const clipped = await reception.locator('input,button,textarea,select').evaluateAll(elements => elements
       .filter(e => e.getClientRects().length).map(e => ({ label: e.textContent.trim().slice(0, 40), x: e.getBoundingClientRect().x, right: e.getBoundingClientRect().right }))
       .filter(e => e.x < 0 || e.right > window.innerWidth + 1));
     assert.deepEqual(clipped, [], 'Long reception controls stay within mobile viewport');
     await f.page.screenshot({ path: path.join(output, 'reception-long-mobile.png') });
-    await f.page.keyboard.press('Escape');
-    observations.push({ test: 'reception-short-long-scroll-three-close-methods', pass: true });
+    await f.page.getByRole('button', { name: 'Retour à ma liste, conserver le brouillon', exact: true }).click();
+    observations.push({ test: 'reception-full-page-mobile-controls-and-preserved-draft', pass: true });
     await f.page.goto(base + '/settings');
     await f.page.getByRole('heading', { name: 'Paramètres', exact: true }).waitFor();
     await f.page.waitForTimeout(350);

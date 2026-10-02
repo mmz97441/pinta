@@ -24,15 +24,15 @@ async function run() {
         if (event === 'phx_join' && filters.some(filter => filter.table === 'colis')) changesChannel = { socket, array, joinRef, topic, filterId: filters.find(filter => filter.table === 'colis').id };
       });
     });
-    let patchVersion;
+    let commandVersion;
     f.page.on('request', request => {
       const url = new URL(request.url());
-      if (request.method() === 'PATCH' && url.pathname === '/rest/v1/colis') patchVersion = url.searchParams.get('updated_at');
+      if (request.method() === 'POST' && url.pathname.endsWith('/append_reception_cartons')) commandVersion = request.postDataJSON().p_expected_updated_at;
     });
     f.page.setDefaultTimeout(10000);
     await f.login();
     await f.page.getByRole('button', { name: 'Réceptionner des cartons', exact: true }).first().click();
-    const dialog = f.page.getByRole('dialog', { name: 'Réceptionner des cartons' });
+    const dialog = f.page.getByRole('region', { name: 'Réceptionner des cartons' });
     await dialog.getByPlaceholder('Rechercher un client…').fill('Camille');
     await dialog.getByRole('button').filter({ hasText: /Exemple/ }).first().click();
     await dialog.getByRole('button').filter({ hasText: 'EXP-TEST-001' }).click();
@@ -47,12 +47,12 @@ async function run() {
     const refresh = f.page.waitForResponse(response => response.request().method() === 'GET' && new URL(response.url()).pathname === '/rest/v1/colis' && new URL(response.url()).searchParams.get('id') === `eq.${ids.P}`);
     changesChannel.socket.send(JSON.stringify(changesChannel.array ? [changesChannel.joinRef, null, changesChannel.topic, 'postgres_changes', payload] : { join_ref: changesChannel.joinRef, ref: null, topic: changesChannel.topic, event: 'postgres_changes', payload }));
     await refresh;
-    // Visible dashboard state behind the modal confirms the provider finished its relation fetch.
+    // Allow the provider to finish refreshing while the receipt keeps its original snapshot.
     await f.page.waitForTimeout(500);
     await dialog.getByRole('heading', { name: 'Carton 3', level: 3, exact: true }).waitFor();
-    await dialog.getByRole('button', { name: /^Enregistrer (?:le carton|les cartons) dans EXP-TEST-001$/, exact: true }).click();
+    await dialog.getByRole('button', { name: 'Terminer la réception', exact: true }).click();
     await dialog.getByRole('alert').filter({ hasText: 'modifié par un collègue' }).waitFor();
-    assert.equal(patchVersion, `eq.${originalVersion}`, 'The submitted snapshot, not the refreshed cache, guards the write');
+    assert.equal(commandVersion, originalVersion, 'The submitted snapshot, not the refreshed cache, guards the atomic append command');
     assert.equal(original.nb_colis, 4);
     assert.equal(original.ref, 'EXP-TEST-001');
     assert.deepEqual(original.trackings, ['TEST-001', 'TEST-002', 'REMOTE-03', 'REMOTE-04']);

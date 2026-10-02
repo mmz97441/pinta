@@ -58,7 +58,7 @@ async function main() {
       await calculation.getByText('Poids facturable', { exact: true }).waitFor();
       assert.equal(f.requests.some(request => /\/(save_quote|save_preparation_measurements)$/.test(request.path)), false, 'Reading the calculation never saves anything.');
       await f.page.getByLabel('Longueur · colis sortant 1 (cm)', { exact: true }).fill('38');
-      await f.page.getByRole('button', { name: 'Enregistrer les mesures de préparation', exact: true }).click();
+      await f.page.getByRole('button', { name: 'Enregistrer l’optimisation', exact: true }).click();
       await f.page.getByRole('button', { name: 'Modifier les mesures', exact: true }).waitFor();
       assert.equal(await f.page.getByLabel('Longueur · colis sortant 1 (cm)', { exact: true }).count(), 0);
       assert.equal(new URL(f.page.url()).searchParams.get('section'), 'preparation');

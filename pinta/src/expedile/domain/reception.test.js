@@ -48,3 +48,32 @@ test('legacy multiple cartons keep unknown slots and never share one aggregate m
   assert.equal(hasCompleteReceptionMeasurements({ ...original, nbColis: 1, trackings: [], dimsParColis: [null] }), false);
   assert.equal(receptionCartonManifest({ ...original, nbColis: 1 }).nbColis, 2);
 });
+
+test('append gates paid, archived, transported and active checkout dossiers with a useful reason', async () => {
+  const { receptionAppendBlockReason } = await import('./reception.js');
+  for (const statut of ['receptionne', 'mesure', 'attente_feu_vert', 'autorise', 'en_preparation', 'devis_envoye', 'attente_paiement']) assert.equal(receptionAppendBlockReason({ statut }), '');
+  assert.match(receptionAppendBlockReason({ statut: 'mesure', archive: true }), /archivé/);
+  assert.match(receptionAppendBlockReason({ statut: 'autorise', paiementDate: '2026-10-01' }), /paiement/i);
+  assert.match(receptionAppendBlockReason({ statut: 'attente_paiement', payplugPaymentId: 'pay_fixture' }), /Corrigez le devis/);
+  assert.match(receptionAppendBlockReason({ statut: 'expedie' }), /ne peut plus/);
+});
+
+test('append impact explains renewed consent, preparation and quote only when affected', async () => {
+  const { receptionAppendImpact } = await import('./reception.js');
+  assert.equal(receptionAppendImpact({ statut: 'mesure' }), '');
+  assert.match(receptionAppendImpact({ statut: 'autorise' }), /redemander l’accord/);
+  assert.match(receptionAppendImpact({ statut: 'en_preparation' }), /vérifier la préparation/);
+  assert.match(receptionAppendImpact({ statut: 'mesure', devisTotal: 50 }), /refaire le devis/);
+  assert.match(receptionAppendImpact({ statut: 'devis_envoye' }), /historique/);
+});
+
+
+test('opening the saved dossier unwraps the original filtered list instead of linking back to itself', async () => {
+  const { receptionDossierReturn } = await import('./reception.js');
+  const list = '/colis?sort=client&dir=desc&work=reception';
+  assert.equal(receptionDossierReturn(`/colis/uuid?${new URLSearchParams({ returnTo: list })}`), list);
+  assert.equal(receptionDossierReturn(list), list);
+  assert.equal(receptionDossierReturn('/colis/uuid'), '/colis');
+  assert.equal(receptionDossierReturn('//untrusted.example'), '/colis');
+  assert.equal(receptionDossierReturn('/reception?dossier=uuid'), '/colis');
+});

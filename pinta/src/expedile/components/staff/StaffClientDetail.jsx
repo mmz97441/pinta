@@ -10,7 +10,6 @@ import ShareLinkPanel from './ShareLinkPanel';
 import { supabase } from '../../lib/supabase';
 import { functionErrorMessage } from '../../services/functionErrors';
 import * as sb from '../../lib/supabaseData';
-import ColisModal from '../ColisModal';
 import { nextAction } from '../../domain/workQueues';
 import usePersistentDraft from '../../hooks/usePersistentDraft';
 import { receptionCartonManifest } from '../../domain/reception';
@@ -180,7 +179,6 @@ function EditClientPage({ cl, clients, data: initialData, updateClient, deleteCl
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
   const [panel, setPanel] = useState('overview');
-  const [receiving, setReceiving] = useState(false);
   const [history, setHistory] = useState(null);
   const [historyError, setHistoryError] = useState('');
   const [historyLoading, setHistoryLoading] = useState(true);
@@ -367,11 +365,10 @@ function EditClientPage({ cl, clients, data: initialData, updateClient, deleteCl
 
         <nav aria-label="Sections de la fiche client" className="flex flex-wrap gap-2 border-b border-gray-200 p-3">{[['overview', 'Synthèse'], ['contact', 'Coordonnées'], ['admin', 'Abonnement et administration']].map(([key, label]) => <button key={key} onClick={() => setPanel(key)} aria-pressed={panel === key} className={`min-h-11 rounded-xl px-3 text-sm font-semibold ${panel === key ? 'brand-bg text-white' : 'text-gray-700 hover:bg-gray-100'}`}>{label}</button>)}</nav>
         {panel === 'overview' && <div className="space-y-5 p-4">
-          <section aria-label="Contact disponible" className="space-y-3"><h2 className="font-bold text-gray-800">Joindre ce client</h2><p className="text-sm text-gray-600">{cl.telegramChatId ? 'Telegram connecté' : 'Telegram non connecté'} · {cl.userId ? 'Espace client rattaché à cette fiche' : 'Accès au portail à activer'}</p><div className="flex flex-wrap gap-2">{cl.tel && <a href={`tel:${cl.tel}`} className="min-h-11 inline-flex items-center rounded-xl border border-gray-300 px-3 text-sm font-semibold">Appeler</a>}{cl.email && <a href={`mailto:${cl.email}`} className="min-h-11 inline-flex items-center rounded-xl border border-gray-300 px-3 text-sm font-semibold">Préparer un email</a>}{can('perm_colis_receptionner') && <button onClick={() => setReceiving(true)} className="min-h-11 rounded-xl brand-bg px-4 text-sm font-semibold text-white">Réceptionner pour ce client</button>}</div>{!cl.userId && <InviteClientAccess client={cl} flash={flash} />}{!cl.telegramChatId && <TelegramInvitation client={cl} flash={flash} />}</section>
+          <section aria-label="Contact disponible" className="space-y-3"><h2 className="font-bold text-gray-800">Joindre ce client</h2><p className="text-sm text-gray-600">{cl.telegramChatId ? 'Telegram connecté' : 'Telegram non connecté'} · {cl.userId ? 'Espace client rattaché à cette fiche' : 'Accès au portail à activer'}</p><div className="flex flex-wrap gap-2">{cl.tel && <a href={`tel:${cl.tel}`} className="min-h-11 inline-flex items-center rounded-xl border border-gray-300 px-3 text-sm font-semibold">Appeler</a>}{cl.email && <a href={`mailto:${cl.email}`} className="min-h-11 inline-flex items-center rounded-xl border border-gray-300 px-3 text-sm font-semibold">Préparer un email</a>}{can('perm_colis_receptionner') && <button onClick={() => navigate(`/reception?${new URLSearchParams({ client: cl.id, returnTo: `/clients/${cl.id}` })}`)} className="min-h-11 rounded-xl brand-bg px-4 text-sm font-semibold text-white">Réceptionner pour ce client</button>}</div>{!cl.userId && <InviteClientAccess client={cl} flash={flash} />}{!cl.telegramChatId && <TelegramInvitation client={cl} flash={flash} />}</section>
           <section aria-label="Expéditions ouvertes" className="space-y-3"><h2 className="font-bold text-gray-800">Expéditions ouvertes ({actifs.length})</h2>{actifs.length ? actifs.map((item) => <button key={item.id} onClick={() => handleOpenColis(item.id)} className="flex min-h-20 w-full flex-wrap items-center justify-between gap-3 rounded-xl border border-gray-200 p-3 text-left"><span><strong className="brand-t">{item.ref}</strong><span className="mt-1 block text-sm text-gray-700">{nextAction(item, cl)}</span><span className="mt-1 block text-xs text-gray-600">{receptionCartonManifest(item).nbColis} carton(s) reçus{item.casier ? ` · Casier ${item.casier}` : ''}</span></span><Badge statut={item.statut} /></button>) : <p className="text-sm text-gray-600">Aucune expédition ouverte.</p>}</section>
           <details className="rounded-xl border border-gray-200 p-3"><summary className="min-h-11 cursor-pointer font-semibold text-gray-800">Historique complet {history ? `(${history.length} dossiers)` : ''}</summary>{historyLoading && <p role="status" className="text-sm text-gray-600">Chargement de l’historique, archives comprises…</p>}{historyError && <p role="alert" className="text-sm text-red-700">Historique indisponible : {historyError}<button onClick={() => window.location.reload()} className="min-h-11 block underline">Réessayer</button></p>}{history?.map((item) => <button key={item.id} onClick={() => handleOpenColis(item.id)} className="flex min-h-14 w-full items-center justify-between gap-2 border-t border-gray-100 text-left text-sm"><span className="font-semibold brand-t">{item.ref}{item.archive ? ' · Archivé' : ''}</span><Badge statut={item.statut} /></button>)}</details>
         </div>}
-        <ColisModal open={receiving} onClose={() => setReceiving(false)} initialClientId={cl.id} />
         {/* ── Edit form ─────────────────────────────────────────────────── */}
         <div hidden={panel === 'overview'} className="px-4 pb-5 pt-4 space-y-4">
 

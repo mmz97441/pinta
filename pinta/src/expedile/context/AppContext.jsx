@@ -1006,10 +1006,13 @@ export function AppProvider({ children }) {
         throw reportError(new Error('Renseignez les dimensions et le poids à réception de chaque carton, avant optimisation, avant de demander l’accord du client.'));
       if (options.expectedConsentVersion != null && options.expectedConsentVersion !== c.consentRequestVersion)
         throw reportError(new Error('La demande a changé. Préparez un nouvel aperçu avant de l’envoyer.'));
-      await upd(id, { statut: 'attente_feu_vert', feuVert: 'en_attente' }, { expectedUpdatedAt: options.expectedUpdatedAt || c.updatedAt });
+      if (options.expectedUpdatedAt && options.expectedUpdatedAt !== c.updatedAt)
+        throw reportError(new Error('Le dossier a changé. Actualisez le message proposé avant de l’envoyer.'));
+      // queue_message validates and records the request and its business state
+      // atomically. A failed send must not leave a fictitious client wait here.
       return true;
     },
-    [upd, reportError],
+    [reportError],
   );
   const feuVert = useCallback(
     async (id, ok, options = {}) => {

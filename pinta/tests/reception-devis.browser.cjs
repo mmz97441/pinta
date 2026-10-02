@@ -45,11 +45,11 @@ async function main() {
       assert.equal(current.tables.colis[0].poids, 2);
       assert.equal(current.tables.colis[0].fin_p, null);
       await current.page.getByRole('button', { name: 'Réceptionner un autre carton', exact: true }).click();
-      await current.page.getByRole('dialog').waitFor();
-      await current.page.getByRole('dialog').getByRole('button', { name: /^Enregistrer (?:le carton|les cartons) dans EXP-TEST-001$/, exact: true }).waitFor();
-      assert.match(await current.page.getByRole('dialog').innerText(), /EXP-TEST-001/);
+      await current.page.getByRole('region',{name:'Réceptionner des cartons',exact:true}).waitFor();
+      await current.page.getByRole('region',{name:'Réceptionner des cartons',exact:true}).getByRole('button', { name: 'Terminer la réception', exact: true }).waitFor();
+      assert.match(await current.page.getByRole('region',{name:'Réceptionner des cartons',exact:true}).innerText(), /EXP-TEST-001/);
       assert.equal(current.tables.colis[0].dims_par_colis.length, 2, 'opening the mandatory measurement flow cannot append an unmeasured carton');
-      await current.page.keyboard.press('Escape');
+      await current.page.getByRole('button',{name:'Retour à ma liste, conserver le brouillon',exact:true}).click();
       assert.equal(current.errors.length, 0, current.errors.join('\n'));
       results.push({ test: `physical-cartons-preserved-and-new-receipt-measured-${device}`, pass: true });
       await current.context.close();
@@ -64,7 +64,7 @@ async function main() {
       const verify = current.page.getByRole('button', { name: 'Enregistrer et vérifier le devis', exact: true });
       assert.equal(await current.page.getByTestId('quote-action-bar').count(), 0, 'A quote cannot be saved until preparation measurements are recorded.');
       assert.equal(current.requests.some(request => /\/(save_quote|save_preparation_measurements)$/.test(request.path)), false);
-      await current.page.getByRole('button', { name: 'Ouvrir la préparation', exact: true }).click();
+      await current.page.getByRole('button', { name: 'Ouvrir l’optimisation', exact: true }).click();
       for (const [label, unit] of [['Longueur', 'cm'], ['Largeur', 'cm'], ['Hauteur', 'cm'], ['Poids réel', 'kg']]) assert.equal(await current.page.getByLabel(`${label} · colis sortant 1 (${unit})`, { exact: true }).inputValue(), '');
       await current.page.screenshot({ path: path.join(output, `preparation-separate-${device}.png`), fullPage: true });
       for (const [label, unit, value] of [['Longueur', 'cm', 40], ['Largeur', 'cm', 20], ['Hauteur', 'cm', 10], ['Poids réel', 'kg', 3]]) await current.page.getByLabel(`${label} · colis sortant 1 (${unit})`, { exact: true }).fill(String(value));
@@ -72,10 +72,10 @@ async function main() {
       await current.page.getByRole('heading', { name: 'Préparation à terminer avant le devis', exact: true }).waitFor();
       assert.equal(await verify.count(), 0, 'Draft measurements do not unlock the quote before an explicit preparation save.');
       assert.equal(current.requests.some(request => /\/(save_quote|save_preparation_measurements)$/.test(request.path)), false, 'Typing and navigating preserve the draft without saving measurements or a quote.');
-      await current.page.getByRole('button', { name: 'Ouvrir la préparation', exact: true }).click();
+      await current.page.getByRole('button', { name: 'Ouvrir l’optimisation', exact: true }).click();
       for (const [label, unit, value] of [['Longueur', 'cm', 40], ['Largeur', 'cm', 20], ['Hauteur', 'cm', 10], ['Poids réel', 'kg', 3]]) assert.equal(await current.page.getByLabel(`${label} · colis sortant 1 (${unit})`, { exact: true }).inputValue(), String(value));
-      await current.page.getByRole('button', { name: 'Enregistrer les mesures de préparation', exact: true }).click();
-      await current.page.getByRole('region', { name: 'Relais après préparation', exact: true }).getByText(/Préparation enregistrée/).waitFor();
+      await current.page.getByRole('button', { name: 'Enregistrer l’optimisation', exact: true }).click();
+      await current.page.getByRole('region', { name: 'Relais après préparation', exact: true }).getByText(/Optimisation enregistrée/).waitFor();
       await current.page.goBack();
       await verify.waitFor();
       assert.equal(await verify.isDisabled(), false);

@@ -273,7 +273,7 @@ export default function ChatPanel({ colis, client, embedded = false, active = tr
           {(sel.messages || []).map(renderMessage)}
         </div>
         <label htmlFor={`staff-message-${sel.id}`} className="block text-xs font-semibold mb-1">Votre réponse au client</label>
-        <div className="flex gap-2">
+        <div className="flex flex-col gap-2 sm:flex-row">
           <textarea
             rows={3}
             id={`staff-message-${sel.id}`}
@@ -282,7 +282,7 @@ export default function ChatPanel({ colis, client, embedded = false, active = tr
             onChange={(e) => setMsgTxt(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); handleSend(); } }}
             placeholder={selClient?.telegramChatId ? 'Écrire au client via Telegram…' : 'Écrire dans l’espace client…'}
-            className="flex-1 min-w-0 min-h-[44px] px-3 py-2 rounded-xl border text-sm"
+            className="w-full flex-1 min-w-0 min-h-24 px-3 py-2 rounded-xl border text-sm"
           />
           <button
             onClick={handleSend}

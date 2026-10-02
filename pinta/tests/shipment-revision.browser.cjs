@@ -285,7 +285,8 @@ async function invalidFieldVisible(f, element) {
       await f.page.getByRole('button', { name: 'Annuler', exact: true }).click(); unchanged(f, before);
       await f.page.getByRole('button', { name: 'Demander un nouvel accord', exact: true }).click();
       await f.page.getByRole('button', { name: 'Préparer une nouvelle demande', exact: true }).click();
-      await f.page.getByRole('button', { name: 'Préparer la demande au client', exact: true }).waitFor();
+      await f.page.getByLabel('Message à envoyer au client', { exact: true }).waitFor();
+      await f.page.getByRole('button', { name: 'Ouvrir le brouillon email', exact: true }).waitFor();
       assert.equal(f.calls.length, 1); assert.equal(f.calls[0].task, 'accord');
       assert.equal(f.tables.colis[0].feu_vert, 'en_attente'); assert.equal(f.tables.colis[0].statut, 'mesure');
       assert.deepEqual(f.tables.colis[0].dims_par_colis, saved.dims_par_colis); assert.deepEqual(f.tables.colis[0].final_packages, saved.final_packages);

@@ -62,6 +62,7 @@ jobs:
           sh ./supabase/tests/run-team-task-start.sh
           sh ./supabase/tests/run-task-owner-guards.sh
           sh ./supabase/tests/run-payment-return.sh
+          sh ./supabase/tests/run-reception-append.sh
       - run: npx playwright install --with-deps chromium
       - name: Parcours navigateur sans services externes
         run: |
@@ -75,6 +76,7 @@ jobs:
           node tests/browser-staff-sync.cjs
           node tests/payment-return.browser.cjs
           node tests/dossier-list-contrast.browser.cjs
+          node tests/dossier-table.browser.cjs
           node tests/parcel-reference-search.cjs
           node tests/reçu-documents-factures.cjs
           node tests/invoice-review-indicator.cjs
@@ -88,6 +90,8 @@ jobs:
           node tests/quote-task-conflict.browser.cjs
           node tests/customs-quote.browser.cjs
           node tests/dossier-shell.browser.cjs
+          node tests/parcours-dossier.browser.cjs
+          node tests/reception-page.browser.cjs
           node tests/personal-work.browser.cjs
           node tests/task-claim.browser.cjs
           node tests/collaborative-work.browser.cjs
@@ -134,11 +138,14 @@ jobs:
             /tmp/pinta-task-flow
             /tmp/pinta-task-readiness
             /tmp/pinta-dossier-shell
+            /tmp/pinta-parcours-dossier
+            /tmp/pinta-reception-page
             /tmp/pinta-personal-work
             /tmp/pinta-task-claim
             /tmp/pinta-collaborative-work
             /tmp/pinta-payment-return
             /tmp/pinta-dossier-list-contrast
+            /tmp/pinta-dossier-table
             /tmp/pinta-receipt-flow
             /tmp/pinta-client-lightweight
             /tmp/pinta-task-message

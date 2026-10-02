@@ -103,7 +103,7 @@ function noWrite(f, before) {
     await header(f).getByRole('button', { name: 'Revenir à l’accord client', exact: true }).click(); await task(f, 'accord');
     await f.page.getByRole('heading', { name: 'Accord du client reçu', exact: true }).waitFor();
     assert.equal(f.tables.colis[0].statut, 'en_preparation'); assert.equal(f.tables.colis[0].feu_vert, 'autorise');
-    await header(f).getByRole('button', { name: 'Aller à la préparation', exact: true }).click(); await task(f, 'preparation');
+    await header(f).getByRole('button', { name: 'Aller à l’optimisation', exact: true }).click(); await task(f, 'preparation');
     await length.waitFor(); assert.equal(await length.inputValue(), '39');
     assert.equal(await f.page.getByLabel('Poids réel · colis sortant 1 (kg)', { exact: true }).inputValue(), '4.25');
     await f.page.locator('summary').filter({ hasText: 'Consignes facultatives' }).click();
@@ -115,7 +115,7 @@ function noWrite(f, before) {
     await f.page.getByTestId('quote-action-bar').waitFor();
     assert.equal(await header(f).getByLabel('Tâche du dossier', { exact: true }).locator('option[value="documents"]').count(), 0);
     assert.equal(await header(f).getByRole('button', { name: 'Revenir aux factures', exact: true }).count(), 0);
-    await header(f).getByRole('button', { name: 'Revenir à la préparation', exact: true }).click(); await task(f, 'preparation');
+    await header(f).getByRole('button', { name: 'Revenir à l’optimisation', exact: true }).click(); await task(f, 'preparation');
     assert.equal(await f.page.getByRole('button', { name: 'Modifier les mesures', exact: true }).count(), 0);
     assert.equal(await header(f).getByRole('button', { name: 'Aller aux factures', exact: true }).count(), 0);
     await header(f).getByRole('button', { name: 'Aller au devis', exact: true }).click(); await task(f, 'devis');

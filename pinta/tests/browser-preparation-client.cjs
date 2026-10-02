@@ -9,7 +9,7 @@ const { setup, ids, base } = require('./browser-regression.cjs');
 const output = process.env.PINTA_PREPARATION_OUT || path.resolve(__dirname, '../../docs/verification-organisation-preparation-client-2026-09-12');
 const results=[];
 async function navigate(page, destination) { await page.evaluate(to => { window.history.pushState({},'',to); window.dispatchEvent(new PopStateEvent('popstate')); },destination); }
-async function editPreparation(f) { const edit=f.page.getByRole('button',{name:'Modifier les mesures',exact:true}); if(await edit.isVisible()) await edit.click(); await f.page.getByRole('button',{name:'Enregistrer les mesures de préparation',exact:true}).waitFor(); }
+async function editPreparation(f) { const edit=f.page.getByRole('button',{name:'Modifier les mesures',exact:true}); if(await edit.isVisible()) await edit.click(); await f.page.getByRole('button',{name:'Enregistrer l’optimisation',exact:true}).waitFor(); }
 async function ready(f) { await f.login(); await f.page.goto(`${base}/colis/${ids.P}?section=preparation`); await f.page.getByTestId('dossier-task-workspace').waitFor(); await editPreparation(f); }
 async function chooseSection(f, name) { await openTaskNavigation(f);await f.page.getByLabel('Tâche du dossier',{exact:true}).selectOption(name); }
 async function staffFixture(browser) {
@@ -27,7 +27,7 @@ async function staffFixture(browser) {
  try{
   f=await staffFixture(browser);f.tables.factures=[];f.tables.lignes=[];await ready(f);
   await f.page.getByLabel('Poids réel · colis sortant 1 (kg)',{exact:true}).fill('4');
-  await f.page.getByRole('button',{name:'Enregistrer les mesures de préparation',exact:true}).click();
+  await f.page.getByRole('button',{name:'Enregistrer l’optimisation',exact:true}).click();
   await f.page.getByRole('region',{name:'Relais après préparation',exact:true}).waitFor();
   assert.equal(f.tables.colis[0].fin_p,4);assert.equal(f.requests.filter(r=>r.path.endsWith('/save_quote')).length,0);
   const savedPreparation=JSON.stringify([f.tables.colis,f.tables.factures,f.tables.messages]);
@@ -36,7 +36,7 @@ async function staffFixture(browser) {
   await chooseSection(f,'devis');
   await f.page.getByRole('heading',{name:'Factures à vérifier avant le devis',exact:true}).waitFor();
   assert.equal(await f.page.getByRole('button',{name:'Enregistrer et vérifier le devis',exact:true}).count(),0);
-  await f.page.getByRole('button',{name:'Ouvrir les factures',exact:true}).click();
+  await f.page.getByRole('button',{name:'Vérifier les factures d’achat',exact:true}).click();
   await f.page.getByTestId('documents-task').getByText('Aucune facture enregistrée.',{exact:true}).waitFor();
   assert.equal(new URL(f.page.url()).searchParams.get('section'),'documents');
   assert.equal(JSON.stringify([f.tables.colis,f.tables.factures,f.tables.messages]),savedPreparation,'Opening the useful document task preserves measured preparation and consent');
@@ -50,14 +50,14 @@ async function staffFixture(browser) {
   f.tables.colis[0].updated_at=new Date(Date.parse(f.tables.colis[0].updated_at)+60000).toISOString();f.tables.colis[0].final_packages[0].poids=9;f.tables.colis[0].fin_p=9;
   await navigate(f.page,`/colis/${ids.P}?section=preparation`);await f.page.getByRole('button',{name:'Recharger et remplacer mon brouillon'}).waitFor();
   assert.equal(await f.page.getByLabel('Poids réel · colis sortant 1 (kg)',{exact:true}).inputValue(),'5');
-  assert.equal(await f.page.getByRole('button',{name:'Enregistrer les mesures de préparation',exact:true}).isDisabled(),true);
+  assert.equal(await f.page.getByRole('button',{name:'Enregistrer l’optimisation',exact:true}).isDisabled(),true);
   await f.page.getByRole('button',{name:'Recharger et remplacer mon brouillon'}).click();await editPreparation(f);assert.equal(await f.page.getByLabel('Poids réel · colis sortant 1 (kg)',{exact:true}).inputValue(),'9');
   results.push({test:'draft survives SPA navigation and detects a colleague version without overwriting it',pass:true});
   assert.deepEqual(f.errors,[]);await f.context.close();
   f=await staffFixture(browser);await ready(f);
   await f.page.getByRole('button',{name:'+ Ajouter un colis après optimisation',exact:true}).click();
   for(const [label,value] of [['Longueur','10'],['Largeur','40'],['Hauteur','10'],['Poids réel','1']]) await f.page.getByLabel(`${label} · colis sortant 2 (${label==='Poids réel'?'kg':'cm'})`,{exact:true}).fill(value);
-  await f.page.getByRole('button',{name:'Enregistrer les mesures de préparation',exact:true}).click();await f.page.getByRole('region',{name:'Relais après préparation',exact:true}).waitFor();
+  await f.page.getByRole('button',{name:'Enregistrer l’optimisation',exact:true}).click();await f.page.getByRole('region',{name:'Relais après préparation',exact:true}).waitFor();
   assert.equal(f.tables.colis[0].outgoing_parcel_count,2);
   await chooseSection(f,'devis');
   await f.page.getByRole('button',{name:'Enregistrer et vérifier le devis',exact:true}).click();await f.page.getByRole('button',{name:'Envoyer le devis au client',exact:true}).waitFor();

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowRight, Search, Users, RefreshCw } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
@@ -29,6 +29,12 @@ export default function PersonalWorkView() {
   const globalSearchUrl = `/colis${search.trim() ? `?${new URLSearchParams({ q: search.trim() })}` : ''}`;
   const renderRow = (action, notice) => <WorkActionRow key={action.id} action={action} dossier={view.dossierById.get(action.colis_id)} client={view.clientById.get(view.dossierById.get(action.colis_id)?.clientId)} returnTo={returnTo} now={now} density={preference?.density || 'comfortable'} compactLayout notice={notice} />;
   const openPreferences = () => { setPreferencesRequest(value => value + 1); document.getElementById('work-preferences')?.scrollIntoView({ block: 'start' }); };
+  const preferencesRequested = params.get('preferences') === '1';
+  useEffect(() => {
+    if (!preferencesRequested) return;
+    setPreferencesRequest(value => value + 1);
+    document.getElementById('work-preferences')?.scrollIntoView({ block: 'start' });
+  }, [preferencesRequested]);
   const unavailable = !staffAvailable(preference, now);
   const hasFilters = Boolean(search || mission);
   const allowedMissions = availableMissions(can);

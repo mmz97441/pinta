@@ -143,7 +143,7 @@ test('receipt, consent and correction actions open the relevant dossier task dir
   assert.equal(url.searchParams.get('action'), 'task'); assert.equal(url.searchParams.get('returnTo'), '/?section=pool');
  }
  const conversation = new URL(workActionUrl(action('reply', { kind: 'conversation' }), '/?q=Exemple', dossier), 'https://example.test');
- assert.equal(conversation.pathname, '/conversations'); assert.equal(conversation.searchParams.get('dossier'), 'parcel');
+ assert.equal(conversation.pathname, '/colis/parcel'); assert.equal(conversation.searchParams.get('onglet'), 'conversation');
 });
 test('continuation uses the current personal filters and permissions without claiming work', () => {
  const actions = [action('finished'), action('foreign', { assignee_id: 'other' }), action('forbidden', { kind: 'quote' }), action('blocked', { blocked_reason: 'Accord requis' }), action('waiting', { state: 'waiting' }), action('next'), action('free', { assignee_id: null })];

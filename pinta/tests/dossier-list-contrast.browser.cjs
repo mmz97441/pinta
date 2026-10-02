@@ -24,8 +24,10 @@ async function measure(locator) {
       const bg = background(parent), fg = over(rgba(getComputedStyle(parent).color), bg);
       text.push({ text: node.textContent.trim(), ratio: contrast(fg, bg), foreground: fg, background: bg });
     }
-    const focused = root.querySelector(':focus-visible'), bg = background(root);
-    return { text, background: bg, luminance: luminance(bg), selected: root.dataset.selected, shadow: getComputedStyle(root).boxShadow,
+    if (root.tagName === 'SELECT') { const bg = background(root); const fg = over(rgba(getComputedStyle(root).color), bg); text.push({ text: root.selectedOptions[0]?.textContent || '', ratio: contrast(fg, bg), foreground: fg, background: bg }); }
+    const surface = root.tagName === 'TR' ? root.querySelector('td') : root;
+    const focused = root.matches(':focus-visible') ? root : root.querySelector(':focus-visible'), bg = background(surface);
+    return { text, background: bg, luminance: luminance(bg), selected: root.dataset.selected, shadow: getComputedStyle(surface).boxShadow,
       focus: focused ? { color: getComputedStyle(focused).outlineColor, width: getComputedStyle(focused).outlineWidth, ratio: contrast(rgba(getComputedStyle(focused).outlineColor), background(focused)) } : null };
   });
 }
@@ -40,7 +42,7 @@ async function measure(locator) {
         await f.page.setViewportSize({ width, height: 1000 }); await f.page.emulateMedia({ reducedMotion: 'reduce' }); await f.login();
         await f.page.evaluate(value => localStorage.setItem('expedile-theme', value), theme); await f.page.goto(base + '/colis');
         await f.page.waitForFunction(dark => document.documentElement.classList.contains('dark') === dark, theme === 'dark');
-        const row = () => f.page.locator(width === 1440 ? `[data-dossier-row="${ids.P}"]` : `[data-dossier-card="${ids.P}"]`);
+        const row = () => f.page.locator(width === 1440 ? `[data-dossier-row="${ids.P}"]:visible` : `[data-dossier-card="${ids.P}"]`);
         await row().waitFor({ state: 'visible' }); const samples = [];
         async function check(state, focus = false) {
           const sample = await measure(row());
@@ -55,7 +57,7 @@ async function measure(locator) {
         await f.page.mouse.move(0, 0); await f.page.keyboard.press('Tab'); await row().getByRole('button', { name: 'EXP-TEST-001', exact: true }).focus(); await check('focus', true);
         // Select through the real checkbox before resizing to mobile cards.
         if (width === 390) await f.page.setViewportSize({ width: 1440, height: 1000 });
-        await f.page.getByRole('checkbox', { name: 'Sélectionner le dossier EXP-TEST-001', exact: true }).check();
+        await f.page.getByRole('checkbox', { name: 'Sélectionner le dossier EXP-TEST-001', exact: true }).filter({ visible: true }).check();
         if (width === 390) await f.page.setViewportSize({ width, height: 1000 });
         await row().waitFor({ state: 'visible' }); await f.page.mouse.move(0, 0); await f.page.evaluate(() => document.activeElement?.blur());
         const selected = await check('selected'); assert.equal(selected.selected, 'true'); assert.notDeepEqual(selected.background, normal.background, `${name}: perceptible selection`);
@@ -63,10 +65,14 @@ async function measure(locator) {
         await f.page.mouse.move(0, 0); await f.page.keyboard.press('Tab'); await row().getByRole('button', { name: 'EXP-TEST-001', exact: true }).focus(); await check('selected-focus', true);
         await f.page.screenshot({ path: path.join(output, `${name}.png`), fullPage: true });
         if (width === 1440) {
-          await f.page.getByRole('button', { name: 'Tri par défaut', exact: true }).click();
-          const option = f.page.getByRole('button', { name: "Plus récent d'abord", exact: true }); await option.hover(); const sample = await measure(option);
-          assert.ok(sample.text.every(item => item.ratio >= 4.5), `${name}: sorting hover contrast`); assert.ok(theme === 'dark' ? sample.luminance < .15 : sample.luminance > .75);
-          samples.push({ state: 'sort-option-hover', ...sample });
+          await f.page.getByRole('button', { name: /^Filtres et options/ }).click();
+          const sorting = f.page.getByRole('combobox', { name: 'Tri par défaut', exact: true });
+          await sorting.selectOption('date_desc'); assert.equal(await sorting.inputValue(), 'date_desc');
+          await sorting.hover(); const sample = await measure(sorting);
+          assert.ok(sample.text.length > 0 && sample.text.every(item => item.ratio >= 4.5), `${name}: sorting control contrast`); assert.ok(theme === 'dark' ? sample.luminance < .15 : sample.luminance > .75);
+          await f.page.keyboard.press('Tab'); await sorting.focus();
+          const focus = await measure(sorting); assert.ok(focus.focus && parseFloat(focus.focus.width) >= 2 && focus.focus.ratio >= 3, `${name}: sorting keyboard focus remains visible`);
+          samples.push({ state: 'sort-control-hover', ...sample }, { state: 'sort-control-focus', ...focus });
         }
         assert.deepEqual(f.errors, []); assert.deepEqual(f.networkDenied, []);
         // Loading the signed-in app synchronizes its work queue. No list

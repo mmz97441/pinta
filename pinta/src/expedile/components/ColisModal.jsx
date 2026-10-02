@@ -1,11 +1,10 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { X, FileText, Search, UserPlus, Package, MapPin, Camera } from 'lucide-react';
+import { X, FileText, Search, UserPlus, Package, Camera } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
-import { BRAND, STATUTS, getDestByCP, PRODUITS_INTERDITS, ABONNEMENTS } from '../constants';
-import { MSG_TEMPLATES } from '../constants/templates';
-import { uid, searchClients, telegramLink, getPrenom } from '../utils';
+import { BRAND, getDestByCP, PRODUITS_INTERDITS, ABONNEMENTS } from '../constants';
+import { uid, searchClients } from '../utils';
 import { Badge } from './ui';
 import * as sb from '../lib/supabaseData';
 import { deliverMessage } from '../services/telegramApi';
@@ -13,8 +12,16 @@ import { supabase } from '../lib/supabase';
 import { renderTemplate } from '../services/messageTemplates';
 import { DEFAULT_BODIES } from '../services/messageDefaults';
 import { useDialog } from './ui/useDialog';
-import { receptionCartons, receptionMeasurements, receptionMeasurementIssues, receptionCartonManifest, mergeReceptionCartons, hasCompleteReceptionMeasurements, RECEPTION_MEASURES, removeReceptionCarton } from '../domain/reception';
+import { receptionCartons, receptionMeasurements, receptionMeasurementIssues, receptionCartonManifest, hasCompleteReceptionMeasurements, RECEPTION_MEASURES, removeReceptionCarton, RECEPTION_APPEND_STATUSES, receptionAppendBlockReason, receptionAppendImpact, receptionDossierReturn } from '../domain/reception';
 import { safeWorkReturn } from '../domain/personalWork';
+import { usePersistentDraft } from '../hooks/usePersistentDraft';
+
+// Drafts need the reception baseline, not invoice/message contents.
+const receptionDraftDossier = dossier => {
+  if (!dossier) return null;
+  const { factures, lignes, messages, devisSnapshot, ...rest } = dossier;
+  return { ...rest, devisSnapshot: devisSnapshot ? true : null };
+};
 
 function ReceptionInput({ label, ...props }) {
   return <label className="block min-w-0"><span className="block text-xs font-semibold text-gray-600 mb-1">{label}</span><input {...props} /></label>;
@@ -26,6 +33,7 @@ function CartonFields({ lines, dimensions, setTracking, setDimension, addTrackin
     <p className="text-xs text-gray-600">Mesurez et pesez chaque carton reçu. Le fournisseur et le suivi sont facultatifs.</p>
     {lines.map((line, idx) => <section key={idx} aria-label={`Carton ${cartonOffset + idx + 1}`} className="rounded-xl border border-gray-200 p-3 space-y-3">
       <div className="flex justify-between items-center"><h3 className="text-sm font-bold text-gray-800">Carton {cartonOffset + idx + 1}</h3>{lines.length > 1 && <button type="button" onClick={() => removeTracking(idx)} aria-label={`Supprimer le carton ${cartonOffset + idx + 1}`} className="w-11 h-11 -my-2 rounded-lg text-gray-500 hover:bg-red-50 hover:text-red-700 flex items-center justify-center"><X size={16} /></button>}</div>
+      <label className="block"><span className="block text-xs font-semibold text-gray-600 mb-1">Numéro de suivi · carton {cartonOffset + idx + 1}<span className="font-normal"> · facultatif</span></span><input aria-label={`Numéro de suivi · carton ${cartonOffset + idx + 1}`} ref={element => { inputRefs.current[idx] = element; }} value={line.tracking} onChange={event => setTracking(idx, 'tracking', event.target.value)} onKeyDown={event => onScan(event, idx)} placeholder="Scanner ou saisir le numéro" autoComplete="off" aria-invalid={issues.some(issue => issue.index === idx && issue.key === 'tracking')} className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm font-mono" /></label>
       <fieldset className="rounded-lg bg-gray-50 border border-gray-200 p-3">
         <legend className="px-1 text-xs font-bold text-gray-800">Mesures à réception — avant optimisation</legend>
         <div className="grid grid-cols-2 gap-3">
@@ -38,9 +46,9 @@ function CartonFields({ lines, dimensions, setTracking, setDimension, addTrackin
           })}
         </div>
       </fieldset>
-      <details><summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-gray-600">Fournisseur et suivi{line.fournisseur || line.tracking ? ' · renseignés' : ' · facultatifs'}</summary>      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+      <details><summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-gray-600">Fournisseur{line.fournisseur ? ' · renseigné' : ' · facultatif'}</summary>      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         <ReceptionInput label={`Fournisseur · carton ${cartonOffset + idx + 1}`} placeholder="Amazon, Zara…" value={line.fournisseur} onChange={event => setTracking(idx, 'fournisseur', event.target.value)} className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm" />
-        <label className="block"><span className="block text-xs font-semibold text-gray-600 mb-1">Numéro de suivi · carton {cartonOffset + idx + 1}</span><input ref={element => { inputRefs.current[idx] = element; }} value={line.tracking} onChange={event => setTracking(idx, 'tracking', event.target.value)} onKeyDown={event => onScan(event, idx)} placeholder="Scanner ou saisir le numéro" autoComplete="off" aria-invalid={issues.some(issue => issue.index === idx && issue.key === 'tracking')} className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm font-mono" /></label>
+
       </div>
 </details>
     </section>)}
@@ -82,28 +90,29 @@ function nextRef() {
   return 'EXP-TMP-' + Date.now().toString(36).toUpperCase();
 }
 
-export default function ColisModal({ open, onClose, initialColisId, initialClientId }) {
+export default function ColisModal({ open, onClose, initialColisId, initialClientId, fullPage = false, startAppend = false }) {
   const navigate = useNavigate();
   const location = useLocation();
   const appCtx = useApp();
-  const { isStaff, authCl, clients, data, setData, flash, addNewClient, receptionner, upd, log } = appCtx;
+  const { isStaff, authCl, clients, data, setData, flash, addNewClient } = appCtx;
   const produitsInterdits = appCtx.produitsInterdits || PRODUITS_INTERDITS;
 
-  const [nf, setNf] = useState(EMPTY_FORM);
+  const [savedDraft, persistDraft, draftStorage] = usePersistentDraft(fullPage ? `reception-page:${initialColisId || initialClientId || 'new'}` : null, null);
+  const [nf, setNf] = useState(() => ({ ...EMPTY_FORM, ...savedDraft?.nf, photoFile: savedDraft?.nf?.photoFile instanceof File ? savedDraft.nf.photoFile : null }));
   const [formErr, setFormErr] = useState({});
-  const [clientSearchQ, setClientSearchQ] = useState('');
+  const [clientSearchQ, setClientSearchQ] = useState(savedDraft?.clientSearchQ || '');
   const [clientSearchOpen, setClientSearchOpen] = useState(false);
-  const [selectedClient, setSelectedClient] = useState(null);
+  const [selectedClient, setSelectedClient] = useState(savedDraft?.selectedClient || null);
 
   // ── Mode: null = choix (ou auto-nouveau si pas de regroupables), 'rattacher', 'nouveau' ──
-  const [mode, setMode] = useState(null);
-  const [rattacherTarget, setRattacherTarget] = useState(null);
+  const [mode, setMode] = useState(savedDraft?.mode || null);
+  const [rattacherTarget, setRattacherTarget] = useState(() => startAppend && savedDraft?.receipt?.finished ? data.find(item => item.id === initialColisId) || savedDraft.rattacherTarget : savedDraft?.rattacherTarget || null);
 
-  const [checkedInterdits, setCheckedInterdits] = useState([]);
+  const [checkedInterdits, setCheckedInterdits] = useState(savedDraft?.checkedInterdits || []);
 
   // ── State ──
-  const [newClientMode, setNewClientMode] = useState(false);
-  const [newClientForm, setNewClientForm] = useState(EMPTY_NEW_CLIENT);
+  const [newClientMode, setNewClientMode] = useState(savedDraft?.newClientMode || false);
+  const [newClientForm, setNewClientForm] = useState(savedDraft?.newClientForm || EMPTY_NEW_CLIENT);
   const [newClientErr, setNewClientErr] = useState({});
 
   const [saving, setSaving] = useState(false);
@@ -111,17 +120,28 @@ export default function ColisModal({ open, onClose, initialColisId, initialClien
   const trackingRefs = useRef([]);
   const dimensionRefs = useRef({});
   const [pendingMeasureFocus, setPendingMeasureFocus] = useState(null);
-  const initialisedRef = useRef(false);
+  const initialisedRef = useRef(Boolean(savedDraft));
   const [pendingFocus, setPendingFocus] = useState(null);
   const [saveError, setSaveError] = useState('');
   const [photoPreview, setPhotoPreview] = useState(null);
+  const [receipt, setReceipt] = useState(() => startAppend && savedDraft?.receipt?.finished ? { ...savedDraft.receipt, finished: false } : savedDraft?.receipt || null);
+  const [discarding, setDiscarding] = useState(false);
+  const [requestId, setRequestId] = useState(() => savedDraft?.requestId || crypto.randomUUID());
+  const [pendingAppend, setPendingAppend] = useState(savedDraft?.pendingAppend || null);
+  const [pendingCreate, setPendingCreate] = useState(savedDraft?.pendingCreate || null);
+  const [restoredPhoto, setRestoredPhoto] = useState(savedDraft?.photoName && !(savedDraft?.nf?.photoFile instanceof File) ? savedDraft.photoName : '');
+
+  useEffect(() => {
+    if (!fullPage || !open) return;
+    persistDraft({ nf, clientSearchQ, selectedClient, mode, rattacherTarget: receptionDraftDossier(rattacherTarget), checkedInterdits, newClientMode, newClientForm, receipt: receipt ? { ...receipt, colis: receptionDraftDossier(receipt.colis) } : null, photoName: nf.photoFile?.name || restoredPhoto, requestId, pendingAppend, pendingCreate });
+  }, [fullPage, open, nf, clientSearchQ, selectedClient, mode, rattacherTarget, checkedInterdits, newClientMode, newClientForm, receipt, restoredPhoto, requestId, pendingAppend, pendingCreate, persistDraft]);
   useEffect(() => {
     if (!open || !initialClientId || initialColisId || initialisedRef.current) return;
     const client = clients.find((item) => item.id === initialClientId);
     if (!client) return;
     initialisedRef.current = true;
     setSelectedClient(client); setClientSearchQ(client.nom);
-    setMode(data.some((item) => !item.archive && item.clientId === client.id && ['receptionne', 'mesure', 'attente_feu_vert', 'autorise'].includes(item.statut)) ? null : 'nouveau');
+    setMode(data.some((item) => !item.archive && item.clientId === client.id && RECEPTION_APPEND_STATUSES.includes(item.statut)) ? null : 'nouveau');
   }, [open, initialClientId, initialColisId, clients, data]);
   useEffect(() => {
     if (!open) { initialisedRef.current = false; return; }
@@ -131,6 +151,7 @@ export default function ColisModal({ open, onClose, initialColisId, initialClien
     if (!target || !client) return;
     initialisedRef.current = true;
     setSelectedClient(client); setClientSearchQ(client.nom); setMode('rattacher'); setRattacherTarget(target);
+    setNf(previous => ({ ...previous, casier: target.casier || '' }));
   }, [open, initialColisId, data, clients]);
   useEffect(() => {
     if (!open || saving || !pendingMeasureFocus) return;
@@ -153,9 +174,11 @@ export default function ColisModal({ open, onClose, initialColisId, initialClien
     setSaveError('');
     setPendingMeasureFocus(null);
   }, [mode, rattacherTarget?.id]);
-  const dialogRef=useDialog(open,()=>{if(!savingRef.current)resetAndClose();});
+  const dialogRef=useDialog(open && !fullPage,()=>{if(!savingRef.current)resetAndClose();});
   const runSave = async action => {
     if(savingRef.current)return;
+    if (isStaff && !appCtx.can('perm_colis_receptionner')) { setSaveError('Vous n’avez pas le droit d’enregistrer une réception. Contactez un responsable.'); return; }
+    if (restoredPhoto) { setSaveError('Choisissez de nouveau la photo ou cliquez sur « Continuer sans photo » avant d’enregistrer.'); return; }
     savingRef.current=true;setSaving(true);setSaveError('');
     try {await action();} catch(error) {setSaveError(error.message);flash({msg:error.message,type:'error'});}
     finally {savingRef.current=false;setSaving(false);}
@@ -163,7 +186,7 @@ export default function ColisModal({ open, onClose, initialColisId, initialClien
   if (!open) return null;
 
   // ── helpers ──────────────────────────────────────────────
-  const setField = (key, val) => setNf((prev) => ({ ...prev, [key]: val }));
+  const setField = (key, val) => { if (key === 'photoFile') setRestoredPhoto(''); setNf((prev) => ({ ...prev, [key]: val })); };
 
   const setTracking = (idx, field, val) => {
     setNf((prev) => {
@@ -213,12 +236,18 @@ export default function ColisModal({ open, onClose, initialColisId, initialClien
     setNewClientForm(EMPTY_NEW_CLIENT);
     setNewClientErr({});
     setCheckedInterdits([]);
-    onClose();
+    setReceipt(null);
+    setRestoredPhoto('');
+    setDiscarding(false);
+    setRequestId(crypto.randomUUID());
+    setPendingAppend(null);
+    setPendingCreate(null);
+    if (!fullPage) onClose();
   };
 
   const openReceivedDossier = (colis, index) => {
     const current = new URLSearchParams(location.search);
-    const returnTo = location.pathname.startsWith('/colis/')
+    const returnTo = fullPage ? receptionDossierReturn(current.get('returnTo')) : location.pathname.startsWith('/colis/')
       ? safeWorkReturn(current.get('returnTo'), '/colis')
       : location.pathname + location.search;
     const query = new URLSearchParams({ returnTo, section: hasCompleteReceptionMeasurements(colis) ? 'accord' : 'reception' });
@@ -227,12 +256,32 @@ export default function ColisModal({ open, onClose, initialColisId, initialClien
     });
   };
 
+  const confirmReceipt = (colis, firstIndex, count, action, client = selectedClient) => {
+    const nextForm = { ...EMPTY_FORM, casier: colis.casier || '' };
+    const nextRequestId = crypto.randomUUID();
+    const nextReceipt = { colis, first: firstIndex + 1, last: firstIndex + count, count, finished: action === 'finish' };
+    // Persist success even if the operator left this screen while the request completed.
+    if (fullPage) persistDraft({ nf: nextForm, clientSearchQ: client?.nom || '', selectedClient: client, mode: 'rattacher', rattacherTarget: receptionDraftDossier(colis), checkedInterdits: [], newClientMode: false, newClientForm: EMPTY_NEW_CLIENT, receipt: { ...nextReceipt, colis: receptionDraftDossier(colis) }, photoName: '', requestId: nextRequestId, pendingAppend: null, pendingCreate: null });
+    setRequestId(nextRequestId);
+    setPendingAppend(null);
+    setPendingCreate(null);
+    setRattacherTarget(colis);
+    setMode('rattacher');
+    setNf(nextForm);
+    setCheckedInterdits([]);
+    setFormErr({});
+    setRestoredPhoto('');
+    setReceipt(nextReceipt);
+    if (action !== 'finish') setPendingMeasureFocus({ index: 0, key: 'dimL' });
+    else window.scrollTo({ top: 0 });
+  };
+
   // ── client search ─────────────────────────────────────────
   const filteredClients = clientSearchQ.trim()
     ? searchClients(clients, clientSearchQ)
     : clients.slice(0, 8);
 
-  const STATUTS_REGROUPABLES = ['receptionne', 'mesure', 'attente_feu_vert', 'autorise'];
+  const STATUTS_REGROUPABLES = RECEPTION_APPEND_STATUSES;
 
   const regroupables = selectedClient
     ? data.filter((c) => !c.archive && c.clientId === selectedClient.id && STATUTS_REGROUPABLES.includes(c.statut))
@@ -240,6 +289,7 @@ export default function ColisModal({ open, onClose, initialColisId, initialClien
 
   const handleSelectClient = (cl) => {
     setSelectedClient(cl);
+    setReceipt(null);
     setClientSearchQ(cl.nom);
     setClientSearchOpen(false);
     setNewClientMode(false);
@@ -297,9 +347,10 @@ export default function ColisModal({ open, onClose, initialColisId, initialClien
   };
 
   // ── submit: rattacher à un EXP existant ──────────────
-  const handleRattacher = async () => {
+  const handleRattacher = async (action = 'finish') => {
     if (!rattacherTarget) return;
-    if (!validate(true)) return;
+    if (fullPage && action === 'finish' && receipt && !receptionCartons(nf.trackingLines, nf.multiDims).length && !nf.notesReception.trim() && !nf.photoFile && nf.casier === (receipt.colis.casier || '')) { setReceipt({ ...receipt, finished: true }); window.scrollTo({ top: 0 }); return; }
+    if (!pendingAppend && !validate(true)) return;
     const lines = nf.trackingLines || [{ fournisseur: '', tracking: '' }];
     const newCartons = receptionCartons(lines, nf.multiDims);
     const newTrackings = newCartons.filter(l=>l.tracking.trim());
@@ -312,35 +363,33 @@ export default function ColisModal({ open, onClose, initialColisId, initialClien
     const numbers = newTrackings.map((line) => line.tracking.trim());
     const duplicate = numbers.find((number, index) => numbers.indexOf(number) !== index);
     const other = data.find((colis) => !colis.archive && !['livre', 'annule'].includes(colis.statut) && (colis.trackings || []).some((number) => numbers.includes(number)));
-    if (duplicate || other) { setFormErr({ tracking: duplicate ? `Numéro saisi plusieurs fois : ${duplicate}` : `Numéro déjà présent dans ${other.ref}. Vérifiez le carton avant rattachement.` }); return; }
+    if (!pendingAppend && (duplicate || other)) { setFormErr({ tracking: duplicate ? `Numéro saisi plusieurs fois : ${duplicate}` : `Numéro déjà présent dans ${other.ref}. Vérifiez le carton avant rattachement.` }); return; }
 
     const existing = rattacherTarget;
-    const changes = mergeReceptionCartons(existing, lines, nf.multiDims);
-    if (!changes) throw new Error('Mesures à réception incomplètes : vérifiez chaque nouveau carton.');
-    if (checkedInterdits.length) {
-      changes.checkInterdits = [...new Set([...(existing.checkInterdits || []), ...checkedInterdits])];
-      changes.produitInterdit = true;
+    const blocked = receptionAppendBlockReason(existing);
+    if (!pendingAppend && blocked) throw new Error(blocked);
+    const intent = pendingAppend || { dossierId: existing.id, action, firstIndex: receptionCartonManifest(existing).nbColis,
+      cartons: newCartons.map(carton => ({ ...nf.multiDims[carton.index], fournisseur: carton.fournisseur, tracking: carton.tracking })),
+      options: { requestId, expectedUpdatedAt: existing.updatedAt, casier: nf.casier.trim() || undefined, notesReception: nf.notesReception.trim() || undefined, checkInterdits: checkedInterdits } };
+    setPendingAppend(intent);
+    if (fullPage) persistDraft(previous => ({ ...previous, pendingAppend: intent, requestId }));
+    let result;
+    try { result = await sb.appendReceptionCartons(intent.dossierId, intent.cartons, intent.options); }
+    catch (error) {
+      // A SQL rejection confirms no write. A lost response remains uncertain and must be replayed.
+      if (error.code && (/^[0-9]{5}$/.test(error.code) || /^P(?:000|GRST)/.test(error.code))) {
+        setPendingAppend(null);
+        if (fullPage) persistDraft(previous => ({ ...previous, pendingAppend: null }));
+      }
+      throw error;
     }
-    changes.statut = hasCompleteReceptionMeasurements(changes) ? 'mesure' : 'receptionne';
-
-    // Un nouvel accord doit porter sur tous les cartons ; les mesures originales restent conservées.
-    if (newCartons.length && ['mesure','autorise','attente_feu_vert'].includes(existing.statut)) {
-      changes.feuVert = 'en_attente';
-      changes.feuVertDate = null;
-      changes.attenteClientUntil = null;
-      changes.attenteClientDate = null;
-      changes.attenteClientMotif = null;
-      changes.demandeFeuVertEnvoyeeAt = null;
-    }
-
-    if (nf.casier?.trim()) changes.casier = nf.casier.trim();
-    if (nf.notesReception?.trim()) changes.notesReception = (existing.notesReception ? existing.notesReception + '\n' : '') + nf.notesReception.trim();
-
-    await upd(existing.id, changes, { expectedUpdatedAt: existing.updatedAt });
-    flash(`${newCartons.length} carton${newCartons.length > 1 ? 's' : ''} rattaché${newCartons.length > 1 ? 's' : ''} à ${existing.ref} — ${changes.nbColis} cartons au total`);
+    const saved = { ...existing, ...result, factures: existing.factures, lignes: existing.lignes, messages: existing.messages };
+    setData(previous => previous.map(item => item.id === existing.id ? { ...item, ...result } : item));
+    flash(`${newCartons.length} carton${newCartons.length > 1 ? 's' : ''} rattaché${newCartons.length > 1 ? 's' : ''} à ${existing.ref} — ${saved.nbColis} cartons au total`);
+    if (fullPage) { confirmReceipt(saved, intent.firstIndex, intent.cartons.length, intent.action); return; }
     resetAndClose();
     // Reception is saved first; the colleague decides when to send the combined request.
-    if (isStaff) openReceivedDossier({ ...existing, ...changes }, receptionCartonManifest(existing).nbColis);
+    if (isStaff) openReceivedDossier(saved, receptionCartonManifest(existing).nbColis);
     else {
       const sameDetail = location.pathname === `/colis/${existing.id}`;
       const query = new URLSearchParams(/^\/colis\/?$/.test(location.pathname) ? location.search : '');
@@ -352,12 +401,16 @@ export default function ColisModal({ open, onClose, initialColisId, initialClien
   };
 
   // ── submit: staff new colis (reception) ──────────────
-  const handleReceptionner = async (sendTG) => {
+  const handleReceptionner = async (sendTG, action = 'finish') => {
     const sendNotification = !isStaff && sendTG;
     // If in new client mode, create client first
     let clientId;
     let cl;
-    if (newClientMode) {
+    if (pendingCreate) {
+      clientId = pendingCreate.client.id;
+      cl = pendingCreate.client;
+    } else if (newClientMode) {
+      if (!appCtx.can('perm_clients_creer')) throw new Error('Votre accès ne permet pas de créer un client. Sélectionnez une fiche existante.');
       if (!validateNewClient()) return;
       if (!validate()) return;
       clientId = await addNewClient({
@@ -396,13 +449,13 @@ export default function ColisModal({ open, onClose, initialColisId, initialClien
       cl = selectedClient;
     }
 
-    // ── Subscription expiry check — réception autorisée mais avertissement ──
-    const isSubExpired = cl && cl.abonnement && cl.abonnement !== 'freemium' && cl.abonnementFin && new Date(cl.abonnementFin) < new Date();
-    const isAnnuelSub = cl && (cl.abonnement === 'premium_annuel' || cl.abonnement === 'vip');
+    const colisTemplate = pendingCreate?.template || buildColis(clientId, 'receptionne');
 
-    const colisTemplate = buildColis(clientId, 'receptionne');
-
-    // Insert into Supabase, fallback to local
+    const intent = pendingCreate || { template: colisTemplate, client: cl, action, createId: requestId };
+    if (fullPage) {
+      setPendingCreate(intent);
+      persistDraft(previous => ({ ...previous, pendingCreate: intent, requestId }));
+    }
     let newColis = colisTemplate;
     try {
       const inserted = await sb.insertColis({
@@ -423,12 +476,16 @@ export default function ColisModal({ open, onClose, initialColisId, initialClien
         statut: colisTemplate.statut,
         checkInterdits: colisTemplate.checkInterdits,
         produitInterdit: colisTemplate.produitInterdit,
-      });
+      }, fullPage ? { createId: intent.createId } : undefined);
       newColis = { ...colisTemplate, ...inserted };
     } catch (err) {
+      if (err.code && (/^[0-9]{5}$/.test(err.code) || /^P(?:000|GRST)/.test(err.code))) {
+        setPendingCreate(null);
+        if (fullPage) persistDraft(previous => ({ ...previous, pendingCreate: null }));
+      }
       throw new Error(`Réception non enregistrée : ${err.message}`);
     }
-    setData((prev) => [...prev, newColis]);
+    setData((prev) => prev.some(item => item.id === newColis.id) ? prev.map(item => item.id === newColis.id ? { ...item, ...newColis } : item) : [...prev, newColis]);
 
     if (nf.photoFile) {
       try {
@@ -455,6 +512,7 @@ export default function ColisModal({ open, onClose, initialColisId, initialClien
     }else flash(`Colis ${newColis.ref} réceptionné — casier ${nf.casier.trim()}`);
 
     const newId = newColis.id;
+    if (fullPage) { confirmReceipt(newColis, 0, colisTemplate.nbColis, intent.action, cl); return; }
     resetAndClose();
     if (isStaff && newId) {
       openReceivedDossier(newColis, 0);
@@ -538,39 +596,55 @@ export default function ColisModal({ open, onClose, initialColisId, initialClien
 
   const labelCls = 'block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1';
 
-  const isMatchMode = false;
   const notificationAccessible = !!(selectedClient?.telegramChatId || selectedClient?.userId);
 
   // ─────────────────────────────────────────────────────────
-  return createPortal(
+  const receiptSummary = receipt && `${receipt.count === 1 ? `Carton ${receipt.first} enregistré` : `Cartons ${receipt.first} à ${receipt.last} enregistrés`} · ${receipt.colis.ref} · Casier ${receipt.colis.casier || 'à renseigner'}`;
+  if (fullPage && receipt?.finished) return <section aria-label="Réception terminée" className="mx-auto max-w-3xl p-4 sm:p-8 space-y-6">
+    <h1 className="text-2xl font-black text-gray-900">Réception enregistrée</h1>
+    <div role="status" className="rounded-2xl border border-green-300 bg-green-50 p-5 space-y-2">
+      <p className="text-lg font-bold text-green-800">{receiptSummary}</p>
+      <p className="text-sm text-gray-700">{selectedClient?.nom} · {receptionCartonManifest(receipt.colis).nbColis} carton(s) reçus dans cette expédition.</p>
+      <p className="text-sm text-gray-700">Aucun message envoyé au client.</p>
+    </div>
+    <button type="button" className="w-full min-h-12 rounded-xl px-4 py-3 font-bold text-white" style={{ background: BRAND.navy }} onClick={() => openReceivedDossier(receipt.colis, receipt.first - 1)}>Ouvrir le dossier {receipt.colis.ref}</button>
+    <div className="flex flex-wrap gap-3">
+      <button type="button" className="min-h-11 rounded-xl border border-gray-300 px-4 text-sm font-semibold text-gray-700" onClick={() => { setReceipt({ ...receipt, finished: false }); setPendingMeasureFocus({ index: 0, key: 'dimL' }); }}>Ajouter un carton à cette expédition</button>
+      <button type="button" className="min-h-11 rounded-xl border border-gray-300 px-4 text-sm font-semibold text-gray-700" onClick={resetAndClose}>Réceptionner pour un autre client</button>
+      <button type="button" className="min-h-11 px-4 text-sm font-semibold text-gray-700 underline" onClick={onClose}>Retour à ma liste</button>
+    </div>
+  </section>;
+
+  const content = (
     <div
-      className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center px-0 sm:px-4"
-      style={{ backgroundColor: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(6px)' }}
+      className={fullPage ? "mx-auto w-full max-w-4xl px-4 py-5 sm:px-6" : "fixed inset-0 z-[100] flex items-end sm:items-center justify-center px-0 sm:px-4"}
+      style={fullPage ? undefined : { backgroundColor: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(6px)' }}
       onClick={(e) => {
-        if (e.target === e.currentTarget && !saving) resetAndClose();
+        if (!fullPage && e.target === e.currentTarget && !saving) resetAndClose();
       }}
     >
-      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Réceptionner des cartons" tabIndex={-1} className="bg-white w-full max-w-lg rounded-t-3xl sm:rounded-2xl shadow-2xl flex flex-col max-h-[90dvh]">
+      <div ref={dialogRef} role={fullPage ? "region" : "dialog"} aria-modal={fullPage ? undefined : "true"} aria-label="Réceptionner des cartons" tabIndex={-1} className={fullPage ? "bg-white w-full rounded-2xl border border-gray-200 flex flex-col" : "bg-white w-full max-w-lg rounded-t-3xl sm:rounded-2xl shadow-2xl flex flex-col max-h-[90dvh]"}>
         {/* ── Header ── */}
         <div className="shrink-0 flex items-center justify-between px-5 pt-5 pb-4 border-b border-gray-100">
           <div>
-            <h2 className="text-lg font-black text-gray-900">
-              Réceptionner des cartons
-            </h2>
+            {fullPage ? <><h1 className="text-2xl font-black text-gray-900">Réceptionner des cartons</h1><p className="mt-1 text-sm text-gray-600">Choisissez le client, mesurez le carton, enregistrez.</p></> : <h2 className="text-lg font-black text-gray-900">Réceptionner des cartons</h2>}
           </div>
           <button
-            onClick={resetAndClose}
+            onClick={fullPage ? onClose : resetAndClose}
             disabled={saving} className="w-11 h-11 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-700 transition-colors"
-            aria-label="Fermer"
+            aria-label={fullPage ? "Retour à ma liste, conserver le brouillon" : "Fermer"}
           >
             <X size={18} />
           </button>
         </div>
 
         {/* ── Body ── */}
-        <div className="flex-1 min-h-0 overflow-y-auto px-5 py-4 space-y-4">
-
-          <fieldset disabled={saving} className="min-w-0 space-y-4">
+        <div className={fullPage ? "px-4 sm:px-6 py-5 space-y-5" : "flex-1 min-h-0 overflow-y-auto px-5 py-4 space-y-4"}>
+          {fullPage && receipt && <p role="status" className="rounded-xl border border-green-300 bg-green-50 p-3 text-sm font-semibold text-green-800">{receiptSummary}. Vous pouvez saisir le carton suivant.</p>}
+          {fullPage && restoredPhoto && <p role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">La photo « {restoredPhoto} » doit être choisie à nouveau après le rechargement. Les autres saisies sont conservées.<button type="button" onClick={() => setRestoredPhoto('')} className="ml-2 underline">Continuer sans photo</button></p>}
+          {fullPage && !draftStorage.storageAvailable && <p role="status" className="text-sm text-amber-800">Le navigateur bloque le stockage du brouillon. Gardez cet onglet ouvert jusqu’à l’enregistrement.</p>}
+          {fullPage && (pendingAppend || pendingCreate) && !saving && <div role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-800"><p>L’enregistrement doit être vérifié avant de modifier ces cartons. Votre saisie est conservée.</p><button type="button" className="min-h-11 font-bold underline" onClick={() => runSave(() => pendingAppend ? handleRattacher(pendingAppend.action) : handleReceptionner(false, pendingCreate.action))}>Vérifier l’enregistrement</button></div>}
+          <fieldset disabled={saving || Boolean(pendingAppend || pendingCreate)} className="min-w-0 space-y-4">
           {/* ── CLIENT (staff only) ── */}
           {isStaff && !newClientMode && (
             <div>
@@ -587,6 +661,8 @@ export default function ColisModal({ open, onClose, initialColisId, initialClien
                     value={clientSearchQ}
                     onChange={(e) => {
                       setClientSearchQ(e.target.value);
+                      setReceipt(null);
+                      setRattacherTarget(null);
                       setSelectedClient(null);
                       setMode(null);
                       setClientSearchOpen(true);
@@ -708,7 +784,7 @@ export default function ColisModal({ open, onClose, initialColisId, initialClien
                           <button
                             key={c.id}
                             type="button"
-                            onClick={() => { setMode('rattacher'); setRattacherTarget(c); }}
+                            onClick={() => { setMode('rattacher'); setRattacherTarget(c); setReceipt(null); setNf(previous => ({ ...previous, casier: c.casier || '' })); }}
                             className="w-full flex items-center gap-3 p-3 rounded-xl bg-white border border-gray-200 hover:border-blue-400 hover:bg-blue-50 transition-all text-left active:scale-[0.98]"
                           >
                             <div className="flex-1 min-w-0">
@@ -1037,13 +1113,14 @@ export default function ColisModal({ open, onClose, initialColisId, initialClien
                   <span className="text-xs font-bold" style={{ color: 'var(--brand-text)' }}>
                     Ajouter un carton à {rattacherTarget.ref}
                   </span>
-                  <button type="button" onClick={() => { setMode(null); setRattacherTarget(null); }} className="ml-auto min-h-11 px-3 text-sm text-gray-600 hover:text-gray-800">
+                  <button type="button" onClick={() => { setMode(null); setRattacherTarget(null); }} className="ml-auto shrink-0 whitespace-nowrap min-h-11 px-3 text-sm text-gray-600 hover:text-gray-800">
                     Changer
                   </button>
                 </div>
                 <p className="text-[11px] text-gray-500">{rattacherTarget.desc} · {receptionCartonManifest(rattacherTarget).nbColis} carton(s) déjà reçu(s) · Casier {rattacherTarget.casier || '—'}</p>
               </div>
 
+              {receptionAppendBlockReason(rattacherTarget) ? <div role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-4 space-y-3"><p className="text-sm font-semibold text-amber-800">{receptionAppendBlockReason(rattacherTarget)}</p><button type="button" className="min-h-11 underline font-semibold text-sm" onClick={() => navigate(`/colis/${rattacherTarget.id}?${new URLSearchParams({ section: 'devis', returnTo: location.pathname + location.search })}`)}>Ouvrir le dossier pour le corriger</button></div> : receptionAppendImpact(rattacherTarget) && <p className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">{receptionAppendImpact(rattacherTarget)}</p>}
               {cartonFields}
               <p className="text-xs text-gray-600">{receptionCartonManifest(rattacherTarget).nbColis} carton(s) déjà reçu(s) : leurs mesures sont conservées. {!hasCompleteReceptionMeasurements(rattacherTarget) && 'Certaines mesures anciennes restent à compléter dans le dossier avant de demander un accord.'}</p>
 
@@ -1295,16 +1372,19 @@ export default function ColisModal({ open, onClose, initialColisId, initialClien
 
         {/* ── Footer / Actions ── */}
         {mode && (
-          <div className="shrink-0 px-5 py-3 border-t border-gray-200 bg-white" style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom))' }}>
+          <div className={fullPage ? "sticky bottom-0 z-10 shrink-0 px-4 sm:px-6 py-4 border-t border-gray-200 bg-white rounded-b-2xl" : "shrink-0 px-5 py-3 border-t border-gray-200 bg-white"} style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom))' }}>
             <div className="mb-3 text-xs text-gray-600" aria-live="polite">
               <p className="font-bold text-sm text-gray-800">{selectedClient?.nom || newClientForm.nom || authCl?.nom} · {mode === 'rattacher' ? rattacherTarget?.ref : 'Nouveau dossier'}</p>
               <p>{nf.trackingLines.filter((line, index) => receptionMeasurements([line], { 0: nf.multiDims[index] })).length} / {nf.trackingLines.length} carton(s) mesuré(s) à réception · Casier {nf.casier || rattacherTarget?.casier || 'à renseigner'}</p>
-              {isStaff ? <p>Enregistrez la réception, puis préparez la demande d’accord et de factures. Le message sera envoyé à votre confirmation.</p> : mode === 'nouveau' && <p>{notificationAccessible ? `Notification proposée : ${selectedClient?.telegramChatId ? 'Telegram' : 'message dans l’espace client'}` : 'Accès client à activer : une action de contact sera créée pour l’équipe.'}</p>}
+              {isStaff ? <p>{fullPage ? "Aucun message envoyé au client lors de l’enregistrement." : "Enregistrez la réception, puis préparez la demande d’accord et de factures. Le message sera envoyé à votre confirmation."}</p> : mode === 'nouveau' && <p>{notificationAccessible ? `Notification proposée : ${selectedClient?.telegramChatId ? 'Telegram' : 'message dans l’espace client'}` : 'Accès client à activer : une action de contact sera créée pour l’équipe.'}</p>}
               {checkedInterdits.length > 0 && <p className="text-red-700 font-bold">{checkedInterdits.length} produit(s) interdit(s) signalé(s)</p>}
             </div>
             {formErr.dimensions && <p role="alert" className="mb-3 text-sm font-semibold text-red-700">{formErr.dimensions}</p>}
-            {saveError && <p role="alert" className="mb-3 text-sm font-semibold text-red-700">{saveError}</p>}
-            <div className="flex flex-wrap sm:flex-nowrap gap-3">
+            {saveError && <div role="alert" className="mb-3 text-sm font-semibold text-red-700"><p>{saveError}</p>{fullPage && rattacherTarget && !pendingAppend && !pendingCreate && <button type="button" disabled={saving} className="min-h-11 underline" onClick={async () => { try { const updated = await appCtx.refreshColis(rattacherTarget.id); if (updated) { setRattacherTarget(updated); setSaveError('Le dossier est actualisé. Vos nouvelles mesures sont conservées : vérifiez le numéro du carton avant d’enregistrer.'); } } catch (error) { setSaveError(error.message); } }}>Actualiser le dossier sans perdre ma saisie</button>}</div>}
+            {fullPage ? <div className="grid gap-2 sm:grid-cols-2">
+              <button type="button" disabled={saving || Boolean(pendingAppend || pendingCreate)} onClick={() => runSave(() => mode === 'rattacher' ? handleRattacher('continue') : handleReceptionner(false, 'continue'))} className="min-h-12 rounded-xl px-4 py-3 text-sm font-bold text-white disabled:opacity-60" style={{ background: BRAND.navy }}>{saving ? 'Enregistrement…' : 'Enregistrer et ajouter un carton'}</button>
+              <button type="button" disabled={saving || Boolean(pendingAppend || pendingCreate)} onClick={() => runSave(() => mode === 'rattacher' ? handleRattacher('finish') : handleReceptionner(false, 'finish'))} className="min-h-12 rounded-xl border border-gray-300 px-4 py-3 text-sm font-bold text-gray-800 disabled:opacity-60">Terminer la réception</button>
+            </div> : <div className="flex flex-wrap sm:flex-nowrap gap-3">
               <button
                 type="button"
                 disabled={saving} onClick={mode === 'rattacher' ? () => { setMode(null); setRattacherTarget(null); } : resetAndClose}
@@ -1341,10 +1421,14 @@ export default function ColisModal({ open, onClose, initialColisId, initialClien
                   </button>}
                 </>
               )}
-            </div>
+            </div>}
           </div>
         )}
+        {fullPage && <div className="px-5 py-3 text-sm text-gray-600 border-t border-gray-100">
+          {discarding ? <div className="flex flex-wrap gap-3 items-center"><span>Effacer les saisies non enregistrées ?</span><button type="button" disabled={saving || Boolean(pendingAppend || pendingCreate)} className="min-h-11 px-3 font-bold text-red-700 underline" onClick={resetAndClose}>Oui, effacer le brouillon</button><button type="button" className="min-h-11 px-3 underline" onClick={() => setDiscarding(false)}>Garder la saisie</button></div> : <div className="flex flex-wrap items-center justify-between gap-2"><span>Brouillon conservé dans cet onglet.</span><button type="button" disabled={saving || Boolean(pendingAppend || pendingCreate)} className="min-h-11 px-3 underline" onClick={() => setDiscarding(true)}>Effacer le brouillon</button></div>}
+        </div>}
       </div>
-    </div>, document.body
+    </div>
   );
+  return fullPage ? content : createPortal(content, document.body);
 }

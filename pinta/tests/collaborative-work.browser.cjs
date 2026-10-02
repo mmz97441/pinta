@@ -106,14 +106,14 @@ function noMessages(s){for(const f of s.fixtures){assert.equal(f.requests.some(r
     });
     for(const mobile of [false,true]) await scenario(`completed-preparation-explains-colleague-work-${mobile?'mobile':'desktop'}`,async s=>{
       await detail(s.first);await owner(s.first).getByRole('button',{name:'Je m’en occupe',exact:true}).click();await owner(s.first).getByText('Vous vous en occupez',{exact:true}).waitFor();
-      await fillMeasures(s.first);await s.first.page.getByRole('button',{name:'Enregistrer les mesures de préparation',exact:true}).click();
+      await fillMeasures(s.first);await s.first.page.getByRole('button',{name:'Enregistrer l’optimisation',exact:true}).click();
       const after=s.first.page.getByRole('navigation',{name:'Après cette tâche',exact:true});await after.getByText(/Madly/).first().waitFor();await after.getByText(/Factures|factures/).first().waitFor();
       assert.deepEqual(s.saved.dims_par_colis,s.initialBusiness[0][0].dims_par_colis);assert.equal(Number(s.saved.final_packages[0].poids),2.7);assert.equal(s.saved.feu_vert,'autorise');
       assert.equal(s.first.tables.staff_work_actions.find(a=>a.id===DOCS).assignee_id,B);assert.equal(s.first.tables.staff_work_actions.find(a=>a.id===QUOTE).state,'waiting');
       assert.equal(await s.first.page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false);await s.first.page.screenshot({path:`${output}/completion-${mobile?'mobile':'desktop'}.png`,fullPage:true});
     },{mobile});
     await scenario('completed-preparation-releases-quote-to-pool-without-invented-owner',async s=>{
-      await detail(s.first);await owner(s.first).getByRole('button',{name:'Je m’en occupe',exact:true}).click();await fillMeasures(s.first);await s.first.page.getByRole('button',{name:'Enregistrer les mesures de préparation',exact:true}).click();
+      await detail(s.first);await owner(s.first).getByRole('button',{name:'Je m’en occupe',exact:true}).click();await fillMeasures(s.first);await s.first.page.getByRole('button',{name:'Enregistrer l’optimisation',exact:true}).click();
       const after=s.first.page.getByRole('navigation',{name:'Après cette tâche',exact:true});await after.getByText(/devis/i).first().waitFor();await after.getByText(/prendre|disponible/i).first().waitFor();
       const quote=s.first.tables.staff_work_actions.find(a=>a.id===QUOTE);assert.equal(quote.state,'ready');assert.equal(quote.assignee_id,null);
       await s.second.page.goto(base+'/?section=pool');await row(s.second,QUOTE).getByRole('button',{name:'Je m’en occupe',exact:true}).waitFor();assert.equal(s.commands.filter(c=>c.kind==='work').length,1);
@@ -130,6 +130,7 @@ function noMessages(s){for(const f of s.fixtures){assert.equal(f.requests.some(r
     });
     await scenario('shared-dossier-summary-shows-completed-work-owners-and-specific-blockers',async s=>{
       await detail(s.first);await s.first.page.getByRole('button',{name:'Détails du dossier',exact:true}).click();
+      await s.first.page.getByRole('dialog', { name: 'Contexte du dossier' }).getByRole('button', { name: 'Équipe', exact: true }).click();
       const summary=s.first.page.getByRole('region',{name:'Suivi partagé du dossier',exact:true});await summary.waitFor();
       const completed=summary.locator('[data-dossier-work="reception"]');await completed.getByText('Terminé',{exact:true}).waitFor();await completed.getByText('Vous',{exact:true}).waitFor();
       await summary.locator('[data-dossier-work="documents"]').getByText('Madly',{exact:true}).waitFor();
@@ -141,7 +142,7 @@ function noMessages(s){for(const f of s.fixtures){assert.equal(f.requests.some(r
       const preparation=s.first.tables.staff_work_actions.find(a=>a.id===PREP),documents=s.first.tables.staff_work_actions.find(a=>a.id===DOCS);
       preparation.assignee_id=B;preparation.state='in_progress';documents.assignee_id=ids.A;
       await detail(s.first);await owner(s.first).getByText('Pris en charge par Madly',{exact:true}).waitFor();
-      const measureSave=s.first.page.getByRole('button',{name:'Enregistrer les mesures de préparation',exact:true});
+      const measureSave=s.first.page.getByRole('button',{name:'Enregistrer l’optimisation',exact:true});
       if(await measureSave.count())assert.equal(await measureSave.isDisabled(),true,'A colleague’s assigned work is read-only');
       const measure=s.first.page.getByLabel('Longueur · colis sortant 1 (cm)',{exact:true});
       if(await measure.count())assert.equal(await measure.isEditable(),false,'Viewing never exposes an editable colleague measurement');
