@@ -410,7 +410,7 @@ function AppContent() {
         <div className="flex-1 flex flex-col min-w-0 bg-gray-50">
           <div className="lg:hidden min-h-12 px-4 flex items-center justify-between border-b border-gray-200">
             <span className="font-black brand-t">EXPÉD<span className="brand-t-gold">ÎLE</span></span>
-            <div className="flex items-center gap-2">{can('perm_colis_receptionner') && <button aria-label="Réceptionner des cartons" onClick={() => navigate(`/reception?${new URLSearchParams({ returnTo: location.pathname + location.search })}`)} className="min-h-11 inline-flex items-center gap-1 rounded-xl px-2 text-xs font-bold brand-t"><Plus size={18} />Réceptionner</button>}<ThemeToggle compact /><button aria-label="Se déconnecter" onClick={handleLogout} className="min-h-11 min-w-11 flex items-center justify-center text-gray-500"><LogOut size={18} /></button></div>
+            <div className="flex items-center gap-2">{can('perm_colis_receptionner') && <button aria-label="Réceptionner des cartons" onClick={() => navigate(`/reception?${new URLSearchParams({ returnTo: location.pathname + location.search })}`)} className="min-h-11 inline-flex items-center gap-1 whitespace-nowrap rounded-xl px-2 text-xs font-bold brand-t"><Plus size={18} className="shrink-0" />Recevoir</button>}<ThemeToggle compact /><button aria-label="Se déconnecter" onClick={handleLogout} className="min-h-11 min-w-11 flex items-center justify-center text-gray-500"><LogOut size={18} /></button></div>
           </div>
           {loadBanner}
           <div className="flex-1 min-h-0 overflow-y-auto pb-[calc(4.5rem+env(safe-area-inset-bottom))] scroll-pb-[calc(4.5rem+env(safe-area-inset-bottom))] lg:pb-0 lg:scroll-pb-0">

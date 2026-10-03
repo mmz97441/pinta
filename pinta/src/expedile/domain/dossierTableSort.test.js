@@ -2,14 +2,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { TABLE_COLUMNS, defineDossierTableColumn, isDossierTableColumnSortable, sortDossierTableRows, dossierTableSortDirectionLabel, buildDossierTableModel, buildDossierTableExportRows } from './dossierTable.js';
 
-const columns = new Map(Object.values(TABLE_COLUMNS).flat().map(column => [column.key, column]));
+const columns = new Map([...Object.values(TABLE_COLUMNS).flat(), ...TABLE_COLUMNS.payments].map(column => [column.key, column]));
 const ids = rows => rows.map(row => row.id);
 const ordered = (rows, key, direction = 'asc', options = {}) => sortDossierTableRows(rows, { ...options, column: columns.get(key), direction });
 const models = values => new Map(Object.entries(values));
 
 test('every displayed data column declares a typed accessor, while actions have no sorting contract', () => {
   const data = [...columns.values()].filter(column => column.kind === 'data');
-  assert.equal(data.length, 18);
+  assert.equal(data.length, 19);
   for (const column of data) {
     assert.equal(isDossierTableColumnSortable(column), true, column.key);
     assert.ok(['text', 'number', 'date'].includes(column.sort.type));
@@ -158,4 +158,15 @@ test('latest reception sorts by proven carton arrivals, exports Réunion date an
   const exported = buildDossierTableExportRows(rows, [], options.models, 'daily', [columns.get('receivedAt')]);
   assert.equal(exported[0]['Dernière réception'], 'Non renseigné');
   assert.equal(exported[2]['Dernière réception'], '01/10/2026 · 1/2 cartons datés');
+});
+
+test('final weights and known quote prices sort numerically with unknowns last, using their own source', () => {
+  const weightColumn = TABLE_COLUMNS.daily.find(column => column.key === 'optimizedWeight');
+  const priceColumn = TABLE_COLUMNS.daily.find(column => column.key === 'requested');
+  const rows = ['ten', 'unknown', 'zero', 'two'].map(id => ({ id }));
+  const data = models({ ten: { optimizedWeight: 10, quotePrice: { amount: 100 }, payment: { requested: 1 } }, unknown: { optimizedWeight: null, quotePrice: { amount: null }, payment: { requested: 0 } }, zero: { optimizedWeight: 1, quotePrice: { amount: 0 }, payment: { requested: 999 } }, two: { optimizedWeight: 2.5, quotePrice: { amount: 20 }, payment: { requested: 500 } } });
+  for (const column of [weightColumn, priceColumn]) {
+    assert.deepEqual(ids(sortDossierTableRows(rows, { column, models: data })), ['zero', 'two', 'ten', 'unknown']);
+    assert.deepEqual(ids(sortDossierTableRows(rows, { column, models: data, direction: 'desc' })), ['ten', 'two', 'zero', 'unknown']);
+  }
 });

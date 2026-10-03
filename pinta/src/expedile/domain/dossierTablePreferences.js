@@ -1,7 +1,14 @@
 import { isDossierTableColumnSortable, formatDossierTableDate } from './dossierTable.js';
 
 export const COLUMN_FILTER_PREFIX = 'col.';
-const widths = { ref: 160, client: 200, statusLabel: 170, paymentState: 155, statut: 220, owner: 140, casier: 120, cartons: 125, optimizedDimensions: 225, requested: 135, paid: 135, remaining: 150, sentAt: 155, departure: 165, destination: 135, packages: 160, readiness: 230, action: 180 };
+const widths = { ref: 160, client: 200, statusLabel: 170, paymentState: 155, statut: 220, owner: 140, casier: 120, cartons: 125, optimizedDimensions: 225, optimizedWeight: 155, requested: 150, paid: 135, remaining: 150, sentAt: 155, departure: 165, destination: 135, packages: 160, readiness: 230, action: 180 };
+export const DOSSIER_TEXT_SIZES = [{ value: 14, label: 'Petit' }, { value: 16, label: 'Normal' }, { value: 18, label: 'Grand' }];
+export function sanitizeDossierTextSize(value) {
+  return DOSSIER_TEXT_SIZES.some(size => size.value === value) ? value : 16;
+}
+export function dossierTextSizeStorageKey(userId, view) {
+  return userId && ['daily', 'payments', 'departures'].includes(view) ? `expedile:table-text:v1:${encodeURIComponent(userId)}:${view}` : null;
+}
 export function columnWidthBounds(column) {
   const min = column?.key === 'action' ? 175 : ['ref', 'client'].includes(column?.key) ? 140 : 132;
   const initial = Math.max(min, widths[column?.key] || 180);

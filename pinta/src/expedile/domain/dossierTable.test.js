@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildDossierTableModel as model, buildDossierTableExportRows, dossierTableExportColumns, formatDossierTableDate, dossierTableMissingAmountLabel } from './dossierTable.js';
+import { TABLE_COLUMNS, buildDossierTableModel as model, buildDossierTableExportRows, dossierTableExportColumns, formatDossierTableDate, dossierTableMissingAmountLabel } from './dossierTable.js';
 import { actionWaiting, workActionUrl } from './personalWork.js';
 
 const now = Date.parse('2026-10-02T12:00:00Z');
@@ -287,4 +287,60 @@ test('an active priority explains the displayed task while an expired priority d
   assert.equal(model(dossier, { ...base, actions: [action('preparation', { due_at: '2026-10-01T12:00:00Z' })] }).detail, 'Échéance dépassée');
   assert.match(model(dossier, { ...base, actions: [{ ...urgent, assignee_id: 'other' }] }).detail, /Départ rapproché.*collègue/);
   assert.equal(model(dossier, { ...base, actions: [{ ...urgent, blocked_reason: 'Matériel attendu' }] }).detail, 'Matériel attendu');
+});
+
+test('final weight sums only certified physical packages and does not use an old aggregate', () => {
+  const multi = { ...prepared, outgoingParcelCount: 2, finP: 999, finalPackages: [
+    { dimL: 10, dimW: 20, dimH: 30, poids: '1.25' }, { dimL: 40, dimW: 50, dimH: 60, poids: 2.1 },
+  ] };
+  assert.equal(model(multi, base).optimizedWeight, 3.35);
+  assert.deepEqual(model(multi, base).optimizedDimensions, ['Colis 1 : 10 × 20 × 30 cm', 'Colis 2 : 40 × 50 × 60 cm']);
+  for (const patch of [{ finalPackages: [] }, { finalMeasurementsVersion: 99 }, { outgoingParcelCount: 3 }]) {
+    const result = model({ ...multi, ...patch }, base);
+    assert.equal(result.optimizedWeight, null); assert.deepEqual(result.optimizedDimensions, []);
+  }
+  assert.equal(model({ ...prepared, finalPackages: null, finL: 10, finW: 20, finH: 30, finP: 1.5 }, base).optimizedWeight, 1.5);
+});
+
+test('a known draft price stays separate from a payment request and uses stored amounts without tax recalculation', () => {
+  const draft = { ...prepared, devisTotal: 83.47, devisBrouillon: true, quoteVersion: 3, devisSnapshot: { version: 3, amounts: { total: 83.47 } } };
+  const result = model(draft, base);
+  assert.deepEqual(result.quotePrice, { amount: 83.47, stateLabel: 'Brouillon' });
+  assert.equal(result.payment.requested, null); assert.equal(result.payment.remaining, null);
+  assert.equal(model({ ...draft, devisTotal: null }, base).quotePrice.amount, 83.47);
+  assert.deepEqual(model({ ...draft, statut: 'autorise' }, base).quotePrice, { amount: 83.47, stateLabel: 'Brouillon' });
+  assert.equal(model({ ...draft, statut: 'autorise', finalMeasurementsVersion: 99 }, base).quotePrice.amount, null);
+  for (const patch of [{ quoteNeedsReview: true }, { devisTotal: 91 }, { devisSnapshot: { version: 2, amounts: { total: 83.47 } } }, { statut: 'mesure' }])
+    assert.deepEqual(model({ ...draft, ...patch }, base).quotePrice, { amount: null, stateLabel: 'À revoir' });
+});
+
+test('recorded payment keeps the frozen quote price even when a raw draft total diverges', () => {
+  const result = model({ ...paid, devisTotal: 999, devisBrouillon: true, devisSnapshot: { version: 1, amounts: { total: 100 } } }, base);
+  assert.deepEqual(result.quotePrice, { amount: 100, stateLabel: 'À revoir' });
+  assert.equal(result.payment.requested, null); // Existing payment consistency remains strict.
+  assert.equal(model({ ...quoted, devisTotal: 999, devisSnapshot: { version: 1, amounts: { total: 100 } } }, base).quotePrice.amount, null);
+});
+
+test('a real zero quote price needs a versioned frozen zero and cannot come from initial defaults', () => {
+  assert.deepEqual(model({ ...prepared, devisTotal: 0, devisBrouillon: true, quoteVersion: 0 }, base).quotePrice, { amount: null, stateLabel: 'À calculer' });
+  assert.deepEqual(model({ ...quoted, devisTotal: null, devisSnapshot: { amounts: { total: 0 } } }, base).quotePrice, { amount: 0, stateLabel: '' });
+  assert.equal(model({ ...quoted, devisTotal: 0, quoteVersion: 0, devisSnapshot: { amounts: { total: 0 } } }, base).quotePrice.amount, null);
+});
+
+test('quote price columns are financial and preserve draft and review labels in exports', () => {
+  const draft = { ...prepared, id: 'draft', devisTotal: 83.47, devisBrouillon: true, quoteVersion: 3, devisSnapshot: { version: 3, amounts: { total: 83.47 } } };
+  const paidMismatch = { ...paid, id: 'paid', devisTotal: 999, devisSnapshot: { version: 1, amounts: { total: 100 } } };
+  const zero = { ...quoted, id: 'zero', devisTotal: null, devisSnapshot: { amounts: { total: 0 } } };
+  const items = [draft, paidMismatch, zero], models = new Map(items.map(row => [row.id, model(row, base)]));
+  for (const view of ['daily', 'departures']) {
+    const columns = TABLE_COLUMNS[view].filter(column => ['optimizedWeight', 'requested'].includes(column.key));
+    assert.equal(columns.find(column => column.key === 'requested').financial, true);
+    assert.equal(columns.find(column => column.key === 'requested').priceKind, 'quote');
+    const rows = buildDossierTableExportRows(items, [], models, view, columns);
+    assert.equal(rows[0]['Prix du devis'], '83,47 € · Brouillon');
+    assert.equal(rows[1]['Prix du devis'], '100,00 € · À revoir');
+    assert.equal(rows[2]['Prix du devis'], 0);
+    assert.equal(rows[0]['Poids final (kg)'], 2);
+  }
+  for (const key of ['requested', 'paid', 'remaining']) assert.equal(TABLE_COLUMNS.payments.find(column => column.key === key).financial, true);
 });

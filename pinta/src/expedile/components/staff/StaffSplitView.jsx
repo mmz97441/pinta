@@ -13,8 +13,9 @@ import { findColisByReference, normalizeColisReference } from '../../lib/supabas
 import { buildDossierTableModel, defineDossierTableColumn, isDossierTableColumnSortable, sortDossierTableRows, dossierTableSortDirectionLabel } from '../../domain/dossierTable';
 import { staffAvailable, sortWorkActions, workActionUrl } from '../../domain/personalWork';
 import DossierColumnOptions, { DossierColumnVisibility } from './DossierColumnOptions';
+import DossierHorizontalScroll from './DossierHorizontalScroll';
 import useDossierTablePreferences from '../../hooks/useDossierTablePreferences';
-import { COLUMN_FILTER_PREFIX, readColumnFilters, filterDossierTableRows, columnFilterLabel, dossierColumnSuggestions } from '../../domain/dossierTablePreferences';
+import { COLUMN_FILTER_PREFIX, DOSSIER_TEXT_SIZES, readColumnFilters, filterDossierTableRows, columnFilterLabel, dossierColumnSuggestions } from '../../domain/dossierTablePreferences';
 import { TABLE_VIEWS, TABLE_COLUMNS, DossierTableHead, DossierTableRow, DossierTableCard } from './DossierTableRows';
 
 // ── Pipeline cards (filters) ────────────────────────────────────────────────
@@ -149,8 +150,8 @@ export default function StaffColisPage() {
   const canSeePayments = ['perm_finances_voir_total', 'perm_colis_calculer_devis', 'perm_colis_envoyer_devis', 'perm_colis_confirmer_paiement'].some(permission => can(permission));
   const tableRequested = TABLE_VIEWS.some(view => view.key === searchParams.get('table')) ? searchParams.get('table') : 'daily';
   const tableView = tableRequested === 'payments' && !canSeePayments ? 'daily' : tableRequested;
-  const allColumns = TABLE_COLUMNS[tableView];
-  const { widths, setWidth, resetWidths, visibleKeys, setColumnVisible, resetColumns } = useDossierTablePreferences(auth?.u?.id, tableView, allColumns);
+  const allColumns = useMemo(() => TABLE_COLUMNS[tableView].filter(column => !column.financial || canSeePayments), [tableView, canSeePayments]);
+  const { widths, setWidth, resetWidths, visibleKeys, setColumnVisible, resetColumns, textSize, setTextSize } = useDossierTablePreferences(auth?.u?.id, tableView, allColumns);
   const visibleSignature = visibleKeys.join('|');
   const displayColumns = useMemo(() => allColumns.filter(column => visibleSignature.split('|').includes(column.key)), [allColumns, visibleSignature]);
   const sortableColumns = displayColumns.filter(isDossierTableColumnSortable);
@@ -162,9 +163,11 @@ export default function StaffColisPage() {
   useEffect(() => {
     const invalid = [...searchParams.keys()].filter(key => key.startsWith(COLUMN_FILTER_PREFIX) && !columnFilters[key.slice(COLUMN_FILTER_PREFIX.length)]);
     const requestedSort = searchParams.get('sort');
-    if (requestedSort && allColumns.some(column => column.key === requestedSort) && !displayColumns.some(column => column.key === requestedSort)) invalid.push('sort', 'dir');
+    const knownColumn = TABLE_COLUMNS[tableView].find(column => column.key === requestedSort);
+    const forbiddenColumn = Object.values(TABLE_COLUMNS).flat().find(column => column.key === requestedSort && column.financial && !canSeePayments);
+    if (requestedSort && (knownColumn || forbiddenColumn) && !displayColumns.some(column => column.key === requestedSort)) invalid.push('sort', 'dir');
     if (invalid.length) setSearchParams(previous => { const next = new URLSearchParams(previous); invalid.forEach(key => next.delete(key)); return next; }, { replace: true });
-  }, [searchParams, columnFilters, setSearchParams, allColumns, displayColumns]);
+  }, [searchParams, columnFilters, setSearchParams, tableView, canSeePayments, displayColumns]);
   const tableStyle = { width: 40 + displayColumns.reduce((sum, column) => sum + widths[column.key], 0), '--dossier-ref-width': `${widths.ref}px`, '--dossier-client-width': `${widths.client}px`, '--dossier-client-left': `${40 + widths.ref}px` };
 
   // Keep another view's sort in the URL, but never sort on invisible or
@@ -197,7 +200,8 @@ export default function StaffColisPage() {
   const exportRows = async rows => {
     if (!canExportView || exportBusy) return;
     setExportError(''); setExportBusy(true);
-    try { await exportDossierTableExcel(rows, clients, models, tableView, displayColumns); }
+    const exportColumns = displayColumns.filter(column => !column.financial || can('perm_finances_exporter'));
+    try { await exportDossierTableExcel(rows, clients, models, tableView, exportColumns); }
     catch (error) { setExportError(error.message || 'Export impossible. Réessayez.'); }
     finally { setExportBusy(false); }
   };
@@ -297,9 +301,9 @@ export default function StaffColisPage() {
         case 'date_asc':
           return sort(defaultDateColumn, 'asc');
         case 'total_desc':
-          return sort(TABLE_COLUMNS.payments.find(column => column.key === 'requested'), 'desc');
+          return sort(TABLE_COLUMNS[tableView].find(column => column.key === 'requested'), 'desc');
         case 'total_asc':
-          return sort(TABLE_COLUMNS.payments.find(column => column.key === 'requested'), 'asc');
+          return sort(TABLE_COLUMNS[tableView].find(column => column.key === 'requested'), 'asc');
         case 'ref_asc':
           return sort(TABLE_COLUMNS[tableView].find(column => column.key === 'ref'), 'asc');
     }
@@ -389,7 +393,7 @@ export default function StaffColisPage() {
 
 
   return (
-    <div className="dossier-list h-full min-w-0 flex flex-col">
+    <div className="dossier-list h-full min-h-0 min-w-0 flex flex-col" style={{ '--dossier-text-size': `${textSize}px`, '--dossier-small-text-size': `${Math.max(14, textSize - 2)}px` }}>
 
       <header className="max-h-[55dvh] shrink-0 space-y-3 overflow-y-auto overscroll-contain border-b border-gray-200 bg-white px-4 py-4">
         <h1 className="text-xl font-bold text-gray-900">Dossiers d’expédition</h1>
@@ -438,7 +442,11 @@ export default function StaffColisPage() {
           {activeFilters.map(filter => <button key={filter.key} aria-label={`Retirer le filtre ${filter.label}`} onClick={() => setParam(filter.key, null)} className="inline-flex min-h-11 max-w-full items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-left text-sm text-gray-700"><span className="break-words">{filter.label}</span><X size={14} className="shrink-0" /></button>)}
           <button onClick={clearFilters} className="min-h-11 px-2 text-sm font-semibold brand-t underline">Retirer les filtres</button>
         </div>}
-        <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-gray-600"><span role="status">{sorted.length} dossier(s) affiché(s)</span><span className="hidden sm:inline">{tableView === 'daily' ? 'Une ligne par expédition · responsable de la tâche affichée' : tableView === 'payments' ? 'Montants demandés au client et règlements enregistrés' : 'Départs affectés et vérifications restantes'}</span></div>
+        <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-gray-600">
+          <span role="status">{sorted.length} dossier(s) affiché(s)</span>
+          <span className="hidden sm:inline">{tableView === 'daily' ? 'Une ligne par expédition · responsable de la tâche affichée' : tableView === 'payments' ? 'Montants demandés au client et règlements enregistrés' : 'Départs affectés et vérifications restantes'}</span>
+          <label className="dossier-text-size">Texte<select aria-label="Taille du texte des dossiers" value={textSize} onChange={event => setTextSize(Number(event.target.value))}>{DOSSIER_TEXT_SIZES.map(size => <option key={size.value} value={size.value}>{size.label}</option>)}</select></label>
+        </div>
         {sortColumn && <p role="status" className="text-sm text-gray-600">Tri : {sortColumn.label} · {dossierTableSortDirectionLabel(sortColumn, sortDir)}{viewMode !== 'priority' ? ' · dans chaque groupe' : ''}</p>}
         {workFilter === 'messages' && <button onClick={() => navigate('/conversations')} className="min-h-11 rounded-lg border px-3 text-sm font-semibold">Ouvrir les conversations et messages à rattacher</button>}
         {exactReference && <section aria-label="Recherche de référence dans tous les dossiers" className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm">
@@ -518,11 +526,12 @@ export default function StaffColisPage() {
       )}
 
       {exportError && <p role="alert" className="px-4 py-2 text-sm text-red-700">{exportError}</p>}
+      <DossierHorizontalScroll scrollRef={listScrollRef} layoutKey={`${tableView}:${tableStyle.width}:${visibleSignature}:${sorted.length}:${textSize}`} />
       {/* Main area: table + detail side by side */}
       <div className="flex-1 flex min-h-0">
 
         {/* Table (scrollable) */}
-        <div ref={listScrollRef} role="region" aria-label="Tableau des dossiers" tabIndex={0} className="min-w-0 flex-1 overflow-y-auto overflow-x-auto">
+        <div id="dossier-table-scroll" ref={listScrollRef} role="region" aria-label="Tableau des dossiers" tabIndex={0} className="min-w-0 flex-1 overflow-y-auto overflow-x-auto">
 
           {(() => {
             const groups = viewMode === 'envoi' ? groupedByEnvoi : viewMode === 'statut' ? groupedByStatut : sorted.length ? [{ label: 'Ordre de traitement', icon: Package, color: BRAND.navy, colis: sorted }] : [];

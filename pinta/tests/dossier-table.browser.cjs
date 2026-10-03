@@ -326,9 +326,9 @@ async function main() {
       const query=new URLSearchParams({'col.remaining':JSON.stringify({mode:'min',value:'999'}),'col.secret':'{"mode":"contains","value":"hidden"}','col.ref':'broken'});
       await open(f,query.toString());await waitIds(f,[P,P2,P3,P4,P5,P6]);
       await f.page.waitForURL(url=>![...url.searchParams.keys()].some(key=>key.startsWith('col.')));
-      await selectPreset(f,'Paiements','payments');await filterColumn(f,'requested','min','50');await waitIds(f,[P4,P5,P6]);
+      await selectPreset(f,'Paiements','payments');await filterColumn(f,'paid','min','20');await waitIds(f,[P4,P5,P6]);
       await selectPreset(f,'Travail quotidien','daily');await waitIds(f,[P,P2,P3,P4,P5,P6]);
-      await f.page.waitForURL(url=>!url.searchParams.has('col.requested'));
+      await f.page.waitForURL(url=>!url.searchParams.has('col.paid'));
       await assertNoBusinessChange(f,before);
     });
     await scenario('forced-finance-column-filter-does-not-grant-finance-access',async f=>{
@@ -463,9 +463,9 @@ async function main() {
         await sort(key,direction);assert.deepEqual((await orderedIds(f)).slice(0,3),expected,`${key} sorts real numbers/dates, not their formatted labels`);
         assert.deepEqual((await orderedIds(f)).slice(3).sort(),[P,P2,P3].sort(),`${key}: unknowns stay last even descending`);
       }
-      await sort('requested','desc');await f.page.reload();await row(f,P4).waitFor();assert.deepEqual((await orderedIds(f)).slice(0,3),[P4,P6,P5]);
-      await selectPreset(f,'Départs','departures');assert.equal(new URL(f.page.url()).searchParams.get('sort'),'requested');
-      assert.equal(await f.page.locator('thead th[aria-sort="descending"]').count(),0,'An unrelated view does not pretend to sort an invisible amount.');
+      await sort('sentAt','desc');await f.page.reload();await row(f,P4).waitFor();assert.deepEqual((await orderedIds(f)).slice(0,3),[P4,P6,P5]);
+      await selectPreset(f,'Départs','departures');assert.equal(new URL(f.page.url()).searchParams.get('sort'),'sentAt');
+      assert.equal(await f.page.locator('thead th[aria-sort="descending"]').count(),0,'An unrelated view does not pretend to sort an invisible quote-sent date.');
       await selectPreset(f,'Paiements','payments');assert.deepEqual((await orderedIds(f)).slice(0,3),[P4,P6,P5]);
       if(await f.page.getByRole('button',{name:'Fermer les filtres',exact:true}).count())await f.page.getByRole('button',{name:'Fermer les filtres',exact:true}).click();await f.page.screenshot({path:`${output}/payments-sorted-descending.png`,fullPage:true});
       await assertNoBusinessChange(f,before);
@@ -473,9 +473,9 @@ async function main() {
     await scenario('mobile-sort-menu-offers-all-data-columns-in-every-view-and-both-directions',async f=>{
       await f.page.setViewportSize({width:390,height:844});const before=structuredClone(f.tables.colis);await open(f);
       for(const [label,view,keys] of [
-        ['Travail quotidien','daily',['ref','client','receivedAt','statusLabel','paymentState','statut','owner','casier','cartons','optimizedDimensions']],
+        ['Travail quotidien','daily',['ref','client','receivedAt','statusLabel','paymentState','statut','owner','casier','cartons','optimizedDimensions','optimizedWeight','requested']],
         ['Paiements','payments',['ref','client','receivedAt','statusLabel','paymentState','requested','paid','remaining','sentAt']],
-        ['Départs','departures',['ref','client','receivedAt','statusLabel','paymentState','departure','destination','packages','readiness','optimizedDimensions']],
+        ['Départs','departures',['ref','client','receivedAt','statusLabel','paymentState','departure','destination','packages','readiness','optimizedDimensions','optimizedWeight','requested']],
       ]) {
         await selectPreset(f,label,view);
         if(await f.page.getByRole('combobox',{name:'Tri par défaut',exact:true}).count()===0)await f.page.getByRole('button',{name:/^Filtres et options/}).click();
@@ -623,7 +623,7 @@ async function main() {
     },{unavailable:true});
     await scenario('excel-download-matches-visible-preset-and-recorded-amounts',async f=>{
       await open(f);await f.page.getByRole('button',{name:/^Filtres et options/}).click();
-      const expected={daily:['Référence','Client','Dernière réception','Statut du dossier','Paiement','Travail à faire','Qui s’en occupe','Casier','Cartons reçus','Dimensions optimisées'],payments:['Référence','Client','Dernière réception','Statut du dossier','Paiement','Demandé','Payé','Reste à payer','Devis envoyé le'],departures:['Référence','Client','Dernière réception','Statut du dossier','Paiement','Départ prévu','Destination','Colis à expédier','Prêt à partir ?','Dimensions optimisées']};
+      const expected={daily:['Référence','Client','Dernière réception','Statut du dossier','Paiement','Travail à faire','Qui s’en occupe','Casier','Cartons reçus','Dimensions finales','Poids final (kg)','Prix du devis'],payments:['Référence','Client','Dernière réception','Statut du dossier','Paiement','Demandé','Payé','Reste à payer','Devis envoyé le'],departures:['Référence','Client','Dernière réception','Statut du dossier','Paiement','Départ prévu','Destination','Colis à expédier','Prêt à partir ?','Dimensions finales','Poids final (kg)','Prix du devis']};
       for(const [label,view] of [['Travail quotidien','daily'],['Paiements','payments'],['Départs','departures']]) {
         await selectPreset(f,label,view);
         const downloaded=f.page.waitForEvent('download');await f.page.getByRole('button',{name:'Exporter 6 dossiers filtrés',exact:true}).click();

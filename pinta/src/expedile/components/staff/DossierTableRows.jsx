@@ -6,7 +6,7 @@ import { getDestByCP, getSecteurByCP } from '../../constants';
 import { actionWaiting, canWorkAction, staffAvailable } from '../../domain/personalWork';
 import { receptionCartonManifest } from '../../domain/reception';
 import { needsConversationAction } from '../../domain/conversations';
-import { TABLE_COLUMNS, dossierTableMissingAmountLabel, formatDossierTableDate, isDossierTableColumnSortable, dossierTableSortDirectionLabel } from '../../domain/dossierTable';
+import { TABLE_COLUMNS, dossierTableAmount, dossierTableAmountState, dossierTableMissingAmountLabel, formatDossierTableDate, isDossierTableColumnSortable, dossierTableSortDirectionLabel } from '../../domain/dossierTable';
 import { columnWidthBounds } from '../../domain/dossierTablePreferences';
 import TaskTakeButton from '../workspace/TaskTakeButton';
 import InvoiceReviewIndicator from '../ui/InvoiceReviewIndicator';
@@ -82,11 +82,15 @@ function CellContent({ column, c, client, model, onOpen, returnTo, showActionTit
     case 'statusLabel': return <span>{model.statusLabel || 'Statut à vérifier'}</span>;
     case 'paymentState': return <span>{model.payment?.stateLabel || 'À vérifier'}</span>;
     case 'optimizedDimensions': return model.optimized ? <span className="dossier-table-dimensions">{(model.optimizedDimensions || []).map((dimensions, index) => <span key={index}>{dimensions}</span>)}</span> : null;
+    case 'optimizedWeight': return model.optimizedWeight == null ? null : <span>{Number(model.optimizedWeight).toLocaleString('fr-FR', { maximumFractionDigits: 2 })}</span>;
     case 'statut': return <TaskSummary model={model} c={c} returnTo={returnTo} />;
     case 'owner': return <span>{model.ownerName || 'Non attribué'}</span>;
     case 'casier': return <span>{c.casier || 'À renseigner'}</span>;
     case 'cartons': return <span>{receptionCartonManifest(c).nbColis}</span>;
-    case 'requested': return <span className="dossier-table-money">{money(model.payment?.requested, dossierTableMissingAmountLabel(model.payment, 'requested'))}</span>;
+    case 'requested': {
+      const amount = dossierTableAmount(model, column), state = dossierTableAmountState(model, column);
+      return <div><span className="dossier-table-money">{money(amount, state || dossierTableMissingAmountLabel(model.payment, 'requested'))}</span>{amount !== null && state && <span className="dossier-table-secondary">{state}</span>}</div>;
+    }
     case 'paid': return <span className="dossier-table-money">{money(model.payment?.paid, dossierTableMissingAmountLabel(model.payment, 'paid'))}</span>;
     case 'remaining': {
       const amount = money(model.payment?.remaining, dossierTableMissingAmountLabel(model.payment, 'remaining'));

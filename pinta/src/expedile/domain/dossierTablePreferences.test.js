@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { TABLE_COLUMNS, buildDossierTableModel, buildDossierTableExportRows, sortDossierTableRows } from './dossierTable.js';
-import { clampColumnWidth, columnWidthsStorageKey, columnVisibilityStorageKey, sanitizeHiddenColumns, readColumnFilters, filterDossierTableRows, sanitizeColumnFilter, sanitizeColumnWidths, dossierColumnSuggestions } from './dossierTablePreferences.js';
+import { clampColumnWidth, columnWidthsStorageKey, columnVisibilityStorageKey, dossierTextSizeStorageKey, sanitizeDossierTextSize, DOSSIER_TEXT_SIZES, sanitizeHiddenColumns, readColumnFilters, filterDossierTableRows, sanitizeColumnFilter, sanitizeColumnWidths, dossierColumnSuggestions } from './dossierTablePreferences.js';
 
 const columns = TABLE_COLUMNS.daily;
 const column = key => columns.find(item => item.key === key);
@@ -18,9 +18,9 @@ test('optimized dimensions show every certified outgoing box, never received or 
   assert.deepEqual(models.get('prepared').optimizedDimensions, ['Colis 1 : 10,5 × 20 × 30 cm', 'Colis 2 : 40 × 50 × 60 cm']);
   for (const id of ['received', 'stale']) assert.deepEqual(models.get(id).optimizedDimensions, []);
   const exported = buildDossierTableExportRows(data, [], models, 'daily', columns);
-  assert.equal(exported[0]['Dimensions optimisées'], '');
-  assert.equal(exported[2]['Dimensions optimisées'], '');
-  assert.match(exported[1]['Dimensions optimisées'], /Colis 2 : 40 × 50 × 60 cm/);
+  assert.equal(exported[0]['Dimensions finales'], '');
+  assert.equal(exported[2]['Dimensions finales'], '');
+  assert.match(exported[1]['Dimensions finales'], /Colis 2 : 40 × 50 × 60 cm/);
   for (const direction of ['asc', 'desc']) assert.equal(sortDossierTableRows(data, { column: column('optimizedDimensions'), direction, models })[0].id, 'prepared');
 });
 
@@ -46,8 +46,9 @@ test('column filters combine with AND without changing the source scope or model
 
 test('unknown, hidden finance, action and malformed filters never hide rows', () => {
   const params = new URLSearchParams({ 'col.requested': JSON.stringify(filter('min', '100')), 'col.action': JSON.stringify(filter('contains', 'Consulter')), 'col.ref': '{broken', 'col.casier': JSON.stringify(filter('contains', 'A1')) });
-  assert.deepEqual(readColumnFilters(params, columns), { casier: filter('contains', 'A1') });
-  assert.deepEqual(apply({ requested: filter('min', '100'), action: filter('contains', 'Non attribué') }), ['received', 'prepared', 'stale']);
+  const authorizedColumns = columns.filter(item => !item.financial);
+  assert.deepEqual(readColumnFilters(params, authorizedColumns), { casier: filter('contains', 'A1') });
+  assert.deepEqual(filterDossierTableRows(data, { columns: authorizedColumns, models, filters: { requested: filter('min', '100'), action: filter('contains', 'Non attribué') } }).map(item => item.id), ['received', 'prepared', 'stale']);
   assert.equal(sanitizeColumnFilter(column('cartons'), filter('min', 'invalid')), null);
   assert.equal(sanitizeColumnFilter(TABLE_COLUMNS.payments.find(item => item.key === 'sentAt'), filter('min', '2026-02-30')), null);
 });
@@ -78,7 +79,7 @@ test('width preferences isolate user/view and bound corrupt or unsupported value
   assert.equal(clampColumnWidth(column('ref'), -5), 140);
   assert.equal(clampColumnWidth(column('ref'), 'invalid'), 160);
   assert.equal(clampColumnWidth(column('action'), 600), 280);
-  const values = sanitizeColumnWidths(columns, { ref: 220, requested: 400, action: 20, client: Infinity });
+  const values = sanitizeColumnWidths(columns.filter(item => !item.financial), { ref: 220, requested: 400, action: 20, client: Infinity });
   assert.equal(values.ref, 220); assert.equal(values.client, 200); assert.equal(values.action, 175);
   assert.equal(values.requested, undefined);
 });
@@ -106,5 +107,18 @@ test('hidden columns cannot filter or export values, while visible columns retai
   assert.deepEqual(selected.map(item => item.id), ['received']);
   const exported = buildDossierTableExportRows(selected, [], models, 'daily', visible);
   assert.equal(exported[0].Référence, 'EXP-RECU');
-  for (const label of ['Client', 'Action', 'Paiement', 'Dimensions optimisées']) assert.equal(Object.hasOwn(exported[0], label), false);
+  for (const label of ['Client', 'Action', 'Paiement', 'Dimensions finales']) assert.equal(Object.hasOwn(exported[0], label), false);
+});
+
+test('text size is readable, bounded, and isolated from widths, visibility, account and view', () => {
+  assert.deepEqual(DOSSIER_TEXT_SIZES.map(size => size.value), [14, 16, 18]);
+  for (const size of [14, 16, 18]) assert.equal(sanitizeDossierTextSize(size), size);
+  for (const invalid of [0, 10, 12, 15, 19, 100, null, undefined, '', '18', {}, Infinity]) assert.equal(sanitizeDossierTextSize(invalid), 16);
+  const key = dossierTextSizeStorageKey('one', 'daily');
+  assert.notEqual(key, dossierTextSizeStorageKey('two', 'daily'));
+  assert.notEqual(key, dossierTextSizeStorageKey('one', 'payments'));
+  assert.notEqual(key, columnWidthsStorageKey('one', 'daily'));
+  assert.notEqual(key, columnVisibilityStorageKey('one', 'daily'));
+  assert.equal(dossierTextSizeStorageKey(null, 'daily'), null);
+  assert.equal(dossierTextSizeStorageKey('one', 'unknown'), null);
 });

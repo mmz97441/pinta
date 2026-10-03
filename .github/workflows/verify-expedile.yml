@@ -79,6 +79,7 @@ jobs:
           node tests/payment-return.browser.cjs
           node tests/dossier-list-contrast.browser.cjs
           node tests/dossier-table.browser.cjs
+          node tests/dossier-table-comfort.browser.cjs
           node tests/parcel-reference-search.cjs
           node tests/reçu-documents-factures.cjs
           node tests/invoice-review-indicator.cjs
@@ -152,6 +153,7 @@ jobs:
             /tmp/pinta-payment-return
             /tmp/pinta-dossier-list-contrast
             /tmp/pinta-dossier-table
+            /tmp/pinta-dossier-table-comfort
             /tmp/pinta-receipt-flow
             /tmp/pinta-client-lightweight
             /tmp/pinta-task-message
