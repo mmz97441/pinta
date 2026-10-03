@@ -63,7 +63,11 @@ async function audit(f, name, include = '[data-testid="dossier-task-workspace"]'
    await dialog.getByRole('button',{name:'+ Ajouter un carton',exact:true}).click();
    const first=dialog.getByRole('region',{name:'Carton 1',exact:true}),second=dialog.getByRole('region',{name:'Carton 2',exact:true});
    await first.getByLabel('Numéro de suivi · carton 1',{exact:true}).fill('SCAN-FIRST');await first.getByLabel('Numéro de suivi · carton 1',{exact:true}).press('Enter');
+   await f.page.waitForFunction(()=>document.activeElement?.getAttribute('aria-label')==='Numéro de suivi · carton 2');
    assert.equal(await second.getByLabel('Numéro de suivi · carton 2',{exact:true}).evaluate(node=>node===document.activeElement),true);
+   await second.getByLabel('Numéro de suivi · carton 2',{exact:true}).fill('SCAN-SECOND');await second.getByLabel('Numéro de suivi · carton 2',{exact:true}).press('Enter');
+   await f.page.waitForFunction(()=>document.activeElement?.getAttribute('aria-label')==='Numéro de suivi · carton 3');
+   assert.equal(await dialog.getByRole('region',{name:'Carton 3',exact:true}).count(),1,'Scanning the last line creates and focuses the following carton exactly once.');
    await dialog.locator('summary').filter({hasText:'Compléments de réception'}).click();
    const camera=dialog.locator('input[type="file"][capture="environment"]'),file=dialog.getByLabel('Choisir une photo de réception',{exact:true});assert.equal(await camera.count(),1);assert.equal(await file.getAttribute('capture'),null);
    await file.setInputFiles({name:'reception-test.png',mimeType:'image/png',buffer:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6f0kAAAAASUVORK5CYII=','base64')});
@@ -93,15 +97,21 @@ async function audit(f, name, include = '[data-testid="dossier-task-workspace"]'
   });
   await scenario('correction-describes-real-quote-invalidation-without-navigation-mutation',async f=>{
    Object.assign(f.tables.colis[0],{statut:'devis_envoye',devis_brouillon:false,devis_total:70,devis_snapshot:{amounts:{total:70}}});
+   const before=structuredClone(f.tables.colis[0]);
    await open(f,'devis');
    await openTaskNavigation(f);await f.page.getByRole('button',{name:'Revenir aux factures',exact:true}).click();
    await openTaskNavigation(f);await f.page.getByLabel('Tâche du dossier',{exact:true}).selectOption('devis');
    assert.deepEqual(mutations(f),[]);
    await region(f).getByRole('button',{name:'Modifier le devis',exact:true}).click();
    const confirmation=region(f).getByRole('region',{name:'Reprise du devis',exact:true});
-   await confirmation.waitFor(); assert.match(await confirmation.innerText(),/articles, les taux, les frais et les mesures seront conservés/); assert.match(await confirmation.innerText(),/Aucun message ne sera envoyé/);
+   await confirmation.waitFor();const explanation=await confirmation.innerText();
+   assert.match(explanation,/corriger les articles, les taux OM \/ OMR et les frais/);
+   assert.match(explanation,/informations déjà enregistrées seront conservées/);
+   assert.match(explanation,/devis actuel et son éventuel lien de paiement seront retirés/);
+   assert.match(explanation,/vérifiez le montant puis choisissez d’envoyer le nouveau devis/);
+   assert.match(explanation,/Aucun message ne sera envoyé/);
    await confirmation.getByRole('button',{name:'Annuler',exact:true}).click();
-   assert.equal(f.tables.colis[0].statut,'devis_envoye'); assert.deepEqual(mutations(f),[]);
+   assert.deepEqual(f.tables.colis[0],before);assert.equal(f.requests.some(request=>request.path.endsWith('/correct-colis-task')),false); assert.deepEqual(mutations(f),[]);
    await region(f).getByRole('button',{name:'Corrections',exact:true}).click();
    await region(f).getByRole('button',{name:'Archiver',exact:true}).click();
    await f.page.getByRole('dialog').filter({hasText:/masqué des listes courantes/}).getByRole('button',{name:'Annuler',exact:true}).click();

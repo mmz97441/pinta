@@ -106,3 +106,23 @@ export function receptionDossierReturn(value) {
   }
   return '/colis';
 }
+
+/** Per-carton arrival evidence is separate from carton identity/measurements.
+ * A dossier's initial date never dates every later carton by implication. */
+export function receptionDateSummary(dossier = {}, { now = Date.now() } = {}) {
+  const length = value => Array.isArray(value) ? value.length : 0;
+  const totalCount = Math.max(Number(dossier.nbColis) || 0, length(dossier.trackingsDetail), length(dossier.trackings), length(dossier.dimsParColis), 1);
+  const evidence = Array.isArray(dossier.receptionDates) ? dossier.receptionDates : [];
+  const sources = new Set(['server', 'append_receipt', 'initial_receipt', 'audit']);
+  const dates = Array.from({ length: totalCount }, (_, index) => {
+    const entry = evidence[index], value = entry?.receivedAt;
+    if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(value)
+      || !sources.has(entry?.source) || !Number.isFinite(Date.parse(value)) || Date.parse(value) > now
+      || new Date(`${value.slice(0, 10)}T00:00:00Z`).toISOString().slice(0, 10) !== value.slice(0, 10)) return null;
+    return { receivedAt: value, source: entry.source };
+  });
+  const known = dates.filter(Boolean).sort((a, b) => Date.parse(a.receivedAt) - Date.parse(b.receivedAt));
+  return { dates, totalCount, knownCount: known.length, complete: known.length === totalCount,
+    firstReceivedAt: known[0]?.receivedAt || null, lastReceivedAt: known.at(-1)?.receivedAt || null,
+    error: dossier.receptionDatesError === true };
+}

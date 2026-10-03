@@ -29,8 +29,13 @@
 .dossier-overview-link { display: inline-flex; align-items: center; justify-content: flex-start; gap: 5px; color: var(--brand-text); font-size: .875rem; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; text-align: left; }
 .dossier-overview-link svg { flex-shrink: 0; }
 .dossier-overview-trackings { display: flex; align-items: center; gap: 6px 12px; flex-wrap: wrap; margin-top: 8px; padding: 8px 0; border-top: 1px solid var(--border-subtle); font-size: .875rem; }
-.dossier-overview-trackings ul { display: flex; flex-wrap: wrap; gap: 6px 12px; min-width: 0; list-style: none; padding: 0; }
-.dossier-overview-trackings li { display: flex; align-items: baseline; gap: 4px 6px; flex-wrap: wrap; min-width: 0; }
+.dossier-overview-arrivals-title { font-weight: 600; }
+.dossier-overview-trackings ul { display: flex; flex-wrap: wrap; gap: 8px; min-width: 0; list-style: none; padding: 0; }
+.dossier-overview-trackings li { display: flex; align-items: baseline; gap: 4px 8px; flex-wrap: wrap; min-width: 0; border-left: 2px solid var(--border-subtle); padding-left: 8px; }
+.dossier-overview-arrival-date { font-variant-numeric: tabular-nums; color: var(--text-secondary); }
+.dossier-overview-more-arrivals { flex-basis: 100%; }
+.dossier-overview-more-arrivals summary { display: flex; align-items: center; cursor: pointer; color: var(--brand-text); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+.dossier-overview-more-arrivals ul { padding-bottom: 8px; }
 .dossier-overview-tracking-label { color: var(--text-secondary); }
 .dossier-overview-tracking-number { font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .dossier-overview-alerts { margin: 4px 0 8px; padding: 0 10px; border: 1px solid var(--border-subtle); border-left: 3px solid var(--warning, #c29243); border-radius: 8px; font-size: .875rem; }

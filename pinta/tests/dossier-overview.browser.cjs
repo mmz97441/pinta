@@ -9,7 +9,7 @@ const results = [];
 const overview = f => f.page.getByTestId('dossier-overview');
 const step = (f,id) => overview(f).locator(`[data-step="${id}"]`);
 // The invoice context RPC is SQL STABLE: its POST only reads review evidence.
-const readOnlyRpcs = new Set(['/rest/v1/rpc/refresh_staff_work_actions','/rest/v1/rpc/get_invoice_review_context']);
+const readOnlyRpcs = new Set(['/rest/v1/rpc/refresh_staff_work_actions','/rest/v1/rpc/get_invoice_review_context','/rest/v1/rpc/get_reception_dates']);
 const businessWrites = f => f.requests.filter(request => ['POST','PATCH','DELETE'].includes(request.method) && request.path.startsWith('/rest/v1/') && !readOnlyRpcs.has(request.path));
 const originals = f => ({colis:structuredClone(f.tables.colis),factures:structuredClone(f.tables.factures),lignes:structuredClone(f.tables.lignes)});
 function unchanged(f, before) { assert.deepEqual(originals(f),before); assert.deepEqual(businessWrites(f),[]); }
@@ -26,6 +26,14 @@ function paid(f) {
 function received(f) {
   paid(f);Object.assign(f.tables.colis[0],{statut:'mesure',feu_vert:'en_attente',feu_vert_date:null,devis_total:0,quote_version:0,devis_envoye_le:null,paiement_montant:null,paiement_date:null,
     final_packages:[],outgoing_parcel_count:0,final_measurements_version:null,final_measurements_at:null,fin_l:null,fin_w:null,fin_h:null,fin_p:null});
+}
+function datedCartons(f) {
+  paid(f);const parcel=f.tables.colis[0];parcel.nb_colis=4;
+  parcel.dims_par_colis=Array.from({length:4},()=>({dimL:30,dimW:20,dimH:10,poids:1}));
+  parcel.trackings=['TEST-001','TEST-003'];
+  parcel.trackings_detail=[{number:'TEST-001',fournisseur:'Boutique A'},{number:'',fournisseur:'Boutique B'},{number:'TEST-003',fournisseur:'Boutique C'},{number:'',fournisseur:''}];
+  parcel.date_reception='2026-09-08T08:00:00Z';
+  parcel.reception_dates=[{receivedAt:'2026-09-29T07:00:00Z',source:'server'},{receivedAt:'2026-09-30T21:30:00Z',source:'append_receipt'},null,{receivedAt:'2026-10-01T06:00:00Z',source:'append_receipt'}];
 }
 async function open(f, section='expedition') {await f.page.goto(`${base}/colis/${ids.P}?section=${section}`);await overview(f).waitFor();}
 async function main() {
@@ -46,12 +54,47 @@ async function main() {
       assert.equal(await overview(f).getByRole('button',{name:/Corriger.*mesures|Modifier.*mesures/i}).count(),0,'Paid measurements stay protected.');
       unchanged(f,before);
     });
-    await scenario('tracking-summary-shows-first-two-and-opens-the-complete-received-manifest',async f=>{
+    await scenario('tracking-summary-shows-first-two-and-expands-the-other-cartons-inline',async f=>{
       paid(f);const parcel=f.tables.colis[0];parcel.nb_colis=3;parcel.dims_par_colis.push({dimL:20,dimW:20,dimH:20,poids:1});parcel.trackings.push('TEST-003');parcel.trackings_detail.push({number:'TEST-003',fournisseur:'Boutique C'});
       const before=originals(f);await f.login();await open(f);
       const trackings=overview(f).locator('[data-overview="trackings"]');assert.match(await trackings.innerText(),/TEST-001/);assert.match(await trackings.innerText(),/TEST-002/);assert.doesNotMatch(await trackings.innerText(),/TEST-003/);
-      await trackings.getByRole('button',{name:'Consulter les 3 suivis reçus',exact:true}).click();
-      await f.page.getByRole('dialog',{name:'Contexte du dossier',exact:true}).getByText('TEST-003',{exact:true}).waitFor();unchanged(f,before);
+      await trackings.locator('summary').filter({hasText:'Voir l’autre carton'}).click();
+      await trackings.getByText('TEST-003',{exact:true}).waitFor();assert.equal(await f.page.getByRole('dialog',{name:'Contexte du dossier',exact:true}).count(),0);unchanged(f,before);
+    });
+    for(const width of [1440,390])await scenario(`individual-arrival-dates-include-untracked-and-extra-cartons-${width}`,async f=>{
+      datedCartons(f);const before=originals(f);await f.page.setViewportSize({width,height:width===390?844:1000});await f.login();await open(f);
+      const arrivals=overview(f).locator('[data-overview="trackings"]');
+      const carton=n=>arrivals.locator(`[data-received-carton="${n}"]`);
+      assert.match(await arrivals.innerText(),/Arrivées à l’entrepôt/);
+      assert.match(await carton(1).innerText(),/Carton 1.*TEST-001.*29\/09\/2026/s);
+      assert.match(await carton(2).innerText(),/Carton 2.*01\/10\/2026/s,'The untracked carton keeps its position and its own arrival date in the Réunion timezone.');
+      assert.doesNotMatch(await carton(2).innerText(),/TEST-001|TEST-003|08\/09\/2026/);
+      assert.equal(await carton(3).isVisible(),false);
+      const url=f.page.url();await arrivals.locator('summary').filter({hasText:'Voir les 2 autres cartons'}).click();
+      await carton(3).waitFor();await carton(4).waitFor();
+      assert.match(await carton(3).innerText(),/TEST-003/);assert.match(await carton(3).innerText(),/Date non renseignée/);assert.equal(await carton(3).locator('time').count(),0,'A dossier date never invents an arrival for a carton with no evidence.');
+      assert.match(await carton(4).innerText(),/Carton 4.*01\/10\/2026/s);assert.equal(f.page.url(),url);
+      assert.equal(await f.page.getByRole('dialog',{name:'Contexte du dossier',exact:true}).count(),0);
+      assert.equal(await f.page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false);
+      await arrivals.scrollIntoViewIfNeeded();await f.page.screenshot({path:`${output}/carton-arrival-dates-${width}.png`,fullPage:true});
+      unchanged(f,before);
+    });
+    await scenario('legacy-cartons-without-evidence-never-copy-the-dossier-arrival-date',async f=>{
+      datedCartons(f);f.tables.colis[0].reception_dates=[null,null,null,null];const before=originals(f);await f.login();await open(f);
+      const arrivals=overview(f).locator('[data-overview="trackings"]');await arrivals.locator('summary').filter({hasText:'Voir les 2 autres cartons'}).click();
+      for(let number=1;number<=4;number++){
+        const carton=arrivals.locator(`[data-received-carton="${number}"]`);assert.match(await carton.innerText(),/Date non renseignée/);assert.equal(await carton.locator('time').count(),0);
+      }
+      assert.doesNotMatch(await arrivals.innerText(),/08\/09\/2026/);unchanged(f,before);
+    });
+    await scenario('historical-date-read-failure-keeps-cartons-visible-and-explains-recovery',async f=>{
+      datedCartons(f);f.tables.colis[0].reception_dates=null;
+      await f.context.route('**/rest/v1/rpc/get_reception_dates',route=>route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({message:'Dates indisponibles pour cet essai.'})}));
+      const before=originals(f);await f.login();await open(f);
+      const arrivals=overview(f).locator('[data-overview="trackings"]');
+      await arrivals.getByRole('status').filter({hasText:'Anciennes dates indisponibles. Actualisez le dossier.'}).waitFor();
+      assert.match(await arrivals.innerText(),/Carton 1/);assert.match(await arrivals.innerText(),/Carton 2/);assert.match(await arrivals.innerText(),/Date non renseignée/);
+      assert.doesNotMatch(await arrivals.innerText(),/08\/09\/2026/);unchanged(f,before);
     });
     await scenario('future-step-navigation-is-consultation-and-keeps-the-real-business-stage',async f=>{
       received(f);const before=originals(f);await f.login();await open(f,'accord');

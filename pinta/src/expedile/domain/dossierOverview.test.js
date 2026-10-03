@@ -259,3 +259,12 @@ test('the model is pure, bounded in alerts and changes no dossier, documents or 
   assert.equal(JSON.stringify(input), before); assert.equal(result.alerts.length, 2);
   assert.deepEqual(overview(input, config), result);
 });
+
+test('overview shows each proven carton arrival and leaves unknown dates explicit without dating optimized packages', () => {
+  const model = overview({ ...paid, receptionDates: [{ receivedAt: '2026-09-30T21:30:00Z', source: 'server' }, null] }, options);
+  assert.equal(model.received.boxes[0].receivedAt, '2026-09-30T21:30:00Z');
+  assert.equal(model.received.boxes[1].receivedAt, null); assert.equal(model.received.datesComplete, false);
+  assert.equal(model.received.datedCount, 1); assert.equal(model.received.latestDate, '2026-09-30T21:30:00Z');
+  assert.equal(model.received.date, reception.dateReception);
+  assert.equal('receivedAt' in model.optimization.boxes[0], false);
+});

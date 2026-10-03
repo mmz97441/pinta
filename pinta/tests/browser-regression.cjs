@@ -228,6 +228,7 @@ async function setup(browser, role, { failTable = null } = {}) {
         invoices: tables.factures.filter(invoice => invoice.colis_id === input.p_colis_id).map(invoice => ({ factureId: invoice.id, reviewToken: 'fixture-review-' + invoice.id, extraction: null, draft: null, documentHash: null, duplicateCandidateIds: [] })),
         unlinkedLines: tables.lignes.filter(line => line.colis_id === input.p_colis_id && !line.facture_id),
       };
+      else if (rpc === 'get_reception_dates') body = tables.colis.filter(parcel=>(input.p_colis_ids || []).includes(parcel.id)).map(parcel=>({colis_id:parcel.id,reception_dates:parcel.reception_dates || []}));
       else if (rpc === 'refresh_staff_work_actions') body = null;
       else if (rpc === 'save_message_template') {
         const existing = tables.message_templates.find(row => row.key === input.p_key && row.canal === input.p_canal);

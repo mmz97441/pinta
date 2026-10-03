@@ -217,3 +217,24 @@ test('clients cannot become staff through user-editable auth metadata', async ()
   assert.equal(identity.type, 'client');
   assert.equal(identity.cl.id, 'c');
 });
+
+test('carton date evidence loads in bounded batches without leaking a ledger or replacing supplied server dates', async () => {
+  const rows = Array.from({ length: 205 }, (_, i) => ({ id: String(i).padStart(4, '0'), archive: false, nb_colis: 2, reception_dates: null }));
+  const db = client({ colis: rows }); const batches = [];
+  db.rpc = async (name, args) => {
+    assert.equal(name, 'get_reception_dates'); batches.push(args.p_colis_ids);
+    return { data: args.p_colis_ids.map(id => ({ colis_id: id, reception_dates: [null, { receivedAt: '2026-10-02T10:00:00Z', source: 'append_receipt' }] })), error: null };
+  };
+  const data = await service(db); const result = await data.fetchColis();
+  assert.equal(result.length, 205); assert.deepEqual(batches.map(ids => ids.length), [100, 100, 5]);
+  assert.equal(result[0].receptionDates[0], null); assert.equal(result[0].receptionDates[1].source, 'append_receipt');
+  assert.equal(result[0].receptionDatesError, false);
+  assert.equal(db.calls.some(call => call.table === 'reception_append_receipts'), false);
+});
+test('a failed date evidence request keeps the dossier and marks only its date evidence unavailable', async () => {
+  const db = client({ colis: [{ id: 'date-error', archive: false, nb_colis: 2, reception_dates: null }] });
+  db.rpc = async () => ({ data: null, error: { code: '503', message: 'unavailable' } });
+  const data = await service(db); const result = await data.fetchColis();
+  assert.equal(result.length, 1); assert.equal(result[0].id, 'date-error');
+  assert.equal(result[0].receptionDatesError, true); assert.equal(result[0].receptionDates, null);
+});

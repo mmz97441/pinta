@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { X, FileText, Search, UserPlus, Package, Camera } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -25,6 +25,15 @@ const receptionDraftDossier = dossier => {
 
 function ReceptionInput({ label, ...props }) {
   return <label className="block min-w-0"><span className="block text-xs font-semibold text-gray-600 mb-1">{label}</span><input {...props} /></label>;
+}
+
+function focusTrackingInput(input) {
+  if (!input?.isConnected) return false;
+  const details = input.closest('details');
+  if (details) details.open = true;
+  input.focus();
+  input.scrollIntoView({ block: 'center' });
+  return document.activeElement === input;
 }
 
 function CartonFields({ lines, dimensions, setTracking, setDimension, addTracking, removeTracking, inputRefs, dimensionRefs, onScan, issues = [], cartonOffset = 0 }) {
@@ -160,8 +169,10 @@ export default function ColisModal({ open, onClose, initialColisId, initialClien
     input?.focus(); input?.scrollIntoView({ block: 'center', behavior: 'smooth' });
     setPendingMeasureFocus(null);
   }, [open, saving, pendingMeasureFocus]);
-  useEffect(() => {
-    if (pendingFocus !== null && open) { const input = trackingRefs.current[pendingFocus]; const details = input?.closest('details'); if (details) details.open = true; input?.focus(); setPendingFocus(null); }
+  useLayoutEffect(() => {
+    // Focus a newly created row after its refs exist, before another scanner
+    // event can race the deferred effect from the previous row.
+    if (pendingFocus !== null && open && focusTrackingInput(trackingRefs.current[pendingFocus])) setPendingFocus(null);
   }, [nf.trackingLines.length, open, pendingFocus]);
   useEffect(() => {
     if (!nf.photoFile) { setPhotoPreview(null); return; }
@@ -210,7 +221,10 @@ export default function ColisModal({ open, onClose, initialColisId, initialClien
     if (event.key !== 'Enter') return;
     event.preventDefault();
     if (!nf.trackingLines[idx].tracking.trim()) return;
-    if (nf.trackingLines[idx + 1]) setPendingFocus(idx + 1);
+    if (nf.trackingLines[idx + 1]) {
+      if (focusTrackingInput(trackingRefs.current[idx + 1])) setPendingFocus(null);
+      else setPendingFocus(idx + 1);
+    }
     else addTracking();
   };
   const setDimension = (index, key, value) => {

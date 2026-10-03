@@ -4,7 +4,7 @@ import { hasCurrentPreparation } from './preparationReadiness.js';
 import { departureReadiness } from './departureReadiness.js';
 import { actionPriority, actionWaiting, canWorkAction, sortWorkActions } from './personalWork.js';
 import { workTitle, workSituation } from './collaborativeWork.js';
-import { receptionCartonManifest } from './reception.js';
+import { receptionCartonManifest, receptionDateSummary } from './reception.js';
 
 const SORT_TYPES = new Set(['text', 'number', 'date']);
 const naturalTextOrder = new Intl.Collator('fr', { numeric: true, sensitivity: 'base' });
@@ -27,16 +27,17 @@ const actionColumn = defineDossierTableColumn({ key: 'action', label: 'Action', 
 const statusColumn = defineDossierTableColumn({ key: 'statusLabel', label: 'Statut du dossier', sort: { type: 'text', value: ({ model }) => model?.statusLabel } });
 const paymentStateColumn = defineDossierTableColumn({ key: 'paymentState', label: 'Paiement', sort: { type: 'text', value: ({ model }) => model?.payment?.stateLabel } });
 const dimensionsColumn = defineDossierTableColumn({ key: 'optimizedDimensions', label: 'Dimensions optimisées', sort: { type: 'text', value: ({ model }) => model?.optimizedDimensions?.join(' · ') || null } });
+const receptionDateColumn = defineDossierTableColumn({ key: 'receivedAt', label: 'Dernière réception', sort: { type: 'date', value: ({ model }) => model?.reception?.lastReceivedAt } });
 const financialColumn = (key, label) => defineDossierTableColumn({ key, label, align: 'right', sort: { type: 'number', value: ({ model }) => model?.payment?.[key] } });
 export const TABLE_COLUMNS = Object.freeze({
-  daily: Object.freeze([refColumn, clientColumn, statusColumn, paymentStateColumn,
+  daily: Object.freeze([refColumn, clientColumn, receptionDateColumn, statusColumn, paymentStateColumn,
     defineDossierTableColumn({ key: 'statut', label: 'Travail à faire', sort: { type: 'text', value: ({ model }) => model?.title === 'Tâches à actualiser' ? null : model?.title } }),
     defineDossierTableColumn({ key: 'owner', label: 'Qui s’en occupe', filter: { text: ({ model }) => model?.ownerName }, sort: { type: 'text', value: ({ model }) => ['—', 'Non attribué', 'Membre de l’équipe'].includes(model?.ownerName) ? null : model?.ownerName } }),
     defineDossierTableColumn({ key: 'casier', label: 'Casier', filter: { text: ({ dossier }) => dossier.casier || 'À renseigner' }, sort: { type: 'text', value: ({ dossier }) => dossier.casier } }),
     defineDossierTableColumn({ key: 'cartons', label: 'Cartons reçus', sort: { type: 'number', value: ({ dossier }) => receptionCartonManifest(dossier).nbColis } }), dimensionsColumn, actionColumn]),
-  payments: Object.freeze([refColumn, clientColumn, statusColumn, paymentStateColumn, financialColumn('requested', 'Demandé'), financialColumn('paid', 'Payé'), financialColumn('remaining', 'Reste à payer'),
+  payments: Object.freeze([refColumn, clientColumn, receptionDateColumn, statusColumn, paymentStateColumn, financialColumn('requested', 'Demandé'), financialColumn('paid', 'Payé'), financialColumn('remaining', 'Reste à payer'),
     defineDossierTableColumn({ key: 'sentAt', label: 'Devis envoyé le', sort: { type: 'date', value: ({ model }) => model?.payment?.sentAt } }), actionColumn]),
-  departures: Object.freeze([refColumn, clientColumn, statusColumn, paymentStateColumn,
+  departures: Object.freeze([refColumn, clientColumn, receptionDateColumn, statusColumn, paymentStateColumn,
     defineDossierTableColumn({ key: 'departure', label: 'Départ prévu', sort: { type: 'date', value: ({ model, envoi }) => /^(Prévu le|Date dépassée)/.test(model?.departure?.label || '') ? envoi?.date : null } }),
     defineDossierTableColumn({ key: 'destination', label: 'Destination', sort: { type: 'text', value: ({ model }) => model?.departure?.destination === 'Destination à préciser' ? null : model?.departure?.destination } }),
     defineDossierTableColumn({ key: 'packages', label: 'Colis à expédier', sort: { type: 'number', value: ({ dossier, model }) => model?.optimized ? dossier.outgoingParcelCount : null } }),
@@ -209,7 +210,7 @@ export function buildDossierTableModel(dossier, { actions = [], me, can = () => 
   const optimizedDimensions = boxes.map((box, index) => `${boxes.length > 1 ? `Colis ${index + 1} : ` : ''}${dimensions(box.dimL)} × ${dimensions(box.dimW)} × ${dimensions(box.dimH)} cm`);
   // A legacy status cannot turn an incomplete recorded payment into “Payé”.
   const statusLabel = dossier.statut === 'paye' && payment.stateLabel !== 'Payé' ? payment.stateLabel : STATUTS[dossier.statut]?.label || 'Statut à vérifier';
-  const base = { payment, departure, optimized, optimizedDimensions, statusLabel };
+  const base = { reception: receptionDateSummary(dossier, { now }), payment, departure, optimized, optimizedDimensions, statusLabel };
   if (!workReady) return { ...base, action: null, title: 'Tâches à actualiser', detail: 'Actualisez les tâches pour retrouver leur attribution.', ownerName: '—', otherActionsCount: 0, matchesScope: scope === 'all' && !assigneeFilter };
   const rows = dossier.archive ? [] : sortWorkActions(actions.filter(action => action.colis_id === dossier.id && action.state !== 'done')
     .map(action => checkedAction(action, dossier, optimized, payment, now)), now);
@@ -239,9 +240,9 @@ export function buildDossierTableModel(dossier, { actions = [], me, can = () => 
 }
 
 const exportKeys = {
-  daily: ['ref', 'client', 'statusLabel', 'paymentState', 'statut', 'owner', 'casier', 'cartons', 'optimizedDimensions'],
-  payments: ['ref', 'client', 'statusLabel', 'paymentState', 'requested', 'paid', 'remaining', 'sentAt'],
-  departures: ['ref', 'client', 'statusLabel', 'paymentState', 'departure', 'destination', 'packages', 'readiness', 'optimizedDimensions'],
+  daily: ['ref', 'client', 'receivedAt', 'statusLabel', 'paymentState', 'statut', 'owner', 'casier', 'cartons', 'optimizedDimensions'],
+  payments: ['ref', 'client', 'receivedAt', 'statusLabel', 'paymentState', 'requested', 'paid', 'remaining', 'sentAt'],
+  departures: ['ref', 'client', 'receivedAt', 'statusLabel', 'paymentState', 'departure', 'destination', 'packages', 'readiness', 'optimizedDimensions'],
 };
 const tableDateFormatter = new Intl.DateTimeFormat('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'Indian/Reunion' });
 
@@ -300,6 +301,7 @@ export function buildDossierTableExportRows(dossiers, clients, models, view, col
       owner: model?.ownerName || '—',
       casier: dossier.casier || 'À renseigner',
       cartons: receptionCartonManifest(dossier).nbColis,
+      receivedAt: formatDossierTableDate(model?.reception?.lastReceivedAt) + (model?.reception?.lastReceivedAt && !model.reception.complete ? ` · ${model.reception.knownCount}/${model.reception.totalCount} cartons datés` : ''),
       requested: amount('requested'), paid: amount('paid'), remaining: amount('remaining'),
       sentAt: formatDossierTableDate(model?.payment?.sentAt),
       departure: model?.departure?.label || 'À prévoir', destination: model?.departure?.destination || 'À renseigner',

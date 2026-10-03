@@ -1,6 +1,6 @@
 import { STATUTS } from '../constants/index.js';
 import { DOSSIER_TASKS, dossierNextTask } from './dossierTasks.js';
-import { receptionCartonManifest, RECEPTION_MEASURES } from './reception.js';
+import { receptionCartonManifest, receptionDateSummary, RECEPTION_MEASURES } from './reception.js';
 import { hasCurrentPreparation } from './preparationReadiness.js';
 import { currentInvoices } from './invoiceDocuments.js';
 import { buildDossierTableModel, formatDossierTableDate } from './dossierTable.js';
@@ -48,12 +48,17 @@ export function buildDossierOverview(dossier = {}, { client = {}, envois = [], c
   };
   const receiptKnown = Boolean(receiptData.nbColis || receiptData.trackings.length || receiptData.trackingsDetail.length || receiptData.dimsParColis.length);
   const manifest = receiptKnown ? receptionCartonManifest(receiptData) : null;
-  const receiptBoxes = manifest ? manifest.dimsParColis.map((box, index) => measureBox(box, index, manifest.trackingsDetail[index])) : [];
+  const receptionDates = receptionDateSummary(receiptData, { now });
+  const receiptBoxes = manifest ? manifest.dimsParColis.map((box, index) => ({
+    ...measureBox(box, index, manifest.trackingsDetail[index]),
+    receivedAt: receptionDates.dates[index]?.receivedAt || null,
+    receivedAtSource: receptionDates.dates[index]?.source || null,
+  })) : [];
   const receiptComplete = receiptBoxes.length > 0 && receiptBoxes.every(box => box.complete);
   const receptionDate = savedDate(dossier.dateReception, now);
   const received = {
     count: manifest?.nbColis ?? null, complete: receiptComplete, totalWeight: totalWeight(receiptBoxes), boxes: receiptBoxes,
-    date: receptionDate,
+    date: receptionDate, latestDate: receptionDates.lastReceivedAt, datesComplete: receptionDates.complete, datedCount: receptionDates.knownCount, datesError: receptionDates.error,
     summary: !receiptKnown ? 'Réception à vérifier' : receiptComplete ? `${manifest.nbColis} carton(s) reçu(s) et mesuré(s)` : `${manifest.nbColis} carton(s) reçu(s) · mesures à compléter`,
   };
 

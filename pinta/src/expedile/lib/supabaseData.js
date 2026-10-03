@@ -28,6 +28,8 @@ export function mapColis(row) {
     trackingsDetail: row.trackings_detail || [],
     casier: row.casier,
     dateReception: row.date_reception,
+    receptionDates: row.reception_dates ?? null,
+    receptionDatesError: row._reception_dates_error === true,
     dateExpedition: row.date_expedition,
     dateLivraison: row.date_livraison || null,
     devisEnvoyeLe: row.devis_envoye_le,
@@ -302,6 +304,8 @@ export async function fetchColis(colisId = null, { archived = false, clientId = 
   if (!colisRows.length) return [];
   const grouped = { factures: {}, lignes: {}, messages: {} };
   const outgoing = new Map();
+  const receptionDates = new Map();
+  const receptionDatesErrors = new Set();
   const clientScope = dataScope === 'client';
   const mappers = { factures: mapFact, lignes: mapLigne, messages: mapMessage };
   // Load only relations belonging to the requested working set, in bounded requests.
@@ -312,12 +316,26 @@ export async function fetchColis(colisId = null, { archived = false, clientId = 
       if (error) throw error;
       for (const item of Array.isArray(tracking) ? tracking : []) outgoing.set(item.colis_id, item.tracking_principal);
     }
+    // Date evidence is optional to consultation: a failed ledger read keeps
+    // the dossier visible and surfaces an explicit date error, never a guess.
+    const missingDates = colisRows.slice(i, i + 100).filter(row => !Array.isArray(row.reception_dates) || row.reception_dates.some(entry => entry == null)).map(row => row.id);
+    const loadDates = async () => {
+      if (!missingDates.length) return;
+      try {
+        const { data, error } = await supabase.rpc('get_reception_dates', { p_colis_ids: missingDates });
+        if (error) throw error;
+        for (const row of Array.isArray(data) ? data : []) receptionDates.set(row.colis_id, row.reception_dates);
+        for (const id of missingDates) if (!receptionDates.has(id)) receptionDatesErrors.add(id);
+      } catch { for (const id of missingDates) receptionDatesErrors.add(id); }
+    };
+    const datesLoaded = loadDates();
     const result = await Promise.all(
       Object.keys(grouped).map(async (table) => [
         table,
         await fetchAllRows(table, (q) => q.in('colis_id', ids)),
       ]),
     );
+    await datesLoaded;
     for (const [table, rows] of result)
       for (const row of rows) {
         (grouped[table][row.colis_id] ||= []).push(mappers[table](row));
@@ -328,6 +346,8 @@ export async function fetchColis(colisId = null, { archived = false, clientId = 
       mapColis({
         ...row,
         outgoing_tracking: outgoing.get(row.id) || null,
+        reception_dates: receptionDates.get(row.id) ?? row.reception_dates ?? null,
+        _reception_dates_error: receptionDatesErrors.has(row.id),
         _factures: grouped.factures[row.id] || [],
         _lignes: grouped.lignes[row.id] || [],
         _messages: (grouped.messages[row.id] || []).sort((a, b) =>

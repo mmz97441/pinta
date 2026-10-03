@@ -2,7 +2,8 @@ import React, { useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import { dossierTaskUrl } from '../../domain/dossierTasks';
-import { receptionCartonManifest } from '../../domain/reception';
+import { receptionCartonManifest, receptionDateSummary } from '../../domain/reception';
+import { formatDossierTableDate } from '../../domain/dossierTable';
 import { measureShipment, volumetricDivisor } from '../../domain/quote';
 
 const measuredValue = (value) => value != null && Number.isFinite(Number(value)) && Number(value) > 0 ? value : '—';
@@ -30,6 +31,7 @@ export default function ReceivedCartons({ colis, settings, onCompleteReception }
   }, [colis?.id, manifest?.nbColis, received?.colisId, received?.index, location.key]);
   if (!colis) return null;
   const divisor = volumetricDivisor(settings);
+  const receptionDates = receptionDateSummary(colis);
   const before = measureShipment(manifest.dimsParColis, divisor);
   const finalBox = { dimL: colis.finL, dimW: colis.finW, dimH: colis.finH, poids: colis.finP };
   // An explicitly empty preparation must not resurrect legacy scalar values.
@@ -42,6 +44,8 @@ export default function ReceivedCartons({ colis, settings, onCompleteReception }
   return <section aria-label="Mesures des cartons" className="space-y-3 min-w-0">
     <h3 className="text-xs font-bold text-gray-700">Mesures à réception — avant optimisation · {manifest.nbColis} carton{manifest.nbColis > 1 ? 's' : ''}</h3>
     <p className="text-sm text-gray-600">Casier {colis.casier || "à renseigner"}{before ? ` · ${before.realWeight.toFixed(2)} kg reçus` : ""}</p>
+    {colis.dateReception && Number.isFinite(Date.parse(colis.dateReception)) && <p className="text-xs text-gray-600">Réception du dossier : <time dateTime={colis.dateReception}>{formatDossierTableDate(colis.dateReception)}</time></p>}
+    {receptionDates.error && <p role="status" className="text-sm text-amber-800">Les anciennes dates d’arrivée n’ont pas pu être chargées. Actualisez le dossier pour les retrouver.</p>}
     <ol className="space-y-2">
       {manifest.trackingsDetail.map((detail, index) => {
         const box = manifest.dimsParColis[index];
@@ -53,6 +57,9 @@ export default function ReceivedCartons({ colis, settings, onCompleteReception }
           </div>
           <p className={`text-xs break-all ${detail.number ? 'font-mono text-gray-700' : 'text-gray-500'}`}>
             {detail.number || 'Numéro de suivi non renseigné'}
+          </p>
+          <p className="text-xs text-gray-700" data-received-date={index + 1}>
+            {receptionDates.dates[index]?.receivedAt ? <>Arrivé à l’entrepôt le <time dateTime={receptionDates.dates[index].receivedAt}>{formatDossierTableDate(receptionDates.dates[index].receivedAt)}</time></> : 'Date d’arrivée non renseignée'}
           </p>
           <p className="text-xs text-gray-700">
             {measuredValue(box.dimL)} × {measuredValue(box.dimW)} × {measuredValue(box.dimH)} cm · {measuredValue(box.poids)} kg

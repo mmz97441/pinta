@@ -28,6 +28,15 @@ function OverviewAction({ onClick, label, children }) {
   return <button type="button" className="dossier-overview-link" aria-label={label} onClick={onClick}>{children}<ArrowUpRight size={14} aria-hidden="true" /></button>;
 }
 
+function ReceivedCartonArrival({ box }) {
+  return <li data-received-carton={box.number}>
+    <span className="dossier-overview-tracking-label">Carton {box.number}</span>
+    <span className="dossier-overview-tracking-number">{box.tracking || 'Suivi non renseigné'}</span>
+    {box.receivedAt ? <span className="dossier-overview-arrival-date">Reçu le <time dateTime={box.receivedAt}>{formatDossierTableDate(box.receivedAt)}</time></span>
+      : <span className="dossier-overview-secondary">Date non renseignée</span>}
+  </li>;
+}
+
 function Step({ step, viewedTask, onNavigateTask, summaryId }) {
   const state = STEP_STATES[step.state] || STEP_STATES.unknown;
   const Icon = state.icon;
@@ -65,8 +74,9 @@ export default function DossierOverview({
   const editPreparation = canEditPreparation && onCorrect && canOpen('preparation');
   const receivedDimensions = dimensions(received.boxes);
   const optimizedDimensions = dimensions(optimization.boxes);
-  const trackings = (received.boxes || []).filter(box => box.tracking);
-  const visibleTrackings = trackings.slice(0, 2);
+  const receivedBoxes = received.boxes || [];
+  const visibleBoxes = receivedBoxes.slice(0, 2);
+  const remainingBoxes = receivedBoxes.slice(2);
   const alerts = model.alerts || [];
   const openedStep = steps.find(step => step.id === viewedTask);
   const openedStepSummaryId = `dossier-overview-opened-${dossier.id}`;
@@ -85,6 +95,7 @@ export default function DossierOverview({
       <div className="dossier-overview-fact" data-overview="received">
         <h3><Package size={15} aria-hidden="true" />À réception</h3>
         <p className="dossier-overview-summary">{received.summary || 'Réception à vérifier'}</p>
+        {received.date && <p className="dossier-overview-secondary">Réception du dossier : <time dateTime={received.date}>{formatDossierTableDate(received.date)}</time></p>}
         <p className="dossier-overview-weight">{positive(received.totalWeight) ? `${numberFormat.format(received.totalWeight)} kg reçus` : 'Poids à compléter'}</p>
         {receivedDimensions && <p className="dossier-overview-secondary">{receivedDimensions}</p>}
         <OverviewAction onClick={editReception ? () => onCorrect('reception') : openContext('reception') || openTask('reception')}
@@ -107,9 +118,10 @@ export default function DossierOverview({
     </div>
 
     <div className="dossier-overview-trackings" data-overview="trackings">
-      <span className="dossier-overview-secondary">Suivis reçus</span>
-      {visibleTrackings.length ? <ul>{visibleTrackings.map((box, index) => <li key={`${box.number}-${index}`}><span className="dossier-overview-tracking-label">Carton {box.number}</span><span className="dossier-overview-tracking-number">{box.tracking}</span></li>)}</ul> : <span className="dossier-overview-secondary">Aucun numéro saisi</span>}
-      {trackings.length > visibleTrackings.length && <OverviewAction onClick={openContext('reception')} label={`Consulter les ${trackings.length} suivis reçus`}>+ {trackings.length - visibleTrackings.length} autre{trackings.length - visibleTrackings.length > 1 ? 's' : ''}</OverviewAction>}
+      <h3 className="dossier-overview-arrivals-title">Arrivées à l’entrepôt</h3>
+      {received.datesError && <p role="status" className="dossier-overview-secondary">Anciennes dates indisponibles. Actualisez le dossier.</p>}
+      {visibleBoxes.length ? <ul>{visibleBoxes.map(box => <ReceivedCartonArrival key={box.number} box={box} />)}</ul> : <span className="dossier-overview-secondary">Aucun carton renseigné</span>}
+      {remainingBoxes.length > 0 && <details className="dossier-overview-more-arrivals"><summary>{remainingBoxes.length === 1 ? 'Voir l’autre carton' : `Voir les ${remainingBoxes.length} autres cartons`}</summary><ul>{remainingBoxes.map(box => <ReceivedCartonArrival key={box.number} box={box} />)}</ul></details>}
       {canEditQuote && onCorrect && canOpen('devis') && <OverviewAction onClick={() => onCorrect('devis')} label="Modifier le devis et les taux">Modifier le devis et les taux</OverviewAction>}
     </div>
 

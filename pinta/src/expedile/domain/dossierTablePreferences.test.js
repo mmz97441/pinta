@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { TABLE_COLUMNS, buildDossierTableModel, buildDossierTableExportRows, sortDossierTableRows } from './dossierTable.js';
-import { clampColumnWidth, columnWidthsStorageKey, readColumnFilters, filterDossierTableRows, sanitizeColumnFilter, sanitizeColumnWidths, dossierColumnSuggestions } from './dossierTablePreferences.js';
+import { clampColumnWidth, columnWidthsStorageKey, columnVisibilityStorageKey, sanitizeHiddenColumns, readColumnFilters, filterDossierTableRows, sanitizeColumnFilter, sanitizeColumnWidths, dossierColumnSuggestions } from './dossierTablePreferences.js';
 
 const columns = TABLE_COLUMNS.daily;
 const column = key => columns.find(item => item.key === key);
@@ -81,4 +81,30 @@ test('width preferences isolate user/view and bound corrupt or unsupported value
   const values = sanitizeColumnWidths(columns, { ref: 220, requested: 400, action: 20, client: Infinity });
   assert.equal(values.ref, 220); assert.equal(values.client, 200); assert.equal(values.action, 175);
   assert.equal(values.requested, undefined);
+});
+
+test('visibility isolates user and view, keeps only reference mandatory and admits future columns by default', () => {
+  assert.notEqual(columnVisibilityStorageKey('one', 'daily'), columnVisibilityStorageKey('two', 'daily'));
+  assert.notEqual(columnVisibilityStorageKey('one', 'daily'), columnVisibilityStorageKey('one', 'departures'));
+  assert.notEqual(columnVisibilityStorageKey('one', 'daily'), columnWidthsStorageKey('one', 'daily'));
+  assert.equal(columnVisibilityStorageKey(null, 'daily'), null);
+  const hidden = sanitizeHiddenColumns(columns, ['ref', 'client', 'action', 'client', 'unknown', 'paid']);
+  assert.deepEqual(hidden, ['client', 'action']);
+  assert.deepEqual(sanitizeHiddenColumns(columns, 'invalid'), []);
+  const future = { key: 'future', label: 'Future' };
+  assert.equal(sanitizeHiddenColumns([...columns, future], hidden).includes('future'), false);
+  assert.deepEqual(sanitizeHiddenColumns(columns, columns.map(item => item.key)), columns.filter(item => item.key !== 'ref').map(item => item.key));
+});
+
+test('hidden columns cannot filter or export values, while visible columns retain combined filters', () => {
+  const hidden = sanitizeHiddenColumns(columns, ['client', 'action', 'paymentState', 'optimizedDimensions']);
+  const visible = columns.filter(item => !hidden.includes(item.key));
+  const params = new URLSearchParams({ 'col.paymentState': JSON.stringify(filter('contains', 'Payé')), 'col.casier': JSON.stringify(filter('contains', 'A1')) });
+  const filters = readColumnFilters(params, visible);
+  assert.deepEqual(filters, { casier: filter('contains', 'A1') });
+  const selected = filterDossierTableRows(data, { columns: visible, filters, models });
+  assert.deepEqual(selected.map(item => item.id), ['received']);
+  const exported = buildDossierTableExportRows(selected, [], models, 'daily', visible);
+  assert.equal(exported[0].Référence, 'EXP-RECU');
+  for (const label of ['Client', 'Action', 'Paiement', 'Dimensions optimisées']) assert.equal(Object.hasOwn(exported[0], label), false);
 });

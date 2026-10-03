@@ -23,7 +23,7 @@ async function main(){
     if(process.env.PINTA_CONVERSATION_LAYOUT_FILTER&&!name.includes(process.env.PINTA_CONVERSATION_LAYOUT_FILTER))return;
     const f=await setup(browser,'directeur');f.page.setDefaultTimeout(12000);fixture(f);const before=structuredClone(f.tables.colis);
     try{await run(f);assert.deepEqual(f.tables.colis,f.expectedServerColis||before);assert.deepEqual(f.errors,[]);assert.deepEqual(f.networkDenied,[]);
-      const writes=f.requests.filter(r=>['POST','PATCH','DELETE'].includes(r.method)&&r.path.startsWith('/rest/v1/')&&!['/rest/v1/rpc/refresh_staff_work_actions','/rest/v1/rpc/get_invoice_review_context','/rest/v1/messages'].includes(r.path));
+      const writes=f.requests.filter(r=>['POST','PATCH','DELETE'].includes(r.method)&&r.path.startsWith('/rest/v1/')&&!['/rest/v1/rpc/refresh_staff_work_actions','/rest/v1/rpc/get_invoice_review_context','/rest/v1/rpc/get_reception_dates','/rest/v1/messages'].includes(r.path));
       assert.deepEqual(writes,[],'Reading, resizing and drafting never send, claim, notify or advance a task.');
       assert.equal(f.requests.some(r=>/\/(queue_message|send-email|send-telegram)$/.test(r.path)),false);results.push({test:name,pass:true});
     }catch(error){process.exitCode=1;results.push({test:name,pass:false,error:error.stack});await f.page.screenshot({path:`${output}/${name}-failure.png`,fullPage:true}).catch(()=>{});await fs.writeFile(`${output}/${name}-failure.txt`,await f.page.locator('body').innerText().catch(()=>''));}

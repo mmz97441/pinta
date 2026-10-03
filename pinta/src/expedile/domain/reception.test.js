@@ -77,3 +77,25 @@ test('opening the saved dossier unwraps the original filtered list instead of li
   assert.equal(receptionDossierReturn('//untrusted.example'), '/colis');
   assert.equal(receptionDossierReturn('/reception?dossier=uuid'), '/colis');
 });
+
+test('carton arrival dates never spread a dossier date over appended or unknown cartons', async () => {
+  const { receptionDateSummary } = await import('./reception.js');
+  const now = Date.parse('2026-10-03T12:00:00Z');
+  const model = receptionDateSummary({ nbColis: 3, dateReception: '2026-09-01T10:00:00Z', receptionDates: [
+    { receivedAt: '2026-09-30T21:30:00Z', source: 'server' }, null,
+    { receivedAt: '2026-10-02T11:00:00Z', source: 'append_receipt' },
+  ] }, { now });
+  assert.equal(model.knownCount, 2); assert.equal(model.totalCount, 3); assert.equal(model.complete, false);
+  assert.equal(model.dates[1], null); assert.equal(model.lastReceivedAt, '2026-10-02T11:00:00Z');
+  assert.equal(receptionDateSummary({ nbColis: 2, dateReception: '2026-09-01T10:00:00Z' }, { now }).knownCount, 0);
+});
+test('invalid, future and unproven dates remain unknown and ledger error stays explicit', async () => {
+  const { receptionDateSummary } = await import('./reception.js');
+  const model = receptionDateSummary({ nbColis: 4, receptionDatesError: true, receptionDates: [
+    { receivedAt: '2026-02-30T00:00:00Z', source: 'server' },
+    { receivedAt: '2026-10-05T00:00:00Z', source: 'server' },
+    { receivedAt: '2026-10-01T00:00:00Z', source: 'guess' },
+    { receivedAt: '2026-10-01', source: 'server' },
+  ] }, { now: Date.parse('2026-10-03T00:00:00Z') });
+  assert.equal(model.knownCount, 0); assert.equal(model.lastReceivedAt, null); assert.equal(model.error, true);
+});

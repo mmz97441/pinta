@@ -9,7 +9,7 @@ const models = values => new Map(Object.entries(values));
 
 test('every displayed data column declares a typed accessor, while actions have no sorting contract', () => {
   const data = [...columns.values()].filter(column => column.kind === 'data');
-  assert.equal(data.length, 17);
+  assert.equal(data.length, 18);
   for (const column of data) {
     assert.equal(isDossierTableColumnSortable(column), true, column.key);
     assert.ok(['text', 'number', 'date'].includes(column.sort.type));
@@ -144,4 +144,18 @@ test('export keeps the sorted dossier order, selected columns and actual task ow
   const sorted = ordered(rows, 'owner', 'asc', { models: sharedModels });
   const result = buildDossierTableExportRows(sorted, [{ id: 'client', nom: 'Client', email: 'hidden@example.invalid' }], sharedModels, 'daily', TABLE_COLUMNS.daily.filter(column => ['ref', 'owner'].includes(column.key)));
   assert.deepEqual(result, [{ 'Référence': 'EXP-B', 'Qui s’en occupe': 'Alice' }, { 'Référence': 'EXP-A', 'Qui s’en occupe': 'Zoé' }]);
+});
+
+test('latest reception sorts by proven carton arrivals, exports Réunion date and preserves missing evidence', () => {
+  const rows = [
+    { id: 'unknown', nbColis: 2, dateReception: '2026-01-01T00:00:00Z' },
+    { id: 'later', nbColis: 2, receptionDates: [{ receivedAt: '2026-09-28T10:00:00Z', source: 'server' }, { receivedAt: '2026-10-02T00:00:00Z', source: 'append_receipt' }] },
+    { id: 'partial', nbColis: 2, receptionDates: [{ receivedAt: '2026-09-30T21:30:00Z', source: 'server' }, null] },
+  ];
+  const options = { models: new Map(rows.map(row => [row.id, buildDossierTableModel(row, { now: Date.parse('2026-10-03T00:00:00Z') })])) };
+  assert.deepEqual(ids(ordered(rows, 'receivedAt', 'asc', options)), ['partial', 'later', 'unknown']);
+  assert.deepEqual(ids(ordered(rows, 'receivedAt', 'desc', options)), ['later', 'partial', 'unknown']);
+  const exported = buildDossierTableExportRows(rows, [], options.models, 'daily', [columns.get('receivedAt')]);
+  assert.equal(exported[0]['Dernière réception'], 'Non renseigné');
+  assert.equal(exported[2]['Dernière réception'], '01/10/2026 · 1/2 cartons datés');
 });

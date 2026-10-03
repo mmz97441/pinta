@@ -1,5 +1,6 @@
 /* The sticky cells must paint the same opaque surface as their row in both themes. */
-.dossier-data-table { table-layout: fixed; border-collapse: separate; border-spacing: 0; }
+.dossier-data-table { --dossier-column-line: #8d8374; table-layout: fixed; border-collapse: separate; border-spacing: 0; }
+html.dark .dossier-data-table { --dossier-column-line: #81796b; }
 .dossier-table-head,
 .dossier-table-row,
 .dossier-table-card {
@@ -26,6 +27,7 @@ html.dark .dossier-table-card {
   vertical-align: middle;
   background: var(--dossier-table-row-bg);
   border-bottom: 1px solid var(--border-subtle);
+  border-right: 1px solid var(--dossier-column-line);
   line-height: 1.4;
   overflow-wrap: anywhere;
 }
@@ -65,7 +67,7 @@ html.dark .dossier-table-card {
   width: var(--dossier-client-width, 200px);
   min-width: var(--dossier-client-width, 200px);
   max-width: var(--dossier-client-width, 200px);
-  box-shadow: 1px 0 0 var(--border-subtle);
+  box-shadow: 1px 0 0 var(--dossier-column-line);
   z-index: 2;
 }
 .dossier-table-head [data-column='select'],
@@ -77,7 +79,7 @@ html.dark .dossier-table-card {
   position: sticky;
   right: 0;
   z-index: 3;
-  box-shadow: -1px 0 0 var(--border-subtle);
+  box-shadow: -1px 0 0 var(--dossier-column-line);
 }
 .dossier-table-head [data-column='action'] { z-index: 6; }
 /* Oversized identity cells must not cover every scrollable data column. */
@@ -172,17 +174,38 @@ html.dark .dossier-table-open-primary { color: #122a36; background: #c4dae5; bor
 .dossier-table-card[data-view='daily'] .dossier-table-card-facts > div { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .dossier-table-card[data-view='daily'] .dossier-table-card-facts > [data-column='owner'] { grid-column: 1 / -1; }
 .dossier-table-card[data-view='daily'] .dossier-table-card-facts > [data-column='optimizedDimensions'],
+.dossier-table-card[data-view='daily'] .dossier-table-card-facts > [data-column='receivedAt'],
 .dossier-table-card[data-view='daily'] .dossier-table-card-facts > [data-column='statusLabel'],
 .dossier-table-card[data-view='daily'] .dossier-table-card-facts > [data-column='paymentState'] { grid-column: 1 / -1; }
 .dossier-table-card[data-view='daily'] .dossier-table-card-facts dt { flex-shrink: 0; }
 .dossier-table-card[data-view='daily'] .dossier-table-card-facts dd { margin: 0; text-align: right; }
-.dossier-column-options { border: 1px solid var(--border-subtle); border-radius: 12px; padding: 12px; color: var(--text-primary); background: var(--bg-surface); }
-.dossier-column-options form, .dossier-column-width-options { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; }
+.dossier-column-options { position: fixed; box-sizing: border-box; margin: 0; width: 340px; max-width: calc(100vw - 24px); overflow-y: auto; overscroll-behavior: contain; border: 1px solid var(--border-subtle); border-radius: 16px; padding: 16px; color: var(--text-primary); background: var(--bg-surface); box-shadow: 0 12px 36px #0003; }
+.dossier-column-options::backdrop { background: #0001; }
+.dossier-column-dialog-heading { position: sticky; top: -16px; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; padding: 4px 0; background: var(--bg-surface); }
+.dossier-column-dialog-heading h2 { margin: 0; font-size: 1rem; font-weight: 700; overflow-wrap: anywhere; }
+.dossier-column-options form, .dossier-column-width-options { display: grid; gap: 12px; }
 .dossier-column-options label { display: flex; flex-direction: column; gap: 4px; font-size: .875rem; font-weight: 600; min-width: 0; max-width: 100%; }
 .dossier-column-options input, .dossier-column-options select, .dossier-column-options button { min-height: 44px; max-width: 100%; border: 1px solid var(--border-subtle); background: var(--bg-elevated); color: var(--text-primary); border-radius: 8px; padding: 8px 12px; }
 .dossier-column-options input, .dossier-column-options select { width: 100%; min-width: 0; }
 .dossier-column-options button { font-size: .875rem; font-weight: 600; }
 .dossier-column-options button:disabled { opacity: .5; }
-.dossier-column-options summary { display: flex; align-items: center; min-height: 44px; font-size: .875rem; text-decoration: underline; cursor: pointer; }
-.dossier-column-options p { flex-basis: 100%; font-size: .875rem; color: var(--text-secondary); }
-.dossier-column-filter-value { flex: 1 1 180px; }
+.dossier-column-options button:focus-visible, .dossier-column-options input:focus-visible, .dossier-column-options select:focus-visible, .dossier-column-options summary:focus-visible { outline: 2px solid var(--brand-text); outline-offset: 2px; }
+.dossier-column-options .dossier-column-close { display: flex; flex: 0 0 44px; align-items: center; justify-content: center; padding: 0; }
+.dossier-column-options .dossier-column-back { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; border: 0; padding-left: 0; background: transparent; }
+.dossier-column-options summary { display: flex; align-items: center; min-height: 44px; margin-top: 8px; font-size: .875rem; text-decoration: underline; cursor: pointer; }
+.dossier-column-options p { margin: 0 0 8px; font-size: .875rem; color: var(--text-secondary); }
+.dossier-column-filter-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.dossier-column-options .dossier-column-apply { background: #1b3a4b; border-color: #1b3a4b; color: #fff; }
+html.dark .dossier-column-options .dossier-column-apply { background: #c4dae5; border-color: #c4dae5; color: #122a36; }
+.dossier-column-choices { display: grid; gap: 4px; }
+.dossier-column-choices button { display: flex; align-items: center; justify-content: space-between; gap: 8px; text-align: left; }
+.dossier-column-choices span { font-size: .75rem; color: var(--brand-text); }
+.dossier-column-visibility { display: grid; gap: 2px; margin: 8px 0 12px; }
+.dossier-column-visibility label { flex-direction: row; align-items: center; min-height: 44px; gap: 12px; padding: 4px 8px; border-radius: 8px; cursor: pointer; }
+.dossier-column-visibility label:hover { background: var(--bg-elevated); }
+.dossier-column-visibility input { flex: 0 0 20px; width: 20px; min-height: 20px; height: 20px; padding: 0; accent-color: var(--brand-navy-l); }
+.dossier-column-visibility span { display: flex; flex: 1; align-items: center; justify-content: space-between; gap: 8px; }
+.dossier-column-visibility small { color: var(--text-secondary); font-weight: 400; }
+@media (max-width: 767px) {
+  .dossier-column-options::backdrop { background: #0005; }
+}

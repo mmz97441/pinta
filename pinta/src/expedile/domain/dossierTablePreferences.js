@@ -14,6 +14,14 @@ export function clampColumnWidth(column, value) {
 export function columnWidthsStorageKey(userId, view) {
   return userId && ['daily', 'payments', 'departures'].includes(view) ? `expedile:table-widths:v1:${encodeURIComponent(userId)}:${view}` : null;
 }
+export function columnVisibilityStorageKey(userId, view) {
+  return userId && ['daily', 'payments', 'departures'].includes(view) ? `expedile:table-columns:v1:${encodeURIComponent(userId)}:${view}` : null;
+}
+/** Store exclusions: a newly introduced data column stays discoverable. The
+ * reference is the single required datum, and foreign keys are ignored. */
+export function sanitizeHiddenColumns(columns, hidden) {
+  return Array.isArray(hidden) ? columns.filter(column => column.key !== 'ref' && hidden.includes(column.key)).map(column => column.key) : [];
+}
 export function sanitizeColumnWidths(columns, values) {
   return Object.fromEntries(columns.map(column => [column.key, clampColumnWidth(column, values?.[column.key])]));
 }

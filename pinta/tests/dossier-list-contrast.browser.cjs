@@ -77,7 +77,7 @@ async function measure(locator) {
         assert.deepEqual(f.errors, []); assert.deepEqual(f.networkDenied, []);
         // Loading the signed-in app synchronizes its work queue. No list
         // interaction may issue an assignment, document or dossier write.
-        assert.deepEqual(f.requests.filter(request => ['POST', 'PATCH', 'DELETE'].includes(request.method) && request.path.startsWith('/rest/v1/') && request.path !== '/rest/v1/rpc/refresh_staff_work_actions').map(request => ({ path: request.path, input: request.input })), [], 'List interaction does not write business data');
+        assert.deepEqual(f.requests.filter(request => ['POST', 'PATCH', 'DELETE'].includes(request.method) && request.path.startsWith('/rest/v1/') && !['/rest/v1/rpc/refresh_staff_work_actions','/rest/v1/rpc/get_reception_dates'].includes(request.path)).map(request => ({ path: request.path, input: request.input })), [], 'List interaction does not write business data');
         assert.equal(await f.page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false);
         results.push({ name, pass: true, samples }); console.log('PASS', name);
       } catch (error) { results.push({ name, pass: false, error: error.stack }); process.exitCode = 1; await f.page.screenshot({ path: path.join(output, `${name}-failure.png`), fullPage: true }).catch(() => {}); console.error('FAIL', name, error.message); }
