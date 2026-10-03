@@ -101,6 +101,25 @@ async function selectScope(f,label,value) {
 async function assertNoBusinessChange(f,before) {
   assert.deepEqual(f.tables.colis,before); assert.equal(f.claims.length,0); assert.deepEqual(businessWrites(f),[]);
 }
+async function waitIds(f, expected) {
+  await f.page.waitForFunction(expected => {
+    const current=[...document.querySelectorAll('[data-dossier-row]')].filter(node=>node.getBoundingClientRect().width>0).map(node=>node.dataset.dossierRow).sort();
+    return JSON.stringify(current)===JSON.stringify(expected);
+  }, [...expected].sort());
+  assert.deepEqual(await allIds(f),[...expected].sort());
+}
+async function filterColumn(f,key,mode,value='') {
+  let options=f.page.getByRole('region',{name:'Options des colonnes',exact:true});
+  if(!await options.count())await f.page.getByRole('button',{name:/^Filtres par colonne/}).click();
+  await options.getByRole('combobox',{name:'Colonne à filtrer',exact:true}).selectOption(key);
+  const label=await options.getByRole('combobox',{name:'Colonne à filtrer',exact:true}).locator('option:checked').textContent();
+  await options.getByRole('combobox',{name:`Condition pour ${label}`,exact:true}).selectOption(mode);
+  if(!['empty','filled'].includes(mode))await options.getByLabel(`Filtrer : ${label}`,{exact:true}).fill(value);
+  await options.getByRole('button',{name:'Appliquer le filtre',exact:true}).click();
+  await f.page.waitForURL(url=>url.searchParams.has(`col.${key}`));
+  await options.getByRole('button',{name:'Effacer ce filtre',exact:true}).waitFor();
+  return options;
+}
 
 async function main() {
   await fs.mkdir(output,{recursive:true}); const browser = await chromium.launch({headless:true});
@@ -127,6 +146,170 @@ async function main() {
       }
       await assertNoBusinessChange(f,before);
     });
+    await scenario('new-payment-status-and-optimized-dimensions-never-invent-ready-or-paid-data',async f=>{
+      const prepared=f.tables.colis.find(item=>item.id===P5);
+      prepared.final_packages=[{dimL:31,dimW:22,dimH:13,poids:2},{dimL:19.5,dimW:17,dimH:11,poids:1}];prepared.outgoing_parcel_count=2;
+      const before=structuredClone(f.tables.colis);await open(f);
+      for(const [label,view] of [['Travail quotidien','daily'],['Paiements','payments'],['Départs','departures']]) {
+        await selectPreset(f,label,view);
+        assert.equal((await cell(f,P4,'paymentState').innerText()).trim(),'Paiement partiel');
+        assert.equal((await cell(f,P4,'statusLabel').innerText()).trim(),'Paiement partiel','A stale paye status cannot disguise an incomplete payment.');
+        assert.equal((await cell(f,P5,'paymentState').innerText()).trim(),'Payé');
+        assert.equal((await cell(f,P5,'statusLabel').innerText()).trim(),'Payé');
+        if(view!=='payments') {
+          for(const id of [P,P2,P6])assert.equal((await cell(f,id,'optimizedDimensions').innerText()).trim(),'','Absent or stale preparation leaves a truly empty cell.');
+          const dimensions=await cell(f,P5,'optimizedDimensions').innerText();
+          assert.match(dimensions,/Colis 1 : 31 × 22 × 13 cm/);assert.match(dimensions,/Colis 2 : 19,5 × 17 × 11 cm/);
+          assert.doesNotMatch(dimensions,/40 × 30 × 20/,'Reception dimensions are never substituted.');
+        }
+      }
+      await assertNoBusinessChange(f,before);
+    });
+    await scenario('every-data-column-has-a-usable-filter-from-its-heading',async f=>{
+      const before=structuredClone(f.tables.colis);await open(f);
+      for(const [label,view] of [['Travail quotidien','daily'],['Paiements','payments'],['Départs','departures']]) {
+        await selectPreset(f,label,view);
+        const table=f.page.getByRole('table',{name:'Dossiers d’expédition',exact:true});
+        const columns=await table.locator('thead th[data-column] .dossier-table-sort').evaluateAll(buttons=>buttons.map(button=>({key:button.closest('th').dataset.column,label:button.textContent.trim()})));
+        assert.ok(columns.length>=8);
+        for(const column of columns) {
+          const heading=table.locator(`th[data-column="${column.key}"]`);
+          await heading.getByRole('button',{name:`Filtrer la colonne ${column.label}`,exact:true}).click();
+          const options=f.page.getByRole('region',{name:'Options des colonnes',exact:true});
+          assert.equal(await options.getByRole('combobox',{name:'Colonne à filtrer',exact:true}).inputValue(),column.key);
+          // Every current and future data column must expose a real filter; P5 has a value in every view.
+          await filterColumn(f,column.key,'filled');await row(f,P5).waitFor();
+          assert.equal(await heading.getByRole('button',{name:`Filtrer la colonne ${column.label}`,exact:true}).getAttribute('aria-pressed'),'true');
+          assert.ok(await rows(f).count()>0);assert.equal(await row(f,P5).count(),1);
+          await options.getByRole('button',{name:'Effacer ce filtre',exact:true}).click();
+          await f.page.waitForURL(url=>!url.searchParams.has(`col.${column.key}`));await waitIds(f,[P,P2,P3,P4,P5,P6]);
+          await options.getByRole('button',{name:'Fermer les options',exact:true}).click();
+        }
+      }
+      await assertNoBusinessChange(f,before);
+    });
+    await scenario('column-filters-match-real-task-owner-payments-and-only-current-measurements',async f=>{
+      const before=structuredClone(f.tables.colis);await open(f);
+      let options=await filterColumn(f,'owner','contains','Vous');await waitIds(f,[P2]);
+      await options.getByRole('button',{name:'Effacer ce filtre',exact:true}).click();await waitIds(f,[P,P2,P3,P4,P5,P6]);
+      options=await filterColumn(f,'optimizedDimensions','empty');await waitIds(f,[P,P2,P6]);
+      await options.getByRole('button',{name:'Effacer ce filtre',exact:true}).click();await waitIds(f,[P,P2,P3,P4,P5,P6]);
+      await selectPreset(f,'Paiements','payments');await filterColumn(f,'remaining','min','1');await waitIds(f,[P4]);
+      assert.equal((await cell(f,P4,'paymentState').innerText()).trim(),'Paiement partiel');
+      options=await filterColumn(f,'requested','min','90');await waitIds(f,[P4]);
+      assert.equal(new URL(f.page.url()).searchParams.get('col.remaining'),JSON.stringify({mode:'min',value:'1'}));
+      await f.page.reload();await row(f,P4).waitFor();await waitIds(f,[P4]);
+      await f.page.getByRole('button',{name:/^Filtres et options/}).click();
+      const downloadPromise=f.page.waitForEvent('download');await f.page.getByRole('button',{name:'Exporter 1 dossiers filtrés',exact:true}).click();
+      const download=await downloadPromise;const book=XLSX.read(await fs.readFile(await download.path()),{type:'buffer'});
+      const data=XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]],{header:1});
+      assert.equal(data.length,2);assert.equal(data[1][0],'EXP-TAB004');assert.equal(data[1][data[0].indexOf('Paiement')],'Paiement partiel');
+      await f.page.getByRole('button',{name:'Fermer les filtres',exact:true}).click();
+      await f.page.getByRole('button',{name:'Retirer les filtres',exact:true}).click();await waitIds(f,[P,P2,P3,P4,P5,P6]);
+      assert.equal([...new URL(f.page.url()).searchParams.keys()].some(key=>key.startsWith('col.')),false);
+      await assertNoBusinessChange(f,before);
+    });
+    await scenario('date-and-numeric-filter-boundaries-are-inclusive-and-combine-with-task-scope',async f=>{
+      Object.assign(f.tables.colis.find(item=>item.id===P5),{devis_envoye_le:'2026-09-10T08:00:00Z'});
+      Object.assign(f.tables.colis.find(item=>item.id===P6),{devis_envoye_le:'2026-09-20T08:00:00Z'});
+      const before=structuredClone(f.tables.colis);await open(f);await selectPreset(f,'Paiements','payments');
+      let options=await filterColumn(f,'sentAt','min','2026-09-20');await waitIds(f,[P4,P6]);
+      options=await filterColumn(f,'paid','max','30');await waitIds(f,[P4]);
+      await options.getByRole('button',{name:'Effacer ce filtre',exact:true}).click();await waitIds(f,[P4,P6]);
+      options=await filterColumn(f,'sentAt','max','2026-09-20');await waitIds(f,[P5,P6]);
+      await selectScope(f,'Mes tâches','mine');await waitIds(f,[]);
+      await f.page.getByText('Aucune tâche ne vous est attribuée dans cette sélection.',{exact:true}).waitFor();
+      await assertNoBusinessChange(f,before);
+    });
+    await scenario('hidden-foreign-or-invalid-column-filters-cannot-hide-permitted-dossiers',async f=>{
+      const before=structuredClone(f.tables.colis);
+      const query=new URLSearchParams({'col.remaining':JSON.stringify({mode:'min',value:'999'}),'col.secret':'{"mode":"contains","value":"hidden"}','col.ref':'broken'});
+      await open(f,query.toString());await waitIds(f,[P,P2,P3,P4,P5,P6]);
+      await f.page.waitForURL(url=>![...url.searchParams.keys()].some(key=>key.startsWith('col.')));
+      await selectPreset(f,'Paiements','payments');await filterColumn(f,'requested','min','50');await waitIds(f,[P4,P5,P6]);
+      await selectPreset(f,'Travail quotidien','daily');await waitIds(f,[P,P2,P3,P4,P5,P6]);
+      await f.page.waitForURL(url=>!url.searchParams.has('col.requested'));
+      await assertNoBusinessChange(f,before);
+    });
+    await scenario('forced-finance-column-filter-does-not-grant-finance-access',async f=>{
+      const before=structuredClone(f.tables.colis);
+      await open(f,new URLSearchParams({table:'payments','col.paid':JSON.stringify({mode:'min',value:'50'})}).toString());
+      await waitIds(f,[P,P2,P3,P4,P5,P6]);await f.page.waitForURL(url=>!url.searchParams.has('col.paid'));
+      await f.page.getByRole('button',{name:/^Filtres par colonne/}).click();
+      const values=await f.page.getByRole('combobox',{name:'Colonne à filtrer',exact:true}).locator('option').evaluateAll(options=>options.map(option=>option.value));
+      assert.equal(values.includes('paid'),false);assert.equal(values.includes('requested'),false);assert.equal(await f.page.locator('th[data-column="paid"]').count(),0);
+      await assertNoBusinessChange(f,before);
+    },{restricted:true});
+    await scenario('column-widths-resize-by-mouse-and-keyboard-and-keep-sticky-identities-aligned',async f=>{
+      const before=structuredClone(f.tables.colis);await open(f);
+      const separator=f.page.getByRole('separator',{name:'Redimensionner Référence',exact:true});
+      const initial=Number(await separator.getAttribute('aria-valuenow'));
+      await separator.focus();await separator.press('ArrowRight');await separator.press('Shift+ArrowRight');
+      await f.page.waitForFunction(()=>document.querySelector('[aria-label="Redimensionner Référence"]').getAttribute('aria-valuenow')==='220');
+      assert.equal(Number(await separator.getAttribute('aria-valuenow')),initial+60);
+      const bbox=await separator.boundingBox();await f.page.mouse.move(bbox.x+bbox.width/2,bbox.y+bbox.height/2);await f.page.mouse.down();await f.page.mouse.move(bbox.x+bbox.width/2+35,bbox.y+bbox.height/2,{steps:5});await f.page.mouse.up();
+      const resized=Number(await separator.getAttribute('aria-valuenow'));assert.ok(Math.abs(resized-(initial+95))<=1);
+      const ref=cell(f,P,'ref'),client=cell(f,P,'client');const beforeScroll=[await ref.boundingBox(),await client.boundingBox()];
+      assert.ok(Math.abs(beforeScroll[0].width-resized)<=2);assert.ok(Math.abs(beforeScroll[1].x-beforeScroll[0].x-beforeScroll[0].width)<=2,'Client begins precisely after the resized reference.');
+      const scroller=f.page.getByRole('region',{name:'Tableau des dossiers',exact:true});await scroller.evaluate(node=>{node.scrollLeft=500;});
+      await f.page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(resolve)));
+      for(const [i,target] of [ref,client].entries())assert.ok(Math.abs((await target.boundingBox()).x-beforeScroll[i].x)<=2);
+      await f.page.reload();await row(f,P).waitFor();assert.equal(Number(await separator.getAttribute('aria-valuenow')),resized);
+      await selectPreset(f,'Paiements','payments');assert.equal(Number(await separator.getAttribute('aria-valuenow')),initial,'Widths are separate for each view.');
+      await selectPreset(f,'Travail quotidien','daily');assert.equal(Number(await separator.getAttribute('aria-valuenow')),resized);
+      await separator.focus();await separator.press('End');assert.equal(Number(await separator.getAttribute('aria-valuenow')),600);
+      assert.equal(await f.page.getByRole('table',{name:'Dossiers d’expédition',exact:true}).getAttribute('data-unpin-ref'),'true','An oversized reference stops pinning over the whole usable table.');
+      await separator.press('Enter');assert.equal(Number(await separator.getAttribute('aria-valuenow')),initial);
+      const actionResize=f.page.getByRole('separator',{name:'Redimensionner Action',exact:true});
+      await actionResize.focus();await actionResize.press('End');assert.equal(Number(await actionResize.getAttribute('aria-valuenow')),280,'The action column has a useful upper bound instead of hiding the central data.');
+      const clientResize=f.page.getByRole('separator',{name:'Redimensionner Client',exact:true});await clientResize.focus();await clientResize.press('End');
+      assert.equal(await f.page.getByRole('table',{name:'Dossiers d’expédition',exact:true}).getAttribute('data-unpin-client'),'true');
+      await clientResize.press('Enter');await actionResize.focus();await actionResize.press('Enter');
+      // A wide reference must release Client even when the two widths total less than 600px.
+      await separator.focus();await separator.press('Home');for(let step=0;step<5;step++)await separator.press('Shift+ArrowRight');await separator.press('ArrowRight');
+      await clientResize.focus();await clientResize.press('Home');
+      assert.equal(Number(await separator.getAttribute('aria-valuenow')),400);assert.equal(Number(await clientResize.getAttribute('aria-valuenow')),140);
+      const table=f.page.getByRole('table',{name:'Dossiers d’expédition',exact:true});
+      assert.equal(await table.getAttribute('data-unpin-ref'),'true');assert.equal(await table.getAttribute('data-unpin-client'),'true');
+      await scroller.evaluate(node=>{node.scrollLeft=0;});await f.page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(resolve)));
+      const action=cell(f,P,'action'),wideBefore=[await ref.boundingBox(),await client.boundingBox(),await action.boundingBox()];
+      await scroller.evaluate(node=>{node.scrollLeft=300;});await f.page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(resolve)));
+      const wideAfter=[await ref.boundingBox(),await client.boundingBox(),await action.boundingBox()];
+      for(let i=0;i<2;i++)assert.ok(Math.abs(wideBefore[i].x-wideAfter[i].x-300)<=2,'Both oversized identity columns scroll together instead of leaving Client floating.');
+      assert.ok(Math.abs(wideBefore[2].x-wideAfter[2].x)<=2&&wideAfter[2].x>=220&&wideAfter[2].x+wideAfter[2].width<=1440,'The action stays pinned and visible after releasing the identity columns.');
+      assert.equal(await f.page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false);
+      await assertNoBusinessChange(f,before);
+    });
+    await scenario('column-width-preferences-remain-private-after-switching-account-in-the-same-browser',async f=>{
+      await open(f);const separator=f.page.getByRole('separator',{name:'Redimensionner Référence',exact:true});
+      await separator.focus();await separator.press('Shift+ArrowRight');await f.page.waitForFunction(()=>document.querySelector('[aria-label="Redimensionner Référence"]').getAttribute('aria-valuenow')==='210');
+      const savedA=await f.page.evaluate(id=>localStorage.getItem(`expedile:table-widths:v1:${encodeURIComponent(id)}:daily`),ids.A);assert.equal(JSON.parse(savedA).ref,210);
+      await f.page.getByRole('button',{name:'Se déconnecter',exact:true}).filter({visible:true}).click();await f.page.getByLabel('Email',{exact:true}).waitFor();
+      f.tables.profiles.push({id:B,nom:'Madly',role:'directeur',actif:true});
+      const user={id:B,aud:'authenticated',role:'authenticated',email:'madly@example.test',user_metadata:{},created_at:new Date().toISOString()};
+      const token=Buffer.from(JSON.stringify({alg:'HS256',typ:'JWT'})).toString('base64url')+'.'+Buffer.from(JSON.stringify({sub:B,role:'authenticated',exp:Math.floor(Date.now()/1000)+3600})).toString('base64url')+'.test';
+      await f.context.route('**/auth/v1/token**',route=>reply(route,{access_token:token,refresh_token:'test-b',token_type:'bearer',expires_in:3600,user}));
+      await f.context.route('**/auth/v1/user',route=>reply(route,user));
+      await f.login();await open(f);assert.equal(Number(await separator.getAttribute('aria-valuenow')),160,'The new account does not inherit the previous user’s width.');
+      await separator.focus();await separator.press('ArrowRight');await f.page.waitForFunction(()=>document.querySelector('[aria-label="Redimensionner Référence"]').getAttribute('aria-valuenow')==='170');
+      const values=await f.page.evaluate(({a,b})=>({a:localStorage.getItem(`expedile:table-widths:v1:${encodeURIComponent(a)}:daily`),b:localStorage.getItem(`expedile:table-widths:v1:${encodeURIComponent(b)}:daily`)}),{a:ids.A,b:B});
+      assert.equal(values.a,savedA);assert.equal(JSON.parse(values.b).ref,170);assert.equal(f.claims.length,0);assert.deepEqual(businessWrites(f),[]);
+    });
+    for(const dark of [false,true])await scenario(`mobile-column-filter-reset-and-width-editor-${dark?'dark':'light'}`,async f=>{
+      await f.page.setViewportSize({width:390,height:844});await f.context.addInitScript(dark=>localStorage.setItem('expedile-theme',dark?'dark':'light'),dark);
+      const before=structuredClone(f.tables.colis);await open(f);
+      const options=await filterColumn(f,'paymentState','contains','partiel');await waitIds(f,[P4]);
+      assert.equal(await f.page.getByRole('table',{name:'Dossiers d’expédition',exact:true}).count(),0);
+      await options.getByText('Largeur des colonnes sur ordinateur',{exact:true}).click();
+      const width=options.getByLabel('Largeur de Paiement',{exact:true});await width.fill('300');await width.press('Enter');
+      assert.equal(await width.inputValue(),'300');await options.getByRole('button',{name:'Rétablir les largeurs',exact:true}).click();
+      await f.page.waitForFunction(()=>document.querySelector('[aria-label="Largeur de Paiement"]')?.value==='155');assert.equal(await width.inputValue(),'155');
+      await options.getByRole('button',{name:'Fermer les options',exact:true}).click();await row(f,P4).waitFor();
+      assert.equal(await f.page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false);
+      await f.page.screenshot({path:`${output}/mobile-column-filter-${dark?'dark':'light'}.png`,fullPage:true});
+      await f.page.getByRole('button',{name:'Retirer les filtres',exact:true}).click();await waitIds(f,[P,P2,P3,P4,P5,P6]);
+      await assertNoBusinessChange(f,before);
+    });
     await scenario('sorting-every-displayed-data-column-is-keyboard-accessible-and-read-only',async f=>{
       const before=structuredClone(f.tables.colis);await open(f);
       for(const [label,view] of [['Travail quotidien','daily'],['Paiements','payments'],['Départs','departures']]) {
@@ -136,12 +319,12 @@ async function main() {
         const keys=await table.locator('thead th[data-column]').evaluateAll(headers=>headers.map(h=>h.dataset.column).filter(key=>!['action','select'].includes(key)));
         assert.ok(keys.length>=6);
         for(const key of keys) {
-          const header=table.locator(`th[data-column="${key}"]`),button=header.getByRole('button');
+          const header=table.locator(`th[data-column="${key}"]`),button=header.locator('.dossier-table-sort');
           assert.equal(await button.count(),1,`${view}/${key} has a native sort button`);
           for(const direction of ['asc','desc']) {
             // Reset to a different key first: the next activation must mean ascending.
             if(direction==='asc'&&new URL(f.page.url()).searchParams.get('sort')===key) {
-              const other=keys.find(value=>value!==key);await table.locator(`th[data-column="${other}"]`).getByRole('button').click();
+              const other=keys.find(value=>value!==key);await table.locator(`th[data-column="${other}"]`).locator('.dossier-table-sort').click();
             }
             await button.focus();await button.press(direction==='asc'?'Enter':'Space');
             await f.page.waitForURL(url=>url.searchParams.get('sort')===key&&url.searchParams.get('dir')===direction);
@@ -185,9 +368,9 @@ async function main() {
     await scenario('mobile-sort-menu-offers-all-data-columns-in-every-view-and-both-directions',async f=>{
       await f.page.setViewportSize({width:390,height:844});const before=structuredClone(f.tables.colis);await open(f);
       for(const [label,view,keys] of [
-        ['Travail quotidien','daily',['ref','client','statut','owner','casier','cartons']],
-        ['Paiements','payments',['ref','client','requested','paid','remaining','sentAt']],
-        ['Départs','departures',['ref','client','departure','destination','packages','readiness']],
+        ['Travail quotidien','daily',['ref','client','statusLabel','paymentState','statut','owner','casier','cartons','optimizedDimensions']],
+        ['Paiements','payments',['ref','client','statusLabel','paymentState','requested','paid','remaining','sentAt']],
+        ['Départs','departures',['ref','client','statusLabel','paymentState','departure','destination','packages','readiness','optimizedDimensions']],
       ]) {
         await selectPreset(f,label,view);
         if(await f.page.getByRole('combobox',{name:'Tri par défaut',exact:true}).count()===0)await f.page.getByRole('button',{name:/^Filtres et options/}).click();
@@ -335,7 +518,7 @@ async function main() {
     },{unavailable:true});
     await scenario('excel-download-matches-visible-preset-and-recorded-amounts',async f=>{
       await open(f);await f.page.getByRole('button',{name:/^Filtres et options/}).click();
-      const expected={daily:['Référence','Client','Travail à faire','Qui s’en occupe','Casier','Cartons reçus'],payments:['Référence','Client','Demandé','Payé','Reste à payer','Devis envoyé le'],departures:['Référence','Client','Départ prévu','Destination','Colis à expédier','Prêt à partir ?']};
+      const expected={daily:['Référence','Client','Statut du dossier','Paiement','Travail à faire','Qui s’en occupe','Casier','Cartons reçus','Dimensions optimisées'],payments:['Référence','Client','Statut du dossier','Paiement','Demandé','Payé','Reste à payer','Devis envoyé le'],departures:['Référence','Client','Statut du dossier','Paiement','Départ prévu','Destination','Colis à expédier','Prêt à partir ?','Dimensions optimisées']};
       for(const [label,view] of [['Travail quotidien','daily'],['Paiements','payments'],['Départs','departures']]) {
         await selectPreset(f,label,view);
         const downloaded=f.page.waitForEvent('download');await f.page.getByRole('button',{name:'Exporter 6 dossiers filtrés',exact:true}).click();
@@ -346,9 +529,9 @@ async function main() {
         assert.deepEqual(data[0],expected[view]);assert.deepEqual(data.slice(1).map(line=>line[0]),visibleReferences,'Excel follows the visible row order.');assert.equal(data.length,7);assert.equal(new Set(data.slice(1).map(line=>line[0])).size,6);
         if(view==='payments') {
           const unknown=data.find(line=>line[0]==='EXP-TAB001'),partial=data.find(line=>line[0]==='EXP-TAB004');
-          assert.equal(unknown[2],'À calculer');assert.deepEqual(partial.slice(2,5),[100,30,70]);
+          assert.equal(unknown[data[0].indexOf('Demandé')],'À calculer');assert.deepEqual(['Demandé','Payé','Reste à payer'].map(label=>partial[data[0].indexOf(label)]),[100,30,70]);
         }
-        if(view==='daily')assert.equal(data.find(line=>line[0]==='EXP-TAB002')[3],'Vous');
+        if(view==='daily')assert.equal(data.find(line=>line[0]==='EXP-TAB002')[data[0].indexOf('Qui s’en occupe')],'Vous');
       }
       assert.equal(f.claims.length,0);assert.deepEqual(businessWrites(f),[]);
     });
@@ -399,16 +582,19 @@ async function main() {
         assert.ok(action.y>=0&&action.y+action.height<=bottomNav.y,`The first primary action is fully visible before scrolling (${action.y+action.height} <= ${bottomNav.y}).`);
       }
       if(width===1440) {
+        const primary=row(f,P2).getByRole('button',{name:'Continuer',exact:true});
+        const initialAction=await primary.boundingBox();assert.ok(initialAction.x>=220&&initialAction.x+initialAction.width<=width,'The primary action is visible at the initial horizontal position.');
         await selectPreset(f,'Paiements','payments');
         // A narrower desktop still uses the table and genuinely needs horizontal scrolling.
         await f.page.setViewportSize({width:1280,height:1000});
         const ref=cell(f,P,'ref'),client=cell(f,P,'client');await ref.waitFor();await client.waitFor();
-        const before=[await ref.boundingBox(),await client.boundingBox()];
+        const action=cell(f,P,'action');const before=[await ref.boundingBox(),await client.boundingBox(),await action.boundingBox()];
         const scroll=await ref.evaluate(node=>{let el=node.parentElement;while(el&&!(el.scrollWidth>el.clientWidth+5&&/(auto|scroll)/.test(getComputedStyle(el).overflowX)))el=el.parentElement;if(!el)return null;el.scrollLeft=el.scrollWidth;return {left:el.scrollLeft,max:el.scrollWidth-el.clientWidth};});
         assert.ok(scroll&&scroll.left>20,'The payment table actually scrolls horizontally.');
         await ref.evaluate(() => new Promise(resolve => requestAnimationFrame(resolve)));
-        const after=[await ref.boundingBox(),await client.boundingBox()];
-        for(let i=0;i<2;i++)assert.ok(Math.abs(after[i].x-before[i].x)<=2,`Sticky ${i===0?'EXP':'Client'} remains fixed while the other columns scroll.`);
+        const after=[await ref.boundingBox(),await client.boundingBox(),await action.boundingBox()];
+        for(let i=0;i<3;i++)assert.ok(Math.abs(after[i].x-before[i].x)<=2,`Sticky ${['EXP','Client','Action'][i]} remains fixed while the other columns scroll.`);
+        assert.ok(after[2].x+after[2].width<=1280&&after[2].x>=after[1].x+after[1].width,'Pinned action stays visible without covering the fixed client identity.');
         await f.page.setViewportSize({width,height:1000});
       }
       const audit=await new AxeBuilder({page:f.page}).withTags(['wcag2a','wcag2aa','wcag21aa','wcag22aa']).analyze();

@@ -28,6 +28,12 @@ function staffDb(old = null, mutations = []) {
   colis: ({ mutation }) => { if (mutation) mutations.push(['colis', mutation]); return { data: { id: colisId, client_id: 'client', ref: 'EXP', devis_total: 40, quote_version: 2, statut: 'en_preparation' }, error: null }; },
   clients: { nom: 'Example', prenom: 'Camille', email: 'camille@example.test', adresse: '1 rue Exemple', ville: 'Saint-Denis', cp: '97400', type: 'particulier' },
   payment_intents: ({ mutation }) => { if (mutation) { mutations.push(['intent', mutation]); return { data: { id: 'intent', ...mutation }, error: null }; } return { data: old, error: null }; },
+ }, (name,args) => {
+  assert.equal(name,'reserve_payplug_intent');
+  if(old?.provider_is_live!==undefined && old.provider_is_live!==args.p_is_live) return {data:null,error:{code:'22023',message:'Ancien mode incompatible'}};
+  if(old?.status==='pending') return {data:old,error:null};
+  const intent={id:'intent',status:'creating',provider_is_live:args.p_is_live,return_token_hash:args.p_return_token_hash,return_token_expires_at:args.p_return_token_expires_at};
+  mutations.push(['intent',intent]);return {data:intent,error:null};
  });
 }
 test('creation refuses a test key in live/default mode before intent creation or any provider call', async () => {
@@ -102,4 +108,15 @@ test('a refunded modern resource cannot produce a first full receipt', async () 
  let calls = 0;
  const run = await handler('payplug-webhook', { env: { PAYPLUG_SECRET_KEY: 'sk_live_fixture', PAYPLUG_MODE: 'live' }, db: database({}, () => { calls++; return { data: {}, error: null }; }), fetch: async () => Response.json({ ...payment, amount_refunded: 4000 }) });
  assert.equal((await run(req({ id: payment.id, object: 'payment' }))).status, 409); assert.equal(calls, 0);
+});
+
+// A transaction conflict/payment proof must stop checkout before the provider.
+test('reservation conflicts never create a provider payment or bypass the server lock',async()=>{
+ for(const code of ['40001','22023','23505','42501']) {
+  const mutations=[];const db=staffDb(null,mutations);let reservations=0;
+  db.rpc=async(name,args)=>{reservations++;assert.equal(name,'reserve_payplug_intent');assert.equal(args.p_quote_version,2);assert.equal(args.p_amount_cents,4000);assert.equal(args.p_is_live,false);return {data:null,error:{code,message:'Dossier actualisé ou paiement enregistré'}};};
+  const run=await handler('payplug-create',{env:{...common,PAYPLUG_SECRET_KEY:'sk_test_fixture',PAYPLUG_MODE:'test'},db});
+  const response=await run(req({colisId},{authorization:'Bearer staff'}));
+  assert.equal(response.status,code==='42501'?403:409);assert.equal(reservations,1);assert.equal(mutations.length,0);
+ }
 });

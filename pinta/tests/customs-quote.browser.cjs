@@ -55,6 +55,58 @@ async function updateOther(f){await f.page.evaluate(()=>window.dispatchEvent(new
 const results=[];
 (async()=>{await fs.mkdir(output,{recursive:true});const browser=await chromium.launch({headless:true});async function scenario(name,options,run){if(process.env.PINTA_CUSTOMS_FILTER&&!name.includes(process.env.PINTA_CUSTOMS_FILTER))return;const f=await fixture(browser,options);try{await run(f);assert.deepEqual(f.errors,[]);assert.deepEqual(f.networkDenied,[]);assert.equal(f.requests.some(r=>r.path.endsWith('/queue_message')),false);results.push({test:name,pass:true});}catch(e){results.push({test:name,pass:false,error:e.stack});process.exitCode=1;await f.page.screenshot({path:`${output}/${name}.png`,fullPage:true}).catch(()=>{});await fs.writeFile(`${output}/${name}.txt`,await f.page.locator('body').innerText().catch(()=>''));}finally{await f.context.close();}}
 try{
+ for(const mobile of [false,true])await scenario(`direct-rate-correction-opens-recorded-values-and-saves-only-this-quote-${mobile?'mobile':'desktop'}`,{},async f=>{
+  const mappedDuty=mapped(catalog[0]);f.tables.lignes[0].custom_duty=mappedDuty;
+  const original={invoice:structuredClone(f.tables.factures),catalog:structuredClone(f.tables.taux_categories),category:structuredClone(f.tables.categories),measures:structuredClone(f.tables.colis[0].final_packages)};
+  await f.page.setViewportSize(mobile?{width:390,height:844}:{width:1440,height:1000});await open(f);
+  await panel(f).getByRole('button',{name:'Corriger les taux OM et OMR de l’article 1',exact:true}).click();
+  const om=panel(f).getByLabel('Taux OM (%)',{exact:true}),omr=panel(f).getByLabel('Taux OMR (%)',{exact:true});await om.waitFor();
+  assert.equal(await om.inputValue(),'10');assert.equal(await omr.inputValue(),'2.5');
+  await f.page.waitForFunction(()=>document.activeElement?.getAttribute('aria-label')==='Taux OM (%)');
+  assert.equal(await panel(f).getByRole('search').count(),0,'Correcting known rates does not require another catalogue search.');
+  assert.equal(f.calls.filter(call=>['search','save','reopen'].includes(call.kind)).length,0);
+  await om.fill('0');await om.press('Tab');assert.equal(await omr.evaluate(node=>document.activeElement===node),true);
+  await omr.fill('3.125');await omr.press('Tab');
+  const reason=panel(f).getByLabel('Motif de la correction douanière');assert.equal(await reason.evaluate(node=>document.activeElement===node),true);
+  await reason.fill('Taux vérifiés pour cette expédition uniquement.');
+  await f.page.screenshot({path:`${output}/direct-rate-correction-${mobile?'mobile':'desktop'}.png`,fullPage:true});
+  if(mobile){
+   await reason.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+   const focused=await reason.evaluate(node=>{const r=node.getBoundingClientRect();return {top:r.top,bottom:r.bottom,visible:node.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2))};});
+   const nav=await f.page.getByRole('button',{name:'Dossiers',exact:true}).locator('..').boundingBox();
+   assert.ok(focused.visible&&focused.top>=44&&focused.bottom<=nav.y,'The correction reason reached with Tab remains fully visible; the quote bar must not cover it.');
+   await reason.press('Tab');await f.page.keyboard.press('Tab');
+   assert.equal(await apply(f).evaluate(node=>document.activeElement===node),true,'Keyboard progression reaches the explicit apply action.');
+   const action=await apply(f).evaluate(node=>{const r=node.getBoundingClientRect();return {bottom:r.bottom,visible:node.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2))};});
+   assert.ok(action.visible&&action.bottom<=nav.y,'Applying the correction is reachable above the mobile navigation.');
+  }
+  assert.equal(await mainSave(f).isDisabled(),true);
+  await apply(f).click();await saved(f);
+  const command=f.calls.filter(call=>call.kind==='save');assert.equal(command.length,1);assert.equal(command[0].input.p_changes[0].tariffId,T);
+  assert.deepEqual(command[0].input.p_changes[0].override,{om:0,omr:3.125,reason:'Taux vérifiés pour cette expédition uniquement.'});
+  assert.equal(f.tables.lignes[0].custom_duty.code,mappedDuty.code);assert.deepEqual(f.tables.lignes[0].custom_duty.rates,{om:0,omr:3.125});
+  assert.deepEqual(f.tables.factures,original.invoice);assert.deepEqual(f.tables.taux_categories,original.catalog);assert.deepEqual(f.tables.categories,original.category);assert.deepEqual(f.tables.colis[0].final_packages,original.measures);
+  assert.equal(f.tables.colis[0].devis_total,null);assert.equal(await mainSave(f).isEnabled(),true);assert.deepEqual(writes(f),[]);
+  assert.equal(await f.page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false);
+ });
+ await scenario('overview-quote-shortcut-opens-saved-draft-editor-without-withdrawing-or-resaving',{},async f=>{
+  f.tables.lignes[0].custom_duty=mapped(catalog[0]);await open(f);await mainSave(f).click();
+  await f.page.getByRole('button',{name:'Envoyer le devis au client',exact:true}).waitFor();const before=structuredClone(f.tables.colis[0]);const count=f.requests.filter(r=>r.path.endsWith('/save_quote')).length;
+  await f.page.getByTestId('dossier-overview').getByRole('button',{name:'Modifier le devis et les taux',exact:true}).click();await panel(f).waitFor();await mainSave(f).waitFor();
+  assert.equal(f.calls.filter(c=>['save','reopen'].includes(c.kind)).length,0);assert.equal(f.requests.filter(r=>r.path.endsWith('/save_quote')).length,count);assert.deepEqual(f.tables.colis[0],before);
+  await panel(f).getByRole('button',{name:'Corriger les taux OM et OMR de l’article 1',exact:true}).click();await panel(f).getByLabel('Taux OM (%)',{exact:true}).waitFor();assert.equal(await panel(f).getByLabel('Taux OM (%)',{exact:true}).inputValue(),'10');
+ });
+ await scenario('direct-rate-correction-keeps-existing-override-and-unsaved-draft',{},async f=>{
+  f.tables.lignes[0].custom_duty={...mapped(catalog[0]),rates:{om:7,omr:1.25},overrideReason:'Correction déjà vérifiée.'};
+  await open(f);const shortcut=panel(f).getByRole('button',{name:'Corriger les taux OM et OMR de l’article 1',exact:true});await shortcut.click();
+  const om=panel(f).getByLabel('Taux OM (%)',{exact:true});await om.waitFor();assert.equal(await om.inputValue(),'7');
+  assert.equal(await panel(f).getByLabel('Taux OMR (%)',{exact:true}).inputValue(),'1.25');assert.equal(await panel(f).getByLabel('Motif de la correction douanière').inputValue(),'Correction déjà vérifiée.');
+  await om.fill('8');await panel(f).getByLabel('Motif de la correction douanière').fill('Brouillon à conserver lors du retour.');
+  await f.page.getByRole('tab',{name:/^Conversation/}).click();await panel(f).waitFor({state:'hidden'});
+  await f.page.getByRole('tab',{name:'Colis',exact:true}).click();await panel(f).waitFor();await shortcut.click();await om.waitFor();
+  assert.equal(await om.inputValue(),'8');assert.equal(await panel(f).getByLabel('Motif de la correction douanière').inputValue(),'Brouillon à conserver lors du retour.');
+  assert.equal(f.tables.lignes[0].custom_duty.rates.om,7);assert.equal(f.calls.filter(call=>['save','reopen'].includes(call.kind)).length,0);assert.deepEqual(writes(f),[]);
+ });
  await scenario('renewed-agreement-allows-stale-customs-correction-before-quote',{},async f=>{
   const row=f.tables.colis[0];Object.assign(row,{statut:'autorise',feu_vert:'autorise'});
   f.tables.lignes[0].custom_duty={...mapped(catalog[0]),stale:true};
@@ -112,6 +164,26 @@ try{
   await f.page.getByRole('heading',{name:'Devis enregistré',exact:true}).waitFor();assert.equal(await panel(f).count(),0);assert.equal(await f.page.getByRole('button',{name:'Modifier le devis',exact:true}).count(),0);assert.equal(await mainSave(f).count(),0);assert.equal(f.calls.filter(c=>['save','suggest','reopen'].includes(c.kind)).length,0);
  });
 
+ await scenario('paid-quote-consults-frozen-rates-even-when-live-article-rates-have-changed',{},async f=>{
+  f.tables.lignes[0].custom_duty=mapped(catalog[0]);await open(f);await mainSave(f).click();await f.page.getByRole('button',{name:'Envoyer le devis au client',exact:true}).waitFor();
+  const frozenSnapshot=structuredClone(f.tables.colis[0].devis_snapshot);assert.ok(frozenSnapshot?.inputs?.lines?.length);
+  f.tables.lignes[0].custom_duty={...mapped(catalog[0]),rates:{om:25,omr:8},overrideReason:'Valeurs courantes différentes du devis payé.'};
+  Object.assign(f.tables.colis[0],{statut:'paye',paiement_montant:f.tables.colis[0].devis_total,paiement_date:'2026-10-01T08:00:00Z',devis_brouillon:false});
+  const before=structuredClone(f.tables.colis[0]);await f.page.reload();await f.page.getByRole('heading',{name:'Devis enregistré',exact:true}).waitFor();
+  assert.equal(await panel(f).count(),0);const frozen=f.page.getByLabel('Articles et taux enregistrés',{exact:true});await frozen.locator('summary').click();
+  assert.match(await frozen.innerText(),/01012100/);assert.match(await frozen.innerText(),/OM\s*:?\s*10\s*%/);assert.match(await frozen.innerText(),/OMR\s*:?\s*2[,.]5\s*%/);
+  assert.doesNotMatch(await frozen.innerText(),/OM\s*:?\s*25\s*%/);assert.doesNotMatch(await frozen.innerText(),/OMR\s*:?\s*8\s*%/);
+  assert.deepEqual(f.tables.colis[0],before);assert.deepEqual(f.tables.colis[0].devis_snapshot,frozenSnapshot);assert.equal(await mainSave(f).count(),0);assert.equal(f.calls.filter(c=>['save','reopen'].includes(c.kind)).length,0);
+  assert.equal(f.requests.filter(r=>r.path.endsWith('/save_quote')).length,1,'Only the deliberate initial draft save wrote a quote.');
+ });
+ for(const [name,proof] of [['partial-payment-without-date',{paiement_montant:10,paiement_date:null}],['recorded-zero-payment',{paiement_montant:0,paiement_date:null}],['departure-before-status-refresh',{date_expedition:'2026-10-01T08:00:00Z'}]])await scenario(`direct-quote-edit-query-cannot-bypass-${name}`,{},async f=>{
+  f.tables.lignes[0].custom_duty=mapped(catalog[0]);Object.assign(f.tables.colis[0],{statut:'devis_envoye',devis_total:77,quote_version:1,devis_brouillon:false,...proof});
+  const before=structuredClone(f.tables.colis[0]);await f.login();await f.page.goto(`${base}/colis/${ids.P}?section=devis&modifier=devis`);
+  await f.page.getByRole('heading',{name:'Devis enregistré',exact:true}).waitFor();assert.equal(await panel(f).count(),0);
+  assert.equal(await f.page.getByTestId('dossier-overview').getByRole('button',{name:'Modifier le devis et les taux',exact:true}).count(),0);
+  assert.equal(await panel(f).getByRole('button',{name:/Corriger les taux|Classer l’article/}).count(),0);assert.equal(await mainSave(f).count(),0);
+  assert.equal(f.calls.filter(c=>['save','suggest','reopen'].includes(c.kind)).length,0);assert.deepEqual(f.tables.colis[0],before);assert.deepEqual(writes(f),[]);
+ });
  await scenario('suggestions-automatic-read-only-until-explicit-choice',{suggestions:true},async f=>{
   f.tables.taux_categories[0].om=20;f.control.suggestDelay=true;await open(f);
   await panel(f).getByRole('status').filter({hasText:'Recherche de propositions douanières'}).waitFor();

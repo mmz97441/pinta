@@ -21,20 +21,19 @@ Deno.serve(async (req: Request) => {
     const city = client.commune || client.ville;
     if (!client.nom || !client.email || !address || !city || !client.cp) throw new HttpError(400, 'Complétez le nom, l’email et l’adresse de facturation du client avant le paiement');
     const amount = Math.round(Number(colis.devis_total) * 100);
-    const old = await db.from('payment_intents').select('*').eq('colis_id', colisId).eq('quote_version', colis.quote_version).maybeSingle(); throwDb(old);
-    if (old.data && old.data.provider_is_live !== expectedLive) throw new HttpError(409, 'Le mode de l’ancien lien doit être vérifié. Établissez une nouvelle version du devis avant de créer un paiement.');
-    if (old.data?.payment_url && old.data.status === 'pending') return json({ success: true, paymentId: old.data.provider_id, paymentUrl: old.data.payment_url, amount: amount / 100, reused: true });
     const returnToken = await createPaymentReturnToken();
-    const returnFields = { return_token_hash: returnToken.hash, return_token_expires_at: returnToken.expiresAt };
-    let reserved;
-    if (old.data?.status === 'failed' && !old.data.provider_id) {
-      reserved=await db.from('payment_intents').update({status:'creating',updated_at:new Date().toISOString(),...returnFields}).eq('id',old.data.id).eq('status','failed').select().maybeSingle(); throwDb(reserved);
-      if (!reserved.data) throw new HttpError(409,'Nouvelle tentative déjà en cours');
-    } else {
-      if (old.data) throw new HttpError(409, 'Un paiement pour ce devis est déjà en traitement. Vérifiez son état avant de réessayer.');
-      reserved = await db.from('payment_intents').insert({ colis_id: colisId, quote_version: colis.quote_version, amount_cents: amount, status: 'creating', provider_is_live: expectedLive, ...returnFields }).select().single();
-      if (reserved.error?.code === '23505') throw new HttpError(409, 'Création déjà en cours'); throwDb(reserved);
-    }
+    // Serialize reservation with corrections and quote saves. The RPC verifies
+    // current amount/version and every payment proof while holding the dossier.
+    const reserved = await db.rpc('reserve_payplug_intent', {
+      p_colis_id: colisId, p_quote_version: colis.quote_version, p_amount_cents: amount, p_is_live: expectedLive,
+      p_return_token_hash: returnToken.hash, p_return_token_expires_at: returnToken.expiresAt,
+    });
+    if (reserved.error && ['40001', '22023', '23505'].includes(reserved.error.code)) throw new HttpError(409, reserved.error.message || 'Le dossier a changé. Actualisez avant de réessayer.');
+    if (reserved.error?.code === '42501') throw new HttpError(403, 'Création du paiement non autorisée');
+    throwDb(reserved);
+    if (!reserved.data?.id) throw new HttpError(409, 'Réservation du paiement indisponible. Actualisez le dossier.');
+    if (reserved.data.status === 'pending') return json({ success: true, paymentId: reserved.data.provider_id, paymentUrl: reserved.data.payment_url, amount: amount / 100, reused: true });
+    if (reserved.data.status !== 'creating') throw new HttpError(409, 'Un paiement est déjà en traitement. Vérifiez son état.');
     const country = ({ '974':'RE','976':'YT','971':'GP','972':'MQ' } as Record<string,string>)[client.cp.slice(0,3)] || 'FR';
     const billing = { first_name: client.prenom || client.nom, last_name: client.nom, email: client.email.trim(), address1: address, ...(client.adresse_ligne2 ? { address2: client.adresse_ligne2 } : {}), postcode: client.cp, city, country, language: 'fr' };
     const returnUrl = `${appUrl.replace(/\/$/, '')}/paiement/retour?token=${returnToken.token}`;

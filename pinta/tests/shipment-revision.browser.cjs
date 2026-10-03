@@ -134,6 +134,51 @@ async function invalidFieldVisible(f, element) {
     } finally { await f.context.close(); console.log(JSON.stringify(results.at(-1))); }
   }
   try {
+    for(const phase of ['reception','preparation'])for(const mobile of [false,true])await scenario(`overview-direct-${phase}-opens-once-preserves-draft-and-cancels-without-write-${mobile?'mobile':'desktop'}`,async f=>{
+      const before=snapshot(f);await open(f,'documents');
+      const shortcut=f.page.getByTestId('dossier-overview').getByRole('button',{name:phase==='reception'?'Modifier les mesures à réception':'Modifier les mesures après optimisation',exact:true});
+      await shortcut.click();const panel=revision(f,phase);await field(f,phase).waitFor();
+      assert.equal(new URL(f.page.url()).searchParams.get('section'),phase);
+      assert.equal(await field(f,phase).inputValue(),phase==='reception'?'40':'30');
+      await focusedAfterRender(f,field(f,phase));assert.equal(await panel.getByRole('button',{name:'Enregistrer',exact:true}).isDisabled(),true);
+      assert.equal(f.calls.length,0,'Opening the correction never withdraws a quote or payment link.');
+      await field(f,phase).fill('43');
+      await f.page.getByRole('tab',{name:/^Conversation/}).click();await panel.waitFor({state:'hidden'});
+      await f.page.getByRole('tab',{name:'Colis',exact:true}).click();await field(f,phase).waitFor();
+      assert.equal(await field(f,phase).inputValue(),'43');await shortcut.click();await field(f,phase).waitFor();assert.equal(await field(f,phase).inputValue(),'43','The shortcut does not replace an existing unsaved draft.');
+      await panel.getByRole('button',{name:'Annuler',exact:true}).click();await field(f,phase).waitFor({state:'hidden'});
+      await panel.getByRole('status').filter({hasText:'Modification annulée'}).waitFor();
+      // The query/request must not immediately reopen after cancellation, but a new deliberate click must work.
+      assert.equal(await panel.getByRole('button',{name:'Modifier',exact:true}).isVisible(),true);await shortcut.click();await field(f,phase).waitFor();
+      assert.equal(await field(f,phase).inputValue(),phase==='reception'?'40':'30');unchanged(f,before);
+      await f.page.screenshot({path:path.join(output,`direct-${phase}-${mobile?'mobile':'desktop'}.png`),fullPage:true});
+    },{mobile});
+    for(const phase of ['reception','preparation'])await scenario(`overview-direct-${phase}-save-retires-old-quote-and-payment-link-only-on-confirmed-save`,async f=>{
+      const before={colis:clone(f.tables.colis[0]),factures:clone(f.tables.factures),lignes:clone(f.tables.lignes)};await open(f,'documents');
+      await f.page.getByTestId('dossier-overview').getByRole('button',{name:phase==='reception'?'Modifier les mesures à réception':'Modifier les mesures après optimisation',exact:true}).click();await field(f,phase).waitFor();
+      await field(f,phase,1,'Poids','kg').fill('2,75');assert.equal(f.tables.colis[0].payplug_payment_url,before.colis.payplug_payment_url);assert.equal(f.calls.length,0);
+      await revision(f,phase).getByRole('button',{name:'Enregistrer',exact:true}).click();
+      await revision(f,phase).getByRole('status').filter({hasText:'enregistrées.'}).waitFor();
+      assert.match(await revision(f,phase).getByRole('status').innerText(),/recalculé.*vérifié/);assert.match(await revision(f,phase).getByRole('status').innerText(),/Aucun message envoyé/);
+      assert.equal(f.calls.length,1);assert.equal(f.calls[0].task,phase);assert.equal(f.calls[0].expectedUpdatedAt,before.colis.updated_at);
+      independentData(f,before,phase);assert.equal(f.tables.colis[0].devis_total,null);assert.equal(f.tables.colis[0].devis_snapshot,null);assert.equal(f.tables.colis[0].payplug_payment_url,null);
+      await field(f,phase).waitFor({state:'hidden'});assert.equal(await revision(f,phase).getByRole('button',{name:'Modifier',exact:true}).isVisible(),true,'Successful save does not reopen its form.');
+    });
+    await scenario('overview-keeps-colleague-measures-read-only-while-other-phase-remains-correctable',async f=>{
+      const colleague='88888888-1111-4111-8111-111111111111';f.tables.staff_users.push({id:colleague,auth_id:colleague,nom:'Madly',role:'preparateur',actif:true,staff_permissions:{}});
+      f.tables.staff_work_actions[0].assignee_id=colleague;f.tables.staff_work_actions[0].state='in_progress';const before=snapshot(f);await open(f,'documents');
+      const overview=f.page.getByTestId('dossier-overview');assert.equal(await overview.getByRole('button',{name:'Modifier les mesures après optimisation',exact:true}).count(),0);
+      assert.equal(await overview.getByRole('button',{name:'Modifier les mesures à réception',exact:true}).isVisible(),true);
+      await f.page.goto(`${base}/colis/${ids.P}?section=preparation&modifier=preparation`);await revision(f,'preparation').waitFor();
+      assert.equal(await revision(f,'preparation').getByRole('button',{name:'Modifier',exact:true}).count(),0);assert.equal(await field(f,'preparation').count(),0);unchanged(f,before);
+    });
+    await scenario('explicit-empty-optimised-manifest-never-restores-old-scalar-measures',async f=>{
+      await open(f,'preparation');const panel=revision(f,'preparation');await panel.waitFor();
+      assert.equal(await panel.locator('ol li').count(),0,'An explicitly empty manifest contains no legacy package.');
+      await panel.getByRole('button',{name:'Modifier',exact:true}).click();assert.equal(await field(f,'preparation').count(),0);
+      await panel.getByRole('button',{name:'Ajouter un colis préparé',exact:true}).click();await field(f,'preparation').waitFor();
+      assert.equal(await field(f,'preparation').inputValue(),'');assert.equal(await field(f,'preparation',1,'Poids','kg').inputValue(),'');assert.equal(f.calls.length,0);
+    },{colis:{final_packages:[],final_measurements_version:null,outgoing_parcel_count:0,fin_l:80,fin_w:70,fin_h:60,fin_p:9}});
     await scenario('step-navigation-only-does-not-reopen-or-correct-anything', async f => {
       const before = snapshot(f); await open(f, 'reception'); await revision(f, 'reception').waitFor();
       const select = await openTaskNavigation(f);
@@ -251,11 +296,13 @@ async function invalidFieldVisible(f, element) {
       await panel.getByRole('button', { name: 'Enregistrer', exact: true }).click(); await panel.getByRole('status').filter({ hasText: 'enregistrées.' }).waitFor();
       assert.equal(f.calls.length, 2); assert.deepEqual(f.calls[1], f.calls[0]);
     }, { networkError: true });
-    for (const [name, changes] of [['paid', { statut: 'paye', paiement_date: '2026-09-10' }], ['shipped', { statut: 'expedie' }], ['cancelled', { statut: 'annule' }], ['archived', { archive: true }]]) await scenario(`${name}-measurements-stay-read-only`, async f => {
+    for (const [name, changes] of [['paid', { statut: 'paye', paiement_date: '2026-09-10' }], ['partial-payment-without-date', { paiement_montant: 10, paiement_date: null }], ['recorded-zero-payment', { paiement_montant: 0, paiement_date: null }], ['departure-proof-before-status-refresh', { date_expedition: '2026-10-01T08:00:00Z' }], ['shipped', { statut: 'expedie' }], ['cancelled', { statut: 'annule' }], ['archived', { archive: true }]]) await scenario(`${name}-measurements-stay-read-only`, async f => {
       const before = snapshot(f);
       for (const phase of ['reception', 'preparation']) {
         await open(f, phase); const panel = revision(f, phase); await panel.waitFor();
         assert.equal(await panel.getByRole('button', { name: 'Modifier', exact: true }).count(), 0);
+        assert.equal(await f.page.getByTestId('dossier-overview').getByRole('button',{name:phase==='reception'?'Modifier les mesures à réception':'Modifier les mesures après optimisation',exact:true}).count(),0);
+        await f.page.goto(`${base}/colis/${ids.P}?section=${phase}&modifier=${phase}`);await panel.waitFor();assert.equal(await field(f,phase).count(),0);
       }
       unchanged(f, before);
     }, { colis: changes });
@@ -292,6 +339,17 @@ async function invalidFieldVisible(f, element) {
       assert.deepEqual(f.tables.colis[0].dims_par_colis, saved.dims_par_colis); assert.deepEqual(f.tables.colis[0].final_packages, saved.final_packages);
       assert.equal(f.tables.factures[0].valide, true); assert.equal(f.tables.messages.length, 0);
       await f.page.screenshot({ path: path.join(output, 'new-consent-after-reopen.png'), fullPage: true });
+    });
+    await scenario('overview-quote-shortcut-opens-withdrawal-confirmation-before-any-business-change',async f=>{
+      const before=snapshot(f);await open(f,'documents');
+      const shortcut=f.page.getByTestId('dossier-overview').getByRole('button',{name:'Modifier le devis et les taux',exact:true});await shortcut.click();
+      const reopen=f.page.getByRole('region',{name:'Reprise du devis',exact:true});await reopen.getByRole('button',{name:'Reprendre le devis',exact:true}).waitFor();
+      assert.match(await reopen.innerText(),/lien de paiement.*retirés/s);unchanged(f,before);
+      await reopen.getByRole('button',{name:'Annuler',exact:true}).click();await reopen.getByRole('button',{name:'Modifier le devis',exact:true}).waitFor();unchanged(f,before);
+      await shortcut.click();await reopen.getByRole('button',{name:'Reprendre le devis',exact:true}).click();
+      await f.page.getByRole('button',{name:'Enregistrer et vérifier le devis',exact:true}).waitFor();
+      assert.equal(f.calls.length,1);assert.equal(f.calls[0].task,'devis');assert.equal(f.tables.colis[0].payplug_payment_url,null);assert.equal(f.tables.colis[0].devis_total,null);
+      assert.equal(f.tables.factures[0].valide,true);assert.equal(f.tables.messages.length,0);
     });
     await scenario('sent-quote-reopens-as-an-editable-draft-without-notification', async f => {
       const saved = clone(f.tables.colis[0]); await open(f, 'devis');

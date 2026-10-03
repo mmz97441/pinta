@@ -46,6 +46,8 @@ import DossierContextPanel from './components/detail/DossierContextPanel';
 import DossierOverview from './components/detail/DossierOverview';
 import { buildDossierOverview } from './domain/dossierOverview';
 import { revisionLockedReason } from './domain/shipmentRevision';
+import { needsQuoteRecalculation } from './domain/clientJourney';
+import { hasCurrentPreparation } from './domain/preparationReadiness';
 import ChatPanel from './components/detail/ChatPanel';
 import './components/detail/dossierConversation.css';
 import AuditLog from './components/detail/AuditLog';
@@ -101,6 +103,7 @@ function StaffColisDetail() {
   const selectTab = tab => {
     setContextSection(null);
     const params = new URLSearchParams(location.search);
+    params.delete('modifier');
     if (tab === 'conversation') params.set('onglet', 'conversation'); else params.delete('onglet');
     navigate(`${location.pathname}?${params}`, { state: location.state });
   };
@@ -108,6 +111,10 @@ function StaffColisDetail() {
   const openOverviewTask = next => {
     setContextSection(null);
     navigate(dossierTaskUrl(id, next, location.search, { hash: 'dossier-work' }));
+  };
+  const openOverviewEditor = next => {
+    setContextSection(null);
+    navigate(dossierTaskUrl(id, next, location.search, { edit: true, hash: 'dossier-work' }));
   };
 
   useEffect(() => {
@@ -122,7 +129,7 @@ function StaffColisDetail() {
     if (detailLoading || conversationOpen || location.hash !== '#dossier-work') return;
     const frame = requestAnimationFrame(() => {
       const workspace = document.getElementById('dossier-work');
-      workspace?.focus({ preventScroll: true });
+      if (!workspace?.contains(document.activeElement)) workspace?.focus({ preventScroll: true });
       workspace?.scrollIntoView({ block: 'start' });
     });
     return () => cancelAnimationFrame(frame);
@@ -151,10 +158,17 @@ function StaffColisDetail() {
     && ['perm_colis_receptionner', 'perm_colis_preparer', 'perm_colis_modifier_dims'].some(can);
   const canEditMeasures = phase => {
     const action = findDossierWorkAction(sel, workActions, phase, { can });
-    return !revisionLockedReason(sel, phase) && can('perm_colis_revenir_arriere')
+    const stage = needsQuoteRecalculation(sel) ? 'en_preparation' : sel.statut;
+    const correction = phase === 'reception' ? stage !== 'receptionne'
+      : !['autorise', 'en_preparation'].includes(stage) || sel.devisSnapshot?.inputs || sel.devisSnapshot && hasCurrentPreparation(sel);
+    return !revisionLockedReason(sel, phase) && (!correction || can('perm_colis_revenir_arriere'))
       && can(phase === 'reception' ? 'perm_colis_mesurer' : 'perm_colis_preparer')
       && (!action?.assignee_id || action.assignee_id === auth?.u?.id);
   };
+  const quoteAction = findDossierWorkAction(sel, workActions, 'devis', { can });
+  const canEditQuote = !revisionLockedReason(sel, 'preparation') && can('perm_colis_calculer_devis')
+    && (!['devis_envoye', 'attente_paiement'].includes(sel.statut) || can('perm_colis_revenir_arriere'))
+    && (!quoteAction?.assignee_id || quoteAction.assignee_id === auth?.u?.id);
   return (
     <div className={conversationOpen ? 'dossier-page dossier-page--conversation' : 'dossier-page'}>
       <DetailHeader task={task} conversation={conversationOpen} onOpenContext={openContext} />
@@ -175,7 +189,7 @@ function StaffColisDetail() {
       <section role="tabpanel" id="dossier-panel-colis" aria-labelledby="dossier-tab-colis" hidden={conversationOpen}>
       <div className="mx-auto max-w-[1600px] px-4 pt-4 sm:px-6 lg:px-8">
         <DossierOverview dossier={sel} model={overview} currentTask={task}
-          onNavigateTask={openOverviewTask} onCorrect={openOverviewTask} onOpenContext={openContext}
+          onNavigateTask={openOverviewTask} onCorrect={openOverviewEditor} onOpenContext={openContext} canEditQuote={canEditQuote}
           canEditCasier={canEditCasier} canEditReception={canEditMeasures('reception')} canEditPreparation={canEditMeasures('preparation')}
           onEditCasier={() => { setContextSection('reception'); setCasierEditRequest(previous => previous + 1); }} />
       </div>

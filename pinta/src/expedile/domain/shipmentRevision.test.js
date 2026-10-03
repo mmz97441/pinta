@@ -12,6 +12,15 @@ test('revising receipt and prepared measurements preserves the distinct physical
   assert.deepEqual(shipmentRevisionBoxes({ finL: 20, finW: 10, finH: 5, finP: 1 }, 'preparation'), [{ dimL: 20, dimW: 10, dimH: 5, poids: 1 }]);
 });
 
+test('an explicit empty or invalid prepared manifest cannot revive old scalar measurements', () => {
+  const previous = { ...colis, finL: 100, finW: 80, finH: 60, finP: 90 };
+  assert.deepEqual(shipmentRevisionBoxes({ ...previous, finalPackages: [] }, 'preparation'), []);
+  assert.deepEqual(shipmentRevisionBoxes({ ...previous, finalPackages: {} }, 'preparation'), []);
+  assert.deepEqual(shipmentRevisionBoxes({ ...previous, finalPackages: null }, 'preparation'), [{ dimL: 100, dimW: 80, dimH: 60, poids: 90 }]);
+  assert.deepEqual(shipmentRevisionBoxes(previous, 'reception'), colis.dimsParColis);
+  assert.deepEqual(shipmentRevisionBoxes(previous, 'preparation'), colis.finalPackages);
+});
+
 test('equivalent decimal edits are no-ops but dimension and composition changes are not', () => {
   const typed = { dimL: '40.00', dimW: '30', dimH: '20', poids: '2,50' };
   assert.equal(sameRevisionBoxes([box], [typed]), true);
@@ -43,7 +52,37 @@ test('paid, shipped, archived or cancelled dossiers remain read-only; preparatio
   assert.equal(revisionLockedReason({ ...colis, produitInterdit: true }, 'reception'), '');
 });
 
+test('any recorded amount or recorded departure locks corrections even if the displayed status is stale', () => {
+  for (const changes of [{ paiementMontant: 20 }, { paiementMontant: '0.01' }, { paiementMontant: 0 }, { dateExpedition: '2026-10-02T10:00:00Z' }]) {
+    for (const phase of ['reception', 'preparation']) assert.notEqual(revisionLockedReason({ ...colis, ...changes }, phase), '');
+  }
+  assert.match(revisionLockedReason({ ...colis, paiementMontant: 20 }, 'reception'), /paiement/);
+  assert.match(revisionLockedReason({ ...colis, dateExpedition: '2026-10-02T10:00:00Z' }, 'preparation'), /transport/);
+  assert.equal(revisionLockedReason({ ...colis, paiementMontant: null, paiementDate: null }, 'preparation'), '');
+});
+
+test('unknown states and stale consent cannot offer a correction that its server command forbids', () => {
+  for (const statut of ['unknown', undefined, 'pret']) {
+    for (const phase of ['reception', 'preparation']) assert.notEqual(revisionLockedReason({ ...colis, statut }, phase), '');
+  }
+  assert.notEqual(revisionLockedReason({ ...colis, statut: 'mesure', feuVert: 'autorise' }, 'preparation'), '');
+  assert.equal(revisionLockedReason({ ...colis, statut: 'mesure', feuVert: 'autorise' }, 'reception'), '');
+  assert.equal(revisionLockedReason({ ...colis, statut: 'autorise' }, 'preparation'), '');
+});
+
+test('an unpaid payment link still permits the explicit guarded correction flow', () => {
+  const awaiting = { ...colis, statut: 'attente_paiement', payplugPaymentId: 'pay_existing', payplugPaymentUrl: 'https://payment.invalid', paiementDate: null, paiementMontant: null };
+  assert.equal(revisionLockedReason(awaiting, 'reception'), '');
+  assert.equal(revisionLockedReason(awaiting, 'preparation'), '');
+  assert.equal(revisionHasQuote(awaiting), true);
+});
+
 test('quote impact includes a saved draft, sent quote and active payment link', () => {
   assert.equal(revisionHasQuote(colis), false);
-  for (const changes of [{ devisSnapshot: {} }, { devisTotal: 0 }, { devisBrouillon: true }, { payplugPaymentUrl: 'https://example.invalid/pay' }, { statut: 'devis_envoye' }]) assert.equal(revisionHasQuote({ ...colis, ...changes }), true);
+  for (const changes of [{ devisSnapshot: { inputs: {} } }, { devisSnapshot: { amounts: { total: 50 } } }, { devisTotal: 50, devisBrouillon: true }, { devisTotal: 0, quoteVersion: 1 }, { payplugPaymentUrl: 'https://example.invalid/pay' }, { statut: 'devis_envoye' }]) assert.equal(revisionHasQuote({ ...colis, ...changes }), true);
+});
+
+test('initial zero, preparation draft flag and retired quote stamps do not invent a quote impact', () => {
+  for (const changes of [{ devisTotal: 0, quoteVersion: 0 }, { devisTotal: null, devisBrouillon: true }, { devisTotal: null, devisSnapshot: { createdAt: '2026-10-02', version: 3 }, quoteVersion: 3, devisBrouillon: true }, { devisSnapshot: {} }])
+    assert.equal(revisionHasQuote({ ...colis, ...changes }), false);
 });

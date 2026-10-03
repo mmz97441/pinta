@@ -17,7 +17,7 @@ export default function ShipmentRevision(props) {
   return <RevisionEditor key={`${props.draftOwnerId || ''}:${props.colis.id}:${props.phase}`} {...props} />;
 }
 
-function RevisionEditor({ colis, phase, canEdit = false, draftOwnerId, onSave, onReload, onContinue, nextLabel = 'Voir la suite du dossier' }) {
+function RevisionEditor({ colis, phase, canEdit = false, draftOwnerId, onSave, onReload, onContinue, autoOpen = false, onAutoOpen, nextLabel = 'Voir la suite du dossier' }) {
   const key = draftKey(draftOwnerId, `shipment-revision:${colis.id}:${phase}`);
   const [cached] = useState(() => {
     const saved = readDraft(key, null);
@@ -41,6 +41,7 @@ function RevisionEditor({ colis, phase, canEdit = false, draftOwnerId, onSave, o
   const formRef = useRef(null);
   const feedbackRef = useRef(null);
   const fieldRefs = useRef({});
+  const openedRequest = useRef(false);
   const savedBoxes = shipmentRevisionBoxes(colis, phase);
   const dirty = !sameRevisionBoxes(boxes, baseline);
   const needsCertification = phase === 'preparation' && !hasCurrentPreparation(colis);
@@ -54,6 +55,22 @@ function RevisionEditor({ colis, phase, canEdit = false, draftOwnerId, onSave, o
   const clearWorkDraft = useWorkDraft({ userId: draftOwnerId, dossierId: colis.id, kind: phase === 'reception' ? 'reception' : 'preparation', source: `revision-${phase}`, dirty: editing && dirty, label: `${receipt ? 'Mesures à réception' : 'Mesures après optimisation'} non enregistrées` });
 
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  useEffect(() => {
+    if (!autoOpen) { openedRequest.current = false; return; }
+    if (openedRequest.current) return;
+    openedRequest.current = true;
+    if (!locked && !pending.current) {
+      // Reuse an existing draft, including its original version for conflicts.
+      // A fresh editor takes the values currently saved in the dossier.
+      if (!editing) {
+        const next = shipmentRevisionBoxes(colis, phase);
+        setBoxes(copy(next)); setBaseline(copy(next)); setExpectedUpdatedAt(colis.updatedAt);
+        setEditing(true); setLastSaved(null); setNotice(''); setError(''); setIssues([]);
+      }
+      setFocusTarget({ kind: 'field', index: 0, name: 'dimL' });
+    }
+    onAutoOpen?.();
+  }, [autoOpen, locked, editing, colis, phase, onAutoOpen]);
   useEffect(() => {
     if (editing && dirty) {
       setStorageAvailable(writeDraft(key, { boxes, baseline, expectedUpdatedAt }));

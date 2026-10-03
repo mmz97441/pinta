@@ -9,7 +9,7 @@ const models = values => new Map(Object.entries(values));
 
 test('every displayed data column declares a typed accessor, while actions have no sorting contract', () => {
   const data = [...columns.values()].filter(column => column.kind === 'data');
-  assert.equal(data.length, 14);
+  assert.equal(data.length, 17);
   for (const column of data) {
     assert.equal(isDossierTableColumnSortable(column), true, column.key);
     assert.ok(['text', 'number', 'date'].includes(column.sort.type));

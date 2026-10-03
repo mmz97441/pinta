@@ -1,7 +1,5 @@
 /* The sticky cells must paint the same opaque surface as their row in both themes. */
-.dossier-data-table { table-layout: fixed; min-width: 1055px; border-collapse: separate; border-spacing: 0; }
-.dossier-data-table[data-view='payments'] { min-width: 1120px; }
-.dossier-data-table[data-view='departures'] { min-width: 1120px; }
+.dossier-data-table { table-layout: fixed; border-collapse: separate; border-spacing: 0; }
 .dossier-table-head,
 .dossier-table-row,
 .dossier-table-card {
@@ -55,36 +53,39 @@ html.dark .dossier-table-card {
 .dossier-table-head [data-column='ref'] {
   position: sticky;
   left: 40px;
-  width: 160px;
-  min-width: 160px;
-  max-width: 160px;
+  width: var(--dossier-ref-width, 160px);
+  min-width: var(--dossier-ref-width, 160px);
+  max-width: var(--dossier-ref-width, 160px);
   z-index: 2;
 }
 .dossier-table-row > [data-column='client'],
 .dossier-table-head [data-column='client'] {
   position: sticky;
-  left: 200px;
-  width: 200px;
-  min-width: 200px;
-  max-width: 200px;
+  left: var(--dossier-client-left, 200px);
+  width: var(--dossier-client-width, 200px);
+  min-width: var(--dossier-client-width, 200px);
+  max-width: var(--dossier-client-width, 200px);
   box-shadow: 1px 0 0 var(--border-subtle);
   z-index: 2;
 }
 .dossier-table-head [data-column='select'],
 .dossier-table-head [data-column='ref'],
 .dossier-table-head [data-column='client'] { z-index: 5; }
-/* One unfixed column in each view absorbs extra room. Fixed identity columns
-   never stretch, so their sticky offsets also hold on a very wide display. */
-.dossier-table-head [data-column='owner'] { width: 120px; }
-.dossier-table-head [data-column='casier'] { width: 70px; }
-.dossier-table-head [data-column='cartons'] { width: 80px; }
-.dossier-table-head [data-column='requested'],
-.dossier-table-head [data-column='paid'] { width: 130px; }
-.dossier-table-head [data-column='sentAt'] { width: 145px; }
-.dossier-table-head [data-column='departure'] { width: 150px; }
-.dossier-table-head [data-column='destination'] { width: 110px; }
-.dossier-table-head [data-column='packages'] { width: 140px; }
-.dossier-table-head [data-column='action'] { width: 175px; }
+/* The main task remains directly available when extra facts require scrolling. */
+.dossier-table-row > [data-column='action'],
+.dossier-table-head [data-column='action'] {
+  position: sticky;
+  right: 0;
+  z-index: 3;
+  box-shadow: -1px 0 0 var(--border-subtle);
+}
+.dossier-table-head [data-column='action'] { z-index: 6; }
+/* Oversized identity cells must not cover every scrollable data column. */
+.dossier-data-table[data-unpin-client='true'] .dossier-table-row > [data-column='client'],
+.dossier-data-table[data-unpin-ref='true'] .dossier-table-row > [data-column='ref'] { position: static; }
+.dossier-data-table[data-unpin-client='true'] .dossier-table-head [data-column='client'],
+.dossier-data-table[data-unpin-ref='true'] .dossier-table-head [data-column='ref'] { left: auto; z-index: 4; }
+/* The colgroup owns every width. Identity offsets use the same saved widths. */
 .dossier-table-row > .dossier-table-align-right,
 .dossier-table-head .dossier-table-align-right { text-align: right; }
 .dossier-table-checkbox {
@@ -105,6 +106,14 @@ html.dark .dossier-table-card {
   text-align: left;
 }
 .dossier-table-sort { width: 100%; }
+.dossier-table-heading-tools { display: flex; align-items: center; justify-content: space-between; gap: 2px; }
+.dossier-table-filter, .dossier-table-resize { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; border-radius: 6px; }
+.dossier-table-filter { gap: 4px; font-size: .75rem; padding: 0 4px; }
+.dossier-table-filter svg { flex-shrink: 0; }
+.dossier-table-filter[aria-pressed='true'] { color: var(--brand-text); background: var(--dossier-table-selected-bg); font-weight: 700; }
+.dossier-table-resize { flex-shrink: 0; width: 44px; min-width: 44px; touch-action: none; cursor: col-resize; border-right: 2px solid var(--border-subtle); }
+.dossier-table-dimensions > span { display: block; }
+.dossier-table-card-main-action { margin-top: 12px; }
 .dossier-table-align-right .dossier-table-sort { justify-content: flex-end; }
 .dossier-table-sort svg { flex-shrink: 0; }
 .dossier-table-reference { font-weight: 700; color: var(--brand-text); white-space: nowrap; }
@@ -162,5 +171,18 @@ html.dark .dossier-table-open-primary { color: #122a36; background: #c4dae5; bor
 .dossier-table-card[data-view='daily'] .dossier-table-card-facts { row-gap: 8px; margin: 12px 0; }
 .dossier-table-card[data-view='daily'] .dossier-table-card-facts > div { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .dossier-table-card[data-view='daily'] .dossier-table-card-facts > [data-column='owner'] { grid-column: 1 / -1; }
+.dossier-table-card[data-view='daily'] .dossier-table-card-facts > [data-column='optimizedDimensions'],
+.dossier-table-card[data-view='daily'] .dossier-table-card-facts > [data-column='statusLabel'],
+.dossier-table-card[data-view='daily'] .dossier-table-card-facts > [data-column='paymentState'] { grid-column: 1 / -1; }
 .dossier-table-card[data-view='daily'] .dossier-table-card-facts dt { flex-shrink: 0; }
 .dossier-table-card[data-view='daily'] .dossier-table-card-facts dd { margin: 0; text-align: right; }
+.dossier-column-options { border: 1px solid var(--border-subtle); border-radius: 12px; padding: 12px; color: var(--text-primary); background: var(--bg-surface); }
+.dossier-column-options form, .dossier-column-width-options { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; }
+.dossier-column-options label { display: flex; flex-direction: column; gap: 4px; font-size: .875rem; font-weight: 600; min-width: 0; max-width: 100%; }
+.dossier-column-options input, .dossier-column-options select, .dossier-column-options button { min-height: 44px; max-width: 100%; border: 1px solid var(--border-subtle); background: var(--bg-elevated); color: var(--text-primary); border-radius: 8px; padding: 8px 12px; }
+.dossier-column-options input, .dossier-column-options select { width: 100%; min-width: 0; }
+.dossier-column-options button { font-size: .875rem; font-weight: 600; }
+.dossier-column-options button:disabled { opacity: .5; }
+.dossier-column-options summary { display: flex; align-items: center; min-height: 44px; font-size: .875rem; text-decoration: underline; cursor: pointer; }
+.dossier-column-options p { flex-basis: 100%; font-size: .875rem; color: var(--text-secondary); }
+.dossier-column-filter-value { flex: 1 1 180px; }

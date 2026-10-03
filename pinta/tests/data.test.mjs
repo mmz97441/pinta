@@ -119,6 +119,20 @@ test('related-table failure rejects a dossier load instead of pretending no invo
   );
   await assert.rejects(() => sb.fetchColis(), /Database unavailable/);
 });
+
+test('payment mapping preserves recorded zero and partial amounts instead of making them editable', async () => {
+  const sb = await service(client({ colis: [
+    { id: 'a', archive: false, paiement_montant: 0 },
+    { id: 'b', archive: false, paiement_montant: '12.50' },
+    { id: 'c', archive: false, paiement_montant: null },
+    { id: 'd', archive: false },
+  ] }));
+  const rows = await sb.fetchColis();
+  assert.equal(rows.find(row => row.id === 'a').paiementMontant, 0);
+  assert.equal(rows.find(row => row.id === 'b').paiementMontant, 12.5);
+  assert.equal(rows.find(row => row.id === 'c').paiementMontant, null);
+  assert.equal(rows.find(row => row.id === 'd').paiementMontant, null);
+});
 test('archived dossiers are loaded only when explicitly requested', async () => {
   const mock = client({
     colis: [

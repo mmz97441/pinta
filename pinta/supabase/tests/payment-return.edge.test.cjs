@@ -81,6 +81,12 @@ function checkoutDb(old=null,mutations=[]){
   colis:({mutation})=>{if(mutation)mutations.push(['colis',mutation]);return {data:{id:colisId,client_id:'client',ref:'EXP',devis_total:40,quote_version:2,statut:'en_preparation'},error:null};},
   clients:{nom:'Example',prenom:'Camille',email:'camille@example.test',adresse:'1 rue Exemple',ville:'Saint-Denis',cp:'97400',type:'particulier'},
   payment_intents:({mutation})=>{if(mutation){mutations.push(['intent',mutation]);return {data:{id:'intent',...mutation},error:null};}return {data:old,error:null};}
+ }, (name,args) => {
+  assert.equal(name,'reserve_payplug_intent');
+  if(old?.provider_is_live!==undefined && old.provider_is_live!==args.p_is_live) return {data:null,error:{code:'22023',message:'Ancien mode incompatible'}};
+  if(old?.status==='pending') return {data:old,error:null};
+  const intent={id:'intent',status:'creating',provider_is_live:args.p_is_live,return_token_hash:args.p_return_token_hash,return_token_expires_at:args.p_return_token_expires_at};
+  mutations.push(['intent',intent]);return {data:intent,error:null};
  });
 }
 const env={APP_URL:'https://app.example.test/',SUPABASE_URL:'https://fixture.supabase.co',PAYPLUG_SECRET_KEY:'sk_test_fixture',PAYPLUG_MODE:'test'};

@@ -1,5 +1,5 @@
 import { useTaskAccess } from '../../context/TaskAccessContext';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { excludedInvoiceIds } from '../../domain/invoiceDocuments';
 import useWorkDraft from '../../hooks/useWorkDraft';
@@ -45,13 +45,16 @@ function Source({ tariff }) {
  * invoice descriptions or the shared tariff catalogue. */
 export default function QuoteCustomsPanel({ colis, destination, onDirtyChange, onSaved }) {
   const { auth, can: rawCan, ask, flash, categories = [], searchCustomsTariffs, suggestCustomsTariffs, saveQuoteCustoms, refreshColis } = useApp();
-  const { taskCan: can } = useTaskAccess(rawCan);
+  const { taskCan: can, readOnly: colleagueReadOnly } = useTaskAccess(rawCan);
   const excluded = excludedInvoiceIds(colis.factures);
   const lines = (colis.lignes || []).filter(line => !line.factureId || !excluded.has(line.factureId));
   const key = `${auth?.u?.id}:${colis.id}`;
   const cached = cachedDrafts.get(key);
   const [drafts, setDrafts] = useState(() => cached?.drafts || {});
   const [activeId, setActiveId] = useState(() => cached?.activeId || null);
+  const [editorMode, setEditorMode] = useState(() => cached?.editorMode || 'classification');
+  const [ratesFocusRequest, setRatesFocusRequest] = useState(0);
+  const ratesFocusTarget = useRef(null);
   const baseline = useRef(cached?.signature || signature(lines, destination));
   const version = useRef(cached?.version || colis.updatedAt);
   const [query, setQuery] = useState('');
@@ -76,8 +79,20 @@ export default function QuoteCustomsPanel({ colis, destination, onDirtyChange, o
   const dirty = pendingIds.length > 0 || activeId != null;
   const clearWorkDraft = useWorkDraft({ userId: auth?.u?.id, dossierId: colis.id, kind: 'quote', source: 'customs', dirty: pendingIds.length > 0, label: 'Classement douanier non enregistré' });
   const currentSignature = signature(lines, destination);
-  const editable = can('perm_colis_calculer_devis') && ['autorise', 'en_preparation', 'devis_envoye', 'attente_paiement'].includes(colis.statut) && !colis.archive && !colis.paiementDate && colis.paiementMontant == null && colis.feuVert === 'autorise' && !colis.produitInterdit;
-  const proposalContext = useRef(null); proposalContext.current = { lines, destination, editable };
+  const paymentLinkExists = Boolean(colis.payplugPaymentId || colis.payplugPaymentUrl);
+  const editable = can('perm_colis_calculer_devis') && ['autorise', 'en_preparation', 'devis_envoye', 'attente_paiement'].includes(colis.statut) && !colis.archive && !colis.paiementDate && colis.paiementMontant == null && !colis.dateExpedition && !paymentLinkExists && colis.feuVert === 'autorise' && !colis.produitInterdit;
+  const paymentRecorded = Boolean(colis.paiementDate) || colis.paiementMontant != null || colis.statut === 'paye';
+  const inTransport = Boolean(colis.dateExpedition) || ['expedie', 'transit', 'dedouanement', 'arrive', 'livraison', 'livre'].includes(colis.statut);
+  const readOnlyReason = paymentRecorded ? 'Paiement enregistré : le devis et les taux OM / OMR sont verrouillés. Vous pouvez les consulter.'
+    : inTransport ? 'Le transport a commencé : le devis et ses taux sont conservés en lecture seule.'
+    : colis.archive || colis.statut === 'annule' ? 'Ce dossier est clos. Le classement et les taux restent consultables.'
+    : colleagueReadOnly ? 'Un collègue s’occupe de ce devis. Demandez un relais avant de modifier ses taux.'
+    : !rawCan('perm_colis_calculer_devis') ? 'Votre rôle permet de consulter les taux. Une personne autorisée à calculer le devis peut les corriger.'
+    : paymentLinkExists ? 'Un lien de paiement existe. Utilisez « Modifier le devis » pour retirer ce lien avant de corriger les taux.'
+    : colis.feuVert !== 'autorise' ? 'L’accord du client est nécessaire avant de modifier les taux du devis.'
+    : colis.produitInterdit ? 'Le contenu du dossier doit être vérifié avant de modifier le devis.'
+    : 'Les taux pourront être corrigés après l’accord du client et la préparation du dossier.';
+  const proposalContext = useRef(null); proposalContext.current = { lines, destination, editable, updatedAt: colis.updatedAt };
   const mounted = useRef(true);
   const active = lines.find(line => line.id === activeId);
   const draft = active ? drafts[activeId] || seed(active) : null;
@@ -135,12 +150,12 @@ export default function QuoteCustomsPanel({ colis, destination, onDirtyChange, o
 
   useEffect(() => {
     onDirtyChange?.(dirty);
-    if (dirty) cachedDrafts.set(key, { drafts, activeId, signature: baseline.current, version: version.current });
+    if (dirty) cachedDrafts.set(key, { drafts, activeId, editorMode, signature: baseline.current, version: version.current });
     else cachedDrafts.delete(key);
     const warn = event => { if (dirty) { event.preventDefault(); event.returnValue = ''; } };
     window.addEventListener('beforeunload', warn);
     return () => window.removeEventListener('beforeunload', warn);
-  }, [key, dirty, drafts, activeId, onDirtyChange]);
+  }, [key, dirty, drafts, activeId, editorMode, onDirtyChange]);
   useEffect(() => {
     if (version.current === colis.updatedAt) return;
     if (dirty) { setConflict(true); return; }
@@ -149,8 +164,25 @@ export default function QuoteCustomsPanel({ colis, destination, onDirtyChange, o
   useEffect(() => { searchSequence.current++; setQuery(''); setResults([]); setSearched(false); setSearching(false); }, [activeId]);
   useEffect(() => { if (error) { feedback.current?.scrollIntoView({ block: 'nearest' }); feedback.current?.focus({ preventScroll: true }); } }, [error]);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; searchSequence.current++; }; }, []);
+  useLayoutEffect(() => {
+    if (!ratesFocusRequest) return;
+    const input = document.getElementById(`customs-om-${ratesFocusTarget.current}`);
+    input?.scrollIntoView({ block: 'center' }); input?.focus({ preventScroll: true });
+  }, [ratesFocusRequest]);
 
   const update = changes => { onDirtyChange?.(true); setDrafts(previous => ({ ...previous, [activeId]: { ...(previous[activeId] || seed(active)), ...changes } })); setError(''); setNotice(''); };
+  function openRates(line) {
+    if (!editable || busy || !line.customDuty?.tariffId || line.customDuty.stale) return;
+    onDirtyChange?.(true);
+    setDrafts(previous => ({ ...previous, [line.id]: { ...(previous[line.id] || seed(line)), manual: true } }));
+    setActiveId(line.id); setEditorMode('rates'); setError(''); setNotice('');
+    ratesFocusTarget.current = line.id; setRatesFocusRequest(value => value + 1);
+  }
+  function openClassification(line) {
+    const opening = activeId !== line.id || editorMode !== 'classification';
+    onDirtyChange?.(opening || pendingIds.length > 0);
+    setEditorMode('classification'); setActiveId(opening ? line.id : null); setError('');
+  }
   function selectProposal(line, tariff) {
     // Background responses and proposals must never replace an operator's draft
     // or a confirmed classification. Only this explicit action chooses a code.
@@ -166,7 +198,7 @@ export default function QuoteCustomsPanel({ colis, destination, onDirtyChange, o
       }
       onDirtyChange?.(true);
       setDrafts(current => ({ ...current, [line.id]: { tariff, manual: false, om: tariff.baseRates?.om ?? '', omr: tariff.baseRates?.omr ?? '', reason: '', acknowledged: false } }));
-      setActiveId(line.id); setError(''); setNotice('');
+      setActiveId(line.id); setEditorMode('classification'); setError(''); setNotice('');
       requestAnimationFrame(() => { const editor = document.getElementById(`customs-editor-${line.id}`); editor?.scrollIntoView({ block: 'nearest' }); editor?.focus({ preventScroll: true }); });
     };
     if (line.customDuty?.overrideReason) ask('Revoir les taux corrigés de cet article ?', 'Ce classement est à revoir. La nouvelle proposition utilisera les taux du référentiel ; vérifiez-les et corrigez-les si nécessaire. Vos anciens taux et leur motif restent enregistrés jusqu’à « Appliquer au devis ».', choose, { okLabel: 'Vérifier la nouvelle proposition' });
@@ -201,7 +233,7 @@ export default function QuoteCustomsPanel({ colis, destination, onDirtyChange, o
     finally { if (sequence === searchSequence.current) setSearching(false); }
   }
   function abandon() {
-    const reset = () => { setDrafts({}); setActiveId(null); setError(''); setNotice('Saisie abandonnée. Le classement enregistré est conservé.'); version.current = colis.updatedAt; baseline.current = currentSignature; setConflict(false); cachedDrafts.delete(key); clearWorkDraft(); setSuggestionRetry(value => value + 1); };
+    const reset = () => { setDrafts({}); setActiveId(null); setEditorMode('classification'); setError(''); setNotice('Saisie abandonnée. Le classement enregistré est conservé.'); version.current = colis.updatedAt; baseline.current = currentSignature; setConflict(false); cachedDrafts.delete(key); clearWorkDraft(); setSuggestionRetry(value => value + 1); };
     if (pendingIds.length) ask('Abandonner la saisie douanière ?', 'Seules vos modifications non enregistrées seront abandonnées. Les factures et le classement déjà enregistré sont conservés.', reset, { okLabel: 'Abandonner la saisie' });
     else reset();
   }
@@ -223,6 +255,10 @@ export default function QuoteCustomsPanel({ colis, destination, onDirtyChange, o
     }
     const commit = async () => {
       if (busyRef.current) return;
+      // The confirmation may have stayed open while a payment or a colleague's
+      // update arrived. Never submit its now-obsolete editable state.
+      if (!proposalContext.current?.editable) { setError('Le dossier ne permet plus cette correction. Votre saisie est conservée ; consultez son état avant de poursuivre.'); return; }
+      if (proposalContext.current.updatedAt !== version.current) { setConflict(true); setError('Le dossier a changé depuis votre saisie. Actualisez et comparez les taux avant de poursuivre.'); return; }
       busyRef.current = true; setBusy(true); setError(''); setNotice('');
       try {
         const saved = await saveQuoteCustoms(colis.id, changes, { expectedUpdatedAt: version.current });
@@ -230,7 +266,7 @@ export default function QuoteCustomsPanel({ colis, destination, onDirtyChange, o
         version.current = saved.updatedAt;
         const excludedSaved = excludedInvoiceIds(saved.factures);
         baseline.current = signature((saved.lignes || []).filter(line => !line.factureId || !excludedSaved.has(line.factureId)), destination);
-        setDrafts({}); setActiveId(null); setConflict(false); cachedDrafts.delete(key); clearWorkDraft();
+        setDrafts({}); setActiveId(null); setEditorMode('classification'); setConflict(false); cachedDrafts.delete(key); clearWorkDraft();
         onDirtyChange?.(false); onSaved?.(saved);
         setNotice('Classement douanier enregistré. Vérifiez puis enregistrez le nouveau devis.');
         flash('Classement douanier enregistré. Aucun message envoyé au client.');
@@ -243,7 +279,7 @@ export default function QuoteCustomsPanel({ colis, destination, onDirtyChange, o
 
   return <section id="quote-customs" aria-label="Classement douanier du devis" tabIndex={-1} className="min-w-0 scroll-mt-32 space-y-3 rounded-xl border border-slate-200 bg-white p-4">
     <div><h3 className="text-base font-semibold text-slate-800">Classement douanier</h3><p className="mt-1 text-sm text-slate-600">{lines.filter(line => line.customDuty?.tariffId).length} / {lines.length} article(s) avec un code choisi · destination {destination}.</p><p className="mt-1 text-xs text-slate-600">Les taux sont appliqués à ce devis. Le libellé de la facture et le catalogue restent inchangés.</p></div>
-    {!editable && <p className="text-sm text-slate-600">Consultation seule : la modification exige le droit de calcul du devis et un dossier préparé, autorisé et non réglé.</p>}
+    {!editable && <p role="status" className="rounded-xl bg-slate-50 p-3 text-sm text-slate-700">{readOnlyReason}</p>}
     {destination !== '974' && <p className="rounded-xl bg-slate-50 p-3 text-sm text-slate-700">Le catalogue de recherche disponible concerne la Réunion (974). Aucun barème douanier n’est chargé pour cette destination ; les taux des catégories déjà enregistrées restent utilisés tant qu’aucun classement spécifique n’est choisi.</p>}
     {eligibleSuggestions.length > 0 && <p className="text-xs text-slate-600">Propositions d’après le libellé des articles, sans enregistrement automatique. Les taux appliqués restent inchangés jusqu’à votre validation.</p>}
     {loadingSuggestions && <p role="status" className="text-sm text-slate-600">Recherche de propositions douanières… Vous pouvez continuer à consulter le devis.</p>}
@@ -251,15 +287,19 @@ export default function QuoteCustomsPanel({ colis, destination, onDirtyChange, o
     {!lines.length && <p className="text-sm text-slate-600">Les articles apparaîtront après vérification des factures.</p>}
     {notice && <p role="status" className="rounded-xl bg-emerald-50 p-3 text-sm text-emerald-800">{notice}</p>}
     {conflict && <div role="alert" className="space-y-2 rounded-xl bg-amber-50 p-3 text-sm text-amber-900"><p>Le dossier a changé. Votre saisie est conservée ; comparez le classement enregistré avant de poursuivre.</p><button className={BUTTON} disabled={busy} onClick={async () => { try { await refreshColis(colis.id); setNotice('Version du dossier actualisée. Votre saisie locale est conservée.'); } catch (failure) { setError(failure.message || 'Actualisation indisponible.'); } }}>Actualiser sans perdre ma saisie</button>{baseline.current === currentSignature && version.current !== colis.updatedAt && editable && <button className={BUTTON} disabled={busy} onClick={() => { version.current = colis.updatedAt; setConflict(false); setError(''); }}>Conserver ma saisie et réessayer</button>}</div>}
-    <ul className="divide-y divide-slate-200">{lines.map((line, index) => <li key={line.id} className="min-w-0 py-3"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p title={line.desc} className="line-clamp-2 break-words text-sm font-semibold text-slate-800">{index + 1}. {line.desc}</p><p title={line.customDuty?.label} className="mt-1 line-clamp-2 break-words text-sm text-slate-600">{line.customDuty?.tariffId ? `${line.customDuty.code} · ${line.customDuty.label}` : 'Catégorie enregistrée · code douanier à préciser'}</p>{line.customDuty && <p className="mt-1 text-xs text-slate-600">Enregistré : OM {rate(line.customDuty.rates?.om)} · OMR {rate(line.customDuty.rates?.omr)}{line.customDuty.overrideReason ? ' · taux corrigés pour ce devis' : ''}</p>}{line.customDuty?.tariffId && activeId !== line.id && <details className="mt-1"><summary className="min-h-11 cursor-pointer py-3 text-xs font-semibold text-slate-600">Source et justification</summary><p className="mb-2 break-words text-sm text-slate-700">{line.customDuty.code} · {line.customDuty.label}</p><Source tariff={line.customDuty} />{line.customDuty.overrideReason && <p className="text-sm text-slate-700">Motif au devis : {line.customDuty.overrideReason}</p>}</details>}{line.customDuty?.stale && <p className="text-xs font-semibold text-amber-800">Référence modifiée : vérifiez de nouveau ce classement.</p>}{drafts[line.id] && <p className="mt-1 text-xs font-semibold text-amber-800">Modification non enregistrée</p>}</div>{editable && <button className={`${BUTTON} shrink-0`} disabled={busy} aria-label={`Classer l’article ${index + 1}`} aria-expanded={activeId === line.id} onClick={() => { onDirtyChange?.(activeId !== line.id || pendingIds.length > 0); setActiveId(activeId === line.id ? null : line.id); setError(''); }}>Modifier</button>}</div>
+    <ul className="divide-y divide-slate-200">{lines.map((line, index) => <li key={line.id} className="min-w-0 py-3"><div className="flex flex-col items-start justify-between gap-3 sm:flex-row"><div className="min-w-0"><p title={line.desc} className="line-clamp-2 break-words text-sm font-semibold text-slate-800">{index + 1}. {line.desc}</p><p title={line.customDuty?.label} className="mt-1 line-clamp-2 break-words text-sm text-slate-600">{line.customDuty?.tariffId ? `${line.customDuty.code} · ${line.customDuty.label}` : 'Catégorie enregistrée · code douanier à préciser'}</p>{line.customDuty && <p className="mt-1 text-xs text-slate-600">Enregistré : OM {rate(line.customDuty.rates?.om)} · OMR {rate(line.customDuty.rates?.omr)}{line.customDuty.overrideReason ? ' · taux corrigés pour ce devis' : ''}</p>}{line.customDuty?.tariffId && activeId !== line.id && <details className="mt-1"><summary className="min-h-11 cursor-pointer py-3 text-xs font-semibold text-slate-600">Source et justification</summary><p className="mb-2 break-words text-sm text-slate-700">{line.customDuty.code} · {line.customDuty.label}</p><Source tariff={line.customDuty} />{line.customDuty.overrideReason && <p className="text-sm text-slate-700">Motif au devis : {line.customDuty.overrideReason}</p>}</details>}{line.customDuty?.stale && <p className="text-xs font-semibold text-amber-800">Référence modifiée : vérifiez de nouveau ce classement.</p>}{drafts[line.id] && <p className="mt-1 text-xs font-semibold text-amber-800">Modification non enregistrée</p>}</div>{editable && <div className="flex shrink-0 flex-wrap gap-2 sm:flex-col sm:items-end">
+        {line.customDuty?.tariffId && !line.customDuty.stale && <button type="button" className={BUTTON} disabled={busy} aria-label={`Corriger les taux OM et OMR de l’article ${index + 1}`} aria-expanded={activeId === line.id && editorMode === 'rates'} onClick={() => openRates(line)}>Corriger OM / OMR</button>}
+        <button type="button" className={BUTTON} disabled={busy} aria-label={`Classer l’article ${index + 1}`} aria-expanded={activeId === line.id && editorMode === 'classification'} onClick={() => openClassification(line)}>{line.customDuty?.stale ? 'Revoir le code' : line.customDuty?.tariffId ? 'Changer le code' : 'Choisir un code'}</button>
+      </div>}</div>
       {proposalsFor(line, index)}
       {activeId === line.id && draft && <div id={`customs-editor-${line.id}`} tabIndex={-1} className="mt-3 scroll-mt-32 space-y-3 rounded-xl bg-slate-50 p-3">
-        <form onSubmit={search} role="search" aria-label={`Rechercher un code pour l’article ${index + 1}`} className="space-y-2"><label className="block text-sm font-semibold text-slate-700">Code ou libellé douanier<input aria-label="Rechercher un code ou un libellé douanier" className={`${INPUT} mt-1`} value={query} onChange={event => setQuery(event.target.value)} disabled={busy || !editable} placeholder="Code, meuble, vêtement…" /></label><button className={BUTTON} disabled={busy || searching || !query.trim() || !editable}>{searching ? 'Recherche…' : 'Rechercher la nomenclature'}</button></form>
+        <div hidden={editorMode === 'rates'} className="space-y-2"><form onSubmit={search} role="search" aria-label={`Rechercher un code pour l’article ${index + 1}`} className="space-y-2"><label className="block text-sm font-semibold text-slate-700">Code ou libellé douanier<input aria-label="Rechercher un code ou un libellé douanier" className={`${INPUT} mt-1`} value={query} onChange={event => setQuery(event.target.value)} disabled={busy || !editable} placeholder="Code, meuble, vêtement…" /></label><button className={BUTTON} disabled={busy || searching || !query.trim() || !editable}>{searching ? 'Recherche…' : 'Rechercher la nomenclature'}</button></form>
         {searched && <p role="status" className="text-sm text-slate-600">{results.length ? `${results.length} résultat(s). Choisissez celui qui correspond à l’article.` : 'Aucun résultat. Essayez un autre code ou un libellé plus court.'}</p>}
         {results.length > 0 && <ul aria-label="Résultats de nomenclature" className="max-h-80 space-y-2 overflow-y-auto">{results.map(tariff => <li key={tariff.tariffId} className="space-y-2 rounded-xl border border-slate-200 bg-white p-3"><p className="break-words text-sm font-semibold text-slate-800">{tariff.code} · {tariff.label}</p><p className="text-sm text-slate-600">OM {rate(tariff.baseRates?.om)} · OMR {rate(tariff.baseRates?.omr)} · destination {tariff.destination}</p><Source tariff={tariff} /><button aria-label={`Choisir ${tariff.code} — ${tariff.label}`} className={BUTTON} disabled={busy || !editable} onClick={() => { update({ tariff, manual: false, om: tariff.baseRates?.om ?? '', omr: tariff.baseRates?.omr ?? '', reason: '', acknowledged: false }); setResults([]); setSearched(false); }}>Choisir {tariff.code}</button></li>)}</ul>}
-        {draft.tariff && <div className="space-y-3 border-t border-slate-200 pt-3"><p className="break-words text-sm font-semibold text-slate-800">Choisi : {draft.tariff.code} · {draft.tariff.label}</p><Source tariff={draft.tariff} /><p className="text-sm text-slate-600">Référentiel : OM {rate(draft.tariff.baseRates?.om)} · OMR {rate(draft.tariff.baseRates?.omr)}</p>
+        </div>
+        {draft.tariff && <div className={`space-y-3 ${editorMode === 'rates' ? '' : 'border-t border-slate-200 pt-3'}`}><p className="break-words text-sm font-semibold text-slate-800">Choisi : {draft.tariff.code} · {draft.tariff.label}</p><Source tariff={draft.tariff} /><p className="text-sm text-slate-600">Référentiel : OM {rate(draft.tariff.baseRates?.om)} · OMR {rate(draft.tariff.baseRates?.omr)}</p>
           {needsAcknowledgement(draft.tariff) && <label className="flex min-h-11 items-start gap-2 text-sm text-slate-700"><input type="checkbox" className="mt-1 h-5 w-5 shrink-0" checked={draft.acknowledged} disabled={busy || !editable} onChange={event => update({ acknowledged: event.target.checked })} />J’ai vérifié la source et les conditions d’application pour cet article.</label>}
-          {!draft.manual ? <button className={BUTTON} disabled={busy || !editable} onClick={() => update({ manual: true })}>Corriger les taux pour ce devis</button> : <div className="space-y-3 rounded-xl border border-amber-200 bg-amber-50 p-3"><p className="text-sm font-semibold text-amber-900">Correction limitée à ce devis</p><div className="grid grid-cols-2 gap-3">{[['om','OM (%)'],['omr','OMR (%)']].map(([field,label]) => <label key={field} className="text-sm font-semibold text-slate-700">{label}<input aria-label={`Taux ${label}`} type="number" inputMode="decimal" min="0" max="100" step="0.0001" className={`${INPUT} mt-1`} value={draft[field]} disabled={busy || !editable} onChange={event => update({ [field]: event.target.value })} /></label>)}</div><label className="block text-sm font-semibold text-slate-700">Motif de la correction<textarea aria-label="Motif de la correction douanière" rows={2} maxLength={500} className={`${INPUT} mt-1`} value={draft.reason} disabled={busy || !editable} onChange={event => update({ reason: event.target.value })} /></label><p className="text-xs text-slate-600">Indiquez une justification factuelle : ce motif sera visible dans le devis.</p><button className={BUTTON} disabled={busy || !editable} onClick={() => update({ manual: false, om: draft.tariff.baseRates?.om ?? '', omr: draft.tariff.baseRates?.omr ?? '', reason: '' })}>Reprendre les taux du référentiel</button></div>}
+          {!draft.manual ? <button className={BUTTON} disabled={busy || !editable} onClick={() => { update({ manual: true }); setEditorMode('rates'); }}>Corriger les taux pour ce devis</button> : <div className="space-y-3 rounded-xl border border-amber-200 bg-amber-50 p-3"><p className="text-sm font-semibold text-amber-900">Correction limitée à ce devis</p><div className="grid grid-cols-2 gap-3">{[['om','OM (%)','OM externe (%)'],['omr','OMR (%)','OMR externe (%)']].map(([field,label,visibleLabel]) => <label key={field} className="text-sm font-semibold text-slate-700">{visibleLabel}<input id={`customs-${field}-${line.id}`} aria-label={`Taux ${label}`} aria-required="true" type="number" inputMode="decimal" min="0" max="100" step="0.0001" className={`${INPUT} mt-1`} value={draft[field]} disabled={busy || !editable} onChange={event => update({ [field]: event.target.value })} /></label>)}</div><p className="text-xs text-slate-600">Taux en pourcentage, de 0 à 100 %. Saisissez 0 si ce taux ne s’applique pas.</p><label className="block text-sm font-semibold text-slate-700">Motif obligatoire — visible sur le devis<textarea aria-label="Motif de la correction douanière" aria-required="true" rows={2} minLength={3} maxLength={500} placeholder="Ex. : taux confirmé par la source officielle pour cet article." className={`${INPUT} mt-1`} value={draft.reason} disabled={busy || !editable} onChange={event => update({ reason: event.target.value })} /></label><p className="text-xs text-slate-600">Indiquez une justification factuelle : ce motif sera visible dans le devis.</p><button className={BUTTON} disabled={busy || !editable} onClick={() => { update({ manual: false, om: draft.tariff.baseRates?.om ?? '', omr: draft.tariff.baseRates?.omr ?? '', reason: '' }); setEditorMode('classification'); }}>Reprendre les taux du référentiel</button></div>}
           {(!finiteRate(draft.tariff.baseRates?.om) || !finiteRate(draft.tariff.baseRates?.omr)) && !draft.manual && <p className="text-sm font-semibold text-amber-800">Les taux ne sont pas déterminés par cette référence. Vérifiez la source et renseignez les deux taux avant d’appliquer.</p>}
         </div>}
       </div>}

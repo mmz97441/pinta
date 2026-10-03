@@ -1,0 +1,784 @@
+[
+  {
+    "suite": "Mesures et reprise",
+    "passed": 31,
+    "results": [
+      {
+        "test": "overview-direct-reception-opens-once-preserves-draft-and-cancels-without-write-desktop",
+        "pass": true
+      },
+      {
+        "test": "overview-direct-reception-opens-once-preserves-draft-and-cancels-without-write-mobile",
+        "pass": true
+      },
+      {
+        "test": "overview-direct-preparation-opens-once-preserves-draft-and-cancels-without-write-desktop",
+        "pass": true
+      },
+      {
+        "test": "overview-direct-preparation-opens-once-preserves-draft-and-cancels-without-write-mobile",
+        "pass": true
+      },
+      {
+        "test": "overview-direct-reception-save-retires-old-quote-and-payment-link-only-on-confirmed-save",
+        "pass": true
+      },
+      {
+        "test": "overview-direct-preparation-save-retires-old-quote-and-payment-link-only-on-confirmed-save",
+        "pass": true
+      },
+      {
+        "test": "overview-keeps-colleague-measures-read-only-while-other-phase-remains-correctable",
+        "pass": true
+      },
+      {
+        "test": "explicit-empty-optimised-manifest-never-restores-old-scalar-measures",
+        "pass": true
+      },
+      {
+        "test": "step-navigation-only-does-not-reopen-or-correct-anything",
+        "pass": true
+      },
+      {
+        "test": "reception-prefilled-noop-and-cancel-never-write-mobile",
+        "pass": true
+      },
+      {
+        "test": "preparation-prefilled-noop-and-cancel-never-write-mobile",
+        "pass": true
+      },
+      {
+        "test": "reception-save-is-explicit-and-preserves-independent-work",
+        "pass": true
+      },
+      {
+        "test": "preparation-save-is-explicit-and-preserves-independent-work",
+        "pass": true
+      },
+      {
+        "test": "prepared-package-count-can-change-without-changing-received-cartons",
+        "pass": true
+      },
+      {
+        "test": "invalid-measure-focuses-exact-field-without-request-mobile",
+        "pass": true
+      },
+      {
+        "test": "draft-survives-step-navigation-and-reload-without-save",
+        "pass": true
+      },
+      {
+        "test": "conflict-keeps-draft-and-reloads-only-on-explicit-request",
+        "pass": true
+      },
+      {
+        "test": "network-failure-keeps-values-and-retry-is-explicit",
+        "pass": true
+      },
+      {
+        "test": "paid-measurements-stay-read-only",
+        "pass": true
+      },
+      {
+        "test": "partial-payment-without-date-measurements-stay-read-only",
+        "pass": true
+      },
+      {
+        "test": "recorded-zero-payment-measurements-stay-read-only",
+        "pass": true
+      },
+      {
+        "test": "departure-proof-before-status-refresh-measurements-stay-read-only",
+        "pass": true
+      },
+      {
+        "test": "shipped-measurements-stay-read-only",
+        "pass": true
+      },
+      {
+        "test": "cancelled-measurements-stay-read-only",
+        "pass": true
+      },
+      {
+        "test": "archived-measurements-stay-read-only",
+        "pass": true
+      },
+      {
+        "test": "quote-permission-does-not-grant-measurement-revision",
+        "pass": true
+      },
+      {
+        "test": "measurement-permission-alone-does-not-grant-measurement-revision",
+        "pass": true
+      },
+      {
+        "test": "correction-permission-alone-does-not-grant-measurement-revision",
+        "pass": true
+      },
+      {
+        "test": "new-client-consent-requires-confirmation-and-never-sends-notification",
+        "pass": true
+      },
+      {
+        "test": "overview-quote-shortcut-opens-withdrawal-confirmation-before-any-business-change",
+        "pass": true
+      },
+      {
+        "test": "sent-quote-reopens-as-an-editable-draft-without-notification",
+        "pass": true
+      }
+    ]
+  },
+  {
+    "suite": "Taux OM/OMR",
+    "passed": 30,
+    "results": [
+      {
+        "test": "direct-rate-correction-opens-recorded-values-and-saves-only-this-quote-desktop",
+        "pass": true
+      },
+      {
+        "test": "direct-rate-correction-opens-recorded-values-and-saves-only-this-quote-mobile",
+        "pass": true
+      },
+      {
+        "test": "overview-quote-shortcut-opens-saved-draft-editor-without-withdrawing-or-resaving",
+        "pass": true
+      },
+      {
+        "test": "direct-rate-correction-keeps-existing-override-and-unsaved-draft",
+        "pass": true
+      },
+      {
+        "test": "renewed-agreement-allows-stale-customs-correction-before-quote",
+        "pass": true
+      },
+      {
+        "test": "search-choice-save-quote-preserves-invoice-and-global-catalogue",
+        "pass": true
+      },
+      {
+        "test": "manual-rates-require-two-values-and-public-reason-zero-is-valid",
+        "pass": true
+      },
+      {
+        "test": "conditional-variant-requires-human-confirmation",
+        "pass": true
+      },
+      {
+        "test": "historical-ten-digit-code-with-unknown-rates-needs-manual-proof",
+        "pass": true
+      },
+      {
+        "test": "draft-survives-task-switch-and-network-error",
+        "pass": true
+      },
+      {
+        "test": "colleague-classification-conflict-preserves-local-draft",
+        "pass": true
+      },
+      {
+        "test": "server-cas-conflict-needs-refresh-and-explicit-retry",
+        "pass": true
+      },
+      {
+        "test": "parallel-fee-draft-survives-customs-save-with-new-version",
+        "pass": true
+      },
+      {
+        "test": "published-quote-reclassification-requires-withdrawal-confirmation",
+        "pass": true
+      },
+      {
+        "test": "calculator-without-invoice-permission-can-classify-mobile",
+        "pass": true
+      },
+      {
+        "test": "other-destination-explains-unavailable-catalogue-without-reunion-fallback",
+        "pass": true
+      },
+      {
+        "test": "read-only-and-paid-dossier-never-offer-editing",
+        "pass": true
+      },
+      {
+        "test": "paid-quote-consults-frozen-rates-even-when-live-article-rates-have-changed",
+        "pass": true
+      },
+      {
+        "test": "direct-quote-edit-query-cannot-bypass-partial-payment-without-date",
+        "pass": true
+      },
+      {
+        "test": "direct-quote-edit-query-cannot-bypass-recorded-zero-payment",
+        "pass": true
+      },
+      {
+        "test": "direct-quote-edit-query-cannot-bypass-departure-before-status-refresh",
+        "pass": true
+      },
+      {
+        "test": "suggestions-automatic-read-only-until-explicit-choice",
+        "pass": true
+      },
+      {
+        "test": "suggestions-alternatives-keyboard-conditional-mobile",
+        "pass": true
+      },
+      {
+        "test": "suggestions-no-match-keeps-business-notice-and-search",
+        "pass": true
+      },
+      {
+        "test": "suggestions-error-explicit-retry-never-becomes-no-match",
+        "pass": true
+      },
+      {
+        "test": "suggestions-confirmed-override-excluded-and-stale-explicit-reset",
+        "pass": true
+      },
+      {
+        "test": "suggestions-confirmation-refuses-colleague-description-change",
+        "pass": true
+      },
+      {
+        "test": "suggestions-late-response-preserves-draft-and-abandon-restarts",
+        "pass": true
+      },
+      {
+        "test": "suggestions-description-revision-ignores-obsolete-response",
+        "pass": true
+      },
+      {
+        "test": "suggestions-batches-fifty-articles-without-saving",
+        "pass": true
+      }
+    ]
+  },
+  {
+    "suite": "Préparation autonome",
+    "passed": 9,
+    "results": [
+      {
+        "test": "preparer-only-saves-multiple-boxes-without-invoice-or-quote-desktop",
+        "pass": true
+      },
+      {
+        "test": "preparer-only-saves-multiple-boxes-without-invoice-or-quote-mobile",
+        "pass": true
+      },
+      {
+        "test": "agreement-starts-preparation-without-invoice-permission",
+        "pass": true
+      },
+      {
+        "test": "missing-customer-agreement-blocks-preparation",
+        "pass": true
+      },
+      {
+        "test": "quote-worker-reads-measures-but-cannot-rewrite-them",
+        "pass": true
+      },
+      {
+        "test": "colleague-measurements-preserved-and-local-draft-compared",
+        "pass": true
+      },
+      {
+        "test": "failed-conflict-refresh-preserves-draft-until-explicit-successful-reload",
+        "pass": true
+      },
+      {
+        "test": "invoice-update-allows-explicit-retry-without-losing-measures",
+        "pass": true
+      },
+      {
+        "test": "late-conflict-refresh-cannot-replace-another-dossier-draft",
+        "pass": true
+      }
+    ]
+  },
+  {
+    "suite": "Tâches et prérequis",
+    "passed": 20,
+    "results": [
+      {
+        "test": "complete-receipt-client-approval-invoices-preparation-payment-delivery-desktop",
+        "pass": true
+      },
+      {
+        "test": "complete-receipt-client-approval-invoices-preparation-payment-delivery-mobile",
+        "pass": true
+      },
+      {
+        "test": "quote-only-operator-opens-ready-authorised-work-desktop",
+        "pass": true
+      },
+      {
+        "test": "quote-only-operator-opens-ready-authorised-work-mobile",
+        "pass": true
+      },
+      {
+        "test": "incomplete-certificate-missing-count-opens-preparation-before-quote",
+        "pass": true
+      },
+      {
+        "test": "incomplete-certificate-wrong-count-opens-preparation-before-quote",
+        "pass": true
+      },
+      {
+        "test": "incomplete-certificate-stale-version-opens-preparation-before-quote",
+        "pass": true
+      },
+      {
+        "test": "incomplete-certificate-explicit-empty-opens-preparation-before-quote",
+        "pass": true
+      },
+      {
+        "test": "preparation-only-role-saves-without-invoices-and-never-enters-quote",
+        "pass": true
+      },
+      {
+        "test": "historical-snapshot-can-certify-identical-preserved-measurements",
+        "pass": true
+      },
+      {
+        "test": "historical-measurements-require-correction-right-before-recertification",
+        "pass": true
+      },
+      {
+        "test": "preparation-corrector-without-quote-right-gets-an-accessible-next-step",
+        "pass": true
+      },
+      {
+        "test": "ready-physical-preparation-with-missing-invoices-opens-real-document-task",
+        "pass": true
+      },
+      {
+        "test": "send-only-role-reviews-saved-quote-without-editable-money-or-payment-method",
+        "pass": true
+      },
+      {
+        "test": "certified-null-legacy-packages-use-one-scalar-box-without-artificial-preparation",
+        "pass": true
+      },
+      {
+        "test": "old-preparation-and-quote-never-bypass-mesure",
+        "pass": true
+      },
+      {
+        "test": "old-preparation-and-quote-never-bypass-attente_feu_vert",
+        "pass": true
+      },
+      {
+        "test": "old-preparation-and-quote-never-bypass-refuse_client",
+        "pass": true
+      },
+      {
+        "test": "read-only-navigation-for-archive-dossier",
+        "pass": true
+      },
+      {
+        "test": "read-only-navigation-for-paid-dossier",
+        "pass": true
+      }
+    ]
+  },
+  {
+    "suite": "Conflits du devis",
+    "passed": 7,
+    "results": [
+      {
+        "test": "saved-quote-can-be-reviewed-by-send-only-colleague-without-new-save",
+        "pass": true
+      },
+      {
+        "test": "unfinished-fee-cannot-disappear-into-final-quote-review",
+        "pass": true
+      },
+      {
+        "test": "unfinished-fee-survives-work-list-and-blocks-release-until-explicit-discard",
+        "pass": true
+      },
+      {
+        "test": "quote-fee-conflict-explains-recovery-and-rechecks-new-invoice-amounts",
+        "pass": true
+      },
+      {
+        "test": "changed-preparation-forbids-fee-rebase-and-explicit-reload-keeps-colleague-measurements",
+        "pass": true
+      },
+      {
+        "test": "manual-article-draft-survives-task-change-and-saves-only-on-explicit-submit",
+        "pass": true
+      },
+      {
+        "test": "manual-article-drafts-are-isolated-by-dossier-and-explicit-clear-stays-empty",
+        "pass": true
+      }
+    ]
+  },
+  {
+    "suite": "Vue d’ensemble",
+    "passed": 18,
+    "results": [
+      {
+        "test": "paid-dossier-retains-reception-optimisation-and-current-invoices-as-separate-facts",
+        "pass": true
+      },
+      {
+        "test": "tracking-summary-shows-first-two-and-opens-the-complete-received-manifest",
+        "pass": true
+      },
+      {
+        "test": "future-step-navigation-is-consultation-and-keeps-the-real-business-stage",
+        "pass": true
+      },
+      {
+        "test": "paid-status-never-manufactures-missing-preparation-or-received-invoices",
+        "pass": true
+      },
+      {
+        "test": "casier-edit-opens-directly-and-persists-without-reopening-paid-steps",
+        "pass": true
+      },
+      {
+        "test": "casier-failed-save-keeps-draft-and-retry-does-not-duplicate-history",
+        "pass": true
+      },
+      {
+        "test": "history-opens-the-journal-directly-without-mutating-the-dossier",
+        "pass": true
+      },
+      {
+        "test": "restricted-worker-cannot-open-financial-or-invoice-details-through-overview",
+        "pass": true
+      },
+      {
+        "test": "status-colours-have-readable-contrast-and-do-not-replace-labels-light",
+        "pass": true
+      },
+      {
+        "test": "status-colours-have-readable-contrast-and-do-not-replace-labels-dark",
+        "pass": true
+      },
+      {
+        "test": "overview-accessible-1440-light",
+        "pass": true
+      },
+      {
+        "test": "overview-accessible-1440-dark",
+        "pass": true
+      },
+      {
+        "test": "overview-accessible-768-light",
+        "pass": true
+      },
+      {
+        "test": "overview-accessible-768-dark",
+        "pass": true
+      },
+      {
+        "test": "overview-accessible-390-light",
+        "pass": true
+      },
+      {
+        "test": "overview-accessible-390-dark",
+        "pass": true
+      },
+      {
+        "test": "overview-accessible-320-light",
+        "pass": true
+      },
+      {
+        "test": "overview-accessible-320-dark",
+        "pass": true
+      }
+    ]
+  },
+  {
+    "suite": "Tableau et préférences",
+    "passed": 39,
+    "results": [
+      {
+        "test": "presets-change-columns-without-filtering-or-duplicating-expeditions",
+        "pass": true
+      },
+      {
+        "test": "new-payment-status-and-optimized-dimensions-never-invent-ready-or-paid-data",
+        "pass": true
+      },
+      {
+        "test": "every-data-column-has-a-usable-filter-from-its-heading",
+        "pass": true
+      },
+      {
+        "test": "column-filters-match-real-task-owner-payments-and-only-current-measurements",
+        "pass": true
+      },
+      {
+        "test": "date-and-numeric-filter-boundaries-are-inclusive-and-combine-with-task-scope",
+        "pass": true
+      },
+      {
+        "test": "hidden-foreign-or-invalid-column-filters-cannot-hide-permitted-dossiers",
+        "pass": true
+      },
+      {
+        "test": "forced-finance-column-filter-does-not-grant-finance-access",
+        "pass": true
+      },
+      {
+        "test": "column-widths-resize-by-mouse-and-keyboard-and-keep-sticky-identities-aligned",
+        "pass": true
+      },
+      {
+        "test": "column-width-preferences-remain-private-after-switching-account-in-the-same-browser",
+        "pass": true
+      },
+      {
+        "test": "mobile-column-filter-reset-and-width-editor-light",
+        "pass": true
+      },
+      {
+        "test": "mobile-column-filter-reset-and-width-editor-dark",
+        "pass": true
+      },
+      {
+        "test": "sorting-every-displayed-data-column-is-keyboard-accessible-and-read-only",
+        "pass": true
+      },
+      {
+        "test": "sorting-real-numbers-natural-shelf-names-and-dates-keeps-unknowns-last",
+        "pass": true
+      },
+      {
+        "test": "mobile-sort-menu-offers-all-data-columns-in-every-view-and-both-directions",
+        "pass": true
+      },
+      {
+        "test": "mine-uses-task-owner-not-general-dossier-contact",
+        "pass": true
+      },
+      {
+        "test": "mine-keeps-owned-waiting-work-and-presets-do-not-reassign-it",
+        "pass": true
+      },
+      {
+        "test": "pool-only-has-free-ready-permitted-work-not-client-waits",
+        "pass": true
+      },
+      {
+        "test": "own-parallel-task-continues-in-its-real-workspace-without-claiming-colleague-work",
+        "pass": true
+      },
+      {
+        "test": "explicit-take-is-one-atomic-command-and-opens-reception-agreement",
+        "pass": true
+      },
+      {
+        "test": "late-claim-response-never-navigates-away-from-new-selection",
+        "pass": true
+      },
+      {
+        "test": "consulting-colleague-task-never-takes-it",
+        "pass": true
+      },
+      {
+        "test": "claim-conflict-retains-colleague-and-never-retries-automatically",
+        "pass": true
+      },
+      {
+        "test": "payments-show-uncalculated-and-partial-balance-truthfully",
+        "pass": true
+      },
+      {
+        "test": "departure-readiness-rejects-stale-optimisation-and-partial-payment",
+        "pass": true
+      },
+      {
+        "test": "restricted-permission-cannot-take-reception-visible-in-all-dossiers",
+        "pass": true
+      },
+      {
+        "test": "finance-preset-permissions-cannot-be-bypassed-through-the-url",
+        "pass": true
+      },
+      {
+        "test": "hidden-selected-dossier-is-removed-before-any-bulk-command",
+        "pass": true
+      },
+      {
+        "test": "unavailable-person-keeps-owned-work-but-cannot-take-pool-work",
+        "pass": true
+      },
+      {
+        "test": "work-loading-failure-is-visible-and-cannot-advertise-a-false-free-task",
+        "pass": true
+      },
+      {
+        "test": "mobile-open-filters-leave-dossiers-clickable-and-keyboard-controls-visible",
+        "pass": true
+      },
+      {
+        "test": "unavailability-link-directly-opens-the-announced-preferences",
+        "pass": true
+      },
+      {
+        "test": "excel-download-matches-visible-preset-and-recorded-amounts",
+        "pass": true
+      },
+      {
+        "test": "financial-view-does-not-grant-financial-export-permission",
+        "pass": true
+      },
+      {
+        "test": "filters-and-scroll-survive-opening-and-returning-from-an-expedition",
+        "pass": true
+      },
+      {
+        "test": "mobile-primary-action-keeps-space-with-alternative-platform-fonts",
+        "pass": true
+      },
+      {
+        "test": "table-readable-and-accessible-1440-light",
+        "pass": true
+      },
+      {
+        "test": "table-readable-and-accessible-1440-dark",
+        "pass": true
+      },
+      {
+        "test": "table-readable-and-accessible-390-light",
+        "pass": true
+      },
+      {
+        "test": "table-readable-and-accessible-390-dark",
+        "pass": true
+      }
+    ]
+  },
+  {
+    "suite": "Recherche de références",
+    "passed": 11,
+    "results": [
+      {
+        "test": "partial-references-and-normal-searches-do-not-query-server",
+        "pass": true
+      },
+      {
+        "test": "case-and-unicode-hyphen-normalization-finds-uncached-dossier-and-opens-full-detail",
+        "pass": true
+      },
+      {
+        "test": "scanner-enter-before-debounce-opens-correct-dossier-on-confirmed-response",
+        "pass": true
+      },
+      {
+        "test": "all-active-filter-chips-visible-while-collapsed-and-clear-preserves-query",
+        "pass": true
+      },
+      {
+        "test": "historical-reference-finds-and-opens-archived-cancelled-dossier",
+        "pass": true
+      },
+      {
+        "test": "lookup-network-error-is-explicit-retryable-and-never-reported-as-missing",
+        "pass": true
+      },
+      {
+        "test": "duplicate-case-insensitive-reference-is-reported-instead-of-arbitrary-open",
+        "pass": true
+      },
+      {
+        "test": "confirmed-empty-server-response-reports-reference-not-found",
+        "pass": true
+      },
+      {
+        "test": "slow-obsolete-response-cannot-overwrite-current-reference-result",
+        "pass": true
+      },
+      {
+        "test": "mobile-reference-result-fits-screen-with-accessible-open-target",
+        "pass": true
+      },
+      {
+        "test": "all-reference-queries-are-exact-bounded-read-only-and-network-isolated",
+        "pass": true
+      }
+    ]
+  },
+  {
+    "suite": "Indicateur de factures",
+    "passed": 8,
+    "results": [
+      {
+        "test": "received-invoice-indicator-visible-with-read-message-and-treated-conversation",
+        "pass": true
+      },
+      {
+        "test": "one-click-opens-and-focuses-correct-pending-pdf-without-validating-it",
+        "pass": true
+      },
+      {
+        "test": "validation-updates-count-and-next-target-while-return-preserves-filters",
+        "pass": true
+      },
+      {
+        "test": "preparation-work-does-not-repeat-document-task-indicators",
+        "pass": true
+      },
+      {
+        "test": "personal-document-work-shows-its-pending-invoice-indicator",
+        "pass": true
+      },
+      {
+        "test": "unassigned-work-links-directly-without-claiming-or-changing-team-priorities",
+        "pass": true
+      },
+      {
+        "test": "mobile-indicator-and-preparation-link-open-document-tab-with-correct-invoice",
+        "pass": true
+      },
+      {
+        "test": "colleague-validation-removes-indicator-from-list-and-personal-work",
+        "pass": true
+      }
+    ]
+  },
+  {
+    "suite": "Contraste de la liste",
+    "passed": 4,
+    "results": [
+      {
+        "test": "1440-light",
+        "pass": true
+      },
+      {
+        "test": "1440-dark",
+        "pass": true
+      },
+      {
+        "test": "390-light",
+        "pass": true
+      },
+      {
+        "test": "390-dark",
+        "pass": true
+      }
+    ]
+  },
+  {
+    "suite": "Réception et organisation",
+    "passed": 2,
+    "results": [
+      {
+        "test": "1440x1000",
+        "pass": true
+      },
+      {
+        "test": "390x844",
+        "pass": true
+      }
+    ]
+  }
+]

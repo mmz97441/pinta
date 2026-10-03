@@ -62,7 +62,7 @@ export function mapColis(row) {
     avantOptimTransport: row.avant_optim_transport ? +row.avant_optim_transport : null,
     avantOptimTotal: row.avant_optim_total ? +row.avant_optim_total : null,
     economie: row.economie ? +row.economie : 0,
-    paiementMontant: row.paiement_montant ? +row.paiement_montant : null,
+    paiementMontant: row.paiement_montant == null ? null : +row.paiement_montant,
     paiementDate: row.paiement_date,
     envoi: row.envoi_id,
     urgence: row.urgence || false,

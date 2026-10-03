@@ -61,6 +61,7 @@ jobs:
           sh ./supabase/tests/run-task-readiness.sh
           sh ./supabase/tests/run-team-task-start.sh
           sh ./supabase/tests/run-task-owner-guards.sh
+          sh ./supabase/tests/run-quote-edit-guards.sh
           sh ./supabase/tests/run-payment-return.sh
           sh ./supabase/tests/run-reception-append.sh
       - run: npx playwright install --with-deps chromium

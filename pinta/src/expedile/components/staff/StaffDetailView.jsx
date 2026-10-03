@@ -1,6 +1,6 @@
 import { useTaskAccess } from '../../context/TaskAccessContext';
 import { useNavigate, useLocation } from 'react-router-dom';
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Ruler, Check, Clock, AlertTriangle, Eye, X, RotateCcw, Send, Plus, Archive,
 } from 'lucide-react';
@@ -27,6 +27,7 @@ import QuoteCustomsPanel from './QuoteCustomsPanel';
 import ShipmentRevision from './ShipmentRevision';
 import TaskReopen from './TaskReopen';
 import TaskGuidance from './TaskGuidance';
+import { revisionLockedReason, shipmentRevisionBoxes } from '../../domain/shipmentRevision';
 
 const receptionDrafts = new Map();
 const preparationDrafts = new Map();
@@ -34,7 +35,11 @@ const preparationCommentDrafts = new Map();
 const dateLabel = value => value && Number.isFinite(Date.parse(value)) ? new Date(value).toLocaleString('fr-FR', { dateStyle: 'medium', timeStyle: 'short' }) : null;
 // Matches revert_colis: navigation never calls this correction.
 const REVERT_TARGETS = { mesure: 'receptionne', attente_feu_vert: 'mesure', autorise: 'attente_feu_vert', en_preparation: 'autorise', devis_envoye: 'en_preparation', attente_paiement: 'devis_envoye', expedie: 'paye', transit: 'expedie', dedouanement: 'transit', arrive: 'dedouanement', livraison: 'arrive' };
-const savedFinalPackages = (colis) => colis?.finalPackages?.length ? colis.finalPackages.map(box => ({ ...box })) : [{ dimL: colis?.finL ?? '', dimW: colis?.finW ?? '', dimH: colis?.finH ?? '', poids: colis?.finP ?? '' }];
+const savedFinalPackages = colis => {
+  const boxes = shipmentRevisionBoxes(colis || {}, 'preparation');
+  // A blank input is useful for the first package. It is never a saved measure.
+  return boxes.length ? boxes : [{ dimL: '', dimW: '', dimH: '', poids: '' }];
+};
 
 // ── Status border color helper ───────────────────────────────────────────────
 function statusBorderColor(statut) {
@@ -298,6 +303,30 @@ export default function StaffDetailView({ workspace = false, active = true, task
   const canQuoteWorkspace = ['perm_colis_calculer_devis', 'perm_colis_envoyer_devis', 'perm_finances_voir_total'].some(permission => rawCan(permission));
   const canCalculateQuote = can('perm_colis_calculer_devis');
   const task = requestedTask || resolveDossierTask(sel || {}, location.search, workActions, can, cl || {});
+  const editRequested = new URLSearchParams(location.search).get('modifier') === task;
+  const consumeEditRequest = useCallback(() => {
+    const params = new URLSearchParams(location.search);
+    if (!params.has('modifier')) return;
+    params.delete('modifier');
+    navigate(`${location.pathname}?${params}${location.hash}`, { replace: true, state: location.state });
+  }, [location.search, location.pathname, location.hash, location.state, navigate]);
+  useEffect(() => {
+    if (!editRequested || !sel) return;
+    // Sent quotes and measurement revisions consume the intent in their own
+    // editor. Here only the ordinary draft forms are opened, without a save.
+    const stage = needsQuoteRecalculation(sel) ? 'en_preparation' : sel.statut;
+    const normalPreparation = task === 'preparation' && ['autorise', 'en_preparation'].includes(stage)
+      && !preparationRevision && !sel.devisSnapshot?.inputs && !(sel.devisSnapshot && hasCurrentPreparation(sel));
+    const draftQuote = task === 'devis' && ['autorise', 'en_preparation'].includes(stage);
+    const initialReceipt = task === 'reception' && stage === 'receptionne';
+    if (!normalPreparation && !draftQuote && !initialReceipt) return;
+    const locked = revisionLockedReason(sel, task === 'reception' ? 'reception' : 'preparation');
+    if (!locked && !readOnly) {
+      if (normalPreparation && can('perm_colis_preparer')) setPreparationEditing(true);
+      if (draftQuote && canCalculateQuote) setDevisPrev(false);
+    }
+    consumeEditRequest();
+  }, [editRequested, sel, task, preparationRevision, readOnly, can, canCalculateQuote, consumeEditRequest]);
   const preparationView = task === 'preparation';
   useEffect(() => {
     if (!workspaceActive.current || !preparationView || (!formErr && !measuresSaved)) return;
@@ -510,12 +539,14 @@ export default function StaffDetailView({ workspace = false, active = true, task
     const nextTask = phase === 'reception' ? 'accord' : nextUsefulTask;
     const mayContinue = nextTask !== phase && canViewTask(nextTask);
     return <ShipmentRevision colis={sel} phase={phase} draftOwnerId={auth?.u?.id}
+      autoOpen={editRequested && task === phase} onAutoOpen={consumeEditRequest}
       canEdit={canCorrect(phase === 'reception' ? 'perm_colis_mesurer' : 'perm_colis_preparer')}
       onSave={saveRevision} onReload={() => refreshColis(sel.id)}
       onContinue={() => mayContinue ? chooseSection(nextTask) : navigate(safeWorkReturn(new URLSearchParams(location.search).get('returnTo') || '/'))}
       nextLabel={mayContinue ? taskLinkLabels[nextTask] : 'Retour à ma liste'} />;
   };
   const reopenControl = phase => <TaskReopen colis={sel} task={phase}
+    autoOpen={editRequested && task === phase} onAutoOpen={consumeEditRequest}
     canEdit={canCorrect(phase === 'accord' ? 'perm_colis_demander_feuvert' : 'perm_colis_calculer_devis')}
     onSave={reopenTask} onReload={() => refreshColis(sel.id)} />;
 
@@ -525,12 +556,14 @@ export default function StaffDetailView({ workspace = false, active = true, task
 
   function renderActionBlock() {
     const stage = needsQuoteRecalculation(sel) ? 'en_preparation' : sel.statut;
-    const inTransport = ['expedie','transit','dedouanement','arrive','livraison','livre'].includes(sel.statut);
-    const paymentRecorded = Boolean(sel.paiementDate) || sel.statut === 'paye';
+    const inTransport = Boolean(sel.dateExpedition) || ['expedie','transit','dedouanement','arrive','livraison','livre'].includes(sel.statut);
+    const paymentRecorded = Boolean(sel.paiementDate) || sel.paiementMontant != null || sel.statut === 'paye';
     const closed = sel.archive || sel.statut === 'annule';
+    const frozenLines = sel.devisSnapshot?.amounts?.taxLines || sel.devisSnapshot?.inputs?.lines || [];
     const quoteSummary = Number(sel.devisTotal) > 0 ? <div aria-label="Devis enregistré" className="space-y-2 rounded-xl border border-slate-200 p-4 text-sm">
       {sel.devisSnapshot?.amounts && <><Ligne label="Transport" value={eur(sel.devisSnapshot.amounts.transport)} /><Ligne label="Taxes" value={eur((sel.devisSnapshot.amounts.om || 0) + (sel.devisSnapshot.amounts.omr || 0) + (sel.devisSnapshot.amounts.tva || 0))} /><Ligne label="Frais" value={eur(sel.devisSnapshot.amounts.fees)} /></>}
       <Ligne label="Total" value={eur(sel.devisTotal)} />
+      {frozenLines.length > 0 && <details aria-label="Articles et taux enregistrés"><summary className="min-h-11 cursor-pointer py-3 font-semibold">Articles et taux enregistrés ({frozenLines.length})</summary><ul className="divide-y divide-slate-200">{frozenLines.map((line, index) => <li key={line.id || index} className="space-y-1 py-3"><p className="font-semibold">{line.description}</p>{line.customDuty?.code && <p>{line.customDuty.code} · {line.customDuty.label}</p>}<p>{line.quantity} × {eur(line.unitPrice)} HT</p><p>OM : {line.rates?.om == null ? 'non renseigné' : `${line.rates.om} %`} · OMR : {line.rates?.omr == null ? 'non renseigné' : `${line.rates.omr} %`}</p>{line.customDuty?.overrideReason && <p>Motif de correction : {line.customDuty.overrideReason}</p>}</li>)}</ul><p className="py-2 text-slate-600">Valeurs conservées avec ce devis.</p></details>}
     </div> : <p className="text-sm text-slate-600">Aucun devis en cours n’est enregistré dans ce dossier.</p>;
     // Closed dossiers keep their data available without offering work to restart.
     // These guards precede task prerequisites so cancellation never looks like
@@ -546,7 +579,7 @@ export default function StaffDetailView({ workspace = false, active = true, task
     if (task === 'documents') return canInvoiceWorkspace
       ? <DossierDocumentsTask key={sel.id} onQuote={canQuoteWorkspace ? () => chooseSection('devis') : undefined}>{continuation}</DossierDocumentsTask>
       : guidance('Factures réservées à l’équipe habilitée', 'Vous n’avez pas accès aux factures de ce dossier. La personne chargée de leur vérification doit terminer cette tâche.', nextUsefulTask === 'documents' ? null : nextUsefulTask);
-    if (task === 'reception' && stage !== 'receptionne') return <section className="space-y-4">{revisionEditor('reception')}
+    if (task === 'reception' && (stage !== 'receptionne' || revisionLockedReason(sel, 'reception'))) return <section className="space-y-4">{revisionEditor('reception')}
       <TaskGuidance title="Réception enregistrée" message="Les mesures des cartons reçus sont conservées. Consultez la suite utile du dossier sans les ressaisir."
         actionLabel={nextUsefulTask !== 'reception' && canViewTask(nextUsefulTask) ? taskLinkLabels[nextUsefulTask] : null}
         onOpen={nextUsefulTask !== 'reception' && canViewTask(nextUsefulTask) ? () => chooseSection(nextUsefulTask) : null} />
@@ -775,7 +808,7 @@ export default function StaffDetailView({ workspace = false, active = true, task
           {quote.ok && <Section title={verified ? 'Brouillon enregistré · vérifier puis envoyer' : 'Estimation du devis'} icon={Eye} color={BRAND.navy}>
             <div className="space-y-2 text-sm"><Ligne label="Transport" value={eur(quote.amounts.transport)} />{!isPro && <><Ligne label="Taxes" value={eur(quote.amounts.om + quote.amounts.omr + quote.amounts.tva)} /><details><summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-slate-600">Détail des taxes</summary><Ligne label="Octroi de mer" value={eur(quote.amounts.om)} /><Ligne label="Octroi de mer régional" value={eur(quote.amounts.omr)} /><Ligne label={`TVA (${dest.tva} %)`} value={eur(quote.amounts.tva)} /></details></>}<Ligne label="Frais convenus" value={eur(quote.amounts.fees)} />{verified && fraisDivers.length > 0 && <details><summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-slate-600">Détail des frais</summary>{fraisDivers.map((fee, index) => <Ligne key={index} label={fee.libelle} value={eur(fee.montant)} />)}</details>}{quote.patch.economie > 0 && <Ligne label="Économie après optimisation" value={eur(quote.patch.economie)} />}</div>
           </Section>}
-          <div id="quote-review" tabIndex={-1} data-testid="quote-action-bar" className="sticky bottom-16 z-10 -mx-1 scroll-mt-48 border-t border-slate-200 bg-white px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-3px_12px_rgba(0,0,0,0.06)] lg:bottom-0">
+          <div id="quote-review" tabIndex={-1} data-testid="quote-action-bar" className={`${customsDirty ? 'lg:sticky' : 'sticky'} bottom-16 z-10 -mx-1 scroll-mt-48 border-t border-slate-200 bg-white px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-3px_12px_rgba(0,0,0,0.06)] lg:bottom-0`}>
             <div className="mb-2 flex items-center justify-between gap-3"><div><p className="text-xs font-semibold text-slate-600">Total à régler</p><p className="text-lg font-bold text-slate-800">{quote.ok ? eur(quote.amounts.total) : 'À compléter'}</p></div><p role="status" className="max-w-[60%] text-right text-xs text-slate-600">{actionLoading ? 'Enregistrement en cours…' : verified ? 'Brouillon enregistré · vérifiez le détail avant envoi' : sel.devisBrouillon ? 'Modifications à enregistrer et vérifier' : 'Calcul non enregistré'}</p></div>
           {customsDirty && <p className="mb-2 text-sm font-semibold text-amber-800">Terminez le classement douanier avant d’enregistrer le devis.</p>}
           {!verified && !can('perm_colis_calculer_devis') && <p className="mb-2 text-sm text-slate-700">Une personne chargée du calcul doit vérifier et enregistrer ce devis avant son envoi.</p>}

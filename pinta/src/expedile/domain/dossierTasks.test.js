@@ -147,3 +147,18 @@ test('navigation preserves return path, removes stale action/invoice and uses co
   assert.equal(document.searchParams.get('section'), 'documents');
   assert.equal(document.searchParams.get('invoice'), 'invoice-a');
 });
+
+test('explicit edit links open a draft and ordinary navigation drops that intent', () => {
+  const origin = 'https://example.test';
+  const edit = new URL(dossierTaskUrl('a', 'preparation', '?returnTo=%2Fcolis&action=old', { edit: true }), origin);
+  assert.equal(edit.searchParams.get('modifier'), 'preparation');
+  assert.equal(edit.searchParams.get('section'), 'preparation');
+  assert.equal(edit.searchParams.has('action'), false);
+  for (const task of ['preparation', 'devis', 'documents', 'paiement']) {
+    const next = new URL(dossierTaskUrl('a', task, edit.search), origin);
+    assert.equal(next.searchParams.has('modifier'), false);
+    assert.equal(next.searchParams.get('returnTo'), '/colis');
+  }
+  const documents = new URL(dossierTaskUrl('a', 'devis', edit.search, { edit: true, invoiceId: 'invoice' }), origin);
+  assert.equal(documents.searchParams.has('modifier'), false);
+});

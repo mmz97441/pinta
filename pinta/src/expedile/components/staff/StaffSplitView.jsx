@@ -12,6 +12,9 @@ import { useMinuteNow } from '../../hooks/useMinuteNow';
 import { findColisByReference, normalizeColisReference } from '../../lib/supabaseData';
 import { buildDossierTableModel, defineDossierTableColumn, isDossierTableColumnSortable, sortDossierTableRows, dossierTableSortDirectionLabel } from '../../domain/dossierTable';
 import { staffAvailable, sortWorkActions, workActionUrl } from '../../domain/personalWork';
+import DossierColumnOptions from './DossierColumnOptions';
+import useDossierTablePreferences from '../../hooks/useDossierTablePreferences';
+import { COLUMN_FILTER_PREFIX, readColumnFilters, filterDossierTableRows, columnFilterLabel, dossierColumnSuggestions } from '../../domain/dossierTablePreferences';
 import { TABLE_VIEWS, TABLE_COLUMNS, DossierTableHead, DossierTableRow, DossierTableCard } from './DossierTableRows';
 
 // ── Pipeline cards (filters) ────────────────────────────────────────────────
@@ -146,7 +149,19 @@ export default function StaffColisPage() {
   const canSeePayments = ['perm_finances_voir_total', 'perm_colis_calculer_devis', 'perm_colis_envoyer_devis', 'perm_colis_confirmer_paiement'].some(permission => can(permission));
   const tableRequested = TABLE_VIEWS.some(view => view.key === searchParams.get('table')) ? searchParams.get('table') : 'daily';
   const tableView = tableRequested === 'payments' && !canSeePayments ? 'daily' : tableRequested;
-  const sortableColumns = TABLE_COLUMNS[tableView].filter(isDossierTableColumnSortable);
+  const displayColumns = TABLE_COLUMNS[tableView];
+  const sortableColumns = displayColumns.filter(isDossierTableColumnSortable);
+  const { widths, setWidth, resetWidths } = useDossierTablePreferences(auth?.u?.id, tableView, displayColumns);
+  const [columnOptions, setColumnOptions] = useState(null);
+  const columnFilters = useMemo(() => readColumnFilters(searchParams, displayColumns), [searchParams, displayColumns]);
+  const setColumnFilter = (key, value) => { setParam(COLUMN_FILTER_PREFIX + key, value ? JSON.stringify(value) : null); };
+  // Unknown, hidden or unauthorized columns never filter the visible view.
+  useEffect(() => {
+    const invalid = [...searchParams.keys()].filter(key => key.startsWith(COLUMN_FILTER_PREFIX) && !columnFilters[key.slice(COLUMN_FILTER_PREFIX.length)]);
+    if (invalid.length) setSearchParams(previous => { const next = new URLSearchParams(previous); invalid.forEach(key => next.delete(key)); return next; }, { replace: true });
+  }, [searchParams, columnFilters, setSearchParams]);
+  const tableStyle = { width: 40 + displayColumns.reduce((sum, column) => sum + widths[column.key], 0), '--dossier-ref-width': `${widths.ref}px`, '--dossier-client-width': `${widths.client}px`, '--dossier-client-left': `${40 + widths.ref}px` };
+
   // Keep another view's sort in the URL, but never sort on invisible or
   // inaccessible data. Returning to that view restores its selected column.
   const sortColumn = sortableColumns.find(column => column.key === searchParams.get('sort'));
@@ -206,12 +221,13 @@ export default function StaffColisPage() {
     ownerFilter && { key: 'owner', label: `Responsable de tâche : ${ownerFilter === 'mine' ? 'Moi' : ownerFilter === 'unassigned' ? 'Non attribué' : teamUsers.find(item => item.authId === ownerFilter)?.nom || 'Sélectionné'}` },
     activeDest && { key: 'dest', label: `Destination : ${getDestByCP(activeDest + '00')?.nom || activeDest}` },
     activeTab !== 'all' && { key: 'tab', label: `Étape : ${PIPELINE.find(item => item.key === activeTab)?.label}` },
+    ...sortableColumns.filter(column => columnFilters[column.key]).map(column => ({ key: COLUMN_FILTER_PREFIX + column.key, label: columnFilterLabel(column, columnFilters[column.key]) })),
   ].filter(Boolean);
   const clearFilters = () => {
     setShowFilters(false);
     setSearchParams(previous => {
       const next = new URLSearchParams(previous);
-      ['work', 'client', 'envoi', 'owner', 'dest', 'tab', 'archive', 'dossier', 'tasks'].forEach(key => next.delete(key));
+      ['work', 'client', 'envoi', 'owner', 'dest', 'tab', 'archive', 'dossier', 'tasks', ...[...next.keys()].filter(key => key.startsWith(COLUMN_FILTER_PREFIX))].forEach(key => next.delete(key));
       return next;
     }, { replace: true });
   };
@@ -245,11 +261,15 @@ export default function StaffColisPage() {
     if (search.trim()) list = list.filter((c) => fuzzy(`${c.ref} ${c.desc || ''} ${getClient(c.clientId)?.nom || ''} ${c.casier || ''} ${c.trackings?.join(' ') || ''}`, exactReference || search));
     return list;
   }, [data, showArchive, workFilter, context, clientFilter, envoiFilter, ownerFilter, taskScope, models, activeDest, getClient, search, exactReference]);
-  const searched = useMemo(() => {
+  const phaseRows = useMemo(() => {
     if (activeTab === 'all' && (workFilter === 'messages' || ownerFilter || taskScope !== 'all')) return scope;
     const phase = PIPELINE.find((item) => item.key === activeTab);
     return phase ? scope.filter(phase.filter) : scope;
   }, [scope, activeTab, workFilter, ownerFilter, taskScope]);
+
+  const searched = useMemo(() => filterDossierTableRows(phaseRows, { columns: displayColumns, filters: columnFilters, models, getClient, envois }), [phaseRows, displayColumns, columnFilters, models, getClient, envois]);
+
+  const columnSuggestions = useMemo(() => dossierColumnSuggestions(phaseRows, displayColumns.find(column => column.key === columnOptions), { models, getClient, envois }), [phaseRows, displayColumns, columnOptions, models, getClient, envois]);
 
   // Sort
   const sorted = useMemo(() => {
@@ -370,7 +390,7 @@ export default function StaffColisPage() {
         <h1 className="text-xl font-bold text-gray-900">Dossiers d’expédition</h1>
         <div aria-label="Vues du tableau" className="flex flex-wrap gap-2">
           {TABLE_VIEWS.filter(view => view.key !== 'payments' || canSeePayments).map(view => <button key={view.key} aria-pressed={tableView === view.key}
-            onClick={() => { setParam('table', view.key === 'daily' ? null : view.key); setSelectedIds(new Set()); }}
+            onClick={() => { setParam('table', view.key === 'daily' ? null : view.key); setSelectedIds(new Set()); setColumnOptions(null); }}
             className={`min-h-11 rounded-xl px-4 text-sm font-semibold ${tableView === view.key ? 'bg-slate-900 text-white dark:bg-slate-200 dark:text-slate-900' : 'border border-gray-200 text-gray-700'}`}>{view.label}</button>)}
         </div>
         {tableRequested === 'payments' && !canSeePayments && <p role="status" className="text-sm text-gray-700">Votre rôle ne permet pas de consulter les montants. Les dossiers restent accessibles dans Travail quotidien.</p>}
@@ -387,8 +407,10 @@ export default function StaffColisPage() {
               placeholder="Référence, client, casier ou suivi…" className="min-h-11 w-full rounded-xl border border-gray-300 bg-white pl-10 pr-10 text-sm text-gray-900" />
             {search && <button aria-label="Effacer la recherche" onClick={() => setSearch('')} className="absolute right-0 top-0 flex min-h-11 w-10 items-center justify-center text-gray-500"><X size={17} /></button>}
           </div>
+          <button onClick={() => setColumnOptions(value => value ? null : sortableColumns[0]?.key)} aria-expanded={Boolean(columnOptions)} className="min-h-11 rounded-xl border border-gray-200 px-3 text-sm font-semibold text-gray-700">Filtres par colonne{Object.keys(columnFilters).length ? ` · ${Object.keys(columnFilters).length}` : ''}</button>
           <button onClick={() => setShowFilters(value => !value)} aria-expanded={showFilters} className="min-h-11 rounded-xl border border-gray-200 px-3 text-sm font-semibold text-gray-700">Filtres et options{activeFilters.length ? ` · ${activeFilters.length}` : ''}</button>
         </div>
+        {columnOptions && <DossierColumnOptions key={tableView} columns={sortableColumns} columnKey={columnOptions} filters={columnFilters} widths={widths} suggestions={columnSuggestions} onSelect={setColumnOptions} onFilter={setColumnFilter} onResize={setWidth} onResetWidths={resetWidths} onClose={() => setColumnOptions(null)} />}
         {showFilters && <div className="flex flex-wrap items-end gap-3 rounded-xl border border-gray-200 p-3">
           <label className="max-w-full text-sm font-medium text-gray-700">File de travail<select aria-label="File de travail" value={workFilter || ''} onChange={e => { setSearchParams(previous => { const next = new URLSearchParams(previous); next.delete('tab'); next.delete('archive'); if (e.target.value) next.set('work', e.target.value); else next.delete('work'); return next; }, { replace: true }); }} className="mt-1 block min-h-11 max-w-full rounded-lg border border-gray-300 bg-white px-2"><option value="">Tous les dossiers</option>{WORK_QUEUES.map(queue => <option key={queue.key} value={queue.key}>{queue.label}</option>)}</select></label>
           <label className="text-sm font-medium text-gray-700">Étape<select aria-label="Étape" value={activeTab} onChange={event => setActiveTab(event.target.value)} className="mt-1 block min-h-11 rounded-lg border border-gray-300 bg-white px-2">{PIPELINE.map(phase => <option key={phase.key} value={phase.key}>{phase.label} ({tabCounts[phase.key] || 0})</option>)}</select></label>
@@ -517,10 +539,15 @@ export default function StaffColisPage() {
 
             return <>
               <div className="xl:hidden divide-y divide-gray-200 px-4">{sorted.map(c => <DossierTableCard key={c.id} c={c} client={getClient(c.clientId)} model={models.get(c.id)} columns={displayCols} checked={selectedIds.has(c.id)} onCheck={() => toggleSelection(c.id)} onOpen={action => openColis(c.id, action)} returnTo={returnTo} />)}</div>
-              <table aria-label="Dossiers d’expédition" data-view={tableView} className="dossier-data-table hidden w-full text-left xl:table">
+              <table aria-label="Dossiers d’expédition" data-view={tableView} data-unpin-client={widths.ref > 360 || widths.ref + widths.client > 600 || widths.ref + widths.client + widths.action > 760 ? 'true' : undefined} data-unpin-ref={widths.ref > 360 ? 'true' : undefined} style={tableStyle} className="dossier-data-table hidden text-left xl:table">
+                <colgroup><col style={{ width: 40 }} />{displayCols.map(column => <col key={column.key} style={{ width: widths[column.key] }} />)}</colgroup>
                 <thead>
                   <DossierTableHead
                     columns={displayCols}
+                    widths={widths}
+                    onResize={setWidth}
+                    filters={columnFilters}
+                    onFilterColumn={key => { setColumnOptions(key); }}
                     allSelected={sorted.length > 0 && sorted.every((c) => selectedIds.has(c.id))}
                     onSelectAll={() => {
                       if (sorted.every((c) => selectedIds.has(c.id))) setSelectedIds(new Set());

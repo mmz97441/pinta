@@ -83,9 +83,10 @@ export function resolveDossierTask(dossier = {}, search = '', workActions = [], 
  * action or invoice into a different task. No navigation mutates business data. */
 export function dossierTaskUrl(dossierId, task, search = '', options = {}) {
   const params = new URLSearchParams(search);
-  params.delete('invoice'); params.delete('action'); params.delete('onglet');
+  params.delete('invoice'); params.delete('action'); params.delete('onglet'); params.delete('modifier');
   const section = options.invoiceId ? 'documents' : Object.hasOwn(DOSSIER_TASKS, task) ? task : 'reception';
   params.set('section', section);
+  if (options.edit && ['reception', 'preparation', 'devis'].includes(section)) params.set('modifier', section);
   if (options.invoiceId) params.set('invoice', options.invoiceId);
   const hash = options.hash ? `#${String(options.hash).replace(/^#/, '')}` : '';
   return `/colis/${encodeURIComponent(dossierId)}?${params}${hash}`;

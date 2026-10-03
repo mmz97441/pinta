@@ -51,7 +51,7 @@ function Step({ step, viewedTask, onNavigateTask, summaryId }) {
  * reading an earlier step never changes the dossier or sends a notification. */
 export default function DossierOverview({
   dossier, model, currentTask: viewedTask, onNavigateTask, onOpenContext, onCorrect,
-  onEditCasier, canEditCasier = false, canEditReception = false, canEditPreparation = false,
+  onEditCasier, canEditCasier = false, canEditReception = false, canEditPreparation = false, canEditQuote = false,
 }) {
   if (!dossier || !model) return null;
   const received = model.received || {};
@@ -88,7 +88,7 @@ export default function DossierOverview({
         <p className="dossier-overview-weight">{positive(received.totalWeight) ? `${numberFormat.format(received.totalWeight)} kg reçus` : 'Poids à compléter'}</p>
         {receivedDimensions && <p className="dossier-overview-secondary">{receivedDimensions}</p>}
         <OverviewAction onClick={editReception ? () => onCorrect('reception') : openContext('reception') || openTask('reception')}
-          label={editReception ? 'Voir ou modifier les mesures à réception' : 'Consulter les cartons et les mesures à réception'}>{editReception ? 'Voir / modifier' : 'Consulter'}</OverviewAction>
+          label={editReception ? 'Modifier les mesures à réception' : 'Consulter les cartons et les mesures à réception'}>{editReception ? 'Modifier les mesures' : 'Consulter'}</OverviewAction>
       </div>
       <div className="dossier-overview-fact" data-overview="optimization">
         <h3><Ruler size={15} aria-hidden="true" />Après optimisation</h3>
@@ -96,7 +96,7 @@ export default function DossierOverview({
         <p className="dossier-overview-weight">{positive(optimization.totalWeight) ? `${numberFormat.format(optimization.totalWeight)} kg ${optimization.current ? 'après optimisation' : 'enregistrés · à vérifier'}` : 'Poids à compléter'}</p>
         {optimizedDimensions && <p className="dossier-overview-secondary">{optimizedDimensions}</p>}
         <OverviewAction onClick={editPreparation ? () => onCorrect('preparation') : openTask('preparation')}
-          label={editPreparation ? 'Voir ou modifier les mesures après optimisation' : 'Consulter les mesures après optimisation'}>{editPreparation ? 'Voir / modifier' : 'Consulter'}</OverviewAction>
+          label={editPreparation ? 'Modifier les mesures après optimisation' : 'Consulter les mesures après optimisation'}>{editPreparation ? 'Modifier les mesures' : 'Consulter'}</OverviewAction>
       </div>
       <div className="dossier-overview-fact dossier-overview-invoices" data-overview="invoices">
         <div><h3><FileText size={15} aria-hidden="true" />Factures</h3>
@@ -110,6 +110,7 @@ export default function DossierOverview({
       <span className="dossier-overview-secondary">Suivis reçus</span>
       {visibleTrackings.length ? <ul>{visibleTrackings.map((box, index) => <li key={`${box.number}-${index}`}><span className="dossier-overview-tracking-label">Carton {box.number}</span><span className="dossier-overview-tracking-number">{box.tracking}</span></li>)}</ul> : <span className="dossier-overview-secondary">Aucun numéro saisi</span>}
       {trackings.length > visibleTrackings.length && <OverviewAction onClick={openContext('reception')} label={`Consulter les ${trackings.length} suivis reçus`}>+ {trackings.length - visibleTrackings.length} autre{trackings.length - visibleTrackings.length > 1 ? 's' : ''}</OverviewAction>}
+      {canEditQuote && onCorrect && canOpen('devis') && <OverviewAction onClick={() => onCorrect('devis')} label="Modifier le devis et les taux">Modifier le devis et les taux</OverviewAction>}
     </div>
 
     {alerts.length > 0 && <details className="dossier-overview-alerts">

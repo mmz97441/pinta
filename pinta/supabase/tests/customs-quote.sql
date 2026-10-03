@@ -81,8 +81,14 @@ SELECT customs_assert((SELECT devis_snapshot#>>'{inputs,lines,0,description}'='O
 SELECT customs_reject($q$SELECT customs_quote(12,3,2.98,37.98)$q$,'old category total cannot bypass chosen tariff');
 RESET ROLE;
 UPDATE colis SET statut='devis_envoye',devis_brouillon=false WHERE id='fc300000-0000-4000-8000-000000000001';
-INSERT INTO payment_intents(colis_id,quote_version,amount_cents,status) SELECT id,quote_version,5165,'pending' FROM colis WHERE id='fc300000-0000-4000-8000-000000000001';
+INSERT INTO payment_intents(colis_id,quote_version,amount_cents,status,provider_id,provider_is_live,payment_url) SELECT id,quote_version,5165,'pending','pay_customsFixture',false,'https://example.test/customs-payment' FROM colis WHERE id='fc300000-0000-4000-8000-000000000001';
 SET LOCAL ROLE authenticated;
+SELECT customs_reject($q$SELECT customs_save('test-p410-r1','{"om":5,"omr":0,"reason":"Taux vérifié pour ce devis"}')$q$,'active provider link must be cancelled before rate correction','22023');
+RESET ROLE;
+-- Synthetic provider cancellation evidence; actual verification is covered in task-corrections.sql.
+UPDATE payment_intents SET provider_cancelled_at=now() WHERE provider_id='pay_customsFixture';
+SET LOCAL ROLE authenticated;
+SELECT correct_colis_task(id,'devis','{}',updated_at,'Corriger le taux après annulation du lien') FROM colis WHERE id='fc300000-0000-4000-8000-000000000001';
 SELECT customs_save('test-p410-r1','{"om":5,"omr":0,"reason":"Taux vérifié pour ce devis"}');
 SELECT customs_assert((SELECT devis_total IS NULL AND devis_brouillon AND statut='en_preparation' AND payplug_payment_url IS NULL FROM colis WHERE id='fc300000-0000-4000-8000-000000000001'),'published quote is invalidated by explicit correction');
 SELECT customs_assert((SELECT status='superseded' FROM payment_intents WHERE colis_id='fc300000-0000-4000-8000-000000000001'),'previous payment intent superseded');
