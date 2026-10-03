@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { TABLE_COLUMNS, buildDossierTableModel, buildDossierTableExportRows, sortDossierTableRows } from './dossierTable.js';
-import { clampColumnWidth, columnWidthsStorageKey, columnVisibilityStorageKey, dossierTextSizeStorageKey, sanitizeDossierTextSize, DOSSIER_TEXT_SIZES, sanitizeHiddenColumns, readColumnFilters, filterDossierTableRows, sanitizeColumnFilter, sanitizeColumnWidths, dossierColumnSuggestions } from './dossierTablePreferences.js';
+import { clampColumnWidth, columnWidthsStorageKey, columnVisibilityStorageKey, dossierTextSizeStorageKey, dossierLayoutStorageKey, sanitizeDossierTextSize, sanitizeDossierTableLayout, DOSSIER_TEXT_SIZE_BOUNDS, sanitizeHiddenColumns, readColumnFilters, filterDossierTableRows, sanitizeColumnFilter, sanitizeColumnWidths, dossierColumnSuggestions } from './dossierTablePreferences.js';
 
 const columns = TABLE_COLUMNS.daily;
 const column = key => columns.find(item => item.key === key);
@@ -76,11 +76,14 @@ test('width preferences isolate user/view and bound corrupt or unsupported value
   assert.equal(columnWidthsStorageKey(null, 'daily'), null);
   assert.equal(columnWidthsStorageKey('one', 'unknown'), null);
   assert.equal(clampColumnWidth(column('ref'), 999999), 600);
-  assert.equal(clampColumnWidth(column('ref'), -5), 140);
-  assert.equal(clampColumnWidth(column('ref'), 'invalid'), 160);
+  assert.equal(clampColumnWidth(column('ref'), -5), 96);
+  assert.equal(clampColumnWidth(column('ref'), 'invalid'), 140);
   assert.equal(clampColumnWidth(column('action'), 600), 280);
+  assert.equal(clampColumnWidth(column('optimizedDimensions'), 5), 110);
+  assert.equal(clampColumnWidth(column('cartons'), 5), 64);
+  assert.equal(clampColumnWidth(column('client'), 5), 96);
   const values = sanitizeColumnWidths(columns.filter(item => !item.financial), { ref: 220, requested: 400, action: 20, client: Infinity });
-  assert.equal(values.ref, 220); assert.equal(values.client, 200); assert.equal(values.action, 175);
+  assert.equal(values.ref, 220); assert.equal(values.client, 180); assert.equal(values.action, 110);
   assert.equal(values.requested, undefined);
 });
 
@@ -110,10 +113,14 @@ test('hidden columns cannot filter or export values, while visible columns retai
   for (const label of ['Client', 'Action', 'Paiement', 'Dimensions finales']) assert.equal(Object.hasOwn(exported[0], label), false);
 });
 
-test('text size is readable, bounded, and isolated from widths, visibility, account and view', () => {
-  assert.deepEqual(DOSSIER_TEXT_SIZES.map(size => size.value), [14, 16, 18]);
-  for (const size of [14, 16, 18]) assert.equal(sanitizeDossierTextSize(size), size);
-  for (const invalid of [0, 10, 12, 15, 19, 100, null, undefined, '', '18', {}, Infinity]) assert.equal(sanitizeDossierTextSize(invalid), 16);
+test('text size accepts every integer from 5 to 20, preserves legacy choices, and isolates each preference', () => {
+  assert.deepEqual(DOSSIER_TEXT_SIZE_BOUNDS, { min: 5, max: 20, initial: 12 });
+  for (let size = 5; size <= 20; size += 1) assert.equal(sanitizeDossierTextSize(size), size);
+  for (const previous of [14, 16, 18]) assert.equal(sanitizeDossierTextSize(previous), previous);
+  assert.equal(sanitizeDossierTextSize(0), 5);
+  assert.equal(sanitizeDossierTextSize(100), 20);
+  assert.equal(sanitizeDossierTextSize(12.2), 12);
+  for (const invalid of [null, undefined, '', '18', {}, Infinity, NaN]) assert.equal(sanitizeDossierTextSize(invalid), 12);
   const key = dossierTextSizeStorageKey('one', 'daily');
   assert.notEqual(key, dossierTextSizeStorageKey('two', 'daily'));
   assert.notEqual(key, dossierTextSizeStorageKey('one', 'payments'));
@@ -121,4 +128,15 @@ test('text size is readable, bounded, and isolated from widths, visibility, acco
   assert.notEqual(key, columnVisibilityStorageKey('one', 'daily'));
   assert.equal(dossierTextSizeStorageKey(null, 'daily'), null);
   assert.equal(dossierTextSizeStorageKey('one', 'unknown'), null);
+});
+
+test('automatic, table and card layouts are independently scoped and safely default to automatic', () => {
+  for (const layout of ['auto', 'table', 'cards']) assert.equal(sanitizeDossierTableLayout(layout), layout);
+  for (const invalid of ['grid', '', null, undefined, {}, 0]) assert.equal(sanitizeDossierTableLayout(invalid), 'auto');
+  const key = dossierLayoutStorageKey('one', 'daily');
+  assert.notEqual(key, dossierLayoutStorageKey('two', 'daily'));
+  assert.notEqual(key, dossierLayoutStorageKey('one', 'departures'));
+  for (const other of [columnWidthsStorageKey, columnVisibilityStorageKey, dossierTextSizeStorageKey]) assert.notEqual(key, other('one', 'daily'));
+  assert.equal(dossierLayoutStorageKey(null, 'daily'), null);
+  assert.equal(dossierLayoutStorageKey('one', 'unknown'), null);
 });

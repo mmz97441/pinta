@@ -230,13 +230,13 @@ async function main() {
       const reference=dialog.getByRole('checkbox',{name:'Afficher Référence',exact:true});assert.equal(await reference.isChecked(),true);assert.equal(await reference.isDisabled(),true);
       await dialog.getByRole('checkbox',{name:'Afficher Casier',exact:true}).uncheck();await dialog.getByRole('checkbox',{name:'Afficher Dernière réception',exact:true}).uncheck();await dialog.getByRole('button',{name:'Terminer',exact:true}).click();
       await f.page.waitForURL(url=>!url.searchParams.has('col.casier')&&!url.searchParams.has('sort'));assert.equal(await f.page.locator('th[data-column="casier"]').count(),0);assert.equal(await f.page.locator('th[data-column="receivedAt"]').count(),0);
-      await f.page.reload();await row(f,P).waitFor();assert.equal(await f.page.locator('th[data-column="casier"]').count(),0);assert.equal(Number(await resize.getAttribute('aria-valuenow')),210);
+      await f.page.reload();await row(f,P).waitFor();assert.equal(await f.page.locator('th[data-column="casier"]').count(),0);assert.equal(Number(await resize.getAttribute('aria-valuenow')),190);
       await f.page.getByRole('button',{name:/^Filtres et options/}).click();const downloaded=f.page.waitForEvent('download');await f.page.getByRole('button',{name:'Exporter 6 dossiers filtrés',exact:true}).click();const file=await downloaded;const book=XLSX.read(await fs.readFile(await file.path()),{type:'buffer'});const records=XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]],{header:1});
       assert.equal(records[0].includes('Casier'),false);assert.equal(records[0].includes('Dernière réception'),false);assert.equal(records[0][0],'Référence');
       await f.page.getByRole('button',{name:'Fermer les filtres',exact:true}).click();await selectPreset(f,'Paiements','payments');assert.equal(await f.page.locator('th[data-column="receivedAt"]').count(),1);
       await selectPreset(f,'Travail quotidien','daily');assert.equal(await f.page.locator('th[data-column="receivedAt"]').count(),0);
       await f.page.getByRole('button',{name:'Colonnes',exact:true}).click();dialog=f.page.getByRole('dialog',{name:'Colonnes affichées',exact:true});await dialog.getByRole('button',{name:'Rétablir les colonnes',exact:true}).click();await dialog.getByRole('button',{name:'Terminer',exact:true}).click();
-      await f.page.locator('th[data-column="casier"]').waitFor();assert.equal(Number(await resize.getAttribute('aria-valuenow')),210,'Restoring visible columns does not erase personal widths.');await assertNoBusinessChange(f,before);
+      await f.page.locator('th[data-column="casier"]').waitFor();assert.equal(Number(await resize.getAttribute('aria-valuenow')),190,'Restoring visible columns does not erase personal widths.');await assertNoBusinessChange(f,before);
     });
     await scenario('mobile-column-choices-keep-reference-and-filter-only-visible-data',async f=>{
       await f.page.setViewportSize({width:390,height:844});const before=structuredClone(f.tables.colis);await open(f);
@@ -345,7 +345,7 @@ async function main() {
       const separator=f.page.getByRole('separator',{name:'Redimensionner Référence',exact:true});
       const initial=Number(await separator.getAttribute('aria-valuenow'));
       await separator.focus();await separator.press('ArrowRight');await separator.press('Shift+ArrowRight');
-      await f.page.waitForFunction(()=>document.querySelector('[aria-label="Redimensionner Référence"]').getAttribute('aria-valuenow')==='220');
+      await f.page.waitForFunction(()=>document.querySelector('[aria-label="Redimensionner Référence"]').getAttribute('aria-valuenow')==='200');
       assert.equal(Number(await separator.getAttribute('aria-valuenow')),initial+60);
       const bbox=await separator.boundingBox();await f.page.mouse.move(bbox.x+bbox.width/2,bbox.y+bbox.height/2);await f.page.mouse.down();await f.page.mouse.move(bbox.x+bbox.width/2+35,bbox.y+bbox.height/2,{steps:5});await f.page.mouse.up();
       const resized=Number(await separator.getAttribute('aria-valuenow'));assert.ok(Math.abs(resized-(initial+95))<=1);
@@ -358,17 +358,17 @@ async function main() {
       await selectPreset(f,'Paiements','payments');assert.equal(Number(await separator.getAttribute('aria-valuenow')),initial,'Widths are separate for each view.');
       await selectPreset(f,'Travail quotidien','daily');assert.equal(Number(await separator.getAttribute('aria-valuenow')),resized);
       await separator.focus();await separator.press('End');assert.equal(Number(await separator.getAttribute('aria-valuenow')),600);
-      assert.equal(await f.page.getByRole('table',{name:'Dossiers d’expédition',exact:true}).getAttribute('data-unpin-ref'),'true','An oversized reference stops pinning over the whole usable table.');
+      const usable=await f.page.getByRole('region',{name:'Tableau des dossiers',exact:true}).boundingBox();const pinnedRef=await cell(f,P,'ref').evaluate(n=>getComputedStyle(n).position==='sticky');if(pinnedRef){const actionWidth=(await cell(f,P,'action').boundingBox()).width;assert.ok(usable.width-600-actionWidth-40>=300,'Keeping a wide reference fixed must leave real room for the other data.');}
       await separator.press('Enter');assert.equal(Number(await separator.getAttribute('aria-valuenow')),initial);
       const actionResize=f.page.getByRole('separator',{name:'Redimensionner Action',exact:true});
       await actionResize.focus();await actionResize.press('End');assert.equal(Number(await actionResize.getAttribute('aria-valuenow')),280,'The action column has a useful upper bound instead of hiding the central data.');
       const clientResize=f.page.getByRole('separator',{name:'Redimensionner Client',exact:true});await clientResize.focus();await clientResize.press('End');
       assert.equal(await f.page.getByRole('table',{name:'Dossiers d’expédition',exact:true}).getAttribute('data-unpin-client'),'true');
       await clientResize.press('Enter');await actionResize.focus();await actionResize.press('Enter');
-      // A wide reference must release Client even when the two widths total less than 600px.
-      await separator.focus();await separator.press('Home');for(let step=0;step<5;step++)await separator.press('Shift+ArrowRight');await separator.press('ArrowRight');
+      // Narrowing the usable area releases fixed identities before they cover the data.
+      await f.page.setViewportSize({width:1280,height:1000});await separator.focus();await separator.press('End');await actionResize.focus();await actionResize.press('End');
       await clientResize.focus();await clientResize.press('Home');
-      assert.equal(Number(await separator.getAttribute('aria-valuenow')),400);assert.equal(Number(await clientResize.getAttribute('aria-valuenow')),140);
+      assert.equal(Number(await separator.getAttribute('aria-valuenow')),600);assert.equal(Number(await clientResize.getAttribute('aria-valuenow')),96);
       const table=f.page.getByRole('table',{name:'Dossiers d’expédition',exact:true});
       assert.equal(await table.getAttribute('data-unpin-ref'),'true');assert.equal(await table.getAttribute('data-unpin-client'),'true');
       await scroller.evaluate(node=>{node.scrollLeft=0;});await f.page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(resolve)));
@@ -376,14 +376,14 @@ async function main() {
       await scroller.evaluate(node=>{node.scrollLeft=300;});await f.page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(resolve)));
       const wideAfter=[await ref.boundingBox(),await client.boundingBox(),await action.boundingBox()];
       for(let i=0;i<2;i++)assert.ok(Math.abs(wideBefore[i].x-wideAfter[i].x-300)<=2,'Both oversized identity columns scroll together instead of leaving Client floating.');
-      assert.ok(Math.abs(wideBefore[2].x-wideAfter[2].x)<=2&&wideAfter[2].x>=220&&wideAfter[2].x+wideAfter[2].width<=1440,'The action stays pinned and visible after releasing the identity columns.');
+      assert.ok(Math.abs(wideBefore[2].x-wideAfter[2].x)<=2&&wideAfter[2].x>=220&&wideAfter[2].x+wideAfter[2].width<=1280,'The action stays pinned and visible after releasing the identity columns.');
       assert.equal(await f.page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false);
       await assertNoBusinessChange(f,before);
     });
     await scenario('column-width-preferences-remain-private-after-switching-account-in-the-same-browser',async f=>{
       await open(f);const separator=f.page.getByRole('separator',{name:'Redimensionner Référence',exact:true});
-      await separator.focus();await separator.press('Shift+ArrowRight');await f.page.waitForFunction(()=>document.querySelector('[aria-label="Redimensionner Référence"]').getAttribute('aria-valuenow')==='210');
-      const savedA=await f.page.evaluate(id=>localStorage.getItem(`expedile:table-widths:v1:${encodeURIComponent(id)}:daily`),ids.A);assert.equal(JSON.parse(savedA).ref,210);
+      await separator.focus();await separator.press('Shift+ArrowRight');await f.page.waitForFunction(()=>document.querySelector('[aria-label="Redimensionner Référence"]').getAttribute('aria-valuenow')==='190');
+      const savedA=await f.page.evaluate(id=>localStorage.getItem(`expedile:table-widths:v1:${encodeURIComponent(id)}:daily`),ids.A);assert.equal(JSON.parse(savedA).ref,190);
       await f.page.getByRole('button',{name:'Colonnes',exact:true}).click();let visibility=f.page.getByRole('dialog',{name:'Colonnes affichées',exact:true});await visibility.getByRole('checkbox',{name:'Afficher Client',exact:true}).uncheck();await visibility.getByRole('button',{name:'Terminer',exact:true}).click();
       const hiddenA=await f.page.evaluate(id=>localStorage.getItem(`expedile:table-columns:v1:${encodeURIComponent(id)}:daily`),ids.A);assert.ok(JSON.parse(hiddenA).includes('client'));
       await f.page.getByRole('button',{name:'Se déconnecter',exact:true}).filter({visible:true}).click();await f.page.getByLabel('Email',{exact:true}).waitFor();
@@ -392,12 +392,12 @@ async function main() {
       const token=Buffer.from(JSON.stringify({alg:'HS256',typ:'JWT'})).toString('base64url')+'.'+Buffer.from(JSON.stringify({sub:B,role:'authenticated',exp:Math.floor(Date.now()/1000)+3600})).toString('base64url')+'.test';
       await f.context.route('**/auth/v1/token**',route=>reply(route,{access_token:token,refresh_token:'test-b',token_type:'bearer',expires_in:3600,user}));
       await f.context.route('**/auth/v1/user',route=>reply(route,user));
-      await f.login();await open(f);assert.equal(Number(await separator.getAttribute('aria-valuenow')),160,'The new account does not inherit the previous user’s width.');
+      await f.login();await open(f);assert.equal(Number(await separator.getAttribute('aria-valuenow')),140,'The new account does not inherit the previous user’s width.');
       assert.equal(await f.page.locator('th[data-column="client"]').count(),1,'The new account does not inherit hidden columns.');
       await f.page.getByRole('button',{name:'Colonnes',exact:true}).click();visibility=f.page.getByRole('dialog',{name:'Colonnes affichées',exact:true});await visibility.getByRole('checkbox',{name:'Afficher Casier',exact:true}).uncheck();await visibility.getByRole('button',{name:'Terminer',exact:true}).click();
-      await separator.focus();await separator.press('ArrowRight');await f.page.waitForFunction(()=>document.querySelector('[aria-label="Redimensionner Référence"]').getAttribute('aria-valuenow')==='170');
+      await separator.focus();await separator.press('ArrowRight');await f.page.waitForFunction(()=>document.querySelector('[aria-label="Redimensionner Référence"]').getAttribute('aria-valuenow')==='150');
       const values=await f.page.evaluate(({a,b})=>({a:localStorage.getItem(`expedile:table-widths:v1:${encodeURIComponent(a)}:daily`),b:localStorage.getItem(`expedile:table-widths:v1:${encodeURIComponent(b)}:daily`)}),{a:ids.A,b:B});
-      assert.equal(values.a,savedA);assert.equal(JSON.parse(values.b).ref,170);assert.equal(f.claims.length,0);assert.deepEqual(businessWrites(f),[]);
+      assert.equal(values.a,savedA);assert.equal(JSON.parse(values.b).ref,150);assert.equal(f.claims.length,0);assert.deepEqual(businessWrites(f),[]);
       const hidden=await f.page.evaluate(({a,b})=>({a:localStorage.getItem(`expedile:table-columns:v1:${encodeURIComponent(a)}:daily`),b:localStorage.getItem(`expedile:table-columns:v1:${encodeURIComponent(b)}:daily`)}),{a:ids.A,b:B});assert.equal(hidden.a,hiddenA);assert.ok(JSON.parse(hidden.b).includes('casier'));assert.equal(JSON.parse(hidden.b).includes('client'),false);
     });
     for(const dark of [false,true])await scenario(`mobile-column-filter-reset-and-width-editor-${dark?'dark':'light'}`,async f=>{
@@ -405,10 +405,9 @@ async function main() {
       const before=structuredClone(f.tables.colis);await open(f);
       const options=await filterColumn(f,'paymentState','contains','partiel');await waitIds(f,[P4]);
       assert.equal(await f.page.getByRole('table',{name:'Dossiers d’expédition',exact:true}).count(),0);
-      await options.getByText('Largeur des colonnes sur ordinateur',{exact:true}).click();
       const width=options.getByLabel('Largeur de Paiement',{exact:true});await width.fill('300');await width.press('Enter');
       assert.equal(await width.inputValue(),'300');await options.getByRole('button',{name:'Rétablir les largeurs',exact:true}).click();
-      await f.page.waitForFunction(()=>document.querySelector('[aria-label="Largeur de Paiement"]')?.value==='155');assert.equal(await width.inputValue(),'155');
+      await f.page.waitForFunction(()=>document.querySelector('[aria-label="Largeur de Paiement"]')?.value==='140');assert.equal(await width.inputValue(),'140');
       await options.getByRole('button',{name:'Fermer',exact:true}).click();await row(f,P4).waitFor();
       assert.equal(await f.page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false);
       await f.page.screenshot({path:`${output}/mobile-column-filter-${dark?'dark':'light'}.png`,fullPage:true});

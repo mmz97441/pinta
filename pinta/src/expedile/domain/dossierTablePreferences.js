@@ -1,17 +1,24 @@
 import { isDossierTableColumnSortable, formatDossierTableDate } from './dossierTable.js';
 
 export const COLUMN_FILTER_PREFIX = 'col.';
-const widths = { ref: 160, client: 200, statusLabel: 170, paymentState: 155, statut: 220, owner: 140, casier: 120, cartons: 125, optimizedDimensions: 225, optimizedWeight: 155, requested: 150, paid: 135, remaining: 150, sentAt: 155, departure: 165, destination: 135, packages: 160, readiness: 230, action: 180 };
-export const DOSSIER_TEXT_SIZES = [{ value: 14, label: 'Petit' }, { value: 16, label: 'Normal' }, { value: 18, label: 'Grand' }];
+const widths = { ref: 140, client: 180, statusLabel: 155, paymentState: 140, statut: 190, owner: 125, casier: 90, cartons: 90, receivedAt: 130, optimizedDimensions: 190, optimizedWeight: 110, requested: 130, paid: 115, remaining: 130, sentAt: 130, departure: 140, destination: 115, packages: 135, readiness: 195, action: 140 };
+export const DOSSIER_TEXT_SIZE_BOUNDS = Object.freeze({ min: 5, max: 20, initial: 12 });
 export function sanitizeDossierTextSize(value) {
-  return DOSSIER_TEXT_SIZES.some(size => size.value === value) ? value : 16;
+  const { min, max, initial } = DOSSIER_TEXT_SIZE_BOUNDS;
+  return typeof value === 'number' && Number.isFinite(value) ? Math.min(max, Math.max(min, Math.round(value))) : initial;
 }
 export function dossierTextSizeStorageKey(userId, view) {
   return userId && ['daily', 'payments', 'departures'].includes(view) ? `expedile:table-text:v1:${encodeURIComponent(userId)}:${view}` : null;
 }
+export function sanitizeDossierTableLayout(value) {
+  return ['auto', 'table', 'cards'].includes(value) ? value : 'auto';
+}
+export function dossierLayoutStorageKey(userId, view) {
+  return userId && ['daily', 'payments', 'departures'].includes(view) ? `expedile:table-layout:v1:${encodeURIComponent(userId)}:${view}` : null;
+}
 export function columnWidthBounds(column) {
-  const min = column?.key === 'action' ? 175 : ['ref', 'client'].includes(column?.key) ? 140 : 132;
-  const initial = Math.max(min, widths[column?.key] || 180);
+  const min = ['action', 'optimizedDimensions'].includes(column?.key) ? 110 : ['ref', 'client'].includes(column?.key) ? 96 : 64;
+  const initial = Math.max(min, widths[column?.key] || 140);
   return { min, max: column?.key === 'action' ? 280 : 600, initial };
 }
 export function clampColumnWidth(column, value) {

@@ -14,8 +14,9 @@ import { buildDossierTableModel, defineDossierTableColumn, isDossierTableColumnS
 import { staffAvailable, sortWorkActions, workActionUrl } from '../../domain/personalWork';
 import DossierColumnOptions, { DossierColumnVisibility } from './DossierColumnOptions';
 import DossierHorizontalScroll from './DossierHorizontalScroll';
+import DossierTextSizeControl from './DossierTextSizeControl';
 import useDossierTablePreferences from '../../hooks/useDossierTablePreferences';
-import { COLUMN_FILTER_PREFIX, DOSSIER_TEXT_SIZES, readColumnFilters, filterDossierTableRows, columnFilterLabel, dossierColumnSuggestions } from '../../domain/dossierTablePreferences';
+import { COLUMN_FILTER_PREFIX, readColumnFilters, filterDossierTableRows, columnFilterLabel, dossierColumnSuggestions } from '../../domain/dossierTablePreferences';
 import { TABLE_VIEWS, TABLE_COLUMNS, DossierTableHead, DossierTableRow, DossierTableCard } from './DossierTableRows';
 
 // ── Pipeline cards (filters) ────────────────────────────────────────────────
@@ -151,7 +152,7 @@ export default function StaffColisPage() {
   const tableRequested = TABLE_VIEWS.some(view => view.key === searchParams.get('table')) ? searchParams.get('table') : 'daily';
   const tableView = tableRequested === 'payments' && !canSeePayments ? 'daily' : tableRequested;
   const allColumns = useMemo(() => TABLE_COLUMNS[tableView].filter(column => !column.financial || canSeePayments), [tableView, canSeePayments]);
-  const { widths, setWidth, resetWidths, visibleKeys, setColumnVisible, resetColumns, textSize, setTextSize } = useDossierTablePreferences(auth?.u?.id, tableView, allColumns);
+  const { widths, setWidth, resetWidths, visibleKeys, setColumnVisible, resetColumns, textSize, setTextSize, layout, setLayout } = useDossierTablePreferences(auth?.u?.id, tableView, allColumns);
   const visibleSignature = visibleKeys.join('|');
   const displayColumns = useMemo(() => allColumns.filter(column => visibleSignature.split('|').includes(column.key)), [allColumns, visibleSignature]);
   const sortableColumns = displayColumns.filter(isDossierTableColumnSortable);
@@ -194,6 +195,19 @@ export default function StaffColisPage() {
   const viewMode = ['envoi', 'statut'].includes(searchParams.get('view')) ? searchParams.get('view') : 'priority';
   const setViewMode = (value) => setParam('view', value === 'priority' ? null : value);
   const listScrollRef = useRef(null);
+  const [listWidth, setListWidth] = useState(0);
+  useEffect(() => {
+    const element = listScrollRef.current;
+    if (!element) return;
+    const observer = new ResizeObserver(() => setListWidth(element.clientWidth));
+    observer.observe(element);
+    setListWidth(element.clientWidth);
+    return () => observer.disconnect();
+  }, []);
+  const pinBudget = Math.max(0, listWidth - 300);
+  const pinnedActionWidth = visibleKeys.includes('action') ? widths.action : 0;
+  const unpinRef = listWidth < 768 || widths.ref + pinnedActionWidth + 40 > pinBudget;
+  const unpinClient = unpinRef || widths.ref + widths.client + pinnedActionWidth + 40 > pinBudget;
   const [collapsedGroups, setCollapsedGroups] = usePersistentDraft('dossiers:groups', []);
   const [exportError, setExportError] = useState('');
   const [exportBusy, setExportBusy] = useState(false);
@@ -393,11 +407,11 @@ export default function StaffColisPage() {
 
 
   return (
-    <div className="dossier-list h-full min-h-0 min-w-0 flex flex-col" style={{ '--dossier-text-size': `${textSize}px`, '--dossier-small-text-size': `${Math.max(14, textSize - 2)}px` }}>
+    <div className="dossier-list h-full min-h-0 min-w-0 flex flex-col" data-layout={layout} style={{ '--dossier-text-size': `${textSize}px`, '--dossier-small-text-size': `${textSize}px` }}>
 
       <header className="max-h-[55dvh] shrink-0 space-y-3 overflow-y-auto overscroll-contain border-b border-gray-200 bg-white px-4 py-4">
         <h1 className="text-xl font-bold text-gray-900">Dossiers d’expédition</h1>
-        <div aria-label="Vues du tableau" className="flex flex-wrap gap-2">
+        <div aria-label="Vues du tableau" className="dossier-table-views flex gap-2">
           {TABLE_VIEWS.filter(view => view.key !== 'payments' || canSeePayments).map(view => <button key={view.key} aria-pressed={tableView === view.key}
             onClick={() => { setParam('table', view.key === 'daily' ? null : view.key); setSelectedIds(new Set()); setColumnOptions(null); setVisibilityAnchor(null); }}
             className={`min-h-11 rounded-xl px-4 text-sm font-semibold ${tableView === view.key ? 'bg-slate-900 text-white dark:bg-slate-200 dark:text-slate-900' : 'border border-gray-200 text-gray-700'}`}>{view.label}</button>)}
@@ -417,10 +431,10 @@ export default function StaffColisPage() {
             {search && <button aria-label="Effacer la recherche" onClick={() => setSearch('')} className="absolute right-0 top-0 flex min-h-11 w-10 items-center justify-center text-gray-500"><X size={17} /></button>}
           </div>
           <button type="button" onClick={event => { setColumnOptions(null); setVisibilityAnchor(event.currentTarget); }} aria-haspopup="dialog" className="min-h-11 rounded-xl border border-gray-200 px-3 text-sm font-semibold text-gray-700">Colonnes</button>
-          <button data-column-filters-button onClick={event => setColumnOptions({ key: null, anchor: event.currentTarget, fromMenu: true })} aria-haspopup="dialog" aria-controls={columnOptions ? 'dossier-column-dialog' : undefined} aria-expanded={Boolean(columnOptions)} className="min-h-11 rounded-xl border border-gray-200 px-3 text-sm font-semibold text-gray-700">Filtres par colonne{Object.keys(columnFilters).length ? ` · ${Object.keys(columnFilters).length}` : ''}</button>
-          <button onClick={() => setShowFilters(value => !value)} aria-expanded={showFilters} className="min-h-11 rounded-xl border border-gray-200 px-3 text-sm font-semibold text-gray-700">Filtres et options{activeFilters.length ? ` · ${activeFilters.length}` : ''}</button>
+          <button aria-label={`Filtres par colonne${Object.keys(columnFilters).length ? ` · ${Object.keys(columnFilters).length}` : ''}`} data-column-filters-button onClick={event => setColumnOptions({ key: null, anchor: event.currentTarget, fromMenu: true })} aria-haspopup="dialog" aria-controls={columnOptions ? 'dossier-column-dialog' : undefined} aria-expanded={Boolean(columnOptions)} className="min-h-11 rounded-xl border border-gray-200 px-3 text-sm font-semibold text-gray-700"><span className="hidden sm:inline">Filtres par colonne</span><span className="sm:hidden">Filtrer</span>{Object.keys(columnFilters).length ? ` · ${Object.keys(columnFilters).length}` : ''}</button>
+          <button aria-label={`Filtres et options${activeFilters.length ? ` · ${activeFilters.length}` : ''}`} onClick={() => setShowFilters(value => !value)} aria-expanded={showFilters} className="min-h-11 rounded-xl border border-gray-200 px-3 text-sm font-semibold text-gray-700"><span className="hidden sm:inline">Filtres et options</span><span className="sm:hidden">Options</span>{activeFilters.length ? ` · ${activeFilters.length}` : ''}</button>
         </div>
-        {visibilityAnchor && <DossierColumnVisibility key={tableView} columns={allColumns} visibleKeys={visibleKeys} anchor={visibilityAnchor} onChange={setColumnVisible} onReset={resetColumns} onClose={() => setVisibilityAnchor(null)} />}
+        {visibilityAnchor && <DossierColumnVisibility key={tableView} columns={allColumns} visibleKeys={visibleKeys} widths={widths} onResize={setWidth} onResetWidths={resetWidths} anchor={visibilityAnchor} onChange={setColumnVisible} onReset={resetColumns} onClose={() => setVisibilityAnchor(null)} />}
         {columnOptions && <DossierColumnOptions key={tableView} columns={sortableColumns} columnKey={columnOptions.key} anchor={columnOptions.anchor} fromMenu={columnOptions.fromMenu} filters={columnFilters} widths={widths} suggestions={columnSuggestions} onSelect={key => setColumnOptions(previous => ({ ...previous, key }))} onFilter={setColumnFilter} onResize={setWidth} onResetWidths={resetWidths} onClose={() => setColumnOptions(null)} />}
         {showFilters && <div className="flex flex-wrap items-end gap-3 rounded-xl border border-gray-200 p-3">
           <label className="max-w-full text-sm font-medium text-gray-700">File de travail<select aria-label="File de travail" value={workFilter || ''} onChange={e => { setSearchParams(previous => { const next = new URLSearchParams(previous); next.delete('tab'); next.delete('archive'); if (e.target.value) next.set('work', e.target.value); else next.delete('work'); return next; }, { replace: true }); }} className="mt-1 block min-h-11 max-w-full rounded-lg border border-gray-300 bg-white px-2"><option value="">Tous les dossiers</option>{WORK_QUEUES.map(queue => <option key={queue.key} value={queue.key}>{queue.label}</option>)}</select></label>
@@ -445,7 +459,10 @@ export default function StaffColisPage() {
         <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-gray-600">
           <span role="status">{sorted.length} dossier(s) affiché(s)</span>
           <span className="hidden sm:inline">{tableView === 'daily' ? 'Une ligne par expédition · responsable de la tâche affichée' : tableView === 'payments' ? 'Montants demandés au client et règlements enregistrés' : 'Départs affectés et vérifications restantes'}</span>
-          <label className="dossier-text-size">Texte<select aria-label="Taille du texte des dossiers" value={textSize} onChange={event => setTextSize(Number(event.target.value))}>{DOSSIER_TEXT_SIZES.map(size => <option key={size.value} value={size.value}>{size.label}</option>)}</select></label>
+          <div className="dossier-reading-controls">
+            <label className="dossier-layout-control">Affichage<select aria-label="Affichage des dossiers" value={layout} onChange={event => setLayout(event.target.value)}><option value="auto">Automatique</option><option value="table">Tableau</option><option value="cards">Cartes</option></select></label>
+            <DossierTextSizeControl key={`${auth?.u?.id}:${tableView}`} value={textSize} onChange={setTextSize} />
+          </div>
         </div>
         {sortColumn && <p role="status" className="text-sm text-gray-600">Tri : {sortColumn.label} · {dossierTableSortDirectionLabel(sortColumn, sortDir)}{viewMode !== 'priority' ? ' · dans chaque groupe' : ''}</p>}
         {workFilter === 'messages' && <button onClick={() => navigate('/conversations')} className="min-h-11 rounded-lg border px-3 text-sm font-semibold">Ouvrir les conversations et messages à rattacher</button>}
@@ -526,7 +543,7 @@ export default function StaffColisPage() {
       )}
 
       {exportError && <p role="alert" className="px-4 py-2 text-sm text-red-700">{exportError}</p>}
-      <DossierHorizontalScroll scrollRef={listScrollRef} layoutKey={`${tableView}:${tableStyle.width}:${visibleSignature}:${sorted.length}:${textSize}`} />
+      <DossierHorizontalScroll scrollRef={listScrollRef} layoutKey={`${tableView}:${tableStyle.width}:${visibleSignature}:${sorted.length}:${textSize}:${layout}`} />
       {/* Main area: table + detail side by side */}
       <div className="flex-1 flex min-h-0">
 
@@ -554,8 +571,8 @@ export default function StaffColisPage() {
             }
 
             return <>
-              <div className="xl:hidden divide-y divide-gray-200 px-4">{sorted.map(c => <DossierTableCard view={tableView} key={c.id} c={c} client={getClient(c.clientId)} model={models.get(c.id)} columns={displayCols} checked={selectedIds.has(c.id)} onCheck={() => toggleSelection(c.id)} onOpen={action => openColis(c.id, action)} returnTo={returnTo} />)}</div>
-              <table aria-label="Dossiers d’expédition" data-view={tableView} data-unpin-client={widths.ref > 360 || widths.ref + widths.client > 600 || widths.ref + widths.client + (visibleKeys.includes('action') ? widths.action : 0) > 760 ? 'true' : undefined} data-unpin-ref={widths.ref > 360 ? 'true' : undefined} style={tableStyle} className="dossier-data-table hidden text-left xl:table">
+              <div className="dossier-card-list divide-y divide-gray-200 px-4">{sorted.map(c => <DossierTableCard view={tableView} key={c.id} c={c} client={getClient(c.clientId)} model={models.get(c.id)} columns={displayCols} checked={selectedIds.has(c.id)} onCheck={() => toggleSelection(c.id)} onOpen={action => openColis(c.id, action)} returnTo={returnTo} />)}</div>
+              <table aria-label="Dossiers d’expédition" data-view={tableView} data-unpin-client={unpinClient ? 'true' : undefined} data-unpin-ref={unpinRef ? 'true' : undefined} data-unpin-action={listWidth < 768 ? 'true' : undefined} style={tableStyle} className="dossier-data-table text-left">
                 <colgroup><col style={{ width: 40 }} />{displayCols.map(column => <col key={column.key} style={{ width: widths[column.key] }} />)}</colgroup>
                 <thead>
                   <DossierTableHead

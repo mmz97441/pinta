@@ -1,5 +1,7 @@
 # Dimensions finales, prix et confort du tableau
 
+> Ce premier lot a été complété après votre retour : [police libre de 5 à 20 px, tableau compact et largeur par colonne](rapport-tableau-compact-2026-10-03.md). Les trois tailles décrites ci-dessous correspondent à la première version livrée.
+
 ## Demande
 
 Retrouver les dimensions finales et le prix connu dans le tableau des dossiers, accéder aux colonnes hors écran et régler la taille du texte, sur ordinateur comme sur téléphone.

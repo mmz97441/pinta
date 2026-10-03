@@ -1,7 +1,7 @@
 import React, { useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X, ArrowLeft } from 'lucide-react';
-import { columnFilterModes, columnWidthBounds, sanitizeColumnFilter } from '../../domain/dossierTablePreferences';
+import { clampColumnWidth, columnFilterModes, columnWidthBounds, sanitizeColumnFilter } from '../../domain/dossierTablePreferences';
 
 /** Native modal semantics keep keyboard focus here without covering the table
  * in another full-width toolbar. Position follows the actual trigger. */
@@ -62,37 +62,50 @@ export default function DossierColumnOptions({ columns, columnKey, anchor, fromM
   </ColumnDialog>;
 }
 
-export function DossierColumnVisibility({ columns, visibleKeys, anchor, onChange, onReset, onClose }) {
+export function DossierColumnVisibility({ columns, visibleKeys, widths, anchor, onChange, onResize, onReset, onResetWidths, onClose }) {
   return <ColumnDialog title="Colonnes affichées" closeLabel="Fermer les colonnes" anchor={anchor} onClose={onClose}>
-    <p>Choisissez ce que vous voulez voir dans cette vue. La référence reste affichée pour identifier chaque dossier.</p>
-    <div className="dossier-column-visibility">{columns.map(column => <label key={column.key}>
+    <p>Choisissez les colonnes et réglez leur largeur séparément. La référence reste affichée pour identifier chaque dossier.</p>
+    <p>Vos choix sont mémorisés pour votre compte et cette vue, sur cet appareil. Les largeurs s’appliquent au tableau.</p>
+    <div className="dossier-column-visibility">{columns.map(column => <div key={column.key} className="dossier-column-setting"><label className="dossier-column-toggle">
       <input data-filter-focus={column.key === 'client' ? '' : undefined} type="checkbox" aria-label={`Afficher ${column.label}`} checked={visibleKeys.includes(column.key)} disabled={column.key === 'ref'} onChange={event => onChange(column.key, event.target.checked)} />
       <span>{column.label}{column.key === 'ref' && <small>Obligatoire</small>}</span>
-    </label>)}</div>
-    <div className="dossier-column-filter-actions"><button type="button" onClick={onReset}>Rétablir les colonnes</button><button type="button" className="dossier-column-apply" onClick={onClose}>Terminer</button></div>
+    </label>{onResize && <ColumnWidthControl column={column} width={widths?.[column.key]} onResize={onResize} />}</div>)}</div>
+    <div className="dossier-column-filter-actions"><button type="button" onClick={onReset}>Rétablir les colonnes</button>{onResetWidths && <button type="button" onClick={onResetWidths}>Rétablir les largeurs</button>}<button type="button" className="dossier-column-apply" onClick={onClose}>Terminer</button></div>
   </ColumnDialog>;
+}
+
+function ColumnWidthControl({ column, width, onResize }) {
+  const currentWidth = clampColumnWidth(column, width);
+  const [widthText, setWidthText] = useState(String(currentWidth));
+  useLayoutEffect(() => { setWidthText(String(currentWidth)); }, [column.key, currentWidth]);
+  const { min, max } = columnWidthBounds(column);
+  const commit = value => {
+    const next = value !== '' && Number.isFinite(Number(value)) ? clampColumnWidth(column, value) : currentWidth;
+    setWidthText(String(next));
+    if (next !== currentWidth) onResize(column, next);
+  };
+  return <div className="dossier-column-width-control">
+    <label>Largeur (px)<input aria-label={`Largeur de ${column.label}`} type="number" inputMode="numeric" min={min} max={max} step="1" value={widthText}
+      onChange={event => setWidthText(event.target.value)} onBlur={() => commit(widthText.trim())}
+      onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); commit(widthText.trim()); } }} /></label>
+  </div>;
 }
 
 function ColumnFilterEditor({ column, active, widths, suggestions, onFilter, onResize, onResetWidths, onClose }) {
   const [mode, setMode] = useState(active?.mode || 'contains');
   const [value, setValue] = useState(active?.value || '');
-  const [widthText, setWidthText] = useState(String(widths[column.key]));
-  useLayoutEffect(() => { setWidthText(String(widths[column.key])); }, [column.key, widths]);
   const emptyMode = ['empty', 'filled'].includes(mode);
   const valid = sanitizeColumnFilter(column, { mode, value });
   const inputType = mode !== 'contains' && column.sort.type === 'date' ? 'date' : 'text';
-  const bounds = columnWidthBounds(column);
-  const applyWidth = () => { if (widthText.trim() && Number.isFinite(Number(widthText))) onResize(column, widthText); else setWidthText(String(widths[column.key])); };
   return <>
     <form onSubmit={event => { event.preventDefault(); if (valid) onFilter(valid); }}>
       <label>Condition<select data-filter-focus={emptyMode ? '' : undefined} aria-label={`Condition pour ${column.label}`} value={mode} onChange={event => setMode(event.target.value)}>{columnFilterModes(column).map(item => <option key={item.key} value={item.key}>{item.label}</option>)}</select></label>
       {!emptyMode && <label>Valeur<input data-filter-focus="" aria-label={`Filtrer : ${column.label}`} type={inputType} inputMode={column.sort.type === 'number' && mode !== 'contains' ? 'decimal' : undefined} list={mode === 'contains' ? 'dossier-column-values' : undefined} value={value} maxLength={200} onChange={event => setValue(event.target.value)} placeholder={column.sort.type === 'number' ? 'Ex. : 2' : 'Texte recherché'} /><datalist id="dossier-column-values">{suggestions.map(item => <option key={item} value={item} />)}</datalist></label>}
       <div className="dossier-column-filter-actions"><button className="dossier-column-apply" type="submit" disabled={!valid}>Appliquer le filtre</button>{active && <button type="button" onClick={() => onFilter(null)}>Effacer ce filtre</button>}<button type="button" onClick={onClose}>Fermer</button></div>
     </form>
-    <details><summary>Largeur des colonnes sur ordinateur</summary><div className="dossier-column-width-options">
-      <label>Largeur de {column.label} (px)<input aria-label={`Largeur de ${column.label}`} type="number" min={bounds.min} max={bounds.max} value={widthText} onChange={event => setWidthText(event.target.value)} onBlur={applyWidth} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); applyWidth(); } }} /></label>
-      <button type="button" onClick={onResetWidths}>Rétablir les largeurs</button>
-      <p>Mémorisées pour votre compte et cette vue.</p>
-    </div></details>
+    {onResize && <div className="dossier-column-width-options"><ColumnWidthControl column={column} width={widths?.[column.key]} onResize={onResize} />
+      {onResetWidths && <button type="button" onClick={onResetWidths}>Rétablir les largeurs</button>}
+      <p>Largeurs du tableau mémorisées pour votre compte et cette vue, sur cet appareil.</p>
+    </div>}
   </>;
 }

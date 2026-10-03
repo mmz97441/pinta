@@ -1,0 +1,378 @@
+{
+  "date": "2026-10-03",
+  "environment": "Chromium, compilation locale, données et services métier simulés",
+  "uniquePassed": 72,
+  "uniqueFailed": 0,
+  "scenarios": [
+    {
+      "suite": "Confort et préférences",
+      "test": "final-dimensions-and-weight-are-certified-and-independent-daily",
+      "pass": true
+    },
+    {
+      "suite": "Confort et préférences",
+      "test": "final-dimensions-and-weight-are-certified-and-independent-departures",
+      "pass": true
+    },
+    {
+      "suite": "Confort et préférences",
+      "test": "quote-price-preserves-zero-draft-and-paid-snapshot-daily",
+      "pass": true
+    },
+    {
+      "suite": "Confort et préférences",
+      "test": "quote-price-preserves-zero-draft-and-paid-snapshot-departures",
+      "pass": true
+    },
+    {
+      "suite": "Confort et préférences",
+      "test": "finance-denied-hides-price-from-cells-column-choices-filters-and-export",
+      "pass": true
+    },
+    {
+      "suite": "Confort et préférences",
+      "test": "financial-read-permission-does-not-leak-prices-through-daily-or-departure-export",
+      "pass": true
+    },
+    {
+      "suite": "Confort et préférences",
+      "test": "weight-and-quote-price-support-real-numeric-sort-and-filter",
+      "pass": true
+    },
+    {
+      "suite": "Confort et préférences",
+      "test": "horizontal-controls-stay-reachable-and-synchronize-1440-light",
+      "pass": true
+    },
+    {
+      "suite": "Confort et préférences",
+      "test": "horizontal-controls-stay-reachable-and-synchronize-1440-dark",
+      "pass": true
+    },
+    {
+      "suite": "Confort et préférences",
+      "test": "horizontal-controls-stay-reachable-and-synchronize-1280-light",
+      "pass": true
+    },
+    {
+      "suite": "Confort et préférences",
+      "test": "horizontal-controls-stay-reachable-and-synchronize-1280-dark",
+      "pass": true
+    },
+    {
+      "suite": "Confort et préférences",
+      "test": "text-size-is-personal-per-view-and-preserves-width-and-column-choices",
+      "pass": true
+    },
+    {
+      "suite": "Confort et préférences",
+      "test": "large-text-cards-are-readable-and-operable-320-light",
+      "pass": true
+    },
+    {
+      "suite": "Confort et préférences",
+      "test": "large-text-cards-are-readable-and-operable-320-dark",
+      "pass": true
+    },
+    {
+      "suite": "Confort et préférences",
+      "test": "large-text-cards-are-readable-and-operable-390-light",
+      "pass": true
+    },
+    {
+      "suite": "Confort et préférences",
+      "test": "large-text-cards-are-readable-and-operable-390-dark",
+      "pass": true
+    },
+    {
+      "suite": "Confort et préférences",
+      "test": "text-size-free-input-accepts-intermediate-digits-and-bounds-with-readable-controls",
+      "pass": true
+    },
+    {
+      "suite": "Confort et préférences",
+      "test": "every-column-width-is-editable-directly-without-opening-a-filter",
+      "pass": true
+    },
+    {
+      "suite": "Confort et préférences",
+      "test": "responsive-tablet-layout-and-explicit-cards-768",
+      "pass": true
+    },
+    {
+      "suite": "Confort et préférences",
+      "test": "responsive-tablet-layout-and-explicit-cards-1024",
+      "pass": true
+    },
+    {
+      "suite": "Confort et préférences",
+      "test": "phone-can-explicitly-use-the-table-without-pinned-overlays-320-light",
+      "pass": true
+    },
+    {
+      "suite": "Confort et préférences",
+      "test": "phone-can-explicitly-use-the-table-without-pinned-overlays-320-dark",
+      "pass": true
+    },
+    {
+      "suite": "Confort et préférences",
+      "test": "phone-can-explicitly-use-the-table-without-pinned-overlays-390-light",
+      "pass": true
+    },
+    {
+      "suite": "Confort et préférences",
+      "test": "phone-can-explicitly-use-the-table-without-pinned-overlays-390-dark",
+      "pass": true
+    },
+    {
+      "suite": "Confort et préférences",
+      "test": "large-text-and-wide-columns-keep-scroll-controls-and-action-accessible",
+      "pass": true
+    },
+    {
+      "suite": "Régressions tableau",
+      "test": "presets-change-columns-without-filtering-or-duplicating-expeditions",
+      "pass": true
+    },
+    {
+      "suite": "Régressions tableau",
+      "test": "last-reception-column-sorts-proven-dates-and-keeps-incomplete-history-explicit",
+      "pass": true
+    },
+    {
+      "suite": "Régressions tableau",
+      "test": "last-reception-filter-matches-the-displayed-last-date-not-an-earlier-carton",
+      "pass": true
+    },
+    {
+      "suite": "Régressions tableau",
+      "test": "compact-column-dialog-keyboard-focus-and-layout-1440-light",
+      "pass": true
+    },
+    {
+      "suite": "Régressions tableau",
+      "test": "compact-column-dialog-keyboard-focus-and-layout-1440-dark",
+      "pass": true
+    },
+    {
+      "suite": "Régressions tableau",
+      "test": "compact-column-dialog-keyboard-focus-and-layout-390-light",
+      "pass": true
+    },
+    {
+      "suite": "Régressions tableau",
+      "test": "compact-column-dialog-keyboard-focus-and-layout-390-dark",
+      "pass": true
+    },
+    {
+      "suite": "Régressions tableau",
+      "test": "personal-column-visibility-clears-hidden-filter-and-sort-and-preserves-widths",
+      "pass": true
+    },
+    {
+      "suite": "Régressions tableau",
+      "test": "mobile-column-choices-keep-reference-and-filter-only-visible-data",
+      "pass": true
+    },
+    {
+      "suite": "Régressions tableau",
+      "test": "new-payment-status-and-optimized-dimensions-never-invent-ready-or-paid-data",
+      "pass": true
+    },
+    {
+      "suite": "Régressions tableau",
+      "test": "every-data-column-has-a-usable-filter-from-its-heading",
+      "pass": true
+    },
+    {
+      "suite": "Régressions tableau",
+      "test": "column-filters-match-real-task-owner-payments-and-only-current-measurements",
+      "pass": true
+    },
+    {
+      "suite": "Régressions tableau",
+      "test": "date-and-numeric-filter-boundaries-are-inclusive-and-combine-with-task-scope",
+      "pass": true
+    },
+    {
+      "suite": "Régressions tableau",
+      "test": "hidden-foreign-or-invalid-column-filters-cannot-hide-permitted-dossiers",
+      "pass": true
+    },
+    {
+      "suite": "Régressions tableau",
+      "test": "forced-finance-column-filter-does-not-grant-finance-access",
+      "pass": true
+    },
+    {
+      "suite": "Régressions tableau",
+      "test": "column-widths-resize-by-mouse-and-keyboard-and-keep-sticky-identities-aligned",
+      "pass": true
+    },
+    {
+      "suite": "Régressions tableau",
+      "test": "column-width-preferences-remain-private-after-switching-account-in-the-same-browser",
+      "pass": true
+    },
+    {
+      "suite": "Régressions tableau",
+      "test": "mobile-column-filter-reset-and-width-editor-light",
+      "pass": true
+    },
+    {
+      "suite": "Régressions tableau",
+      "test": "mobile-column-filter-reset-and-width-editor-dark",
+      "pass": true
+    },
+    {
+      "suite": "Régressions tableau",
+      "test": "sorting-every-displayed-data-column-is-keyboard-accessible-and-read-only",
+      "pass": true
+    },
+    {
+      "suite": "Régressions tableau",
+      "test": "sorting-real-numbers-natural-shelf-names-and-dates-keeps-unknowns-last",
+      "pass": true
+    },
+    {
+      "suite": "Régressions tableau",
+      "test": "mobile-sort-menu-offers-all-data-columns-in-every-view-and-both-directions",
+      "pass": true
+    },
+    {
+      "suite": "Régressions tableau",
+      "test": "mine-uses-task-owner-not-general-dossier-contact",
+      "pass": true
+    },
+    {
+      "suite": "Régressions tableau",
+      "test": "mine-keeps-owned-waiting-work-and-presets-do-not-reassign-it",
+      "pass": true
+    },
+    {
+      "suite": "Régressions tableau",
+      "test": "pool-only-has-free-ready-permitted-work-not-client-waits",
+      "pass": true
+    },
+    {
+      "suite": "Régressions tableau",
+      "test": "own-parallel-task-continues-in-its-real-workspace-without-claiming-colleague-work",
+      "pass": true
+    },
+    {
+      "suite": "Régressions tableau",
+      "test": "explicit-take-is-one-atomic-command-and-opens-reception-agreement",
+      "pass": true
+    },
+    {
+      "suite": "Régressions tableau",
+      "test": "late-claim-response-never-navigates-away-from-new-selection",
+      "pass": true
+    },
+    {
+      "suite": "Régressions tableau",
+      "test": "consulting-colleague-task-never-takes-it",
+      "pass": true
+    },
+    {
+      "suite": "Régressions tableau",
+      "test": "claim-conflict-retains-colleague-and-never-retries-automatically",
+      "pass": true
+    },
+    {
+      "suite": "Régressions tableau",
+      "test": "payments-show-uncalculated-and-partial-balance-truthfully",
+      "pass": true
+    },
+    {
+      "suite": "Régressions tableau",
+      "test": "departure-readiness-rejects-stale-optimisation-and-partial-payment",
+      "pass": true
+    },
+    {
+      "suite": "Régressions tableau",
+      "test": "restricted-permission-cannot-take-reception-visible-in-all-dossiers",
+      "pass": true
+    },
+    {
+      "suite": "Régressions tableau",
+      "test": "finance-preset-permissions-cannot-be-bypassed-through-the-url",
+      "pass": true
+    },
+    {
+      "suite": "Régressions tableau",
+      "test": "hidden-selected-dossier-is-removed-before-any-bulk-command",
+      "pass": true
+    },
+    {
+      "suite": "Régressions tableau",
+      "test": "unavailable-person-keeps-owned-work-but-cannot-take-pool-work",
+      "pass": true
+    },
+    {
+      "suite": "Régressions tableau",
+      "test": "work-loading-failure-is-visible-and-cannot-advertise-a-false-free-task",
+      "pass": true
+    },
+    {
+      "suite": "Régressions tableau",
+      "test": "mobile-open-filters-leave-dossiers-clickable-and-keyboard-controls-visible",
+      "pass": true
+    },
+    {
+      "suite": "Régressions tableau",
+      "test": "unavailability-link-directly-opens-the-announced-preferences",
+      "pass": true
+    },
+    {
+      "suite": "Régressions tableau",
+      "test": "excel-download-matches-visible-preset-and-recorded-amounts",
+      "pass": true
+    },
+    {
+      "suite": "Régressions tableau",
+      "test": "financial-view-does-not-grant-financial-export-permission",
+      "pass": true
+    },
+    {
+      "suite": "Régressions tableau",
+      "test": "filters-and-scroll-survive-opening-and-returning-from-an-expedition",
+      "pass": true
+    },
+    {
+      "suite": "Régressions tableau",
+      "test": "mobile-primary-action-keeps-space-with-alternative-platform-fonts",
+      "pass": true
+    },
+    {
+      "suite": "Régressions tableau",
+      "test": "table-readable-and-accessible-1440-light",
+      "pass": true
+    },
+    {
+      "suite": "Régressions tableau",
+      "test": "table-readable-and-accessible-1440-dark",
+      "pass": true
+    },
+    {
+      "suite": "Régressions tableau",
+      "test": "table-readable-and-accessible-390-light",
+      "pass": true
+    },
+    {
+      "suite": "Régressions tableau",
+      "test": "table-readable-and-accessible-390-dark",
+      "pass": true
+    }
+  ],
+  "finalCssReplayedScenarios": [
+    "large-text-and-wide-columns-keep-scroll-controls-and-action-accessible",
+    "horizontal-controls-stay-reachable-and-synchronize-1440-light",
+    "horizontal-controls-stay-reachable-and-synchronize-1440-dark",
+    "horizontal-controls-stay-reachable-and-synchronize-1280-light",
+    "horizontal-controls-stay-reachable-and-synchronize-1280-dark",
+    "text-size-free-input-accepts-intermediate-digits-and-bounds-with-readable-controls",
+    "phone-can-explicitly-use-the-table-without-pinned-overlays-320-light"
+  ],
+  "note": "Les rejeux de la dernière retouche CSS sont déjà inclus dans les 72 scénarios uniques."
+}
