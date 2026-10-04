@@ -139,7 +139,7 @@ html.dark .dossier-table-card {
 .dossier-table-action-title { font-size: var(--dossier-small-text-size, 14px); font-weight: 600; margin: 0 0 8px; }
 .dossier-table-action button { white-space: normal; max-width: 100%; min-height: 44px; font-size: var(--dossier-text-size, 16px); }
 .dossier-table-action button svg { flex-shrink: 0; }
-.dossier-table-row .dossier-table-action button { padding-left: 2px; padding-right: 2px; overflow-wrap: normal; }
+.dossier-table-row .dossier-table-action button { padding-left: 8px; padding-right: 8px; overflow-wrap: normal; }
 .dossier-table-row .dossier-table-action button svg { display: none; }
 .dossier-table-open {
   display: inline-flex;
