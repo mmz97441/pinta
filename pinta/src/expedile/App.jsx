@@ -323,7 +323,7 @@ function AppContent() {
           <div className="px-3 mb-2" hidden={!can('perm_colis_receptionner')}>
             <button
               aria-label="Réceptionner des cartons" onClick={() => navigate(`/reception?${new URLSearchParams({ returnTo: location.pathname + location.search })}`)}
-              className={`w-full flex items-center gap-2 rounded-xl text-sm font-bold transition-all active:scale-95 ${sidebarCollapsed ? 'justify-center px-2 py-2.5' : 'px-3 py-2.5'}`}
+              className={`w-full flex items-center gap-2 rounded-xl text-left text-sm font-bold transition-all active:scale-95 ${sidebarCollapsed ? 'justify-center px-2 py-2.5' : 'px-3 py-2.5'}`}
               style={{ background: `linear-gradient(135deg, ${BRAND.gold}, ${BRAND.goldD})`, color: BRAND.navyD }}
             >
               <Plus size={16} strokeWidth={2.5} />
@@ -341,7 +341,7 @@ function AppContent() {
                   key={item.key}
                   onClick={() => navigate(item.key)}
                   aria-label={item.label} aria-description={item.key === '/conversations' ? `${conversationCount} demandes à traiter` : undefined} aria-current={isActive ? 'page' : undefined}
-                  className={`w-full flex items-center gap-3 rounded-xl transition-all ${
+                  className={`w-full flex items-center gap-3 rounded-xl text-left transition-all ${
                     sidebarCollapsed ? 'justify-center px-2 py-2.5' : 'px-3 py-2.5'
                   } ${isActive
                     ? 'bg-white bg-opacity-15 text-white'
