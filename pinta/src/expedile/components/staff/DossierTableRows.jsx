@@ -8,6 +8,7 @@ import { receptionCartonManifest } from '../../domain/reception';
 import { needsConversationAction } from '../../domain/conversations';
 import { TABLE_COLUMNS, dossierTableAmount, dossierTableAmountState, dossierTableMissingAmountLabel, formatDossierTableDate, isDossierTableColumnSortable, dossierTableSortDirectionLabel } from '../../domain/dossierTable';
 import { clampColumnWidth, columnWidthBounds } from '../../domain/dossierTablePreferences';
+import { paymentTone, statusTone } from '../../domain/dossierTableTone';
 import TaskTakeButton from '../workspace/TaskTakeButton';
 import InvoiceReviewIndicator from '../ui/InvoiceReviewIndicator';
 import './dossierTable.css';
@@ -23,6 +24,18 @@ const referenceColumn = TABLE_COLUMNS.daily.find(column => column.key === 'ref')
 
 const moneyFormatter = new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' });
 const stopPropagation = event => event.stopPropagation();
+
+/** The tone only helps scanning; the text stays exactly the state label. */
+function Pill({ tone, children }) {
+  return <span className="dossier-pill" data-tone={tone}>{children}</span>;
+}
+
+/** Missing facts stay readable but quieter than recorded values. */
+function Placeholder({ children }) {
+  return <span className="dossier-table-placeholder">{children}</span>;
+}
+const PLACEHOLDERS = new Set(['Non renseigné', 'Non attribué', 'À renseigner', '—']);
+const Fact = ({ children }) => PLACEHOLDERS.has(children) ? <Placeholder>{children}</Placeholder> : <span>{children}</span>;
 
 function money(value, missingLabel) {
   return value === null || value === undefined || value === '' || !Number.isFinite(Number(value))
@@ -79,13 +92,13 @@ function CellContent({ column, c, client, model, onOpen, returnTo, showActionTit
       {model.action?.kind !== 'conversation' && needsConversationAction(c) && <Link className="dossier-table-message" aria-label={`Message client à traiter — ${c.ref}`} to={`/colis/${encodeURIComponent(c.id)}?${new URLSearchParams({ onglet: 'conversation', returnTo: returnTo || '/colis' })}`} onClick={stopPropagation}><MessageCircle size={14} aria-hidden="true" />À répondre</Link>}
     </div>;
     case 'client': return <ClientIdentity client={client} />;
-    case 'statusLabel': return <span>{model.statusLabel || 'Statut à vérifier'}</span>;
-    case 'paymentState': return <span>{model.payment?.stateLabel || 'À vérifier'}</span>;
+    case 'statusLabel': return <Pill tone={statusTone(c, model)}>{model.statusLabel || 'Statut à vérifier'}</Pill>;
+    case 'paymentState': return <Pill tone={paymentTone(model)}>{model.payment?.stateLabel || 'À vérifier'}</Pill>;
     case 'optimizedDimensions': return model.optimized ? <span className="dossier-table-dimensions">{(model.optimizedDimensions || []).map((dimensions, index) => <span key={index}>{dimensions}</span>)}</span> : null;
     case 'optimizedWeight': return model.optimizedWeight == null ? null : <span>{Number(model.optimizedWeight).toLocaleString('fr-FR', { maximumFractionDigits: 2 })}</span>;
     case 'statut': return <TaskSummary model={model} c={c} returnTo={returnTo} />;
-    case 'owner': return <span>{model.ownerName || 'Non attribué'}</span>;
-    case 'casier': return <span>{c.casier || 'À renseigner'}</span>;
+    case 'owner': return <Fact>{model.ownerName || 'Non attribué'}</Fact>;
+    case 'casier': return <Fact>{c.casier || 'À renseigner'}</Fact>;
     case 'cartons': return <span>{receptionCartonManifest(c).nbColis}</span>;
     case 'requested': {
       const amount = dossierTableAmount(model, column), state = dossierTableAmountState(model, column);
@@ -96,10 +109,10 @@ function CellContent({ column, c, client, model, onOpen, returnTo, showActionTit
       const amount = money(model.payment?.remaining, dossierTableMissingAmountLabel(model.payment, 'remaining'));
       return <div><span className="dossier-table-money dossier-table-task-title">{amount}</span>{model.payment?.stateLabel && model.payment.stateLabel !== amount && <span className="dossier-table-secondary">{model.payment.stateLabel}</span>}</div>;
     }
-    case 'receivedAt': return <div>{model.reception?.lastReceivedAt ? <time dateTime={model.reception.lastReceivedAt}>{formatDossierTableDate(model.reception.lastReceivedAt)}</time> : <span>{formatDossierTableDate(null)}</span>}{model.reception && !model.reception.complete && <span className="dossier-table-secondary">{model.reception.knownCount} / {model.reception.totalCount} cartons datés</span>}</div>;
-    case 'sentAt': return model.payment?.sentAt ? <time dateTime={model.payment.sentAt}>{formatDossierTableDate(model.payment.sentAt)}</time> : <span>{formatDossierTableDate(null)}</span>;
+    case 'receivedAt': return <div>{model.reception?.lastReceivedAt ? <time dateTime={model.reception.lastReceivedAt}>{formatDossierTableDate(model.reception.lastReceivedAt)}</time> : <Fact>{formatDossierTableDate(null)}</Fact>}{model.reception && !model.reception.complete && <span className="dossier-table-secondary">{model.reception.knownCount} / {model.reception.totalCount} cartons datés</span>}</div>;
+    case 'sentAt': return model.payment?.sentAt ? <time dateTime={model.payment.sentAt}>{formatDossierTableDate(model.payment.sentAt)}</time> : <Fact>{formatDossierTableDate(null)}</Fact>;
     case 'departure': return <span>{model.departure?.label || 'À prévoir'}</span>;
-    case 'destination': return <span>{model.departure?.destination || 'À renseigner'}</span>;
+    case 'destination': return <Fact>{model.departure?.destination || 'À renseigner'}</Fact>;
     case 'packages': return <span>{model.departure?.packagesLabel || 'À préparer'}</span>;
     case 'readiness': return <span>{model.departure?.readinessLabel || 'À vérifier'}</span>;
     case 'action': return <MainAction action={model.action} onOpen={onOpen} title={showActionTitle ? model.title : undefined} />;
@@ -122,19 +135,19 @@ function ColumnResize({ column, width, onResize }) {
     onKeyDown={event => { const step = event.shiftKey ? 50 : 10; const value = { ArrowLeft: currentWidth - step, ArrowRight: currentWidth + step, Home: min, End: max, Enter: initial }[event.key]; if (value !== undefined) { event.preventDefault(); event.stopPropagation(); onResize(column, value); } }}><span aria-hidden="true" className="dossier-table-resize-line" /></button>;
 }
 
-export function DossierTableHead({ columns = TABLE_COLUMNS.daily, onSelectAll, allSelected, onSort, sortCol, sortDir, widths, onResize, filters = {}, onFilterColumn }) {
+export function DossierTableHead({ columns = TABLE_COLUMNS.daily, onSelectAll, allSelected, onSort, sortCol, sortDir, widths, onResize, filters = {}, onFilterColumn, openFilterKey = null }) {
   return <tr className="dossier-table-head">
     <th scope="col" className="dossier-table-select" data-column="select">
       <label className="dossier-table-checkbox"><input type="checkbox" aria-label="Sélectionner tous les dossiers affichés" checked={Boolean(allSelected)} onChange={onSelectAll} /></label>
     </th>
-    {columns.map(column => <th key={column.key} scope="col" data-column={column.key}
+    {columns.map(column => <th key={column.key} scope="col" data-column={column.key} data-column-label={column.label}
       className={column.align === 'right' ? 'dossier-table-align-right' : undefined}
       aria-sort={isDossierTableColumnSortable(column) ? sortCol === column.key ? sortDir === 'desc' ? 'descending' : 'ascending' : 'none' : undefined}>
-      <div className="dossier-table-heading-label">{isDossierTableColumnSortable(column) && onSort ? <button type="button" className="dossier-table-sort" onClick={() => onSort(column.key)}
+      <div className="dossier-table-heading-label">{isDossierTableColumnSortable(column) && onSort ? <button type="button" className="dossier-table-sort" aria-label={column.label} onClick={() => onSort(column.key)}
         title={`Trier ${column.label} : ${dossierTableSortDirectionLabel(column, sortCol === column.key && sortDir === 'asc' ? 'desc' : 'asc')}`}>
-        <span className="dossier-table-heading-text" title={column.label}>{column.label}</span>{sortCol === column.key ? sortDir === 'desc' ? <ArrowDown size={14} aria-hidden="true" /> : <ArrowUp size={14} aria-hidden="true" /> : <ArrowUpDown size={14} aria-hidden="true" />}
-      </button> : <span className="dossier-table-heading-text" title={column.label}>{column.label}</span>}
-      {isDossierTableColumnSortable(column) && onFilterColumn && <button type="button" className="dossier-table-filter" aria-label={`Filtrer la colonne ${column.label}`} aria-pressed={Boolean(filters[column.key])} aria-haspopup="dialog" title={`${filters[column.key] ? 'Modifier le filtre' : 'Filtrer'} : ${column.label}`} onClick={event => onFilterColumn(column.key, event.currentTarget)}><Filter size={14} aria-hidden="true" /></button>}</div>
+        <span className="dossier-table-heading-text" title={column.label}>{column.shortLabel || column.label}</span>{sortCol === column.key ? sortDir === 'desc' ? <ArrowDown size={14} aria-hidden="true" /> : <ArrowUp size={14} aria-hidden="true" /> : <ArrowUpDown size={14} aria-hidden="true" className="dossier-table-sort-idle" />}
+      </button> : <span className="dossier-table-heading-text" title={column.label}>{column.shortLabel || column.label}</span>}
+      {isDossierTableColumnSortable(column) && onFilterColumn && <button type="button" className="dossier-table-filter" aria-label={`Filtrer la colonne ${column.label}`} aria-pressed={Boolean(filters[column.key])} aria-haspopup="dialog" aria-expanded={openFilterKey === column.key} aria-controls={openFilterKey === column.key ? 'dossier-column-dialog' : undefined} title={`${filters[column.key] ? 'Modifier le filtre' : 'Filtrer'} : ${column.label}`} onClick={event => onFilterColumn(column.key, event.currentTarget)}><Filter size={14} aria-hidden="true" /></button>}</div>
       {onResize && <ColumnResize column={column} width={widths?.[column.key]} onResize={onResize} />}
     </th>)}
   </tr>;
@@ -153,18 +166,20 @@ export function DossierTableRow({ c, client, model = {}, columns = TABLE_COLUMNS
 }
 
 export function DossierTableCard({ c, view, client, model = {}, columns = TABLE_COLUMNS.daily, checked, onCheck, onOpen, returnTo }) {
-  const facts = columns.filter(column => !['ref', 'client', 'statut', 'action'].includes(column.key) && (column.key !== 'optimizedDimensions' || model.optimized));
+  const statusColumn = columns.find(column => column.key === 'statusLabel');
+  const facts = columns.filter(column => !['ref', 'client', 'statut', 'action', 'statusLabel'].includes(column.key) && (column.key !== 'optimizedDimensions' || model.optimized));
   const showActionTitle = !columns.some(column => column.key === 'statut');
   return <article className="dossier-table-card dossier-list-item" aria-label={`Dossier ${c.ref}`} data-view={view || (columns === TABLE_COLUMNS.daily ? 'daily' : undefined)} data-dossier-card={c.id} data-dossier-row={c.id} data-selected={checked ? 'true' : 'false'}>
     <div className="dossier-table-card-heading">
       <label className="dossier-table-checkbox"><input type="checkbox" aria-label={`Sélectionner le dossier ${c.ref}`} checked={Boolean(checked)} onChange={onCheck} /></label>
       <div data-column="ref"><CellContent column={referenceColumn} c={c} model={model} onOpen={onOpen} returnTo={returnTo} /></div>
+      {statusColumn && <div data-column="statusLabel" className="dossier-table-card-status"><CellContent column={statusColumn} c={c} model={model} /></div>}
     </div>
     {columns.some(column => column.key === 'client') && <div data-column="client"><ClientIdentity client={client} /></div>}
     {columns.some(column => column.key === 'statut') && <div data-column="statut" className="dossier-table-card-task"><TaskSummary model={model} c={c} returnTo={returnTo} /></div>}
     {columns.some(column => column.key === 'action') && <div data-column="action" className="dossier-table-card-main-action"><MainAction action={model.action} onOpen={onOpen} title={showActionTitle ? model.title : undefined} /></div>}
-    <dl className="dossier-table-card-facts">{facts.map(column => <div key={column.key} data-column={column.key}>
+    {facts.length > 0 && <dl className="dossier-table-card-facts">{facts.map(column => <div key={column.key} data-column={column.key}>
       <dt>{column.label}</dt><dd><CellContent column={column} c={c} client={client} model={model} onOpen={onOpen} /></dd>
-    </div>)}</dl>
+    </div>)}</dl>}
   </article>;
 }

@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { ArrowLeft, ArrowRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 
-/** Keep horizontal navigation reachable above the list, even when the system
- * hides native scrollbars. The list remains the only source of scroll state. */
+/** Keep horizontal navigation reachable above the list (in the page header's
+ * meta row), even when the system hides native scrollbars. The list remains the
+ * only source of scroll state. */
 export default function DossierHorizontalScroll({ scrollRef, layoutKey }) {
   const [position, setPosition] = useState({ left: 0, max: 0 });
   useEffect(() => {
@@ -39,8 +40,7 @@ export default function DossierHorizontalScroll({ scrollRef, layoutKey }) {
   const step = () => Math.max(120, Math.round((scrollRef.current?.clientWidth || 600) / 3));
   const percent = Math.round(position.left / position.max * 100);
   return <div className="dossier-horizontal-scroll" role="group" aria-label="Déplacer les colonnes du tableau">
-    <span aria-hidden="true">Colonnes</span>
-    <button type="button" aria-label="Faire défiler les colonnes vers la gauche" disabled={position.left <= 1} onClick={() => scrollTo(position.left - step())}><ArrowLeft size={20} aria-hidden="true" /></button>
+    <button type="button" aria-label="Faire défiler les colonnes vers la gauche" disabled={position.left <= 1} onClick={() => scrollTo(position.left - step())}><ChevronLeft size={18} aria-hidden="true" /></button>
     <input type="range" aria-label="Défilement horizontal des dossiers" aria-controls="dossier-table-scroll" min={0} max={position.max} step={1} value={position.left}
       aria-valuetext={percent === 0 ? 'Début du tableau' : percent === 100 ? 'Fin du tableau' : `${percent} % du tableau`}
       onChange={event => scrollTo(Number(event.target.value))}
@@ -48,6 +48,6 @@ export default function DossierHorizontalScroll({ scrollRef, layoutKey }) {
         const target = { ArrowLeft: position.left - 50, ArrowRight: position.left + 50, PageUp: position.left - step(), PageDown: position.left + step(), Home: 0, End: position.max }[event.key];
         if (target !== undefined) { event.preventDefault(); scrollTo(target); }
       }} />
-    <button type="button" aria-label="Faire défiler les colonnes vers la droite" disabled={position.left >= position.max - 1} onClick={() => scrollTo(position.left + step())}><ArrowRight size={20} aria-hidden="true" /></button>
+    <button type="button" aria-label="Faire défiler les colonnes vers la droite" disabled={position.left >= position.max - 1} onClick={() => scrollTo(position.left + step())}><ChevronRight size={18} aria-hidden="true" /></button>
   </div>;
 }

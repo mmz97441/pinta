@@ -130,8 +130,8 @@ test('equal values and equal instants stay stable, accessors run once per row an
 });
 
 test('the shared direction wording describes text, numbers and dates without exposing implementation terms', () => {
-  assert.equal(dossierTableSortDirectionLabel(columns.get('casier')), 'A → Z');
-  assert.equal(dossierTableSortDirectionLabel(columns.get('owner'), 'desc'), 'Z → A');
+  assert.equal(dossierTableSortDirectionLabel(columns.get('casier')), 'de A à Z');
+  assert.equal(dossierTableSortDirectionLabel(columns.get('owner'), 'desc'), 'de Z à A');
   assert.equal(dossierTableSortDirectionLabel(columns.get('cartons')), 'du plus petit au plus grand');
   assert.equal(dossierTableSortDirectionLabel(columns.get('requested'), 'desc'), 'du plus grand au plus petit');
   assert.equal(dossierTableSortDirectionLabel(columns.get('sentAt')), 'plus ancien d’abord');

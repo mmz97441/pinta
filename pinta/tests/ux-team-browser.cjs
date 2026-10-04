@@ -39,11 +39,11 @@ async function run() {
       f.tables.colis.push(second);
       await f.login();
       await f.page.goto(base + '/colis?work=preparation&owner=mine');
-      await f.page.getByRole('status').filter({ hasText: '1 dossier(s) affiché(s)' }).waitFor();
-      await f.page.getByRole('button', { name: /^Filtres et options/ }).click();
+      await f.page.getByRole('status').filter({ hasText: /^1 dossier$/ }).waitFor();
+      await f.page.getByRole('button', { name: /^Filtres(?: · \d+)?$/ }).click();
       assert.equal(await f.page.getByLabel('Responsable de la tâche', { exact: true }).inputValue(), 'mine');
       await f.page.getByLabel('Responsable de la tâche', { exact: true }).selectOption('');
-      await f.page.getByRole('status').filter({ hasText: '2 dossier(s) affiché(s)' }).waitFor();
+      await f.page.getByRole('status').filter({ hasText: /^2 dossiers$/ }).waitFor();
       const firstButton = f.page.getByRole('button', { name: 'EXP-TEST-001', exact: !mobile }).first();
       await firstButton.click();
       await f.page.getByRole('tab', { name: /Conversation/ }).click();
@@ -62,7 +62,7 @@ async function run() {
       await f.page.getByRole('button', { name: 'Retour à la liste de travail', exact: true }).click();
       console.log('Navigation suivante OK');
       await f.page.reload();
-      await f.page.getByRole('button', { name: /^Filtres et options/ }).click();
+      await f.page.getByRole('button', { name: /^Filtres(?: · \d+)?$/ }).click();
       assert.equal(await f.page.getByLabel('File de travail', { exact: true }).inputValue(), 'preparation');
       await f.page.screenshot({ path: path.join(out, `file-${mobile ? 'mobile' : 'desktop'}.png`), fullPage: true });
       console.log('Filtres OK');

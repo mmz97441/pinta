@@ -65,9 +65,11 @@ async function measure(locator) {
         await f.page.mouse.move(0, 0); await f.page.keyboard.press('Tab'); await row().getByRole('button', { name: 'EXP-TEST-001', exact: true }).focus(); await check('selected-focus', true);
         await f.page.screenshot({ path: path.join(output, `${name}.png`), fullPage: true });
         if (width === 1440) {
-          await f.page.getByRole('button', { name: /^Filtres et options/ }).click();
-          const sorting = f.page.getByRole('combobox', { name: 'Tri par défaut', exact: true });
-          await sorting.selectOption('date_desc'); assert.equal(await sorting.inputValue(), 'date_desc');
+          // « Tri par défaut » now lives in the « Affichage » dialog, which stays open after a change.
+          await f.page.getByRole('button', { name: 'Affichage', exact: true }).click();
+          const display = f.page.getByRole('dialog', { name: 'Affichage', exact: true }); await display.waitFor();
+          const sorting = display.getByRole('combobox', { name: 'Tri par défaut', exact: true });
+          await sorting.selectOption('date_desc'); assert.equal(await sorting.inputValue(), 'date_desc'); assert.equal(await display.isVisible(), true);
           await sorting.hover(); const sample = await measure(sorting);
           assert.ok(sample.text.length > 0 && sample.text.every(item => item.ratio >= 4.5), `${name}: sorting control contrast`); assert.ok(theme === 'dark' ? sample.luminance < .15 : sample.luminance > .75);
           await f.page.keyboard.press('Tab'); await sorting.focus();

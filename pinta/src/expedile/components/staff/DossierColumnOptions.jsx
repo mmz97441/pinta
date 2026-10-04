@@ -4,8 +4,11 @@ import { X, ArrowLeft } from 'lucide-react';
 import { clampColumnWidth, columnFilterModes, columnWidthBounds, sanitizeColumnFilter } from '../../domain/dossierTablePreferences';
 
 /** Native modal semantics keep keyboard focus here without covering the table
- * in another full-width toolbar. Position follows the actual trigger. */
-function ColumnDialog({ title, anchor, focusKey, onClose, children, closeLabel = 'Fermer le filtre' }) {
+ * in another full-width toolbar. Position follows the actual trigger: from
+ * 768px the dialog hangs under it, aligned on its left edge ('start') or its
+ * right edge ('end'); on phones it is centred. The top layer also escapes the
+ * scrolling page header that holds the triggers. */
+export function ColumnDialog({ title, anchor, focusKey, onClose, children, closeLabel = 'Fermer le filtre', id = 'dossier-column-dialog', titleId = 'dossier-column-title', testId = 'column-filter-dialog', className = '', align = 'start' }) {
   const dialog = useRef(null);
   const initialTrigger = useRef(anchor || document.activeElement);
   const [position, setPosition] = useState({ left: 12, top: 12, maxHeight: 'calc(100dvh - 24px)' });
@@ -25,7 +28,8 @@ function ColumnDialog({ title, anchor, focusKey, onClose, children, closeLabel =
       const height = Math.min(node.getBoundingClientRect().height, viewportHeight - gap * 2);
       const rect = anchor?.isConnected ? anchor.getBoundingClientRect() : null;
       const desktop = window.innerWidth >= 768 && rect;
-      const left = desktop ? Math.max(originX + gap, Math.min(rect.left, originX + viewportWidth - width - gap)) : originX + (viewportWidth - width) / 2;
+      const anchoredLeft = desktop && (align === 'end' ? rect.right - width : rect.left);
+      const left = desktop ? Math.max(originX + gap, Math.min(anchoredLeft, originX + viewportWidth - width - gap)) : originX + (viewportWidth - width) / 2;
       const preferredTop = desktop ? rect.bottom + 8 : originY + (viewportHeight - height) / 2;
       const top = Math.max(originY + gap, Math.min(preferredTop, originY + viewportHeight - height - gap));
       setPosition(previous => previous.left === left && previous.top === top && previous.width === width && previous.maxHeight === viewportHeight - gap * 2 ? previous : { left, top, width, maxHeight: viewportHeight - gap * 2 });
@@ -38,15 +42,15 @@ function ColumnDialog({ title, anchor, focusKey, onClose, children, closeLabel =
     window.visualViewport?.addEventListener('resize', place);
     window.visualViewport?.addEventListener('scroll', place);
     return () => { observer.disconnect(); window.removeEventListener('resize', place); window.removeEventListener('scroll', place, true); window.visualViewport?.removeEventListener('resize', place); window.visualViewport?.removeEventListener('scroll', place); };
-  }, [anchor]);
+  }, [anchor, align]);
   useLayoutEffect(() => {
     const target = dialog.current?.querySelector('[data-filter-focus]');
     target?.focus({ preventScroll: true });
   }, [focusKey]);
-  return createPortal(<dialog ref={dialog} id="dossier-column-dialog" aria-modal="true" aria-labelledby="dossier-column-title" data-testid="column-filter-dialog" className="dossier-column-options" style={position}
+  return createPortal(<dialog ref={dialog} id={id} aria-modal="true" aria-labelledby={titleId} data-testid={testId} className={className ? `dossier-column-options ${className}` : 'dossier-column-options'} style={position}
     onCancel={event => { event.preventDefault(); onClose(); }}
     onClick={event => { if (event.target !== event.currentTarget) return; const rect = event.currentTarget.getBoundingClientRect(); if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) onClose(); }}>
-    <div className="dossier-column-dialog-heading"><h2 id="dossier-column-title">{title}</h2><button type="button" className="dossier-column-close" aria-label={closeLabel} onClick={onClose}><X size={18} aria-hidden="true" /></button></div>
+    <div className="dossier-column-dialog-heading"><h2 id={titleId}>{title}</h2><button type="button" className="dossier-column-close" aria-label={closeLabel} onClick={onClose}><X size={18} aria-hidden="true" /></button></div>
     {children}
   </dialog>, document.body);
 }

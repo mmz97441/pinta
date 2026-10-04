@@ -1,14 +1,45 @@
+/* Warm lines that stay visible on every row state without competing with text.
+   Column lines: 1.48:1 light / 1.92:1 dark against the canvas; the stronger
+   edge marks the resize handles and the sticky identity/action columns. */
+.dossier-list,
+.dossier-data-table,
+.dossier-table-card,
+.dossier-column-options {
+  --dossier-column-line: #d6cfc2;
+  --dossier-column-edge: #c9c1b3;
+  --dossier-header-line: #cfc8ba;
+  --dossier-filter-idle: #857e73;
+  --dossier-control-border: #d6d0c4;
+  --dossier-scroll-track: #d9d3c7;
+  /* Editable fields only: 3.5:1 on the elevated fill, 3.2:1 on the surface. */
+  --dossier-field-border: #8c8579;
+}
+html.dark .dossier-list,
+html.dark .dossier-data-table,
+html.dark .dossier-table-card,
+html.dark .dossier-column-options {
+  --dossier-column-line: #4e4840;
+  --dossier-column-edge: #6b645a;
+  --dossier-header-line: #5a534a;
+  --dossier-filter-idle: #9c958a;
+  --dossier-control-border: #4e4840;
+  --dossier-scroll-track: #4a443c;
+  --dossier-field-border: #7d766b;
+}
 /* The sticky cells must paint the same opaque surface as their row in both themes. */
-.dossier-data-table { --dossier-column-line: #c1cbd0; table-layout: fixed; border-collapse: separate; border-spacing: 0; font-size: var(--dossier-text-size, 16px); }
-html.dark .dossier-data-table { --dossier-column-line: #5c676c; }
+.dossier-data-table { table-layout: fixed; border-collapse: separate; border-spacing: 0; font-size: var(--dossier-text-size, 16px); font-variant-numeric: tabular-nums; }
 .dossier-table-head,
 .dossier-table-row,
 .dossier-table-card {
   --dossier-table-row-bg: var(--bg-canvas);
-  --dossier-table-hover-bg: #f1f4f4;
+  /* Darker than the group bands (--bg-surface) so a hovered row never reads as one;
+     muted text keeps 5.2:1 on it. */
+  --dossier-table-hover-bg: #efeadf;
   --dossier-table-selected-bg: #e8f0f5;
   color: var(--text-primary);
 }
+/* Cards float on the canvas; hover and selection reuse the row colours. */
+.dossier-table-card { --dossier-table-row-bg: var(--bg-elevated); }
 html.dark .dossier-table-head,
 html.dark .dossier-table-row,
 html.dark .dossier-table-card {
@@ -19,6 +50,10 @@ html.dark .dossier-table-card {
 .dossier-table-card:hover { --dossier-table-row-bg: var(--dossier-table-hover-bg); }
 .dossier-table-row[data-selected='true'],
 .dossier-table-card[data-selected='true'] { --dossier-table-row-bg: var(--dossier-table-selected-bg); }
+/* The neutral pill keeps an outline where the row tint would swallow its fill. */
+.dossier-table-row:hover .dossier-pill:is(:not([data-tone]), [data-tone='neutral']),
+.dossier-table-card:hover .dossier-pill:is(:not([data-tone]), [data-tone='neutral']),
+[data-selected='true'] .dossier-pill:is(:not([data-tone]), [data-tone='neutral']) { box-shadow: inset 0 0 0 1px var(--dossier-column-edge); }
 .dossier-table-row > td,
 .dossier-table-head th {
   box-sizing: border-box;
@@ -37,7 +72,7 @@ html.dark .dossier-table-card {
   z-index: 4;
   background: var(--bg-elevated);
   padding: 0 10px 0 6px;
-  border-bottom: 2px solid var(--dossier-column-line);
+  border-bottom: 1px solid var(--dossier-header-line);
   font-size: var(--dossier-text-size, 12px);
   font-weight: 600;
   color: var(--text-secondary);
@@ -69,7 +104,7 @@ html.dark .dossier-table-card {
   width: var(--dossier-client-width, 200px);
   min-width: var(--dossier-client-width, 200px);
   max-width: var(--dossier-client-width, 200px);
-  box-shadow: 1px 0 0 var(--dossier-column-line);
+  box-shadow: 1px 0 0 var(--dossier-column-edge);
   z-index: 2;
 }
 .dossier-table-head [data-column='select'],
@@ -81,7 +116,7 @@ html.dark .dossier-table-card {
   position: sticky;
   right: 0;
   z-index: 3;
-  box-shadow: -1px 0 0 var(--dossier-column-line);
+  box-shadow: -1px 0 0 var(--dossier-column-edge);
 }
 .dossier-table-head [data-column='action'] { z-index: 6; }
 .dossier-data-table[data-unpin-action='true'] .dossier-table-row > [data-column='action'] { position: static; }
@@ -103,6 +138,8 @@ html.dark .dossier-table-card {
   cursor: pointer;
 }
 .dossier-table-checkbox input { width: 18px; height: 18px; accent-color: var(--brand-navy-l); cursor: pointer; }
+html.dark .dossier-table-checkbox input,
+html.dark .dossier-column-visibility input { accent-color: #c4dae5; }
 .dossier-table-sort,
 .dossier-table-reference {
   display: inline-flex;
@@ -115,12 +152,23 @@ html.dark .dossier-table-card {
 .dossier-table-sort { flex: 1; min-width: 0; width: 100%; gap: 3px; }
 .dossier-table-heading-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dossier-table-sort svg { width: 12px; height: 12px; }
-.dossier-table-filter { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 24px; width: 24px; min-height: 44px; padding: 0; border: 0; border-radius: 4px; color: var(--text-secondary); }
-.dossier-table-filter:hover { color: var(--brand-text); background: var(--dossier-table-selected-bg); }
+/* Quiet until used: the idle icon keeps 3.88:1 (light) / 4.74:1 (dark) on the header. */
+.dossier-table-filter { position: relative; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 24px; width: 24px; min-height: 44px; padding: 0; border: 0; border-radius: 4px; color: var(--dossier-filter-idle); background: transparent; transition: background-color .15s ease-out, color .15s ease-out; }
+.dossier-table-filter:hover { color: var(--brand-text); background: var(--bg-surface); }
 .dossier-table-filter svg { flex-shrink: 0; }
-.dossier-table-filter[aria-pressed='true'] { color: var(--brand-text); background: var(--dossier-table-selected-bg); font-weight: 700; }
+.dossier-table-filter[aria-pressed='true'] { color: var(--brand-text); background: var(--dossier-table-selected-bg); }
+.dossier-table-filter[aria-pressed='true']::after { content: ''; position: absolute; top: 12px; right: 2px; width: 6px; height: 6px; border-radius: 50%; background: var(--brand-gold); pointer-events: none; }
+/* Light theme: the dark gold keeps the marker at 4.85:1 on the pressed tint. */
+html:not(.dark) .dossier-table-filter[aria-pressed='true']::after { background: var(--text-accent); }
+/* brand.css widens icon-only buttons to 44px on touch and below 1024px, which
+   would leave short headings such as « Casier » and « Cartons » as « Ca… ». The
+   filter keeps its 24px box; an invisible layer widens the touch target to 44px. */
+.dossier-table-head .dossier-table-filter { min-width: 24px; }
+@media (pointer: coarse), (max-width: 1023px) {
+  .dossier-table-head .dossier-table-filter::before { content: ''; position: absolute; inset: 0 -10px; }
+}
 .dossier-table-resize { position: absolute; inset: 0 0 0 auto; z-index: 2; display: flex; align-items: stretch; justify-content: flex-end; width: 10px; min-height: 44px; padding: 0; border: 0; border-radius: 0; touch-action: none; cursor: col-resize; background: transparent; }
-.dossier-table-resize::after { content: ''; width: 2px; margin-right: 0; background: var(--dossier-column-line); }
+.dossier-table-resize::after { content: ''; width: 1px; margin-right: 0; background: var(--dossier-column-edge); }
 .dossier-table-resize:hover, .dossier-table-resize:focus-visible, .dossier-table-resize:active { background: var(--dossier-table-selected-bg); }
 .dossier-table-resize:hover::after, .dossier-table-resize:focus-visible::after, .dossier-table-resize:active::after { width: 3px; background: var(--brand-text); }
 .dossier-table-resize:focus-visible { outline: 2px solid var(--brand-text); outline-offset: -2px; }
@@ -128,7 +176,42 @@ html.dark .dossier-table-card {
 .dossier-table-card-main-action { margin-top: 12px; }
 .dossier-table-align-right .dossier-table-sort { justify-content: flex-end; }
 .dossier-table-sort svg { flex-shrink: 0; }
-.dossier-table-reference { font-weight: 700; color: var(--brand-text); overflow-wrap: anywhere; }
+.dossier-table-reference { font-weight: 700; color: var(--brand-text); white-space: nowrap; overflow-wrap: normal; font-variant-numeric: tabular-nums; }
+.dossier-table-placeholder { color: var(--text-muted); }
+/* Status and payment pills: the label is the whole content, the dot is decoration.
+   Palette shared with the dossier overview, every pair >= 5.9:1 (light) / 8.4:1 (dark). */
+.dossier-pill {
+  --pill-bg: #f1f2f0;
+  --pill-text: #565d63;
+  /* A flex row keeps the dot beside the first line: the label is one item that wraps inside itself. */
+  display: inline-flex;
+  align-items: baseline;
+  gap: .4em;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: .15em .6em;
+  border-radius: .75em;
+  font-size: var(--dossier-small-text-size, 1em);
+  font-weight: 600;
+  line-height: 1.35;
+  text-align: left;
+  color: var(--pill-text);
+  background: var(--pill-bg);
+  /* Wrap between words; a single word is cut only if it is wider than the column. */
+  overflow-wrap: break-word;
+  word-break: normal;
+  hyphens: manual;
+}
+.dossier-pill::before { content: ''; flex: none; align-self: flex-start; width: .45em; height: .45em; margin: .45em 0 0; border-radius: 50%; background: currentColor; }
+.dossier-pill[data-tone='done'] { --pill-bg: #eaf7ef; --pill-text: #17633e; }
+.dossier-pill[data-tone='current'] { --pill-bg: #eaf2ff; --pill-text: #174ea6; }
+.dossier-pill[data-tone='waiting'] { --pill-bg: #fff5d8; --pill-text: #79520a; }
+.dossier-pill[data-tone='review'] { --pill-bg: #fff0e9; --pill-text: #943d16; }
+html.dark .dossier-pill { --pill-bg: #282b2d; --pill-text: #c4c8cd; }
+html.dark .dossier-pill[data-tone='done'] { --pill-bg: #153d2c; --pill-text: #b9e8ca; }
+html.dark .dossier-pill[data-tone='current'] { --pill-bg: #1b365a; --pill-text: #c4deff; }
+html.dark .dossier-pill[data-tone='waiting'] { --pill-bg: #44361b; --pill-text: #f7db97; }
+html.dark .dossier-pill[data-tone='review'] { --pill-bg: #4a2d24; --pill-text: #ffd3c0; }
 .dossier-table-client-name,
 .dossier-table-task-title { display: block; font-weight: 600; }
 .dossier-table-secondary { display: block; color: var(--text-secondary); font-size: var(--dossier-small-text-size, 14px); margin-top: 4px; }
@@ -137,64 +220,82 @@ html.dark .dossier-table-card {
 .dossier-table-money { font-variant-numeric: tabular-nums; }
 .dossier-table-action { min-width: 0; }
 .dossier-table-action-title { font-size: var(--dossier-small-text-size, 14px); font-weight: 600; margin: 0 0 8px; }
-.dossier-table-action button { white-space: normal; max-width: 100%; min-height: 44px; font-size: var(--dossier-text-size, 16px); }
+.dossier-table-action button { white-space: normal; max-width: 100%; min-height: 44px; font-size: var(--dossier-text-size, 16px); transition: background-color .15s ease-out, color .15s ease-out, border-color .15s ease-out; }
+.dossier-table-action button:active:not(:disabled) { transform: translateY(1px); }
 .dossier-table-action button svg { flex-shrink: 0; }
-.dossier-table-row .dossier-table-action button { padding-left: 8px; padding-right: 8px; overflow-wrap: normal; }
+.dossier-table-row .dossier-table-action button { width: 100%; padding-left: 8px; padding-right: 8px; overflow-wrap: normal; }
 .dossier-table-row .dossier-table-action button svg { display: none; }
+/* Three distinct weights: filled “Continuer”, outlined “Je m’en occupe”, quiet
+   “Consulter”. Scoped to the table and cards: TaskTakeButton keeps its look in
+   Mon travail. The html prefix outranks html:not(.dark) .bg-slate-900. */
 .dossier-table-open {
   display: inline-flex;
   justify-content: center;
   align-items: center;
   gap: 8px;
   min-height: 44px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 12px;
+  border: 1px solid var(--dossier-control-border);
+  border-radius: 10px;
   padding: 8px 14px;
   font-weight: 600;
-  color: var(--brand-text);
+  color: var(--text-primary);
   background: var(--bg-elevated);
 }
-.dossier-table-open-primary { color: #fff; background: #1b3a4b; border-color: #1b3a4b; }
-html.dark .dossier-table-open-primary { color: #122a36; background: #c4dae5; border-color: #c4dae5; }
-.dossier-table-row:focus-within > td { box-shadow: inset 0 -2px 0 var(--brand-text); }
+.dossier-table-open:hover { background: var(--bg-surface); }
+html .dossier-table-action .dossier-table-open-primary,
+html .dossier-table-action button[data-take-kind='continue'] { color: #fff; background: var(--brand-navy); border: 1px solid var(--brand-navy); border-radius: 10px; }
+html .dossier-table-action .dossier-table-open-primary:hover,
+html .dossier-table-action button[data-take-kind='continue']:hover:not(:disabled) { background: var(--brand-navy-l); border-color: var(--brand-navy-l); }
+html.dark .dossier-table-action .dossier-table-open-primary,
+html.dark .dossier-table-action button[data-take-kind='continue'] { color: #122a36; background: #c4dae5; border-color: #c4dae5; }
+html.dark .dossier-table-action .dossier-table-open-primary:hover,
+html.dark .dossier-table-action button[data-take-kind='continue']:hover:not(:disabled) { background: #d6e6ee; border-color: #d6e6ee; }
+html .dossier-table-action button[data-take-kind='claim'] { color: var(--brand-text); background: transparent; border: 2px solid var(--brand-text); border-radius: 10px; font-weight: 700; }
+html .dossier-table-action button[data-take-kind='claim']:hover:not(:disabled) { background: var(--dossier-table-selected-bg); }
+/* Keyboard focus outlines the whole row; a mouse click on a checkbox draws nothing.
+   The sticky client/action cells keep their edge line under the ring. */
+.dossier-table-row:has(:focus-visible) > td { box-shadow: inset 0 2px 0 var(--brand-text), inset 0 -2px 0 var(--brand-text); }
+.dossier-table-row:has(:focus-visible) > td:first-child { box-shadow: inset 2px 0 0 var(--brand-text), inset 0 2px 0 var(--brand-text), inset 0 -2px 0 var(--brand-text); }
+.dossier-table-row:has(:focus-visible) > td[data-column='client'] { box-shadow: 1px 0 0 var(--dossier-column-edge), inset 0 2px 0 var(--brand-text), inset 0 -2px 0 var(--brand-text); }
+.dossier-table-row:has(:focus-visible) > td:last-child { box-shadow: -1px 0 0 var(--dossier-column-edge), inset -2px 0 0 var(--brand-text), inset 0 2px 0 var(--brand-text), inset 0 -2px 0 var(--brand-text); }
 .dossier-table-row button:focus-visible,
 .dossier-table-row a:focus-visible,
-.dossier-table-head button:focus-visible,
 .dossier-table-card button:focus-visible,
 .dossier-table-card a:focus-visible,
 .dossier-table-checkbox input:focus-visible { outline: 2px solid var(--brand-text); outline-offset: 3px; }
+/* The header sits on the top edge of the scrolling table: an outer ring would
+   lose its top side, so header controls draw it inside, like the resize handle. */
+.dossier-table-head button:focus-visible { outline: 2px solid var(--brand-text); outline-offset: -2px; }
 .dossier-table-card {
   background: var(--dossier-table-row-bg);
   border: 1px solid var(--border-subtle);
-  border-radius: 16px;
-  padding: 12px 16px 16px;
+  border-radius: 14px;
+  padding: 14px 16px;
+  font-variant-numeric: tabular-nums;
+  transition: background-color .15s ease-out, border-color .15s ease-out;
   min-width: 0;
   font-size: var(--dossier-text-size, 16px);
   overflow-wrap: anywhere;
 }
 .dossier-table-card:focus-within { box-shadow: inset 0 0 0 2px var(--brand-text); }
-.dossier-table-card + .dossier-table-card { margin-top: 12px; }
-.dossier-table-card-heading { display: flex; align-items: center; gap: 4px; margin-left: -12px; }
+.dossier-table-card-heading { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 4px; margin-left: -12px; }
 .dossier-table-card-heading > [data-column='ref'] { min-width: 0; }
 .dossier-table-card-heading .dossier-table-checkbox { flex-shrink: 0; }
+.dossier-table-card-status { flex: 0 1 auto; max-width: 100%; margin-left: auto; text-align: right; }
 .dossier-table-card-task { margin-top: 12px; }
-.dossier-table-card-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; margin: 16px 0; }
+.dossier-table-card-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; margin: 14px 0 0; padding-top: 12px; border-top: 1px solid var(--border-subtle); }
 .dossier-table-card-facts > div { min-width: 0; }
 .dossier-table-card-facts dt { font-size: var(--dossier-small-text-size, 14px); color: var(--text-secondary); }
 .dossier-table-card-facts dd { margin: 2px 0 0; overflow-wrap: anywhere; }
 .dossier-table-card .dossier-table-action button { width: 100%; }
+.dossier-table-card .dossier-table-action svg { width: max(12px, 1.1em); height: max(12px, 1.1em); }
+/* Every card action shows its icon after the label (« Continuer → »). */
+.dossier-table-card .dossier-table-action button[data-take-kind] svg { order: 2; }
 
-/* Keep the primary action in view despite platform font metrics. The owner
-   keeps a full-width line; short reception facts share the next line. */
-.dossier-table-card[data-view='daily'] .dossier-table-card-facts { row-gap: 8px; margin: 12px 0; }
+/* Daily view: one label/value line per fact, every value in the same
+   right-hand column. The action comes before the facts, so it stays in view. */
+.dossier-table-card[data-view='daily'] .dossier-table-card-facts { grid-template-columns: minmax(0, 1fr); row-gap: 8px; margin: 12px 0 0; }
 .dossier-table-card[data-view='daily'] .dossier-table-card-facts > div { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
-.dossier-table-card[data-view='daily'] .dossier-table-card-facts > [data-column='owner'] { grid-column: 1 / -1; }
-.dossier-table-card[data-view='daily'] .dossier-table-card-facts > [data-column='optimizedDimensions'],
-.dossier-table-card[data-view='daily'] .dossier-table-card-facts > [data-column='optimizedWeight'],
-.dossier-table-card[data-view='daily'] .dossier-table-card-facts > [data-column='requested'],
-.dossier-table-card[data-view='daily'] .dossier-table-card-facts > [data-column='receivedAt'],
-.dossier-table-card[data-view='daily'] .dossier-table-card-facts > [data-column='statusLabel'],
-.dossier-table-card[data-view='daily'] .dossier-table-card-facts > [data-column='paymentState'] { grid-column: 1 / -1; }
 .dossier-table-card[data-view='daily'] .dossier-table-card-facts dt { flex-shrink: 1; max-width: 55%; overflow-wrap: anywhere; }
 .dossier-table-card[data-view='daily'] .dossier-table-card-facts dd { min-width: 0; margin: 0; text-align: right; }
 /* Small embedded badges and grouped headings must remain readable as well. */
@@ -202,43 +303,31 @@ html.dark .dossier-table-open-primary { color: #122a36; background: #c4dae5; bor
 .dossier-data-table [class*='text-['], .dossier-table-card [class*='text-xs'],
 .dossier-table-card [class*='text-sm'], .dossier-table-card [class*='text-['] { font-size: var(--dossier-small-text-size, 14px); }
 .dossier-table-row .dossier-table-action button, .dossier-table-card .dossier-table-action button { font-size: var(--dossier-text-size, 16px); }
-.dossier-reading-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
-.dossier-text-size, .dossier-layout-control { display: inline-flex; align-items: center; gap: 6px; color: var(--text-secondary); font-size: 12px; }
-.dossier-text-size input, .dossier-text-size-step, .dossier-layout-control select { min-height: 44px; border: 1px solid var(--border-subtle); border-radius: 6px; background: var(--bg-surface); color: var(--text-primary); padding: 6px; font-size: 14px; }
-.dossier-text-size input { width: 58px; text-align: center; }
-.dossier-text-size-step { min-width: 44px; font-weight: 600; }
-.dossier-text-size-step:disabled { opacity: .45; }
-.dossier-layout-control select { max-width: 145px; }
-.dossier-horizontal-scroll { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; min-width: 0; padding: 0 16px; border-bottom: 1px solid var(--border-subtle); background: var(--bg-surface); color: var(--text-secondary); font-size: 14px; }
-.dossier-horizontal-scroll button { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 44px; min-height: 44px; border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--bg-elevated); color: var(--brand-text); }
-.dossier-horizontal-scroll button:disabled { opacity: .45; }
-.dossier-horizontal-scroll input { appearance: none; -webkit-appearance: none; flex: 1 1 auto; min-width: 0; width: 0; height: 44px; margin: 0; background: transparent; cursor: ew-resize; }
-.dossier-horizontal-scroll input::-webkit-slider-runnable-track { height: 8px; background: var(--border-default, #8d8374); border-radius: 8px; }
-.dossier-horizontal-scroll input::-moz-range-track { height: 8px; background: var(--border-default, #8d8374); border-radius: 8px; }
-.dossier-horizontal-scroll input::-webkit-slider-thumb { appearance: none; -webkit-appearance: none; width: 44px; height: 24px; margin-top: -8px; border: 2px solid var(--bg-surface); border-radius: 8px; background: var(--brand-text); }
-.dossier-horizontal-scroll input::-moz-range-thumb { width: 44px; height: 24px; border: 2px solid var(--bg-surface); border-radius: 8px; background: var(--brand-text); }
-.dossier-text-size input:focus-visible, .dossier-text-size-step:focus-visible, .dossier-layout-control select:focus-visible, .dossier-horizontal-scroll button:focus-visible, .dossier-horizontal-scroll input:focus-visible { outline: 2px solid var(--brand-text); outline-offset: 2px; }
-.dossier-card-list { display: none; }
+.dossier-card-list { display: none; grid-template-columns: minmax(0, 1fr); gap: 12px; padding-bottom: 16px; }
 .dossier-list[data-layout='cards'] .dossier-data-table, .dossier-list[data-layout='cards'] .dossier-horizontal-scroll { display: none; }
-.dossier-list[data-layout='cards'] .dossier-card-list { display: block; }
+.dossier-list[data-layout='cards'] .dossier-card-list { display: grid; }
 @media (max-width: 767px) {
   .dossier-list[data-layout='auto'] .dossier-data-table, .dossier-list[data-layout='auto'] .dossier-horizontal-scroll { display: none; }
-  .dossier-list[data-layout='auto'] .dossier-card-list { display: block; }
-  .dossier-horizontal-scroll { padding: 0 8px; gap: 4px; }
-  .dossier-horizontal-scroll > span { display: none; }
+  .dossier-list[data-layout='auto'] .dossier-card-list { display: grid; }
 }
 .dossier-column-options { position: fixed; box-sizing: border-box; margin: 0; width: 340px; max-width: calc(100vw - 24px); overflow-y: auto; overscroll-behavior: contain; border: 1px solid var(--border-subtle); border-radius: 16px; padding: 16px; color: var(--text-primary); background: var(--bg-surface); box-shadow: 0 12px 36px #0003; }
 .dossier-column-options::backdrop { background: #0001; }
 .dossier-column-dialog-heading { position: sticky; top: -16px; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; padding: 4px 0; background: var(--bg-surface); }
 .dossier-column-dialog-heading h2 { margin: 0; font-size: 1rem; font-weight: 700; overflow-wrap: anywhere; }
 .dossier-column-options form, .dossier-column-width-options { display: grid; gap: 12px; }
-.dossier-column-options label { display: flex; flex-direction: column; gap: 4px; font-size: .875rem; font-weight: 600; min-width: 0; max-width: 100%; }
-.dossier-column-options input, .dossier-column-options select, .dossier-column-options button { min-height: 44px; max-width: 100%; border: 1px solid var(--border-subtle); background: var(--bg-elevated); color: var(--text-primary); border-radius: 8px; padding: 8px 12px; }
-.dossier-column-options input, .dossier-column-options select { width: 100%; min-width: 0; }
-.dossier-column-options button { font-size: .875rem; font-weight: 600; }
+/* Column width is a separate setting from the filter: its own section, like « Affichage ». */
+.dossier-column-options form + .dossier-column-width-options { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border-subtle); }
+.dossier-column-options:where(:not(.dossier-display-options)) label { display: flex; flex-direction: column; gap: 4px; font-size: .875rem; font-weight: 600; min-width: 0; max-width: 100%; }
+.dossier-column-options:where(:not(.dossier-display-options)) :is(input, select, button) { min-height: 44px; max-width: 100%; border: 1px solid var(--border-subtle); background: var(--bg-elevated); color: var(--text-primary); border-radius: 8px; padding: 8px 12px; }
+.dossier-column-options:where(:not(.dossier-display-options)) :is(input, select) { width: 100%; min-width: 0; }
+.dossier-column-options:where(:not(.dossier-display-options)) button { font-size: .875rem; font-weight: 600; }
 .dossier-column-options button:disabled { opacity: .5; }
 .dossier-column-options button:focus-visible, .dossier-column-options input:focus-visible, .dossier-column-options select:focus-visible, .dossier-column-options summary:focus-visible { outline: 2px solid var(--brand-text); outline-offset: 2px; }
-.dossier-column-options .dossier-column-close { display: flex; flex: 0 0 44px; align-items: center; justify-content: center; padding: 0; }
+/* The dialogs use the 2px ring above, not the global gold input glow. */
+.dossier-column-options :is(input, select):focus { border-color: var(--brand-text) !important; box-shadow: none !important; }
+/* A quiet suggestion marker instead of Chrome's heavy black datalist triangle. */
+.dossier-column-options input::-webkit-calendar-picker-indicator { opacity: .5; }
+.dossier-column-options .dossier-column-close { display: flex; flex: 0 0 44px; align-items: center; justify-content: center; min-height: 44px; padding: 0; border: 1px solid var(--border-subtle); border-radius: 8px; color: var(--text-primary); background: var(--bg-elevated); }
 .dossier-column-options .dossier-column-back { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; border: 0; padding-left: 0; background: transparent; }
 .dossier-column-options summary { display: flex; align-items: center; min-height: 44px; margin-top: 8px; font-size: .875rem; text-decoration: underline; cursor: pointer; }
 .dossier-column-options p { margin: 0 0 8px; font-size: .875rem; color: var(--text-secondary); }
@@ -267,7 +356,378 @@ html.dark .dossier-column-options .dossier-column-apply { background: #c4dae5; b
 .dossier-column-visibility .dossier-column-width-control label { flex-direction: column; align-items: stretch; gap: 2px; padding: 0; min-height: 0; width: 100%; font-size: 11px; cursor: default; }
 .dossier-column-visibility .dossier-column-width-control input { width: 100%; }
 
+
+/* ── Page header: tabs, one toolbar row, inline filters, meta row ─────────── */
+/* The header width (not the viewport) decides the compact layout, so the
+   sidebar at 1024px behaves like any narrower screen. */
+.dossier-list-header { container: dossier-header / inline-size; background: var(--bg-elevated); border-bottom: 1px solid var(--border-subtle); }
+/* The space under the last row continues the rows' warm canvas. */
+#dossier-table-scroll { background: var(--bg-canvas); }
+
+/* View tabs: underline instead of pills; the strip scrolls on its own. */
+.dossier-view-tabs {
+  position: relative;
+  display: flex;
+  gap: 20px;
+  margin: 0 -16px;
+  padding: 0 16px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.dossier-view-tabs::-webkit-scrollbar { display: none; }
+.dossier-view-tab {
+  flex-shrink: 0;
+  min-height: 44px;
+  padding: 8px 4px 10px;
+  border-radius: 4px 4px 0 0;
+  white-space: nowrap;
+  overflow-wrap: normal;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--text-secondary);
+  background: transparent;
+  transition: color .15s ease-out, box-shadow .15s ease-out;
+}
+.dossier-view-tab:hover { color: var(--text-primary); }
+.dossier-view-tab[aria-pressed='true'] { color: var(--brand-text); box-shadow: inset 0 -3px 0 var(--text-accent); }
+/* Drawn inside the button: the scrolling strip would clip an outer ring. */
+.dossier-view-tab:focus-visible { outline: 2px solid var(--brand-text); outline-offset: -2px; }
+@media (max-width: 359px) { .dossier-view-tabs { gap: 14px; } }
+
+/* One toolbar row: [search][scope][Filtres][Affichage], wrapping when needed. */
+.dossier-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.dossier-toolbar-search { flex: 1 1 16rem; min-width: 0; }
+.dossier-toolbar .dossier-toolbar-search input {
+  border: 1px solid var(--dossier-field-border);
+  text-overflow: ellipsis;
+  border-radius: 10px;
+  color: var(--text-primary);
+  background-color: var(--bg-elevated);
+}
+.dossier-toolbar .dossier-toolbar-search input::placeholder { color: var(--text-muted); opacity: 1; }
+
+/* Scope: segmented control. The 44px button is the target; its inner pill is the look. */
+.dossier-scope { display: inline-flex; flex-shrink: 0; padding: 0 3px; border-radius: 10px; background: var(--bg-surface); }
+.dossier-scope > button {
+  display: flex;
+  align-items: stretch;
+  min-height: 44px;
+  padding: 3px 0;
+  border-radius: 8px;
+  white-space: nowrap;
+  overflow-wrap: normal;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: transparent;
+}
+.dossier-scope > button > span {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  padding: 0 12px;
+  border-radius: 8px;
+  transition: background-color .15s ease-out, color .15s ease-out, box-shadow .15s ease-out;
+}
+.dossier-scope > button:hover > span { color: var(--text-primary); }
+.dossier-scope > button[aria-pressed='true'] > span { color: var(--brand-text); background: var(--bg-elevated); box-shadow: 0 1px 2px rgb(0 0 0 / .08); }
+html.dark .dossier-scope > button[aria-pressed='true'] > span { box-shadow: 0 1px 2px rgb(0 0 0 / .4); }
+.dossier-scope > button:active > span { transform: translateY(1px); }
+
+/* Secondary buttons: Filtres, Affichage and the actions of the filters panel. */
+.dossier-toolbar-button {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--dossier-control-border);
+  border-radius: 10px;
+  white-space: nowrap;
+  overflow-wrap: normal;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  background: var(--bg-elevated);
+  transition: background-color .15s ease-out, color .15s ease-out, border-color .15s ease-out;
+}
+.dossier-toolbar-button svg { flex-shrink: 0; }
+.dossier-toolbar-button:hover:not(:disabled) { background: var(--bg-surface); }
+.dossier-toolbar-button:active:not(:disabled) { transform: translateY(1px); }
+.dossier-toolbar-button:disabled { opacity: .55; }
+.dossier-toolbar-button[aria-expanded='true'],
+.dossier-toolbar-button[aria-pressed='true'] { border-color: var(--brand-text); color: var(--brand-text); }
+.dossier-toolbar-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+  background: var(--brand-navy);
+}
+html.dark .dossier-toolbar-badge { color: #122a36; background: #c4dae5; }
+.dossier-text-button {
+  min-height: 44px;
+  padding: 0 8px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--brand-text);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  background: transparent;
+}
+
+/* Inline filters panel: non-modal, the header keeps its 55dvh cap. Every height
+   in the header is a whole pixel (labels on a 20px line): at a half-pixel table
+   offset the sticky columns snap apart from the scrolling ones and lose the
+   row lines. */
+.dossier-filters-panel { display: grid; gap: 12px; padding: 12px; border: 1px solid var(--border-subtle); border-radius: 12px; background: var(--bg-surface); }
+.dossier-filters-fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 13rem), 1fr)); gap: 12px; }
+.dossier-filters-field { display: grid; gap: 4px; min-width: 0; font-size: 13px; font-weight: 600; line-height: 20px; color: var(--text-secondary); }
+.dossier-filters-panel .dossier-filters-field select {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 10px;
+  border: 1px solid var(--dossier-field-border);
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 400;
+  color: var(--text-primary);
+  background-color: var(--bg-elevated);
+}
+.dossier-filters-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.dossier-filters-actions .dossier-text-button { margin-left: auto; }
+
+/* Meta row: count, active filters, sort status and horizontal scroll. */
+.dossier-meta-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; font-size: 14px; color: var(--text-secondary); }
+.dossier-meta-count { font-weight: 600; color: var(--text-primary); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.dossier-active-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; min-width: 0; }
+.dossier-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  min-height: 44px;
+  padding: 4px 12px;
+  border: 1px solid var(--dossier-control-border);
+  border-radius: 999px;
+  text-align: left;
+  font-size: 14px;
+  color: var(--text-primary);
+  background: var(--bg-elevated);
+  transition: background-color .15s ease-out, border-color .15s ease-out;
+}
+.dossier-filter-chip:hover { background: var(--bg-surface); }
+.dossier-active-filters .dossier-text-button { font-size: 14px; }
+.dossier-meta-spacer { flex: 1 1 0; }
+.dossier-meta-sort { margin: 0; }
+
+/* Horizontal scroll: quiet arrows and a thin track, still 44px tall to hit. */
+.dossier-horizontal-scroll { display: flex; flex: 1 1 220px; align-items: center; gap: 4px; min-width: 0; max-width: 380px; margin-left: auto; }
+.dossier-horizontal-scroll button {
+  display: inline-flex;
+  flex: 0 0 36px;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  color: var(--brand-text);
+  background: transparent;
+  transition: background-color .15s ease-out;
+}
+.dossier-horizontal-scroll button:hover:not(:disabled) { background: var(--bg-surface); }
+.dossier-horizontal-scroll button:disabled { opacity: .35; }
+.dossier-horizontal-scroll input[type='range'] { appearance: none; -webkit-appearance: none; flex: 1 1 auto; min-width: 0; width: 0; height: 44px; margin: 0; background: transparent; cursor: ew-resize; }
+.dossier-horizontal-scroll input[type='range']:focus { border-color: transparent !important; box-shadow: none !important; }
+.dossier-horizontal-scroll input[type='range']::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: var(--dossier-scroll-track); }
+.dossier-horizontal-scroll input[type='range']::-moz-range-track { height: 4px; border-radius: 2px; background: var(--dossier-scroll-track); }
+.dossier-horizontal-scroll input[type='range']::-webkit-slider-thumb { appearance: none; -webkit-appearance: none; width: 32px; height: 12px; margin-top: -4px; border: 0; border-radius: 6px; background: var(--brand-text); box-shadow: none; transform: none; transition: none; }
+.dossier-horizontal-scroll input[type='range']::-webkit-slider-thumb:hover { transform: none; }
+.dossier-horizontal-scroll input[type='range']::-moz-range-thumb { width: 32px; height: 12px; border: 0; border-radius: 6px; background: var(--brand-text); box-shadow: none; }
+.dossier-horizontal-scroll button:focus-visible,
+.dossier-horizontal-scroll input[type='range']:focus-visible { outline: 2px solid var(--brand-text); outline-offset: 2px; }
+
+/* Medium header (tablets, 1024px with the sidebar): the search takes the first
+   line; scope on the left, Filtres and Affichage on the right of the second. */
+.dossier-toolbar-filters { margin-left: auto; }
+@container dossier-header (max-width: 879px) {
+  .dossier-toolbar-search { flex-basis: 100%; }
+}
+
+/* Compact header (phones): search + two icon buttons, then the scope. */
+@container dossier-header (max-width: 607px) {
+  .dossier-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; }
+  .dossier-toolbar-search { grid-column: 1; }
+  .dossier-scope { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-row: 2; grid-column: 1 / -1; }
+  .dossier-scope > button > span { padding: 0 6px; }
+  .dossier-toolbar-icon-button { width: 44px; padding: 0; }
+  .dossier-toolbar-button-text { display: none; }
+  .dossier-toolbar-icon-button .dossier-toolbar-badge { position: absolute; top: -6px; right: -6px; min-width: 18px; height: 18px; padding: 0 5px; font-size: 11px; box-shadow: 0 0 0 2px var(--bg-elevated); }
+  .dossier-filters-actions .dossier-text-button { margin-left: 0; }
+  .dossier-horizontal-scroll { flex-basis: 100%; max-width: none; }
+}
+
+/* ── « Affichage » dialog ─────────────────────────────────────────────────── */
+.dossier-display-options { padding-bottom: 8px; }
+.dossier-display-section { display: grid; gap: 10px; padding: 14px 0; border-top: 1px solid var(--border-subtle); }
+.dossier-column-dialog-heading + .dossier-display-section { padding-top: 2px; border-top: 0; }
+.dossier-display-section-title { margin: 0; font-size: 12px; font-weight: 700; line-height: 1.3; letter-spacing: .06em; text-transform: uppercase; color: var(--text-secondary); }
+.dossier-display-options .dossier-display-note { margin: -4px 0 0; font-size: 13px; color: var(--text-secondary); }
+.dossier-display-field { display: grid; gap: 4px; min-width: 0; font-size: 13px; font-weight: 600; color: var(--text-secondary); }
+.dossier-display-options .dossier-display-field select {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  /* Long option labels end with an ellipsis before the native chevron. */
+  padding: 0 2.25rem 0 10px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  border: 1px solid var(--dossier-field-border);
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 400;
+  color: var(--text-primary);
+  background-color: var(--bg-elevated);
+}
+.dossier-display-row,
+.dossier-display-action {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--dossier-control-border);
+  border-radius: 10px;
+  text-align: left;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  background: var(--bg-elevated);
+  transition: background-color .15s ease-out, border-color .15s ease-out;
+}
+.dossier-display-row { justify-content: space-between; gap: 8px; }
+.dossier-display-row svg { flex-shrink: 0; color: var(--brand-text); }
+.dossier-display-action { justify-content: center; text-align: center; }
+.dossier-display-row:hover, .dossier-display-action:hover:not(:disabled) { background: var(--bg-canvas); }
+.dossier-display-row:active, .dossier-display-action:active:not(:disabled) { transform: translateY(1px); }
+.dossier-display-action:disabled { opacity: .55; }
+.dossier-display-options .dossier-display-error { margin: 0; font-size: 14px; color: #b91c1c; }
+html.dark .dossier-display-options .dossier-display-error { color: #f4b9b9; }
+
+/* Text size control: fixed size inside the dialog, never driven by the table text size. */
+.dossier-text-size { display: grid; grid-template-columns: 44px minmax(0, 72px) auto 44px; justify-content: start; align-items: center; gap: 6px; }
+.dossier-text-size label { grid-column: 1 / -1; font-size: 13px; font-weight: 600; color: var(--text-secondary); }
+.dossier-text-size > span { font-size: 14px; color: var(--text-secondary); }
+.dossier-text-size input,
+.dossier-text-size-step {
+  box-sizing: border-box;
+  min-height: 44px;
+  border: 1px solid var(--dossier-control-border);
+  border-radius: 10px;
+  padding: 0 6px;
+  font-size: 15px;
+  color: var(--text-primary);
+  background-color: var(--bg-elevated);
+}
+html.dark .dossier-text-size input { background-color: var(--bg-elevated); }
+.dossier-text-size input { width: 100%; text-align: center; font-size: 16px; font-variant-numeric: tabular-nums; }
+/* Outranks brand.css « html.dark input » (0,1,2), which would reset the border to 1.16:1. */
+html .dossier-text-size input { border-color: var(--dossier-field-border); }
+.dossier-text-size-step { min-width: 44px; font-weight: 600; transition: background-color .15s ease-out; }
+.dossier-text-size-step:hover:not(:disabled) { background-color: var(--bg-canvas); }
+.dossier-text-size-step:active:not(:disabled) { transform: translateY(1px); }
+.dossier-text-size-step:disabled { opacity: .45; }
+.dossier-text-size input:focus-visible, .dossier-text-size-step:focus-visible { outline: 2px solid var(--brand-text); outline-offset: 2px; }
+
+/* ── Bulk selection bar ───────────────────────────────────────────────────── */
+.dossier-bulk-bar { display: flex; flex-shrink: 0; flex-wrap: wrap; align-items: center; gap: 8px; margin: 8px 16px; padding: 8px 12px; border: 1px solid var(--border-subtle); border-radius: 12px; background: var(--bg-surface); }
+.dossier-bulk-clear { margin-right: 8px; }
+/* Each status button wraps on its own; the phone layout swaps them for a select. */
+.dossier-bulk-statuses { display: contents; }
+.dossier-bulk-picker { display: none; }
+.dossier-bulk-status-select {
+  flex: 1 1 9rem;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 2rem 0 10px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  border: 1px solid var(--dossier-field-border);
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  background-color: var(--bg-elevated);
+}
+.dossier-bulk-status-select:disabled { opacity: .5; }
+/* Outranks brand.css « html.dark select »: the field keeps its edge on the bar in dark mode. */
+html .dossier-bulk-bar .dossier-bulk-status-select { border-color: var(--dossier-field-border); background-color: var(--bg-elevated); }
 @media (max-width: 639px) {
-  .dossier-table-views { gap: 4px; }
-  .dossier-table-views > button { flex: 1 1 0; min-width: 0; padding: 6px 8px; line-height: 16px; }
+  .dossier-bulk-bar { gap: 6px 8px; padding: 6px 10px; }
+  .dossier-bulk-count, .dossier-bulk-clear { font-size: 14px; }
+  .dossier-bulk-clear { margin-right: 0; padding: 0 4px; }
+  .dossier-bulk-statuses { display: none; }
+  /* Its own line: the full « Changer le statut… » stays readable. Choosing only
+     prepares the change; « Appliquer » runs it (no command on a mere keystroke). */
+  .dossier-bulk-picker { display: flex; flex-basis: 100%; align-items: center; gap: 8px; min-width: 0; }
+  .dossier-bulk-picker .dossier-bulk-button { flex-shrink: 0; }
+}
+/* Focused or scrolled-to cards clear the fixed bottom navigation. */
+@media (max-width: 1023px) {
+  #dossier-table-scroll { scroll-padding-bottom: 80px; }
+}
+.dossier-bulk-count { font-size: 15px; font-weight: 600; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.dossier-bulk-button {
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--dossier-control-border);
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  background: var(--bg-elevated);
+  transition: background-color .15s ease-out, border-color .15s ease-out;
+}
+.dossier-bulk-button:hover:not(:disabled) { border-color: var(--brand-text); }
+.dossier-bulk-button:active:not(:disabled) { transform: translateY(1px); }
+.dossier-bulk-button:disabled { opacity: .5; }
+
+/* Idle sort arrows appear on hover or focus only, so short headers stay whole.
+   Touch screens keep them: there is no hover to reveal them. */
+@media (hover: hover) {
+  .dossier-table-head th:not(:hover):not(:focus-within) .dossier-table-sort-idle { display: none; }
+}
+
+/* Windows contrast themes drop box-shadows and repaint backgrounds: every state
+   drawn that way gets a border, outline or system colour that survives. */
+@media (forced-colors: active) {
+  .dossier-view-tab[aria-pressed='true'] { border-bottom: 3px solid Highlight; }
+  .dossier-scope > button[aria-pressed='true'] > span { outline: 2px solid Highlight; outline-offset: -2px; }
+  .dossier-table-filter[aria-pressed='true'] { outline: 1px solid Highlight; outline-offset: -1px; }
+  /* :root .dossier-list outranks the light-theme marker colour (0,3,2). */
+  :root .dossier-list .dossier-table-filter[aria-pressed='true']::after { forced-color-adjust: none; background: Highlight; }
+  .dossier-horizontal-scroll input[type='range'] { forced-color-adjust: none; }
+  .dossier-horizontal-scroll input[type='range']::-webkit-slider-runnable-track { background: CanvasText; }
+  .dossier-horizontal-scroll input[type='range']::-moz-range-track { background: CanvasText; }
+  .dossier-horizontal-scroll input[type='range']::-webkit-slider-thumb { background: Highlight; }
+  .dossier-horizontal-scroll input[type='range']::-moz-range-thumb { background: Highlight; }
 }

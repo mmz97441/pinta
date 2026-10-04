@@ -24,6 +24,20 @@ const businessWrites = f => f.requests.filter(request => ['POST', 'PATCH', 'DELE
 const orderedIds = f => rows(f).evaluateAll(elements => elements.map(node => node.dataset.dossierRow || node.dataset.dossierCard));
 const allIds = async f => (await rows(f).evaluateAll(elements => elements.map(node => node.dataset.dossierRow || node.dataset.dossierCard))).sort();
 const reply = (route, body, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+// Computed WCAG contrast in the page: colours composited over every ancestor background, opacity included.
+function installContrast() {
+  const rgba=value=>{const n=value.match(/[\d.]+/g)?.map(Number)||[];return n.length>=3?[...n.slice(0,3),n[3]??1]:[0,0,0,0];};
+  const over=(fg,bg)=>[...fg.slice(0,3).map((channel,i)=>channel*fg[3]+bg[i]*(1-fg[3])),1];
+  const background=element=>{const chain=[];for(let n=element;n&&n.nodeType===1;n=n.parentElement)chain.push(rgba(getComputedStyle(n).backgroundColor));return chain.reverse().reduce((bg,color)=>over(color,bg),[255,255,255,1]);};
+  const luminance=rgb=>rgb.slice(0,3).map(c=>c/255).map(c=>c<=.04045?c/12.92:((c+.055)/1.055)**2.4).reduce((sum,c,i)=>sum+c*[.2126,.7152,.0722][i],0);
+  const contrast=(a,b)=>{const x=luminance(a),y=luminance(b);return (Math.max(x,y)+.05)/(Math.min(x,y)+.05);};
+  const opacity=element=>{let value=1;for(let n=element;n&&n.nodeType===1;n=n.parentElement)value*=parseFloat(getComputedStyle(n).opacity);return value;};
+  const ink=(element,color)=>{const bg=background(element),fg=rgba(color);return contrast(over([...fg.slice(0,3),fg[3]*opacity(element)],bg),bg);};
+  window.__pintaContrast={rgba,background,contrast,ink,text:element=>ink(element,getComputedStyle(element).color)};
+}
+// Two frames, then every hover/selection transition finished: colours are sampled at rest.
+const settle = async f => {await f.page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));await f.page.waitForFunction(()=>document.getAnimations().every(animation=>animation.playState!=='running'));};
+const noPageOverflow = async f => assert.equal(await f.page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false);
 function arrivalDatesFixture(f) {
   const evidence=value=>value?{receivedAt:value,source:'server'}:null;
   const dates=[['2026-09-29T08:00:00Z','2026-10-02T08:00:00Z'],['2026-09-30T07:00:00Z','2026-09-30T08:00:00Z'],[null,null],['2026-09-29T06:00:00Z',null],['2026-09-30T21:30:00Z','2026-09-30T21:45:00Z'],[null,null]];
@@ -32,7 +46,7 @@ function arrivalDatesFixture(f) {
 
 async function fixture(browser, options = {}) {
   const f = await setup(browser, options.restricted ? 'preparateur' : 'directeur');
-  f.page.setDefaultTimeout(10000);
+  f.page.setDefaultTimeout(10000);await f.context.addInitScript(installContrast);
   f.tables.staff_users.push({ id: B, auth_id: B, nom: 'Madly', role: 'directeur', actif: true, staff_permissions: {} });
   if (options.restricted) {
     const rights = { id: 'table-permissions', staff_id: ids.S, perm_colis_preparer: true, ...(options.financeReadNoExport ? { perm_finances_voir_total: true, perm_export_colis: true, perm_finances_exporter: false } : {}) };
@@ -91,15 +105,51 @@ async function open(f, query = '') {
   await f.page.getByLabel('Rechercher ou scanner un colis',{exact:true}).waitFor();
   if (!f.failWork) await row(f,P).waitFor();
 }
+// Toolbar: « Filtres » toggles the inline panel; « Affichage » opens a modal
+// dialog holding columns, layout, text size, grouping, sort and export.
+const filtersButton = f => f.page.getByRole('button',{name:/^Filtres(?: · \d+)?$/});
+const displayButton = f => f.page.getByRole('button',{name:'Affichage',exact:true});
+const displayDialog = f => f.page.getByRole('dialog',{name:'Affichage',exact:true});
+async function openDisplay(f) {
+  await closeColumnFilter(f);const dialog=displayDialog(f);
+  if(!await dialog.isVisible().catch(()=>false))await displayButton(f).click();
+  await dialog.waitFor();return dialog;
+}
+async function closeDisplay(f) {
+  const dialog=displayDialog(f);
+  if(await dialog.isVisible().catch(()=>false)){await dialog.getByRole('button',{name:'Fermer l’affichage',exact:true}).click();await dialog.waitFor({state:'hidden'});}
+}
+async function openFilters(f) {
+  await closeDisplay(f);const button=filtersButton(f);
+  if(await button.getAttribute('aria-expanded')!=='true')await button.click();
+  const panel=f.page.getByRole('group',{name:'Filtres des dossiers',exact:true});await panel.waitFor();return panel;
+}
+const columnFiltersEntry = f => f.page.getByRole('group',{name:'Filtres des dossiers',exact:true}).getByRole('button',{name:/^Filtres par colonne(?: · \d+)?$/});
+async function openColumnChooser(f) {
+  await openFilters(f);await columnFiltersEntry(f).click();
+  const dialog=f.page.getByRole('dialog',{name:'Filtrer une colonne',exact:true});await dialog.waitFor();return dialog;
+}
+async function openVisibleColumns(f) {
+  const display=await openDisplay(f);await display.getByRole('button',{name:'Colonnes',exact:true}).click();await display.waitFor({state:'hidden'});
+  const dialog=f.page.getByRole('dialog',{name:'Colonnes affichées',exact:true});await dialog.waitFor();return dialog;
+}
+async function exportFiltered(f,count) {
+  const display=await openDisplay(f);const downloaded=f.page.waitForEvent('download');
+  await display.getByRole('button',{name:`Exporter ${count} dossiers filtrés`,exact:true}).click();
+  const file=await downloaded;assert.equal(await file.failure(),null);
+  assert.equal(await display.isVisible(),true,'Exporting keeps « Affichage » open.');await closeDisplay(f);
+  const book=XLSX.read(await fs.readFile(await file.path()),{type:'buffer'});
+  return XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]],{header:1});
+}
 async function selectPreset(f,label,value) {
-  await closeColumnFilter(f);
+  await closeColumnFilter(f);await closeDisplay(f);
   const button=f.page.locator('[aria-label="Vues du tableau"]').getByRole('button',{name:label,exact:true});
   await button.click();
   await f.page.waitForURL(url => (url.searchParams.get('table') || 'daily') === value);
   await button.evaluate(node => new Promise(resolve => { const check=()=>node.getAttribute('aria-pressed')==='true'?resolve():requestAnimationFrame(check);check(); }));
 }
 async function selectScope(f,label,value) {
-  await closeColumnFilter(f);
+  await closeColumnFilter(f);await closeDisplay(f);
   const button=f.page.locator('[aria-label="Choisir les tâches affichées"]').getByRole('button',{name:label,exact:true});
   await button.click();
   await f.page.waitForURL(url => (url.searchParams.get('tasks') || 'all') === value);
@@ -124,10 +174,7 @@ async function openColumnFilter(f,key) {
   await closeColumnFilter(f);
   const header=f.page.locator(`th[data-column="${key}"] .dossier-table-filter`);
   if(await header.isVisible().catch(()=>false))await header.click();
-  else {
-    await f.page.getByRole('button',{name:/^Filtres par colonne/}).click();
-    await columnDialog(f).locator(`[data-column-choice="${key}"]`).click();
-  }
+  else await (await openColumnChooser(f)).locator(`[data-column-choice="${key}"]`).click();
   const dialog=columnDialog(f);await dialog.getByRole('combobox',{name:/^Condition pour /}).waitFor();return dialog;
 }
 async function filterColumn(f,key,mode,value='') {
@@ -186,8 +233,7 @@ async function main() {
         await f.page.locator('th[data-column="receivedAt"][aria-sort="descending"]').waitFor();
         assert.deepEqual((await orderedIds(f)).slice(0,4),[P,P5,P2,P4]);assert.deepEqual((await orderedIds(f)).slice(4).sort(),[P3,P6]);
       }
-      await f.page.getByRole('button',{name:/^Filtres et options/}).click();const downloadPromise=f.page.waitForEvent('download');await f.page.getByRole('button',{name:'Exporter 6 dossiers filtrés',exact:true}).click();
-      const file=await downloadPromise,book=XLSX.read(await fs.readFile(await file.path()),{type:'buffer'}),exported=XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]],{header:1});const dateColumn=exported[0].indexOf('Dernière réception');
+      const exported=await exportFiltered(f,6);const dateColumn=exported[0].indexOf('Dernière réception');
       assert.equal(exported.find(line=>line[0]==='EXP-TAB005')[dateColumn],'01/10/2026');assert.match(exported.find(line=>line[0]==='EXP-TAB004')[dateColumn],/29\/09\/2026.*1\s*\/\s*2 cartons datés/);
       assert.doesNotMatch(exported.find(line=>line[0]==='EXP-TAB003')[dateColumn],/08\/09\/2026/);
       await assertNoBusinessChange(f,before);
@@ -205,7 +251,9 @@ async function main() {
     for(const width of [1440,390])for(const dark of [false,true])await scenario(`compact-column-dialog-keyboard-focus-and-layout-${width}-${dark?'dark':'light'}`,async f=>{
       await f.page.setViewportSize({width,height:width===390?844:1000});await f.context.addInitScript(dark=>localStorage.setItem('expedile-theme',dark?'dark':'light'),dark);
       const before=structuredClone(f.tables.colis);await open(f);
-      const trigger=width===1440?f.page.getByRole('button',{name:'Filtrer la colonne Client',exact:true}):f.page.getByRole('button',{name:/^Filtres par colonne/});
+      // On a phone the column filters are reached from the inline « Filtres » panel, which stays open.
+      if(width===390)await openFilters(f);
+      const trigger=width===1440?f.page.getByRole('button',{name:'Filtrer la colonne Client',exact:true}):columnFiltersEntry(f);
       const openDialog=async()=>{await trigger.click();if(width===390)await columnDialog(f).locator('[data-column-choice="client"]').click();const dialog=columnDialog(f);await dialog.getByLabel('Filtrer : Client',{exact:true}).waitFor();return dialog;};
       let dialog=await openDialog();const bounds=await dialog.boundingBox(),anchor=await trigger.boundingBox();
       assert.ok(bounds.width<=342&&bounds.x>=10&&bounds.x+bounds.width<=width-10,'The compact dialog stays inside the viewport.');
@@ -226,24 +274,24 @@ async function main() {
       const resize=f.page.getByRole('separator',{name:'Redimensionner Référence',exact:true});await resize.focus();await resize.press('Shift+ArrowRight');
       const options=await filterColumn(f,'casier','contains','A-03');await options.press('Escape');await options.waitFor({state:'hidden'});
       await f.page.locator('th[data-column="casier"] .dossier-table-sort').click();await f.page.waitForURL(url=>url.searchParams.get('sort')==='casier');
-      await f.page.getByRole('button',{name:'Colonnes',exact:true}).click();let dialog=f.page.getByRole('dialog',{name:'Colonnes affichées',exact:true});
+      let dialog=await openVisibleColumns(f);
       const reference=dialog.getByRole('checkbox',{name:'Afficher Référence',exact:true});assert.equal(await reference.isChecked(),true);assert.equal(await reference.isDisabled(),true);
       await dialog.getByRole('checkbox',{name:'Afficher Casier',exact:true}).uncheck();await dialog.getByRole('checkbox',{name:'Afficher Dernière réception',exact:true}).uncheck();await dialog.getByRole('button',{name:'Terminer',exact:true}).click();
       await f.page.waitForURL(url=>!url.searchParams.has('col.casier')&&!url.searchParams.has('sort'));assert.equal(await f.page.locator('th[data-column="casier"]').count(),0);assert.equal(await f.page.locator('th[data-column="receivedAt"]').count(),0);
       await f.page.reload();await row(f,P).waitFor();assert.equal(await f.page.locator('th[data-column="casier"]').count(),0);assert.equal(Number(await resize.getAttribute('aria-valuenow')),190);
-      await f.page.getByRole('button',{name:/^Filtres et options/}).click();const downloaded=f.page.waitForEvent('download');await f.page.getByRole('button',{name:'Exporter 6 dossiers filtrés',exact:true}).click();const file=await downloaded;const book=XLSX.read(await fs.readFile(await file.path()),{type:'buffer'});const records=XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]],{header:1});
+      const records=await exportFiltered(f,6);
       assert.equal(records[0].includes('Casier'),false);assert.equal(records[0].includes('Dernière réception'),false);assert.equal(records[0][0],'Référence');
-      await f.page.getByRole('button',{name:'Fermer les filtres',exact:true}).click();await selectPreset(f,'Paiements','payments');assert.equal(await f.page.locator('th[data-column="receivedAt"]').count(),1);
+      await selectPreset(f,'Paiements','payments');assert.equal(await f.page.locator('th[data-column="receivedAt"]').count(),1);
       await selectPreset(f,'Travail quotidien','daily');assert.equal(await f.page.locator('th[data-column="receivedAt"]').count(),0);
-      await f.page.getByRole('button',{name:'Colonnes',exact:true}).click();dialog=f.page.getByRole('dialog',{name:'Colonnes affichées',exact:true});await dialog.getByRole('button',{name:'Rétablir les colonnes',exact:true}).click();await dialog.getByRole('button',{name:'Terminer',exact:true}).click();
+      dialog=await openVisibleColumns(f);await dialog.getByRole('button',{name:'Rétablir les colonnes',exact:true}).click();await dialog.getByRole('button',{name:'Terminer',exact:true}).click();
       await f.page.locator('th[data-column="casier"]').waitFor();assert.equal(Number(await resize.getAttribute('aria-valuenow')),190,'Restoring visible columns does not erase personal widths.');await assertNoBusinessChange(f,before);
     });
     await scenario('mobile-column-choices-keep-reference-and-filter-only-visible-data',async f=>{
       await f.page.setViewportSize({width:390,height:844});const before=structuredClone(f.tables.colis);await open(f);
-      await f.page.getByRole('button',{name:'Colonnes',exact:true}).click();const dialog=f.page.getByRole('dialog',{name:'Colonnes affichées',exact:true});
+      const dialog=await openVisibleColumns(f);
       for(const label of ['Client','Paiement','Action'])await dialog.getByRole('checkbox',{name:`Afficher ${label}`,exact:true}).uncheck();await dialog.getByRole('button',{name:'Terminer',exact:true}).click();
       assert.equal(await row(f,P2).locator('[data-column="client"]').count(),0);assert.equal(await row(f,P2).getByRole('button',{name:'Continuer',exact:true}).count(),0);await row(f,P2).getByRole('button',{name:'EXP-TAB002',exact:true}).waitFor();
-      await f.page.getByRole('button',{name:/^Filtres par colonne/}).click();assert.equal(await columnDialog(f).locator('[data-column-choice="paymentState"]').count(),0);assert.equal(await columnDialog(f).locator('[data-column-choice="client"]').count(),0);await columnDialog(f).press('Escape');
+      await openColumnChooser(f);assert.ok(await columnDialog(f).locator('[data-column-choice]').count()>0);assert.equal(await columnDialog(f).locator('[data-column-choice="paymentState"]').count(),0);assert.equal(await columnDialog(f).locator('[data-column-choice="client"]').count(),0);await columnDialog(f).press('Escape');
       await f.page.reload();await row(f,P2).waitFor();assert.equal(await row(f,P2).locator('[data-column="client"]').count(),0);assert.equal(await f.page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false);await assertNoBusinessChange(f,before);
     });
     await scenario('new-payment-status-and-optimized-dimensions-never-invent-ready-or-paid-data',async f=>{
@@ -270,9 +318,11 @@ async function main() {
       for(const [label,view] of [['Travail quotidien','daily'],['Paiements','payments'],['Départs','departures']]) {
         await selectPreset(f,label,view);
         const table=f.page.getByRole('table',{name:'Dossiers d’expédition',exact:true});
-        const columns=await table.locator('thead th[data-column] .dossier-table-sort').evaluateAll(buttons=>buttons.map(button=>({key:button.closest('th').dataset.column,label:button.textContent.trim()})));
+        const columns=await table.locator('thead th[data-column] .dossier-table-sort').evaluateAll(buttons=>buttons.map(button=>({key:button.closest('th').dataset.column,label:button.closest('th').dataset.columnLabel,visible:button.textContent.trim(),name:button.getAttribute('aria-label')})));
         assert.ok(columns.length>=8);
         for(const column of columns) {
+          // A short visible heading keeps the full column name for every command and dialog.
+          assert.equal(column.name,column.label);assert.ok(column.visible&&column.visible.split(/\s+/).every(word=>column.label.toLocaleLowerCase('fr').includes(word.toLocaleLowerCase('fr'))),`${column.key}: “${column.visible}” is part of “${column.label}”.`);
           const heading=table.locator(`th[data-column="${column.key}"]`);
           await heading.getByRole('button',{name:`Filtrer la colonne ${column.label}`,exact:true}).click();
           const options=columnDialog(f);
@@ -299,12 +349,8 @@ async function main() {
       options=await filterColumn(f,'requested','min','90');await waitIds(f,[P4]);
       assert.equal(new URL(f.page.url()).searchParams.get('col.remaining'),JSON.stringify({mode:'min',value:'1'}));
       await f.page.reload();await row(f,P4).waitFor();await waitIds(f,[P4]);
-      await f.page.getByRole('button',{name:/^Filtres et options/}).click();
-      const downloadPromise=f.page.waitForEvent('download');await f.page.getByRole('button',{name:'Exporter 1 dossiers filtrés',exact:true}).click();
-      const download=await downloadPromise;const book=XLSX.read(await fs.readFile(await download.path()),{type:'buffer'});
-      const data=XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]],{header:1});
+      const data=await exportFiltered(f,1);
       assert.equal(data.length,2);assert.equal(data[1][0],'EXP-TAB004');assert.equal(data[1][data[0].indexOf('Paiement')],'Paiement partiel');
-      await f.page.getByRole('button',{name:'Fermer les filtres',exact:true}).click();
       await f.page.getByRole('button',{name:'Retirer les filtres',exact:true}).click();await waitIds(f,[P,P2,P3,P4,P5,P6]);
       assert.equal([...new URL(f.page.url()).searchParams.keys()].some(key=>key.startsWith('col.')),false);
       await assertNoBusinessChange(f,before);
@@ -335,9 +381,12 @@ async function main() {
       const before=structuredClone(f.tables.colis);
       await open(f,new URLSearchParams({table:'payments','col.paid':JSON.stringify({mode:'min',value:'50'})}).toString());
       await waitIds(f,[P,P2,P3,P4,P5,P6]);await f.page.waitForURL(url=>!url.searchParams.has('col.paid'));
-      await f.page.getByRole('button',{name:/^Filtres par colonne/}).click();
+      await openColumnChooser(f);
       const values=await columnDialog(f).locator('[data-column-choice]').evaluateAll(buttons=>buttons.map(button=>button.dataset.columnChoice));
       assert.equal(values.includes('paid'),false);assert.equal(values.includes('requested'),false);assert.equal(await f.page.locator('th[data-column="paid"]').count(),0);
+      // Without perm_export_colis, the open « Affichage » dialog offers every reading setting but no export.
+      const display=await openDisplay(f);await display.getByRole('combobox',{name:'Tri par défaut',exact:true}).waitFor();
+      assert.equal(await display.getByRole('button',{name:/^Export/}).count(),0);assert.equal(await display.getByText(/^Export/).count(),0);await closeDisplay(f);
       await assertNoBusinessChange(f,before);
     },{restricted:true});
     await scenario('column-widths-resize-by-mouse-and-keyboard-and-keep-sticky-identities-aligned',async f=>{
@@ -384,7 +433,7 @@ async function main() {
       await open(f);const separator=f.page.getByRole('separator',{name:'Redimensionner Référence',exact:true});
       await separator.focus();await separator.press('Shift+ArrowRight');await f.page.waitForFunction(()=>document.querySelector('[aria-label="Redimensionner Référence"]').getAttribute('aria-valuenow')==='190');
       const savedA=await f.page.evaluate(id=>localStorage.getItem(`expedile:table-widths:v1:${encodeURIComponent(id)}:daily`),ids.A);assert.equal(JSON.parse(savedA).ref,190);
-      await f.page.getByRole('button',{name:'Colonnes',exact:true}).click();let visibility=f.page.getByRole('dialog',{name:'Colonnes affichées',exact:true});await visibility.getByRole('checkbox',{name:'Afficher Client',exact:true}).uncheck();await visibility.getByRole('button',{name:'Terminer',exact:true}).click();
+      let visibility=await openVisibleColumns(f);await visibility.getByRole('checkbox',{name:'Afficher Client',exact:true}).uncheck();await visibility.getByRole('button',{name:'Terminer',exact:true}).click();
       const hiddenA=await f.page.evaluate(id=>localStorage.getItem(`expedile:table-columns:v1:${encodeURIComponent(id)}:daily`),ids.A);assert.ok(JSON.parse(hiddenA).includes('client'));
       await f.page.getByRole('button',{name:'Se déconnecter',exact:true}).filter({visible:true}).click();await f.page.getByLabel('Email',{exact:true}).waitFor();
       f.tables.profiles.push({id:B,nom:'Madly',role:'directeur',actif:true});
@@ -394,7 +443,7 @@ async function main() {
       await f.context.route('**/auth/v1/user',route=>reply(route,user));
       await f.login();await open(f);assert.equal(Number(await separator.getAttribute('aria-valuenow')),140,'The new account does not inherit the previous user’s width.');
       assert.equal(await f.page.locator('th[data-column="client"]').count(),1,'The new account does not inherit hidden columns.');
-      await f.page.getByRole('button',{name:'Colonnes',exact:true}).click();visibility=f.page.getByRole('dialog',{name:'Colonnes affichées',exact:true});await visibility.getByRole('checkbox',{name:'Afficher Casier',exact:true}).uncheck();await visibility.getByRole('button',{name:'Terminer',exact:true}).click();
+      visibility=await openVisibleColumns(f);await visibility.getByRole('checkbox',{name:'Afficher Casier',exact:true}).uncheck();await visibility.getByRole('button',{name:'Terminer',exact:true}).click();
       await separator.focus();await separator.press('ArrowRight');await f.page.waitForFunction(()=>document.querySelector('[aria-label="Redimensionner Référence"]').getAttribute('aria-valuenow')==='150');
       const values=await f.page.evaluate(({a,b})=>({a:localStorage.getItem(`expedile:table-widths:v1:${encodeURIComponent(a)}:daily`),b:localStorage.getItem(`expedile:table-widths:v1:${encodeURIComponent(b)}:daily`)}),{a:ids.A,b:B});
       assert.equal(values.a,savedA);assert.equal(JSON.parse(values.b).ref,150);assert.equal(f.claims.length,0);assert.deepEqual(businessWrites(f),[]);
@@ -449,9 +498,10 @@ async function main() {
       Object.assign(parcels[5],{devis_total:80,paiement_montant:80,devis_envoye_le:'2026-09-20T08:00:00Z'});
       const before=structuredClone(parcels);await open(f);
       const sort=async(key,direction)=>{
-        if(await f.page.getByRole('combobox',{name:'Tri par défaut',exact:true}).count()===0)await f.page.getByRole('button',{name:/^Filtres et options/}).click();
-        await f.page.getByRole('combobox',{name:'Tri par défaut',exact:true}).selectOption(`column:${key}:${direction}`);
+        const display=await openDisplay(f);
+        await display.getByRole('combobox',{name:'Tri par défaut',exact:true}).selectOption(`column:${key}:${direction}`);
         await f.page.waitForURL(url=>url.searchParams.get('sort')===key&&url.searchParams.get('dir')===direction);
+        assert.equal(await display.isVisible(),true,'Choosing a sort keeps « Affichage » open.');
       };
       for(const [direction,expected] of [['asc',[P3,P,P2]],['desc',[P2,P,P3]]]) {
         await sort('casier',direction);assert.deepEqual((await orderedIds(f)).slice(0,3),expected);
@@ -466,7 +516,7 @@ async function main() {
       await selectPreset(f,'Départs','departures');assert.equal(new URL(f.page.url()).searchParams.get('sort'),'sentAt');
       assert.equal(await f.page.locator('thead th[aria-sort="descending"]').count(),0,'An unrelated view does not pretend to sort an invisible quote-sent date.');
       await selectPreset(f,'Paiements','payments');assert.deepEqual((await orderedIds(f)).slice(0,3),[P4,P6,P5]);
-      if(await f.page.getByRole('button',{name:'Fermer les filtres',exact:true}).count())await f.page.getByRole('button',{name:'Fermer les filtres',exact:true}).click();await f.page.screenshot({path:`${output}/payments-sorted-descending.png`,fullPage:true});
+      await closeDisplay(f);await f.page.screenshot({path:`${output}/payments-sorted-descending.png`,fullPage:true});
       await assertNoBusinessChange(f,before);
     });
     await scenario('mobile-sort-menu-offers-all-data-columns-in-every-view-and-both-directions',async f=>{
@@ -477,8 +527,7 @@ async function main() {
         ['Départs','departures',['ref','client','receivedAt','statusLabel','paymentState','departure','destination','packages','readiness','optimizedDimensions','optimizedWeight','requested']],
       ]) {
         await selectPreset(f,label,view);
-        if(await f.page.getByRole('combobox',{name:'Tri par défaut',exact:true}).count()===0)await f.page.getByRole('button',{name:/^Filtres et options/}).click();
-        const menu=f.page.getByRole('combobox',{name:'Tri par défaut',exact:true});
+        const menu=(await openDisplay(f)).getByRole('combobox',{name:'Tri par défaut',exact:true});
         const available=await menu.locator('option').evaluateAll(options=>options.map(option=>option.value).filter(value=>value.startsWith('column:')));
         for(const key of keys)for(const direction of ['asc','desc']) {
           assert.ok(available.includes(`column:${key}:${direction}`));await menu.selectOption(`column:${key}:${direction}`);
@@ -488,7 +537,7 @@ async function main() {
         assert.deepEqual(await orderedIds(f),[P6,P5,P4,P3,P2,P],'Mobile cards follow the chosen descending order.');
         assert.equal(await f.page.getByRole('table',{name:'Dossiers d’expédition',exact:true}).count(),0);
         assert.equal(await f.page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false);
-        await f.page.getByRole('button',{name:'Fermer les filtres',exact:true}).click();
+        await closeDisplay(f);
       }
       await assertNoBusinessChange(f,before);
     });
@@ -574,6 +623,10 @@ async function main() {
     },{restricted:true});
     await scenario('finance-preset-permissions-cannot-be-bypassed-through-the-url',async f=>{
       await open(f,'table=payments');
+      // Count every element (button, tab, link or text) of the view strip, so a new widget role cannot make this pass vacuously.
+      const views=f.page.locator('[aria-label="Vues du tableau"]');
+      assert.deepEqual(await views.getByRole('button').allTextContents(),['Travail quotidien','Départs']);
+      assert.equal(await views.evaluate(node=>[node,...node.querySelectorAll('*')].filter(item=>/Paiements/i.test(`${item.textContent} ${item.getAttribute('aria-label')||''} ${item.getAttribute('title')||''}`)).length),0);
       assert.equal(await f.page.getByRole('button',{name:'Paiements',exact:true}).count(),0);
       assert.equal(await cell(f,P,'requested').count(),0);
       await f.page.getByText(/montants.*autorisation|financ.*autorisation|accès.*financ|pas.*autorisé|pas.*accès/i).first().waitFor();
@@ -588,6 +641,26 @@ async function main() {
       await row(f,P2).waitFor();await f.page.getByText('1 dossier sélectionné',{exact:true}).waitFor({state:'hidden'});
       assert.equal(await row(f,P).count(),0);assert.equal(f.claims.length,0);assert.deepEqual(businessWrites(f),[]);
     });
+    for(const dark of [false,true])await scenario(`phone-bulk-status-is-chosen-then-applied-explicitly-${dark?'dark':'light'}`,async f=>{
+      await f.page.setViewportSize({width:390,height:844});await f.context.addInitScript(dark=>localStorage.setItem('expedile-theme',dark?'dark':'light'),dark);
+      await open(f);await f.page.waitForFunction(dark=>document.documentElement.classList.contains('dark')===dark,dark);
+      for(const [id,ref] of [[P4,'EXP-TAB004'],[P5,'EXP-TAB005']])await row(f,id).getByRole('checkbox',{name:`Sélectionner le dossier ${ref}`,exact:true}).check();
+      const bar=f.page.getByRole('group',{name:'Actions sur la sélection',exact:true});await bar.getByText('2 dossiers sélectionnés',{exact:true}).waitFor();
+      const select=bar.getByRole('combobox',{name:'Changer le statut',exact:true}),apply=bar.getByRole('button',{name:'Appliquer',exact:true});
+      assert.equal(await apply.isDisabled(),true,'Nothing to apply before a status is chosen.');
+      const edge=await select.evaluate(node=>window.__pintaContrast.ink(node.parentElement,getComputedStyle(node).borderTopColor));assert.ok(edge>=3,`The status field keeps a 3:1 edge on the bar (${edge.toFixed(2)}).`);
+      for(const control of [select,apply]){const box=await control.boundingBox();assert.ok(box.height>=44&&box.x>=0&&box.x+box.width<=391,'The picker fits the phone with 44px targets.');}
+      const statusWrites=()=>f.requests.filter(request=>request.method==='PATCH'&&request.path==='/rest/v1/colis');
+      // A keystroke on the closed select (typeahead, arrows) changes its value: it must not run anything.
+      await select.focus();await f.page.keyboard.press('a');await select.selectOption('transit');
+      await f.page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+      assert.deepEqual(statusWrites(),[],'Choosing a status never changes a dossier.');assert.equal(await select.inputValue(),'transit');
+      await apply.click();await bar.waitFor({state:'hidden'});
+      const writes=statusWrites();assert.equal(writes.length,2,'Exactly one update per selected dossier.');
+      assert.deepEqual(writes.map(request=>request.input.statut),['transit','transit']);
+      assert.deepEqual(f.tables.colis.filter(parcel=>parcel.statut==='transit').map(parcel=>parcel.id).sort(),[P4,P5].sort());
+      assert.equal(f.claims.length,0);
+    });
     await scenario('unavailable-person-keeps-owned-work-but-cannot-take-pool-work',async f=>{
       await open(f);if(await take(f).count())assert.equal(await take(f).isDisabled(),true);
       await selectScope(f,'Mes tâches','mine');assert.deepEqual(await allIds(f),[P2]);
@@ -601,7 +674,8 @@ async function main() {
     },{failWork:true});
     await scenario('mobile-open-filters-leave-dossiers-clickable-and-keyboard-controls-visible',async f=>{
       await f.page.setViewportSize({width:390,height:844});await open(f);
-      await f.page.getByRole('button',{name:/^Filtres et options/}).click();
+      const toggle=filtersButton(f);assert.equal(await toggle.getAttribute('aria-expanded'),'false');await toggle.click();
+      assert.equal(await toggle.getAttribute('aria-expanded'),'true');assert.equal(await f.page.getByRole('dialog').count(),0,'The filters panel is inline, never modal.');
       const close=f.page.getByRole('button',{name:'Fermer les filtres',exact:true});
       await f.page.keyboard.press('Tab');await close.focus();
       await close.evaluate(() => new Promise(resolve => requestAnimationFrame(resolve)));
@@ -621,16 +695,17 @@ async function main() {
       assert.equal(f.claims.length,0);assert.deepEqual(businessWrites(f),[]);
     },{unavailable:true});
     await scenario('excel-download-matches-visible-preset-and-recorded-amounts',async f=>{
-      await open(f);await f.page.getByRole('button',{name:/^Filtres et options/}).click();
+      await open(f);
       const expected={daily:['Référence','Client','Dernière réception','Statut du dossier','Paiement','Travail à faire','Qui s’en occupe','Casier','Cartons reçus','Dimensions finales','Poids final (kg)','Prix du devis'],payments:['Référence','Client','Dernière réception','Statut du dossier','Paiement','Demandé','Payé','Reste à payer','Devis envoyé le'],departures:['Référence','Client','Dernière réception','Statut du dossier','Paiement','Départ prévu','Destination','Colis à expédier','Prêt à partir ?','Dimensions finales','Poids final (kg)','Prix du devis']};
       for(const [label,view] of [['Travail quotidien','daily'],['Paiements','payments'],['Départs','departures']]) {
         await selectPreset(f,label,view);
-        const downloaded=f.page.waitForEvent('download');await f.page.getByRole('button',{name:'Exporter 6 dossiers filtrés',exact:true}).click();
-        const download=await downloaded;assert.equal(await download.failure(),null);
+        const data=await exportFiltered(f,6);
         const visibleReferences=await rows(f).locator('[data-column="ref"] .dossier-table-reference').allTextContents();
-        const workbook=XLSX.read(await fs.readFile(await download.path()),{type:'buffer'});
-        const data=XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]],{header:1});
-        assert.deepEqual(data[0],expected[view]);assert.deepEqual(data.slice(1).map(line=>line[0]),visibleReferences,'Excel follows the visible row order.');assert.equal(data.length,7);assert.equal(new Set(data.slice(1).map(line=>line[0])).size,6);
+        assert.deepEqual(data[0],expected[view]);
+        // Short visible headings never leak into the export: it keeps every full column label.
+        const headings=await f.page.locator('thead th[data-column-label]:not([data-column="action"])').evaluateAll(nodes=>nodes.map(node=>({label:node.dataset.columnLabel,visible:node.querySelector('.dossier-table-sort')?.textContent.trim()})));
+        assert.deepEqual(headings.map(item=>item.label),expected[view],`${view}: export headers equal the full labels of the visible columns, in order.`);
+        if(view==='daily')assert.ok(headings.some(item=>item.visible!==item.label),'The daily view really displays at least one short heading.');assert.deepEqual(data.slice(1).map(line=>line[0]),visibleReferences,'Excel follows the visible row order.');assert.equal(data.length,7);assert.equal(new Set(data.slice(1).map(line=>line[0])).size,6);
         if(view==='payments') {
           const unknown=data.find(line=>line[0]==='EXP-TAB001'),partial=data.find(line=>line[0]==='EXP-TAB004');
           assert.equal(unknown[data[0].indexOf('Demandé')],'À calculer');assert.deepEqual(['Demandé','Payé','Reste à payer'].map(label=>partial[data[0].indexOf(label)]),[100,30,70]);
@@ -640,11 +715,18 @@ async function main() {
       assert.equal(f.claims.length,0);assert.deepEqual(businessWrites(f),[]);
     });
     await scenario('financial-view-does-not-grant-financial-export-permission',async f=>{
-      await open(f);await f.page.getByRole('button',{name:/^Filtres et options/}).click();
-      await f.page.getByRole('button',{name:'Exporter 6 dossiers filtrés',exact:true}).waitFor();
-      await selectPreset(f,'Paiements','payments');assert.equal(await f.page.getByRole('button',{name:/^Exporter/}).count(),0);
+      await open(f);let display=await openDisplay(f);
+      await display.getByRole('button',{name:'Exporter 6 dossiers filtrés',exact:true}).waitFor();
+      await selectPreset(f,'Paiements','payments');
+      // The menu is open while counting, so the absence of an export command is real.
+      display=await openDisplay(f);await display.getByRole('combobox',{name:'Tri par défaut',exact:true}).waitFor();
+      assert.equal(await display.getByRole('button',{name:/^Export/}).count(),0);assert.equal(await f.page.getByRole('button',{name:/^Exporter/}).count(),0);
+      await closeDisplay(f);
       await row(f,P4).getByRole('checkbox',{name:'Sélectionner le dossier EXP-TAB004',exact:true}).check();
-      assert.equal(await f.page.getByRole('button',{name:/^Exporter/}).count(),0);assert.deepEqual(businessWrites(f),[]);
+      await f.page.getByRole('group',{name:'Actions sur la sélection',exact:true}).waitFor();
+      assert.equal(await f.page.getByRole('button',{name:/^Exporter/}).count(),0);
+      display=await openDisplay(f);assert.equal(await display.getByRole('button',{name:/^Export/}).count(),0);await closeDisplay(f);
+      assert.deepEqual(businessWrites(f),[]);
     },{restricted:true,financeReadNoExport:true});
     await scenario('filters-and-scroll-survive-opening-and-returning-from-an-expedition',async f=>{
       for(let i=20;i<80;i++) {
@@ -676,6 +758,162 @@ async function main() {
       }
       assert.deepEqual(businessWrites(f),[]);
     });
+    for(const [width,height] of [[1440,1000],[390,844],[320,568]])for(const dark of [false,true])await scenario(`toolbar-filters-panel-and-display-dialog-${width}-${dark?'dark':'light'}`,async f=>{
+      await f.page.setViewportSize({width,height});await f.context.addInitScript(dark=>localStorage.setItem('expedile-theme',dark?'dark':'light'),dark);
+      const before=structuredClone(f.tables.colis);await open(f);await f.page.waitForFunction(dark=>document.documentElement.classList.contains('dark')===dark,dark);
+      const phone=width<640,filters=filtersButton(f),display=displayButton(f);
+      const count=f.page.getByRole('status').filter({hasText:/^\d+ dossiers?$/});
+      const assertCount=async()=>{const n=await rows(f).count();assert.equal((await count.innerText()).trim(),`${n} ${n>1?'dossiers':'dossier'}`,'The count names exactly the dossiers displayed.');};
+      await assertCount();
+      for(const button of [filters,display]){const box=await button.boundingBox();assert.ok(box.width>=44&&box.height>=44,'Toolbar buttons keep a 44px target.');}
+      // On a phone both buttons are icons; their accessible names stay complete.
+      assert.equal((await filters.innerText()).trim(),phone?'':'Filtres');assert.equal((await display.innerText()).trim(),phone?'':'Affichage');
+      // aria-controls names the panel only while it exists (a dangling IDREF is invalid).
+      assert.equal(await filters.getAttribute('aria-label'),'Filtres');assert.equal(await filters.getAttribute('aria-controls'),null);assert.equal(await filters.getAttribute('aria-expanded'),'false');
+      assert.equal(await f.page.locator('#dossier-filters-panel').count(),0);
+      // « Filtres »: an inline panel with the work filters and the column-filter entry only.
+      await filters.click();assert.equal(await filters.getAttribute('aria-expanded'),'true');
+      const panel=f.page.getByRole('group',{name:'Filtres des dossiers',exact:true});await panel.waitFor();assert.equal(await panel.getAttribute('id'),'dossier-filters-panel');assert.equal(await filters.getAttribute('aria-controls'),'dossier-filters-panel');
+      assert.equal(await f.page.getByRole('dialog').count(),0,'The filters panel is not modal.');
+      for(const name of ['File de travail','Étape','Responsable de la tâche','Destination'])assert.equal(await panel.getByRole('combobox',{name,exact:true}).count(),1,`${name} stays in Filtres.`);
+      await panel.getByRole('button',{name:'Inclure les archives',exact:true}).waitFor();
+      // A work queue never lists archives, so no toggle may claim to include them.
+      const queue=panel.getByRole('combobox',{name:'File de travail',exact:true});
+      await queue.selectOption('preparation');await f.page.waitForURL(url=>url.searchParams.get('work')==='preparation');
+      assert.equal(await panel.getByRole('button',{name:/archives/i}).count(),0,'No archives toggle under a work queue.');
+      await queue.selectOption('');await f.page.waitForURL(url=>!url.searchParams.has('work'));
+      await panel.getByRole('button',{name:'Inclure les archives',exact:true}).waitFor();
+      const entry=panel.getByRole('button',{name:'Filtres par colonne',exact:true});assert.equal((await entry.innerText()).trim(),'Filtres par colonne','The visible entry text is its accessible name at every width.');
+      assert.equal(await entry.getAttribute('aria-haspopup'),'dialog');
+      for(const name of ['Tri par défaut','Regrouper les dossiers','Affichage des dossiers'])assert.equal(await f.page.getByRole('combobox',{name,exact:true}).count(),0,`${name} lives in Affichage only.`);
+      assert.equal(await f.page.getByRole('button',{name:/^Export/}).count(),0);
+      await panel.getByRole('combobox',{name:'Destination',exact:true}).selectOption('974');
+      await f.page.getByRole('button',{name:'Filtres · 1',exact:true}).waitFor();
+      const active=f.page.getByRole('group',{name:'Filtres actifs',exact:true}),chips=active.getByRole('button',{name:/^Retirer le filtre /});
+      assert.equal(await chips.count(),1);assert.equal((await filters.locator('.dossier-toolbar-badge').innerText()).trim(),'1');await assertCount();
+      await panel.getByRole('combobox',{name:'Responsable de la tâche',exact:true}).selectOption('mine');
+      await f.page.getByRole('button',{name:'Filtres · 2',exact:true}).waitFor();assert.equal(await chips.count(),2,'The button count equals the active filter chips.');
+      assert.equal((await filters.locator('.dossier-toolbar-badge').innerText()).trim(),'2');await assertCount();
+      // Clearing every filter also folds the panel, as before the redesign.
+      await active.getByRole('button',{name:'Retirer les filtres',exact:true}).click();
+      await f.page.getByRole('button',{name:'Filtres',exact:true}).waitFor();assert.equal(await filters.locator('.dossier-toolbar-badge').count(),0);await waitIds(f,[P,P2,P3,P4,P5,P6]);await assertCount();
+      await panel.waitFor({state:'hidden'});assert.equal(await filters.getAttribute('aria-expanded'),'false');
+      await filters.click();await panel.getByRole('button',{name:'Fermer les filtres',exact:true}).click();await panel.waitFor({state:'hidden'});assert.equal(await filters.getAttribute('aria-expanded'),'false');
+      // « Affichage »: a keyboard-operable dialog that holds every reading and organisation preference.
+      assert.equal(await display.getAttribute('aria-haspopup'),'dialog');assert.equal(await display.getAttribute('aria-expanded'),'false');
+      await display.focus();await f.page.keyboard.press('Enter');const dialog=displayDialog(f);await dialog.waitFor();
+      assert.equal(await display.getAttribute('aria-expanded'),'true');assert.equal(await display.getAttribute('aria-controls'),'dossier-display-dialog');assert.equal(await dialog.getAttribute('id'),'dossier-display-dialog');
+      assert.equal(await dialog.evaluate(node=>node.contains(document.activeElement)),true,'Keyboard focus moves into Affichage.');
+      const columns=dialog.getByRole('button',{name:'Colonnes',exact:true});assert.equal(await columns.getAttribute('aria-haspopup'),'dialog');
+      await dialog.getByText(/^\d+ sur \d+ colonnes affichées$/).waitFor();
+      for(const text of ['Colonnes','Affichage des dossiers','Taille du texte','Regrouper','Tri par défaut'])assert.ok(await dialog.getByText(text,{exact:true}).count()>=1,`Affichage shows « ${text} ».`);
+      // WCAG 2.5.3: every visible field label is part of its control's accessible name.
+      for(const field of await dialog.locator('label.dossier-display-field').evaluateAll(nodes=>nodes.map(node=>({visible:node.querySelector('span').textContent.trim(),name:node.querySelector('select').getAttribute('aria-label')}))))assert.ok(field.name.startsWith(field.visible),`« ${field.visible} » is in the name « ${field.name} ».`);
+      const layout=dialog.getByRole('combobox',{name:'Affichage des dossiers',exact:true}),size=dialog.getByRole('spinbutton',{name:'Taille du texte des dossiers',exact:true}),group=dialog.getByRole('combobox',{name:'Regrouper les dossiers',exact:true}),sort=dialog.getByRole('combobox',{name:'Tri par défaut',exact:true});
+      assert.deepEqual(await layout.locator('option').evaluateAll(options=>options.map(option=>option.value)),['auto','table','cards']);
+      const exportButton=dialog.getByRole('button',{name:'Exporter 6 dossiers filtrés',exact:true});
+      const controls=[columns,layout,dialog.getByRole('button',{name:'Réduire le texte des dossiers',exact:true}),size,dialog.getByRole('button',{name:'Agrandir le texte des dossiers',exact:true}),group,sort,exportButton];
+      // Editable fields keep a visible edge (3:1) in both themes: « html.dark input/select » cannot reset it.
+      for(const field of [layout,size,group,sort]){const edge=await field.evaluate(node=>({name:node.getAttribute('aria-label'),ratio:window.__pintaContrast.ink(node.parentElement,getComputedStyle(node).borderTopColor)}));assert.ok(edge.ratio>=3,`« ${edge.name} » keeps a 3:1 border (${edge.ratio.toFixed(2)}).`);}
+      const box=await dialog.boundingBox();assert.ok(box.x>=0&&box.y>=0&&box.x+box.width<=width+1&&box.y+box.height<=height+1,'Affichage fits inside the viewport.');
+      if(width>=768){const anchor=await display.boundingBox();assert.ok(Math.abs(box.x+box.width-anchor.x-anchor.width)<=2,'On a large screen Affichage hangs under its button, right edges aligned.');}
+      const scrolling=await dialog.evaluate(node=>({overflow:getComputedStyle(node).overflowY,scrolls:node.scrollHeight>node.clientHeight+1}));
+      assert.ok(['auto','scroll'].includes(scrolling.overflow),'Affichage scrolls inside itself.');if(height<=568)assert.equal(scrolling.scrolls,true,'The short phone really needs the internal scroll.');
+      for(const control of controls){
+        await control.scrollIntoViewIfNeeded();const b=await control.boundingBox();
+        assert.ok(b.height>=44&&b.x>=box.x-1&&b.x+b.width<=box.x+box.width+1&&b.y>=0&&b.y+b.height<=height+1,'Every Affichage control is reachable inside the dialog.');
+        assert.ok(await control.evaluate(node=>parseFloat(getComputedStyle(node).fontSize))>=14,'Affichage controls keep a fixed readable size.');
+      }
+      await noPageOverflow(f);
+      // Changing a setting keeps the dialog open.
+      await group.selectOption('statut');await f.page.waitForURL(url=>url.searchParams.get('view')==='statut');assert.equal(await dialog.isVisible(),true);
+      await group.selectOption('priority');await f.page.waitForURL(url=>(url.searchParams.get('view')||'priority')==='priority');assert.equal(await dialog.isVisible(),true);
+      // Escape first undoes a typed size, then closes and returns focus to the trigger.
+      await size.fill('17');await size.press('Escape');assert.equal(await size.inputValue(),'12');assert.equal(await dialog.isVisible(),true,'Escape in a dirty size field does not close Affichage.');
+      await size.press('Escape');await dialog.waitFor({state:'hidden'});
+      assert.equal(await display.evaluate(node=>node===document.activeElement),true,'Escape returns focus to Affichage.');assert.equal(await display.getAttribute('aria-expanded'),'false');
+      assert.ok([null,'12'].includes(await f.page.evaluate(id=>localStorage.getItem(`expedile:table-text:v1:${id}:daily`),ids.A)),'An abandoned size is never saved.');
+      await display.click();await dialog.waitFor();await f.page.mouse.click(2,height-2);await dialog.waitFor({state:'hidden'});
+      assert.equal(await display.evaluate(node=>node===document.activeElement),true,'A backdrop click returns focus to Affichage.');
+      await display.click();await dialog.waitFor();
+      const axe=await new AxeBuilder({page:f.page}).include('[data-testid="display-options-dialog"]').withTags(['wcag2a','wcag2aa','wcag21aa','wcag22aa']).analyze();
+      assert.deepEqual(axe.violations.map(item=>({id:item.id,nodes:item.nodes.map(node=>node.target)})),[]);
+      await f.page.screenshot({path:`${output}/display-dialog-${width}-${dark?'dark':'light'}.png`});
+      await dialog.getByRole('button',{name:'Fermer l’affichage',exact:true}).click();await dialog.waitFor({state:'hidden'});assert.equal(await display.evaluate(node=>node===document.activeElement),true);
+      // « Colonnes » replaces Affichage with the visibility dialog; closing it returns to Affichage.
+      await display.click();await columns.click();await dialog.waitFor({state:'hidden'});
+      const visibility=f.page.getByRole('dialog',{name:'Colonnes affichées',exact:true});await visibility.waitFor();await visibility.press('Escape');await visibility.waitFor({state:'hidden'});
+      assert.equal(await display.evaluate(node=>node===document.activeElement),true);
+      await noPageOverflow(f);await assertNoBusinessChange(f,before);
+    });
+    for(const width of [1440,320])for(const dark of [false,true])await scenario(`view-tabs-press-exactly-one-view-and-scroll-inside-their-strip-${width}-${dark?'dark':'light'}`,async f=>{
+      await f.page.setViewportSize({width,height:width===320?568:1000});await f.page.emulateMedia({reducedMotion:'reduce'});await f.context.addInitScript(dark=>localStorage.setItem('expedile-theme',dark?'dark':'light'),dark);
+      await open(f);await f.page.waitForFunction(dark=>document.documentElement.classList.contains('dark')===dark,dark);
+      const strip=f.page.locator('[aria-label="Vues du tableau"]');assert.equal(await strip.getAttribute('role'),'group');
+      if(width===320){const overflow=await strip.evaluate(node=>({style:getComputedStyle(node).overflowX,scrolls:node.scrollWidth>node.clientWidth+1}));assert.ok(['auto','scroll'].includes(overflow.style)&&overflow.scrolls,'At 320px the tabs really overflow and scroll inside their own strip.');}
+      for(const [label,value] of [['Départs','departures'],['Paiements','payments'],['Travail quotidien','daily']]) {
+        await selectPreset(f,label,value);await settle(f);
+        const states=await strip.getByRole('button').evaluateAll(buttons=>buttons.map(button=>({text:button.textContent,pressed:button.getAttribute('aria-pressed')})));
+        assert.deepEqual(states.filter(item=>item.pressed==='true').map(item=>item.text),[label],'Exactly one view is pressed, and its text is the bare label.');
+        assert.ok(states.every(item=>item.pressed==='true'||item.pressed==='false'));
+        const tab=strip.getByRole('button',{name:label,exact:true}),t=await tab.boundingBox(),s=await strip.boundingBox();
+        assert.ok(t.x>=s.x-1&&t.x+t.width<=s.x+s.width+1,`${label}: the selected view is scrolled fully into its strip.`);
+        if(width===320&&value==='departures')assert.ok(await strip.evaluate(node=>node.scrollLeft)>0,'Selecting the last view scrolls the strip, not the page.');
+        const underline=await tab.evaluate(node=>{const C=window.__pintaContrast,style=getComputedStyle(node);const color=/inset/.test(style.boxShadow)?style.boxShadow.match(/rgba?\([^)]*\)/)?.[0]:parseFloat(style.borderBottomWidth)>=2?style.borderBottomColor:null;return color?C.ink(node,color):0;});
+        assert.ok(underline>=3,`${label}: the selected underline reaches 3:1 (${underline.toFixed(2)}).`);
+        assert.ok(await tab.evaluate(node=>window.__pintaContrast.text(node))>=4.5);
+        await noPageOverflow(f);
+      }
+    });
+    for(const dark of [false,true])await scenario(`table-header-pills-and-actions-keep-meaning-and-contrast-${dark?'dark':'light'}`,async f=>{
+      // P5 becomes my own ready task: the shared TaskTakeButton then offers « Continuer ».
+      f.tables.staff_work_actions.find(action=>action.colis_id===P5).assignee_id=ids.A;
+      await f.page.setViewportSize({width:1440,height:1000});await f.page.emulateMedia({reducedMotion:'reduce'});await f.context.addInitScript(dark=>localStorage.setItem('expedile-theme',dark?'dark':'light'),dark);
+      const before=structuredClone(f.tables.colis);await open(f);await f.page.waitForFunction(dark=>document.documentElement.classList.contains('dark')===dark,dark);
+      const table=f.page.getByRole('table',{name:'Dossiers d’expédition',exact:true});
+      // A short heading keeps every command named with the full label.
+      const received=table.locator('th[data-column="receivedAt"]');assert.equal(await received.getAttribute('data-column-label'),'Dernière réception');
+      assert.equal((await received.locator('.dossier-table-sort').textContent()).trim(),'Réception');assert.equal(await received.locator('.dossier-table-sort').getAttribute('aria-label'),'Dernière réception');
+      assert.equal(await received.locator('.dossier-table-heading-text').getAttribute('title'),'Dernière réception');
+      await received.getByRole('button',{name:'Filtrer la colonne Dernière réception',exact:true}).waitFor();await table.getByRole('separator',{name:'Redimensionner Dernière réception',exact:true}).waitFor();
+      // Quiet header filters: never hidden, 24×44 target, icon at least 3:1.
+      const probeFilters=()=>table.locator('thead .dossier-table-filter').evaluateAll(buttons=>buttons.map(button=>{const r=button.getBoundingClientRect(),s=getComputedStyle(button);return {key:button.closest('th').dataset.column,width:r.width,height:r.height,ratio:window.__pintaContrast.text(button),pressed:button.getAttribute('aria-pressed'),visible:s.visibility!=='hidden'&&s.display!=='none',color:s.color,background:s.backgroundColor,dot:getComputedStyle(button,'::after').content};}));
+      await f.page.mouse.move(0,0);await settle(f);let headerFilters=await probeFilters();assert.ok(headerFilters.length>=8);
+      for(const item of headerFilters){assert.ok(item.visible&&item.width>=24&&item.height>=44,`${item.key}: quiet filter keeps its target.`);assert.ok(item.ratio>=3,`${item.key}: idle filter icon ${item.ratio.toFixed(2)}:1.`);assert.equal(item.pressed,'false');}
+      const idle=headerFilters.find(item=>item.key==='client');
+      const options=await filterColumn(f,'client','contains','Camille');await options.press('Escape');await options.waitFor({state:'hidden'});await f.page.mouse.move(0,0);await settle(f);
+      headerFilters=await probeFilters();const pressed=headerFilters.find(item=>item.key==='client');
+      assert.equal(pressed.pressed,'true');assert.ok(pressed.ratio>=3);assert.ok(pressed.color!==idle.color||pressed.background!==idle.background,'An active column filter looks different from an idle one.');
+      assert.ok(pressed.dot&&pressed.dot!=='none','An active column filter shows its marker.');
+      await f.page.getByRole('button',{name:'Retirer les filtres',exact:true}).click();await waitIds(f,[P,P2,P3,P4,P5,P6]);
+      // Pills: exact label, deliberate tone; a partial payment is never green.
+      for(const [id,key,label,tone] of [[P4,'paymentState','Paiement partiel','waiting'],[P4,'statusLabel','Paiement partiel','waiting'],[P5,'paymentState','Payé','done'],[P5,'statusLabel','Payé','done'],[P3,'statusLabel',null,'waiting'],[P,'statusLabel',null,'neutral']]) {
+        const pill=cell(f,id,key).locator('.dossier-pill');assert.equal(await pill.count(),1);
+        const text=(await pill.innerText()).trim();assert.equal(text,(await cell(f,id,key).innerText()).trim(),'The pill holds the whole cell text, with no hidden prefix.');
+        if(label)assert.equal(text,label);assert.equal(await pill.getAttribute('data-tone'),tone,`${id}/${key}: “${text}” uses the ${tone} tone.`);
+      }
+      const pillRatios=async id=>{await settle(f);return row(f,id).locator('.dossier-pill').evaluateAll(nodes=>nodes.map(node=>({text:node.textContent,ratio:window.__pintaContrast.text(node)})));};
+      const assertPills=async(state,ids)=>{for(const id of ids){const values=await pillRatios(id);assert.ok(values.length>=2);assert.deepEqual(values.filter(item=>item.ratio<4.5),[],`${state}: pill text keeps 4.5:1.`);}};
+      await f.page.mouse.move(0,0);await assertPills('normal',[P,P2,P3,P4,P5,P6]);
+      for(const id of [P,P3,P4,P5]){await cell(f,id,'client').hover();await assertPills('hover',[id]);}
+      for(const id of [P4,P5])await row(f,id).getByRole('checkbox',{name:/^Sélectionner le dossier /}).check();
+      await f.page.mouse.move(0,0);await assertPills('selected',[P4,P5]);for(const id of [P4,P5]){await cell(f,id,'client').hover();await assertPills('selected-hover',[id]);}
+      await f.page.getByRole('button',{name:'Désélectionner tout',exact:true}).click();await f.page.mouse.move(0,0);
+      // Actions: « Continuer » filled, « Je m’en occupe » outlined, « Consulter » quiet; all legible.
+      const probe=locator=>locator.evaluate(node=>{const s=getComputedStyle(node),C=window.__pintaContrast;return {kind:node.dataset.takeKind||null,background:s.backgroundColor,alpha:C.rgba(s.backgroundColor)[3],border:parseFloat(s.borderTopWidth),borderColor:s.borderTopColor,borderRatio:C.ink(node.parentElement,s.borderTopColor),ratio:C.text(node),height:node.getBoundingClientRect().height,justify:s.justifyContent};});
+      await settle(f);
+      const ownTake=await probe(row(f,P5).getByRole('button',{name:'Continuer',exact:true})),ownOpen=await probe(row(f,P2).getByRole('button',{name:'Continuer',exact:true})),claim=await probe(take(f)),consult=await probe(row(f,P3).getByRole('button',{name:'Consulter',exact:true}));
+      assert.equal(ownTake.kind,'continue');assert.equal(claim.kind,'claim');
+      for(const item of [ownTake,ownOpen])assert.ok(item.alpha===1&&item.background===ownOpen.background,`Both « Continuer » buttons are filled alike (${ownTake.background} / ${ownOpen.background}).`);
+      assert.equal(claim.alpha,0,'« Je m’en occupe » is outlined, not filled.');assert.ok(claim.border>=1&&claim.borderRatio>=3,'Its outline is visible.');
+      assert.notEqual(consult.borderColor,claim.borderColor,'« Consulter » stays visibly quieter than the claim outline.');
+      for(const item of [ownTake,ownOpen,claim,consult]){assert.ok(item.ratio>=4.5,`Action text ${item.ratio.toFixed(2)}:1.`);assert.ok(item.height>=44);assert.equal(item.justify,'center');}
+      await noPageOverflow(f);
+      // The same TaskTakeButton keeps its own filled style in Mon travail.
+      await f.page.goto(`${base}/?section=pool`);const work=f.page.locator(`[data-work-action="${RECEIVE}"]`).getByRole('button',{name:'Je m’en occupe',exact:true});await work.waitFor();
+      const workStyle=await probe(work);assert.equal(workStyle.kind,'claim');assert.equal(workStyle.alpha,1,'Mon travail keeps a filled claim button.');assert.equal(workStyle.border,0);assert.ok(workStyle.ratio>=4.5);
+      await assertNoBusinessChange(f,before);
+    });
     for(const width of [1440,390])for(const dark of [false,true])await scenario(`table-readable-and-accessible-${width}-${dark?'dark':'light'}`,async f=>{
       await f.page.setViewportSize({width,height:width===390?844:1000});await f.context.addInitScript(dark=>localStorage.setItem('expedile-theme',dark?'dark':'light'),dark);
       await open(f);await f.page.waitForFunction(dark=>document.documentElement.classList.contains('dark')===dark,dark);
@@ -683,11 +921,14 @@ async function main() {
       if(width===390){
         const action=await row(f,P2).getByRole('button',{name:'Continuer',exact:true}).boundingBox();
         const bottomNav=await f.page.getByRole('button',{name:'Dossiers',exact:true}).locator('..').boundingBox();
-        assert.ok(action.y>=0&&action.y+action.height<=bottomNav.y,`The first primary action is fully visible before scrolling (${action.y+action.height} <= ${bottomNav.y}).`);
+        assert.ok(action.y>=0&&action.y+action.height<=bottomNav.y-12,`The first primary action is fully visible before scrolling, 12px above the navigation (${action.y+action.height} <= ${bottomNav.y-12}).`);
       }
       if(width===1440) {
-        const separators=await row(f,P2).locator('td[data-column]').evaluateAll(cells=>cells.map(node=>{const style=getComputedStyle(node);return {column:node.dataset.column,width:parseFloat(style.borderRightWidth),color:style.borderRightColor,background:style.backgroundColor};}));
-        assert.ok(separators.length>=10);assert.ok(separators.every(line=>line.width>=1&&line.color!=='rgba(0, 0, 0, 0)'&&line.color!==line.background),'Every desktop cell retains a visible vertical separator in both themes.');
+        const separatorStyle=nodes=>nodes.map(node=>{const style=getComputedStyle(node);return {column:node.dataset.column,width:parseFloat(style.borderRightWidth),color:style.borderRightColor,background:style.backgroundColor,ratio:window.__pintaContrast.ink(node,style.borderRightColor)};});
+        const separators=await row(f,P2).locator('td[data-column]').evaluateAll(separatorStyle),headings=await f.page.locator('thead th[data-column]').evaluateAll(separatorStyle);
+        assert.ok(separators.length>=10);assert.equal(headings.length,separators.length);
+        // A real 1px border (not a shadow) whose colour differs measurably from the cell, on body and header cells.
+        assert.deepEqual([...separators,...headings].filter(line=>!(line.width>=1&&line.color!=='rgba(0, 0, 0, 0)'&&line.color!==line.background&&line.ratio>=1.25)),[],'Every desktop cell retains a visible vertical separator in both themes.');
         const primary=row(f,P2).getByRole('button',{name:'Continuer',exact:true});
         const initialAction=await primary.boundingBox();assert.ok(initialAction.x>=220&&initialAction.x+initialAction.width<=width,'The primary action is visible at the initial horizontal position.');
         await selectPreset(f,'Paiements','payments');

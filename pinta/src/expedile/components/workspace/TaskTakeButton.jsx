@@ -41,7 +41,7 @@ export default function TaskTakeButton({ action, onClaim }) {
   }
 
   return <div className="space-y-1.5">
-    <button disabled={busy || !available} onClick={claim} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40 dark:bg-slate-200 dark:text-slate-900"><UserCheck size={16} />{busy ? 'Ouverture…' : own ? 'Continuer' : 'Je m’en occupe'}</button>
+    <button disabled={busy || !available} onClick={claim} data-take-kind={own ? 'continue' : 'claim'} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40 dark:bg-slate-200 dark:text-slate-900"><UserCheck size={16} />{busy ? 'Ouverture…' : own ? 'Continuer' : 'Je m’en occupe'}</button>
     {!available && <p className="text-xs text-slate-600 dark:text-slate-300">Vous êtes indisponible. Modifiez votre disponibilité dans Mon travail pour prendre une tâche.</p>}
     {error && <p role="alert" className="text-sm text-red-700 dark:text-red-300">{error}</p>}
   </div>;

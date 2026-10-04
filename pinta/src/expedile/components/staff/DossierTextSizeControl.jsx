@@ -1,7 +1,7 @@
 import React, { useEffect, useId, useState } from 'react';
 import { DOSSIER_TEXT_SIZE_BOUNDS, sanitizeDossierTextSize } from '../../domain/dossierTablePreferences';
 
-export default function DossierTextSizeControl({ value, onChange }) {
+export default function DossierTextSizeControl({ value, onChange, label = 'Texte' }) {
   const [draft, setDraft] = useState(String(value));
   const id = useId();
   const { min, max } = DOSSIER_TEXT_SIZE_BOUNDS;
@@ -12,13 +12,15 @@ export default function DossierTextSizeControl({ value, onChange }) {
     if (next !== value) onChange(next);
   };
   return <div className="dossier-text-size" role="group" aria-label="Régler la taille du texte des dossiers">
-    <label htmlFor={id}>Texte</label>
+    <label htmlFor={id}>{label}</label>
     <button type="button" className="dossier-text-size-step" aria-label="Réduire le texte des dossiers" disabled={value <= min} onClick={() => onChange(value - 1)}>A−</button>
     <input id={id} type="number" inputMode="numeric" min={min} max={max} step={1} aria-label="Taille du texte des dossiers" aria-description="De 5 à 20 pixels. Appuyez sur Entrée pour appliquer." value={draft}
       onChange={event => setDraft(event.target.value)} onBlur={commit}
       onKeyDown={event => {
         if (event.key === 'Enter') { event.preventDefault(); commit(); }
-        if (event.key === 'Escape') { event.preventDefault(); setDraft(String(value)); }
+        // Escape first undoes a typed size. Only then may it close the dialog
+        // that hosts this control (native dialog cancel).
+        if (event.key === 'Escape' && draft !== String(value)) { event.preventDefault(); event.stopPropagation(); setDraft(String(value)); }
       }} />
     <span aria-hidden="true">px</span>
     <button type="button" className="dossier-text-size-step" aria-label="Agrandir le texte des dossiers" disabled={value >= max} onClick={() => onChange(value + 1)}>A+</button>

@@ -307,14 +307,16 @@ html.dark .dossier-list {
   --dossier-hover: #35312B;
   --dossier-selected: #203744;
 }
+/* Table rows and cards publish their state colour in --dossier-table-row-bg
+   (dossierTable.css), so a card hovers and selects exactly like a row. */
 .dossier-list-item {
   color: var(--text-primary);
-  background-color: var(--bg-canvas);
+  background-color: var(--dossier-table-row-bg, var(--bg-canvas));
   border-color: var(--border-subtle);
 }
-.dossier-list-item:hover { background-color: var(--dossier-hover); }
+.dossier-list-item:hover { background-color: var(--dossier-table-row-bg, var(--dossier-hover)); }
 .dossier-list-item[data-selected='true'],
-.dossier-list-item[data-selected='true']:hover { background-color: var(--dossier-selected); }
+.dossier-list-item[data-selected='true']:hover { background-color: var(--dossier-table-row-bg, var(--dossier-selected)); }
 .dossier-list-item:has(:focus-visible) { box-shadow: inset 0 0 0 2px var(--brand-text); }
 .dossier-list-item button:focus-visible,
 .dossier-list-item input:focus-visible { outline-color: var(--brand-text); }

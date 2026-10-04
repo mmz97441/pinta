@@ -344,3 +344,33 @@ test('quote price columns are financial and preserve draft and review labels in 
   }
   for (const key of ['requested', 'paid', 'remaining']) assert.equal(TABLE_COLUMNS.payments.find(column => column.key === key).financial, true);
 });
+
+test('short header labels keep the words of their full label, in order, and never reach exports', () => {
+  const words = text => text.toLocaleLowerCase('fr').split(/\s+/).filter(Boolean);
+  const shortened = new Map();
+  for (const [view, columns] of Object.entries(TABLE_COLUMNS)) for (const column of columns) {
+    if (!column.shortLabel) continue;
+    // WCAG 2.5.3: the visible short text must be findable inside the accessible full label.
+    let cursor = 0;
+    const full = words(column.label);
+    for (const word of words(column.shortLabel)) {
+      const index = full.indexOf(word, cursor);
+      assert.ok(index >= 0, `${view}/${column.key}: “${column.shortLabel}” is not contained in “${column.label}”.`);
+      cursor = index + 1;
+    }
+    assert.notEqual(column.shortLabel, column.label);
+    shortened.set(`${view}/${column.key}`, column.shortLabel);
+  }
+  assert.equal(shortened.get('daily/requested'), 'Prix');
+  assert.equal(shortened.has('payments/requested'), false, 'The payment “Demandé” column keeps its own label.');
+  assert.deepEqual(Object.fromEntries([...shortened].map(([key, value]) => [key.split('/')[1], value])), {
+    receivedAt: 'Réception', statusLabel: 'Statut', statut: 'Travail', cartons: 'Cartons', optimizedDimensions: 'Dimensions', optimizedWeight: 'Poids (kg)',
+    requested: 'Prix', remaining: 'Reste', sentAt: 'Devis envoyé', departure: 'Départ', packages: 'Colis',
+  });
+  for (const view of Object.keys(TABLE_COLUMNS)) {
+    const exported = dossierTableExportColumns(view, TABLE_COLUMNS[view]);
+    assert.deepEqual(exported.map(column => column.label), TABLE_COLUMNS[view].filter(column => exported.some(item => item.key === column.key)).map(column => column.label));
+    assert.ok(exported.every(column => !('shortLabel' in column)));
+  }
+  assert.deepEqual(dossierTableExportColumns('daily', TABLE_COLUMNS.daily).map(column => column.label), ['Référence', 'Client', 'Dernière réception', 'Statut du dossier', 'Paiement', 'Travail à faire', 'Qui s’en occupe', 'Casier', 'Cartons reçus', 'Dimensions finales', 'Poids final (kg)', 'Prix du devis']);
+});

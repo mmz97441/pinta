@@ -176,7 +176,7 @@ const results = [];
   results.push({ test: 'preference-conflict-is-visible-and-draft-retained', pass: true });
   f.tables.colis[0].envoi_id = 'departure-test';
   await f.page.goto(base + '/colis?envoi=departure-test');
-  await f.page.getByRole('status').filter({ hasText: '1 dossier(s) affiché(s)' }).waitFor();
+  await f.page.getByRole('status').filter({ hasText: /^1 dossier$/ }).waitFor();
   assert.equal(await f.page.getByRole('button', { name: 'EXP-TEST-002', exact: true }).count(), 0);
   results.push({ test: 'departure-url-filter-count-and-rows-share-scope', pass: true });
   await f.page.goto(base + '/?mission=preparation');
