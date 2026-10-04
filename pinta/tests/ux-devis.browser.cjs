@@ -50,7 +50,8 @@ async function main() {
     assert.equal(current.tables.factures[1].montant, 0);
     assert.ok(current.tables.factures[1].fichier_url.startsWith(P + '/'));
     let rejectInsert = true;
-    await current.context.route('**/rest/v1/factures*', async (route) => { if (route.request().method() === 'POST' && rejectInsert) { rejectInsert = false; await route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ message: 'Insertion indisponible pour test' }) }); } else await route.fallback(); });
+    // The portal deposit goes through the client-invoice-deposit command (D3), never a direct insert.
+    await current.context.route('**/functions/v1/client-invoice-deposit', async (route) => { if (rejectInsert) { rejectInsert = false; await route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: 'Insertion indisponible pour test' }) }); } else await route.fallback(); });
     await upload.setInputFiles({ name: 'correction.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4 correction') });
     await current.page.getByRole('button', { name: 'Déposer la facture', exact: true }).click();
     await current.page.getByRole('alert').filter({ hasText: 'Insertion indisponible pour test' }).waitFor();

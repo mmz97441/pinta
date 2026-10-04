@@ -92,6 +92,13 @@ Deno.serve(async (req: Request) => {
       ? await supabase.from('envois').select('id, date_depart, statut').in('id', envoiIds)
       : { data: [] };
 
+    // Late client invoice being added to the sent quote (same rule as client_colis.quote_update_pending):
+    // observers read « devis en cours de mise à jour », never « règlement attendu ». A read failure keeps the status view.
+    const updating = await supabase.from('quote_withdrawals').select('colis_id').in('colis_id', colis.map((c) => c.id))
+      .neq('source', 'staff').is('closed_at', null).in('status', ['pending', 'processing', 'needs_review', 'withdrawn']);
+    if (updating.error) console.error('Tracking quote update state unavailable', updating.error.code || 'error');
+    const quoteUpdating = new Set((updating.data || []).map((row: { colis_id: string }) => row.colis_id));
+
     // 7. Destination du client (via CP)
     const { data: clientFull } = await supabase
       .from('clients')
@@ -126,6 +133,7 @@ Deno.serve(async (req: Request) => {
         attenteClientDate: c.attente_client_date, attenteClientUntil: c.attente_client_until,
         feuVertDate: c.feu_vert_date, demandeFeuVertEnvoyeeAt: c.demande_feu_vert_envoyee_at,
         devisEnvoyeLe: c.devis_envoye_le, paiementDate: c.paiement_date, dateExpedition: c.date_expedition, dateLivraison: c.date_livraison,
+        quoteUpdatePending: quoteUpdating.has(c.id),
 
         ...physical,
         photoPrep,

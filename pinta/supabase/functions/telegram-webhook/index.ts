@@ -1,9 +1,61 @@
 import { admin, fail, HttpError, json, throwDb, uuid } from '../_shared/http.ts';
+import { processQuoteWithdrawal, type WithdrawalOutcome } from '../_shared/quoteWithdrawal.ts';
 import { telegram } from '../_shared/telegram.ts';
-import { saveIncoming } from '../_shared/telegramIncoming.ts';
+import { type IncomingDocument, saveIncoming } from '../_shared/telegramIncoming.ts';
 
 const db = admin();
 const reply = (chatId: number, text: string, replyMarkup?: unknown) => telegram('sendMessage', { chat_id: chatId, text, ...(replyMarkup ? { reply_markup: replyMarkup } : {}) });
+const SIGNATURE = '\n\nL’équipe Expedîle';
+// A late invoice is being processed: the old link is cancelled or about to be.
+const UPDATING = ['withdrawn', 'pending', 'processing', 'busy', 'needs_review'];
+const delivered = (withdrawal?: WithdrawalOutcome) => withdrawal?.status === 'withdrawn' && withdrawal.message?.canal === 'telegram' && withdrawal.message.status === 'sent';
+const pendingText = (prenom: string, ref: string) => `Bonjour ${prenom}, votre facture pour ${ref} est bien reçue, merci ! Notre équipe met à jour votre devis avec cet achat. Merci d’attendre notre prochain message avant tout paiement : nous revenons vers vous très vite.${SIGNATURE}`;
+/** Acknowledgement of a received document. No text when the D3 message itself was delivered. */
+function documentReply(document: IncomingDocument | undefined, messageId: string | null, fallback: string, name: string): { text?: string; markup?: unknown } {
+  if (!document) return { text: fallback };
+  const prenom = document.prenom || name; const ref = document.ref || '';
+  if (document.status === 'registered' && document.withdrawal) {
+    if (delivered(document.withdrawal)) return {};
+    if (UPDATING.includes(document.withdrawal.status)) return { text: pendingText(prenom, ref) };
+  }
+  if (document.status === 'identical') return { text: document.quoteSent === false
+    ? `Bonjour ${prenom}, nous avions déjà ce document dans votre dossier ${ref}, merci ! Notre équipe poursuit la préparation.${SIGNATURE}`
+    : `Bonjour ${prenom}, nous avions déjà ce document pour ${ref} : rien ne change pour votre devis. Merci !${SIGNATURE}` };
+  if (document.status === 'ask_client' && uuid(messageId)) return {
+    text: `Bonjour ${prenom}, votre document pour ${ref} est bien reçu. S’agit-il d’une facture d’achat à ajouter à ce dossier ? Si oui, votre devis sera mis à jour avec cet achat et nous vous enverrons le nouveau devis.${SIGNATURE}`,
+    markup: { inline_keyboard: [[{ text: 'Oui, c’est une facture d’achat', callback_data: `lf_oui_${messageId}` }], [{ text: 'Non, autre document', callback_data: `lf_non_${messageId}` }]] },
+  };
+  return { text: fallback };
+}
+// The client answers the question about a document: only their own Telegram document qualifies.
+async function lateInvoiceAnswer(chatId: number, answer: string, messageId: string): Promise<{ text?: string }> {
+  const client = await db.from('clients').select('id,prenom,nom').eq('telegram_chat_id', String(chatId)).maybeSingle(); throwDb(client);
+  if (!client.data) return { text: 'Ce document ne correspond pas à votre compte.' };
+  if (answer === 'non') {
+    // Nothing changes: the document stays in the conversation for the team.
+    const message = await db.from('messages').select('colis_id').eq('id', messageId).eq('type', 'client').eq('canal', 'telegram').maybeSingle(); throwDb(message);
+    const colis = message.data ? await db.from('colis').select('ref').eq('id', message.data.colis_id).eq('client_id', client.data.id).maybeSingle() : { data: null, error: null }; throwDb(colis);
+    if (!colis.data) return { text: 'Ce document ne correspond pas à votre compte.' };
+    return { text: `C’est noté, merci ! Votre document reste dans le dossier ${colis.data.ref} et notre équipe le consulte.${SIGNATURE}` };
+  }
+  const registered = await db.rpc('register_late_invoice_from_message', { p_message_id: messageId, p_chat_id: String(chatId) });
+  // A refusal of the command itself is the answer (wrong account, document no longer usable); any other failure
+  // (a trigger, a timeout) is retried by Telegram and never shown to the client.
+  if (registered.error) { if (['42501', '22023'].includes(registered.error.code)) return { text: registered.error.message }; throw registered.error; }
+  const result = registered.data || {}; const ref = result.ref || '';
+  // Payment wording only for a recorded payment (never « payé » for a departure or a closed dossier).
+  if (result.status === 'frozen') return { text: `${result.reason === 'departure' ? `Votre colis ${ref} est déjà parti` : result.reason === 'closed' ? `Votre dossier ${ref} est clôturé` : `Votre paiement pour ${ref} est déjà enregistré`} : nous conservons ce document et notre équipe revient vers vous si nécessaire.${SIGNATURE}` };
+  // The question was about an earlier quote: the button no longer applies, nothing changes.
+  if (result.status === 'stale') return { text: `Merci ! Votre document reste dans le dossier ${ref} et notre équipe le consulte. Elle revient vers vous si nécessaire.${SIGNATURE}` };
+  let withdrawal: WithdrawalOutcome | undefined;
+  if (uuid(result.withdrawalId)) {
+    try { withdrawal = await processQuoteWithdrawal(db, result.withdrawalId, { deadline: Date.now() + 15000 }); }
+    catch (error) { console.error('Late invoice processing deferred', error instanceof Error ? error.message : 'error'); }
+    if (delivered(withdrawal)) return {};
+    if (!withdrawal || UPDATING.includes(withdrawal.status)) return { text: pendingText(result.prenom || client.data.prenom || client.data.nom, ref) };
+  }
+  return { text: `Merci ! Votre facture est ajoutée au dossier ${ref}. Notre équipe la vérifie.${SIGNATURE}` };
+}
 async function processUpdate(update: any): Promise<{ chatId?: number; text?: string; markup?: unknown; callbackId?: string }> {
   const cb = update.callback_query;
   if (cb) {
@@ -16,6 +68,8 @@ async function processUpdate(update: any): Promise<{ chatId?: number; text?: str
       if (result.error) return { chatId, callbackId: cb.id, text: result.error.message };
       return { chatId, callbackId: cb.id, text: match[1] === 'oui' ? `Votre accord pour ${result.data.ref} est enregistré. Notre équipe peut préparer les cartons de ce dossier. Vous recevrez votre devis dès sa finalisation.\n\nL’équipe Expedîle` : match[1] === 'wait' ? 'Votre attente est enregistrée. Les relances sont suspendues jusqu’à une nouvelle réception ou votre décision dans l’application.\n\nL’équipe Expedîle' : 'Votre refus est enregistré. Notre équipe vous contactera pour organiser la suite.\n\nL’équipe Expedîle' };
     }
+    const late = cb.data.match(/^lf_(oui|non)_([0-9a-f-]{36})$/);
+    if (late && uuid(late[2])) return { chatId, callbackId: cb.id, ...await lateInvoiceAnswer(chatId, late[1], late[2]) };
     const assignment = cb.data.match(/^in_([0-9a-f-]{36})_(\d+)$/);
     if (assignment && uuid(assignment[1])) {
       const client = await db.from('clients').select('id,nom,prenom').eq('telegram_chat_id', String(chatId)).single(); throwDb(client);
@@ -23,8 +77,9 @@ async function processUpdate(update: any): Promise<{ chatId?: number; text?: str
       const colis = await db.from('colis').select('id,ref,statut,paiement_date').eq('id', assignment[1]).eq('client_id', client.data.id).single(); throwDb(colis);
       if (pending.data.status === 'assigned') return { chatId, callbackId: cb.id, text: 'Ce message a déjà été rattaché à son dossier.' };
       const claim = await db.rpc('claim_inbox_assignment',{p_inbox_id:pending.data.id,p_colis_id:colis.data.id}); throwDb(claim);
+      let saved: Awaited<ReturnType<typeof saveIncoming>> | undefined;
       if (claim.data.status !== 'assigned') {
-        try { await saveIncoming(db, client.data, colis.data, pending.data.payload, pending.data.telegram_update_id); }
+        try { saved = await saveIncoming(db, client.data, colis.data, pending.data.payload, pending.data.telegram_update_id); }
         catch (error) {
           if (!(error instanceof HttpError) || error.status !== 400) throw error;
           throwDb(await db.from('client_inbox').update({ status: 'unassigned', payload: { ...pending.data.payload, intake_error: error.message }, texte: `${colis.data.ref} — ${error.message}` }).eq('id', pending.data.id));
@@ -32,7 +87,7 @@ async function processUpdate(update: any): Promise<{ chatId?: number; text?: str
         }
       }
       throwDb(await db.from('client_inbox').update({ colis_id: colis.data.id, status: 'assigned' }).eq('id', pending.data.id));
-      return { chatId, callbackId: cb.id, text: `Votre message est enregistré dans ${colis.data.ref}. Notre équipe le retrouvera dans ce dossier.` };
+      return { chatId, callbackId: cb.id, ...documentReply(saved?.document, saved?.messageId ?? null, `Votre message est enregistré dans ${colis.data.ref}. Notre équipe le retrouvera dans ce dossier.`, client.data.prenom || client.data.nom) };
     }
     return { chatId, callbackId: cb.id, text: 'Ce bouton n’est pas une décision reconnue. Ouvrez le dossier dans l’application.' };
   }
@@ -59,15 +114,16 @@ async function processUpdate(update: any): Promise<{ chatId?: number; text?: str
     throwDb(await db.from('client_inbox').upsert({ client_id: client.id, texte: text || msg.caption || 'Document reçu', telegram_update_id: update.update_id, payload: msg }, { onConflict: 'telegram_update_id', ignoreDuplicates: true }));
     return { chatId, text: active.data.length ? 'À quel dossier correspond ce message ou document ? Choisissez ci-dessous pour que notre équipe puisse le traiter.' : 'Votre message est enregistré pour notre équipe. Aucun dossier actif ne permet encore de le rattacher.', markup: { inline_keyboard: active.data.slice(0,10).map((c: any) => [{ text: c.ref, callback_data: `in_${c.id}_${update.update_id}` }]) } };
   }
+  let saved: Awaited<ReturnType<typeof saveIncoming>>;
   try {
-    await saveIncoming(db, client, chosen, msg, update.update_id);
+    saved = await saveIncoming(db, client, chosen, msg, update.update_id);
   } catch (error) {
     if (!(error instanceof HttpError) || error.status !== 400) throw error;
     // Unsupported documents are a durable team request, not endless webhook retries.
     throwDb(await db.from('client_inbox').upsert({ client_id: client.id, texte: `${chosen.ref} — ${error.message}`, telegram_update_id: update.update_id, payload: { ...msg, intake_error: error.message } }, { onConflict: 'telegram_update_id', ignoreDuplicates: true }));
     return { chatId, text: `${error.message}. Votre demande pour ${chosen.ref} a été transmise à notre équipe. Vous pouvez envoyer un document PDF, JPEG, PNG ou WebP de moins de 10 Mo.` };
   }
-  return { chatId, text: `Bonjour ${client.prenom || client.nom}, votre ${msg.document || msg.photo ? 'document' : 'message'} est enregistré pour ${chosen.ref}. Notre équipe le retrouvera dans ce dossier.\n\nL’équipe Expedîle` };
+  return { chatId, ...documentReply(saved.document, saved.messageId, `Bonjour ${client.prenom || client.nom}, votre ${msg.document || msg.photo ? 'document' : 'message'} est enregistré pour ${chosen.ref}. Notre équipe le retrouvera dans ce dossier.\n\nL’équipe Expedîle`, client.prenom || client.nom) };
 }
 Deno.serve(async (req: Request) => {
   if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405);

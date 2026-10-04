@@ -1,7 +1,7 @@
 import { useTaskAccess } from '../../context/TaskAccessContext';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { AlertTriangle, Check, ChevronLeft, ChevronRight, FileText, History, Info, Loader2, Plus, Scan, Upload, X } from 'lucide-react';
+import { AlertTriangle, Check, CheckCircle, ChevronLeft, ChevronRight, FileText, History, Info, Loader2, Plus, RotateCcw, Scan, Upload, X } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import * as sb from '../../lib/supabaseData';
 import { supabase } from '../../lib/supabase';
@@ -10,7 +10,9 @@ import { eur, getPrenom } from '../../utils';
 import { invoiceBuckets, invoiceIdentity, invoiceNumbering, invoiceOcrNote, invoiceProgressSummary, invoiceState, invoiceStateLabel, orderInvoices, reviewQueue } from '../../domain/invoiceProgress';
 import InlineDocument from './InvoiceDocument';
 import TaskMessage from '../staff/TaskMessage';
-import { ConversationAttachment, pendingInvoiceAttachments, conversationInvoiceEditable } from './ChatPanel';
+import { ConversationAttachment, pendingInvoiceAttachments } from './ChatPanel';
+import { FROZEN_TEXT, NO_WITHDRAWAL_PERMISSION_TEXT, frozenReasonOf, frozenText, invoicesEditable, isQuoteWithdrawalError, quoteLocked, withdrawalBanner, withdrawnActionFailure } from '../../domain/invoiceLock';
+import useQuoteWithdrawal from '../../hooks/useQuoteWithdrawal';
 import useWorkDraft from '../../hooks/useWorkDraft';
 import { registerWorkDraft } from '../../domain/workDrafts';
 import './invoiceWorkspace.css';
@@ -52,11 +54,13 @@ function ArticleReview({ initialOpen, summary, children }) {
   return <details open={expanded} onToggle={event => setExpanded(event.currentTarget.open)} className="min-w-0 rounded-xl border border-gray-200 bg-slate-50 p-3"><summary className="min-h-11 cursor-pointer py-2 text-sm font-semibold text-slate-700">{CHEVRON}<span className="min-w-0">{summary}</span></summary>{children}</details>;
 }
 
-function seedDraft(invoice, record, lines) {
+// D1: a validated invoice never seeds from an analysis, and its saved draft
+// opens for editing only once the quote no longer covers it (D2).
+function seedDraft(invoice, record, lines, { locked = false } = {}) {
   const saved = lines.filter(line => line.factureId === invoice.id);
-  const extraction = record.extraction;
+  const extraction = invoice.valide ? null : record.extraction;
   const source = record.draft || (saved.length ? { vendeur: invoice.vendeur, total: invoice.montant, lines: saved, extractionId: null } : extraction ? { ...extraction, extractionId: extraction.id } : { vendeur: invoice.vendeur === 'Document à vérifier' ? '' : invoice.vendeur, total: invoice.montant || '', lines: [emptyLine()] });
-  return { vendeur: source.vendeur || '', total: source.total ?? '', lines: (source.lines || []).map(line => ({ desc: line.desc || '', qte: line.qte ?? '', prix: line.prix ?? '', cat: line.cat || '' })), extractionId: source.extractionId || null, reviewToken: record.reviewToken, dirty: false, editing: !invoice.valide || !!record.draft, editingExplicit: !!record.draft };
+  return { vendeur: source.vendeur || '', total: source.total ?? '', lines: (source.lines || []).map(line => ({ desc: line.desc || '', qte: line.qte ?? '', prix: line.prix ?? '', cat: line.cat || '' })), extractionId: source.extractionId || null, reviewToken: record.reviewToken, dirty: false, editing: !invoice.valide || (!!record.draft && !locked), editingExplicit: !!record.draft && !locked };
 }
 
 export function reviewIssues(draft, categories, invoice) {
@@ -78,8 +82,8 @@ export function reviewIssues(draft, categories, invoice) {
   return issues;
 }
 
-export default function InvoiceWorkspace({ workspace = false, taskMode = false, onQuote, tab, onTabChange, children }) {
-  const { sel, auth, categories = [], can: rawCan, setData, refreshColis, refreshWork, setCfm: askConfirm, getClient } = useApp();
+export default function InvoiceWorkspace({ workspace = false, taskMode = false, onQuote, tab, onTabChange, onLockChange, children }) {
+  const { sel, auth, categories = [], can: rawCan, setData, refreshColis, refreshWork, setCfm: askConfirm, getClient, retryQuoteWithdrawal } = useApp();
   const { taskCan: can } = useTaskAccess(rawCan);
   const cacheKey = `${auth?.u?.id || auth?.id}:${sel?.id}`;
   const location = useLocation();
@@ -92,9 +96,12 @@ export default function InvoiceWorkspace({ workspace = false, taskMode = false, 
   const activeTab = tab || localTab;
   const setTab = next => { setLocalTab(next); onTabChange?.(next); };
   const [records, setRecords] = useState({});
+  // Server lock state from the review context: { frozenReason, quoteLocked, quoteSent, withdrawal }.
+  const [lock, setLock] = useState(null);
   const [drafts, setDrafts] = useState(() => reviewDraftCache.get(cacheKey) || {});
   const draftsRef = useRef(drafts); draftsRef.current = drafts;
   const parcelRef = useRef(sel); parcelRef.current = sel;
+  const lockListener = useRef(onLockChange); lockListener.current = onLockChange;
   const alive = useRef(true);
   const loadSequence = useRef(0);
   const [loading, setLoading] = useState(true);
@@ -140,10 +147,13 @@ export default function InvoiceWorkspace({ workspace = false, taskMode = false, 
   const record = records[invoiceId];
   const draft = drafts[invoiceId];
   const feedback = feedbacks[invoiceId || 'general'];
-  const editable = conversationInvoiceEditable(sel);
+  const editable = invoicesEditable(sel, lock?.frozenReason);
+  const locked = quoteLocked(sel, lock?.quoteLocked);
+  const { guard, requestWithdrawal } = useQuoteWithdrawal(sel, lock, { report: (message, type = 'error') => setHeaderFeedback({ type, message }) });
   const canEdit = editable && can('perm_factures_modifier_articles');
   const canValidate = canEdit && can('perm_factures_valider');
   const canAdd = editable && can('perm_factures_ajouter');
+  const lockedForRole = editable && locked && !can('perm_factures_modifier_articles');
   const inactive = selected && (selected.duplicateOfId || selected.rejetMotif || isReplaced(selected, invoices));
   const historical = selected && !activeInvoices.some(invoice => invoice.id === selected.id);
   const fieldsDisabled = !canEdit || !!busy || !!inactive || !draft?.editing;
@@ -162,15 +172,22 @@ export default function InvoiceWorkspace({ workspace = false, taskMode = false, 
   const chosenOriginal = originalCandidates.find(invoice => invoice.id === originalId);
   const isOriginalOfCopies = invoices.some(invoice => invoice.duplicateOfId === invoiceId);
   const duplicateCandidates = (record?.duplicateCandidateIds || []).map(id => invoices.find(invoice => invoice.id === id)).filter(invoice => invoice && !invoice.duplicateOfId && !invoice.rejetMotif && !isReplaced(invoice, invoices));
-  const contextFingerprint = JSON.stringify([sel?.factures, sel?.lignes]);
+  const contextFingerprint = JSON.stringify([sel?.factures, sel?.lignes, sel?.statut, sel?.quoteVersion]);
   const canResume = can('perm_factures_ocr') || can('perm_factures_valider');
+  // D1: proposals (analysis, resume, « (proposé) ») only for an invoice being
+  // verified, or a validated invoice whose modification was explicitly opened.
+  // The fallback keeps contexts without analysisAllowed working.
+  const analysisAllowed = record?.analysisAllowed ?? (!selected?.valide || !!record?.draft);
+  const proposalsAllowed = editable && !inactive && !historical && !!selected?.fichier && analysisAllowed && (!selected?.valide || (!!draft?.editing && !!draft?.editingExplicit));
 
   const loadContext = useCallback(async (resetId = null) => {
     const sequence = ++loadSequence.current;
     const context = await sb.getInvoiceReviewContext(parcelRef.current.id);
     if (!alive.current || sequence !== loadSequence.current) return;
     const next = Object.fromEntries(context.invoices.map(item => [item.factureId, item]));
-    setRecords(next); setLoadError('');
+    const lockedNow = quoteLocked(parcelRef.current, context.lock?.quoteLocked);
+    setRecords(next); setLock(context.lock || null); setLoadError('');
+    lockListener.current?.(context.lock || null);   // e.g. the manual-article dialog of the documents task
     setDrafts(previous => {
       const merged = { ...previous };
       for (const invoice of parcelRef.current.factures || []) {
@@ -180,7 +197,7 @@ export default function InvoiceWorkspace({ workspace = false, taskMode = false, 
           merged[invoice.id] = { ...seedDraft(invoice, { ...next[invoice.id], draft: null, extraction: null }, parcelRef.current.lignes || []), editing: false, editingExplicit: false, viewingSaved: true };
           continue;
         }
-        merged[invoice.id] = seedDraft(invoice, next[invoice.id], parcelRef.current.lignes || []);
+        merged[invoice.id] = seedDraft(invoice, next[invoice.id], parcelRef.current.lignes || [], { locked: lockedNow });
       }
       return merged;
     });
@@ -198,7 +215,7 @@ export default function InvoiceWorkspace({ workspace = false, taskMode = false, 
     const fileKey = `${invoiceId}:${selected?.fichier}`;
     // Consultation never reads proposals again: no OCR call on a paid, closed
     // or archived dossier, and no warning about proposals that are not needed.
-    if (!editable || !showReview || historical || !selected?.fichier || !canResume || resumedFiles.current.has(fileKey)) return;
+    if (!proposalsAllowed || !showReview || !canResume || resumedFiles.current.has(fileKey)) return;
     resumedFiles.current.add(fileKey);
     let active = true;
     // Resume only verifies the current file and retrieves saved proposals; it
@@ -211,7 +228,7 @@ export default function InvoiceWorkspace({ workspace = false, taskMode = false, 
       if (active) setFeedbacks(previous => ({ ...previous, [invoiceId]: { type: 'warning', message: `${error.message} La saisie manuelle reste disponible.` } }));
     });
     return () => { active = false; };
-  }, [invoiceId, selected?.fichier, canResume, sel?.id, loadContext, showReview, historical, editable]);
+  }, [invoiceId, selected?.fichier, canResume, sel?.id, loadContext, showReview, proposalsAllowed]);
   useEffect(() => {
     if (requestedId) {
       setSelectedId(requestedId);
@@ -306,21 +323,45 @@ export default function InvoiceWorkspace({ workspace = false, taskMode = false, 
       focusAfter.current = [() => modifyRef.current, ...stableFocus];
       settleDraft(invoiceId, { ...seedDraft(selected, { ...record, draft: null, extraction: null }, sel.lignes || []), editing: false, editingExplicit: false, viewingSaved: true });
     };
+    // D1: an opened modification is a server draft; closing it deletes that draft.
+    if (record?.draft && selected?.valide && !historical) return askConfirm({ title: 'Fermer la modification ?', msg: 'Le brouillon enregistré de cette facture sera supprimé. La version validée est conservée.' + (lock?.withdrawal?.status === 'withdrawn' ? ' Le devis reste retiré : vérifiez puis envoyez un nouveau devis.' : ''), okLabel: 'Revenir à la version validée', onOk: () => run('close-modification', async () => {
+      const id = invoiceId;
+      await sb.closeInvoiceModification(id, record.reviewToken);
+      close();
+      await loadContext(id);
+    }) });
     if (!draft?.dirty) return close();
     askConfirm({ title: historical ? 'Abandonner la saisie locale ?' : 'Fermer sans enregistrer ?', msg: 'Vos modifications non enregistrées seront abandonnées. La version enregistrée du dossier est conservée.' + (record?.draft ? ' Le brouillon déjà enregistré restera disponible.' : ''), okLabel: historical ? 'Abandonner la saisie locale' : 'Revenir à la version validée', onOk: close });
   };
   const focusField = field => { const element = sectionRef.current?.querySelector(`[data-field="${field}"]`); for(let parent = element?.parentElement; parent; parent = parent.parentElement) { if(parent.tagName === 'DETAILS') parent.open = true; } setTab('articles'); element?.focus(); element?.scrollIntoView({ block: 'center', behavior: 'smooth' }); };
-  const run = async (key, operation) => {
+  // meta: { action, options, withdrawn } for an action covered by a sent quote
+  // (D2). A server refusal with quote_withdrawal_required opens the withdrawal
+  // dialog for that action; a frozen dossier (D4) is reloaded and explained.
+  const run = async (key, operation, meta = null) => {
     if (busyRef.current) return;
     const target = invoiceId || 'general';
     focusAfter.current = [document.activeElement, ...stableFocus];
     busyRef.current = true; setBusy(key); setHeaderFeedback(null); setFeedbacks(previous => ({ ...previous, [target]: null }));
     try { await operation(); }
     catch (error) {
-      feedbackFor(target, error.message || 'Enregistrement interrompu. Votre saisie est conservée. Actualisez pour vérifier le résultat.', 'error');
-      if (['request', 'upload', 'duplicate', 'restore'].includes(key)) setHeaderFeedback({ type: 'error', message: error.message || 'L’action n’a pas pu être enregistrée.' });
+      if (meta?.action && !meta.withdrawn && isQuoteWithdrawalError(error)) {
+        const retry = () => run(key, operation, { ...meta, withdrawn: true });
+        requestWithdrawal(meta.action, retry, { ...meta.options, afterWithdrawal: meta.options?.afterWithdrawal || retry });
+        return;
+      }
+      const frozen = frozenReasonOf(error);
+      if (frozen) refreshColis(sel.id).then(saved => { if (saved) parcelRef.current = saved; return loadContext(); }).catch(() => {});
+      const message = frozen ? FROZEN_TEXT[frozen] || FROZEN_TEXT.closed : meta?.withdrawn ? withdrawnActionFailure(error.message || 'Erreur inconnue.') : error.message;
+      feedbackFor(target, message || 'Enregistrement interrompu. Votre saisie est conservée. Actualisez pour vérifier le résultat.', 'error');
+      if (frozen || meta?.withdrawn || ['request', 'upload', 'duplicate', 'restore'].includes(key)) setHeaderFeedback({ type: 'error', message: message || 'L’action n’a pas pu être enregistrée.' });
       if (error.code === '40001' || /fetch|network|serveur est indisponible/i.test(error.message || '')) setReloadRequired(previous => ({ ...previous, [target]: true }));
     } finally { busyRef.current = false; if (alive.current) setBusy(''); }
+  };
+  // A D2 action: dialog first when the quote is locked, server fallback otherwise.
+  const guarded = (action, key, operation, options = {}) => {
+    const meta = { action, options };
+    const perform = withdrawal => run(key, operation, withdrawal ? { ...meta, withdrawn: true } : meta);
+    return guard(action, perform, { ...options, afterWithdrawal: options.afterWithdrawal || perform });
   };
   const invokeOCR = async (invoice, action) => {
     const response = await supabase.functions.invoke('ocr-facture', { body: { factureId: invoice.id, colisId: sel.id, action } });
@@ -351,7 +392,7 @@ export default function InvoiceWorkspace({ workspace = false, taskMode = false, 
     return saveReview(confirm);
   };
   const saveReview = confirm => run('save', async () => {
-    if (confirm && draft.extractionId) await invokeOCR(selected, 'resume');
+    if (confirm && draft.extractionId && proposalsAllowed) await invokeOCR(selected, 'resume');
     const result = await sb.saveInvoiceReview(selected, draft, confirm);
     // Apply the acknowledged transaction immediately: a later refresh failure is
     // not a failed save and must never invite a second import.
@@ -369,7 +410,7 @@ export default function InvoiceWorkspace({ workspace = false, taskMode = false, 
       const next = reviewQueue(invoiceBuckets(parcelRef.current.factures || [])).find(invoice => invoice.id !== invoiceId);
       if (next) chooseForReview(next.id); else closeReview();
     }
-  });
+  }, { action: selected.valide ? 'open_modification' : 'add_document', options: { factureId: invoiceId, expectedReviewToken: record?.reviewToken } });
   const reload = () => run('reload', async () => {
     const saved = await refreshColis(sel.id);
     if (saved) parcelRef.current = saved;
@@ -381,13 +422,14 @@ export default function InvoiceWorkspace({ workspace = false, taskMode = false, 
     if (!draft?.dirty) return reload();
     askConfirm({ title: 'Recharger la vérification ?', msg: 'Votre saisie locale sera remplacée par la version enregistrée. Pour la conserver, annulez et copiez vos corrections avant de recharger.', okLabel: 'Recharger la version enregistrée', onOk: reload });
   };
-  const analyze = () => run('analyze', async () => {
+  const analyze = () => { if (!proposalsAllowed) return; return run('analyze', async () => {
     const result = await invokeOCR(selected, 'extract');
     await loadContext();
     if (!result.extraction) throw new Error('Aucune proposition disponible. Complétez les articles manuellement.');
     feedbackFor(invoiceId, 'Analyse chargée. Vérifiez les propositions puis choisissez « Utiliser les propositions » pour remplacer la saisie courante.');
-  });
+  }); };
   const useAnalysis = () => {
+    if (!proposalsAllowed) return;
     const apply = () => { change({ vendeur: record.extraction.vendeur || '', total: record.extraction.total ?? '', lines: record.extraction.lines || [], extractionId: record.extraction.id, editing: true }); feedbackFor(invoiceId, 'Propositions reprises dans le brouillon. Vérifiez chaque article avant validation.'); };
     if (draft.dirty || (sel.lignes || []).some(line => line.factureId === invoiceId)) askConfirm({ title: 'Utiliser les propositions de l’analyse ?', msg: 'Le brouillon de cette facture sera remplacé. Les articles enregistrés restent inchangés jusqu’à votre validation.', okLabel: 'Utiliser les propositions', onOk: apply });
     else apply();
@@ -399,45 +441,78 @@ export default function InvoiceWorkspace({ workspace = false, taskMode = false, 
     setReloadRequired(previous => ({ ...previous, [invoiceId]: false }));
   };
   const described = invoice => { const identity = identityOf(invoice); return `${numberLabel(invoice)} — ${name(invoice)} (${[identity.supplierKnown && identity.supplier, identity.amount !== null && amountText(identity), identity.receivedAt && `reçue le ${shortDate(identity.receivedAt)}`].filter(Boolean).join(', ') || 'à vérifier'})`; };
-  const classify = original => askConfirm({ title: 'Retirer cette facture en double ?', msg: `Vous confirmez que ces deux documents correspondent au même achat.\n\nÀ retirer : ${described(selected)}.\nÀ conserver : ${described(original)}.\n\nLa copie et ses articles seront exclus du devis. Elle restera consultable et restaurable dans « Doublons retirés ».${draft?.dirty ? '\nLe brouillon non enregistré de la copie sera abandonné.' : ''}\nAucun message ne sera envoyé au client.`, okLabel: 'Retirer le doublon', danger: true, onOk: () => run('duplicate', async () => {
-    const result = await sb.classifyInvoiceDuplicate(invoiceId, original.id, draft?.reviewToken || record?.reviewToken, records[original.id]?.reviewToken);
-    applyClassification(result); setRemovingDuplicate(false);
-    // Numbers after the removal: the copy leaves the count, so the original
-    // may move up. The message uses the numbers the list now shows.
-    const kept = invoiceNumbering(invoices.map(invoice => invoice.id === invoiceId ? keepArrival(invoice, result.facture) : invoice))[original.id]?.n;
-    const before = numbering[original.id]?.n;
-    const message = `Copie retirée : ${name(selected)} devient « Copie de la facture ${kept} ». La facture ${kept} est conservée (${shortName(identityOf(original))}${before && before !== kept ? `, numérotée ${before} avant le retrait` : ''}) ; la copie et ses articles sont exclus du devis.`;
-    setHeaderFeedback({ type: 'success', message });
-    await afterCommit(invoiceId, message);
-    choose(original.id);
-  }) });
-  const restore = () => run('restore', async () => {
+  const classify = original => {
+    const text = `Vous confirmez que ces deux documents correspondent au même achat.\n\nÀ retirer : ${described(selected)}.\nÀ conserver : ${described(original)}.\n\nLa copie et ses articles seront exclus du devis. Elle restera consultable et restaurable dans « Doublons retirés ».${draft?.dirty ? '\nLe brouillon non enregistré de la copie sera abandonné.' : ''}`;
+    const options = { factureId: invoiceId, details: text };
+    const operation = async () => {
+      const result = await sb.classifyInvoiceDuplicate(invoiceId, original.id, draft?.reviewToken || record?.reviewToken, records[original.id]?.reviewToken);
+      applyClassification(result); setRemovingDuplicate(false);
+      // Numbers after the removal: the copy leaves the count, so the original
+      // may move up. The message uses the numbers the list now shows.
+      const kept = invoiceNumbering(invoices.map(invoice => invoice.id === invoiceId ? keepArrival(invoice, result.facture) : invoice))[original.id]?.n;
+      const before = numbering[original.id]?.n;
+      const message = `Copie retirée : ${name(selected)} devient « Copie de la facture ${kept} ». La facture ${kept} est conservée (${shortName(identityOf(original))}${before && before !== kept ? `, numérotée ${before} avant le retrait` : ''}) ; la copie et ses articles sont exclus du devis.`;
+      setHeaderFeedback({ type: 'success', message });
+      await afterCommit(invoiceId, message);
+      choose(original.id);
+    };
+    // Locked quote: one dialog carries the duplicate check and the withdrawal.
+    if (locked) return guarded('classify_duplicate', 'duplicate', operation, options);
+    askConfirm({ title: 'Retirer cette facture en double ?', msg: `${text}\nAucun message ne sera envoyé au client.`, okLabel: 'Retirer le doublon', danger: true, onOk: () => run('duplicate', operation, { action: 'classify_duplicate', options }) });
+  };
+  const restore = () => guarded('restore_duplicate', 'restore', async () => {
     const result = await sb.restoreInvoiceDuplicate(invoiceId, record?.reviewToken);
     applyClassification(result);
     setHeaderFeedback({ type: 'success', message: 'Facture restaurée dans les documents du dossier. Vérifiez ses articles avant de valider.' });
     await afterCommit(invoiceId, 'Facture remise à vérifier. Ses articles seront pris en compte après validation.');
-  });
+  }, { factureId: invoiceId });
+  // The file is chosen first; a locked quote is withdrawn before the upload,
+  // and a cancelled dialog simply drops the chosen file.
   const upload = async event => {
     const file = event.target.files?.[0]; event.target.value = '';
     if (!file) return;
-    await run('upload', async () => {
+    const target = uploadTarget.current;
+    await guarded(target ? 'replace_document' : 'add_document', 'upload', async () => {
       const document = await sb.uploadDocument('factures', sel.id, file);
-      const target = uploadTarget.current;
       const saved = target ? await sb.updateFacture(target, { fichierUrl: document.path, fichierNom: file.name, valide: false, rejetMotif: null }) : await sb.insertFacture(sel.id, { vendeur: 'Document à vérifier', montant: 0, fichierUrl: document.path, fichierNom: file.name, valide: false });
       setData(previous => previous.map(parcel => parcel.id === sel.id ? { ...parcel, factures: [...parcel.factures.filter(invoice => invoice.id !== saved.id), keepArrival(parcel.factures.find(invoice => invoice.id === saved.id), saved)] } : parcel));
       settleDraft(saved.id, null);
       choose(saved.id); setHeaderFeedback({ type: 'success', message: 'Document enregistré. Vous pouvez analyser ou saisir ses articles.' }); await afterCommit(saved.id, 'Document enregistré. Vous pouvez analyser ou saisir ses articles.');
-    });
+    }, { factureId: target || undefined });
   };
   const manualEntry = () => askConfirm({ title: 'Saisir les articles manuellement ?', msg: 'Le brouillon de cette facture sera vidé. Les articles déjà enregistrés restent inchangés jusqu’à votre validation.', okLabel: 'Commencer la saisie', onOk: () => change({ vendeur: '', total: '', lines: [emptyLine()], extractionId: null, editing: true }) });
-  const reject = () => run('reject', async () => {
+  const reject = () => guarded('request_correction', 'reject', async () => {
     const saved = await sb.updateFacture(invoiceId, { valide: false, rejetMotif: reason.trim() });
     choose(invoiceId, 'articles');
     setData(previous => previous.map(parcel => parcel.id === sel.id ? { ...parcel, factures: parcel.factures.map(invoice => invoice.id === invoiceId ? keepArrival(invoice, saved) : invoice) } : parcel));
     settleDraft(invoiceId, { ...draftsRef.current[invoiceId], dirty: false, editing: false });
     setRejecting(false);
     await afterCommit(invoiceId, 'Correction enregistrée. Préparez la demande au client pour lui transmettre le motif. Aucun message n’a encore été envoyé.');
+  }, { factureId: invoiceId });
+  const enterEditing = () => { focusAfter.current = [() => sectionRef.current?.querySelector('[data-field="vendor"]')]; };
+  // « Modifier la vérification » (D1): the server draft is the open
+  // modification. A locked quote is withdrawn first (D2), atomically with it.
+  const startModification = () => {
+    if (record?.draft && !locked) {
+      enterEditing();
+      setDrafts(previous => ({ ...previous, [invoiceId]: { ...seedDraft(selected, record, sel.lignes || []), editing: true, editingExplicit: true } }));
+      return;
+    }
+    const id = invoiceId;
+    const reopen = async () => { await loadContext(id); enterEditing(); };
+    return guarded('open_modification', 'modify', async () => { await sb.openInvoiceModification(id, record?.reviewToken); await reopen(); }, {
+      factureId: id, expectedReviewToken: record?.reviewToken,
+      afterWithdrawal: result => run('modify', async () => { if (result?.colis) parcelRef.current = result.colis; await reopen(); }, { withdrawn: true }),
+    });
+  };
+  const retryWithdrawal = () => run('retry-withdrawal', async () => {
+    const result = await retryQuoteWithdrawal(sel.id, lock.withdrawal.id);
+    if (result?.colis) parcelRef.current = result.colis;
+    await loadContext();
   });
+  const banner = withdrawalBanner(lock?.withdrawal, invoices.map(invoice => invoice.id), shortDate);
+  const BANNER_ICON = { progress: <Loader2 size={14} className="mt-0.5 shrink-0 animate-spin" aria-hidden="true" />, warning: <AlertTriangle size={14} className="mt-0.5 shrink-0" aria-hidden="true" />, done: <CheckCircle size={14} className="mt-0.5 shrink-0" aria-hidden="true" /> };
+  const BANNER_TONE = { progress: 'bg-blue-50 text-blue-800', warning: 'bg-amber-50 text-amber-800', done: 'bg-emerald-50 text-emerald-800' };
 
   const displayed = showReview && selected ? selected : null;
   const identity = selected ? identityOf(selected) : null;
@@ -452,7 +527,8 @@ export default function InvoiceWorkspace({ workspace = false, taskMode = false, 
   const nextAllowed = nextState === 'missingFile' ? canAdd : canEdit;
   const showNextStep = editable && !documentsComplete && (next ? nextState === 'toCorrect' || !nextShown : buckets.pendingAttachments > 0);
   const total = buckets.total;
-  const { remaining } = invoiceProgressSummary(buckets);
+  // Frozen: nothing is left to verify; unverified invoices are only kept.
+  const remaining = editable ? invoiceProgressSummary(buckets).remaining : buckets.toVerify.length ? [buckets.toVerify.length === 1 ? '1 conservée hors devis' : `${buckets.toVerify.length} conservées hors devis`] : [];
   // The completed summary carries the total; the header does not repeat it.
   const meta = [
     !documentsComplete && buckets.verifiedTotalHT > 0 && `Total vérifié ${eur(buckets.verifiedTotalHT)} HT`,
@@ -470,8 +546,10 @@ export default function InvoiceWorkspace({ workspace = false, taskMode = false, 
     ? (copyOf(invoice) ? `Copie de la facture ${copyOf(invoice)}` : numbering[invoice.id]?.copyOfVersion ? `Copie d’un document remplacé (facture ${numbering[invoice.id].copyOfVersion})` : 'Copie retirée')
     : (numbering[invoice.id]?.versionOf ? `Ancienne version de la facture ${numbering[invoice.id].versionOf}` : 'Ancienne version');
   const headline = !selected ? '' : entry?.kind === 'counted' ? `Facture ${entry.n} sur ${entry.total}` : historyLabel(selected);
-  const detail = !selected ? '' : entry?.kind === 'counted' ? identityText(identity) : name(selected);
-  const paneHeading = !selected ? '' : selected.duplicateOfId ? 'Copie retirée' : historical ? 'Ancienne version' : selected.rejetMotif ? 'Articles en attente de correction' : !draft ? 'Articles' : selected.valide && !draft.editing ? incompleteValidation ? 'Articles à vérifier' : 'Articles vérifiés' : !editable ? 'Articles non vérifiés' : selected.valide ? 'Modification des articles vérifiés' : draft.extractionId ? 'Articles proposés' : 'Articles à vérifier';
+  const detail = !selected ? '' : entry?.kind === 'counted' ? !editable && identity.amount === null ? shortName(identity) : identityText(identity) : name(selected);
+  // Frozen dossier (D4): an unverified invoice is kept for reference, outside the quote; nothing is left to verify.
+  const pillOf = (invoice, state) => !editable && state === 'toVerify' ? ['Conservée · hors devis', 'kept'] : [invoiceStateLabel(invoice, invoices), TONE[state]];
+  const paneHeading = !selected ? '' : selected.duplicateOfId ? 'Copie retirée' : historical ? 'Ancienne version' : selected.rejetMotif ? 'Articles en attente de correction' : !draft ? 'Articles' : selected.valide && !draft.editing ? incompleteValidation ? 'Articles à vérifier' : 'Articles vérifiés' : !editable ? 'Articles conservés hors devis' : selected.valide ? 'Modification des articles vérifiés' : draft.extractionId ? 'Articles proposés' : 'Articles à vérifier';
 
   return <section ref={sectionRef} id="quote-documents" aria-label="Factures d’achat" className="invoice-workspace min-w-0 scroll-mt-48 rounded-2xl border border-gray-200 bg-white">
     <input ref={uploadRef} type="file" accept="application/pdf,image/jpeg,image/png,image/webp" className="hidden" onChange={upload} />
@@ -485,10 +563,13 @@ export default function InvoiceWorkspace({ workspace = false, taskMode = false, 
       {/* Dossier-level actions, after the summary they never interrupt; the
           same rule in the work, summary and consultation views. */}
       {(canAdd || canRequest) && <div className="iw-actions">
-        {canAdd && <button disabled={!!busy} className={SECONDARY} onClick={() => { uploadTarget.current = null; uploadRef.current?.click(); }}><Upload size={16} />Ajouter une facture</button>}
+        {canAdd && <button disabled={!!busy || lockedForRole} aria-describedby={lockedForRole ? 'invoice-lock-role-info' : undefined} className={SECONDARY} onClick={() => { uploadTarget.current = null; uploadRef.current?.click(); }}><Upload size={16} />Ajouter une facture</button>}
         {canRequest && <TaskMessage template="facture_manquante" label="Préparer une demande de facture" disabled={!!busy} />}
       </div>}
-      {!editable && <p className="iw-banner"><Info size={18} aria-hidden="true" />Consultation uniquement : ce dossier est payé, terminé ou archivé.</p>}
+      {/* Said before any file is chosen: only a role allowed to modify articles can withdraw the sent quote. */}
+      {lockedForRole && <p id="invoice-lock-role-info" data-testid="invoice-lock-role-info" className="iw-banner"><Info size={18} aria-hidden="true" />{NO_WITHDRAWAL_PERMISSION_TEXT}</p>}
+      {!editable && <p data-testid="invoice-frozen-notice" className="iw-banner"><Info size={18} aria-hidden="true" />{frozenText(sel, lock?.frozenReason)}</p>}
+      {banner && <div data-testid="quote-withdrawal-banner" data-status={banner.status} role="status" className={`flex flex-wrap items-start gap-2 rounded-xl p-3 text-sm ${BANNER_TONE[banner.tone]}`}>{BANNER_ICON[banner.tone]}<p className="min-w-0 flex-1 basis-[14rem] [overflow-wrap:anywhere]">{banner.text}</p>{banner.retry && can('perm_factures_modifier_articles') && <button type="button" className={`${SECONDARY} w-full sm:w-auto`} disabled={!!busy || banner.status === 'processing'} onClick={retryWithdrawal}>{busy === 'retry-withdrawal' ? <Loader2 size={15} className="animate-spin" aria-hidden="true" /> : <RotateCcw size={15} aria-hidden="true" />}Réessayer l’annulation</button>}</div>}
       {headerFeedback && (headerFeedback.type === 'success' && documentsComplete
         // The green « Factures vérifiées » summary right below carries the
         // result: the acknowledgement stays visible on a neutral surface.
@@ -510,24 +591,24 @@ export default function InvoiceWorkspace({ workspace = false, taskMode = false, 
       </div>}
       {unlinked.length > 0 && <div className="rounded-xl bg-amber-50 p-3 text-sm text-amber-800"><p>{unlinked.length} article(s) saisi(s) manuellement · {eur(unlinkedTotal)} HT restent inclus dans le devis, en plus des articles des factures. Vérifiez s’il s’agit d’achats supplémentaires ou de doublons.</p>{workspace && <button className={`${BUTTON} underline`} onClick={() => focusSection('quote-unlinked')}>Vérifier les articles manuels</button>}</div>}
     </div>
-    {pendingInvoiceAttachments(sel).length > 0 && <details className="m-3 rounded-xl border border-amber-200 bg-amber-50 p-3" open={!invoices.length}><summary className="min-h-11 cursor-pointer text-sm font-semibold text-amber-800">{CHEVRON}Documents reçus à vérifier ({pendingInvoiceAttachments(sel).length})</summary><section aria-label="Documents reçus à vérifier" className="space-y-3">{!editable ? <p className="text-sm font-semibold text-slate-600">Consultation uniquement : ce dossier est payé, terminé ou archivé.</p> : !canAdd && <p className="text-sm text-slate-600">Un membre de l’équipe autorisé à ajouter des factures peut les intégrer au dossier.</p>}<p className="text-xs text-slate-600">Ces pièces jointes sont dans la conversation. Ajoutez celles qui sont des factures pour les vérifier ici.</p>{pendingInvoiceAttachments(sel).map(message => <ConversationAttachment key={message.id} message={message} colis={sel} canImport={canAdd} preview importLabel="Ajouter comme facture" onImported={refresh} />)}</section></details>}
+    {pendingInvoiceAttachments(sel).length > 0 && <details className="m-3 rounded-xl border border-amber-200 bg-amber-50 p-3" open={!invoices.length}><summary className="min-h-11 cursor-pointer text-sm font-semibold text-amber-800">{CHEVRON}Documents reçus à vérifier ({pendingInvoiceAttachments(sel).length})</summary><section aria-label="Documents reçus à vérifier" className="space-y-3">{!editable ? <p className="text-sm font-semibold text-slate-600">{frozenText(sel, lock?.frozenReason)}</p> : !canAdd && <p className="text-sm text-slate-600">Un membre de l’équipe autorisé à ajouter des factures peut les intégrer au dossier.</p>}<p className="text-xs text-slate-600">Ces pièces jointes sont dans la conversation. Ajoutez celles qui sont des factures pour les vérifier ici.</p>{pendingInvoiceAttachments(sel).map(message => <ConversationAttachment key={message.id} message={message} colis={sel} lock={lock} canImport={canAdd} preview importLabel="Ajouter comme facture" onImported={refresh} />)}</section></details>}
     {(activeInvoices.length > 0 || retiredInvoices.length > 0 || replacedInvoices.length > 0) && <div className="space-y-2 p-3 sm:p-4">
       {activeInvoices.length > 0 && <ol role="list" aria-label="Factures du dossier" className="iw-list">{activeInvoices.map(invoice => {
         const item = numbering[invoice.id];
         const known = identityOf(invoice);
-        const label = invoiceStateLabel(invoice, invoices);
         const state = invoiceState(invoice, invoices);
+        const [label, tone] = pillOf(invoice, state);
         // The row says why it waits, never « Propositions prêtes » beside a
         // pill telling that the client must act or the document is missing.
-        const work = state === 'toCorrect' ? '' : state === 'missingFile' ? 'En attente du document' : drafts[invoice.id]?.dirty ? 'Modifications non enregistrées' : records[invoice.id]?.draft ? 'Brouillon enregistré' : invoiceOcrNote(invoice, records[invoice.id]);
+        const work = state === 'toCorrect' ? '' : state === 'missingFile' ? 'En attente du document' : drafts[invoice.id]?.dirty ? 'Modifications non enregistrées' : records[invoice.id]?.draft ? 'Brouillon enregistré' : !editable ? '' : invoiceOcrNote(invoice, records[invoice.id]);
         const details = [known.receivedAt && `Reçue le ${shortDate(known.receivedAt)}`, known.articles > 0 && plural(known.articles, 'article', 'articles'), work].filter(Boolean);
         // A proposal is worth showing only while the invoice is being verified.
         const amount = known.amount !== null && !(known.amountSuggested && state === 'toCorrect') ? known.amount : null;
         return <li key={invoice.id}><button type="button" className="iw-item" data-invoice-id={invoice.id} disabled={!!busy} aria-current={displayed?.id === invoice.id ? 'true' : undefined} aria-label={`Facture ${item.n} sur ${item.total} · ${known.supplier} · ${label}`} aria-describedby={`iw-${invoice.id}-meta iw-${invoice.id}-amount`} onClick={() => choose(invoice.id, activeTab)}>
           <span className="iw-num" aria-hidden="true">{item.n}</span>
           <span className="iw-who"><span className="iw-supplier">{known.supplier}{known.supplierSuggested && <span className="iw-muted"> (proposé)</span>}</span><span id={`iw-${invoice.id}-meta`} className="iw-meta"><span className="iw-meta-items">{details.map((text, index) => <span key={index} className="iw-meta-item">{text}</span>)}{known.fileName && <span className="iw-meta-item"><span className="iw-file" title={known.fileName}>{known.fileName}</span></span>}</span>{state === 'toCorrect' && <span className="iw-reason" title={invoice.rejetMotif}>Correction demandée : {invoice.rejetMotif}</span>}</span></span>
-          <span id={`iw-${invoice.id}-amount`} className="iw-amount">{amount === null ? <>—{state === 'toVerify' && <small>Montant à vérifier</small>}</> : <>{eur(amount)}<small>{known.amountSuggested ? 'proposé' : 'HT'}</small></>}</span>
-          <span className="iw-pill" data-tone={TONE[state]} aria-hidden="true">{label}</span>
+          <span id={`iw-${invoice.id}-amount`} className="iw-amount">{amount === null ? <>—{state === 'toVerify' && editable && <small>Montant à vérifier</small>}</> : <>{eur(amount)}<small>{known.amountSuggested ? 'proposé' : 'HT'}</small></>}</span>
+          <span className="iw-pill" data-tone={tone} aria-hidden="true">{label}</span>
         </button></li>;
       })}</ol>}
       {retiredInvoices.length > 0 && <details open={selected?.duplicateOfId ? true : undefined} className="iw-history"><summary className="min-h-11 cursor-pointer py-2 text-sm font-semibold text-slate-700">{CHEVRON}Doublons retirés ({retiredInvoices.length})<History size={15} aria-hidden="true" /></summary><p className="mb-2 text-xs text-slate-600">{editable && can('perm_factures_valider') ? 'Exclus du devis. Ouvrez une copie pour la consulter ou la remettre à vérifier.' : 'Exclus du devis. Ouvrez une copie pour la consulter.'}</p><nav aria-label="Doublons retirés" className="flex flex-wrap gap-2">{retiredInvoices.map(invoice => <button key={invoice.id} disabled={!!busy} aria-current={displayed?.id === invoice.id ? 'true' : undefined} className={`${SECONDARY} max-w-full break-all text-left`} onClick={() => choose(invoice.id)}>{historyLabel(invoice)} — {name(invoice)}</button>)}</nav></details>}
@@ -538,7 +619,7 @@ export default function InvoiceWorkspace({ workspace = false, taskMode = false, 
     {displayed && <>
       <div ref={currentRef} className="iw-current" role="group" aria-label="Facture affichée">
         <h3 ref={currentTitleRef} tabIndex={-1} className="iw-current-title"><strong>{headline}</strong><span className="iw-muted"> · {detail}</span></h3>
-        <span className="iw-pill" data-tone={TONE[selectedState]}>{invoiceStateLabel(selected, invoices)}</span>
+        {(([label, tone]) => <span className="iw-pill" data-tone={tone}>{label}</span>)(pillOf(selected, selectedState))}
         {entry?.kind === 'counted' && <div className="iw-nav">{[['Facture précédente', -1], ['Facture suivante', 1]].map(([label, step]) => {
           // aria-disabled, not disabled: the button just pressed stays focusable
           // at the end of the list, so keyboard focus never falls to <body>.
@@ -548,8 +629,8 @@ export default function InvoiceWorkspace({ workspace = false, taskMode = false, 
         })}</div>}
       </div>
       {!inactive && editable && <details className="mx-3 mt-2 sm:mx-4"><summary className="min-h-11 cursor-pointer py-2 text-sm font-semibold text-slate-600">{CHEVRON}Autres actions sur cette facture</summary><div className="space-y-3">
-            <div className="flex flex-wrap gap-2">{canAdd && selected.fichier && !inactive && <button data-field="document" disabled={!!busy} className={SECONDARY} onClick={() => { const pick = () => { uploadTarget.current = invoiceId; uploadRef.current?.click(); }; if (selected.fichier) askConfirm({ title: 'Remplacer le document source ?', msg: 'La validation sera annulée. Les articles devront être vérifiés à nouveau avec le nouveau fichier.', okLabel: 'Choisir un nouveau document', onOk: pick }); else pick(); }}><Upload size={15} />{selected.fichier ? 'Remplacer le document' : 'Joindre le document'}</button>}{editable && can('perm_factures_ocr') && selected.fichier && !!record?.extraction && !inactive && <button disabled={!!busy} className={SECONDARY} onClick={analyze}><Scan size={15} />{record?.extraction ? 'Reprendre l’analyse' : 'Analyser la facture'}</button>}</div>
-            {!!draft?.extractionId && canEdit && !inactive && <button className={`${BUTTON} text-slate-600 underline`} disabled={!!busy} onClick={manualEntry}>Saisir les articles manuellement</button>}
+            <div className="flex flex-wrap gap-2">{canAdd && selected.fichier && !inactive && <button data-field="document" disabled={!!busy} className={SECONDARY} onClick={() => { const pick = () => { uploadTarget.current = invoiceId; uploadRef.current?.click(); }; if (selected.fichier) askConfirm({ title: 'Remplacer le document source ?', msg: 'La validation sera annulée. Les articles devront être vérifiés à nouveau avec le nouveau fichier.', okLabel: 'Choisir un nouveau document', onOk: pick }); else pick(); }}><Upload size={15} />{selected.fichier ? 'Remplacer le document' : 'Joindre le document'}</button>}{can('perm_factures_ocr') && proposalsAllowed && draft?.editing && !!record?.extraction && <button disabled={!!busy} className={SECONDARY} onClick={analyze}><Scan size={15} />Reprendre l’analyse</button>}</div>
+            {!!draft?.extractionId && !!draft?.editing && canEdit && !inactive && <button className={`${BUTTON} text-slate-600 underline`} disabled={!!busy} onClick={manualEntry}>Saisir les articles manuellement</button>}
       {selected && !inactive && editable && can('perm_factures_valider') && <div>
         <button disabled={!!busy || !record || isOriginalOfCopies || !selected.fichier || !originalCandidates.length} aria-expanded={removingDuplicate} className={`${SECONDARY} text-red-700`} onClick={() => { setRemovingDuplicate(!removingDuplicate); setOriginalId(originalCandidates.length === 1 ? originalCandidates[0].id : ''); }}>Retirer cette facture en double</button>
         {isOriginalOfCopies ? <p className="mt-1 text-xs text-slate-600">Cette facture est l’original de copies déjà retirées. Restaurez ces copies avant de changer d’original.</p> : !originalCandidates.length && <p className="mt-1 text-xs text-slate-600">Une autre facture active doit être présente pour choisir l’original à conserver.</p>}
@@ -567,6 +648,7 @@ export default function InvoiceWorkspace({ workspace = false, taskMode = false, 
         <div ref={documentRef} id={`invoice-document-${sel.id}`} tabIndex={-1} role="region" aria-label="Document source" className={`invoice-document min-w-0 scroll-mt-32 p-3 sm:p-4 ${activeTab === 'document' ? '' : 'invoice-pane-hidden'}`}><p className="mb-3 truncate text-sm font-semibold text-slate-800" title={name(selected)}>Document · {name(selected)}</p><InlineDocument invoice={selected} /></div>
         <div ref={editorRef} id={`invoice-articles-${sel.id}`} tabIndex={-1} role="region" aria-label="Vérification de la facture" className={`invoice-editor min-w-0 space-y-4 p-3 sm:p-4 ${activeTab === 'articles' ? '' : 'invoice-pane-hidden'}`}>
           <h4 className="iw-pane-heading">{paneHeading}</h4>
+          {!editable && <p role="note" data-testid="invoice-frozen-pane-notice" className="iw-banner"><Info size={18} aria-hidden="true" />{frozenText(sel, lock?.frozenReason)}</p>}
           {editable && !canEdit && <p className="rounded-xl bg-slate-100 p-3 text-sm text-slate-700">Votre rôle permet la consultation. La modification des articles nécessite une autorisation.</p>}
           {selected.duplicateOfId && <div className="rounded-xl bg-slate-100 p-3 text-sm text-slate-700"><p>{(original => original && copyOf(selected) ? `Copie de la facture ${copyOf(selected)} (${shortName(identityOf(original))} · ${name(original)}).` : `${historyLabel(selected)}${original ? ` (${name(original)})` : ''}.`)(invoices.find(invoice => invoice.id === selected.duplicateOfId))} Ce document et ses articles sont exclus du devis. Aucune validation n’est attendue pour cette copie.</p><button className={`${BUTTON} underline`} disabled={!!busy} onClick={() => choose(selected.duplicateOfId)}>Voir la facture originale</button>{editable && can('perm_factures_valider') && <button className={`${BUTTON} underline`} disabled={!!busy || !record} onClick={restore}>Remettre à vérifier</button>}</div>}
           {isReplaced(selected, invoices) && <p className="rounded-xl bg-slate-100 p-3 text-sm text-slate-700">Ce document a été remplacé. Vérifiez la facture corrigée depuis la liste.</p>}
@@ -590,13 +672,18 @@ export default function InvoiceWorkspace({ workspace = false, taskMode = false, 
               {draft.lines.length > 0 && <ul role="list" className="iw-lines">{draft.lines.map((line, position) => <li key={position}><span>{line.desc}</span><span>{line.qte} × {eur(line.prix)}</span></li>)}</ul>}
               {!incompleteValidation && <p className="iw-total"><span>Total de la facture</span><span>{eur(selected.montant)} HT</span></p>}
               {record?.draft && <p className="text-sm text-slate-600">Un brouillon enregistré reste disponible ; il ne remplace pas cette validation.</p>}
-              {canEdit && !inactive && <button ref={modifyRef} className={SECONDARY} disabled={!!busy} onClick={() => { focusAfter.current = [() => sectionRef.current?.querySelector('[data-field="vendor"]')]; setDrafts(previous => ({ ...previous, [invoiceId]: { ...(record?.draft ? seedDraft(selected, record, sel.lignes || []) : draft), editing: true, editingExplicit: true } })); }}>{record?.draft ? 'Reprendre le brouillon' : 'Modifier la vérification'}</button>}
+              {canEdit && !inactive && <button ref={modifyRef} data-testid="invoice-modify" className={SECONDARY} disabled={!!busy || !record} onClick={startModification}>{busy === 'modify' && <Loader2 size={15} className="animate-spin" aria-hidden="true" />}{record?.draft ? 'Reprendre le brouillon' : 'Modifier la vérification'}</button>}
             </div>}
-            {draft.editing && <>
+            {draft.editing && !editable && <div data-testid="invoice-kept-summary" className="space-y-1">
+              <p className="text-sm text-slate-700">{selected.valide ? 'La modification commencée n’est pas appliquée : les valeurs validées restent celles du devis.' : 'Cette facture n’a pas été vérifiée : elle est conservée dans le dossier et n’entre pas dans le devis.'}</p>
+              {(lines => lines.length > 0 && <ul role="list" className="iw-lines">{lines.map((line, position) => <li key={position}><span>{line.desc || 'Description non renseignée'}</span><span>{line.qte || '—'} × {line.prix !== '' && line.prix != null ? eur(line.prix) : '—'}</span></li>)}</ul>)(draft.lines.filter(line => line.desc?.trim() || (line.prix !== '' && line.prix != null)))}
+              {Number(draft.total) > 0 && <p className="iw-total"><span>Total saisi</span><span>{eur(draft.total)} HT</span></p>}
+            </div>}
+            {draft.editing && editable && <>
             {selected.valide && <button className={SECONDARY} disabled={!!busy} onClick={returnToSaved}>Revenir à la version validée</button>}
             {canAdd && !selected.fichier && !inactive && <button data-field="document" disabled={!!busy} className={SECONDARY} onClick={() => { uploadTarget.current = invoiceId; uploadRef.current?.click(); }}><Upload size={15} />Joindre le document</button>}
-            {editable && can('perm_factures_ocr') && selected.fichier && !record?.extraction && !inactive && <div><button disabled={!!busy || !record} className={SECONDARY} onClick={analyze}><Scan size={15} />Analyser la facture</button><p className="mt-1 text-xs text-slate-600">La lecture automatique propose les articles. Vérifiez les propositions avant validation.</p></div>}
-            {record?.extraction && !inactive && <div className="rounded-xl bg-blue-50 p-3 text-sm text-blue-800"><p>{draft.extractionId ? 'Propositions de l’analyse : vérifiez les articles et leurs catégories.' : 'Une analyse du document est disponible. Vos articles enregistrés sont conservés.'}</p>{!draft.extractionId && <p className="mt-2 text-xs">Analyse : {record.extraction.vendeur || 'Vendeur à vérifier'} · {record.extraction.total > 0 ? eur(record.extraction.total) : 'Total à vérifier'} · {(record.extraction.lines || []).length} article(s).</p>}{!draft.extractionId && canEdit && <button className={`${BUTTON} underline`} disabled={!!busy} onClick={useAnalysis}>Utiliser les propositions</button>}{(record.extraction.warnings || []).map((warning, i) => <p className="mt-1 text-xs" key={i}>{typeof warning === 'string' ? warning : warning.message}</p>)}</div>}
+            {proposalsAllowed && can('perm_factures_ocr') && !record?.extraction && <div><button disabled={!!busy || !record} className={SECONDARY} onClick={analyze}><Scan size={15} />Analyser la facture</button><p className="mt-1 text-xs text-slate-600">La lecture automatique propose les articles. Vérifiez les propositions avant validation.</p></div>}
+            {proposalsAllowed && record?.extraction && !(record.extraction.status === 'confirmed' && selected.valide) && <div data-testid="invoice-proposals" className="rounded-xl bg-blue-50 p-3 text-sm text-blue-800"><p>{draft.extractionId ? 'Propositions de l’analyse : vérifiez les articles et leurs catégories.' : 'Une analyse du document est disponible. Vos articles enregistrés sont conservés.'}</p>{!draft.extractionId && <p className="mt-2 text-xs">Analyse : {record.extraction.vendeur || 'Vendeur à vérifier'} · {record.extraction.total > 0 ? eur(record.extraction.total) : 'Total à vérifier'} · {(record.extraction.lines || []).length} article(s).</p>}{!draft.extractionId && canEdit && <button className={`${BUTTON} underline`} disabled={!!busy} onClick={useAnalysis}>Utiliser les propositions</button>}{(record.extraction.warnings || []).map((warning, i) => <p className="mt-1 text-xs" key={i}>{typeof warning === 'string' ? warning : warning.message}</p>)}</div>}
 
             <fieldset disabled={fieldsDisabled} className="min-w-0 space-y-3">
               <legend className="mb-2 text-sm font-semibold text-slate-800">Montants de la facture</legend><p className="text-xs text-slate-600">Utilisez les montants HT imprimés, sans recalculer la TVA. Si le HT n’est pas indiqué, demandez une précision au client.</p>

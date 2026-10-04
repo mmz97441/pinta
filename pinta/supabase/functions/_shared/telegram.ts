@@ -43,8 +43,11 @@ export async function dispatchOutbox(db: any, outboxId: string) {
       && Object.keys(currentSnapshot).every((key) => JSON.stringify(currentSnapshot[key as keyof typeof currentSnapshot]) === JSON.stringify(message.data.request_snapshot[key]));
     const outdatedPreparation = preparationRequest && (colis.data.statut !== 'attente_feu_vert' || colis.data.attente_client_date || !snapshotMatches);
     const outdatedPayment = message.data.template === 'relance_paiement' && (!['devis_envoye','attente_paiement'].includes(colis.data.statut) || outbox.quote_version !== colis.data.quote_version);
-    const archivedRequest = colis.data.archive && (preparationRequest || message.data.template === 'relance_paiement');
-    if (outdatedPreparation || outdatedPayment || archivedRequest) {
+    // A quote withdrawn or replaced after queueing must never reach the client with its old amount or link.
+    const quoteMessage = ['devis_final','devis_final_pro'].includes(message.data.template);
+    const outdatedQuote = quoteMessage && (outbox.quote_version !== colis.data.quote_version || !['devis_envoye','attente_paiement'].includes(colis.data.statut));
+    const archivedRequest = colis.data.archive && (preparationRequest || quoteMessage || message.data.template === 'relance_paiement');
+    if (outdatedPreparation || outdatedPayment || outdatedQuote || archivedRequest) {
       const error = 'Le dossier ou la demande a changé. Préparez un nouveau message avant de l’envoyer.';
       throwDb(await db.from('notification_outbox').update({ status: 'cancelled', last_error: error }).eq('id', outbox.id));
       throwDb(await db.from('messages').update({ statut:'echec' }).eq('id',outbox.message_id));

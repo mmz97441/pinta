@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
+import { existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { build } from 'esbuild';
 import { receptionCartons, receptionMeasurements, mergeReceptionCartons, hasCompleteReceptionMeasurements } from '../src/expedile/domain/reception.js';
@@ -186,4 +187,46 @@ test('browser preview and server delivery show identical real carton totals and 
     if (current === parcel) { assert.match(preview, /2\.67 kg/); assert.match(preview, /2\. Sans numéro de suivi/); }
     else assert.match(preview, /À mesurer/);
   }
+});
+
+test('late-invoice messages (D3): same text in preview and delivery, plain text, defaults mirrored on the server', async () => {
+  const root = new URL('..', import.meta.url).pathname;
+  const { DEFAULT_BODIES } = await import('../src/expedile/services/messageDefaults.js');
+  const keys = ['facture_apres_devis_telegram', 'facture_apres_devis_email', 'facture_apres_devis_sans_lien_telegram', 'facture_apres_devis_sans_lien_email'];
+  const messages = await build({ stdin: { contents: "export {renderTemplate} from './src/expedile/services/messageTemplates.js'; export {renderMessage} from './supabase/functions/_shared/messageTemplate.ts';", resolveDir: root }, bundle: true, write: false, platform: 'node', format: 'cjs', logLevel: 'silent', plugins: [{ name: 'isolated-http', setup(builder) {
+    builder.onResolve({ filter: /^\.\/http\.ts$/ }, () => ({ path: 'http', namespace: 'message-test' }));
+    builder.onLoad({ filter: /.*/, namespace: 'message-test' }, () => ({ contents: 'export class HttpError extends Error { constructor(status,message) { super(message);this.status=status; } }', loader: 'js' }));
+  } }] });
+  const module = { exports: {} };
+  vm.runInNewContext(messages.outputFiles[0].text, { module, exports: module.exports, require: createRequire(import.meta.url), Deno: { env: { get: () => 'https://example.test' } } });
+  const client = { prenom: 'Flavie', nom: 'Martin', type: 'particulier' };
+  for (const key of keys) {
+    const body = DEFAULT_BODIES[key];
+    assert.ok(body, `${key} has a default body.`);
+    assert.doesNotMatch(body, /[_*]/, `${key} is plain text: no Markdown marker.`);
+    assert.deepEqual([...body.matchAll(/\{\{(\w+)\}\}/g)].map(match => match[1]).sort(), ['prenom', 'ref'], `${key} uses only variables known to both renderers.`);
+    const preview = module.exports.renderTemplate(body, { client, colis: { ref: 'EXP-ABC123' } });
+    const server = module.exports.renderMessage(body, client, { ref: 'EXP-ABC123' }, {}, {});
+    assert.equal(preview, server, `${key} renders identically in preview and delivery.`);
+    assert.match(preview, /^Bonjour Flavie/);
+    assert.match(preview, /EXP-ABC123/);
+    if (key.endsWith('_email')) { assert.doesNotMatch(body, /\p{Extended_Pictographic}/u, `${key} has no emoji.`); assert.match(body, /Cordialement,\nL’équipe Expedîle$/); }
+  }
+  assert.match(DEFAULT_BODIES.facture_apres_devis_telegram, /L’ancien lien de paiement n’est plus valable/);
+  assert.doesNotMatch(DEFAULT_BODIES.facture_apres_devis_sans_lien_telegram, /lien/);
+});
+
+// The server falls back to its own copy of these defaults (spec §4.15). The
+// Edge module is delivered with the same change; until it exists this check is
+// reported as skipped, never as passed.
+const serverDefaults = new URL('../supabase/functions/_shared/messageDefaults.ts', import.meta.url).pathname;
+test('late-invoice defaults are identical in the browser and Edge copies', { skip: !existsSync(serverDefaults) && 'supabase/functions/_shared/messageDefaults.ts absent' }, async () => {
+  const { DEFAULT_BODIES } = await import('../src/expedile/services/messageDefaults.js');
+  const keys = ['facture_apres_devis_telegram', 'facture_apres_devis_email', 'facture_apres_devis_sans_lien_telegram', 'facture_apres_devis_sans_lien_email'];
+  const serverFile = serverDefaults;
+  const server = await build({ entryPoints: [serverFile], bundle: true, write: false, platform: 'node', format: 'cjs', logLevel: 'silent' });
+  const serverModule = { exports: {} };
+  vm.runInNewContext(server.outputFiles[0].text, { module: serverModule, exports: serverModule.exports });
+  const serverBodies = serverModule.exports.DEFAULT_BODIES || {};
+  for (const key of keys) assert.equal(serverBodies[key], DEFAULT_BODIES[key], `${key} is identical in src/services/messageDefaults.js and fn/_shared/messageDefaults.ts.`);
 });

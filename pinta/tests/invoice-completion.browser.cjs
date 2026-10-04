@@ -144,18 +144,24 @@ async function main() {
       const description = f.page.getByLabel('Description de l’article 1', { exact: true });
       await description.waitFor();
       if (dirty) await description.fill('Correction locale à abandonner après confirmation');
+      // D1: « Modifier la vérification » opens the modification on the server (a draft), never an analysis.
+      assert.deepEqual(f.calls.filter(call => call.kind === 'open-modification').map(call => call.input.p_facture_id), [B]);
       const close = f.page.getByRole('button', { name: 'Revenir à la version validée', exact: true });
       await close.click();
+      // Closing an opened modification deletes its server draft: always confirmed, never implicit.
+      const dialog = f.page.getByRole('dialog', { name: 'Fermer la modification ?', exact: true });
+      await dialog.waitFor();
+      assert.match(await dialog.innerText(), /Le brouillon enregistré de cette facture sera supprimé\. La version validée est conservée\./);
       if (dirty) {
-        const dialog = f.page.getByRole('dialog', { name: 'Fermer sans enregistrer ?', exact: true });
-        await dialog.waitFor();
         await dialog.getByRole('button', { name: 'Annuler', exact: true }).click();
         assert.equal(await description.inputValue(), 'Correction locale à abandonner après confirmation');
         assert.deepEqual(f.tables.lignes, originalLines);
+        assert.equal(f.calls.some(call => call.kind === 'close-modification'), false, 'Cancel keeps the modification open.');
         await close.click();
-        await dialog.getByRole('button', { name: 'Revenir à la version validée', exact: true }).click();
-      } else assert.equal(await f.page.getByRole('dialog').count(), 0);
+      }
+      await dialog.getByRole('button', { name: 'Revenir à la version validée', exact: true }).click();
       await modify.waitFor(); await noEditor(f);
+      assert.equal(f.calls.filter(call => call.kind === 'close-modification').length, 1);
       assert.deepEqual(f.tables.factures, originalInvoices); assert.deepEqual(f.tables.lignes, originalLines);
       await invoicePanel(f).getByRole('button', { name: 'Revenir au récapitulatif', exact: true }).click();
       await complete(f); await noEditor(f);

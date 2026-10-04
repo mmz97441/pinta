@@ -50,11 +50,10 @@ async function main() {
     await scenario('multiple-documents-partial-failure-and-retry-without-duplicate-upload', async f => {
       pending(f); let uploads = 0; let inserts = 0; let rejectSecond = true;
       await f.context.route('**/storage/v1/object/factures/**', async route => { uploads++; await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }); });
-      await f.context.route('**/rest/v1/factures*', async route => {
-        if (route.request().method() === 'POST') {
-          inserts++; const input = route.request().postDataJSON();
-          if (input.fichier_nom === 'second.pdf' && rejectSecond) { rejectSecond = false; return route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ message: 'Insertion indisponible pour second.pdf' }) }); }
-        }
+      // Each uploaded file becomes an invoice through the deposit command (D3), one call per file.
+      await f.context.route('**/functions/v1/client-invoice-deposit', async route => {
+        inserts++; const input = route.request().postDataJSON();
+        if (input.fileName === 'second.pdf' && rejectSecond) { rejectSecond = false; return route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: 'Insertion indisponible pour second.pdf' }) }); }
         return route.fallback();
       });
       await open(f); await f.page.getByRole('button', { name: 'Transmettre mes factures', exact: true }).click();
@@ -76,12 +75,14 @@ async function main() {
       await f.page.screenshot({ path: path.join(output, 'multiple-documents-mobile.png'), fullPage: true });
     });
     await scenario('lost-insert-response-reuses-the-already-saved-private-document', async f => {
-      pending(f); let inserts = 0;
+      pending(f); let inserts = 0; const paths = [];
       await f.context.route('**/storage/v1/object/factures/**', route => route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }));
-      await f.context.route('**/rest/v1/factures*', async route => {
-        if (route.request().method() === 'POST') {
-          inserts++; f.tables.factures.push({ ...route.request().postDataJSON(), id: ids.F });
-          return route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ message: 'Réponse perdue après enregistrement' }) });
+      await f.context.route('**/functions/v1/client-invoice-deposit', async route => {
+        const input = route.request().postDataJSON(); paths.push(input.path);
+        if (inserts++ === 0) {
+          // The invoice is committed, then the response is lost.
+          f.tables.factures.push({ id: ids.F, colis_id: ids.P, vendeur: input.fileName, montant: 0, valide: false, fichier_url: input.path, fichier_nom: input.fileName });
+          return route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: 'Réponse perdue après enregistrement' }) });
         }
         return route.fallback();
       });
@@ -90,7 +91,8 @@ async function main() {
       await f.page.getByRole('alert').filter({ hasText: 'Réponse perdue' }).waitFor();
       await f.page.getByRole('button', { name: 'Réessayer les documents en échec', exact: true }).click();
       await f.page.getByText('Facture reçue et enregistrée. Notre équipe la vérifie.', { exact: true }).waitFor();
-      assert.equal(inserts, 1); assert.equal(f.tables.factures.length, 1);
+      // The retry sends the same private path again; the command is idempotent on it.
+      assert.equal(inserts, 2); assert.equal(new Set(paths).size, 1); assert.equal(f.tables.factures.length, 1);
     });
     await scenario('replacement-stays-single-file-and-preserves-its-original', async f => {
       Object.assign(f.tables.colis[0], { statut: 'en_preparation', feu_vert: 'autorise' });

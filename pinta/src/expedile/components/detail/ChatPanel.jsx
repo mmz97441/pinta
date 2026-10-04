@@ -10,19 +10,21 @@ import { setConversationState, markVisibleMessagesRead } from '../../services/co
 import { CONVERSATION_STATES, conversationState, conversationLabel } from '../../domain/conversations';
 import { supabase } from '../../lib/supabase';
 import { staffName } from '../workspace/WorkActionRow';
+import { invoicesEditable } from '../../domain/invoiceLock';
+import useQuoteWithdrawal from '../../hooks/useQuoteWithdrawal';
 
 const AttachmentPDFPreview = lazy(() => import('../ui/PDFPreview'));
 
+// Same freeze evidence as the server (D4): payment amount or date, departure, closing.
 export function conversationInvoiceEditable(colis) {
-  return Boolean(colis && !colis.archive && !colis.paiementDate && !colis.paiement_date
-    && ['receptionne','mesure','attente_feu_vert','autorise','en_preparation','pret','devis_envoye','attente_paiement'].includes(colis.statut));
+  return invoicesEditable(colis);
 }
 
 // Pure rules shared with the dossier overview (domain/invoiceDocuments).
 import { conversationAttachmentImported, pendingInvoiceAttachments } from '../../domain/invoiceDocuments';
 export { conversationAttachmentImported, pendingInvoiceAttachments };
 
-export function ConversationAttachment({ message, colis, canImport, onImported, importLabel = 'Utiliser comme facture', preview = false }) {
+export function ConversationAttachment({ message, colis, lock = null, canImport, onImported, importLabel = 'Utiliser comme facture', preview = false }) {
   const [url, setUrl] = useState('');
   const [fileError, setFileError] = useState('');
   const [fileAttempt, setFileAttempt] = useState(0);
@@ -30,6 +32,8 @@ export function ConversationAttachment({ message, colis, canImport, onImported, 
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
   const [saved, setSaved] = useState(false);
+  const [savedText, setSavedText] = useState('Facture ajoutée, à vérifier dans Documents.');
+  const { guard } = useQuoteWithdrawal(colis, lock, { report: text => setError(text) });
   const [needsRefresh, setNeedsRefresh] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const path = message.attachmentPath || message.attachment_path;
@@ -46,28 +50,39 @@ export function ConversationAttachment({ message, colis, canImport, onImported, 
     return () => { active = false; };
   }, [path, fileAttempt]);
   if (!path) return null;
-  const importInvoice = async (refreshOnly = false) => {
-    if (busyRef.current || (!refreshOnly && !importAllowed)) return;
+  // withdrawal: the result of « Retirer le devis et ajouter la facture » (D2 +
+  // D3), which already imported the invoice and queued the client message.
+  const importInvoice = async (refreshOnly = false, withdrawal = null) => {
+    if (busyRef.current || (!refreshOnly && !withdrawal && !importAllowed)) return;
     busyRef.current = true; setBusy(true); setError('');
-    let invoiceSaved = refreshOnly;
+    let invoiceSaved = refreshOnly || !!withdrawal;
     try {
-      if (!refreshOnly) {
+      if (withdrawal) {
+        setSaved(true);
+        setSavedText(['sent', 'portal'].includes(withdrawal.message?.status) ? 'Facture ajoutée, devis retiré. Client prévenu.' : 'Facture ajoutée, devis retiré. Message au client à envoyer depuis la conversation.');
+      } else if (!refreshOnly) {
         const { error: rpcError } = await supabase.rpc('import_conversation_invoice', { p_message_id: message.id });
         if (rpcError) throw rpcError;
         invoiceSaved = true; setSaved(true);
       }
       await onImported?.(colis.id); setNeedsRefresh(false);
     } catch (err) {
+      // Raised again for the guard: a locked quote opens the withdrawal dialog.
+      if (!invoiceSaved && err?.hint === 'quote_withdrawal_required') throw err;
       setNeedsRefresh(invoiceSaved);
       setError(invoiceSaved ? `Facture enregistrée. Actualisation impossible : ${err.message}` : err.message || 'Ajout impossible. Réessayez.');
     } finally { busyRef.current = false; setBusy(false); }
+  };
+  const importGuarded = () => {
+    if (busyRef.current || !importAllowed) return;
+    guard('import_attachment', () => importInvoice(), { messageId: message.id, afterWithdrawal: result => importInvoice(false, result) }).catch(err => setError(err.message || 'Ajout impossible. Réessayez.'));
   };
   return <div className="mt-2 min-w-0 space-y-2 border-t border-current/20 pt-2">
     {url ? <a href={url} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 max-w-full items-center break-all underline">{name}</a> : !fileError && <span role="status">Préparation du document…</span>}
     {fileError && <div role="alert"><p>{fileError}</p><button onClick={() => setFileAttempt(value => value + 1)} className="min-h-11 font-semibold underline">Réessayer l’ouverture du document</button></div>}
     {preview && url && (pdf || image) && <div><button onClick={() => setShowPreview(value => !value)} aria-expanded={showPreview} className="min-h-11 rounded-lg border border-current px-3 text-xs font-semibold">{showPreview ? 'Fermer l’aperçu' : 'Voir l’aperçu'}</button>{showPreview && <div className="mt-2 min-w-0">{pdf ? <Suspense fallback={<p role="status">Chargement du lecteur PDF…</p>}><AttachmentPDFPreview url={url} title={name} /></Suspense> : <img src={url} alt={name} className="max-h-96 max-w-full rounded-lg object-contain" />}</div>}</div>}
-    {importAllowed && <button disabled={busy} onClick={() => importInvoice()} className="block min-h-11 rounded-lg border border-current px-3 text-xs font-semibold">{busy ? 'Import…' : importLabel}</button>}
-    {imported && <p>{saved ? 'Facture ajoutée, à vérifier dans Documents.' : 'Document déjà présent dans les factures.'}</p>}
+    {importAllowed && <button disabled={busy} onClick={importGuarded} className="block min-h-11 rounded-lg border border-current px-3 text-xs font-semibold">{busy ? 'Import…' : importLabel}</button>}
+    {imported && <p role="status">{saved ? savedText : 'Document déjà présent dans les factures.'}</p>}
     {error && <p role="alert">{error}</p>}
     {needsRefresh && <button disabled={busy} onClick={() => importInvoice(true)} className="min-h-11 font-semibold underline">Réessayer l’actualisation</button>}
   </div>;

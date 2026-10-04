@@ -188,4 +188,27 @@ SELECT set_config('request.jwt.claim.sub','e1000000-0000-4000-8000-000000000005'
 SELECT work_reject($q$SELECT get_departure_manifest('e5000000-0000-4000-8000-000000000001')$q$,'Client cannot read manifest of other clients');
 SELECT work_assert(NOT has_function_privilege('authenticated','resolve_telegram_message_colis(uuid,text,text)','EXECUTE'),'Telegram routing helper restricted to webhook service');
 RESET ROLE;
+-- Late client invoice (D3, 2026-10-04): the withdrawal request drives a system hint, a capped system priority and the block reasons.
+INSERT INTO colis(id,client_id,statut,feu_vert) VALUES('e4000000-0000-4000-8000-000000000010','e3000000-0000-4000-8000-000000000001','en_preparation','autorise');
+INSERT INTO factures(colis_id,vendeur,montant,valide,fichier_url) VALUES('e4000000-0000-4000-8000-000000000010','Facture tardive',0,false,'e4000000-0000-4000-8000-000000000010/late.pdf');
+UPDATE colis SET devis_total=40,devis_brouillon=false WHERE id='e4000000-0000-4000-8000-000000000010';
+UPDATE colis SET statut='devis_envoye' WHERE id='e4000000-0000-4000-8000-000000000010';
+INSERT INTO quote_withdrawals(id,colis_id,source,quote_version,reason,status,created_at) SELECT 'e7000000-0000-4000-8000-000000000001',id,'portal',quote_version,'Facture reçue du client après l’envoi du devis','pending',now()-interval '1 hour' FROM colis WHERE id='e4000000-0000-4000-8000-000000000010';
+SELECT work_assert((SELECT state='waiting' AND blocked_reason='Annulation de l’ancien lien de paiement en cours' AND action_hint='Vérifier la nouvelle facture puis renvoyer le devis'
+ AND priority_reason='Facture reçue après l’envoi du devis' AND priority_until=now()+interval '6 days 23 hours' AND priority_by IS NULL FROM staff_work_actions WHERE colis_id='e4000000-0000-4000-8000-000000000010' AND kind='documents'),'Late invoice on a sent quote opens documents work blocked by the link cancellation, with hint and seven-day system priority');
+UPDATE quote_withdrawals SET status='needs_review',last_error='Lien inconnu' WHERE id='e7000000-0000-4000-8000-000000000001';
+SELECT work_assert((SELECT state='waiting' AND blocked_reason='Ancien lien de paiement à vérifier dans PayPlug' FROM staff_work_actions WHERE colis_id='e4000000-0000-4000-8000-000000000010' AND kind='documents'),'A link needing review is shown as a PayPlug verification');
+UPDATE staff_work_actions SET priority_reason='Client prioritaire',priority_until=now()+interval '2 days',priority_by='e1000000-0000-4000-8000-000000000001' WHERE colis_id='e4000000-0000-4000-8000-000000000010' AND kind='documents';
+UPDATE colis SET statut='en_preparation',devis_total=NULL WHERE id='e4000000-0000-4000-8000-000000000010';
+UPDATE quote_withdrawals SET status='withdrawn',withdrawn_at=now(),withdrawn_quote_version=quote_version,client_message_status='failed' WHERE id='e7000000-0000-4000-8000-000000000001';
+SELECT work_assert((SELECT state<>'done' AND blocked_reason IS NULL AND action_hint='Vérifier la nouvelle facture puis renvoyer le devis' AND priority_reason='Client prioritaire' AND priority_by IS NOT NULL
+ FROM staff_work_actions WHERE colis_id='e4000000-0000-4000-8000-000000000010' AND kind='documents'),'After the withdrawal the new invoice is actionable and a direction priority is never overwritten');
+SELECT work_assert((SELECT action_hint='Renvoyer le devis mis à jour au client' AND priority_reason='Facture reçue après l’envoi du devis' FROM staff_work_actions WHERE colis_id='e4000000-0000-4000-8000-000000000010' AND kind='quote'),'Quote work carries the resend hint and the system priority');
+SELECT work_assert((SELECT state<>'done' AND action_hint='Prévenir le client : devis en cours de mise à jour' FROM staff_work_actions WHERE colis_id='e4000000-0000-4000-8000-000000000010' AND kind='conversation'),'An unconfirmed client message keeps a conversation action');
+UPDATE colis SET devis_total=50,devis_brouillon=false WHERE id='e4000000-0000-4000-8000-000000000010';
+UPDATE colis SET statut='devis_envoye' WHERE id='e4000000-0000-4000-8000-000000000010';
+SELECT work_assert((SELECT closed_reason='new_quote_sent' AND client_message_status='failed' FROM quote_withdrawals WHERE id='e7000000-0000-4000-8000-000000000001'),'Sending the new quote closes the request and keeps the message outcome');
+SELECT work_assert((SELECT action_hint IS NULL AND priority_reason='Client prioritaire' FROM staff_work_actions WHERE colis_id='e4000000-0000-4000-8000-000000000010' AND kind='documents')
+ AND (SELECT action_hint IS NULL AND priority_reason IS NULL AND priority_until IS NULL FROM staff_work_actions WHERE colis_id='e4000000-0000-4000-8000-000000000010' AND kind='quote')
+ AND (SELECT action_hint IS NULL FROM staff_work_actions WHERE colis_id='e4000000-0000-4000-8000-000000000010' AND kind='conversation'),'The new quote clears system hints and priority, never the direction priority');
 ROLLBACK;

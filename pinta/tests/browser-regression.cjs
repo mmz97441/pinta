@@ -15,6 +15,26 @@ const A = '11111111-1111-4111-8111-111111111111',
   L = '55555555-5555-4555-8555-555555555555',
   S = '66666666-6666-4666-8666-666666666666';
 const observations = [];
+// Server freeze/lock evidence (D2/D4), mirrored for the mocked review context.
+const TRANSPORT = ['expedie', 'transit', 'dedouanement', 'arrive', 'livraison', 'livre'];
+function frozenReason(colis) {
+  if (!colis) return 'closed';
+  if (colis.paiement_date || colis.paiement_montant != null || colis.statut === 'paye') return 'payment';
+  if (colis.date_expedition || TRANSPORT.includes(colis.statut)) return 'departure';
+  if (colis.archive || !['receptionne', 'mesure', 'attente_feu_vert', 'autorise', 'refuse_client', 'en_preparation', 'devis_envoye', 'attente_paiement'].includes(colis.statut)) return 'closed';
+  return null;
+}
+const quoteSent = colis => ['devis_envoye', 'attente_paiement'].includes(colis?.statut);
+function invoiceLock(colis, withdrawal = null) {
+  return { frozenReason: frozenReason(colis), quoteLocked: quoteSent(colis) || !!(colis?.payplug_payment_id || colis?.payplug_payment_url), quoteSent: quoteSent(colis), liveLink: !!(colis?.payplug_payment_id || colis?.payplug_payment_url), withdrawal };
+}
+// D1: validated invoices get no analysis unless a modification draft is open.
+function analysisReason(colis, invoice, draft) {
+  if (frozenReason(colis)) return 'frozen';
+  if (invoice.duplicate_of_facture_id || invoice.rejet_motif) return 'inactive';
+  if (invoice.valide && !draft) return 'validated';
+  return null;
+}
 function fixtures(role) {
   return {
     profiles: [{ id: A, nom: 'Camille', role, actif: true }],
@@ -217,6 +237,34 @@ async function setup(browser, role, { failTable = null } = {}) {
       colis: [{ ref: 'EXP-TEST-001', desc: 'Deux achats à regrouper', statut: 'attente_paiement', quoteNeedsReview: false, receivedCount: 2, preparedPackages: [{ L: 30, W: 20, H: 20, P: 5 }], outgoingParcelCount: 1, dateReception: '2026-09-08T08:00:00Z', dims: { L: 30, W: 20, H: 20, P: 5 } }],
     };
     else if (url.pathname.endsWith('/functions/v1/ocr-facture') && input?.action === 'resume') body = { success: true, extraction: null };
+    else if (url.pathname.endsWith('/functions/v1/client-invoice-deposit')) {
+      // Portal deposit (D3), idempotent on the private path. The lock, PayPlug
+      // and freeze branches are covered by the SQL/Edge suites and by
+      // tests/client-late-invoice.browser.cjs.
+      const parcel = tables.colis.find(item => item.id === input?.colisId);
+      if (!parcel || typeof input?.path !== 'string' || !input.path.startsWith(parcel.id + '/') || input.path.includes('..')) { status = 400; body = { error: 'Document rattaché à un autre colis' }; }
+      else if (frozenReason(parcel)) body = { ok: true, status: 'frozen' };
+      else {
+        let invoice = tables.factures.find(item => item.colis_id === parcel.id && item.fichier_url === input.path);
+        if (!invoice) {
+          invoice = { id: crypto.randomUUID(), colis_id: parcel.id, vendeur: (input.vendor || '').trim() || input.fileName, montant: 0, valide: false, fichier_url: input.path, fichier_nom: input.fileName, replaces_facture_id: input.replacesFactureId || null, created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
+          tables.factures.push(invoice);
+        }
+        body = { ok: true, status: 'added', facture: invoice };
+      }
+    }
+    else if (url.pathname.endsWith('/functions/v1/invoice-quote-withdrawal')) {
+      // Staff D2 withdrawal: PayPlug proof first, then the database (SQL/Edge suites).
+      const parcel = tables.colis.find(item => item.id === input?.colisId);
+      if (!parcel) { status = 404; body = { error: 'Dossier introuvable.' }; }
+      else if (input.action === 'retry') body = { ok: true, withdrawal: { id: input.withdrawalId, status: 'pending' } };
+      else if (input.expectedUpdatedAt !== parcel.updated_at) { status = 409; body = { ok: false, code: '40001', error: 'Le dossier a changé. Actualisez puis réessayez.' }; }
+      else {
+        const linked = !!(parcel.payplug_payment_id || parcel.payplug_payment_url), changed = invoiceLock(parcel).quoteLocked;
+        if (changed) Object.assign(parcel, { statut: quoteSent(parcel) ? 'en_preparation' : parcel.statut, devis_total: null, devis_snapshot: null, devis_brouillon: true, payplug_payment_id: null, payplug_payment_url: null, quote_version: (parcel.quote_version || 0) + 1, updated_at: new Date(Math.max(Date.now(), Date.parse(parcel.updated_at) + 1000)).toISOString() });
+        body = { ok: true, changed, colis: parcel, withdrawal: changed ? { id: crypto.randomUUID(), colis_id: parcel.id, source: input.action === 'import_attachment' ? 'conversation_import' : 'staff', action: input.action, status: 'withdrawn', link_cancelled: linked, reason: input.reason } : null, paymentLinkCancelled: changed && linked };
+      }
+    }
     else if (url.pathname.includes('/storage/v1/object/sign/'))
       body = { signedURL: '/storage/v1/object/sign/factures/test.pdf?token=fake' };
     else if (url.pathname.includes('/rest/v1/rpc/')) {
@@ -225,9 +273,16 @@ async function setup(browser, role, { failTable = null } = {}) {
       if (rpc === 'client_outgoing_tracking') body = tables.colis.filter(c => input.p_colis_ids.includes(c.id) && tables.clients.some(client => client.id === c.client_id && client.user_id === user.id) && ['expedie','transit','dedouanement','arrive','livraison','livre'].includes(c.statut)).map(c => ({ colis_id: c.id, tracking_principal: tables.envois.find(envoi => envoi.id === c.envoi_id)?.tracking_principal || null }));
       else if (rpc === 'suggest_customs_tariffs') body = (input.p_items || []).map(item => ({ lineId: item.lineId, candidates: [], status: 'no_match', notice: 'Catalogue fictif sans proposition automatique.' }));
       else if (rpc === 'get_invoice_review_context') body = {
-        invoices: tables.factures.filter(invoice => invoice.colis_id === input.p_colis_id).map(invoice => ({ factureId: invoice.id, reviewToken: 'fixture-review-' + invoice.id, extraction: null, draft: null, documentHash: null, duplicateCandidateIds: [] })),
+        invoices: tables.factures.filter(invoice => invoice.colis_id === input.p_colis_id).map(invoice => { const reason = analysisReason(colis, invoice, null); return { factureId: invoice.id, reviewToken: 'fixture-review-' + invoice.id, extraction: null, draft: null, documentHash: null, duplicateCandidateIds: [], analysisAllowed: reason === null, analysisBlockedReason: reason }; }),
         unlinkedLines: tables.lignes.filter(line => line.colis_id === input.p_colis_id && !line.facture_id),
+        lock: invoiceLock(colis),
       };
+      else if (rpc === 'open_invoice_modification' || rpc === 'close_invoice_modification') {
+        // D1 commands: the draft itself is modelled by the invoice suites.
+        const invoice = tables.factures.find(item => item.id === input.p_facture_id);
+        if (!invoice) { status = 400; body = { code: '22023', message: 'Facture introuvable.' }; }
+        else body = rpc === 'open_invoice_modification' ? { reviewToken: 'fixture-review-' + invoice.id, draft: null, created: false } : { reviewToken: 'fixture-review-' + invoice.id, closed: true };
+      }
       else if (rpc === 'get_reception_dates') body = tables.colis.filter(parcel=>(input.p_colis_ids || []).includes(parcel.id)).map(parcel=>({colis_id:parcel.id,reception_dates:parcel.reception_dates || []}));
       else if (rpc === 'refresh_staff_work_actions') body = null;
       else if (rpc === 'save_message_template') {
@@ -669,5 +724,5 @@ async function main() {
     console.log(JSON.stringify(observations, null, 2));
   }
 }
-module.exports = { setup, fixtures, ids: { A, C, P, F, L, S }, base };
+module.exports = { setup, fixtures, ids: { A, C, P, F, L, S }, base, invoiceLock, frozenReason, analysisReason };
 if (require.main === module) main();

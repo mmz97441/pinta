@@ -50,3 +50,10 @@ verify_jwt = false
 
 [functions.correct-colis-task]
 verify_jwt = false
+
+# Both authenticate the caller themselves (staff JWT, client JWT).
+[functions.invoice-quote-withdrawal]
+verify_jwt = false
+
+[functions.client-invoice-deposit]
+verify_jwt = false

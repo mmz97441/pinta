@@ -4,13 +4,27 @@ import { admin, fail, HttpError, json, postOnly, requireStaff, throwDb, trustedS
 function base64(bytes: Uint8Array) {
   let result = ''; for (let start = 0; start < bytes.length; start += 8192) result += String.fromCharCode(...bytes.subarray(start, start + 8192)); return btoa(result);
 }
+// D1/D4: no analysis of a validated invoice (unless « Modifier la vérification »
+// opened its draft), of an inactive copy, or once a payment or departure froze the dossier.
+const BLOCKED: Record<string, string> = {
+  validated: 'Facture validée : ouvrez « Modifier la vérification » pour relancer son analyse.',
+  frozen: 'Paiement ou départ enregistré : l’analyse de cette facture est figée.',
+  inactive: 'Cette facture est retirée, remplacée ou à corriger : son analyse n’est plus utilisée.',
+  missing: 'Cette facture n’existe plus. Actualisez le dossier.',
+};
+class AnalysisBlocked extends Error { constructor(public reason: string) { super(BLOCKED[reason] || 'L’analyse de cette facture n’est pas disponible. Actualisez la facture.'); } }
+async function assertAnalysisAllowed(db: any, factureId: string) {
+  const gate = await db.rpc('invoice_analysis_gate', { p_facture_id: factureId }); throwDb(gate);
+  if (gate.data?.allowed !== true) throw new AnalysisBlocked(String(gate.data?.reason || 'unavailable'));
+}
 Deno.serve(async (req: Request) => {
   const early = postOnly(req); if (early) return early;
+  let automated = false;
   try {
     const db = admin();
     const body = await req.json();
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-    const automated = !!serviceKey && req.headers.get('Authorization') === `Bearer ${serviceKey}` && (body.action || 'extract') === 'extract';
+    automated = !!serviceKey && req.headers.get('Authorization') === `Bearer ${serviceKey}` && (body.action || 'extract') === 'extract';
     let user;
     if (automated) user = { token: serviceKey };
     else if (body.action === 'resume') {
@@ -19,6 +33,8 @@ Deno.serve(async (req: Request) => {
     } else user = await requireStaff(req, body.action === 'confirm' ? 'perm_factures_valider' : 'perm_factures_ocr', db);
     if (!uuid(body.factureId) || !uuid(body.colisId) || !['extract','confirm','resume'].includes(body.action || 'extract')) throw new HttpError(400, 'Facture, dossier et action valides requis');
     const invoice = await db.from('factures').select('*').eq('id', body.factureId).eq('colis_id', body.colisId).single(); throwDb(invoice);
+    // Before any download or write, and again before each write below (a validation or payment may happen meanwhile).
+    if (body.action !== 'confirm') await assertAnalysisAllowed(db, body.factureId);
     const path = trustedStoragePath(invoice.data.fichier_url || '', 'factures', body.colisId);
     // Bind a verified hash to the immutable object version observed around download.
     // Confirmation through the legacy path retains its existing hash guard.
@@ -46,6 +62,7 @@ Deno.serve(async (req: Request) => {
     if (currentIdentity.data !== storageIdentity) throw new HttpError(409, 'Le document a changé pendant sa lecture. Rechargez la facture.');
     const old = await db.from('ocr_extractions').select('*').eq('facture_id', body.factureId).eq('document_hash', documentHash).maybeSingle(); throwDb(old);
     if (old.data && (!old.data.document_file_url || (old.data.status === 'review' && old.data.document_file_url !== invoice.data.fichier_url))) {
+      await assertAnalysisAllowed(db, body.factureId);
       let binding = db.from('ocr_extractions').update({ document_file_url: invoice.data.fichier_url }).eq('id', old.data.id).eq('status', old.data.status);
       binding = old.data.document_file_url ? binding.eq('document_file_url', old.data.document_file_url) : binding.is('document_file_url', null);
       const bound = await binding.select().maybeSingle(); throwDb(bound);
@@ -54,12 +71,14 @@ Deno.serve(async (req: Request) => {
     }
     if (old.data && old.data.document_file_url !== invoice.data.fichier_url) throw new HttpError(409, 'Ce document a déjà été confirmé. Vérifiez la facture existante ou validez ses informations manuellement.');
     if (old.data && old.data.document_storage_identity !== storageIdentity) {
+      await assertAnalysisAllowed(db, body.factureId);
       const stamped = await db.from('ocr_extractions').update({ document_storage_identity: storageIdentity }).eq('id', old.data.id).eq('document_hash', documentHash).eq('document_file_url', invoice.data.fichier_url).select().maybeSingle(); throwDb(stamped);
       if (!stamped.data) throw new HttpError(409, 'L’analyse a changé. Rechargez la facture.');
       old.data = stamped.data;
     }
     if (body.action === 'resume') return json({ success: true, extraction: old.data || null, insertedLignes: [], reused: !!old.data });
     if (old.data) {
+      await assertAnalysisAllowed(db, body.factureId);
       throwDb(await db.from('factures').update({ocr_status:old.data.status,ocr_error:null}).eq('id',body.factureId));
       throwDb(await db.from('ocr_jobs').update({status:'review',last_error:null}).eq('facture_id',body.factureId));
       return json({ success: true, extraction: old.data, insertedLignes: [], reused: true });
@@ -93,10 +112,19 @@ Deno.serve(async (req: Request) => {
     });
     const total = typeof parsed.total_ht === 'number' && Number.isFinite(parsed.total_ht) && parsed.total_ht >= 0 ? Math.round(parsed.total_ht*100)/100 : null;
     if (total === null || lines.some((l:any)=>l.prix===null) || Math.abs(lines.reduce((sum:number,l:any)=>sum+(l.prix || 0),0)-(total || 0)) > 0.02) warnings.push('Le total doit être rapproché avec les articles avant validation.');
+    await assertAnalysisAllowed(db, body.factureId);
     const result = await db.from('ocr_extractions').upsert({ facture_id:body.factureId, document_hash:documentHash, document_file_url:invoice.data.fichier_url, document_storage_identity:storageIdentity, vendeur:String(parsed.vendeur || '').slice(0,200), total, lines, warnings }, { onConflict:'facture_id,document_hash',ignoreDuplicates:true }).select().maybeSingle(); throwDb(result);
     const extraction = result.data || (await db.from('ocr_extractions').select('*').eq('facture_id',body.factureId).eq('document_hash',documentHash).single()).data;
     throwDb(await db.from('factures').update({ocr_status:extraction.status,ocr_error:null}).eq('id',body.factureId));
     throwDb(await db.from('ocr_jobs').update({status:'review',last_error:null}).eq('facture_id',body.factureId));
     return json({ success:true,extraction,insertedLignes:[] });
-  } catch (error) { return fail(error); }
+  } catch (error) {
+    // The database guards give the same outcome when a validation or payment wins a race.
+    const hint = String((error as any)?.hint || '');
+    const blocked = error instanceof AnalysisBlocked ? error
+      : /^invoices_frozen:/.test(hint) ? new AnalysisBlocked('frozen') : /^analysis_not_allowed:/.test(hint) ? new AnalysisBlocked(hint.slice(21)) : null;
+    if (blocked) return automated ? json({ success:true, skipped:blocked.reason })
+      : json({ ok:false, error:blocked.message, code:'22023', hint:`analysis_not_allowed:${blocked.reason}` }, 409);
+    return fail(error);
+  }
 });

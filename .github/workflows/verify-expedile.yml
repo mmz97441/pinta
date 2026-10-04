@@ -65,6 +65,7 @@ jobs:
           sh ./supabase/tests/run-reception-dates.sh
           sh ./supabase/tests/run-payment-return.sh
           sh ./supabase/tests/run-reception-append.sh
+          sh ./supabase/tests/run-invoice-quote-rules.sh
       - run: npx playwright install --with-deps chromium
       - name: Parcours navigateur sans services externes
         run: |
@@ -85,6 +86,8 @@ jobs:
           node tests/invoice-review-indicator.cjs
           node tests/invoice-workspace.cjs
           node tests/invoice-completion.browser.cjs
+          node tests/invoice-quote-withdrawal.browser.cjs
+          node tests/client-late-invoice.browser.cjs
           node tests/preparation-autonomous.browser.cjs
           node tests/task-flow.browser.cjs
           node tests/task-readiness.browser.cjs
@@ -135,6 +138,8 @@ jobs:
             /tmp/pinta-carton-numbering-results
             /tmp/pinta-invoice-workspace-20260916
             /tmp/pinta-invoice-completion
+            /tmp/pinta-invoice-quote-withdrawal
+            /tmp/pinta-client-late-invoice
             /tmp/pinta-preparation-autonomous
             /tmp/pinta-quote-task-conflict
             /tmp/pinta-customs-quote

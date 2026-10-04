@@ -3,8 +3,11 @@ import { X, Loader2 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 
 export default function ConfirmDialog() {
-  const { cfm, closeConfirm, flash } = useApp();
+  const { cfm, closeConfirm, setCfm, flash } = useApp();
   const [busy, setBusy] = useState(false);
+  // { message, final }: a final error (e.g. payment seen, no permission) removes the action it refused.
+  const [inlineError, setInlineError] = useState(null);
+  useEffect(() => { setInlineError(null); }, [cfm]);
   const dialogRef = useRef(null);
   useEffect(() => {
     if (!cfm) return;
@@ -39,12 +42,16 @@ export default function ConfirmDialog() {
   if (!cfm) return null;
   const confirm = async () => {
     if (busy) return;
-    setBusy(true);
+    const current = cfm;
+    setBusy(true); setInlineError(null);
     try {
-      await cfm.onOk();
-      closeConfirm();
+      await current.onOk();
+      // onOk may open the next dialog (e.g. a quote withdrawal): keep it open.
+      setCfm(value => (value === current ? null : value));
     } catch (error) {
-      flash({ msg: error.message, type: 'error' });
+      // inlineError: the error stays inside the dialog, which stays open.
+      if (current.inlineError) setInlineError({ message: error.message || 'L’action n’a pas abouti. Réessayez.', final: error.final === true, body: typeof error.dialogMessage === 'string' ? error.dialogMessage : null });
+      else flash({ msg: error.message, type: 'error' });
     } finally {
       setBusy(false);
     }
@@ -76,25 +83,28 @@ export default function ConfirmDialog() {
             <X size={20} />
           </button>
         </div>
-        <p className="text-sm text-gray-600 dark:text-gray-300 mb-6 whitespace-pre-line break-words">
-          {cfm.msg}
-        </p>
-        <div className="flex gap-3">
+        {/* A final error replaces the body: the action it describes will not happen. */}
+        {!inlineError?.final && <p className="text-sm text-gray-600 dark:text-gray-300 mb-6 whitespace-pre-line break-words">
+          {inlineError?.body || cfm.msg}
+        </p>}
+        {inlineError && <p role="alert" data-testid="confirm-inline-error" data-final={inlineError.final ? 'true' : undefined} className={`text-red-600 text-sm mb-4 whitespace-pre-line break-words ${inlineError.final ? '' : '-mt-3'}`}>{inlineError.message}</p>}
+        {/* Stacked on narrow screens so a long action label keeps the full width. */}
+        <div className="flex flex-col-reverse gap-3 sm:flex-row">
           <button
             disabled={busy}
             onClick={closeConfirm}
-            className="flex-1 min-h-[44px] rounded-xl font-semibold bg-gray-100 dark:bg-gray-800"
+            className="flex-1 min-h-[44px] px-4 py-2 leading-tight rounded-xl font-semibold bg-gray-100 dark:bg-gray-800"
           >
-            Annuler
+            {inlineError?.final ? 'Fermer' : cfm.cancelLabel || 'Annuler'}
           </button>
-          <button
+          {!inlineError?.final && <button
             disabled={busy}
             onClick={confirm}
-            className={`flex-1 min-h-[44px] rounded-xl font-semibold text-white flex justify-center items-center gap-2 ${cfm.danger ? 'bg-red-600' : 'bg-[#17324D]'} disabled:opacity-50`}
+            className={`flex-1 min-h-[44px] px-4 py-2 leading-tight rounded-xl font-semibold text-white flex justify-center items-center gap-2 ${cfm.danger ? 'bg-red-600' : 'bg-[#17324D]'} disabled:opacity-50`}
           >
             {busy && <Loader2 size={16} className="animate-spin" />}
             {cfm.okLabel || 'Confirmer'}
-          </button>
+          </button>}
         </div>
       </div>
     </div>

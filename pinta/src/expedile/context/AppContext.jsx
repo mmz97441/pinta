@@ -10,7 +10,8 @@ import React, {
   useRef,
 } from 'react';
 import { STATUTS, PREV_STATUT, PRODUITS_INTERDITS } from '../constants';
-import { functionErrorMessage } from '../services/functionErrors';
+import { functionErrorBody, functionErrorMessage } from '../services/functionErrors';
+import { WITHDRAWAL_ACTIONS, withdrawalErrorMessage } from '../domain/invoiceLock';
 import { MSG_TEMPLATES } from '../constants/templates';
 import { eur, mailtoLink, getClientDest, getPrenom } from '../utils';
 import { deliverMessage } from '../services/telegramApi';
@@ -1141,6 +1142,8 @@ export function AppProvider({ children }) {
     if (result.error || result.data?.error) {
       const error = new Error(await functionErrorMessage(result, 'La modification n’a pas été confirmée. Votre saisie est conservée.'));
       if (result.error?.context?.status === 409 || result.data?.code === '40001') error.code = '40001';
+      // A cancelled PayPlug link must not stay on screen: show the saved dossier.
+      if ((await functionErrorBody(result))?.paymentLinkCancelled) await refreshColis(id).catch(() => {});
       throw error;
     }
     if (!result.data?.colis) throw new Error('La modification n’a pas été confirmée. Rechargez le dossier avant de réessayer.');
@@ -1148,7 +1151,32 @@ export function AppProvider({ children }) {
     const canonical = replaceColis(sb.mapColis(result.data.colis));
     refreshWork().catch(() => {});
     return canonical;
-  }, [requireReady, replaceColis, refreshWork]);
+  }, [requireReady, replaceColis, refreshWork, refreshColis]);
+  // D2: withdraw a sent quote (PayPlug link cancelled first, on the server) for
+  // an invoice action. The dossier is always reloaded after a failed attempt.
+  const callQuoteWithdrawal = useCallback(async (id, body, fallback) => {
+    requireReady();
+    const sessionGeneration = generation.current;
+    const result = await supabase.functions.invoke('invoice-quote-withdrawal', { body });
+    if (result.error || result.data?.ok === false || result.data?.error) {
+      const payload = await functionErrorBody(result) || {};
+      await refreshColis(id).catch(() => {});
+      refreshWork().catch(() => {});
+      const details = { code: payload.code, hint: payload.hint, status: result.error?.context?.status, paymentLinkCancelled: payload.paymentLinkCancelled === true, withdrawalSaved: payload.withdrawalSaved, serverMessage: typeof payload.error === 'string' ? payload.error : null };
+      throw Object.assign(new Error(withdrawalErrorMessage(details, fallback)), details);
+    }
+    if (sessionGeneration !== generation.current) throw new Error('La session a changé pendant l’enregistrement. Reconnectez-vous au même compte pour vérifier le dossier.');
+    const colis = result.data?.colis ? replaceColis(sb.mapColis(result.data.colis)) : await refreshColis(id).catch(() => null);
+    refreshWork().catch(() => {});
+    return { ...result.data, colis: colis || null };
+  }, [requireReady, replaceColis, refreshColis, refreshWork]);
+  const withdrawQuoteForDocuments = useCallback(async (id, { action, expectedUpdatedAt, reason, factureId, expectedReviewToken, messageId } = {}) => {
+    if (!WITHDRAWAL_ACTIONS[action]) throw new Error('Action de retrait inconnue.');
+    if (!expectedUpdatedAt) throw new Error('Rechargez le dossier avant de retirer le devis.');
+    const text = (reason || '').trim() || WITHDRAWAL_ACTIONS[action].reason;
+    return callQuoteWithdrawal(id, { action, colisId: id, expectedUpdatedAt, reason: text, factureId: factureId || undefined, expectedReviewToken: expectedReviewToken || undefined, messageId: messageId || undefined }, 'Le retrait du devis n’a pas été confirmé. Rien n’a été modifié ; réessayez.');
+  }, [callQuoteWithdrawal]);
+  const retryQuoteWithdrawal = useCallback((id, withdrawalId) => callQuoteWithdrawal(id, { action: 'retry', colisId: id, withdrawalId }, 'La nouvelle tentative d’annulation n’a pas abouti. Réessayez dans un instant.'), [callQuoteWithdrawal]);
   const savePreparationMeasurements = useCallback(async (id, changes, { expectedUpdatedAt, expectedCompositionVersion } = {}) => {
     if (!expectedUpdatedAt || !Number.isInteger(expectedCompositionVersion)) throw new Error('Rechargez le dossier avant d’enregistrer les mesures.');
     const { data: saved, error } = await supabase.rpc('save_preparation_measurements', {
@@ -1376,6 +1404,8 @@ export function AppProvider({ children }) {
     saveQuoteCustoms,
     savePreparationMeasurements,
     correctColisTask,
+    withdrawQuoteForDocuments,
+    retryQuoteWithdrawal,
     assignDeparture,
     confirmerDevis,
     payer,

@@ -31,6 +31,12 @@ SELECT legacy_assert((SELECT count(*)=1 FROM paiements WHERE provider_id='pay_le
 SELECT legacy_assert((SELECT statut='paye' AND paiement_montant=37.98 AND paiement_date IS NOT NULL FROM colis WHERE ref='EXP-LEGACY'),'Verified legacy payment confirms exact amount');
 SELECT legacy_assert((SELECT points=10 FROM clients WHERE id='80000000-0000-4000-8000-000000000001'),'Repeated legacy callback never awards duplicate points');
 SELECT legacy_reject($q$UPDATE legacy_payplug_payments SET provider_verification='{}' WHERE provider_id='pay_legacyPending'$q$,'First provider verification stays immutable');
+-- D2 (2026-10-04): the article waits for the explicit withdrawal, which follows the provider cancellation proof.
+SELECT legacy_reject($q$INSERT INTO lignes(colis_id,description,qte,prix_unitaire) VALUES('90000000-0000-4000-8000-000000000003','Changed after migration',1,10)$q$,'Article change cannot silently withdraw a quote whose historical link is live');
+SELECT set_config('request.jwt.claim.role','service_role',true);
+SELECT record_payplug_cancellation(colis_id,provider_id,jsonb_build_object('object','payment','id',provider_id,'is_paid',false,'failure',jsonb_build_object('code','aborted'),'currency','EUR','amount',amount_cents,'is_live',true,'metadata',jsonb_build_object('colis_id',colis_id,'colis_ref',colis_ref),'billing',jsonb_build_object('email',billing_email))) FROM legacy_payplug_payments WHERE provider_id='pay_legacyChanged';
+SELECT set_config('request.jwt.claim.role','',true);
+SELECT _withdraw_quote(c,'staff','manual_articles','Retrait avant modification d’un achat',NULL,'{}') FROM colis c WHERE id='90000000-0000-4000-8000-000000000003';
 INSERT INTO lignes(colis_id,description,qte,prix_unitaire) VALUES('90000000-0000-4000-8000-000000000003','Changed after migration',1,10);
 SELECT legacy_assert((SELECT invalidated_at IS NOT NULL FROM legacy_payplug_payments WHERE provider_id='pay_legacyChanged'),'Article changes invalidate historical compatibility');
 SELECT legacy_reject($q$SELECT confirm_legacy_payplug_payment(legacy_resource('pay_legacyChanged','90000000-0000-4000-8000-000000000003','EXP-CHANGED','other@example.test'))$q$,'Superseded legacy quote cannot be paid');

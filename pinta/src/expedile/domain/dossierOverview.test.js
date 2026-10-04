@@ -59,6 +59,13 @@ test('payment and later transport statuses never certify missing earlier physica
   assert.equal(result.alerts[0].code, 'preparation-unconfirmed');
 });
 
+test('an unverified invoice kept after payment is never « À faire » (UX-R2-03)', () => {
+  const late = { id: 'late', fichier: 'private/late.pdf', valide: false, montant: 0 };
+  const documents = step(overview({ ...paid, factures: [...paid.factures, late] }, options), 'documents');
+  assert.equal(documents.state, 'not_required'); assert.match(documents.summary, /^Factures figées · 1 facture non vérifiée conservée hors devis$/);
+  assert.equal(step(overview({ ...quoted, factures: [...quoted.factures, late] }, options), 'documents').state, 'current');
+});
+
 test('a changed composition preserves previous optimized values as a reviewable draft', () => {
   for (const finalMeasurementsVersion of [1, null]) {
     const result = overview({ ...prepared, statut: 'mesure', feuVert: 'en_attente', finalMeasurementsVersion, finalMeasurementsAt: null, outgoingParcelCount: null }, options);

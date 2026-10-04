@@ -26,7 +26,7 @@ Variables serveur requises :
 
 Le token du bot, la clé service et les secrets fournisseur ne doivent jamais être exposés dans une variable `VITE_*` ni dans le navigateur.
 
-L’activation nécessite les migrations de finalisation, les fonctions Edge et le frontend correspondants. Déployer uniquement cette fonction sur l’ancien schéma ne suffit pas. Depuis le dossier applicatif `pinta/`, la configuration des fonctions est versionnée dans `supabase/config.toml` ; `verify_jwt = false` pour ce webhook signifie que l’authentification du fournisseur est assurée dans son code, pas que l’accès est libre.
+L’activation nécessite les migrations de finalisation, les fonctions Edge et le frontend correspondants. Déployer uniquement cette fonction sur l’ancien schéma ne suffit pas. Le traitement des factures tardives exige la migration `20261004000001_invoice_quote_rules.sql` (commandes `register_telegram_document`, `register_late_invoice_from_message` et `*_quote_withdrawal`) avant cette version de la fonction. Depuis le dossier applicatif `pinta/`, la configuration des fonctions est versionnée dans `supabase/config.toml` ; `verify_jwt = false` pour ce webhook signifie que l’authentification du fournisseur est assurée dans son code, pas que l’accès est libre.
 
 Après configuration des secrets et déploiement, enregistrer le webhook auprès de Telegram avec la même valeur `secret_token` :
 
@@ -91,7 +91,35 @@ Une action inconnue n’est jamais assimilée à un refus. Une décision déjà 
 
 Les factures PDF, JPEG, PNG et WebP sont acceptées jusqu’à 10 Mo. Elles sont stockées dans le bucket privé `factures`, sous un chemin stable commençant par l’identifiant du dossier. Aucun lien de fichier public n’est créé.
 
-Le dépôt crée une facture non validée et un travail OCR. Le worker peut extraire des propositions, avec hash de document et avertissements ; une validation humaine reste nécessaire. Le webhook ne valide ni les montants, ni les catégories, ni le devis au seul motif qu’un document a été reçu.
+Chaque document est d’abord enregistré dans la conversation du dossier. Il ne devient une facture non validée que dans les cas décrits ci-dessous ; une facture non validée crée un travail OCR. Le worker peut extraire des propositions, avec hash de document et avertissements ; une validation humaine reste nécessaire. Aucune analyse ne porte sur une facture validée (sauf modification ouverte par l’équipe) ni sur un dossier payé, parti ou clos. Le webhook ne valide ni les montants, ni les catégories, ni le devis au seul motif qu’un document a été reçu.
+
+## Factures reçues après l’envoi du devis
+
+Après l’enregistrement du message, le webhook appelle `register_telegram_document(message, réponse, sha256)`. L’empreinte SHA-256 est calculée par le serveur sur les octets stockés.
+
+| Résultat | Effet | Réponse au client |
+|---|---|---|
+| `registered` | Facture créée : réponse à une demande de facture livrée depuis moins de 7 jours. Sur un devis envoyé, ou avec un lien de paiement encore actif, une demande de retrait du devis est ouverte et traitée aussitôt. | Le message de mise à jour du devis s’il a été livré ; sinon « votre facture est bien reçue… merci d’attendre notre prochain message avant tout paiement ». |
+| `identical` | Copie exacte d’une facture déjà validée : rien n’est créé, le devis ne change pas. | « Nous avions déjà ce document : rien ne change pour votre devis. » |
+| `ask_client` | Autre document sur un devis envoyé : aucune facture n’est créée sans l’accord du client. | Question « S’agit-il d’une facture d’achat ? » avec deux boutons. |
+| `frozen` | Paiement, départ ou dossier clos : le document reste dans la conversation, sans facture. | Accusé habituel. |
+| `not_invoice` | Document de conversation. | Accusé habituel. |
+
+| `callback_data` | Commande |
+|---|---|
+| `lf_oui_<messageId>` | `register_late_invoice_from_message(message, chat)` : le chat doit appartenir au client du document, sinon « Ce document ne correspond pas à votre compte ». La facture est créée puis traitée comme ci-dessus. Un bouton obsolète (plus de devis à mettre à jour, ou devis envoyé après l’arrivée du document) renvoie `stale` : rien n’est enregistré, le client est remercié et l’équipe consulte le document. Sur un dossier figé, la réponse suit la raison (`payment`, `departure`, `closed`) : jamais « paiement enregistré » sans paiement. |
+| `lf_non_<messageId>` | Aucune écriture : le document reste dans la conversation pour l’équipe. |
+
+Traitement d’une demande de retrait, sans renvoi aveugle :
+
+1. Lecture de chaque lien PayPlug du devis concerné (jamais celui d’un devis plus récent).
+2. Annulation `{aborted:true}` seulement si le lien n’est ni payé ni remboursé, puis preuve `record_payplug_cancellation`.
+3. `complete_quote_withdrawal` retire et versionne le devis dans la base.
+4. Un seul message client par version retirée (clé `late-invoice:<dossier>:<version>`, modèles `facture_apres_devis` ou `facture_apres_devis_sans_lien`) : Telegram si le chat est lié, sinon l’espace client, sinon un brouillon email à envoyer par l’équipe.
+
+Si PayPlug ne confirme pas, la facture est conservée, le devis reste payable et l’espace client masque l’ancien lien. `relances-auto` reprend la demande en commençant par une lecture (après 5, 10, 20, 40 puis 60 minutes) et la laisse à vérifier après 6 tentatives ; l’équipe peut relancer depuis la facture. Un paiement constaté chez PayPlug n’est jamais annulé. La demande ne passe à `paid` que lorsque le paiement est enregistré dans le dossier (webhook PayPlug ou paiement manuel) ; d’ici là, elle passe en vérification (`needs_review`, « rapprochement nécessaire ») et l’ancien lien reste masqué au client. C’est le cas d’un ancien lien remplacé, que le webhook refuse d’enregistrer.
+
+Les rattachements depuis la boîte de réception (bouton `in_…` du client, `telegram-inbox-assign` pour l’équipe) suivent le même chemin. `telegram-inbox-assign` renvoie `document` à l’équipe et ne sollicite pas le client.
 
 ## Sorties, relances et erreurs
 

@@ -9,9 +9,10 @@ import { receptionCartonManifest } from '../../domain/reception';
 import { workDate, staffName } from './WorkActionRow';
 import InboxAttachment from './InboxAttachment';
 import { workspaceReturnPath } from '../../domain/navigation';
+import { inboxAssignmentMessage } from '../../domain/invoiceLock';
 
 export default function ConversationsView() {
-  const { data = [], clients = [], inboxItems = [], workActions = [], workError, teamUsers = [], auth, can, ask, refreshInbox, refreshColis, refreshWork } = useApp();
+  const { data = [], clients = [], inboxItems = [], workActions = [], workError, teamUsers = [], auth, can, ask, flash, refreshInbox, refreshColis, refreshWork } = useApp();
   const [params, setParams] = useSearchParams();
   const location = useLocation();
   const navigate = useNavigate();
@@ -50,7 +51,11 @@ export default function ConversationsView() {
     try {
       const response = await supabase.functions.invoke('telegram-inbox-assign', { body: { inboxId: item.id, colisId: target } });
       if (response.error || response.data?.error) throw new Error(await functionErrorMessage(response, 'Le rattachement a échoué.'));
-      await Promise.all([refreshInbox(), refreshColis(target), refreshWork()]); select('dossier', target);
+      // A document may have become a late invoice (D3): say what happened to the quote.
+      const notice = inboxAssignmentMessage(response.data?.document, data.find(parcel => parcel.id === target)?.ref);
+      await Promise.all([refreshInbox(), refreshColis(target), refreshWork()]);
+      if (notice) flash?.({ msg: notice, type: 'info', duration: 9000 });
+      select('dossier', target);
     } catch (err) { setError(err.message); } finally { setBusy(false); }
   }
   if (dossierId) return <p role="status" className="p-6 text-sm text-slate-600">Ouverture de la conversation du dossier…</p>;

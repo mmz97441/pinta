@@ -4,6 +4,7 @@ import { receptionCartonManifest, receptionDateSummary, RECEPTION_MEASURES } fro
 import { hasCurrentPreparation } from './preparationReadiness.js';
 import { currentInvoices, pendingInvoiceAttachments } from './invoiceDocuments.js';
 import { invoiceBuckets, invoiceProgressSummary } from './invoiceProgress.js';
+import { invoicesFrozenReason } from './invoiceLock.js';
 import { buildDossierTableModel, formatDossierTableDate } from './dossierTable.js';
 
 const DOCUMENT_PERMISSIONS = ['perm_factures_voir', 'perm_factures_ajouter', 'perm_factures_valider', 'perm_factures_refuser', 'perm_factures_ocr', 'perm_factures_modifier_articles'];
@@ -97,7 +98,10 @@ export function buildDossierOverview(dossier = {}, { client = {}, envois = [], c
   const invoiceBucketsNow = invoiceBuckets(invoiceRows || [], { pendingAttachments: pendingInvoiceAttachments(dossier) });
   const invoicesDone = invoiceRows !== null && invoiceBucketsNow.complete;
   const invoicesOptional = invoiceRows !== null && client.type === 'pro' && activeInvoices.length === 0;
+  // Paid, departed or closed (D4): nothing left to verify; an unverified late invoice is kept, outside the quote.
+  const invoicesFrozen = invoiceRows !== null && reviewInvoices.length > 0 && Boolean(invoicesFrozenReason(dossier));
   const invoiceSummary = invoiceRows === null ? 'Factures à actualiser'
+    : invoicesFrozen ? `Factures figées · ${reviewInvoices.length === 1 ? '1 facture non vérifiée conservée' : `${reviewInvoices.length} factures non vérifiées conservées`} hors devis`
     : activeInvoices.length ? invoiceProgressSummary(invoiceBucketsNow).text
     : invoicesOptional ? 'Factures non nécessaires pour ce client professionnel' : 'Aucune facture reçue';
   const invoices = {
@@ -163,7 +167,7 @@ export function buildDossierOverview(dossier = {}, { client = {}, envois = [], c
     accord: { state: consentState, summary: consentSummary, date: approved || refused ? consentDate : voluntaryWait ? waitingDate : requestDate },
     preparation: { state: optimization.state, summary: optimization.summary, date: optimization.savedAt },
     documents: { state: !documentsVisible ? 'restricted' : invoicesDone ? 'done' : invoicesOptional ? 'not_required' : invoiceRows === null || missingFileCount ? 'unknown'
-      : rejectedInvoices.length ? 'review' : reviewInvoices.length ? 'current' : invoiceBucketsNow.pendingAttachments ? 'unknown' : AFTER_PREPARATION.has(dossier.statut) ? 'unknown' : 'waiting', summary: invoices.summary, date: null },
+      : rejectedInvoices.length ? 'review' : reviewInvoices.length ? invoicesFrozen ? 'not_required' : 'current' : invoiceBucketsNow.pendingAttachments ? 'unknown' : AFTER_PREPARATION.has(dossier.statut) ? 'unknown' : 'waiting', summary: invoices.summary, date: null },
     devis: { state: financeVisible ? quoteState : 'restricted', summary: financeVisible ? quoteSummary : 'Accès réservé au devis', date: financeVisible ? financialFacts.sentAt || (quoteRevised ? savedDate(dossier.devisEnvoyeLe, now) : null) : null },
     paiement: { state: financeVisible ? paymentState : 'restricted', summary: payment.stateLabel, date: financeVisible ? savedDate(dossier.paiementDate, now) : null },
     expedition: { state: departureConfirmed ? 'done' : AFTER_DEPARTURE.has(dossier.statut) || (dossier.envoi || dossier.envoiId) && !envoi ? 'unknown'

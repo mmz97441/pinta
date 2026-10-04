@@ -102,3 +102,52 @@ La migration `20260910000013_reminders_activation.sql` initialise `business.rela
 Une activation absente, invalide ou sans fuseau horaire empêche la génération des relances. Le traitement des pauses, les messages explicitement placés dans l’outbox et l’OCR continuent. Le résultat du worker indique `remindersActivationValid` pour distinguer une configuration invalide d’une file simplement vide. Les cadences et la règle d’un client par période restent inchangées ; cette garde ne corrige pas la distinction future entre message lu et réponse traitée.
 
 Le helper exécuté par le worker est testé sur les frontières, fuseaux, dates invalides et requêtes futures. La migration est vérifiée directement dans une transaction annulée : initialisation d’une valeur absente et préservation d’une activation existante. La CI utilise désormais PostgreSQL 17 et exécute également les fixtures de schéma historique, les tests SQL/Edge des paiements historiques et ces tests d’activation. Les runners locaux de cette CI ont été exécutés sans connexion à la production ni aux fournisseurs.
+
+## Règles factures, devis envoyé et gel après paiement — 4 octobre 2026
+
+Migration `20261004000001_invoice_quote_rules.sql`, non appliquée en production à cette date.
+
+**Prédicats.** Chaque prédicat a une définition unique :
+
+- `_dossier_frozen_reason` reprend les preuves de `_assert_unpaid_dossier` ;
+- `_live_payment_link` : un lien est vivant tant que sa preuve d’annulation PayPlug manque ;
+- `_quote_locked` ;
+- `_invoice_analysis_reason`.
+
+Les triggers `a0_guard_invoice_lock` et `a0_guard_invoice_analysis` appliquent D1/D4 à toute écriture, qu’elle vienne du navigateur, d’une fonction Edge ou du worker OCR.
+
+**Retrait du devis (D2).** `withdraw_quote_for_documents` s’exécute avec le JWT équipe. Elle exige la permission, le propriétaire de tâche et le contrôle de version, puis vérifie la suite de l’action via `_assert_withdrawal_followup`. `_withdraw_quote` n’est appelée qu’une fois chaque lien prouvé annulé (`record_payplug_cancellation`).
+
+La fonction Edge `invoice-quote-withdrawal` procède dans cet ordre :
+
+1. elle appelle d’abord le pré-contrôle en lecture seule `withdraw_quote_preflight`, réservé au service ;
+2. elle lit PayPlug, annule le lien et enregistre sa preuve ;
+3. elle exécute la commande SQL.
+
+Après un échec SQL, l’URL annulée est effacée et la réponse précise que le lien est annulé mais que le retrait n’est pas enregistré. Ce message n’apparaît que si le lien a été annulé par cette requête.
+
+**Facture tardive (D3).** `quote_withdrawals` admet une seule demande ouverte par dossier. Le traitement suit `claim` → lecture/annulation PayPlug → `complete_quote_withdrawal` → un message par version retirée (clé `late-invoice:<dossier>:<version>`).
+
+`release_quote_withdrawal(...,'paid')` ne clôt la demande comme payée que si `_dossier_frozen_reason = 'payment'`. Sinon, elle passe en `needs_review` avec « Paiement signalé chez PayPlug mais non enregistré dans le dossier (rapprochement nécessaire) ». Les fermetures normales restent `close_quote_withdrawals` (statut `paye`, nouveau devis, annulation, archive) et `complete_quote_withdrawal`.
+
+Une demande ouverte ne vaut que pour la version de devis où elle a été créée. Une correction (`correct_colis_task`) re-versionne le devis sans la fermer : la facture suivante du client la marque `superseded` puis ouvre une demande à la version courante, et l’envoi d’un nouveau devis ferme de même toute demande ouverte d’une version antérieure. Le portail affiche alors le lien du nouveau devis.
+
+Un document identique à une facture validée ne mentionne le devis que si le client en a reçu un : `client_document_precheck` et `register_telegram_document` renvoient `quoteSent`.
+
+Le suivi public (`get-tracking`) lit `quote_withdrawals` avec la même règle que `client_colis.quote_update_pending` : un observateur lit « devis en cours de mise à jour », pas « règlement attendu ».
+
+Un message dont l’envoi lève une exception n’est marqué `failed` que si sa ligne d’outbox est elle-même en échec. Une ligne encore `pending`, `blocked` ou `sending` reste confiée au worker, sans renvoi aveugle.
+
+`register_late_invoice_from_message` renvoie `stale` dans deux cas : le dossier n’a plus de devis à mettre à jour, ou un devis a été envoyé après l’arrivée du document. Le statut `frozen` porte sa raison (`payment`, `departure`, `closed`).
+
+`deposit_client_invoice` vérifie aussi la taille (20 Mo au plus) et le type de l’objet stocké, d’après ses métadonnées. `client-invoice-deposit` lit la taille dans les métadonnées de l’objet avant de le télécharger. Le plafond et les types du bucket `factures` restent à configurer côté Storage lors de l’activation.
+
+**Accès.** `quote_withdrawals` est en lecture seule pour les rôles API : `REVOKE ALL`, puis `GRANT SELECT`. La lecture RLS est réservée aux rôles disposant d’une permission factures, comme `get_invoice_review_context`.
+
+`client-invoice-deposit` ne transmet au client que le motif métier (22023). Toute autre erreur de la base devient un texte fixe ; le détail reste dans les journaux.
+
+**Vérification locale.** Les tests suivants passent, sans aucun accès distant :
+
+- `supabase/tests/run-invoice-quote-rules.sh` : assertions SQL et sessions concurrentes réelles ;
+- les tests Edge `*.edge.test.cjs` ;
+- les suites navigateur `invoice-quote-withdrawal` et `client-late-invoice`.

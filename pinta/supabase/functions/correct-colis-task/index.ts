@@ -1,6 +1,8 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { admin, fail, HttpError, json, postOnly, requireStaff, throwDb, uuid } from '../_shared/http.ts';
-import { requirePayplugCreationMode } from '../_shared/payplugMode.ts';
+import { cancelPayplugLinks, compensateCancelledLinks, loadPaymentLinks } from '../_shared/payplugCancel.ts';
+import { instant } from '../_shared/revision.ts';
+import { assertTaskOwner } from '../_shared/taskOwner.ts';
 
 const taskPermissions: Record<string, string> = {
   reception: 'perm_colis_mesurer', preparation: 'perm_colis_preparer',
@@ -8,16 +10,8 @@ const taskPermissions: Record<string, string> = {
 };
 const openStates = ['receptionne','mesure','attente_feu_vert','autorise','refuse_client','en_preparation','devis_envoye','attente_paiement'];
 const boxKeys = ['dimL','dimW','dimH','poids'];
-async function checkTaskOwner(db: any, colisId: string, task: string, staffId: string) {
-  const kind = task === 'accord' ? 'reception' : task === 'devis' ? 'quote' : task;
-  const result = await db.from('staff_work_actions').select('assignee_id')
-    .eq('colis_id', colisId).in('kind', [kind, 'correction']).in('state', ['ready', 'in_progress', 'waiting']);
-  throwDb(result);
-  if (result.data?.some((action: any) => action.assignee_id && action.assignee_id !== staffId)) {
-    const error: any = new HttpError(409, 'Cette tâche est suivie par un collègue. Actualisez le dossier et organisez un relais avant de corriger.');
-    error.code = '40001'; throw error;
-  }
-}
+const checkTaskOwner = (db: any, colisId: string, task: string, staffId: string) =>
+  assertTaskOwner(db, colisId, [task === 'accord' ? 'reception' : task === 'devis' ? 'quote' : task, 'correction'], staffId);
 function measuredBoxes(value: unknown, allowExtraKeys = false): Array<Record<string, number>> | null {
   if (!Array.isArray(value) || value.length < 1 || value.length > 100) return null;
   if (value.some(box => !box || typeof box !== 'object' || Array.isArray(box)
@@ -51,29 +45,6 @@ function preflightValues(colis: any, task: string, values: Record<string, unknow
     && !colis.feu_vert_date && !colis.attente_client_date && !colis.demande_feu_vert_envoyee_at;
 }
 
-function instant(value: unknown): string | null {
-  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?(Z|[+-]\d{2}:\d{2})$/.test(value) || !Number.isFinite(Date.parse(value))) return null;
-  // PostgreSQL timestamps retain microseconds; Date alone discards the final three.
-  const fraction = (value.match(/\.(\d+)/)?.[1] || '').padEnd(6,'0');
-  return `${Date.parse(value)}:${fraction.slice(3)}`;
-}
-
-function verifyPayment(payment: any, link: any, colis: any, expectedLive: boolean) {
-  if (!payment || typeof payment !== 'object' || payment.id !== link.provider_id || payment.object !== 'payment' || payment.is_live !== expectedLive
-    || payment.currency !== 'EUR' || !Number.isInteger(payment.amount) || payment.amount !== link.amount_cents
-    || payment.metadata?.colis_id !== colis.id) throw new HttpError(409, 'Le paiement fournisseur ne correspond pas à ce dossier, à son montant ou au mode attendu.');
-  if (payment.is_paid !== false || (payment.amount_refunded ?? 0) !== 0) throw new HttpError(409, 'Un paiement reçu ou remboursé est signalé. La correction est bloquée ; aucun remboursement ne sera effectué.');
-  if (link.kind === 'modern') {
-    if (link.provider_is_live !== expectedLive || payment.metadata?.intent_id !== link.id
-      || String(payment.metadata?.quote_version) !== String(link.quote_version)) throw new HttpError(409, 'Le paiement ne correspond pas à la version du devis enregistrée.');
-  } else if (payment.metadata?.colis_ref !== link.colis_ref || Object.hasOwn(payment.metadata, 'quote_version')
-    || Object.hasOwn(payment.metadata, 'intent_id') || typeof payment.billing?.email !== 'string'
-    || payment.metadata?.client_id != null && payment.metadata.client_id !== link.client_id
-    || payment.billing.email.trim().toLowerCase() !== link.billing_email.trim().toLowerCase()) {
-    throw new HttpError(409, 'L’identité du paiement historique doit être vérifiée avant de retirer son lien.');
-  }
-}
-
 Deno.serve(async (req: Request) => {
   const early = postOnly(req); if (early) return early;
   const cancelledIds: string[] = [];
@@ -101,52 +72,19 @@ Deno.serve(async (req: Request) => {
     // SQL checks again under lock; an external cancellation cannot share that
     // transaction, so the existing cancellation proof/cleanup remains required.
     await checkTaskOwner(db, colisId, task, user.id);
-    const [intentsResult, paidResult, legacyResult] = await Promise.all([
-      db.from('payment_intents').select('*').eq('colis_id', colisId),
+    const [{ intents, legacy }, paidResult] = await Promise.all([
+      loadPaymentLinks(db, colisId),
       db.from('paiements').select('id').eq('colis_id', colisId).eq('statut','confirme').limit(1),
-      db.from('legacy_payplug_payments').select('*').eq('colis_id', colisId),
-    ]); [intentsResult, paidResult, legacyResult].forEach(throwDb);
-    const intents = intentsResult.data || []; const legacy = legacyResult.data || [];
+    ]); throwDb(paidResult);
     if (paidResult.data?.length || intents.some((intent: any) => intent.status === 'paid')
       || legacy.some((link: any) => link.observed_payment_date || link.observed_payment_amount != null)) throw new HttpError(409, 'Un règlement est déjà enregistré. La correction est bloquée.');
     if (colis.envoi_id) {
       const departure = await db.from('envois').select('departed_at,manifest_version').eq('id',colis.envoi_id).maybeSingle(); throwDb(departure);
       if (departure.data?.departed_at || departure.data?.manifest_version > 0) throw new HttpError(409, 'Ce dossier appartient à un départ déjà confirmé.');
     }
-    if (!unchanged) {
-      if (intents.some((intent: any) => intent.status === 'creating')) throw new HttpError(409, 'Un lien de paiement est en cours de création. Attendez sa confirmation avant de corriger le dossier.');
-      const links = [...intents.filter((intent: any) => intent.provider_id).map((intent: any) => ({...intent,kind:'modern'})),
-        ...legacy.map((link: any) => ({...link,kind:'legacy'}))];
-      if (colis.payplug_payment_id && !links.some(link => link.provider_id === colis.payplug_payment_id)
-        || colis.payplug_payment_url && !colis.payplug_payment_id) throw new HttpError(409, 'Le lien de paiement actuel n’a pas de référence vérifiable. Faites vérifier ce lien avant de corriger.');
-      for (const link of links) {
-        if (link.provider_cancelled_at) { cancelledIds.push(link.provider_id); continue; }
-        const key = Deno.env.get('PAYPLUG_SECRET_KEY')?.trim();
-        if (!key) throw new HttpError(503, 'PayPlug doit être configuré pour retirer l’ancien lien de paiement.');
-        const expectedLive = requirePayplugCreationMode(key);
-        if (link.kind === 'legacy' && !expectedLive) throw new HttpError(409, 'Ce lien historique doit être rapproché manuellement avant de corriger le dossier dans cet environnement de test.');
-        if (!/^pay_[a-zA-Z0-9]+$/.test(link.provider_id)) throw new HttpError(409, 'Référence PayPlug non reconnue.');
-        const url = `https://api.payplug.com/v1/payments/${encodeURIComponent(link.provider_id)}`;
-        const headers = { Authorization:`Bearer ${key}`,'PayPlug-Version':'2019-08-06','Content-Type':'application/json' };
-        let response: Response;
-        try { response = await fetch(url,{headers,signal:AbortSignal.timeout(15000)}); }
-        catch { throw new HttpError(502, 'PayPlug n’a pas confirmé l’état de l’ancien lien. La correction n’est pas enregistrée ; réessayez.'); }
-        if (!response.ok) throw new HttpError(502, 'Impossible de vérifier l’ancien paiement auprès de PayPlug.');
-        let payment = await response.json(); verifyPayment(payment,link,colis,expectedLive);
-        if (payment.failure?.code !== 'aborted') {
-          if (payment.failure) throw new HttpError(409, 'Ce paiement fournisseur est déjà en échec. Faites vérifier sa clôture avant de corriger le dossier.');
-          await checkTaskOwner(db, colisId, task, user.id);
-          try { response = await fetch(url,{method:'PATCH',headers,body:JSON.stringify({aborted:true}),signal:AbortSignal.timeout(15000)}); }
-          catch { throw new HttpError(502, 'L’annulation PayPlug n’a pas été confirmée. Votre correction n’est pas enregistrée ; réessayez pour vérifier le lien.'); }
-          if (!response.ok) throw new HttpError(502, 'PayPlug n’a pas confirmé l’annulation. Vérifiez si le client a payé, puis réessayez.');
-          payment = await response.json(); verifyPayment(payment,link,colis,expectedLive);
-          if (payment.failure?.code !== 'aborted') throw new HttpError(502, 'PayPlug n’a pas confirmé que l’ancien lien est annulé. La correction n’est pas enregistrée.');
-        }
-        cancelledIds.push(link.provider_id);
-        const proof = await db.rpc('record_payplug_cancellation', { p_colis_id:colisId,p_provider_id:link.provider_id,p_payment:payment });
-        throwDb(proof);
-      }
-    }
+    if (!unchanged) await cancelPayplugLinks(db, colis, { intents, legacy }, {
+      context: 'correction', cancelledIds, beforePatch: () => checkTaskOwner(db, colisId as string, task, user.id),
+    });
     const correction = await scoped.rpc('correct_colis_task', {
       p_colis_id:colisId,p_task:task,p_values:values,p_expected_updated_at:expectedUpdatedAt,p_reason:reason.trim(),
     });
@@ -157,13 +95,7 @@ Deno.serve(async (req: Request) => {
     return json({ ...correction.data, paymentLinkCancelled:cancelledIds.length > 0 });
   } catch (error) {
     if (cancelledIds.length && db && colisId) {
-      // The provider link is gone even if the dossier CAS failed. Never clear a
-      // replacement link or overwrite the colleague's measurements/status.
-      let cleanupFailed = false;
-      try {
-        const cleaned = await db.from('colis').update({payplug_payment_url:null}).eq('id',colisId).in('payplug_payment_id',cancelledIds).select('id');
-        cleanupFailed = Boolean(cleaned.error);
-      } catch { cleanupFailed = true; }
+      const { cleanupFailed } = await compensateCancelledLinks(db, colisId, cancelledIds);
       const extra = cleanupFailed ? ' L’affichage du lien doit aussi être actualisé.' : '';
       return json({ok:false,code:(error as any)?.code || null,paymentLinkCancelled:true,correctionSaved:false,
         error:`Un ancien lien de paiement est désactivé, mais la correction n’est pas enregistrée. Votre saisie est conservée.${extra} ${error instanceof HttpError ? error.message : 'Réessayez après avoir actualisé le dossier.'}`},error instanceof HttpError ? error.status : 500);

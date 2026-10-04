@@ -1,5 +1,6 @@
 import { admin, fail, HttpError, json, postOnly, requireStaff, throwDb } from '../_shared/http.ts';
 import { processOcrQueue } from '../_shared/ocrQueue.ts';
+import { processDueQuoteWithdrawals } from '../_shared/quoteWithdrawal.ts';
 import { dispatchOutbox } from '../_shared/telegram.ts';
 
 Deno.serve(async (req: Request) => {
@@ -33,12 +34,15 @@ Deno.serve(async (req: Request) => {
       }
       cursor=batch.data[batch.data.length-1].id;
     }
+    // Late client invoices: cancel the old PayPlug link (read first), withdraw the quote, tell the client once.
+    // Short budget: a PayPlug read and abort already in flight may still take 30 s, and the outbox and OCR follow.
+    const withdrawals = await processDueQuoteWithdrawals(db, { deadline: Date.now() + 10000, limit: 3 });
     // Failed/ambiguous sends require operator review. Never silently resend them.
     const stale = await db.from('notification_outbox').update({status:'failed',last_error:'Envoi interrompu : vérifier Telegram avant de renvoyer'}).eq('status','sending').lt('locked_at',new Date(Date.now()-300000).toISOString()); throwDb(stale);
     const pending = await db.from('notification_outbox').select('id').in('status',['pending','blocked']).lte('available_at',new Date().toISOString()).order('created_at').limit(100); throwDb(pending);
     const dispatchStarted=Date.now();
     for (const row of pending.data) { if (!Deno.env.get('TELEGRAM_BOT_TOKEN') || Date.now()-dispatchStarted>40000) break; try { const result=await dispatchOutbox(db,row.id); if(result.ok) sent++; } catch { /* failure is durable in outbox, continue other clients */ } }
     const ocr = await processOcrQueue(db);
-    return json({scanned,queued,sent,ocr,remindersMode:'manual'});
+    return json({scanned,queued,sent,withdrawals,ocr,remindersMode:'manual'});
   } catch (error) { return fail(error); }
 });

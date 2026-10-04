@@ -10,8 +10,10 @@ Deno.serve(async (req:Request)=>{
   const colis=await db.from('colis').select('id,ref,client_id').eq('id',colisId).eq('client_id',inbox.data.client_id).single();throwDb(colis);
   const client=await db.from('clients').select('id,nom,prenom').eq('id',inbox.data.client_id).single();throwDb(client);
   const claim=await db.rpc('claim_inbox_assignment',{p_inbox_id:inboxId,p_colis_id:colisId});throwDb(claim);
+  // What became of a document (late invoice, identical copy, question): the team sees it; the client is not prompted.
+  let document:unknown=null;
   if(claim.data.status!=='assigned'){
-   try{await saveIncoming(db,client.data,colis.data,inbox.data.payload,inbox.data.telegram_update_id);}
+   try{document=(await saveIncoming(db,client.data,colis.data,inbox.data.payload,inbox.data.telegram_update_id)).document??null;}
    catch(error){
     if(error instanceof HttpError&&error.status===400){
      throwDb(await db.from('client_inbox').update({status:'unassigned',payload:{...inbox.data.payload,intake_error:error.message},texte:`${colis.data.ref} — ${error.message}`}).eq('id',inboxId));
@@ -20,6 +22,6 @@ Deno.serve(async (req:Request)=>{
    }
   }
   throwDb(await db.from('client_inbox').update({colis_id:colisId,status:'assigned'}).eq('id',inboxId).eq('status','assigning'));
-  return json({success:true,colisId});
+  return json({success:true,colisId,document});
  }catch(error){return fail(error);}
 });

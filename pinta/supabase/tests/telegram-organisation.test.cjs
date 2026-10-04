@@ -2,7 +2,8 @@ const test=require('node:test');
 const assert=require('node:assert/strict');
 const path=require('node:path');
 const vm=require('node:vm');
-const {webcrypto}=require('node:crypto');
+const {webcrypto,createHash}=require('node:crypto');
+const documentHash=createHash('sha256').update('SYNTHETIC PDF').digest('hex');
 const esbuild=require('../../node_modules/esbuild');
 let bundle;
 async function webhook(db,fetch){
@@ -12,7 +13,7 @@ async function webhook(db,fetch){
 async function scenario({attachment=false,unsupported=false,reply=false,ambiguous=false,ackFails=false,invoiceFails=false}={}){
  const selected={id:'fixture-selected',ref:'EXP-PAID',statut:'paye',paiement_date:'2026-09-01'};
  const writes=[],rpcCalls=[],providerCalls=[];
- const db={rpc:async(name,args)=>{rpcCalls.push({name,args});if(name==='claim_telegram_update')return{data:'claimed',error:null};if(name==='register_requested_invoice')return{data:null,error:invoiceFails?{message:'Synthetic invoice registration unavailable'}:null};assert.equal(name,'resolve_telegram_message_colis');return{data:ambiguous?null:selected,error:null};},
+ const db={rpc:async(name,args)=>{rpcCalls.push({name,args});if(name==='claim_telegram_update')return{data:'claimed',error:null};if(name==='register_telegram_document')return invoiceFails?{data:null,error:{message:'Synthetic invoice registration unavailable'}}:{data:{status:'frozen',ref:'EXP-PAID',prenom:'Camille'},error:null};assert.equal(name,'resolve_telegram_message_colis');return{data:ambiguous?null:selected,error:null};},
  storage:{from(bucket){assert.equal(bucket,'factures');return{upload:async(file,bytes,options)=>{writes.push({table:'storage',file,bytes:bytes.byteLength,options});return{data:{},error:null};}};}},
  from(table){let mutation;const q={};for(const key of ['select','eq','in','not','order','limit'])q[key]=()=>q;
  q.upsert=q.update=value=>{mutation=value;return q;};const resolve=()=>{
@@ -33,18 +34,19 @@ test('Actual webhook stores paid attachment as readable conversation document wi
  const result=await scenario({attachment:true});assert.equal(result.response.status,200);assert.equal(result.writes.filter(x=>x.table==='storage').length,1);const message=result.writes.find(x=>x.table==='messages').mutation;assert.equal(message.colis_id,'fixture-selected');assert.equal(message.attachment_path,'fixture-selected/telegram_1001.pdf');assert.equal(message.attachment_name,'document.pdf');assert.equal(message.attachment_type,'application/pdf');assert.match(message.texte,/Document reçu/);assert.equal(result.writes.find(x=>x.table==='telegram_updates').mutation.status,'done');
 });
 test('An attachment checks invoice intent in the database after its durable message is saved',async()=>{
- const result=await scenario({attachment:true});assert.equal(result.response.status,200);assert.equal(result.rpcCalls.find(x=>x.name==='register_requested_invoice').args.p_message_id,'fixture-message');assert.equal(result.writes.find(x=>x.table==='messages').mutation.created_at,new Date(1789000000*1000).toISOString());
- assert.equal(Object.hasOwn(result.rpcCalls.find(x=>x.name==='register_requested_invoice').args,'p_reply_message_id'),false);
+ const result=await scenario({attachment:true});assert.equal(result.response.status,200);assert.equal(result.rpcCalls.find(x=>x.name==='register_telegram_document').args.p_message_id,'fixture-message');assert.equal(result.writes.find(x=>x.table==='messages').mutation.created_at,new Date(1789000000*1000).toISOString());
+ assert.equal(result.rpcCalls.find(x=>x.name==='register_telegram_document').args.p_reply_message_id,null);
+ assert.equal(result.rpcCalls.find(x=>x.name==='register_telegram_document').args.p_document_sha256,documentHash,'The server hashes the bytes it stored');
 });
 test('Explicit attachment reply passes the authenticated Telegram request id to the guarded invoice RPC',async()=>{
  const result=await scenario({attachment:true,reply:true});assert.equal(result.response.status,200);
- assert.deepEqual(JSON.parse(JSON.stringify(result.rpcCalls.find(x=>x.name==='register_requested_invoice').args)),{p_message_id:'fixture-message',p_reply_message_id:'90'});
+ assert.deepEqual(JSON.parse(JSON.stringify(result.rpcCalls.find(x=>x.name==='register_telegram_document').args)),{p_message_id:'fixture-message',p_reply_message_id:'90',p_document_sha256:documentHash});
 });
 test('Invoice registration failure keeps the document durable and the update retryable before acknowledgement',async()=>{
  const result=await scenario({attachment:true,invoiceFails:true});assert.equal(result.response.status,500);assert.equal(result.writes.filter(x=>x.table==='messages').length,1);assert.equal(result.writes.find(x=>x.table==='telegram_updates').mutation.status,'failed');assert.equal(result.providerCalls.some(x=>x.url.includes('/sendMessage')),false);
 });
 test('Plain customer messages never enter the invoice registration pipeline',async()=>{
- const result=await scenario();assert.equal(result.response.status,200);assert.equal(result.rpcCalls.some(x=>x.name==='register_requested_invoice'),false);
+ const result=await scenario();assert.equal(result.response.status,200);assert.equal(result.rpcCalls.some(x=>x.name==='register_telegram_document'),false);
 });
 test('Ambiguous explicit routing creates durable inbox instead of selecting unrelated active dossier',async()=>{
  const result=await scenario({reply:true,ambiguous:true});assert.equal(result.response.status,200);assert.equal(result.writes.some(x=>x.table==='messages'),false);assert.equal(result.writes.filter(x=>x.table==='client_inbox').length,1);assert.equal(result.writes.find(x=>x.table==='telegram_updates').mutation.status,'done');

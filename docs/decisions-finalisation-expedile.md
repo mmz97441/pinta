@@ -433,3 +433,37 @@ Validation : 79 tests applicatifs, 45 assertions PostgreSQL, 12 scénarios navig
 ## Livraison organisation multiutilisateur — 12 septembre 2026
 
 Les huit zones UI et les 22 écarts logiques ont été corrigés puis publiés sur expedile.app. [Rapport complet des modifications, décisions, tests et déploiement](livraison-organisation-equipe-2026-09-12.md). Déploiement Vercel `dpl_G1oRZ2gghCjX5hoNguK4RBqXSunA` ; migrations 00002–00008 et trois fonctions Edge appliquées. 109 tests applicatifs, 73 + 24 assertions SQL, 38 parités JS/SQL, 17 tests Telegram et 44 contrôles navigateur sur la version hébergée réussis. Aucun test n’a envoyé de communication ni de paiement réel.
+
+## Factures validées, devis envoyé, factures tardives et gel après paiement — 4 octobre 2026 (D1–D4, non déployé)
+
+Décisions de l’utilisateur du 4 octobre 2026 :
+
+- **D1** : aucune nouvelle analyse d’une facture validée, sauf après « Modifier la vérification » (brouillon serveur).
+- **D2** : la modification des pièces couvertes par un devis envoyé passe par le dialogue obligatoire « Retirer le devis et modifier ». Elle est réservée à `perm_factures_modifier_articles`. Le lien PayPlug est annulé et prouvé d’abord, puis le devis est retiré et versionné.
+- **D3** : une facture du client reçue après l’envoi du devis ouvre une demande durable. Elle annule le lien PayPlug, retire le devis, prévient le client une fois et crée la tâche « Vérifier la nouvelle facture puis renvoyer le devis ». Un document Telegram non demandé sur un devis verrouillé déclenche la question « S’agit-il d’une facture d’achat ? ».
+- **D4** : gel complet après paiement, départ ou clôture, avec les mêmes preuves que `_assert_unpaid_dossier`. Il s’applique au serveur, aux factures, articles, analyses, brouillons et à l’OCR.
+
+Livrables :
+
+- migration `20261004000001_invoice_quote_rules.sql` ;
+- fonctions Edge `invoice-quote-withdrawal` et `client-invoice-deposit` ;
+- modules partagés `payplugCancel`, `quoteWithdrawal`, `revision` et `taskOwner` ;
+- adaptations de `telegram-webhook`, `telegram-inbox-assign`, `relances-auto` et `ocr-facture`.
+
+Le détail des contrats est dans les [décisions backend](decisions-backend.md#règles-factures-devis-envoyé-et-gel-après-paiement--4-octobre-2026).
+
+Corrections de revue intégrées avant toute livraison :
+
+- **PayPlug seul ne vaut pas paiement.** Un lien signalé payé chez PayPlug ne clôt plus une demande comme payée tant que le dossier ne porte pas de paiement enregistré. C’est notamment le cas d’un ancien lien remplacé que le webhook refuse. La demande passe alors en vérification, le lien reste masqué au client et l’équipe rapproche le paiement.
+- **Pré-contrôle avant PayPlug.** Facture du dossier, jeton de vérification et pièce jointe sont vérifiés en lecture seule (`withdraw_quote_preflight`) avant toute annulation. Une demande invalide ne coûte plus son lien au client.
+- **Portail client.** Pendant la mise à jour du devis, ni la liste ni le détail ne demandent de payer. Le détail ne montre ni l’ancien montant, ni la référence de virement pro, ni le PDF du devis retiré.
+- **Dialogues équipe.** Une erreur définitive (paiement signalé, rôle insuffisant, PayPlug non configuré, dossier figé) retire le bouton de retrait. Une nouvelle tentative après un échec partiel utilise le dossier rechargé. L’article manuel n’affirme plus qu’aucun message n’est envoyé quand une facture du client attend.
+- **Messages client.** Un départ ou une clôture n’est jamais annoncé comme « paiement enregistré ». Un bouton « Oui » obsolète n’ajoute rien. Les erreurs techniques de la base ne sont plus transmises au client.
+
+La recette est **locale** : PostgreSQL 17 en conteneur sans réseau, tests Edge simulés, suites navigateur sur un build de test. Ni migration, ni fonction, ni secret, ni webhook n’a été appliqué au projet Supabase. Aucun envoi Telegram ni appel PayPlug réel n’a eu lieu.
+
+Ordre d’activation prévu :
+
+1. la migration ;
+2. les deux nouvelles fonctions et les fonctions modifiées ;
+3. le bundle du portail et de l’espace équipe.

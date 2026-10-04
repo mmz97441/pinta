@@ -125,3 +125,27 @@ test('payment dates do not imply a logistics update or delivery commitment', () 
   assert.deepEqual(latestLogisticsEvent(parcel), { label:'Réception enregistrée', date:'2026-09-01' });
   assert.equal(latestLogisticsEvent({...parcel, dateReception:'invalid'}), null);
 });
+
+test('a quote being updated after a late invoice never asks the client to pay', () => {
+  const parcel = { id: 'p', statut: 'devis_envoye', devisTotal: 120, devisEnvoyeLe: '2026-10-01T08:00:00Z', quoteUpdatePending: true, payplugPaymentUrl: null, factures: [] };
+  const state = clientWorkState(parcel);
+  assert.deepEqual([state.section, state.kind, state.action], ['team', 'none', 'Suivre la mise à jour du devis']);
+  assert.equal(state.journey.label, 'Devis en cours de mise à jour'); assert.equal(state.journey.actor, 'Notre équipe');
+  assert.match(state.journey.next, /Aucun règlement n’est demandé/);
+  assert.equal(state.journey.event?.historical, true, 'The withdrawn quote date is history, not the current step');
+  assert.equal(clientWorkState({ ...parcel, statut: 'attente_paiement' }).kind, 'none');
+  assert.equal(clientWorkState({ ...parcel, quoteUpdatePending: false }).kind, 'payment');
+  assert.equal(clientWorkState({ ...parcel, statut: 'paye', paiementDate: '2026-10-02', paiementMontant: 120 }).journey.quoteUpdating, false);
+  assert.doesNotMatch(publicJourney(parcel).label + publicJourney(parcel).next, /Règlement attendu/);
+});
+
+test('after the late-invoice withdrawal the quote stays « en cours de mise à jour » until the new quote is sent', () => {
+  const parcel = { id: 'p', statut: 'en_preparation', devisBrouillon: true, devisTotal: null, devisEnvoyeLe: '2026-10-01T08:00:00Z', quoteUpdatePending: true, factures: [{ id: 'f', valide: false }] };
+  const state = clientWorkState(parcel);
+  assert.deepEqual([state.section, state.kind, state.action], ['team', 'none', 'Suivre la mise à jour du devis']);
+  assert.equal(state.journey.label, 'Devis en cours de mise à jour'); assert.equal(state.journey.quoteUpdating, true);
+  assert.equal(state.journey.event?.historical, true);
+  assert.equal(clientWorkState({ ...parcel, quoteUpdatePending: false }).journey.label, 'Devis en cours de révision');
+  assert.equal(clientWorkState({ ...parcel, statut: 'expedie', dateExpedition: '2026-10-02' }).journey.quoteUpdating, false);
+  assert.equal(clientWorkState({ ...parcel, archive: true }).journey.quoteUpdating, false);
+});

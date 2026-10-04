@@ -4,6 +4,7 @@
 import { supabase } from './supabase';
 import { randomId } from './randomId';
 import { normalizeStaffPermissions, staffPermissionSaveArgs } from '../domain/staffPermissions';
+import { functionErrorMessage } from '../services/functionErrors';
 
 let dataScope = 'staff';
 export function setDataScope(type) {
@@ -83,6 +84,8 @@ export function mapColis(row) {
     archive: row.archive || false,
     payplugPaymentId: row.payplug_payment_id || null,
     payplugPaymentUrl: row.payplug_payment_url || null,
+    // client_colis only: a late invoice is updating the quote. Read-only, never written.
+    quoteUpdatePending: row.quote_update_pending === true,
     updatedAt: row.updated_at,
     statutUpdatedAt: row.statut_updated_at || null,
     conversationStatut: row.conversation_statut || null,
@@ -828,6 +831,31 @@ export async function saveInvoiceReview(invoice, draft, confirm) {
   if (error) throw error;
   if (!data?.success) throw new Error('La confirmation du serveur est indisponible. Actualisez pour vérifier l’enregistrement.');
   return { ...data, facture: mapFact(data.facture) };
+}
+
+/** D1: opens the modification of a validated invoice (server-side draft). */
+export async function openInvoiceModification(invoiceId, token) {
+  const { data, error } = await supabase.rpc('open_invoice_modification', { p_facture_id: invoiceId, p_expected_review_token: token || null });
+  if (error) throw error;
+  if (!data?.reviewToken) throw new Error('L’ouverture de la modification n’a pas été confirmée. Actualisez la facture.');
+  return data;
+}
+
+/** D1: closes the modification; the saved draft is deleted, the validated version kept. */
+export async function closeInvoiceModification(invoiceId, token) {
+  const { data, error } = await supabase.rpc('close_invoice_modification', { p_facture_id: invoiceId, p_expected_review_token: token || null });
+  if (error) throw error;
+  if (!data?.reviewToken) throw new Error('La fermeture de la modification n’a pas été confirmée. Actualisez la facture.');
+  return data;
+}
+
+const DEPOSIT_STATUSES = new Set(['quote_withdrawn', 'received_pending', 'duplicate', 'frozen', 'paid', 'added']);
+/** Client portal: one already uploaded file becomes an invoice (D3). Idempotent on path. */
+export async function depositClientInvoice({ colisId, path, fileName, vendor = null, replacesFactureId = null }) {
+  const result = await supabase.functions.invoke('client-invoice-deposit', { body: { colisId, path, fileName, vendor: vendor || null, replacesFactureId: replacesFactureId || null } });
+  if (result.error || result.data?.ok === false || result.data?.error) throw new Error(await functionErrorMessage(result, 'Le dépôt n’a pas été confirmé. Réessayez : le document déjà envoyé ne sera pas enregistré deux fois.'));
+  if (!DEPOSIT_STATUSES.has(result.data?.status)) throw new Error('Le dépôt n’a pas été confirmé. Réessayez : le document déjà envoyé ne sera pas enregistré deux fois.');
+  return { ...result.data, facture: result.data.facture ? mapFact(result.data.facture) : null };
 }
 
 export async function classifyInvoiceDuplicate(invoiceId, originalId, token, originalToken) {

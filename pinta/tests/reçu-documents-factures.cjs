@@ -127,7 +127,8 @@ async function openConversation(page) {
     tables.colis[0].paiement_date = null;
     await page.goto(base + '/colis/' + P + '?section=documents');
     await openReceived(page, 2);
-    await received.getByText('Consultation uniquement : ce dossier est payé, terminé ou archivé.', { exact: true }).waitFor();
+    // D4: the read-only notice names the freezing reason (statut « payé » counts as a recorded payment).
+    await received.getByText('Paiement enregistré : factures, articles et analyses sont figés. Ils restent consultables.', { exact: true }).waitFor();
     assert.equal(await received.getByRole('button', { name: 'Ajouter comme facture', exact: true }).count(), 0);
     assert.equal(await invoices.getByRole('button', { name: 'Ajouter une facture', exact: true }).count(), 0);
     await openConversation(page);
@@ -136,10 +137,15 @@ async function openConversation(page) {
     await received.getByRole('link', { name: 'achat-un.pdf', exact: true }).waitFor();
     results.push({ test: 'paid-dossier-retains-document-reading-and-disables-all-invoice-import-entry-points', pass: true });
 
-    for (const changes of [{ statut: 'livre', archive: false, paiement_date: null }, { statut: 'autorise', archive: true, paiement_date: null }, { statut: 'autorise', archive: false, paiement_date: '2026-09-10T10:00:00Z' }]) {
+    for (const [changes, notice] of [
+      [{ statut: 'livre', archive: false, paiement_date: null }, 'Le dossier est parti : factures, articles et analyses restent consultables.'],
+      [{ statut: 'autorise', archive: true, paiement_date: null }, 'Dossier clos : factures, articles et analyses restent consultables.'],
+      [{ statut: 'autorise', archive: false, paiement_date: '2026-09-10T10:00:00Z' }, 'Paiement enregistré : factures, articles et analyses sont figés. Ils restent consultables.'],
+    ]) {
       Object.assign(tables.colis[0], changes);
       await page.goto(base + '/colis/' + P + '?section=documents');
       await openReceived(page, 2);
+      await received.getByText(notice, { exact: true }).waitFor();
       assert.equal(await received.getByRole('button', { name: 'Ajouter comme facture', exact: true }).count(), 0);
       await openConversation(page);
       assert.equal(await page.locator('#conversation-client').getByRole('button', { name: 'Utiliser comme facture', exact: true }).count(), 0);

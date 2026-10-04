@@ -168,6 +168,18 @@ test('identity prefers validated data, then labelled suggestions, never the uplo
   assert.equal(invoiceIdentity(second, null, lines).articles, 1, 'Raw article rows are understood.');
 });
 
+test('D1: a validated invoice ignores any extraction, even a legacy validation without vendor or total', () => {
+  const record = { extraction: { id: 'e', status: 'review', vendeur: 'Leroy Merlin', total: 42.5, lines: [] } };
+  const legacy = { ...copy, valide: true };
+  const identity = invoiceIdentity(legacy, record);
+  assert.equal(identity.supplierSuggested, false);
+  assert.equal(identity.amountSuggested, false);
+  assert.notEqual(identity.supplier, 'Leroy Merlin');
+  assert.equal(identity.amount, null);
+  assert.deepEqual(invoiceIdentity(legacy, record), invoiceIdentity(legacy, null), 'The extraction changes nothing once validated.');
+  assert.equal(invoiceIdentity({ ...copy, valide: false }, record).supplierSuggested, true, 'An unvalidated invoice keeps its proposals.');
+});
+
 test('state labels name every case in plain French', () => {
   const replacement = { ...second, id: 'second-v2', replacesFactureId: second.id, valide: false, montant: 0 };
   const list = [first, second, copy, replacement];
@@ -191,6 +203,8 @@ test('OCR notes are advisory and silent once the invoice is validated', () => {
   assert.equal(invoiceOcrNote(todo, { extraction: null }), '');
   assert.equal(invoiceOcrNote({ ...first, ocrStatus: 'failed' }, { extraction: { status: 'review' } }), '');
   assert.equal(invoiceOcrNote(null), '');
+  assert.equal(invoiceOcrNote({ ...todo, ocrStatus: 'pending' }, { analysisAllowed: false, analysisBlockedReason: 'frozen', extraction: null }), '', 'A frozen dossier never says the reading is in progress');
+  assert.equal(invoiceOcrNote({ ...todo, ocrStatus: 'review' }, { analysisAllowed: false, extraction: null }), '');
 });
 
 test('no « Propositions prêtes » beside a client correction or a missing document', () => {

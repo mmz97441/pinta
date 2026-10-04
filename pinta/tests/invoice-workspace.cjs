@@ -7,7 +7,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const os = require('node:os');
-const { setup, ids, base } = require('./browser-regression.cjs');
+const { setup, ids, base, invoiceLock, analysisReason } = require('./browser-regression.cjs');
 const { invoiceList, invoiceItems, invoiceItem, currentInvoiceItem, currentInvoiceId, waitForCurrentInvoice, invoiceNames, chooseInvoice } = require('./invoice-list.helper.cjs');
 
 const output = process.env.PINTA_INVOICE_WORKSPACE_OUT || path.join(os.tmpdir(), 'pinta-invoice-workspace-20260916');
@@ -44,7 +44,8 @@ async function fixture(browser, options = {}) {
   if (options.duplicates) Object.assign(records.get(C).extraction, { vendeur: 'Boutique B', total: 16.64, lines: [{ desc: 'Scelleuse thermique', qte: 1, prix: 16.64, cat: 'cat-test' }] });
   if (options.noAnalysis) for (const id of [B, C]) Object.assign(records.get(id), { extraction: null, documentHash: null, duplicateCandidateIds: [] });
   const calls = [], mutations = [];
-  const control = { failSave: false, loseResponse: false, failContext: false, failRefresh: false, failClassify: false, failSign: null, gate: null };
+  // withdrawal: lock.withdrawal of the review context; withdrawalReply(input): { status, body } of the D2 Edge function.
+  const control = { failSave: false, loseResponse: false, failContext: false, failRefresh: false, failClassify: false, failSign: null, gate: null, withdrawal: null, withdrawalReply: null, openReply: null, legacyContext: false };
   page.on('request', request => {
     const url = new URL(request.url());
     if (/\/rest\/v1\/(factures|lignes)$/.test(url.pathname) && request.method() !== 'GET') mutations.push({ path: url.pathname, method: request.method(), input: request.postDataJSON() });
@@ -71,11 +72,60 @@ async function fixture(browser, options = {}) {
   await context.route('**/rest/v1/rpc/get_invoice_review_context', route => {
     calls.push({ kind: 'context', input: route.request().postDataJSON() });
     if (control.failContext) return answer(route, { message: 'Chargement des vérifications temporairement indisponible.' }, 503);
+    const parcel = tables.colis[0];
     const current = tables.factures.map(invoice => {
       if (!records.has(invoice.id)) records.set(invoice.id, { factureId: invoice.id, reviewToken: 'review-' + invoice.id, extraction: null, draft: null, documentHash: null, duplicateCandidateIds: [] });
-      return clone(records.get(invoice.id));
+      const record = clone(records.get(invoice.id));
+      if (control.legacyContext) return record;
+      // D1/D4 as the server answers: no analysis for a validated invoice without an open modification, nor on a frozen dossier.
+      const reason = analysisReason(parcel, invoice, record.draft);
+      return { ...record, extraction: ['frozen', 'validated'].includes(reason) ? null : record.extraction, analysisAllowed: reason === null, analysisBlockedReason: reason };
     });
-    return answer(route, { invoices: current, unlinkedLines: tables.lignes.filter(line => !line.facture_id).map(clone) });
+    return answer(route, { invoices: current, unlinkedLines: tables.lignes.filter(line => !line.facture_id).map(clone), ...(control.legacyContext ? {} : { lock: invoiceLock(parcel, clone(control.withdrawal)) }) });
+  });
+  const validatedDraft = invoice => ({ lines: tables.lignes.filter(line => line.facture_id === invoice.id).map(line => ({ desc: line.description, qte: line.qte, prix: line.prix_unitaire, cat: line.categorie_id })), total: invoice.montant, vendeur: invoice.vendeur, extractionId: null });
+  await context.route('**/rest/v1/rpc/open_invoice_modification', route => {
+    const input = route.request().postDataJSON(); calls.push({ kind: 'open-modification', input });
+    if (control.openReply) { const reply = control.openReply; control.openReply = null; return answer(route, reply.body, reply.status); }
+    const record = records.get(input.p_facture_id), invoice = tables.factures.find(item => item.id === input.p_facture_id);
+    if (!invoice?.valide) return answer(route, { code: '22023', message: 'Seule une facture validée et active peut être modifiée.' }, 400);
+    if (input.p_expected_review_token !== record.reviewToken) return answer(route, { code: '40001', message: 'Cette facture a changé. Rechargez sa vérification.' }, 409);
+    const created = !record.draft;
+    if (created) { record.draft = validatedDraft(invoice); record.reviewToken += '-opened'; }
+    return answer(route, { reviewToken: record.reviewToken, draft: clone(record.draft), created });
+  });
+  await context.route('**/rest/v1/rpc/close_invoice_modification', route => {
+    const input = route.request().postDataJSON(); calls.push({ kind: 'close-modification', input });
+    const record = records.get(input.p_facture_id);
+    if (input.p_expected_review_token !== record.reviewToken) return answer(route, { code: '40001', message: 'Cette facture a changé. Rechargez sa vérification.' }, 409);
+    const closed = !!record.draft; record.draft = null; record.reviewToken += '-closed';
+    return answer(route, { reviewToken: record.reviewToken, closed });
+  });
+  // D2: PayPlug first, then the database withdraws the quote (and opens the draft for open_modification).
+  await context.route('**/functions/v1/invoice-quote-withdrawal', route => {
+    const input = route.request().postDataJSON(); calls.push({ kind: 'withdrawal', input });
+    if (control.withdrawalReply) { const reply = control.withdrawalReply(input); if (reply) return answer(route, reply.body, reply.status); }
+    const parcel = tables.colis[0];
+    if (input.action === 'retry') { control.withdrawal = { ...control.withdrawal, status: 'withdrawn', withdrawnAt: '2026-10-04T09:00:00Z', linkCancelled: true, clientMessageStatus: 'sent' }; return answer(route, { ok: true, withdrawal: { id: input.withdrawalId, status: 'withdrawn', linkCancelled: true, message: { canal: 'telegram', status: 'sent' } } }); }
+    if (input.expectedUpdatedAt !== parcel.updated_at) return answer(route, { ok: false, code: '40001', error: 'Le dossier a changé. Actualisez puis réessayez.' }, 409);
+    const linked = !!(parcel.payplug_payment_id || parcel.payplug_payment_url);
+    Object.assign(parcel, { statut: ['devis_envoye', 'attente_paiement'].includes(parcel.statut) ? 'en_preparation' : parcel.statut, devis_total: null, devis_snapshot: null, devis_brouillon: true, payplug_payment_id: null, payplug_payment_url: null, quote_version: (parcel.quote_version || 0) + 1, updated_at: new Date(Math.max(Date.now(), Date.parse(parcel.updated_at) + 1000)).toISOString() });
+    const withdrawal = { id: '88888888-0000-4000-8000-000000000001', colis_id: parcel.id, source: input.action === 'import_attachment' ? 'conversation_import' : 'staff', action: input.action, status: 'withdrawn', link_cancelled: linked, reason: input.reason };
+    const reply = { ok: true, changed: true, colis: clone(parcel), withdrawal, paymentLinkCancelled: linked };
+    if (input.action === 'open_modification') {
+      const record = records.get(input.factureId), invoice = tables.factures.find(item => item.id === input.factureId);
+      if (input.expectedReviewToken !== record.reviewToken) return answer(route, { ok: false, code: '40001', error: 'Cette facture a changé.' }, 409);
+      if (!record.draft) { record.draft = validatedDraft(invoice); record.reviewToken += '-opened'; }
+      reply.reviewToken = record.reviewToken;
+    }
+    if (input.action === 'import_attachment') {
+      // Atomic with the withdrawal: the invoice is imported and the D3 message delivered after the commit.
+      const message = tables.messages.find(item => item.id === input.messageId);
+      let invoice = tables.factures.find(item => item.fichier_url === message.attachment_path);
+      if (!invoice) { invoice = { id: '98888888-0000-4000-8000-000000000001', colis_id: parcel.id, vendeur: 'Document à vérifier', montant: 0, valide: false, fichier_url: message.attachment_path, fichier_nom: message.attachment_name }; tables.factures.push(invoice); }
+      Object.assign(reply, { facture: clone(invoice), message: { canal: 'telegram', status: 'sent' } });
+    }
+    return answer(route, reply);
   });
   await context.route('**/functions/v1/ocr-facture', route => {
     const input = route.request().postDataJSON();
@@ -144,7 +194,7 @@ const panel = f => f.page.getByRole('region', { name: 'Factures d’achat', exac
 const shownInvoice = f => f.page.getByRole('group', { name: 'Facture affichée', exact: true });
 // The bold progress line of the header: « {verified} sur {N} … » or « {N} factures · toutes vérifiées ».
 const progressLine = f => panel(f).locator('p').filter({ hasText: /^(\d+ sur \d+ factures? vérifiées?|\d+ factures? · (toutes )?vérifiées?|Aucune facture (reçue|enregistrée))/ });
-const READ_ONLY = 'Consultation uniquement : ce dossier est payé, terminé ou archivé.';
+const READ_ONLY = 'Paiement enregistré : factures, articles et analyses sont figés. Ils restent consultables.'; // FROZEN_TEXT.payment (D4)
 const AXE_TAGS = ['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa'];
 async function noAxeViolations(f, selector = '#quote-documents') {
   const audit = await new AxeBuilder({ page: f.page }).include(selector).withTags(AXE_TAGS).analyze();
@@ -923,6 +973,58 @@ async function main() {
       await minTarget(shownInvoice(f).getByRole('button'), 'Previous/next invoice');
       assert.equal(await invoiceItems(f.page).count(), 3);
       await f.page.screenshot({ path: path.join(output, 'invoice-dark-320.png'), fullPage: true });
+    });
+
+    // D1: a validated invoice is consulted without any analysis, whatever the server still holds.
+    for (const legacy of [false, true]) await scenario(`validated-invoice-opens-without-analysis${legacy ? '-legacy-context' : ''}`, {}, async f => {
+      Object.assign(f.records.get(ids.F), { documentHash: 'hash-a', extraction: { id: '74444444-4444-4444-8444-444444444444', facture_id: ids.F, document_hash: 'hash-a', document_file_url: ids.P + '/facture.pdf', document_storage_identity: 'stored-a-1', status: 'review', vendeur: 'Boutique A proposée', total: 99, lines: [{ desc: 'Article proposé', qte: 1, prix: 99, cat: 'cat-test' }], warnings: [] } });
+      // Legacy: a server from before D1 still returns the extraction and no analysisAllowed.
+      f.control.legacyContext = legacy;
+      await open(f, ids.F);
+      await f.page.getByTestId('invoice-modify').waitFor({ state: 'attached' });
+      await f.page.waitForTimeout(400);
+      assert.deepEqual(f.calls.filter(call => call.kind === 'ocr'), [], 'No ocr-facture call for a validated invoice.');
+      assert.equal(await f.page.getByRole('button', { name: 'Reprendre l’analyse', exact: true }).count(), 0);
+      assert.equal(await f.page.getByRole('button', { name: 'Analyser la facture', exact: true }).count(), 0);
+      assert.equal(await f.page.getByTestId('invoice-proposals').count(), 0);
+      assert.doesNotMatch(await review(f).innerText(), /\(proposé\)|Article proposé|Boutique A proposée/);
+    });
+
+    await scenario('modify-validated-invoice-opens-the-server-draft-then-one-resume', {}, async f => {
+      await open(f, ids.F);
+      await f.page.getByTestId('invoice-modify').click();
+      await description(f).waitFor();
+      assert.equal(await description(f).isEditable(), true);
+      assert.deepEqual(f.calls.filter(call => call.kind === 'open-modification').map(call => call.input), [{ p_facture_id: ids.F, p_expected_review_token: 'review-1-a' }]);
+      for (let i = 0; i < 40 && !f.calls.some(call => call.kind === 'ocr'); i++) await f.page.waitForTimeout(100);
+      await f.page.waitForTimeout(400);
+      assert.deepEqual(f.calls.filter(call => call.kind === 'ocr').map(call => call.input.action), ['resume'], 'Exactly one resume once the modification is open.');
+      assert.equal(f.calls.some(call => call.kind === 'withdrawal'), false, 'No quote: nothing to withdraw.');
+      assert.ok(f.records.get(ids.F).draft, 'The modification is a server draft.');
+    });
+
+    await scenario('payment-amount-without-date-freezes-invoices-without-ocr', {}, async f => {
+      Object.assign(f.tables.colis[0], { paiement_montant: 152.4, paiement_date: null });
+      Object.assign(f.tables.factures.find(invoice => invoice.id === C), { ocr_status: 'pending' });   // job skipped by the worker: the status stays stale
+      await f.page.goto(`${base}/colis/${ids.P}?invoice=${B}&returnTo=%2Fcolis#quote-documents`);
+      await f.page.getByTestId('invoice-frozen-notice').waitFor();
+      assert.equal(await f.page.getByTestId('invoice-frozen-notice').innerText(), READ_ONLY);
+      // R2-01 / UX-R2-03: no reading « en cours », no « À vérifier », a read-only pane that says why.
+      const list = f.page.getByRole('list', { name: 'Factures du dossier' });
+      await list.getByText('Conservée · hors devis').first().waitFor();
+      const listText = await list.innerText();
+      assert.doesNotMatch(listText, /Lecture automatique en cours|Propositions prêtes|À vérifier|Montant à vérifier/);
+      const articlesTab = f.page.getByRole('tab', { name: 'Voir les articles', exact: true });
+      if (await articlesTab.isVisible()) await articlesTab.click();
+      assert.equal(await f.page.getByTestId('invoice-frozen-pane-notice').innerText(), READ_ONLY);
+      await f.page.getByTestId('invoice-kept-summary').waitFor();
+      assert.equal(await f.page.getByText('Choisissez une catégorie pour cet article.').count(), 0);
+      assert.equal(await f.page.getByLabel('Description de l’article 1', { exact: true }).count(), 0, 'No editing form on a frozen dossier.');
+      await f.page.waitForTimeout(400);
+      assert.deepEqual(f.calls.filter(call => call.kind === 'ocr'), [], 'A frozen dossier never calls ocr-facture.');
+      assert.equal(await validate(f).count(), 0);
+      assert.equal(await f.page.getByTestId('invoice-proposals').count(), 0);
+      assert.equal(await f.page.getByRole('button', { name: 'Ajouter une facture', exact: true }).count(), 0);
     });
   } finally {
     await browser.close();

@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import {
   ArrowLeft, Package, CheckCircle, Wrench, CreditCard, Plane, MapPin,
   ChevronDown, ChevronUp, ChevronRight, AlertCircle, ThumbsUp, ThumbsDown, RotateCcw,
-  ExternalLink, Clock, Download, Camera, Shield, Warehouse, Truck,
+  ExternalLink, Clock, Download, Camera, Shield, Warehouse, Truck, RefreshCw,
 } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { hasPublishedQuote } from './quoteVisibility';
@@ -369,11 +369,19 @@ export default function ClientDetailView() {
       const isPay = ['devis_envoye', 'attente_paiement'].includes(sel.statut);
       const isPaye = sel.paiementMontant != null;
       const hasDevis = hasPublishedQuote(sel);
+      // A late invoice is updating the quote: no old amount, no old link.
+      const updating = sel.quoteUpdatePending && !isPaye;
 
       return (
         <div className="space-y-3">
-          {hasDevis && <p className="flex flex-wrap items-baseline justify-between gap-2 text-base font-semibold text-slate-800"><span>{isPaye ? 'Total du devis' : 'Montant à régler'}</span><strong className="text-2xl">{eur(price.devisTotal)}</strong></p>}
-          {hasDevis && isPay && !isPaye && !sel.archive && (
+          {updating && (
+            <div role="status" data-testid="quote-update-pending" className="flex items-start gap-3 rounded-xl border border-blue-100 bg-blue-50 p-3 text-blue-800">
+              <RefreshCw size={16} className="mt-0.5 shrink-0" aria-hidden="true" />
+              <div className="min-w-0"><p className="text-sm font-semibold">Votre devis est en cours de mise à jour</p><p className="mt-1 text-sm">Nous avons bien reçu votre nouvelle facture. Vous recevrez le nouveau devis dès qu’il sera prêt : vous n’avez rien à faire d’ici là.</p></div>
+            </div>
+          )}
+          {hasDevis && !updating && <p className="flex flex-wrap items-baseline justify-between gap-2 text-base font-semibold text-slate-800"><span>{isPaye ? 'Total du devis' : 'Montant à régler'}</span><strong className="text-2xl">{eur(price.devisTotal)}</strong></p>}
+          {hasDevis && isPay && !isPaye && !sel.archive && !updating && (
             <button
               onClick={handlePayer}
               className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-black text-sm text-white active:scale-95 transition-all"
@@ -387,7 +395,7 @@ export default function ClientDetailView() {
               {sel.payplugPaymentUrl ? `Payer ${hasDevis ? eur(price.devisTotal) : ''}` : published.client.type === 'pro' ? 'Consulter les échanges de règlement' : 'Contacter l’équipe pour le règlement'}
             </button>
           )}
-          {hasDevis && (
+          {hasDevis && !updating && (
             <details className="rounded-xl border border-gray-100 overflow-hidden">
               <summary
                 className="min-h-11 cursor-pointer px-3 py-3 text-sm font-semibold"
@@ -430,7 +438,7 @@ export default function ClientDetailView() {
             </details>
           )}
 
-          {hasDevis && <div className="border-t border-slate-200 pt-3 text-sm text-slate-600">
+          {hasDevis && !updating && <div className="border-t border-slate-200 pt-3 text-sm text-slate-600">
             {published.paymentMode && <p className="mt-2">Modalités convenues : <strong>{PAYMENT_TERMS[published.paymentMode] || published.paymentMode}</strong>.</p>}
             {published.client.type === 'pro' && !isPaye && <p className="mt-1">{published.paymentMode === 'virement' ? 'Utilisez les coordonnées bancaires transmises par notre équipe. Si vous ne les avez pas, demandez-les dans les échanges ci-dessous.' : ['30_jours','fin_de_mois'].includes(published.paymentMode) ? 'La date exacte d’échéance est celle communiquée par notre équipe. Consultez les échanges si elle ne figure pas sur votre devis.' : published.paymentMode === 'especes' ? 'Contactez notre équipe pour convenir de la remise du règlement.' : 'Les modalités sont à confirmer avec notre équipe.'} La réception du règlement sera confirmée ici.</p>}
             {published.client.type === 'pro' && !isPaye && <div className="mt-2 space-y-2"><p className="text-sm">Référence à communiquer pour le règlement : <strong>{price.ref}</strong> · {eur(price.devisTotal)}.</p><button className="min-h-11 rounded-lg border border-slate-300 px-3 text-sm font-semibold" onClick={async () => { try { await navigator.clipboard.writeText(`${price.ref} · ${eur(price.devisTotal)}`); flash('Référence de règlement copiée'); } catch { flash({ msg: 'Copie indisponible. La référence reste affichée ci-dessus.', type: 'error' }); } }}>Copier la référence de règlement</button></div>}
@@ -446,7 +454,7 @@ export default function ClientDetailView() {
             </div>
           )}
 
-          {hasDevis && (
+          {hasDevis && !updating && (
             <button
               onClick={async () => { try { const { exportDevisPDF } = await import('../../utils/exportDevisPDF'); await exportDevisPDF(sel, authCl, getDestByCP(authCl?.cp)); } catch (error) { flash({ msg: 'Le PDF n’a pas pu être généré. ' + error.message, type: 'error' }); } }}
               className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl font-bold text-sm transition-all active:scale-95"
@@ -459,7 +467,7 @@ export default function ClientDetailView() {
 
 
 
-          {!hasDevis && !isPaye && (
+          {!hasDevis && !isPaye && !updating && (
             <p className="text-sm text-gray-400 flex items-center gap-1.5 bg-gray-50 rounded-xl px-3 py-2">
               <Clock size={13} />
               {journey.quoteNeedsReview ? 'Votre devis est en cours de révision. Aucun règlement n’est demandé pour la version retirée.' : 'Le devis sera disponible prochainement'}
@@ -564,7 +572,7 @@ export default function ClientDetailView() {
 
       <section aria-label="État actuel et prochaine étape" className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
         <div><p className="text-sm font-semibold uppercase tracking-wide text-slate-500">Étape actuelle</p><h2 className="mt-1 text-lg font-bold text-slate-800">{journey.label}</h2></div>
-        {task.kind === 'none' ? <><p className="font-semibold text-slate-700">Aucune action attendue de votre part.</p><p className="text-sm text-slate-600">{journey.next}</p></> : <p className="text-sm font-semibold text-slate-700">À vous · {task.action}</p>}
+        {task.kind === 'none' ? <><p className="font-semibold text-slate-700">Aucune action attendue de votre part.</p>{journey.quoteUpdating ? phaseContent(3) : <p className="text-sm text-slate-600">{journey.next}</p>}</> : <p className="text-sm font-semibold text-slate-700">À vous · {task.action}</p>}
         {task.kind === 'agreement' && phaseContent(1)}
         {task.kind === 'payment' && phaseContent(3)}
         {['documents','messages'].includes(task.kind) && <button onClick={() => openPanel(task.kind)} className="min-h-11 w-full rounded-xl brand-bg px-4 py-3 text-sm font-semibold text-white">{task.action}</button>}
@@ -584,7 +592,7 @@ export default function ClientDetailView() {
         {sel.statut === 'annule' && <p className="text-sm text-slate-600">Ce dossier a été annulé. Les documents et échanges restent consultables.</p>}
         {sel.statut !== 'annule' && <div className="space-y-2">{PHASES_CLIENT.map((phase, idx) => {
           const state = getPhaseState(idx, curPhaseIdx);
-          if (state === 'future' || (idx === 1 && (task.kind === 'agreement' || clientWaiting)) || (idx === 3 && task.kind === 'payment')) return null;
+          if (state === 'future' || (idx === 1 && (task.kind === 'agreement' || clientWaiting)) || (idx === 3 && (task.kind === 'payment' || journey.quoteUpdating))) return null;
           return <PhaseStep key={phase.key} phase={phase} phaseIdx={idx} state={state} open={timeOpen === idx} onToggle={() => toggleStep(idx)}>{phaseContent(idx)}</PhaseStep>;
         })}</div>}
         {!['annule','refuse_client'].includes(sel.statut) && curPhaseIdx < PHASES_CLIENT.length - 1 && <div><p className="mb-2 text-sm font-semibold text-slate-500">Prochaines étapes</p><div className="flex flex-wrap gap-2">{PHASES_CLIENT.slice(curPhaseIdx + 1).map(phase => <span key={phase.key} className="inline-flex items-center gap-1 text-sm text-slate-600"><ChevronRight size={12} />{phase.label}</span>)}</div></div>}

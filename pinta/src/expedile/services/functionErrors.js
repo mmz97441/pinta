@@ -10,3 +10,14 @@ export async function functionErrorMessage(result, fallback = 'L’action n’a 
   }
   return fallback;
 }
+/** Parsed JSON body of a non-2xx Edge response (code, hint, flags), else result.data. */
+export async function functionErrorBody(result) {
+  const response = result?.error?.context;
+  if (response?.json) {
+    try {
+      const body = await (response.clone ? response.clone() : response).json();
+      if (body && typeof body === 'object') return body;
+    } catch { /* No JSON body: fall back to the data payload. */ }
+  }
+  return result?.data && typeof result.data === 'object' ? result.data : null;
+}

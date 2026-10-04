@@ -1,11 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { X, Eye, Upload } from 'lucide-react';
+import { X, Eye, Upload, Info } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { eur } from '../../utils';
 import * as sb from '../../lib/supabaseData';
 import { SecureImage, SecureFileLink } from '../ui/SecureFile';
 import InvoiceWorkspace from './InvoiceWorkspace';
 import { currentInvoices } from '../../domain/invoiceDocuments';
+import { clientDepositInformation, clientDepositNotice, invoicesEditable } from '../../domain/invoiceLock';
 const INPUT = 'min-h-11 min-w-0 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300';
 const BUTTON = 'min-h-11 inline-flex items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold transition-colors disabled:opacity-40 active:scale-[0.98]';
 function Lightbox({ src, title, onClose }) {
@@ -32,7 +33,7 @@ export default function FacturesPanel(props) {
   return isStaff ? <InvoiceWorkspace key={sel?.id} {...props} /> : <ClientFacturesPanel key={sel?.id} />;
 }
 function ClientFacturesPanel() {
-  const { sel, setData } = useApp();
+  const { sel, setData, refreshColis } = useApp();
   const [replacesFactureId, setReplacesFactureId] = useState(() => { const rejected = currentInvoices(sel?.factures).filter(invoice => invoice.rejetMotif); return rejected.length === 1 ? rejected[0].id : rejected.length > 1 ? 'choose' : ''; });
   const explicitReplacementChoice = useRef(false);
   const [clientFiles, setClientFiles] = useState([]);
@@ -65,7 +66,10 @@ function ClientFacturesPanel() {
   }, [correctionIds, busy, hasPendingFiles, replacesFactureId]);
   if (!sel) return null;
   const replacement = corrections.find(invoice => invoice.id === replacesFactureId);
-  const canDeposit = !sel.archive && !sel.paiementDate && ['receptionne','mesure','attente_feu_vert','autorise','en_preparation','devis_envoye','attente_paiement'].includes(sel.statut);
+  const canDeposit = invoicesEditable(sel);
+  // After a deposit answered « paid » or « frozen », the pre-send information no longer applies.
+  const settled = clientFiles.some(item => item.status === 'saved' && ['paid', 'frozen'].includes(item.result));
+  const information = settled ? '' : clientDepositInformation(sel);
   const pendingFiles = clientFiles.filter(item => item.status !== 'saved');
   const updateFile = (id, patch) => setClientFiles(previous => previous.map(item => item.id === id ? { ...item, ...patch } : item));
   const clearSelection = () => {
@@ -80,7 +84,7 @@ function ClientFacturesPanel() {
     if (!pendingFiles.length) { setError('Choisissez une facture PDF ou une photo lisible.'); return; }
     if (replacesFactureId && pendingFiles.length !== 1) { setError('Choisissez un seul document pour remplacer cette facture.'); return; }
     busyRef.current = true; setBusy('client-deposit'); setError(''); setNotice('');
-    let savedCount = 0; const failures = [];
+    const failures = []; const results = [];
     try {
       for (const item of pendingFiles) {
         updateFile(item.id, { status: 'uploading', error: '' });
@@ -90,23 +94,21 @@ function ClientFacturesPanel() {
             document = await sb.uploadDocument('factures', parcelId, item.file);
             uploadedClientDocuments.current.set(item.id, document);
           }
-          // A retry may follow a lost response after a successful insert. Reuse
-          // the invoice with this exact private path before attempting another.
-          const existing = item.status === 'failed'
-            ? await sb.fetchAllRows('factures', query => query.eq('colis_id', parcelId).eq('fichier_url', document.path)) : [];
-          const saved = existing.length ? sb.mapFact(existing[0]) : await sb.insertFacture(parcelId, {
-            vendeur: newVendor.trim() || item.file.name, montant: 0, valide: false,
-            fichierUrl: document.path, fichierNom: item.file.name, replacesFactureId: replacesFactureId || null,
-          });
-          setData(previous => previous.map(parcel => parcel.id === parcelId ? { ...parcel, factures: [...(parcel.factures || []).filter(invoice => invoice.id !== saved.id), saved] } : parcel));
-          updateFile(item.id, { status: 'saved', error: '' }); savedCount++;
+          // The server is idempotent on the private path: a retry after a lost
+          // response returns the same invoice, never a second one (D3).
+          const result = await sb.depositClientInvoice({ colisId: parcelId, path: document.path, fileName: item.file.name, vendor: newVendor.trim() || null, replacesFactureId: replacesFactureId || null });
+          const saved = result.facture;
+          if (saved) setData(previous => previous.map(parcel => parcel.id === parcelId ? { ...parcel, factures: [...(parcel.factures || []).filter(invoice => invoice.id !== saved.id), saved] } : parcel));
+          updateFile(item.id, { status: 'saved', result: result.status, error: '' }); results.push(result);
         } catch (failure) {
           const message = failure.message || 'Enregistrement impossible. Réessayez.';
           updateFile(item.id, { status: 'failed', error: message }); failures.push(message);
         }
       }
       if (failures.length) setError(failures.length === 1 ? failures[0] : `${failures.length} documents restent à envoyer. Les autres sont enregistrés.`);
-      if (savedCount) setNotice(savedCount === 1 ? 'Facture reçue et enregistrée. Notre équipe la vérifie.' : `${savedCount} factures reçues et enregistrées. Notre équipe les vérifie.`);
+      if (results.length) setNotice(clientDepositNotice(results));
+      // The quote may now be updating: show the dossier as the server sees it.
+      if (results.some(result => result.status !== 'added' && result.status !== 'duplicate')) await refreshColis(parcelId).catch(() => {});
       if (!failures.length) {
         explicitReplacementChoice.current = false;
         setReplacesFactureId(''); setNewVendor('');
@@ -127,9 +129,10 @@ function ClientFacturesPanel() {
   return <section id="quote-documents" aria-label="Factures d’achat" className="min-w-0 border-t border-gray-200 py-4">
     {preview && <Lightbox src={preview.fichier} title={preview.vendeur} onClose={() => setPreview(null)} />}
     {error && <p role="alert" className="my-2 rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}
-    {notice && <p role="status" className="my-2 rounded-xl bg-blue-50 p-3 text-sm text-blue-800">{notice}</p>}
+    {notice && <p role="status" data-testid="client-deposit-notice" className="my-2 rounded-xl bg-blue-50 p-3 text-sm text-blue-800">{notice}</p>}
     {canDeposit && <form aria-label="Déposer une facture" className="my-3 space-y-3 rounded-xl border border-slate-200 p-3" onSubmit={(event) => { event.preventDefault(); depositClientDocuments(); }}>
       <p className="text-sm font-semibold text-slate-700">{replacesFactureId ? 'Corriger une facture' : 'Envoyer mes factures'}</p>
+      {information && <p data-testid="client-deposit-information" className="flex items-start gap-2 rounded-lg bg-blue-50 p-3 text-sm text-blue-800"><Info size={16} className="mt-0.5 shrink-0" aria-hidden="true" />{information}</p>}
       <p className="text-xs text-slate-600">Toutes les pages doivent être lisibles. PDF ou photos (JPG, PNG, WebP), 20 Mo par fichier. Plusieurs factures possibles pour un nouveau dépôt.</p>
       {(corrections.length > 0 || replacesFactureId) && <label className="block text-xs font-semibold text-slate-600">Type de dépôt<select aria-label="Facture corrigée" disabled={!!busy} value={replacesFactureId} onChange={event => { explicitReplacementChoice.current = true; setReplacesFactureId(event.target.value); clearSelection(); }} className={INPUT}><option value="choose" disabled>Choisir la facture à corriger</option><option value="">Nouvelle facture</option>{replacesFactureId && replacesFactureId !== 'choose' && !replacement && <option value={replacesFactureId} disabled>Cette facture a changé — choisissez le dépôt</option>}{corrections.map(invoice => <option key={invoice.id} value={invoice.id}>Corriger : {invoice.vendeur || "Facture rejetée"}</option>)}</select></label>}
       {replacement && <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900"><strong>{replacement.vendeur || 'Facture à corriger'}</strong><br />Correction demandée : {replacement.rejetMotif}</p>}
@@ -140,7 +143,7 @@ function ClientFacturesPanel() {
         setClientFiles(files.map((file,index) => ({ id: `${selectionVersion.current}-${index}`, file, status: 'ready', error: '' })));
       }} className="mt-1 block min-h-11 w-full min-w-0 text-xs" /></label>
       <details><summary className="min-h-11 cursor-pointer py-3 text-sm text-slate-600">Préciser le vendeur (facultatif)</summary><label className="block text-xs font-semibold text-slate-600">Vendeur (facultatif)<input disabled={!!busy} value={newVendor} onChange={(event) => setNewVendor(event.target.value)} className={INPUT} /></label></details>
-      {clientFiles.length > 0 && <ul aria-label="Résultat du dépôt des factures" className="space-y-2">{clientFiles.map(item => <li key={item.id} className="rounded-lg bg-slate-50 p-2 text-xs"><p className="break-words font-semibold text-slate-700">{item.file.name}</p><p role="status" className={item.status === 'failed' ? 'text-red-700' : 'text-slate-600'}>{item.status === 'saved' ? 'Enregistrée · à vérifier par l’équipe' : item.status === 'uploading' ? 'Enregistrement…' : item.status === 'failed' ? item.error : 'Prête à envoyer'}</p></li>)}</ul>}
+      {clientFiles.length > 0 && <ul aria-label="Résultat du dépôt des factures" className="space-y-2">{clientFiles.map(item => <li key={item.id} className="rounded-lg bg-slate-50 p-2 text-xs"><p className="break-words font-semibold text-slate-700">{item.file.name}</p><p role="status" className={item.status === 'failed' ? 'text-red-700' : 'text-slate-600'}>{item.status === 'saved' ? item.result === 'duplicate' ? 'Déjà reçu · rien ne change' : item.result === 'frozen' || item.result === 'paid' ? 'Conservé dans votre dossier' : 'Enregistrée · à vérifier par l’équipe' : item.status === 'uploading' ? 'Enregistrement…' : item.status === 'failed' ? item.error : 'Prête à envoyer'}</p></li>)}</ul>}
       <button disabled={!!busy || !pendingFiles.length || replacesFactureId === 'choose'} className={`${BUTTON} w-full bg-slate-700 text-white`}><Upload size={15} />{busy === 'client-deposit' ? 'Enregistrement des documents…' : pendingFiles.some(item => item.status === 'failed') ? 'Réessayer les documents en échec' : pendingFiles.length > 1 ? `Déposer les ${pendingFiles.length} factures` : 'Déposer la facture'}</button>
     </form>}
     <div className="space-y-3"><h3 className="text-sm font-semibold text-slate-700">Factures envoyées ({activeInvoices.length})</h3>{!activeInvoices.length && <p className="py-4 text-sm text-gray-500">{pastInvoices.length ? 'Aucune facture à utiliser pour cette expédition. Les anciennes copies restent dans l’historique.' : 'Aucune facture reçue'}</p>}{activeInvoices.map(invoiceCard)}</div>

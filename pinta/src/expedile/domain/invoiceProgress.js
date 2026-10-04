@@ -213,7 +213,8 @@ export function invoiceProgressSummary(buckets) {
  * ({ extraction }) when loaded; lines are the dossier's articles (sel.lignes).
  */
 export function invoiceIdentity(invoice, record = null, lines = []) {
-  const extraction = record?.extraction || null;
+  // D1: a validated invoice is identified by its validated values only.
+  const extraction = invoice?.valide ? null : record?.extraction || null;
   const confirmedVendor = realVendor(invoice?.vendeur);
   const suggestedVendor = confirmedVendor ? '' : realVendor(extraction?.vendeur);
   const amount = amountOf(invoice);
@@ -239,6 +240,8 @@ export function invoiceIdentity(invoice, record = null, lines = []) {
  */
 export function invoiceOcrNote(invoice, record = null) {
   if (!invoice || invoice.valide || rejected(invoice) || !fileOf(invoice)) return '';
+  // Frozen dossier (D4): the analysis will never run nor be shown, whatever the stale OCR status says.
+  if (record?.analysisAllowed === false) return '';
   const status = invoice.ocrStatus || invoice.ocr_status || '';
   const extraction = record?.extraction || null;
   if (status === 'pending') return 'Lecture automatique en cours';

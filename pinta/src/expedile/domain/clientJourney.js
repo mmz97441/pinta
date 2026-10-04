@@ -1,5 +1,6 @@
 import { receptionCartonManifest } from './reception.js';
 import { currentInvoices } from './invoiceDocuments.js';
+import { invoicesFrozenReason } from './invoiceLock.js';
 /** Client-facing facts only. A status never implies a delivery date. */
 export function cartonManifest(colis) {
   const trackings = [...new Set((colis?.trackings || []).map(String).map((s) => s.trim()).filter(Boolean))];
@@ -57,9 +58,12 @@ export function clientJourney(colis, now = Date.now()) {
   const waiting = hasClientRequestedWait(colis);
   const reviewDue = waiting && !!colis.attenteClientUntil && Date.parse(colis.attenteClientUntil) <= now;
   const quoteNeedsReview = needsQuoteRecalculation(colis);
-  const oldQuote = !!colis.devisEnvoyeLe && (quoteNeedsReview || ['receptionne','mesure','attente_feu_vert','autorise','refuse_client'].includes(colis.statut));
+  // A late invoice is being added: the sent quote is about to be withdrawn, no payment is asked meanwhile.
+  const quoteUpdating = quoteBeingUpdated(colis);
+  const oldQuote = !!colis.devisEnvoyeLe && (quoteNeedsReview || quoteUpdating || ['receptionne','mesure','attente_feu_vert','autorise','refuse_client'].includes(colis.statut));
   const [label, actor, next] = waiting
     ? ['En attente à votre demande', 'À vous, lorsque vous serez prêt', 'Autoriser la préparation lorsque vos achats sont réunis.']
+    : quoteUpdating ? ['Devis en cours de mise à jour', 'Notre équipe', 'Ajouter votre nouvelle facture au devis et vous transmettre le devis mis à jour. Aucun règlement n’est demandé d’ici là.']
     : quoteNeedsReview ? ['Devis en cours de révision', 'Notre équipe', 'Vérifier les changements et vous transmettre un nouveau devis. Aucun règlement n’est demandé pour le devis retiré.']
     : STATES[colis.statut] || ['État à préciser', 'Notre équipe', 'Confirmer la prochaine étape du dossier.'];
   const events = [
@@ -68,11 +72,17 @@ export function clientJourney(colis, now = Date.now()) {
     [oldQuote ? 'Ancien devis envoyé' : 'Devis envoyé', colis.devisEnvoyeLe, oldQuote], ['Paiement reçu', colis.paiementDate], ['Expédition enregistrée', colis.dateExpedition], ['Livraison confirmée', colis.dateLivraison],
   ].filter(([, date]) => date && Number.isFinite(Date.parse(date)) && Date.parse(date) <= now)
     .sort((a, b) => Date.parse(b[1]) - Date.parse(a[1]));
-  return { label, actor, next, waiting, reviewDue, quoteNeedsReview, event: events[0] ? { label: events[0][0], date: events[0][1], ...(events[0][2] ? { historical: true } : {}) } : null };
+  return { label, actor, next, waiting, reviewDue, quoteNeedsReview, quoteUpdating, event: events[0] ? { label: events[0][0], date: events[0][1], ...(events[0][2] ? { historical: true } : {}) } : null };
 }
 
 export function hasClientRequestedWait(colis) {
   return colis?.statut === 'attente_feu_vert' && !!colis.attenteClientDate;
+}
+
+/** Late client invoice received on a sent quote (client_colis.quote_update_pending), until the new quote is sent:
+ * before the withdrawal (quote still sent) and after it (back in preparation). Never once paid, departed or closed. */
+export function quoteBeingUpdated(colis) {
+  return !!colis?.quoteUpdatePending && !invoicesFrozenReason(colis);
 }
 
 export function needsQuoteRecalculation(colis) {
@@ -97,6 +107,7 @@ export function clientWorkState(colis, client = {}) {
     return { section: 'waiting', kind: 'none', action: 'Consulter mon attente', journey };
   }
   if (colis.statut === 'attente_feu_vert') return { section: 'todo', kind: 'agreement', action: 'Donner mon accord ou attendre', journey };
+  if (journey.quoteUpdating) return { section: 'team', kind: 'none', action: 'Suivre la mise à jour du devis', journey };
   if (['devis_envoye', 'attente_paiement'].includes(colis.statut) && !journey.quoteNeedsReview && !colis.paiementDate)
     return { section: 'todo', kind: 'payment', action: client.type === 'pro' ? 'Consulter les modalités de règlement' : colis.payplugPaymentUrl ? 'Consulter et régler le devis' : 'Consulter le devis et le règlement', journey };
   if (rejected && !colis.paiementDate && ['receptionne','mesure','attente_feu_vert','autorise','en_preparation','devis_envoye','attente_paiement'].includes(colis.statut)) return { section: 'todo', kind: 'documents', action: 'Corriger une facture', journey };
@@ -116,7 +127,7 @@ export function clientShipmentPath(colis, client) {
 /** Public readers are observers, never the account holder or payer. */
 export function publicJourney(colis, now) {
   const journey = clientJourney(colis, now);
-  if (journey.quoteNeedsReview) return { ...journey, actor: 'Équipe Expedîle', next: 'Vérification du devis avant transmission au client.' };
+  if (journey.quoteNeedsReview || journey.quoteUpdating) return { ...journey, actor: 'Équipe Expedîle', next: 'Vérification du devis avant transmission au client.' };
   if (journey.waiting) return { ...journey, label: 'En attente à la demande du client', actor: 'Client', next: 'La préparation attend un nouvel accord du client.' };
   if (colis.statut === 'attente_feu_vert') return { ...journey, label: 'Accord du client attendu', actor: 'Client', next: 'Accord nécessaire avant la préparation.' };
   if (['devis_envoye', 'attente_paiement'].includes(colis.statut)) return { ...journey, label: 'Règlement attendu du client', actor: 'Client', next: 'Le devis et les modalités de règlement sont disponibles dans son espace privé.' };

@@ -52,6 +52,9 @@ SELECT prep_assert((SELECT devis_total=37.98 AND (devis_snapshot->'amounts'->>'m
 SELECT prep_assert((SELECT devis_snapshot->'inputs'->'destination'->>'code'='974' AND devis_snapshot->'inputs'->'client'->>'type'='particulier' AND devis_snapshot->'inputs'->'client'->>'nom'='Client préparation Maya' FROM colis WHERE id='b3000000-0000-4000-8000-000000000001'),'commercial snapshot identity is canonical despite a forged caller destination/type');
 UPDATE colis SET statut='devis_envoye',devis_brouillon=false WHERE id='b3000000-0000-4000-8000-000000000001';
 RESET ROLE;
+-- D2 (2026-10-04): a sent quote is withdrawn explicitly before a document is added; never silently.
+SELECT prep_reject($q$INSERT INTO factures(colis_id,vendeur,montant,fichier_url,valide) VALUES('b3000000-0000-4000-8000-000000000001','Pièce supplémentaire',10,'extra.pdf',false)$q$,'sent quote is not silently withdrawn by a staff document');
+SELECT withdraw_quote_for_documents(id,updated_at,'add_document') FROM colis WHERE id='b3000000-0000-4000-8000-000000000001';
 INSERT INTO factures(colis_id,vendeur,montant,fichier_url,valide) VALUES('b3000000-0000-4000-8000-000000000001','Pièce supplémentaire',10,'extra.pdf',false);
 SELECT prep_assert((SELECT statut='en_preparation' AND devis_total IS NULL AND devis_brouillon AND payplug_payment_url IS NULL FROM colis WHERE id='b3000000-0000-4000-8000-000000000001'),'document revision returns to preparation instead of empty payment state');
 -- A paid contract remains frozen; an unpaid modern quote is invalidated on destination change.

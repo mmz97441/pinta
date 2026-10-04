@@ -104,8 +104,18 @@ RESET ROLE;
 -- Reopening the quote alone preserves physical inputs and reviewed invoices.
 UPDATE colis SET devis_total=130,devis_transport=80,devis_snapshot='{"inputs":{"marker":"third quote"},"amounts":{"total":130}}' WHERE id='ca300000-0000-4000-8000-000000000001';
 TRUNCATE observed;
+-- Queued quote and reminder messages of the withdrawn quote are cancelled; a message already sent stays as history.
+INSERT INTO messages(id,colis_id,type,texte,statut,canal,template) VALUES
+ ('ca600000-0000-4000-8000-000000000001','ca300000-0000-4000-8000-000000000001','staff','Devis en file','envoi','telegram','devis_final'),
+ ('ca600000-0000-4000-8000-000000000002','ca300000-0000-4000-8000-000000000001','staff','Relance en échec','echec','telegram','relance_paiement'),
+ ('ca600000-0000-4000-8000-000000000003','ca300000-0000-4000-8000-000000000001','staff','Devis déjà envoyé','envoye','telegram','devis_final');
+INSERT INTO notification_outbox(message_id,client_id,colis_id,quote_version,canal,status,idempotency_key)
+ SELECT m.id,c.client_id,c.id,c.quote_version,'telegram',CASE right(m.id::text,1) WHEN '1' THEN 'pending' WHEN '2' THEN 'failed' ELSE 'sent' END,'correction-outbox-'||right(m.id::text,1)
+ FROM messages m JOIN colis c ON c.id=m.colis_id WHERE m.id::text LIKE 'ca600000%';
 SET LOCAL ROLE authenticated;
 INSERT INTO observed SELECT to_jsonb(c),correct_colis_task(id,'devis','{}',updated_at,'Modifier les frais du devis') FROM colis c WHERE id='ca300000-0000-4000-8000-000000000001';
+SELECT correction_assert((SELECT bool_and(CASE WHEN idempotency_key='correction-outbox-3' THEN status='sent' ELSE status='cancelled' AND last_error='Le devis a été retiré pour correction' END) AND count(*)=3
+ FROM notification_outbox WHERE idempotency_key LIKE 'correction-outbox-%'),'quote reopening cancels queued quote and reminder messages and keeps sent history');
 SELECT correction_assert((SELECT result->>'changed'='true' AND result->'invalidated'='["devis"]'::jsonb AND result#>'{colis,final_packages}'=before_row->'final_packages' AND result#>'{colis,dims_par_colis}'=before_row->'dims_par_colis' AND result#>>'{colis,feu_vert}'='autorise' FROM observed),'quote-only reopening invalidates quote without changing physical measurements or consent');
 SELECT correction_assert((SELECT count(*)=3 FROM quote_versions WHERE colis_id='ca300000-0000-4000-8000-000000000001'),'quote-only reopening preserves its prior version too');
 SELECT correction_assert((SELECT (correct_colis_task(id,'devis','{}',updated_at,'Relire le brouillon')->>'changed')::boolean=false FROM colis WHERE id='ca300000-0000-4000-8000-000000000001'),'already withdrawn quote is a no-op');

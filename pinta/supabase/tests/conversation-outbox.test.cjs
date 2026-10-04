@@ -4,7 +4,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const esbuild = require('../../node_modules/esbuild');
 let compiled;
-async function setup({open=true,template='relance_feu_vert',outboxStatus='pending',parcelStatus='attente_feu_vert',recentSentAt=null,archive=false,idempotencyKey='operator-message',consentVersion=0,snapshotVersion=0,snapshotExtra={},requestSentAt=null,duringProvider}={}) {
+async function setup({open=true,template='relance_feu_vert',outboxStatus='pending',parcelStatus='attente_feu_vert',recentSentAt=null,archive=false,idempotencyKey='operator-message',consentVersion=0,snapshotVersion=0,snapshotExtra={},requestSentAt=null,quoteVersion=1,duringProvider}={}) {
   compiled ||= (await esbuild.build({entryPoints:[path.join(__dirname,'../functions/_shared/telegram.ts')],bundle:true,write:false,format:'cjs',platform:'node',plugins:[{name:'mock-supabase',setup(build){
     build.onResolve({filter:/^https:\/\/esm.sh\/\@supabase\//},()=>({path:'supabase',namespace:'mock'}));
     build.onLoad({filter:/.*/,namespace:'mock'},()=>({contents:'export const createClient=()=>{throw new Error("No external database");};',loader:'js'}));
@@ -15,7 +15,7 @@ async function setup({open=true,template='relance_feu_vert',outboxStatus='pendin
     notification_outbox:{id:'outbox',message_id:'message',colis_id:'parcel',client_id:'client',quote_version:1,status:outboxStatus,attempts:0,idempotency_key:idempotencyKey},
     messages:{id:'message',texte:'Synthetic message',template,statut:'envoi',request_snapshot:snapshot},
     clients:{id:'client',telegram_chat_id:'fixture-chat'},
-    colis:{id:'parcel',statut:parcelStatus,archive,attente_client_date:null,quote_version:1,...composition,consent_request_version:consentVersion,demande_feu_vert_envoyee_at:requestSentAt},
+    colis:{id:'parcel',statut:parcelStatus,archive,attente_client_date:null,quote_version:quoteVersion,...composition,consent_request_version:consentVersion,demande_feu_vert_envoyee_at:requestSentAt},
   };
   let requests=0,checks=0;
   const db={rpc:async(name,args)=>{assert.equal(name,'client_has_open_conversation');assert.equal(args.p_client_id,'client');checks++;return{data:open,error:null};},from(table){
@@ -108,4 +108,21 @@ test('a reminder keeps the first delivery date when another message records it d
  const fixture=await setup({open:false,duringProvider(rows){rows.colis.demande_feu_vert_envoyee_at=firstDate;}});
  assert.equal((await fixture.run()).status,'sent');assert.equal(fixture.requests,1);
  assert.equal(fixture.rows.colis.demande_feu_vert_envoyee_at,firstDate);
+});
+
+test('a queued quote is cancelled at dispatch once it was withdrawn, replaced or archived',async()=>{
+ for(const [template,parcelStatus,quoteVersion,archive] of [['devis_final','devis_envoye',2,false],['devis_final_pro','attente_paiement',2,false],['devis_final','en_preparation',1,false],['devis_final_pro','devis_envoye',1,true]]){
+  const fixture=await setup({open:false,template,parcelStatus,quoteVersion,archive});const result=await fixture.run();
+  assert.equal(result.status,'cancelled',`${template} ${parcelStatus} v${quoteVersion}`);assert.equal(fixture.requests,0);
+  assert.equal(fixture.rows.notification_outbox.status,'cancelled');assert.equal(fixture.rows.messages.statut,'echec');
+ }
+ const current=await setup({open:false,template:'devis_final',parcelStatus:'devis_envoye'});
+ assert.equal((await current.run()).status,'sent');assert.equal(current.requests,1);
+});
+
+test('the late-invoice message is not a reminder: an open conversation does not hold it',async()=>{
+ for(const template of ['facture_apres_devis','facture_apres_devis_sans_lien']){
+  const fixture=await setup({open:true,template,parcelStatus:'en_preparation',quoteVersion:3});
+  assert.equal((await fixture.run()).status,'sent');assert.equal(fixture.requests,1);assert.equal(fixture.checks,0);
+ }
 });
