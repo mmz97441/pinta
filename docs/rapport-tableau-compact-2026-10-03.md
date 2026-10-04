@@ -10,7 +10,7 @@ Les trois tailles proposées ne permettaient pas de réduire suffisamment le tex
 - **12 px par défaut** pour un compte sans préférence. Les réglages déjà enregistrés sont conservés.
 - **En-têtes sur une seule rangée** : titre et tri, icône de filtre, séparation verticale. Les titres trop longs pour une colonne étroite sont raccourcis visuellement ; leur nom complet reste accessible au survol et dans le choix des colonnes.
 - **Largeur propre à chaque colonne** : glisser son bord droit ou ouvrir **Colonnes** et saisir sa largeur en pixels. Le réglage s’applique aussi à Référence et Action. Les autres colonnes gardent leurs valeurs. Double-clic sur une séparation, ou Entrée au clavier, rétablit uniquement cette colonne.
-- **Colonnes plus compactes** : les minimums passent à 64 px pour les données ordinaires, 96 px pour la référence et le client, 110 px pour les dimensions et l’action. Le réglage global « Rétablir les largeurs » retrouve les nouvelles valeurs initiales.
+- **Colonnes plus compactes** : les minimums passent à 64 px pour les données ordinaires, 96 px pour la référence et le client, 110 px pour les dimensions et 132 px pour l’action. Le réglage global « Rétablir les largeurs » retrouve les nouvelles valeurs initiales.
 - **Affichage au choix** : Automatique, Tableau ou Cartes. Automatique conserve le tableau dès 768 pixels et utilise les cartes sur téléphone. Le mode Tableau permet de garder les colonnes sur téléphone, avec défilement horizontal.
 - **Défilement contenu dans la liste** : les colonnes fixes se détachent si elles occuperaient trop de place. Sur un petit écran, elles ne masquent plus les autres informations pendant le défilement.
 - Taille du texte, affichage, visibilité et largeur restent enregistrés **par compte, par vue et dans ce navigateur**.
@@ -28,6 +28,6 @@ Les dimensions finales, poids, prix, droits financiers et calculs du lot précé
 - Lint et compilation validés ; **320 tests unitaires réussis**.
 - **72 scénarios navigateur réussis** : 25 pour le confort, les prix et les mesures finales ; 47 pour le tableau, ses filtres et les parcours associés.
 - Vérification des valeurs 5 et 20 px, de la saisie intermédiaire, de chaque largeur indépendamment, des préférences par compte/vue, des modes Tableau/Cartes et des écrans de 320 à 1 440 pixels en clair et sombre.
-- Le cas des boutons à 20 px et des colonnes étroites a été vérifié séparément après la dernière simplification visuelle.
+- Le cas des boutons à 20 px et des colonnes étroites a été vérifié séparément après la dernière simplification visuelle. La vérification Linux a montré qu’une largeur de 110 px était insuffisante avec certaines polices : le minimum de la colonne Action passe à 132 px, sans changer les autres colonnes ni réduire le texte choisi.
 
 Voir la [recette et ses captures](recette-tableau-compact-2026-10-03.md). Les contrôles sont intégrés à la [vérification du dépôt](https://github.com/mmz97441/pinta/actions/workflows/verify-expedile.yml). Les essais utilisent des dossiers fictifs ; aucune notification ni aucun paiement réel n’a été déclenché.

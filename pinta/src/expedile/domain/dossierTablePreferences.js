@@ -17,7 +17,7 @@ export function dossierLayoutStorageKey(userId, view) {
   return userId && ['daily', 'payments', 'departures'].includes(view) ? `expedile:table-layout:v1:${encodeURIComponent(userId)}:${view}` : null;
 }
 export function columnWidthBounds(column) {
-  const min = ['action', 'optimizedDimensions'].includes(column?.key) ? 110 : ['ref', 'client'].includes(column?.key) ? 96 : 64;
+  const min = column?.key === 'action' ? 132 : column?.key === 'optimizedDimensions' ? 110 : ['ref', 'client'].includes(column?.key) ? 96 : 64;
   const initial = Math.max(min, widths[column?.key] || 140);
   return { min, max: column?.key === 'action' ? 280 : 600, initial };
 }

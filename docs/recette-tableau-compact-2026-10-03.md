@@ -34,14 +34,16 @@ La consultation d’une tâche appartenant à un collègue ne l’attribue pas. 
 
 ## Dernière correction visuelle et preuves
 
-La relecture a relevé que **Consulter** pouvait se couper à 20 px dans une colonne Action étroite. Après ajustement de son espacement et retrait de l’icône décorative, le test vérifie le mot entier sur une seule ligne, contenu dans le bouton, avec **Action à 110 px** et une cible d’au moins 44 px. Ce scénario et les captures concernées ont été rejoués sur la dernière compilation ; ces rejeux ne sont pas ajoutés au total de 72.
+La relecture a relevé que **Consulter** pouvait se couper à 20 px dans une colonne Action étroite. Malgré une première vérification locale réussie après retrait de l’icône décorative, la CI Linux a révélé un débordement à 110 px. Le minimum de la seule colonne **Action passe à 132 px**. Le test mesure maintenant les neuf caractères du mot entier, sans réduire le texte choisi.
+
+Le rejeu ciblé est réussi avec la police de l’application et les familles alternatives Arial, DejaVu Sans avec repli sans-serif, et monospace : une seule ligne, mot contenu dans le bouton, texte à 20 px et cible haute de 46 px. La mesure la plus large relevée localement est de 108,03 px dans un bouton de 114,03 px. Les polices alternatives utilisent les fontes disponibles sur le système ; ce contrôle local ne remplace pas la nouvelle exécution CI Linux. Les [mesures détaillées](verification-tableau-compact-2026-10-03/controle-action-polices.json) et la capture à 132 px correspondent à la compilation corrigée. Ce rejeu ne constitue pas un scénario supplémentaire dans le total de 72.
 
 Les captures ci-dessous utilisent exclusivement des exemples fictifs :
 
 - [Tableau initial à 12 px, clair](verification-tableau-compact-2026-10-03/tableau-12px-clair.png) et [sombre](verification-tableau-compact-2026-10-03/tableau-12px-sombre.png).
 - [Largeurs individuelles sur téléphone](verification-tableau-compact-2026-10-03/largeurs-individuelles-mobile.png).
 - [Tableau choisi sur un écran de 320 px](verification-tableau-compact-2026-10-03/tableau-force-mobile-320.png).
-- [Texte à 5 px](verification-tableau-compact-2026-10-03/tableau-5px.png) et [texte à 20 px avec Action à 110 px](verification-tableau-compact-2026-10-03/tableau-20px-action-110.png).
+- [Texte à 5 px](verification-tableau-compact-2026-10-03/tableau-5px.png) et [texte à 20 px avec Action à 132 px](verification-tableau-compact-2026-10-03/tableau-20px-action-132.png).
 - [Résultats des 72 scénarios et liste des rejeux](verification-tableau-compact-2026-10-03/resultats.json).
 
 ## Limites

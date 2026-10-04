@@ -1,0 +1,42 @@
+{
+  "columnWidth": 132,
+  "fontSize": 20,
+  "checks": [
+    {
+      "lines": 1,
+      "contained": true,
+      "font": 20,
+      "family": "system-ui, -apple-system, \"Segoe UI\", sans-serif",
+      "height": 46,
+      "textWidth": 89.71875,
+      "buttonWidth": 95.71875
+    },
+    {
+      "lines": 1,
+      "contained": true,
+      "font": 20,
+      "family": "Arial, sans-serif",
+      "height": 46,
+      "textWidth": 93.34375,
+      "buttonWidth": 99.34375
+    },
+    {
+      "lines": 1,
+      "contained": true,
+      "font": 20,
+      "family": "\"DejaVu Sans\", sans-serif",
+      "height": 46,
+      "textWidth": 93.34375,
+      "buttonWidth": 99.34375
+    },
+    {
+      "lines": 1,
+      "contained": true,
+      "font": 20,
+      "family": "monospace",
+      "height": 46,
+      "textWidth": 108.03125,
+      "buttonWidth": 114.03125
+    }
+  ]
+}

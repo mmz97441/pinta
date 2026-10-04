@@ -83,7 +83,7 @@ test('width preferences isolate user/view and bound corrupt or unsupported value
   assert.equal(clampColumnWidth(column('cartons'), 5), 64);
   assert.equal(clampColumnWidth(column('client'), 5), 96);
   const values = sanitizeColumnWidths(columns.filter(item => !item.financial), { ref: 220, requested: 400, action: 20, client: Infinity });
-  assert.equal(values.ref, 220); assert.equal(values.client, 180); assert.equal(values.action, 110);
+  assert.equal(values.ref, 220); assert.equal(values.client, 180); assert.equal(values.action, 132);
   assert.equal(values.requested, undefined);
 });
 

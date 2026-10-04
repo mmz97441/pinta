@@ -171,10 +171,28 @@ async function main(){
    await f.page.setViewportSize({width:1280,height:900});await open(f);await setTextSize(f,20);
    for(const label of ['Référence','Client','Travail à faire']){const resize=f.page.getByRole('separator',{name:`Redimensionner ${label}`,exact:true});await resize.focus();await resize.press('End');}
    const narrow=f.page.getByRole('separator',{name:'Redimensionner Poids final (kg)',exact:true});await narrow.focus();await narrow.press('Home');
-   const actionWidth=f.page.getByRole('separator',{name:'Redimensionner Action',exact:true});await actionWidth.focus();await actionWidth.press('Home');await f.page.waitForFunction(()=>document.querySelector('[aria-label="Redimensionner Action"]').getAttribute('aria-valuenow')==='110');
+   const actionWidth=f.page.getByRole('separator',{name:'Redimensionner Action',exact:true});await actionWidth.focus();await actionWidth.press('Home');await f.page.waitForFunction(()=>document.querySelector('[aria-label="Redimensionner Action"]').getAttribute('aria-valuenow')==='132');
    const filters=f.page.locator('.dossier-table-filter');assert.ok(await filters.count()>0);for(const button of await filters.all()){assert.match(await button.getAttribute('aria-label'),/^Filtrer la colonne /);assert.equal(await button.evaluate(n=>n.scrollWidth>n.clientWidth+1),false,'A narrow column keeps a named filter command instead of a clipped word.');}
    const slider=f.page.getByRole('slider',{name:'Défilement horizontal des dossiers',exact:true});await slider.focus();await slider.press('End');await noGlobalOverflow(f);const action=await cell(f,2,'action').boundingBox();assert.ok(action.x>=0&&action.x+action.width<=1281);
-   const consult=cell(f,2,'action').getByRole('button',{name:'Consulter',exact:true});const word=await consult.evaluate(button=>{const walker=document.createTreeWalker(button,NodeFilter.SHOW_TEXT);let node;while((node=walker.nextNode())){const start=node.textContent.indexOf('Consulter');if(start<0)continue;const range=document.createRange();range.setStart(node,start);range.setEnd(node,start+8);const lines=[...range.getClientRects()].filter(r=>r.width>0&&r.height>0);const outer=button.getBoundingClientRect();return {lines:lines.length,contained:lines.every(r=>r.left>=outer.left&&r.right<=outer.right+1),font:parseFloat(getComputedStyle(button).fontSize),height:outer.height};}return null;});assert.ok(word,'The consultation button keeps its full visible label.');assert.equal(word.lines,1,'Consulter stays a whole word even at 20 px in a 110 px Action column.');assert.equal(word.contained,true);assert.equal(word.font,20);assert.ok(word.height>=44);
+   const consult=cell(f,2,'action').getByRole('button',{name:'Consulter',exact:true});const fontChecks=[];
+   for(const family of ['', 'Arial, sans-serif', '"DejaVu Sans", sans-serif', 'monospace']){
+    const word=await consult.evaluate((button,family)=>{
+     button.style.fontFamily=family;
+     const walker=document.createTreeWalker(button,NodeFilter.SHOW_TEXT);let node;
+     while((node=walker.nextNode())){
+      const start=node.textContent.indexOf('Consulter');if(start<0)continue;
+      const range=document.createRange();range.setStart(node,start);range.setEnd(node,start+'Consulter'.length);
+      const lines=[...range.getClientRects()].filter(r=>r.width>0&&r.height>0),outer=button.getBoundingClientRect(),style=getComputedStyle(button);
+      return {lines:lines.length,contained:lines.every(r=>r.left>=outer.left&&r.right<=outer.right+1),font:parseFloat(style.fontSize),family:style.fontFamily,height:outer.height,textWidth:range.getBoundingClientRect().width,buttonWidth:outer.width};
+     }return null;
+    },family);
+    assert.ok(word,'The consultation button keeps its full visible label.');
+    assert.equal(word.lines,1,`Consulter stays a whole word at 20 px in a 132 px Action column (${family||'application font'}).`);
+    assert.equal(word.contained,true,`Consulter stays inside its button with ${family||'the application font'}.`);
+    assert.equal(word.font,20);assert.ok(word.height>=44);fontChecks.push(word);
+   }
+   await consult.evaluate(button=>button.style.removeProperty('font-family'));
+   await fs.writeFile(`${output}/action-font-checks.json`,JSON.stringify({columnWidth:132,fontSize:20,checks:fontChecks},null,2));
    await f.page.screenshot({path:`${output}/compact-wide-columns-20.png`,fullPage:true});
    // A 1280px screen at 125% browser zoom has a 1024 CSS-pixel viewport.
    await f.page.setViewportSize({width:1024,height:720});await f.page.getByRole('table',{name:'Dossiers d’expédition',exact:true}).waitFor();await noGlobalOverflow(f);assert.equal(await f.page.getByRole('spinbutton',{name:'Taille du texte des dossiers',exact:true}).inputValue(),'20');
