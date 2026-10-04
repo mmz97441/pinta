@@ -37,6 +37,13 @@ function ReceivedCartonArrival({ box }) {
   </li>;
 }
 
+// Le résumé contient souvent déjà la date (« Prévu le 17/10/2026 ») : ne pas la répéter.
+function stepDateLabel(step) {
+  if (!step?.date) return '';
+  const label = formatDossierTableDate(step.date);
+  return step.summary?.includes(label) ? '' : label;
+}
+
 function Step({ step, viewedTask, onNavigateTask, summaryId }) {
   const state = STEP_STATES[step.state] || STEP_STATES.unknown;
   const Icon = state.icon;
@@ -45,7 +52,7 @@ function Step({ step, viewedTask, onNavigateTask, summaryId }) {
     <span className="dossier-overview-step-label">{step.label}</span>
     <span className="dossier-overview-step-state"><Icon size={14} aria-hidden="true" />{state.shortLabel || state.label}</span>
   </>;
-  const title = [step.summary, step.date ? formatDossierTableDate(step.date) : ''].filter(Boolean).join(' · ');
+  const title = [step.summary, stepDateLabel(step)].filter(Boolean).join(' · ');
   return <li data-step={step.id} data-state={step.state}>
     {step.canOpen && onNavigateTask ? <button type="button" className="dossier-overview-step"
       aria-current={viewed ? 'step' : undefined}
@@ -135,7 +142,7 @@ export default function DossierOverview({
     </nav>
     {openedStep && <p id={openedStepSummaryId} data-overview="opened-step" className="dossier-overview-opened-step">
       <strong>Étape ouverte : {openedStep.label}.</strong>{' '}{openedStep.summary || STEP_STATES[openedStep.state]?.label}
-      {openedStep.date && <>{' · '}<time dateTime={openedStep.date}>{formatDossierTableDate(openedStep.date)}</time></>}
+      {stepDateLabel(openedStep) && <>{' · '}<time dateTime={openedStep.date}>{stepDateLabel(openedStep)}</time></>}
     </p>}
   </section>;
 }
