@@ -3,12 +3,14 @@ import { createPortal } from 'react-dom';
 import { FileText, History, Package, Users, X } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
+import { useTaskAccess } from '../../context/TaskAccessContext';
 import { useDialog } from '../ui/useDialog';
-import { currentInvoices } from '../../domain/invoiceDocuments';
+import { invoiceIdentity, invoiceNumbering, invoiceStateLabel, numberedInvoices, orderInvoices } from '../../domain/invoiceProgress';
 import { dossierTaskUrl } from '../../domain/dossierTasks';
 import { eur } from '../../utils';
 import ColisInfo from './ColisInfo';
 import InlineDocument from './InvoiceDocument';
+import { conversationInvoiceEditable } from './ChatPanel';
 import AuditLog from './AuditLog';
 import StaffAssignment from '../staff/StaffAssignment';
 
@@ -21,29 +23,45 @@ const SECTIONS = [
 ];
 
 function DocumentContext({ onClose }) {
-  const { sel } = useApp();
+  const { sel, can: rawCan } = useApp();
+  // Same permission rule as the workspace: only a role that may edit the
+  // articles is invited to verify; the others consult the invoice.
+  const { taskCan: can } = useTaskAccess(rawCan);
   const [previewId, setPreviewId] = useState(null);
   const navigate = useNavigate();
   const location = useLocation();
   const invoices = sel.factures || [];
-  const active = new Set(currentInvoices(invoices).map(invoice => invoice.id));
+  // Same order, numbering and labels as the invoice workspace.
+  const numbering = invoiceNumbering(invoices);
+  const counted = numberedInvoices(invoices);
+  const editable = conversationInvoiceEditable(sel);
+  const history = orderInvoices(invoices).filter(invoice => numbering[invoice.id]?.kind !== 'counted');
   const openTask = invoice => {
     onClose();
     navigate(dossierTaskUrl(sel.id, 'documents', location.search, { invoiceId: invoice?.id }));
   };
+  const title = invoice => {
+    const entry = numbering[invoice.id];
+    if (entry?.kind === 'duplicate') return entry.copyOf ? `Copie de la facture ${entry.copyOf}` : entry.copyOfVersion ? `Copie d’un document remplacé (facture ${entry.copyOfVersion})` : 'Copie retirée';
+    if (entry?.kind === 'replaced') return entry.versionOf ? `Ancienne version de la facture ${entry.versionOf}` : 'Ancienne version';
+    // Same rule as the workspace's short name: the confirmed supplier, else the
+    // file name (never a placeholder that the workspace would not show).
+    const identity = invoiceIdentity(invoice);
+    return `Facture ${entry.n} sur ${entry.total} · ${identity.supplierKnown ? identity.supplier : identity.fileName || identity.supplier}`;
+  };
   const cards = (rows, historical = false) => rows.map(invoice => <article key={invoice.id} className="space-y-2 rounded-xl border border-slate-200 p-3 dark:border-slate-700">
-    <div className="flex items-start justify-between gap-2"><div className="min-w-0"><h3 className="break-words text-sm font-semibold">{invoice.vendeur || invoice.fichierNom || 'Facture à vérifier'}</h3><p className="break-words text-xs text-slate-600 dark:text-slate-300">{invoice.fichierNom || 'Document sans nom'}</p></div><span className="shrink-0 rounded-lg bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">{invoice.duplicateOfId ? 'Doublon retiré' : historical ? 'Remplacée' : invoice.rejetMotif ? 'À corriger' : invoice.valide ? 'Validée' : 'À vérifier'}</span></div>
-    {invoice.montant > 0 && <p className="text-sm">{eur(invoice.montant)} HT</p>}
+    <div className="flex items-start justify-between gap-2"><div className="min-w-0"><h3 className="break-words text-sm font-semibold">{title(invoice)}</h3><p className="break-words text-xs text-slate-600 dark:text-slate-300">{invoice.fichierNom || 'Document sans nom'}</p></div><span className="shrink-0 rounded-lg bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">{invoiceStateLabel(invoice, invoices)}</span></div>
+    {invoice.montant > 0 && <p className="text-sm tabular-nums">{eur(invoice.montant)} HT</p>}
     {historical && <p className="text-xs text-slate-600 dark:text-slate-300">Document conservé dans l’historique, exclu du devis.</p>}
     {invoice.rejetMotif && !historical && <p className="text-sm text-amber-800 dark:text-amber-200">Correction attendue : {invoice.rejetMotif}</p>}
-    <div className="flex flex-wrap gap-2">{invoice.fichier && <button className={BUTTON} aria-expanded={previewId === invoice.id} onClick={() => setPreviewId(previous => previous === invoice.id ? null : invoice.id)}>{previewId === invoice.id ? 'Fermer le document' : 'Voir le document'}</button>}{!historical && !invoice.valide && <button className={BUTTON} onClick={() => openTask(invoice)}>Vérifier la facture</button>}</div>
+    <div className="flex flex-wrap gap-2">{invoice.fichier && <button className={BUTTON} aria-expanded={previewId === invoice.id} onClick={() => setPreviewId(previous => previous === invoice.id ? null : invoice.id)}>{previewId === invoice.id ? 'Fermer le document' : 'Voir le document'}</button>}{editable && !historical && !invoice.valide && !invoice.rejetMotif && <button className={BUTTON} onClick={() => openTask(invoice)}>{can('perm_factures_modifier_articles') ? 'Vérifier' : 'Consulter'} la facture {numbering[invoice.id]?.n}</button>}</div>
     {previewId === invoice.id && <InlineDocument invoice={invoice} />}
   </article>);
   return <section aria-label="Documents du dossier" className="space-y-3">
     <p className="text-sm text-slate-600 dark:text-slate-300">Les documents reçus restent accessibles ici. La vérification et l’ajout de factures se font dans la tâche Factures.</p>
     {!invoices.length && <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-600 dark:bg-slate-800 dark:text-slate-300">Aucune facture reçue.</p>}
-    {cards(invoices.filter(invoice => active.has(invoice.id)))}
-    {invoices.some(invoice => !active.has(invoice.id)) && <details className="space-y-3"><summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold">Documents conservés dans l’historique ({invoices.filter(invoice => !active.has(invoice.id)).length})</summary>{cards(invoices.filter(invoice => !active.has(invoice.id)), true)}</details>}
+    {cards(counted)}
+    {history.length > 0 && <details className="space-y-3"><summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold">Documents conservés dans l’historique ({history.length})</summary>{cards(history, true)}</details>}
     <button className={BUTTON} onClick={() => openTask()}>Ouvrir la tâche Factures</button>
   </section>;
 }

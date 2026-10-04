@@ -6,6 +6,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const { fixture, B, C } = require('./invoice-workspace.cjs');
 const { setup, base, ids } = require('./browser-regression.cjs');
+const { waitForCurrentInvoice } = require('./invoice-list.helper.cjs');
 const output = process.env.PINTA_TASK_FLOW_OUT || '/tmp/pinta-task-flow';
 const section = f => f.page.getByTestId('dossier-task-workspace');
 const selectTask = async (f, task) => (await openTaskNavigation(f)).selectOption(task);
@@ -28,7 +29,7 @@ async function main() {
       assert.equal(await f.page.getByLabel('Longueur · colis sortant 1 (cm)', { exact: true }).count(), 0);
       const next = f.page.getByRole('button', { name: 'Valider et passer à la suivante', exact: true }); await next.waitFor();
       await next.click();
-      await f.page.waitForFunction(id => document.querySelector('select[aria-label="Facture à vérifier"]')?.value === id, C);
+      await waitForCurrentInvoice(f.page, C);
       assert.equal(f.tables.factures.find(invoice => invoice.id === B).valide, true);
       assert.equal(f.tables.factures.find(invoice => invoice.id === C).valide, false);
       await f.page.getByRole('button', { name: 'Terminer la vérification', exact: true }).click();

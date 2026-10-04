@@ -18,20 +18,9 @@ export function conversationInvoiceEditable(colis) {
     && ['receptionne','mesure','attente_feu_vert','autorise','en_preparation','pret','devis_envoye','attente_paiement'].includes(colis.statut));
 }
 
-export function conversationAttachmentImported(message, colis) {
-  const path = message.attachmentPath || message.attachment_path;
-  return Boolean(path && (colis.factures || []).some(invoice => (invoice.fichier || invoice.fichierUrl || invoice.fichier_url) === path));
-}
-
-export function pendingInvoiceAttachments(colis) {
-  const paths = new Set();
-  return (colis?.messages || []).filter(message => {
-    const path = message.attachmentPath || message.attachment_path;
-    if (!path || paths.has(path) || conversationAttachmentImported(message, colis)) return false;
-    paths.add(path);
-    return true;
-  });
-}
+// Pure rules shared with the dossier overview (domain/invoiceDocuments).
+import { conversationAttachmentImported, pendingInvoiceAttachments } from '../../domain/invoiceDocuments';
+export { conversationAttachmentImported, pendingInvoiceAttachments };
 
 export function ConversationAttachment({ message, colis, canImport, onImported, importLabel = 'Utiliser comme facture', preview = false }) {
   const [url, setUrl] = useState('');

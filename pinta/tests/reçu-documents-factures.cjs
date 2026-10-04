@@ -7,6 +7,7 @@ const path = require('node:path');
 const os = require('node:os');
 const { setup, ids, base } = require('./browser-regression.cjs');
 const { P } = ids;
+const { invoiceList, invoiceItems, invoiceNames } = require('./invoice-list.helper.cjs');
 const output = process.env.PINTA_RECEIVED_DOCS_OUT || path.join(os.tmpdir(), 'pinta-received-documents');
 const results = [];
 async function openReceived(page, count) {
@@ -86,7 +87,9 @@ async function openConversation(page) {
     assert.equal(tables.factures[0].valide, false);
     assert.equal(tables.factures[0].montant, 0);
     assert.equal(tables.factures[0].fichier_url, first.attachment_path);
-    assert.equal(await invoices.getByLabel('Facture à vérifier', { exact: true }).locator('option').filter({ hasText: 'À vérifier' }).count(), 1);
+    await invoiceList(invoices).waitFor();
+    assert.deepEqual((await invoiceNames(invoices)).filter(name => / · À vérifier$/.test(name)).length, 1);
+    assert.equal(await invoiceItems(invoices).count(), 1);
     assert.equal(imports.length, 1);
     await openConversation(page);
     assert.equal(await page.locator('#conversation-client').getByRole('button', { name: 'Utiliser comme facture', exact: true }).count(), 1, 'The chat also suppresses import for the newly imported path');
@@ -113,8 +116,9 @@ async function openConversation(page) {
     assert.equal(tables.factures.length, 2);
     assert.ok(tables.factures.every(invoice => !invoice.valide));
     await page.goto(base + '/colis/' + P + '?section=documents');
-    await invoices.getByLabel('Facture à vérifier', { exact: true }).waitFor();
-    assert.equal(await invoices.getByLabel('Facture à vérifier', { exact: true }).locator('option').count(), 2);
+    await invoiceList(invoices).waitFor();
+    assert.equal(await invoiceItems(invoices).count(), 2);
+    assert.equal((await invoiceNames(invoices)).filter(name => / · À vérifier$/.test(name)).length, 2, 'Both imported documents wait for verification.');
     assert.equal(await page.getByRole('button', { name: /^\d+ document\(s\) reçu\(s\) à vérifier$/ }).count(), 0);
     results.push({ test: 'failed-import-retains-document-and-successful-import-refresh-can-retry-without-reimport', pass: true });
 

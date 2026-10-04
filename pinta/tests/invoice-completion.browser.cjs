@@ -8,6 +8,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const { fixture, B, C } = require('./invoice-workspace.cjs');
 const { base, ids } = require('./browser-regression.cjs');
+const { invoiceList, invoiceItems, invoiceItem, currentInvoiceId, waitForCurrentInvoice, invoiceNames } = require('./invoice-list.helper.cjs');
 const output = process.env.PINTA_INVOICE_COMPLETION_OUT || '/tmp/pinta-invoice-completion';
 const clone = value => JSON.parse(JSON.stringify(value));
 const invoicePanel = f => f.page.getByRole('region', { name: 'Factures d’achat', exact: true });
@@ -72,6 +73,10 @@ async function main() {
       await open(f); await complete(f); await noEditor(f);
       assert.equal(f.tables.factures[0].duplicate_of_facture_id, B, 'Fixture deliberately puts the retired zero-amount copy first.');
       assert.match(await invoicePanel(f).innerText(), /2/);
+      // The summary still lists every counted invoice at a glance, never the copy.
+      assert.deepEqual(await invoiceNames(f.page), ['Facture 1 sur 2 · Boutique B · Vérifiée', 'Facture 2 sur 2 · Boutique C · Vérifiée']);
+      assert.equal(await invoicePanel(f).locator('p').filter({ hasText: /^2 factures · toutes vérifiées/ }).count(), 1, 'Header progress line in the complete state.');
+      assert.match(await invoicePanel(f).innerText(), /1 doublon retiré/);
       assert.equal(await invoicePanel(f).getByText('Choisissez une catégorie pour cet article.', { exact: true }).count(), 0);
       const rows = clone(f.tables.lignes);
       await invoicePanel(f).getByRole('button', { name: 'Passer au devis', exact: true }).click();
@@ -98,11 +103,15 @@ async function main() {
       const original = f.page.getByRole('button', { name: 'Voir la facture originale', exact: true });
       await original.waitFor(); await noEditor(f);
       assert.match(await invoicePanel(f).innerText(), /exclu|doublon/i);
-      const options = f.page.getByLabel('Facture à vérifier', { exact: true }).locator('option');
-      assert.equal(await options.filter({ hasText: 'achat-verifie.pdf' }).count(), 0, 'Retired copies belong to history, not the active document selector.');
+      await invoiceList(f.page).waitFor();
+      assert.equal(await invoiceItems(f.page).count(), 2);
+      assert.equal(await invoiceItem(f.page, ids.F).count(), 0, 'Retired copies belong to history, not the active document list.');
+      assert.equal(await invoiceItems(f.page).filter({ hasText: 'achat-verifie.pdf' }).count(), 0);
+      assert.equal(await currentInvoiceId(f.page), null, 'A copy is never marked as one of the counted invoices.');
+      assert.match(await f.page.getByRole('group', { name: 'Facture affichée', exact: true }).innerText(), /Copie de la facture 1/);
       await original.click();
       await f.page.getByRole('button', { name: 'Modifier la vérification', exact: true }).waitFor();
-      assert.equal(await f.page.getByLabel('Facture à vérifier', { exact: true }).inputValue(), B);
+      await waitForCurrentInvoice(f.page, B);
       assert.notEqual(new URL(f.page.url()).searchParams.get('invoice'), ids.F);
       assert.equal(await f.page.getByRole('button', { name: /^(Valider et passer à la suivante|Terminer la vérification)$/ }).count(), 0);
       await invoicePanel(f).getByRole('button', { name: 'Revenir au récapitulatif', exact: true }).click(); await complete(f); await noEditor(f);
@@ -113,7 +122,7 @@ async function main() {
       await open(f); await complete(f);
       await invoicePanel(f).getByRole('button', { name: 'Consulter les factures', exact: true }).click();
       await f.page.getByRole('button', { name: 'Modifier la vérification', exact: true }).waitFor();
-      assert.notEqual(await f.page.getByLabel('Facture à vérifier', { exact: true }).inputValue(), ids.F);
+      assert.ok([B, C].includes(await currentInvoiceId(f.page)), 'Consultation opens a counted invoice, never the copy.');
       assert.equal(await f.page.getByRole('button', { name: /^(Valider et passer à la suivante|Terminer la vérification)$/ }).count(), 0);
       const editor = f.page.getByLabel('Description de l’article 1', { exact: true });
       if (await editor.count()) assert.equal(await editor.isDisabled(), true);
@@ -122,7 +131,7 @@ async function main() {
     await scenario('one-original-still-pending-opens-that-review-not-summary-or-copy', { pending: true }, async f => {
       await open(f);
       await f.page.getByRole('button', { name: /^(Valider et passer à la suivante|Terminer la vérification)$/ }).waitFor();
-      assert.equal(await f.page.getByLabel('Facture à vérifier', { exact: true }).inputValue(), B);
+      await waitForCurrentInvoice(f.page, B);
       assert.equal(await f.page.getByLabel('Description de l’article 1', { exact: true }).inputValue(), 'Scelleuse thermique');
       assert.equal(await invoicePanel(f).getByText('Factures vérifiées', { exact: true }).count(), 0);
       assert.equal(f.tables.factures.find(invoice => invoice.id === B).valide, false);
@@ -160,14 +169,17 @@ async function main() {
       f.tables.factures.find(invoice => invoice.id === B).replaces_facture_id = ids.F;
       await open(f); await complete(f); await noEditor(f);
       const summary = invoicePanel(f).getByText('Factures vérifiées', { exact: true }).locator('..');
-      assert.match(await summary.innerText(), /2 facture\(s\) validée\(s\)/);
-      assert.match(await summary.innerText(), /44[,.]64/);
+      assert.match(await summary.innerText(), /2 factures vérifiées · 44[,.]64/);
+      assert.doesNotMatch(await summary.innerText(), /250/, 'The replaced document is not in the total.');
       await invoicePanel(f).getByRole('button', { name: 'Consulter les factures', exact: true }).click();
       await f.page.getByRole('button', { name: 'Modifier la vérification', exact: true }).waitFor();
-      assert.equal(await f.page.getByLabel('Facture à vérifier', { exact: true }).locator('option').count(), 2);
+      assert.equal(await invoiceItems(f.page).count(), 2);
+      assert.equal(await invoiceItem(f.page, ids.F).count(), 0, 'A replaced document is not one of the counted invoices.');
       await invoicePanel(f).locator('summary').filter({ hasText: /^Documents remplacés/ }).click();
-      await invoicePanel(f).getByRole('navigation', { name: 'Documents remplacés', exact: true }).getByRole('button', { name: 'Facture 1 — achat-verifie.pdf', exact: true }).click();
+      await invoicePanel(f).getByRole('navigation', { name: 'Documents remplacés', exact: true }).getByRole('button', { name: 'Ancienne version de la facture 1 — achat-verifie.pdf', exact: true }).click();
       await review(f).getByText('Ce document a été remplacé. Vérifiez la facture corrigée depuis la liste.', { exact: true }).waitFor();
+      assert.match(await f.page.getByRole('group', { name: 'Facture affichée', exact: true }).innerText(), /Ancienne version de la facture 1/);
+      assert.equal(await currentInvoiceId(f.page), null);
       await noEditor(f);
     });
     for (const dirty of [false, true]) await scenario(`colleague-validation-${dirty ? 'preserves-local-correction' : 'closes-automatic-editor'}`, { pending: true }, async f => {

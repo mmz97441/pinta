@@ -238,3 +238,26 @@ test('a failed date evidence request keeps the dossier and marks only its date e
   assert.equal(result.length, 1); assert.equal(result[0].id, 'date-error');
   assert.equal(result[0].receptionDatesError, true); assert.equal(result[0].receptionDates, null);
 });
+test('invoice arrival and validation dates are read but never written back', async () => {
+  const sent = [];
+  const row = { id: 'f1', colis_id: 'p1', vendeur: 'Fnac', montant: '10.50', valide: true, fichier_url: 'p1/a.pdf', fichier_nom: 'a.pdf', created_at: '2026-09-01T08:00:00+00:00', valide_le: '2026-09-02T09:00:00+00:00' };
+  const query = {
+    insert(payload) { sent.push(['insert', payload]); return this; },
+    update(payload) { sent.push(['update', payload]); return this; },
+    eq() { return this; },
+    select() { return this; },
+    async single() { return { data: row, error: null }; },
+  };
+  const sb = await service({ from: () => query });
+  const mapped = sb.mapFact(row);
+  assert.equal(mapped.createdAt, '2026-09-01T08:00:00+00:00');
+  assert.equal(mapped.valideLe, '2026-09-02T09:00:00+00:00');
+  assert.equal(sb.mapFact({ id: 'f2' }).createdAt, null);
+  assert.equal(sb.mapFact({ id: 'f2' }).valideLe, null);
+  const saved = await sb.updateFacture('f1', { ...mapped, fichierUrl: 'p1/b.pdf', rejetMotif: null });
+  assert.equal(saved.createdAt, row.created_at, 'A saved row keeps its arrival date for ordering.');
+  await sb.insertFacture('p1', { ...mapped, fichierUrl: 'p1/c.pdf' });
+  for (const [, payload] of sent) {
+    for (const key of ['created_at', 'createdAt', 'valide_le', 'valideLe']) assert.equal(key in payload, false, `${key} must stay server-owned`);
+  }
+});

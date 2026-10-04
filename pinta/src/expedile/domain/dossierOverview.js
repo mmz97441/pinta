@@ -2,7 +2,8 @@ import { STATUTS } from '../constants/index.js';
 import { DOSSIER_TASKS, dossierNextTask } from './dossierTasks.js';
 import { receptionCartonManifest, receptionDateSummary, RECEPTION_MEASURES } from './reception.js';
 import { hasCurrentPreparation } from './preparationReadiness.js';
-import { currentInvoices } from './invoiceDocuments.js';
+import { currentInvoices, pendingInvoiceAttachments } from './invoiceDocuments.js';
+import { invoiceBuckets, invoiceProgressSummary } from './invoiceProgress.js';
 import { buildDossierTableModel, formatDossierTableDate } from './dossierTable.js';
 
 const DOCUMENT_PERMISSIONS = ['perm_factures_voir', 'perm_factures_ajouter', 'perm_factures_valider', 'perm_factures_refuser', 'perm_factures_ocr', 'perm_factures_modifier_articles'];
@@ -88,12 +89,16 @@ export function buildDossierOverview(dossier = {}, { client = {}, envois = [], c
   const validatedInvoices = receivedInvoices.filter(invoice => invoice.valide === true && !text(invoice.rejetMotif || invoice.rejet_motif));
   const reviewInvoices = receivedInvoices.filter(invoice => invoice.valide !== true && !text(invoice.rejetMotif || invoice.rejet_motif));
   const missingFileCount = activeInvoices.filter(invoice => !filePresent(invoice)).length;
-  const invoicesDone = invoiceRows !== null && receivedInvoices.length > 0 && !missingFileCount && !rejectedInvoices.length && !reviewInvoices.length;
+  // Same counting and wording as the invoice workspace shown right below
+  // (domain/invoiceProgress): « 3 sur 8 factures vérifiées · 3 à vérifier… ».
+  // Conversation attachments left to sort count too, exactly as in the
+  // workspace: the overview never says « toutes vérifiées » above a workspace
+  // that still asks to sort received documents.
+  const invoiceBucketsNow = invoiceBuckets(invoiceRows || [], { pendingAttachments: pendingInvoiceAttachments(dossier) });
+  const invoicesDone = invoiceRows !== null && invoiceBucketsNow.complete;
   const invoicesOptional = invoiceRows !== null && client.type === 'pro' && activeInvoices.length === 0;
   const invoiceSummary = invoiceRows === null ? 'Factures à actualiser'
-    : missingFileCount ? `${receivedInvoices.length} facture(s) reçue(s) · ${missingFileCount} document(s) à retrouver`
-    : rejectedInvoices.length ? `${receivedInvoices.length} facture(s) reçue(s) · ${rejectedInvoices.length} à corriger`
-    : receivedInvoices.length ? `${receivedInvoices.length} facture(s) reçue(s) · ${validatedInvoices.length} validée(s)${reviewInvoices.length ? ` · ${reviewInvoices.length} à vérifier` : ''}`
+    : activeInvoices.length ? invoiceProgressSummary(invoiceBucketsNow).text
     : invoicesOptional ? 'Factures non nécessaires pour ce client professionnel' : 'Aucune facture reçue';
   const invoices = {
     visible: documentsVisible,
@@ -158,7 +163,7 @@ export function buildDossierOverview(dossier = {}, { client = {}, envois = [], c
     accord: { state: consentState, summary: consentSummary, date: approved || refused ? consentDate : voluntaryWait ? waitingDate : requestDate },
     preparation: { state: optimization.state, summary: optimization.summary, date: optimization.savedAt },
     documents: { state: !documentsVisible ? 'restricted' : invoicesDone ? 'done' : invoicesOptional ? 'not_required' : invoiceRows === null || missingFileCount ? 'unknown'
-      : rejectedInvoices.length ? 'review' : reviewInvoices.length ? 'current' : AFTER_PREPARATION.has(dossier.statut) ? 'unknown' : 'waiting', summary: invoices.summary, date: null },
+      : rejectedInvoices.length ? 'review' : reviewInvoices.length ? 'current' : invoiceBucketsNow.pendingAttachments ? 'unknown' : AFTER_PREPARATION.has(dossier.statut) ? 'unknown' : 'waiting', summary: invoices.summary, date: null },
     devis: { state: financeVisible ? quoteState : 'restricted', summary: financeVisible ? quoteSummary : 'Accès réservé au devis', date: financeVisible ? financialFacts.sentAt || (quoteRevised ? savedDate(dossier.devisEnvoyeLe, now) : null) : null },
     paiement: { state: financeVisible ? paymentState : 'restricted', summary: payment.stateLabel, date: financeVisible ? savedDate(dossier.paiementDate, now) : null },
     expedition: { state: departureConfirmed ? 'done' : AFTER_DEPARTURE.has(dossier.statut) || (dossier.envoi || dossier.envoiId) && !envoi ? 'unknown'

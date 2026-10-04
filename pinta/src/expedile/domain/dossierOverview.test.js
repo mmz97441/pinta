@@ -12,7 +12,7 @@ const reception = { id: 'dossier', ref: 'EXP-TEST', casier: '5C', statut: 'mesur
 const prepared = { ...reception, statut: 'en_preparation', feuVert: 'autorise', feuVertDate: '2026-09-29T10:00:00Z',
   preparationCompositionVersion: 2, finalMeasurementsVersion: 2, finalMeasurementsAt: '2026-09-30T10:00:00Z',
   outgoingParcelCount: 1, finalPackages: [{ dimL: 30, dimW: 20, dimH: 15, poids: 2.5 }],
-  factures: [{ id: 'invoice', fichier: 'private/invoice.pdf', valide: true }],
+  factures: [{ id: 'invoice', fichier: 'private/invoice.pdf', valide: true, montant: 40 }],
 };
 const quoted = { ...prepared, statut: 'devis_envoye', devisTotal: 100, quoteVersion: 1, devisBrouillon: false, devisEnvoyeLe: '2026-10-01T10:00:00Z' };
 const paid = { ...quoted, statut: 'paye', paiementMontant: 100, paiementDate: '2026-10-02T09:00:00Z' };
@@ -92,7 +92,7 @@ test('incomplete or uncertified final values are not a finished optimization', (
 test('invoice counts exclude duplicates and replaced copies without losing pending or rejected originals', () => {
   const factures = [
     { id: 'old', fichier: 'old.pdf', valide: true },
-    { id: 'replacement', replacesFactureId: 'old', fichier: 'new.pdf', valide: true },
+    { id: 'replacement', replacesFactureId: 'old', fichier: 'new.pdf', valide: true, montant: 30 },
     { id: 'copy', duplicateOfId: 'replacement', fichier: 'copy.pdf', valide: true },
     { id: 'pending', fichier: 'pending.pdf', valide: false },
     { id: 'rejected', fichier: 'rejected.pdf', valide: true, rejetMotif: 'Document illisible' },
@@ -101,6 +101,36 @@ test('invoice counts exclude duplicates and replaced copies without losing pendi
   assert.equal(result.invoices.receivedCount, 3); assert.equal(result.invoices.validatedCount, 1);
   assert.equal(result.invoices.reviewCount, 1); assert.equal(result.invoices.rejectedCount, 1);
   assert.equal(result.invoices.excludedCount, 2); assert.equal(step(result, 'documents').state, 'review');
+  // The same wording as the invoice workspace: counted invoices only, every open bucket named.
+  assert.equal(result.invoices.summary, '1 sur 3 factures vérifiées · 1 à vérifier · 1 à corriger par le client');
+  assert.equal(step(result, 'documents').summary, result.invoices.summary);
+});
+
+test('the overview never shows a second invoice total: same wording as the workspace in every state', () => {
+  const at = day => `2026-09-0${day}T08:00:00Z`;
+  const verified = day => ({ id: `v${day}`, createdAt: at(day), fichier: `v${day}.pdf`, valide: true, montant: 10 });
+  const eight = [verified(1), verified(2), verified(3),
+    { id: 't4', createdAt: at(4), fichier: 't4.pdf', valide: false }, { id: 't5', createdAt: at(5), fichier: 't5.pdf', valide: false }, { id: 't6', createdAt: at(6), fichier: 't6.pdf', valide: false },
+    { id: 'r7', createdAt: at(7), fichier: 'r7.pdf', valide: false, rejetMotif: 'Floue' }, { id: 'm8', createdAt: at(8) },
+    { id: 'copy', createdAt: at(9), fichier: 'c.pdf', valide: false, duplicateOfId: 'v1' }];
+  const work = overview({ ...prepared, factures: eight }, options);
+  assert.equal(work.invoices.summary, '3 sur 8 factures vérifiées · 3 à vérifier · 1 à corriger par le client · 1 document manquant');
+  assert.doesNotMatch(work.invoices.summary, /reçue\(s\)|validée\(s\)|à retrouver/);
+  const done = overview({ ...prepared, factures: [verified(1), verified(2), { id: 'copy', fichier: 'c.pdf', duplicateOfId: 'v1' }] }, options);
+  assert.equal(done.invoices.summary, '2 factures · toutes vérifiées'); assert.equal(step(done, 'documents').state, 'done');
+  const legacy = overview({ ...prepared, factures: [{ id: 'legacy', fichier: 'l.pdf', valide: true, montant: 0 }] }, options);
+  assert.notEqual(step(legacy, 'documents').state, 'done', 'A validation without amount is not verified, as in the workspace.');
+});
+
+test('a conversation attachment left to sort keeps the overview in step with the workspace', () => {
+  const verified = n => ({ id: `v${n}`, createdAt: `2026-09-0${n}T08:00:00Z`, fichier: `v${n}.pdf`, valide: true, montant: 10 });
+  const factures = [verified(1), verified(2), verified(3)];
+  const messages = [{ id: 'm1', type: 'client', attachmentPath: 'dossier/nouvelle.pdf' }, { id: 'm2', type: 'client', attachmentPath: 'v1.pdf' }];
+  const result = overview({ ...prepared, factures, messages }, options);
+  assert.equal(result.invoices.summary, '3 sur 3 factures vérifiées · 1 document reçu à trier');
+  assert.notEqual(step(result, 'documents').state, 'done', 'Documents still to sort: the step is not finished.');
+  const sorted = overview({ ...prepared, factures, messages: [messages[1]] }, options);
+  assert.equal(sorted.invoices.summary, '3 factures · toutes vérifiées'); assert.equal(step(sorted, 'documents').state, 'done');
 });
 
 test('an invoice record with no file is never presented as a received validated document', () => {

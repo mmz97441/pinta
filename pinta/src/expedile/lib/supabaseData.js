@@ -201,6 +201,9 @@ export function mapFact(row) {
     ocrStatus: row.ocr_status || null,
     ocrResult: row.ocr_result || null,
     ocrError: row.ocr_error || null,
+    // Read-only: arrival order and validation date. Never written back by insertFacture/updateFacture.
+    createdAt: row.created_at || null,
+    valideLe: row.valide_le || null,
   };
 }
 

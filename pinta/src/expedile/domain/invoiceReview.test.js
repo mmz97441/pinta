@@ -42,3 +42,18 @@ test('indicator links target the pending invoice and preserve the work filters',
   assert.equal(invoiceReviewLabel(1), 'Facture reçue · À vérifier');
   assert.equal(invoiceReviewLabel(2), '2 factures reçues · À vérifier');
 });
+
+test('the indicator link targets the workspace’s next invoice, in arrival order, not in id order', async () => {
+  const { invoiceBuckets, invoiceNumbering } = await import('./invoiceProgress.js');
+  // Fetched in id order (fetchAllRows); arrival order differs.
+  const factures = [
+    { id: 'a1', createdAt: '2026-09-12T09:00:00Z', fichier: 'd/a1.pdf', valide: false },
+    { id: 'b2', createdAt: '2026-09-09T09:00:00Z', fichier: 'd/b2.pdf', valide: true, montant: 12 },
+    { id: 'c3', createdAt: '2026-09-10T09:00:00Z', fichier: 'd/c3.pdf', valide: false },
+  ];
+  const value = { ...dossier, factures };
+  assert.deepEqual(invoicesAwaitingReview(value).map(invoice => invoice.id), ['c3', 'a1']);
+  const target = new URL(invoiceReviewUrl(value), 'https://example.test').searchParams.get('invoice');
+  assert.equal(target, invoiceBuckets(factures).next.id);
+  assert.equal(invoiceNumbering(factures)[target].n, 2);
+});

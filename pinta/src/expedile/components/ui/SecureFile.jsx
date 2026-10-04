@@ -1,20 +1,26 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import * as sb from '../../lib/supabaseData';
 
-/** URLs are signed on read; only the storage path is kept in business records. */
+/** URLs are signed on read; only the storage path is kept in business records.
+ *  retry() asks for a fresh signed URL without reloading the dossier. */
 export function useSignedFile(bucket, pathOrUrl) {
   const [state, setState] = useState({ url: '', error: '', loading: Boolean(pathOrUrl) });
+  const [attempt, setAttempt] = useState(0);
+  const retry = useCallback(() => setAttempt(value => value + 1), []);
   useEffect(() => {
     let alive = true;
     setState({ url: '', error: '', loading: Boolean(pathOrUrl) });
     if (pathOrUrl) sb.signedFileUrl(bucket, pathOrUrl).then((url) => {
       if (alive) setState({ url, error: '', loading: false });
-    }).catch(() => {
-      if (alive) setState({ url: '', error: 'Document indisponible. Rechargez le dossier pour réessayer.', loading: false });
+    }).catch(failure => {
+      // A legacy link outside the private bucket fails the same way every time:
+      // say so rather than inviting a retry that cannot succeed.
+      const permanent = /domaine non autorisé|Chemin du document non reconnu/.test(failure?.message || '');
+      if (alive) setState({ url: '', error: 'Document indisponible. Rechargez le dossier pour réessayer.', loading: false, permanent });
     });
     return () => { alive = false; };
-  }, [bucket, pathOrUrl]);
-  return state;
+  }, [bucket, pathOrUrl, attempt]);
+  return { ...state, retry };
 }
 
 export function SecureImage({ bucket = 'photos-colis', src, alt = '', ...props }) {

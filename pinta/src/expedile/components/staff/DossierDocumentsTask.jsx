@@ -1,6 +1,6 @@
 import { useTaskAccess } from '../../context/TaskAccessContext';
 import React, { useEffect, useRef, useState } from 'react';
-import { X } from 'lucide-react';
+import { ChevronRight, X } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { eur } from '../../utils';
 import * as sb from '../../lib/supabaseData';
@@ -61,7 +61,7 @@ export default function DossierDocumentsTask({ onQuote, children }) {
           </div>)}
         </>}
         {error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}
-        {editable && <details open={dirty || undefined}><summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-slate-600">Ajouter un achat supplémentaire sans facture reliée</summary>
+        {editable && <details open={dirty || undefined}><summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-slate-600"><ChevronRight size={16} className="iw-chevron" aria-hidden="true" />Ajouter un achat supplémentaire sans facture reliée</summary>
           <form className="space-y-3" onSubmit={event => { event.preventDefault(); run(add); }}>
             <input required disabled={busy} aria-label="Description du nouvel article" value={article.desc} onChange={event => setArticle({ ...article, desc: event.target.value })} placeholder="Description de l’article" className={INPUT} />
             <div className="grid grid-cols-2 gap-3"><label className="text-xs text-slate-600">Quantité<input required disabled={busy} aria-label="Quantité du nouvel article" type="number" min="1" step="1" value={article.qte} onChange={event => setArticle({ ...article, qte: event.target.value })} className={INPUT} /></label><label className="text-xs text-slate-600">Prix unitaire HT (€)<input required disabled={busy} aria-label="Prix du nouvel article" type="number" min="0" step="0.01" value={article.prix} onChange={event => setArticle({ ...article, prix: event.target.value })} className={INPUT} /></label></div>

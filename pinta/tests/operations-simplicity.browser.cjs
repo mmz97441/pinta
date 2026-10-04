@@ -6,7 +6,8 @@ const AxeBuilder = require('@axe-core/playwright').default;
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const { setup, base, ids } = require('./browser-regression.cjs');
-const { fixture, B } = require('./invoice-workspace.cjs');
+const { fixture, B, C } = require('./invoice-workspace.cjs');
+const { waitForCurrentInvoice } = require('./invoice-list.helper.cjs');
 const output = process.env.PINTA_OPERATIONS_OUT || '/tmp/pinta-operations-simplicity';
 const region = f => f.page.getByTestId('dossier-task-workspace');
 const mutations = f => f.requests.filter(request => /\/(save_quote|confirm_quote|queue_message|save_invoice_review|save_preparation_measurements|transition_colis|revert_colis|assign_colis_departure|mark_manual_payment)$/.test(request.path));
@@ -232,7 +233,7 @@ async function audit(f, name, include = '[data-testid="dossier-task-workspace"]'
   await scenario('invoice-atomic-validation-auto-next-keeps-manual-purchase',async f=>{
    await open(f,'documents'); const manual=f.tables.lignes.filter(line=>!line.facture_id); assert.equal(manual.length,1);
    await f.page.getByRole('button',{name:'Valider et passer à la suivante',exact:true}).click();
-   await f.page.waitForFunction(id=>document.querySelector('select[aria-label="Facture à vérifier"]')?.value!==id,B);
+   await waitForCurrentInvoice(f.page,C); // auto-advance lands on the next invoice to verify, not merely « away from B »
    assert.equal(f.calls.filter(call=>call.kind==='save').length,1); assert.equal(f.tables.lignes.filter(line=>line.facture_id===B).length,1);
    assert.deepEqual(f.tables.lignes.filter(line=>!line.facture_id),manual);
    await region(f).getByText('Achats supplémentaires sans facture reliée',{exact:true}).waitFor(); noNotification(f);

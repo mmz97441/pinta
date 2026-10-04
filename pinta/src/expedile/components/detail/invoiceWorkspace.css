@@ -1,0 +1,232 @@
+/* Invoice workspace: one numbering, one list, one navigator.
+   The section is a size container, so the breakpoints follow the panel width
+   (split view included), not the viewport. Tailwind utilities are emitted after
+   this file, so every rule that must beat a utility (.grid, .flex) carries the
+   .invoice-workspace prefix.
+   Contrast (measured): pills reuse the dossier table palette (>= 5.9:1 light,
+   >= 8.4:1 dark); muted text >= 5.5:1 on every item background; progress
+   segments >= 3.4:1 against the panel in both themes. */
+.invoice-workspace {
+  container-type: inline-size;
+  --iw-ring: var(--brand-text, #1B3A4B);
+  --iw-item-bg: transparent;
+  --iw-selected-bg: #EEF3F5;
+  --iw-hover-border: #8FA3AE;
+  --iw-num-bg: var(--bg-surface);
+  --iw-num-text: var(--brand-text, #1B3A4B);
+  --iw-num-current-bg: #1B3A4B;
+  --iw-num-current-text: #FFFFFF;
+  --iw-primary-bg: #1B3A4B;
+  --iw-primary-text: #FFFFFF;
+  --iw-ok-text: #17633e;
+  --iw-seg-verified: #2E7D50;
+  --iw-seg-toVerify: #A87414;
+  --iw-seg-toCorrect: #B5532C;
+  --iw-seg-missingFile: #868C89;
+  --iw-focus: #1B3A4B;
+  --iw-reason-text: #943d16;
+  --iw-warn-text: #79520a;
+}
+html.dark .invoice-workspace {
+  --iw-selected-bg: #203744;
+  --iw-hover-border: #6F8794;
+  --iw-num-current-bg: #C4DAE5;
+  --iw-num-current-text: #122A36;
+  --iw-primary-bg: #24506A;
+  --iw-ok-text: #B0DFC0;
+  --iw-seg-verified: #6FBF8B;
+  --iw-seg-toVerify: #E0B254;
+  --iw-seg-toCorrect: #E08A66;
+  --iw-seg-missingFile: #8E949A;
+  --iw-focus: #C4DAE5;
+  --iw-reason-text: #ffd3c0;
+  --iw-warn-text: #f7db97;
+}
+
+/* Header: progress, meta, decorative bar, read-only banner, next step. */
+.iw-title { display: flex; align-items: center; gap: 8px; font-size: 1.125rem; font-weight: 700; color: var(--text-primary); }
+.iw-progress { margin-top: 6px; font-size: 1.0625rem; line-height: 1.4; color: var(--text-primary); overflow-wrap: anywhere; }
+.iw-progress strong { font-weight: 700; color: var(--iw-ring); font-variant-numeric: tabular-nums; }
+.iw-muted { font-weight: 400; color: var(--text-secondary); }
+.iw-meta-line { margin-top: 2px; font-size: .875rem; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.iw-bar { display: flex; gap: 4px; max-width: 520px; margin-top: 10px; }
+.iw-bar span { flex: 1; height: 8px; border-radius: 4px; background: var(--iw-seg-missingFile); }
+.iw-bar [data-state='verified'] { background: var(--iw-seg-verified); }
+.iw-bar [data-state='toVerify'] { background: var(--iw-seg-toVerify); }
+.iw-bar [data-state='toCorrect'] { background: var(--iw-seg-toCorrect); }
+.iw-banner, .iw-next {
+  display: flex; align-items: center; gap: 10px;
+  border: 1px solid var(--border-subtle); border-radius: 12px;
+  background: var(--bg-surface); color: var(--text-primary);
+}
+.iw-banner { padding: 10px 12px; font-weight: 500; }
+/* Dossier-level actions: one row after the summary block, never between the
+   progress text and its bar. An opened message composer takes the full row. */
+.iw-actions { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px; }
+.iw-actions > section:has(> div, > p) { flex-basis: 100%; }
+.iw-feedback { font-size: .875rem; }
+.iw-feedback svg { color: var(--iw-ok-text); }
+/* Local reminder of a message the header already announced. */
+.iw-feedback-echo { font-size: .875rem; color: var(--text-secondary); }
+.iw-banner svg { flex: none; color: var(--iw-ring); }
+.iw-next { justify-content: space-between; flex-wrap: wrap; min-height: 68px; padding: 10px 12px; }
+.iw-next-text { min-width: 0; flex: 1 1 16rem; }
+.iw-next-text strong { display: block; font-weight: 700; }
+.iw-next-text span { display: block; font-size: .875rem; color: var(--text-secondary); overflow-wrap: anywhere; }
+.iw-primary {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  min-height: 44px; padding: 0 16px; border-radius: 12px;
+  background: var(--iw-primary-bg); color: var(--iw-primary-text); font-weight: 700;
+  transition: transform .2s ease-out, background-color .2s ease-out;
+}
+.iw-primary:hover:not(:disabled) { transform: translateY(-1px); }
+.iw-primary:active:not(:disabled) { transform: translateY(1px); }
+.iw-primary:disabled { opacity: .5; }
+
+/* Counted invoices, in numbering order. The rows share the list's columns
+   (subgrid): amounts line up from one row to the next and the state pills
+   share one right-aligned column. The subgrid folds the row's border and
+   padding (1px + 12px) into the first track: 44px = 13px + 30px disc + 1px,
+   so the 12px column gap stays between the disc and the supplier. */
+.iw-list {
+  display: grid; grid-template-columns: 44px minmax(0, 1fr) minmax(7.5rem, auto) auto; gap: 8px 12px;
+  margin: 0; padding: 0; list-style: none;
+}
+.iw-list > li { grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; }
+.iw-item {
+  grid-column: 1 / -1;
+  display: grid; grid-template-columns: subgrid; align-items: center; gap: 4px 12px;
+  width: 100%; min-height: 60px; padding: 10px 12px;
+  border: 1px solid var(--border-subtle); border-radius: 12px;
+  background: var(--iw-item-bg); color: var(--text-primary); text-align: left;
+  transition: border-color .2s ease-out, background-color .2s ease-out, box-shadow .2s ease-out, transform .2s ease-out;
+}
+/* Hover stays lighter than the navy ring of the displayed invoice. */
+.iw-item:hover:not(:disabled):not([aria-current='true']) { border-color: var(--iw-hover-border); }
+.iw-item:active:not(:disabled) { transform: translateY(1px); }
+.iw-item[aria-current='true'] { border-color: var(--iw-ring); box-shadow: inset 0 0 0 1px var(--iw-ring); background: var(--iw-selected-bg); }
+.iw-item:disabled { cursor: progress; }
+.iw-num {
+  display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%;
+  background: var(--iw-num-bg); color: var(--iw-num-text); font-weight: 800; font-variant-numeric: tabular-nums;
+}
+.iw-item[aria-current='true'] .iw-num { background: var(--iw-num-current-bg); color: var(--iw-num-current-text); }
+.iw-who { min-width: 0; }
+.iw-supplier { display: block; font-weight: 700; overflow-wrap: anywhere; }
+.iw-meta { display: block; overflow: hidden; font-size: .875rem; color: var(--text-secondary); overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+/* Each item carries its « · » before it; the list is shifted left by one
+   separator width and clipped, so a wrapped line never starts with a dot. */
+.iw-meta-items { display: flex; flex-wrap: wrap; margin-left: -1.1em; }
+.iw-meta-item { min-width: 0; max-width: 100%; }
+.iw-meta-item::before { content: '·'; display: inline-block; width: 1.1em; text-align: center; }
+.iw-file { display: inline-block; max-width: 18ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
+/* Why an invoice waits on the client: one line, full text in the tooltip. */
+.iw-reason { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; color: var(--iw-reason-text); }
+.iw-item > .iw-pill { justify-self: end; }
+.iw-amount { font-weight: 700; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.iw-amount small { display: block; font-size: .8125rem; font-weight: 500; color: var(--text-secondary); }
+
+/* State pill: same palette as the dossier table pills. */
+.iw-pill {
+  --pill-bg: #f1f2f0; --pill-text: #565d63;
+  display: inline-flex; align-items: baseline; gap: .4em; max-width: 100%;
+  padding: .15em .65em; border-radius: .75em;
+  background: var(--pill-bg); color: var(--pill-text);
+  font-size: .875rem; font-weight: 600; line-height: 1.35; white-space: nowrap;
+}
+.iw-pill::before { content: ''; flex: none; align-self: center; width: .45em; height: .45em; border-radius: 50%; background: currentColor; }
+.iw-pill[data-tone='done'] { --pill-bg: #eaf7ef; --pill-text: #17633e; }
+.iw-pill[data-tone='waiting'] { --pill-bg: #fff5d8; --pill-text: #79520a; }
+.iw-pill[data-tone='review'] { --pill-bg: #fff0e9; --pill-text: #943d16; }
+html.dark .iw-pill { --pill-bg: #282b2d; --pill-text: #c4c8cd; }
+html.dark .iw-pill[data-tone='done'] { --pill-bg: #153d2c; --pill-text: #b9e8ca; }
+html.dark .iw-pill[data-tone='waiting'] { --pill-bg: #44361b; --pill-text: #f7db97; }
+html.dark .iw-pill[data-tone='review'] { --pill-bg: #4a2d24; --pill-text: #ffd3c0; }
+
+/* One disclosure language in the workspace: the lucide chevron replaces the
+   native marker of every <details> (history, other actions, articles…). */
+.invoice-workspace summary { display: flex; align-items: center; gap: 6px; list-style: none; }
+.invoice-workspace summary::-webkit-details-marker { display: none; }
+.invoice-workspace summary > svg { flex: none; }
+.iw-chevron { transition: transform .2s ease-out; }
+.invoice-workspace details[open] > summary > .iw-chevron { transform: rotate(90deg); }
+/* The copy or old version on screen: same ring as the displayed invoice. */
+.invoice-workspace .iw-history button[aria-current='true'] {
+  border-color: var(--iw-ring); box-shadow: inset 0 0 0 1px var(--iw-ring); background: var(--iw-selected-bg);
+}
+
+/* Current invoice bar: the only invoice navigator. It wraps instead of
+   squeezing: the state pill never shrinks, and the buttons move to a second
+   line before they can cover it. The title wraps rather than being cut. */
+.iw-current {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; min-height: 68px; padding: 10px 16px;
+  border-top: 1px solid var(--border-subtle); border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-canvas); scroll-margin-top: 8rem;
+}
+.iw-current-title { flex: 1 1 20rem; min-width: 0; font-size: 1rem; font-weight: 400; line-height: 1.4; overflow-wrap: anywhere; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.iw-current-title strong { font-weight: 700; }
+.iw-current > .iw-pill { flex: none; }
+.iw-nav { display: flex; flex: none; gap: 6px; margin-left: auto; }
+.iw-nav-button {
+  display: inline-flex; align-items: center; justify-content: center; gap: 4px;
+  min-width: 44px; min-height: 44px; padding: 0 12px; border-radius: 12px;
+  border: 1px solid #C9C3B7; background: var(--bg-elevated); color: var(--text-primary); font-weight: 600;
+  transition: border-color .2s ease-out, transform .2s ease-out;
+}
+html.dark .iw-nav-button { border-color: #5C564E; }
+.iw-nav-button:hover:not([aria-disabled='true']) { border-color: var(--iw-ring); }
+.iw-nav-button:active:not([aria-disabled='true']) { transform: translateY(1px); }
+.iw-nav-button[aria-disabled='true'] { opacity: .45; cursor: default; }
+
+/* Focus: the global gold outline is about 2:1 on these light surfaces; the
+   navy ring (light) / pale blue (dark) gives >= 3:1, offset from the inset
+   ring of the selected item. Every control of the workspace (document
+   viewer, pager, message composer, focused panes included) uses it. */
+.invoice-workspace :is(button, a, summary, [role='region'][tabindex], [tabindex='-1']):focus-visible,
+.invoice-workspace h2[tabindex]:focus-visible,
+.invoice-workspace h3[tabindex]:focus-visible { outline: 3px solid var(--iw-focus); outline-offset: 2px; }
+
+/* Articles pane. */
+.iw-pane-heading { font-size: .875rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--text-secondary); }
+.iw-okline { display: flex; align-items: center; gap: 6px; font-weight: 700; color: var(--iw-ok-text); font-variant-numeric: tabular-nums; }
+.iw-okline svg { flex: none; }
+.iw-warnline { display: flex; align-items: center; gap: 6px; font-weight: 700; color: var(--iw-warn-text); font-variant-numeric: tabular-nums; }
+.iw-warnline svg { flex: none; }
+.iw-lines { margin: 0; padding: 0; list-style: none; }
+.iw-lines li, .iw-total { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border-subtle); }
+.iw-lines li > span:first-child { min-width: 0; overflow-wrap: anywhere; }
+.iw-lines li > span:last-child, .iw-total > span:last-child { flex: none; font-weight: 700; font-variant-numeric: tabular-nums; }
+.iw-total { border-bottom: 0; font-weight: 700; }
+
+/* Panes: one at a time below 850px, side by side above it. */
+.invoice-pane-hidden { display: none; }
+.invoice-editor { scroll-margin-top: 8rem; }
+.iw-nav-label { display: none; }
+@container (min-width: 560px) {
+  .iw-nav-label { display: inline; }
+}
+@container (max-width: 559px) {
+  .iw-list { grid-template-columns: minmax(0, 1fr); }
+  .iw-list > li { display: block; }
+  .iw-item { grid-template-columns: 30px minmax(0, 1fr) auto; gap: 6px 10px; padding: 10px; }
+  .iw-amount { min-width: 0; }
+  .iw-item .iw-pill { grid-column: 2 / 4; justify-self: start; white-space: normal; }
+  .iw-current { padding: 10px 12px; }
+  .iw-current-title { flex-basis: calc(100% - 110px); }
+  .iw-current > .iw-pill { order: 3; }
+}
+@container (min-width: 850px) {
+  .invoice-wide { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
+  .invoice-wide .invoice-pane-hidden { display: block; }
+  /* Beats Tailwind's .grid, which is emitted later with the same specificity. */
+  .invoice-workspace .invoice-wide-tabs { display: none; }
+  .invoice-wide .invoice-document { position: sticky; top: 7.5rem; max-height: calc(100dvh - 9rem); overflow-y: auto; }
+  .invoice-wide .invoice-editor { border-left: 1px solid var(--border-subtle); }
+}
+/* Read-only: the additional-purchase block below the workspace may be empty;
+   no bordered strip without content. */
+.invoice-workspace .iw-extra:has(> :only-child:empty) { display: none; }
+@media (prefers-reduced-motion: reduce) {
+  .iw-item, .iw-primary, .iw-nav-button, .iw-chevron { transition: none; }
+  .iw-primary:hover, .iw-primary:active, .iw-item:active, .iw-nav-button:active { transform: none; }
+}

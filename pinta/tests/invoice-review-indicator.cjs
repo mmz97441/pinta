@@ -6,6 +6,7 @@ const path = require('node:path');
 const os = require('node:os');
 const { ids, base } = require('./browser-regression.cjs');
 const { fixture } = require('./invoice-workspace.cjs');
+const { invoiceList, currentInvoiceId, waitForCurrentInvoice } = require('./invoice-list.helper.cjs');
 const output = process.env.PINTA_INVOICE_INDICATOR_OUT || path.join(os.tmpdir(), 'pinta-invoice-indicator');
 const results = [];
 
@@ -36,7 +37,11 @@ const results = [];
     assert.equal(await firstDocument.evaluate(element => element === document.activeElement), true);
     assert.equal(tables.factures.filter(invoice => invoice.valide).length, 1);
     results.push({ test: 'one-click-opens-and-focuses-correct-pending-pdf-without-validating-it', pass: true });
-    await page.getByRole('tab', { name: 'Vérifier les articles', exact: true }).click();
+    // Wide layout: document and articles are side by side, so the mobile tabs
+    // are hidden and the articles are reachable without switching.
+    assert.equal(await page.getByRole('tab', { name: 'Vérifier les articles', exact: true }).isVisible(), false);
+    assert.equal(await firstDocument.isVisible(), true);
+    await waitForCurrentInvoice(page, first.id);
     await firstArticle.getByRole('button', { name: 'Valider et passer à la suivante', exact: true }).click();
     await page.getByTestId('invoice-header-feedback').filter({ hasText: 'facture et articles validés et enregistrés' }).waitFor();
     await page.getByRole('button', { name: 'Retour à la liste de travail', exact: true }).click();
@@ -72,7 +77,11 @@ const results = [];
     await badge('Facture reçue · À vérifier').click();
     await page.getByRole('region', { name: 'Document source', exact: true }).locator('canvas[data-rendered="true"]').waitFor();
     assert.equal(await page.getByRole('tab', { name: 'Voir la facture', exact: true }).getAttribute('aria-selected'), 'true');
-    assert.equal(await page.getByLabel('Facture à vérifier', { exact: true }).inputValue(), second.id);
+    // Focus lands on the document and the document is on screen, even though
+    // the header and the invoice list come first on a phone.
+    assert.ok(await page.getByRole('region', { name: 'Document source', exact: true }).evaluate(element => { const box = element.getBoundingClientRect(); return element === document.activeElement && box.top >= 0 && box.top < innerHeight; }), 'Mobile: the focused document is visible, not off-screen.');
+    await invoiceList(page).waitFor();
+    assert.equal(await currentInvoiceId(page), second.id);
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false);
     results.push({ test: 'mobile-indicator-and-preparation-link-open-document-tab-with-correct-invoice', pass: true });
 
@@ -87,6 +96,26 @@ const results = [];
     assert.deepEqual(f.errors, []);
     assert.deepEqual(f.networkDenied, []);
     results.push({ test: 'colleague-validation-removes-indicator-from-list-and-personal-work', pass: true });
+
+    // Rows come back in id order; arrival order differs. The link opens the
+    // invoice the workspace itself names as the next one (numbering order),
+    // so no competing « Prochaine étape » card appears on arrival.
+    tables.messages = [];
+    tables.factures = [
+      { ...first, id: 'invoice-a-late', vendeur: 'Boutique tardive', valide: false, fichier_url: ids.P + '/late.pdf', fichier_nom: 'late.pdf', created_at: '2026-09-12T09:00:00Z' },
+      { ...first, id: 'invoice-b-first', vendeur: 'Boutique validée', valide: true, montant: 12, fichier_url: ids.P + '/first.pdf', fichier_nom: 'first.pdf', created_at: '2026-09-09T09:00:00Z' },
+      { ...first, id: 'invoice-c-middle', vendeur: 'Boutique du milieu', valide: false, fichier_url: ids.P + '/middle.pdf', fichier_nom: 'middle.pdf', created_at: '2026-09-10T09:00:00Z' },
+    ];
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto(base + '/colis');
+    await badge().click();
+    assert.equal(new URL(page.url()).searchParams.get('invoice'), 'invoice-c-middle', 'The link targets the first invoice to verify in arrival order, not in id order.');
+    await waitForCurrentInvoice(page, 'invoice-c-middle');
+    assert.match(await page.getByRole('group', { name: 'Facture affichée', exact: true }).innerText(), /^Facture 2 sur 3/);
+    await page.getByTestId('invoice-action-bar').filter({ hasText: 'Vous validez : Facture 2 sur 3' }).waitFor();
+    assert.equal(await page.locator('#quote-documents').getByText(/^Prochaine étape/).count(), 0, 'The link and the workspace agree: no second target on arrival.');
+    assert.equal(await page.locator('#quote-documents').getByRole('button', { name: /^Vérifier la facture \d/ }).count(), 0);
+    results.push({ test: 'indicator-link-and-workspace-agree-on-the-next-invoice-in-arrival-order', pass: true });
   } catch (error) {
     results.push({ test: 'failure', pass: false, error: error.stack, url: f?.page.url(), documents: await f?.page.locator('#quote-documents').innerText().catch(() => 'absent') });
     if (f?.page && !f.page.isClosed()) await f.page.screenshot({ path: path.join(output, 'failure.png'), fullPage: true });

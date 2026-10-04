@@ -10,3 +10,20 @@ export function excludedInvoiceIds(invoices = []) {
   const currentIds = new Set(currentInvoices(invoices).filter(invoice => !(invoice.rejetMotif || invoice.rejet_motif)).map(invoice => invoice.id));
   return new Set((invoices || []).filter(invoice => invoice.id && !currentIds.has(invoice.id)).map(invoice => invoice.id));
 }
+
+/** A conversation attachment already added as an invoice of this dossier. */
+export function conversationAttachmentImported(message, colis) {
+  const path = message?.attachmentPath || message?.attachment_path;
+  return Boolean(path && (colis?.factures || []).some(invoice => (invoice.fichier || invoice.fichierUrl || invoice.fichier_url) === path));
+}
+
+/** Conversation attachments not yet sorted into the dossier's invoices (one per file). */
+export function pendingInvoiceAttachments(colis) {
+  const paths = new Set();
+  return (colis?.messages || []).filter(message => {
+    const path = message?.attachmentPath || message?.attachment_path;
+    if (!path || paths.has(path) || conversationAttachmentImported(message, colis)) return false;
+    paths.add(path);
+    return true;
+  });
+}

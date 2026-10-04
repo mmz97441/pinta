@@ -6,6 +6,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const { setup, base, ids } = require('./browser-regression.cjs');
 const { fixture: invoicesFixture, C } = require('./invoice-workspace.cjs');
+const { waitForCurrentInvoice } = require('./invoice-list.helper.cjs');
 const output = process.env.PINTA_TASK_READINESS_OUT || '/tmp/pinta-task-readiness';
 const TASK = '77777777-0000-4000-8000-000000000001';
 const DEPARTURE = '88888888-2222-4222-8222-222222222222';
@@ -134,7 +135,7 @@ async function allScreensReadOnly(f){const snapshot=JSON.stringify([f.tables.col
         await fromWork(f,'reception');assert.equal(new URL(f.page.url()).searchParams.get('section'),'reception');
         await capture(f,'01-reception',mobile);await workspace(f).getByRole('button',{name:'Enregistrer les mesures de réception',exact:true}).click();await workspace(f).getByRole('heading',{name:'Réception enregistrée',exact:true}).waitFor();assert.equal(row.statut,'mesure');assert.equal(f.tables.messages.length,0);
         // Documents are genuinely validated before approval; this neither grants consent nor measures outgoing parcels.
-        await fromWork(f,'documents');await f.page.getByRole('button',{name:'Valider et passer à la suivante',exact:true}).waitFor();await capture(f,'04-factures',mobile);await f.page.getByRole('button',{name:'Valider et passer à la suivante',exact:true}).click();await f.page.waitForFunction(id=>document.querySelector('select[aria-label="Facture à vérifier"]')?.value===id,C);
+        await fromWork(f,'documents');await f.page.getByRole('button',{name:'Valider et passer à la suivante',exact:true}).waitFor();await capture(f,'04-factures',mobile);await f.page.getByRole('button',{name:'Valider et passer à la suivante',exact:true}).click();await waitForCurrentInvoice(f.page,C);
         await f.page.getByRole('button',{name:'Terminer la vérification',exact:true}).click();await f.page.getByText('Factures vérifiées',{exact:true}).waitFor();assert.equal(row.statut,'mesure');assert.equal(row.final_measurements_version,null);assert.ok(f.tables.factures.every(invoice=>invoice.valide));
         await fromWork(f,'reception');assert.equal(new URL(f.page.url()).searchParams.get('section'),'accord');
         await capture(f,'02-accord',mobile);await workspace(f).getByLabel('Message à envoyer au client',{exact:true}).waitFor();await workspace(f).getByLabel('Canal de notification',{exact:true}).selectOption('portal');
