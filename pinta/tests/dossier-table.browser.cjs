@@ -780,6 +780,8 @@ async function main() {
       // A work queue never lists archives, so no toggle may claim to include them.
       const queue=panel.getByRole('combobox',{name:'File de travail',exact:true});
       await queue.selectOption('preparation');await f.page.waitForURL(url=>url.searchParams.get('work')==='preparation');
+      // The URL changes before React re-renders the panel: wait for the toggle to leave, then prove it is gone.
+      await panel.getByRole('button',{name:/archives/i}).waitFor({state:'detached'});
       assert.equal(await panel.getByRole('button',{name:/archives/i}).count(),0,'No archives toggle under a work queue.');
       await queue.selectOption('');await f.page.waitForURL(url=>!url.searchParams.has('work'));
       await panel.getByRole('button',{name:'Inclure les archives',exact:true}).waitFor();
