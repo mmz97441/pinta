@@ -105,6 +105,10 @@ html.dark .border-gray-100  { border-color: var(--border-subtle) !important; }
 .brand-bd-gold  { border-color: var(--brand-gold); }
 
 html.dark .brand-t { color: #C4DAE5; }
+
+/* Actions principales et onglets actifs : une seule couleur d'accent (navy), jamais un quasi-noir. */
+html:not(.dark) .bg-slate-900     { background-color: var(--brand-navy); }
+html:not(.dark) .border-slate-900 { border-color: var(--brand-navy); }
 html.dark .brand-bg-l { background: rgb(36 80 106 / .14); }
 
 /* ══════════ ANIMATIONS ══════════ */
