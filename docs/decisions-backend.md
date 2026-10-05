@@ -105,7 +105,7 @@ Le helper exécuté par le worker est testé sur les frontières, fuseaux, dates
 
 ## Règles factures, devis envoyé et gel après paiement — 4 octobre 2026
 
-Migration `20261004000001_invoice_quote_rules.sql`, non appliquée en production à cette date.
+Migration `20261004000001_invoice_quote_rules.sql`, appliquée en production le 5 octobre 2026 à 03 h 12 UTC, après contrôle préalable et essai annulé ; les fonctions Edge concernées ont été déployées dans les deux minutes suivantes (voir `docs/rapport-regles-factures-paiement-2026-10-05.md`).
 
 **Prédicats.** Chaque prédicat a une définition unique :
 

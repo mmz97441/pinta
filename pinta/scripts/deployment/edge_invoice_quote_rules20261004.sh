@@ -29,12 +29,8 @@ case "${1:-}" in
   compare)
     download edge-after
     status=0
-    # Every downloaded file (function code and the shared modules it bundles) must equal the local source.
-    while IFS= read -r remote; do
-      local_file="supabase/functions/${remote#"$LOT/edge-after/supabase/functions/"}"
-      if [ -f "$local_file" ] && [ "$(shasum -a 256 < "$local_file")" = "$(shasum -a 256 < "$remote")" ]; then echo "identical   $local_file"
-      else echo "DIFFERENT   $local_file"; status=1; fi
-    done < <(find "$LOT/edge-after/supabase/functions" -type f -name '*.ts' | sort)
+    # The download can be re-emitted by the Deno bundler: compare transpiled code, not bytes (see compare_edge_sources.cjs).
+    node scripts/deployment/compare_edge_sources.cjs "$LOT/edge-after/supabase/functions" HEAD || status=1
     for fn in $FUNCTIONS; do [ -f "$LOT/edge-after/supabase/functions/$fn/index.ts" ] || { echo "MISSING     $fn"; status=1; }; done
     exit $status ;;
   *) echo "Usage: bash scripts/deployment/edge_invoice_quote_rules20261004.sh [backup|deploy|compare]"; exit 2 ;;

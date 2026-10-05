@@ -351,7 +351,8 @@ def verify():
         assert command['acl'] == previous[signature]['acl'] and command['owner'] == previous[signature]['owner'], signature
         assert command['security_definer'] and 'search_path=public, pg_temp' in command['config'], signature
     assert current['view']['acl'] == before['view']['acl'] and current['view']['owner'] == before['view']['owner'] and current['view']['options'] == before['view']['options']
-    query(POST_CHECKS_SQL)
+    # The Management API read-only mode rejects DO blocks: run the read-only checks in a rolled-back transaction.
+    query('BEGIN;\n' + POST_CHECKS_SQL + '\nROLLBACK;', False)
     query(view_check_sql(before['view']['definition']), False)
     save('verified.json', {'sha256': digest(), 'at': datetime.now(timezone.utc).isoformat(), 'state': current, 'fingerprints': query(fingerprints_sql())})
     print(json.dumps({'registered': VERSION, 'guarded_commands': len(INJECTED), 'replaced_commands': len(MARKERS),
