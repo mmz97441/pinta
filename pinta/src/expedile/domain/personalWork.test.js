@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildPersonalWork, sortWorkActions, workTotals, availableMissions, workActionUrl, staffAvailable, canWorkAction, personalSection, nextPersonalWorkAction, PERSONAL_SECTIONS, findDossierWorkAction, workLoad, teamWorkQueues } from './personalWork.js';
+import { buildPersonalWork, sortWorkActions, workTotals, availableMissions, workActionUrl, workActionOpensClient, staffAvailable, canWorkAction, personalSection, nextPersonalWorkAction, PERSONAL_SECTIONS, findDossierWorkAction, workLoad, teamWorkQueues } from './personalWork.js';
 const now = Date.parse('2026-09-12T12:00:00Z');
 const dossier = { id: 'parcel', clientId: 'client', ref: 'EXP-QA', nbColis: 3, responsibleStaffId: 'referent' };
 const base = { dossiers: [dossier], clients: [{ id: 'client', nom: 'Exemple' }], userId: 'worker', now, can: () => true };
@@ -111,6 +111,12 @@ test('customer access tasks open the client record and require invitation permis
  assert.equal(canWorkAction(item, permission => permission === 'perm_comm_telegram'), false);
  assert.equal(canWorkAction(item, permission => permission === 'perm_clients_creer'), true);
  assert.equal(new URL(workActionUrl(item, '/', dossier), 'https://example.test').pathname, '/clients/client');
+ // The open button names the client record exactly when the task leads there.
+ assert.equal(workActionOpensClient(item, dossier), true);
+ assert.equal(workActionOpensClient(item, { ...dossier, clientId: null }), false);
+ assert.equal(new URL(workActionUrl(item, '/', { ...dossier, clientId: null }), 'https://example.test').pathname, '/colis/parcel');
+ assert.equal(workActionOpensClient(action('reply', { kind: 'conversation' }), dossier), false);
+ assert.equal(workActionOpensClient(null, dossier), false);
  assert.deepEqual(availableMissions(permission => permission === 'perm_colis_demander_feuvert').map(item => item.id), ['reception']);
 });
 

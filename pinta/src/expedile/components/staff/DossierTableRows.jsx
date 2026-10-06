@@ -1,14 +1,15 @@
 import React, { useRef } from 'react';
-import { ArrowDown, ArrowUp, ArrowUpDown, ArrowRight, MessageCircle, Filter } from 'lucide-react';
+import { ArrowDown, ArrowUp, ArrowUpDown, ArrowRight, MessageCircle, Filter, AlertTriangle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import { getDestByCP, getSecteurByCP } from '../../constants';
-import { actionWaiting, canWorkAction, staffAvailable } from '../../domain/personalWork';
+import { actionWaiting, canWorkAction, staffAvailable, workActionOpensClient } from '../../domain/personalWork';
 import { receptionCartonManifest } from '../../domain/reception';
 import { needsConversationAction } from '../../domain/conversations';
 import { TABLE_COLUMNS, dossierTableAmount, dossierTableAmountState, dossierTableMissingAmountLabel, formatDossierTableDate, isDossierTableColumnSortable, dossierTableSortDirectionLabel } from '../../domain/dossierTable';
 import { clampColumnWidth, columnWidthBounds } from '../../domain/dossierTablePreferences';
 import { paymentTone, statusTone } from '../../domain/dossierTableTone';
+import { dossierAlertsLabel } from '../../domain/dossierAlerts';
 import TaskTakeButton from '../workspace/TaskTakeButton';
 import InvoiceReviewIndicator from '../ui/InvoiceReviewIndicator';
 import './dossierTable.css';
@@ -66,8 +67,9 @@ function TaskSummary({ model, c, returnTo }) {
   </div>;
 }
 
-/** Opening a row only consults it; taking a task always uses the atomic action. */
-function MainAction({ action, onOpen, title }) {
+/** The row and its reference open the dossier; this button opens the task.
+ * Taking a task always uses the atomic action. */
+function MainAction({ action, dossier, onOpen, title }) {
   const { auth, can, workPreferences = [] } = useApp();
   const own = Boolean(action?.assignee_id && action.assignee_id === auth?.u?.id);
   const allowed = Boolean(action && canWorkAction(action, can));
@@ -75,20 +77,32 @@ function MainAction({ action, onOpen, title }) {
   const available = own || staffAvailable(workPreferences.find(preference => preference.staff_id === auth?.u?.id));
   const canTake = allowed && action.state === 'ready' && !waiting && available && (!action.assignee_id || own);
   const canContinue = allowed && own && action.state === 'in_progress' && !waiting;
+  // A task worked on another page says where it leads.
+  const openLabel = workActionOpensClient(action, dossier) ? 'Ouvrir la fiche client' : canContinue ? 'Continuer' : 'Consulter';
   return <div className="dossier-table-action" onClick={stopPropagation}>
     {title && <p className="dossier-table-action-title">{title}</p>}
     {canTake
       ? <TaskTakeButton action={action} onClaim={saved => onOpen?.(saved)} />
       : <button type="button" className={`dossier-table-open${canContinue ? ' dossier-table-open-primary' : ''}`} onClick={() => onOpen?.(action)}>
-        {canContinue ? 'Continuer' : 'Consulter'}<ArrowRight size={16} aria-hidden="true" />
+        {openLabel}<ArrowRight size={16} aria-hidden="true" />
       </button>}
   </div>;
 }
 
-function CellContent({ column, c, client, model, onOpen, returnTo, showActionTitle }) {
+/** Something is « À vérifier » on this dossier: the mark names it for
+ * assistive technology and on hover; the dossier page shows each line with its
+ * link. It is not a tab stop: the reference opens the dossier. */
+function AlertMark({ alerts }) {
+  if (!alerts?.length) return null;
+  const label = dossierAlertsLabel(alerts);
+  return <span className="dossier-table-alert" role="img" aria-label={label} title={label}><AlertTriangle aria-hidden="true" /></span>;
+}
+
+function CellContent({ column, c, client, model, alerts, onOpen, onOpenDossier, returnTo, showActionTitle }) {
   switch (column.key) {
     case 'ref': return <div>
-      <button type="button" className="dossier-table-reference" onClick={event => { event.stopPropagation(); onOpen?.(model.action); }}>{c.ref || 'Sans référence'}</button>
+      <button type="button" className="dossier-table-reference" onClick={event => { event.stopPropagation(); onOpenDossier?.(); }}>{c.ref || 'Sans référence'}</button>
+      <AlertMark alerts={alerts} />
       {model.action?.kind !== 'conversation' && needsConversationAction(c) && <Link className="dossier-table-message" aria-label={`Message client à traiter — ${c.ref}`} to={`/colis/${encodeURIComponent(c.id)}?${new URLSearchParams({ onglet: 'conversation', returnTo: returnTo || '/colis' })}`} onClick={stopPropagation}><MessageCircle size={14} aria-hidden="true" />À répondre</Link>}
     </div>;
     case 'client': return <ClientIdentity client={client} />;
@@ -107,7 +121,7 @@ function CellContent({ column, c, client, model, onOpen, returnTo, showActionTit
     case 'paid': return <span className="dossier-table-money">{money(model.payment?.paid, dossierTableMissingAmountLabel(model.payment, 'paid'))}</span>;
     case 'remaining': {
       const amount = money(model.payment?.remaining, dossierTableMissingAmountLabel(model.payment, 'remaining'));
-      return <div><span className="dossier-table-money dossier-table-task-title">{amount}</span>{model.payment?.stateLabel && model.payment.stateLabel !== amount && <span className="dossier-table-secondary">{model.payment.stateLabel}</span>}</div>;
+      return <div><span className="dossier-table-money dossier-table-task-title">{amount}</span>{model.payment?.detailLabel && model.payment.detailLabel !== amount && <span className="dossier-table-secondary">{model.payment.detailLabel}</span>}</div>;
     }
     case 'receivedAt': return <div>{model.reception?.lastReceivedAt ? <time dateTime={model.reception.lastReceivedAt}>{formatDossierTableDate(model.reception.lastReceivedAt)}</time> : <Fact>{formatDossierTableDate(null)}</Fact>}{model.reception && !model.reception.complete && <span className="dossier-table-secondary">{model.reception.knownCount} / {model.reception.totalCount} cartons datés</span>}</div>;
     case 'sentAt': return model.payment?.sentAt ? <time dateTime={model.payment.sentAt}>{formatDossierTableDate(model.payment.sentAt)}</time> : <Fact>{formatDossierTableDate(null)}</Fact>;
@@ -115,7 +129,7 @@ function CellContent({ column, c, client, model, onOpen, returnTo, showActionTit
     case 'destination': return <Fact>{model.departure?.destination || 'À renseigner'}</Fact>;
     case 'packages': return <span>{model.departure?.packagesLabel || 'À préparer'}</span>;
     case 'readiness': return <span>{model.departure?.readinessLabel || 'À vérifier'}</span>;
-    case 'action': return <MainAction action={model.action} onOpen={onOpen} title={showActionTitle ? model.title : undefined} />;
+    case 'action': return <MainAction action={model.action} dossier={c} onOpen={onOpen} title={showActionTitle ? model.title : undefined} />;
     default: return null;
   }
 }
@@ -153,31 +167,34 @@ export function DossierTableHead({ columns = TABLE_COLUMNS.daily, onSelectAll, a
   </tr>;
 }
 
-export function DossierTableRow({ c, client, model = {}, columns = TABLE_COLUMNS.daily, checked, onCheck, onOpen, returnTo }) {
+/** `onOpenDossier()` opens the dossier itself (row and reference);
+ * `onOpen(action)` opens a task (action button). `alerts` are the dossier's
+ * « À vérifier » lines, marked next to the reference. */
+export function DossierTableRow({ c, client, model = {}, alerts, columns = TABLE_COLUMNS.daily, checked, onCheck, onOpen, onOpenDossier, returnTo }) {
   const showActionTitle = !columns.some(column => column.key === 'statut');
-  return <tr className="dossier-table-row dossier-list-item" data-dossier-row={c.id} data-selected={checked ? 'true' : 'false'} onClick={() => onOpen?.(model.action)}>
+  return <tr className="dossier-table-row dossier-list-item" data-dossier-row={c.id} data-selected={checked ? 'true' : 'false'} onClick={() => onOpenDossier?.()}>
     <td className="dossier-table-select" data-column="select" onClick={stopPropagation}>
       <label className="dossier-table-checkbox"><input type="checkbox" aria-label={`Sélectionner le dossier ${c.ref}`} checked={Boolean(checked)} onChange={onCheck} /></label>
     </td>
     {columns.map(column => <td key={column.key} data-column={column.key} className={column.align === 'right' ? 'dossier-table-align-right' : undefined}>
-      <CellContent column={column} c={c} client={client} model={model} onOpen={onOpen} returnTo={returnTo} showActionTitle={showActionTitle} />
+      <CellContent column={column} c={c} client={client} model={model} alerts={alerts} onOpen={onOpen} onOpenDossier={onOpenDossier} returnTo={returnTo} showActionTitle={showActionTitle} />
     </td>)}
   </tr>;
 }
 
-export function DossierTableCard({ c, view, client, model = {}, columns = TABLE_COLUMNS.daily, checked, onCheck, onOpen, returnTo }) {
+export function DossierTableCard({ c, view, client, model = {}, alerts, columns = TABLE_COLUMNS.daily, checked, onCheck, onOpen, onOpenDossier, returnTo }) {
   const statusColumn = columns.find(column => column.key === 'statusLabel');
   const facts = columns.filter(column => !['ref', 'client', 'statut', 'action', 'statusLabel'].includes(column.key) && (column.key !== 'optimizedDimensions' || model.optimized));
   const showActionTitle = !columns.some(column => column.key === 'statut');
   return <article className="dossier-table-card dossier-list-item" aria-label={`Dossier ${c.ref}`} data-view={view || (columns === TABLE_COLUMNS.daily ? 'daily' : undefined)} data-dossier-card={c.id} data-dossier-row={c.id} data-selected={checked ? 'true' : 'false'}>
     <div className="dossier-table-card-heading">
       <label className="dossier-table-checkbox"><input type="checkbox" aria-label={`Sélectionner le dossier ${c.ref}`} checked={Boolean(checked)} onChange={onCheck} /></label>
-      <div data-column="ref"><CellContent column={referenceColumn} c={c} model={model} onOpen={onOpen} returnTo={returnTo} /></div>
+      <div data-column="ref"><CellContent column={referenceColumn} c={c} model={model} alerts={alerts} onOpenDossier={onOpenDossier} returnTo={returnTo} /></div>
       {statusColumn && <div data-column="statusLabel" className="dossier-table-card-status"><CellContent column={statusColumn} c={c} model={model} /></div>}
     </div>
     {columns.some(column => column.key === 'client') && <div data-column="client"><ClientIdentity client={client} /></div>}
     {columns.some(column => column.key === 'statut') && <div data-column="statut" className="dossier-table-card-task"><TaskSummary model={model} c={c} returnTo={returnTo} /></div>}
-    {columns.some(column => column.key === 'action') && <div data-column="action" className="dossier-table-card-main-action"><MainAction action={model.action} onOpen={onOpen} title={showActionTitle ? model.title : undefined} /></div>}
+    {columns.some(column => column.key === 'action') && <div data-column="action" className="dossier-table-card-main-action"><MainAction action={model.action} dossier={c} onOpen={onOpen} title={showActionTitle ? model.title : undefined} /></div>}
     {facts.length > 0 && <dl className="dossier-table-card-facts">{facts.map(column => <div key={column.key} data-column={column.key}>
       <dt>{column.label}</dt><dd><CellContent column={column} c={c} client={client} model={model} onOpen={onOpen} /></dd>
     </div>)}</dl>}

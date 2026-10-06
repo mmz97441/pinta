@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { TABLE_COLUMNS, buildDossierTableModel, buildDossierTableExportRows, sortDossierTableRows } from './dossierTable.js';
-import { clampColumnWidth, columnWidthsStorageKey, columnVisibilityStorageKey, dossierTextSizeStorageKey, dossierLayoutStorageKey, sanitizeDossierTextSize, sanitizeDossierTableLayout, DOSSIER_TEXT_SIZE_BOUNDS, sanitizeHiddenColumns, readColumnFilters, filterDossierTableRows, sanitizeColumnFilter, sanitizeColumnWidths, dossierColumnSuggestions, requiredTableColumn, tableTextSizeInitial } from './dossierTablePreferences.js';
+import { clampColumnWidth, columnWidthsStorageKey, columnVisibilityStorageKey, dossierTextSizeStorageKey, dossierLayoutStorageKey, sanitizeDossierTextSize, sanitizeDossierTableLayout, DOSSIER_TEXT_SIZE_BOUNDS, sanitizeHiddenColumns, readColumnFilters, filterDossierTableRows, sanitizeColumnFilter, columnFilterModes, sanitizeColumnWidths, dossierColumnSuggestions, requiredTableColumn, tableTextSizeInitial, DOSSIER_GROUPINGS, defaultDossierGrouping, sanitizeDossierGrouping, resolveDossierGrouping, dossierGroupingStorageKey, sanitizeNoDeparturePlacement, noDeparturePlacementStorageKey } from './dossierTablePreferences.js';
 import { WORK_TABLE_CHOICES } from './workTable.js';
 
 const columns = TABLE_COLUMNS.daily;
@@ -25,13 +25,33 @@ test('optimized dimensions show every certified outgoing box, never received or 
   for (const direction of ['asc', 'desc']) assert.equal(sortDossierTableRows(data, { column: column('optimizedDimensions'), direction, models })[0].id, 'prepared');
 });
 
+test('« Paiement » is filtered on one exact value: « Payé » never keeps « Non payé »', () => {
+  const quoted = { ...prepared, statut: 'devis_envoye', devisTotal: 100, devisBrouillon: false, quoteVersion: 1, devisEnvoyeLe: '2026-10-01T10:00:00Z' };
+  const rows = [
+    { ...quoted, id: 'paid', statut: 'paye', paiementMontant: 100, paiementDate: '2026-10-02T10:00:00Z' },
+    { ...quoted, id: 'unpaid' },
+    { ...quoted, id: 'partial', statut: 'paye', paiementMontant: 30, paiementDate: '2026-10-02T10:00:00Z' },
+  ];
+  const projection = new Map(rows.map(dossier => [dossier.id, buildDossierTableModel(dossier, { now })]));
+  const payment = column('paymentState');
+  const run = value => filterDossierTableRows(rows, { columns, filters: { paymentState: { mode: 'is', value } }, models: projection }).map(item => item.id);
+  assert.deepEqual(columnFilterModes(payment).map(mode => mode.key), ['is', 'empty', 'filled']);
+  assert.deepEqual(sanitizeColumnFilter(payment, filter('filled')), { mode: 'filled', value: '' });
+  assert.deepEqual(run('Payé'), ['paid']);
+  assert.deepEqual(run('Non payé'), ['unpaid', 'partial']);
+  // An older shared link keeps its meaning only when it names one value exactly.
+  assert.deepEqual(sanitizeColumnFilter(payment, filter('contains', 'payé')), { mode: 'is', value: 'Payé' });
+  assert.equal(sanitizeColumnFilter(payment, filter('contains', 'partiel')), null);
+  assert.equal(sanitizeColumnFilter(payment, filter('is', 'Remboursé')), null);
+});
+
 test('status and payment are distinct from the selected task and never call partial cash paid', () => {
   const dossier = { ...prepared, statut: 'paye', devisTotal: 100, devisBrouillon: false, quoteVersion: 1, paiementMontant: 30, paiementDate: '2026-10-02T10:00:00Z' };
   const row = buildDossierTableModel(dossier, { now });
-  assert.equal(row.payment.stateLabel, 'Paiement partiel');
+  assert.equal(row.payment.stateLabel, 'Non payé'); assert.equal(row.payment.detailLabel, 'Paiement partiel');
   assert.equal(row.statusLabel, 'Paiement partiel');
   const zero = buildDossierTableModel({ ...dossier, statut: 'devis_envoye', paiementMontant: 0, paiementDate: null }, { now });
-  assert.equal(zero.payment.stateLabel, 'Paiement à vérifier');
+  assert.equal(zero.payment.stateLabel, 'À vérifier'); assert.equal(zero.payment.detailLabel, 'Paiement à vérifier');
   assert.equal(zero.payment.paid, null);
 });
 
@@ -161,4 +181,35 @@ test('Mon travail keeps its own preferences, its task column required and a 15px
   assert.equal(sanitizeDossierTextSize(18, tableTextSizeInitial('work')), 18);
   assert.equal(sanitizeDossierTextSize(40, tableTextSizeInitial('work')), 20);
   assert.equal(sanitizeDossierTextSize('15'), 12);
+});
+
+test('grouping opens by departure in « Départs » only, and an explicit URL view wins over the stored choice', () => {
+  assert.deepEqual(DOSSIER_GROUPINGS, ['none', 'statut', 'envoi']);
+  assert.equal(defaultDossierGrouping('departures'), 'envoi');
+  for (const view of ['daily', 'payments', 'work', 'unknown']) assert.equal(defaultDossierGrouping(view), 'none');
+  for (const grouping of DOSSIER_GROUPINGS) assert.equal(sanitizeDossierGrouping(grouping, 'daily'), grouping);
+  for (const invalid of ['priority', '', null, undefined, {}, 'ENVOI']) {
+    assert.equal(sanitizeDossierGrouping(invalid, 'departures'), 'envoi');
+    assert.equal(sanitizeDossierGrouping(invalid, 'daily'), 'none');
+  }
+  assert.equal(resolveDossierGrouping('statut', 'envoi', 'departures'), 'statut', 'A shared link keeps its grouping.');
+  assert.equal(resolveDossierGrouping('none', 'envoi', 'daily'), 'none');
+  assert.equal(resolveDossierGrouping(null, 'envoi', 'daily'), 'envoi', 'Without a URL view, the stored choice applies.');
+  assert.equal(resolveDossierGrouping(null, null, 'departures'), 'envoi');
+  assert.equal(resolveDossierGrouping('priority', null, 'payments'), 'none', 'An unknown URL value never forces a grouping.');
+});
+
+test('grouping and « Dossiers sans départ » are stored per person and per list tab, apart from other preferences', () => {
+  for (const key of [dossierGroupingStorageKey, noDeparturePlacementStorageKey]) {
+    assert.notEqual(key('one', 'daily'), key('two', 'daily'));
+    assert.notEqual(key('one', 'daily'), key('one', 'departures'));
+    assert.notEqual(key('one', 'daily'), key('one', 'payments'));
+    for (const other of [columnWidthsStorageKey, columnVisibilityStorageKey, dossierTextSizeStorageKey, dossierLayoutStorageKey]) assert.notEqual(key('one', 'daily'), other('one', 'daily'));
+    assert.equal(key(null, 'daily'), null);
+    assert.equal(key('one', 'work'), null, 'Mon travail has no grouping.');
+    assert.equal(key('one', 'unknown'), null);
+  }
+  assert.notEqual(dossierGroupingStorageKey('one', 'daily'), noDeparturePlacementStorageKey('one', 'daily'));
+  assert.equal(sanitizeNoDeparturePlacement('top'), 'top');
+  for (const value of ['bottom', 'TOP', '', null, undefined, 1]) assert.equal(sanitizeNoDeparturePlacement(value), 'bottom');
 });

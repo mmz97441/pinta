@@ -126,9 +126,14 @@ export function workTotals(actions, dossiers = []) {
 export function safeWorkReturn(value, fallback = '/') {
   return typeof value === 'string' && value.startsWith('/') && !value.startsWith('//') && !value.includes('\\') ? value : fallback;
 }
+/** « Accès client à activer » is worked on the client record, not in the
+ * dossier: the button that opens this task names that page. */
+export function workActionOpensClient(action, dossier) {
+  return action?.kind === 'conversation' && action.action_hint === 'Accès client à activer' && Boolean(dossier?.clientId);
+}
 export function workActionUrl(action, returnTo = '/', dossier) {
   const params = new URLSearchParams({ returnTo: safeWorkReturn(returnTo), action: action.id });
-  if (action.kind === 'conversation' && action.action_hint === 'Accès client à activer' && dossier?.clientId) return `/clients/${encodeURIComponent(dossier.clientId)}?${params}`;
+  if (workActionOpensClient(action, dossier)) return `/clients/${encodeURIComponent(dossier.clientId)}?${params}`;
   if (action.kind === 'conversation') return `/colis/${encodeURIComponent(action.colis_id)}?${new URLSearchParams({ onglet: 'conversation', action: action.id, returnTo: safeWorkReturn(returnTo) })}`;
   params.set('section', resolveDossierTask({ ...dossier, id: action.colis_id }, params, [action]));
   return `/colis/${encodeURIComponent(action.colis_id)}?${params}`;

@@ -25,7 +25,7 @@ const refColumn = defineDossierTableColumn({ key: 'ref', label: 'Référence', s
 const clientColumn = defineDossierTableColumn({ key: 'client', label: 'Client', sort: { type: 'text', value: ({ client }) => clientName(client) } });
 const actionColumn = defineDossierTableColumn({ key: 'action', label: 'Action', kind: 'action' });
 const statusColumn = defineDossierTableColumn({ key: 'statusLabel', label: 'Statut du dossier', shortLabel: 'Statut', sort: { type: 'text', value: ({ model }) => model?.statusLabel } });
-const paymentStateColumn = defineDossierTableColumn({ key: 'paymentState', label: 'Paiement', sort: { type: 'text', value: ({ model }) => model?.payment?.stateLabel } });
+const paymentStateColumn = defineDossierTableColumn({ key: 'paymentState', label: 'Paiement', filter: { choices: ['Payé', 'Non payé', 'À vérifier'] }, sort: { type: 'text', value: ({ model }) => model?.payment?.stateLabel } });
 const dimensionsColumn = defineDossierTableColumn({ key: 'optimizedDimensions', label: 'Dimensions finales', shortLabel: 'Dimensions', sort: { type: 'text', value: ({ model }) => model?.optimizedDimensions?.join(' · ') || null } });
 const receptionDateColumn = defineDossierTableColumn({ key: 'receivedAt', label: 'Dernière réception', shortLabel: 'Réception', sort: { type: 'date', value: ({ model }) => model?.reception?.lastReceivedAt } });
 const finalWeightColumn = defineDossierTableColumn({ key: 'optimizedWeight', label: 'Poids final (kg)', shortLabel: 'Poids (kg)', align: 'right', sort: { type: 'number', value: ({ model }) => model?.optimizedWeight } });
@@ -91,9 +91,14 @@ const QUOTED = new Set(['devis_envoye', 'attente_paiement', 'paye', 'expedie', '
 const dateTime = value => typeof value === 'string' && value.trim() && Number.isFinite(Date.parse(value)) ? Date.parse(value) : null;
 const money = value => (typeof value === 'number' || typeof value === 'string' && value.trim()) && Number.isFinite(Number(value)) && Number(value) >= 0 ? Math.round(Number(value) * 100) / 100 : null;
 
-/** The only payment states the table can show. Shared with the colour tones so
- * a wording change cannot silently drop a state back to the neutral colour. */
-export const PAYMENT_STATE_LABELS = Object.freeze({
+/** The « Paiement » column only says whether the shipment is paid; « À vérifier »
+ * appears when the records disagree. Shared with the colour tones so a wording
+ * change cannot silently drop a state back to the neutral colour. */
+export const PAYMENT_STATE_LABELS = Object.freeze({ paid: 'Payé', unpaid: 'Non payé', toVerify: 'À vérifier' });
+
+/** The detailed payment situation, kept where it explains something: the dossier
+ * page, the remaining amount, and the status of a dossier marked paid too early. */
+export const PAYMENT_DETAIL_LABELS = Object.freeze({
   toVerify: 'Paiement à vérifier', toRecalculate: 'À recalculer', quoteToSend: 'Devis à envoyer', toCalculate: 'À calculer',
   overpaid: 'Trop-perçu à vérifier', partial: 'Paiement partiel', paid: 'Payé', noneRequested: 'Aucun règlement demandé', expected: 'Paiement attendu',
 });
@@ -118,16 +123,19 @@ function paymentModel(dossier, now) {
   const remaining = requested !== null && paid !== null ? Math.max(0, Math.round((requested - paid) * 100) / 100) : null;
   const sent = dateTime(dossier.devisEnvoyeLe);
   const sentAt = valid && sent !== null && sent <= now ? dossier.devisEnvoyeLe : null;
-  const labels = PAYMENT_STATE_LABELS;
-  let stateLabel;
-  if (uncertainPayment || conflictingTotal || recorded && requested === null) stateLabel = labels.toVerify;
-  else if (requested === null) stateLabel = revised ? labels.toRecalculate : candidate > 0 ? labels.quoteToSend : labels.toCalculate;
-  else if (paid > requested) stateLabel = labels.overpaid;
-  else if (paid > 0 && remaining > 0) stateLabel = labels.partial;
-  else if (recorded && remaining === 0) stateLabel = labels.paid;
-  else if (requested === 0) stateLabel = labels.noneRequested;
-  else stateLabel = labels.expected;
-  return { requested, paid, remaining, sentAt, stateLabel };
+  const labels = PAYMENT_DETAIL_LABELS;
+  let detailLabel;
+  if (uncertainPayment || conflictingTotal || recorded && requested === null) detailLabel = labels.toVerify;
+  else if (requested === null) detailLabel = revised ? labels.toRecalculate : candidate > 0 ? labels.quoteToSend : labels.toCalculate;
+  else if (paid > requested) detailLabel = labels.overpaid;
+  else if (paid > 0 && remaining > 0) detailLabel = labels.partial;
+  else if (recorded && remaining === 0) detailLabel = labels.paid;
+  else if (requested === 0) detailLabel = labels.noneRequested;
+  else detailLabel = labels.expected;
+  // Until the shipment is fully paid it is « Non payé »; only contradictory records ask for a check.
+  const stateLabel = detailLabel === labels.paid ? PAYMENT_STATE_LABELS.paid
+    : detailLabel === labels.toVerify || detailLabel === labels.overpaid ? PAYMENT_STATE_LABELS.toVerify : PAYMENT_STATE_LABELS.unpaid;
+  return { requested, paid, remaining, sentAt, stateLabel, detailLabel };
 }
 
 /** A recorded quote is not necessarily an amount already asked from the client.
@@ -250,7 +258,7 @@ export function buildDossierTableModel(dossier, { actions = [], me, can = () => 
   const dimensions = value => Number(value).toLocaleString('fr-FR', { maximumFractionDigits: 4 });
   const optimizedDimensions = boxes.map((box, index) => `${boxes.length > 1 ? `Colis ${index + 1} : ` : ''}${dimensions(box.dimL)} × ${dimensions(box.dimW)} × ${dimensions(box.dimH)} cm`);
   // A legacy status cannot turn an incomplete recorded payment into “Payé”.
-  const statusLabel = dossier.statut === 'paye' && payment.stateLabel !== PAYMENT_STATE_LABELS.paid ? payment.stateLabel : STATUTS[dossier.statut]?.label || 'Statut à vérifier';
+  const statusLabel = dossier.statut === 'paye' && payment.stateLabel !== PAYMENT_STATE_LABELS.paid ? payment.detailLabel : STATUTS[dossier.statut]?.label || 'Statut à vérifier';
   const base = { reception: receptionDateSummary(dossier, { now }), payment, quotePrice, departure, optimized, optimizedDimensions, optimizedWeight, statusLabel };
   if (!workReady) return { ...base, action: null, title: 'Tâches à actualiser', detail: 'Actualisez les tâches pour retrouver leur attribution.', ownerName: '—', otherActionsCount: 0, matchesScope: scope === 'all' && !assigneeFilter };
   const rows = dossier.archive ? [] : sortWorkActions(actions.filter(action => action.colis_id === dossier.id && action.state !== 'done')

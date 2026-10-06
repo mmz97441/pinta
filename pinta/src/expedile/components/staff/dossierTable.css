@@ -177,6 +177,11 @@ html:not(.dark) .dossier-table-filter[aria-pressed='true']::after { background: 
 .dossier-table-align-right .dossier-table-sort { justify-content: flex-end; }
 .dossier-table-sort svg { flex-shrink: 0; }
 .dossier-table-reference { font-weight: 700; color: var(--brand-text); white-space: nowrap; overflow-wrap: normal; font-variant-numeric: tabular-nums; }
+/* « À vérifier » next to the reference: an amber mark sized with the text
+   (5.8:1 or more on every row state, both themes). */
+.dossier-table-alert { display: inline-flex; align-items: center; vertical-align: middle; margin-left: 6px; color: var(--attention-text); }
+.dossier-table-alert svg { width: max(14px, 1.15em); height: max(14px, 1.15em); flex-shrink: 0; }
+@media (forced-colors: active) { .dossier-table-alert { color: CanvasText; } }
 .dossier-table-placeholder { color: var(--text-muted); }
 /* Status and payment pills: the label is the whole content, the dot is decoration.
    Palette shared with the dossier overview, every pair >= 5.9:1 (light) / 8.4:1 (dark). */
@@ -223,7 +228,8 @@ html.dark .dossier-pill[data-tone='review'] { --pill-bg: #4a2d24; --pill-text: #
 .dossier-table-action button { white-space: normal; max-width: 100%; min-height: 44px; font-size: var(--dossier-text-size, 16px); transition: background-color .15s ease-out, color .15s ease-out, border-color .15s ease-out; }
 .dossier-table-action button:active:not(:disabled) { transform: translateY(1px); }
 .dossier-table-action button svg { flex-shrink: 0; }
-.dossier-table-row .dossier-table-action button { width: 100%; padding-left: 8px; padding-right: 8px; overflow-wrap: normal; }
+/* A two-line label splits evenly (« Ouvrir la / fiche client »), never one word alone. */
+.dossier-table-row .dossier-table-action button { width: 100%; padding-left: 8px; padding-right: 8px; overflow-wrap: normal; text-wrap: balance; }
 .dossier-table-row .dossier-table-action button svg { display: none; }
 /* Three distinct weights: filled “Continuer”, outlined “Je m’en occupe”, quiet
    “Consulter”. Scoped to the table and cards: TaskTakeButton keeps its look in
@@ -303,6 +309,47 @@ html .dossier-table-action button[data-take-kind='claim']:hover:not(:disabled) {
 .dossier-data-table [class*='text-['], .dossier-table-card [class*='text-xs'],
 .dossier-table-card [class*='text-sm'], .dossier-table-card [class*='text-['] { font-size: var(--dossier-small-text-size, 14px); }
 .dossier-table-row .dossier-table-action button, .dossier-table-card .dossier-table-action button { font-size: var(--dossier-text-size, 16px); }
+/* Group headings (departure or stage), the same above table rows and cards.
+   Tokens only; the title follows the dossier text size and never goes under
+   12px. The checkbox lines up with the title; reference and count may wrap
+   below it on a narrow screen. */
+.dossier-group-header { display: flex; align-items: flex-start; gap: 8px; min-width: 0; color: var(--text-primary); }
+/* A 44px target, centred on the rows' 40px checkbox column. */
+.dossier-group-header .dossier-table-checkbox { flex-shrink: 0; width: 44px; margin-left: -2px; }
+.dossier-group-heading { display: flex; flex: 1 1 auto; flex-wrap: wrap; align-items: center; gap: 0 12px; min-width: 0; }
+.dossier-group-toggle {
+  display: inline-flex;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  min-width: 0;
+  margin-left: -4px;
+  padding: 0 8px 0 4px;
+  border-radius: 8px;
+  text-align: left;
+  color: var(--text-primary);
+  background: transparent;
+  transition: background-color .15s ease-out;
+}
+.dossier-group-toggle:hover { background: var(--bg-elevated); }
+.dossier-group-toggle:active { transform: translateY(1px); }
+.dossier-group-toggle:focus-visible { outline: 2px solid var(--brand-text); outline-offset: -2px; }
+.dossier-group-toggle svg { flex-shrink: 0; }
+.dossier-group-title { font-size: max(13px, calc(var(--dossier-text-size, 12px) + 1px)); font-weight: 700; line-height: 1.3; overflow-wrap: anywhere; }
+.dossier-group-details { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 2px 12px; min-width: 0; }
+.dossier-group-ref,
+.dossier-group-count { font-size: max(12px, var(--dossier-small-text-size, 12px)); font-weight: 600; line-height: 1.4; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.dossier-group-count { white-space: nowrap; }
+/* Table: the band spans every column; its heading stays at the left edge
+   while the columns scroll horizontally. */
+.dossier-group-row > td { padding: 0; background: var(--bg-surface); border-bottom: 1px solid var(--dossier-header-line); }
+.dossier-group-row .dossier-group-header { position: sticky; left: 0; box-sizing: border-box; width: max-content; max-width: min(100%, var(--dossier-list-width, 100%)); padding: 2px 12px 4px 0; }
+/* Cards: a quiet heading line above the group's cards; its checkbox lines up
+   with the cards' own checkboxes. */
+.dossier-card-group { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; min-width: 0; }
+.dossier-card-group + .dossier-card-group { margin-top: 8px; }
+.dossier-card-group > .dossier-group-header { padding: 0 4px 6px 5px; border-bottom: 1px solid var(--dossier-header-line); }
 .dossier-card-list { display: none; grid-template-columns: minmax(0, 1fr); gap: 12px; padding-bottom: 16px; }
 .dossier-list[data-layout='cards'] .dossier-data-table, .dossier-list[data-layout='cards'] .dossier-horizontal-scroll { display: none; }
 .dossier-list[data-layout='cards'] .dossier-card-list { display: grid; }

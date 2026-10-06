@@ -6,6 +6,7 @@ import { BRAND, ABONNEMENTS, getDestByCP } from '../../constants';
 import { eur, getPrenom } from '../../utils';
 import { Badge } from '../ui';
 import { exportRecapProExcel, clientPaymentLabel, monthlyProDossiers, proRecapDossier } from '../../utils/exportRecapPro';
+import { safeWorkReturn } from '../../domain/personalWork';
 import ShareLinkPanel from './ShareLinkPanel';
 import { supabase } from '../../lib/supabase';
 import { functionErrorMessage } from '../../services/functionErrors';
@@ -175,7 +176,11 @@ export default function StaffClientDetail() {
 // ─────────────────────────────────────────────────────────────────────────────
 function EditClientPage({ cl, clients, data: initialData, updateClient, deleteClient, flash, sendMsg, ask, auth, onDone }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const { can } = useApp();
+  // Opened from a dossier (« À vérifier », « Ouvrir la fiche client »): the way back is that dossier.
+  const returnTo = safeWorkReturn(new URLSearchParams(location.search).get('returnTo'), '');
+  const backToDossier = returnTo.startsWith('/colis/');
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
   const [panel, setPanel] = useState('overview');
@@ -293,11 +298,11 @@ function EditClientPage({ cl, clients, data: initialData, updateClient, deleteCl
       {/* ── Header with back button ─────────────────────────────────────── */}
       <div className="flex items-center justify-between mb-4 pt-1">
         <button
-          onClick={() => navigate('/clients')}
+          onClick={() => navigate(backToDossier ? returnTo : '/clients')}
           className="flex items-center gap-1.5 text-sm font-semibold text-gray-600 hover:text-gray-900 transition-colors px-2 py-1.5 rounded-lg hover:bg-gray-100"
         >
           <ArrowLeft size={16} />
-          Retour aux clients
+          {backToDossier ? 'Retour au dossier' : 'Retour aux clients'}
         </button>
       </div>
 

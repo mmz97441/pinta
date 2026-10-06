@@ -12,7 +12,7 @@ export default function DossierDisplayOptions({
   anchor, onClose,
   visibleColumnCount, columnCount, onOpenColumns,
   layout, onLayoutChange, textSize, onTextSizeChange, textSizeKey,
-  viewMode, onViewModeChange,
+  grouping, onGroupingChange, noDeparture, onNoDepartureChange,
   sortValue, sortOptions, sortableColumns, onSortChange,
   canExport, exportCount, exportBusy, exportError, onExport,
 }) {
@@ -42,10 +42,16 @@ export default function DossierDisplayOptions({
       <h3 id="dossier-display-organisation" className="dossier-display-section-title">Organisation</h3>
       <label className="dossier-display-field">
         <span>Regrouper</span>
-        <select aria-label="Regrouper les dossiers" value={viewMode} onChange={event => onViewModeChange(event.target.value)}>
-          <option value="priority">Aucun</option><option value="statut">Par étape</option><option value="envoi">Par départ</option>
+        <select aria-label="Regrouper les dossiers" value={grouping} onChange={event => onGroupingChange(event.target.value)}>
+          <option value="none">Aucun</option><option value="statut">Par étape</option><option value="envoi">Par départ</option>
         </select>
       </label>
+      {grouping === 'envoi' && <label className="dossier-display-field">
+        <span>Dossiers sans départ</span>
+        <select aria-label="Dossiers sans départ" value={noDeparture} onChange={event => onNoDepartureChange(event.target.value)}>
+          <option value="bottom">En bas</option><option value="top">En haut</option>
+        </select>
+      </label>}
       <label className="dossier-display-field">
         <span>Tri par défaut</span>
         <select aria-label="Tri par défaut" value={sortValue} onChange={event => onSortChange(event.target.value)}>

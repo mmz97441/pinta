@@ -35,7 +35,8 @@ export function buildDossierOverview(dossier = {}, { client = {}, envois = [], c
   const stopped = dossier.archive || dossier.statut === 'annule';
   const stoppedSummary = dossier.archive ? 'Dossier archivé · aucune action attendue' : 'Dossier annulé · aucune action attendue';
   const table = buildDossierTableModel(dossier, { client, envois, can, now });
-  const financialFacts = table.payment;
+  // The dossier page keeps the detailed payment situation (« Paiement partiel »…).
+  const financialFacts = { ...table.payment, stateLabel: table.payment.detailLabel };
   const fullyPaid = financialFacts.requested !== null && financialFacts.paid > 0 && financialFacts.remaining === 0;
   const currentTask = knownStatus && !closed ? dossierNextTask({ ...dossier,
     paiementDate: fullyPaid ? dossier.paiementDate : null,

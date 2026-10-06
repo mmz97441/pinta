@@ -182,7 +182,8 @@ async function filterColumn(f,key,mode,value='') {
   const condition=options.getByRole('combobox',{name:/^Condition pour /});
   const label=(await condition.getAttribute('aria-label')).slice('Condition pour '.length);
   await condition.selectOption(mode);
-  if(!['empty','filled'].includes(mode))await options.getByLabel(`Filtrer : ${label}`,{exact:true}).fill(value);
+  if(mode==='is')await options.getByLabel(`Filtrer : ${label}`,{exact:true}).selectOption(value);
+  else if(!['empty','filled'].includes(mode))await options.getByLabel(`Filtrer : ${label}`,{exact:true}).fill(value);
   await options.getByRole('button',{name:'Appliquer le filtre',exact:true}).click();
   await f.page.waitForURL(url=>url.searchParams.has(`col.${key}`));
   await options.waitFor({state:'hidden'});
@@ -228,10 +229,14 @@ async function main() {
         if(new URL(f.page.url()).searchParams.get('sort')==='receivedAt')await f.page.locator('th[data-column="ref"] .dossier-table-sort').click();
         await button.click();await f.page.waitForURL(url=>url.searchParams.get('sort')==='receivedAt'&&url.searchParams.get('dir')==='asc');
         await f.page.locator('th[data-column="receivedAt"][aria-sort="ascending"]').waitFor();
-        assert.deepEqual((await orderedIds(f)).slice(0,4),[P4,P2,P5,P]);assert.deepEqual((await orderedIds(f)).slice(4).sort(),[P3,P6]);
+        // « Départs » groups by departure (DEP-QA-01: P4–P6, then the dossiers without a
+        // departure): the sort applies inside each group, unknown dates last in each.
+        if(view==='departures'){assert.deepEqual(await orderedIds(f),[P4,P5,P6,P2,P,P3]);assert.match(await f.page.locator('.dossier-meta-sort').innerText(),/ · dans chaque groupe$/);}
+        else{assert.deepEqual((await orderedIds(f)).slice(0,4),[P4,P2,P5,P]);assert.deepEqual((await orderedIds(f)).slice(4).sort(),[P3,P6]);}
         await button.click();await f.page.waitForURL(url=>url.searchParams.get('dir')==='desc');
         await f.page.locator('th[data-column="receivedAt"][aria-sort="descending"]').waitFor();
-        assert.deepEqual((await orderedIds(f)).slice(0,4),[P,P5,P2,P4]);assert.deepEqual((await orderedIds(f)).slice(4).sort(),[P3,P6]);
+        if(view==='departures')assert.deepEqual(await orderedIds(f),[P5,P4,P6,P,P2,P3]);
+        else{assert.deepEqual((await orderedIds(f)).slice(0,4),[P,P5,P2,P4]);assert.deepEqual((await orderedIds(f)).slice(4).sort(),[P3,P6]);}
       }
       const exported=await exportFiltered(f,6);const dateColumn=exported[0].indexOf('Dernière réception');
       assert.equal(exported.find(line=>line[0]==='EXP-TAB005')[dateColumn],'01/10/2026');assert.match(exported.find(line=>line[0]==='EXP-TAB004')[dateColumn],/29\/09\/2026.*1\s*\/\s*2 cartons datés/);
@@ -300,7 +305,7 @@ async function main() {
       const before=structuredClone(f.tables.colis);await open(f);
       for(const [label,view] of [['Travail quotidien','daily'],['Paiements','payments'],['Départs','departures']]) {
         await selectPreset(f,label,view);
-        assert.equal((await cell(f,P4,'paymentState').innerText()).trim(),'Paiement partiel');
+        assert.equal((await cell(f,P4,'paymentState').innerText()).trim(),'Non payé','Until it is fully paid, a shipment is « Non payé ».');
         assert.equal((await cell(f,P4,'statusLabel').innerText()).trim(),'Paiement partiel','A stale paye status cannot disguise an incomplete payment.');
         assert.equal((await cell(f,P5,'paymentState').innerText()).trim(),'Payé');
         assert.equal((await cell(f,P5,'statusLabel').innerText()).trim(),'Payé');
@@ -345,12 +350,12 @@ async function main() {
       options=await filterColumn(f,'optimizedDimensions','empty');await waitIds(f,[P,P2,P6]);
       await options.getByRole('button',{name:'Effacer ce filtre',exact:true}).click();await waitIds(f,[P,P2,P3,P4,P5,P6]);
       await selectPreset(f,'Paiements','payments');await filterColumn(f,'remaining','min','1');await waitIds(f,[P4]);
-      assert.equal((await cell(f,P4,'paymentState').innerText()).trim(),'Paiement partiel');
+      assert.equal((await cell(f,P4,'paymentState').innerText()).trim(),'Non payé');
       options=await filterColumn(f,'requested','min','90');await waitIds(f,[P4]);
       assert.equal(new URL(f.page.url()).searchParams.get('col.remaining'),JSON.stringify({mode:'min',value:'1'}));
       await f.page.reload();await row(f,P4).waitFor();await waitIds(f,[P4]);
       const data=await exportFiltered(f,1);
-      assert.equal(data.length,2);assert.equal(data[1][0],'EXP-TAB004');assert.equal(data[1][data[0].indexOf('Paiement')],'Paiement partiel');
+      assert.equal(data.length,2);assert.equal(data[1][0],'EXP-TAB004');assert.equal(data[1][data[0].indexOf('Paiement')],'Non payé');
       await f.page.getByRole('button',{name:'Retirer les filtres',exact:true}).click();await waitIds(f,[P,P2,P3,P4,P5,P6]);
       assert.equal([...new URL(f.page.url()).searchParams.keys()].some(key=>key.startsWith('col.')),false);
       await assertNoBusinessChange(f,before);
@@ -452,7 +457,10 @@ async function main() {
     for(const dark of [false,true])await scenario(`mobile-column-filter-reset-and-width-editor-${dark?'dark':'light'}`,async f=>{
       await f.page.setViewportSize({width:390,height:844});await f.context.addInitScript(dark=>localStorage.setItem('expedile-theme',dark?'dark':'light'),dark);
       const before=structuredClone(f.tables.colis);await open(f);
-      const options=await filterColumn(f,'paymentState','contains','partiel');await waitIds(f,[P4]);
+      // « Paiement » reads Payé or Non payé, and its filter takes one exact value: « Payé » never keeps « Non payé ».
+      let options=await filterColumn(f,'paymentState','is','Payé');await waitIds(f,[P5,P6].sort());
+      await options.getByRole('button',{name:'Fermer',exact:true}).click();await options.waitFor({state:'hidden'});
+      options=await filterColumn(f,'paymentState','is','Non payé');await waitIds(f,[P,P2,P3,P4].sort());
       assert.equal(await f.page.getByRole('table',{name:'Dossiers d’expédition',exact:true}).count(),0);
       const width=options.getByLabel('Largeur de Paiement',{exact:true});await width.fill('300');await width.press('Enter');
       assert.equal(await width.inputValue(),'300');await options.getByRole('button',{name:'Rétablir les largeurs',exact:true}).click();
@@ -829,7 +837,7 @@ async function main() {
       await noPageOverflow(f);
       // Changing a setting keeps the dialog open.
       await group.selectOption('statut');await f.page.waitForURL(url=>url.searchParams.get('view')==='statut');assert.equal(await dialog.isVisible(),true);
-      await group.selectOption('priority');await f.page.waitForURL(url=>(url.searchParams.get('view')||'priority')==='priority');assert.equal(await dialog.isVisible(),true);
+      await group.selectOption('none');await f.page.waitForURL(url=>url.searchParams.get('view')==='none');assert.equal(await dialog.isVisible(),true);
       // Escape first undoes a typed size, then closes and returns focus to the trigger.
       await size.fill('17');await size.press('Escape');assert.equal(await size.inputValue(),'12');assert.equal(await dialog.isVisible(),true,'Escape in a dirty size field does not close Affichage.');
       await size.press('Escape');await dialog.waitFor({state:'hidden'});
@@ -889,7 +897,7 @@ async function main() {
       assert.ok(pressed.dot&&pressed.dot!=='none','An active column filter shows its marker.');
       await f.page.getByRole('button',{name:'Retirer les filtres',exact:true}).click();await waitIds(f,[P,P2,P3,P4,P5,P6]);
       // Pills: exact label, deliberate tone; a partial payment is never green.
-      for(const [id,key,label,tone] of [[P4,'paymentState','Paiement partiel','waiting'],[P4,'statusLabel','Paiement partiel','waiting'],[P5,'paymentState','Payé','done'],[P5,'statusLabel','Payé','done'],[P3,'statusLabel',null,'waiting'],[P,'statusLabel',null,'neutral']]) {
+      for(const [id,key,label,tone] of [[P4,'paymentState','Non payé','neutral'],[P4,'statusLabel','Paiement partiel','waiting'],[P5,'paymentState','Payé','done'],[P5,'statusLabel','Payé','done'],[P3,'statusLabel',null,'waiting'],[P,'statusLabel',null,'neutral']]) {
         const pill=cell(f,id,key).locator('.dossier-pill');assert.equal(await pill.count(),1);
         const text=(await pill.innerText()).trim();assert.equal(text,(await cell(f,id,key).innerText()).trim(),'The pill holds the whole cell text, with no hidden prefix.');
         if(label)assert.equal(text,label);assert.equal(await pill.getAttribute('data-tone'),tone,`${id}/${key}: “${text}” uses the ${tone} tone.`);

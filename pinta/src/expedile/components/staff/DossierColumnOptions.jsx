@@ -1,7 +1,7 @@
 import React, { useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X, ArrowLeft } from 'lucide-react';
-import { clampColumnWidth, columnFilterModes, columnWidthBounds, sanitizeColumnFilter } from '../../domain/dossierTablePreferences';
+import { clampColumnWidth, columnFilterChoices, columnFilterModes, columnWidthBounds, sanitizeColumnFilter } from '../../domain/dossierTablePreferences';
 
 /** Native modal semantics keep keyboard focus here without covering the table
  * in another full-width toolbar. Position follows the actual trigger: from
@@ -103,15 +103,17 @@ function ColumnWidthControl({ column, width, onResize }) {
 }
 
 function ColumnFilterEditor({ column, active, widths, suggestions, onFilter, onResize, onResetWidths, onClose }) {
-  const [mode, setMode] = useState(active?.mode || 'contains');
-  const [value, setValue] = useState(active?.value || '');
+  const choices = columnFilterChoices(column);
+  const [mode, setMode] = useState(active?.mode || columnFilterModes(column)[0].key);
+  const [value, setValue] = useState(active?.value || choices?.[0] || '');
   const emptyMode = ['empty', 'filled'].includes(mode);
   const valid = sanitizeColumnFilter(column, { mode, value });
   const inputType = mode !== 'contains' && column.sort.type === 'date' ? 'date' : 'text';
   return <>
     <form onSubmit={event => { event.preventDefault(); if (valid) onFilter(valid); }}>
       <label>Condition<select data-filter-focus={emptyMode ? '' : undefined} aria-label={`Condition pour ${column.label}`} value={mode} onChange={event => setMode(event.target.value)}>{columnFilterModes(column).map(item => <option key={item.key} value={item.key}>{item.label}</option>)}</select></label>
-      {!emptyMode && <label>Valeur<input data-filter-focus="" aria-label={`Filtrer : ${column.label}`} type={inputType} inputMode={column.sort.type === 'number' && mode !== 'contains' ? 'decimal' : undefined} list={mode === 'contains' ? 'dossier-column-values' : undefined} value={value} maxLength={200} onChange={event => setValue(event.target.value)} placeholder={column.sort.type === 'number' ? 'Ex. : 2' : 'Texte recherché'} /><datalist id="dossier-column-values">{suggestions.map(item => <option key={item} value={item} />)}</datalist></label>}
+      {!emptyMode && (choices ? <label>Valeur<select data-filter-focus="" aria-label={`Filtrer : ${column.label}`} value={value} onChange={event => setValue(event.target.value)}>{choices.map(choice => <option key={choice} value={choice}>{choice}</option>)}</select></label>
+        : <label>Valeur<input data-filter-focus="" aria-label={`Filtrer : ${column.label}`} type={inputType} inputMode={column.sort.type === 'number' && mode !== 'contains' ? 'decimal' : undefined} list={mode === 'contains' ? 'dossier-column-values' : undefined} value={value} maxLength={200} onChange={event => setValue(event.target.value)} placeholder={column.sort.type === 'number' ? 'Ex. : 2' : 'Texte recherché'} /><datalist id="dossier-column-values">{suggestions.map(item => <option key={item} value={item} />)}</datalist></label>)}
       <div className="dossier-column-filter-actions"><button className="dossier-column-apply" type="submit" disabled={!valid}>Appliquer le filtre</button>{active && <button type="button" onClick={() => onFilter(null)}>Effacer ce filtre</button>}<button type="button" onClick={onClose}>Fermer</button></div>
     </form>
     {onResize && <div className="dossier-column-width-options"><ColumnWidthControl column={column} width={widths?.[column.key]} onResize={onResize} />

@@ -114,20 +114,33 @@ test('zero placeholders and incomplete quotes never display a payment request', 
     assert.equal(model(current, base).payment.requested, null);
     assert.equal(model(current, base).payment.remaining, null);
   }
-  assert.equal(model({ ...dossier, devisTotal: 0, quoteVersion: 0 }, base).payment.stateLabel, 'À calculer');
+  const placeholder = model({ ...dossier, devisTotal: 0, quoteVersion: 0 }, base).payment;
+  assert.equal(placeholder.stateLabel, 'Non payé'); assert.equal(placeholder.detailLabel, 'À calculer');
 });
 
 test('a current unpaid request has an exact outstanding amount and only its saved sent date', () => {
   const payment = model(quoted, base).payment;
-  assert.deepEqual(payment, { requested: 100, paid: 0, remaining: 100, sentAt: quoted.devisEnvoyeLe, stateLabel: 'Paiement attendu' });
+  assert.deepEqual(payment, { requested: 100, paid: 0, remaining: 100, sentAt: quoted.devisEnvoyeLe, stateLabel: 'Non payé', detailLabel: 'Paiement attendu' });
   assert.equal(model({ ...quoted, devisEnvoyeLe: null }, base).payment.sentAt, null);
   assert.equal(model({ ...quoted, devisEnvoyeLe: '2099-01-01' }, base).payment.sentAt, null);
+});
+
+test('« Paiement » says Payé only for a complete recorded payment; contradictions ask for a check', () => {
+  const sent = { id: 'p', ref: 'EXP-PAY', statut: 'devis_envoye', devisTotal: 100, devisBrouillon: false, quoteVersion: 1, devisEnvoyeLe: '2026-10-01T08:00:00Z' };
+  const at = { now: Date.parse('2026-10-03T12:00:00Z') };
+  const label = fields => { const { stateLabel, detailLabel } = model({ ...sent, ...fields }, at).payment; return [stateLabel, detailLabel]; };
+  assert.deepEqual(label({}), ['Non payé', 'Paiement attendu']);
+  assert.deepEqual(label({ devisBrouillon: true }), ['Non payé', 'À recalculer'], 'A revised quote is not a payment anomaly.');
+  assert.deepEqual(label({ statut: 'en_preparation', devisEnvoyeLe: null }), ['Non payé', 'Devis à envoyer']);
+  assert.deepEqual(label({ statut: 'paye', paiementMontant: 100, paiementDate: '2026-10-02T08:00:00Z' }), ['Payé', 'Payé']);
+  assert.deepEqual(label({ statut: 'paye', paiementMontant: null, paiementDate: null }), ['À vérifier', 'Paiement à vérifier'], 'A paid status without a recorded payment is never shown as paid.');
+  assert.deepEqual(label({ devisSnapshot: { amounts: { total: 90 } } }), ['À vérifier', 'Paiement à vérifier'], 'Conflicting amounts ask for a check.');
 });
 
 test('a partial capture does not become paid because its status says paye', () => {
   const current = { ...paid, paiementMontant: 30 };
   const row = model(current, { ...base, actions: [action('departure')] });
-  assert.deepEqual(row.payment, { requested: 100, paid: 30, remaining: 70, sentAt: quoted.devisEnvoyeLe, stateLabel: 'Paiement partiel' });
+  assert.deepEqual(row.payment, { requested: 100, paid: 30, remaining: 70, sentAt: quoted.devisEnvoyeLe, stateLabel: 'Non payé', detailLabel: 'Paiement partiel' });
   assert.equal(row.departure.readinessLabel, 'Paiement à compléter');
   assert.equal(actionWaiting(row.action), true);
   assert.equal(model(current, { ...base, actions: [action('departure')], scope: 'pool' }).matchesScope, false);
@@ -152,7 +165,8 @@ test('money remains finite numbers and subtraction is rounded to cents', () => {
   const payment = model({ ...paid, devisTotal: '100.10', paiementMontant: '30.05' }, base).payment;
   assert.equal(payment.requested, 100.1); assert.equal(payment.paid, 30.05); assert.equal(payment.remaining, 70.05);
   assert.equal(model({ ...paid, paiementMontant: 110 }, base).payment.remaining, 0);
-  assert.equal(model({ ...paid, paiementMontant: 110 }, base).payment.stateLabel, 'Trop-perçu à vérifier');
+  const overpaid = model({ ...paid, paiementMontant: 110 }, base).payment;
+  assert.equal(overpaid.stateLabel, 'À vérifier'); assert.equal(overpaid.detailLabel, 'Trop-perçu à vérifier');
 });
 
 test('optimisation is true only for complete saved packages with a current composition certificate', () => {
@@ -194,7 +208,7 @@ test('departure preparation names the real next prerequisite before asking for p
 test('an explicit valid zero quote is not mistaken for an initial placeholder or a permission to ship', () => {
   const zero = { ...quoted, devisTotal: 0, devisSnapshot: { amounts: { total: 0 } }, quoteVersion: 1 };
   const row = model(zero, base);
-  assert.equal(row.payment.requested, 0); assert.equal(row.payment.stateLabel, 'Aucun règlement demandé');
+  assert.equal(row.payment.requested, 0); assert.equal(row.payment.stateLabel, 'Non payé'); assert.equal(row.payment.detailLabel, 'Aucun règlement demandé');
   assert.match(row.departure.readinessLabel, /Montant nul.*responsable/);
 });
 

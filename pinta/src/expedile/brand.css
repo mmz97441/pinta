@@ -280,6 +280,10 @@ html.theme-switching *, html.theme-switching *::before, html.theme-switching *::
 /* Text tokens are distinct from decorative gold and stage colors. */
 :root { --text-accent: #856217; }
 html.dark { --text-accent: #E8C779; }
+/* « À vérifier » (dossier band and list mark): the amber of the waiting steps.
+   Text 6.4:1 on its fill, 5.8:1 or more on every list row (light); 8.7:1 and 9.2:1 (dark). */
+:root { --attention-text: #79520a; --attention-bg: #fff5d8; --attention-border: #d8b969; }
+html.dark { --attention-text: #f7db97; --attention-bg: #44361b; --attention-border: #7b6538; }
 html:not(.dark) .text-gray-400, html:not(.dark) .text-slate-400,
 html:not(.dark) .text-gray-500, html:not(.dark) .text-slate-500 { color: var(--text-muted); }
 html:not(.dark) .text-blue-600 { color: #1D4ED8; }

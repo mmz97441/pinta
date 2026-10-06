@@ -28,6 +28,7 @@ import ShipmentRevision from './ShipmentRevision';
 import TaskReopen from './TaskReopen';
 import TaskGuidance from './TaskGuidance';
 import { revisionLockedReason, shipmentRevisionBoxes } from '../../domain/shipmentRevision';
+import { subscriptionEndConfirmation } from '../../domain/dossierAlerts';
 
 const receptionDrafts = new Map();
 const preparationDrafts = new Map();
@@ -906,12 +907,20 @@ export default function StaffDetailView({ workspace = false, active = true, task
                   aria-label="Départ de cette expédition"
                   value={selEnvoi}
                   disabled={actionLoading || !canAssign}
-                  onChange={(e) => { const envoi = e.target.value; runAction(async () => {
-                    await assignDeparture(sel, envoi || null);
-                    setSelEnvoi(envoi);
-                    setDepartureFeedback(envoi ? 'Départ enregistré.' : 'Affectation retirée.');
-                    flash(envoi ? 'Départ enregistré' : 'Départ retiré');
-                  }); }}
+                  onChange={(e) => {
+                    const envoi = e.target.value;
+                    const assign = () => runAction(async () => {
+                      await assignDeparture(sel, envoi || null);
+                      setSelEnvoi(envoi);
+                      setDepartureFeedback(envoi ? 'Départ enregistré.' : 'Affectation retirée.');
+                      flash(envoi ? 'Départ enregistré' : 'Départ retiré');
+                    });
+                    // After the end of the subscription the choice is confirmed
+                    // first; cancelling writes nothing and keeps the saved departure.
+                    const confirmation = subscriptionEndConfirmation(envois.find(departure => departure.id === envoi), cl);
+                    if (confirmation) ask(confirmation.title, confirmation.message, assign, { okLabel: confirmation.okLabel });
+                    else assign();
+                  }}
                   className="w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-sm outline-none"
                   style={{ color: 'var(--brand-text)' }}
                 >
@@ -942,10 +951,11 @@ export default function StaffDetailView({ workspace = false, active = true, task
                 </div>
               )}
 
+              {/* Dark cyan: 5.4:1 under the white label (#0891B2 gave 3.7:1). */}
               <BtnPrimary
                 onClick={() => navigate(`/departs?envoi=${encodeURIComponent(sel.envoi || selEnvoi)}`)}
                 disabled={(!sel.envoi && !selEnvoi) || !!assignmentIssue || subExpired || !can('perm_envois_voir')}
-                color="#0891B2"
+                color="#0E7490"
               >
                 <Check size={15} />
                 Vérifier le départ et son manifeste

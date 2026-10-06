@@ -42,6 +42,7 @@ import ClientDossierContext from './components/client/ClientDossierContext';
 import ClientBottomNav from './components/client/ClientBottomNav';
 
 import DetailHeader from './components/detail/DetailHeader';
+import DossierAlerts from './components/detail/DossierAlerts';
 import DossierContextPanel from './components/detail/DossierContextPanel';
 import DossierOverview from './components/detail/DossierOverview';
 import { buildDossierOverview } from './domain/dossierOverview';
@@ -172,6 +173,7 @@ function StaffColisDetail() {
   return (
     <div className={conversationOpen ? 'dossier-page dossier-page--conversation' : 'dossier-page'}>
       <DetailHeader task={task} conversation={conversationOpen} onOpenContext={openContext} />
+      <DossierAlerts conversation={conversationOpen} />
       <div className="dossier-page-tabs">
         <div className={`w-full px-4 sm:px-6 lg:px-8 ${conversationOpen ? '' : 'mx-auto max-w-[1600px]'}`}>
           <nav role="tablist" aria-label="Dossier et conversation" className="dossier-view-tabs" onKeyDown={event => {

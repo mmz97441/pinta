@@ -1,8 +1,8 @@
 import React, { useState, useMemo, useEffect, useLayoutEffect, useCallback, useRef } from 'react';
-import { Search, X, Package, Clock, CheckCircle, Check, CreditCard, Plane, AlertCircle, ChevronDown, ChevronRight, ListFilter, Settings2 } from 'lucide-react';
+import { Search, X, Package, Clock, CheckCircle, Check, CreditCard, Plane, AlertCircle, CalendarX, ListFilter, Settings2 } from 'lucide-react';
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
-import { BRAND, STATUTS, getDestByCP } from '../../constants';
+import { STATUTS, getDestByCP } from '../../constants';
 import { fuzzy } from '../../utils';
 const exportDossierTableExcel = async (...args) => { const exports = await import('../../utils/exportExcel'); return exports.exportDossierTableExcel(...args); };
 import PersonalWorkView from '../workspace/PersonalWorkView';
@@ -16,8 +16,11 @@ import DossierColumnOptions, { DossierColumnVisibility } from './DossierColumnOp
 import DossierHorizontalScroll from './DossierHorizontalScroll';
 import DossierDisplayOptions from './DossierDisplayOptions';
 import useDossierTablePreferences from '../../hooks/useDossierTablePreferences';
-import { COLUMN_FILTER_PREFIX, readColumnFilters, filterDossierTableRows, columnFilterLabel, dossierColumnSuggestions } from '../../domain/dossierTablePreferences';
+import { COLUMN_FILTER_PREFIX, readColumnFilters, filterDossierTableRows, columnFilterLabel, dossierColumnSuggestions, DOSSIER_GROUPINGS, resolveDossierGrouping } from '../../domain/dossierTablePreferences';
+import { groupDossiersByDeparture, parisCalendarDay, NO_DEPARTURE_GROUP_KEY } from '../../domain/departureGroups';
+import { dossierAlerts } from '../../domain/dossierAlerts';
 import { TABLE_VIEWS, TABLE_COLUMNS, DossierTableHead, DossierTableRow, DossierTableCard } from './DossierTableRows';
+import { DossierGroupRow, DossierCardGroup } from './DossierGroupHeader';
 
 // ── Pipeline cards (filters) ────────────────────────────────────────────────
 const PIPELINE = [
@@ -60,27 +63,17 @@ function loadDefaultSort(userId) {
   return 'priority';
 }
 
-// ── Group header row (colspan toute la largeur) ─────────────────────────────
-function GroupHeaderRow({ icon: Icon, color, label, extraLabel, count, allChecked, onToggleAll, colspan, collapsed, onToggle }) {
-  return (
-    <tr className="border-b border-gray-200" style={{ background: 'var(--bg-surface)' }}>
-      <td colSpan={colspan} className="px-3 py-2">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <label className="dossier-table-checkbox -ml-3 shrink-0"><input aria-label={`Sélectionner le groupe ${label}`} type="checkbox"
-              checked={allChecked}
-              onChange={(e) => { e.stopPropagation(); onToggleAll(); }}
-              onClick={(e) => e.stopPropagation()} /></label>
-            {Icon && <Icon size={13} style={{ color }} />}
-            <button onClick={onToggle} aria-expanded={!collapsed} className="inline-flex min-h-11 items-center gap-1 text-sm font-bold" style={{ color: 'var(--brand-text)' }}>{collapsed ? <ChevronRight size={14} aria-hidden="true" className="shrink-0" /> : <ChevronDown size={14} aria-hidden="true" className="shrink-0" />}{label}</button>
-            {extraLabel && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">{extraLabel}</span>}
-          </div>
-          <span className="text-[10px] font-bold text-gray-400">{count} dossier(s)</span>
-        </div>
-      </td>
-    </tr>
-  );
-}
+// « Regrouper › Par étape »: the stage bands, in the order of the journey.
+const STATUT_GROUPS = [
+  { label: 'Réception', statuts: ['receptionne', 'mesure'], color: '#F59E0B', icon: Package },
+  { label: 'Accord attendu', statuts: ['attente_feu_vert'], color: '#F97316', icon: Clock },
+  { label: 'Optimisation et factures', statuts: ['autorise', 'en_preparation'], color: '#65A30D', icon: CheckCircle },
+  { label: 'Devis / Paiement', statuts: ['devis_envoye', 'attente_paiement'], color: '#D97706', icon: CreditCard },
+  { label: 'Payé', statuts: ['paye'], color: '#10B981', icon: Check },
+  { label: 'En expédition', statuts: ['expedie', 'transit', 'dedouanement', 'arrive', 'livraison'], color: '#0891B2', icon: Plane },
+  { label: 'Livrés', statuts: ['livre'], color: '#16A34A', icon: Check },
+  { label: 'À revoir', statuts: ['refuse_client', 'annule'], color: '#B85454', icon: AlertCircle },
+];
 
 // ════════════════════════════════════════════════════════════════════════════
 // DASHBOARD PAGE — exported for / route
@@ -163,7 +156,7 @@ export default function StaffColisPage() {
   const tableRequested = TABLE_VIEWS.some(view => view.key === searchParams.get('table')) ? searchParams.get('table') : 'daily';
   const tableView = tableRequested === 'payments' && !canSeePayments ? 'daily' : tableRequested;
   const allColumns = useMemo(() => TABLE_COLUMNS[tableView].filter(column => !column.financial || canSeePayments), [tableView, canSeePayments]);
-  const { widths, setWidth, resetWidths, visibleKeys, setColumnVisible, resetColumns, textSize, setTextSize, layout, setLayout } = useDossierTablePreferences(auth?.u?.id, tableView, allColumns);
+  const { widths, setWidth, resetWidths, visibleKeys, setColumnVisible, resetColumns, textSize, setTextSize, layout, setLayout, grouping: savedGrouping, setGrouping, noDeparture, setNoDeparture } = useDossierTablePreferences(auth?.u?.id, tableView, allColumns);
   const visibleSignature = visibleKeys.join('|');
   const displayColumns = useMemo(() => allColumns.filter(column => visibleSignature.split('|').includes(column.key)), [allColumns, visibleSignature]);
   const sortableColumns = displayColumns.filter(isDossierTableColumnSortable);
@@ -210,8 +203,19 @@ export default function StaffColisPage() {
     actions: actionsByDossier.get(dossier.id) || [], client: getClient(dossier.clientId), me: auth?.u?.id, can, teamUsers, envois,
     scope: taskScope, view: tableView, available, now, workReady, assigneeFilter: ownerFilter,
   })])), [data, getClient, actionsByDossier, auth?.u?.id, can, teamUsers, envois, taskScope, tableView, available, now, workReady, ownerFilter]);
-  const viewMode = ['envoi', 'statut'].includes(searchParams.get('view')) ? searchParams.get('view') : 'priority';
-  const setViewMode = (value) => setParam('view', value === 'priority' ? null : value);
+  // « À vérifier », marked next to each reference; the dossier page details it.
+  const alertsByDossier = useMemo(() => {
+    const envoiById = new Map(envois.map(envoi => [envoi.id, envoi]));
+    return new Map(data.map(dossier => [dossier.id, dossierAlerts({ dossier, client: getClient(dossier.clientId), envoi: envoiById.get(dossier.envoi), today: now })]));
+  }, [data, getClient, envois, now]);
+  // Each tab remembers its own « Regrouper » on this device; an explicit `view`
+  // in the URL wins, so a shared link keeps its grouping.
+  const grouping = resolveDossierGrouping(searchParams.get('view'), savedGrouping, tableView);
+  const changeGrouping = value => {
+    if (!DOSSIER_GROUPINGS.includes(value)) return;
+    setGrouping(value);
+    setParam('view', value);
+  };
   const listScrollRef = useRef(null);
   const [listWidth, setListWidth] = useState(0);
   useEffect(() => {
@@ -351,47 +355,22 @@ export default function StaffColisPage() {
     });
   }, [sorted]);
 
-  // Grouped by envoi (for envoi view)
-  const groupedByEnvoi = useMemo(() => {
-    const groups = {};
-    const noEnvoi = [];
-    sorted.forEach((c) => {
-      if (c.envoi) {
-        const e = envois.find((x) => x.id === c.envoi);
-        const key = c.envoi;
-        if (!groups[key]) groups[key] = { envoi: e, colis: [] };
-        groups[key].colis.push(c);
-      } else {
-        noEnvoi.push(c);
-      }
+  // Groups keep the sorted order inside each band. A departure group reads
+  // « Départ du jeudi 15 octobre · Réunion », then its reference.
+  const today = parisCalendarDay(now);
+  const grouped = grouping !== 'none';
+  const groups = useMemo(() => {
+    if (grouping === 'envoi') return groupDossiersByDeparture(sorted, envois, { today, noDeparture }).map(group => {
+      const unassigned = group.key === NO_DEPARTURE_GROUP_KEY;
+      return { key: group.key, title: group.destinationLabel ? `${group.label} · ${group.destinationLabel}` : group.label, ref: group.ref,
+        icon: unassigned ? CalendarX : Plane, color: unassigned ? 'var(--text-muted)' : 'var(--brand-text)', dossiers: group.dossiers };
     });
-    // Sort groups by date
-    const sortedGroups = Object.values(groups).sort((a, b) => {
-      if (!a.envoi?.date || !b.envoi?.date) return 0;
-      return a.envoi.date.localeCompare(b.envoi.date);
-    });
-    if (noEnvoi.length > 0) sortedGroups.push({ envoi: null, colis: noEnvoi });
-    return sortedGroups;
-  }, [sorted, envois]);
-
-  // Grouped by statut phase (for statut view)
-  const STATUT_GROUPS = [
-    { label: 'Réception', statuts: ['receptionne', 'mesure'], color: '#F59E0B', icon: Package },
-    { label: 'Accord attendu', statuts: ['attente_feu_vert'], color: '#F97316', icon: Clock },
-    { label: 'Optimisation et factures', statuts: ['autorise', 'en_preparation'], color: '#65A30D', icon: CheckCircle },
-    { label: 'Devis / Paiement', statuts: ['devis_envoye', 'attente_paiement'], color: '#D97706', icon: CreditCard },
-    { label: 'Payé', statuts: ['paye'], color: '#10B981', icon: Check },
-    { label: 'En expédition', statuts: ['expedie', 'transit', 'dedouanement', 'arrive', 'livraison'], color: '#0891B2', icon: Plane },
-    { label: 'Livrés', statuts: ['livre'], color: '#16A34A', icon: Check },
-    { label: 'À revoir', statuts: ['refuse_client', 'annule'], color: '#B85454', icon: AlertCircle },
-  ];
-
-  const groupedByStatut = useMemo(() => {
-    return STATUT_GROUPS.map((g) => ({
-      ...g,
-      colis: sorted.filter((c) => g.statuts.includes(c.statut)),
-    })).filter((g) => g.colis.length > 0);
-  }, [sorted]);
+    if (grouping === 'statut') return STATUT_GROUPS.map(group => ({ key: group.label, title: group.label, icon: group.icon, color: group.color,
+      dossiers: sorted.filter(dossier => group.statuts.includes(dossier.statut)) })).filter(group => group.dossiers.length > 0);
+    return sorted.length ? [{ key: 'all', dossiers: sorted }] : [];
+  }, [grouping, sorted, envois, today, noDeparture]);
+  // Exports follow the order on screen, group by group.
+  const displayedRows = useMemo(() => grouped ? groups.flatMap(group => group.dossiers) : sorted, [grouped, groups, sorted]);
 
   const tabCounts = useMemo(() => PIPELINE.reduce((all, phase) => {
     all[phase.key] = scope.filter((c) => phase.key === 'all' && (workFilter === 'messages' || ownerFilter || taskScope !== 'all') ? true : phase.filter(c)).length;
@@ -417,11 +396,10 @@ export default function StaffColisPage() {
     flash({ msg: `${ok} dossier(s) mis à jour${failed.length ? ` · ${failed.length} non modifié(s), encore sélectionné(s)` : ''}`, type: failed.length ? 'warning' : 'success' });
   };
   const toggleSelection = id => setSelectedIds(previous => { const next = new Set(previous); if (next.has(id)) next.delete(id); else next.add(id); return next; });
-  const openColis = (id, claimedAction) => {
-    const dossier = data.find(item => item.id === id);
-    const action = claimedAction || models.get(id)?.action;
-    navigate(action ? workActionUrl(action, returnTo, dossier) : `/colis/${encodeURIComponent(id)}?${new URLSearchParams({ returnTo })}`);
-  };
+  // A row, its reference or the only search result opens the dossier itself,
+  // which resolves its current step; only the action button opens the task.
+  const openDossier = id => navigate(`/colis/${encodeURIComponent(id)}?${new URLSearchParams({ returnTo })}`);
+  const openTask = (id, action) => action ? navigate(workActionUrl(action, returnTo, data.find(item => item.id === id))) : openDossier(id);
   const selectedFromUrl = searchParams.get('dossier');
   useEffect(() => {
     if (!selectedFromUrl) return;
@@ -449,8 +427,9 @@ export default function StaffColisPage() {
       <header className="dossier-list-header max-h-[55dvh] shrink-0 space-y-3 overflow-y-auto overscroll-contain px-4 pb-3 pt-4">
         <h1 className="text-xl font-bold text-gray-900">Dossiers d’expédition</h1>
         <div ref={viewTabsRef} role="group" aria-label="Vues du tableau" className="dossier-view-tabs">
+          {/* A tab opens with its own remembered grouping, not the previous tab's. */}
           {TABLE_VIEWS.filter(view => view.key !== 'payments' || canSeePayments).map(view => <button key={view.key} type="button" aria-pressed={tableView === view.key}
-            onClick={() => { setParam('table', view.key === 'daily' ? null : view.key); setSelectedIds(new Set()); setColumnOptions(null); setVisibilityAnchor(null); setDisplayOpen(false); }}
+            onClick={() => { setSearchParams(previous => { const next = new URLSearchParams(previous); if (view.key === 'daily') next.delete('table'); else next.set('table', view.key); next.delete('view'); return next; }, { replace: true }); setSelectedIds(new Set()); setColumnOptions(null); setVisibilityAnchor(null); setDisplayOpen(false); }}
             className="dossier-view-tab">{view.label}</button>)}
         </div>
         {tableRequested === 'payments' && !canSeePayments && <p role="status" className="text-sm text-gray-700">Votre rôle ne permet pas de consulter les montants. Les dossiers restent accessibles dans Travail quotidien.</p>}
@@ -458,7 +437,7 @@ export default function StaffColisPage() {
           <div className="dossier-toolbar-search relative">
             <Search size={18} aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
             <input type="search" value={search} onChange={e => setSearch(e.target.value)} aria-label="Rechercher ou scanner un colis"
-              onKeyDown={event => { if (event.key !== 'Enter') return; if (exactReference) openReferenceDossier(); else if (sorted.length === 1) openColis(sorted[0].id); }}
+              onKeyDown={event => { if (event.key !== 'Enter') return; if (exactReference) openReferenceDossier(); else if (sorted.length === 1) openDossier(sorted[0].id); }}
               placeholder="Référence, client, casier ou suivi…" className="min-h-11 w-full pl-10 pr-10 text-sm" />
             {search && <button aria-label="Effacer la recherche" onClick={() => setSearch('')} className="absolute right-0 top-0 flex min-h-11 w-10 items-center justify-center text-gray-500"><X size={17} aria-hidden="true" /></button>}
           </div>
@@ -479,10 +458,10 @@ export default function StaffColisPage() {
           visibleColumnCount={displayColumns.length} columnCount={allColumns.length}
           onOpenColumns={() => { setDisplayOpen(false); setColumnOptions(null); setVisibilityAnchor(displayButtonRef.current); }}
           layout={layout} onLayoutChange={setLayout} textSize={textSize} onTextSizeChange={setTextSize} textSizeKey={`${auth?.u?.id}:${tableView}`}
-          viewMode={viewMode} onViewModeChange={setViewMode}
+          grouping={grouping} onGroupingChange={changeGrouping} noDeparture={noDeparture} onNoDepartureChange={setNoDeparture}
           sortValue={sortCol ? `column:${sortCol}:${sortDir}` : defaultSortKey} sortOptions={sortOptions} sortableColumns={sortableColumns}
           onSortChange={value => { const [kind, key, direction] = value.split(':'); if (kind === 'column') handleSort(key, direction); else changeDefaultSort(value); }}
-          canExport={canExportView} exportCount={sorted.length} exportBusy={exportBusy} exportError={exportError} onExport={() => exportRows(sorted)} />}
+          canExport={canExportView} exportCount={displayedRows.length} exportBusy={exportBusy} exportError={exportError} onExport={() => exportRows(displayedRows)} />}
         {visibilityAnchor && <DossierColumnVisibility key={tableView} columns={allColumns} visibleKeys={visibleKeys} widths={widths} onResize={setWidth} onResetWidths={resetWidths} anchor={visibilityAnchor} onChange={setColumnVisible} onReset={resetColumns} onClose={() => setVisibilityAnchor(null)} />}
         {columnOptions && <DossierColumnOptions key={tableView} columns={sortableColumns} columnKey={columnOptions.key} anchor={columnOptions.anchor} fromMenu={columnOptions.fromMenu} filters={columnFilters} widths={widths} suggestions={columnSuggestions} onSelect={key => setColumnOptions(previous => ({ ...previous, key }))} onFilter={setColumnFilter} onResize={setWidth} onResetWidths={resetWidths} onClose={() => setColumnOptions(null)} />}
         {showFilters && <div id="dossier-filters-panel" role="group" aria-label="Filtres des dossiers" className="dossier-filters-panel">
@@ -506,7 +485,7 @@ export default function StaffColisPage() {
             <button type="button" onClick={clearFilters} className="dossier-text-button">Retirer les filtres</button>
           </div>}
           <span className="dossier-meta-spacer" aria-hidden="true" />
-          {sortColumn && <p role="status" className="dossier-meta-sort">Tri : {sortColumn.label} · {dossierTableSortDirectionLabel(sortColumn, sortDir)}{viewMode !== 'priority' ? ' · dans chaque groupe' : ''}</p>}
+          {sortColumn && <p role="status" className="dossier-meta-sort">Tri : {sortColumn.label} · {dossierTableSortDirectionLabel(sortColumn, sortDir)}{grouped ? ' · dans chaque groupe' : ''}</p>}
           <DossierHorizontalScroll scrollRef={listScrollRef} layoutKey={`${tableView}:${tableStyle.width}:${visibleSignature}:${sorted.length}:${textSize}:${layout}`} />
         </div>
         {workFilter === 'messages' && <button onClick={() => navigate('/conversations')} className="min-h-11 rounded-lg border px-3 text-sm font-semibold">Ouvrir les conversations et messages à rattacher</button>}
@@ -569,7 +548,7 @@ export default function StaffColisPage() {
             const exportLabel = selectedIds.size === 1 ? 'Exporter le dossier sélectionné' : `Exporter les ${selectedIds.size} dossiers sélectionnés`;
             // The bar names the selection; the button shows « Exporter », and its
             // full name starts with that visible word (WCAG 2.5.3).
-            return <button type="button" aria-label={exportLabel} title={exportLabel} onClick={() => exportRows(sorted.filter(dossier => selectedIds.has(dossier.id)))} className="dossier-bulk-button">
+            return <button type="button" aria-label={exportLabel} title={exportLabel} onClick={() => exportRows(displayedRows.filter(dossier => selectedIds.has(dossier.id)))} className="dossier-bulk-button">
               Exporter
             </button>;
           })()}
@@ -585,12 +564,10 @@ export default function StaffColisPage() {
         <div id="dossier-table-scroll" ref={listScrollRef} role="region" aria-label="Tableau des dossiers" tabIndex={0} className="min-w-0 flex-1 overflow-y-auto overflow-x-auto">
 
           {(() => {
-            const groups = viewMode === 'envoi' ? groupedByEnvoi : viewMode === 'statut' ? groupedByStatut : sorted.length ? [{ label: 'Ordre de traitement', icon: Package, color: BRAND.navy, colis: sorted }] : [];
             const displayCols = displayColumns;
-            const totalColspan = displayCols.length + 1; // checkbox + N colonnes + chevron
-            const allInGroupSelected = (g) => g.colis.length > 0 && g.colis.every((c) => selectedIds.has(c.id));
-            const toggleGroup = (g) => {
-              const ids = g.colis.map((c) => c.id);
+            const totalColspan = displayCols.length + 1; // checkbox + N colonnes
+            const toggleGroup = (group) => {
+              const ids = group.dossiers.map((c) => c.id);
               setSelectedIds((prev) => {
                 const next = new Set(prev);
                 if (ids.every((id) => next.has(id))) ids.forEach((id) => next.delete(id));
@@ -598,6 +575,15 @@ export default function StaffColisPage() {
                 return next;
               });
             };
+            // Folding is shared by the table and the cards, and remembered for the person.
+            const collapsed = group => collapsedGroups.includes(group.key);
+            const headerProps = group => ({
+              group, collapsed: collapsed(group), checked: group.dossiers.length > 0 && group.dossiers.every((c) => selectedIds.has(c.id)),
+              onToggle: () => setCollapsedGroups(previous => previous.includes(group.key) ? previous.filter(key => key !== group.key) : [...previous, group.key]),
+              onToggleAll: () => toggleGroup(group),
+            });
+            const card = c => <DossierTableCard view={tableView} key={c.id} c={c} client={getClient(c.clientId)} model={models.get(c.id)} alerts={alertsByDossier.get(c.id)} columns={displayCols} checked={selectedIds.has(c.id)} onCheck={() => toggleSelection(c.id)} onOpen={action => openTask(c.id, action)} onOpenDossier={() => openDossier(c.id)} returnTo={returnTo} />;
+            const tableRow = c => <DossierTableRow key={c.id} c={c} client={getClient(c.clientId)} model={models.get(c.id)} alerts={alertsByDossier.get(c.id)} columns={displayCols} checked={selectedIds.has(c.id)} onCheck={() => toggleSelection(c.id)} onOpen={action => openTask(c.id, action)} onOpenDossier={() => openDossier(c.id)} returnTo={returnTo} />;
 
             if (groups.length === 0) {
               if (exactReference) return null;
@@ -605,8 +591,10 @@ export default function StaffColisPage() {
             }
 
             return <>
-              <div className="dossier-card-list px-4">{sorted.map(c => <DossierTableCard view={tableView} key={c.id} c={c} client={getClient(c.clientId)} model={models.get(c.id)} columns={displayCols} checked={selectedIds.has(c.id)} onCheck={() => toggleSelection(c.id)} onOpen={action => openColis(c.id, action)} returnTo={returnTo} />)}</div>
-              <table aria-label="Dossiers d’expédition" data-view={tableView} data-unpin-client={unpinClient ? 'true' : undefined} data-unpin-ref={unpinRef ? 'true' : undefined} data-unpin-action={listWidth < 768 ? 'true' : undefined} style={tableStyle} className="dossier-data-table text-left">
+              <div className="dossier-card-list px-4">{grouped
+                ? groups.map(group => <DossierCardGroup key={group.key} {...headerProps(group)}>{!collapsed(group) && group.dossiers.map(card)}</DossierCardGroup>)
+                : sorted.map(card)}</div>
+              <table aria-label="Dossiers d’expédition" data-view={tableView} data-unpin-client={unpinClient ? 'true' : undefined} data-unpin-ref={unpinRef ? 'true' : undefined} data-unpin-action={listWidth < 768 ? 'true' : undefined} style={{ ...tableStyle, '--dossier-list-width': listWidth ? `${listWidth}px` : undefined }} className="dossier-data-table text-left">
                 <colgroup><col style={{ width: 40 }} />{displayCols.map(column => <col key={column.key} style={{ width: tableWidths[column.key] }} />)}</colgroup>
                 <thead>
                   <DossierTableHead
@@ -627,45 +615,12 @@ export default function StaffColisPage() {
                   />
                 </thead>
                 <tbody>
-                  {groups.map((group) => {
-                    // Props header selon vue
-                    let headerProps;
-                    if (viewMode === 'envoi') {
-                      const e = group.envoi;
-                      const dateLabel = e?.date
-                        ? new Date(e.date + 'T00:00:00').toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })
-                        : 'Sans envoi affecté';
-                      headerProps = {
-                        icon: Plane,
-                        color: 'var(--brand-text)',
-                        label: dateLabel,
-                        extraLabel: e?.ref,
-                        bgTint: `${BRAND.navy}06`,
-                      };
-                    } else {
-                      headerProps = {
-                        icon: group.icon,
-                        color: group.color,
-                        label: group.label,
-                        bgTint: `${group.color}08`,
-                      };
-                    }
-                    const groupKey = viewMode === 'envoi' ? (group.envoi?.id || 'none') : group.label;
-                    return (
-                      <React.Fragment key={groupKey}>
-                        {viewMode !== 'priority' && <GroupHeaderRow
-                          {...headerProps}
-                          count={group.colis.length}
-                          colspan={totalColspan}
-                          allChecked={allInGroupSelected(group)}
-                          collapsed={collapsedGroups.includes(groupKey)}
-                          onToggle={() => setCollapsedGroups(previous => previous.includes(groupKey) ? previous.filter(key => key !== groupKey) : [...previous, groupKey])}
-                          onToggleAll={() => toggleGroup(group)}
-                        />}
-                        {(viewMode === 'priority' || !collapsedGroups.includes(groupKey)) && group.colis.map(c => <DossierTableRow key={c.id} c={c} client={getClient(c.clientId)} model={models.get(c.id)} columns={displayCols} checked={selectedIds.has(c.id)} onCheck={() => toggleSelection(c.id)} onOpen={action => openColis(c.id, action)} returnTo={returnTo} />)}
-                      </React.Fragment>
-                    );
-                  })}
+                  {grouped
+                    ? groups.map(group => <React.Fragment key={group.key}>
+                      <DossierGroupRow colSpan={totalColspan} {...headerProps(group)} />
+                      {!collapsed(group) && group.dossiers.map(tableRow)}
+                    </React.Fragment>)
+                    : sorted.map(tableRow)}
                 </tbody>
               </table>
             </>;

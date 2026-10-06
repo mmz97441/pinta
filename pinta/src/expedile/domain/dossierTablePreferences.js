@@ -24,6 +24,30 @@ export function sanitizeDossierTableLayout(value) {
 export function dossierLayoutStorageKey(userId, view) {
   return userId && preferenceView(view) ? `expedile:table-layout:v1:${encodeURIComponent(userId)}:${view}` : null;
 }
+/** « Regrouper » of each dossier list tab: none, by stage or by departure. The
+ * « Départs » tab opens grouped by departure; Mon travail has no grouping. */
+export const DOSSIER_GROUPINGS = Object.freeze(['none', 'statut', 'envoi']);
+const groupingView = view => ['daily', 'payments', 'departures'].includes(view);
+export function defaultDossierGrouping(view) {
+  return view === 'departures' ? 'envoi' : 'none';
+}
+export function sanitizeDossierGrouping(value, view) {
+  return DOSSIER_GROUPINGS.includes(value) ? value : defaultDossierGrouping(view);
+}
+/** An explicit `view` in the URL wins over the stored choice: shared links keep their grouping. */
+export function resolveDossierGrouping(requested, stored, view) {
+  return DOSSIER_GROUPINGS.includes(requested) ? requested : sanitizeDossierGrouping(stored, view);
+}
+export function dossierGroupingStorageKey(userId, view) {
+  return userId && groupingView(view) ? `expedile:table-group:v1:${encodeURIComponent(userId)}:${view}` : null;
+}
+/** Where « Sans départ affecté » goes when grouping by departure. */
+export function sanitizeNoDeparturePlacement(value) {
+  return value === 'top' ? 'top' : 'bottom';
+}
+export function noDeparturePlacementStorageKey(userId, view) {
+  return userId && groupingView(view) ? `expedile:table-no-departure:v1:${encodeURIComponent(userId)}:${view}` : null;
+}
 export function columnWidthBounds(column) {
   const min = column?.key === 'action' ? 132 : column?.key === 'optimizedDimensions' ? 110 : ['ref', 'client'].includes(column?.key) ? 96 : 64;
   const initial = Math.max(min, widths[column?.key] || 140);
@@ -53,14 +77,29 @@ export function sanitizeColumnWidths(columns, values) {
   return Object.fromEntries(columns.map(column => [column.key, clampColumnWidth(column, values?.[column.key])]));
 }
 
+const normalizeChoice = value => String(value).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('fr').trim();
+/** A column with a closed list of values (« Paiement ») is filtered on one exact
+ * value: « Payé » must not also keep « Non payé ». */
+export function columnFilterChoices(column) {
+  return Array.isArray(column?.filter?.choices) ? column.filter.choices : null;
+}
 export function columnFilterModes(column) {
-  const modes = [{ key: 'contains', label: 'Contient' }, { key: 'empty', label: 'Non renseigné' }, { key: 'filled', label: 'Renseigné' }];
+  const presence = [{ key: 'empty', label: 'Non renseigné' }, { key: 'filled', label: 'Renseigné' }];
+  if (columnFilterChoices(column)) return [{ key: 'is', label: 'Est' }, ...presence];
+  const modes = [{ key: 'contains', label: 'Contient' }, ...presence];
   if (column?.sort?.type === 'number') modes.push({ key: 'min', label: 'Au moins' }, { key: 'max', label: 'Au plus' });
   if (column?.sort?.type === 'date') modes.push({ key: 'min', label: 'À partir du' }, { key: 'max', label: 'Jusqu’au' });
   return modes;
 }
 export function sanitizeColumnFilter(column, value) {
   if (!isDossierTableColumnSortable(column) || !value || typeof value !== 'object') return null;
+  const choices = columnFilterChoices(column);
+  // An older link (« contient Payé ») keeps its meaning only when it names one value exactly.
+  if (choices) {
+    if (['empty', 'filled'].includes(value.mode)) return { mode: value.mode, value: '' };
+    const choice = typeof value.value === 'string' && choices.find(item => normalizeChoice(item) === normalizeChoice(value.value));
+    return choice ? { mode: 'is', value: choice } : null;
+  }
   const mode = columnFilterModes(column).some(item => item.key === value.mode) ? value.mode : 'contains';
   const text = typeof value.value === 'string' ? value.value.slice(0, 200).trim() : '';
   if (['empty', 'filled'].includes(mode)) return { mode, value: '' };
@@ -88,6 +127,7 @@ export function filterDossierTableRows(dossiers, { columns, filters, models, get
     return active.every(([column, filter]) => {
       const value = (column.filter?.value || column.sort.value)(context);
       const empty = value == null || value === '';
+      if (filter.mode === 'is') return !empty && normalizeChoice(value) === normalizeChoice(filter.value);
       if (filter.mode === 'empty') return empty;
       if (filter.mode === 'filled') return !empty;
       if (filter.mode === 'contains') {
