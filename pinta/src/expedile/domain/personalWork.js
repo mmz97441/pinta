@@ -22,6 +22,7 @@ export const PERSONAL_SECTIONS = [
 // Existing bookmarks for work in progress remain in the combined action list.
 export function personalSection(value) { return ['pool', 'waiting'].includes(value) ? value : 'now'; }
 export const workTime = value => value ? Date.parse(value) : NaN;
+export const workDate = value => value && Number.isFinite(Date.parse(value)) ? new Date(value).toLocaleString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : null;
 export function canWorkAction(action, can = () => false) {
   if (action.kind === 'conversation' && action.action_hint === 'Accès client à activer') return can('perm_clients_creer');
   return Boolean(WORK_KINDS[action.kind]?.permissions.some(permission => can(permission)));

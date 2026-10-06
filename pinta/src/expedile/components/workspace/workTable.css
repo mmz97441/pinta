@@ -1,0 +1,202 @@
+/* ══════════ MON TRAVAIL ══════════
+   Tabs, toolbar buttons, pills, rows and cards reuse the dossier list classes
+   (staff/dossierTable.css). This file adds the page, the task table and cards,
+   and the relay band. */
+.work-page {
+  /* The same warm lines and control edges as the dossier list. */
+  --dossier-column-line: #d6cfc2;
+  --dossier-column-edge: #c9c1b3;
+  --dossier-header-line: #cfc8ba;
+  --dossier-control-border: #d6d0c4;
+  --dossier-field-border: #8c8579;
+  /* Secondary lines follow the chosen text size. */
+  --dossier-small-text-size: calc(var(--dossier-text-size, 15px) * .9);
+  /* Overdue text 6.5:1 on the canvas, 5.6:1 on a hovered row. */
+  --work-urgent: #8a4b06;
+  --work-urgent-edge: #c8962e;
+  --work-alert-line: #e6c88a;
+  --work-handoff-bg: #f1f6fa;
+  --work-handoff-line: #bbd1e0;
+  min-height: 100%;
+  background: var(--bg-canvas);
+}
+html.dark .work-page {
+  --dossier-column-line: #4e4840;
+  --dossier-column-edge: #6b645a;
+  --dossier-header-line: #5a534a;
+  --dossier-control-border: #4e4840;
+  --dossier-field-border: #7d766b;
+  --work-urgent: #f4cf8b;
+  --work-urgent-edge: #c8962e;
+  --work-alert-line: #6b5426;
+  --work-handoff-bg: #1d2e39;
+  --work-handoff-line: #34546a;
+}
+
+/* ── Header ─────────────────────────────────────────────────────────────── */
+.work-header { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; }
+.work-header h1 { margin: 0; font-size: 1.5rem; font-weight: 700; line-height: 1.25; color: var(--text-primary); }
+.work-presence { display: inline-flex; align-items: center; gap: 6px; margin: 0; font-size: 14px; color: var(--text-secondary); }
+.work-presence-dot { flex-shrink: 0; width: 8px; height: 8px; border-radius: 50%; background: #10b981; }
+.work-presence-dot[data-available='false'] { background: #f59e0b; }
+.work-header-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.work-text-link { display: inline-flex; align-items: center; }
+
+/* ── Tabs and toolbar ───────────────────────────────────────────────────── */
+.work-tab-count { margin-left: .45em; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.dossier-view-tab[aria-pressed='true'] .work-tab-count { color: inherit; }
+.work-toolbar { position: relative; }
+.work-filter { position: relative; flex-shrink: 0; }
+.work-filter > summary { list-style: none; cursor: pointer; }
+.work-filter > summary::-webkit-details-marker { display: none; }
+.work-filter[open] > summary { border-color: var(--brand-text); color: var(--brand-text); }
+.work-filter-popover { position: absolute; z-index: 30; top: calc(100% + 8px); right: 0; width: 18rem; box-shadow: 0 12px 36px #0003; }
+.work-inline-link { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; font-size: 15px; font-weight: 600; color: var(--brand-text); text-decoration: underline; text-underline-offset: 4px; }
+.work-notice { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0 12px; padding: 0 4px 0 12px; border-radius: 12px; font-size: 15px; color: var(--text-secondary); background: var(--bg-surface); }
+.work-notice > :first-child { margin: 0; padding: 10px 0; }
+
+/* ── Relay band ─────────────────────────────────────────────────────────── */
+.work-handoffs { display: flex; flex-wrap: wrap; align-items: center; gap: 0 16px; padding: 4px 12px; border: 1px solid var(--work-handoff-line); border-radius: 12px; color: var(--text-primary); background: var(--work-handoff-bg); }
+.work-handoffs-title { display: flex; align-items: center; gap: 8px; min-height: 44px; margin: 0; font-size: 15px; font-weight: 700; color: var(--brand-text); white-space: nowrap; }
+.work-handoffs-title > button { display: flex; flex: 1; align-items: center; gap: 8px; min-height: 44px; text-align: left; color: inherit; font-weight: inherit; }
+.work-handoffs-chevron { margin-left: auto; transition: transform .2s ease-out; }
+.work-handoffs-title [aria-expanded='true'] .work-handoffs-chevron { transform: rotate(180deg); }
+.work-handoff-list { flex: 1 1 32rem; min-width: 0; margin: 0; padding: 0; list-style: none; }
+.work-handoff-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 4px 0; font-size: var(--dossier-text-size, 15px); }
+.work-handoff-row + .work-handoff-row { border-top: 1px solid var(--work-handoff-line); }
+.work-handoff-text { flex: 1 1 18rem; min-width: 0; margin: 0; color: var(--text-primary); overflow-wrap: anywhere; }
+/* With a mouse the title stays in the line of text; touch keeps 44px. */
+@media (pointer: fine) and (min-width: 1024px) { .work-handoff-text .work-task-link { min-height: 0; } }
+.work-handoff-from { color: var(--text-secondary); }
+.work-handoff-row .work-panel { flex-basis: 100%; padding-bottom: 8px; }
+@media (max-width: 767px) {
+  .work-handoffs { display: block; }
+  .work-handoffs-title { white-space: normal; }
+  .work-handoff-row { padding: 10px 0; }
+  .work-handoff-row, .work-handoff-row + .work-handoff-row { border-top: 1px solid var(--work-handoff-line); }
+}
+
+/* ── Regions before and after the list ──────────────────────────────────── */
+.work-region { padding: 4px 12px 12px; border: 1px solid var(--work-alert-line); border-radius: 12px; }
+.work-region-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0 12px; margin-bottom: 4px; }
+.work-region-heading h2 { margin: 0; padding: 10px 0; font-size: 15px; font-weight: 700; color: var(--work-urgent); }
+.work-count { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 12px; font-size: 14px; color: var(--text-secondary); }
+.work-count p { margin: 0; }
+.work-count strong { font-size: 16px; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.work-count-help { color: var(--text-muted); }
+.work-count .work-refresh { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; color: var(--text-muted); }
+
+/* ── Task title, deadline and sub-lines (table cell and card) ───────────── */
+.work-task-heading { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; }
+.work-task-link { display: inline-flex; align-items: center; min-height: 44px; font-weight: 700; color: var(--text-primary); text-decoration: underline; text-decoration-color: transparent; text-underline-offset: 3px; transition: text-decoration-color .2s ease-out; }
+.work-task-link:hover { text-decoration-color: currentColor; }
+.work-task-detail { margin: 0 0 2px; font-size: var(--dossier-small-text-size); color: var(--text-secondary); }
+.work-task-detail strong { font-weight: 600; color: var(--text-primary); }
+.work-task-notice { color: var(--work-urgent); font-weight: 600; }
+/* The invoice indicator reads as one more line of its task. It stays a 44px
+   target on touch screens and narrow windows. */
+.work-invoice { display: contents; }
+.work-invoice > a { margin-top: 0; padding: 0; border-color: transparent; background-color: transparent; text-decoration: underline; text-decoration-color: transparent; text-underline-offset: 3px; transition: text-decoration-color .2s ease-out; }
+.work-invoice > a:hover { background-color: transparent; text-decoration-color: currentColor; }
+html.dark .work-invoice > a { background-color: transparent !important; }
+@media (pointer: fine) and (min-width: 1024px) { .work-invoice > a { min-height: 32px; } }
+.work-ref { font-weight: 700; color: var(--brand-text); white-space: nowrap; font-variant-numeric: tabular-nums; letter-spacing: .01em; }
+.work-due { display: inline-flex; align-items: flex-start; gap: 6px; color: var(--text-secondary); }
+.work-due svg { flex-shrink: 0; margin-top: .2em; }
+.work-due[data-urgent='true'] { color: var(--work-urgent); font-weight: 700; }
+
+/* ── Commands ───────────────────────────────────────────────────────────── */
+.work-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.work-page .work-actions button { font-size: var(--dossier-small-text-size); white-space: nowrap; transition: background-color .2s ease-out, color .2s ease-out, border-color .2s ease-out; }
+.work-page .work-actions button:active:not(:disabled) { transform: translateY(1px); }
+.work-page .work-actions button[data-take-kind] { padding-left: 14px; padding-right: 14px; }
+/* Dark theme: the filled command takes the dossier list's soft blue rather than
+   a near-white block on every row (10:1 text). The quiet commands keep a dark hover. */
+html.dark .work-page .work-actions :is(button[data-take-kind], button.bg-slate-900),
+html.dark .work-page .work-panel button.bg-slate-900 { color: #122a36; background-color: #c4dae5; border-color: #c4dae5; }
+html.dark .work-page .work-actions :is(button[data-take-kind], button.bg-slate-900):hover:not(:disabled) { background-color: #d6e6ee; }
+html.dark .work-page .hover\:bg-slate-50:hover { background-color: var(--bg-surface); }
+.work-panel { padding-top: 4px; }
+
+/* ── Table: one row per task ────────────────────────────────────────────── */
+/* Columns size to their content; when the table is wider than the page it
+   scrolls in its frame. A frame that fits clips instead, so the sticky header
+   follows the page scroll. */
+.work-table-frame { overflow-x: auto; overscroll-behavior-x: contain; }
+.work-table-frame[data-fits='true'] { overflow-x: clip; }
+.work-table { table-layout: auto; width: 100%; border: 1px solid var(--dossier-column-line); border-radius: 10px; background: var(--bg-canvas); }
+.work-table .dossier-table-head th { height: 44px; padding: 0 12px; font-size: var(--dossier-small-text-size); white-space: nowrap; }
+.work-table .dossier-table-head th:first-child { border-top-left-radius: 9px; }
+.work-table .dossier-table-head th:last-child { border-top-right-radius: 9px; }
+.work-table .work-table-row { cursor: auto; }
+/* Words wrap whole: a column never shrinks to a letter. */
+.work-table .work-table-row > td { padding: 6px 12px; overflow-wrap: break-word; }
+.work-table :is(th, td):last-child { border-right: 0; }
+.work-table tbody > tr:last-child > td { border-bottom: 0; }
+.work-table tbody > tr:last-child > td:first-child { border-bottom-left-radius: 9px; }
+.work-table tbody > tr:last-child > td:last-child { border-bottom-right-radius: 9px; }
+.work-table .work-table-number { text-align: right; font-variant-numeric: tabular-nums; }
+.work-table [data-work-column='task'] { min-width: 12em; }
+.work-table td[data-work-column='due'] > .work-due { max-width: 14em; }
+.work-table td[data-work-column='action'] .work-actions { flex-wrap: nowrap; }
+.work-table-row[data-urgent='true']:not(:has(:focus-visible)) > td:first-child { box-shadow: inset 3px 0 0 var(--work-urgent-edge); }
+/* A wide screen whose table scrolls keeps the commands in view, as in the
+   dossier list; on a phone they scroll with the row. */
+@media (min-width: 1024px) {
+  .work-table-frame:not([data-fits='true']) [data-work-column='action'] { position: sticky; right: 0; z-index: 3; box-shadow: -1px 0 0 var(--dossier-column-edge), -12px 0 12px -10px rgb(0 0 0 / .22); }
+  .work-table-frame:not([data-fits='true']) th[data-work-column='action'] { z-index: 6; }
+}
+/* The open Options row and its panel share the selected row colour (dossierTable.css). */
+.work-table-panel { --dossier-table-selected-bg: #e8f0f5; }
+html.dark .work-table-panel { --dossier-table-selected-bg: #203744; }
+.work-table-panel > td { padding: 8px 12px 12px; background: var(--dossier-table-selected-bg); border-bottom: 1px solid var(--border-subtle); }
+.work-page[data-density='compact'] .work-table .work-table-row > td { padding-top: 2px; padding-bottom: 2px; }
+
+/* ── Cards: 1 column on phones, 2 from 768px, 3 from 1280px ─────────────── */
+.work-cards { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+@media (min-width: 768px) { .work-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 1280px) { .work-cards { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.work-card { display: flex; flex-direction: column; gap: 2px; }
+.work-card[data-urgent='true'] { box-shadow: inset 3px 0 0 var(--work-urgent-edge); }
+.work-card[data-urgent='true']:focus-within { box-shadow: inset 3px 0 0 var(--work-urgent-edge), inset 0 0 0 2px var(--brand-text); }
+/* The title keeps its 44px link target; the margins give back its extra height. */
+.work-card-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: -8px 0 -6px; }
+.work-card-heading .dossier-pill { flex-shrink: 0; }
+.work-card-title { margin: 0; min-width: 0; font-size: 1.07em; line-height: 1.3; }
+.work-card-identity { margin: 0; color: var(--text-secondary); }
+.work-card-facts { margin: 0; font-size: var(--dossier-small-text-size); color: var(--text-muted); }
+.work-card .work-due { margin: 2px 0 0; }
+.work-card-controls { margin-top: 10px; }
+.work-page[data-density='compact'] .work-card { padding-top: 10px; padding-bottom: 10px; }
+@media (max-width: 767px) {
+  /* The main command takes the width beside « Options ». */
+  .work-card .work-actions > :first-child { flex: 1 1 auto; }
+  .work-card .work-actions > div:first-child > button { width: 100%; }
+}
+
+/* ── Loading ────────────────────────────────────────────────────────────── */
+.work-skeleton-table { display: grid; gap: 1px; overflow: hidden; border: 1px solid var(--dossier-column-line); border-radius: 10px; background: var(--dossier-column-line); }
+.work-skeleton-table > span { display: block; height: 56px; background: var(--bg-surface); }
+.work-skeleton-table > span:first-child { height: 44px; background: var(--bg-elevated); }
+.work-skeleton-card { display: block; height: 150px; border: 1px solid var(--border-subtle); border-radius: 14px; background: var(--bg-surface); }
+
+/* ── Phones: Filtrer and Affichage become 44px icon buttons ─────────────── */
+@media (max-width: 639px) {
+  .work-presence-name, .work-header-actions { display: none; }
+  .work-header h1 { font-size: 1.375rem; }
+  .work-presence { margin-left: auto; }
+  .work-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; }
+  .work-toolbar .work-toolbar-icon { width: 44px; padding: 0; }
+  /* Hidden from sight only: the name stays « Filtrer » / « Affichage ». */
+  .work-toolbar .work-toolbar-label { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+  .work-toolbar .work-toolbar-icon .dossier-toolbar-badge { position: absolute; top: -6px; right: -6px; min-width: 18px; height: 18px; padding: 0 5px; font-size: 11px; box-shadow: 0 0 0 2px var(--bg-canvas); }
+  .work-filter { position: static; }
+  .work-filter-popover { left: 0; right: 0; width: auto; }
+}
+
+/* « Colonnes affichées » without width settings: the toggles take the row. */
+.dossier-column-setting:not(:has(.dossier-column-width-control)) { grid-template-columns: minmax(0, 1fr); }
+
+@media (forced-colors: active) {
+  .work-table-row[data-urgent='true'] > td:first-child, .work-card[data-urgent='true'] { border-left: 3px solid Highlight; }
+}

@@ -82,14 +82,21 @@ export function AppProvider({ children }) {
   const generation = useRef(0);
   const queues = useRef(new Map());
   const flashTimer = useRef(null);
-  const [theme, setTheme] = useState(
-    () =>
-      localStorage.getItem('expedile-theme') ||
-      (window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),
-  );
+  const [theme, setTheme] = useState(() => {
+    // Blocked site data must not stop the app: the system theme applies.
+    let saved = null;
+    try { saved = localStorage.getItem('expedile-theme'); } catch { saved = null; }
+    return saved || (window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+  });
   useEffect(() => {
-    document.documentElement.classList.toggle('dark', theme === 'dark');
-    localStorage.setItem('expedile-theme', theme);
+    // The new palette applies at once (brand.css « theme-switching »): no
+    // control fades through an unreadable mix of the two themes.
+    const root = document.documentElement;
+    root.classList.add('theme-switching');
+    root.classList.toggle('dark', theme === 'dark');
+    void root.offsetWidth;
+    root.classList.remove('theme-switching');
+    try { localStorage.setItem('expedile-theme', theme); } catch { /* the choice lasts for this visit */ }
   }, [theme]);
   const toggleTheme = useCallback(() => setTheme((t) => (t === 'dark' ? 'light' : 'dark')), []);
   const flash = useCallback((message) => {

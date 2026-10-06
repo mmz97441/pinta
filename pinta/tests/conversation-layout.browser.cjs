@@ -59,7 +59,9 @@ async function main(){
     });
     await scenario('short-screen-expanded-controls-keep-keyboard-composer-and-send-reachable',async f=>{
       await f.page.setViewportSize({width:390,height:568});await f.login();await open(f);
-      await f.page.locator('#conversation-client summary').filter({hasText:'Gérer le suivi'}).click();
+      // The status bar's task options expand in place, above the history and the reply.
+      await f.page.locator('#conversation-client .chat-status').getByRole('button',{name:'Options',exact:true}).click();
+      await f.page.getByRole('button',{name:'Mettre en attente',exact:true}).waitFor();
       await reply(f).fill('Brouillon conservé sur un écran court.');
       const send=f.page.getByRole('button',{name:'Envoyer le message',exact:true});await send.focus();await send.scrollIntoViewIfNeeded();
       const action=await send.boundingBox(),nav=await f.page.getByRole('button',{name:'Dossiers',exact:true}).locator('..').boundingBox();

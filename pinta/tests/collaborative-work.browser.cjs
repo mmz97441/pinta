@@ -156,8 +156,8 @@ function noMessages(s){for(const f of s.fixtures){assert.equal(f.requests.some(r
       await detail(s.first,'documents',DOCS);await s.first.page.locator('summary').filter({hasText:'Ajouter un achat supplémentaire sans facture reliée'}).click();
       await s.first.page.getByLabel('Description du nouvel article',{exact:true}).fill('Article non enregistré à conserver');
       await s.first.page.getByRole('button',{name:'Retour à la liste de travail',exact:true}).click();await s.first.page.getByRole('navigation',{name:'Mes tâches',exact:true}).getByRole('button',{name:/À faire/}).click();
-      const task=row(s.first,DOCS);await task.getByRole('button',{name:'Options',exact:true}).click();await task.getByRole('button',{name:'Remettre à disposition',exact:true}).click();
-      await task.getByRole('alert').filter({hasText:/Enregistrez ou annulez vos saisies/}).waitFor();assert.equal(s.commands.length,0);
+      const task=row(s.first,DOCS),panel=s.first.page.locator(`[data-work-action-panel="${DOCS}"]`);await task.getByRole('button',{name:'Options',exact:true}).click();await panel.getByRole('button',{name:'Remettre à disposition',exact:true}).click();
+      await panel.getByRole('alert').filter({hasText:/Enregistrez ou annulez vos saisies/}).waitFor();assert.equal(s.commands.length,0);
       await task.getByRole('button',{name:'Continuer',exact:true}).click();const add=s.first.page.locator('summary').filter({hasText:'Ajouter un achat supplémentaire sans facture reliée'});
       if(!(await s.first.page.getByLabel('Description du nouvel article',{exact:true}).isVisible()))await add.click();
       assert.equal(await s.first.page.getByLabel('Description du nouvel article',{exact:true}).inputValue(),'Article non enregistré à conserver');
@@ -171,8 +171,8 @@ function noMessages(s){for(const f of s.fixtures){assert.equal(f.requests.some(r
       assert.equal(s.commands.filter(c=>c.kind==='work').length,1);assert.equal(await s.first.page.getByLabel('Longueur · colis sortant 1 (cm)',{exact:true}).inputValue(),'32');
       assert.equal(await owner(s.first).getByLabel('Consigne pour la reprise').inputValue(),'Ne pas perdre les nouvelles mesures.');
       await s.first.page.getByRole('button',{name:'Retour à la liste de travail',exact:true}).click();await s.first.page.getByRole('navigation',{name:'Mes tâches',exact:true}).getByRole('button',{name:/À faire/}).click();
-      const task=row(s.first,PREP);await task.getByRole('button',{name:'Options',exact:true}).click();await task.getByRole('button',{name:'Remettre à disposition',exact:true}).click();
-      await task.getByRole('alert').filter({hasText:/Enregistrez ou annulez vos saisies/}).waitFor();assert.equal(s.commands.filter(c=>c.kind==='work').length,1);
+      const task=row(s.first,PREP),panel=s.first.page.locator(`[data-work-action-panel="${PREP}"]`);await task.getByRole('button',{name:'Options',exact:true}).click();await panel.getByRole('button',{name:'Remettre à disposition',exact:true}).click();
+      await panel.getByRole('alert').filter({hasText:/Enregistrez ou annulez vos saisies/}).waitFor();assert.equal(s.commands.filter(c=>c.kind==='work').length,1);
       await task.getByRole('button',{name:'Continuer',exact:true}).click();assert.equal(await s.first.page.getByLabel('Longueur · colis sortant 1 (cm)',{exact:true}).inputValue(),'32');
       assert.deepEqual([s.first.tables.colis,s.first.tables.factures,s.first.tables.lignes,s.first.tables.messages],s.initialBusiness);
     });
@@ -196,10 +196,10 @@ function noMessages(s){for(const f of s.fixtures){assert.equal(f.requests.some(r
       await s.first.page.goto(`${base}/conversations?dossier=${ids.P}&action=${conversation}`);await s.first.page.getByRole('log',{name:'Messages avec le client',exact:true}).waitFor();
       const reply=s.first.page.getByLabel('Votre réponse au client',{exact:true});if(await reply.count())assert.equal(await reply.isEditable(),false);
       const send=s.first.page.getByRole('button',{name:'Envoyer le message',exact:true});if(await send.count())assert.equal(await send.isDisabled(),true);
-      await s.first.page.locator('summary').filter({hasText:'Gérer le suivi'}).click();assert.equal(await s.first.page.getByRole('button',{name:'Marquer comme traité',exact:true}).count(),0);
+      await s.first.page.locator('#conversation-client .chat-status').getByText('À répondre',{exact:true}).waitFor();assert.equal(await s.first.page.getByRole('group',{name:'Traitement de la conversation',exact:true}).count(),0);assert.equal(await s.first.page.getByRole('button',{name:'Marquer comme traité',exact:true}).count(),0);
       await s.second.page.goto(`${base}/conversations?dossier=${ids.P}&action=${conversation}`);const ownReply=s.second.page.getByLabel('Votre réponse au client',{exact:true});await ownReply.fill('Brouillon du collègue qui suit la conversation.');
       assert.equal(await s.second.page.getByRole('button',{name:'Envoyer le message',exact:true}).isEnabled(),true);
-      await s.second.page.locator('summary').filter({hasText:'Gérer le suivi'}).click();assert.equal(await s.second.page.getByRole('button',{name:'Marquer comme traité',exact:true}).isEnabled(),true);
+      assert.equal(await s.second.page.getByRole('button',{name:'Marquer comme traité',exact:true}).isEnabled(),true);
       assert.equal(s.commands.length,0);assert.equal(s.fixtures.some(f=>f.requests.some(r=>r.path.endsWith('/set_conversation_state'))),false);assert.equal(s.first.tables.colis[0].conversation_statut,'a_traiter');
     });
     await scenario('late-handoff-acceptance-never-pulls-operator-back-from-another-screen',async s=>{

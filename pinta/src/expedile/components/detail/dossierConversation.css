@@ -1,21 +1,77 @@
 /* The surrounding staff shell already accounts for mobile navigation and the
-   safe area. Share its available height instead of guessing header dimensions. */
+   safe area. Share its available height instead of guessing header dimensions.
+   On a short screen the page scrolls inside that height, so the reply can
+   always be brought above the mobile navigation. */
 .dossier-page--conversation {
   display: flex;
   flex-direction: column;
   height: 100%;
   min-height: 100%;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
 }
 .dossier-page--conversation > header { flex-shrink: 0; }
+
+/* « Colis / Conversation »: the underlined tabs of the dossier list. This page
+   loads before the list stylesheet (dossierTable.css), so it carries the tab
+   rules itself, with aria-selected for its real tablist. */
+.dossier-page-tabs { flex-shrink: 0; background: #fff; border-bottom: 1px solid var(--border-subtle); }
+html.dark .dossier-page-tabs { background: var(--bg-elevated); }
+.dossier-page-tabs .dossier-view-tabs { display: flex; gap: 28px; margin: 0; padding: 0; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; border-bottom: 0; }
+.dossier-page-tabs .dossier-view-tabs::-webkit-scrollbar { display: none; }
+.dossier-page-tabs .dossier-view-tab {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  /* A short label (« Colis ») still offers a 44px touch target. */
+  min-width: 44px;
+  min-height: 48px;
+  padding: 10px 2px 12px;
+  border-radius: 4px 4px 0 0;
+  white-space: nowrap;
+  overflow-wrap: normal;
+  font-size: 15.5px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--text-secondary);
+  background: transparent;
+  transition: color .2s ease-out, box-shadow .2s ease-out;
+}
+.dossier-page-tabs .dossier-view-tab:hover { color: var(--text-primary); }
+.dossier-page-tabs .dossier-view-tab[aria-selected='true'] { color: var(--brand-text); box-shadow: inset 0 -3px 0 var(--text-accent); }
+.dossier-page-tabs .dossier-view-tab:focus-visible { outline: 2px solid var(--brand-text); outline-offset: -2px; }
+.dossier-page-tabs .dossier-tab-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 7px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+  background: #174ea6;
+}
+html.dark .dossier-page-tabs .dossier-tab-count { color: #122a36; background: #c4deff; }
+@media (max-width: 359px) { .dossier-page-tabs .dossier-view-tabs { gap: 18px; } }
+@media (forced-colors: active) {
+  .dossier-page-tabs .dossier-view-tab[aria-selected='true'] { border-bottom: 3px solid Highlight; }
+}
+
+/* The conversation uses the whole panel: status bar, history and reply run
+   edge to edge (chatThread.css), then the dossier history at the bottom. */
 .dossier-conversation:not([hidden]) {
   display: flex;
   flex: 1 0 24rem;
   flex-direction: column;
-  gap: .75rem;
   min-width: 0;
-  padding: .75rem 1rem 1rem;
+  background: var(--bg-canvas);
 }
-.dossier-conversation > [data-testid="task-ownership"] { flex-shrink: 0; }
 .dossier-conversation__chat {
   display: flex;
   flex: 1 0 20rem;
@@ -32,9 +88,11 @@
   scrollbar-gutter: stable;
   overflow-wrap: anywhere;
 }
+.dossier-conversation__history { flex-shrink: 0; padding: 0 16px; border-top: 1px solid var(--border-subtle); background: var(--bg-elevated); }
+.dossier-conversation__history > summary { display: flex; align-items: center; gap: 8px; min-height: 48px; cursor: pointer; list-style: none; font-weight: 600; color: var(--text-primary); }
+.dossier-conversation__history > summary::-webkit-details-marker { display: none; }
+.dossier-conversation__history > summary svg { flex-shrink: 0; transition: transform .2s ease-out; }
+.dossier-conversation__history[open] > summary svg { transform: rotate(90deg); }
 @media (min-width: 640px) {
-  .dossier-conversation:not([hidden]) { padding-inline: 1.5rem; }
-}
-@media (min-width: 1024px) {
-  .dossier-conversation:not([hidden]) { padding-inline: 2rem; }
+  .dossier-conversation__history { padding-inline: 24px; }
 }

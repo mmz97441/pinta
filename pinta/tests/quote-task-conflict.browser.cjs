@@ -100,11 +100,11 @@ async function main() {
         await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(action)});
       });
       await open(f);await f.page.goto(`${base}/colis/${ids.P}?section=devis&returnTo=%2F`);await save(f).waitFor();await f.page.getByText('Ajouter un frais',{exact:true}).click();await f.page.getByLabel('Libellé du frais',{exact:true}).fill('Emballage à confirmer');await f.page.getByLabel('Montant du frais',{exact:true}).fill('9');
-      await f.page.getByRole('button',{name:'Retour à la liste de travail',exact:true}).click();const row=f.page.locator(`[data-work-action="${action.id}"]`);await row.getByRole('button',{name:'Options',exact:true}).click();await row.getByRole('button',{name:'Remettre à disposition',exact:true}).click();
-      await row.getByRole('alert').filter({hasText:/Enregistrez ou annulez vos saisies/}).waitFor();assert.equal(releases,0);
+      await f.page.getByRole('button',{name:'Retour à la liste de travail',exact:true}).click();const row=f.page.locator(`[data-work-action="${action.id}"]`),panel=f.page.locator(`[data-work-action-panel="${action.id}"]`);await row.getByRole('button',{name:'Options',exact:true}).click();await panel.getByRole('button',{name:'Remettre à disposition',exact:true}).click();
+      await panel.getByRole('alert').filter({hasText:/Enregistrez ou annulez vos saisies/}).waitFor();assert.equal(releases,0);
       await row.getByRole('link',{name:/^Ouvrir /}).click();await save(f).waitFor();if(!(await f.page.getByLabel('Libellé du frais',{exact:true}).isVisible()))await f.page.getByText('Ajouter un frais',{exact:true}).click();
       assert.equal(await f.page.getByLabel('Libellé du frais',{exact:true}).inputValue(),'Emballage à confirmer');assert.equal(await f.page.getByLabel('Montant du frais',{exact:true}).inputValue(),'9');assert.equal(await save(f).isDisabled(),true);
-      await f.page.getByRole('button',{name:'Annuler ce frais',exact:true}).click();await f.page.getByRole('button',{name:'Retour à la liste de travail',exact:true}).click();await row.getByRole('button',{name:'Options',exact:true}).click();await row.getByRole('button',{name:'Remettre à disposition',exact:true}).click();
+      await f.page.getByRole('button',{name:'Annuler ce frais',exact:true}).click();await f.page.getByRole('button',{name:'Retour à la liste de travail',exact:true}).click();await row.getByRole('button',{name:'Options',exact:true}).click();await panel.getByRole('button',{name:'Remettre à disposition',exact:true}).click();
       await row.waitFor({state:'hidden'});assert.equal(releases,1);assert.equal(f.requests.filter(request=>request.path.endsWith('/save_quote')).length,0);assert.deepEqual(f.tables.colis[0].frais_divers,[]);
     });
     await scenario('quote-fee-conflict-explains-recovery-and-rechecks-new-invoice-amounts', async f => {

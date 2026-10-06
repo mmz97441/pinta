@@ -26,10 +26,10 @@ const results = [];
  });
  await scenario('reply-draft-survives-navigation-reload-and-enter',async f=>{
   f.tables.colis[0].conversation_statut='a_traiter';await f.login();
-  await f.page.goto(`${base}/conversations?dossier=${ids.P}`);
+  await f.page.goto(`${base}/conversations?ouvert=${ids.P}`);
   let field=f.page.getByLabel('Votre réponse au client',{exact:true});await field.fill('Bonjour,\nVoici les informations.');await field.press('Enter');
   assert.equal(f.requests.filter(r=>r.path.endsWith('/queue_message')).length,0);
-  await f.page.goto(base+'/');await f.page.goto(`${base}/conversations?dossier=${ids.P}`);
+  await f.page.goto(base+'/');await f.page.goto(`${base}/conversations?ouvert=${ids.P}`);
   field=f.page.getByLabel('Votre réponse au client',{exact:true});assert.match(await field.inputValue(),/Bonjour,\nVoici les informations\./);
   await f.page.reload();assert.match(await field.inputValue(),/Voici les informations/);
   await f.page.getByRole('button',{name:'Effacer le brouillon',exact:true}).click();
@@ -76,6 +76,8 @@ const results = [];
   const inbox='aaaaaaaa-1111-4111-8111-111111111111';f.tables.client_inbox=[{id:inbox,client_id:ids.C,status:'unassigned',texte:'Facture pour mes achats',payload:{document:{file_id:'fixture',file_name:'facture.pdf',mime_type:'application/pdf'}}}];
   let previewCalls=0;await f.page.route('**/functions/v1/telegram-inbox-document',async route=>{previewCalls++;const {jsPDF}=require('jspdf');const pdf=new jsPDF();pdf.text('Document fictif a rattacher',20,20);await route.fulfill({status:200,contentType:'application/pdf',body:Buffer.from(pdf.output('arraybuffer'))});});
   await f.login();await f.page.goto(`${base}/conversations?inbox=${inbox}`);
+  // On a computer the form opens beside the list, which keeps the message.
+  await f.page.getByRole('region',{name:'Messages sans dossier',exact:true}).getByRole('button').filter({hasText:'Facture pour mes achats'}).waitFor();
   await f.page.getByRole('button',{name:'Voir le document avant de le rattacher'}).click();await f.page.locator('canvas[data-rendered="true"]').waitFor();assert.equal(previewCalls,1);
   await f.page.getByLabel('Dossier du client').selectOption(ids.P);await f.page.getByRole('button',{name:'Rattacher au dossier',exact:true}).click();await f.page.getByRole('dialog').getByText(/EXP-TEST-001/).waitFor();
   await f.page.getByRole('dialog').getByRole('button',{name:'Annuler',exact:true}).click();assert.equal(f.requests.some(r=>r.path.endsWith('/telegram-inbox-assign')),false);

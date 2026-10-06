@@ -2,19 +2,27 @@ import { isDossierTableColumnSortable, formatDossierTableDate } from './dossierT
 
 export const COLUMN_FILTER_PREFIX = 'col.';
 const widths = { ref: 140, client: 180, statusLabel: 155, paymentState: 140, statut: 190, owner: 125, casier: 90, cartons: 90, receivedAt: 130, optimizedDimensions: 190, optimizedWeight: 110, requested: 130, paid: 115, remaining: 130, sentAt: 130, departure: 140, destination: 115, packages: 135, readiness: 195, action: 140 };
+// Each dossier preset and Mon travail (`work`) keep their own reading choices.
+const PREFERENCE_VIEWS = ['daily', 'payments', 'departures', 'work'];
+const preferenceView = view => PREFERENCE_VIEWS.includes(view);
 export const DOSSIER_TEXT_SIZE_BOUNDS = Object.freeze({ min: 5, max: 20, initial: 12 });
-export function sanitizeDossierTextSize(value) {
-  const { min, max, initial } = DOSSIER_TEXT_SIZE_BOUNDS;
+/** Mon travail opens at a reading size close to its former text; the dossier
+ * tables keep their compact 12px. */
+export function tableTextSizeInitial(view) {
+  return view === 'work' ? 15 : DOSSIER_TEXT_SIZE_BOUNDS.initial;
+}
+export function sanitizeDossierTextSize(value, initial = DOSSIER_TEXT_SIZE_BOUNDS.initial) {
+  const { min, max } = DOSSIER_TEXT_SIZE_BOUNDS;
   return typeof value === 'number' && Number.isFinite(value) ? Math.min(max, Math.max(min, Math.round(value))) : initial;
 }
 export function dossierTextSizeStorageKey(userId, view) {
-  return userId && ['daily', 'payments', 'departures'].includes(view) ? `expedile:table-text:v1:${encodeURIComponent(userId)}:${view}` : null;
+  return userId && preferenceView(view) ? `expedile:table-text:v1:${encodeURIComponent(userId)}:${view}` : null;
 }
 export function sanitizeDossierTableLayout(value) {
   return ['auto', 'table', 'cards'].includes(value) ? value : 'auto';
 }
 export function dossierLayoutStorageKey(userId, view) {
-  return userId && ['daily', 'payments', 'departures'].includes(view) ? `expedile:table-layout:v1:${encodeURIComponent(userId)}:${view}` : null;
+  return userId && preferenceView(view) ? `expedile:table-layout:v1:${encodeURIComponent(userId)}:${view}` : null;
 }
 export function columnWidthBounds(column) {
   const min = column?.key === 'action' ? 132 : column?.key === 'optimizedDimensions' ? 110 : ['ref', 'client'].includes(column?.key) ? 96 : 64;
@@ -26,15 +34,20 @@ export function clampColumnWidth(column, value) {
   return value != null && value !== '' && Number.isFinite(Number(value)) ? Math.min(max, Math.max(min, Math.round(Number(value)))) : initial;
 }
 export function columnWidthsStorageKey(userId, view) {
-  return userId && ['daily', 'payments', 'departures'].includes(view) ? `expedile:table-widths:v1:${encodeURIComponent(userId)}:${view}` : null;
+  return userId && preferenceView(view) ? `expedile:table-widths:v1:${encodeURIComponent(userId)}:${view}` : null;
 }
 export function columnVisibilityStorageKey(userId, view) {
-  return userId && ['daily', 'payments', 'departures'].includes(view) ? `expedile:table-columns:v1:${encodeURIComponent(userId)}:${view}` : null;
+  return userId && preferenceView(view) ? `expedile:table-columns:v1:${encodeURIComponent(userId)}:${view}` : null;
+}
+/** The one column that identifies a row: the reference of a dossier, the
+ * title of a task in Mon travail. */
+export function requiredTableColumn(view) {
+  return view === 'work' ? 'task' : 'ref';
 }
 /** Store exclusions: a newly introduced data column stays discoverable. The
- * reference is the single required datum, and foreign keys are ignored. */
-export function sanitizeHiddenColumns(columns, hidden) {
-  return Array.isArray(hidden) ? columns.filter(column => column.key !== 'ref' && hidden.includes(column.key)).map(column => column.key) : [];
+ * required column is the single mandatory datum, and foreign keys are ignored. */
+export function sanitizeHiddenColumns(columns, hidden, required = 'ref') {
+  return Array.isArray(hidden) ? columns.filter(column => column.key !== required && hidden.includes(column.key)).map(column => column.key) : [];
 }
 export function sanitizeColumnWidths(columns, values) {
   return Object.fromEntries(columns.map(column => [column.key, clampColumnWidth(column, values?.[column.key])]));

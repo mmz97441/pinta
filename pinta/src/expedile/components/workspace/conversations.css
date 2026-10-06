@@ -1,0 +1,199 @@
+/* Conversations inbox: the list beside the open exchange from 1024px, the list
+   alone below. Search, segments and buttons reuse the dossier list controls
+   (dossierTable.css), whose colours are scoped to their own containers. */
+.conversation-inbox {
+  --dossier-control-border: #d6d0c4;
+  --dossier-field-border: #8c8579;
+  --conversation-row-line: #eee9de;
+  --conversation-hover: #efeadf;
+  --conversation-selected: #e8f0f5;
+  --conversation-inbox-bg: #fffbef;
+  --conversation-amber: #79520a;
+  --conversation-amber-bg: #fff5d8;
+  --conversation-overdue: #8a4b06;
+  --conversation-unread: #174ea6;
+  /* #0088cc is the Telegram mark; its text needs a darker shade to stay readable (5.2:1). */
+  --conversation-telegram: #0088cc;
+  --conversation-telegram-text: #0070a8;
+  min-width: 0;
+  color: var(--text-primary);
+  background: var(--bg-canvas);
+}
+html.dark .conversation-inbox {
+  --dossier-control-border: #4e4840;
+  --dossier-field-border: #7d766b;
+  --conversation-row-line: #3a3530;
+  --conversation-hover: #35312b;
+  --conversation-selected: #203744;
+  --conversation-inbox-bg: #2c271c;
+  --conversation-amber: #f7db97;
+  --conversation-amber-bg: #44361b;
+  --conversation-overdue: #f4cf8b;
+  --conversation-unread: #8db8ff;
+  --conversation-telegram: #5cb8e6;
+  --conversation-telegram-text: #6fc3ec;
+}
+.conversation-inbox:not(.conversation-inbox--two-panes) { min-height: 100%; }
+/* 403px at 1440: the exchange keeps its status bar on one row. */
+.conversation-inbox--two-panes {
+  display: grid;
+  grid-template-columns: clamp(400px, 28vw, 430px) minmax(0, 1fr);
+  height: 100%;
+  min-height: 0;
+}
+
+/* ── List ─────────────────────────────────────────────────────────────── */
+.conversation-list { container: conversation-list / inline-size; display: flex; flex-direction: column; min-width: 0; background: var(--bg-elevated); }
+.conversation-inbox:not(.conversation-inbox--two-panes) .conversation-list { min-height: 100%; }
+.conversation-inbox--two-panes .conversation-list { min-height: 0; border-right: 1px solid var(--border-subtle); }
+/* Two panes: the header stays, the rows scroll on their own. */
+.conversation-inbox--two-panes .conversation-list__body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.conversation-list__header { display: grid; flex-shrink: 0; gap: 10px; padding: 18px 18px 8px; }
+.conversation-list__header h1 { margin: 0; font-size: 23px; font-weight: 700; line-height: 1.25; color: var(--text-primary); }
+/* Prefixed with the inbox: the dossier rules may load before or after this file. */
+.conversation-inbox .conversation-toolbar { flex-wrap: nowrap; gap: 8px; }
+.conversation-inbox .conversation-toolbar .dossier-toolbar-search { flex: 1 1 auto; }
+.conversation-inbox .conversation-toolbar .dossier-toolbar-search input { height: 44px; padding-left: 40px; font-size: 15px; }
+.conversation-inbox .conversation-toolbar .dossier-toolbar-icon-button { width: 44px; padding: 0; }
+.conversation-inbox .conversation-toolbar .dossier-toolbar-badge { position: absolute; top: -6px; right: -6px; min-width: 18px; height: 18px; padding: 0 5px; font-size: 11px; box-shadow: 0 0 0 2px var(--bg-elevated); }
+/* Large counts wrap the segments onto a second row inside the track, never past it. */
+.conversation-inbox .conversation-segments { display: flex; flex-wrap: wrap; width: 100%; }
+.conversation-inbox .conversation-segments > button { flex: 1 1 auto; font-size: 14.5px; }
+.conversation-inbox .conversation-segments > button > span { gap: 5px; padding: 0 8px; }
+.conversation-segments b { font-weight: 600; font-variant-numeric: tabular-nums; }
+.conversation-workerror { margin: 0 18px 8px; padding: 10px 12px; border: 1px solid #fecaca; border-radius: 12px; font-size: 14px; color: #b91c1c; }
+html.dark .conversation-workerror { border-color: #7f3a3a; color: #f4b9b9; }
+
+.conversation-section__title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin: 0;
+  padding: 14px 18px 6px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.4;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+.conversation-section[data-tone='inbox'] .conversation-section__title { color: var(--conversation-amber); }
+.conversation-section__hint { font-weight: 600; letter-spacing: 0; text-transform: none; color: var(--text-muted); }
+.conversation-section__toggle { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; margin: -12px 0 -8px; font: inherit; letter-spacing: inherit; text-transform: inherit; color: inherit; background: transparent; }
+.conversation-section__toggle svg { transition: transform .2s ease-out; }
+.conversation-section__toggle[aria-expanded='true'] svg { transform: rotate(180deg); }
+.conversation-rows { margin: 0; padding: 0; list-style: none; }
+
+.conversation-row {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 12px;
+  width: 100%;
+  min-height: 64px;
+  padding: 10px 18px;
+  border-top: 1px solid var(--conversation-row-line);
+  text-align: left;
+  color: var(--text-primary);
+  background: transparent;
+  transition: background-color .2s ease-out;
+}
+.conversation-row:hover { background: var(--conversation-hover); }
+.conversation-row:active { transform: translateY(1px); }
+.conversation-row[data-inbox] { background: var(--conversation-inbox-bg); }
+.conversation-row[data-inbox]:hover { background: var(--conversation-hover); }
+.conversation-row[aria-current='true'] { background: var(--conversation-selected); box-shadow: inset 3px 0 0 var(--brand-text); }
+.conversation-row:focus-visible { outline: 2px solid var(--brand-text); outline-offset: -2px; }
+.conversation-avatar { display: grid; flex-shrink: 0; place-items: center; width: 36px; height: 36px; border-radius: 50%; font-size: 13px; font-weight: 700; line-height: 1; color: var(--brand-text); background: var(--bg-surface); }
+.conversation-row[data-inbox] .conversation-avatar { color: var(--conversation-amber); background: var(--conversation-amber-bg); }
+.conversation-row__main { display: grid; gap: 2px; min-width: 0; }
+.conversation-row__title { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.conversation-row__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; font-weight: 700; }
+.conversation-row__ref { flex-shrink: 0; white-space: nowrap; font-size: 12.5px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--text-muted); }
+.conversation-row__preview { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; line-height: 1.45; color: var(--text-secondary); }
+.conversation-row[data-unread] .conversation-row__preview { font-weight: 600; color: var(--text-primary); }
+.conversation-row__dot { display: inline-block; width: 9px; height: 9px; margin-right: 6px; border-radius: 50%; vertical-align: 1px; background: var(--conversation-unread); }
+.conversation-row__meta { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; padding-top: 2px; white-space: nowrap; font-size: 12.5px; line-height: 1.35; color: var(--text-muted); }
+.conversation-row__meta [data-overdue] { font-weight: 700; color: var(--conversation-overdue); }
+.conversation-row__meta svg { color: var(--text-secondary); }
+
+.conversation-list__empty { display: grid; justify-items: center; gap: 10px; padding: 36px 18px; text-align: center; font-size: 15px; color: var(--text-secondary); }
+.conversation-list__empty svg { color: var(--text-muted); }
+.conversation-text-button { min-height: 44px; padding: 0 8px; font-size: 15px; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; color: var(--brand-text); background: transparent; }
+.conversation-skeleton { display: grid; grid-template-columns: 36px minmax(0, 1fr) 56px; gap: 12px; padding: 12px 18px; border-top: 1px solid var(--conversation-row-line); }
+.conversation-skeleton span { display: block; height: 12px; border-radius: 6px; background: var(--bg-surface); }
+.conversation-skeleton span:first-child { width: 36px; height: 36px; border-radius: 50%; }
+.conversation-skeleton div { display: grid; gap: 8px; align-content: start; padding-top: 3px; }
+
+/* Phone list: name, reference and preview on their own lines. The 400px pane
+   beside an open exchange keeps the computer rows. */
+@container conversation-list (max-width: 399px) {
+  .conversation-list__header { padding: 14px 16px 6px; }
+  .conversation-list__header h1 { font-size: 22px; }
+  .conversation-section__title { padding: 12px 16px 6px; }
+  .conversation-section__hint { display: none; }
+  .conversation-row { padding: 10px 16px; }
+  .conversation-row__title { flex-direction: column; align-items: flex-start; gap: 0; }
+  .conversation-row[data-inbox] .conversation-row__ref { display: none; }
+  .conversation-row__since { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
+  .conversation-inbox .conversation-segments > button { font-size: 14px; }
+  .conversation-inbox .conversation-segments > button > span { gap: 4px; padding: 0 5px; }
+}
+@container conversation-list (max-width: 359px) {
+  .conversation-inbox .conversation-segments { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* ── Open exchange ────────────────────────────────────────────────────── */
+.conversation-pane { container: conversation-pane / inline-size; display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--bg-canvas); }
+.conversation-thread { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; }
+.conversation-thread__header { display: flex; flex-shrink: 0; flex-wrap: wrap; align-items: center; gap: 10px 12px; padding: 12px 22px; border-bottom: 1px solid var(--border-subtle); background: var(--bg-elevated); }
+.conversation-thread__identity { flex: 1 1 12rem; min-width: 0; }
+.conversation-thread__identity h2 { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 8px; margin: 0; font-size: 17px; font-weight: 700; line-height: 1.35; }
+.conversation-thread__ref { font-size: 14.5px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--text-muted); }
+.conversation-thread__facts { display: flex; flex-wrap: wrap; align-items: center; gap: 0 6px; margin: 1px 0 0; font-size: 14px; color: var(--text-secondary); }
+.conversation-channel { display: inline-flex; align-items: center; gap: 4px; }
+.conversation-channel[data-channel='telegram'] { color: var(--conversation-telegram-text); }
+.conversation-channel[data-channel='telegram'] svg { color: var(--conversation-telegram); }
+.conversation-thread__actions { display: flex; flex-shrink: 0; gap: 8px; }
+.conversation-inbox .conversation-thread__actions .dossier-toolbar-button { text-decoration: none; }
+@container conversation-pane (max-width: 559px) {
+  .conversation-thread__header { padding: 10px 12px; }
+  .conversation-inbox .conversation-thread__actions .dossier-toolbar-button { width: 44px; padding: 0; }
+  .conversation-thread__action-text { display: none; }
+}
+
+.conversation-pane__empty { display: grid; flex: 1 1 auto; place-content: center; justify-items: center; gap: 12px; padding: 32px; text-align: center; color: var(--text-secondary); }
+.conversation-pane__empty svg { color: var(--text-muted); }
+.conversation-pane__empty h2 { margin: 0; font-size: 18px; font-weight: 700; color: var(--text-primary); }
+.conversation-pane__empty p { margin: 0; max-width: 28rem; font-size: 15px; }
+.conversation-primary-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 16px;
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 700;
+  text-decoration: none;
+  color: #fff;
+  background: var(--brand-navy);
+  transition: all .2s ease-out;
+}
+html.dark .conversation-primary-button { color: #122a36; background: #c4dae5; }
+.conversation-primary-button:hover:not(:disabled) { transform: translateY(-1px); }
+.conversation-primary-button:active:not(:disabled) { transform: translateY(1px); }
+.conversation-primary-button:disabled { opacity: .45; }
+
+/* Assignment of a message without dossier: in the pane, or as the page below 1024px. */
+.conversation-assign { display: grid; align-content: start; gap: 14px; width: 100%; max-width: 46rem; padding: 22px; overflow-y: auto; }
+.conversation-inbox--two-panes .conversation-assign { min-height: 0; }
+.conversation-assign h2 { margin: 0; font-size: 18px; font-weight: 700; line-height: 1.35; overflow-wrap: anywhere; }
+.conversation-assign__intro { margin: 0; font-size: 15px; color: var(--text-secondary); }
+.conversation-assign__message { margin: 0; padding: 14px 16px; border: 1px solid var(--border-subtle); border-radius: 12px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 15px; background: var(--bg-elevated); }
+.conversation-assign label { display: grid; gap: 6px; font-size: 14px; font-weight: 600; color: var(--text-secondary); }
+.conversation-assign select { min-height: 48px; width: 100%; padding: 0 12px; border: 1px solid var(--dossier-field-border); border-radius: 10px; font-size: 15px; font-weight: 400; color: var(--text-primary); background-color: var(--bg-elevated); }
+.conversation-assign .conversation-primary-button { justify-self: start; }
+.conversation-back { display: inline-flex; align-items: center; gap: 8px; justify-self: start; min-height: 44px; font-weight: 600; color: var(--text-secondary); background: transparent; }

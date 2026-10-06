@@ -22,7 +22,7 @@ const SECTIONS = [
   { id: 'historique', label: 'Historique', icon: History },
 ];
 
-function DocumentContext({ onClose }) {
+function DocumentContext({ onClose, taskSearch }) {
   const { sel, can: rawCan } = useApp();
   // Same permission rule as the workspace: only a role that may edit the
   // articles is invited to verify; the others consult the invoice.
@@ -38,7 +38,7 @@ function DocumentContext({ onClose }) {
   const history = orderInvoices(invoices).filter(invoice => numbering[invoice.id]?.kind !== 'counted');
   const openTask = invoice => {
     onClose();
-    navigate(dossierTaskUrl(sel.id, 'documents', location.search, { invoiceId: invoice?.id }));
+    navigate(dossierTaskUrl(sel.id, 'documents', taskSearch ?? location.search, { invoiceId: invoice?.id }));
   };
   const title = invoice => {
     const entry = numbering[invoice.id];
@@ -67,7 +67,8 @@ function DocumentContext({ onClose }) {
 }
 
 /** Closing context must not discard an assignment draft or document preview. */
-export default function DossierContextPanel({ section, onSectionChange, onClose, casierEditRequest = 0 }) {
+// taskSearch: the query of task links (returnTo) when the panel opens outside the dossier page.
+export default function DossierContextPanel({ section, onSectionChange, onClose, casierEditRequest = 0, taskSearch }) {
   const { sel, can } = useApp();
   const navigate = useNavigate();
   const location = useLocation();
@@ -90,8 +91,8 @@ export default function DossierContextPanel({ section, onSectionChange, onClose,
         return <button key={item.id} aria-current={item.id === selected ? 'page' : undefined} onClick={() => onSectionChange(item.id)} className={`inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl px-2 text-xs font-semibold ${item.id === selected ? 'bg-slate-800 text-white dark:bg-slate-200 dark:text-slate-900' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'}`}><Icon size={15} />{item.label}</button>;
       })}</nav>
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 pb-[max(1rem,env(safe-area-inset-bottom))] text-slate-800 dark:text-slate-100">
-        {visited.has('reception') && <div hidden={selected !== 'reception'}><ColisInfo compact casierEditRequest={casierEditRequest} onCompleteReception={() => { onClose(); navigate(dossierTaskUrl(sel.id, "reception", location.search)); }} /></div>}
-        {canDocuments && visited.has('documents') && <div hidden={selected !== 'documents'}><DocumentContext onClose={onClose} /></div>}
+        {visited.has('reception') && <div hidden={selected !== 'reception'}><ColisInfo compact casierEditRequest={casierEditRequest} onCompleteReception={() => { onClose(); navigate(dossierTaskUrl(sel.id, "reception", taskSearch ?? location.search)); }} /></div>}
+        {canDocuments && visited.has('documents') && <div hidden={selected !== 'documents'}><DocumentContext onClose={onClose} taskSearch={taskSearch} /></div>}
         {visited.has('equipe') && <div hidden={selected !== 'equipe'}><StaffAssignment /></div>}
         {visited.has('historique') && <div hidden={selected !== 'historique'}><AuditLog expanded includeAudit={can('perm_admin_audit')} /></div>}
       </div>

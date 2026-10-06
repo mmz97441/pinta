@@ -28,9 +28,9 @@ export default function InboxAttachment({ item }) {
   }
   if (!file) return null;
   const name = file.file_name || 'Photo reçue sur Telegram';
-  return <section className="space-y-2 rounded-xl border p-3" aria-label="Pièce jointe à rattacher">
+  return <section className="space-y-2 rounded-xl border border-slate-200 p-3" aria-label="Pièce jointe à rattacher">
     <p className="break-words text-sm font-semibold">{name}</p>
-    {!document && <button disabled={busy} onClick={preview} className="min-h-11 rounded-lg border px-3 text-sm font-semibold">{busy ? 'Ouverture…' : 'Voir le document avant de le rattacher'}</button>}
+    {!document && <button disabled={busy} onClick={preview} className="min-h-11 rounded-lg border border-slate-200 px-3 text-sm font-semibold">{busy ? 'Ouverture…' : 'Voir le document avant de le rattacher'}</button>}
     {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
     {document && (document.type === 'application/pdf' ? <Suspense fallback={<p role="status">Chargement du document…</p>}><PDFPreview url={document.url} title={name} /></Suspense> : <img src={document.url} alt={name} className="max-h-96 max-w-full object-contain" />)}
   </section>;

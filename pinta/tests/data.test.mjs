@@ -133,6 +133,19 @@ test('payment mapping preserves recorded zero and partial amounts instead of mak
   assert.equal(rows.find(row => row.id === 'c').paiementMontant, null);
   assert.equal(rows.find(row => row.id === 'd').paiementMontant, null);
 });
+test('loaded messages keep their channel, template and author', async () => {
+  const sb = await service(client({
+    colis: [{ id: 'p1', archive: false }],
+    messages: [
+      { id: 'm1', colis_id: 'p1', type: 'staff', auteur_id: 'staff-1', auteur_nom: 'Camille', texte: 'Bonjour', statut: 'echec', canal: 'telegram', template: 'demande_feu_vert', created_at: '2026-10-05T06:00:00Z' },
+      { id: 'm2', colis_id: 'p1', type: 'client', texte: 'Merci', created_at: '2026-10-05T07:00:00Z' },
+    ],
+  }));
+  const [dossier] = await sb.fetchColis();
+  const [sent, received] = dossier.messages;
+  assert.equal(sent.canal, 'telegram'); assert.equal(sent.template, 'demande_feu_vert'); assert.equal(sent.auteurId, 'staff-1');
+  assert.equal(received.canal, null); assert.equal(received.template, null); assert.equal(received.auteurId, null);
+});
 test('archived dossiers are loaded only when explicitly requested', async () => {
   const mock = client({
     colis: [

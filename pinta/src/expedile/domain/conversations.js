@@ -1,7 +1,8 @@
+// One vocabulary for the list, the thread and the confirmations.
 export const CONVERSATION_STATES = Object.freeze({
   a_traiter: 'À répondre',
   attente_client: 'Attente client',
-  termine: 'Terminé',
+  termine: 'Traitée',
 });
 
 export function conversationState(colis) {

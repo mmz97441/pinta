@@ -274,6 +274,8 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: var(--tex
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
 }
+/* Set by AppContext for the instant of a theme change. */
+html.theme-switching *, html.theme-switching *::before, html.theme-switching *::after { transition: none !important; }
 
 /* Text tokens are distinct from decorative gold and stage colors. */
 :root { --text-accent: #856217; }

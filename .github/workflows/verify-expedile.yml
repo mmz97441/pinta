@@ -99,8 +99,10 @@ jobs:
           node tests/parcours-dossier.browser.cjs
           node tests/dossier-overview.browser.cjs
           node tests/conversation-layout.browser.cjs
+          PINTA_CONVERSATIONS_OUT=/tmp/pinta-conversations node tests/conversations-inbox.browser.cjs
           node tests/reception-page.browser.cjs
           node tests/personal-work.browser.cjs
+          PINTA_WORK_LAYOUT_OUT=/tmp/pinta-work-layout node tests/work-layout.browser.cjs
           node tests/task-claim.browser.cjs
           node tests/collaborative-work.browser.cjs
           node tests/reception-without-notification.browser.cjs
@@ -151,8 +153,10 @@ jobs:
             /tmp/pinta-parcours-dossier
             /tmp/pinta-dossier-overview
             /tmp/pinta-conversation-layout
+            /tmp/pinta-conversations
             /tmp/pinta-reception-page
             /tmp/pinta-personal-work
+            /tmp/pinta-work-layout
             /tmp/pinta-task-claim
             /tmp/pinta-collaborative-work
             /tmp/pinta-payment-return

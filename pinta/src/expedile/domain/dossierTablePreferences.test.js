@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { TABLE_COLUMNS, buildDossierTableModel, buildDossierTableExportRows, sortDossierTableRows } from './dossierTable.js';
-import { clampColumnWidth, columnWidthsStorageKey, columnVisibilityStorageKey, dossierTextSizeStorageKey, dossierLayoutStorageKey, sanitizeDossierTextSize, sanitizeDossierTableLayout, DOSSIER_TEXT_SIZE_BOUNDS, sanitizeHiddenColumns, readColumnFilters, filterDossierTableRows, sanitizeColumnFilter, sanitizeColumnWidths, dossierColumnSuggestions } from './dossierTablePreferences.js';
+import { clampColumnWidth, columnWidthsStorageKey, columnVisibilityStorageKey, dossierTextSizeStorageKey, dossierLayoutStorageKey, sanitizeDossierTextSize, sanitizeDossierTableLayout, DOSSIER_TEXT_SIZE_BOUNDS, sanitizeHiddenColumns, readColumnFilters, filterDossierTableRows, sanitizeColumnFilter, sanitizeColumnWidths, dossierColumnSuggestions, requiredTableColumn, tableTextSizeInitial } from './dossierTablePreferences.js';
+import { WORK_TABLE_CHOICES } from './workTable.js';
 
 const columns = TABLE_COLUMNS.daily;
 const column = key => columns.find(item => item.key === key);
@@ -139,4 +140,25 @@ test('automatic, table and card layouts are independently scoped and safely defa
   for (const other of [columnWidthsStorageKey, columnVisibilityStorageKey, dossierTextSizeStorageKey]) assert.notEqual(key, other('one', 'daily'));
   assert.equal(dossierLayoutStorageKey(null, 'daily'), null);
   assert.equal(dossierLayoutStorageKey('one', 'unknown'), null);
+});
+
+test('Mon travail keeps its own preferences, its task column required and a 15px reading size', () => {
+  for (const key of [dossierTextSizeStorageKey, dossierLayoutStorageKey, columnWidthsStorageKey, columnVisibilityStorageKey]) {
+    assert.match(key('one', 'work'), /:work$/);
+    assert.notEqual(key('one', 'work'), key('two', 'work'));
+    for (const view of ['daily', 'payments', 'departures']) assert.notEqual(key('one', 'work'), key('one', view));
+    assert.equal(key(null, 'work'), null);
+    assert.equal(key('one', 'unknown'), null);
+  }
+  assert.equal(requiredTableColumn('work'), 'task');
+  for (const view of ['daily', 'payments', 'departures', 'unknown']) assert.equal(requiredTableColumn(view), 'ref');
+  assert.deepEqual(sanitizeHiddenColumns(WORK_TABLE_CHOICES, ['task', 'casier', 'action', 'ref'], 'task'), ['ref', 'casier']);
+  assert.deepEqual(sanitizeHiddenColumns(WORK_TABLE_CHOICES, WORK_TABLE_CHOICES.map(item => item.key), 'task'), ['due', 'ref', 'client', 'casier', 'cartons']);
+  assert.deepEqual(sanitizeHiddenColumns(columns, ['ref', 'client']), ['client'], 'The dossier reference stays the default requirement.');
+  assert.equal(tableTextSizeInitial('work'), 15);
+  for (const view of ['daily', 'payments', 'departures']) assert.equal(tableTextSizeInitial(view), DOSSIER_TEXT_SIZE_BOUNDS.initial);
+  assert.equal(sanitizeDossierTextSize(undefined, tableTextSizeInitial('work')), 15);
+  assert.equal(sanitizeDossierTextSize(18, tableTextSizeInitial('work')), 18);
+  assert.equal(sanitizeDossierTextSize(40, tableTextSizeInitial('work')), 20);
+  assert.equal(sanitizeDossierTextSize('15'), 12);
 });

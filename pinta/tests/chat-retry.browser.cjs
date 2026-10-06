@@ -27,7 +27,8 @@ const navigate = (page, to) => page.evaluate(url => { window.history.pushState({
       if (lose) { lose = false; return answer(route, { message: 'Confirmation perdue après enregistrement fictif.' }, 503); }
       return answer(route, stored.get(input.p_idempotency_key));
     });
-    await f.login(); await f.page.goto(`${base}/conversations?dossier=${ids.P}`);
+    // The exchange open beside the list (1440px): the reload keeps it open with its draft.
+    await f.login(); await f.page.goto(`${base}/conversations?ouvert=${ids.P}`);
     const input = f.page.getByLabel('Votre réponse au client', { exact: true }); await input.fill('Réponse stable\nÀ conserver');
     await input.press('Control+Enter'); await f.page.locator('p[role="alert"]').filter({ hasText: 'Confirmation perdue' }).waitFor();
     assert.equal(f.tables.messages.filter(message => message.type === 'staff').length, 1);
@@ -61,17 +62,17 @@ const navigate = (page, to) => page.evaluate(url => { window.history.pushState({
     f.tables.colis.push({ ...f.tables.colis[0], id: second, ref: 'EXP-SECOND' });
     let release, entered; const gate = new Promise(resolve => { release = resolve; }); const pending = new Promise(resolve => { entered = resolve; });
     await f.context.route('**/rest/v1/rpc/queue_message', async route => { entered(); await gate; return route.fallback(); });
-    await f.login(); await f.page.goto(`${base}/conversations?dossier=${second}`);
+    await f.login(); await f.page.goto(`${base}/conversations?ouvert=${second}`);
     const field = () => f.page.getByLabel('Votre réponse au client', { exact: true }); await field().fill('Brouillon du second dossier');
-    await navigate(f.page, `/conversations?dossier=${ids.P}`); await field().fill('Envoi du premier dossier'); await field().press('Control+Enter'); await pending;
-    await navigate(f.page, `/conversations?dossier=${second}`); assert.equal(await field().inputValue(), 'Brouillon du second dossier');
+    await navigate(f.page, `/conversations?ouvert=${ids.P}`); await field().fill('Envoi du premier dossier'); await field().press('Control+Enter'); await pending;
+    await navigate(f.page, `/conversations?ouvert=${second}`); assert.equal(await field().inputValue(), 'Brouillon du second dossier');
     const attemptKey = `expedile:draft:v1:${encodeURIComponent(ids.A)}:${encodeURIComponent(`conversation-send:${ids.P}`)}`;
     assert.notEqual(await f.page.evaluate(key => sessionStorage.getItem(key), attemptKey), null, 'The first send is still pending before its response is released.');
     release();
-    // Each full-page dossier has its own composer. The second composer's
-    // enabled state says nothing about the first send still finishing.
+    // Each opened conversation has its own composer, beside the list. The
+    // second composer's enabled state says nothing about the first send finishing.
     await f.page.waitForFunction(key => sessionStorage.getItem(key) === null, attemptKey);
-    assert.equal(await field().inputValue(), 'Brouillon du second dossier'); await navigate(f.page, `/conversations?dossier=${ids.P}`); assert.equal(await field().inputValue(), '');
+    assert.equal(await field().inputValue(), 'Brouillon du second dossier'); await navigate(f.page, `/conversations?ouvert=${ids.P}`); assert.equal(await field().inputValue(), '');
   });
   await browser.close(); await fs.writeFile(`${out}/results.json`, JSON.stringify(results, null, 2)); console.log(JSON.stringify(results, null, 2));
   if (results.some(result => !result.pass)) process.exitCode = 1;

@@ -172,19 +172,21 @@ function StaffColisDetail() {
   return (
     <div className={conversationOpen ? 'dossier-page dossier-page--conversation' : 'dossier-page'}>
       <DetailHeader task={task} conversation={conversationOpen} onOpenContext={openContext} />
-      <div className={`w-full shrink-0 px-4 pt-4 sm:px-6 lg:px-8 ${conversationOpen ? '' : 'mx-auto max-w-[1600px]'}`}>
-        <nav role="tablist" aria-label="Dossier et conversation" className="flex gap-2 border-b border-slate-200 pb-3" onKeyDown={event => {
-          if (!canMessages || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
-          event.preventDefault();
-          const next = event.key === 'Home' ? 'colis' : event.key === 'End' ? 'conversation' : conversationOpen ? 'colis' : 'conversation';
-          selectTab(next); document.getElementById(`dossier-tab-${next}`)?.focus();
-        }}>
-          {[['colis', 'Colis'], ...(canMessages ? [['conversation', 'Conversation']] : [])].map(([key, label]) => {
-            const selected = (key === 'conversation') === conversationOpen;
-            const unread = key === 'conversation' ? (sel.messages || []).filter(message => message.type === 'client' && !message.lu).length : 0;
-            return <button key={key} id={`dossier-tab-${key}`} role="tab" aria-selected={selected} aria-controls={`dossier-panel-${key}`} tabIndex={selected ? 0 : -1} onClick={() => selectTab(key)} className={`min-h-12 flex-1 rounded-xl px-4 text-base font-semibold sm:flex-none sm:min-w-40 ${selected ? 'brand-bg text-white' : 'border border-slate-200 bg-white text-slate-700'}`}>{label}{unread > 0 && <span className="ml-2 rounded-full bg-blue-100 px-2 py-0.5 text-sm text-blue-800" aria-label={`${unread} messages non lus`}>{unread}</span>}</button>;
-          })}
-        </nav>
+      <div className="dossier-page-tabs">
+        <div className={`w-full px-4 sm:px-6 lg:px-8 ${conversationOpen ? '' : 'mx-auto max-w-[1600px]'}`}>
+          <nav role="tablist" aria-label="Dossier et conversation" className="dossier-view-tabs" onKeyDown={event => {
+            if (!canMessages || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+            event.preventDefault();
+            const next = event.key === 'Home' ? 'colis' : event.key === 'End' ? 'conversation' : conversationOpen ? 'colis' : 'conversation';
+            selectTab(next); document.getElementById(`dossier-tab-${next}`)?.focus();
+          }}>
+            {[['colis', 'Colis'], ...(canMessages ? [['conversation', 'Conversation']] : [])].map(([key, label]) => {
+              const selected = (key === 'conversation') === conversationOpen;
+              const unread = key === 'conversation' ? (sel.messages || []).filter(message => message.type === 'client' && !message.lu).length : 0;
+              return <button key={key} id={`dossier-tab-${key}`} role="tab" aria-selected={selected} aria-controls={`dossier-panel-${key}`} tabIndex={selected ? 0 : -1} onClick={() => selectTab(key)} className="dossier-view-tab">{label}{unread > 0 && <span className="dossier-tab-count" aria-label={`${unread} messages non lus`}>{unread}</span>}</button>;
+            })}
+          </nav>
+        </div>
       </div>
       <section role="tabpanel" id="dossier-panel-colis" aria-labelledby="dossier-tab-colis" hidden={conversationOpen}>
       <div className="mx-auto max-w-[1600px] px-4 pt-4 sm:px-6 lg:px-8">
@@ -200,8 +202,7 @@ function StaffColisDetail() {
       </div>
       </section>
       {canMessages && <section role="tabpanel" id="dossier-panel-conversation" aria-labelledby="dossier-tab-conversation" hidden={!conversationOpen} className="dossier-conversation">
-        {conversationAction && <TaskOwnership key={conversationAction.id} action={conversationAction} />}
-        {(conversationOpen || conversationVisited === id) && <><div className="dossier-conversation__chat rounded-2xl border border-slate-200 bg-white"><ChatPanel key={id} colis={sel} client={selClient} embedded active={conversationOpen} /></div><details className="shrink-0 rounded-xl border border-slate-200 bg-white px-4"><summary className="min-h-12 cursor-pointer py-3 font-semibold text-slate-700">Ce qui a déjà été fait</summary><AuditLog key={id} expanded includeAudit={can('perm_admin_audit')} /></details></>}
+        {(conversationOpen || conversationVisited === id) && <><div className="dossier-conversation__chat"><ChatPanel key={id} colis={sel} client={selClient} embedded active={conversationOpen} ownership={conversationAction && <TaskOwnership key={conversationAction.id} action={conversationAction} compact />} /></div><details className="dossier-conversation__history"><summary><ChevronRight size={18} aria-hidden="true" />Ce qui a déjà été fait</summary><AuditLog key={id} expanded includeAudit={can('perm_admin_audit')} /></details></>}
       </section>}
       <DossierContextPanel key={sel.id} section={contextSection} onSectionChange={setContextSection} onClose={() => setContextSection(null)} casierEditRequest={casierEditRequest} />
     </div>

@@ -1,6 +1,6 @@
 import useWorkDraft from '../../hooks/useWorkDraft';
-import React, { Suspense, lazy, useState, useRef, useEffect } from 'react';
-import { Send, MessageCircle, ChevronDown, Check, CheckCheck, Clock, AlertCircle } from 'lucide-react';
+import React, { Suspense, lazy, useState, useRef, useEffect, useLayoutEffect } from 'react';
+import { Send, MessageCircle, ChevronDown, Check, CheckCheck, Clock, AlertCircle, MoreHorizontal, PenLine } from 'lucide-react';
 import usePersistentDraft from '../../hooks/usePersistentDraft';
 import { useApp } from '../../context/AppContext';
 import { deliverMessage } from '../../services/telegramApi';
@@ -8,10 +8,12 @@ import { BRAND } from '../../constants';
 import * as sb from '../../lib/supabaseData';
 import { setConversationState, markVisibleMessagesRead } from '../../services/conversationApi';
 import { CONVERSATION_STATES, conversationState, conversationLabel } from '../../domain/conversations';
+import { CHANNEL_LABELS, clientDisplayName, conversationClock, conversationDay, conversationDayKey, linkLabel } from '../../domain/conversationList';
 import { supabase } from '../../lib/supabase';
 import { staffName } from '../workspace/WorkActionRow';
 import { invoicesEditable } from '../../domain/invoiceLock';
 import useQuoteWithdrawal from '../../hooks/useQuoteWithdrawal';
+import './chatThread.css';
 
 const AttachmentPDFPreview = lazy(() => import('../ui/PDFPreview'));
 
@@ -49,6 +51,9 @@ export function ConversationAttachment({ message, colis, lock = null, canImport,
     if (path) sb.signedFileUrl('factures', path).then(value => { if (active) setUrl(value); }).catch(err => { if (active) setFileError(err.message || 'Document indisponible.'); });
     return () => { active = false; };
   }, [path, fileAttempt]);
+  const previewRef = useRef(null);
+  // An opened preview is brought on screen: the PDF reader loads only once visible.
+  useEffect(() => { if (showPreview) previewRef.current?.scrollIntoView?.({ block: 'nearest' }); }, [showPreview]);
   if (!path) return null;
   // withdrawal: the result of « Retirer le devis et ajouter la facture » (D2 +
   // D3), which already imported the invoice and queued the client message.
@@ -80,7 +85,7 @@ export function ConversationAttachment({ message, colis, lock = null, canImport,
   return <div className="mt-2 min-w-0 space-y-2 border-t border-current/20 pt-2">
     {url ? <a href={url} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 max-w-full items-center break-all underline">{name}</a> : !fileError && <span role="status">Préparation du document…</span>}
     {fileError && <div role="alert"><p>{fileError}</p><button onClick={() => setFileAttempt(value => value + 1)} className="min-h-11 font-semibold underline">Réessayer l’ouverture du document</button></div>}
-    {preview && url && (pdf || image) && <div><button onClick={() => setShowPreview(value => !value)} aria-expanded={showPreview} className="min-h-11 rounded-lg border border-current px-3 text-xs font-semibold">{showPreview ? 'Fermer l’aperçu' : 'Voir l’aperçu'}</button>{showPreview && <div className="mt-2 min-w-0">{pdf ? <Suspense fallback={<p role="status">Chargement du lecteur PDF…</p>}><AttachmentPDFPreview url={url} title={name} /></Suspense> : <img src={url} alt={name} className="max-h-96 max-w-full rounded-lg object-contain" />}</div>}</div>}
+    {preview && url && (pdf || image) && <div><button onClick={() => setShowPreview(value => !value)} aria-expanded={showPreview} className="min-h-11 rounded-lg border border-current px-3 text-xs font-semibold">{showPreview ? 'Fermer l’aperçu' : 'Voir l’aperçu'}</button>{showPreview && <div ref={previewRef} className="mt-2 min-w-0">{pdf ? <Suspense fallback={<p role="status">Chargement du lecteur PDF…</p>}><AttachmentPDFPreview url={url} title={name} /></Suspense> : <img src={url} alt={name} className="max-h-96 max-w-full rounded-lg object-contain" />}</div>}</div>}
     {importAllowed && <button disabled={busy} onClick={importGuarded} className="block min-h-11 rounded-lg border border-current px-3 text-xs font-semibold">{busy ? 'Import…' : importLabel}</button>}
     {imported && <p role="status">{saved ? savedText : 'Document déjà présent dans les factures.'}</p>}
     {error && <p role="alert">{error}</p>}
@@ -89,14 +94,16 @@ export function ConversationAttachment({ message, colis, lock = null, canImport,
 }
 
 // ── Status indicator (Telegram-style) ────────────────────────────────────────
-function MsgStatut({ statut }) {
+function MsgStatut({ statut, canal }) {
   if (!statut) return null;
   const labels = {envoi:'En attente de livraison',envoye:'Envoyé',distribue:'Distribué',lu:'Lu',echec:'Envoi non confirmé',en_attente:'En attente de connexion Telegram'};
-  const label = labels[statut] || statut;
+  // No business e-mail provider is connected: an e-mail stays a manual draft.
+  const manualDraft = canal === 'email' && statut === 'envoi';
+  const label = manualDraft ? 'Brouillon manuel' : labels[statut] || statut;
   let icon;
   switch (statut) {
     case 'envoi':
-      icon=<Clock size={13} />;break;
+      icon=manualDraft ? <PenLine size={13} /> : <Clock size={13} />;break;
     case 'envoye':
       icon=<Check size={13} />;break;
     case 'distribue':
@@ -113,7 +120,9 @@ function MsgStatut({ statut }) {
   return <span className="inline-flex items-center gap-1 text-xs">{icon}{label}</span>;
 }
 
-export default function ChatPanel({ colis, client, embedded = false, active = true }) {
+// ownership: the caller's task ownership (TaskOwnership compact), shown in the
+// status bar. Without it, the bar names the person following the conversation.
+export default function ChatPanel({ colis, client, embedded = false, active = true, ownership = null }) {
   const { sel: contextSel, selClient: contextClient, isStaff, auth, envMsg, setData, flash, ask, refreshColis, refreshWork, can, teamUsers=[], workActions=[] } = useApp();
   const sel = colis || contextSel;
   const selClient = client || contextClient;
@@ -130,6 +139,30 @@ export default function ChatPanel({ colis, client, embedded = false, active = tr
   const hasMsg = sel?.messages?.length > 0;
   const [expanded, setExpanded] = useState(false);
   const scrollRef = useRef(null);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [markingUnread, setMarkingUnread] = useState(false);
+  const moreRef = useRef(null);
+  const moreButtonRef = useRef(null);
+  const replyRef = useRef(null);
+
+  // The conversation menu closes like a popover: outside press or Escape.
+  useEffect(() => {
+    if (!moreOpen) return undefined;
+    const outside = event => { if (!moreRef.current?.contains(event.target)) setMoreOpen(false); };
+    const escape = event => { if (event.key !== 'Escape') return; setMoreOpen(false); moreButtonRef.current?.focus(); };
+    document.addEventListener('pointerdown', outside);
+    document.addEventListener('keydown', escape);
+    return () => { document.removeEventListener('pointerdown', outside); document.removeEventListener('keydown', escape); };
+  }, [moreOpen]);
+
+  // The staff reply grows with its text up to its CSS maximum, then scrolls.
+  // A hidden tab has no layout: it is measured again when it becomes visible.
+  useLayoutEffect(() => {
+    const field = replyRef.current;
+    if (!field?.getClientRects().length) return;
+    field.style.height = '';
+    field.style.height = `${field.scrollHeight + field.offsetHeight - field.clientHeight}px`;
+  }, [msgTxt, active]);
 
   // Auto-expand only when there are messages
   useEffect(() => {
@@ -177,10 +210,10 @@ export default function ChatPanel({ colis, client, embedded = false, active = tr
   };
 
   const hasMessages = (sel.messages || []).length > 0;
-  const lastSent = [...(sel.messages || [])].reverse().find(message => message.type === 'staff');
 
   // ── Render text with clickable URLs ─────────────────────────────────────────
-  const renderText = (text) => {
+  // The thread shows links as host and path (shortLinks); the href never changes.
+  const renderText = (text, { shortLinks = false } = {}) => {
     if (!text) return null;
     const urlRegex = /(https?:\/\/[^\s]+)/g;
     const parts = text.split(urlRegex);
@@ -194,8 +227,8 @@ export default function ChatPanel({ colis, client, embedded = false, active = tr
                 <img src={part} alt="Pièce jointe" className="max-w-[200px] max-h-[150px] rounded-lg border border-gray-200" />
               </a>
             )}
-            <a href={part} target="_blank" rel="noopener noreferrer" className="underline text-blue-400 hover:text-blue-600 break-all">
-              {isImage ? 'Voir la pièce jointe' : part.length > 50 ? part.slice(0, 50) + '...' : part}
+            <a href={part} target="_blank" rel="noopener noreferrer" className={shortLinks ? 'chat-link' : 'underline text-blue-400 hover:text-blue-600 break-all'}>
+              {isImage ? 'Voir la pièce jointe' : shortLinks ? linkLabel(part) : part.length > 50 ? part.slice(0, 50) + '...' : part}
             </a>
           </span>
         );
@@ -204,7 +237,7 @@ export default function ChatPanel({ colis, client, embedded = false, active = tr
     });
   };
 
-  // ── Render a single message bubble ─────────────────────────────────────────
+  // ── Render a single message bubble (client portal) ──────────────────────────
   const renderMessage = (m) => {
     const isS = m.type === 'staff';
     const isFacture = m.texte?.includes('Facture envoyée') || m.texte?.includes('📎');
@@ -220,11 +253,6 @@ export default function ChatPanel({ colis, client, embedded = false, active = tr
           <p className="text-xs mb-0.5">{m.auteur}</p>
           <p className="whitespace-pre-line">{renderText(m.texte)}</p>
           <ConversationAttachment message={m} colis={sel} canImport={isStaff && can('perm_factures_ajouter')} onImported={async id => { await refreshColis(id); await refreshWork?.(); }} />
-          {isStaff&&canHandle&&m.statut==='echec'&&m.canal==='telegram'&&can('perm_comm_telegram')&&<button className="min-h-[44px] text-xs underline" onClick={()=>ask('Réessayer cet envoi','Vérifiez dans Telegram que le client n’a pas reçu ce message, puis confirmez le renvoi.',async()=>{
-            const result=await deliverMessage(sel.id,m.id,{retryConfirmed:true});
-            if(!result.ok)throw new Error(result.error || 'L’envoi reste à vérifier.');
-            await refreshColis(sel.id);flash('Message envoyé à Telegram');
-          })}>Vérifier et réessayer</button>}
           {(m.heure || m.statut) && (
             <div className="flex flex-wrap items-center justify-end gap-1 mt-1">
               {m.heure && <span className="text-xs">{m.heure}</span>}
@@ -232,81 +260,141 @@ export default function ChatPanel({ colis, client, embedded = false, active = tr
             </div>
           )}
         </div>
-        {isStaff && m.type === 'client' && (
-          <button
-            onClick={async(e) => {
-              e.stopPropagation();
-              const newLu = !m.lu;
-              try { await sb.updateMessageLu(m.id,newLu); } catch(error){flash({msg:error.message,type:'error'});return;}
-              setData((prev) => prev.map((c) => {
-                if (c.id !== sel.id) return c;
-                return { ...c, messages: (c.messages || []).map((msg) => msg.id === m.id ? { ...msg, lu: newLu } : msg) };
-              }));
-
-            }}
-            className="min-h-11 min-w-11 text-xs text-gray-600 dark:text-gray-300 hover:text-blue-500"
-            aria-label={m.lu ? 'Marquer ce message comme non lu' : 'Marquer ce message comme lu'}
-            title={m.lu ? 'Marquer comme non lu' : 'Marquer comme lu'}
-          >
-            {m.lu ? 'Lu' : 'Non lu'}
-          </button>
-        )}
       </div>
     );
   };
 
   // Staff always sees full panel
   if (isStaff) {
+    const now = Date.now();
+    const messages = sel.messages || [];
+    const clientName = clientDisplayName(selClient);
+    const firstName = selClient?.prenom?.trim();
+    const channel = selClient?.telegramChatId ? 'telegram' : 'portal';
+    const ChannelIcon = channel === 'telegram' ? Send : MessageCircle;
+    const lastSent = messages.findLast(message => message.type === 'staff');
+    const lastClientMessage = messages.findLast(message => message.type === 'client');
+    // Reading is not handling: a closed conversation without a task names nobody.
+    const ownerText = ownership || (state === 'termine' && !conversationAction) ? '' : staffName(conversationAction?.assignee_id, teamUsers);
+    const busy = changingState || sending;
+    const help = channel === 'telegram' ? 'Envoyer une réponse ne clôture pas le traitement.' : 'Message dans l’espace client. L’invitation Telegram se trouve dans sa fiche client.';
+    const explanation = state==='a_traiter' ? 'La demande reste à traiter, même après lecture. Les relances automatiques de ce client sont suspendues.' : state==='attente_client' ? 'Votre réponse a été apportée ; le prochain retour est attendu du client. Les pauses demandées restent respectées.' : 'Le traitement est terminé. Un nouveau message du client rouvrira la conversation.';
+    // Below 640px the secondary states move into the menu: the bar keeps one row.
+    const stateButton = (key, phone = false) => <button key={key} type="button" disabled={busy} onClick={() => { setMoreOpen(false); changeState(key); }}
+      className={phone ? 'chat-more__item chat-more__phone' : 'chat-action chat-action--secondary'}>{CONVERSATION_STATES[key]}</button>;
+    const secondaryStates = canHandle ? ['attente_client', 'a_traiter'].filter(key => key !== state) : [];
+    // One filled command at a time: a conversation still to take puts « Je m’en occupe » first.
+    const closePrimary = state === 'a_traiter' && !(conversationAction && conversationAction.state !== 'done' && !conversationAction.assignee_id);
+    const markUnread = async () => {
+      if (!lastClientMessage || markingUnread) return;
+      const id = sel.id, messageId = lastClientMessage.id;
+      setMarkingUnread(true);
+      try {
+        await sb.updateMessageLu(messageId, false);
+        setData(prev => prev.map(c => c.id !== id ? c : { ...c, messages: (c.messages || []).map(message => message.id === messageId ? { ...message, lu: false } : message) }));
+        setMoreOpen(false); moreButtonRef.current?.focus();
+        flash('Message marqué comme non lu.');
+      } catch (error) { flash({ msg: error.message, type: 'error' }); }
+      finally { setMarkingUnread(false); }
+    };
+
+    // One day separator per Paris day; the author once per consecutive group.
+    let previousDay = null, previousAuthor = null;
+    const thread = messages.map(m => {
+      const fromStaff = m.type === 'staff';
+      const author = m.type === 'client' ? clientName : m.auteur;
+      const day = conversationDayKey(m.createdAt);
+      const newDay = Boolean(day) && day !== previousDay;
+      if (newDay) { previousDay = day; previousAuthor = null; }
+      const showAuthor = `${m.type}:${author}` !== previousAuthor;
+      previousAuthor = `${m.type}:${author}`;
+      const kind = fromStaff ? 'staff' : m.texte?.includes('Facture envoyée') || m.texte?.includes('📎') ? 'document' : 'client';
+      const time = conversationClock(m.createdAt) || m.heure;
+      return <React.Fragment key={m.id}>
+        {newDay && <p className="chat-day">{conversationDay(m.createdAt, now)}</p>}
+        {showAuthor && <p className="chat-author" data-from={fromStaff ? 'staff' : 'client'}>{author}</p>}
+        <div className="chat-message" data-from={fromStaff ? 'staff' : 'client'}>
+          {m.type === 'client' && !m.lu && <span className="chat-unread"><span className="sr-only">Non lu</span></span>}
+          <div className="chat-bubble" data-kind={kind}>
+            <p className="chat-bubble__text">{renderText(m.texte, { shortLinks: true })}</p>
+            <ConversationAttachment message={m} colis={sel} canImport={can('perm_factures_ajouter')} onImported={async id => { await refreshColis(id); await refreshWork?.(); }} />
+            {canHandle&&m.statut==='echec'&&m.canal==='telegram'&&can('perm_comm_telegram')&&<button className="chat-retry" onClick={()=>ask('Réessayer cet envoi','Vérifiez dans Telegram que le client n’a pas reçu ce message, puis confirmez le renvoi.',async()=>{
+              const result=await deliverMessage(sel.id,m.id,{retryConfirmed:true});
+              if(!result.ok)throw new Error(result.error || 'L’envoi reste à vérifier.');
+              await refreshColis(sel.id);flash('Message envoyé à Telegram');
+            })}>Vérifier et réessayer</button>}
+            {(time || fromStaff && m.statut) && <p className="chat-bubble__footer">{time}{fromStaff && m.statut && <>{time && <span aria-hidden="true">·</span>}<MsgStatut statut={m.statut} canal={m.canal} /></>}</p>}
+          </div>
+        </div>
+      </React.Fragment>;
+    });
+
     return (
-      <div className={embedded ? 'flex min-h-0 flex-1 flex-col overflow-y-auto p-3' : 'card p-4 anim-fade'} id="conversation-client">
-        <p className={embedded ? 'sr-only' : 'font-bold mb-2 text-sm'}>Chat avec le client{(() => {
-          const unread = (sel?.messages || []).filter((m) => m.type === 'client' && !m.lu).length;
-          if (unread === 0) return null;
-          return <span className="ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-red-500 text-white">{unread}</span>;
-        })()}</p>
-        {colleagueHandling && <p role="status" className="mb-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">{staffName(conversationAction.assignee_id, teamUsers)} s’occupe de cette conversation. Vous pouvez lire les échanges et les pièces jointes. Pour répondre ou terminer le traitement, demandez un relais.</p>}
-        <details className="mb-2 rounded-xl border border-gray-200 dark:border-gray-700 px-3 py-1 space-y-2"><summary className="min-h-11 cursor-pointer py-2 text-sm font-semibold">{conversationLabel(sel)} · Gérer le suivi</summary>
-          <div className="flex flex-wrap justify-between items-center gap-2"><p className="text-sm font-semibold" role="status">{conversationLabel(sel)}</p><p className="text-xs text-gray-600 dark:text-gray-300">{state === 'termine' && !conversationAction ? 'Traitée' : `Conversation : ${staffName(conversationAction?.assignee_id, teamUsers)}`}</p></div>
-          <details className="text-xs text-gray-600 dark:text-gray-300"><summary className="min-h-8 cursor-pointer py-2">Suivi du traitement et relances</summary><p>{state==='a_traiter' ? 'La demande reste à traiter, même après lecture. Les relances automatiques de ce client sont suspendues.' : state==='attente_client' ? 'Votre réponse a été apportée ; le prochain retour est attendu du client. Les pauses demandées restent respectées.' : 'Le traitement est terminé. Un nouveau message du client rouvrira la conversation.'}</p></details>
-          {canHandle&&<div className="flex flex-wrap gap-2" aria-label="Traitement de la conversation">{Object.entries(CONVERSATION_STATES).map(([key,label])=><button key={key} type="button" disabled={changingState||sending||state===key} onClick={()=>changeState(key)} className="min-h-11 rounded-lg border border-gray-300 dark:border-gray-600 px-3 text-xs font-semibold disabled:opacity-50">{key==='termine'?'Marquer comme traité':key==='a_traiter'?'À traiter':label}</button>)}</div>}
-        </details>
-        <div ref={scrollRef} role="log" aria-label="Messages avec le client" className={`space-y-1.5 mb-3 overflow-y-auto ${embedded ? 'min-h-24 flex-1' : 'max-h-64'}`}>
-          {!hasMessages && (
-            <p className="text-xs text-gray-400 italic text-center py-3">Aucun message</p>
-          )}
-          {(sel.messages || []).map(renderMessage)}
+      <div className={embedded ? 'chat-thread' : 'chat-thread card anim-fade'} id="conversation-client">
+        <p className={embedded ? 'sr-only' : 'chat-thread__title'}>Chat avec le client</p>
+        <div className="chat-status">
+          <div className="chat-status__lead">
+            <span role="status" className="chat-state" data-tone={{ a_traiter: 'current', attente_client: 'waiting', termine: 'done' }[state]}>{conversationLabel(sel)}</span>
+            {ownership ? <div className="chat-status__owner">{ownership}</div> : ownerText && <span className="chat-status__owner">{ownerText}</span>}
+          </div>
+          <div className="chat-status__commands">
+            {canHandle && <div role="group" aria-label="Traitement de la conversation" className="chat-status__actions">
+              {secondaryStates.includes('attente_client') && stateButton('attente_client')}
+              {state !== 'termine' && <button type="button" disabled={busy} onClick={() => changeState('termine')} className={`chat-action chat-action--close${closePrimary ? ' chat-action--primary' : ''}`}><Check size={16} aria-hidden="true" />Marquer comme traité</button>}
+              {secondaryStates.includes('a_traiter') && stateButton('a_traiter')}
+            </div>}
+            <div ref={moreRef} className="chat-more">
+              <button ref={moreButtonRef} type="button" className="chat-more__button" aria-label="Autres actions sur la conversation" aria-expanded={moreOpen} aria-controls={`conversation-more-${sel.id}`} onClick={() => setMoreOpen(open => !open)}><MoreHorizontal size={18} aria-hidden="true" /></button>
+              <div id={`conversation-more-${sel.id}`} className="chat-more__panel" hidden={!moreOpen}>
+                <p className="chat-more__note">{explanation}</p>
+                {secondaryStates.map(key => stateButton(key, true))}
+                {lastClientMessage && <button type="button" className="chat-more__item" disabled={markingUnread || !lastClientMessage.lu} onClick={markUnread}>Marquer comme non lu</button>}
+              </div>
+            </div>
+          </div>
         </div>
-        <label htmlFor={`staff-message-${sel.id}`} className="block text-xs font-semibold mb-1">Votre réponse au client</label>
-        <div className="flex flex-col gap-2 sm:flex-row">
-          <textarea
-            rows={3}
-            id={`staff-message-${sel.id}`}
-            value={msgTxt}
-            disabled={!canHandle || sending}
-            onChange={(e) => setMsgTxt(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); handleSend(); } }}
-            placeholder={selClient?.telegramChatId ? 'Écrire au client via Telegram…' : 'Écrire dans l’espace client…'}
-            className="w-full flex-1 min-w-0 min-h-24 px-3 py-2 rounded-xl border text-sm"
-          />
-          <button
-            onClick={handleSend}
-            disabled={!canHandle || sending || changingState || !msgTxt.trim()} aria-label="Envoyer le message"
-            className="min-h-11 px-3 py-2 text-white rounded-xl text-sm font-bold disabled:opacity-30"
-            style={{ backgroundColor: BRAND.navy }}
-          >
-            <Send size={16} className="inline mr-1" />{sending ? 'Envoi…' : selClient?.telegramChatId ? 'Envoyer sur Telegram' : 'Envoyer dans l’espace client'}
-          </button>
+        {colleagueHandling && <p role="status" className="chat-notice">{staffName(conversationAction.assignee_id, teamUsers)} s’occupe de cette conversation. Vous pouvez lire les échanges et les pièces jointes. Pour répondre ou terminer le traitement, demandez un relais.</p>}
+        {/* Focusable: the history scrolls by keyboard even without a link inside. */}
+        <div ref={scrollRef} role="log" aria-label="Messages avec le client" tabIndex={0} className="chat-log">
+          {!hasMessages && <p className="chat-log__empty">Aucun message</p>}
+          {thread}
         </div>
-        {msgTxt && <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-sm text-slate-600"><span>{draft.storageAvailable ? (sendAttempt ? 'Saisie conservée dans cet onglet · tentative à vérifier' : 'Brouillon conservé dans cet onglet · non envoyé') : 'Brouillon conservé jusqu’au rechargement de cette page'}</span><button disabled={sending} onClick={() => ask('Effacer ce brouillon ?', 'La saisie sera retirée de cet onglet. Cela ne retire pas un message déjà enregistré : vérifiez la conversation si une tentative d’envoi existe.', clearMessageDraft, { danger: true, okLabel: 'Effacer le brouillon' })} className="min-h-11 underline">Effacer le brouillon</button></div>}
+        <div className="chat-composer">
+          <div className="chat-composer__meta">
+            <span className="chat-channel" data-channel={channel}><ChannelIcon size={14} aria-hidden="true" />{CHANNEL_LABELS[channel]}</span>
+            <span id={`staff-message-help-${sel.id}`} className="chat-composer__help">{help}</span>
+            <span className="chat-composer__shortcut">Ctrl + Entrée pour envoyer</span>
+          </div>
+          <label htmlFor={`staff-message-${sel.id}`} className="sr-only">Votre réponse au client</label>
+          <div className="chat-composer__box">
+            <textarea
+              ref={replyRef}
+              rows={2}
+              id={`staff-message-${sel.id}`}
+              value={msgTxt}
+              disabled={!canHandle || sending}
+              aria-describedby={`staff-message-help-${sel.id}`}
+              aria-keyshortcuts="Control+Enter"
+              onChange={(e) => setMsgTxt(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); handleSend(); } }}
+              placeholder={channel === 'telegram' ? `Écrire ${firstName ? `à ${firstName}` : 'au client'} via Telegram…` : 'Écrire dans l’espace client…'}
+              className="chat-composer__field"
+            />
+            <span className="chat-channel chat-composer__box-channel" data-channel={channel} aria-hidden="true"><ChannelIcon size={14} />{CHANNEL_LABELS[channel]}</span>
+            <button
+              onClick={handleSend}
+              disabled={!canHandle || sending || changingState || !msgTxt.trim()} aria-label="Envoyer le message"
+              className="chat-send"
+            >
+              <Send size={16} aria-hidden="true" />{sending ? 'Envoi…' : 'Envoyer'}
+            </button>
+          </div>
+          {msgTxt && <div className="chat-composer__draft"><span>{draft.storageAvailable ? (sendAttempt ? 'Saisie conservée dans cet onglet · tentative à vérifier' : 'Brouillon conservé dans cet onglet · non envoyé') : 'Brouillon conservé jusqu’au rechargement de cette page'}</span><button disabled={sending} onClick={() => ask('Effacer ce brouillon ?', 'La saisie sera retirée de cet onglet. Cela ne retire pas un message déjà enregistré : vérifiez la conversation si une tentative d’envoi existe.', clearMessageDraft, { danger: true, okLabel: 'Effacer le brouillon' })} className="min-h-11 underline">Effacer le brouillon</button></div>}
           {retryNotice}
           {sendError && <p role="alert" className="mt-2 text-sm text-red-700">{sendError}</p>}
           {sendResult && <p role="status" className="mt-2 text-sm text-emerald-700">{sendResult}</p>}
-        <p className="text-sm text-gray-600 dark:text-gray-300 mt-2">
-          {selClient?.telegramChatId
-            ? 'Envoi via Telegram. Envoyer une réponse ne clôture pas automatiquement son traitement.'
-            : 'Message dans l’espace client. L’invitation Telegram se trouve dans sa fiche client.'}
-        </p>
-        {lastSent && <p className="mt-1 text-xs text-slate-500">Dernier envoi : <MsgStatut statut={lastSent.statut} />{lastSent.canal ? ` · ${lastSent.canal === 'portal' ? 'espace client' : lastSent.canal}` : ''}</p>}
+          {lastSent?.statut && <p className="chat-composer__last">Dernier envoi : <MsgStatut statut={lastSent.statut} canal={lastSent.canal} />{lastSent.canal ? ` · ${CHANNEL_LABELS[lastSent.canal] || lastSent.canal}` : ''}</p>}
+        </div>
       </div>
     );
   }

@@ -1,30 +1,51 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useId } from 'react';
 import { ArrowRight, Clock, ChevronDown } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
-import { WORK_KINDS, WORK_STATES, actionPriority, actionBlocked, actionWaiting, canWorkAction, staffAvailable, workActionUrl } from '../../domain/personalWork';
+import { WORK_KINDS, WORK_STATES, actionPriority, actionBlocked, actionWaiting, canWorkAction, staffAvailable, workActionUrl, workDate } from '../../domain/personalWork';
+import { cartonCount, workRowModel } from '../../domain/workTable';
 import { receptionCartonManifest } from '../../domain/reception';
 import InvoiceReviewIndicator from '../ui/InvoiceReviewIndicator';
 import TaskTakeButton from './TaskTakeButton';
 import { pendingWorkDrafts } from '../../domain/workDrafts';
 
-export const workDate = value => value && Number.isFinite(Date.parse(value)) ? new Date(value).toLocaleString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : null;
+export { workDate };
 export const staffName = (id, users = []) => { const person = users.find(user => user.authId === id); return person ? [person.prenom, person.nom].filter(Boolean).join(' ') : id ? 'Membre de l’équipe' : 'Non attribué'; };
 const controlClass = 'min-h-11 rounded-lg border border-slate-200 px-3 text-sm font-semibold disabled:opacity-40';
 const secondaryClass = 'min-h-11 rounded-lg px-2 text-sm font-semibold text-slate-600 underline underline-offset-4 hover:bg-slate-50 disabled:opacity-40';
 
-export function WorkActionControls({ action, returnTo = '/', compact = false, inTask = false }) {
+// An open form of a task list outlives a change of layout (table ↔ cards when a
+// tablet turns): its fields stay with the task until confirmed or cancelled.
+const formDrafts = new Map();
+
+/** State, guards and commands of one task. Buttons and panel (menu, forms,
+ * conflict) render apart, so a table shows the panel in its own row; the drafts
+ * live here and survive a background refresh of the same task. */
+export function useWorkActionControls(action, { returnTo = '/', inTask = false } = {}) {
   const { auth, authRole, can, teamUsers = [], workPreferences = [], data = [], mutateWorkAction, refreshWork, flash } = useApp();
   const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
   const pending = useRef(false);
   const [error, setError] = useState('');
-  const [mode, setMode] = useState('');
-  const [formAction, setFormAction] = useState(null);
-  const [note, setNote] = useState('');
-  const [target, setTarget] = useState('');
-  const [date, setDate] = useState('');
-  useEffect(() => { setMode(''); setFormAction(null); setNote(''); setTarget(''); setDate(''); setError(''); }, [action.id]);
+  // Only list rows keep their form across a remount; a task page has one copy.
+  const kept = id => inTask ? undefined : formDrafts.get(id);
+  const [mode, setMode] = useState(() => kept(action.id)?.mode || '');
+  const [formAction, setFormAction] = useState(() => kept(action.id)?.formAction || null);
+  const [note, setNote] = useState(() => kept(action.id)?.note || '');
+  const [target, setTarget] = useState(() => kept(action.id)?.target || '');
+  const [date, setDate] = useState(() => kept(action.id)?.date || '');
+  const shownAction = useRef(action.id);
+  useEffect(() => {
+    if (shownAction.current === action.id) return;
+    shownAction.current = action.id;
+    const draft = kept(action.id);
+    setMode(draft?.mode || ''); setFormAction(draft?.formAction || null); setNote(draft?.note || ''); setTarget(draft?.target || ''); setDate(draft?.date || ''); setError('');
+  }, [action.id]);
+  useEffect(() => {
+    if (inTask) return;
+    if (mode && mode !== 'menu') formDrafts.set(action.id, { mode, formAction, note, target, date });
+    else formDrafts.delete(action.id);
+  }, [inTask, action.id, mode, formAction, note, target, date]);
   const me = auth?.u?.id;
   const own = action.assignee_id === me;
   const recipient = action.handoff_to === me;
@@ -33,7 +54,8 @@ export function WorkActionControls({ action, returnTo = '/', compact = false, in
   const available = staffAvailable(workPreferences.find(item => item.staff_id === me));
   const waiting = actionWaiting(action);
   const canTake = allowed && action.state === 'ready' && !waiting && (!action.assignee_id && available || own);
-  const hasPrimaryCommand = recipient || canTake || own && allowed && action.state === 'in_progress' && !waiting;
+  const canContinue = own && allowed && action.state === 'in_progress' && !waiting;
+  const hasPrimaryCommand = recipient || canTake || canContinue;
   const candidates = teamUsers.filter(user => user.authId && user.authId !== action.assignee_id && user.actif !== false
     && staffAvailable(workPreferences.find(item => item.staff_id === user.authId))
     && canWorkAction(action, permission => ['directeur', 'vice_directeur'].includes(user.role) || user.permissions?.[permission] === true));
@@ -68,15 +90,39 @@ export function WorkActionControls({ action, returnTo = '/', compact = false, in
       : { staff_id: target, note: note.trim() };
     command(mode, payload);
   }
-  if (action.state === 'done') return null;
-  return <div className="space-y-2">
-    <div className="flex flex-wrap items-center gap-2">
-      {recipient && <><button disabled={busy || !allowed} onClick={() => command('accept', { start: !waiting }, true)} className={controlClass + ' bg-slate-900 text-white dark:bg-slate-200 dark:text-slate-900'}>{waiting ? 'Accepter le suivi' : 'Accepter et ouvrir'}</button><button disabled={busy} onClick={() => command('reject')} className={secondaryClass}>Décliner</button></>}
-      {!recipient && !(inTask && own) && <TaskTakeButton key={action.id} action={action} onClaim={inTask ? undefined : open} />}
-      {!inTask && own && allowed && action.state === 'in_progress' && !waiting && <button onClick={open} className={controlClass + ' bg-slate-900 text-white dark:bg-slate-200 dark:text-slate-900'}>Continuer<ArrowRight size={14} className="inline ml-2" /></button>}
-      {!inTask && !(own && allowed && action.state === 'in_progress' && !waiting) && <button onClick={open} className={hasPrimaryCommand ? secondaryClass : controlClass}>Voir<ArrowRight size={14} className="inline ml-2" /></button>}
-      {(own || coordinate) && <button aria-expanded={Boolean(mode)} onClick={() => { setFormAction(action); setMode(mode ? '' : 'menu'); }} className={secondaryClass} disabled={busy}>Options<ChevronDown size={14} className="inline ml-1" /></button>}
-    </div>
+  async function refreshTask() {
+    try {
+      const refreshed = await refreshWork();
+      const fresh = refreshed?.actions?.find(item => item.id === action.id);
+      if (fresh) { setFormAction(fresh); setError('Tâche actualisée. Votre saisie est conservée ; vérifiez son attribution avant de confirmer.'); }
+      else setError('Cette tâche est terminée ou n’est plus disponible. Revenez à votre liste.');
+    } catch (err) { setError(err.message); }
+  }
+  return {
+    action, inTask, busy, error, mode, setMode, setFormAction, note, setNote, target, setTarget, date, setDate,
+    own, recipient, coordinate, allowed, waiting, canContinue, hasPrimaryCommand, candidates, teamUsers,
+    open, command, submit, refreshTask,
+  };
+}
+
+/** `hideRedundantView`: in Mon travail the title link already opens a task
+ * without taking it, so « Voir » only appears when no command leads there.
+ * `options={false}` keeps a relay row to its decision. */
+export function WorkActionButtons({ controls, hideRedundantView = false, options = true, panelId, className = 'flex flex-wrap items-center gap-2' }) {
+  const { action, inTask, busy, mode, setMode, setFormAction, own, recipient, coordinate, allowed, waiting, canContinue, hasPrimaryCommand, open, command } = controls;
+  return <div className={className}>
+    {recipient && <><button disabled={busy || !allowed} onClick={() => command('accept', { start: !waiting }, true)} className={controlClass + ' bg-slate-900 text-white dark:bg-slate-200 dark:text-slate-900'}>{waiting ? 'Accepter le suivi' : 'Accepter et ouvrir'}</button><button disabled={busy} onClick={() => command('reject')} className={secondaryClass}>Décliner</button></>}
+    {!recipient && !(inTask && own) && <TaskTakeButton key={action.id} action={action} onClaim={inTask ? undefined : open} />}
+    {!inTask && canContinue && <button onClick={open} className={controlClass + ' bg-slate-900 text-white dark:bg-slate-200 dark:text-slate-900'}>Continuer<ArrowRight size={14} className="inline ml-2" /></button>}
+    {!inTask && !canContinue && !(hideRedundantView && hasPrimaryCommand) && <button onClick={open} className={hasPrimaryCommand ? secondaryClass : controlClass}>Voir<ArrowRight size={14} className="inline ml-2" /></button>}
+    {options && (own || coordinate) && <button aria-expanded={Boolean(mode)} aria-controls={mode && panelId ? panelId : undefined} onClick={() => { setFormAction(action); setMode(mode ? '' : 'menu'); }} className={secondaryClass} disabled={busy}>Options<ChevronDown size={14} className="inline ml-1" /></button>}
+  </div>;
+}
+
+/** The Options menu, its forms and the conflict message, in this order. */
+export function WorkActionPanel({ controls, compact = false }) {
+  const { action, busy, error, mode, setMode, note, setNote, target, setTarget, date, setDate, own, coordinate, allowed, candidates, teamUsers, command, submit, refreshTask } = controls;
+  return <>
     {mode === 'menu' && <div className="flex flex-wrap gap-2 text-sm">
       {own && <>{action.state === 'waiting' && !actionBlocked(action) && allowed && <button disabled={busy} onClick={() => command('resume', { start: true }, true)} className={controlClass}>Lever l’attente et continuer</button>}<button onClick={() => setMode('wait')} className={controlClass}>Mettre en attente</button><button onClick={() => setMode('handoff')} className={controlClass}>Passer à un collègue</button><button disabled={busy} onClick={() => command('release')} className={controlClass}>Remettre à disposition</button></>}
       {coordinate && <><button onClick={() => setMode('reassign')} className={controlClass}>Réaffecter immédiatement</button><button onClick={() => setMode('prioritize')} className={controlClass}>Signaler une priorité</button></>}
@@ -91,18 +137,75 @@ export function WorkActionControls({ action, returnTo = '/', compact = false, in
       {mode === 'wait' && <p className="text-xs text-slate-600">Cette attente concerne le travail de l’équipe. Elle ne constitue pas une pause demandée par le client.</p>}
       <div className="flex gap-2"><button disabled={busy} className={controlClass + ' bg-slate-900 text-white dark:bg-slate-200 dark:text-slate-900'}>{busy ? 'Enregistrement…' : mode === 'handoff' ? 'Proposer le relais' : 'Confirmer'}</button><button type="button" onClick={() => setMode('')} className={controlClass}>Annuler</button></div>
     </form>}
-    {error && <div role="alert" className="text-sm text-red-700">{error}<button onClick={async () => {
-      try {
-        const refreshed = await refreshWork();
-        const fresh = refreshed?.actions?.find(item => item.id === action.id);
-        if (fresh) { setFormAction(fresh); setError('Tâche actualisée. Votre saisie est conservée ; vérifiez son attribution avant de confirmer.'); }
-        else setError('Cette tâche est terminée ou n’est plus disponible. Revenez à votre liste.');
-      } catch (err) { setError(err.message); }
-    }} className="ml-2 min-h-11 underline">Actualiser la tâche</button></div>}
+    {error && <div role="alert" className="text-sm text-red-700">{error}<button onClick={refreshTask} className="ml-2 min-h-11 underline">Actualiser la tâche</button></div>}
+  </>;
+}
+
+export function WorkActionControls({ action, returnTo = '/', compact = false, inTask = false, hideRedundantView = false }) {
+  const controls = useWorkActionControls(action, { returnTo, inTask });
+  if (action.state === 'done') return null;
+  return <div className="space-y-2">
+    <WorkActionButtons controls={controls} hideRedundantView={hideRedundantView} />
+    <WorkActionPanel controls={controls} compact={compact} />
   </div>;
 }
 
-export default function WorkActionRow({ action, dossier, client, returnTo, now = Date.now(), density = 'comfortable', compactLayout = false, notice }) {
+/** The title link: it opens the task without taking it. */
+export function WorkTaskLink({ action, dossier, title, returnTo }) {
+  return <Link to={workActionUrl(action, returnTo, dossier)} aria-label={`Ouvrir ${title} — ${dossier?.ref || 'dossier'}`} className="work-task-link">{title}</Link>;
+}
+
+/** What only some tasks carry, under their title in the table and the cards. */
+export function WorkTaskDetails({ model, action, dossier, returnTo, notice }) {
+  const { teamUsers = [] } = useApp();
+  return <>
+    {model.assigneeId && <p className="work-task-detail">Réalise la tâche : {staffName(model.assigneeId, teamUsers)}</p>}
+    {model.waiting && <p className="work-task-detail"><strong>En attente : </strong>{model.waiting}</p>}
+    {notice && <p className="work-task-detail work-task-notice">{notice}</p>}
+    {model.handoff && <p className="work-task-detail">Relais proposé à {staffName(model.handoff.to, teamUsers)} · acceptation attendue{model.handoff.note ? ` — ${model.handoff.note}` : ''}</p>}
+    {action.kind === 'documents' && <div className="work-invoice"><InvoiceReviewIndicator dossier={dossier} returnTo={returnTo} /></div>}
+    {model.note && <p className="work-task-detail whitespace-pre-wrap"><strong>Consigne de reprise : </strong>{model.note}</p>}
+  </>;
+}
+
+/** Mon travail card: the same facts and commands as a table row. */
+function WorkActionCard({ action, dossier, client, returnTo, now = Date.now(), notice, visibleKeys }) {
+  const { auth } = useApp();
+  const controls = useWorkActionControls(action, { returnTo });
+  const panelId = useId();
+  const model = workRowModel(action, dossier, client, { now, meId: auth?.u?.id });
+  const shows = key => !visibleKeys || visibleKeys.includes(key);
+  const facts = [shows('casier') && model.casier && `Casier ${model.casier}`, shows('cartons') && model.cartons && cartonCount(model.cartons)].filter(Boolean).join(' · ');
+  return <article data-work-action={action.id} data-urgent={model.urgent ? 'true' : undefined} className="dossier-table-card work-card">
+    <div className="work-card-heading">
+      <h2 className="work-card-title"><WorkTaskLink action={action} dossier={dossier} title={model.title} returnTo={returnTo} /></h2>
+      {model.state && <span className="dossier-pill" data-tone={model.state.tone}>{model.state.label}</span>}
+    </div>
+    {(shows('ref') || shows('client')) && <p className="work-card-identity">{shows('ref') && <strong className="work-ref">{model.ref}</strong>}{shows('ref') && shows('client') && ' · '}{shows('client') && model.client}</p>}
+    {facts && <p className="work-card-facts">{facts}</p>}
+    {shows('due') && model.due && <p className="work-due" data-urgent={model.due.urgent ? 'true' : undefined}><Clock size={15} aria-hidden="true" />{model.due.label}</p>}
+    <WorkTaskDetails model={model} action={action} dossier={dossier} returnTo={returnTo} notice={notice} />
+    {action.state !== 'done' && <div className="work-card-controls">
+      <WorkActionButtons controls={controls} hideRedundantView panelId={panelId} className="work-actions" />
+      {(controls.mode || controls.error) && <div id={panelId} data-work-action-panel={action.id} className="work-panel space-y-2"><WorkActionPanel controls={controls} compact /></div>}
+    </div>}
+  </article>;
+}
+
+/** A relay proposed to me: one compact line, its decision beside it. */
+function WorkHandoffRow({ action, dossier, client, returnTo, now = Date.now() }) {
+  const { auth, teamUsers = [] } = useApp();
+  const controls = useWorkActionControls(action, { returnTo });
+  const panelId = useId();
+  const model = workRowModel(action, dossier, client, { now, meId: auth?.u?.id });
+  return <li data-work-action={action.id} className="work-handoff-row">
+    <p className="work-handoff-text"><WorkTaskLink action={action} dossier={dossier} title={model.title} returnTo={returnTo} /> · <span className="work-ref">{model.ref}</span> · {model.client}{action.assignee_id && <span className="work-handoff-from"> — proposé par {staffName(action.assignee_id, teamUsers)}{action.handoff_note ? ` : « ${action.handoff_note} »` : ''}</span>}</p>
+    <WorkActionButtons controls={controls} hideRedundantView options={false} panelId={panelId} className="work-actions" />
+    {(controls.mode || controls.error) && <div id={panelId} data-work-action-panel={action.id} className="work-panel space-y-2"><WorkActionPanel controls={controls} /></div>}
+  </li>;
+}
+
+function WorkActionListRow({ action, dossier, client, returnTo, now = Date.now(), density = 'comfortable', compactLayout = false, notice }) {
   const { teamUsers = [], auth } = useApp();
   const priority = actionPriority(action, now);
   const waiting = action.blocked_reason || action.waiting_reason;
@@ -127,4 +230,11 @@ export default function WorkActionRow({ action, dossier, client, returnTo, now =
     </div>
     <div className={compact ? 'lg:!mt-2 lg:max-w-sm' : ''}><WorkActionControls action={action} returnTo={returnTo} compact={compact} /></div>
   </article>;
+}
+
+/** `card` and `handoff` belong to Mon travail; the team view keeps the list row. */
+export default function WorkActionRow({ variant, ...props }) {
+  if (variant === 'card') return <WorkActionCard {...props} />;
+  if (variant === 'handoff') return <WorkHandoffRow {...props} />;
+  return <WorkActionListRow {...props} />;
 }

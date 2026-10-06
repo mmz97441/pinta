@@ -7,6 +7,9 @@ test('durable work state never disappears when all messages are read', () => {
   assert.equal(needsConversationAction({conversationStatut:'termine',messages:[{type:'client',lu:false}]}),false);
   assert.equal(conversationLabel({conversationStatut:'attente_client'}),'Attente client');
 });
+test('the three states use one set of labels', () => {
+  assert.deepEqual(['a_traiter','attente_client','termine'].map(conversationLabel),['À répondre','Attente client','Traitée']);
+});
 test('legacy fallback is based on a delivered reply, never the read flag', () => {
   const customer={type:'client',lu:true,createdAt:'2026-09-10T10:00:00Z'};
   assert.equal(conversationState({messages:[customer]}),'a_traiter');

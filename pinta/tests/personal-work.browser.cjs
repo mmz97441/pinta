@@ -50,13 +50,14 @@ function assertNoMutation(f) {
    await nav.getByRole('button', { name: 'À faire 4', exact: true }).waitFor();
    assert.equal(await nav.getByRole('button').count(), 2);
    const actions = f.page.getByRole('region', { name: 'À faire', exact: true });
-   assert.deepEqual(await actions.locator('article').evaluateAll(rows => rows.map(row => row.dataset.workAction)), ['quote', 'started', 'outside', 'prepare']);
+   assert.deepEqual(await actions.locator('[data-work-action]').evaluateAll(rows => rows.map(row => row.dataset.workAction)), ['quote', 'started', 'outside', 'prepare']);
    await row(f, 'started').getByText('En cours', { exact: true }).waitFor();
-   await row(f, 'quote').getByText(/Échéance dépassée/).waitFor();
+   // The table names the column « Échéance »; its cell keeps the rest of the priority wording.
+   await row(f, 'quote').getByRole('cell', { name: /^Dépassée · / }).waitFor();
    for (const [legacy, section, count] of [['progress','À faire',4],['now','À faire',4],['waiting','En attente',1],['pool','À prendre',1]]) {
     await f.page.goto(base + '/?section=' + legacy);
     await f.page.getByRole('region', { name: section, exact: true }).waitFor();
-    assert.equal(await f.page.getByRole('region', { name: section, exact: true }).locator('article').count(), count);
+    assert.equal(await f.page.getByRole('region', { name: section, exact: true }).locator('[data-work-action]').count(), count);
    }
   });
   await scenario('filters-never-hide-urgent-owned-actions-or-handoffs', async f => {
@@ -142,7 +143,10 @@ function assertNoMutation(f) {
    }
    await f.page.goto(base + '/?section=pool');
    const invitation = row(f, 'pool');
-   await invitation.getByRole('button', { name: 'Voir', exact: true }).click();
+   // « Je m’en occupe » is offered: the title link alone consults without taking.
+   await invitation.getByRole('button', { name: 'Je m’en occupe', exact: true }).waitFor();
+   assert.equal(await invitation.getByRole('button', { name: 'Voir', exact: true }).count(), 0);
+   await invitation.getByRole('link', { name: /^Ouvrir / }).click();
    await f.page.waitForURL(url => url.pathname === '/colis/' + ids.P && url.searchParams.get('onglet') === 'conversation' && url.searchParams.get('action') === 'pool');
    assert.equal(f.tables.staff_work_actions.find(action => action.id === 'pool').assignee_id, null);
   });

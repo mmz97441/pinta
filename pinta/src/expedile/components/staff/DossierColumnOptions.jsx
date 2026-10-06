@@ -66,13 +66,20 @@ export default function DossierColumnOptions({ columns, columnKey, anchor, fromM
   </ColumnDialog>;
 }
 
-export function DossierColumnVisibility({ columns, visibleKeys, widths, anchor, onChange, onResize, onReset, onResetWidths, onClose }) {
+const DOSSIER_COLUMN_NOTES = [
+  'Choisissez les colonnes et réglez leur largeur séparément. La référence reste affichée pour identifier chaque dossier.',
+  'Vos choix sont mémorisés pour votre compte et cette vue, sur cet appareil. Les largeurs s’appliquent au tableau.',
+];
+
+/** `required` is the column that identifies a row (the reference of a dossier,
+ * the task in Mon travail); focus starts on the first column one may hide. */
+export function DossierColumnVisibility({ columns, visibleKeys, widths, anchor, required = 'ref', notes = DOSSIER_COLUMN_NOTES, onChange, onResize, onReset, onResetWidths, onClose }) {
+  const firstChoice = columns.find(column => column.key !== required)?.key;
   return <ColumnDialog title="Colonnes affichées" closeLabel="Fermer les colonnes" anchor={anchor} onClose={onClose}>
-    <p>Choisissez les colonnes et réglez leur largeur séparément. La référence reste affichée pour identifier chaque dossier.</p>
-    <p>Vos choix sont mémorisés pour votre compte et cette vue, sur cet appareil. Les largeurs s’appliquent au tableau.</p>
+    {notes.map(note => <p key={note}>{note}</p>)}
     <div className="dossier-column-visibility">{columns.map(column => <div key={column.key} className="dossier-column-setting"><label className="dossier-column-toggle">
-      <input data-filter-focus={column.key === 'client' ? '' : undefined} type="checkbox" aria-label={`Afficher ${column.label}`} checked={visibleKeys.includes(column.key)} disabled={column.key === 'ref'} onChange={event => onChange(column.key, event.target.checked)} />
-      <span>{column.label}{column.key === 'ref' && <small>Obligatoire</small>}</span>
+      <input data-filter-focus={column.key === firstChoice ? '' : undefined} type="checkbox" aria-label={`Afficher ${column.label}`} checked={visibleKeys.includes(column.key)} disabled={column.key === required} onChange={event => onChange(column.key, event.target.checked)} />
+      <span>{column.label}{column.key === required && <small>Obligatoire</small>}</span>
     </label>{onResize && <ColumnWidthControl column={column} width={widths?.[column.key]} onResize={onResize} />}</div>)}</div>
     <div className="dossier-column-filter-actions"><button type="button" onClick={onReset}>Rétablir les colonnes</button>{onResetWidths && <button type="button" onClick={onResetWidths}>Rétablir les largeurs</button>}<button type="button" className="dossier-column-apply" onClick={onClose}>Terminer</button></div>
   </ColumnDialog>;
