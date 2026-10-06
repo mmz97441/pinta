@@ -3,11 +3,12 @@ import React, { useState, useEffect } from 'react';
 import {
   ArrowLeft, Package, CheckCircle, Wrench, CreditCard, Plane, MapPin,
   ChevronDown, ChevronUp, ChevronRight, AlertCircle, ThumbsUp, ThumbsDown, RotateCcw,
-  ExternalLink, Clock, Download, Camera, Shield, Warehouse, Truck, RefreshCw,
+  ExternalLink, Clock, Download, Camera, Shield, Warehouse, Truck, RefreshCw, FileText, Upload,
 } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { hasPublishedQuote } from './quoteVisibility';
 import { hasCurrentPreparation } from '../../domain/preparationReadiness';
+import { invoiceRequestState } from '../../domain/invoiceRequest';
 import { cartonManifest, clientJourney, clientWorkState, quotePresentation, PAYMENT_TERMS, outgoingTracking, latestLogisticsEvent } from '../../domain/clientJourney';
 import { useApp } from '../../context/AppContext';
 import { SecureImage } from '../ui/SecureFile';
@@ -149,6 +150,9 @@ export default function ClientDetailView() {
   const logistics = latestLogisticsEvent(sel);
   const shipmentStarted = ['expedie','transit','dedouanement','arrive','livraison','livre'].includes(sel.statut);
   const previousPreparation = !hasCurrentPreparation(sel) || ['receptionne','mesure','attente_feu_vert','refuse_client','annule'].includes(sel.statut);
+  // After the consent, before the quote: the purchase invoice still requested (same rule as the server), never for a professional.
+  const invoiceReminder = ['autorise', 'en_preparation'].includes(sel.statut) && !sel.paiementDate && !sel.archive
+    && authCl?.type !== 'pro' && invoiceRequestState(sel).requested;
   const openPanel = panel => setParams(previous => { const next = new URLSearchParams(previous); next.set('panel', panel); return next; }, { replace: true });
 
   const toggleStep = (idx) => {
@@ -302,10 +306,17 @@ export default function ClientDetailView() {
                   <CheckCircle size={13} />
                   Accord donné
                 </p>
-                <p className="text-sm text-emerald-600 leading-relaxed">
+                <p className="text-sm text-emerald-800 leading-relaxed">
                   Vous avez autorisé la préparation de ce colis. Expedîle va le préparer pour l'expédition.
                 </p>
               </div>
+              {invoiceReminder && (
+                <div data-testid="consent-invoice-reminder" className="space-y-2 rounded-xl border p-3" style={{ backgroundColor: 'var(--attention-bg)', borderColor: 'var(--attention-border)', color: 'var(--attention-text)' }}>
+                  <p className="flex items-start gap-1.5 text-sm font-semibold"><FileText size={14} className="mt-0.5 shrink-0" aria-hidden="true" />Il nous manque encore votre facture d’achat.</p>
+                  <p className="text-sm">Elle nous permet d’établir votre devis.</p>
+                  <button type="button" onClick={() => openPanel('documents')} className="min-h-11 inline-flex items-center gap-2 rounded-xl brand-bg px-4 py-2 text-sm font-semibold text-white transition-all duration-200 ease-out hover:translate-y-[-1px] active:scale-[0.98]"><Upload size={16} aria-hidden="true" />Joindre mes factures</button>
+                </div>
+              )}
               <button
                 onClick={handleRevoke}
                 className="flex items-center gap-1.5 text-sm font-semibold text-gray-400 hover:text-red-500 transition-colors"

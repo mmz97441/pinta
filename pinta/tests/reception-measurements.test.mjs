@@ -7,6 +7,10 @@ import { build } from 'esbuild';
 import { receptionCartons, receptionMeasurements, mergeReceptionCartons, hasCompleteReceptionMeasurements } from '../src/expedile/domain/reception.js';
 import { calculateQuote, measureShipment } from '../src/expedile/domain/quote.js';
 
+// Confirmations of the client's choice sent by the server (lot 3b): same rules as the D3 bodies below.
+const CONSENT_REPLY_KEYS = ['feu_vert_recu_telegram', 'feu_vert_recu_email', 'feu_vert_recu_facture_telegram', 'feu_vert_recu_facture_email',
+  'choix_attente_recu_telegram', 'choix_attente_recu_email', 'refus_recu_telegram', 'refus_recu_email'];
+
 const entry = new URL('../src/expedile/lib/supabaseData.js', import.meta.url).pathname;
 const bundle = await build({ entryPoints: [entry], bundle: true, write: false, platform: 'node', format: 'cjs', logLevel: 'silent', plugins: [{ name: 'isolated-storage', setup(builder) {
   builder.onResolve({ filter: /^\.\/supabase$/ }, () => ({ path: 'supabase', namespace: 'test' }));
@@ -192,7 +196,8 @@ test('browser preview and server delivery show identical real carton totals and 
 test('late-invoice messages (D3): same text in preview and delivery, plain text, defaults mirrored on the server', async () => {
   const root = new URL('..', import.meta.url).pathname;
   const { DEFAULT_BODIES } = await import('../src/expedile/services/messageDefaults.js');
-  const keys = ['facture_apres_devis_telegram', 'facture_apres_devis_email', 'facture_apres_devis_sans_lien_telegram', 'facture_apres_devis_sans_lien_email'];
+  const keys = ['facture_apres_devis_telegram', 'facture_apres_devis_email', 'facture_apres_devis_sans_lien_telegram', 'facture_apres_devis_sans_lien_email',
+    ...CONSENT_REPLY_KEYS];
   const messages = await build({ stdin: { contents: "export {renderTemplate} from './src/expedile/services/messageTemplates.js'; export {renderMessage} from './supabase/functions/_shared/messageTemplate.ts';", resolveDir: root }, bundle: true, write: false, platform: 'node', format: 'cjs', logLevel: 'silent', plugins: [{ name: 'isolated-http', setup(builder) {
     builder.onResolve({ filter: /^\.\/http\.ts$/ }, () => ({ path: 'http', namespace: 'message-test' }));
     builder.onLoad({ filter: /.*/, namespace: 'message-test' }, () => ({ contents: 'export class HttpError extends Error { constructor(status,message) { super(message);this.status=status; } }', loader: 'js' }));
@@ -220,13 +225,43 @@ test('late-invoice messages (D3): same text in preview and delivery, plain text,
 // Edge module is delivered with the same change; until it exists this check is
 // reported as skipped, never as passed.
 const serverDefaults = new URL('../supabase/functions/_shared/messageDefaults.ts', import.meta.url).pathname;
-test('late-invoice defaults are identical in the browser and Edge copies', { skip: !existsSync(serverDefaults) && 'supabase/functions/_shared/messageDefaults.ts absent' }, async () => {
+test('default bodies (late invoice, consent confirmations and all others) are identical in the browser and Edge copies', { skip: !existsSync(serverDefaults) && 'supabase/functions/_shared/messageDefaults.ts absent' }, async () => {
   const { DEFAULT_BODIES } = await import('../src/expedile/services/messageDefaults.js');
-  const keys = ['facture_apres_devis_telegram', 'facture_apres_devis_email', 'facture_apres_devis_sans_lien_telegram', 'facture_apres_devis_sans_lien_email'];
+  const keys = ['facture_apres_devis_telegram', 'facture_apres_devis_email', 'facture_apres_devis_sans_lien_telegram', 'facture_apres_devis_sans_lien_email',
+    ...CONSENT_REPLY_KEYS];
   const serverFile = serverDefaults;
   const server = await build({ entryPoints: [serverFile], bundle: true, write: false, platform: 'node', format: 'cjs', logLevel: 'silent' });
   const serverModule = { exports: {} };
   vm.runInNewContext(server.outputFiles[0].text, { module: serverModule, exports: serverModule.exports });
   const serverBodies = serverModule.exports.DEFAULT_BODIES || {};
   for (const key of keys) assert.equal(serverBodies[key], DEFAULT_BODIES[key], `${key} is identical in src/services/messageDefaults.js and fn/_shared/messageDefaults.ts.`);
+  // Strict mirror: the same keys in the same order, every body identical to the one the editor shows.
+  assert.deepEqual(Object.keys(serverBodies), Object.keys(DEFAULT_BODIES), 'The Edge copy holds exactly the keys of the browser copy.');
+  for (const [key, body] of Object.entries(serverBodies)) assert.equal(body, DEFAULT_BODIES[key], `${key} (server copy) is mirrored in src/services/messageDefaults.js.`);
+});
+
+test('every default body is plain text, signed « L’équipe Expedîle » without Markdown', async () => {
+  const { DEFAULT_BODIES } = await import('../src/expedile/services/messageDefaults.js');
+  assert.ok(Object.keys(DEFAULT_BODIES).length >= 36);
+  for (const [key, body] of Object.entries(DEFAULT_BODIES)) {
+    // Messages are sent as plain text: an underscore or an asterisk would reach the client literally.
+    assert.doesNotMatch(body.replace(/\{\{\w+\}\}/g, ''), /[_*]/, `${key} has no Markdown marker outside its variables.`);
+    if (key.endsWith('_email')) assert.match(body, /\n\nCordialement,\nL’équipe Expedîle$/, `${key} ends with the email signature.`);
+    else assert.match(body, /\nL’équipe Expedîle(?: — Paris → \{\{destination\}\})?$/, `${key} is signed by L’équipe Expedîle.`);
+  }
+});
+
+test('consent confirmations (lot 3b): the invoice line only in its own variant, no started preparation, no date', async () => {
+  const { DEFAULT_BODIES } = await import('../src/expedile/services/messageDefaults.js');
+  for (const key of CONSENT_REPLY_KEYS) {
+    const body = DEFAULT_BODIES[key];
+    // « Accord enregistré » is not « Préparation commencée »; a departure date is never promised.
+    assert.doesNotMatch(body, /en cours de pr[ée]paration|pr[ée]paration (en cours|commenc[ée]e)|d[ée]part|\d{1,2}\/\d{1,2}/i, `${key} claims no started preparation and no date.`);
+    if (key.endsWith('_telegram')) assert.match(body, /^Bonjour \{\{prenom\}\} 👋\n\n[\s\S]+\n\nL’équipe Expedîle$/u, `${key} greets with the first name and is signed.`);
+    assert.equal(/facture d’achat/.test(body), key.startsWith('feu_vert_recu_facture_'), `${key}: only the invoice variant asks for the purchase invoice.`);
+  }
+  assert.match(DEFAULT_BODIES.feu_vert_recu_telegram, /votre accord pour \{\{ref\}\} est bien enregistré/);
+  assert.match(DEFAULT_BODIES.feu_vert_recu_facture_telegram, /Il nous manque encore votre facture d’achat, nécessaire pour établir votre devis : envoyez-la en réponse à ce message \(photo ou PDF\) ou déposez-la dans votre espace client\./);
+  assert.match(DEFAULT_BODIES.choix_attente_recu_telegram, /nous conservons vos cartons pour \{\{ref\}\}[\s\S]*depuis votre espace client ou ici/);
+  assert.match(DEFAULT_BODIES.refus_recu_telegram, /Notre équipe vous contactera pour organiser la suite/);
 });

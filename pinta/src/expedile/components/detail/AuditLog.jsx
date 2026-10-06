@@ -12,6 +12,7 @@ const ACTION_NAMES = {
   correction_devis: 'Devis repris pour correction',
   preparation_measured: 'Mesures après préparation enregistrées', quote_saved: 'Devis enregistré', quote_sent: 'Devis envoyé', invoice_review_saved: 'Facture vérifiée', invoice_duplicate: 'Copie de facture retirée', invoice_duplicate_restored: 'Facture remise à vérifier', colis_reverted: 'Étape du dossier corrigée', colis_archived: 'Dossier archivé', colis_cancelled: 'Expédition annulée', payment_confirmed: 'Paiement confirmé', departure_confirmed: 'Départ confirmé', colis_assigned: 'Suivi du dossier attribué', staff_work_action: 'Organisation du travail mise à jour',
   quote_withdrawn: 'Devis retiré', late_invoice_received: 'Facture reçue après l’envoi du devis', invoice_modification_opened: 'Modification d’une facture validée ouverte', invoice_modification_closed: 'Modification d’une facture fermée sans enregistrement', client_invoice_identical_ignored: 'Document identique déjà présent', telegram_late_invoice_confirmed: 'Facture confirmée par le client sur Telegram',
+  consent_reply_failed: 'Confirmation du choix du client non envoyée sur Telegram',
 };
 function formatDate(iso) {
   if (!iso) return '';

@@ -98,6 +98,38 @@ const results=[];
   f.tables.colis[0].statut='dedouanement';await f.page.reload();await out.waitFor();assert.match(await out.getAttribute('href'),/TRANSPORT-SORTANT$/);
   f.tables.envois=[];await f.page.reload();await active.getByText(/Le suivi transporteur vers votre adresse n’est pas encore renseigné/).waitFor();assert.equal(await out.count(),0);
  });
+ // Lot 3b: once the consent is recorded, a particulier whose purchase invoice is still requested sees it in « Accord
+ // donné », with a direct way to the invoice deposit of this dossier (light and dark, 390 and 1440, axe).
+ const showConsent=async f=>{await f.page.getByText('Suivi et détails de l’expédition',{exact:true}).click();await f.page.getByText('Vous avez autorisé la préparation de ce colis. Expedîle va le préparer pour l\'expédition.',{exact:true}).waitFor();};
+ for(const width of [390,1440])for(const theme of ['light','dark'])await check(`consent-invoice-reminder-${width}-${theme}`,async f=>{
+  Object.assign(f.tables.colis[0],{statut:'autorise',feu_vert:'autorise',feu_vert_date:'2026-09-19T08:00:00Z'});f.tables.factures=[];f.tables.lignes=[];
+  await f.page.setViewportSize({width,height:900});await f.page.emulateMedia({reducedMotion:'reduce'});await f.login();
+  await f.page.evaluate(value=>localStorage.setItem('expedile-theme',value),theme);await f.page.goto(`${base}/colis/${ids.P}`);
+  await f.page.waitForFunction(dark=>document.documentElement.classList.contains('dark')===dark,theme==='dark');
+  await f.page.getByRole('region',{name:'État actuel et prochaine étape',exact:true}).waitFor();await showConsent(f);
+  const reminder=f.page.getByTestId('consent-invoice-reminder');await reminder.waitFor();
+  await reminder.getByText('Il nous manque encore votre facture d’achat.',{exact:true}).waitFor();await reminder.getByText('Elle nous permet d’établir votre devis.',{exact:true}).waitFor();
+  assert.doesNotMatch(await f.page.locator('body').innerText(),/préparation en cours|préparation commencée/i);
+  assert.equal(await f.page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false);
+  const button=reminder.getByRole('button',{name:'Joindre mes factures',exact:true});const box=await button.boundingBox();assert.ok(box.height>=44&&box.width>=44,'44 px touch target');
+  const axe=await new AxeBuilder({page:f.page}).withTags(['wcag2a','wcag2aa','wcag21aa','wcag22aa']).analyze();assert.deepEqual(axe.violations.map(v=>v.id),[]);
+  await reminder.evaluate(element=>element.scrollIntoView({block:'center'}));await f.page.screenshot({path:path.join(output,`consent-invoice-reminder-${width}-${theme}.png`)});
+  await button.click();await f.page.getByRole('form',{name:'Déposer une facture'}).waitFor();assert.equal(new URL(f.page.url()).searchParams.get('panel'),'documents');
+  assert.equal(f.requests.some(r=>r.path.endsWith('/client_decision')||r.method==='POST'&&r.path.endsWith('/factures')),false,'Opening the deposit sends nothing');
+ });
+ await check('consent-invoice-reminder-only-while-requested',async f=>{
+  Object.assign(f.tables.colis[0],{statut:'autorise',feu_vert:'autorise'});await open(f);await showConsent(f);
+  assert.equal(await f.page.getByTestId('consent-invoice-reminder').count(),0,'a validated invoice: no reminder');
+  Object.assign(f.tables.factures[0],{valide:false,rejet_motif:'Page manquante'});await f.page.reload();await showConsent(f);
+  await f.page.getByTestId('consent-invoice-reminder').waitFor();
+  f.tables.factures=[];f.tables.clients[0].type='pro';await f.page.reload();await showConsent(f);
+  assert.equal(await f.page.getByTestId('consent-invoice-reminder').count(),0,'a professional client: no reminder');
+  f.tables.clients[0].type='particulier';f.tables.colis[0].statut='en_preparation';await f.page.reload();
+  await f.page.getByText('Suivi et détails de l’expédition',{exact:true}).click();await f.page.getByRole('button',{name:/^Votre accord/}).click();
+  await f.page.getByTestId('consent-invoice-reminder').waitFor();
+  f.tables.colis[0].statut='attente_feu_vert';f.tables.colis[0].feu_vert='en_attente';await f.page.reload();await f.page.getByRole('button',{name:'Autoriser la préparation',exact:true}).waitFor();
+  assert.equal(await f.page.getByTestId('consent-invoice-reminder').count(),0,'before the consent: the request itself speaks');
+ });
  await check('payment-first-and-mobile-accessibility',async f=>{
   Object.assign(f.tables.colis[0],{statut:'devis_envoye',devis_total:88,devis_transport:88,devis_brouillon:false,devis_envoye_le:'2026-09-16T08:00:00Z',mode_paiement_pro:'virement'});f.tables.clients[0].type='pro';await open(f);await f.page.getByText('Montant à régler',{exact:true}).waitFor();assert.equal(await f.page.getByText('Transport optimisé',{exact:true}).isVisible(),false);await f.page.getByText(/Utilisez les coordonnées bancaires transmises/).waitFor();await f.page.getByText('Détail du devis',{exact:true}).click();await f.page.getByText('Transport optimisé',{exact:true}).waitFor();await f.page.setViewportSize({width:390,height:844});assert.equal(await f.page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false);const axe=await new AxeBuilder({page:f.page}).withTags(['wcag2a','wcag2aa','wcag21aa','wcag22aa']).analyze();assert.deepEqual(axe.violations.map(v=>v.id),[]);await f.page.screenshot({path:path.join(output,'payment-mobile.png'),fullPage:true});
  });

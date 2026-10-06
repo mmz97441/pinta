@@ -80,6 +80,8 @@ La mutation, le message client et l’audit sont persistés avant l’accusé Te
 
 Une action inconnue n’est jamais assimilée à un refus. Une décision déjà traitée ou devenue périmée n’est pas rejouée, même si l’ancien bouton reste visible dans Telegram.
 
+Le choix enregistré est confirmé par un seul message, une fois l’update marquée comme traitée : `queue_message` (auteur « Expedîle », clé `consent-reply:<dossier>:<version de la demande>:<action>`) puis la file de sortie. Le modèle enregistré dans `message_templates` prime sur le texte par défaut : `feu_vert_recu`, ou `feu_vert_recu_facture` lorsque la facture d’achat d’un particulier est encore demandée (même règle que `queue_message`, `_shared/invoiceRequest.ts`), `choix_attente_recu` et `refus_recu`. Le message conserve son identifiant Telegram : une réponse s’y rattache au dossier. Une variable inconnue ou un refus de mise en file est consigné dans l’historique (`consent_reply_failed`) sans texte de remplacement ; un échec d’envoi reste visible sur le message enregistré, sans renvoi automatique. Aucun de ces échecs ne rejoue la décision. Les refus métier des commandes (bouton remplacé, demande déjà traitée…) sont affichés tels quels au client ; toute autre erreur est remplacée par « Votre réponse n’a pas pu être enregistrée. Réessayez depuis votre espace client ou écrivez-nous ici. ».
+
 ## Messages et documents entrants
 
 - `/statut` liste les dossiers actifs du client lié.
@@ -99,7 +101,7 @@ Après l’enregistrement du message, le webhook appelle `register_telegram_docu
 
 | Résultat | Effet | Réponse au client |
 |---|---|---|
-| `registered` | Facture créée : réponse à une demande de facture livrée depuis moins de 7 jours. Sur un devis envoyé, ou avec un lien de paiement encore actif, une demande de retrait du devis est ouverte et traitée aussitôt. | Le message de mise à jour du devis s’il a été livré ; sinon « votre facture est bien reçue… merci d’attendre notre prochain message avant tout paiement ». |
+| `registered` | Facture créée : réponse à une demande de facture livrée depuis moins de 7 jours, y compris une réponse explicite à la confirmation `feu_vert_recu_facture` tant que le dossier demande encore une facture (migration `20261006000002_consent_reply.sql`). Sur un devis envoyé, ou avec un lien de paiement encore actif, une demande de retrait du devis est ouverte et traitée aussitôt. | Le message de mise à jour du devis s’il a été livré ; sinon « votre facture est bien reçue… merci d’attendre notre prochain message avant tout paiement ». |
 | `identical` | Copie exacte d’une facture déjà validée : rien n’est créé, le devis ne change pas. | « Nous avions déjà ce document : rien ne change pour votre devis. » |
 | `ask_client` | Autre document sur un devis envoyé : aucune facture n’est créée sans l’accord du client. | Question « S’agit-il d’une facture d’achat ? » avec deux boutons. |
 | `frozen` | Paiement, départ ou dossier clos : le document reste dans la conversation, sans facture. | Accusé habituel. |

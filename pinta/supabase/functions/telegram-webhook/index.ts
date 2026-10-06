@@ -1,3 +1,4 @@
+import { type ConsentDecision, decisionErrorText, deliverConsentReply } from '../_shared/consentReply.ts';
 import { admin, fail, HttpError, json, throwDb, uuid } from '../_shared/http.ts';
 import { processQuoteWithdrawal, type WithdrawalOutcome } from '../_shared/quoteWithdrawal.ts';
 import { telegram } from '../_shared/telegram.ts';
@@ -56,7 +57,7 @@ async function lateInvoiceAnswer(chatId: number, answer: string, messageId: stri
   }
   return { text: `Merci ! Votre facture est ajoutée au dossier ${ref}. Notre équipe la vérifie.${SIGNATURE}` };
 }
-async function processUpdate(update: any): Promise<{ chatId?: number; text?: string; markup?: unknown; callbackId?: string }> {
+async function processUpdate(update: any): Promise<{ chatId?: number; text?: string; markup?: unknown; callbackId?: string; consent?: ConsentDecision }> {
   const cb = update.callback_query;
   if (cb) {
     const chatId = cb.message?.chat?.id;
@@ -64,9 +65,11 @@ async function processUpdate(update: any): Promise<{ chatId?: number; text?: str
     if (typeof cb.data !== 'string') throw new HttpError(400, 'Action invalide');
     const match = cb.data.match(/^fv_(oui|non|wait)_([0-9a-f-]{36})$/);
     if (match && uuid(match[2])) {
-      const result = await db.rpc('telegram_client_decision', { p_colis_id: match[2], p_action: ({ oui:'approve',non:'refuse',wait:'wait' } as any)[match[1]], p_chat_id: String(chatId), p_message_id: String(cb.message.message_id) });
-      if (result.error) return { chatId, callbackId: cb.id, text: result.error.message };
-      return { chatId, callbackId: cb.id, text: match[1] === 'oui' ? `Votre accord pour ${result.data.ref} est enregistré. Notre équipe peut préparer les cartons de ce dossier. Vous recevrez votre devis dès sa finalisation.\n\nL’équipe Expedîle` : match[1] === 'wait' ? 'Votre attente est enregistrée. Les relances sont suspendues jusqu’à une nouvelle réception ou votre décision dans l’application.\n\nL’équipe Expedîle' : 'Votre refus est enregistré. Notre équipe vous contactera pour organiser la suite.\n\nL’équipe Expedîle' };
+      const action = ({ oui:'approve', non:'refuse', wait:'wait' } as const)[match[1] as 'oui'|'non'|'wait'];
+      const result = await db.rpc('telegram_client_decision', { p_colis_id: match[2], p_action: action, p_chat_id: String(chatId), p_message_id: String(cb.message.message_id) });
+      if (result.error) return { chatId, callbackId: cb.id, text: decisionErrorText(result.error) };
+      // The confirmation is stored and sent after the update is marked done (deliverConsentReply).
+      return { chatId, callbackId: cb.id, consent: { colis: result.data, action } };
     }
     const late = cb.data.match(/^lf_(oui|non)_([0-9a-f-]{36})$/);
     if (late && uuid(late[2])) return { chatId, callbackId: cb.id, ...await lateInvoiceAnswer(chatId, late[1], late[2]) };
@@ -144,6 +147,11 @@ Deno.serve(async (req: Request) => {
       if (result.callbackId) await telegram('answerCallbackQuery', { callback_query_id: result.callbackId, text: 'Réponse traitée' });
       if (result.chatId && result.text) await reply(result.chatId, result.text, result.markup);
     } catch (error) { console.error('Telegram acknowledgement unavailable', error instanceof Error ? error.message : 'error'); }
+    // Confirmation of a recorded choice: queue_message, then the outbox. A failure only logs; nothing is retried blindly.
+    if (result.consent) {
+      try { await deliverConsentReply(db, result.consent); }
+      catch (error) { console.error('Consent confirmation unavailable', error instanceof Error ? error.message : 'error'); }
+    }
     return json({ ok: true });
   } catch (error) {
     if (updateId !== undefined) await db.from('telegram_updates').update({ status: 'failed' }).eq('update_id', updateId);

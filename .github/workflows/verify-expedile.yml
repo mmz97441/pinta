@@ -67,6 +67,7 @@ jobs:
           sh ./supabase/tests/run-reception-append.sh
           sh ./supabase/tests/run-invoice-quote-rules.sh
           sh ./supabase/tests/run-departure-any-step.sh
+          sh ./supabase/tests/run-consent-reply.sh
       - run: npx playwright install --with-deps chromium
       - name: Parcours navigateur sans services externes
         run: |

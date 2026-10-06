@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useLayoutEffect } from 'react';
 import usePersistentDraft from '../../hooks/usePersistentDraft';
 import { useApp } from '../../context/AppContext';
 import { DEFAULT_BODIES } from '../../services/messageDefaults';
@@ -66,23 +66,27 @@ const VAR_GROUPS = [
 const ALL_EXAMPLES = {};
 VAR_GROUPS.forEach((g) => g.vars.forEach((v) => { ALL_EXAMPLES[v.key] = v.ex; }));
 
-// ── Templates par défaut ──
+// ── Templates par défaut ── (labels only: plain text, no emoji; keys unchanged)
 const TEMPLATES = [
-  { key: 'reception', label: 'Réception seule (ancien modèle)' , emoji: '📦' },
-  { key: 'facture_manquante', label: '📄 Facture manquante', emoji: '📄' },
-  { key: 'demande_feu_vert', label: 'Réception et demande d’accord', emoji: '🟢' },
-  { key: 'feu_vert_recu', label: '✅ Feu vert confirmé', emoji: '✅' },
-  { key: 'devis_final', label: 'Devis particulier', emoji: '' },
-  { key: 'devis_final_pro', label: 'Devis professionnel', emoji: '' },
-  { key: 'relance_feu_vert', label: '⏰ Relance feu vert', emoji: '⏰' },
-  { key: 'relance_paiement', label: '⏰ Relance paiement', emoji: '⏰' },
-  { key: 'expedie', label: '✈️ Expédié', emoji: '✈️' },
-  { key: 'arrive', label: '📍 Arrivé', emoji: '📍' },
-  { key: 'en_livraison', label: '🚚 En livraison', emoji: '🚚' },
-  { key: 'facture_rejetee', label: '❌ Facture rejetée', emoji: '❌' },
-  { key: 'facture_apres_devis', label: 'Facture reçue après le devis (ancien lien annulé)', emoji: '' },
-  { key: 'facture_apres_devis_sans_lien', label: 'Facture reçue après le devis (sans lien de paiement)', emoji: '' },
-  { key: 'invitation_telegram', label: '📲 Invitation Telegram', emoji: '📲' },
+  { key: 'reception', label: 'Réception seule (ancien modèle)' },
+  { key: 'facture_manquante', label: 'Facture manquante' },
+  { key: 'demande_feu_vert', label: 'Réception et demande d’accord' },
+  // Confirmations sent by the server after a Telegram button of the request (lot 3b).
+  { key: 'feu_vert_recu', label: 'Accord enregistré (confirmation au client)', hint: 'Envoyé automatiquement sur Telegram quand le client autorise la préparation avec le bouton de la demande, si sa facture d’achat n’est plus attendue ou s’il est professionnel.' },
+  { key: 'feu_vert_recu_facture', label: 'Accord enregistré, facture encore attendue', hint: 'Envoyé automatiquement sur Telegram quand le client autorise la préparation alors que sa facture d’achat manque encore. Un document envoyé en réponse est ajouté comme facture à vérifier.' },
+  { key: 'choix_attente_recu', label: 'Choix « attendre d’autres colis » enregistré', hint: 'Envoyé automatiquement sur Telegram quand le client choisit d’attendre d’autres colis avec le bouton de la demande.' },
+  { key: 'refus_recu', label: 'Refus de préparation enregistré', hint: 'Envoyé automatiquement sur Telegram quand le client refuse la préparation avec le bouton de la demande.' },
+  { key: 'devis_final', label: 'Devis particulier' },
+  { key: 'devis_final_pro', label: 'Devis professionnel' },
+  { key: 'relance_feu_vert', label: 'Relance de la demande d’accord' },
+  { key: 'relance_paiement', label: 'Relance du paiement' },
+  { key: 'expedie', label: 'Colis expédié' },
+  { key: 'arrive', label: 'Colis arrivé à destination' },
+  { key: 'en_livraison', label: 'Colis en livraison' },
+  { key: 'facture_rejetee', label: 'Facture rejetée' },
+  { key: 'facture_apres_devis', label: 'Facture reçue après le devis (ancien lien annulé)', hint: 'Envoyé automatiquement, sur Telegram ou sinon dans l’espace client, quand une facture du client arrive après l’envoi du devis : le devis est retiré et son ancien lien de paiement annulé.' },
+  { key: 'facture_apres_devis_sans_lien', label: 'Facture reçue après le devis (sans lien de paiement)', hint: 'Envoyé automatiquement, sur Telegram ou sinon dans l’espace client, quand une facture du client arrive après l’envoi d’un devis sans lien de paiement : le devis est retiré.' },
+  { key: 'invitation_telegram', label: 'Invitation Telegram' },
 ];
 
 // ── Preview: replace {{var}} with examples ──
@@ -102,6 +106,7 @@ export default function TemplateEditor() {
   const [drafts, setDrafts, { storageAvailable }] = usePersistentDraft('admin:message-templates', {});
   const [notice, setNotice] = useState(null); const [saving, setSaving] = useState(false); const lock = useRef(false); const textarea = useRef(null);
   const bodyKey = `${selKey}_${canal}`;
+  const hint = TEMPLATES.find(template => template.key === selKey)?.hint;
   const draft = drafts[bodyKey]; const stored = messageTemplates[bodyKey] ?? null;
   const body = draft?.value ?? stored ?? DEFAULT_BODIES[bodyKey] ?? '';
   const dirty = Boolean(draft && draft.value !== (draft.expected ?? DEFAULT_BODIES[bodyKey] ?? ''));
@@ -121,8 +126,23 @@ export default function TemplateEditor() {
     finally { lock.current = false; setSaving(false); }
   };
   const insert = key => { const field = textarea.current; const start = field?.selectionStart ?? body.length; const end = field?.selectionEnd ?? start; change(body.slice(0, start) + `{{${key}}}` + body.slice(end)); field?.focus(); };
-  return <section className="min-w-0 space-y-4"><header><h2 className="text-lg font-bold">Modèles de messages</h2><p className="mt-1 text-sm text-gray-600">Le message principal confirme la réception, demande l’accord et indique les factures manquantes. L’équipe garde la main sur chaque envoi.</p></header>
+  // The whole template stays readable without an inner scroll bar: the field follows its text (12 lines at least),
+  // up to 85 % of the window, then it scrolls. Measured again when the text, the model, the channel or the width change.
+  useLayoutEffect(() => {
+    const field = textarea.current;
+    if (!field) return undefined;
+    const fit = () => {
+      field.style.height = 'auto';
+      const borders = field.offsetHeight - field.clientHeight;
+      field.style.height = `${Math.min(field.scrollHeight + borders, Math.max(320, Math.round(window.innerHeight * 0.85)))}px`;
+    };
+    fit();
+    window.addEventListener('resize', fit);
+    return () => window.removeEventListener('resize', fit);
+  }, [body]);
+  return <section className="min-w-0 space-y-4"><header><h2 className="text-lg font-bold">Modèles de messages</h2><p className="mt-1 text-sm text-gray-600">Le message principal confirme la réception, demande l’accord et indique les factures manquantes. Les modèles signalés « Envoyé automatiquement » partent sans action de l’équipe ; l’équipe envoie elle-même tous les autres.</p></header>
     <div className="grid gap-3 sm:grid-cols-2"><label className="text-sm">Message à modifier<select className={FIELD} value={selKey} disabled={saving} onChange={e => setSelKey(e.target.value)}>{[...TEMPLATES].sort((a, b) => (a.key === 'demande_feu_vert' ? -1 : b.key === 'demande_feu_vert' ? 1 : 0)).map(t => <option key={t.key} value={t.key}>{t.label}{['telegram', 'email'].some(c => drafts[`${t.key}_${c}`]) ? ' · brouillon' : ''}</option>)}</select></label><label className="text-sm">Canal<select className={FIELD} disabled={saving} value={canal} onChange={e => setCanal(e.target.value)}><option value="telegram">Telegram</option><option value="email">Email</option></select></label></div>
+    {hint && <p className="text-sm text-gray-600">{hint}{canal === 'email' ? ' La version email reste un brouillon : aucun email n’est envoyé automatiquement.' : ''}</p>}
     <p className="text-sm text-gray-600">{dirty ? 'Modifications non enregistrées. ' : ''}Vos brouillons restent disponibles lorsque vous changez de modèle ou de rubrique.{!storageAvailable && ' Stockage du navigateur indisponible : gardez cet onglet ouvert.'}</p>
     <div className="grid min-w-0 gap-4 xl:grid-cols-2"><label className="min-w-0 text-sm">Texte du message<textarea ref={textarea} disabled={saving} rows={12} className={`${FIELD} mt-1 resize-y font-mono`} value={body} onChange={e => change(e.target.value)} /></label><section className="min-w-0 rounded-xl border bg-gray-50 p-4" aria-label="Aperçu du message"><h3 className="font-semibold">Aperçu avec des données fictives</h3><p className="mt-3 whitespace-pre-wrap break-words text-sm">{renderPreview(body)}</p></section></div>
     <details className="rounded-xl border p-3"><summary className="min-h-11 cursor-pointer font-semibold">Insérer une information du dossier</summary><div className="space-y-3">{VAR_GROUPS.map(group => <section key={group.label}><h3 className="text-sm font-semibold">{group.label}</h3><div className="mt-1 flex flex-wrap gap-2">{group.vars.map(v => <button key={v.key} disabled={saving} className={BUTTON} onClick={() => insert(v.key)}>{v.label}</button>)}</div></section>)}</div></details>
