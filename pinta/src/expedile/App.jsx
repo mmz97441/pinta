@@ -400,7 +400,8 @@ function AppContent() {
                 className="flex-1 min-h-11 flex flex-col items-center justify-center gap-0.5 px-1 py-1"
               >
                 <span className="relative"><Icon size={20} style={{ color: isActive ? 'var(--brand-text)' : '#9CA3AF' }} strokeWidth={isActive ? 2.5 : 2} />{item.key === '/conversations' && conversationCount > 0 && <span aria-hidden="true" className="absolute -right-5 -top-2 rounded-full bg-blue-800 px-1 text-xs font-bold text-white">{conversationCount > 99 ? '99+' : conversationCount}</span>}</span>
-                <span className={`text-[9px] font-bold ${isActive ? 'text-gray-800' : 'text-gray-400'}`}>{item.label}</span>
+                {/* One line: a wrapped label would grow the bar over the space the pages reserve for it. */}
+                <span className={`whitespace-nowrap text-[9px] font-bold ${isActive ? 'text-gray-800' : 'text-gray-400'}`}>{item.label}</span>
               </button>
             );
           })}
