@@ -4,6 +4,7 @@
 import { supabase } from './supabase';
 import { randomId } from './randomId';
 import { normalizeStaffPermissions, staffPermissionSaveArgs } from '../domain/staffPermissions';
+import { departureClosing } from '../domain/departurePlanning';
 import { functionErrorMessage } from '../services/functionErrors';
 
 let dataScope = 'staff';
@@ -68,6 +69,9 @@ export function mapColis(row) {
     paiementMontant: row.paiement_montant == null ? null : +row.paiement_montant,
     paiementDate: row.paiement_date,
     envoi: row.envoi_id,
+    // Staff only (absent from client_colis): the desired day while no departure is assigned.
+    // Written by set_colis_departure_wish / create_departure_for_colis, never by updateColis.
+    departSouhaite: row.depart_souhaite ?? null,
     urgence: row.urgence || false,
     notesInternes: row.notes_internes,
     produitInterdit: row.produit_interdit || false,
@@ -166,7 +170,11 @@ export function mapEnvoi(row) {
     volumeTotal: row.volume_total ? +row.volume_total : 0,
     notes: row.notes,
     updatedAt: row.updated_at,
+    modeTransport: row.mode_transport ?? null,
     loadingClosesAt: row.loading_closes_at || null,
+    // The closing shown and used by the consent relance: the loading closing, else the habitual
+    // Wednesday 17 h Paris before the departure. Only loadingClosesAt ever closes a departure.
+    closesAt: departureClosing({ loadingClosesAt: row.loading_closes_at, date: row.date_depart }),
     departedAt: row.departed_at || null,
     manifestVersion: row.manifest_version || 0,
   };
@@ -1069,6 +1077,7 @@ export async function updateEnvoi(id, changes, expectedUpdatedAt) {
     transporteur: 'transporteur',
     trackingPrincipal: 'tracking_principal',
     notes: 'notes',
+    modeTransport: 'mode_transport',
     loadingClosesAt: 'loading_closes_at',
   };
   for (const [key, val] of Object.entries(changes)) {

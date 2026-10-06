@@ -45,6 +45,7 @@ import DetailHeader from './components/detail/DetailHeader';
 import DossierAlerts from './components/detail/DossierAlerts';
 import DossierContextPanel from './components/detail/DossierContextPanel';
 import DossierOverview from './components/detail/DossierOverview';
+import DossierDeparture from './components/detail/DossierDeparture';
 import { buildDossierOverview } from './domain/dossierOverview';
 import { revisionLockedReason } from './domain/shipmentRevision';
 import { needsQuoteRecalculation } from './domain/clientJourney';
@@ -154,6 +155,10 @@ function StaffColisDetail() {
   const taskAction = findDossierWorkAction(sel, workActions, task, { can, actionId: new URLSearchParams(location.search).get('action') });
   const conversationAction = workActions.find(action => action.colis_id === id && action.kind === 'conversation' && action.state !== 'done');
   const colleagueWorking = Boolean(taskAction?.assignee_id && taskAction.assignee_id !== auth?.u?.id);
+  // At « paye » the departure belongs to the expedition task: while a colleague holds that task,
+  // the overview's Départ reads only too, as the task field does.
+  const departureAction = sel.statut === 'paye' ? findDossierWorkAction(sel, workActions, 'expedition', { can }) : null;
+  const departureHolder = departureAction?.assignee_id && departureAction.assignee_id !== auth?.u?.id ? departureAction.assignee_id : null;
   const overview = buildDossierOverview(sel, { client: selClient || {}, envois, can });
   const canEditCasier = !sel.archive && !['livre', 'annule'].includes(sel.statut)
     && ['perm_colis_receptionner', 'perm_colis_preparer', 'perm_colis_modifier_dims'].some(can);
@@ -173,7 +178,7 @@ function StaffColisDetail() {
   return (
     <div className={conversationOpen ? 'dossier-page dossier-page--conversation' : 'dossier-page'}>
       <DetailHeader task={task} conversation={conversationOpen} onOpenContext={openContext} />
-      <DossierAlerts conversation={conversationOpen} />
+      <DossierAlerts conversation={conversationOpen} departureReadOnly={Boolean(departureHolder)} />
       <div className="dossier-page-tabs">
         <div className={`w-full px-4 sm:px-6 lg:px-8 ${conversationOpen ? '' : 'mx-auto max-w-[1600px]'}`}>
           <nav role="tablist" aria-label="Dossier et conversation" className="dossier-view-tabs" onKeyDown={event => {
@@ -192,10 +197,12 @@ function StaffColisDetail() {
       </div>
       <section role="tabpanel" id="dossier-panel-colis" aria-labelledby="dossier-tab-colis" hidden={conversationOpen}>
       <div className="mx-auto max-w-[1600px] px-4 pt-4 sm:px-6 lg:px-8">
-        <DossierOverview dossier={sel} model={overview} currentTask={task}
-          onNavigateTask={openOverviewTask} onCorrect={openOverviewEditor} onOpenContext={openContext} canEditQuote={canEditQuote}
-          canEditCasier={canEditCasier} canEditReception={canEditMeasures('reception')} canEditPreparation={canEditMeasures('preparation')}
-          onEditCasier={() => { setContextSection('reception'); setCasierEditRequest(previous => previous + 1); }} />
+        <DossierDeparture readOnly={Boolean(departureHolder)} lockedReason={departureHolder ? `${staffName(departureHolder, teamUsers)} s’occupe de l’expédition.` : ''}>
+          {({ line, editor }) => <DossierOverview dossier={sel} model={overview} currentTask={task}
+            onNavigateTask={openOverviewTask} onCorrect={openOverviewEditor} onOpenContext={openContext} canEditQuote={canEditQuote}
+            canEditCasier={canEditCasier} canEditReception={canEditMeasures('reception')} canEditPreparation={canEditMeasures('preparation')}
+            onEditCasier={() => { setContextSection('reception'); setCasierEditRequest(previous => previous + 1); }} departure={line} departureEditor={editor} />}
+        </DossierDeparture>
       </div>
       <div id="dossier-work" tabIndex={-1} className="mx-auto max-w-[1600px] scroll-mt-4 px-4 py-5 outline-none sm:px-6 lg:px-8" aria-label={`Travail : ${DOSSIER_TASKS[task]?.label || task}`} data-testid="dossier-task-workspace">
         {location.state?.receivedCarton?.colisId === id && <div role="status" className="mb-4 flex flex-wrap items-center gap-3 rounded-xl bg-emerald-50 px-4 py-2 text-sm text-emerald-800"><span>Carton {location.state.receivedCarton.index + 1} enregistré dans {sel.ref}.</span><button className="min-h-11 font-semibold underline" onClick={() => setContextSection('reception')}>Voir le carton reçu</button></div>}

@@ -180,6 +180,29 @@ test('a concurrently changed dossier cannot be reported as saved', async () => {
     /modifié par un collègue/,
   );
 });
+test('the desired departure day and the transport mode are mapped; the day is never written as an ordinary field', async () => {
+  const sb = await service(client({
+    colis: [{ id: 'a', archive: false, depart_souhaite: '2026-11-19' }, { id: 'b', archive: false }],
+    envois: [
+      { id: 'e1', date_depart: '2026-10-08', mode_transport: 'aerien', loading_closes_at: null },
+      { id: 'e2', date_depart: '2026-10-15', mode_transport: null, loading_closes_at: '2026-10-14T13:30:00Z' },
+      { id: 'e3', date_depart: null },
+    ],
+  }));
+  const rows = await sb.fetchColis();
+  assert.equal(rows.find(row => row.id === 'a').departSouhaite, '2026-11-19');
+  assert.equal(rows.find(row => row.id === 'b').departSouhaite, null);
+  const envois = await sb.fetchEnvois();
+  assert.deepEqual(Array.from(envois, envoi => [envoi.id, envoi.modeTransport, envoi.loadingClosesAt, envoi.closesAt]), [
+    ['e3', null, null, null],
+    ['e1', 'aerien', null, '2026-10-07T15:00:00.000Z'],
+    ['e2', null, '2026-10-14T13:30:00Z', '2026-10-14T13:30:00.000Z'],
+  ], 'The closing is the loading closing, else Wednesday 17:00 Paris before the departure.');
+  let called = false;
+  const guarded = await service({ from() { called = true; throw new Error('unexpected'); } });
+  await assert.rejects(() => guarded.updateColis('a', { departSouhaite: '2026-11-20' }), /non pris en charge/);
+  assert.equal(called, false, 'Only the departure commands write the desired day.');
+});
 test('unknown fields fail before sending a database mutation', async () => {
   let called = false;
   const sb = await service({

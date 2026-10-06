@@ -3,26 +3,33 @@ import { Link, useLocation } from 'react-router-dom';
 import { AlertTriangle, ArrowRight, ChevronDown } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { dossierAlerts } from '../../domain/dossierAlerts';
+import { departureFieldEditable } from '../../domain/departurePlanning';
 import useMediaQuery from '../../hooks/useMediaQuery';
 import './dossierAlerts.css';
 
 /** « À vérifier », between the dossier header and its tabs, on both tabs: one
  * line per alert with the link that handles it. Links only: nothing here writes.
- * A link the person cannot follow (client page or conversation) is left out. */
-export default function DossierAlerts({ conversation = false }) {
+ * A link the person cannot follow (client page, conversation, or a Départ field
+ * that would not open, `departureReadOnly` while a colleague holds it) is left out. */
+export default function DossierAlerts({ conversation = false, departureReadOnly = false }) {
   const location = useLocation();
   const { sel, selClient, envois = [], can } = useApp();
   // On a phone, several alerts fold behind their count so the dossier stays in view.
   const phone = useMediaQuery('(max-width: 639px)');
   const [open, setOpen] = useState(false);
-  const alerts = sel ? dossierAlerts({ dossier: sel, client: selClient, envoi: envois.find(envoi => envoi.id === sel.envoi), dossierUrl: location.pathname + location.search }) : [];
+  const alerts = sel ? dossierAlerts({ dossier: sel, client: selClient, envoi: envois.find(envoi => envoi.id === sel.envoi), envois, dossierUrl: location.pathname + location.search }) : [];
   if (!alerts.length) return null;
   // Each link leads where the person can act; reading a record alone gets « Voir la fiche client ».
   const canInvite = can('perm_clients_creer') || can('perm_clients_modifier');
   const canEditClient = can('perm_clients_modifier');
   const canSeeClient = canInvite || can('perm_clients_voir');
   const canReply = can('perm_comm_message_libre') || can('perm_comm_telegram') || can('perm_comm_email');
+  // « Choisir ou créer le départ » opens the Départ field: offered only when it opens for this person.
+  const canPlanDeparture = !departureReadOnly && departureFieldEditable(sel, can);
+  const canAskConsent = can('perm_colis_demander_feuvert');
   const linkFor = alert => alert.key === 'after_subscription' ? canReply ? alert.action : null
+    : alert.key === 'departure_to_create' ? canPlanDeparture ? alert.action : null
+    : alert.key === 'consent_before_cutoff' ? canAskConsent ? alert.action : null
     : (alert.key === 'no_contact' ? canInvite : canEditClient) ? alert.action
       : canSeeClient ? { ...alert.action, label: 'Voir la fiche client' } : null;
   // Already on the Conversation tab, « Écrire au client » goes to the reply field.

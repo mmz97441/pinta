@@ -25,6 +25,22 @@ function frozenReason(colis) {
   return null;
 }
 const quoteSent = colis => ['devis_envoye', 'attente_paiement'].includes(colis?.statut);
+// Departure commands (lot 3a), mirrored on Paris time; the SQL suite
+// departure-any-step.sql covers locks, audit and every refusal in depth.
+const PARIS_CLOCK = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Paris', hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit' });
+function parisClock(time) {
+  const parts = Object.fromEntries(PARIS_CLOCK.formatToParts(new Date(time)).map(part => [part.type, part.value]));
+  return { day: `${parts.year}-${parts.month}-${parts.day}`, hour: Number(parts.hour) };
+}
+// departure_default_closing: the last Wednesday strictly before the day, 17:00 Paris.
+function departureDefaultClosing(day) {
+  const date = new Date(`${day}T00:00:00Z`);
+  const wednesday = new Date(date.getTime() - (((date.getUTCDay() || 7) + 3) % 7 + 1) * 86400000);
+  const instant = [2, 1].map(offset => Date.UTC(wednesday.getUTCFullYear(), wednesday.getUTCMonth(), wednesday.getUTCDate(), 17 - offset)).find(time => parisClock(time).hour === 17);
+  return new Date(instant).toISOString();
+}
+const DEPARTED_STATUSES = ['expedie', 'transit', 'dedouanement', 'arrive', 'livraison', 'livre', 'annule'];
+const OPEN_DEPARTURE_STATUSES = ['planifie', 'prochain', 'en_cours', 'en_preparation', 'pret'];
 function invoiceLock(colis, withdrawal = null) {
   return { frozenReason: frozenReason(colis), quoteLocked: quoteSent(colis) || !!(colis?.payplug_payment_id || colis?.payplug_payment_url), quoteSent: quoteSent(colis), liveLink: !!(colis?.payplug_payment_id || colis?.payplug_payment_url), withdrawal };
 }
@@ -175,6 +191,27 @@ async function setup(browser, role, { failTable = null } = {}) {
     requests = [],
     errors = [],
     networkDenied = [];
+  // The mocked server's clock; a suite that fixes the browser clock sets server.now too.
+  const server = { now: () => Date.now() };
+  const allowed = permission => ['directeur', 'vice_directeur'].includes(tables.staff_users[0]?.role) || (tables.staff_permissions || []).some(row => row[permission] === true);
+  const destinationOf = parcel => {
+    const prefix = String(tables.clients.find(client => client.id === parcel.client_id)?.cp ?? '').slice(0, 3);
+    return parcel.paiement_date ? parcel.devis_snapshot?.inputs?.destination?.code || parcel.devis_snapshot?.destination?.code || prefix : prefix;
+  };
+  // valid_departure_for_colis (guard_colis_departure).
+  const validDeparture = (envoi, parcel) => Boolean(envoi) && envoi.destination_code === destinationOf(parcel) && OPEN_DEPARTURE_STATUSES.includes(envoi.statut)
+    && !envoi.departed_at && envoi.date_depart >= parisClock(server.now()).day && (!envoi.loading_closes_at || Date.parse(envoi.loading_closes_at) > server.now());
+  const bump = parcel => { parcel.updated_at = new Date(Math.max(server.now(), Date.parse(parcel.updated_at) + 1000)).toISOString(); };
+  /** The common refusals of the three departure commands, as the server orders them. */
+  function departureRefusal(rpc, parcel, input) {
+    if (!parcel) return [400, { code: 'P0002', message: 'Dossier introuvable' }];
+    const assignment = parcel.envoi_id ? 'perm_envois_reaffecter' : 'perm_colis_affecter_envoi';
+    if (rpc === 'create_departure_for_colis' ? !allowed('perm_envois_creer') || !allowed(assignment) : !allowed(assignment))
+      return [403, { code: '42501', message: rpc === 'create_departure_for_colis' ? 'Permissions de création du départ et d’affectation requises' : 'Permission d’affectation ou de réaffectation requise' }];
+    if (input.p_expected_updated_at !== parcel.updated_at) return [409, { code: '40001', message: rpc === 'assign_colis_departure' ? 'Le dossier a changé. Rechargez-le.' : 'Le dossier a changé. Actualisez avant de réessayer.' }];
+    if (DEPARTED_STATUSES.includes(parcel.statut) || parcel.archive) return [400, { code: '22023', message: 'Ce dossier ne peut plus être affecté' }];
+    return null;
+  }
   const user = {
     id: A,
     aud: 'authenticated',
@@ -380,6 +417,42 @@ async function setup(browser, role, { failTable = null } = {}) {
         }
         colis.updated_at = new Date().toISOString();
         body = colis;
+      } else if (['assign_colis_departure', 'set_colis_departure_wish', 'create_departure_for_colis'].includes(rpc)) {
+        const refusal = departureRefusal(rpc, colis, input);
+        const today = parisClock(server.now()).day;
+        const destination = colis && destinationOf(colis);
+        if (refusal) [status, body] = refusal;
+        else if (rpc === 'assign_colis_departure') {
+          if (input.p_envoi_id && !validDeparture(tables.envois.find(envoi => envoi.id === input.p_envoi_id), colis)) { status = 400; body = { code: '22023', message: 'Départ incompatible, passé ou clôturé' }; }
+          else {
+            Object.assign(colis, { envoi_id: input.p_envoi_id || null, depart_souhaite: input.p_envoi_id ? null : colis.depart_souhaite ?? null });
+            bump(colis); body = colis;
+          }
+        } else if (input.p_date && input.p_date < today || rpc === 'create_departure_for_colis' && !input.p_date) { status = 400; body = { code: '22023', message: 'Choisissez une date à venir.' }; }
+        else if (rpc === 'set_colis_departure_wish') {
+          // The valid departure of that day is assigned (the current one first), otherwise the day is kept.
+          const departure = input.p_date ? tables.envois.filter(envoi => envoi.date_depart === input.p_date && validDeparture(envoi, colis))
+            .sort((a, b) => Number(a.id !== colis.envoi_id) - Number(b.id !== colis.envoi_id) || String(a.id).localeCompare(String(b.id)))[0] : null;
+          Object.assign(colis, { envoi_id: input.p_date ? departure?.id ?? null : colis.envoi_id, depart_souhaite: departure ? null : input.p_date || null });
+          bump(colis); body = colis;
+        } else if (!['974', '976', '971', '972'].includes(destination)) { status = 400; body = { code: '22023', message: 'Destination du client inconnue : complétez son code postal.' }; }
+        else {
+          // One departure per destination and day: only an open one is reused; a day whose departure is closed or gone is refused.
+          let envoi = tables.envois.filter(item => item.date_depart === input.p_date && validDeparture(item, colis)).sort((a, b) => String(a.id).localeCompare(String(b.id)))[0];
+          const dayTaken = !envoi && tables.envois.some(item => item.destination_code === destination && item.date_depart === input.p_date && item.statut !== 'archive');
+          if (dayTaken) { status = 400; body = { code: '22023', message: 'Le départ de ce jour est clôturé : choisissez un autre jour.' }; }
+          else if (!envoi && Date.parse(departureDefaultClosing(input.p_date)) <= server.now()) { status = 400; body = { code: '22023', message: 'La clôture de ce départ est déjà passée.' }; }
+          else {
+            if (!envoi) {
+              const stamp = new Date(server.now()).toISOString();
+              envoi = { id: crypto.randomUUID(), ref: `ENV-${input.p_date.slice(0, 4)}-${String(900 + tables.envois.length).padStart(3, '0')}`, date_depart: input.p_date, destination_code: destination, statut: 'planifie', mode_transport: 'aerien',
+                loading_closes_at: departureDefaultClosing(input.p_date), cree_par: A, departed_at: null, manifest_version: 0, nb_colis: 0, created_at: stamp, updated_at: stamp };
+              tables.envois.push(envoi);
+            }
+            Object.assign(colis, { envoi_id: envoi.id, depart_souhaite: null });
+            bump(colis); body = { colis, envoi };
+          }
+        }
       } else if (rpc === 'acquire_colis_lock')
         body = { staff_id: A, staff_nom: 'Camille', locked_at: new Date().toISOString() };
       else if (rpc === 'release_colis_lock') body = true;
@@ -482,7 +555,7 @@ async function setup(browser, role, { failTable = null } = {}) {
         !document.body.innerText.includes('Chargement de votre espace'),
     );
   };
-  return { context, page, tables, requests, errors, networkDenied, login };
+  return { context, page, tables, requests, errors, networkDenied, login, server };
 }
 async function main() {
   await fs.mkdir(output, { recursive: true });

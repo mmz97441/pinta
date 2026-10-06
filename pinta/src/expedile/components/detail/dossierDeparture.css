@@ -1,0 +1,112 @@
+/* « Départ » of a dossier: the overview line (next to Casier) and the open field
+   of the expedition task share one combobox. Tokens from brand.css with their
+   html.dark values; the active option uses the « current step » blue of the
+   overview path (8.1:1 light, 10.6:1 dark). */
+.dossier-departure-line { display: flex; align-items: center; gap: 4px 12px; flex-wrap: wrap; min-width: 0; font-size: .875rem; }
+.dossier-departure-text { min-width: 0; overflow-wrap: anywhere; }
+.dossier-departure-edit { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; color: var(--brand-text); font-weight: 600; transition: color .2s ease-out; }
+.dossier-departure-edit:active { transform: translateY(1px); }
+.dossier-departure-edit:disabled { cursor: progress; }
+/* A colleague holds the expedition task: the departure reads only, and says why. */
+.dossier-departure-locked { font-size: .8125rem; line-height: 1.4; color: var(--text-secondary); }
+
+.dossier-departure-picker {
+  --departure-active-bg: #eaf2ff;
+  --departure-active-text: #174ea6;
+  --departure-active-border: #93b4e4;
+  min-width: 0;
+  color: var(--text-primary);
+}
+html.dark .dossier-departure-picker {
+  --departure-active-bg: #1b365a;
+  --departure-active-text: #c4deff;
+  --departure-active-border: #5279aa;
+}
+/* In the overview heading the open field takes its own line: the overview places it after
+   the heading's actions in the DOM, so the focus order follows the layout (no CSS reordering). */
+.dossier-departure-picker[data-variant='summary'] {
+  flex: 1 1 100%;
+  margin-top: 4px;
+  padding: 10px 0 4px;
+  border-top: 1px solid var(--border-subtle);
+}
+.dossier-departure-label,
+.dossier-departure-task-label { display: block; margin-bottom: 4px; font-size: .75rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--text-secondary); }
+/* « Annuler » sits at the end of the label line, so the field keeps the whole width on a phone. */
+.dossier-departure-label-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; max-width: 34rem; }
+.dossier-departure-label-row .dossier-departure-label { margin-bottom: 0; }
+.dossier-departure-input-row { display: flex; align-items: center; }
+.dossier-departure-input { position: relative; flex: 1 1 auto; min-width: 0; max-width: 34rem; }
+.dossier-departure-input input {
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 40px 8px 12px;
+  border: 2px solid var(--border-subtle);
+  border-radius: 12px;
+  font-size: .875rem;
+  color: var(--text-primary);
+  background: var(--bg-elevated);
+  transition: border-color .2s ease-out;
+}
+.dossier-departure-input input:focus { border-color: var(--departure-active-border); }
+.dossier-departure-input input::placeholder { color: var(--text-muted); }
+.dossier-departure-busy { position: absolute; top: 50%; right: 14px; margin-top: -8px; color: var(--text-secondary); }
+.dossier-departure-cancel { min-height: 44px; padding: 0 4px; font-size: .875rem; font-weight: 600; color: var(--brand-text); text-decoration: underline; text-underline-offset: 3px; }
+.dossier-departure-hint { margin-top: 4px; font-size: .8125rem; line-height: 1.4; color: var(--text-secondary); }
+.dossier-departure-missing { margin-top: 8px; font-size: .875rem; line-height: 1.4; font-weight: 600; overflow-wrap: anywhere; }
+.dossier-departure-list {
+  max-width: 34rem;
+  max-height: 18rem;
+  margin: 8px 0 0;
+  padding: 4px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  list-style: none;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  background: var(--bg-elevated);
+  box-shadow: 0 6px 18px rgba(27, 58, 75, .08);
+}
+.dossier-departure-option {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  min-height: 44px;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  font-size: .875rem;
+  line-height: 1.35;
+  cursor: pointer;
+  transition: background-color .2s ease-out, border-color .2s ease-out;
+}
+.dossier-departure-option + .dossier-departure-option { margin-top: 2px; }
+.dossier-departure-option[aria-selected='true'] { color: var(--departure-active-text); background: var(--departure-active-bg); border-color: var(--departure-active-border); }
+.dossier-departure-option:active { transform: translateY(1px); }
+.dossier-departure-option[data-kind='create'],
+.dossier-departure-option[data-kind='wish'] { font-weight: 600; }
+.dossier-departure-option[data-kind='remove'] { border-top-color: var(--border-subtle); border-radius: 0 0 8px 8px; }
+.dossier-departure-option[aria-selected='true'][data-kind='remove'] { border-color: var(--departure-active-border); border-radius: 8px; }
+.dossier-departure-option-icon { flex-shrink: 0; }
+.dossier-departure-option-text { flex: 1 1 12rem; min-width: 0; overflow-wrap: anywhere; }
+.dossier-departure-badge {
+  flex-shrink: 0;
+  padding: 1px 8px;
+  border: 1px solid var(--attention-border);
+  border-radius: 999px;
+  font-size: .75rem;
+  font-weight: 700;
+  color: var(--attention-text);
+  background: var(--attention-bg);
+}
+.dossier-departure-current { flex-shrink: 0; }
+.dossier-departure-error { max-width: 34rem; margin-top: 8px; padding: 8px 12px; border-radius: 10px; font-size: .875rem; line-height: 1.4; color: #991b1b; background: #fef2f2; overflow-wrap: anywhere; }
+html.dark .dossier-departure-error { color: #f4b9b9; background: #44282a; }
+.dossier-departure-task { display: grid; gap: 6px; min-width: 0; }
+.dossier-departure-task .dossier-departure-task-label { margin-bottom: 0; }
+.dossier-departure-feedback { font-size: .875rem; color: #047857; }
+html.dark .dossier-departure-feedback { color: #b0dfc0; }
+@media (forced-colors: active) {
+  .dossier-departure-option[aria-selected='true'] { outline: 2px solid Highlight; }
+}

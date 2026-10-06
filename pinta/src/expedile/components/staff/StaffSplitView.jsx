@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useLayoutEffect, useCallback, useRef } from 'react';
-import { Search, X, Package, Clock, CheckCircle, Check, CreditCard, Plane, AlertCircle, CalendarX, ListFilter, Settings2 } from 'lucide-react';
+import { Search, X, Package, Clock, CheckCircle, Check, CreditCard, Plane, AlertCircle, CalendarX, CalendarPlus, ListFilter, Settings2, User, UserX } from 'lucide-react';
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import { STATUTS, getDestByCP } from '../../constants';
@@ -19,6 +19,9 @@ import useDossierTablePreferences from '../../hooks/useDossierTablePreferences';
 import { COLUMN_FILTER_PREFIX, readColumnFilters, filterDossierTableRows, columnFilterLabel, dossierColumnSuggestions, DOSSIER_GROUPINGS, resolveDossierGrouping } from '../../domain/dossierTablePreferences';
 import { groupDossiersByDeparture, parisCalendarDay, NO_DEPARTURE_GROUP_KEY } from '../../domain/departureGroups';
 import { dossierAlerts } from '../../domain/dossierAlerts';
+import { dossierDestinationCode, dossierWishState } from '../../domain/departurePlanning';
+import { consentQueueFilter } from '../../domain/consentQueue';
+import { groupDossiersByClient } from '../../domain/clientGroups';
 import { TABLE_VIEWS, TABLE_COLUMNS, DossierTableHead, DossierTableRow, DossierTableCard } from './DossierTableRows';
 import { DossierGroupRow, DossierCardGroup } from './DossierGroupHeader';
 
@@ -55,9 +58,12 @@ const BULK_STATUSES = [
   { label: 'Expédié', statut: 'expedie', permission: 'perm_colis_expedier' },
 ];
 const LS_SORT_KEY = 'expedile_default_sort_v2:';
-function loadDefaultSort(userId) {
+// « Accords clients » keeps its own default order: a choice made there never reorders the other tabs.
+const sortScopeOf = view => view === 'accords' ? 'accords' : 'shared';
+const sortStorageKey = (userId, scope) => `${LS_SORT_KEY}${userId}${scope === 'accords' ? ':accords' : ''}`;
+function loadDefaultSort(userId, scope = 'shared') {
   try {
-    const saved = localStorage.getItem(LS_SORT_KEY + userId);
+    const saved = localStorage.getItem(sortStorageKey(userId, scope));
     if (saved && SORT_OPTIONS.some((o) => o.key === saved)) return saved;
   } catch {}
   return 'priority';
@@ -186,7 +192,9 @@ export default function StaffColisPage() {
   // inaccessible data. Returning to that view restores its selected column.
   const sortColumn = sortableColumns.find(column => column.key === searchParams.get('sort'));
   const sortCol = sortColumn?.key || null;
-  const sortOptions = SORT_OPTIONS.filter(option => canSeePayments || !option.key.startsWith('total_'));
+  // Amount orders apply only where the quote price is displayed: never in « Accords clients ».
+  const amountSortable = canSeePayments && displayColumns.some(column => column.key === 'requested');
+  const sortOptions = SORT_OPTIONS.filter(option => amountSortable || !option.key.startsWith('total_'));
   const canExportView = can('perm_export_colis') && (tableView !== 'payments' || can('perm_finances_exporter'));
   const taskScope = ['mine', 'pool'].includes(searchParams.get('tasks')) ? searchParams.get('tasks') : 'all';
   const available = staffAvailable(workPreferences.find(item => item.staff_id === auth?.u?.id), now);
@@ -206,7 +214,7 @@ export default function StaffColisPage() {
   // « À vérifier », marked next to each reference; the dossier page details it.
   const alertsByDossier = useMemo(() => {
     const envoiById = new Map(envois.map(envoi => [envoi.id, envoi]));
-    return new Map(data.map(dossier => [dossier.id, dossierAlerts({ dossier, client: getClient(dossier.clientId), envoi: envoiById.get(dossier.envoi), today: now })]));
+    return new Map(data.map(dossier => [dossier.id, dossierAlerts({ dossier, client: getClient(dossier.clientId), envoi: envoiById.get(dossier.envoi), envois, today: now })]));
   }, [data, getClient, envois, now]);
   // Each tab remembers its own « Regrouper » on this device; an explicit `view`
   // in the URL wins, so a shared link keeps its grouping.
@@ -255,8 +263,10 @@ export default function StaffColisPage() {
     element.addEventListener('scroll', save, { passive: true });
     return () => { element.removeEventListener('scroll', save); };
   }, [listMemoryKey]);
-  const [defaultSort, setDefaultSort] = useState(() => loadDefaultSort(auth?.u?.id));
-  const defaultSortKey = defaultSort.startsWith('total_') && (!canSeePayments || !displayColumns.some(column => column.key === 'requested')) ? 'priority' : defaultSort;
+  const sortScope = sortScopeOf(tableView);
+  const [defaultSorts, setDefaultSorts] = useState(() => ({ shared: loadDefaultSort(auth?.u?.id), accords: loadDefaultSort(auth?.u?.id, 'accords') }));
+  const defaultSort = defaultSorts[sortScope];
+  const defaultSortKey = defaultSort.startsWith('total_') && !amountSortable ? 'priority' : defaultSort;
   const activeFilters = [
     taskScope !== 'all' && { key: 'tasks', label: taskScope === 'mine' ? 'Mes tâches' : 'À prendre' },
     showArchive && { key: 'archive', label: 'Archives incluses' },
@@ -285,8 +295,8 @@ export default function StaffColisPage() {
 
   const changeDefaultSort = key => {
     if (!sortOptions.some(option => option.key === key)) return;
-    setDefaultSort(key);
-    try { localStorage.setItem(LS_SORT_KEY + auth?.u?.id, key); } catch { /* optional preference */ }
+    setDefaultSorts(previous => ({ ...previous, [sortScope]: key }));
+    try { localStorage.setItem(sortStorageKey(auth?.u?.id, sortScope), key); } catch { /* optional preference */ }
     setSearchParams(previous => { const next = new URLSearchParams(previous); next.delete('sort'); next.delete('dir'); return next; }, { replace: true });
   };
 
@@ -306,11 +316,15 @@ export default function StaffColisPage() {
     if (search.trim()) list = list.filter((c) => fuzzy(`${c.ref} ${c.desc || ''} ${getClient(c.clientId)?.nom || ''} ${c.casier || ''} ${c.trackings?.join(' ') || ''}`, exactReference || search));
     return list;
   }, [data, showArchive, workFilter, context, clientFilter, envoiFilter, ownerFilter, taskScope, models, activeDest, getClient, search, exactReference]);
+  // « Accords clients » is the one view that lists only some dossiers: those
+  // whose consent is to obtain. Stage counts, suggestions, export and the empty
+  // state all follow it.
+  const viewRows = useMemo(() => tableView === 'accords' ? consentQueueFilter(scope) : scope, [scope, tableView]);
   const phaseRows = useMemo(() => {
-    if (activeTab === 'all' && (workFilter === 'messages' || ownerFilter || taskScope !== 'all')) return scope;
+    if (activeTab === 'all' && (workFilter === 'messages' || ownerFilter || taskScope !== 'all')) return viewRows;
     const phase = PIPELINE.find((item) => item.key === activeTab);
-    return phase ? scope.filter(phase.filter) : scope;
-  }, [scope, activeTab, workFilter, ownerFilter, taskScope]);
+    return phase ? viewRows.filter(phase.filter) : viewRows;
+  }, [viewRows, activeTab, workFilter, ownerFilter, taskScope]);
 
   const searched = useMemo(() => filterDossierTableRows(phaseRows, { columns: displayColumns, filters: columnFilters, models, getClient, envois }), [phaseRows, displayColumns, columnFilters, models, getClient, envois]);
 
@@ -359,23 +373,31 @@ export default function StaffColisPage() {
   // « Départ du jeudi 15 octobre · Réunion », then its reference.
   const today = parisCalendarDay(now);
   const grouped = grouping !== 'none';
+  // A desired day without a departure forms « Départ à créer du jeudi 20 novembre · Réunion »,
+  // or « Départ souhaité le … » once that day has its departure or has passed.
   const groups = useMemo(() => {
-    if (grouping === 'envoi') return groupDossiersByDeparture(sorted, envois, { today, noDeparture }).map(group => {
+    if (grouping === 'envoi') return groupDossiersByDeparture(sorted, envois, { today, noDeparture,
+      destinationOf: dossier => dossierDestinationCode(dossier, getClient(dossier.clientId)),
+      wishStateOf: dossier => dossierWishState(dossier, getClient(dossier.clientId), envois, now)?.state }).map(group => {
       const unassigned = group.key === NO_DEPARTURE_GROUP_KEY;
       return { key: group.key, title: group.destinationLabel ? `${group.label} · ${group.destinationLabel}` : group.label, ref: group.ref,
-        icon: unassigned ? CalendarX : Plane, color: unassigned ? 'var(--text-muted)' : 'var(--brand-text)', dossiers: group.dossiers };
+        icon: unassigned ? CalendarX : group.wish ? CalendarPlus : Plane, color: unassigned ? 'var(--text-muted)' : 'var(--brand-text)', dossiers: group.dossiers };
     });
     if (grouping === 'statut') return STATUT_GROUPS.map(group => ({ key: group.label, title: group.label, icon: group.icon, color: group.color,
       dossiers: sorted.filter(dossier => group.statuts.includes(dossier.statut)) })).filter(group => group.dossiers.length > 0);
+    // « Flavie Payet », then « 3 dossiers »: the client whose oldest dossier arrived first leads;
+    // two clients with the same name are told apart by their reference.
+    if (grouping === 'client') return groupDossiersByClient(sorted, { getClient, receivedAt: dossier => models.get(dossier.id)?.reception?.firstReceivedAt }).map(group => ({
+      key: group.key, title: group.title, ref: group.ref, icon: group.client ? User : UserX, color: group.client ? 'var(--brand-text)' : 'var(--text-muted)', dossiers: group.dossiers }));
     return sorted.length ? [{ key: 'all', dossiers: sorted }] : [];
-  }, [grouping, sorted, envois, today, noDeparture]);
+  }, [grouping, sorted, envois, today, now, noDeparture, getClient, models]);
   // Exports follow the order on screen, group by group.
   const displayedRows = useMemo(() => grouped ? groups.flatMap(group => group.dossiers) : sorted, [grouped, groups, sorted]);
 
   const tabCounts = useMemo(() => PIPELINE.reduce((all, phase) => {
-    all[phase.key] = scope.filter((c) => phase.key === 'all' && (workFilter === 'messages' || ownerFilter || taskScope !== 'all') ? true : phase.filter(c)).length;
+    all[phase.key] = viewRows.filter((c) => phase.key === 'all' && (workFilter === 'messages' || ownerFilter || taskScope !== 'all') ? true : phase.filter(c)).length;
     return all;
-  }, {}), [scope, workFilter, ownerFilter, taskScope]);
+  }, {}), [viewRows, workFilter, ownerFilter, taskScope]);
   const handleSort = (col, direction) => {
     if (!sortableColumns.some(column => column.key === col)) return;
     setSearchParams((previous) => {
@@ -587,7 +609,9 @@ export default function StaffColisPage() {
 
             if (groups.length === 0) {
               if (exactReference) return null;
-              return <div className="text-center text-sm text-gray-600 px-4 py-8"><p>{!workReady && taskScope !== 'all' ? 'La liste des tâches est indisponible pour le moment.' : taskScope === 'mine' ? 'Aucune tâche ne vous est attribuée dans cette sélection.' : taskScope === 'pool' ? 'Aucune tâche disponible dans cette sélection.' : 'Aucun dossier ne correspond à ces filtres.'}</p>{taskScope !== 'all' && <button onClick={() => setSearchParams(previous => { const next = new URLSearchParams(previous); next.delete('tasks'); next.delete('owner'); return next; }, { replace: true })} className="mt-2 min-h-11 px-3 font-semibold brand-t underline">Voir tous les dossiers</button>}{activeFilters.length > 0 && <button onClick={clearFilters} className="min-h-11 mt-2 font-semibold brand-t underline">Retirer les filtres</button>}{search && <button onClick={() => setSearch('')} className="min-h-11 mt-2 px-3 font-semibold brand-t underline">Effacer la recherche</button>}</div>;
+              // Without any filter, an empty « Accords clients » is the normal state: every consent is obtained.
+              const emptyConsentQueue = tableView === 'accords' && taskScope === 'all' && !activeFilters.length && !search.trim();
+              return <div className="text-center text-sm text-gray-600 px-4 py-8"><p>{!workReady && taskScope !== 'all' ? 'La liste des tâches est indisponible pour le moment.' : taskScope === 'mine' ? 'Aucune tâche ne vous est attribuée dans cette sélection.' : taskScope === 'pool' ? 'Aucune tâche disponible dans cette sélection.' : emptyConsentQueue ? 'Aucun dossier en attente d’accord.' : 'Aucun dossier ne correspond à ces filtres.'}</p>{taskScope !== 'all' && <button onClick={() => setSearchParams(previous => { const next = new URLSearchParams(previous); next.delete('tasks'); next.delete('owner'); return next; }, { replace: true })} className="mt-2 min-h-11 px-3 font-semibold brand-t underline">Voir tous les dossiers</button>}{activeFilters.length > 0 && <button onClick={clearFilters} className="min-h-11 mt-2 font-semibold brand-t underline">Retirer les filtres</button>}{search && <button onClick={() => setSearch('')} className="min-h-11 mt-2 px-3 font-semibold brand-t underline">Effacer la recherche</button>}</div>;
             }
 
             return <>

@@ -7,7 +7,7 @@ import { deliverMessage } from '../../services/telegramApi';
 import { BRAND } from '../../constants';
 import * as sb from '../../lib/supabaseData';
 import { setConversationState, markVisibleMessagesRead } from '../../services/conversationApi';
-import { CONVERSATION_STATES, conversationState, conversationLabel } from '../../domain/conversations';
+import { CONVERSATION_STATES, conversationState, conversationLabel, messageDeliveryLabel } from '../../domain/conversations';
 import { CHANNEL_LABELS, clientDisplayName, conversationClock, conversationDay, conversationDayKey, linkLabel } from '../../domain/conversationList';
 import { supabase } from '../../lib/supabase';
 import { staffName } from '../workspace/WorkActionRow';
@@ -96,10 +96,9 @@ export function ConversationAttachment({ message, colis, lock = null, canImport,
 // ── Status indicator (Telegram-style) ────────────────────────────────────────
 function MsgStatut({ statut, canal }) {
   if (!statut) return null;
-  const labels = {envoi:'En attente de livraison',envoye:'Envoyé',distribue:'Distribué',lu:'Lu',echec:'Envoi non confirmé',en_attente:'En attente de connexion Telegram'};
   // No business e-mail provider is connected: an e-mail stays a manual draft.
   const manualDraft = canal === 'email' && statut === 'envoi';
-  const label = manualDraft ? 'Brouillon manuel' : labels[statut] || statut;
+  const label = messageDeliveryLabel({ statut, canal });
   let icon;
   switch (statut) {
     case 'envoi':

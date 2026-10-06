@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { TABLE_COLUMNS, buildDossierTableModel as model, buildDossierTableExportRows, dossierTableExportColumns, formatDossierTableDate, dossierTableMissingAmountLabel } from './dossierTable.js';
+import { TABLE_COLUMNS, buildDossierTableModel as model, buildDossierTableExportRows, dossierTableExportColumns, formatDossierTableDate, dossierTableMissingAmountLabel, sortDossierTableRows } from './dossierTable.js';
 import { actionWaiting, workActionUrl } from './personalWork.js';
 
 const now = Date.parse('2026-10-02T12:00:00Z');
@@ -59,8 +59,9 @@ test('handoff does not transfer responsibility before acceptance', () => {
   assert.equal(model(dossier, { ...base, actions }).ownerName, 'Marie Test');
 });
 
-test('all keeps dossiers without tasks and presets never change scope membership', () => {
-  for (const view of ['daily', 'payments', 'departures']) {
+test('all keeps dossiers without tasks and the model never changes scope membership in any view', () => {
+  // « Accords clients » lists fewer dossiers through consentQueueFilter, before the model: never here.
+  for (const view of ['daily', 'payments', 'departures', 'accords']) {
     assert.equal(model(dossier, { ...base, view }).matchesScope, true);
     assert.equal(model(dossier, { ...base, view }).action, null);
     assert.equal(model(dossier, { ...base, view, scope: 'mine' }).matchesScope, false);
@@ -379,7 +380,7 @@ test('short header labels keep the words of their full label, in order, and neve
   assert.equal(shortened.has('payments/requested'), false, 'The payment “Demandé” column keeps its own label.');
   assert.deepEqual(Object.fromEntries([...shortened].map(([key, value]) => [key.split('/')[1], value])), {
     receivedAt: 'Réception', statusLabel: 'Statut', statut: 'Travail', cartons: 'Cartons', optimizedDimensions: 'Dimensions', optimizedWeight: 'Poids (kg)',
-    requested: 'Prix', remaining: 'Reste', sentAt: 'Devis envoyé', departure: 'Départ', packages: 'Colis',
+    requested: 'Prix', remaining: 'Reste', sentAt: 'Devis envoyé', departure: 'Départ', packages: 'Colis', consentRequestedAt: 'Demande envoyée',
   });
   for (const view of Object.keys(TABLE_COLUMNS)) {
     const exported = dossierTableExportColumns(view, TABLE_COLUMNS[view]);
@@ -387,4 +388,106 @@ test('short header labels keep the words of their full label, in order, and neve
     assert.ok(exported.every(column => !('shortLabel' in column)));
   }
   assert.deepEqual(dossierTableExportColumns('daily', TABLE_COLUMNS.daily).map(column => column.label), ['Référence', 'Client', 'Dernière réception', 'Statut du dossier', 'Paiement', 'Travail à faire', 'Qui s’en occupe', 'Casier', 'Cartons reçus', 'Dimensions finales', 'Poids final (kg)', 'Prix du devis']);
+});
+
+test('the server relance before the departure closing is work to do, not an awaited consent', () => {
+  const waiting = { ...dossier, statut: 'attente_feu_vert', feuVert: 'en_attente' };
+  for (const hint of ['Relancer le client avant la clôture du départ', 'Demander l’accord avant la clôture du départ', "Demander l'accord avant la clôture du départ"]) {
+    const row = model(waiting, { ...base, actions: [action('reception', { action_hint: hint, due_at: '2026-10-03T15:00:00Z' })], scope: 'pool' });
+    assert.equal(row.matchesScope, true, hint); assert.equal(actionWaiting(row.action), false);
+    assert.equal(row.action.blocked_reason, undefined); assert.equal(row.title, hint);
+  }
+  // Any other hint, or none, keeps the awaited consent blocked.
+  for (const changes of [{}, { action_hint: 'Relancer le client' }, { action_hint: 'Préparer une relance avant la clôture du départ' }]) {
+    assert.equal(model(waiting, { ...base, actions: [action('reception', changes)], scope: 'pool' }).matchesScope, false, JSON.stringify(changes));
+    assert.equal(model(waiting, { ...base, actions: [action('reception', changes)] }).action.blocked_reason, 'Accord client attendu');
+  }
+  const wait = model({ ...waiting, attenteClientDate: '2026-10-01T08:00:00Z' }, { ...base, actions: [action('reception')] });
+  assert.equal(wait.action.blocked_reason, 'Attente demandée par le client', 'A voluntary wait stays blocked.');
+});
+
+test('a desired day without a departure reads « Souhaité le … · à créer » and sorts on that day', () => {
+  const wish = model({ ...dossier, departSouhaite: '2026-11-19' }, base);
+  assert.equal(wish.departure.label, 'Souhaité le 19/11/2026 · à créer');
+  assert.equal(model({ ...dossier, departSouhaite: '2026-11-19', envoi: 'missing' }, base).departure.label, 'Départ à vérifier', 'An assigned departure wins over the wish.');
+  const column = TABLE_COLUMNS.departures.find(item => item.key === 'departure');
+  const rows = [
+    { ...dossier, id: 'late', departSouhaite: '2026-11-19' },
+    { ...dossier, id: 'none' },
+    { ...dossier, id: 'planned', envoi: 'departure' },
+    { ...dossier, id: 'early', departSouhaite: '2026-10-08' },
+  ];
+  const envois = [{ id: 'departure', date: '2026-10-15', destinationCode: '974', statut: 'planifie' }];
+  const models = new Map(rows.map(row => [row.id, model(row, { ...base, envois })]));
+  assert.deepEqual(sortDossierTableRows(rows, { column, direction: 'asc', models, envois }).map(row => row.id), ['early', 'planned', 'late', 'none']);
+  assert.deepEqual(sortDossierTableRows(rows, { column, direction: 'desc', models, envois }).map(row => row.id), ['late', 'planned', 'early', 'none']);
+  const [exported] = buildDossierTableExportRows([rows[0]], [], models, 'departures', [{ key: 'departure', label: 'Départ prévu' }]);
+  assert.deepEqual(exported, { 'Départ prévu': 'Souhaité le 19/11/2026 · à créer' });
+});
+
+test('a desired day reads « départ prévu, à affecter » once its day has a departure, « date passée » once gone', () => {
+  const client = { cp: '97400' };
+  const nov19 = { id: 'nov19', date: '2026-11-19', destinationCode: '974', statut: 'planifie' };
+  assert.equal(model({ ...dossier, departSouhaite: '2026-11-19' }, { ...base, client, envois: [nov19] }).departure.label, 'Souhaité le 19/11/2026 · départ prévu, à affecter');
+  assert.equal(model({ ...dossier, departSouhaite: '2026-11-19' }, { ...base, client, envois: [{ ...nov19, statut: 'parti' }] }).departure.label, 'Souhaité le 19/11/2026 · départ clôturé');
+  assert.equal(model({ ...dossier, departSouhaite: '2026-11-19' }, { ...base, client, envois: [{ ...nov19, destinationCode: '976' }] }).departure.label, 'Souhaité le 19/11/2026 · à créer', 'Another destination does not count.');
+  assert.equal(model({ ...dossier, departSouhaite: '2026-10-01' }, { ...base, client }).departure.label, 'Souhaité le 01/10/2026 · date passée');
+});
+
+test('a departure of today is not past: days are read on Paris time', () => {
+  // 23:30 UTC on 1 October is already 2 October in Paris.
+  const envois = [{ id: 'departure', date: '2026-10-02', destinationCode: '974', statut: 'planifie' }];
+  assert.equal(model({ ...paid, envoi: 'departure' }, { ...base, envois, now: Date.parse('2026-10-01T22:30:00Z') }).departure.label, 'Prévu le 02/10/2026');
+  assert.equal(model({ ...paid, envoi: 'departure' }, { ...base, envois, now: Date.parse('2026-10-02T22:30:00Z') }).departure.label, 'Date dépassée · 02/10/2026');
+});
+
+test('« Accords clients » shows the consent, its request and last relance, without status or payment columns', () => {
+  assert.deepEqual(TABLE_COLUMNS.accords.map(column => [column.key, column.label]), [
+    ['ref', 'Référence'], ['client', 'Client'], ['receivedAt', 'Dernière réception'], ['consentState', 'Accord'],
+    ['consentRequestedAt', 'Demande envoyée le'], ['lastRelanceAt', 'Dernière relance'], ['cartons', 'Cartons reçus'],
+    ['casier', 'Casier'], ['departure', 'Départ prévu'], ['action', 'Action'],
+  ]);
+  assert.equal(TABLE_COLUMNS.accords.some(column => column.financial || ['statusLabel', 'paymentState'].includes(column.key)), false);
+  // Cartons, Casier and Départ are the very columns of the other views.
+  for (const key of ['casier', 'cartons']) assert.equal(TABLE_COLUMNS.accords.find(column => column.key === key), TABLE_COLUMNS.daily.find(column => column.key === key));
+  assert.equal(TABLE_COLUMNS.accords.find(column => column.key === 'departure'), TABLE_COLUMNS.departures.find(column => column.key === 'departure'));
+  assert.deepEqual(TABLE_COLUMNS.accords.find(column => column.key === 'consentState').filter.choices, ['À soumettre', 'Réponse attendue', 'Le client attend']);
+  // Its dossiers are worked through their reception and consent task.
+  const measured = { ...dossier, statut: 'mesure', feuVert: 'en_attente' };
+  assert.equal(model(measured, { ...base, actions: [action('documents'), action('reception')], view: 'accords' }).action.kind, 'reception');
+});
+
+const consentRows = [
+  { ...dossier, id: 'waiting', ref: 'EXP-WAIT', statut: 'attente_feu_vert', feuVert: 'en_attente', attenteClientDate: '2026-10-01T08:00:00Z', attenteClientUntil: '2026-10-25T08:00:00Z', demandeFeuVertEnvoyeeAt: '2026-09-30T08:00:00Z', messages: [] },
+  { ...dossier, id: 'submit', ref: 'EXP-SUBMIT', statut: 'mesure', feuVert: 'en_attente', casier: 'B-2' },
+  { ...dossier, id: 'awaited', ref: 'EXP-AWAIT', statut: 'attente_feu_vert', feuVert: 'en_attente', demandeFeuVertEnvoyeeAt: '2026-10-01T09:00:00Z', departSouhaite: '2026-11-19',
+    messages: [{ template: 'demande_feu_vert', statut: 'envoye', createdAt: '2026-10-01T09:00:00Z' }, { template: 'relance_feu_vert', statut: 'envoye', createdAt: '2026-10-01T15:00:00Z' }, { template: 'relance_feu_vert', statut: 'echec', canal: 'telegram', createdAt: '2026-10-02T09:00:00Z' }] },
+];
+
+test('the consent columns sort on their real values, unknowns last in either direction', () => {
+  const column = key => TABLE_COLUMNS.accords.find(item => item.key === key);
+  const order = (key, direction) => sortDossierTableRows(consentRows, { column: column(key), direction }).map(row => row.id);
+  // « À soumettre », « Le client attend », « Réponse attendue ».
+  assert.deepEqual(order('consentState', 'asc'), ['submit', 'waiting', 'awaited']);
+  assert.deepEqual(order('consentState', 'desc'), ['awaited', 'waiting', 'submit']);
+  assert.deepEqual(order('consentRequestedAt', 'asc'), ['waiting', 'awaited', 'submit']);
+  assert.deepEqual(order('consentRequestedAt', 'desc'), ['awaited', 'waiting', 'submit']);
+  assert.deepEqual(order('lastRelanceAt', 'asc'), ['awaited', 'waiting', 'submit']);
+  assert.deepEqual(order('lastRelanceAt', 'desc'), ['awaited', 'waiting', 'submit']);
+});
+
+test('the accords export uses the screen wording and only the columns of this view', () => {
+  const models = new Map(consentRows.map(row => [row.id, model(row, base)]));
+  const exported = buildDossierTableExportRows(consentRows, [], models, 'accords', TABLE_COLUMNS.accords);
+  assert.deepEqual(Object.keys(exported[0]), ['Référence', 'Client', 'Dernière réception', 'Accord', 'Demande envoyée le', 'Dernière relance', 'Cartons reçus', 'Casier', 'Départ prévu']);
+  assert.deepEqual(exported.map(row => [row.Référence, row.Accord, row['Demande envoyée le'], row['Dernière relance'], row['Départ prévu']]), [
+    ['EXP-WAIT', 'Le client attend · jusqu’au 25/10', '30/09/2026', 'Non renseigné', 'À planifier'],
+    ['EXP-SUBMIT', 'À soumettre', 'Non renseigné', 'Non renseigné', 'À planifier'],
+    // The last relance failed: its date never reads as a sent relance.
+    ['EXP-AWAIT', 'Réponse attendue', '01/10/2026', '02/10/2026 · Envoi non confirmé', 'Souhaité le 19/11/2026 · à créer'],
+  ]);
+  assert.equal(exported[1].Casier, 'B-2');
+  // A column of another view never reaches this export.
+  assert.deepEqual(dossierTableExportColumns('accords', TABLE_COLUMNS.daily).map(column => column.key), ['ref', 'client', 'receivedAt', 'casier', 'cartons']);
+  assert.deepEqual(dossierTableExportColumns('daily', TABLE_COLUMNS.accords).map(column => column.key), ['ref', 'client', 'receivedAt', 'cartons', 'casier']);
 });

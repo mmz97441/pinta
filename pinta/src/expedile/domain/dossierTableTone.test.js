@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { STATUTS } from '../constants/index.js';
 import { PAYMENT_DETAIL_LABELS, PAYMENT_STATE_LABELS, buildDossierTableModel } from './dossierTable.js';
-import { DOSSIER_TABLE_TONES, paymentTone, statusTone } from './dossierTableTone.js';
+import { DOSSIER_TABLE_TONES, consentTone, paymentTone, statusTone } from './dossierTableTone.js';
+import { CONSENT_STAGE_LABELS } from './consentQueue.js';
 
 const withPayment = stateLabel => ({ payment: { stateLabel } });
 const withDetail = (stateLabel, detailLabel) => ({ payment: { stateLabel, detailLabel } });
@@ -58,4 +59,13 @@ test('tones computed from real table models stay within the known palette', () =
     assert.equal(paymentTone(row), payment, row.payment.stateLabel);
     assert.ok(DOSSIER_TABLE_TONES.includes(statusTone(dossier, row)) && DOSSIER_TABLE_TONES.includes(paymentTone(row)));
   }
+});
+
+test('the « Accord » pill: to submit is neutral, an awaited answer waits, the client’s own wait is current', () => {
+  const expected = { to_submit: 'neutral', awaiting_reply: 'waiting', client_waiting: 'current' };
+  // A new consent state must be given a tone on purpose.
+  assert.deepEqual(Object.keys(expected).sort(), Object.keys(CONSENT_STAGE_LABELS).sort());
+  for (const [stage, tone] of Object.entries(expected)) assert.equal(consentTone(stage), tone, stage);
+  for (const unknown of [null, undefined, '', 'refused', '__proto__']) assert.equal(consentTone(unknown), 'neutral');
+  assert.ok(Object.values(expected).every(tone => DOSSIER_TABLE_TONES.includes(tone)));
 });

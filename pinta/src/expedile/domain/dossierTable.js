@@ -5,6 +5,9 @@ import { departureReadiness } from './departureReadiness.js';
 import { actionPriority, actionWaiting, canWorkAction, sortWorkActions } from './personalWork.js';
 import { workTitle, workSituation } from './collaborativeWork.js';
 import { receptionCartonManifest, receptionDateSummary } from './reception.js';
+import { parisCalendarDay } from './departureGroups.js';
+import { dossierDepartureWish, wishedDepartureLabel } from './departurePlanning.js';
+import { CONSENT_STAGE_LABELS, consentRelance, consentState, consentWaitLabel } from './consentQueue.js';
 
 const SORT_TYPES = new Set(['text', 'number', 'date']);
 const naturalTextOrder = new Intl.Collator('fr', { numeric: true, sensitivity: 'base' });
@@ -31,19 +34,27 @@ const receptionDateColumn = defineDossierTableColumn({ key: 'receivedAt', label:
 const finalWeightColumn = defineDossierTableColumn({ key: 'optimizedWeight', label: 'Poids final (kg)', shortLabel: 'Poids (kg)', align: 'right', sort: { type: 'number', value: ({ model }) => model?.optimizedWeight } });
 const financialColumn = (key, label, priceKind = 'payment', shortLabel) => defineDossierTableColumn({ key, label, ...(shortLabel ? { shortLabel } : {}), align: 'right', financial: true, priceKind, sort: { type: 'number', value: ({ model }) => priceKind === 'quote' ? model?.quotePrice?.amount : model?.payment?.[key] } });
 const quotePriceColumn = financialColumn('requested', 'Prix du devis', 'quote', 'Prix');
+const casierColumn = defineDossierTableColumn({ key: 'casier', label: 'Casier', filter: { text: ({ dossier }) => dossier.casier || 'À renseigner' }, sort: { type: 'text', value: ({ dossier }) => dossier.casier } });
+const cartonsColumn = defineDossierTableColumn({ key: 'cartons', label: 'Cartons reçus', shortLabel: 'Cartons', sort: { type: 'number', value: ({ dossier }) => receptionCartonManifest(dossier).nbColis } });
+// A desired day without a departure (« Souhaité le … · à créer ») sorts on that day.
+const departureColumn = defineDossierTableColumn({ key: 'departure', label: 'Départ prévu', shortLabel: 'Départ', sort: { type: 'date', value: ({ dossier, model, envoi }) => /^(Prévu le|Date dépassée)/.test(model?.departure?.label || '') ? envoi?.date : dossierDepartureWish(dossier) } });
+// « Accords clients »: the consent still to obtain, the request and its last relance.
+const consentStateColumn = defineDossierTableColumn({ key: 'consentState', label: 'Accord', filter: { choices: Object.values(CONSENT_STAGE_LABELS) }, sort: { type: 'text', value: ({ dossier }) => consentState(dossier)?.label } });
+const consentRequestColumn = defineDossierTableColumn({ key: 'consentRequestedAt', label: 'Demande envoyée le', shortLabel: 'Demande envoyée', sort: { type: 'date', value: ({ dossier }) => dossier.demandeFeuVertEnvoyeeAt } });
+const consentRelanceColumn = defineDossierTableColumn({ key: 'lastRelanceAt', label: 'Dernière relance', sort: { type: 'date', value: ({ dossier }) => consentRelance(dossier)?.at } });
 export const TABLE_COLUMNS = Object.freeze({
   daily: Object.freeze([refColumn, clientColumn, receptionDateColumn, statusColumn, paymentStateColumn,
     defineDossierTableColumn({ key: 'statut', label: 'Travail à faire', shortLabel: 'Travail', sort: { type: 'text', value: ({ model }) => model?.title === 'Tâches à actualiser' ? null : model?.title } }),
     defineDossierTableColumn({ key: 'owner', label: 'Qui s’en occupe', filter: { text: ({ model }) => model?.ownerName }, sort: { type: 'text', value: ({ model }) => ['—', 'Non attribué', 'Membre de l’équipe'].includes(model?.ownerName) ? null : model?.ownerName } }),
-    defineDossierTableColumn({ key: 'casier', label: 'Casier', filter: { text: ({ dossier }) => dossier.casier || 'À renseigner' }, sort: { type: 'text', value: ({ dossier }) => dossier.casier } }),
-    defineDossierTableColumn({ key: 'cartons', label: 'Cartons reçus', shortLabel: 'Cartons', sort: { type: 'number', value: ({ dossier }) => receptionCartonManifest(dossier).nbColis } }), dimensionsColumn, finalWeightColumn, quotePriceColumn, actionColumn]),
+    casierColumn, cartonsColumn, dimensionsColumn, finalWeightColumn, quotePriceColumn, actionColumn]),
   payments: Object.freeze([refColumn, clientColumn, receptionDateColumn, statusColumn, paymentStateColumn, financialColumn('requested', 'Demandé'), financialColumn('paid', 'Payé'), financialColumn('remaining', 'Reste à payer', 'payment', 'Reste'),
     defineDossierTableColumn({ key: 'sentAt', label: 'Devis envoyé le', shortLabel: 'Devis envoyé', sort: { type: 'date', value: ({ model }) => model?.payment?.sentAt } }), actionColumn]),
-  departures: Object.freeze([refColumn, clientColumn, receptionDateColumn, statusColumn, paymentStateColumn,
-    defineDossierTableColumn({ key: 'departure', label: 'Départ prévu', shortLabel: 'Départ', sort: { type: 'date', value: ({ model, envoi }) => /^(Prévu le|Date dépassée)/.test(model?.departure?.label || '') ? envoi?.date : null } }),
+  departures: Object.freeze([refColumn, clientColumn, receptionDateColumn, statusColumn, paymentStateColumn, departureColumn,
     defineDossierTableColumn({ key: 'destination', label: 'Destination', sort: { type: 'text', value: ({ model }) => model?.departure?.destination === 'Destination à préciser' ? null : model?.departure?.destination } }),
     defineDossierTableColumn({ key: 'packages', label: 'Colis à expédier', shortLabel: 'Colis', sort: { type: 'number', value: ({ dossier, model }) => model?.optimized ? dossier.outgoingParcelCount : null } }),
     defineDossierTableColumn({ key: 'readiness', label: 'Prêt à partir ?', sort: { type: 'text', value: ({ model }) => model?.departure?.readinessLabel } }), dimensionsColumn, finalWeightColumn, quotePriceColumn, actionColumn]),
+  // No status or payment column: every dossier here is before its quote.
+  accords: Object.freeze([refColumn, clientColumn, receptionDateColumn, consentStateColumn, consentRequestColumn, consentRelanceColumn, cartonsColumn, casierColumn, departureColumn, actionColumn]),
 });
 
 export function isDossierTableColumnSortable(column) {
@@ -183,8 +194,9 @@ function departureModel(dossier, envois, optimized, payment, now, client) {
   const formattedDate = date ? date.split('-').reverse().join('/') : null;
   const departed = Boolean(dossier.dateExpedition || envoi?.departedAt || envoi?.manifestVersion > 0);
   const cancelled = envoi?.statut === 'annule';
-  const past = date && date < new Date(now).toISOString().slice(0, 10);
-  const label = !envoi ? departed ? 'Expédition enregistrée' : envoiId ? 'Départ à vérifier' : 'À planifier'
+  // Departures are planned on Paris days.
+  const past = date && date < parisCalendarDay(now);
+  const label = !envoi ? departed ? 'Expédition enregistrée' : envoiId ? 'Départ à vérifier' : wishedDepartureLabel(dossier, { client, envois, now }) || 'À planifier'
     : cancelled ? 'Départ annulé'
     : departed ? 'Départ confirmé'
     : envoi.statut === 'archive' ? 'Départ archivé'
@@ -210,6 +222,10 @@ function departureModel(dossier, envois, optimized, payment, now, client) {
   return { label, destination, packagesLabel: optimized ? `${dossier.outgoingParcelCount} colis après optimisation` : 'Colis après optimisation à confirmer', readinessLabel };
 }
 
+// The server turns the awaited consent into a relance before the departure
+// closing (sync_staff_work_actions): that reception action is work to do.
+const CONSENT_RELANCE_HINT = /^(Relancer le client avant la clôture|Demander l['’]accord avant la clôture)/;
+
 /** Keep task ids/versions and attribution. A stale ready row must not enable a
  * command when the dossier already proves its prerequisite is missing. */
 function checkedAction(action, dossier, optimized, payment, now) {
@@ -226,7 +242,8 @@ function checkedAction(action, dossier, optimized, payment, now) {
   }[action.kind];
   if (!compatible) reason = 'Le dossier a changé. Actualisez les tâches.';
   else if (action.kind === 'reception' && dossier.statut === 'attente_feu_vert'
-    && !(dateTime(dossier.attenteClientUntil) !== null && dateTime(dossier.attenteClientUntil) <= now))
+    && !(dateTime(dossier.attenteClientUntil) !== null && dateTime(dossier.attenteClientUntil) <= now)
+    && !CONSENT_RELANCE_HINT.test(action.action_hint?.trim() || ''))
     reason = dossier.attenteClientDate ? 'Attente demandée par le client' : 'Accord client attendu';
   else if (['preparation', 'quote'].includes(action.kind) && dossier.feuVert !== undefined && dossier.feuVert !== 'autorise') reason = 'Accord client requis';
   else if (['preparation', 'quote'].includes(action.kind) && dossier.produitInterdit) reason = 'Contenu à vérifier';
@@ -244,8 +261,10 @@ function ownerName(action, me, teamUsers) {
   return [user?.prenom, user?.nom].filter(Boolean).join(' ').trim() || 'Membre de l’équipe';
 }
 
-/** One dossier produces one row. Presets change presentation, never ownership
- * filters, permissions, availability or the number of matching dossiers.
+/** One dossier produces one row. The model never filters: a view changes the
+ * presentation and the preferred task, never ownership filters, permissions or
+ * availability. The one view that lists fewer dossiers, « Accords clients »,
+ * restricts its rows before the model (consentQueueFilter).
  * `actions` may be pre-grouped by the caller; no global store or mutation here.
  */
 export function buildDossierTableModel(dossier, { actions = [], me, can = () => false, teamUsers = [], envois = [], client = dossier.devisSnapshot?.inputs?.client || {}, scope = 'all', view = 'daily', available = true, now = Date.now(), workReady = true, assigneeFilter = '' } = {}) {
@@ -271,7 +290,7 @@ export function buildDossierTableModel(dossier, { actions = [], me, can = () => 
     && (!assigneeFilter || (assigneeFilter === 'mine' ? mine(action) : assigneeFilter === 'unassigned' ? free(action) : action.assignee_id === assigneeFilter)));
   const next = currentTask(dossier, payment, client);
   const stageKind = { reception: 'reception', accord: dossier.statut === 'refuse_client' ? 'correction' : 'reception', preparation: 'preparation', documents: 'documents', devis: 'quote', paiement: 'quote', expedition: 'departure', livraison: 'departure' }[next];
-  const preferred = view === 'payments' ? 'quote' : view === 'departures' ? 'departure' : stageKind;
+  const preferred = view === 'payments' ? 'quote' : view === 'departures' ? 'departure' : view === 'accords' ? 'reception' : stageKind;
   const ordered = [...scoped].sort((a, b) => Number(!canDo(a)) - Number(!canDo(b))
     || Number(actionWaiting(a)) - Number(actionWaiting(b))
     || Number(a.kind !== preferred) - Number(b.kind !== preferred)
@@ -292,6 +311,7 @@ const exportKeys = {
   daily: ['ref', 'client', 'receivedAt', 'statusLabel', 'paymentState', 'statut', 'owner', 'casier', 'cartons', 'optimizedDimensions', 'optimizedWeight', 'requested'],
   payments: ['ref', 'client', 'receivedAt', 'statusLabel', 'paymentState', 'requested', 'paid', 'remaining', 'sentAt'],
   departures: ['ref', 'client', 'receivedAt', 'statusLabel', 'paymentState', 'departure', 'destination', 'packages', 'readiness', 'optimizedDimensions', 'optimizedWeight', 'requested'],
+  accords: ['ref', 'client', 'receivedAt', 'consentState', 'consentRequestedAt', 'lastRelanceAt', 'cartons', 'casier', 'departure'],
 };
 const tableDateFormatter = new Intl.DateTimeFormat('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'Indian/Reunion' });
 
@@ -343,6 +363,8 @@ export function buildDossierTableExportRows(dossiers, clients, models, view, col
     const zone = [DESTINATIONS[code]?.label, sector ? sector[0] + sector.slice(1).toLowerCase() : ''].filter(Boolean).join(' · ');
     const amount = key => typeof model?.payment?.[key] === 'number' && Number.isFinite(model.payment[key])
       ? model.payment[key] : dossierTableMissingAmountLabel(model?.payment, key);
+    // The screen's wording: « Le client attend · jusqu’au 25/10 », « 06/10/2026 · Envoi non confirmé ».
+    const consent = consentState(dossier), relance = consentRelance(dossier);
     const values = {
       ref: dossier.ref || 'Sans référence',
       client: [name, zone].filter(Boolean).join('\n'),
@@ -358,6 +380,9 @@ export function buildDossierTableExportRows(dossiers, clients, models, view, col
       sentAt: formatDossierTableDate(model?.payment?.sentAt),
       departure: model?.departure?.label || 'À prévoir', destination: model?.departure?.destination || 'À renseigner',
       packages: model?.departure?.packagesLabel || 'À préparer', readiness: model?.departure?.readinessLabel || 'À vérifier',
+      consentState: consent ? [consent.label, consentWaitLabel(consent.until)].filter(Boolean).join(' · ') : '',
+      consentRequestedAt: formatDossierTableDate(dossier.demandeFeuVertEnvoyeeAt),
+      lastRelanceAt: relance ? [formatDossierTableDate(relance.at), relance.deliveryLabel].filter(Boolean).join(' · ') : formatDossierTableDate(null),
     };
     return Object.fromEntries(selected.map(column => {
       if (column.priceKind !== 'quote') return [column.label, values[column.key]];

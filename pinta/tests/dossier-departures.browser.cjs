@@ -702,25 +702,30 @@ async function main() {
         await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(parcel) });
       });
       await openDossier(f, DOSSIER.DEP011);await waitTheme(f, theme);
-      const select = f.page.getByLabel('Départ de cette expédition', { exact: true });
-      await select.waitFor();
-      assert.deepEqual((await select.locator('option').evaluateAll(options => options.map(option => option.value))).sort(), ['', DEPARTURE.reunion15, DEPARTURE.reunion22, DEPARTURE.reunion29].sort());
-      assert.equal(await select.inputValue(), DEPARTURE.reunion15);
+      // The expedition task's « Départ » field: the planned departures of the destination, then « Retirer le départ ».
+      const task = f.page.getByTestId('dossier-task-workspace');
+      const field = task.getByRole('combobox', { name: 'Départ de cette expédition', exact: true });
+      const saved = () => task.locator('.dossier-departure-line').getAttribute('data-envoi');
+      const choose = async envoi => { await field.click();await task.locator(`[role="option"][data-envoi="${envoi}"]`).click(); };
+      await field.click();
+      assert.deepEqual(await task.getByRole('option').evaluateAll(options => options.map(option => option.dataset.envoi || option.dataset.kind)), [DEPARTURE.reunion15, DEPARTURE.reunion22, DEPARTURE.reunion29, 'remove']);
+      await field.press('Escape');
+      assert.equal(await saved(), DEPARTURE.reunion15);
       assert.equal(await alertBand(f).count(), 0, 'The 15 October departure is inside the subscription.');
       const dialog = f.page.getByRole('dialog', { name: 'Affecter quand même ?', exact: true });
       // Each way of closing the question writes nothing and shows the saved departure again.
       for (const close of ['Annuler', 'Escape', 'Fermer la confirmation', 'backdrop']) {
-        await select.selectOption(DEPARTURE.reunion22);await dialog.waitFor();
+        await choose(DEPARTURE.reunion22);await dialog.waitFor();
         await dialog.getByText('Le départ du jeudi 22 octobre est après la fin de l’abonnement de Lucas (18 octobre).', { exact: true }).waitFor();
         if (close === 'Escape') await f.page.keyboard.press('Escape');
         else if (close === 'backdrop') await f.page.mouse.click(4, 4);
         else await dialog.getByRole('button', { name: close, exact: true }).click();
         await dialog.waitFor({ state: 'hidden' });
         assert.equal(calls.length, 0, `${close}: nothing is written.`);
-        assert.equal(await select.inputValue(), DEPARTURE.reunion15, `${close}: the saved departure is shown again.`);
+        assert.equal(await saved(), DEPARTURE.reunion15, `${close}: the saved departure is shown again.`);
       }
       // Confirmed: the departure is assigned exactly as without the question.
-      await select.selectOption(DEPARTURE.reunion29);await dialog.waitFor();
+      await choose(DEPARTURE.reunion29);await dialog.waitFor();
       await dialog.getByText('Le départ du jeudi 29 octobre est après la fin de l’abonnement de Lucas (18 octobre).', { exact: true }).waitFor();
       for (const button of await dialog.getByRole('button').all()) { const box = await button.boundingBox(); assert.ok(box.height >= 44 && box.width >= 44 && box.x >= 0 && box.x + box.width <= width + 1); }
       await noPageOverflow(f);await axe(f);
@@ -729,16 +734,16 @@ async function main() {
       await dialog.waitFor({ state: 'hidden' });
       await f.page.getByText('Départ enregistré.', { exact: true }).waitFor();
       assert.deepEqual(calls, [{ p_colis_id: DOSSIER.DEP011, p_envoi_id: DEPARTURE.reunion29, p_expected_updated_at: before.find(item => item.id === DOSSIER.DEP011).updated_at }]);
-      assert.equal(await select.inputValue(), DEPARTURE.reunion29);
+      assert.equal(await saved(), DEPARTURE.reunion29);
       // The dossier now says so in « À vérifier ».
       await alertBand(f).waitFor();
       assert.deepEqual((await bandLines(f)).map(line => line.text), ['Le départ du jeudi 29 octobre est après la fin de son abonnement (18 octobre). Contactez le client.']);
       await f.page.screenshot({ path: `${output}/assigned-after-subscription-${width}-${theme}.png`, fullPage: true });
       // Inside the subscription the choice is saved at once.
-      await select.selectOption(DEPARTURE.reunion15);
+      await choose(DEPARTURE.reunion15);
       await alertBand(f).waitFor({ state: 'detached' });
       assert.equal(calls.length, 2);assert.equal(calls[1].p_envoi_id, DEPARTURE.reunion15);
-      assert.equal(await select.inputValue(), DEPARTURE.reunion15);
+      assert.equal(await saved(), DEPARTURE.reunion15);
       // Only these two assignments were written.
       assert.deepEqual(f.tables.colis.filter(item => item.id !== DOSSIER.DEP011), before.filter(item => item.id !== DOSSIER.DEP011));
       assert.deepEqual(f.requests.filter(request => ['POST', 'PATCH', 'DELETE'].includes(request.method) && request.path.startsWith('/rest/v1/') && !DOSSIER_READ_ONLY_RPCS.some(rpc => request.path.endsWith(rpc))), []);

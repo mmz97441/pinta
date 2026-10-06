@@ -28,7 +28,8 @@ import ShipmentRevision from './ShipmentRevision';
 import TaskReopen from './TaskReopen';
 import TaskGuidance from './TaskGuidance';
 import { revisionLockedReason, shipmentRevisionBoxes } from '../../domain/shipmentRevision';
-import { subscriptionEndConfirmation } from '../../domain/dossierAlerts';
+import { departureFieldEditable, departureIssue, plannedDeparturesFor } from '../../domain/departurePlanning';
+import DossierDeparture from '../detail/DossierDeparture';
 
 const receptionDrafts = new Map();
 const preparationDrafts = new Map();
@@ -163,7 +164,6 @@ export default function StaffDetailView({ workspace = false, active = true, task
     categories,
     getTarif,
     envois,
-    assignDeparture,
     payer,
     can: rawCan,
   } = useApp();
@@ -204,9 +204,6 @@ export default function StaffDetailView({ workspace = false, active = true, task
   const [devisPrev, setDevisPrev] = useState(null);
   const [savedInputs, setSavedInputs] = useState('');
   const [customsDirty, setCustomsDirty] = useState(false);
-  // Envoi assignment
-  const [selEnvoi, setSelEnvoi] = useState(sel?.envoi || '');
-  const [departureFeedback, setDepartureFeedback] = useState('');
   const [paymentFeedback, setPaymentFeedback] = useState('');
   // Tags préparation
   const [selTags, setSelTags] = useState(sel?.tagsPreparation || []);
@@ -240,7 +237,7 @@ export default function StaffDetailView({ workspace = false, active = true, task
       setPreparationConflictRefresh({ state: 'idle' });
       setMeasuresSaved(false);
       setPreparationEditing(false);
-      setSelEnvoi(sel.envoi || ''); setDepartureFeedback(''); setPaymentFeedback('');
+      setPaymentFeedback('');
       setSelTags(sel.tagsPreparation || []);
       setFraisDivers(preparationDrafts.get(`${auth?.u?.id}:${sel.id}`)?.fraisDivers || sel.fraisDivers || []);
       setDevisPrev(null);
@@ -881,13 +878,14 @@ export default function StaffDetailView({ workspace = false, active = true, task
 
       // ── 9. PAYE ────────────────────────────────────────────────────────
       case 'paye': {
-        const destinationCode = sel.devisSnapshot?.inputs?.destination?.code || dest?.code;
-        const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Indian/Reunion' });
-        const departureIssue = departure => !departure ? 'Départ introuvable' : departure.destinationCode !== destinationCode ? 'Destination différente du devis payé' : ['parti','arrive','archive'].includes(departure.statut) ? 'Départ déjà parti, arrivé ou archivé' : !departure.date || departure.date.slice(0,10) < today ? 'Date de départ dépassée ou absente' : departure.loadingClosesAt && Date.parse(departure.loadingClosesAt) <= Date.now() ? 'Chargement clôturé' : null;
-        const availableEnvois = envois.filter(departure => !departureIssue(departure));
+        // The server's rule (guard_colis_departure), on Paris days: the paid quote fixes the destination,
+        // a departure without loading closing stays open until its day.
+        const availableEnvois = plannedDeparturesFor(sel, cl, envois);
         const assigned = envois.find(departure => departure.id === sel.envoi);
-        const assignmentIssue = sel.envoi ? departureIssue(assigned) : null;
-        const canAssign = can(sel.envoi ? 'perm_envois_reaffecter' : 'perm_colis_affecter_envoi');
+        const assignmentIssue = sel.envoi ? departureIssue(assigned, sel, cl) : null;
+        // The field's own rule; while a colleague holds the task, the banner above says so.
+        const canAssign = departureFieldEditable(sel, can);
+        const assignRight = can(sel.envoi ? 'perm_envois_reaffecter' : 'perm_colis_affecter_envoi');
         return (
           <Section title="Paiement reçu — Expédier" icon={Check} color={borderColor}>
             <div className="space-y-4">
@@ -898,49 +896,13 @@ export default function StaffDetailView({ workspace = false, active = true, task
                 </p>
               </div>
 
-              {/* Envoi assignment */}
-              <div>
-                <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wider block mb-1">
-                  Affecter à un départ
-                </label>
-                <select
-                  aria-label="Départ de cette expédition"
-                  value={selEnvoi}
-                  disabled={actionLoading || !canAssign}
-                  onChange={(e) => {
-                    const envoi = e.target.value;
-                    const assign = () => runAction(async () => {
-                      await assignDeparture(sel, envoi || null);
-                      setSelEnvoi(envoi);
-                      setDepartureFeedback(envoi ? 'Départ enregistré.' : 'Affectation retirée.');
-                      flash(envoi ? 'Départ enregistré' : 'Départ retiré');
-                    });
-                    // After the end of the subscription the choice is confirmed
-                    // first; cancelling writes nothing and keeps the saved departure.
-                    const confirmation = subscriptionEndConfirmation(envois.find(departure => departure.id === envoi), cl);
-                    if (confirmation) ask(confirmation.title, confirmation.message, assign, { okLabel: confirmation.okLabel });
-                    else assign();
-                  }}
-                  className="w-full px-3 py-2 rounded-xl border-2 border-gray-200 text-sm outline-none"
-                  style={{ color: 'var(--brand-text)' }}
-                >
-                  <option value="">— Choisir un départ compatible —</option>
-              {assignmentIssue && <option value={sel.envoi} disabled>{assigned?.date || "Départ affecté"} · {assignmentIssue}</option>}
-                  {availableEnvois.map((e) => {
-                    const d = new Date(e.date + 'T00:00:00');
-                    const label = d.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' });
-                    return (
-                      <option key={e.id} value={e.id}>
-                        {label} · {e.destinationCode} · {e.statut}{e.loadingClosesAt ? ` · clôture ${dateLabel(e.loadingClosesAt)}` : ""}
-                      </option>
-                    );
-                  })}
-                </select>
-              </div>
+              {/* The same « Départ » field as the overview: after the end of the
+                  subscription the choice is confirmed first; cancelling writes nothing. */}
+              <DossierDeparture variant="task" can={can} />
 
-              <p className="text-xs text-slate-600">Le choix du départ s’enregistre immédiatement.</p>{departureFeedback && <p role="status" className="text-sm text-emerald-700">{departureFeedback}</p>}
+              <p className="text-xs text-slate-600">Le choix du départ s’enregistre immédiatement.</p>
               {assignmentIssue && <p role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">Affectation à revoir : {assignmentIssue}. Choisissez un départ compatible avant le chargement.</p>}
-              {!canAssign && <p className="text-sm text-slate-600">L’affectation est modifiable par une personne habilitée {sel.envoi ? "à réaffecter les départs" : "à affecter les expéditions"}.</p>}
+              {!canAssign && !readOnly && <p className="text-sm text-slate-600">{assignRight ? 'Le choix du départ demande l’accès aux départs.' : `L’affectation est modifiable par une personne habilitée ${sel.envoi ? 'à réaffecter les départs' : 'à affecter les expéditions'}.`}</p>}
               {!availableEnvois.length && <p className="text-sm text-slate-600">Aucun départ ouvert compatible avec la destination du devis payé. La coordination doit prévoir le prochain départ.{can("perm_envois_creer") && <button className="min-h-11 block font-semibold underline" onClick={() => navigate("/departs")}>Ouvrir les départs pour en créer un</button>}</p>}
               {subExpired && (
                 <div className="flex items-start gap-2 p-3 rounded-xl bg-red-50 border border-red-300">
@@ -953,8 +915,8 @@ export default function StaffDetailView({ workspace = false, active = true, task
 
               {/* Dark cyan: 5.4:1 under the white label (#0891B2 gave 3.7:1). */}
               <BtnPrimary
-                onClick={() => navigate(`/departs?envoi=${encodeURIComponent(sel.envoi || selEnvoi)}`)}
-                disabled={(!sel.envoi && !selEnvoi) || !!assignmentIssue || subExpired || !can('perm_envois_voir')}
+                onClick={() => navigate(`/departs?envoi=${encodeURIComponent(sel.envoi)}`)}
+                disabled={!sel.envoi || !!assignmentIssue || subExpired || !can('perm_envois_voir')}
                 color="#0E7490"
               >
                 <Check size={15} />

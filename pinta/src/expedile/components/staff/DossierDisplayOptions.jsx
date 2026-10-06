@@ -43,7 +43,7 @@ export default function DossierDisplayOptions({
       <label className="dossier-display-field">
         <span>Regrouper</span>
         <select aria-label="Regrouper les dossiers" value={grouping} onChange={event => onGroupingChange(event.target.value)}>
-          <option value="none">Aucun</option><option value="statut">Par étape</option><option value="envoi">Par départ</option>
+          <option value="none">Aucun</option><option value="statut">Par étape</option><option value="envoi">Par départ</option><option value="client">Par client</option>
         </select>
       </label>
       {grouping === 'envoi' && <label className="dossier-display-field">

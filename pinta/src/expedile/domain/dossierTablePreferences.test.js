@@ -166,7 +166,9 @@ test('Mon travail keeps its own preferences, its task column required and a 15px
   for (const key of [dossierTextSizeStorageKey, dossierLayoutStorageKey, columnWidthsStorageKey, columnVisibilityStorageKey]) {
     assert.match(key('one', 'work'), /:work$/);
     assert.notEqual(key('one', 'work'), key('two', 'work'));
-    for (const view of ['daily', 'payments', 'departures']) assert.notEqual(key('one', 'work'), key('one', view));
+    for (const view of ['daily', 'payments', 'departures', 'accords']) assert.notEqual(key('one', 'work'), key('one', view));
+    // « Accords clients » keeps its own widths, columns, text size and layout.
+    assert.match(key('one', 'accords'), /:accords$/);assert.notEqual(key('one', 'accords'), key('one', 'daily'));
     assert.equal(key(null, 'work'), null);
     assert.equal(key('one', 'unknown'), null);
   }
@@ -183,15 +185,20 @@ test('Mon travail keeps its own preferences, its task column required and a 15px
   assert.equal(sanitizeDossierTextSize('15'), 12);
 });
 
-test('grouping opens by departure in « Départs » only, and an explicit URL view wins over the stored choice', () => {
-  assert.deepEqual(DOSSIER_GROUPINGS, ['none', 'statut', 'envoi']);
+test('grouping opens by departure in « Départs », by client in « Accords clients », and an explicit URL view wins over the stored choice', () => {
+  assert.deepEqual(DOSSIER_GROUPINGS, ['none', 'statut', 'envoi', 'client']);
   assert.equal(defaultDossierGrouping('departures'), 'envoi');
+  assert.equal(defaultDossierGrouping('accords'), 'client');
   for (const view of ['daily', 'payments', 'work', 'unknown']) assert.equal(defaultDossierGrouping(view), 'none');
   for (const grouping of DOSSIER_GROUPINGS) assert.equal(sanitizeDossierGrouping(grouping, 'daily'), grouping);
-  for (const invalid of ['priority', '', null, undefined, {}, 'ENVOI']) {
+  for (const invalid of ['priority', '', null, undefined, {}, 'ENVOI', 'CLIENT']) {
     assert.equal(sanitizeDossierGrouping(invalid, 'departures'), 'envoi');
+    assert.equal(sanitizeDossierGrouping(invalid, 'accords'), 'client');
     assert.equal(sanitizeDossierGrouping(invalid, 'daily'), 'none');
   }
+  assert.equal(resolveDossierGrouping(null, null, 'accords'), 'client');
+  assert.equal(resolveDossierGrouping('none', 'client', 'accords'), 'none', 'A shared link without grouping keeps it.');
+  assert.equal(resolveDossierGrouping('client', null, 'daily'), 'client', '« Par client » is offered in every tab.');
   assert.equal(resolveDossierGrouping('statut', 'envoi', 'departures'), 'statut', 'A shared link keeps its grouping.');
   assert.equal(resolveDossierGrouping('none', 'envoi', 'daily'), 'none');
   assert.equal(resolveDossierGrouping(null, 'envoi', 'daily'), 'envoi', 'Without a URL view, the stored choice applies.');
@@ -204,6 +211,7 @@ test('grouping and « Dossiers sans départ » are stored per person and per lis
     assert.notEqual(key('one', 'daily'), key('two', 'daily'));
     assert.notEqual(key('one', 'daily'), key('one', 'departures'));
     assert.notEqual(key('one', 'daily'), key('one', 'payments'));
+    assert.match(key('one', 'accords'), /:accords$/);assert.notEqual(key('one', 'accords'), key('one', 'departures'));
     for (const other of [columnWidthsStorageKey, columnVisibilityStorageKey, dossierTextSizeStorageKey, dossierLayoutStorageKey]) assert.notEqual(key('one', 'daily'), other('one', 'daily'));
     assert.equal(key(null, 'daily'), null);
     assert.equal(key('one', 'work'), null, 'Mon travail has no grouping.');
@@ -212,4 +220,25 @@ test('grouping and « Dossiers sans départ » are stored per person and per lis
   assert.notEqual(dossierGroupingStorageKey('one', 'daily'), noDeparturePlacementStorageKey('one', 'daily'));
   assert.equal(sanitizeNoDeparturePlacement('top'), 'top');
   for (const value of ['bottom', 'TOP', '', null, undefined, 1]) assert.equal(sanitizeNoDeparturePlacement(value), 'bottom');
+});
+
+test('« Accord » is filtered on one exact state, and the consent dates on their real days', () => {
+  const rows = [
+    { id: 'waiting', statut: 'attente_feu_vert', attenteClientDate: '2026-10-01T08:00:00Z', demandeFeuVertEnvoyeeAt: '2026-09-30T08:00:00Z' },
+    { id: 'submit', statut: 'mesure' },
+    { id: 'awaited', statut: 'attente_feu_vert', demandeFeuVertEnvoyeeAt: '2026-10-02T21:30:00Z', messages: [{ template: 'relance_feu_vert', statut: 'envoye', createdAt: '2026-10-03T09:00:00Z' }] },
+  ];
+  const accords = TABLE_COLUMNS.accords, consent = accords.find(item => item.key === 'consentState');
+  const run = filters => filterDossierTableRows(rows, { columns: accords, filters, models: new Map() }).map(item => item.id);
+  assert.deepEqual(columnFilterModes(consent).map(mode => mode.key), ['is', 'empty', 'filled']);
+  assert.deepEqual(run({ consentState: filter('is', 'Le client attend') }), ['waiting']);
+  assert.deepEqual(run({ consentState: filter('is', 'Réponse attendue') }), ['awaited']);
+  assert.deepEqual(run({ consentState: filter('is', 'À soumettre') }), ['submit']);
+  assert.deepEqual(sanitizeColumnFilter(consent, filter('contains', 'le client attend')), filter('is', 'Le client attend'));
+  assert.equal(sanitizeColumnFilter(consent, filter('is', 'Accord donné')), null, 'Only the three states can be chosen.');
+  assert.deepEqual(run({ consentRequestedAt: filter('min', '2026-10-03') }), ['awaited'], 'The request of 2 October 21:30 UTC is on 3 October in Réunion.');
+  assert.deepEqual(run({ consentRequestedAt: filter('empty') }), ['submit']);
+  assert.deepEqual(run({ lastRelanceAt: filter('filled') }), ['awaited']);
+  assert.deepEqual(run({ lastRelanceAt: filter('contains', '03/10/2026') }), ['awaited']);
+  assert.deepEqual(dossierColumnSuggestions(rows, consent, { models: new Map() }), ['À soumettre', 'Le client attend', 'Réponse attendue']);
 });

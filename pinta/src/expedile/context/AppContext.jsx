@@ -1209,6 +1209,39 @@ export function AppProvider({ children }) {
     refreshWork().catch(() => {});
     return saved;
   }, [replaceColis, refreshWork]);
+  // A desired day (NULL clears it): the server assigns the valid departure of
+  // that day, otherwise keeps the day without a departure (« Départ à créer »).
+  const setDepartureWish = useCallback(async (colis, date) => {
+    const { data: row, error } = await supabase.rpc('set_colis_departure_wish', {
+      p_colis_id: colis.id, p_date: date || null, p_expected_updated_at: colis.updatedAt,
+    });
+    if (error) throw error;
+    const canonical = Array.isArray(row) ? row[0] : row;
+    if (!canonical?.id) throw new Error('Départ souhaité non confirmé. Actualisez le dossier.');
+    const saved = replaceColis(sb.mapColis(canonical));
+    refreshWork().catch(() => {});
+    return saved;
+  }, [replaceColis, refreshWork]);
+  // Explicit, confirmed creation (aérien) of the missing departure of that day,
+  // or reuse of the one already planned, then the dossier's assignment to it.
+  const createDepartureForColis = useCallback(async (colis, date) => {
+    const { data: result, error } = await supabase.rpc('create_departure_for_colis', {
+      p_colis_id: colis.id, p_date: date, p_expected_updated_at: colis.updatedAt,
+    });
+    if (error) throw error;
+    if (!result?.colis?.id || !result?.envoi?.id) throw new Error('Création du départ non confirmée. Actualisez le dossier.');
+    const envoi = sb.mapEnvoi(result.envoi);
+    const token = generation.current;
+    // The saved departure first, so the dossier can name it; then the whole planning.
+    setEnvois(previous => [...previous.filter(item => item.id !== envoi.id), envoi].sort((a, b) => (a.date || '').localeCompare(b.date || '')));
+    const saved = replaceColis(sb.mapColis(result.colis));
+    try {
+      const rows = await sb.fetchEnvois();
+      if (token === generation.current) setEnvois(rows);
+    } catch { /* The created departure is already listed; realtime refreshes the planning. */ }
+    refreshWork().catch(() => {});
+    return { colis: saved, envoi };
+  }, [replaceColis, refreshWork]);
   const confirmerDevis = useCallback(
     async (id, options = {}) => {
       const c = await refreshColis(id);
@@ -1414,6 +1447,8 @@ export function AppProvider({ children }) {
     withdrawQuoteForDocuments,
     retryQuoteWithdrawal,
     assignDeparture,
+    setDepartureWish,
+    createDepartureForColis,
     confirmerDevis,
     payer,
     envMsg,

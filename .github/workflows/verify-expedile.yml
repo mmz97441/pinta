@@ -66,6 +66,7 @@ jobs:
           sh ./supabase/tests/run-payment-return.sh
           sh ./supabase/tests/run-reception-append.sh
           sh ./supabase/tests/run-invoice-quote-rules.sh
+          sh ./supabase/tests/run-departure-any-step.sh
       - run: npx playwright install --with-deps chromium
       - name: Parcours navigateur sans services externes
         run: |
@@ -82,6 +83,7 @@ jobs:
           node tests/dossier-table.browser.cjs
           node tests/dossier-table-comfort.browser.cjs
           PINTA_DOSSIER_DEPARTURES_OUT=/tmp/pinta-dossier-departures node tests/dossier-departures.browser.cjs
+          PINTA_DOSSIER_ACCORDS_OUT=/tmp/pinta-dossier-accords node tests/dossier-accords.browser.cjs
           node tests/parcel-reference-search.cjs
           node tests/reçu-documents-factures.cjs
           node tests/invoice-review-indicator.cjs
@@ -165,6 +167,7 @@ jobs:
             /tmp/pinta-dossier-table
             /tmp/pinta-dossier-table-comfort
             /tmp/pinta-dossier-departures
+            /tmp/pinta-dossier-accords
             /tmp/pinta-receipt-flow
             /tmp/pinta-client-lightweight
             /tmp/pinta-task-message

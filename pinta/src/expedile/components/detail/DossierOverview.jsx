@@ -64,10 +64,13 @@ function Step({ step, viewedTask, onNavigateTask, summaryId }) {
 }
 
 /** A factual overview. Every action only opens an existing screen/editor;
- * reading an earlier step never changes the dossier or sends a notification. */
+ * reading an earlier step never changes the dossier or sends a notification.
+ * `departure` is the dossier's « Départ » line, next to Casier; `departureEditor`,
+ * its open editor, follows the heading's actions so the focus order matches the
+ * layout. */
 export default function DossierOverview({
   dossier, model, currentTask: viewedTask, onNavigateTask, onOpenContext, onCorrect,
-  onEditCasier, canEditCasier = false, canEditReception = false, canEditPreparation = false, canEditQuote = false,
+  onEditCasier, canEditCasier = false, canEditReception = false, canEditPreparation = false, canEditQuote = false, departure = null, departureEditor = null,
 }) {
   if (!dossier || !model) return null;
   const received = model.received || {};
@@ -94,8 +97,10 @@ export default function DossierOverview({
       <div className="dossier-overview-casier" data-overview="casier"><span>Casier <strong>{model.casier || 'à renseigner'}</strong></span>
         {canEditCasier && onEditCasier && <button type="button" className="dossier-overview-casier-edit" aria-label="Modifier le casier du dossier" onClick={onEditCasier}><Pencil size={14} aria-hidden="true" /><span>Modifier</span></button>}
       </div>
+      {departure}
       {canOpen(viewedTask) && <OverviewAction onClick={openTask(viewedTask)}>Aller à l’étape ouverte</OverviewAction>}
       <OverviewAction onClick={openContext('historique')} label="Consulter l’historique du dossier">Historique</OverviewAction>
+      {departureEditor}
     </div>
 
     <div className="dossier-overview-facts">

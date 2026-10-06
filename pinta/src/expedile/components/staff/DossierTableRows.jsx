@@ -8,7 +8,8 @@ import { receptionCartonManifest } from '../../domain/reception';
 import { needsConversationAction } from '../../domain/conversations';
 import { TABLE_COLUMNS, dossierTableAmount, dossierTableAmountState, dossierTableMissingAmountLabel, formatDossierTableDate, isDossierTableColumnSortable, dossierTableSortDirectionLabel } from '../../domain/dossierTable';
 import { clampColumnWidth, columnWidthBounds } from '../../domain/dossierTablePreferences';
-import { paymentTone, statusTone } from '../../domain/dossierTableTone';
+import { consentTone, paymentTone, statusTone } from '../../domain/dossierTableTone';
+import { consentRelance, consentState, consentWaitLabel } from '../../domain/consentQueue';
 import { dossierAlertsLabel } from '../../domain/dossierAlerts';
 import TaskTakeButton from '../workspace/TaskTakeButton';
 import InvoiceReviewIndicator from '../ui/InvoiceReviewIndicator';
@@ -18,6 +19,8 @@ export const TABLE_VIEWS = [
   { key: 'daily', label: 'Travail quotidien' },
   { key: 'payments', label: 'Paiements' },
   { key: 'departures', label: 'Départs' },
+  // The one view that lists only some dossiers: those whose consent is to obtain.
+  { key: 'accords', label: 'Accords clients' },
 ];
 
 export { TABLE_COLUMNS };
@@ -37,6 +40,11 @@ function Placeholder({ children }) {
 }
 const PLACEHOLDERS = new Set(['Non renseigné', 'Non attribué', 'À renseigner', '—']);
 const Fact = ({ children }) => PLACEHOLDERS.has(children) ? <Placeholder>{children}</Placeholder> : <span>{children}</span>;
+/** A saved instant on the table's calendar, or the quiet « Non renseigné ». */
+function TableDate({ value }) {
+  return typeof value === 'string' && Number.isFinite(Date.parse(value))
+    ? <time dateTime={value}>{formatDossierTableDate(value)}</time> : <Fact>{formatDossierTableDate(null)}</Fact>;
+}
 
 function money(value, missingLabel) {
   return value === null || value === undefined || value === '' || !Number.isFinite(Number(value))
@@ -124,7 +132,17 @@ function CellContent({ column, c, client, model, alerts, onOpen, onOpenDossier, 
       return <div><span className="dossier-table-money dossier-table-task-title">{amount}</span>{model.payment?.detailLabel && model.payment.detailLabel !== amount && <span className="dossier-table-secondary">{model.payment.detailLabel}</span>}</div>;
     }
     case 'receivedAt': return <div>{model.reception?.lastReceivedAt ? <time dateTime={model.reception.lastReceivedAt}>{formatDossierTableDate(model.reception.lastReceivedAt)}</time> : <Fact>{formatDossierTableDate(null)}</Fact>}{model.reception && !model.reception.complete && <span className="dossier-table-secondary">{model.reception.knownCount} / {model.reception.totalCount} cartons datés</span>}</div>;
-    case 'sentAt': return model.payment?.sentAt ? <time dateTime={model.payment.sentAt}>{formatDossierTableDate(model.payment.sentAt)}</time> : <Fact>{formatDossierTableDate(null)}</Fact>;
+    case 'sentAt': return <TableDate value={model.payment?.sentAt} />;
+    case 'consentState': {
+      const consent = consentState(c);
+      return consent && <div><Pill tone={consentTone(consent.stage)}>{consent.label}</Pill>{consent.until && <span className="dossier-table-secondary">{consentWaitLabel(consent.until)}</span>}</div>;
+    }
+    case 'consentRequestedAt': return <TableDate value={c.demandeFeuVertEnvoyeeAt} />;
+    case 'lastRelanceAt': {
+      // A relance not yet confirmed says where it stands, never reads as sent.
+      const relance = consentRelance(c);
+      return <div><TableDate value={relance?.at} />{relance?.deliveryLabel && <span className="dossier-table-secondary">{relance.deliveryLabel}</span>}</div>;
+    }
     case 'departure': return <span>{model.departure?.label || 'À prévoir'}</span>;
     case 'destination': return <Fact>{model.departure?.destination || 'À renseigner'}</Fact>;
     case 'packages': return <span>{model.departure?.packagesLabel || 'À préparer'}</span>;
@@ -182,15 +200,18 @@ export function DossierTableRow({ c, client, model = {}, alerts, columns = TABLE
   </tr>;
 }
 
+// The pill beside a card's reference: the dossier status, or its « Accord » in « Accords clients ».
+const HEADING_STATUS_KEYS = ['statusLabel', 'consentState'];
+
 export function DossierTableCard({ c, view, client, model = {}, alerts, columns = TABLE_COLUMNS.daily, checked, onCheck, onOpen, onOpenDossier, returnTo }) {
-  const statusColumn = columns.find(column => column.key === 'statusLabel');
-  const facts = columns.filter(column => !['ref', 'client', 'statut', 'action', 'statusLabel'].includes(column.key) && (column.key !== 'optimizedDimensions' || model.optimized));
+  const statusColumn = columns.find(column => HEADING_STATUS_KEYS.includes(column.key));
+  const facts = columns.filter(column => !['ref', 'client', 'statut', 'action', ...HEADING_STATUS_KEYS].includes(column.key) && (column.key !== 'optimizedDimensions' || model.optimized));
   const showActionTitle = !columns.some(column => column.key === 'statut');
   return <article className="dossier-table-card dossier-list-item" aria-label={`Dossier ${c.ref}`} data-view={view || (columns === TABLE_COLUMNS.daily ? 'daily' : undefined)} data-dossier-card={c.id} data-dossier-row={c.id} data-selected={checked ? 'true' : 'false'}>
     <div className="dossier-table-card-heading">
       <label className="dossier-table-checkbox"><input type="checkbox" aria-label={`Sélectionner le dossier ${c.ref}`} checked={Boolean(checked)} onChange={onCheck} /></label>
       <div data-column="ref"><CellContent column={referenceColumn} c={c} model={model} alerts={alerts} onOpenDossier={onOpenDossier} returnTo={returnTo} /></div>
-      {statusColumn && <div data-column="statusLabel" className="dossier-table-card-status"><CellContent column={statusColumn} c={c} model={model} /></div>}
+      {statusColumn && <div data-column={statusColumn.key} className="dossier-table-card-status"><CellContent column={statusColumn} c={c} model={model} /></div>}
     </div>
     {columns.some(column => column.key === 'client') && <div data-column="client"><ClientIdentity client={client} /></div>}
     {columns.some(column => column.key === 'statut') && <div data-column="statut" className="dossier-table-card-task"><TaskSummary model={model} c={c} returnTo={returnTo} /></div>}

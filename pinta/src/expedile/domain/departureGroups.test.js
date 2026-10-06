@@ -131,3 +131,43 @@ test('calendar days are validated and instants are read on Paris time', () => {
   assert.equal(parisCalendarDay('2026-07-01T22:00:00Z'), '2026-07-02');
   for (const invalid of [null, 'demain', NaN]) assert.equal(parisCalendarDay(invalid), null);
 });
+
+test('a desired day without a departure forms « Départ à créer », ordered by its day among the departures', () => {
+  const wish = (id, day, destination) => ({ id, ref: `EXP-${id}`, envoi: null, departSouhaite: day, destination });
+  const destinationOf = item => item.destination;
+  const dossiers = [
+    wish('w1', '2026-11-19', '974'), dossier('a', 'reunion-15'), wish('w2', '2026-10-15', '974'), dossier('b'),
+    wish('w3', '2026-11-19', '974'), wish('w4', '2026-11-19', '971'), wish('w5', '2026-09-24', '974'), { id: 'c', envoi: 'reunion-22', departSouhaite: '2026-11-19' },
+  ];
+  const groups = groupDossiersByDeparture(dossiers, ENVOIS, { today, destinationOf });
+  assert.deepEqual(keys(groups), ['wish:974:2026-10-15', 'reunion-15', 'reunion-22', 'wish:971:2026-11-19', 'wish:974:2026-11-19', 'wish:974:2026-09-24', NO_DEPARTURE_GROUP_KEY]);
+  assert.deepEqual(groups.filter(group => group.wish).map(({ label, destinationLabel, ref, wish: day, envoi: departure }) => ({ label, destinationLabel, ref, day, departure })), [
+    { label: 'Départ à créer du jeudi 15 octobre', destinationLabel: 'Réunion', ref: 'À créer', day: '2026-10-15', departure: null },
+    { label: 'Départ à créer du jeudi 19 novembre', destinationLabel: 'Guadeloupe', ref: 'À créer', day: '2026-11-19', departure: null },
+    { label: 'Départ à créer du jeudi 19 novembre', destinationLabel: 'Réunion', ref: 'À créer', day: '2026-11-19', departure: null },
+    { label: 'Départ à créer du jeudi 24 septembre', destinationLabel: 'Réunion', ref: 'À créer', day: '2026-09-24', departure: null },
+  ]);
+  assert.deepEqual(ids(groups.find(group => group.key === 'wish:974:2026-11-19')), ['w1', 'w3'], 'One group per destination and day, in the incoming order.');
+  assert.deepEqual(ids(groups.find(group => group.key === 'reunion-22')), ['c'], 'An assigned departure wins over an old desired day.');
+  assert.equal(groups.reduce((sum, group) => sum + group.dossiers.length, 0), dossiers.length);
+  // A wish group on the day of a departure of the same destination comes first (« À créer » before the reference).
+  const sameDay = groupDossiersByDeparture([dossier('a', 'reunion-15'), wish('w', '2026-10-15', '974')], ENVOIS, { today, destinationOf });
+  assert.deepEqual(keys(sameDay), ['wish:974:2026-10-15', 'reunion-15']);
+  // Without a known destination the group keeps the day only.
+  const unknown = groupDossiersByDeparture([wish('w', '2026-11-19')], ENVOIS, { today });
+  assert.deepEqual(unknown.map(({ key, label, destinationLabel }) => ({ key, label, destinationLabel })), [{ key: 'wish::2026-11-19', label: 'Départ à créer du jeudi 19 novembre', destinationLabel: null }]);
+  assert.deepEqual(keys(groupDossiersByDeparture([wish('w', 'bientôt', '974')], ENVOIS, { today, destinationOf })), [NO_DEPARTURE_GROUP_KEY], 'An unreadable day is not a wish.');
+});
+
+test('a desired day group says when its day has a departure to assign, a closed one, or has passed', () => {
+  const wish = (id, day, state) => ({ id, envoi: null, departSouhaite: day, destination: '974', state });
+  const groups = groupDossiersByDeparture([wish('a', '2026-11-19', 'planned'), wish('b', '2026-11-26', 'closed'), wish('c', '2026-09-24', 'past'), wish('d', '2026-12-03', 'to_create'), wish('e', '2026-12-10', 'unknown')],
+    ENVOIS, { today, destinationOf: item => item.destination, wishStateOf: item => item.state });
+  assert.deepEqual(groups.map(({ key, label, destinationLabel, ref, wishState }) => ({ key, label, destinationLabel, ref, wishState })), [
+    { key: 'wish:974:2026-11-19', label: 'Départ souhaité le jeudi 19 novembre', destinationLabel: 'Réunion', ref: 'Départ prévu, à affecter', wishState: 'planned' },
+    { key: 'wish:974:2026-11-26', label: 'Départ souhaité le jeudi 26 novembre', destinationLabel: 'Réunion', ref: 'Départ clôturé', wishState: 'closed' },
+    { key: 'wish:974:2026-12-03', label: 'Départ à créer du jeudi 3 décembre', destinationLabel: 'Réunion', ref: 'À créer', wishState: 'to_create' },
+    { key: 'wish:974:2026-12-10', label: 'Départ à créer du jeudi 10 décembre', destinationLabel: 'Réunion', ref: 'À créer', wishState: 'to_create' },
+    { key: 'wish:974:2026-09-24', label: 'Départ souhaité le jeudi 24 septembre', destinationLabel: 'Réunion', ref: 'Date passée', wishState: 'past' },
+  ], 'The key stays the same whatever the state, so a folded group stays folded.');
+});

@@ -215,6 +215,10 @@ async function main() {
         await selectPreset(f,label,value);assert.deepEqual(await allIds(f),expected,`${label} keeps the same expeditions`);
         assert.equal(await rows(f).count(),6,'Parallel tasks do not create duplicate EXP rows');
       }
+      // The one view that lists fewer dossiers: « Accords clients » keeps those whose consent is to obtain (measured P, awaiting P3).
+      await selectPreset(f,'Accords clients','accords');await waitIds(f,[P,P3]);
+      assert.equal(await rows(f).count(),2,'No duplicate row either');
+      await selectPreset(f,'Travail quotidien','daily');await waitIds(f,[P,P2,P3,P4,P5,P6]);
       await assertNoBusinessChange(f,before);
     });
     await scenario('last-reception-column-sorts-proven-dates-and-keeps-incomplete-history-explicit',async f=>{
@@ -633,7 +637,7 @@ async function main() {
       await open(f,'table=payments');
       // Count every element (button, tab, link or text) of the view strip, so a new widget role cannot make this pass vacuously.
       const views=f.page.locator('[aria-label="Vues du tableau"]');
-      assert.deepEqual(await views.getByRole('button').allTextContents(),['Travail quotidien','Départs']);
+      assert.deepEqual(await views.getByRole('button').allTextContents(),['Travail quotidien','Départs','Accords clients']);
       assert.equal(await views.evaluate(node=>[node,...node.querySelectorAll('*')].filter(item=>/Paiements/i.test(`${item.textContent} ${item.getAttribute('aria-label')||''} ${item.getAttribute('title')||''}`)).length),0);
       assert.equal(await f.page.getByRole('button',{name:'Paiements',exact:true}).count(),0);
       assert.equal(await cell(f,P,'requested').count(),0);
@@ -861,14 +865,14 @@ async function main() {
       await open(f);await f.page.waitForFunction(dark=>document.documentElement.classList.contains('dark')===dark,dark);
       const strip=f.page.locator('[aria-label="Vues du tableau"]');assert.equal(await strip.getAttribute('role'),'group');
       if(width===320){const overflow=await strip.evaluate(node=>({style:getComputedStyle(node).overflowX,scrolls:node.scrollWidth>node.clientWidth+1}));assert.ok(['auto','scroll'].includes(overflow.style)&&overflow.scrolls,'At 320px the tabs really overflow and scroll inside their own strip.');}
-      for(const [label,value] of [['Départs','departures'],['Paiements','payments'],['Travail quotidien','daily']]) {
+      for(const [label,value] of [['Accords clients','accords'],['Départs','departures'],['Paiements','payments'],['Travail quotidien','daily']]) {
         await selectPreset(f,label,value);await settle(f);
         const states=await strip.getByRole('button').evaluateAll(buttons=>buttons.map(button=>({text:button.textContent,pressed:button.getAttribute('aria-pressed')})));
         assert.deepEqual(states.filter(item=>item.pressed==='true').map(item=>item.text),[label],'Exactly one view is pressed, and its text is the bare label.');
         assert.ok(states.every(item=>item.pressed==='true'||item.pressed==='false'));
         const tab=strip.getByRole('button',{name:label,exact:true}),t=await tab.boundingBox(),s=await strip.boundingBox();
         assert.ok(t.x>=s.x-1&&t.x+t.width<=s.x+s.width+1,`${label}: the selected view is scrolled fully into its strip.`);
-        if(width===320&&value==='departures')assert.ok(await strip.evaluate(node=>node.scrollLeft)>0,'Selecting the last view scrolls the strip, not the page.');
+        if(width===320&&value==='accords')assert.ok(await strip.evaluate(node=>node.scrollLeft)>0,'Selecting the last view scrolls the strip, not the page.');
         const underline=await tab.evaluate(node=>{const C=window.__pintaContrast,style=getComputedStyle(node);const color=/inset/.test(style.boxShadow)?style.boxShadow.match(/rgba?\([^)]*\)/)?.[0]:parseFloat(style.borderBottomWidth)>=2?style.borderBottomColor:null;return color?C.ink(node,color):0;});
         assert.ok(underline>=3,`${label}: the selected underline reaches 3:1 (${underline.toFixed(2)}).`);
         assert.ok(await tab.evaluate(node=>window.__pintaContrast.text(node))>=4.5);

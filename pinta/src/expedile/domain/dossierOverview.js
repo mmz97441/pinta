@@ -6,6 +6,8 @@ import { currentInvoices, pendingInvoiceAttachments } from './invoiceDocuments.j
 import { invoiceBuckets, invoiceProgressSummary } from './invoiceProgress.js';
 import { invoicesFrozenReason } from './invoiceLock.js';
 import { buildDossierTableModel, formatDossierTableDate } from './dossierTable.js';
+import { parisCalendarDay } from './departureGroups.js';
+import { wishedDepartureLabel } from './departurePlanning.js';
 
 const DOCUMENT_PERMISSIONS = ['perm_factures_voir', 'perm_factures_ajouter', 'perm_factures_valider', 'perm_factures_refuser', 'perm_factures_ocr', 'perm_factures_modifier_articles'];
 const FINANCE_PERMISSIONS = ['perm_finances_voir_total', 'perm_colis_calculer_devis', 'perm_colis_envoyer_devis', 'perm_colis_confirmer_paiement'];
@@ -127,7 +129,9 @@ export function buildDossierOverview(dossier = {}, { client = {}, envois = [], c
     ...table.departure, date: plannedDate, confirmedAt,
     // A date in planning, an arrival status and a tracking number do not prove
     // this dossier was actually included in a confirmed departure.
-    label: departureConfirmed ? 'Départ confirmé' : envoi ? table.departure.label === 'Départ confirmé' ? 'Départ à vérifier' : table.departure.label : dossier.envoi || dossier.envoiId ? 'Départ à vérifier' : 'À planifier',
+    // A desired day without a departure reads like the list: « Souhaité le 20/11/2026 · à créer »
+    // (or « départ prévu, à affecter », « départ clôturé », « date passée »).
+    label: departureConfirmed ? 'Départ confirmé' : envoi ? table.departure.label === 'Départ confirmé' ? 'Départ à vérifier' : table.departure.label : dossier.envoi || dossier.envoiId ? 'Départ à vérifier' : wishedDepartureLabel(dossier, { client, envois, now }) || 'À planifier',
     readinessLabel: !departureConfirmed && table.departure.readinessLabel === 'Expédition enregistrée' ? 'Départ à vérifier' : table.departure.readinessLabel,
   };
   const deliveryDate = savedDate(dossier.dateLivraison, now);
@@ -172,7 +176,7 @@ export function buildDossierOverview(dossier = {}, { client = {}, envois = [], c
     devis: { state: financeVisible ? quoteState : 'restricted', summary: financeVisible ? quoteSummary : 'Accès réservé au devis', date: financeVisible ? financialFacts.sentAt || (quoteRevised ? savedDate(dossier.devisEnvoyeLe, now) : null) : null },
     paiement: { state: financeVisible ? paymentState : 'restricted', summary: payment.stateLabel, date: financeVisible ? savedDate(dossier.paiementDate, now) : null },
     expedition: { state: departureConfirmed ? 'done' : AFTER_DEPARTURE.has(dossier.statut) || (dossier.envoi || dossier.envoiId) && !envoi ? 'unknown'
-      : envoi?.statut === 'annule' || envoi?.statut === 'archive' || plannedDate && plannedDate < new Date(now).toISOString().slice(0, 10) ? 'review' : currentTask === 'expedition' || envoi ? 'current' : 'upcoming',
+      : envoi?.statut === 'annule' || envoi?.statut === 'archive' || plannedDate && plannedDate < parisCalendarDay(now) ? 'review' : currentTask === 'expedition' || envoi ? 'current' : 'upcoming',
       summary: departureConfirmed ? 'Départ enregistré' : AFTER_DEPARTURE.has(dossier.statut) ? 'Départ annoncé · confirmation à vérifier' : departure.label, date: confirmedAt || plannedDate },
     livraison: { state: delivery.state, summary: delivery.summary, date: delivery.date },
   };

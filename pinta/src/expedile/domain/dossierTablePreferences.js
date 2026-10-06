@@ -1,9 +1,9 @@
 import { isDossierTableColumnSortable, formatDossierTableDate } from './dossierTable.js';
 
 export const COLUMN_FILTER_PREFIX = 'col.';
-const widths = { ref: 140, client: 180, statusLabel: 155, paymentState: 140, statut: 190, owner: 125, casier: 90, cartons: 90, receivedAt: 130, optimizedDimensions: 190, optimizedWeight: 110, requested: 130, paid: 115, remaining: 130, sentAt: 130, departure: 140, destination: 115, packages: 135, readiness: 195, action: 140 };
+const widths = { ref: 140, client: 180, statusLabel: 155, paymentState: 140, statut: 190, owner: 125, casier: 90, cartons: 90, receivedAt: 130, optimizedDimensions: 190, optimizedWeight: 110, requested: 130, paid: 115, remaining: 130, sentAt: 130, departure: 140, destination: 115, packages: 135, readiness: 195, consentState: 150, consentRequestedAt: 160, lastRelanceAt: 145, action: 140 };
 // Each dossier preset and Mon travail (`work`) keep their own reading choices.
-const PREFERENCE_VIEWS = ['daily', 'payments', 'departures', 'work'];
+const PREFERENCE_VIEWS = ['daily', 'payments', 'departures', 'accords', 'work'];
 const preferenceView = view => PREFERENCE_VIEWS.includes(view);
 export const DOSSIER_TEXT_SIZE_BOUNDS = Object.freeze({ min: 5, max: 20, initial: 12 });
 /** Mon travail opens at a reading size close to its former text; the dossier
@@ -24,12 +24,13 @@ export function sanitizeDossierTableLayout(value) {
 export function dossierLayoutStorageKey(userId, view) {
   return userId && preferenceView(view) ? `expedile:table-layout:v1:${encodeURIComponent(userId)}:${view}` : null;
 }
-/** « Regrouper » of each dossier list tab: none, by stage or by departure. The
- * « Départs » tab opens grouped by departure; Mon travail has no grouping. */
-export const DOSSIER_GROUPINGS = Object.freeze(['none', 'statut', 'envoi']);
-const groupingView = view => ['daily', 'payments', 'departures'].includes(view);
+/** « Regrouper » of each dossier list tab: none, by stage, by departure or by
+ * client. « Départs » opens grouped by departure, « Accords clients » by
+ * client; Mon travail has no grouping. */
+export const DOSSIER_GROUPINGS = Object.freeze(['none', 'statut', 'envoi', 'client']);
+const groupingView = view => ['daily', 'payments', 'departures', 'accords'].includes(view);
 export function defaultDossierGrouping(view) {
-  return view === 'departures' ? 'envoi' : 'none';
+  return view === 'departures' ? 'envoi' : view === 'accords' ? 'client' : 'none';
 }
 export function sanitizeDossierGrouping(value, view) {
   return DOSSIER_GROUPINGS.includes(value) ? value : defaultDossierGrouping(view);

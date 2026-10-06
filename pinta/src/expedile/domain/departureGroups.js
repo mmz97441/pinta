@@ -15,6 +15,16 @@ const NO_DEPARTURE_LABEL = 'Sans départ affecté';
 // Same wording as the « Départ prévu » column for these two cases.
 const UNREADABLE_DEPARTURE_LABEL = 'Départ à vérifier';
 const UNDATED_DEPARTURE_LABEL = 'Date à préciser';
+// A desired day without a departure: « Départ à créer du jeudi 20 novembre », or,
+// when that day already has its departure or has passed, « Départ souhaité le … »
+// with what it stands for (dossierWishState in departurePlanning.js).
+const WISH_GROUP_PREFIX = 'wish:';
+const WISH_GROUPS = {
+  to_create: { title: 'Départ à créer du', ref: 'À créer' },
+  planned: { title: 'Départ souhaité le', ref: 'Départ prévu, à affecter' },
+  closed: { title: 'Départ souhaité le', ref: 'Départ clôturé' },
+  past: { title: 'Départ souhaité le', ref: 'Date passée' },
+};
 
 /** A real calendar day written YYYY-MM-DD, or null. */
 export function isoCalendarDay(value) {
@@ -66,6 +76,17 @@ function departureGroup(key, envoi, today) {
   };
 }
 
+function wishGroup(key, day, code, state, today) {
+  const wording = WISH_GROUPS[state] || WISH_GROUPS.to_create;
+  return {
+    key, envoi: null, wish: day, wishState: WISH_GROUPS[state] ? state : 'to_create',
+    label: `${wording.title} ${departureDayLabel(day, { today })}`,
+    destinationLabel: DESTINATIONS[code]?.label || code || null,
+    ref: wording.ref,
+    dossiers: [],
+  };
+}
+
 // Missing values come last; equal groups keep a stable order by key.
 const compareText = (left, right) => left && right ? naturalOrder.compare(left, right) : left ? -1 : right ? 1 : 0;
 const compareKey = (left, right) => left < right ? -1 : left > right ? 1 : 0;
@@ -74,23 +95,38 @@ const compareKey = (left, right) => left < right ? -1 : left > right ? 1 : 0;
  * 1. upcoming departures (Paris day ≥ today), soonest first, then by destination and reference;
  * 2. past departures, most recent first;
  * 3. departures without a readable date, by reference.
+ * A dossier without a departure but with a desired day (`departSouhaite`) joins
+ * « Départ à créer du jeudi 20 novembre », keyed `wish:<destination>:<day>` and
+ * referenced « À créer », ordered by its day among the departures;
+ * `destinationOf(dossier)` gives its destination code (client or paid quote) and
+ * `wishStateOf(dossier)` what its day stands for: `planned` (« Départ souhaité le
+ * … », « Départ prévu, à affecter »), `closed` (« Départ clôturé »), `past`
+ * (« Date passée ») or `to_create`, the default.
  * « Sans départ affecté » comes first with `noDeparture: 'top'`, otherwise last.
  * Each group keeps the incoming order of its dossiers: the caller has sorted them.
  * A departure the person cannot read (its id is not among `envois`) still
  * groups its own dossiers, as « Départ à vérifier ». */
-export function groupDossiersByDeparture(dossiers = [], envois = [], { today = Date.now(), noDeparture = 'bottom' } = {}) {
+export function groupDossiersByDeparture(dossiers = [], envois = [], { today = Date.now(), noDeparture = 'bottom', destinationOf = () => null, wishStateOf = () => 'to_create' } = {}) {
   const todayDay = parisCalendarDay(today);
   const envoiById = new Map((envois || []).map(envoi => [envoi.id, envoi]));
   const groups = new Map();
   const withoutDeparture = [];
   for (const dossier of dossiers || []) {
     const envoiId = dossier.envoi || dossier.envoiId;
+    const wish = envoiId ? null : isoCalendarDay(dossier.departSouhaite);
+    if (wish) {
+      const code = String(destinationOf(dossier) ?? '');
+      const key = `${WISH_GROUP_PREFIX}${code}:${wish}`;
+      if (!groups.has(key)) groups.set(key, wishGroup(key, wish, code, wishStateOf(dossier), todayDay));
+      groups.get(key).dossiers.push(dossier);
+      continue;
+    }
     if (!envoiId) { withoutDeparture.push(dossier); continue; }
     if (!groups.has(envoiId)) groups.set(envoiId, departureGroup(envoiId, envoiById.get(envoiId), todayDay));
     groups.get(envoiId).dossiers.push(dossier);
   }
   const rank = group => {
-    const day = isoCalendarDay(group.envoi?.date);
+    const day = isoCalendarDay(group.wish || group.envoi?.date);
     return { day, bucket: !day ? 2 : todayDay && day < todayDay ? 1 : 0 };
   };
   const ordered = [...groups.values()].map(group => ({ group, ...rank(group) })).sort((left, right) => {

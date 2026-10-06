@@ -305,3 +305,18 @@ test('overview shows each proven carton arrival and leaves unknown dates explici
   assert.equal(model.received.date, reception.dateReception);
   assert.equal('receivedAt' in model.optimization.boxes[0], false);
 });
+
+test('a desired day without a departure is the expedition summary, like the list', () => {
+  const result = overview({ ...prepared, departSouhaite: '2026-11-19' }, options);
+  assert.equal(result.departure.label, 'Souhaité le 19/11/2026 · à créer');
+  assert.equal(step(result, 'expedition').summary, 'Souhaité le 19/11/2026 · à créer');
+  assert.equal(step(result, 'expedition').state, 'upcoming', 'A desired day is not a planned departure.');
+  assert.equal(result.departure.date, null);
+  assert.equal(step(overview(prepared, options), 'expedition').summary, 'À planifier');
+  const envois = [{ id: 'assigned', date: '2026-10-10', destinationCode: '974', statut: 'planifie' }];
+  assert.match(step(overview({ ...paid, envoi: 'assigned', departSouhaite: '2026-11-19' }, { ...options, envois }), 'expedition').summary, /^Prévu le 10\/10\/2026/, 'The assigned departure wins.');
+  // Once its day has a departure, the wish is to assign; a day gone reads as such.
+  const planned = [{ id: 'nov19', date: '2026-11-19', destinationCode: '974', statut: 'planifie' }];
+  assert.equal(step(overview({ ...prepared, departSouhaite: '2026-11-19' }, { ...options, envois: planned }), 'expedition').summary, 'Souhaité le 19/11/2026 · départ prévu, à affecter');
+  assert.equal(step(overview({ ...prepared, departSouhaite: '2026-10-01' }, options), 'expedition').summary, 'Souhaité le 01/10/2026 · date passée');
+});

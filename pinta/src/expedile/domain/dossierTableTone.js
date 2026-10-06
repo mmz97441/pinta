@@ -22,6 +22,14 @@ const STATUS_TONES = new Map([
   ['receptionne', 'neutral'], ['mesure', 'neutral'], ['autorise', 'neutral'], ['en_preparation', 'neutral'], ['annule', 'neutral'],
 ]);
 
+// « Accords clients »: nothing asked yet, an answer awaited, a wait the client chose.
+const CONSENT_TONES = new Map([['to_submit', 'neutral'], ['awaiting_reply', 'waiting'], ['client_waiting', 'current']]);
+
+/** The tone of the « Accord » pill (consentStage); neutral outside the queue. */
+export function consentTone(stage) {
+  return CONSENT_TONES.get(stage) || 'neutral';
+}
+
 export function paymentTone(model) {
   const label = model?.payment?.stateLabel;
   if (typeof label !== 'string') return 'neutral';

@@ -162,3 +162,93 @@ test('day labels without the weekday follow the Paris calendar day', () => {
   assert.equal(calendarDateLabel('2026-03-29', { today }), '29 mars', 'The spring clock change keeps the day.');
   for (const invalid of [null, undefined, '', '2026-02-30', '18/10/2026']) assert.equal(calendarDateLabel(invalid, { today }), null);
 });
+
+// Thursday 8 October closes, as usual, on Wednesday 7 October at 17:00 Paris: within 48 hours of today.
+// Without a loading closing of its own that Wednesday is the habitual closing, and the alert says so.
+const planned = (id, date) => ({ ...departure(id, date), statut: 'planifie' });
+const OCT_08 = planned('reunion-08', '2026-10-08');
+const OCT_15 = planned('reunion-15', '2026-10-15');
+const CUTOFF = 'Accord du client à obtenir avant mercredi 7 octobre, 17 h (clôture habituelle du départ du jeudi 8 octobre).';
+const TO_CREATE = 'Départ souhaité le jeudi 19 novembre : aucun départ n’est prévu ce jour-là pour la Réunion.';
+
+test('consent_before_cutoff: consent still missing while the departure closes within 48 hours', () => {
+  const [awaited] = alerts({ statut: 'attente_feu_vert', envoi: OCT_08.id }, {}, OCT_08);
+  assert.deepEqual({ key: awaited.key, text: awaited.text, label: awaited.action.label }, { key: 'consent_before_cutoff', text: CUTOFF, label: 'Relancer le client' });
+  const accord = pathOf(awaited.action.href);
+  assert.deepEqual([accord.pathname, Object.fromEntries(accord.searchParams), accord.hash], ['/colis/dossier-1', { section: 'accord' }, '#dossier-work'], 'The link opens the accord task of the dossier.');
+  for (const statut of ['receptionne', 'mesure']) {
+    const [ask] = alerts({ statut, envoi: OCT_08.id }, {}, OCT_08);
+    assert.deepEqual([ask.key, ask.text, ask.action.label], ['consent_before_cutoff', CUTOFF, 'Demander l’accord'], statut);
+  }
+  // A desired day closes like its departure would, as usual.
+  assert.equal(alerts({ statut: 'mesure', departSouhaite: '2026-10-09' }).find(alert => alert.key === 'consent_before_cutoff')?.text,
+    'Accord du client à obtenir avant mercredi 7 octobre, 17 h (clôture habituelle du départ du vendredi 9 octobre).');
+  // A loading closing set on the departure is the one that counts, and it is no habitual closing.
+  const early = { ...OCT_15, loadingClosesAt: '2026-10-07T07:30:00Z' };
+  assert.equal(alerts({ statut: 'mesure', envoi: early.id }, {}, early)[0]?.text, 'Accord du client à obtenir avant mercredi 7 octobre, 9 h 30 (clôture du départ du jeudi 15 octobre).');
+  const set = { ...OCT_08, loadingClosesAt: '2026-10-07T15:00:00Z' };
+  assert.equal(alerts({ statut: 'mesure', envoi: set.id }, {}, set)[0]?.text, 'Accord du client à obtenir avant mercredi 7 octobre, 17 h (clôture du départ du jeudi 8 octobre).');
+});
+
+test('consent_before_cutoff stays silent outside the window, during a voluntary wait or after consent', () => {
+  assert.deepEqual(alerts({ statut: 'attente_feu_vert', envoi: OCT_15.id }, {}, OCT_15), [], 'Closing in more than 48 hours.');
+  assert.deepEqual(alerts({ statut: 'attente_feu_vert', envoi: OCT_08.id }, {}, OCT_08, { today: Date.parse('2026-10-07T15:00:00Z') }), [], 'Closing passed.');
+  assert.equal(alerts({ statut: 'attente_feu_vert', envoi: OCT_08.id }, {}, OCT_08, { today: Date.parse('2026-10-05T15:00:00Z') })[0]?.key, 'consent_before_cutoff', 'Exactly 48 hours before.');
+  assert.deepEqual(alerts({ statut: 'attente_feu_vert', envoi: OCT_08.id }, {}, OCT_08, { today: Date.parse('2026-10-05T14:59:00Z') }), []);
+  assert.deepEqual(alerts({ statut: 'attente_feu_vert', envoi: OCT_08.id, attenteClientDate: '2026-10-05T08:00:00Z' }, {}, OCT_08), [], 'The client asked to wait.');
+  for (const statut of ['autorise', 'en_preparation', 'devis_envoye', 'paye']) assert.deepEqual(keys(alerts({ statut, envoi: OCT_08.id, paiementDate: statut === 'paye' ? '2026-10-02T10:00:00Z' : null }, {}, OCT_08)), [], statut);
+  assert.deepEqual(alerts({ statut: 'attente_feu_vert', envoi: OCT_08.id }), [], 'A departure the person cannot read gives no closing.');
+  assert.deepEqual(alerts({ statut: 'attente_feu_vert' }), [], 'Without a departure or a desired day there is no closing.');
+});
+
+test('departure_to_create: a desired day without a planned departure leads to the Départ field', () => {
+  const dossierUrl = '/colis/dossier-1?returnTo=%2Fcolis%3Ftable%3Ddepartures&section=accord&onglet=conversation';
+  const [alert] = alerts({ statut: 'autorise', departSouhaite: '2026-11-19' }, {}, undefined, { dossierUrl });
+  assert.deepEqual({ key: alert.key, text: alert.text, label: alert.action.label }, { key: 'departure_to_create', text: TO_CREATE, label: 'Choisir ou créer le départ' });
+  const field = pathOf(alert.action.href);
+  assert.equal(field.pathname, '/colis/dossier-1');
+  assert.deepEqual(Object.fromEntries(field.searchParams), { returnTo: '/colis?table=departures', section: 'accord', modifier: 'depart' }, 'The Colis tab opens with the Départ field, the way back kept.');
+  // A departure planned that day (and readable) means there is nothing to create.
+  const nov19 = planned('reunion-19-nov', '2026-11-19');
+  assert.deepEqual(alerts({ statut: 'autorise', departSouhaite: '2026-11-19' }, {}, undefined, { envois: [nov19] }), []);
+  assert.deepEqual(keys(alerts({ statut: 'autorise', departSouhaite: '2026-11-19' }, {}, undefined, { envois: [{ ...nov19, destinationCode: '971' }] })), ['departure_to_create'], 'Another destination does not count.');
+  assert.deepEqual(keys(alerts({ statut: 'autorise', departSouhaite: '2026-11-19' }, {}, undefined, { envois: [{ ...nov19, statut: 'archive' }] })), ['departure_to_create'], 'An archived departure does not count.');
+  assert.equal(alerts({ statut: 'autorise', departSouhaite: '2026-11-19' }, { cp: '' }).find(alert => alert.key === 'departure_to_create')?.text, 'Départ souhaité le jeudi 19 novembre : aucun départ n’est prévu ce jour-là.', 'Without a known destination the sentence stops at the day.');
+  assert.equal(alerts({ statut: 'paye', paiementDate: '2026-10-02T10:00:00Z', departSouhaite: '2026-11-19', devisSnapshot: { inputs: { destination: { code: '972' } } } })[0]?.text,
+    'Départ souhaité le jeudi 19 novembre : aucun départ n’est prévu ce jour-là pour la Martinique.', 'Once paid, the quote destination.');
+  assert.deepEqual(alerts({ statut: 'autorise', departSouhaite: '2026-11-19', envoi: OCT_15.id }, {}, OCT_15), [], 'An assigned departure replaces the desired day.');
+  for (const fields of [{ statut: 'expedie' }, { statut: 'livre' }, { statut: 'annule' }, { statut: 'refuse_client' }, { archive: true }])
+    assert.deepEqual(alerts({ departSouhaite: '2026-11-19', ...fields }), [], JSON.stringify(fields));
+});
+
+test('departure_to_create: a desired day whose departure is closed, has left or whose day has passed asks for another departure', () => {
+  const dossierUrl = '/colis/dossier-1?returnTo=%2Fcolis';
+  const nov19 = planned('reunion-19-nov', '2026-11-19');
+  const closed = alerts({ statut: 'autorise', departSouhaite: '2026-11-19' }, {}, undefined, { dossierUrl, envois: [{ ...nov19, loadingClosesAt: '2026-10-05T10:00:00Z' }] });
+  assert.deepEqual(closed.map(alert => [alert.key, alert.text, alert.action.label]), [['departure_to_create', 'Départ souhaité le jeudi 19 novembre : le départ de ce jour pour la Réunion est clôturé.', 'Choisir un autre départ']]);
+  assert.equal(pathOf(closed[0].action.href).searchParams.get('modifier'), 'depart', 'The link opens the Départ field.');
+  assert.equal(alerts({ statut: 'autorise', departSouhaite: '2026-11-19' }, {}, undefined, { envois: [{ ...nov19, statut: 'parti' }] })[0]?.text,
+    'Départ souhaité le jeudi 19 novembre : le départ de ce jour pour la Réunion est déjà parti.');
+  const past = alerts({ statut: 'autorise', departSouhaite: '2026-10-01' }, {}, undefined, { envois: [planned('reunion-01', '2026-10-01')] });
+  assert.deepEqual(past.map(alert => [alert.key, alert.text, alert.action.label]), [['departure_to_create', 'Départ souhaité le jeudi 1er octobre : cette date est passée.', 'Choisir un autre départ']]);
+  // Without a loading closing, the departure of the desired day is planned: nothing to create, even after its habitual Wednesday.
+  assert.deepEqual(alerts({ statut: 'autorise', departSouhaite: '2026-10-06' }, {}, undefined, { envois: [planned('reunion-06', '2026-10-06')] }), []);
+});
+
+test('after_subscription also compares the desired day when no departure is assigned', () => {
+  assert.deepEqual(alerts({ departSouhaite: '2026-10-22' }, { abonnementFin: '2026-10-18' }).map(alert => [alert.key, alert.text]), [
+    ['departure_to_create', 'Départ souhaité le jeudi 22 octobre : aucun départ n’est prévu ce jour-là pour la Réunion.'],
+    ['after_subscription', 'Le départ du jeudi 22 octobre est après la fin de son abonnement (18 octobre). Contactez le client.'],
+  ]);
+  assert.deepEqual(keys(alerts({ departSouhaite: '2026-10-22' }, { abonnementFin: '2026-10-18' }, undefined, { envois: [planned(OCT_22.id, OCT_22.date)] })), ['after_subscription'], 'Planned that day: only the subscription.');
+  assert.deepEqual(alerts({ departSouhaite: '2026-10-15' }, { abonnementFin: '2026-10-18' }, undefined, { envois: [OCT_15] }), [], 'Inside the subscription.');
+});
+
+test('the five alerts keep their order: contact, billing, consent, departure to create, subscription', () => {
+  const list = alerts({ statut: 'mesure', departSouhaite: '2026-10-08' }, { userId: null, telegramChatId: null, email: null, abonnementFin: '2026-10-01' });
+  assert.deepEqual(keys(list), ['no_contact', 'billing_incomplete', 'consent_before_cutoff', 'departure_to_create', 'after_subscription']);
+  assert.equal(list[2].text, CUTOFF);
+  assert.equal(list[3].text, 'Départ souhaité le jeudi 8 octobre : aucun départ n’est prévu ce jour-là pour la Réunion.');
+  assert.equal(list[4].text, 'Le départ du jeudi 8 octobre est après la fin de son abonnement (1er octobre). Contactez le client.');
+  assert.match(dossierAlertsLabel(list), /^À vérifier : Le client n’a ni espace client.* Accord du client à obtenir avant .* Départ souhaité le jeudi 8 octobre .* Contactez le client\.$/);
+});
