@@ -1,7 +1,7 @@
 import { isDossierTableColumnSortable, formatDossierTableDate } from './dossierTable.js';
 
 export const COLUMN_FILTER_PREFIX = 'col.';
-const widths = { ref: 140, client: 180, statusLabel: 155, paymentState: 140, statut: 190, owner: 125, casier: 90, cartons: 90, receivedAt: 130, optimizedDimensions: 190, optimizedWeight: 110, requested: 130, paid: 115, remaining: 130, sentAt: 130, departure: 140, destination: 115, packages: 135, readiness: 195, consentState: 150, consentRequestedAt: 160, lastRelanceAt: 145, action: 140 };
+const widths = { ref: 140, client: 180, statusLabel: 155, paymentState: 140, statut: 190, owner: 125, casier: 90, cartons: 100, receivedAt: 130, optimizedDimensions: 190, optimizedWeight: 110, requested: 130, paid: 115, remaining: 130, sentAt: 130, departure: 140, destination: 115, packages: 135, readiness: 195, consentState: 150, consentRequestedAt: 180, lastRelanceAt: 165, action: 140 };
 // Each dossier preset and Mon travail (`work`) keep their own reading choices.
 const PREFERENCE_VIEWS = ['daily', 'payments', 'departures', 'accords', 'work'];
 const preferenceView = view => PREFERENCE_VIEWS.includes(view);
