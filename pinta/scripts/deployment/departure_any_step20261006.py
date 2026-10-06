@@ -77,7 +77,10 @@ SELECT jsonb_build_object(
   'duplicate_departures',(SELECT coalesce(jsonb_agg(jsonb_build_object('destination',destination_code,'date',date_depart,'count',n,'refs',refs) ORDER BY date_depart,destination_code),'[]')
     FROM (SELECT destination_code,date_depart,count(*) n,jsonb_agg(ref ORDER BY ref) refs FROM public.envois WHERE statut<>'archive' GROUP BY destination_code,date_depart HAVING count(*)>1) d),
   'invalid_assignments',(SELECT coalesce(jsonb_agg(jsonb_build_object('id',c.id,'ref',c.ref,'statut',c.statut,'envoi_id',c.envoi_id) ORDER BY c.ref),'[]')
-    FROM open_dossiers c WHERE c.envoi_id IS NOT NULL AND NOT public.valid_departure_for_colis(c.envoi_id,c.client_id)),
+    -- Same predicate as valid_departure_for_colis, inlined: the read-only API role cannot EXECUTE that function.
+    FROM open_dossiers c WHERE c.envoi_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM public.envois e JOIN public.clients cl ON cl.id=c.client_id WHERE e.id=c.envoi_id
+     AND e.destination_code=left(cl.cp,3) AND e.statut IN ('planifie','prochain','en_cours','en_preparation','pret') AND e.departed_at IS NULL
+     AND e.date_depart>=(now() AT TIME ZONE 'Europe/Paris')::date AND (e.loading_closes_at IS NULL OR e.loading_closes_at>now()))),
   'envoi_reference_counter',(SELECT last_value FROM public.seq_envoi_ref),
   'open_reception_actions',(SELECT count(*) FROM public.staff_work_actions WHERE kind='reception' AND state<>'done'))
 ) AS state;"""
