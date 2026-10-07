@@ -280,7 +280,7 @@ export default function ChatPanel({ colis, client, embedded = false, active = tr
     return (
       <div key={m.id} data-from={own ? 'client' : 'team'} className={`flex ${own ? 'justify-end' : 'justify-start'}`}>
         <div
-          className={`max-w-[90%] sm:max-w-[80%] px-3 py-2 rounded-2xl text-sm ${own ? isFacture ? 'bg-green-50 border border-green-200 text-gray-900' : 'text-white' : 'bg-gray-100 text-gray-900'}`}
+          className={`max-w-[90%] sm:max-w-[80%] px-3 py-2 rounded-2xl text-sm ${own ? isFacture ? 'bg-green-50 border border-green-200 text-gray-900' : 'surface-dark text-white' : 'bg-gray-100 text-gray-900'}`}
           style={own && !isFacture ? { backgroundColor: BRAND.navy } : {}}
         >
           <p className="text-xs font-semibold mb-0.5">{own ? 'Vous' : m.auteur}</p>

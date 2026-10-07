@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { TABLE_COLUMNS, buildDossierTableModel, buildDossierTableExportRows, sortDossierTableRows } from './dossierTable.js';
-import { clampColumnWidth, columnWidthBounds, columnWidthsStorageKey, columnVisibilityStorageKey, dossierTextSizeStorageKey, dossierLayoutStorageKey, sanitizeDossierTextSize, sanitizeDossierTableLayout, DOSSIER_TEXT_SIZE_BOUNDS, DOSSIER_TOUCH_TEXT_SIZE, sanitizeHiddenColumns, readColumnFilters, filterDossierTableRows, sanitizeColumnFilter, columnFilterModes, sanitizeColumnWidths, dossierColumnSuggestions, requiredTableColumn, tableTextSizeInitial, DOSSIER_GROUPINGS, defaultDossierGrouping, sanitizeDossierGrouping, resolveDossierGrouping, dossierGroupingStorageKey, sanitizeNoDeparturePlacement, noDeparturePlacementStorageKey } from './dossierTablePreferences.js';
+import { clampColumnWidth, columnWidthBounds, columnWidthsStorageKey, columnVisibilityStorageKey, dossierTextSizeStorageKey, dossierLayoutStorageKey, sanitizeDossierTextSize, sanitizeDossierTableLayout, DOSSIER_TEXT_SIZE_BOUNDS, DOSSIER_TOUCH_TEXT_SIZE, sanitizeHiddenColumns, readColumnFilters, filterDossierTableRows, sanitizeColumnFilter, columnFilterModes, sanitizeColumnWidths, dossierColumnSuggestions, requiredTableColumn, tableTextSizeInitial, DOSSIER_GROUPINGS, defaultDossierGrouping, sanitizeDossierGrouping, resolveDossierGrouping, dossierGroupingStorageKey, sanitizeNoDeparturePlacement, noDeparturePlacementStorageKey, HEADING_CHROME, headingWidthFloors, flooredColumnWidths } from './dossierTablePreferences.js';
 import { WORK_TABLE_CHOICES } from './workTable.js';
 
 const columns = TABLE_COLUMNS.daily;
@@ -261,4 +261,35 @@ test('the default widths keep every heading whole with a wide fallback font, a f
   // Verdana at 12px measured 106, 70, 89 and 78px; a heading keeps 43px for its padding and filter button.
   const room = key => columnWidthBounds({ key }).initial - 43;
   for (const [key, text] of [['owner', 106], ['optimizedWeight', 70], ['sentAt', 89], ['destination', 78]]) assert.ok(room(key) >= text + 6, `${key}: ${room(key)} >= ${text + 6}`);
+});
+
+test('a column is never drawn narrower than its heading: the words, the sort arrow and the filter', () => {
+  // A fixed-width fake font: 7 px per character.
+  const measure = text => text.length * 7;
+  // A touch screen shows every idle sort arrow: « Casier » (6 characters) sorts and filters, 42 px of words and 58 px around them.
+  const touch = headingWidthFloors(columns, measure);
+  assert.equal(touch.casier, 42 + HEADING_CHROME.sortable);
+  // « Cartons reçus » shows its short label, « Cartons ».
+  assert.equal(touch.cartons, 7 * 7 + HEADING_CHROME.sortable);
+  // « Action » has neither sort nor filter: its padding and border only.
+  assert.equal(touch.action, 6 * 7 + HEADING_CHROME.plain);
+  assert.deepEqual(Object.keys(touch), columns.map(item => item.key));
+  // With a mouse an idle arrow shows on hover only: at rest the heading needs 15 px less, except the sorted column's.
+  const mouse = headingWidthFloors(columns, measure, { arrows: false, sortedKey: 'cartons' });
+  assert.equal(mouse.casier, 42 + HEADING_CHROME.sortable - HEADING_CHROME.arrow);
+  assert.equal(mouse.cartons, touch.cartons);
+  assert.equal(mouse.action, touch.action);
+  // The default widths stay as designed at 12 px with a mouse: no floor above them with a 7 px font.
+  assert.ok(columns.every(item => mouse[item.key] <= columnWidthBounds(item).initial || item.key === 'cartons'));
+  // A fractional measure rounds up: the heading never loses its last pixel.
+  assert.equal(headingWidthFloors([column('casier')], () => 37.2).casier, 38 + HEADING_CHROME.sortable);
+  // An unusable measure (no canvas, no font) leaves the saved widths alone.
+  for (const value of [0, NaN, undefined, -3]) assert.equal(headingWidthFloors([column('casier')], () => value).casier, 0);
+  assert.deepEqual(headingWidthFloors(null, measure), {});
+  // Saved widths apply above the floors, never under them; a column without a floor keeps its width.
+  const saved = sanitizeColumnWidths(columns, { casier: 64, owner: 300 });
+  const drawn = flooredColumnWidths(saved, { casier: 100, owner: 120 });
+  assert.equal(drawn.casier, 100); assert.equal(drawn.owner, 300); assert.equal(drawn.client, saved.client);
+  assert.deepEqual(flooredColumnWidths(saved), saved);
+  assert.equal(saved.casier, 64, 'The saved preference itself is unchanged.');
 });

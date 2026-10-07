@@ -268,8 +268,25 @@ async function main() {
       await handle.waitFor();
       const box=async()=>{const [th,grip]=await Promise.all([head.boundingBox(),handle.boundingBox()]);return{th,grip,width:Number(await handle.getAttribute('aria-valuenow'))};};
       let m=await box();
-      assert.ok(Math.abs(m.grip.x-m.th.x)<=1,'The handle sits on the left border of the pinned column.');
+      assert.ok(Math.abs(m.grip.x+m.grip.width/2-m.th.x)<=1,'The handle straddles the left border of the pinned column.');
       assert.ok(m.th.x+m.th.width<=1441&&m.th.x+m.th.width>=1439,'The column stays pinned to the right edge.');
+      // Scrolled to its end, the last column's border is Action's: a press up to 9 px either side of it
+      // resizes Action, never the column under it (whose border would slide under Action).
+      const scroller=f.page.getByRole('region',{name:'Tableau des dossiers',exact:true});
+      await scroller.evaluate(node=>{node.scrollLeft=node.scrollWidth;});await f.page.waitForFunction(()=>document.querySelector('.dossier-list-main')?.dataset.moreRight===undefined);await settle(f);
+      m=await box();
+      const owners=await f.page.evaluate(([x,y])=>[-9,-5,-1,0,1,5,9].map(dx=>document.elementFromPoint(x+dx,y)?.closest('.dossier-table-resize')?.getAttribute('aria-label')||null),[m.th.x,m.th.y+m.th.height/2]);
+      assert.deepEqual(owners,Array(7).fill('Redimensionner Action'),'The shared border has one handle.');
+      // The keyboard still reaches the last column's own handle there: Action's steps aside, so its focus shows.
+      const lastColumn=await f.page.evaluate(()=>{const heads=[...document.querySelectorAll('thead th[data-column]')];return heads[heads.length-2].dataset.columnLabel;});
+      const lastHandle=f.page.getByRole('separator',{name:`Redimensionner ${lastColumn}`,exact:true});
+      await handle.focus();await f.page.keyboard.press('Shift+Tab');
+      for(let i=0;i<3&&!await lastHandle.evaluate(node=>node===document.activeElement);i++)await f.page.keyboard.press('Shift+Tab');
+      assert.equal(await lastHandle.evaluate(node=>node===document.activeElement),true,'Shift+Tab from Action reaches the last column’s handle.');
+      const shown=await lastHandle.evaluate(node=>{const r=node.getBoundingClientRect(),top=document.elementFromPoint(r.left+r.width/2,r.top+r.height/2);return top===node||node.contains(top);});
+      assert.equal(shown,true,'Its focused handle shows on top.');
+      await f.page.evaluate(()=>document.activeElement?.blur());await scroller.evaluate(node=>{node.scrollLeft=0;});await settle(f);m=await box();
+      assert.ok(Math.abs(m.grip.x+m.grip.width/2-m.th.x)<=1,'Once the focus has left, Action’s handle straddles its border again.');
       const drag=async dx=>{const start=m.grip.x+m.grip.width/2,y=m.grip.y+m.grip.height/2;await f.page.mouse.move(start,y);await f.page.mouse.down();await f.page.mouse.move(start+dx/2,y);await f.page.mouse.move(start+dx,y);await f.page.mouse.up();};
       const initial=m.width,left=m.th.x;
       await drag(-60);await f.page.waitForFunction(width=>Number(document.querySelector('[aria-label="Redimensionner Action"]').getAttribute('aria-valuenow'))===width,initial+60);
@@ -323,6 +340,10 @@ async function main() {
       const [b,first]=await Promise.all([badge(P).boundingBox(),row(f,P).locator('.dossier-table-client-name').evaluate(node=>{const range=document.createRange();range.setStart(node.firstChild,0);range.setEnd(node.firstChild,1);const r=range.getBoundingClientRect();return{x:r.x,y:r.y,height:r.height};})]);
       assert.ok(b.x+b.width<=first.x+1,'The badge comes before the name.');
       assert.ok(Math.abs((b.y+b.height/2)-(first.y+first.height/2))<6,'Badge and first letter share the line.');
+      // A click on the badge opens the dossier like the rest of its row: the same hand over it; a card keeps the arrow.
+      const table=await row(f,P).evaluate(node=>node.tagName==='TR');
+      assert.equal(await badge(P).evaluate(node=>getComputedStyle(node).cursor),table?'pointer':'default');
+      if(table)assert.equal(await row(f,P).evaluate(node=>getComputedStyle(node).cursor),'pointer');
       await noPageOverflow(f);
       await f.page.screenshot({path:`${output}/client-offer-${width}-${dark?'dark':'light'}.png`});
       await assertNoBusinessChange(f,before);
@@ -1299,6 +1320,115 @@ async function main() {
         }
       }
     });
+    const textSize=(f,size)=>f.context.addInitScript(([id,size])=>{for(const view of ['daily','payments','departures','accords'])localStorage.setItem(`expedile:table-text:v1:${encodeURIComponent(id)}:${view}`,String(size));},[ids.A,size]);
+    const TOUCH={hasTouch:true,isMobile:true};
+    // Every heading reads whole in every tab: on a touch tablet at its 14 px default (the touch heading
+    // shows its sort arrow and wraps between words) and at 20 px on a computer.
+    for(const [label,width,size,device] of [['tablet-14px',1024,null,TOUCH],['desktop-20px',1440,20,{}]])await scenario(`headings-read-whole-${label}`,async f=>{
+      if(size)await textSize(f,size);
+      await f.page.setViewportSize({width,height:width===1024?768:900});
+      for(const [name,view] of [['Travail quotidien','daily'],['Paiements','payments'],['Départs','departures'],['Accords clients','accords']]){
+        await f.page.goto(`${base}/colis?table=${view}`);await rows(f).first().waitFor();await settle(f);
+        assert.equal(await f.page.evaluate(()=>getComputedStyle(document.querySelector('.dossier-list')).getPropertyValue('--dossier-text-size').trim()),`${size||14}px`);
+        const cut=await f.page.locator('table.dossier-data-table thead .dossier-table-heading-text').evaluateAll(nodes=>nodes.filter(node=>node.scrollWidth>node.clientWidth+1).map(node=>`${node.textContent} ${node.scrollWidth}>${node.clientWidth}`));
+        assert.deepEqual(cut,[],`${name}: every heading reads whole.`);
+        if(view==='daily'){const head=await f.page.locator('table.dossier-data-table thead').boundingBox();await f.page.screenshot({path:`${output}/headings-${label}.png`,clip:{x:0,y:head.y,width,height:head.height}});}
+      }
+      assert.deepEqual(businessWrites(f),[]);
+    },{device});
+    // « Je m’en occupe » wraps on two lines in the 140 px Action column: room above and below its text at the
+    // 14 px of a touch tablet and at 20 px, never a descender on the button's border.
+    for(const [label,width,size,device] of [['tablet-14px',1024,null,TOUCH],['desktop-20px',1440,20,{}]])await scenario(`the-claim-button-keeps-room-around-its-two-lines-${label}`,async f=>{
+      if(size)await textSize(f,size);
+      await f.page.setViewportSize({width,height:width===1024?768:900});await open(f);
+      const claim=take(f);await claim.waitFor();await settle(f);
+      const m=await claim.evaluate(node=>{const style=getComputedStyle(node),r=node.getBoundingClientRect(),range=document.createRange();range.selectNodeContents(node);
+        const rects=[...range.getClientRects()].filter(rect=>rect.width>0&&rect.height>0);
+        return{font:parseFloat(style.fontSize),lines:new Set(rects.map(rect=>Math.round(rect.top))).size,top:Math.min(...rects.map(rect=>rect.top))-r.top-parseFloat(style.borderTopWidth),
+          bottom:r.bottom-parseFloat(style.borderBottomWidth)-Math.max(...rects.map(rect=>rect.bottom)),height:r.height,overflow:node.scrollHeight>node.clientHeight};});
+      assert.equal(m.font,size||14);assert.equal(m.lines,2,'Two lines in the narrow column.');
+      assert.ok(m.top>=4&&m.bottom>=4,`Room above and below the text (${m.top.toFixed(1)} / ${m.bottom.toFixed(1)} px).`);
+      assert.equal(m.overflow,false,'Nothing overflows the button.');assert.ok(m.height>=44);
+      const box=await cell(f,P,'action').boundingBox();await f.page.screenshot({path:`${output}/claim-button-${label}.png`,clip:{x:box.x-4,y:box.y-4,width:box.width+8,height:box.height+8}});
+      assert.deepEqual(businessWrites(f),[]);
+    },{device});
+    // ── Keyboard focus is never hidden (WCAG 2.4.11) ─────────────────────────
+    // Every keyboard stop through the dossiers while the selection bar floats over the list's bottom: the
+    // focused control's centre is never under the bar (a 1024 × 768 tablet, a phone and its cards).
+    for(const width of [1024,390])await scenario(`keyboard-focus-never-lands-under-the-selection-bar-${width}`,async f=>{
+      await f.page.setViewportSize({width,height:width===390?844:768});await open(f);
+      for(const [id,ref] of [[P4,'EXP-TAB004'],[P5,'EXP-TAB005'],[P,'EXP-TAB001'],[P6,'EXP-TAB006']]){const box=row(f,id).getByRole('checkbox',{name:`Sélectionner le dossier ${ref}`,exact:true});await box.scrollIntoViewIfNeeded();await box.check();}
+      await bar(f).getByText('4 dossiers sélectionnés',{exact:true}).waitFor();
+      await f.page.evaluate(()=>{document.getElementById('dossier-table-scroll').scrollTop=0;document.querySelector('.dossier-list').scrollTop=0;});
+      await rows(f).first().locator('input[type="checkbox"]').focus();
+      const under=[];let stops=0;
+      for(let i=0;i<90;i++){
+        await f.page.keyboard.press('Tab');
+        const stop=await f.page.evaluate(()=>{const el=document.activeElement;if(!el?.closest('[data-dossier-row],[data-dossier-card]'))return null;
+          const r=el.getBoundingClientRect(),b=document.querySelector('.dossier-bulk-bar').getBoundingClientRect(),x=r.left+r.width/2,y=r.top+r.height/2;
+          return{name:`${(el.getAttribute('aria-label')||el.innerText||'').trim().slice(0,40)} (${Math.round(y)} in ${Math.round(b.top)}–${Math.round(b.bottom)})`,under:x>=b.left&&x<=b.right&&y>=b.top&&y<=b.bottom};});
+        if(!stop)break;stops++;if(stop.under)under.push(stop.name);
+      }
+      assert.ok(stops>=40,`${stops} keyboard stops through the dossiers.`);
+      assert.deepEqual(under,[],'No focused control sits under the selection bar.');
+      assert.deepEqual(businessWrites(f),[]);
+    },{more:14});
+    // Forward through the table, then scrolled sideways and the whole way back from its last dossier: every
+    // focused control shows (never entirely under the sticky heading row or a pinned column), and a control of
+    // a pinned column never scrolls the table sideways, nor one of the heading row up or down.
+    for(const [width,dark] of [[1440,false],[1024,true]])await scenario(`keyboard-focus-is-never-hidden-under-the-sticky-heading-or-the-pinned-columns-${width}-${dark?'dark':'light'}`,async f=>{
+      await f.page.setViewportSize({width,height:width===1024?768:900});await theme(f,dark);await open(f);await waitTheme(f,dark);
+      const stop=()=>f.page.evaluate(()=>{
+        const scroller=document.getElementById('dossier-table-scroll'),el=document.activeElement;
+        if(!el||el===scroller||!scroller.contains(el))return null;
+        const r=el.getBoundingClientRect();
+        const shows=[[.5,.5],[.15,.25],[.85,.25],[.15,.75],[.85,.75]].some(([px,py])=>{const x=r.left+r.width*px,y=r.top+r.height*py;if(x<0||y<0||x>=innerWidth||y>=innerHeight)return false;const top=document.elementFromPoint(x,y);return top===el||el.contains(top)||(top?.tagName==='LABEL'&&top.contains(el));});
+        let pinnedX=false,pinnedY=false;
+        for(let node=el;node&&node!==scroller;node=node.parentElement){const style=getComputedStyle(node);if(style.position!=='sticky')continue;if(style.left!=='auto'||style.right!=='auto')pinnedX=true;if(style.top!=='auto')pinnedY=true;}
+        return{name:(el.getAttribute('aria-label')||el.innerText||'').trim().slice(0,40),shows,pinnedX,pinnedY,left:scroller.scrollLeft,top:scroller.scrollTop};
+      });
+      const walk=async back=>{
+        const hidden=[],moved=[];let count=0,previous=await f.page.evaluate(()=>{const scroller=document.getElementById('dossier-table-scroll');return{left:scroller.scrollLeft,top:scroller.scrollTop};});
+        for(let i=0;i<160;i++){
+          await f.page.keyboard.press(back?'Shift+Tab':'Tab');
+          const now=await stop();if(!now)break;count++;
+          if(!now.shows)hidden.push(now.name);
+          if(now.pinnedX&&Math.abs(now.left-previous.left)>1||now.pinnedY&&Math.abs(now.top-previous.top)>1)moved.push(`${now.name} (${Math.round(now.left-previous.left)}, ${Math.round(now.top-previous.top)})`);
+          previous=now;
+        }
+        return{hidden,moved,count};
+      };
+      const scroller=f.page.getByRole('region',{name:'Tableau des dossiers',exact:true});
+      await scroller.focus();let result=await walk(false);
+      assert.ok(result.count>=60,`${result.count} stops forward.`);
+      assert.deepEqual(result.hidden,[],'Forward: every focused control shows.');assert.deepEqual(result.moved,[],'Forward: no pinned control scrolls the table.');
+      await scroller.evaluate(node=>{node.scrollTop=node.scrollHeight;node.scrollLeft=200;});await settle(f);
+      await f.page.locator('tbody tr[data-dossier-row]:last-child td[data-column="action"] button').first().focus();
+      result=await walk(true);
+      assert.ok(result.count>=60,`${result.count} stops back.`);
+      assert.deepEqual(result.hidden,[],'Back: every focused control shows.');assert.deepEqual(result.moved,[],'Back: no pinned control scrolls the table.');
+      await f.page.screenshot({path:`${output}/keyboard-focus-table-${width}-${dark?'dark':'light'}.png`});
+      assert.deepEqual(businessWrites(f),[]);
+    },{more:14});
+    // A table narrower than the list has nothing sliding under Action: its handle is on its right border, like
+    // the others'. Widened until the table overflows, Action gets pinned mid-drag and the drag keeps its direction.
+    await scenario('a-table-narrower-than-the-list-resizes-action-from-its-right-border-and-a-drag-keeps-its-direction',async f=>{
+      await f.page.setViewportSize({width:1920,height:1000});await open(f,'table=payments');
+      const head=f.page.locator('thead th[data-column="action"]'),handle=f.page.getByRole('separator',{name:'Redimensionner Action',exact:true});
+      // A list 60 px wider than the table, whatever the fonts.
+      const room=await f.page.evaluate(()=>{const scroller=document.getElementById('dossier-table-scroll');return{table:scroller.querySelector('table.dossier-data-table').getBoundingClientRect().width,list:scroller.clientWidth};});
+      await f.page.setViewportSize({width:Math.ceil(1920-room.list+room.table+60),height:1000});
+      await f.page.waitForFunction(()=>{const scroller=document.getElementById('dossier-table-scroll');return scroller.scrollWidth<=scroller.clientWidth+1&&!document.querySelector('thead th[data-column="action"]').dataset.resizeEdge;});
+      const [th,grip]=await Promise.all([head.boundingBox(),handle.boundingBox()]);
+      assert.ok(Math.abs(grip.x+grip.width-(th.x+th.width))<=1,'The handle sits on the right border.');
+      const initial=Number(await handle.getAttribute('aria-valuenow')),y=grip.y+grip.height/2;let x=grip.x+grip.width/2;
+      await f.page.mouse.move(x,y);await f.page.mouse.down();
+      for(let step=0;step<5;step++){x+=20;await f.page.mouse.move(x,y);await f.page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));}
+      await f.page.mouse.up();
+      await f.page.waitForFunction(width=>document.querySelector('[aria-label="Redimensionner Action"]').getAttribute('aria-valuenow')===String(width),initial+100);
+      await f.page.waitForFunction(()=>document.querySelector('thead th[data-column="action"]').dataset.resizeEdge==='start');
+      assert.deepEqual(businessWrites(f),[]);
+    });
     for(const dark of [false,true])await scenario(`columns-sliding-under-the-pinned-action-are-covered-or-faded-1280-${dark?'dark':'light'}`,async f=>{
       await f.page.setViewportSize({width:1280,height:800});await theme(f,dark);await open(f);await waitTheme(f,dark);
       const scroller=f.page.getByRole('region',{name:'Tableau des dossiers',exact:true});
@@ -1647,7 +1777,12 @@ async function main() {
         await openDisplay(f);await size.fill(String(text));await size.press('Enter');await closeDisplay(f);
         await f.page.waitForFunction(text=>getComputedStyle(document.querySelector('.dossier-data-table')).fontSize===`${text}px`,text);
         await resize.focus();await resize.press(width===110?'Home':'Enter');
-        await f.page.waitForFunction(width=>Math.round(document.querySelector('th[data-column="optimizedDimensions"]').getBoundingClientRect().width)===width,width);
+        await f.page.waitForFunction(width=>document.querySelector('[aria-label="Redimensionner Dimensions finales"]')?.getAttribute('aria-valuenow')===String(width),width);
+        // Drawn at that width, or as wide as its heading needs at this text size: the narrowest
+        // saved width never cuts « Dimensions » (at rest: a focused heading also shows its sort arrow).
+        await resize.evaluate(node=>node.blur());
+        const drawn=await f.page.locator('th[data-column="optimizedDimensions"]').evaluate(th=>{const heading=th.querySelector('.dossier-table-heading-text');return{width:Math.round(th.getBoundingClientRect().width),whole:heading.scrollWidth<=heading.clientWidth+1};});
+        assert.ok(drawn.width>=width&&drawn.width<=Math.max(width,240)&&drawn.whole,`${text} px, ${width} px: drawn ${drawn.width} px with its heading whole.`);
         const layout=await dimensionsLayout(f,selector);
         assert.equal(layout.parts,8);assert.deepEqual(layout.split,[],`${text} px, ${width} px: no number is cut.`);assert.deepEqual(layout.outside,[],`${text} px, ${width} px: every part stays in its cell.`);
         // The default width keeps each part whole up to 16 px; larger text or a narrower column may break a part after a « × » or before « vol. ».

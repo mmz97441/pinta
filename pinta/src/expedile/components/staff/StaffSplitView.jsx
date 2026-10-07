@@ -19,7 +19,7 @@ import DossierColumnOptions, { ColumnDialog, DossierColumnVisibility } from './D
 import DossierHorizontalScroll from './DossierHorizontalScroll';
 import DossierDisplayOptions from './DossierDisplayOptions';
 import useDossierTablePreferences from '../../hooks/useDossierTablePreferences';
-import { COLUMN_FILTER_PREFIX, readColumnFilters, filterDossierTableRows, columnFilterLabel, dossierColumnSuggestions, DOSSIER_GROUPINGS, resolveDossierGrouping } from '../../domain/dossierTablePreferences';
+import { COLUMN_FILTER_PREFIX, readColumnFilters, filterDossierTableRows, columnFilterLabel, dossierColumnSuggestions, DOSSIER_GROUPINGS, resolveDossierGrouping, headingWidthFloors, flooredColumnWidths } from '../../domain/dossierTablePreferences';
 import { groupDossiersByDeparture, parisCalendarDay, NO_DEPARTURE_GROUP_KEY } from '../../domain/departureGroups';
 import { dossierAlerts } from '../../domain/dossierAlerts';
 import { dossierDestinationCode, dossierWishState } from '../../domain/departurePlanning';
@@ -196,7 +196,11 @@ export default function StaffColisPage() {
   // Above the default text size the reference column grows with the text, so a
   // reference never breaks; the saved width (and the default sizes) stay as set.
   const refFloor = textSize > 12 ? Math.ceil(textSize * 7.5) + 16 : 0;
-  const tableWidths = widths.ref >= refFloor ? widths : { ...widths, ref: refFloor };
+  // Every heading reads whole, whatever the text size, the screen or a narrower saved width:
+  // its column is drawn at least as wide as the heading needs (measured below, in its font).
+  const [headingFloors, setHeadingFloors] = useState({});
+  const flooredWidths = flooredColumnWidths(widths, headingFloors);
+  const tableWidths = flooredWidths.ref >= refFloor ? flooredWidths : { ...flooredWidths, ref: refFloor };
   const tableStyle = { width: 40 + displayColumns.reduce((sum, column) => sum + tableWidths[column.key], 0), '--dossier-ref-width': `${tableWidths.ref}px`, '--dossier-client-width': `${tableWidths.client}px`, '--dossier-client-left': `${40 + tableWidths.ref}px` };
 
   // Keep another view's sort in the URL, but never sort on invisible or
@@ -247,10 +251,24 @@ export default function StaffColisPage() {
     setListWidth(element.clientWidth);
     return () => observer.disconnect();
   }, []);
+  // The headings' floors, measured in the table's own font at the current text size
+  // (before paint: the columns never show a cut heading first). The idle sort arrows
+  // show where nothing hovers (dossierTable.css), and always on the sorted column.
+  useLayoutEffect(() => {
+    const scroller = listScrollRef.current;
+    if (!scroller || !tableShown) return;
+    let context = null, arrows = true;
+    try { context = document.createElement('canvas').getContext('2d'); } catch { /* no canvas: saved widths only */ }
+    if (!context) return;
+    try { arrows = !window.matchMedia('(hover: hover)').matches; } catch { /* the arrows count as shown */ }
+    context.font = `600 ${textSize}px ${getComputedStyle(scroller).fontFamily}`;
+    const floors = headingWidthFloors(allColumns, text => context.measureText(text).width, { arrows, sortedKey: sortCol });
+    setHeadingFloors(previous => Object.keys(floors).length === Object.keys(previous).length && Object.keys(floors).every(key => previous[key] === floors[key]) ? previous : floors);
+  }, [textSize, allColumns, tableShown, sortCol]);
   const pinBudget = Math.max(0, listWidth - 300);
-  const pinnedActionWidth = visibleKeys.includes('action') ? widths.action : 0;
+  const pinnedActionWidth = visibleKeys.includes('action') ? tableWidths.action : 0;
   const unpinRef = listWidth < 768 || tableWidths.ref + pinnedActionWidth + 40 > pinBudget;
-  const unpinClient = unpinRef || tableWidths.ref + widths.client + pinnedActionWidth + 40 > pinBudget;
+  const unpinClient = unpinRef || tableWidths.ref + tableWidths.client + pinnedActionWidth + 40 > pinBudget;
   const actionPinned = visibleKeys.includes('action') && listWidth >= 768;
   // Columns hidden under the pinned action (or past the right edge) are marked
   // by a shadow and a fade; DossierHorizontalScroll reports the scroll edges.
@@ -670,7 +688,8 @@ export default function StaffColisPage() {
         )}
 
         {/* Table (scrollable) */}
-        <div id="dossier-table-scroll" ref={listScrollRef} role="region" aria-label="Tableau des dossiers" tabIndex={0} className="min-w-0 flex-1 overflow-y-auto overflow-x-auto">
+        <div id="dossier-table-scroll" ref={listScrollRef} role="region" aria-label="Tableau des dossiers" tabIndex={0} className="min-w-0 flex-1 overflow-y-auto overflow-x-auto"
+          onFocus={event => revealKeyboardFocus(event.currentTarget, event.target)}>
 
           {(() => {
             if (loadFailed) return <DossierListProblem reason={dataProblem} onRetry={retryLoad} />;
@@ -738,7 +757,9 @@ export default function StaffColisPage() {
                     columns={displayCols}
                     widths={widths}
                     onResize={setWidth}
-                    actionPinned={actionPinned}
+                    // A table that fits the list has nothing sliding under its last column: Action
+                    // is resized from its right border, like the others.
+                    actionPinned={actionPinned && (scrollEdges.left || scrollEdges.right)}
                     filters={columnFilters}
                     onFilterColumn={(key, anchor) => { setColumnOptions({ key, anchor, fromMenu: false }); }}
                     openFilterKey={columnOptions && !columnOptions.fromMenu ? columnOptions.key : null}
@@ -771,6 +792,48 @@ export default function StaffColisPage() {
       {bulkRun && <BulkStatusDialog run={bulkRun} onConfirm={runBulkStatus} onClose={closeBulkRun} />}
     </div>
   );
+}
+
+/** Keyboard focus is never left under the sticky heading row or under the pinned
+ * columns (WCAG 2.4.11): the browser only brings a focused control inside the
+ * scroller, which these cover. The table scrolls on, by what covers the control
+ * and its ring, along each axis the control is not pinned on: a control of a
+ * pinned column or of the heading row never moves the table along that axis.
+ * A mouse or touch focus never scrolls (the control was under the pointer); nor
+ * does a browser without :focus-visible (Safari before 15.4). */
+const FOCUS_CLEARANCE = 8; // the ring, 3 px away and 2 px wide, and some air
+function revealKeyboardFocus(scroller, target) {
+  if (!target || target === scroller || !scroller.contains(target)) return;
+  let keyboard = false;
+  try { keyboard = target.matches(':focus-visible'); } catch { /* :focus-visible unknown: the native scrolling only */ }
+  const table = keyboard && scroller.querySelector('table.dossier-data-table');
+  if (!table || !table.contains(target) || !table.getClientRects().length) return;
+  let pinnedX = false, pinnedY = false;
+  for (let node = target; node && node !== table; node = node.parentElement) {
+    const style = getComputedStyle(node);
+    if (style.position !== 'sticky') continue;
+    if (style.left !== 'auto' || style.right !== 'auto') pinnedX = true;
+    if (style.top !== 'auto' || style.bottom !== 'auto') pinnedY = true;
+  }
+  // What covers the table: the heading cells (sticky one by one: the <thead> box itself scrolls
+  // away), the pinned identity columns on the left, the pinned Action on the right.
+  const view = scroller.getBoundingClientRect(), box = target.getBoundingClientRect();
+  let top = view.top, left = view.left, right = view.left + scroller.clientWidth;
+  for (const th of table.querySelectorAll('thead th')) {
+    const style = getComputedStyle(th), rect = th.getBoundingClientRect();
+    if (style.position !== 'sticky') continue;
+    if (style.top !== 'auto') top = Math.max(top, rect.bottom);
+    if (style.left !== 'auto') left = Math.max(left, rect.right);
+    else if (style.right !== 'auto') {
+      // The pinned Action also covers or fades the column sliding under it (its ::before).
+      const edge = getComputedStyle(th, '::before');
+      right = Math.min(right, rect.left - (edge.content && edge.content !== 'none' ? parseFloat(edge.width) || 0 : 0));
+    }
+  }
+  if (!pinnedY && box.top < top + FOCUS_CLEARANCE) scroller.scrollTop -= top + FOCUS_CLEARANCE - box.top;
+  if (pinnedX) return;
+  if (box.left < left + FOCUS_CLEARANCE) scroller.scrollLeft -= left + FOCUS_CLEARANCE - box.left;
+  else if (box.right > right - FOCUS_CLEARANCE) scroller.scrollLeft += box.right - (right - FOCUS_CLEARANCE);
 }
 
 /** French guillemets never end or start a line alone: « … » stays on one

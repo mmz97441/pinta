@@ -31,6 +31,40 @@ async function measure(locator) {
       focus: focused ? { color: getComputedStyle(focused).outlineColor, width: getComputedStyle(focused).outlineWidth, ratio: contrast(rgba(getComputedStyle(focused).outlineColor), background(focused)) } : null };
   });
 }
+// The keyboard focus ring as painted, against what lies beyond it and against the gap inside it:
+// a screenshot read back in the page (a gradient, such as the navigation's, has no single colour).
+async function paintedRing(page) {
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  await page.waitForFunction(() => document.getAnimations().every(animation => animation.playState !== 'running'));
+  const png = (await page.screenshot()).toString('base64');
+  return page.evaluate(async png => {
+    const element = document.activeElement, style = getComputedStyle(element), box = element.getBoundingClientRect();
+    const image = new Image(); image.src = `data:image/png;base64,${png}`; await image.decode();
+    const canvas = document.createElement('canvas'); canvas.width = image.naturalWidth; canvas.height = image.naturalHeight;
+    const context = canvas.getContext('2d'); context.drawImage(image, 0, 0);
+    const scale = image.naturalWidth / innerWidth;
+    const at = (x, y) => [...context.getImageData(Math.round(x * scale), Math.round(y * scale), 1, 1).data].slice(0, 3);
+    const luminance = rgb => rgb.map(c => c / 255).map(c => c <= .04045 ? c / 12.92 : ((c + .055) / 1.055) ** 2.4).reduce((sum, c, i) => sum + c * [.2126, .7152, .0722][i], 0);
+    const contrast = (a, b) => { const x = luminance(a), y = luminance(b); return (Math.max(x, y) + .05) / (Math.min(x, y) + .05); };
+    const width = parseFloat(style.outlineWidth) || 0, offset = parseFloat(style.outlineOffset) || 0, y = box.top + box.height / 2;
+    // The left and right sides at mid-height (one may be clipped): the better one is the ring that shows.
+    const sides = [[-1, box.left], [1, box.right]].map(([sign, edge]) => {
+      const ring = at(edge + sign * (offset + width / 2), y), beyond = at(edge + sign * (offset + width + 2), y), gap = offset >= 2 ? at(edge + sign * offset / 2, y) : beyond;
+      return Math.min(contrast(ring, beyond), contrast(ring, gap));
+    });
+    return { name: (element.getAttribute('aria-label') || element.textContent || '').trim(), color: style.outlineColor, style: style.outlineStyle, width, ratio: Math.max(...sides) };
+  }, png);
+}
+const NAVY = 'rgb(27, 58, 75)', GOLD = 'rgb(216, 170, 66)', DARK_GOLD = 'rgb(232, 199, 121)';
+async function keyboardFocus(page, locator) { await locator.focus(); await page.keyboard.press('Shift+Tab'); await page.keyboard.press('Tab'); }
+async function checkRing(page, locator, expected, label, samples) {
+  await keyboardFocus(page, locator);
+  const ring = await paintedRing(page);
+  assert.equal(ring.style, 'solid', `${label}: a ring`); assert.ok(ring.width >= 2, `${label}: 2 px or more`);
+  assert.equal(ring.color, expected, `${label}: ${expected}`);
+  assert.ok(ring.ratio >= 3, `${label}: the ring keeps 3:1 against what surrounds it (${ring.ratio.toFixed(2)})`);
+  samples.push({ state: `focus-ring ${label}`, ...ring });
+}
 (async () => {
   await fs.mkdir(output, { recursive: true });
   const browser = await chromium.launch({ headless: true });
@@ -62,6 +96,27 @@ async function measure(locator) {
         await row().hover(); const selectedHover = await check('selected-hover'); assert.deepEqual(selectedHover.background, selected.background, `${name}: hover preserves selection`);
         await f.page.mouse.move(0, 0); await f.page.keyboard.press('Tab'); await row().getByRole('button', { name: 'EXP-TEST-001', exact: true }).focus(); await check('selected-focus', true);
         await f.page.screenshot({ path: path.join(output, `${name}.png`), fullPage: true });
+        // A warning or a failure in the selection bar (the labels' outcome carries data-tone) reads apart
+        // from its neutral hints: the amber or red block, its text at 4.5:1, its icon in the same colour.
+        const bulkBar = f.page.getByRole('group', { name: 'Actions sur la sélection', exact: true });
+        for (const tone of ['warning', 'error']) {
+          await bulkBar.evaluate((bar, tone) => { for (const value of ['', tone]) { const note = document.createElement('p'); note.className = 'dossier-bulk-note'; if (value) note.dataset.tone = value; note.dataset.probe = value || 'neutral'; note.innerHTML = '<svg width="16" height="16" aria-hidden="true"></svg><span>Aucune étiquette à imprimer.</span>'; bar.appendChild(note); } }, tone);
+          const note = bulkBar.locator(`[data-probe="${tone}"]`), sample = await measure(note);
+          assert.ok(sample.text.length && sample.text.every(item => item.ratio >= 4.5), `${name}: ${tone} note text >= 4.5:1`);
+          const look = await note.evaluate(node => { const style = getComputedStyle(node), neutral = getComputedStyle(node.parentElement.querySelector('[data-probe="neutral"]')); return { border: style.borderTopWidth, edge: style.borderTopColor, fill: style.backgroundColor, color: style.color, icon: getComputedStyle(node.querySelector('svg')).color, neutralColor: neutral.color, neutralFill: neutral.backgroundColor }; });
+          assert.equal(look.border, '1px', `${name}: ${tone} note has an edge`); assert.notEqual(look.edge, look.fill, `${name}: ${tone} edge shows on its fill`);
+          assert.notEqual(look.fill, look.neutralFill, `${name}: ${tone} note has its own fill`); assert.notEqual(look.color, look.neutralColor, `${name}: ${tone} note does not read as a neutral hint`);
+          assert.equal(look.icon, look.color, `${name}: ${tone} icon in the note's colour`);
+          samples.push({ state: `bulk-note-${tone}`, ...sample, look }); await bulkBar.evaluate(bar => bar.querySelectorAll('[data-probe]').forEach(node => node.remove()));
+        }
+        // One focus ring rule (brand.css): navy on the light surfaces of the light theme, gold on the navy
+        // navigation; gold everywhere in the dark theme.
+        if (width === 1440) {
+          await checkRing(f.page, f.page.getByRole('button', { name: 'Affichage', exact: true }), theme === 'dark' ? DARK_GOLD : NAVY, 'toolbar button', samples);
+          await checkRing(f.page, f.page.locator('.staff-sidebar').getByRole('button', { name: 'Départs', exact: true }), theme === 'dark' ? DARK_GOLD : GOLD, 'navigation link', samples);
+          await f.page.screenshot({ path: path.join(output, `${name}-sidebar-ring.png`), clip: { x: 0, y: 0, width: 260, height: 420 } });
+          await f.page.evaluate(() => document.activeElement?.blur());
+        }
         if (width === 1440) {
           // « Tri par défaut » now lives in the « Affichage » dialog, which stays open after a change.
           await f.page.getByRole('button', { name: 'Affichage', exact: true }).click();
@@ -73,6 +128,14 @@ async function measure(locator) {
           await f.page.keyboard.press('Tab'); await sorting.focus();
           const focus = await measure(sorting); assert.ok(focus.focus && parseFloat(focus.focus.width) >= 2 && focus.focus.ratio >= 3, `${name}: sorting keyboard focus remains visible`);
           samples.push({ state: 'sort-control-hover', ...sample }, { state: 'sort-control-focus', ...focus });
+        }
+        if (width === 390) {
+          // A dialog outside the work area (ConfirmDialog, beside the navigation): the same ring on its light panel.
+          await f.page.goto(base + '/plus'); await f.page.getByRole('button', { name: 'Se déconnecter', exact: true }).click();
+          const dialog = f.page.getByRole('dialog', { name: 'Se déconnecter ?', exact: true }); await dialog.waitFor();
+          await checkRing(f.page, dialog.getByRole('button', { name: 'Annuler', exact: true }), theme === 'dark' ? DARK_GOLD : NAVY, 'confirmation dialog button', samples);
+          await f.page.screenshot({ path: path.join(output, `${name}-dialog-ring.png`) });
+          await f.page.keyboard.press('Escape'); await dialog.waitFor({ state: 'hidden' });
         }
         assert.deepEqual(f.errors, []); assert.deepEqual(f.networkDenied, []);
         // Loading the signed-in app synchronizes its work queue. No list

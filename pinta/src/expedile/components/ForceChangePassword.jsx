@@ -73,7 +73,7 @@ export default function ForceChangePassword({ staffUser, onDone, onCancel, recov
 
   return (
     <div
-      className="fixed inset-0 z-[999] flex items-center justify-center px-4 py-6 overflow-y-auto"
+      className="surface-dark fixed inset-0 z-[999] flex items-center justify-center px-4 py-6 overflow-y-auto"
       style={{ background: `linear-gradient(160deg, ${BRAND.navy} 0%, ${BRAND.navyD} 100%)` }}
     >
       <div

@@ -3,7 +3,9 @@ import { isDossierTableColumnSortable, formatDossierTableDate } from './dossierT
 export const COLUMN_FILTER_PREFIX = 'col.';
 // Each heading reads whole at the default text size, even with a wide fallback
 // font (Verdana, DejaVu Sans): « Qui s’en occupe », « Poids (kg) », « Devis
-// envoyé » and « Destination » keep a few pixels to spare.
+// envoyé » and « Destination » keep a few pixels to spare. At any other text
+// size, on a touch screen or with a narrower saved width, the table draws the
+// column at least as wide as its heading needs (headingWidthFloors).
 const widths = { ref: 140, client: 180, statusLabel: 155, paymentState: 140, statut: 190, owner: 160, casier: 90, cartons: 100, receivedAt: 130, optimizedDimensions: 190, optimizedWeight: 120, requested: 130, paid: 115, remaining: 130, sentAt: 140, departure: 140, destination: 130, packages: 135, readiness: 195, consentState: 150, consentRequestedAt: 180, lastRelanceAt: 165, action: 140 };
 // Each dossier preset and Mon travail (`work`) keep their own reading choices.
 const PREFERENCE_VIEWS = ['daily', 'payments', 'departures', 'accords', 'work'];
@@ -69,6 +71,26 @@ export function columnWidthBounds(column) {
   const min = column?.key === 'action' ? 132 : column?.key === 'optimizedDimensions' ? 110 : ['ref', 'client'].includes(column?.key) ? 96 : 64;
   const initial = Math.max(min, widths[column?.key] || 140);
   return { min, max: column?.key === 'action' ? 280 : 600, initial };
+}
+/** Room a heading takes around its words. A sortable column: the cell's padding and border
+ * (17 px), its sort arrow (15 px) and its filter (26 px). The arrow always shows on a touch
+ * screen and on the sorted column; elsewhere it shows on hover or focus only. Any other
+ * column: padding and border, the pinned Action's being the widest (19 px). */
+export const HEADING_CHROME = Object.freeze({ sortable: 58, arrow: 15, plain: 19 });
+/** The narrowest width at which each heading reads whole at rest: `measureText(text)` gives
+ * the width of its visible words (shortLabel, else label) in the heading font. `arrows`: the
+ * idle sort arrows show (a touch screen); `sortedKey`: the column sorted, whose arrow shows. */
+export function headingWidthFloors(columns, measureText, { arrows = true, sortedKey = null } = {}) {
+  return Object.fromEntries((columns || []).map(column => {
+    const text = Number(measureText(column.shortLabel || column.label || ''));
+    const chrome = !isDossierTableColumnSortable(column) ? HEADING_CHROME.plain
+      : HEADING_CHROME.sortable - (arrows || column.key === sortedKey ? 0 : HEADING_CHROME.arrow);
+    return [column.key, Number.isFinite(text) && text > 0 ? Math.ceil(text) + chrome : 0];
+  }));
+}
+/** The widths drawn: each saved width, never under the floor of its heading. */
+export function flooredColumnWidths(widths, floors = {}) {
+  return Object.fromEntries(Object.entries(widths || {}).map(([key, width]) => [key, Math.max(width, floors[key] || 0)]));
 }
 export function clampColumnWidth(column, value) {
   const { min, max, initial } = columnWidthBounds(column);
