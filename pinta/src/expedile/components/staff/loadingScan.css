@@ -78,9 +78,10 @@ html.dark .loading-button--primary:hover:not(:disabled) { background: #d6e6ee; }
 .loading-scan-row .loading-button { min-height: 48px; }
 /* The field's focus ring (3 px away) never touches the line under it. */
 .loading-scan-help { margin-top: 10px; }
-/* A phone keeps the bar short: the camera button shows its icon (its name is unchanged), and the help, which the
-   introduction above already gives, is read by screen readers only. */
-@media (max-width: 639px) {
+/* A phone keeps the bar short, held upright or sideways (a short screen, where the bar would leave the dossiers a
+   few lines): the camera button shows its icon (its name is unchanged), and the help, which the introduction above
+   already gives, is read by screen readers only. A tablet (768 px high or more) keeps the whole bar. */
+@media (max-width: 639px), (max-height: 540px) {
   .loading-camera-button { width: 48px; padding: 0; }
   .loading-camera-text, .loading-scan-help {
     position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
@@ -116,6 +117,10 @@ html.dark .loading-button--primary:hover:not(:disabled) { background: #d6e6ee; }
 /* Dossiers of the loading. A scanned dossier is brought just under the scan bar (its top margin, the bar's height,
    is set when it is scrolled to) and above the phone navigation. */
 .loading-scan { display: grid; gap: 16px; }
+/* « Prêts à charger (4) », « À débloquer (1) »: section labels (12 px uppercase, as « Scanner un colis »), never read
+   as one more dossier line. The last dossier's line already separates two groups. */
+.loading-group-title { font-size: .75rem; line-height: 1.3; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--text-secondary); }
+.loading-group + .loading-group .loading-group-title { padding-top: 8px; }
 .loading-dossier {
   display: grid; gap: 4px; margin: 0 -8px; padding: 12px 8px; border-bottom: 1px solid var(--border-subtle); border-radius: 8px;
   transition: background-color .2s ease-out, box-shadow .2s ease-out; scroll-margin-bottom: 120px;
@@ -126,6 +131,8 @@ html.dark .loading-button--primary:hover:not(:disabled) { background: #d6e6ee; }
 .loading-dossier[data-flash='info'] { background: var(--scan-info-bg); box-shadow: inset 4px 0 0 var(--scan-info-text); }
 .loading-dossier-check { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; min-height: 44px; font-size: 1rem; }
 .loading-dossier-check input { width: 22px; height: 22px; flex: none; }
+/* A box the person can tick: its whole line is pressed (set by LoadingScanPanel, without :has(), for Safari 14). */
+.loading-dossier-check[data-enabled='true'], .loading-dossier-check[data-enabled='true'] input { cursor: pointer; }
 .loading-dossier-name { min-width: 0; overflow-wrap: anywhere; }
 .loading-dossier-name strong { white-space: nowrap; }
 .loading-ready { display: inline-flex; align-items: center; gap: 4px; font-size: .875rem; font-weight: 700; color: var(--scan-success-text); }

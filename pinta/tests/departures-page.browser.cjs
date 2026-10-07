@@ -197,6 +197,15 @@ async function assertSeenAndFocused(f, locator, label) {
   assert.deepEqual(state, { focused: true, inView: true }, label);
 }
 const noWrite = f => assert.deepEqual(f.writes().map(request => request.path), []);
+/** Polls until `read()` returns the expected value (CI is slower than a laptop). */
+async function until(read, expected, label, timeout = 8000) {
+  const end = Date.now() + timeout;
+  for (;;) {
+    const value = await read();
+    try { assert.deepEqual(value, expected); return value; } catch (error) { if (Date.now() > end) { error.message = `${label}: ${error.message}`; throw error; } }
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+}
 
 /** What one device shows of the Paris times of the page and of the pro recap. */
 async function observeParisTime(f) {
@@ -476,6 +485,13 @@ async function main() {
       assert.equal(await review.getByRole('heading', { level: 2, name: 'Chargement de ENV-2026-099' }).evaluate(element => { const box = element.getBoundingClientRect(); return box.top >= 0 && box.bottom <= innerHeight; }), true, 'Loading review: its title in view');
       await review.getByText('2 colis préparés · 19,5 kg', { exact: true }).waitFor();
       await shot(f, `loading-review-${width}`);
+      // The card's button again, its loading open far above: that loading comes back into view, ready to scan
+      // (never a click without effect).
+      await load.scrollIntoViewIfNeeded();
+      await load.click();
+      await assertSeenAndFocused(f, review.getByLabel('Scanner un colis', { exact: true }), 'The card brings its open loading back');
+      assert.equal(await review.getByRole('heading', { level: 2, name: 'Chargement de ENV-2026-099' }).evaluate(element => { const box = element.getBoundingClientRect(); return box.top >= 0 && box.bottom <= innerHeight; }), true, 'Its title in view again');
+      assert.equal(await f.page.getByRole('region', { name: 'Vérifier le chargement', exact: true }).count(), 1, 'The same loading, once');
       await review.getByRole('button', { name: 'Fermer le chargement', exact: true }).click();
       await review.waitFor({ state: 'detached' });
       await assertSeenAndFocused(f, load, 'Closing gives the focus back to the card');
@@ -582,6 +598,76 @@ async function main() {
       }
       await shot(f, 'documents-open-light-1440');
     });
+    // Each action shows its progress on the button clicked, alone: never on « Actualiser » for another action, never
+    // on the same document of another departure.
+    await scenario('each-action-shows-its-progress-on-its-own-button', async f => {
+      await openPage(f, '?vue=partis');
+      const progress = locator => locator.evaluate(element => [element.getAttribute('aria-busy'), Boolean(element.querySelector('.animate-spin'))]);
+      const idle = [null, false], working = ['true', true];
+      const refresh = page(f).getByRole('button', { name: 'Actualiser', exact: true });
+      const [left, arrived] = [card(f, 'ENV-2026-034'), card(f, 'ENV-2026-028')];
+      const manifestOf = target => target.getByRole('button', { name: 'Voir le manifeste', exact: true });
+      // A reading held until the button is looked at.
+      const hold = async pattern => {
+        let release; const held = new Promise(resolve => { release = resolve; });
+        let holding = true;
+        await f.context.route(pattern, async route => { if (holding && route.request().method() !== 'OPTIONS') await held; return route.fallback(); });
+        return () => { holding = false; release(); };
+      };
+      // « Actualiser »: its icon turns while the departures are read.
+      let release = await hold('**/rest/v1/envois*');
+      await refresh.click();
+      await until(() => progress(refresh), working, 'Actualiser turns');
+      assert.deepEqual(await progress(manifestOf(left)), idle);
+      await shot(f, 'progress-refresh-1440');
+      release();
+      await until(() => progress(refresh), idle, 'Actualiser done');
+      // « Voir le manifeste »: on its card only.
+      release = await hold('**/rest/v1/rpc/get_departure_manifest');
+      await manifestOf(left).click();
+      await until(() => progress(manifestOf(left)), working, 'Voir le manifeste turns');
+      assert.deepEqual([await progress(manifestOf(arrived)), await progress(refresh)], [idle, idle]);
+      release();
+      const manifest = f.page.getByRole('region', { name: 'Manifeste confirmé', exact: true });
+      await manifest.waitFor();
+      await manifest.getByRole('button', { name: 'Fermer le manifeste', exact: true }).click();
+      // « Manifeste Excel »: that document of that departure, not the same one of another departure.
+      for (const target of [left, arrived]) await target.locator('summary').filter({ hasText: 'Documents du départ' }).click();
+      const excelOf = target => target.getByRole('button', { name: 'Manifeste Excel', exact: true });
+      release = await hold('**/rest/v1/rpc/get_departure_manifest');
+      const download = f.page.waitForEvent('download');
+      await excelOf(left).click();
+      await until(() => progress(excelOf(left)), working, 'Manifeste Excel turns');
+      assert.deepEqual([await progress(excelOf(arrived)), await progress(left.getByRole('button', { name: 'Données douane', exact: true })), await progress(refresh)], [idle, idle, idle]);
+      await left.screenshot({ path: path.join(output, 'progress-export-1440.png') });
+      release();
+      assert.equal((await download).suggestedFilename(), 'manifeste-ENV-2026-034.xlsx');
+      await until(() => progress(excelOf(left)), idle, 'Export done');
+      noWrite(f);
+    });
+    // Secondary buttons take the surface colour under the pointer; a primary keeps its own fill (never a light fill
+    // under its white text).
+    for (const theme of ['light', 'dark']) await scenario(`secondary-buttons-answer-the-pointer-primaries-keep-their-fill-${theme}`, async f => {
+      await openPage(f, '?vue=partis');
+      const [surface, primary] = theme === 'light' ? ['rgb(244, 240, 230)', 'rgb(27, 58, 75)'] : ['rgb(37, 34, 30)', 'rgb(214, 230, 238)'];
+      const left = card(f, 'ENV-2026-034');
+      await left.locator('summary').filter({ hasText: 'Documents du départ' }).click();
+      const navigation = page(f).getByRole('navigation', { name: 'État des départs' });
+      for (const [label, button, expected] of [
+        ['Actualiser', page(f).getByRole('button', { name: 'Actualiser', exact: true }), surface],
+        ['À préparer (a view not shown)', navigation.getByRole('button', { name: 'À préparer', exact: true }), surface],
+        ['Voir le manifeste', left.getByRole('button', { name: 'Voir le manifeste', exact: true }), surface],
+        ['Manifeste Excel', left.getByRole('button', { name: 'Manifeste Excel', exact: true }), surface],
+        ['Facture commerciale en PDF', left.getByRole('button', { name: 'Facture commerciale en PDF', exact: true }), surface],
+        ['Partis (the view shown)', navigation.getByRole('button', { name: 'Partis', exact: true }), primary],
+        ['Planifier un départ', page(f).getByRole('button', { name: 'Planifier un départ', exact: true }), primary],
+      ]) {
+        await button.hover();
+        await until(() => button.evaluate(element => getComputedStyle(element).backgroundColor), expected, `${label} under the pointer`);
+      }
+      await page(f).getByRole('heading', { level: 1, name: 'Départs' }).hover();
+      await until(() => page(f).getByRole('button', { name: 'Actualiser', exact: true }).evaluate(element => getComputedStyle(element).backgroundColor), 'rgba(0, 0, 0, 0)', 'Back to transparent');
+    }, { theme });
     await scenario('documents-disclosure-hidden-without-export-permission', async f => {
       await openPage(f, '?vue=partis');
       const left = card(f, 'ENV-2026-034');

@@ -7,7 +7,8 @@ import { dossierTaskUrl } from '../../domain/dossierTasks';
 import { downloadCommercialInvoice, loadingCommercialInvoice, manifestCommercialInvoice } from '../../services/departures';
 import './departureDocuments.css';
 
-const BUTTON = 'min-h-11 inline-flex items-center justify-center gap-2 rounded-xl border border-gray-300 px-3 text-sm font-semibold transition-all duration-200 ease-out active:scale-[0.98] disabled:opacity-50 disabled:active:scale-100';
+// Secondary buttons only (as on the « Départs » page): the surface colour under the pointer, in both themes.
+const BUTTON = 'min-h-11 inline-flex items-center justify-center gap-2 rounded-xl border border-gray-300 px-3 text-sm font-semibold transition-all duration-200 ease-out active:scale-[0.98] hover:bg-[var(--bg-surface)] disabled:opacity-50 disabled:active:scale-100 disabled:hover:bg-transparent';
 const FORMATS = [['pdf', 'PDF', FileText], ['xlsx', 'Excel', FileSpreadsheet]];
 const EXCLUDED_ACTIONS = { paiement: 'Vérifier le paiement', preparation: 'Vérifier la préparation' };
 // The dossier steps that need a right to be opened, as the dossier page decides
@@ -54,13 +55,15 @@ function DossierAccess({ group, can, returnTo }) {
  * built from its dossiers ready to load (read again from the server at each export), dated
  * and named as such (« …-avant-depart »); the definitive one comes from the manifest. Once it
  * has left: the manifest spreadsheets (`exports`, run by the page through `onExport`) and the
- * commercial invoice of the frozen manifest. A blocking point (an HS code missing…) is said
- * inline with the dossier to open when this person can open it, or who corrects it, and
- * nothing is downloaded; a download is its own feedback. The page keys it by the departure's
+ * commercial invoice of the frozen manifest. `running` is the page's action under way: for
+ * `export:<departure>:<type>`, the spreadsheet button clicked on this card shows its progress.
+ * A blocking point (an HS code missing…) is said inline with the dossier to open when this
+ * person can open it, or who corrects it, and nothing is downloaded; the button clicked shows
+ * its progress, then the download is its own feedback. The page keys it by the departure's
  * state: a result read before the departure (its « Non inclus » list) never stays under the
  * manifest once the departure has left.
  */
-export default function DepartureDocuments({ envoi, departed = false, dossierCount = 0, exports = [], busy = false, onExport }) {
+export default function DepartureDocuments({ envoi, departed = false, dossierCount = 0, exports = [], busy = false, running = null, onExport }) {
   const { can, clients, categories } = useApp();
   const location = useLocation();
   const [state, setState] = useState({ working: null, invoice: null, failure: '' });
@@ -96,13 +99,18 @@ export default function DepartureDocuments({ envoi, departed = false, dossierCou
   return <details className="departures-documents">
     <summary>Documents du départ</summary>
     <div className="departure-documents">
-      {documents.length > 0 && <div className="flex flex-wrap items-start gap-2">{documents.map(([type, label]) => <button type="button" key={type} disabled={disabled} className={BUTTON} onClick={() => onExport(type)}><Download size={15} aria-hidden="true" />{label}</button>)}</div>}
+      {documents.length > 0 && <div className="flex flex-wrap items-start gap-2">{documents.map(([type, label]) => {
+        const exporting = running === `export:${envoi.id}:${type}`;
+        return <button type="button" key={type} disabled={disabled} aria-busy={exporting || undefined} className={BUTTON} onClick={() => onExport(type)}>
+          {exporting ? <Loader2 size={15} aria-hidden="true" className="animate-spin" /> : <Download size={15} aria-hidden="true" />}{label}
+        </button>;
+      })}</div>}
       {showInvoice && <section aria-labelledby={titleId} className="departure-invoice">
         <h3 id={titleId} className="departure-invoice-title">Facture commerciale</h3>
         <p className="departure-invoice-help">{departed
           ? 'Depuis le manifeste confirmé : chaque article avec son code SH, sa valeur et sa part du transport.'
           : 'Dossiers prêts à charger : chaque article avec son code SH, sa valeur et sa part du transport.'}</p>
-        <div className="flex flex-wrap gap-2">{FORMATS.map(([format, label, Icon]) => <button type="button" key={format} disabled={disabled} className={BUTTON} aria-describedby={departed ? undefined : basisId} onClick={() => generate(format)}>
+        <div className="flex flex-wrap gap-2">{FORMATS.map(([format, label, Icon]) => <button type="button" key={format} disabled={disabled} aria-busy={working === format || undefined} className={BUTTON} aria-describedby={departed ? undefined : basisId} onClick={() => generate(format)}>
           {working === format ? <Loader2 size={15} aria-hidden="true" className="animate-spin" /> : <Icon size={15} aria-hidden="true" />}
           <span className="sr-only">Facture commerciale en </span>{label}
         </button>)}</div>

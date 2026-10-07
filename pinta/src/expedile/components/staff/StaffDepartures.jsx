@@ -25,9 +25,12 @@ import LoadingScanPanel from './LoadingScanPanel';
 import './staffDepartures.css';
 
 const FIELD = 'mt-1 min-h-11 w-full rounded-xl border-2 border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 transition-all duration-200 ease-out focus:border-blue-400 aria-[invalid=true]:border-red-500';
-const BUTTON = 'min-h-11 inline-flex items-center justify-center gap-2 rounded-xl border border-gray-300 px-3 text-sm font-semibold transition-all duration-200 ease-out active:scale-[0.98] disabled:opacity-50 disabled:active:scale-100';
-const PRIMARY = `${BUTTON} brand-bg text-white hover:-translate-y-px disabled:hover:translate-y-0`;
-const SEARCH_FIELD = 'mt-1 min-h-11 w-full rounded-xl border border-gray-300 bg-white px-3 text-sm text-gray-800';
+const BASE = 'min-h-11 inline-flex items-center justify-center gap-2 rounded-xl border border-gray-300 px-3 text-sm font-semibold transition-all duration-200 ease-out active:scale-[0.98] disabled:opacity-50 disabled:active:scale-100';
+// A secondary button takes the surface colour under the pointer (as .loading-button), in both themes; a primary
+// keeps its own fill and rises a pixel, never the secondary's light fill under its white text.
+const BUTTON = `${BASE} hover:bg-[var(--bg-surface)] disabled:hover:bg-transparent`;
+const PRIMARY = `${BASE} brand-bg text-white hover:-translate-y-px disabled:hover:translate-y-0`;
+const REASON_MISSING = 'Indiquez le motif du report des autres dossiers.';
 // The checks of every device are read again this often while the loading is open on a visible page.
 const CHECKS_REFRESH_MS = 5000;
 const isLegacySingle = (colis) => !colis.finalPackages?.length && !colis.outgoingParcelCount && [colis.finL,colis.finW,colis.finH,colis.finP].every((value) => Number(value) > 0);
@@ -123,8 +126,13 @@ export default function StaffDepartures({ embedded = false }) {
   const [editing, setEditing] = useState(null);
   const [editErrors, setEditErrors] = useState({});
   const [busy, setBusy] = useState(false);
+  // The control whose action runs (« refresh », « confirm », « reload », `export:<departure>:<type>`…): it alone shows
+  // the progress, every other action waiting disabled.
+  const [running, setRunning] = useState(null);
   // One message per place: the page, the planning form, the edit form, the loading review, or a card.
   const [errors, setErrors] = useState({});
+  // The reason of the deferral asked for before the confirmation: said under its field, which takes the focus.
+  const [reasonError, setReasonError] = useState('');
   const [assigning, setAssigning] = useState(null);
   const [assignResults, setAssignResults] = useState({});
   const lock = useRef(false);
@@ -135,6 +143,9 @@ export default function StaffDepartures({ embedded = false }) {
   const planDate = useRef(null);
   const editDate = useRef(null);
   const reviewHeading = useRef(null);
+  const reasonField = useRef(null);
+  // The refusal of the loading review (the server's words): it takes the focus that its disabled button lost.
+  const reviewError = useRef(null);
   const scanInput = useRef(null);
   // The loading panel's handling of a scanned code (LoadingScanPanel fills it).
   const scanCode = useRef(null);
@@ -151,12 +162,18 @@ export default function StaffDepartures({ embedded = false }) {
   const pendingFocus = useRef(null);
 
   const setScopeError = (scope, message) => setErrors(previous => ({ ...previous, [scope]: message }));
-  const run = async (action, scope = 'page') => {
+  // `key` names the control that started the action (its spinner and aria-busy), the scope by default.
+  const run = async (action, scope = 'page', key = scope) => {
     if (lock.current) return false;
-    lock.current = true; setBusy(true); setScopeError(scope, '');
+    lock.current = true; setBusy(true); setRunning(key); setScopeError(scope, '');
     try { await action(); return true; }
-    catch (issue) { setScopeError(scope, issue?.message || 'Opération impossible.'); return false; }
-    finally { lock.current = false; setBusy(false); }
+    catch (issue) {
+      setScopeError(scope, issue?.message || 'Opération impossible.');
+      // The clicked button was disabled meanwhile, its focus lost: the refusal takes it, read at once.
+      if (scope === 'review') pendingFocus.current = () => reviewError.current;
+      return false;
+    }
+    finally { lock.current = false; setBusy(false); setRunning(null); }
   };
   const refresh = async () => { const rows = await sb.fetchEnvois(); setEnvois(rows); return rows; };
   const mergeEnvois = saved => setEnvois(previous => [...previous.filter(item => !saved.some(row => row.id === item.id)), ...saved]
@@ -285,22 +302,43 @@ export default function StaffDepartures({ embedded = false }) {
     // Redone from the start: once checked again, the dossier is ticked again.
     setAside(colisId, false);
   };
+  /** The loading open in place, its title in view and its scan field ready (as when it opens). */
+  const showReview = () => {
+    reviewHeading.current?.scrollIntoView({ block: 'start' });
+    (scanInput.current || reviewHeading.current)?.focus({ preventScroll: true });
+  };
   const openReview = (envoi, event) => {
     opener.current = event.currentTarget;
+    // Already open (far above the card): the same button brings it back, never a click without effect.
+    if (review?.envoi.id === envoi.id) { showReview(); return; }
     if (loadingId === envoi.id && !review) { run(() => startReview(envoi), cardScope(envoi.id)); return; }
     setParams(previous => { const next = new URLSearchParams(previous); next.set('loading', envoi.id); return next; });
   };
   const closeReview = () => {
-    setReview(null); setScopeError('review', ''); setParams(withoutParam('loading'));
+    setReview(null); setScopeError('review', ''); setReasonError(''); setParams(withoutParam('loading'));
     pendingFocus.current = opener.current;
   };
   const reviewChecks = review && checks.envoiId === review.envoi.id ? checks.rows : [];
   const reviewLoaded = review ? loadedDossiers(review.dossiers, reviewChecks, excluded) : [];
+  // Every dossier ticked: nothing is deferred, the reason is no longer asked for.
+  const nothingDeferred = Boolean(review) && reviewLoaded.length === review.dossiers.length;
+  /** « Confirmer le départ »: the reason of the deferral first, asked under its field; then the server's check. */
+  const requestConfirm = () => {
+    if (!nothingDeferred && !deferredReason.trim()) {
+      // The field takes the focus once it says why (aria-invalid, its error), read together by a screen reader;
+      // already said, at once (no new render would apply a pending focus).
+      if (reasonError) reasonField.current?.focus();
+      else { setReasonError(REASON_MISSING); pendingFocus.current = reasonField.current; }
+      return;
+    }
+    run(confirm, 'review', 'confirm');
+  };
   const confirm = async () => {
     if (scanPending > 0) throw new Error('Des contrôles sont en cours d’enregistrement : attendez leur fin, puis confirmez.');
     const loaded = reviewLoaded.map((item) => isLegacySingle(item) ? { ...item, outgoingParcelCount: 1 } : item);
     if (!loaded.length) throw new Error('Aucune expédition n’est prête : scannez ou comptez les colis des dossiers embarqués.');
-    if (loaded.length < review.dossiers.length && !deferredReason.trim()) throw new Error('Indiquez le motif du report des autres dossiers.');
+    // Asked under the field before (requestConfirm); kept for a selection changed meanwhile.
+    if (loaded.length < review.dossiers.length && !deferredReason.trim()) throw new Error(REASON_MISSING);
     let saved;
     try { saved = await confirmDeparture(review.envoi, loaded, deferredReason); }
     catch (issue) {
@@ -319,7 +357,7 @@ export default function StaffDepartures({ embedded = false }) {
     setEnvois((previous) => previous.map((item) => item.id === saved.id ? saved : item));
     setReview(null); setParams(withoutParam('loading'));
     setSelection(previous => { const next = { ...previous }; delete next[id]; return next; });
-    flash('Départ confirmé. Le manifeste est conservé.');
+    flash({ msg: 'Départ confirmé. Le manifeste est conservé.', type: 'success' });
     // Confirmed by the server: a failed reading afterwards never hides it.
     try { await Promise.all([refresh(), ...affected.map((item) => refreshColis(item.id)), refreshWork()]); }
     catch (issue) { setScopeError('page', `Départ confirmé et enregistré. Actualisation à réessayer : ${issue.message}`); }
@@ -328,7 +366,7 @@ export default function StaffDepartures({ embedded = false }) {
   };
   const openManifest = (envoi, event) => {
     opener.current = event.currentTarget;
-    run(async () => setManifest(await departureManifest(envoi.id)), cardScope(envoi.id));
+    run(async () => setManifest(await departureManifest(envoi.id)), cardScope(envoi.id), `manifest:${envoi.id}`);
   };
   const closeManifest = () => { setManifest(null); pendingFocus.current = opener.current; };
 
@@ -403,11 +441,13 @@ export default function StaffDepartures({ embedded = false }) {
   // The panel opened from a card far below comes into view, the scan field ready for the first label.
   const reviewKey = review?.envoi.id || null;
   useEffect(() => {
+    setReasonError('');
     if (!reviewKey) return;
     unknownChecked.current = new Set();
-    reviewHeading.current?.scrollIntoView({ block: 'start' });
-    (scanInput.current || reviewHeading.current)?.focus({ preventScroll: true });
+    showReview();
   }, [reviewKey]);
+  // The reason asked for no longer applies once every dossier is ticked.
+  useEffect(() => { if (nothingDeferred) setReasonError(''); }, [nothingDeferred]);
   // Shared progress: the checks of every device, every 5 s while the loading is open and the page visible, and
   // as soon as the page comes back into view.
   useEffect(() => {
@@ -445,8 +485,9 @@ export default function StaffDepartures({ embedded = false }) {
         <p className="mt-1 text-sm text-gray-600">Planifier, vérifier le chargement et retrouver les manifestes confirmés.</p>
       </div>
       <div className="flex flex-wrap gap-2">
-        <button type="button" className={BUTTON} disabled={busy} onClick={() => (loadFailed ? retryLoad() : run(async () => { await refresh(); setAssignResults({}); }))}>
-          <RefreshCw size={16} aria-hidden="true" className={busy ? 'animate-spin' : ''} />Actualiser
+        <button type="button" className={BUTTON} disabled={busy} aria-busy={running === 'refresh' || undefined} onClick={() => (loadFailed ? retryLoad() : run(async () => { await refresh(); setAssignResults({}); }, 'page', 'refresh'))}>
+          {/* The spinner of every action under way (still readable with reduced motion, where nothing turns). */}
+          {running === 'refresh' ? <Loader2 size={16} aria-hidden="true" className="animate-spin" /> : <RefreshCw size={16} aria-hidden="true" />}Actualiser
         </button>
         {canPlan && <button ref={planButton} type="button" className={PRIMARY} disabled={!sbReady} aria-expanded={creating} aria-controls={creating ? 'departure-planning' : undefined} onClick={() => (creating ? closePlanning() : openPlanning())}>
           <CalendarPlus size={16} aria-hidden="true" />Planifier un départ
@@ -476,7 +517,7 @@ export default function StaffDepartures({ embedded = false }) {
         <p className="text-sm text-gray-600">Pour une série, la même heure de Paris est reprise chaque semaine ; une date déjà planifiée pour cette destination est conservée.</p>
         {errors.plan && <p role="alert" className="departures-error"><AlertTriangle size={16} aria-hidden="true" />{errors.plan}</p>}
         <div className="flex flex-wrap gap-2">
-          <button type="submit" className={PRIMARY}>{busy ? <Loader2 size={16} aria-hidden="true" className="animate-spin" /> : <Check size={16} aria-hidden="true" />}Enregistrer le planning</button>
+          <button type="submit" className={PRIMARY} aria-busy={running === 'plan' || undefined}>{running === 'plan' ? <Loader2 size={16} aria-hidden="true" className="animate-spin" /> : <Check size={16} aria-hidden="true" />}Enregistrer le planning</button>
           <button type="button" className={BUTTON} onClick={closePlanning}>Annuler</button>
         </div>
       </fieldset>
@@ -494,14 +535,29 @@ export default function StaffDepartures({ embedded = false }) {
         onRefreshChecks={refreshChecks} onReload={reloadReview} onPendingChange={setScanPending}
       />
       {reviewCanConfirm ? <>
-        <label className="block text-sm text-gray-700">Motif du report des dossiers non cochés<textarea value={deferredReason} onChange={event => { setDeferredReason(event.target.value); if (errors.review) setScopeError('review', ''); }} onKeyDown={reasonKeyDown} className={`${SEARCH_FIELD} py-2`} maxLength={500} /></label>
+        {/* The form pattern: its label, the field, then its error (red, under it) or its help. */}
+        <div>
+          <label htmlFor="departure-deferral-reason" className="departures-label">Motif du report des dossiers non cochés</label>
+          <textarea
+            ref={reasonField} id="departure-deferral-reason" value={deferredReason} maxLength={500} className={FIELD}
+            onChange={event => { setDeferredReason(event.target.value); setReasonError(''); if (errors.review) setScopeError('review', ''); }} onKeyDown={reasonKeyDown}
+            aria-invalid={reasonError ? true : undefined} aria-describedby={reasonError ? 'departure-deferral-reason-error' : 'departure-deferral-reason-help'}
+          />
+          {reasonError
+            ? <p id="departure-deferral-reason-error" role="alert" className="departures-field-error">{reasonError}</p>
+            : <p id="departure-deferral-reason-help" className="departures-help">Obligatoire quand des dossiers restent non cochés.</p>}
+        </div>
         <p className="text-sm font-semibold">{plural(reviewLoaded.length, 'expédition cochée', 'expéditions cochées')} · {review.dossiers.length - reviewLoaded.length} à reporter.{scanPending > 0 ? ' Contrôles en cours d’enregistrement…' : ''}</p>
       </> : <p className="departures-reason flex items-start gap-2"><Info size={16} aria-hidden="true" className="mt-0.5 shrink-0" />Vos contrôles sont enregistrés pour toute l’équipe. La confirmation du départ est réservée à la direction et aux personnes autorisées à modifier les départs et à expédier les colis : prévenez-les quand tous les colis sont vérifiés.</p>}
-      {errors.review && <p role="alert" className="departures-error"><AlertTriangle size={16} aria-hidden="true" />{errors.review}</p>}
+      {errors.review && <p ref={reviewError} tabIndex={-1} role="alert" className="departures-error"><AlertTriangle size={16} aria-hidden="true" />{errors.review}</p>}
       <div className="flex flex-wrap gap-2">
-        {reviewCanConfirm && <button type="button" disabled={busy || scanPending > 0 || !reviewLoaded.length} onClick={() => run(confirm, 'review')} className={PRIMARY}><Check size={16} aria-hidden="true" />Confirmer le départ de {plural(reviewLoaded.length, 'expédition')}</button>}
+        {reviewCanConfirm && <button type="button" disabled={busy || scanPending > 0 || !reviewLoaded.length} aria-busy={running === 'confirm' || undefined} onClick={requestConfirm} className={PRIMARY}>
+          {running === 'confirm' ? <Loader2 size={16} aria-hidden="true" className="animate-spin" /> : <Check size={16} aria-hidden="true" />}Confirmer le départ de {plural(reviewLoaded.length, 'expédition')}
+        </button>}
         <button type="button" disabled={busy} className={BUTTON} onClick={closeReview}>Fermer le chargement</button>
-        <button type="button" className={BUTTON} disabled={busy} onClick={() => run(reloadReview, 'review')}>Actualiser le chargement</button>
+        <button type="button" className={BUTTON} disabled={busy} aria-busy={running === 'reload' || undefined} onClick={() => run(reloadReview, 'review', 'reload')}>
+          {running === 'reload' && <Loader2 size={16} aria-hidden="true" className="animate-spin" />}Actualiser le chargement
+        </button>
       </div>
     </section>}
 
@@ -583,7 +639,7 @@ export default function StaffDepartures({ embedded = false }) {
           </div>
           {errors.edit && <p role="alert" className="departures-error"><AlertTriangle size={16} aria-hidden="true" />{errors.edit}</p>}
           <div className="flex flex-wrap gap-2">
-            <button type="submit" className={PRIMARY}>{busy ? <Loader2 size={16} aria-hidden="true" className="animate-spin" /> : <Check size={16} aria-hidden="true" />}Enregistrer le départ</button>
+            <button type="submit" className={PRIMARY} aria-busy={running === 'edit' || undefined}>{running === 'edit' ? <Loader2 size={16} aria-hidden="true" className="animate-spin" /> : <Check size={16} aria-hidden="true" />}Enregistrer le départ</button>
             <button type="button" className={BUTTON} onClick={cancelEditing}>Annuler</button>
           </div>
         </fieldset>
@@ -607,11 +663,12 @@ export default function StaffDepartures({ embedded = false }) {
         {canCheck && (loadable.length
           ? <button type="button" data-action="loading" disabled={busy} className={PRIMARY} onClick={(event) => openReview(envoi, event)}>{busy && loadingId === envoi.id && review?.envoi.id !== envoi.id && <Loader2 size={16} aria-hidden="true" className="animate-spin" />}{loadLabel}</button>
           : <><button type="button" data-action="loading" disabled className={BUTTON} aria-describedby={`departure-no-load-${envoi.id}`}>{loadLabel}</button><span id={`departure-no-load-${envoi.id}`} className="departures-reason">Aucun dossier affecté à ce départ</span></>)}
-        {departed && <button type="button" data-action="manifest" disabled={busy} className={BUTTON} onClick={(event) => openManifest(envoi, event)}>Voir le manifeste</button>}
+        {departed && <button type="button" data-action="manifest" disabled={busy} aria-busy={running === `manifest:${envoi.id}` || undefined} className={BUTTON} onClick={(event) => openManifest(envoi, event)}>{running === `manifest:${envoi.id}` && <Loader2 size={16} aria-hidden="true" className="animate-spin" />}Voir le manifeste</button>}
         {departed && canModify && envoi.statut === 'parti' && <button key="arrive" type="button" data-action="arrive" disabled={busy} className={BUTTON} onClick={() => confirmStep(envoi, 'arrive')}>Confirmer l’arrivée</button>}
         {departed && canModify && envoi.statut === 'arrive' && <button key="archive" type="button" data-action="archive" disabled={busy} className={BUTTON} onClick={() => confirmStep(envoi, 'archive')}><Archive size={16} aria-hidden="true" />Archiver ce départ</button>}
       </div>
-      <DepartureDocuments key={departed ? 'departed' : 'loading'} envoi={envoi} departed={departed} dossierCount={loadable.length} exports={exports} busy={busy} onExport={type => run(() => exportDeparture(envoi.id, type), scope)} />
+      {/* An export is keyed by its departure and its type: only the button clicked on this card shows its progress. */}
+      <DepartureDocuments key={departed ? 'departed' : 'loading'} envoi={envoi} departed={departed} dossierCount={loadable.length} exports={exports} busy={busy} running={running} onExport={type => run(() => exportDeparture(envoi.id, type), scope, `export:${envoi.id}:${type}`)} />
       {errors[scope] && <p role="alert" className="departures-error"><AlertTriangle size={16} aria-hidden="true" />{errors[scope]}</p>}
     </article>;
   }

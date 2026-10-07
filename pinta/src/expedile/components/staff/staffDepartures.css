@@ -26,6 +26,11 @@ html.dark .departures-page {
 .departures-label { display: block; font-size: .75rem; line-height: 1.3; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--text-secondary); }
 .departures-help { margin-top: 2px; font-size: .8125rem; line-height: 1.4; color: var(--text-secondary); }
 .departures-field-error { margin-top: 4px; font-size: .875rem; line-height: 1.4; font-weight: 600; color: var(--departures-error-text); }
+/* A refused field keeps its red edge in dark mode too (brand.css gives every .border-gray-200 the subtle edge, with
+   !important); focused, it takes the focus colour, as in light. */
+html.dark .departures-page input[aria-invalid='true']:not(:focus),
+html.dark .departures-page select[aria-invalid='true']:not(:focus),
+html.dark .departures-page textarea[aria-invalid='true']:not(:focus) { border-color: #e59a9a !important; }
 
 /* A panel opened from a card far below scrolls to the top of the page with some air. */
 .departures-panel-heading { scroll-margin-top: 16px; }

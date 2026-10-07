@@ -320,6 +320,37 @@ export default function LoadingScanPanel({
     scanRef.current = (text, line) => { primeAudio(); enqueueTyped(text, line); };
     return () => { scanRef.current = null; };
   });
+  // A dossier's control reached from the keyboard (Tab, Shift+Tab, a dialog giving its focus back) is never hidden
+  // under the scan bar: the browser only brings it inside the scroller, whose top the bar covers. It lands just under
+  // the bar's full height (near the end of the list the bar is pushed partly up, and comes back whole once the list
+  // scrolls). After a press of the pointer (as for :focus-visible) nothing moves: what was pressed was in view, and
+  // the list moving between the press and the release would lose the click.
+  useEffect(() => {
+    const bar = barRef.current;
+    const root = bar && bar.parentElement;
+    if (!root) return undefined;
+    let pointer = false;
+    const pressed = () => { pointer = true; };
+    const typed = () => { pointer = false; };
+    const focused = (event) => {
+      const target = event.target;
+      if (pointer || !(target instanceof Element) || bar.contains(target)) return;
+      let scroller = target.parentElement;
+      while (scroller && scroller !== document.body && !(/(auto|scroll)/.test(getComputedStyle(scroller).overflowY) && scroller.scrollHeight > scroller.clientHeight)) scroller = scroller.parentElement;
+      if (!scroller || scroller === document.body) scroller = document.scrollingElement || document.documentElement;
+      const top = scroller === document.scrollingElement ? 0 : scroller.getBoundingClientRect().top;
+      const covered = top + bar.offsetHeight + 12 - target.getBoundingClientRect().top;
+      if (covered > 0) scroller.scrollBy({ top: -covered });
+    };
+    document.addEventListener('pointerdown', pressed, true);
+    document.addEventListener('keydown', typed, true);
+    root.addEventListener('focusin', focused);
+    return () => {
+      document.removeEventListener('pointerdown', pressed, true);
+      document.removeEventListener('keydown', typed, true);
+      root.removeEventListener('focusin', focused);
+    };
+  }, []);
   // After a count, the field takes the focus back once the dialog has given it to its opener.
   useEffect(() => {
     if (counting || !focusScan.current) return;
@@ -386,9 +417,10 @@ export default function LoadingScanPanel({
     const whyId = `loading-why-${item.id}`;
     const line = checkedByLine(control, { now, team: teamUsers });
     const name = <span className="loading-dossier-name"><strong>{item.ref}</strong> · {clients.find((client) => client.id === item.clientId)?.nom}</span>;
+    const locked = busy || !readiness.eligible || !control.complete;
     return <article key={item.id} data-loading-dossier={item.id} data-flash={flash && flash.id === item.id ? flash.tone : undefined} className="loading-dossier">
       {canConfirm
-        ? <label className="loading-dossier-check"><input type="checkbox" checked={ticked} disabled={busy || !readiness.eligible || !control.complete} aria-describedby={why ? whyId : undefined} onChange={(event) => onToggle(item.id, event.target.checked)} />{name}</label>
+        ? <label className="loading-dossier-check" data-enabled={locked ? undefined : 'true'}><input type="checkbox" checked={ticked} disabled={locked} aria-describedby={why ? whyId : undefined} onChange={(event) => onToggle(item.id, event.target.checked)} />{name}</label>
         : <p className="loading-dossier-check">{name}{ticked && <span className="loading-ready"><CheckCircle size={16} aria-hidden="true" />Prête à partir</span>}</p>}
       {readiness.eligible && <p className="text-sm text-gray-600">{preparedSummary(readiness.count, readiness.weights?.realWeight)}{readiness.legacySingle ? ' · Ancien dossier : un seul colis physique attendu.' : ''}</p>}
       {control.expected > 0
@@ -437,7 +469,7 @@ export default function LoadingScanPanel({
     {GROUPS.map(([ready, label]) => {
       const rows = dossiers.filter((item) => departureReadiness(item).eligible === ready);
       return <div key={label} className="loading-group">
-        <h3 className="loading-group-title font-semibold">{label} ({rows.length})</h3>
+        <h3 className="loading-group-title">{label} ({rows.length})</h3>
         {rows.map(renderDossier)}
         {!rows.length && <p className="py-2 text-sm text-gray-600">Aucun dossier dans ce groupe.</p>}
       </div>;

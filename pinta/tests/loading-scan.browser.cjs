@@ -199,6 +199,10 @@ async function main() {
     await scenario('scanner-codes-in-a-row-and-every-answer', async f => {
       await openLoading(f);
       assert.equal(normalize(await review(f).locator('.loading-totals').innerText()), 'Colis vérifiés 0/8 · Expéditions prêtes 0/5');
+      // The groups are titled as sections (the label of « Scanner un colis »), never read as one more dossier line.
+      const label = await review(f).locator('label.loading-label').evaluate(element => { const style = getComputedStyle(element); return [style.fontSize, style.fontWeight, style.textTransform, style.letterSpacing, style.color]; });
+      assert.deepEqual(await review(f).getByRole('heading', { level: 3 }).evaluateAll(titles => titles.map(title => { const style = getComputedStyle(title); return [title.textContent, style.fontSize, style.fontWeight, style.textTransform, style.letterSpacing, style.color]; })),
+        [['Prêts à charger (4)', ...label], ['À débloquer (1)', ...label]]);
       // Two labels in a row, as fast as a scanner types: two checks, never one concatenated code.
       await scan(f, 'EXP-2YE537-1-2'); await scan(f, 'EXP-4KM2PQ-1-1');
       await until(() => [checksOf(f, D.two), checksOf(f, D.one)], [[[1, 2, 'scan']], [[1, 1, 'scan']]], 'Both labels recorded');
@@ -211,6 +215,10 @@ async function main() {
       await until(() => review(f).getByRole('checkbox', { name: /EXP-4KM2PQ/ }).isChecked(), true, 'A dossier whose parcels are all checked is ticked automatically');
       assert.equal(await review(f).getByRole('checkbox', { name: /EXP-2YE537/ }).isChecked(), false);
       assert.equal(await review(f).getByRole('checkbox', { name: /EXP-2YE537/ }).isDisabled(), true, 'A dossier half checked cannot be ticked');
+      // The pointer says which lines can be ticked: the line and its box, once the box is free.
+      const cursors = name => review(f).getByRole('checkbox', { name }).evaluate(box => [getComputedStyle(box.closest('label')).cursor, getComputedStyle(box).cursor]);
+      assert.deepEqual(await cursors(/EXP-4KM2PQ/), ['pointer', 'pointer'], 'A box that can be ticked');
+      assert.deepEqual(await cursors(/EXP-2YE537/), ['default', 'default'], 'A box that cannot');
       assert.equal(normalize(await dossierRow(f, D.two).locator('.loading-progress').innerText()), 'Colis vérifiés 1/2 Colis 1 : vérifié Colis 2 : à vérifier');
       assert.equal(normalize(await dossierRow(f, D.one).locator('.loading-checked-by').innerText()), 'Vérifié par Madly à 14 h 32');
       assert.equal(normalize(await review(f).locator('.loading-totals').innerText()), 'Colis vérifiés 2/8 · Expéditions prêtes 1/5');
@@ -408,20 +416,53 @@ async function main() {
       assert.equal(await review(f).getByRole('checkbox', { name: /EXP-4KM2PQ/ }).isChecked(), false, 'Set aside, still');
       await review(f).getByRole('checkbox', { name: /EXP-4KM2PQ/ }).check();
       await review(f).getByRole('checkbox', { name: /EXP-7RT5WQ/ }).evaluate(element => element.disabled).then(disabled => assert.equal(disabled, true));
+      // The reason, missing: said in red right under its field (the form pattern), which is marked and takes the focus.
+      const reason = review(f).getByRole('textbox', { name: 'Motif du report des dossiers non cochés' });
+      assert.deepEqual(await f.page.locator('label[for="departure-deferral-reason"]').evaluate(label => { const style = getComputedStyle(label); return [style.textTransform, style.fontWeight, style.fontSize]; }), ['uppercase', '700', '12px'], 'The label of the form pattern');
+      assert.equal(await reason.evaluate(field => document.getElementById(field.getAttribute('aria-describedby'))?.textContent), 'Obligatoire quand des dossiers restent non cochés.');
       await confirmButton().click();
-      await review(f).getByRole('alert').filter({ hasText: 'Indiquez le motif du report des autres dossiers.' }).waitFor();
+      const reasonError = review(f).locator('#departure-deferral-reason-error');
+      await reasonError.filter({ hasText: 'Indiquez le motif du report des autres dossiers.' }).waitFor();
+      await until(() => reason.evaluate(field => [document.activeElement === field, field.getAttribute('aria-invalid'), field.getAttribute('aria-describedby')]), [true, 'true', 'departure-deferral-reason-error'], 'The reason field is marked and has the focus');
+      const [fieldBox, errorBox] = [await reason.boundingBox(), await reasonError.boundingBox()];
+      assert.ok(errorBox.y >= fieldBox.y + fieldBox.height && errorBox.y - (fieldBox.y + fieldBox.height) <= 16, `Right under the field (${JSON.stringify([fieldBox, errorBox])})`);
+      assert.equal(await review(f).locator('.departures-error').count(), 0, 'Not in the box of the whole loading');
+      // Its colour, once the short transition every change runs (even with reduced motion) has ended.
+      await until(() => reasonError.evaluate(element => getComputedStyle(element).color), 'rgb(153, 27, 27)', 'In red');
+      await shot(f, 'reason-missing-1440');
       assert.equal(calls(f, 'confirm_departure').length, 0);
-      await review(f).getByRole('textbox', { name: 'Motif du report des dossiers non cochés' }).fill('Colis non remis au transporteur');
+      // Asked again: the field takes the focus again.
+      await confirmButton().click();
+      await until(() => reason.evaluate(field => document.activeElement === field), true, 'The field takes the focus at each attempt');
+      assert.equal(calls(f, 'confirm_departure').length, 0);
+      await reason.fill('Colis non remis au transporteur');
       await until(() => review(f).getByRole('alert').count(), 0, 'The reason asked for, once written, is no longer asked for');
+      assert.deepEqual(await reason.evaluate(field => [field.getAttribute('aria-invalid'), field.getAttribute('aria-describedby')]), [null, 'departure-deferral-reason-help']);
       // A label scanned while the reason has the focus is checked as a scan, never written into the reason.
       await scan(f, 'EXP-7RT5WQ-2-3');
       await until(() => checksOf(f, D.three), [[1, 3, 'scan'], [2, 3, 'scan']], 'A label scanned from the reason field is checked');
       await until(() => review(f).getByRole('textbox', { name: 'Motif du report des dossiers non cochés' }).inputValue(), 'Colis non remis au transporteur', 'The reason keeps only what was written');
       await until(() => focusedIsField(f), true, 'The scan field takes the focus back');
-      assert.equal(normalize(await review(f).getByText(/expéditions? cochées?/).innerText()), '2 expéditions cochées · 3 à reporter.');
+      // Recorded on the server first, then on this screen: polled (CI is slower).
+      await until(() => review(f).getByText(/expéditions? cochées?/).innerText().then(normalize), '2 expéditions cochées · 3 à reporter.', 'Every check recorded on this screen');
       await tallShot(f, 'ready-to-confirm-1440');
+      // While the server confirms: the clicked button turns its spinner and is busy, the page's « Actualiser » does
+      // not (the confirmation is not a refresh).
+      let release; const held = new Promise(resolve => { release = resolve; });
+      await f.context.route('**/rest/v1/rpc/confirm_departure', async route => { await held; return route.fallback(); });
       await confirmButton().click();
+      const progress = () => f.page.evaluate(() => {
+        const buttons = [...document.querySelectorAll('.departures-page button')];
+        const named = text => buttons.find(button => button.textContent.trim().startsWith(text));
+        const state = button => (button ? [button.getAttribute('aria-busy'), Boolean(button.querySelector('.animate-spin'))] : null);
+        return { confirm: state(named('Confirmer le départ de')), reload: state(named('Actualiser le chargement')), refresh: state(buttons.find(button => button.textContent.trim() === 'Actualiser')) };
+      });
+      await until(progress, { confirm: ['true', true], reload: [null, false], refresh: [null, false] }, 'The confirmation in progress on its own button');
+      await shot(f, 'confirming-1440');
+      release();
       await f.page.getByRole('region', { name: 'Manifeste confirmé', exact: true }).waitFor();
+      // Its success reads as one (green), never as a neutral notice.
+      await f.page.locator('.expedile-toast--success').filter({ hasText: 'Départ confirmé. Le manifeste est conservé.' }).waitFor();
       const [call] = calls(f, 'confirm_departure');
       assert.deepEqual(call.input.p_loaded.map(item => [item.id, item.outgoing_parcel_count]).sort(), [[D.two, 2], [D.one, 1]].sort());
       assert.equal(call.input.p_deferred_reason, 'Colis non remis au transporteur');
@@ -508,7 +549,10 @@ async function main() {
         return route.fallback();
       });
       await review(f).getByRole('button', { name: 'Confirmer le départ de 2 expéditions', exact: true }).click();
-      await review(f).getByRole('alert').filter({ hasText: 'Contrôle incomplet : EXP-4KM2PQ (0/1 colis vérifié). Scannez ou comptez ses colis, ou reportez-le.' }).waitFor();
+      const refusal = review(f).getByRole('alert').filter({ hasText: 'Contrôle incomplet : EXP-4KM2PQ (0/1 colis vérifié). Scannez ou comptez ses colis, ou reportez-le.' });
+      await refusal.waitFor();
+      // The button was disabled while the server answered: its focus goes to the refusal, never to the page.
+      await until(() => refusal.evaluate(element => document.activeElement === element), true, 'The refusal takes the focus');
       await until(() => review(f).getByRole('checkbox', { name: /EXP-4KM2PQ/ }).isChecked(), false, 'Read again after the refusal');
       assert.equal(f.tables.envois.find(row => row.id === TODAY).statut, 'planifie');
       // Scanned again: the refusal no longer describes the loading and leaves.
@@ -730,6 +774,72 @@ async function main() {
       await shot(f, 'phone-stale-label-dossier-under-the-bar-390');
     }, { width: 390 });
 
+    // ── 7d. A tablet: keyboard focus is never hidden under the scan bar (WCAG 2.4.11), and a press of the pointer
+    // never moves the list under it ──
+    await scenario('tablet-keyboard-focus-never-hidden-under-the-scan-bar', async f => {
+      await openLoading(f);
+      for (const code of ['EXP-2YE537-1-2', 'EXP-7RT5WQ-1-3']) await scan(f, code);
+      await until(() => [checksOf(f, D.two), checksOf(f, D.three)], [[[1, 2, 'scan']], [[1, 3, 'scan']]], 'Both labels recorded');
+      await until(() => feedback(f).locator('.loading-scan-feedback-title').innerText().then(normalize), 'EXP-7RT5WQ · colis 1/3 vérifié', 'Last answer');
+      await until(() => review(f).locator('.loading-pending').count(), 0, 'Every label handled');
+      await settle(f);
+      const focused = () => f.page.evaluate(() => {
+        const element = document.activeElement, bar = document.querySelector('.loading-scan-bar').getBoundingClientRect();
+        return { name: element.getAttribute('aria-label') || element.textContent.trim(), top: Math.round(element.getBoundingClientRect().top), barBottom: Math.round(bar.bottom) };
+      });
+      const underTheBar = async (name, label) => {
+        await until(() => focused().then(where => where.name), name, label);
+        const where = await focused();
+        assert.ok(where.top >= where.barBottom, `${label}: under the bar, never hidden by it (${JSON.stringify(where)})`);
+      };
+      // From the scan field: « Valider », the camera, then the first dossier's button, scrolled above the screen's top
+      // since EXP-7RT5WQ came under the bar.
+      for (let step = 0; step < 3; step += 1) await f.page.keyboard.press('Tab');
+      await underTheBar('Compter à la main les colis de EXP-2YE537', 'Third Tab');
+      // Back from the reason into the end of the list, where the bar is pushed partly up.
+      await review(f).getByRole('textbox', { name: 'Motif du report des dossiers non cochés' }).focus();
+      await f.page.keyboard.press('Shift+Tab');
+      await underTheBar('Compter à la main les colis de EXP-9XB4ZT', 'Shift+Tab from the reason');
+      await shot(f, 'keyboard-focus-under-the-bar-1024');
+      // A press of the pointer on the visible half of a button under the bar: the list stays, the click goes through.
+      const placed = await review(f).getByRole('button', { name: 'Compter à la main les colis de EXP-2YE537', exact: true }).evaluate(button => {
+        const scroller = document.querySelector('main.staff-main'), bar = document.querySelector('.loading-scan-bar');
+        scroller.scrollTop += button.getBoundingClientRect().top - (bar.getBoundingClientRect().bottom - 22);
+        const box = button.getBoundingClientRect();
+        return { x: Math.round(box.left + box.width / 2), y: Math.round(bar.getBoundingClientRect().bottom + 6), scrollTop: scroller.scrollTop };
+      });
+      await settle(f);
+      await f.page.mouse.click(placed.x, placed.y);
+      const dialog = f.page.getByRole('dialog', { name: 'Compter les colis de EXP-2YE537', exact: true });
+      await dialog.waitFor();
+      assert.equal(await f.page.evaluate(() => document.querySelector('main.staff-main').scrollTop), placed.scrollTop, 'The list did not move under the pointer');
+      // Closed from the keyboard, the dialog gives its focus back to that button: brought under the bar.
+      await f.page.keyboard.press('Escape');
+      await dialog.waitFor({ state: 'detached' });
+      await underTheBar('Compter à la main les colis de EXP-2YE537', 'The focus given back by the dialog');
+    }, { width: 1024, height: 768 });
+
+    // ── 7e. A phone held sideways (a short screen): the scan bar is as short as on a phone held upright ──
+    for (const [width, theme] of [[812, 'light'], [667, 'dark']]) await scenario(`short-screen-keeps-the-scan-bar-compact-${width}-${theme}`, async f => {
+      await openLoading(f);
+      await scan(f, 'EXP-2YE537-1-2');
+      await until(() => feedback(f).locator('.loading-scan-feedback-title').innerText().then(normalize), 'EXP-2YE537 · colis 1/2 vérifié', 'Answer');
+      await settle(f);
+      const bar = await f.page.evaluate(() => {
+        const box = node => node.getBoundingClientRect();
+        const main = document.querySelector('main.staff-main');
+        const nav = [...document.querySelectorAll('.fixed.bottom-0')].find(node => node.getClientRects().length && getComputedStyle(node).display !== 'none');
+        const bottom = nav ? box(nav).top : box(main).bottom;
+        return { camera: Math.round(box(document.querySelector('.loading-camera-button')).width), help: Math.round(box(document.querySelector('.loading-scan-help')).width), height: Math.round(box(document.querySelector('.loading-scan-bar')).height), room: Math.round(bottom - box(document.querySelector('.loading-scan-bar')).bottom) };
+      });
+      assert.equal(bar.camera, 48, `The camera button shows its icon (${JSON.stringify(bar)})`);
+      assert.ok(bar.help <= 1, `The help is read by screen readers only (${JSON.stringify(bar)})`);
+      // With its help and the camera named in full, the bar and this answer took 253 px and left 74 px for the dossiers.
+      assert.ok(bar.height <= 220 && bar.room >= 100, `Room left for the dossiers (${JSON.stringify(bar)})`);
+      assert.equal(await review(f).getByRole('button', { name: 'Scanner avec la caméra', exact: true }).count(), 1, 'Its name is unchanged');
+      await shot(f, `short-screen-${width}-${theme}`); await axe(f, 'Short screen');
+    }, { width, height: 375, theme });
+
     // ── 8. Every state, light and dark, desktop and phone, with axe ──
     for (const theme of ['light', 'dark']) for (const width of [1440, 390]) await scenario(`states-${theme}-${width}`, async f => {
       await openLoading(f);
@@ -747,6 +857,16 @@ async function main() {
       await f.page.getByRole('dialog', { name: 'Compter les colis de EXP-7RT5WQ', exact: true }).waitFor();
       await shot(f, `${theme}-${width}-count`); await axe(f, 'Count dialog');
       await f.page.keyboard.press('Escape');
+      await f.page.getByRole('dialog', { name: 'Compter les colis de EXP-7RT5WQ', exact: true }).waitFor({ state: 'detached' });
+      // The reason asked for: in red under its field, which keeps a red edge once the focus has left it (dark too).
+      await review(f).getByRole('button', { name: 'Confirmer le départ de 2 expéditions', exact: true }).click();
+      const reason = review(f).getByRole('textbox', { name: 'Motif du report des dossiers non cochés' });
+      await until(() => reason.evaluate(field => [document.activeElement === field, field.getAttribute('aria-invalid')]), [true, 'true'], 'The reason has the focus');
+      await f.page.keyboard.press('Tab');
+      await until(() => reason.evaluate(field => getComputedStyle(field).borderTopColor), theme === 'dark' ? 'rgb(229, 154, 154)' : 'rgb(239, 68, 68)', 'Its edge stays red');
+      await reason.scrollIntoViewIfNeeded();
+      await shot(f, `${theme}-${width}-reason-missing`); await axe(f, 'Reason asked for');
+      assert.equal(calls(f, 'confirm_departure').length, 0);
     }, { theme, width });
   } finally {
     await browser.close();
