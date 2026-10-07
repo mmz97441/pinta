@@ -239,6 +239,36 @@ async function setup(browser, role, { failTable = null, timezoneId = null, devic
   };
   const checkJson = row => ({ colis_id: row.colis_id, parcel_index: row.parcel_index, parcel_count: row.parcel_count, method: row.method, checked_by: row.checked_by, checked_by_name: checkerName(row.checked_by), checked_at: row.checked_at });
   const dossierChecks = (envoiId, colisId) => loadingChecks().filter(row => row.envoi_id === envoiId && row.colis_id === colisId).sort((a, b) => a.parcel_index - b.parcel_index);
+  // colis_loading_checks_forget: after any write of a dossier, one that left its departure (reassigned, deferred at the
+  // confirmation, detached) keeps only the checks of its current departure, and one prepared again (final measurements
+  // stamped or cleared, composition changed: save_preparation_measurements, correct_colis_task('preparation'), a carton
+  // appended) loses them all; any other write, the confirmation included, keeps them. The foreign keys cascade as well: a
+  // dossier or a departure deleted by the write takes its checks with it.
+  const PREPARATION_STAMP = ['final_measurements_version', 'preparation_composition_version', 'final_measurements_at'];
+  const sameValue = (a, b) => a === b || (typeof a === 'string' && typeof b === 'string' && Date.parse(a) === Date.parse(b));
+  /** The rows before a mocked server write: each dossier's departure and preparation stamp, the departures. */
+  const beforeWrite = () => ({
+    dossiers: new Map((tables.colis || []).map(row => [row.id, { envoi_id: row.envoi_id ?? null, ...Object.fromEntries(PREPARATION_STAMP.map(key => [key, row[key] ?? null])) }])),
+    departures: new Set((tables.envois || []).map(row => row.id)),
+  });
+  /** After the write: the trigger and the cascades, on the checks of the dossiers and departures it changed. */
+  function afterWrite({ dossiers, departures }) {
+    const remaining = new Map((tables.colis || []).map(row => [row.id, row])), envois = new Set((tables.envois || []).map(row => row.id));
+    const kept = loadingChecks().filter(check => {
+      if ((dossiers.has(check.colis_id) && !remaining.has(check.colis_id)) || (departures.has(check.envoi_id) && !envois.has(check.envoi_id))) return false;
+      const before = dossiers.get(check.colis_id), row = remaining.get(check.colis_id);
+      if (!before || !row) return true;
+      const envoi = row.envoi_id ?? null, prepared = PREPARATION_STAMP.some(key => !sameValue(before[key], row[key] ?? null));
+      if (!prepared && before.envoi_id === envoi) return true;
+      return !prepared && check.envoi_id === envoi;
+    });
+    if (kept.length !== loadingChecks().length) tables.departure_loading_checks = kept;
+  }
+  /** Runs a mocked server write (a command, or rows written through the API) as the database does, its trigger included. */
+  function serverWrite(write) {
+    const before = beforeWrite();
+    try { return write(); } finally { afterWrite(before); }
+  }
   /** _loading_check_target: an open departure that has not left, the dossier on it, neither shipped, cancelled nor archived. */
   function loadingTarget(input, prepared) {
     const envoi = tables.envois.find(row => row.id === input?.p_envoi_id);
@@ -322,6 +352,7 @@ async function setup(browser, role, { failTable = null, timezoneId = null, devic
       return manifest ? [200, manifest.snapshot] : refused(400, 'P0002', 'Le chargement de ce départ n’a pas été confirmé. Aucun manifeste historique fiable n’est disponible.');
     }
     if (rpc === 'get_loading_checks') {
+      // One JSON array, as the server returns a single jsonb value (PostgREST's max-rows never cuts it).
       if (!allowed('perm_envois_voir')) return refused(403, '42501', 'Permission de consultation des envois requise', 'permission');
       if (!tables.envois.some(row => row.id === input?.p_envoi_id)) return refused(400, 'P0002', 'Départ introuvable', 'departure_not_found');
       return [200, loadingChecks().filter(row => row.envoi_id === input.p_envoi_id && tables.colis.some(parcel => parcel.id === row.colis_id && parcel.envoi_id === row.envoi_id))
@@ -410,6 +441,8 @@ async function setup(browser, role, { failTable = null, timezoneId = null, devic
     let body = {},
       status = 200;
     const responseHeaders = { 'access-control-allow-origin': '*', 'access-control-expose-headers': 'content-range' };
+    // Each request is one server write: the forget trigger and the cascades apply once it is handled (synchronously).
+    const written = beforeWrite();
     if (url.pathname.includes('/auth/v1/token')) body = session;
     else if (url.pathname.includes('/auth/v1/user')) body = user;
     else if (url.pathname.includes('/auth/v1/logout')) {
@@ -696,6 +729,7 @@ async function setup(browser, role, { failTable = null, timezoneId = null, devic
       status = 400;
       body = { error: 'Blocked unexpected external request' };
     }
+    afterWrite(written);
     await route.fulfill({
       status,
       contentType: 'application/json',
@@ -729,11 +763,13 @@ async function setup(browser, role, { failTable = null, timezoneId = null, devic
   };
   /** Runs a mocked loading-control command as the signed-in user, without the page: { status, body }. */
   const rpc = (name, input) => {
-    const answer = loadingRpc(name, input);
+    const answer = serverWrite(() => loadingRpc(name, input));
     if (!answer) throw new Error(`No mocked loading-control command ${name}`);
     return { status: answer[0], body: answer[1] };
   };
-  return { context, page, tables, requests, errors, networkDenied, login, server, rpc, loadingControl };
+  // serverWrite: for a suite that mocks another command writing dossiers (correct-colis-task…), so that its write forgets
+  // the loading checks as the server's trigger does: f.serverWrite(() => Object.assign(row, changes)).
+  return { context, page, tables, requests, errors, networkDenied, login, server, rpc, loadingControl, serverWrite };
 }
 async function main() {
   await fs.mkdir(output, { recursive: true });
@@ -1073,6 +1109,76 @@ async function main() {
       refusedWith(call('record_loading_count', { p_counted: 1 }), '42501', 'permission', 'Permission d’expédition requise pour contrôler le chargement');
       assert.deepEqual(f.errors, []);
       observations.push({ test: 'loading-control-mock-follows-the-server', pass: true });
+    }
+    await f.context.close();
+
+    // ── colis_loading_checks_forget in the mock: a dossier prepared again (the same count included), given a carton or
+    // moved off its departure loses its loading checks; any other write, the confirmation included, keeps them ──
+    f = await setup(browser, 'directeur');
+    {
+      const day = offset => new Date(Date.parse(`${parisClock(f.server.now()).day}T12:00:00Z`) + offset * 86400000).toISOString().slice(0, 10);
+      const E = 'e1000000-0000-4000-8000-0000000000bb', LATER = 'e1000000-0000-4000-8000-0000000000bc', Q = '33333333-3333-4333-8333-3333333333aa';
+      const departure = (id, ref, date) => ({ id, ref, destination_code: '974', date_depart: date, statut: 'planifie', loading_closes_at: null, departed_at: null, updated_at: '2026-10-07T06:00:00Z', manifest_version: 0 });
+      f.tables.envois = [departure(E, 'ENV-OUBLI', day(0)), departure(LATER, 'ENV-SUIVANT', day(7))];
+      const parcel = f.tables.colis[0];
+      Object.assign(parcel, { envoi_id: E, final_packages: [{ dimL: 40, dimW: 30, dimH: 30, poids: 12 }, { dimL: 30, dimW: 30, dimH: 20, poids: 7.5 }], outgoing_parcel_count: 2, fin_l: 40, fin_w: 30, fin_h: 30, fin_p: 19.5 });
+      const command = (name, input) => f.page.evaluate(async ([name, input]) => {
+        const response = await fetch(`https://pinta-ci.supabase.co/rest/v1/rpc/${name}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(input) });
+        return { status: response.status, body: await response.json() };
+      }, [name, input]);
+      const checksOf = id => f.tables.departure_loading_checks.filter(row => row.colis_id === id).map(row => [f.tables.envois.find(envoi => envoi.id === row.envoi_id)?.ref ?? row.envoi_id, row.parcel_index]).sort();
+      const both = ref => [[ref, 1], [ref, 2]];
+      await f.page.goto(base);
+      // Packed again into two other boxes: the same count and versions, a new preparation stamp.
+      scanLoading(f, E, [P]);
+      assert.deepEqual(checksOf(P), both('ENV-OUBLI'));
+      let answer = await command('save_preparation_measurements', { p_colis_id: P, p_final_packages: [{ dimL: 60, dimW: 40, dimH: 40, poids: 16 }, { dimL: 20, dimW: 20, dimH: 10, poids: 3.5 }], p_expected_updated_at: parcel.updated_at, p_expected_composition_version: 1 });
+      assert.equal(answer.status, 200); assert.deepEqual([parcel.outgoing_parcel_count, parcel.preparation_composition_version, parcel.final_measurements_version], [2, 1, 1]);
+      assert.deepEqual(checksOf(P), [], 'Prepared again with the same count: the checks of the former boxes are dropped');
+      assert.equal(f.rpc('record_loading_check', { p_envoi_id: E, p_colis_id: P, p_parcel_index: 1, p_parcel_count: 2, p_method: 'scan' }).body.status, 'recorded', 'A label of the new boxes is recorded afresh');
+      // Any other write keeps them: a field of the dossier written through the API.
+      scanLoading(f, E, [P]);
+      assert.equal(await f.page.evaluate(async id => (await fetch(`https://pinta-ci.supabase.co/rest/v1/colis?id=eq.${id}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ casier: 'B-12' }) })).status, P), 200);
+      assert.equal(parcel.casier, 'B-12'); assert.deepEqual(checksOf(P), both('ENV-OUBLI'), 'Any other write keeps the checks');
+      // A suite mocking another command (correct-colis-task) writes through serverWrite: its new stamp drops them too.
+      f.serverWrite(() => Object.assign(parcel, { final_packages: [{ dimL: 45, dimW: 35, dimH: 30, poids: 14 }, { dimL: 25, dimW: 20, dimH: 15, poids: 5.5 }], final_measurements_at: new Date(Date.parse(parcel.final_measurements_at) + 60000).toISOString() }));
+      assert.deepEqual(checksOf(P), [], 'A corrected preparation drops the checks');
+      // Moved to another departure, by its wish, or onto a departure created for it: its former checks go.
+      scanLoading(f, E, [P]);
+      answer = await command('assign_colis_departure', { p_colis_id: P, p_envoi_id: LATER, p_expected_updated_at: parcel.updated_at });
+      assert.equal(answer.status, 200); assert.equal(parcel.envoi_id, LATER); assert.deepEqual(checksOf(P), [], 'Moved to another departure');
+      scanLoading(f, LATER, [P]);
+      answer = await command('set_colis_departure_wish', { p_colis_id: P, p_date: day(0), p_expected_updated_at: parcel.updated_at });
+      assert.equal(answer.status, 200); assert.equal(parcel.envoi_id, E); assert.deepEqual(checksOf(P), [], 'Its wish moved it to today\'s departure');
+      scanLoading(f, E, [P]);
+      answer = await command('create_departure_for_colis', { p_colis_id: P, p_date: day(21), p_expected_updated_at: parcel.updated_at });
+      assert.equal(answer.status, 200); assert.equal(parcel.envoi_id, answer.body.envoi.id); assert.deepEqual(checksOf(P), [], 'Put on a departure created for it');
+      // A carton appended: the composition changes and the outgoing parcels are to prepare again.
+      answer = await command('assign_colis_departure', { p_colis_id: P, p_envoi_id: E, p_expected_updated_at: parcel.updated_at });
+      assert.equal(answer.status, 200);
+      scanLoading(f, E, [P]);
+      answer = await command('append_reception_cartons', { p_colis_id: P, p_cartons: [{ dimL: 20, dimW: 20, dimH: 20, poids: 2 }], p_expected_updated_at: parcel.updated_at });
+      assert.equal(answer.status, 200); assert.deepEqual([parcel.preparation_composition_version, parcel.final_measurements_version], [2, null]);
+      assert.deepEqual(checksOf(P), [], 'A carton appended drops the checks');
+      // At the confirmation, the dossier deferred loses its checks; the loaded one keeps them, also in the reading.
+      Object.assign(parcel, { statut: 'paye', feu_vert: 'autorise', paiement_date: '2026-10-06T10:00:00Z', paiement_montant: 60, devis_total: 60, devis_snapshot: { inputs: { destination: { code: '974' } } },
+        outgoing_parcel_count: 2, final_measurements_version: 2, final_measurements_at: new Date().toISOString() });
+      f.tables.colis.push({ ...structuredClone(parcel), id: Q, ref: 'EXP-TEST-002', statut: 'en_preparation', paiement_date: null, paiement_montant: null, devis_total: null, devis_snapshot: null });
+      scanLoading(f, E, [P, Q]);
+      assert.deepEqual(checksOf(Q), both('ENV-OUBLI'));
+      const confirmed = f.rpc('confirm_departure', { p_envoi_id: E, p_loaded: [{ id: P, updated_at: parcel.updated_at, outgoing_parcel_count: 2 }], p_expected_updated_at: f.tables.envois[0].updated_at, p_deferred_reason: 'Paiement attendu' });
+      assert.equal(confirmed.status, 200, JSON.stringify(confirmed.body)); assert.equal(confirmed.body.statut, 'parti');
+      assert.equal(f.tables.colis.find(row => row.id === Q).envoi_id, null);
+      assert.deepEqual(checksOf(Q), [], 'The deferred dossier leaves the departure with no check');
+      assert.deepEqual(checksOf(P), both('ENV-OUBLI'), 'The loaded dossier keeps its checks through the confirmation');
+      assert.deepEqual(f.rpc('get_loading_checks', { p_envoi_id: E }).body.map(row => [row.colis_id, row.parcel_index]), [[P, 1], [P, 2]]);
+      assert.deepEqual(f.rpc('get_departure_manifest', { p_envoi_id: E }).body.items[0].loading_checks.map(row => row.parcel_index), [1, 2]);
+      // A departure deleted takes its checks with it (the foreign key cascades).
+      f.tables.departure_loading_checks.push({ envoi_id: LATER, colis_id: Q, parcel_index: 1, parcel_count: 2, method: 'scan', checked_by: A, checked_at: new Date().toISOString() });
+      assert.equal(await f.page.evaluate(async id => (await fetch(`https://pinta-ci.supabase.co/rest/v1/envois?id=eq.${id}`, { method: 'DELETE' })).status, LATER), 200);
+      assert.deepEqual(checksOf(Q), [], 'The checks follow their departure when it is deleted');
+      assert.deepEqual(f.errors, []);
+      observations.push({ test: 'loading-checks-forgotten-like-the-server-trigger', pass: true });
     }
     await f.context.close();
   } catch (error) {
