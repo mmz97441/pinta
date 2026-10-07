@@ -1,5 +1,5 @@
 import { calendarDateLabel, departureDayLabel, isoCalendarDay, parisCalendarDay } from './departureGroups.js';
-import { closedDepartureWording, closingLabel, consentRelanceOpen, destinationName, dossierDepartureClosing, dossierDestinationCode, dossierWishState } from './departurePlanning.js';
+import { OPEN_DEPARTURE_STATUSES, closedDepartureWording, closingLabel, consentRelanceOpen, destinationName, dossierDepartureClosing, dossierDestinationCode, dossierWishState } from './departurePlanning.js';
 import { dossierTaskUrl } from './dossierTasks.js';
 import { paymentRecorded } from './invoiceLock.js';
 
@@ -63,44 +63,70 @@ const CLOSED = new Set(['livre', 'refuse_client', 'annule']);
 const BEFORE_CONSENT = new Set(['receptionne', 'mesure', 'attente_feu_vert']);
 const CONSENT_REQUESTS = new Set(['demande_feu_vert', 'relance_feu_vert']);
 const FOLLOW_UP = 24 * 3600000;
+// The states of a notification_outbox row: a delivery still to come (queued, blocked by an open conversation,
+// rescheduled by the 24-hour client rule, or being sent), and one that will not reach the client.
+const TO_DELIVER = new Set(['pending', 'blocked', 'sending']);
+const UNDELIVERED = new Set(['failed', 'cancelled']);
+const OPEN_DEPARTURE = new Set(OPEN_DEPARTURE_STATUSES);
 const instantOf = value => {
   const time = value instanceof Date ? value.getTime() : typeof value === 'number' ? value : Date.parse(value);
   return Number.isFinite(time) ? time : null;
 };
 
-/** The follow-up of the dossier's latest consent request or relance (a
- * demande_feu_vert or relance_feu_vert message), as the server's
- * _consent_followup_until computes it: `{ at, until }` (its saved instant and
- * the end of its 24 hours, ISO) while it is less than 24 hours old and its
- * delivery has neither failed (« echec ») nor been cancelled; otherwise null.
- * Only the latest one counts: a failed relance is not covered by an earlier
- * delivered request. A cancelled delivery leaves its message « envoi »: it is
- * known here only from `outboxStatus` (the status of its notification_outbox
- * row) when the data layer provides it. */
+/** The follow-up of the dossier's latest consent request or relance written
+ * by the team (a staff demande_feu_vert or relance_feu_vert message; a client's
+ * message never counts), as the server's _consent_followup_until computes it
+ * from its delivery (`outboxStatus` and `outboxSentAt`, its notification_outbox
+ * row, when the data layer provides them):
+ * - its delivery failed or was cancelled (outbox failed or cancelled, or the
+ *   message « echec » without a delivery in progress): null, the relance is due;
+ * - its delivery is still to come (outbox pending, blocked, rescheduled or
+ *   sending): it holds until delivered, `{ at, until: null, pending: true }`;
+ * - delivered (outbox sent): 24 hours from the delivery;
+ * - an e-mail draft (outbox manual) or a portal message: 24 hours from its
+ *   creation (the team acted; no delivery is claimed).
+ * `at` is the message's saved instant and `until` the end of its 24 hours (ISO);
+ * null once they have passed. Only the latest one counts: a failed relance is
+ * not covered by an earlier delivered request. */
 export function consentFollowUp(dossier, now = Date.now()) {
   const instant = instantOf(now);
   if (instant === null) return null;
   const latest = (Array.isArray(dossier?.messages) ? dossier.messages : [])
-    .filter(message => CONSENT_REQUESTS.has(message?.template) && instantOf(message.createdAt ?? NaN) !== null)
+    // messages.type is never empty in the database: a message the client wrote is no request.
+    .filter(message => (message?.type ?? 'staff') === 'staff' && CONSENT_REQUESTS.has(message.template) && instantOf(message.createdAt ?? NaN) !== null)
     .reduce((last, message) => {
       if (!last) return message;
       const time = instantOf(message.createdAt), lastTime = instantOf(last.createdAt);
       return time > lastTime || time === lastTime && String(message.id) > String(last.id) ? message : last;
     }, null);
-  if (!latest) return null;
-  const until = instantOf(latest.createdAt) + FOLLOW_UP;
-  if (instant >= until || latest.statut === 'echec' || ['failed', 'cancelled'].includes(latest.outboxStatus)) return null;
-  return { at: latest.createdAt, until: new Date(until).toISOString() };
+  if (!latest || UNDELIVERED.has(latest.outboxStatus)) return null;
+  if (TO_DELIVER.has(latest.outboxStatus)) return { at: latest.createdAt, until: null, pending: true };
+  if (latest.statut === 'echec') return null;
+  const delivered = latest.outboxStatus === 'sent' ? instantOf(latest.outboxSentAt ?? NaN) : null;
+  const until = (delivered ?? instantOf(latest.createdAt)) + FOLLOW_UP;
+  return instant < until ? { at: latest.createdAt, until: new Date(until).toISOString(), pending: false } : null;
+}
+
+/** The departure, assigned or planned on the desired day, can no longer take
+ * the dossier: it has left, is archived or its day's departure is closed (the
+ * server's _colis_departure_closing then gives no closing). */
+function departureClosed(dossier, departure, now, client, envois) {
+  if (dossier.envoi || dossier.envoiId) return Boolean(departure) && (Boolean(departure.departedAt) || !OPEN_DEPARTURE.has(departure.statut));
+  const wish = dossierWishState(dossier, client, envois, now);
+  return wish?.state === 'closed' || wish?.state === 'past';
 }
 
 /** The consent still missing while the dossier's departure closes within 48 h
  * (the server's _reception_work_hint): `{ closing, day, habitual }` (closing
  * instant, departure day, a habitual Wednesday closing), otherwise null. A
- * voluntary wait of the client is respected, and an awaited consent is not
- * relanced while its latest request or relance is followed up. */
+ * voluntary wait of the client is respected, an awaited consent is not
+ * relanced while its latest request or relance is followed up, and a departure
+ * that has left or is closed asks for another departure, never for consent
+ * before a closing that cannot be met. */
 function consentBeforeCutoff(dossier, departure, now, client, envois) {
   if (!BEFORE_CONSENT.has(dossier.statut)) return null;
   if (dossier.statut === 'attente_feu_vert' && (dossier.attenteClientDate || consentFollowUp(dossier, now))) return null;
+  if (departureClosed(dossier, departure, now, client, envois)) return null;
   const planned = dossierDepartureClosing(dossier, departure, { client, envois, now });
   return planned?.day && consentRelanceOpen(planned.closing, now) ? planned : null;
 }

@@ -1,35 +1,55 @@
--- Consent relance follow-up (final review of lot 3a, 2026-10-07).
--- 1. A consent request or relance (messages.template demande_feu_vert or relance_feu_vert) is followed up for 24 hours:
---    while the latest one is less than 24 hours old and its delivery has neither failed nor been cancelled, an awaited
---    consent is not relanced; the reception task waits (« Accord client attendu ») until the 24 hours end, the closing at
---    the latest. Then, still before the closing, the relance comes back: refresh_staff_work_actions re-syncs the task
---    because its due date has passed and its stored hint differs. A voluntary client wait is still never relanced and
---    an expired wait still asks to review it first.
+-- Consent relance follow-up (final review of lot 3a, 2026-10-07, refined after the final verification review).
+-- 1. The latest consent request or relance written by the team (a staff message, template demande_feu_vert or
+--    relance_feu_vert; a client's message never counts) is followed up until it reaches the client, then for 24 hours:
+--    while its Telegram delivery is still to come (outbox pending, blocked by an open conversation, rescheduled by the
+--    24-hour client rule, or sending), and during the 24 hours after notification_outbox.sent_at, an awaited consent is
+--    not relanced. An e-mail draft (outbox manual) or a portal message is followed up for 24 hours from its creation:
+--    the team acted, no delivery is claimed. A delivery that failed (outbox failed, or message « echec » without a
+--    delivery in progress) or was cancelled (outbox cancelled: its message stays « envoi ») is no follow-up. The
+--    reception task waits (« Accord client attendu ») until the follow-up ends, the closing at the latest (the closing
+--    while the delivery is still to come). Then, still before the closing, the relance comes back:
+--    refresh_staff_work_actions re-syncs the task because its due date has passed or its stored hint differs. A
+--    voluntary client wait is still never relanced and an expired wait still asks to review it first.
 -- 2. Hints of a consent still to ask: receptionne « Mesurer puis demander l’accord avant la clôture du départ »,
 --    mesure « Demander l’accord avant la clôture du départ » (unchanged).
--- 3. A dossier without departure whose desired day has an open planned departure (_departure_for_day) uses that
---    departure's closing (its loading closing, else the Wednesday 17 h) for the relance window.
--- Creating a request or relance, or a delivery failing or being cancelled, re-syncs the dossier's tasks at once.
--- No business row is rewritten: two private functions, three replaced functions and three triggers. Open reception
--- tasks take the new rules at their next synchronisation or refresh (the stored hint differs from the computed one).
+-- 3. The closing of the consent: the assigned departure's while it is open (not left, not archived); without one, the
+--    open departure planned on the desired day (_departure_for_day: its loading closing, else the Wednesday 17 h), else
+--    the Wednesday 17 h of that day when no departure of the destination is planned that day. A departure that has left
+--    or is closed gives no closing: no relance hint, no due date before a closing that cannot be met; the dossier's
+--    « Choisir un autre départ » drives the action.
+-- 4. notification_outbox(message_id) is indexed: the follow-up reads the delivery rows of one message.
+-- Writing a staff request or relance, then its outbox row, and every change of its delivery state (to deliver,
+-- delivered, draft, failed or cancelled) re-sync the dossier's tasks at once.
+-- No business row is rewritten: two private functions, three replaced functions, four triggers and one index. Open
+-- reception tasks take the new rules at their next synchronisation or refresh (the stored hint differs from the
+-- computed one, or their due date has passed).
 
--- The follow-up of the dossier's latest consent request or relance: the instant its 24 hours end, while it is less than
--- 24 hours old and its delivery has neither failed (message « echec », outbox failed) nor been cancelled (outbox
--- cancelled: its message stays « envoi »). NULL otherwise: no request, an older one, or one that did not reach the client.
+-- The follow-up of the dossier's latest staff request or relance: the instant it ends; 'infinity' while its delivery is
+-- still to come (a delivery in progress decides, even over the « echec » left by an earlier attempt); NULL once ended,
+-- when its delivery failed or was cancelled, or without request.
 CREATE FUNCTION _consent_followup_until(c colis) RETURNS timestamptz LANGUAGE sql STABLE SECURITY DEFINER SET search_path=public,pg_temp AS $$
- SELECT latest.created_at+interval '24 hours' FROM (
-  SELECT m.id,m.created_at,m.statut FROM messages m WHERE m.colis_id=c.id AND m.template IN ('demande_feu_vert','relance_feu_vert')
-  ORDER BY m.created_at DESC,m.id DESC LIMIT 1) latest
- WHERE latest.created_at+interval '24 hours'>now() AND latest.statut IS DISTINCT FROM 'echec'
-  AND NOT EXISTS(SELECT 1 FROM notification_outbox o WHERE o.message_id=latest.id AND o.status IN ('failed','cancelled'))
+ SELECT f.until FROM (
+  SELECT CASE WHEN bool_or(o.status IN ('failed','cancelled')) THEN NULL
+    WHEN bool_or(o.status IN ('pending','blocked','sending')) THEN 'infinity'::timestamptz
+    WHEN latest.statut='echec' THEN NULL
+    ELSE coalesce(max(o.sent_at) FILTER (WHERE o.status='sent'),latest.created_at)+interval '24 hours' END AS until
+  FROM (SELECT m.id,m.created_at,m.statut FROM messages m WHERE m.colis_id=c.id AND m.type='staff' AND m.template IN ('demande_feu_vert','relance_feu_vert')
+   ORDER BY m.created_at DESC,m.id DESC LIMIT 1) latest
+  LEFT JOIN notification_outbox o ON o.message_id=latest.id
+  GROUP BY latest.id,latest.created_at,latest.statut) f
+ WHERE f.until>now()
 $$;
 
--- Closing of the dossier's departure (copy of 2026-10-06) plus: without a departure, the open departure planned on its
--- desired day closes it (its loading closing, else the Wednesday rule); otherwise the Wednesday rule of that day.
+-- Closing of the dossier's departure (copy of 2026-10-06) plus: an assigned departure that has left or is no longer
+-- open gives none; without a departure, the open departure planned on the desired day closes it (its loading
+-- closing, else the Wednesday rule); otherwise the Wednesday rule of that day, unless a departure of the destination
+-- planned that day is closed or has left (create_departure_for_colis refuses that day).
 CREATE OR REPLACE FUNCTION _colis_departure_closing(c colis) RETURNS timestamptz LANGUAGE sql STABLE SECURITY DEFINER SET search_path=public,pg_temp AS $$
- SELECT CASE WHEN c.envoi_id IS NOT NULL THEN (SELECT coalesce(e.loading_closes_at,departure_default_closing(e.date_depart)) FROM envois e WHERE e.id=c.envoi_id)
+ SELECT CASE WHEN c.envoi_id IS NOT NULL THEN (SELECT coalesce(e.loading_closes_at,departure_default_closing(e.date_depart)) FROM envois e WHERE e.id=c.envoi_id
+   AND e.statut IN ('planifie','prochain','en_cours','en_preparation','pret') AND e.departed_at IS NULL)
   ELSE coalesce((SELECT coalesce(e.loading_closes_at,departure_default_closing(e.date_depart)) FROM envois e WHERE e.id=_departure_for_day(c,c.depart_souhaite)),
-   departure_default_closing(c.depart_souhaite)) END
+   CASE WHEN NOT EXISTS(SELECT 1 FROM envois e WHERE e.date_depart=c.depart_souhaite AND e.destination_code=_colis_destination(c) AND e.statut<>'archive')
+    THEN departure_default_closing(c.depart_souhaite) END) END
 $$;
 
 -- Reception task hint (copy of 2026-10-06): an expired client wait first, then the consent still missing inside the
@@ -44,8 +64,9 @@ CREATE OR REPLACE FUNCTION _reception_work_hint(c colis) RETURNS text LANGUAGE s
 $$;
 
 -- Task projection (copy of 2026-10-06) plus the follow-up of an awaited consent: while the latest request or relance
--- is followed up, the reception task waits, due when the follow-up ends (the closing at the latest); outside the
--- relance window it is due when the window opens, or when the follow-up ends if that is later.
+-- is followed up, the reception task waits, due when the follow-up ends (the closing at the latest, and the closing
+-- while its delivery is still to come); outside the relance window it is due when the window opens, or when the
+-- follow-up ends if that is later.
 CREATE OR REPLACE FUNCTION sync_staff_work_actions(p_colis_id uuid) RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
 DECLARE c colis; open_case boolean; final_ready boolean; docs_ready boolean; documents_present boolean; has_contact boolean; is_pro boolean; d timestamptz;
  late quote_withdrawals; late_state text; message_attention boolean; late_priority text:='Facture reçue après l’envoi du devis';
@@ -97,27 +118,50 @@ BEGIN
  PERFORM _sync_staff_work_action(c.id,'correction',open_case AND (c.statut='refuse_client' OR c.produit_interdit OR (c.next_action_source='manual' AND nullif(trim(c.next_action),'') IS NOT NULL)),NULL,d);
 END; $$;
 
--- A request or relance starts its follow-up; a delivery that fails or is cancelled ends it, and a retry restarts it.
--- The dossier's tasks are then re-synced at once, for a consent message only. The dossier row is locked first, the
--- order of every synchronisation (dossier, then its tasks): a command in progress on the dossier, such as a relance
--- being queued, commits before this synchronisation reads it. Only these changes fire: a delivery in progress or
--- confirmed takes no lock.
+-- Re-syncs the dossier's tasks when a staff request or relance is written (its message, then its outbox row) and when
+-- its delivery state changes (moves between pending, blocked and sending change nothing and do not fire).
+-- Lock order of the commands: the dossier, then its messages, outbox rows and tasks.
+-- * INSERT: the writing command (queue_message) already holds the dossier; the lock is taken like every command takes it.
+-- * UPDATE: the statement already holds the outbox or message row (send-telegram's retry, dispatchOutbox, the stale-send
+--   sweep of relances-auto, cancel_previous_consent_requests). Waiting for the dossier here would reverse that order and
+--   deadlock with a command changing the cartons, so the dossier is taken only if it is free (SKIP LOCKED; NO KEY UPDATE,
+--   so that inserting a message or an invoice of the dossier never waits for it). When it is held, the transaction
+--   holding it synchronises it, and refresh_staff_work_actions (the team's work list) brings back a relance whose hint
+--   changed. Any failure of this re-sync (a lock conflict with a refresh, for example) is only reported as a warning:
+--   the delivery state is always recorded, and one dossier never fails a multi-row update.
 CREATE FUNCTION trigger_sync_consent_followup() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
 BEGIN
  IF TG_TABLE_NAME='notification_outbox' THEN
-  IF NOT EXISTS(SELECT 1 FROM messages WHERE id=NEW.message_id AND template IN ('demande_feu_vert','relance_feu_vert')) THEN RETURN NEW; END IF;
+  IF NOT EXISTS(SELECT 1 FROM messages WHERE id=NEW.message_id AND type='staff' AND template IN ('demande_feu_vert','relance_feu_vert')) THEN RETURN NEW; END IF;
  END IF;
- PERFORM 1 FROM colis WHERE id=NEW.colis_id FOR UPDATE;
- PERFORM sync_staff_work_actions(NEW.colis_id);
+ IF TG_OP='INSERT' THEN
+  PERFORM 1 FROM colis WHERE id=NEW.colis_id FOR UPDATE;
+  PERFORM sync_staff_work_actions(NEW.colis_id);
+  RETURN NEW;
+ END IF;
+ BEGIN
+  PERFORM 1 FROM colis WHERE id=NEW.colis_id FOR NO KEY UPDATE SKIP LOCKED;
+  IF NOT FOUND THEN RETURN NEW; END IF;
+  PERFORM sync_staff_work_actions(NEW.colis_id);
+ EXCEPTION WHEN OTHERS THEN
+  RAISE WARNING 'Tâches du dossier % non resynchronisées après un changement de livraison (%) : %',NEW.colis_id,SQLSTATE,SQLERRM;
+ END;
  RETURN NEW;
 END; $$;
 CREATE TRIGGER z_sync_consent_request_work AFTER INSERT ON messages FOR EACH ROW
- WHEN (NEW.template IN ('demande_feu_vert','relance_feu_vert')) EXECUTE FUNCTION trigger_sync_consent_followup();
+ WHEN (NEW.type='staff' AND NEW.template IN ('demande_feu_vert','relance_feu_vert')) EXECUTE FUNCTION trigger_sync_consent_followup();
 CREATE TRIGGER z_sync_consent_request_failure AFTER UPDATE OF statut ON messages FOR EACH ROW
- WHEN (NEW.template IN ('demande_feu_vert','relance_feu_vert') AND OLD.statut IS DISTINCT FROM NEW.statut AND (OLD.statut='echec' OR NEW.statut='echec'))
+ WHEN (NEW.type='staff' AND NEW.template IN ('demande_feu_vert','relance_feu_vert') AND OLD.statut IS DISTINCT FROM NEW.statut AND (OLD.statut='echec' OR NEW.statut='echec'))
  EXECUTE FUNCTION trigger_sync_consent_followup();
+-- The outbox row is written after its message: a delivery to come replaces the 24 hours counted from the message (an
+-- e-mail draft keeps them).
+CREATE TRIGGER z_sync_consent_delivery_queued AFTER INSERT ON notification_outbox FOR EACH ROW
+ WHEN (NEW.status<>'manual') EXECUTE FUNCTION trigger_sync_consent_followup();
 CREATE TRIGGER z_sync_consent_delivery_work AFTER UPDATE OF status ON notification_outbox FOR EACH ROW
- WHEN (OLD.status IS DISTINCT FROM NEW.status AND (OLD.status IN ('failed','cancelled') OR NEW.status IN ('failed','cancelled')))
+ WHEN (OLD.status IS DISTINCT FROM NEW.status AND NOT (OLD.status IN ('pending','blocked','sending') AND NEW.status IN ('pending','blocked','sending')))
  EXECUTE FUNCTION trigger_sync_consent_followup();
+
+-- The follow-up reads the delivery rows of one message (also send-telegram's lookup by message).
+CREATE INDEX IF NOT EXISTS notification_outbox_message_id ON notification_outbox(message_id);
 
 REVOKE ALL ON FUNCTION _consent_followup_until(colis),trigger_sync_consent_followup() FROM PUBLIC,anon,authenticated,service_role;

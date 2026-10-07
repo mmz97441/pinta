@@ -248,6 +248,19 @@ function formatMessageDate(isoStr) {
   return `${d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })} ${time}`;
 }
 
+// A failed or cancelled outbox row wins over another one of the same message, then a delivery still to come, then a
+// confirmed one. `outboxSentAt` is the latest confirmed delivery (notification_outbox.sent_at). Both are null without
+// the embedded rows (client scope, or a message without outbox row).
+const OUTBOX_PRECEDENCE = ['failed', 'cancelled', 'pending', 'blocked', 'sending', 'sent', 'manual'];
+function mapOutboxDelivery(rows) {
+  if (!Array.isArray(rows)) return { outboxStatus: null, outboxSentAt: null };
+  const statuses = rows.map((outbox) => outbox?.status).filter(Boolean);
+  const outboxStatus = OUTBOX_PRECEDENCE.find((status) => statuses.includes(status)) ?? statuses[0] ?? null;
+  const outboxSentAt = rows.reduce((latest, outbox) => (outbox?.status === 'sent' && Number.isFinite(Date.parse(outbox.sent_at))
+    && (!latest || Date.parse(outbox.sent_at) > Date.parse(latest)) ? outbox.sent_at : latest), null);
+  return { outboxStatus, outboxSentAt };
+}
+
 export function mapMessage(row) {
   return {
     id: row.id,
@@ -263,10 +276,8 @@ export function mapMessage(row) {
     template: row.template || null,
     msgId: row.msg_id || row.wa_id,
     lu: row.lu || false,
-    // Staff only: a failed or cancelled outbox row wins over another one of the same message.
-    outboxStatus: Array.isArray(row.notification_outbox)
-      ? (row.notification_outbox.find((outbox) => ['failed', 'cancelled'].includes(outbox?.status)) || row.notification_outbox[0])?.status ?? null
-      : null,
+    // Staff only: the delivery of the message, read as the server's _consent_followup_until reads it.
+    ...mapOutboxDelivery(row.notification_outbox),
     attachmentPath: row.attachment_path || null,
     attachmentName: row.attachment_name || null,
     attachmentType: row.attachment_type || null,
@@ -356,9 +367,9 @@ export async function fetchColis(colisId = null, { archived = false, clientId = 
     const result = await Promise.all(
       Object.keys(grouped).map(async (table) => [
         table,
-        // Staff: each message also reads the state of its outbox row (a send cancelled or
-        // failed in the database leaves messages.statut unchanged).
-        await fetchAllRows(table, (q) => q.in('colis_id', ids), 'id', table === 'messages' && !clientScope ? '*,notification_outbox(status)' : '*'),
+        // Staff: each message also reads the state and confirmed delivery of its outbox row (a send
+        // cancelled or failed in the database leaves messages.statut unchanged).
+        await fetchAllRows(table, (q) => q.in('colis_id', ids), 'id', table === 'messages' && !clientScope ? '*,notification_outbox(status,sent_at)' : '*'),
       ]),
     );
     await datesLoaded;

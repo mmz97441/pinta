@@ -222,7 +222,9 @@ async function checkBusiness(f) {
     await panel.getByRole('heading', { name: 'Tarif de stockage de référence', exact: true }).waitFor();
     await panel.getByText('Indicatif : les frais de stockage s’ajoutent au devis par l’équipe, jamais automatiquement.', { exact: true }).waitFor();
     // The reminders are explained, never offered as settings that act.
-    assert.equal(flat(await panel.locator('li', { hasText: 'Accord du client' }).innerText()), 'Accord du client : la tâche de relance apparaît 48 h avant la clôture du départ.');
+    // The consent relance as the server applies it (20261007000001): 48 h before the closing, never within the 24 h
+    // after a delivered request or relance, nor while it is still to deliver.
+    assert.equal(flat(await panel.locator('li', { hasText: 'Accord du client' }).innerText()), 'Accord du client : quand l’accord manque, la tâche de relance apparaît 48 h avant la clôture du départ. Après une demande ou une relance, elle attend sa livraison au client puis 24 h ; un envoi en échec ou annulé ne la retarde pas.');
     assert.equal(flat(await panel.locator('li', { hasText: 'Paiement' }).innerText()), 'Paiement : les relances se font depuis le dossier.');
     assert.equal(await panel.getByText(/créent des tâches|Rappels après/).count(), 0);
     assert.deepEqual(await panel.locator('input, select, textarea').evaluateAll(nodes => nodes.map(node => node.id)), ['business-fraisStockage', 'business-stockageGratuit', 'business-diviseurVolumetrique']);

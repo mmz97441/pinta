@@ -1,7 +1,7 @@
 /* eslint-env node */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { CONSENT_STAGE_LABELS, CONSENT_WAIT_OVER_LABEL, CONSENT_LABELS, CANCELLED_RELANCE_LABEL, consentQueueFilter, consentStage, consentState, consentWaitLabel, consentSummary, consentRelance } from './consentQueue.js';
+import { CONSENT_STAGE_LABELS, CONSENT_WAIT_OVER_LABEL, CONSENT_LABELS, CANCELLED_RELANCE_LABEL, CANCELLED_SEND_LABEL, consentQueueFilter, consentStage, consentState, consentWaitLabel, consentSummary, consentRelance } from './consentQueue.js';
 
 const dossier = (id, statut, changes = {}) => ({ id, ref: `EXP-${id}`, statut, archive: false, ...changes });
 const message = (template, createdAt, changes = {}) => ({ id: `${template}-${createdAt}`, type: 'staff', canal: 'telegram', template, statut: 'envoye', createdAt, ...changes });
@@ -105,4 +105,33 @@ test('a relance still queued when the client chose to wait was cancelled: it nev
   assert.equal(waiting({ statut: 'envoi' }, '2026-10-03T08:00:00Z').deliveryLabel, 'En attente de livraison');
   // Without a wait, a queued relance is still on its way.
   assert.equal(consentRelance(dossier('r', 'attente_feu_vert', { messages: [relance({ statut: 'envoi' })] })).cancelled, false);
+});
+
+test('the delivery row decides: a relance the database cancelled or failed never reads « En attente de livraison »', () => {
+  const latest = (changes, extra = {}) => consentRelance(dossier('r', 'attente_feu_vert', { ...extra, messages: [message('demande_feu_vert', '2026-10-02T09:00:00Z'), message('relance_feu_vert', '2026-10-05T09:00:00Z', changes)] }));
+  // Cancelled by the server before it left (the dossier or the request changed): its message stays « envoi ».
+  assert.deepEqual(latest({ statut: 'envoi', outboxStatus: 'cancelled' }), { at: '2026-10-05T09:00:00Z', delivered: false, cancelled: true, deliveryLabel: CANCELLED_SEND_LABEL });
+  assert.equal(CANCELLED_SEND_LABEL, 'Envoi annulé');
+  // Cancelled because the client chose to wait after it was queued.
+  assert.equal(latest({ statut: 'envoi', outboxStatus: 'cancelled' }, { attenteClientDate: '2026-10-05T10:00:00Z' }).deliveryLabel, CANCELLED_RELANCE_LABEL);
+  // dispatchOutbox's cancellation also marks the message « echec »: still a cancelled send.
+  assert.equal(latest({ statut: 'echec', outboxStatus: 'cancelled' }).deliveryLabel, CANCELLED_SEND_LABEL);
+  // Failed (the stale-send sweep leaves the message « envoi »).
+  assert.deepEqual(latest({ statut: 'envoi', outboxStatus: 'failed' }), { at: '2026-10-05T09:00:00Z', delivered: false, cancelled: false, deliveryLabel: 'Envoi non confirmé' });
+  for (const outboxStatus of ['cancelled', 'failed']) assert.notEqual(latest({ statut: 'envoi', outboxStatus }).deliveryLabel, 'En attente de livraison', outboxStatus);
+  // Still to deliver (queued, blocked, rescheduled, being sent, or a retry after a failure): awaiting delivery.
+  for (const [statut, outboxStatus] of [['envoi', 'pending'], ['envoi', 'blocked'], ['envoi', 'sending'], ['echec', 'pending']])
+    assert.deepEqual(latest({ statut, outboxStatus }), { at: '2026-10-05T09:00:00Z', delivered: false, cancelled: false, deliveryLabel: 'En attente de livraison' }, `${statut}/${outboxStatus}`);
+  // Delivered: dated by its delivery when known (a relance rescheduled by the 24-hour client rule leaves later).
+  assert.deepEqual(latest({ statut: 'envoye', outboxStatus: 'sent', outboxSentAt: '2026-10-06T07:00:00Z' }), { at: '2026-10-06T07:00:00Z', delivered: true, cancelled: false, deliveryLabel: null });
+  assert.deepEqual(latest({ statut: 'envoye', outboxStatus: 'sent', outboxSentAt: null }), { at: '2026-10-05T09:00:00Z', delivered: true, cancelled: false, deliveryLabel: null }, 'A portal message has no delivery instant.');
+  // An e-mail draft stays a draft.
+  assert.equal(latest({ statut: 'envoi', canal: 'email', outboxStatus: 'manual' }).deliveryLabel, 'Brouillon manuel');
+});
+
+test('only the team’s messages are relances: a client message with a consent template is ignored', () => {
+  const client = (template, createdAt) => ({ id: `client-${createdAt}`, type: 'client', canal: 'portal', template, statut: null, createdAt });
+  const awaited = messages => consentRelance(dossier('r', 'attente_feu_vert', { messages }));
+  assert.equal(awaited([message('demande_feu_vert', '2026-10-02T09:00:00Z'), client('relance_feu_vert', '2026-10-06T07:00:00Z')]), null);
+  assert.equal(awaited([message('relance_feu_vert', '2026-10-04T09:00:00Z'), client('demande_feu_vert', '2026-10-05T09:00:00Z')]).at, '2026-10-04T09:00:00Z', 'A client « request » does not hide the current relance.');
 });

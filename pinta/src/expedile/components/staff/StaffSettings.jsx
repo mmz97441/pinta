@@ -103,7 +103,7 @@ function Business() {
       <div className="flex flex-wrap gap-2"><button className={`${BUTTON} brand-bg text-white`} onClick={save}>{busy ? 'Enregistrement…' : 'Enregistrer les règles'}</button><button className={BUTTON} onClick={reload}>Annuler et recharger</button></div>
     </fieldset>
     <Feedback notice={notice} />
-    <div className="space-y-2 border-t border-gray-200 pt-5"><h3 className="font-bold">Rappels</h3><p className="text-sm text-gray-600">Fonctionnement actuel, sans réglage :</p><ul className="space-y-1 text-sm text-gray-700"><li><span className="font-semibold">Accord du client :</span> la tâche de relance apparaît 48&nbsp;h avant la clôture du départ.</li><li><span className="font-semibold">Paiement :</span> les relances se font depuis le dossier.</li></ul><p className="text-sm text-gray-600">Aucune relance n’est envoyée automatiquement au client.</p></div>
+    <div className="space-y-2 border-t border-gray-200 pt-5"><h3 className="font-bold">Rappels</h3><p className="text-sm text-gray-600">Fonctionnement actuel, sans réglage :</p><ul className="space-y-1 text-sm text-gray-700"><li><span className="font-semibold">Accord du client :</span> quand l’accord manque, la tâche de relance apparaît 48&nbsp;h avant la clôture du départ. Après une demande ou une relance, elle attend sa livraison au client puis 24&nbsp;h ; un envoi en échec ou annulé ne la retarde pas.</li><li><span className="font-semibold">Paiement :</span> les relances se font depuis le dossier.</li></ul><p className="text-sm text-gray-600">Aucune relance n’est envoyée automatiquement au client.</p></div>
   </section>;
 }
 function Forbidden() {

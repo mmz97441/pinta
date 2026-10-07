@@ -1426,6 +1426,77 @@ async function main() {
       assertNoBusinessWrite(f);
     });
 
+    // ── C''. The follow-up counts from the delivery; a send the database cancelled or failed; closed desired days ──
+    // (final verification review, 2026-10-07: notification_outbox status and sent_at, as the server reads them).
+    for (const [width, theme] of [[1440, 'light'], [390, 'dark']]) await scenario(`a-relance-still-to-deliver-holds-and-a-delivered-one-is-followed-up-from-its-delivery-${width}-${theme}`, async f => {
+      // EXP-ACC003's latest relance, queued 24 h 15 ago (after the fixture's relance of 7 h 30) and rescheduled by the
+      // 24-hour client rule: not delivered yet. Counted from its queueing it would no longer be followed up.
+      const relance = { id: uuid('b2000000', 310), colis_id: DOSSIER.ACC003, type: 'staff', auteur_nom: 'Camille', texte: 'Bonjour, votre accord est toujours attendu.', canal: 'telegram', template: 'relance_feu_vert', statut: 'envoi', lu: true,
+        created_at: '2026-10-05T07:45:00Z', notification_outbox: [{ status: 'pending', sent_at: null }] };
+      f.tables.messages.push(relance);
+      await openDossier(f, DOSSIER.ACC003);await waitTheme(f, theme);
+      await departureShown(f, 'Départ : jeudi 8 octobre · Réunion');
+      assert.equal(await alertBand(f).count(), 0, 'Still to deliver: no relance on top of it.');
+      if (width >= 1280) {
+        await openAccords(f);
+        const cell = await tableCell(f, DOSSIER.ACC003, 'lastRelanceAt');
+        assert.deepEqual([cell.text, cell.secondary], ['05/10/2026 En attente de livraison', ['En attente de livraison']]);
+        // Delivered this morning: « Dernière relance » is dated by its delivery, never by its queueing.
+        Object.assign(relance, { statut: 'envoye', notification_outbox: [{ status: 'sent', sent_at: '2026-10-06T06:00:00Z' }] });
+        await openAccords(f);
+        const delivered = await tableCell(f, DOSSIER.ACC003, 'lastRelanceAt');
+        assert.deepEqual([delivered.text, delivered.secondary], ['06/10/2026', []]);
+      }
+      // Delivered 23 h 30 ago: followed up until 8 h 30 (UTC), then the relance is back on the page left open.
+      Object.assign(relance, { statut: 'envoye', notification_outbox: [{ status: 'sent', sent_at: '2026-10-05T08:30:00Z' }] });
+      await openDossier(f, DOSSIER.ACC003);
+      await departureShown(f, 'Départ : jeudi 8 octobre · Réunion');
+      assert.equal(await alertBand(f).count(), 0, 'Delivered 23 h 30 ago: followed up.');
+      await f.page.screenshot({ path: `${output}/followed-from-delivery-${width}-${theme}.png`, fullPage: true });
+      await idleUntil(f, '2026-10-06T08:31:00Z');
+      await alertBand(f).getByText(CUTOFF_8, { exact: true }).waitFor();
+      await alertBand(f).getByRole('link', { name: 'Relancer le client', exact: true }).waitFor();
+      await noPageOverflow(f);
+      assertNoBusinessWrite(f);
+    }, { width, theme });
+
+    for (const [outbox, label, statut] of [['cancelled', 'Envoi annulé', 'envoi'], ['failed', 'Envoi non confirmé', 'envoi'], ['cancelled', 'Envoi annulé', 'echec']]) await scenario(`a-relance-the-database-${outbox}-never-awaits-delivery-and-is-relanced-${statut}`, async f => {
+      // EXP-ACC003: the latest relance (6 October, 7 h UTC) was ${outbox} in notification_outbox; its message reads « ${statut} ».
+      f.tables.messages.push({ id: uuid('b2000000', 320), colis_id: DOSSIER.ACC003, type: 'staff', auteur_nom: 'Camille', texte: 'Bonjour, votre accord est toujours attendu.', canal: 'telegram', template: 'relance_feu_vert', statut, lu: true,
+        created_at: '2026-10-06T07:00:00Z', notification_outbox: [{ status: outbox, sent_at: null }] });
+      await openAccords(f);
+      const cell = await tableCell(f, DOSSIER.ACC003, 'lastRelanceAt');
+      assert.deepEqual([cell.text, cell.secondary], [`06/10/2026 ${label}`, [label]]);
+      assert.equal(await f.page.getByText('En attente de livraison', { exact: true }).count(), 0, 'A cancelled or failed relance never reads as awaiting delivery.');
+      // The list mark and the dossier ask to relance: it did not reach the client.
+      await f.page.goto(`${base}/colis`);
+      await f.page.locator(`[data-dossier-row="${DOSSIER.ACC003}"]:visible`).getByRole('img', { name: `À vérifier : ${CUTOFF_8}`, exact: true }).waitFor();
+      await openDossier(f, DOSSIER.ACC003);
+      assert.deepEqual((await bandLines(f)).map(({ text, link }) => [text, link?.label]), [[CUTOFF_8, 'Relancer le client']]);
+      assertNoBusinessWrite(f);
+    });
+
+    for (const [width, theme] of [[1440, 'light'], [390, 'dark']]) await scenario(`a-desired-day-whose-departure-closed-asks-for-another-departure-never-for-consent-before-its-closing-${width}-${theme}`, async f => {
+      // EXP-ACC006 wishes Saturday 10 October, whose Réunion departure closed its loading yesterday; EXP-ACC012 wishes
+      // Friday 9 October, without any departure. Both habitual closings are on Wednesday 7 October at 17 h (inside 48 h).
+      addDepartures(f, extraDeparture(uuid('d2000000', 15), 'ENV-2026-113', '2026-10-10', '974', { loading_closes_at: '2026-10-05T10:00:00Z' }));
+      row(f, DOSSIER.ACC006).depart_souhaite = '2026-10-10';row(f, DOSSIER.ACC012).depart_souhaite = '2026-10-09';f.before = structuredClone(f.tables.colis);
+      await openDossier(f, DOSSIER.ACC006);await waitTheme(f, theme);
+      await departureShown(f, 'Départ souhaité : samedi 10 octobre · départ clôturé');
+      if (width < 640) await alertBand(f).getByText('Choisir un autre départ', { exact: true }).waitFor();
+      assert.deepEqual((await bandLines(f)).map(({ text, link }) => [text, link?.label]), [['Départ souhaité le samedi 10 octobre : le départ de ce jour pour la Réunion est clôturé.', 'Choisir un autre départ']],
+        'No consent to obtain before a closing that cannot be met.');
+      await noPageOverflow(f);await axe(f);
+      await f.page.screenshot({ path: `${output}/closed-wish-${width}-${theme}.png`, fullPage: true });
+      // Without a departure that day, the habitual closing still asks for consent before it.
+      await openDossier(f, DOSSIER.ACC012);
+      await departureShown(f, 'Départ souhaité : vendredi 9 octobre · à créer');
+      const lines = (await bandLines(f)).map(({ text, link }) => [text, link?.label]);
+      assert.deepEqual(lines.map(([text]) => text), ['Accord du client à obtenir avant mercredi 7 octobre, 17 h (clôture habituelle du départ du vendredi 9 octobre).',
+        'Départ souhaité le vendredi 9 octobre : aucun départ n’est prévu ce jour-là pour la Réunion.']);
+      assertNoBusinessWrite(f);
+    }, { width, theme });
+
     for (const theme of ['light', 'dark']) for (const width of [1440, 390]) await scenario(`received-cartons-are-measured-before-the-consent-${width}-${theme}`, async f => {
       // EXP-ACC001 (received, not measured) now leaves on 8 October: its consent closes within 48 hours.
       row(f, DOSSIER.ACC001).envoi_id = DEPARTURE.reunion8;f.before = structuredClone(f.tables.colis);

@@ -242,20 +242,24 @@ test('consent_before_cutoff stays silent outside the window, during a voluntary 
 const request = (id, createdAt, fields = {}) => ({ id, type: 'staff', template: 'demande_feu_vert', canal: 'telegram', statut: 'envoye', createdAt, ...fields });
 const relance = (id, createdAt, fields = {}) => request(id, createdAt, { template: 'relance_feu_vert', ...fields });
 
-test('consentFollowUp: the latest request or relance is followed up for 24 hours unless its delivery failed or was cancelled', () => {
+test('consentFollowUp: the latest staff request or relance is followed up 24 hours from its delivery, unless it failed or was cancelled', () => {
   const followUp = (messages, now = today) => consentFollowUp({ messages }, now);
-  assert.deepEqual(followUp([request('m1', '2026-10-06T06:00:00Z')]), { at: '2026-10-06T06:00:00Z', until: '2026-10-07T06:00:00.000Z' });
-  assert.deepEqual(followUp([request('m1', '2026-10-05T09:00:00Z'), relance('m2', '2026-10-06T07:30:00Z')]), { at: '2026-10-06T07:30:00Z', until: '2026-10-07T07:30:00.000Z' }, 'The relance is the latest.');
-  // 24 hours, end excluded (the server's created_at + 24 h > now()).
+  // Without its outbox row (a portal or older message): 24 hours from its creation.
+  assert.deepEqual(followUp([request('m1', '2026-10-06T06:00:00Z')]), { at: '2026-10-06T06:00:00Z', until: '2026-10-07T06:00:00.000Z', pending: false });
+  assert.deepEqual(followUp([request('m1', '2026-10-05T09:00:00Z'), relance('m2', '2026-10-06T07:30:00Z')]), { at: '2026-10-06T07:30:00Z', until: '2026-10-07T07:30:00.000Z', pending: false }, 'The relance is the latest.');
+  // 24 hours, end excluded (the server's end > now()).
   assert.equal(followUp([request('m1', '2026-10-05T08:00:00Z')]), null);
-  assert.deepEqual(followUp([request('m1', '2026-10-05T08:01:00Z')]), { at: '2026-10-05T08:01:00Z', until: '2026-10-06T08:01:00.000Z' });
+  assert.deepEqual(followUp([request('m1', '2026-10-05T08:01:00Z')]), { at: '2026-10-05T08:01:00Z', until: '2026-10-06T08:01:00.000Z', pending: false });
   // A failed or cancelled delivery is no follow-up, and an earlier delivered request does not take over.
   assert.equal(followUp([request('m1', '2026-10-06T05:00:00Z'), relance('m2', '2026-10-06T07:00:00Z', { statut: 'echec' })]), null);
   assert.equal(followUp([relance('m2', '2026-10-06T07:00:00Z', { statut: 'envoi', outboxStatus: 'cancelled' })]), null);
   assert.equal(followUp([relance('m2', '2026-10-06T07:00:00Z', { statut: 'envoi', outboxStatus: 'failed' })]), null);
-  // Queued, blocked by an open conversation or written as an e-mail draft: the team made the request.
-  for (const fields of [{ statut: 'envoi' }, { statut: 'envoi', outboxStatus: 'pending' }, { statut: 'envoi', outboxStatus: 'blocked' }, { statut: 'envoi', canal: 'email', outboxStatus: 'manual' }, { statut: 'lu' }])
-    assert.notEqual(followUp([relance('m2', '2026-10-06T07:00:00Z', fields)]), null, JSON.stringify(fields));
+  assert.equal(followUp([relance('m2', '2026-10-06T07:00:00Z', { statut: 'envoye', outboxStatus: 'failed' })]), null, 'The outbox decides over the message.');
+  // An e-mail draft (outbox manual) and a portal message: 24 hours from their creation, the team acted.
+  assert.deepEqual(followUp([relance('m2', '2026-10-06T07:00:00Z', { statut: 'envoi', canal: 'email', outboxStatus: 'manual' })]), { at: '2026-10-06T07:00:00Z', until: '2026-10-07T07:00:00.000Z', pending: false });
+  assert.equal(followUp([relance('m2', '2026-10-05T07:00:00Z', { statut: 'envoi', canal: 'email', outboxStatus: 'manual' })]), null, 'A draft written 25 hours ago is no longer followed up.');
+  assert.deepEqual(followUp([request('m1', '2026-10-06T07:00:00Z', { canal: 'portal', outboxStatus: 'sent', outboxSentAt: null })]).until, '2026-10-07T07:00:00.000Z', 'A portal message has no delivery instant: its creation counts.');
+  for (const fields of [{ statut: 'lu' }, { statut: 'envoi' }]) assert.notEqual(followUp([relance('m2', '2026-10-06T07:00:00Z', fields)]), null, JSON.stringify(fields));
   // Other messages and unreadable dates do not count.
   assert.equal(followUp([{ id: 'm3', type: 'staff', template: null, statut: 'envoye', createdAt: '2026-10-06T07:00:00Z' }, { id: 'm4', type: 'client', template: 'client_decision_wait', createdAt: '2026-10-06T07:00:00Z' }]), null);
   assert.equal(followUp([request('m1', 'bientôt'), request('m2', null)]), null);
@@ -265,6 +269,23 @@ test('consentFollowUp: the latest request or relance is followed up for 24 hours
   assert.equal(consentFollowUp({}, today), null);
   assert.equal(consentFollowUp(undefined, today), null);
   assert.equal(followUp([request('m1', '2026-10-06T06:00:00Z')], 'demain'), null);
+});
+
+test('consentFollowUp anchors the 24 hours on the delivery and holds while it is still to come', () => {
+  const followUp = (messages, now = today) => consentFollowUp({ messages }, now);
+  // Queued 30 hours ago, delivered 2 hours ago (notification_outbox.sent_at): 22 hours more.
+  assert.deepEqual(followUp([request('m1', '2026-10-05T02:00:00Z', { outboxStatus: 'sent', outboxSentAt: '2026-10-06T06:00:00Z' })]), { at: '2026-10-05T02:00:00Z', until: '2026-10-07T06:00:00.000Z', pending: false });
+  assert.equal(followUp([request('m1', '2026-10-05T02:00:00Z', { outboxStatus: 'sent', outboxSentAt: '2026-10-05T07:00:00Z' })]), null, 'Delivered 25 hours ago.');
+  // Still to deliver (queued, blocked by an open conversation, rescheduled by the 24-hour client rule, being sent):
+  // it holds whatever its age, until it is delivered.
+  for (const outboxStatus of ['pending', 'blocked', 'sending'])
+    assert.deepEqual(followUp([relance('m2', '2026-10-05T02:00:00Z', { statut: 'envoi', outboxStatus })]), { at: '2026-10-05T02:00:00Z', until: null, pending: true }, outboxStatus);
+  // A retry to deliver holds over the « echec » of its first attempt.
+  assert.deepEqual(followUp([relance('m2', '2026-10-06T07:00:00Z', { statut: 'echec', outboxStatus: 'pending' })]), { at: '2026-10-06T07:00:00Z', until: null, pending: true });
+  // A client's message never counts, even with a consent template: the staff request decides.
+  const client = (id, createdAt, template) => ({ id, type: 'client', template, canal: 'portal', statut: null, createdAt });
+  assert.equal(followUp([request('m1', '2026-10-05T02:00:00Z', { outboxStatus: 'sent', outboxSentAt: '2026-10-05T02:00:00Z' }), client('c1', '2026-10-06T07:50:00Z', 'relance_feu_vert'), client('c2', '2026-10-06T07:55:00Z', 'demande_feu_vert')]), null);
+  assert.equal(followUp([client('c1', '2026-10-06T07:50:00Z', 'relance_feu_vert')]), null);
 });
 
 test('consent_before_cutoff: no relance while the latest request or relance is followed up', () => {
@@ -277,11 +298,36 @@ test('consent_before_cutoff: no relance while the latest request or relance is f
   // A failed or cancelled relance did not reach the client: the relance is due.
   assert.deepEqual(keys(awaiting([request('m1', '2026-10-05T10:00:00Z'), relance('m2', '2026-10-06T07:00:00Z', { statut: 'echec' })])), ['consent_before_cutoff']);
   assert.deepEqual(keys(awaiting([relance('m2', '2026-10-06T07:00:00Z', { statut: 'envoi', outboxStatus: 'cancelled' })])), ['consent_before_cutoff']);
+  // Queued 30 hours ago and still to deliver: no relance on top of it; delivered 2 hours ago: followed up.
+  assert.deepEqual(awaiting([relance('m2', '2026-10-05T02:00:00Z', { statut: 'envoi', outboxStatus: 'pending' })]), []);
+  assert.deepEqual(awaiting([relance('m2', '2026-10-05T02:00:00Z', { outboxStatus: 'sent', outboxSentAt: '2026-10-06T06:00:00Z' })]), []);
+  assert.deepEqual(keys(awaiting([relance('m2', '2026-10-05T02:00:00Z', { outboxStatus: 'sent', outboxSentAt: '2026-10-05T07:00:00Z' })])), ['consent_before_cutoff'], 'Delivered 25 hours ago.');
+  // A client's message with a consent template does not hide the relance.
+  assert.deepEqual(keys(awaiting([request('m1', '2026-10-05T02:00:00Z'), { id: 'c1', type: 'client', template: 'relance_feu_vert', canal: 'portal', statut: null, createdAt: '2026-10-06T07:50:00Z' }])), ['consent_before_cutoff']);
   // A voluntary wait stays silent whatever the messages; a consent still to ask is never followed up (a recent message
   // belongs to an earlier set of cartons).
   assert.deepEqual(alerts({ statut: 'attente_feu_vert', envoi: OCT_08.id, attenteClientDate: '2026-10-05T08:00:00Z', messages: [request('m1', '2026-10-01T08:00:00Z')] }, {}, OCT_08), []);
   for (const [statut, label] of [['mesure', 'Demander l’accord'], ['receptionne', 'Mesurer les cartons']])
     assert.deepEqual(alerts({ statut, envoi: OCT_08.id, messages: [request('m1', '2026-10-06T07:00:00Z')] }, {}, OCT_08).map(alert => alert.action.label), [label], statut);
+});
+
+test('consent_before_cutoff: a departure that has left or is closed asks for another departure, never for consent before its closing', () => {
+  // Thursday 8 October closes, as usual, on Wednesday 7 October at 17 h: inside the window. Its departure's own loading
+  // closed yesterday: the day cannot be met, only another departure can.
+  const closedOct08 = { ...OCT_08, loadingClosesAt: '2026-10-05T10:00:00Z' };
+  for (const statut of ['receptionne', 'mesure', 'attente_feu_vert']) {
+    assert.deepEqual(alerts({ statut, departSouhaite: '2026-10-08' }, {}, undefined, { envois: [closedOct08] }).map(alert => [alert.key, alert.text, alert.action.label]),
+      [['departure_to_create', 'Départ souhaité le jeudi 8 octobre : le départ de ce jour pour la Réunion est clôturé.', 'Choisir un autre départ']], statut);
+    assert.deepEqual(keys(alerts({ statut, departSouhaite: '2026-10-08' }, {}, undefined, { envois: [{ ...OCT_08, statut: 'parti', departedAt: '2026-10-06T06:00:00Z' }] })), ['departure_to_create'], `${statut}: left`);
+  }
+  // Without any departure that day, the Wednesday closing still asks for consent before it.
+  assert.deepEqual(keys(alerts({ statut: 'mesure', departSouhaite: '2026-10-08' })), ['consent_before_cutoff', 'departure_to_create']);
+  // Another destination's closed departure that day does not count.
+  assert.deepEqual(keys(alerts({ statut: 'mesure', departSouhaite: '2026-10-08' }, {}, undefined, { envois: [{ ...closedOct08, destinationCode: '971' }] })), ['consent_before_cutoff', 'departure_to_create']);
+  // An assigned departure archived or gone gives no closing either.
+  for (const gone of [{ ...OCT_08, statut: 'archive' }, { ...OCT_08, statut: 'parti', departedAt: '2026-10-06T06:00:00Z' }, { ...OCT_08, departedAt: '2026-10-06T06:00:00Z' }])
+    assert.deepEqual(keys(alerts({ statut: 'attente_feu_vert', envoi: gone.id }, {}, gone)), [], JSON.stringify(gone));
+  assert.deepEqual(keys(alerts({ statut: 'attente_feu_vert', envoi: OCT_08.id }, {}, OCT_08)), ['consent_before_cutoff'], 'Its open departure still closes it.');
 });
 
 test('departure_to_create: a desired day without a planned departure leads to the Départ field', () => {

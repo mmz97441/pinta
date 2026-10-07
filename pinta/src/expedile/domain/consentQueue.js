@@ -18,7 +18,13 @@ export const CONSENT_LABELS = Object.freeze([...Object.values(CONSENT_STAGE_LABE
 /** A relance still queued when the client chose to wait: the server cancelled
  * its delivery (client_decision), so it was never sent. */
 export const CANCELLED_RELANCE_LABEL = 'Annulée · attente du client';
+/** A relance whose delivery the server cancelled for another reason (the
+ * dossier or the request changed before it left): it was never sent. */
+export const CANCELLED_SEND_LABEL = 'Envoi annulé';
 const QUEUE_STATUSES = new Set(['receptionne', 'mesure', 'attente_feu_vert']);
+// notification_outbox states: a delivery still to come, and the end of a delivery that did not reach the client.
+const TO_DELIVER = new Set(['pending', 'blocked', 'sending']);
+const FAILED_SEND = 'failed', CANCELLED_SEND = 'cancelled';
 // The table's business calendar (formatDossierTableDate), without the year.
 const WAIT_DAY = new Intl.DateTimeFormat('fr-FR', { day: '2-digit', month: '2-digit', timeZone: 'Indian/Reunion' });
 const instant = value => { const time = typeof value === 'string' ? Date.parse(value) : NaN; return Number.isFinite(time) ? time : null; };
@@ -71,26 +77,43 @@ export function consentSummary(consent) {
 }
 
 /** The last relance of the current request while the answer is awaited: the
- * latest relance_feu_vert message from the latest demande_feu_vert on (an older
- * request's relances no longer count). `at` is its saved instant; until Telegram
- * or the portal confirmed it, `deliveryLabel` says where it stands (« En
- * attente de livraison », « Envoi non confirmé », « Brouillon manuel »), so a
- * relance never reads as sent before it is. A Telegram relance still queued
- * when the client chose to wait was cancelled by the server (`cancelled`,
- * « Annulée · attente du client »): it never reads as awaiting delivery. Null
- * when there is none. */
+ * latest relance_feu_vert the team wrote (staff messages only) from the latest
+ * demande_feu_vert on (an older request's relances no longer count). Its
+ * delivery is read from its notification_outbox row (`outboxStatus`,
+ * `outboxSentAt`) when the data layer provides it, else from the message:
+ * - delivered (outbox sent, or the message confirmed): `at` is the delivery
+ *   instant when known, else the saved instant, and there is no label;
+ * - cancelled by the server (outbox cancelled; its message stays « envoi »):
+ *   « Annulée · attente du client » when the client chose to wait after it
+ *   was queued (client_decision cancels the queued relances), « Envoi annulé »
+ *   otherwise. Without the outbox row, a Telegram relance still « envoi » when
+ *   the client chose to wait reads « Annulée · attente du client » too;
+ * - failed (outbox failed, or the message « echec » without a delivery in
+ *   progress): « Envoi non confirmé »;
+ * - still to deliver (queued, blocked, rescheduled or being sent, including a
+ *   retry): « En attente de livraison »; an e-mail draft: « Brouillon manuel ».
+ * So a relance never reads as sent before it is, and a cancelled or failed one
+ * never reads as awaiting delivery. Null when there is none. */
 export function consentRelance(dossier) {
   if (dossier?.statut !== 'attente_feu_vert' || dossier.archive) return null;
-  const messages = (Array.isArray(dossier.messages) ? dossier.messages : []).filter(message => instant(message?.createdAt) !== null);
+  // A message the client wrote (messages.type is never empty in the database) is no request nor relance.
+  const messages = (Array.isArray(dossier.messages) ? dossier.messages : []).filter(message => (message?.type ?? 'staff') === 'staff' && instant(message.createdAt) !== null);
   const requestedAt = Math.max(-Infinity, ...messages.filter(message => message.template === 'demande_feu_vert').map(message => instant(message.createdAt)));
   const latest = messages.filter(message => message.template === 'relance_feu_vert' && instant(message.createdAt) >= requestedAt)
     .reduce((last, message) => !last || instant(message.createdAt) >= instant(last.createdAt) ? message : last, null);
   if (!latest) return null;
-  const delivered = messageDelivered(latest);
+  const outbox = latest.outboxStatus ?? null;
+  const delivered = outbox === 'sent' || (outbox !== FAILED_SEND && outbox !== CANCELLED_SEND && !TO_DELIVER.has(outbox) && messageDelivered(latest));
   // client_decision('wait') cancels the pending and blocked relances; a manual
   // e-mail draft and a failed send keep their own state.
   const waitChosenAt = instant(dossier.attenteClientDate);
-  const cancelled = !delivered && latest.statut === 'envoi' && latest.canal !== 'email'
-    && waitChosenAt !== null && waitChosenAt >= instant(latest.createdAt);
-  return { at: latest.createdAt, delivered, cancelled, deliveryLabel: delivered ? null : cancelled ? CANCELLED_RELANCE_LABEL : messageDeliveryLabel(latest) };
+  const waitAfter = waitChosenAt !== null && waitChosenAt >= instant(latest.createdAt);
+  const cancelled = !delivered && (outbox === CANCELLED_SEND || (outbox === null && latest.statut === 'envoi' && latest.canal !== 'email' && waitAfter));
+  const deliveryLabel = delivered ? null
+    : cancelled ? (outbox === CANCELLED_SEND && !waitAfter ? CANCELLED_SEND_LABEL : CANCELLED_RELANCE_LABEL)
+      : outbox === FAILED_SEND ? messageDeliveryLabel({ statut: 'echec' })
+        : TO_DELIVER.has(outbox) ? messageDeliveryLabel({ statut: 'envoi' })
+          : messageDeliveryLabel(latest);
+  const deliveredAt = delivered && outbox === 'sent' && instant(latest.outboxSentAt) !== null ? latest.outboxSentAt : null;
+  return { at: deliveredAt || latest.createdAt, delivered, cancelled, deliveryLabel };
 }
