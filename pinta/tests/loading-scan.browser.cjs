@@ -746,6 +746,8 @@ async function main() {
 
     // ── 7c. A phone: the scanned dossier lands under the scan bar, however long the last answer ──
     await scenario('phone-scanned-dossier-lands-under-the-scan-bar', async f => {
+      // The wider fonts of Linux (CI): a long answer takes more lines, and the bar grows more.
+      await f.context.addInitScript(() => document.addEventListener('DOMContentLoaded', () => { const style = document.createElement('style'); style.textContent = '* { font-family: Verdana, "DejaVu Sans", sans-serif !important; }'; document.head.appendChild(style); }));
       await openLoading(f);
       const placement = id => f.page.evaluate(id => {
         const bar = document.querySelector('.loading-scan-bar').getBoundingClientRect();
