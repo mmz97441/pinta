@@ -796,6 +796,8 @@ export async function updateClient(id, changes) {
   }
   // One stored format for the Telegram username: trimmed, without @.
   if ('telegram_username' in snakeChanges) snakeChanges.telegram_username = normalizeTelegramUsername(snakeChanges.telegram_username) || null;
+  // The destination is read as left(cp,3): the postal code is stored without spaces (the database refuses « 97 400 »).
+  if (typeof snakeChanges.cp === 'string') snakeChanges.cp = snakeChanges.cp.replace(/\s/g, '');
   if (dataScope === 'client') {
     const { data, error } = await supabase.rpc('update_client_profile', {
       p_changes: snakeChanges,
@@ -1021,7 +1023,7 @@ export async function insertClient(clientData) {
     adresse_ligne2: clientData.adresseLigne2 || null,
     commune: clientData.commune || null,
     infos_livraison: clientData.infosLivraison || null,
-    cp: clientData.cp,
+    cp: typeof clientData.cp === 'string' ? clientData.cp.replace(/\s/g, '') : clientData.cp,
     tel: clientData.tel || null,
     tel_fixe: clientData.telFixe || null,
     email: clientData.email || null,
