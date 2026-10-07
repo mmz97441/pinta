@@ -259,6 +259,35 @@ async function main() {
       await options.getByRole('button',{name:'Effacer ce filtre',exact:true}).click();await options.waitFor({state:'hidden'});await waitIds(f,[P,P2,P3,P4,P5,P6]);
       await assertNoBusinessChange(f,before);
     });
+    // The Action column is pinned to the right edge: it is resized from its left border, which follows the pointer
+    // (dragging it left widens the column, right narrows it), never from a handle stuck against the window.
+    for(const dark of [false,true])await scenario(`pinned-action-column-resizes-from-its-left-border-${dark?'dark':'light'}`,async f=>{
+      await f.page.setViewportSize({width:1440,height:1000});await f.context.addInitScript(dark=>localStorage.setItem('expedile-theme',dark?'dark':'light'),dark);
+      const before=structuredClone(f.tables.colis);await open(f);
+      const head=f.page.locator('thead th[data-column="action"]'),handle=f.page.getByRole('separator',{name:'Redimensionner Action',exact:true});
+      await handle.waitFor();
+      const box=async()=>{const [th,grip]=await Promise.all([head.boundingBox(),handle.boundingBox()]);return{th,grip,width:Number(await handle.getAttribute('aria-valuenow'))};};
+      let m=await box();
+      assert.ok(Math.abs(m.grip.x-m.th.x)<=1,'The handle sits on the left border of the pinned column.');
+      assert.ok(m.th.x+m.th.width<=1441&&m.th.x+m.th.width>=1439,'The column stays pinned to the right edge.');
+      const drag=async dx=>{const start=m.grip.x+m.grip.width/2,y=m.grip.y+m.grip.height/2;await f.page.mouse.move(start,y);await f.page.mouse.down();await f.page.mouse.move(start+dx/2,y);await f.page.mouse.move(start+dx,y);await f.page.mouse.up();};
+      const initial=m.width,left=m.th.x;
+      await drag(-60);await f.page.waitForFunction(width=>Number(document.querySelector('[aria-label="Redimensionner Action"]').getAttribute('aria-valuenow'))===width,initial+60);
+      m=await box();assert.ok(Math.abs(m.th.x-(left-60))<=1,'Dragging the border left widens the column under the pointer.');
+      await drag(200);await f.page.waitForFunction(()=>document.querySelector('[aria-label="Redimensionner Action"]').getAttribute('aria-valuenow')==='132');
+      m=await box();assert.ok(Math.abs(m.th.x+m.th.width-1440)<=1&&Math.abs(m.th.width-132)<=1,'Dragging it right narrows the column down to its readable minimum.');
+      // The arrow keys move the border the same way.
+      await handle.focus();await handle.press('ArrowLeft');await f.page.waitForFunction(()=>document.querySelector('[aria-label="Redimensionner Action"]').getAttribute('aria-valuenow')==='142');
+      await handle.press('ArrowRight');await f.page.waitForFunction(()=>document.querySelector('[aria-label="Redimensionner Action"]').getAttribute('aria-valuenow')==='132');
+      // The title clears the handle, and the button stays whole and clickable at the minimum.
+      const [title,grip]=await Promise.all([head.locator('.dossier-table-heading-text').boundingBox(),handle.boundingBox()]);
+      assert.ok(title.x>=grip.x+grip.width,'« Action » starts after the handle.');
+      const button=cell(f,P,'action').getByRole('button').first();const b=await button.boundingBox();
+      assert.ok(b.height>=44&&b.x>=m.th.x&&b.x+b.width<=m.th.x+m.th.width+1);
+      assert.equal(await button.evaluate(n=>n.scrollWidth>n.clientWidth+1),false);
+      await f.page.screenshot({path:`${output}/pinned-action-resize-${dark?'dark':'light'}.png`});
+      await assertNoBusinessChange(f,before);
+    });
     // The client's offer before the name: « P » Premium, « F » Freemium, an ended Premium marked as such
     // (in words too, readable without hovering); a dossier without a known client shows no offer.
     for(const width of [1440,390])for(const dark of [false,true])await scenario(`client-offer-reads-p-or-f-before-the-name-${width}-${dark?'dark':'light'}`,async f=>{

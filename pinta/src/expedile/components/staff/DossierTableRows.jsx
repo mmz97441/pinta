@@ -189,27 +189,31 @@ function CellContent({ column, c, client, model, alerts, onOpen, onOpenDossier, 
 }
 
 
-function ColumnResize({ column, width, onResize }) {
+/** The resize handle of a column. `edge="start"`: the column is pinned to the right edge of
+ * the list (Action), so its handle sits on its left border and follows the pointer: dragging
+ * that border left widens the column, right narrows it (the arrow keys move it the same way). */
+function ColumnResize({ column, width, onResize, edge = 'end' }) {
+  const sign = edge === 'start' ? -1 : 1;
   const drag = useRef(null);
   const { min, max, initial } = columnWidthBounds(column);
   const currentWidth = clampColumnWidth(column, width);
   return <button type="button" role="separator" aria-orientation="vertical" aria-label={`Redimensionner ${column.label}`} aria-valuemin={min} aria-valuemax={max} aria-valuenow={currentWidth} aria-valuetext={`${currentWidth} pixels`} title={`Largeur de ${column.label} : glisser ce bord. Double-clic ou Entrée pour rétablir ; flèches gauche/droite pour régler.`}
-    className="dossier-table-resize" onClick={stopPropagation}
+    className={`dossier-table-resize${edge === 'start' ? ' dossier-table-resize-start' : ''}`} onClick={stopPropagation}
     onDoubleClick={event => { event.preventDefault(); event.stopPropagation(); onResize(column, initial); }}
     onPointerDown={event => { if (event.button !== 0) return; event.preventDefault(); event.stopPropagation(); event.currentTarget.focus({ preventScroll: true }); drag.current = { x: event.clientX, width: currentWidth }; event.currentTarget.setPointerCapture(event.pointerId); }}
-    onPointerMove={event => { if (drag.current) onResize(column, drag.current.width + event.clientX - drag.current.x); }}
+    onPointerMove={event => { if (drag.current) onResize(column, drag.current.width + sign * (event.clientX - drag.current.x)); }}
     onPointerUp={event => { drag.current = null; if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId); }}
     onPointerCancel={() => { drag.current = null; }} onLostPointerCapture={() => { drag.current = null; }}
-    onKeyDown={event => { const step = event.shiftKey ? 50 : 10; const value = { ArrowLeft: currentWidth - step, ArrowRight: currentWidth + step, Home: min, End: max, Enter: initial }[event.key]; if (value !== undefined) { event.preventDefault(); event.stopPropagation(); onResize(column, value); } }}><span aria-hidden="true" className="dossier-table-resize-line" /></button>;
+    onKeyDown={event => { const step = event.shiftKey ? 50 : 10; const value = { ArrowLeft: currentWidth - sign * step, ArrowRight: currentWidth + sign * step, Home: min, End: max, Enter: initial }[event.key]; if (value !== undefined) { event.preventDefault(); event.stopPropagation(); onResize(column, value); } }}><span aria-hidden="true" className="dossier-table-resize-line" /></button>;
 }
 
 /** `selection` of the displayed dossiers: 'all', 'some' (a mixed checkbox) or 'none'. */
-export function DossierTableHead({ columns = TABLE_COLUMNS.daily, onSelectAll, selection = 'none', onSort, sortCol, sortDir, widths, onResize, filters = {}, onFilterColumn, openFilterKey = null }) {
+export function DossierTableHead({ columns = TABLE_COLUMNS.daily, onSelectAll, selection = 'none', onSort, sortCol, sortDir, widths, onResize, filters = {}, onFilterColumn, openFilterKey = null, actionPinned = false }) {
   return <tr className="dossier-table-head">
     <th scope="col" className="dossier-table-select" data-column="select">
       <label className="dossier-table-checkbox"><SelectionCheckbox aria-label="Sélectionner tous les dossiers affichés" selection={selection} onChange={onSelectAll} /></label>
     </th>
-    {columns.map(column => <th key={column.key} scope="col" data-column={column.key} data-column-label={column.label}
+    {columns.map(column => <th key={column.key} scope="col" data-column={column.key} data-column-label={column.label} data-resize-edge={column.key === 'action' && actionPinned ? 'start' : undefined}
       className={column.align === 'right' ? 'dossier-table-align-right' : undefined}
       aria-sort={isDossierTableColumnSortable(column) ? sortCol === column.key ? sortDir === 'desc' ? 'descending' : 'ascending' : 'none' : undefined}>
       <div className="dossier-table-heading-label">{isDossierTableColumnSortable(column) && onSort ? <button type="button" className="dossier-table-sort" aria-label={column.label} onClick={() => onSort(column.key)}
@@ -217,7 +221,7 @@ export function DossierTableHead({ columns = TABLE_COLUMNS.daily, onSelectAll, s
         <span className="dossier-table-heading-text" title={column.label}>{column.shortLabel || column.label}</span>{sortCol === column.key ? sortDir === 'desc' ? <ArrowDown size={14} aria-hidden="true" /> : <ArrowUp size={14} aria-hidden="true" /> : <ArrowUpDown size={14} aria-hidden="true" className="dossier-table-sort-idle" />}
       </button> : <span className="dossier-table-heading-text" title={column.label}>{column.shortLabel || column.label}</span>}
       {isDossierTableColumnSortable(column) && onFilterColumn && <button type="button" className="dossier-table-filter" aria-label={`Filtrer la colonne ${column.label}`} aria-pressed={Boolean(filters[column.key])} aria-haspopup="dialog" aria-expanded={openFilterKey === column.key} aria-controls={openFilterKey === column.key ? 'dossier-column-dialog' : undefined} title={`${filters[column.key] ? 'Modifier le filtre' : 'Filtrer'} : ${column.label}`} onClick={event => onFilterColumn(column.key, event.currentTarget)}><Filter size={14} aria-hidden="true" /></button>}</div>
-      {onResize && <ColumnResize column={column} width={widths?.[column.key]} onResize={onResize} />}
+      {onResize && <ColumnResize column={column} width={widths?.[column.key]} onResize={onResize} edge={column.key === 'action' && actionPinned ? 'start' : 'end'} />}
     </th>)}
   </tr>;
 }

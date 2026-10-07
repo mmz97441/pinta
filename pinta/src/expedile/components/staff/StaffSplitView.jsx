@@ -748,6 +748,7 @@ export default function StaffColisPage() {
                     columns={displayCols}
                     widths={widths}
                     onResize={setWidth}
+                    actionPinned={actionPinned}
                     filters={columnFilters}
                     onFilterColumn={(key, anchor) => { setColumnOptions({ key, anchor, fromMenu: false }); }}
                     openFilterKey={columnOptions && !columnOptions.fromMenu ? columnOptions.key : null}

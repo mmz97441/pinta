@@ -211,6 +211,10 @@ html:not(.dark) .dossier-table-filter[aria-pressed='true']::after { background: 
 .dossier-table-resize:hover, .dossier-table-resize:focus-visible, .dossier-table-resize:active { background: var(--dossier-table-selected-bg); }
 .dossier-table-resize:hover::after, .dossier-table-resize:focus-visible::after, .dossier-table-resize:active::after { width: 3px; background: var(--brand-text); }
 .dossier-table-resize:focus-visible { outline: 2px solid var(--brand-text); outline-offset: -2px; }
+/* The pinned Action column is resized from its left border, the one that moves; its title
+   keeps clear of that handle. */
+.dossier-table-resize-start { inset: 0 auto 0 0; justify-content: flex-start; }
+.dossier-table-head th[data-resize-edge='start'] { padding: 0 6px 0 12px; }
 .dossier-table-dimensions > span { display: block; }
 .dossier-table-card-main-action { margin-top: 12px; }
 .dossier-table-align-right .dossier-table-sort { justify-content: flex-end; }
