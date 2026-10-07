@@ -130,6 +130,7 @@ SELECT customs_assert(EXISTS(SELECT 1 FROM audit_actions WHERE colis_id='fc30000
 INSERT INTO envois(id,ref,destination_code,statut,date_depart) VALUES('fc700000-0000-4000-8000-000000000001','CUSTOMS-DEPARTURE','974','planifie',(now() AT TIME ZONE 'Europe/Paris')::date);
 UPDATE colis SET envoi_id='fc700000-0000-4000-8000-000000000001' WHERE id='fc300000-0000-4000-8000-000000000001';
 SET LOCAL ROLE authenticated;
+SELECT customs_assert((record_loading_count('fc700000-0000-4000-8000-000000000001','fc300000-0000-4000-8000-000000000001',1))->>'status'='recorded','the departure''s parcel is counted before the confirmation (loading control)');
 SELECT confirm_departure(e.id,(SELECT jsonb_agg(jsonb_build_object('id',id,'updated_at',updated_at,'outgoing_parcel_count',outgoing_parcel_count)) FROM colis WHERE envoi_id=e.id),e.updated_at) FROM envois e WHERE e.id='fc700000-0000-4000-8000-000000000001';
 SELECT customs_assert((SELECT jsonb_array_length(snapshot#>'{items,0,lignes}')=1 AND snapshot#>>'{items,0,lignes,0,custom_duty,code}'='00999997' AND jsonb_array_length(snapshot#>'{items,0,factures}')=1 FROM (SELECT get_departure_manifest('fc700000-0000-4000-8000-000000000001') snapshot) manifest),'departure manifest freezes paid customs classification and excludes duplicate source');
 RESET ROLE;

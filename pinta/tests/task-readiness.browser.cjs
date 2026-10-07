@@ -4,7 +4,7 @@ const { openTaskNavigation } = require('./task-navigation.helper.cjs');
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
-const { setup, base, ids } = require('./browser-regression.cjs');
+const { setup, base, ids, scanLoading } = require('./browser-regression.cjs');
 const { fixture: invoicesFixture, C } = require('./invoice-workspace.cjs');
 const { waitForCurrentInvoice } = require('./invoice-list.helper.cjs');
 const output = process.env.PINTA_TASK_READINESS_OUT || '/tmp/pinta-task-readiness';
@@ -54,8 +54,8 @@ async function fixture(browser, options={}) {
   }));
   await f.context.route('**/rest/v1/rpc/*',guarded(async route=>{
     const kind=new URL(route.request().url()).pathname.split('/').pop(),input=route.request().postDataJSON();
-    if(!['save_quote','save_preparation_measurements','queue_message','client_decision','mark_manual_payment','assign_colis_departure','confirm_departure','get_departure_manifest'].includes(kind)) return route.fallback();
-    if(kind==='get_departure_manifest') return answer(route,{envoi:f.tables.envois[0],confirmed_at:row.date_expedition,items:[{colis:row,client:f.tables.clients[0],lignes:f.tables.lignes,factures:f.tables.factures,categories:f.tables.categories}]});
+    // The confirmed manifest is the mock's (browser-regression.cjs), with the loading checks it froze.
+    if(!['save_quote','save_preparation_measurements','queue_message','client_decision','mark_manual_payment','assign_colis_departure','confirm_departure'].includes(kind)) return route.fallback();
     f.commands.push({kind,input:clone(input)});
     if(kind==='save_preparation_measurements'){
       assert.ok(rights('perm_colis_preparer'));assert.equal(row.feu_vert,'autorise');assert.ok(['autorise','en_preparation'].includes(row.statut));assert.equal(input.p_expected_updated_at,row.updated_at);assert.equal(input.p_expected_composition_version,row.preparation_composition_version);assert.ok(boxesValid(input.p_final_packages));
@@ -92,7 +92,8 @@ async function fixture(browser, options={}) {
     assert.equal(kind,'confirm_departure');assert.equal(row.statut,'paye');assert.ok(certified(row));assert.equal(input.p_expected_updated_at,f.tables.envois[0].updated_at);
     assert.equal(f.tables.envois[0].date_depart,TEST_DAY,'The actual departure is confirmed on its scheduled day');
     assert.deepEqual(input.p_loaded,[{id:row.id,updated_at:row.updated_at,outgoing_parcel_count:row.outgoing_parcel_count}]);
-    Object.assign(row,{statut:'expedie',date_expedition:new Date().toISOString()});advance(row);Object.assign(f.tables.envois[0],{statut:'parti',departed_at:row.date_expedition,manifest_version:1});advance(f.tables.envois[0]);return answer(route,f.tables.envois[0]);
+    // The mock confirms as the server does, the mandatory loading control included (every parcel scanned or counted).
+    const confirmed=f.rpc('confirm_departure',input);return answer(route,confirmed.body,confirmed.status);
   }));
   await f.context.route('**/functions/v1/correct-colis-task',guarded(async route=>{
     if(route.request().method()==='OPTIONS')return route.fulfill({status:204,headers:{'access-control-allow-origin':'*','access-control-allow-headers':'*','access-control-allow-methods':'POST, OPTIONS'}});
@@ -147,8 +148,11 @@ async function allScreensReadOnly(f){const snapshot=JSON.stringify([f.tables.col
         await fromWork(f,'quote');assert.equal(await quoteSave(f).isEnabled(),true);await capture(f,'05-devis',mobile);await quoteSave(f).click();await workspace(f).getByRole('button',{name:'Envoyer le devis au client',exact:true}).click();await workspace(f).getByRole('heading',{name:'Devis enregistré',exact:true}).waitFor();assert.equal(row.statut,'devis_envoye');assert.equal(row.devis_brouillon,false);
         await openTaskNavigation(f);await taskSelect(f).selectOption('paiement');await capture(f,'06-paiement',mobile);await workspace(f).getByRole('button',{name:'Confirmer réception du paiement',exact:true}).click();await f.page.getByRole('dialog').getByRole('button',{name:'Confirmer le paiement reçu',exact:true}).click();await workspace(f).getByRole('heading',{name:'Paiement confirmé',exact:true}).waitFor();assert.equal(row.statut,'paye');assert.equal(row.paiement_montant,row.devis_total);
         await fromWork(f,'departure');await capture(f,'07-expedition',mobile);await workspace(f).getByRole('group',{name:'Affecter à un départ',exact:true}).locator(`[data-shortcut][data-envoi="${DEPARTURE}"]`).click();await workspace(f).getByText('Départ enregistré.',{exact:true}).waitFor();
+        // Loading control (2026-10-07): the parcel is scanned before the confirmation, here through the mocked command.
+        scanLoading(f,DEPARTURE,[ids.P]);
         await workspace(f).getByRole('button',{name:'Vérifier le départ et son manifeste',exact:true}).click();await f.page.getByRole('button',{name:'Vérifier et confirmer le chargement',exact:true}).click();await f.page.getByRole('checkbox',{name:/EXP-TEST-001/}).check();
         await f.page.getByRole('button',{name:'Confirmer le départ de 1 expédition',exact:true}).click();await f.page.getByRole('region',{name:'Manifeste confirmé',exact:true}).waitFor();assert.equal(row.statut,'expedie');
+        assert.deepEqual(f.tables.departure_manifests[0].snapshot.items[0].loading_checks.map(check=>[check.colis_id,check.parcel_index,check.parcel_count,check.method,check.checked_by]),[[row.id,1,1,'scan',ids.A]],'The manifest keeps the loading check');
         await open(f,'expedition');await workspace(f).getByRole('button',{name:'Confirmer le départ en vol',exact:true}).click();await workspace(f).getByRole('button',{name:'Passer en dédouanement',exact:true}).click();await workspace(f).getByRole('button',{name:/^Confirmer l[’']arrivée à destination$/}).click();
         await workspace(f).getByRole('heading',{name:'Transport arrivé à destination',exact:true}).waitFor();assert.equal(row.statut,'arrive');assert.equal(await workspace(f).getByRole('button',{name:'Lancer la livraison',exact:true}).count(),0,'Transport history does not expose a delivery command');
         await openTaskNavigation(f);await taskSelect(f).selectOption('livraison');await capture(f,'08-livraison',mobile);await workspace(f).getByRole('button',{name:'Lancer la livraison',exact:true}).click();await workspace(f).getByRole('button',{name:'Confirmer la livraison',exact:true}).click();await f.page.getByRole('dialog').getByRole('button',{name:'Confirmer la livraison',exact:true}).click();await workspace(f).getByRole('heading',{name:'Livraison terminée',exact:true}).waitFor();assert.equal(row.statut,'livre');assert.ok(row.date_livraison);

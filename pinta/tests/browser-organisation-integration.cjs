@@ -1,7 +1,7 @@
 const { openSavedReception } = require('./reception-page.helper.cjs');
 /* Browser UI regression. All business APIs are local fixtures, never real clients. */
 const { chromium } = require('playwright');
-const { setup, base, ids } = require('./browser-regression.cjs');
+const { setup, base, ids, scanLoading } = require('./browser-regression.cjs');
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
@@ -174,10 +174,14 @@ async function main() {
     await f.context.route('**/rest/v1/rpc/confirm_departure', async route => {
       const input = route.request().postDataJSON(); calls.push(input);
       assert.equal(input.p_loaded.length, 1); assert.equal(input.p_loaded[0].id, ids.P); assert.equal(input.p_deferred_reason, 'Documents à compléter');
+      // The server refuses a dossier whose parcels are not all scanned or counted (the mocked control of browser-regression.cjs).
+      const refusal = f.loadingControl(input.p_envoi_id, input.p_loaded);
+      if (refusal) return route.fulfill({ status: refusal.status, contentType: 'application/json', body: JSON.stringify(refusal.body) });
+      const checks = f.rpc('get_loading_checks', { p_envoi_id: E }).body;
       f.tables.envois[0].statut = 'parti'; f.tables.envois[0].manifest_version = 1; f.tables.envois[0].departed_at = '2026-09-12T02:00:00Z';
       f.tables.colis[0].statut = 'expedie'; f.tables.colis[0].date_expedition = '2026-09-12T02:00:00Z';
       f.tables.colis[1].envoi_id = null;
-      snapshot = clone({ envoi: f.tables.envois[0], confirmed_at: '2026-09-12T02:00:00Z', items: [{ colis: f.tables.colis[0], client: f.tables.clients[0], lignes: f.tables.lignes, factures: f.tables.factures, categories: f.tables.categories }], deferred: [{ id: f.tables.colis[1].id, ref: 'EXP-REPORT', reason: input.p_deferred_reason }] });
+      snapshot = clone({ envoi: f.tables.envois[0], confirmed_at: '2026-09-12T02:00:00Z', items: [{ colis: f.tables.colis[0], client: f.tables.clients[0], lignes: f.tables.lignes, factures: f.tables.factures, categories: f.tables.categories, loading_checks: checks.filter(check => check.colis_id === ids.P) }], deferred: [{ id: f.tables.colis[1].id, ref: 'EXP-REPORT', reason: input.p_deferred_reason }] });
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(f.tables.envois[0]) });
     });
     await f.context.route('**/rest/v1/rpc/get_departure_manifest', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(snapshot) }));
@@ -190,9 +194,16 @@ async function main() {
     await f.page.getByRole('alert').filter({ hasText: 'motif du report' }).waitFor();
     assert.equal(calls.length, 0);
     await review.getByRole('textbox', { name: 'Motif du report des dossiers non cochés' }).fill('Documents à compléter');
+    // Loading control (2026-10-07): without its parcel scanned, the server's refusal is shown as it is.
+    await review.getByRole('button', { name: /Confirmer le départ de 1/ }).click();
+    await review.getByRole('alert').filter({ hasText: 'Contrôle incomplet : EXP-TEST-001 (0/1 colis vérifié). Scannez ou comptez ses colis, ou reportez-le.' }).waitFor();
+    assert.equal(calls.length, 1); assert.equal(f.tables.envois[0].statut, 'planifie');
+    // Scanned through the mocked command, the departure is confirmed and its manifest keeps the check.
+    scanLoading(f, E, [ids.P]);
     await review.getByRole('button', { name: /Confirmer le départ de 1/ }).click();
     await f.page.getByRole('region', { name: 'Manifeste confirmé' }).waitFor();
-    assert.equal(calls.length, 1);
+    assert.equal(calls.length, 2);
+    assert.deepEqual(snapshot.items[0].loading_checks.map(check => [check.parcel_index, check.parcel_count, check.method, check.checked_by_name]), [[1, 1, 'scan', 'Test Camille']]);
     f.tables.colis[0].archive = true; f.tables.colis[0].devis_total = 888;
     await f.page.reload(); await f.page.getByRole('button', { name: 'Voir le manifeste', exact: true }).click();
     await f.page.getByRole('region', { name: 'Manifeste confirmé' }).waitFor();

@@ -40,6 +40,11 @@ function departureDefaultClosing(day) {
   return new Date(instant).toISOString();
 }
 const DEPARTED_STATUSES = ['expedie', 'transit', 'dedouanement', 'arrive', 'livraison', 'livre', 'annule'];
+// Loading control (20261007000004): the outgoing parcels a check expects (_loading_expected_parcels): those of the current
+// preparation, one for a legacy single final measure, null while nothing is prepared.
+const finalMeasured = parcel => ['fin_l', 'fin_w', 'fin_h', 'fin_p'].every(key => Number(parcel[key]) > 0);
+const listsParcels = parcel => Array.isArray(parcel.final_packages) && parcel.final_packages.length > 0;
+const expectedParcels = parcel => listsParcels(parcel) ? parcel.outgoing_parcel_count ?? null : finalMeasured(parcel) ? parcel.outgoing_parcel_count ?? 1 : null;
 const OPEN_DEPARTURE_STATUSES = ['planifie', 'prochain', 'en_cours', 'en_preparation', 'pret'];
 function invoiceLock(colis, withdrawal = null) {
   return { frozenReason: frozenReason(colis), quoteLocked: quoteSent(colis) || !!(colis?.payplug_payment_id || colis?.payplug_payment_url), quoteSent: quoteSent(colis), liveLink: !!(colis?.payplug_payment_id || colis?.payplug_payment_url), withdrawal };
@@ -182,6 +187,8 @@ function fixtures(role) {
     audit_actions: [],
     logs_statut: [],
     staff_permissions: [],
+    departure_loading_checks: [],
+    departure_manifests: [],
   };
 }
 async function setup(browser, role, { failTable = null, timezoneId = null, device = {} } = {}) {
@@ -218,6 +225,139 @@ async function setup(browser, role, { failTable = null, timezoneId = null, devic
     if (input.p_expected_updated_at !== parcel.updated_at) return [409, { code: '40001', message: rpc === 'assign_colis_departure' ? 'Le dossier a changé. Rechargez-le.' : 'Le dossier a changé. Actualisez avant de réessayer.' }];
     if (DEPARTED_STATUSES.includes(parcel.statut) || parcel.archive) return [400, { code: '22023', message: 'Ce dossier ne peut plus être affecté' }];
     return null;
+  }
+  // ── Loading control (20261007000004): the four commands and confirm_departure, with the server's rules, French
+  // messages, SQLSTATEs and HINTs; supabase/tests/loading-checks.sql covers locks, audit and every refusal in depth. ──
+  const loadingChecks = () => (tables.departure_loading_checks ||= []);
+  const refused = (status, code, message, reason = null, details = null) => [status, { code, message, details, hint: reason ? `loading_check:${reason}` : null }];
+  const sameInstant = (a, b) => a != null && b != null && Date.parse(a) === Date.parse(b);
+  const touch = row => { row.updated_at = new Date(Math.max(server.now(), (Date.parse(row.updated_at) || 0) + 1000)).toISOString(); };
+  const copy = value => JSON.parse(JSON.stringify(value));
+  const checkerName = id => {
+    const name = row => (row ? [row.prenom, row.nom].filter(Boolean).join(' ').trim() : '');
+    return name((tables.staff_users || []).find(row => row.auth_id === id)) || name((tables.profiles || []).find(row => row.id === id)) || 'Membre de l’équipe';
+  };
+  const checkJson = row => ({ colis_id: row.colis_id, parcel_index: row.parcel_index, parcel_count: row.parcel_count, method: row.method, checked_by: row.checked_by, checked_by_name: checkerName(row.checked_by), checked_at: row.checked_at });
+  const dossierChecks = (envoiId, colisId) => loadingChecks().filter(row => row.envoi_id === envoiId && row.colis_id === colisId).sort((a, b) => a.parcel_index - b.parcel_index);
+  /** _loading_check_target: an open departure that has not left, the dossier on it, neither shipped, cancelled nor archived. */
+  function loadingTarget(input, prepared) {
+    const envoi = tables.envois.find(row => row.id === input?.p_envoi_id);
+    if (!envoi) return { refusal: refused(400, 'P0002', 'Départ introuvable', 'departure_not_found') };
+    if (envoi.departed_at || !OPEN_DEPARTURE_STATUSES.includes(envoi.statut)) return { refusal: refused(400, '22023', 'Ce départ est déjà confirmé ou clos : son contrôle du chargement ne peut plus changer.', 'departure_closed') };
+    const parcel = tables.colis.find(row => row.id === input?.p_colis_id);
+    if (!parcel) return { refusal: refused(400, 'P0002', 'Dossier introuvable', 'dossier_not_found') };
+    if (parcel.envoi_id !== envoi.id) return { refusal: refused(409, '40001', `${parcel.ref} n’est pas affecté à ce départ : ne chargez pas ses colis. Actualisez le chargement.`, 'not_assigned') };
+    if (parcel.archive || parcel.date_expedition || DEPARTED_STATUSES.includes(parcel.statut)) return { refusal: refused(400, '22023', `${parcel.ref} est déjà expédié, annulé ou archivé : il ne fait plus partie de ce chargement.`, 'dossier_closed') };
+    if (prepared && expectedParcels(parcel) == null) return { refusal: refused(400, '22023', `${parcel.ref} : ses colis sortants ne sont pas encore préparés. Terminez sa préparation avant de contrôler son chargement.`, 'not_prepared') };
+    return { envoi, parcel };
+  }
+  /** The confirmation's control of one loaded dossier: the refusal « Contrôle incomplet », or its checks as evidence. */
+  function loadingEvidence(envoi, parcel, count) {
+    const found = dossierChecks(envoi.id, parcel.id).filter(row => row.parcel_count === count);
+    if (found.length < count) return { refusal: refused(400, '22023', `Contrôle incomplet : ${parcel.ref} (${found.length}/${count} colis ${count > 1 ? 'vérifiés' : 'vérifié'}). Scannez ou comptez ses colis, ou reportez-le.`, 'incomplete', JSON.stringify({ colis_id: parcel.id, ref: parcel.ref, checked: found.length, expected: count })) };
+    return { evidence: found.map(checkJson) };
+  }
+  const activeInvoice = invoice => invoice.valide && !String(invoice.rejet_motif ?? '').trim() && !invoice.duplicate_of_facture_id && !tables.factures.some(other => other.replaces_facture_id === invoice.id);
+  /** confirm_departure: the server's order of refusals, then the writes and the frozen manifest. */
+  function confirmDeparture(input) {
+    if (!(allowed('perm_envois_modifier') && allowed('perm_colis_expedier'))) return refused(403, '42501', 'Permissions de modification du départ et d’expédition requises');
+    const loaded = input?.p_loaded;
+    if (!Array.isArray(loaded) || !loaded.length) return refused(400, '22023', 'Sélectionnez les dossiers effectivement embarqués');
+    const envoi = tables.envois.find(row => row.id === input.p_envoi_id);
+    if (!envoi) return refused(400, 'P0002', 'Départ introuvable');
+    if (envoi.departed_at || !OPEN_DEPARTURE_STATUSES.includes(envoi.statut)) return refused(400, '22023', 'Ce départ est déjà confirmé ou clos');
+    if (!sameInstant(input.p_expected_updated_at, envoi.updated_at)) return refused(409, '40001', 'Le départ a changé. Rechargez le chargement.');
+    if (!envoi.date_depart || envoi.date_depart !== parisClock(server.now()).day) return refused(400, '22023', 'La confirmation doit avoir lieu à la date prévue du départ. Corrigez sa date si nécessaire.');
+    const ids = loaded.map(item => item?.id);
+    if (ids.some(id => !id) || new Set(ids).size !== ids.length) return refused(400, '22023', 'Dossiers embarqués invalides ou dupliqués');
+    const attached = tables.colis.filter(parcel => parcel.envoi_id === envoi.id);
+    if (ids.some(id => !attached.some(parcel => parcel.id === id))) return refused(409, '40001', 'Un dossier sélectionné n’appartient plus à ce départ');
+    const others = attached.filter(parcel => !ids.includes(parcel.id) && !parcel.date_expedition && !['annule', 'livre', 'expedie', 'transit', 'dedouanement', 'arrive', 'livraison'].includes(parcel.statut));
+    if (others.length && !allowed('perm_envois_reaffecter')) return refused(403, '42501', 'Permission de réaffectation requise pour reporter les autres dossiers');
+    if (others.length && !String(input.p_deferred_reason ?? '').trim()) return refused(400, '22023', 'Expliquez le report des dossiers non embarqués');
+    // Every loaded dossier is validated before any write: the server's transaction keeps nothing of a refusal.
+    const plan = [];
+    for (const item of loaded) {
+      const parcel = attached.find(row => row.id === item.id), ref = parcel.ref;
+      const given = item.outgoing_parcel_count == null ? null : Number(item.outgoing_parcel_count);
+      if (!sameInstant(item.updated_at, parcel.updated_at)) return refused(409, '40001', `Le dossier ${ref} a changé. Rechargez le chargement.`);
+      if (parcel.archive || parcel.statut !== 'paye' || !parcel.paiement_date || Number(parcel.paiement_montant || 0) < Number(parcel.devis_total || 0) || !(Number(parcel.devis_total) > 0)) return refused(400, '22023', `${ref} : paiement confirmé et complet requis avant départ`);
+      if (destinationOf(parcel) !== envoi.destination_code) return refused(400, '22023', `${ref} : destination incompatible`);
+      if (!finalMeasured(parcel)) return refused(400, '22023', `${ref} : mesures finales manquantes`);
+      if (parcel.final_packages != null && !Array.isArray(parcel.final_packages)) return refused(400, '22023', `${ref} : mesures sortantes invalides`);
+      if (listsParcels(parcel)) {
+        if (parcel.outgoing_parcel_count !== parcel.final_packages.length || (parcel.preparation_composition_version ?? null) !== (parcel.final_measurements_version ?? null)) return refused(400, '22023', `${ref} : préparation sortante à vérifier`);
+      } else if ((given ?? parcel.outgoing_parcel_count) !== 1) return refused(400, '22023', `${ref} : les mesures historiques décrivent un seul colis ; vérifiez physiquement ce colis avant confirmation`);
+      const count = given ?? parcel.outgoing_parcel_count;
+      if (!(count > 0)) return refused(400, '22023', `${ref} : confirmez le nombre de colis physiques sortants`);
+      if (parcel.outgoing_parcel_count != null && count !== parcel.outgoing_parcel_count) return refused(409, '40001', `${ref} : le nombre sortant ne correspond plus à la préparation`);
+      const control = loadingEvidence(envoi, parcel, count);
+      if (control.refusal) return control.refusal;
+      plan.push({ parcel, count, evidence: control.evidence });
+    }
+    const stamp = new Date(server.now()).toISOString();
+    const deferred = others.map(parcel => ({ id: parcel.id, ref: parcel.ref, reason: input.p_deferred_reason }));
+    for (const parcel of others) { parcel.envoi_id = null; touch(parcel); }
+    const excluded = attached.filter(parcel => !ids.includes(parcel.id) && !others.includes(parcel)).map(parcel => ({ id: parcel.id, ref: parcel.ref, statut: parcel.statut, reason: 'Dossier historique ou annulé : hors chargement' }));
+    const items = plan.map(({ parcel, count, evidence }) => {
+      Object.assign(parcel, { statut: 'expedie', date_expedition: stamp, outgoing_parcel_count: count }); touch(parcel);
+      const lignes = tables.lignes.filter(line => line.colis_id === parcel.id && (!line.facture_id || tables.factures.some(invoice => invoice.id === line.facture_id && activeInvoice(invoice))));
+      return { legacy_measurements_confirmed: !listsParcels(parcel), colis: copy(parcel), client: copy(tables.clients.find(client => client.id === parcel.client_id) ?? null), lignes: copy(lignes),
+        factures: copy(tables.factures.filter(invoice => invoice.colis_id === parcel.id && activeInvoice(invoice))),
+        categories: copy(tables.categories.filter(category => lignes.some(line => line.categorie_id === category.id))), loading_checks: evidence };
+    });
+    const volume = parcel => (listsParcels(parcel) ? parcel.final_packages : [{ dimL: parcel.fin_l, dimW: parcel.fin_w, dimH: parcel.fin_h }]).reduce((sum, box) => sum + Number(box.dimL) * Number(box.dimW) * Number(box.dimH) / 1000000, 0);
+    Object.assign(envoi, { statut: 'parti', departed_at: stamp, manifest_version: 1, nb_colis: ids.length,
+      poids_total: plan.reduce((sum, { parcel }) => sum + Number(parcel.fin_p), 0), volume_total: plan.reduce((sum, { parcel }) => sum + volume(parcel), 0) });
+    touch(envoi);
+    (tables.departure_manifests ||= []).push({ envoi_id: envoi.id, version: 1, confirmed_at: stamp, confirmed_by: user.id, snapshot: copy({ envoi, confirmed_at: stamp, items, deferred, excluded }) });
+    return [200, envoi];
+  }
+  /** The loading-control commands, confirm_departure and get_departure_manifest; null for any other RPC. */
+  function loadingRpc(rpc, input) {
+    if (rpc === 'confirm_departure') return confirmDeparture(input);
+    if (rpc === 'get_departure_manifest') {
+      if (!allowed('perm_envois_voir')) return refused(403, '42501', 'Permission de consultation des envois requise');
+      const manifest = (tables.departure_manifests || []).find(row => row.envoi_id === input?.p_envoi_id);
+      return manifest ? [200, manifest.snapshot] : refused(400, 'P0002', 'Le chargement de ce départ n’a pas été confirmé. Aucun manifeste historique fiable n’est disponible.');
+    }
+    if (rpc === 'get_loading_checks') {
+      if (!allowed('perm_envois_voir')) return refused(403, '42501', 'Permission de consultation des envois requise', 'permission');
+      if (!tables.envois.some(row => row.id === input?.p_envoi_id)) return refused(400, 'P0002', 'Départ introuvable', 'departure_not_found');
+      return [200, loadingChecks().filter(row => row.envoi_id === input.p_envoi_id && tables.colis.some(parcel => parcel.id === row.colis_id && parcel.envoi_id === row.envoi_id))
+        .sort((a, b) => String(a.colis_id).localeCompare(String(b.colis_id)) || a.parcel_index - b.parcel_index).map(checkJson)];
+    }
+    if (!['record_loading_check', 'record_loading_count', 'clear_loading_checks'].includes(rpc)) return null;
+    if (!allowed('perm_colis_expedier')) return refused(403, '42501', 'Permission d’expédition requise pour contrôler le chargement', 'permission');
+    if (rpc === 'record_loading_check') {
+      if (!['scan', 'camera'].includes(input?.p_method)) return refused(400, '22023', 'Contrôle inconnu : scannez l’étiquette, ou comptez les colis du dossier.', 'invalid_method');
+      const { p_parcel_index: index, p_parcel_count: count } = input;
+      if (!Number.isInteger(index) || !Number.isInteger(count) || index < 1 || index > count) return refused(400, '22023', 'Étiquette illisible : numéro de colis invalide. Scannez-la à nouveau.', 'invalid_label');
+    }
+    if (rpc === 'record_loading_count' && (!Number.isInteger(input?.p_counted) || input.p_counted < 0)) return refused(400, '22023', 'Indiquez le nombre de colis comptés.', 'invalid_count');
+    const target = loadingTarget(input, rpc !== 'clear_loading_checks');
+    if (target.refusal) return target.refusal;
+    const { envoi, parcel } = target, expected = expectedParcels(parcel), now = new Date(server.now()).toISOString();
+    if (rpc === 'clear_loading_checks') {
+      const removed = dossierChecks(envoi.id, parcel.id);
+      tables.departure_loading_checks = loadingChecks().filter(row => !removed.includes(row));
+      if (removed.length) (tables.audit_actions ||= []).push({ id: crypto.randomUUID(), colis_id: parcel.id, user_id: user.id, user_nom: checkerName(user.id), action: 'loading_checks_cleared', detail: JSON.stringify({ envoi_id: envoi.id, cleared: removed.length }), before_data: removed.map(checkJson), created_at: now });
+      return [200, { status: removed.length ? 'cleared' : 'none', cleared: removed.length, checked: 0, expected }];
+    }
+    if (rpc === 'record_loading_check' && input.p_parcel_count !== expected) return refused(400, '22023', `Étiquette périmée : ce dossier compte maintenant ${expected} colis. Réimprimez ses étiquettes.`, 'stale_label');
+    if (rpc === 'record_loading_count' && input.p_counted !== expected) return refused(400, '22023', `Comptage différent : ${parcel.ref} compte ${expected} colis, vous en avez compté ${input.p_counted}. Recomptez ses colis, ou reportez-le.`, 'count_mismatch');
+    // Checks of another count describe older labels: the current labels replace them.
+    tables.departure_loading_checks = loadingChecks().filter(row => !(row.envoi_id === envoi.id && row.colis_id === parcel.id && row.parcel_count !== expected));
+    const indexes = rpc === 'record_loading_check' ? [input.p_parcel_index] : Array.from({ length: expected }, (_, position) => position + 1);
+    let added = 0;
+    for (const index of indexes) {
+      if (dossierChecks(envoi.id, parcel.id).some(row => row.parcel_index === index)) continue;
+      loadingChecks().push({ envoi_id: envoi.id, colis_id: parcel.id, parcel_index: index, parcel_count: expected, method: rpc === 'record_loading_check' ? input.p_method : 'count', checked_by: user.id, checked_at: now });
+      added += 1;
+    }
+    const status = added ? 'recorded' : 'already', checked = dossierChecks(envoi.id, parcel.id).length;
+    if (rpc === 'record_loading_count') return [200, { status, checked, expected, added }];
+    return [200, { status, checked, expected, check: checkJson(dossierChecks(envoi.id, parcel.id).find(row => row.parcel_index === input.p_parcel_index)) }];
   }
   const user = {
     id: A,
@@ -314,7 +454,9 @@ async function setup(browser, role, { failTable = null, timezoneId = null, devic
     else if (url.pathname.includes('/rest/v1/rpc/')) {
       const rpc = url.pathname.split('/').pop(),
         colis = tables.colis.find((c) => c.id === input?.p_colis_id);
-      if (rpc === 'client_outgoing_tracking') body = tables.colis.filter(c => input.p_colis_ids.includes(c.id) && tables.clients.some(client => client.id === c.client_id && client.user_id === user.id) && ['expedie','transit','dedouanement','arrive','livraison','livre'].includes(c.statut)).map(c => ({ colis_id: c.id, tracking_principal: tables.envois.find(envoi => envoi.id === c.envoi_id)?.tracking_principal || null }));
+      const loading = loadingRpc(rpc, input);
+      if (loading) [status, body] = loading;
+      else if (rpc === 'client_outgoing_tracking') body = tables.colis.filter(c => input.p_colis_ids.includes(c.id) && tables.clients.some(client => client.id === c.client_id && client.user_id === user.id) && ['expedie','transit','dedouanement','arrive','livraison','livre'].includes(c.statut)).map(c => ({ colis_id: c.id, tracking_principal: tables.envois.find(envoi => envoi.id === c.envoi_id)?.tracking_principal || null }));
       // client_planned_departures (20261007000002): own dossiers at the listed steps, a non-archived departure still to
       // come before departure, the confirmed one after; supabase/tests/client-planned-departure.sql covers it in depth.
       else if (rpc === 'client_planned_departures') body = tables.colis.filter(c => (input.p_colis_ids || []).includes(c.id) && tables.clients.some(client => client.id === c.client_id && client.user_id === user.id)
@@ -496,7 +638,11 @@ async function setup(browser, role, { failTable = null, timezoneId = null, devic
       }
     } else if (url.pathname.includes('/rest/v1/')) {
       const table = url.pathname.split('/').pop();
-      if (table === failTable) {
+      if (['departure_loading_checks', 'departure_manifests'].includes(table)) {
+        // Read and written through the commands only (no privilege, RLS without policy).
+        status = 403;
+        body = { code: '42501', message: `permission denied for table ${table}` };
+      } else if (table === failTable) {
         status = 503;
         body = { message: 'Indisponibilité simulée' };
       } else {
@@ -570,7 +716,24 @@ async function setup(browser, role, { failTable = null, timezoneId = null, devic
         !document.body.innerText.includes('Chargement de votre espace'),
     );
   };
-  return { context, page, tables, requests, errors, networkDenied, login, server };
+  /** confirm_departure's loading control alone: the refusal of the first loaded dossier not fully checked, or null. */
+  const loadingControl = (envoiId, loaded) => {
+    const envoi = tables.envois.find(row => row.id === envoiId);
+    for (const item of loaded || []) {
+      const parcel = tables.colis.find(row => row.id === item?.id);
+      if (!envoi || !parcel) continue;
+      const control = loadingEvidence(envoi, parcel, Number(item.outgoing_parcel_count ?? parcel.outgoing_parcel_count ?? expectedParcels(parcel)));
+      if (control.refusal) return { status: control.refusal[0], body: control.refusal[1] };
+    }
+    return null;
+  };
+  /** Runs a mocked loading-control command as the signed-in user, without the page: { status, body }. */
+  const rpc = (name, input) => {
+    const answer = loadingRpc(name, input);
+    if (!answer) throw new Error(`No mocked loading-control command ${name}`);
+    return { status: answer[0], body: answer[1] };
+  };
+  return { context, page, tables, requests, errors, networkDenied, login, server, rpc, loadingControl };
 }
 async function main() {
   await fs.mkdir(output, { recursive: true });
@@ -870,6 +1033,48 @@ async function main() {
       observations.push({ test: `failed-retry-stated-once-per-screen-${team}`, pass: true });
       await f.context.close();
     }
+
+    // ── Loading control (20261007000004): the mocked commands follow the server's rules, refusals and HINTs ──
+    f = await setup(browser, 'directeur');
+    {
+      const E = 'e1000000-0000-4000-8000-0000000000aa', parcel = f.tables.colis[0];
+      f.tables.envois = [{ id: E, ref: 'ENV-CONTROLE', destination_code: '974', date_depart: parisClock(f.server.now()).day, statut: 'planifie', updated_at: '2026-10-07T06:00:00Z', manifest_version: 0 }];
+      Object.assign(parcel, { envoi_id: E, statut: 'paye', paiement_date: '2026-10-06T10:00:00Z', paiement_montant: 60, devis_total: 60, devis_snapshot: { inputs: { destination: { code: '974' } } } });
+      const call = (name, input) => f.rpc(name, { p_envoi_id: E, p_colis_id: P, ...input });
+      const loaded = () => ({ p_envoi_id: E, p_loaded: [{ id: P, updated_at: parcel.updated_at, outgoing_parcel_count: 1 }], p_expected_updated_at: f.tables.envois[0].updated_at, p_deferred_reason: null });
+      const refusedWith = (answer, code, reason, message) => {
+        assert.equal(answer.body.code, code); assert.equal(answer.body.hint, `loading_check:${reason}`);
+        if (message) assert.equal(answer.body.message, message);
+      };
+      refusedWith(f.rpc('confirm_departure', loaded()), '22023', 'incomplete', 'Contrôle incomplet : EXP-TEST-001 (0/1 colis vérifié). Scannez ou comptez ses colis, ou reportez-le.');
+      assert.deepEqual(JSON.parse(f.rpc('confirm_departure', loaded()).body.details), { colis_id: P, ref: 'EXP-TEST-001', checked: 0, expected: 1 });
+      refusedWith(call('record_loading_check', { p_parcel_index: 1, p_parcel_count: 2, p_method: 'scan' }), '22023', 'stale_label', 'Étiquette périmée : ce dossier compte maintenant 1 colis. Réimprimez ses étiquettes.');
+      refusedWith(call('record_loading_check', { p_parcel_index: 2, p_parcel_count: 1, p_method: 'scan' }), '22023', 'invalid_label');
+      refusedWith(call('record_loading_check', { p_parcel_index: 1, p_parcel_count: 1, p_method: 'count' }), '22023', 'invalid_method');
+      refusedWith(call('record_loading_count', { p_counted: 2 }), '22023', 'count_mismatch', 'Comptage différent : EXP-TEST-001 compte 1 colis, vous en avez compté 2. Recomptez ses colis, ou reportez-le.');
+      refusedWith(f.rpc('record_loading_check', { p_envoi_id: E, p_colis_id: C, p_parcel_index: 1, p_parcel_count: 1, p_method: 'scan' }), 'P0002', 'dossier_not_found');
+      const first = call('record_loading_check', { p_parcel_index: 1, p_parcel_count: 1, p_method: 'scan' });
+      assert.equal(first.status, 200); assert.equal(first.body.status, 'recorded'); assert.equal(first.body.check.checked_by_name, 'Test Camille');
+      const again = call('record_loading_check', { p_parcel_index: 1, p_parcel_count: 1, p_method: 'camera' });
+      assert.equal(again.body.status, 'already'); assert.equal(again.body.check.method, 'scan'); assert.equal(again.body.check.checked_at, first.body.check.checked_at);
+      assert.deepEqual(call('record_loading_count', { p_counted: 1 }).body, { status: 'already', checked: 1, expected: 1, added: 0 });
+      assert.deepEqual(f.rpc('get_loading_checks', { p_envoi_id: E }).body.map(row => [row.colis_id, row.parcel_index, row.method]), [[P, 1, 'scan']]);
+      assert.deepEqual(call('clear_loading_checks', {}).body, { status: 'cleared', cleared: 1, checked: 0, expected: 1 });
+      assert.equal(f.tables.audit_actions.filter(row => row.action === 'loading_checks_cleared').length, 1);
+      assert.equal(call('record_loading_count', { p_counted: 1 }).body.status, 'recorded');
+      const confirmed = f.rpc('confirm_departure', loaded());
+      assert.equal(confirmed.status, 200); assert.equal(confirmed.body.statut, 'parti'); assert.equal(parcel.statut, 'expedie');
+      assert.deepEqual(f.rpc('get_departure_manifest', { p_envoi_id: E }).body.items[0].loading_checks.map(row => [row.parcel_index, row.method]), [[1, 'count']]);
+      refusedWith(call('record_loading_check', { p_parcel_index: 1, p_parcel_count: 1, p_method: 'scan' }), '22023', 'departure_closed');
+      // The checks are read and written through the commands only.
+      await f.page.goto(base);
+      assert.equal(await f.page.evaluate(async () => (await fetch('https://pinta-ci.supabase.co/rest/v1/departure_loading_checks?select=*')).status), 403);
+      f.tables.staff_users[0].role = 'preparateur';
+      refusedWith(call('record_loading_count', { p_counted: 1 }), '42501', 'permission', 'Permission d’expédition requise pour contrôler le chargement');
+      assert.deepEqual(f.errors, []);
+      observations.push({ test: 'loading-control-mock-follows-the-server', pass: true });
+    }
+    await f.context.close();
   } catch (error) {
     observations.push({ test: 'failure', message: error.stack });
     const failedPage = browser.contexts().flatMap(context => context.pages()).pop();
@@ -885,5 +1090,20 @@ async function main() {
     console.log(JSON.stringify(observations, null, 2));
   }
 }
-module.exports = { setup, fixtures, ids: { A, C, P, F, L, S }, base, invoiceLock, frozenReason, analysisReason };
+/**
+ * Scans every outgoing parcel of these dossiers through the mocked command, as the loading control does on the
+ * departure's screen, before a confirmation. Returns the commands' answers by dossier; throws on a refusal.
+ */
+function scanLoading(f, envoiId, colisIds, method = 'scan') {
+  return Object.fromEntries(colisIds.map(colisId => {
+    const parcel = f.tables.colis.find(row => row.id === colisId);
+    const count = parcel && expectedParcels(parcel);
+    if (!count) throw new Error(`No outgoing parcel to check for ${colisId}`);
+    const answers = Array.from({ length: count }, (_, position) => f.rpc('record_loading_check', { p_envoi_id: envoiId, p_colis_id: colisId, p_parcel_index: position + 1, p_parcel_count: count, p_method: method }));
+    const refusal = answers.find(answer => answer.status !== 200);
+    if (refusal) throw new Error(`Loading check refused: ${refusal.body.message}`);
+    return [colisId, answers.map(answer => answer.body)];
+  }));
+}
+module.exports = { setup, fixtures, ids: { A, C, P, F, L, S }, base, invoiceLock, frozenReason, analysisReason, scanLoading, expectedParcels };
 if (require.main === module) main();
