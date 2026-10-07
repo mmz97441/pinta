@@ -1,21 +1,42 @@
 import React, { useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, Check, Shield } from 'lucide-react';
 import { BRAND } from '../constants';
 import { supabase } from '../lib/supabase';
 import { useApp } from '../context/AppContext';
+
+/** Supabase Auth answers in English: the person reads why, in French, never a technical message. */
+function passwordMessage(error) {
+  const text = String(error?.message || error || '').trim();
+  const code = String(error?.code || '');
+  const status = Number(error?.status);
+  if (/different from the old|same_password/i.test(text) || code === 'same_password') return 'Choisissez un mot de passe différent de l’actuel.';
+  if (/weak|should be at least|password should contain|characters/i.test(text) || code === 'weak_password') return 'Ce mot de passe est trop simple. Choisissez-en un plus long, avec des lettres, des chiffres et des symboles.';
+  if (/session|jwt|not authenticated|reauthentication/i.test(text) || ['session_not_found', 'session_expired', 'reauthentication_needed'].includes(code) || status === 401) return 'Votre session a expiré. Reconnectez-vous, puis modifiez votre mot de passe.';
+  if (/security purposes|rate limit|too many/i.test(text) || status === 429) return 'Trop de tentatives. Patientez une minute, puis réessayez.';
+  if ((error?.name === 'AuthRetryableFetchError' && !(status >= 500)) || error?.status === 0 || /failed to fetch|networkerror|load failed|network request failed/i.test(text)) return 'Connexion impossible pour le moment. Vérifiez votre accès à internet, puis réessayez.';
+  if (!text || /^[\x20-\x7E]*$/.test(text)) return 'Le mot de passe n’a pas pu être modifié. Réessayez dans un instant.';
+  return text;
+}
 
 /**
  * Écran bloquant affiché à la première connexion.
  * L'utilisateur DOIT changer son mot de passe pour accéder à l'app.
  */
 export default function ForceChangePassword({ staffUser, onDone, onCancel, recovery }) {
-  const { auth } = useApp();
+  const { auth, flash } = useApp();
+  const navigate = useNavigate();
+  // Opened from the profile: « Annuler » and the confirmation lead back there.
+  const returnTo = useLocation().state?.returnTo === '/profil' ? '/profil' : null;
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [showPwd, setShowPwd] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  // The password Auth already recorded: a retry after a failed confirmation of the team access does not set it
+  // twice (Auth would refuse the same password).
+  const [recorded, setRecorded] = useState(null);
 
   const isValid = password.length >= 12 && password === confirm;
 
@@ -29,18 +50,24 @@ export default function ForceChangePassword({ staffUser, onDone, onCancel, recov
 
     try {
       // Update password in Supabase Auth
-      const { error: authError } = await supabase.auth.updateUser({ password });
-      if (authError) { setError(authError.message); setLoading(false); return; }
+      if (recorded !== password) {
+        const { error: authError } = await supabase.auth.updateUser({ password });
+        if (authError) { setError(passwordMessage(authError)); setLoading(false); return; }
+        setRecorded(password);
+      }
 
       // Mark as password changed
       if (staffUser?.id) {
         const { error: completionError } = await supabase.rpc('complete_password_change');
-        if (completionError) throw completionError;
+        if (completionError) { setError('Votre mot de passe est modifié, mais votre accès n’a pas pu être confirmé. Réessayez\u00a0: votre nouveau mot de passe sera simplement confirmé.'); setLoading(false); return; }
       }
 
+      // Confirmed by Supabase Auth: said once, on the page that follows.
+      flash({ msg: 'Votre mot de passe est modifié.', type: 'success', duration: 8000 });
       await onDone();
+      if (returnTo) navigate(returnTo, { replace: true });
     } catch (err) {
-      setError('Erreur : ' + err.message);
+      setError(passwordMessage(err));
     }
     setLoading(false);
   };
@@ -85,8 +112,8 @@ export default function ForceChangePassword({ staffUser, onDone, onCancel, recov
                 autoComplete="new-password" required autoFocus
               />
               <button aria-label={showPwd ? 'Masquer le mot de passe' : 'Afficher le mot de passe'} type="button" onClick={() => setShowPwd((p) => !p)}
-                className="absolute right-1 min-h-11 min-w-11 flex items-center justify-center top-1/2 -translate-y-1/2 text-gray-400 hover:text-white transition-colors">
-                {showPwd ? <EyeOff size={18} /> : <Eye size={18} />}
+                className="absolute right-1 min-h-11 min-w-11 flex items-center justify-center top-1/2 -translate-y-1/2 text-white/70 hover:text-white transition-colors">
+                {showPwd ? <EyeOff size={18} aria-hidden="true" /> : <Eye size={18} aria-hidden="true" />}
               </button>
             </div>
             {password.length > 0 && password.length < 12 && (
@@ -108,8 +135,8 @@ export default function ForceChangePassword({ staffUser, onDone, onCancel, recov
                 style={{ background: 'rgba(255,255,255,0.08)', border: `1px solid ${confirm && confirm === password ? 'rgba(16,185,129,0.5)' : confirm && confirm !== password ? 'rgba(239,68,68,0.5)' : 'rgba(255,255,255,0.15)'}`, color: 'white' }}
               />
               <button aria-label={showConfirm ? 'Masquer la confirmation' : 'Afficher la confirmation'} type="button" onClick={() => setShowConfirm((p) => !p)}
-                className="absolute right-1 min-h-11 min-w-11 flex items-center justify-center top-1/2 -translate-y-1/2 text-gray-400 hover:text-white transition-colors">
-                {showConfirm ? <EyeOff size={18} /> : <Eye size={18} />}
+                className="absolute right-1 min-h-11 min-w-11 flex items-center justify-center top-1/2 -translate-y-1/2 text-white/70 hover:text-white transition-colors">
+                {showConfirm ? <EyeOff size={18} aria-hidden="true" /> : <Eye size={18} aria-hidden="true" />}
               </button>
             </div>
             {confirm && confirm !== password && (
@@ -133,9 +160,9 @@ export default function ForceChangePassword({ staffUser, onDone, onCancel, recov
             style={{ background: `linear-gradient(135deg, ${BRAND.gold}, ${BRAND.goldD})`, color: BRAND.navyD }}
           >
             <Check size={16} />
-            {loading ? 'Enregistrement...' : 'Définir mon mot de passe et continuer'}
+            {loading ? 'Enregistrement…' : 'Définir mon mot de passe et continuer'}
           </button>
-          {onCancel && <button type="button" onClick={onCancel} className="w-full min-h-11 text-sm text-white/70">Annuler</button>}
+          {onCancel && <button type="button" onClick={() => (returnTo ? navigate(returnTo) : onCancel())} className="w-full min-h-11 text-sm text-white/70">Annuler</button>}
         </form>
       </div>
     </div>

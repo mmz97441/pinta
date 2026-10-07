@@ -133,7 +133,7 @@ async function openDetails(f) {
 const STATES = [
   { name: 'consentement-deux-cartons', state: { colis: { ...perCarton } }, async check(f) {
     const text = await regionText(f);
-    assert.match(text, /2 cartons réceptionnés · dossier EXP-TEST-001/);
+    assert.match(text, /2 cartons réceptionnés · expédition EXP-TEST-001/);
     assert.match(text, /Numéros de suivi de vos achats : TEST-001 · TEST-002/);
     assert.match(text, /Votre accord concerne ces 2 cartons uniquement\./);
     assert.equal(await f.page.getByTestId('consent-without-invoice').count(), 0, 'an invoice is in the dossier');
@@ -146,11 +146,11 @@ const STATES = [
   } },
   { name: 'consentement-sans-facture', state: { colis: { ...perCarton }, factures: [] }, async check(f) {
     const block = f.page.getByTestId('consent-without-invoice');
-    assert.equal(flat(await block.innerText()), 'Votre facture d’achat n’est pas encore dans votre dossier : vous pouvez tout de même donner votre accord dès maintenant. Joignez-la ensuite dans « Mes factures » : elle nous permet d’établir votre devis.');
+    assert.equal(flat(await block.innerText()), 'Votre facture d’achat n’est pas encore dans votre expédition : vous pouvez tout de même donner votre accord dès maintenant. Joignez-la ensuite dans « Mes factures » : elle nous permet d’établir votre devis.');
     await f.page.getByRole('button', { name: 'Autoriser la préparation', exact: true }).waitFor();
   } },
   { name: 'consentement-mesures-globales', state: { colis: { nb_colis: 3, trackings: ['ZAL-1', 'SHEIN-2', 'SHEIN-3'], trackings_detail: [], dims_par_colis: [], dim_l: 40, dim_w: 30, dim_h: 25, poids: 6.2 } }, async check(f) {
-    assert.match(await regionText(f), /3 cartons réceptionnés · dossier EXP-TEST-001/);
+    assert.match(await regionText(f), /3 cartons réceptionnés · expédition EXP-TEST-001/);
     await f.page.getByText('Mesures et fonctionnement', { exact: true }).click();
     const measures = flat(await f.page.getByTestId('carton-measures').innerText());
     assert.match(measures, /Mesures de vos 3 cartons/i);
@@ -262,14 +262,14 @@ const STATES = [
   } },
   { name: 'annule-sans-echange', state: { colis: { statut: 'annule', feu_vert: 'refuse' } }, async check(f) {
     const text = await regionText(f);
-    assert.match(text, /Pour toute question sur ce dossier, écrivez à notre équipe depuis « Messages »\./);
+    assert.match(text, /Pour toute question sur cette expédition, écrivez à notre équipe depuis « Messages »\./);
     assert.doesNotMatch(text, /Consultez les échanges|figurent dans vos échanges/);
   } },
   { name: 'annule-avec-echange', state: { colis: { statut: 'annule', feu_vert: 'refuse' }, messages: [MESSAGE] }, async check(f) {
     assert.match(await regionText(f), /Les dispositions convenues avec notre équipe figurent dans vos échanges\./);
   } },
   { name: 'refus', state: { colis: { statut: 'refuse_client', feu_vert: 'refuse', feu_vert_date: '2026-10-01T18:20:00Z' } }, async check(f) {
-    assert.match(await regionText(f), /Notre équipe vous contactera pour convenir avec vous de la suite de votre dossier\./);
+    assert.match(await regionText(f), /Notre équipe vous contactera pour convenir avec vous de la suite de votre expédition\./);
   } },
   { name: 'facture-sans-vendeur', state: { colis: { statut: 'en_preparation', feu_vert: 'autorise' }, factures: [{ id: ids.F, colis_id: P, vendeur: 'ticket-temu.pdf', montant: 0, valide: false, fichier_url: P + '/ticket-temu.pdf', fichier_nom: 'ticket-temu.pdf' }] }, path: '?panel=documents', async check(f) {
     const card = f.page.getByRole('article', { name: 'Facture ticket-temu.pdf', exact: true });
@@ -353,7 +353,7 @@ async function main() {
       await authorize.click(); await dialog.waitFor();
       const consent = flat(await dialog.innerText());
       assert.match(consent, /avec 2 cartons actuellement réceptionnés\./);
-      assert.match(consent, /dossier EXP\u2011TEST\u2011001, avec/, 'the reference cannot break across lines');
+      assert.match(consent, /expédition EXP\u2011TEST\u2011001, avec/, 'the reference cannot break across lines');
       assert.match(consent, /Votre facture d’achat reste à joindre : elle nous permet d’établir votre devis\./);
       await f.page.screenshot({ path: path.join(output, 'dialogue-accord-390.png') });
       await f.page.keyboard.press('Escape'); await dialog.waitFor({ state: 'detached' });
@@ -364,7 +364,7 @@ async function main() {
       await f.page.getByRole('button', { name: 'Refuser la préparation', exact: true }).click(); await dialog.waitFor();
       const refusal = flat(await dialog.innerText());
       assert.match(refusal, /vos cartons ne seront pas préparés\. Notre équipe vous contactera pour convenir avec vous de la suite\./);
-      assert.match(refusal, /dossier EXP\u2011TEST\u2011001 : vos cartons/);
+      assert.match(refusal, /expédition EXP\u2011TEST\u2011001 : vos cartons/);
       assert.match(refusal, /Pour simplement attendre d’autres achats, choisissez plutôt « Attendre d’autres achats »\./);
       assert.equal(await f.page.getByRole('button', { name: 'Attendre d’autres achats', exact: true }).count(), 1, 'the named button exists exactly');
       await f.page.screenshot({ path: path.join(output, 'dialogue-refus-390.png') });

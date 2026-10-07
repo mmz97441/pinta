@@ -229,7 +229,7 @@ test('clients cannot become staff through user-editable auth metadata', async ()
     eq() {
       return this;
     },
-    async single() {
+    async maybeSingle() {
       return { data: { id: 'u', role: 'client', actif: true }, error: null };
     },
   };
@@ -240,7 +240,7 @@ test('clients cannot become staff through user-editable auth metadata', async ()
     eq() {
       return this;
     },
-    async single() {
+    async maybeSingle() {
       return { data: { id: 'c', user_id: 'u', nom: 'Client' }, error: null };
     },
   };
@@ -252,6 +252,66 @@ test('clients cannot become staff through user-editable auth metadata', async ()
   });
   assert.equal(identity.type, 'client');
   assert.equal(identity.cl.id, 'c');
+});
+
+/** profiles, staff_users and client_clients, each answering { data, error } (maybeSingle). */
+function identityClient(answers) {
+  const reads = [];
+  const query = table => ({ select() { return this; }, eq() { return this; }, async maybeSingle() { reads.push(table); return answers[table] || { data: null, error: null }; } });
+  return { reads, from: query };
+}
+test('a failed read of the account is never reported as an account problem', async () => {
+  const unavailable = { data: null, error: { code: '', message: 'TypeError: Failed to fetch', status: 0 } };
+  const profile = { data: { id: 'u', role: 'client', actif: true }, error: null };
+  const session = { user: { id: 'u' } };
+  for (const answers of [{ profiles: unavailable }, { profiles: profile, client_clients: unavailable }, { profiles: { data: { id: 'u', role: 'preparateur', actif: true }, error: null }, staff_users: { data: null, error: { code: '503', message: 'Service unavailable' } } }]) {
+    const sb = await service(identityClient(answers));
+    await assert.rejects(() => sb.resolveIdentity(session), error => error.code === sb.IDENTITY_UNAVAILABLE && /réessayez/.test(error.message) && !/rattaché|inaccessible/.test(error.message), JSON.stringify(answers));
+  }
+  // Only an answer without the row is an account problem.
+  const notLinked = await service(identityClient({ profiles: profile, client_clients: { data: null, error: null } }));
+  await assert.rejects(() => notLinked.resolveIdentity(session), error => error.code !== notLinked.IDENTITY_UNAVAILABLE && /pas encore rattaché à un dossier client/.test(error.message));
+  const noProfile = await service(identityClient({ profiles: { data: null, error: null } }));
+  await assert.rejects(() => noProfile.resolveIdentity(session), /Profil inaccessible/);
+  const disabled = await service(identityClient({ profiles: { data: { id: 'u', role: 'client', actif: false }, error: null } }));
+  await assert.rejects(() => disabled.resolveIdentity(session), /désactivé/);
+});
+
+test('client portal: a malformed expedition link is an expedition that does not exist', async () => {
+  const db = client({ client_colis: [{ id: '33333333-3333-4333-8333-333333333333', archive: false, statut: 'attente_feu_vert' }] });
+  const sb = await service(db);
+  sb.setDataScope('client');
+  assert.deepEqual([...await sb.fetchColis('33333333-3333-4333-8333-33333333333')], [], 'one character missing');
+  assert.deepEqual([...await sb.fetchColis('pas-un-identifiant')], []);
+  assert.equal(db.calls.length, 0, 'no request for a link that names no expedition');
+  assert.equal((await sb.fetchColis('33333333-3333-4333-8333-333333333333')).length, 1);
+  // A uuid refused by the server (22P02) reads the same way.
+  const refusing = client({});
+  refusing.from = () => ({ select() { return this; }, order() { return this; }, limit() { return this; }, eq() { return this; }, then(resolve) { return Promise.resolve({ data: null, error: { code: '22P02', message: 'invalid input syntax for type uuid' } }).then(resolve); } });
+  const other = await service(refusing); other.setDataScope('client');
+  assert.deepEqual([...await other.fetchColis('aaaaaaaa-0000-4000-8000-000000000999')], []);
+});
+
+test('client portal: a failed carrier tracking read keeps every expedition and marks only the shipped ones', async () => {
+  const rows = [{ id: 'a1', archive: false, statut: 'attente_feu_vert' }, { id: 'b2', archive: false, statut: 'transit' }, { id: 'c3', archive: false, statut: 'paye' }];
+  const db = client({ client_colis: rows }); const asked = [];
+  db.rpc = async (name, args) => {
+    if (name === 'client_outgoing_tracking') { asked.push(args.p_colis_ids); return { data: null, error: { code: '503', message: 'unavailable' } }; }
+    return { data: [], error: null };
+  };
+  const sb = await service(db); sb.setDataScope('client');
+  const result = await sb.fetchColis();
+  assert.deepEqual([...result.map(row => row.id)].sort(), ['a1', 'b2', 'c3'], 'every expedition stays displayed');
+  assert.deepEqual(asked.map(ids => [...ids]), [['b2']], 'only the shipped expeditions are asked for a carrier number');
+  assert.deepEqual({ ...Object.fromEntries([...result].map(row => [row.id, row.outgoingTrackingError])) }, { a1: false, b2: true, c3: false });
+  // Nothing shipped: no request at all; once read, the number is kept.
+  const quiet = client({ client_colis: [rows[0]] }); let calls = 0; quiet.rpc = async (name) => { if (name === 'client_outgoing_tracking') calls++; return { data: [], error: null }; };
+  const portal = await service(quiet); portal.setDataScope('client'); await portal.fetchColis();
+  assert.equal(calls, 0);
+  const read = client({ client_colis: [rows[1]] }); read.rpc = async (name) => ({ data: name === 'client_outgoing_tracking' ? [{ colis_id: 'b2', tracking_principal: 'SORTANT-1' }] : [], error: null });
+  const shipped = await service(read); shipped.setDataScope('client');
+  const [row] = await shipped.fetchColis();
+  assert.equal(row.outgoingTracking, 'SORTANT-1'); assert.equal(row.outgoingTrackingError, false);
 });
 
 test('carton date evidence loads in bounded batches without leaking a ledger or replacing supplied server dates', async () => {

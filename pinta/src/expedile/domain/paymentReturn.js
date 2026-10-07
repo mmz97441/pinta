@@ -31,7 +31,7 @@ export function receiptDate(value, dateOnly = false) {
 }
 
 export function paymentShipmentMessage(shipment = {}) {
-  if (shipment.status === 'annule') return { title: 'Notre équipe vérifie la suite de votre envoi', message: 'Contactez-nous pour connaître les modalités de prise en charge de ce dossier.' };
+  if (shipment.status === 'annule') return { title: 'Notre équipe vérifie la suite de votre envoi', message: 'Contactez-nous pour connaître les modalités de prise en charge de cette expédition.' };
   if (shipment.deliveredAt || shipment.status === 'livre') return { title: 'Votre envoi est livré', message: receiptDate(shipment.deliveredAt) ? `Livraison confirmée le ${receiptDate(shipment.deliveredAt)}.` : 'La livraison a été confirmée.' };
   if (shipment.departedAt || ['expedie', 'transit', 'dedouanement', 'arrive', 'livraison'].includes(shipment.status)) return { title: 'Votre envoi a pris le départ', message: receiptDate(shipment.departedAt) ? `Départ enregistré le ${receiptDate(shipment.departedAt)}.` : 'Votre colis poursuit son acheminement.' };
   const date = receiptDate(shipment.departureDate, true);

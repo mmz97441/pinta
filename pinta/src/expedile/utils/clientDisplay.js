@@ -13,17 +13,19 @@ export function formatTelegramHandle(value) {
   return username ? `@${username}` : '';
 }
 
-/** The way to reach a client shown in lists: email, then phone, then Telegram username. '' when none is known. */
+/** The way to reach a client shown in lists: email, then phone (the mobile, else the landline), then Telegram username. '' when none is known. */
 export function clientContactLabel(client) {
   if (!client) return '';
-  return String(client.email ?? '').trim() || String(client.tel ?? '').trim() || formatTelegramHandle(client.telegramUsername);
+  return String(client.email ?? '').trim() || String(client.tel ?? '').trim() || String(client.telFixe ?? '').trim() || formatTelegramHandle(client.telegramUsername);
 }
 
-/** Every text a client search matches: identity, destination, contact, reference and Telegram username (with and without @). */
+/** Every text a client search matches: identity, destination, contact (both phones, also without their
+ * separators), reference and Telegram username (with and without @). */
 export function clientSearchText(client) {
   if (!client) return '';
   const username = normalizeTelegramUsername(client.telegramUsername);
-  return [client.nom, client.raisonSociale, client.ville, client.cp, client.tel, client.email, client.type, client.ref, username, username && `@${username}`]
+  const phones = [client.tel, client.telFixe].map(phone => String(phone ?? '').trim()).filter(Boolean);
+  return [client.nom, client.raisonSociale, client.ville, client.cp, ...phones, ...phones.map(phone => phone.replace(/\D/g, '')), client.email, client.type, client.ref, username, username && `@${username}`]
     .filter(Boolean).join(' ');
 }
 

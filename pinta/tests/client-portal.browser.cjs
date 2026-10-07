@@ -69,8 +69,9 @@ function touchBrowser(browser) {
   } });
 }
 
-async function session(browser, { role = 'client', width = 390, theme = 'light', login = true } = {}) {
-  const f = await setup(browser, role);
+async function session(browser, { role = 'client', width = 390, theme = 'light', login = true, timezoneId = null } = {}) {
+  // timezoneId: a device far from Paris (Martinique, Réunion) proves that a chosen day never moves.
+  const f = await setup(browser, role, timezoneId ? { timezoneId } : {});
   f.page.setDefaultTimeout(15000);
   f.width = width; f.theme = theme;
   await f.context.addInitScript(value => { try { localStorage.setItem('expedile-theme', value); } catch { /* storage blocked */ } }, theme);
@@ -454,8 +455,9 @@ async function main() {
       await page.getByRole('status').filter({ hasText: 'Vos informations sont enregistrées.' }).waitFor();
       assert.equal(await page.getByText('Client mis à jour').count(), 0, 'no staff wording');
       assert.equal(calls.length, 2); assert.deepEqual([calls[1].p_changes.cp, calls[1].p_changes.ville, calls[1].p_changes.tel], ['97410', 'Saint-Pierre', '+262 692 12 34 56']);
-      // An account created before the rule: the missing phone is asked for, not « erased ».
-      f.tables.clients[0].tel = null;
+      // An account created before the rule, without any phone (neither mobile nor landline): the missing phone is
+      // asked for, not « erased ». (A landline alone is a phone: see profile-landline-only.)
+      Object.assign(f.tables.clients[0], { tel: null, tel_fixe: null });
       await page.reload(); await page.getByRole('heading', { name: 'Mes coordonnées' }).waitFor();
       // The read view says what is missing and opens the form, instead of a dry « Non renseigné ».
       assert.equal(await page.getByText('Non renseigné', { exact: true }).count(), 0);
@@ -468,7 +470,7 @@ async function main() {
       const dialog = page.getByRole('dialog');
       await dialog.waitFor();
       const text = normalize(await dialog.innerText());
-      for (const part of ['Changer la destination de votre envoi ?', 'La Réunion → Martinique', 'EXP-TEST-003', 'retiré avec son lien de paiement', 'un devis mis à jour', 'Aucun règlement n’est demandé d’ici là.']) assert.ok(text.includes(part), `confirmation mentions « ${part} »: ${text}`);
+      for (const part of ['Changer la destination de votre expédition ?', 'La Réunion → Martinique', 'EXP-TEST-003', 'retiré avec son lien de paiement', 'un devis mis à jour', 'Aucun règlement n’est demandé d’ici là.']) assert.ok(text.includes(part), `confirmation mentions « ${part} »: ${text}`);
       await axe(page, `territory confirmation ${width} ${theme}`);
       await shot(f, 'profile-territory', { fullPage: false });
       await dialog.getByRole('button', { name: 'Annuler', exact: true }).click();
@@ -649,6 +651,487 @@ async function main() {
       assert.equal(await f.page.getByRole('link', { name: 'Retour à mon espace client' }).getAttribute('href'), '/');
       await axe(f.page, `payment return ${theme}`);
       await shot(f, 'payment-return');
+      return f;
+    });
+
+    // 16. A failed read of the account keeps the session: an outage is never an account problem.
+    for (const [width, theme] of MATRIX) await scenario(`identity-unavailable-${width}-${theme}`, async () => {
+      const f = await session(browser, { width, theme, login: false });
+      const page = f.page;
+      const accounts = await failing(f, '**/rest/v1/client_clients*');
+      await page.goto(base);
+      await page.getByLabel('Email', { exact: true }).fill('audit@example.test');
+      await page.getByLabel('Mot de passe', { exact: true }).fill('test-password-long');
+      await page.getByRole('button', { name: 'Se connecter', exact: true }).click();
+      const heading = page.getByRole('heading', { level: 1, name: 'Connexion momentanément impossible', exact: true });
+      await heading.waitFor({ timeout: 20000 });
+      const text = normalize(await page.locator('body').innerText());
+      assert.doesNotMatch(text, /pas encore rattaché|Profil inaccessible|Email ou mot de passe incorrect|accès à internet/, 'never an account problem nor a wrong password');
+      assert.match(text, /Votre session est conservée : réessayez dans un instant\./);
+      assert.equal(await page.locator('#login-email').count(), 0, 'not the login form');
+      assert.ok(await page.evaluate(() => Object.keys(localStorage).some(key => /^sb-.+-auth-token$/.test(key))), 'the session is kept on this device');
+      assert.equal(await page.title(), 'Connexion momentanément impossible — Expedîle');
+      const retry = page.getByRole('button', { name: 'Réessayer', exact: true });
+      assert.ok((await retry.boundingBox()).height >= 44, 'retry: 44 px');
+      await axe(page, `identity unavailable ${width} ${theme}`); await noOverflow(page, 'identity unavailable'); await typographyOk(page, 'identity unavailable');
+      await shot(f, 'identity-unavailable', { fullPage: false });
+      // Back online: « Réessayer » opens the portal with the same session.
+      accounts.on = false;
+      await retry.click();
+      await page.getByRole('heading', { level: 1, name: 'Bonjour Camille', exact: true }).waitFor({ timeout: 20000 });
+      // A restored session whose account cannot be read: the same panel; « Utiliser un autre compte » signs out.
+      accounts.on = true;
+      await page.reload();
+      await heading.waitFor({ timeout: 20000 });
+      await page.getByRole('button', { name: 'Utiliser un autre compte', exact: true }).click();
+      await page.locator('#login-email').waitFor();
+      assert.equal(await heading.count(), 0);
+      return f;
+    });
+    await scenario('identity-unavailable-profile-read', async () => {
+      const f = await session(browser, { width: 390, theme: 'light', login: false });
+      await failing(f, '**/rest/v1/profiles*');
+      await f.page.goto(base);
+      await f.page.getByLabel('Email', { exact: true }).fill('audit@example.test');
+      await f.page.getByLabel('Mot de passe', { exact: true }).fill('test-password-long');
+      await f.page.getByRole('button', { name: 'Se connecter', exact: true }).click();
+      await f.page.getByRole('heading', { level: 1, name: 'Connexion momentanément impossible', exact: true }).waitFor({ timeout: 20000 });
+      assert.doesNotMatch(await f.page.locator('body').innerText(), /Profil inaccessible/);
+      return f;
+    });
+    // An account really without client record keeps its own message (not the outage panel).
+    await scenario('identity-not-linked-keeps-its-message', async () => {
+      const f = await session(browser, { width: 1440, theme: 'light', login: false });
+      f.tables.clients[0].user_id = null;
+      await f.page.goto(base);
+      await f.page.getByLabel('Email', { exact: true }).fill('audit@example.test');
+      await f.page.getByLabel('Mot de passe', { exact: true }).fill('test-password-long');
+      await f.page.getByRole('button', { name: 'Se connecter', exact: true }).click();
+      await f.page.getByRole('alert').filter({ hasText: 'Votre compte n’est pas encore rattaché à un dossier client. Contactez l’équipe.' }).waitFor({ timeout: 20000 });
+      assert.equal(await f.page.getByRole('heading', { name: 'Connexion momentanément impossible' }).count(), 0);
+      return f;
+    });
+
+    // 17. « Mot de passe oublié ? » only opens the form; the link is sent by « Envoyer le lien » alone.
+    for (const [width, theme] of [[390, 'light'], [1440, 'dark']]) await scenario(`forgot-password-${width}-${theme}`, async () => {
+      const f = await session(browser, { width, theme, login: false });
+      const page = f.page;
+      const recover = () => f.requests.filter(request => request.path.endsWith('/auth/v1/recover'));
+      await page.addInitScript(() => { window.__invalid = 0; document.addEventListener('invalid', () => { window.__invalid++; }, true); });
+      await page.goto(base);
+      // An empty email: the form opens, no « Please fill out this field » bubble, nothing sent.
+      await page.getByRole('button', { name: 'Mot de passe oublié ?', exact: true }).click();
+      await page.getByRole('heading', { level: 1, name: 'Mot de passe oublié', exact: true }).waitFor();
+      await page.waitForTimeout(200);
+      assert.equal(await page.evaluate(() => window.__invalid), 0, 'no validation bubble on opening');
+      assert.equal(recover().length, 0, 'opening the form sends nothing');
+      await page.getByRole('button', { name: 'Retour à la connexion', exact: true }).click();
+      // After a wrong password, with the email typed: the form opens prefilled, still nothing sent.
+      await f.context.route('**/auth/v1/token*', route => route.fulfill({ status: 400, contentType: 'application/json', headers: CORS, body: JSON.stringify({ code: 400, error_code: 'invalid_credentials', msg: 'Invalid login credentials' }) }));
+      await page.getByLabel('Email', { exact: true }).fill('camille@example.test');
+      await page.getByLabel('Mot de passe', { exact: true }).fill('mauvais-mot-de-passe');
+      await page.getByRole('button', { name: 'Se connecter', exact: true }).click();
+      await page.getByRole('alert').filter({ hasText: 'Email ou mot de passe incorrect.' }).waitFor();
+      const link = page.getByRole('button', { name: 'Mot de passe oublié ?', exact: true });
+      if (width < 768) await link.click(); else { await link.focus(); await page.keyboard.press('Enter'); }
+      await page.getByRole('heading', { level: 1, name: 'Mot de passe oublié', exact: true }).waitFor();
+      await page.waitForTimeout(200);
+      assert.equal(recover().length, 0, 'opening the form after a wrong password sends nothing');
+      assert.equal(await page.getByRole('status').filter({ hasText: 'Vérifiez votre messagerie' }).count(), 0, 'no confirmation before the submit');
+      assert.equal(await page.getByLabel('Email', { exact: true }).inputValue(), 'camille@example.test', 'prefilled with the typed email');
+      await axe(page, `forgot ${width} ${theme}`); await typographyOk(page, 'forgot');
+      await shot(f, 'forgot-password', { fullPage: false });
+      await page.getByRole('button', { name: 'Envoyer le lien de réinitialisation', exact: true }).click();
+      await page.getByRole('status').filter({ hasText: 'Vérifiez votre messagerie' }).waitFor();
+      assert.equal(recover().length, 1, 'one link, on the explicit submit');
+      assert.deepEqual(recover()[0].input?.email, 'camille@example.test');
+      return f;
+    });
+
+    // 18. Only a request that never reached the server is presented as an internet problem.
+    await scenario('login-messages', async () => {
+      const f = await session(browser, { width: 390, theme: 'light', login: false });
+      const page = f.page;
+      let recoverAnswer = { status: 400, body: { code: 400, error_code: 'validation_failed', msg: 'Unable to validate email address: invalid format' } };
+      await f.context.route('**/auth/v1/recover*', route => recoverAnswer === 'abort' ? route.abort('internetdisconnected') : route.fulfill({ status: recoverAnswer.status, contentType: 'application/json', headers: CORS, body: JSON.stringify(recoverAnswer.body) }));
+      await page.goto(base);
+      await page.getByLabel('Email', { exact: true }).fill('camille@example');
+      await page.getByRole('button', { name: 'Mot de passe oublié ?', exact: true }).click();
+      await page.getByRole('button', { name: 'Envoyer le lien de réinitialisation', exact: true }).click();
+      const alert = page.getByRole('alert');
+      await alert.filter({ hasText: 'Vérifiez l’adresse email : elle doit ressembler à nom@exemple.fr.' }).waitFor();
+      assert.doesNotMatch(await alert.allInnerTexts().then(texts => texts.join(' ')), /internet/, 'a refused address is not a connection problem');
+      recoverAnswer = { status: 422, body: { code: 422, error_code: 'unexpected_failure', msg: 'Some other server message' } };
+      await page.getByRole('button', { name: 'Envoyer le lien de réinitialisation', exact: true }).click();
+      await alert.filter({ hasText: 'La demande n’a pas abouti. Réessayez dans un instant ou contactez l’équipe Expedîle.' }).waitFor();
+      recoverAnswer = 'abort';
+      await page.getByRole('button', { name: 'Envoyer le lien de réinitialisation', exact: true }).click();
+      await alert.filter({ hasText: 'Connexion impossible pour le moment. Vérifiez votre accès à internet, puis réessayez.' }).waitFor({ timeout: 20000 });
+      return f;
+    });
+
+    // 19. The password page: French refusals, a confirmation, back to the profile, visible eye icons.
+    for (const [width, theme] of [[390, 'light'], [1440, 'light'], [1440, 'dark']]) await scenario(`password-${width}-${theme}`, async () => {
+      const f = await session(browser, { width, theme });
+      const page = f.page;
+      let refuse = true;
+      await f.context.route('**/auth/v1/user*', route => route.request().method() === 'PUT' && refuse
+        ? route.fulfill({ status: 422, contentType: 'application/json', headers: CORS, body: JSON.stringify({ code: 422, error_code: 'same_password', msg: 'New password should be different from the old password.' }) })
+        : route.fallback());
+      await navLink(f, 'Profil').click();
+      await page.getByRole('button', { name: 'Modifier mon mot de passe', exact: true }).click();
+      await page.getByRole('heading', { level: 1, name: 'Modifier mon mot de passe', exact: true }).waitFor();
+      // The eye buttons on the navy field: at least 3:1 in both themes.
+      for (const name of ['Afficher le mot de passe', 'Afficher la confirmation']) {
+        const ratio = await page.getByRole('button', { name, exact: true }).evaluate(element => window.__portal.contrast(element, element.querySelector('svg')));
+        assert.ok(ratio >= 3, `${name}: ${ratio.toFixed(2)}:1`);
+      }
+      await page.getByRole('button', { name: 'Annuler', exact: true }).click();
+      await page.waitForURL(url => url.pathname === '/profil');
+      await page.getByRole('button', { name: 'Modifier mon mot de passe', exact: true }).click();
+      await page.getByLabel('Nouveau mot de passe', { exact: true }).fill('un-mot-de-passe-solide-2026');
+      await page.getByLabel('Confirmer le mot de passe', { exact: true }).fill('un-mot-de-passe-solide-2026');
+      await page.getByRole('button', { name: 'Définir mon mot de passe et continuer', exact: true }).click();
+      await page.getByRole('alert').filter({ hasText: 'Choisissez un mot de passe différent de l’actuel.' }).waitFor();
+      assert.doesNotMatch(await page.locator('body').innerText(), /New password|Erreur :/, 'never the English message');
+      await axe(page, `password refused ${width} ${theme}`); await typographyOk(page, 'password refused');
+      await shot(f, 'password-refused', { fullPage: false });
+      refuse = false;
+      await page.getByRole('button', { name: 'Définir mon mot de passe et continuer', exact: true }).click();
+      await page.waitForURL(url => url.pathname === '/profil', { timeout: 20000 });
+      await page.locator('[data-toast]').filter({ hasText: 'Votre mot de passe est modifié.' }).waitFor();
+      await page.getByRole('heading', { name: 'Mes coordonnées', exact: true }).waitFor();
+      return f;
+    });
+
+    // 20. The onboarding guide always closes; an unrecorded choice is said, and the guide returns at the next sign-in.
+    for (const [width, theme] of [[390, 'light'], [1440, 'dark']]) await scenario(`guide-save-failure-${width}-${theme}`, async () => {
+      const f = await session(browser, { width, theme, login: false });
+      f.tables.clients[0].onboarded = false;
+      const saves = await failing(f, '**/rest/v1/rpc/update_client_profile');
+      await f.login();
+      const page = f.page;
+      const dialog = page.getByRole('dialog');
+      await dialog.waitFor();
+      await dialog.getByRole('button', { name: /^Passer/ }).click();
+      await dialog.waitFor({ state: 'detached', timeout: 20000 });
+      assert.ok(saves.calls > 0, 'the choice was sent');
+      await page.locator('[data-toast]').filter({ hasText: 'Le guide est fermé. Votre choix n’a pas pu être enregistré : il vous sera de nouveau proposé à votre prochaine connexion.' }).waitFor();
+      await shot(f, 'guide-save-failure', { fullPage: false });
+      for (const [label, heading] of [[/^Expéditions/, 'Mes expéditions'], ['Profil', 'Camille Exemple'], ['Accueil', 'Bonjour Camille']]) {
+        await navLink(f, label).click();
+        await page.getByRole('heading', { level: 1, name: heading, exact: true }).waitFor();
+        assert.equal(await dialog.count(), 0, `${heading}: the guide stays closed`);
+      }
+      await page.goto(`${base}/colis/${ids.P}`);
+      await page.getByRole('region', { name: 'État actuel et prochaine étape', exact: true }).waitFor();
+      await navLink(f, 'Accueil').click();
+      await page.getByRole('heading', { level: 1, name: 'Bonjour Camille', exact: true }).waitFor();
+      assert.equal(await dialog.count(), 0, 'still closed after visiting an expedition');
+      // On request, the guide opens again; Échap closes it.
+      await navLink(f, 'Profil').click();
+      await page.getByRole('button', { name: 'Revoir le guide de démarrage' }).click();
+      await dialog.waitFor();
+      await page.keyboard.press('Escape');
+      await dialog.waitFor({ state: 'detached' });
+      return f;
+    });
+
+    // 21. History: a failed read is said, never « Recherche… » forever.
+    for (const [width, theme] of [[390, 'dark'], [1440, 'light']]) await scenario(`history-failure-${width}-${theme}`, async () => {
+      const f = await session(browser, { width, theme, login: false });
+      let fail = true;
+      await f.context.route('**/rest/v1/client_colis*', route => new URL(route.request().url()).searchParams.get('archive') === 'eq.true' && fail
+        ? route.fulfill({ status: 503, contentType: 'application/json', headers: { ...CORS, 'retry-after': '0' }, body: '{"message":"Indisponibilité simulée"}' }) : route.fallback());
+      await f.login();
+      const page = f.page;
+      await navLink(f, /^Expéditions/).click();
+      await page.getByRole('button', { name: /^Historique/ }).click();
+      await page.getByRole('alert').filter({ hasText: 'L’historique n’a pas pu être chargé.' }).waitFor({ timeout: 20000 });
+      const status = normalize(await page.locator('main [role="status"]').first().innerText());
+      assert.doesNotMatch(status, /Recherche/, 'the waiting line is replaced');
+      assert.match(status, /historique indisponible/);
+      assert.match(normalize(await page.getByRole('button', { name: /^Historique/ }).innerText()), /^Historique – \(indisponible\)$/, 'no endless « … »');
+      await page.getByLabel('Rechercher une expédition').fill('EXP');
+      assert.match(normalize(await page.locator('main [role="status"]').first().innerText()), /résultats limités aux expéditions en cours/);
+      await axe(page, `history failure ${width} ${theme}`); await typographyOk(page, 'history failure', 'main');
+      await shot(f, 'history-failure');
+      fail = false;
+      await page.getByRole('button', { name: 'Réessayer le chargement de l’historique' }).click();
+      await page.getByRole('button', { name: /^Historique 0/ }).waitFor();
+      return f;
+    });
+
+    // 22. A failed read of the carrier tracking keeps the expeditions; the tracking alone is unavailable.
+    await scenario('outgoing-tracking-failure', async () => {
+      const f = await session(browser, { width: 390, theme: 'light', login: false });
+      Object.assign(f.tables.colis[0], { statut: 'transit', envoi_id: 'e1000000-0000-4000-8000-000000000011', paiement_date: '2026-10-02T19:00:00Z', paiement_montant: 80, date_expedition: '2026-10-03T06:00:00Z' });
+      f.tables.envois = [{ id: 'e1000000-0000-4000-8000-000000000011', ref: 'ENV-TEST', date_depart: '2026-10-03', statut: 'parti', destination_code: '974', departed_at: '2026-10-03T06:00:00Z', tracking_principal: null }];
+      const tracking = await failing(f, '**/rest/v1/rpc/client_outgoing_tracking');
+      await f.login();
+      const page = f.page;
+      const card = page.getByRole('button').filter({ hasText: 'EXP-TEST-001' });
+      await card.waitFor();
+      assert.equal(await page.getByTestId('client-dossiers-error').count(), 0, 'the expeditions are shown');
+      await card.click();
+      const unavailable = page.getByTestId('outgoing-tracking-unavailable');
+      await unavailable.waitFor();
+      assert.doesNotMatch(normalize(await unavailable.innerText()), /pas encore renseigné/, 'a failure is never « not yet known »');
+      await axe(page, 'outgoing tracking failure'); await typographyOk(page, 'outgoing tracking failure', 'main');
+      await shot(f, 'outgoing-tracking-failure');
+      tracking.on = false;
+      f.tables.envois[0].tracking_principal = 'SORTANT-123';
+      await unavailable.getByRole('button', { name: 'Réessayer', exact: true }).click();
+      await page.getByRole('link', { name: 'Suivre mon colis', exact: true }).waitFor();
+      assert.equal(await unavailable.count(), 0);
+      return f;
+    });
+
+    // 23. A truncated expedition link: « introuvable », never « momentanément indisponible ».
+    await scenario('truncated-link-not-found', async () => {
+      const f = await session(browser, { width: 390, theme: 'light' });
+      const page = f.page;
+      const truncated = ids.P.slice(0, -1);
+      await page.goto(`${base}/colis/${truncated}`);
+      await page.getByRole('heading', { level: 1, name: 'Expédition introuvable', exact: true }).waitFor();
+      assert.equal(await page.getByText(/ne peut pas s’afficher pour le moment/).count(), 0);
+      await page.goto(`${base}/colis/pas-une-expedition`);
+      await page.getByRole('heading', { level: 1, name: 'Expédition introuvable', exact: true }).waitFor();
+      return f;
+    });
+
+    // 24. A consent refused for a stale version: the expedition is read again, then a new attempt succeeds.
+    for (const [width, theme] of [[390, 'light'], [1440, 'dark']]) await scenario(`consent-stale-version-${width}-${theme}`, async () => {
+      const f = await session(browser, { width, theme, login: false });
+      const decisions = [];
+      await f.context.route('**/rest/v1/rpc/client_decision', route => {
+        if (route.request().method() === 'OPTIONS') return route.fallback();
+        const input = route.request().postDataJSON(); decisions.push(input);
+        const parcel = f.tables.colis[0];
+        if (input.p_expected_updated_at !== parcel.updated_at) return route.fulfill({ status: 400, contentType: 'application/json', headers: CORS, body: JSON.stringify({ code: 'P0001', message: 'Le dossier a changé. Rechargez avant de confirmer.', details: null, hint: null }) });
+        Object.assign(parcel, { statut: 'autorise', feu_vert: 'autorise', feu_vert_date: new Date().toISOString(), updated_at: new Date().toISOString() });
+        return route.fulfill({ status: 200, contentType: 'application/json', headers: CORS, body: JSON.stringify(parcel) });
+      });
+      await f.login();
+      const page = f.page;
+      await page.goto(`${base}/colis/${ids.P}`);
+      const region = page.getByRole('region', { name: 'État actuel et prochaine étape', exact: true });
+      await region.getByText('2 cartons réceptionnés · expédition EXP-TEST-001').waitFor();
+      // Meanwhile, the team receives a third carton.
+      Object.assign(f.tables.colis[0], { nb_colis: 3, trackings: ['TEST-001', 'TEST-002', 'TEST-003'], trackings_detail: [...f.tables.colis[0].trackings_detail, { number: 'TEST-003', fournisseur: 'Boutique C' }], updated_at: '2026-09-10T08:00:00Z' });
+      await page.getByRole('button', { name: 'Autoriser la préparation', exact: true }).click();
+      await page.getByRole('dialog').getByRole('button', { name: 'J’autorise la préparation', exact: true }).click();
+      const notice = page.getByTestId('decision-update-notice');
+      await notice.waitFor();
+      assert.match(normalize(await notice.innerText()), /Votre expédition vient d’être mise à jour \(un nouveau carton, par exemple\) : vérifiez-la ci-dessous, puis confirmez à nouveau\./);
+      await region.getByText('3 cartons réceptionnés · expédition EXP-TEST-001').waitFor();
+      assert.equal(await page.locator('[data-toast="error"]').count(), 0, 'reported once, in the block, not in a toast');
+      await axe(page, `consent stale ${width} ${theme}`); await typographyOk(page, 'consent stale', 'main');
+      await shot(f, 'consent-stale');
+      await page.getByRole('button', { name: 'Autoriser la préparation', exact: true }).click();
+      const dialog = page.getByRole('dialog');
+      assert.match(normalize(await dialog.innerText()), /avec 3 cartons actuellement réceptionnés/);
+      await dialog.getByRole('button', { name: 'J’autorise la préparation', exact: true }).click();
+      await page.locator('[data-toast]').filter({ hasText: 'Votre accord est enregistré pour cette expédition.' }).waitFor();
+      assert.deepEqual(decisions.map(input => input.p_expected_updated_at), ['2026-09-09T08:00:00Z', '2026-09-10T08:00:00Z'], 'the second attempt sends the version it shows');
+      assert.equal(f.tables.colis[0].statut, 'autorise');
+      return f;
+    });
+
+    // 24b. A pause refused for a stale version: said in the open form, then recorded for the version shown.
+    await scenario('wait-stale-version', async () => {
+      const f = await session(browser, { width: 390, theme: 'dark', login: false });
+      const decisions = [];
+      await f.context.route('**/rest/v1/rpc/client_decision', route => {
+        if (route.request().method() === 'OPTIONS') return route.fallback();
+        const input = route.request().postDataJSON(); decisions.push(input);
+        if (input.p_expected_updated_at !== f.tables.colis[0].updated_at) return route.fulfill({ status: 400, contentType: 'application/json', headers: CORS, body: JSON.stringify({ code: 'P0001', message: 'Le dossier a changé. Rechargez avant de confirmer.', details: null, hint: null }) });
+        return route.fallback();
+      });
+      await f.login();
+      const page = f.page;
+      await page.goto(`${base}/colis/${ids.P}`);
+      await page.getByRole('button', { name: 'Attendre d’autres achats', exact: true }).click();
+      Object.assign(f.tables.colis[0], { nb_colis: 3, updated_at: '2026-09-10T08:00:00Z' });
+      await page.getByRole('button', { name: 'Enregistrer mon attente', exact: true }).click();
+      const form = page.locator('form').filter({ hasText: 'Votre précision' });
+      await form.getByRole('alert').filter({ hasText: 'Votre expédition vient d’être mise à jour (un nouveau carton, par exemple) : vérifiez-la, puis enregistrez à nouveau votre attente.' }).waitFor();
+      await page.getByRole('region', { name: 'État actuel et prochaine étape', exact: true }).getByText('3 cartons réceptionnés · expédition EXP-TEST-001').waitFor();
+      assert.equal(await page.locator('[data-toast="error"]').count(), 0);
+      await shot(f, 'wait-stale', { fullPage: false });
+      await form.getByRole('button', { name: 'Enregistrer mon attente', exact: true }).click();
+      await page.locator('[data-toast]').filter({ hasText: 'Votre demande d’attente est enregistrée.' }).waitFor();
+      assert.deepEqual(decisions.map(input => input.p_expected_updated_at), ['2026-09-09T08:00:00Z', '2026-09-10T08:00:00Z']);
+      return f;
+    });
+
+    // 25. « Attendre jusqu’au » never offers a day the server refuses; a refusal is said under the field.
+    for (const [width, theme, timezoneId] of [[390, 'light', 'America/Martinique'], [1440, 'dark', 'Indian/Reunion'], [390, 'dark', 'Europe/Paris']]) await scenario(`wait-until-${width}-${theme}-${timezoneId.split('/')[1]}`, async () => {
+      const f = await session(browser, { width, theme, timezoneId, login: false });
+      const sent = [];
+      let refuseDate = true;
+      await f.context.route('**/rest/v1/rpc/client_decision', route => {
+        if (route.request().method() === 'OPTIONS') return route.fallback();
+        const input = route.request().postDataJSON(); sent.push(input);
+        if (refuseDate) return route.fulfill({ status: 400, contentType: 'application/json', headers: CORS, body: JSON.stringify({ code: 'P0001', message: 'La date de reprise doit être future', details: null, hint: null }) });
+        return route.fallback();
+      });
+      await f.login();
+      const page = f.page;
+      await page.goto(`${base}/colis/${ids.P}`);
+      await page.getByRole('button', { name: 'Attendre d’autres achats', exact: true }).click();
+      const date = page.getByLabel('Attendre jusqu’au (facultatif)', { exact: true });
+      const days = await page.evaluate(() => {
+        const iso = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+        const next = new Date(Date.now() + 86400000);
+        const utc = next.toISOString().slice(0, 10);
+        return { today: iso(new Date()), first: utc > iso(next) ? utc : iso(next) };
+      });
+      assert.equal(await date.getAttribute('min'), days.first, 'the first day the server accepts');
+      assert.ok(days.first > days.today, 'never today');
+      // Today, typed: refused under the field before anything is sent.
+      await date.fill(days.today);
+      await page.getByRole('button', { name: 'Enregistrer mon attente', exact: true }).click();
+      const error = page.locator('#client-wait-until-error');
+      await error.waitFor();
+      assert.match(normalize(await error.innerText()), /^Choisissez une date de reprise à partir du /);
+      assert.deepEqual(await date.evaluate(input => [input.getAttribute('aria-invalid'), input.getAttribute('aria-describedby'), document.activeElement === input]), ['true', 'client-wait-until-error', true]);
+      assert.equal(sent.length, 0, 'nothing sent');
+      await axe(page, `wait refused ${width} ${theme}`); await typographyOk(page, 'wait refused', 'main');
+      await shot(f, `wait-until-refused-${timezoneId.split('/')[1]}`, { fullPage: false });
+      // A refusal of the server for the date is said under the field, in client words, without a toast.
+      await date.fill(days.first);
+      await page.getByRole('button', { name: 'Enregistrer mon attente', exact: true }).click();
+      await page.locator('#client-wait-until-error').filter({ hasText: 'Choisissez une date de reprise à partir du' }).waitFor();
+      assert.equal(await page.locator('[data-toast="error"]').count(), 0);
+      assert.doesNotMatch(await page.locator('main').innerText(), /doit être future/);
+      assert.equal(sent[0].p_wait_until, `${days.first}T00:00:00Z`, 'the chosen day, at its midnight UTC');
+      refuseDate = false;
+      await page.getByRole('button', { name: 'Enregistrer mon attente', exact: true }).click();
+      await page.locator('[data-toast]').filter({ hasText: 'Votre demande d’attente est enregistrée.' }).waitFor();
+      return f;
+    });
+
+    // 26. A chosen day reads on that day in every territory (Antilles UTC-4 included).
+    for (const [width, theme, timezoneId] of [[390, 'light', 'America/Martinique'], [1440, 'dark', 'America/Guadeloupe'], [390, 'dark', 'Indian/Reunion']]) await scenario(`calendar-days-${width}-${theme}-${timezoneId.split('/')[1]}`, async () => {
+      const f = await session(browser, { width, theme, timezoneId, login: false });
+      Object.assign(f.tables.colis[0], { attente_client_date: '2026-10-01T18:00:00Z', attente_client_motif: 'J’attends une commande', attente_client_until: '2099-10-20T00:00:00+00:00' });
+      Object.assign(f.tables.clients[0], { abonnement: 'vip', abonnement_debut: '2026-01-01', abonnement_fin: '2099-11-01' });
+      await f.login();
+      const page = f.page;
+      const card = page.getByRole('button').filter({ hasText: 'EXP-TEST-001' });
+      await card.waitFor();
+      assert.match(normalize(await card.innerText()), /Réexamen prévu le 20 octobre 2099/);
+      await card.click();
+      assert.match(normalize(await page.getByTestId('client-waiting').innerText()), /Réexamen prévu le 20 octobre 2099\./);
+      await navLink(f, 'Profil').click();
+      await page.getByText(/Échéance\s:\s1er\snovembre\s2099/).waitFor();
+      return f;
+    });
+
+    // 27. The shared page: never a past or completed departure as « Départ prévu »; « 1er ».
+    for (const [width, theme] of [[390, 'light'], [1440, 'dark']]) await scenario(`public-departures-${width}-${theme}`, async () => {
+      const f = await session(browser, { width, theme, login: false });
+      const page = f.page;
+      const parisDay = offset => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Paris' }).format(new Date(Date.now() + offset * 86400000));
+      await f.context.route('**/functions/v1/get-tracking*', route => route.fulfill({ status: 200, contentType: 'application/json', headers: CORS, body: JSON.stringify({ ok: true, expediteur: 'Camille E.', destination: { cp: '97400', ville: 'Saint-Denis' }, colis: [
+        { ref: 'EXP-PUB-PASSE', desc: 'Payé, départ passé', statut: 'paye', receivedCount: 1, dateReception: '2026-09-01T08:00:00Z', paiementDate: '2026-09-20T10:00:00Z', eta: parisDay(-6), envoiStatut: 'planifie' },
+        { ref: 'EXP-PUB-EXPEDIE', desc: 'Parti', statut: 'expedie', receivedCount: 1, dateReception: '2026-09-02T08:00:00Z', dateExpedition: '2026-10-01T06:00:00Z', eta: '2026-10-01', envoiStatut: 'parti' },
+        { ref: 'EXP-PUB-A-VENIR', desc: 'Payé, départ à venir', statut: 'paye', receivedCount: 1, dateReception: '2026-09-03T08:00:00Z', paiementDate: '2026-10-02T10:00:00Z', eta: parisDay(5), envoiStatut: 'planifie' },
+      ] }) }));
+      await page.goto(`${base}/suivi/fixture-public-token-123456789`);
+      await page.getByRole('heading', { level: 1, name: 'Suivi des expéditions', exact: true }).waitFor();
+      const article = ref => page.getByRole('article', { name: ref });
+      assert.equal(await article('EXP-PUB-PASSE').getByTestId('public-departure').count(), 0, 'a past day is never planned');
+      assert.match(normalize(await article('EXP-PUB-EXPEDIE').getByTestId('public-departure').innerText()), /^Départ du jeudi 1er octobre( 2026)?\. Il s’agit du départ, pas de la date de livraison\.$/);
+      assert.doesNotMatch(normalize(await article('EXP-PUB-EXPEDIE').innerText()), /Départ prévu/);
+      assert.match(normalize(await article('EXP-PUB-A-VENIR').getByTestId('public-departure').innerText()), /^Départ prévu : \S+ \d+(er)? \S+/);
+      assert.match(normalize(await article('EXP-PUB-PASSE').innerText()), /Reçu le 1er septembre/);
+      await axe(page, `public departures ${width} ${theme}`); await typographyOk(page, 'public departures', 'main');
+      await shot(f, 'public-departures');
+      return f;
+    });
+
+    // 28. One vocabulary in the portal: « expédition », with delivered and cancelled ones listed.
+    for (const [width, theme] of [[390, 'dark'], [1440, 'light']]) await scenario(`vocabulary-${width}-${theme}`, async () => {
+      const f = await session(browser, { width, theme, login: false });
+      const [first] = f.tables.colis;
+      f.tables.colis.push(
+        { ...first, id: '73333333-3333-4333-8333-333333333311', ref: 'EXP-TEST-011', statut: 'livre', desc_contenu: 'Livré', date_livraison: '2026-10-05T10:00:00Z', paiement_date: '2026-09-20T10:00:00Z', paiement_montant: 50 },
+        { ...first, id: '73333333-3333-4333-8333-333333333312', ref: 'EXP-TEST-012', statut: 'annule', desc_contenu: 'Annulé' },
+      );
+      await f.login();
+      const page = f.page;
+      await page.getByRole('heading', { name: 'Historique', exact: true }).waitFor();
+      assert.doesNotMatch(await page.locator('main').innerText(), /\bdossiers?\b/i, 'home');
+      await navLink(f, /^Expéditions/).click();
+      await page.getByRole('button', { name: /^Historique/ }).click();
+      await page.getByRole('button').filter({ hasText: 'EXP-TEST-012' }).waitFor();
+      const list = await page.locator('main').innerText();
+      assert.doesNotMatch(list, /\bdossiers?\b/i, 'history list');
+      assert.match(list, /Expédition annulée/); assert.match(list, /Consulter l’expédition/);
+      await page.getByRole('button').filter({ hasText: 'EXP-TEST-012' }).click();
+      await page.getByRole('region', { name: 'État actuel et prochaine étape', exact: true }).waitFor();
+      assert.doesNotMatch(await page.locator('main').innerText(), /\bdossiers?\b/i, 'cancelled expedition');
+      assert.equal(await page.getByRole('button', { name: 'Retour à mes expéditions', exact: true }).count(), 1);
+      await shot(f, 'vocabulary-cancelled');
+      return f;
+    });
+
+    // 29. Profile: a landline alone is a phone; an older account is told what it misses before any save.
+    for (const [width, theme] of MATRIX) await scenario(`profile-landline-only-${width}-${theme}`, async () => {
+      const f = await session(browser, { width, theme, login: false });
+      Object.assign(f.tables.clients[0], { tel: null, tel_fixe: '0262 00 00 01' });
+      const calls = await profileCommand(f);
+      await f.login();
+      const page = f.page;
+      await navLink(f, 'Profil').click();
+      await page.getByRole('heading', { name: 'Mes coordonnées', exact: true }).waitFor();
+      const section = page.getByRole('region', { name: 'Mes coordonnées' });
+      assert.match(normalize(await section.innerText()), /0262 00 00 01 \(fixe\)/, 'the landline is shown');
+      assert.equal(await page.getByText(/Téléphone à compléter/).count(), 0, 'a landline-only record is complete');
+      assert.equal(await page.getByTestId('profile-incomplete').count(), 0);
+      await page.getByRole('button', { name: 'Modifier', exact: true }).click();
+      assert.equal(await page.locator('#profile-tel').inputValue(), '');
+      assert.equal(await page.locator('#profile-telFixe').inputValue(), '0262 00 00 01');
+      assert.equal(normalize(await page.locator('label[for="profile-tel"]').innerText()), 'Téléphone mobile', 'the mobile is not required beside a landline');
+      await page.locator('#profile-ville').fill('Saint-Paul');
+      await axe(page, `profile landline ${width} ${theme}`); await typographyOk(page, 'profile landline', 'main');
+      await shot(f, 'profile-landline-form', { fullPage: false });
+      await page.getByRole('button', { name: 'Enregistrer', exact: true }).click();
+      await page.getByRole('status').filter({ hasText: 'Vos informations sont enregistrées.' }).waitFor();
+      assert.equal(calls.length, 1, 'saved');
+      assert.deepEqual([calls[0].p_changes.ville, calls[0].p_changes.tel, calls[0].p_changes.tel_fixe], ['Saint-Paul', null, '0262 00 00 01']);
+      // Both numbers removed: one is required, under the mobile.
+      await page.getByRole('button', { name: 'Modifier', exact: true }).click();
+      await page.locator('#profile-telFixe').fill('');
+      await page.getByRole('button', { name: 'Enregistrer', exact: true }).click();
+      await page.locator('#profile-tel-error').filter({ hasText: 'Votre téléphone ne peut pas être effacé : il est nécessaire à la livraison.' }).waitFor();
+      assert.equal(calls.length, 1, 'nothing sent');
+      // A landline invalid by the database rule (no-break space): said under the landline.
+      await page.locator('#profile-telFixe').fill('0262\u00a000 00 01');
+      await page.getByRole('button', { name: 'Enregistrer', exact: true }).click();
+      await page.locator('#profile-telFixe-error').filter({ hasText: 'Indiquez un numéro fixe d’au moins 9 chiffres' }).waitFor();
+      await page.locator('#profile-telFixe').fill('(0262) 00-00-01');
+      await page.getByRole('button', { name: 'Enregistrer', exact: true }).click();
+      await page.getByRole('status').filter({ hasText: 'Vos informations sont enregistrées.' }).waitFor();
+      assert.equal(calls[1].p_changes.tel_fixe, '(0262) 00-00-01', 'parentheses accepted as by the database');
+      return f;
+    });
+    for (const [width, theme] of [[390, 'light'], [1440, 'dark']]) await scenario(`profile-older-account-${width}-${theme}`, async () => {
+      const f = await session(browser, { width, theme, login: false });
+      Object.assign(f.tables.clients[0], { prenom: '', adresse_ligne1: '', adresse: null });
+      await f.login();
+      const page = f.page;
+      await navLink(f, 'Profil').click();
+      const notice = page.getByTestId('profile-incomplete');
+      await notice.waitFor();
+      assert.equal(normalize(await notice.innerText()), 'Complétez votre profil : le prénom et l’adresse sont nécessaires à vos expéditions.');
+      await page.getByRole('button', { name: 'Adresse à compléter : elle est nécessaire à la livraison.', exact: true }).waitFor();
+      await axe(page, `profile older ${width} ${theme}`); await typographyOk(page, 'profile older', 'main');
+      await shot(f, 'profile-older-account');
+      await page.getByRole('button', { name: 'Prénom à compléter', exact: true }).click();
+      await page.waitForFunction(() => document.activeElement?.id === 'profile-prenom');
       return f;
     });
 

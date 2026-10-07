@@ -235,17 +235,8 @@ export async function parseClientFile(file, overrides = {}) {
       }
     }
 
-    // Validation minimale
-    if (!cl.nom.trim()) {
-      errors.push(`Ligne ${i + 2} : nom manquant`);
-      continue;
-    }
-    if (!cl.email.trim() && !cl.telegramUsername.trim()) {
-      errors.push(`Ligne ${i + 2} (${cl.nom}) : ni email ni Telegram — contact requis`);
-      continue;
-    }
-
-    if (cl.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cl.email)) { errors.push(`Ligne ${i + 2} (${cl.nom}) : email invalide`); continue; }
+    // Every row is returned: the required information (importRowIssue, domain/clientRequirements.js)
+    // lists all the reasons of a refused row at once, missing and invalid fields alike.
 
     // Si pro et pas de raison sociale, mettre le nom
     if (cl.type === 'pro' && !cl.raisonSociale) {

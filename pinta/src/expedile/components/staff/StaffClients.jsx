@@ -53,7 +53,8 @@ function ClientImport({ onClose }) {
   const stop = useRef(false); const running = useRef(false); const parsing = useRef(0);
   const pressedBackdrop = useRef(false); const keepImporting = useRef(null); const focusBeforeConfirm = useRef(null);
   const busy = phase === 'importing';
-  // The required information of a client account: a row without it is listed with its reason, never imported.
+  // The required information of a client account: a row without it is listed with all its reasons (missing and
+  // invalid fields at once), never imported.
   const checked = parsed ? parsed.clients.map(client => ({ client, issue: importRowIssue(client) })) : [];
   const rows = parsed ? detectDuplicates(checked.filter(row => !row.issue).map(row => row.client), clients) : [];
   const lineOf = text => Number(/^Ligne (\d+)/.exec(text)?.[1]) || 0;
@@ -128,7 +129,7 @@ function ClientImport({ onClose }) {
           </div>
         ) : <>
           <div className="min-h-0 space-y-4 overflow-y-auto p-4">
-            <p className="text-sm text-secondary">Fichier CSV ou Excel, 10 Mo maximum. Colonnes obligatoires : nom, prénom, email, téléphone, adresse, code postal et ville. Une ligne incomplète est listée avec sa raison et n’est pas importée. Aucun message n’est envoyé pendant l’import.</p>
+            <p className="text-sm text-secondary">Fichier CSV ou Excel, 10 Mo maximum. Colonnes obligatoires : nom, prénom, email, téléphone (mobile ou fixe), adresse, code postal et ville. Une ligne incomplète est listée avec toutes ses raisons et n’est pas importée. Aucun message n’est envoyé pendant l’import.</p>
             {error && <p role="alert" className="rounded-xl border border-red-200 dark:border-red-900 bg-red-50 p-3 text-sm text-red-800">{error}</p>}
             {phase === 'upload' && <>
               <button type="button" className={SECONDARY} onClick={downloadExample}><Download size={16} aria-hidden="true" />Télécharger le fichier exemple</button>

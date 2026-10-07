@@ -107,7 +107,7 @@ async function assertClientOnly(f) {
 
 async function confirmed(f, { test = false, reference = 'EXP-TEST-001' } = {}) {
   await f.page.getByRole('heading', { name: test ? 'Paiement de test confirmé' : 'Paiement reçu', exact: true }).waitFor();
-  await f.page.getByText(`Envoi ${reference}`, { exact: true }).waitFor();
+  await f.page.getByText(`Expédition ${reference}`, { exact: true }).waitFor();
   assert.equal(await f.page.getByRole('button', { name: /^Payer/ }).count(), 0, 'A receipt never offers a second payment.');
 }
 
@@ -242,7 +242,7 @@ async function main() {
           await retry.click(); await confirmed(f);
           release.resolve(); await f.page.waitForTimeout(100);
           await confirmed(f);
-          assert.equal(await f.page.getByText('Envoi EXP-STALE-RESPONSE', { exact: true }).count(), 0, 'The timed-out response cannot overwrite the successful retry.');
+          assert.equal(await f.page.getByText('Expédition EXP-STALE-RESPONSE', { exact: true }).count(), 0, 'The timed-out response cannot overwrite the successful retry.');
           assert.equal(f.paymentCalls.length, blockedCall + 1);
           assert.ok(f.paymentCalls.every(call => JSON.stringify(call.input) === JSON.stringify({ token: tokenA })));
         } finally { release.resolve(); }
@@ -263,7 +263,7 @@ async function main() {
       await scenario(`unknown-or-expired-token-${status}-cannot-leak-a-receipt`, async f => {
         f.respond = async () => ({ status, body: { ok: false, error: 'Internal payment lookup detail must not be displayed' } });
         await open(f); await f.page.getByRole('heading', { name: 'Vérification indisponible', exact: true }).waitFor();
-        assert.equal(await f.page.getByText('Envoi EXP-TEST-001', { exact: true }).count(), 0);
+        assert.equal(await f.page.getByText('Expédition EXP-TEST-001', { exact: true }).count(), 0);
         assert.equal(await f.page.getByRole('button').count(), 0);
         assert.equal(await f.page.getByText(/Internal payment lookup/).count(), 0);
         await f.page.getByRole('link', { name: 'Contacter l’équipe', exact: true }).waitFor();
@@ -274,7 +274,7 @@ async function main() {
       f.respond = async () => ({ body: payment({ isLive: null }) });
       await open(f); await f.page.getByRole('heading', { name: 'Vérification indisponible', exact: true }).waitFor();
       assert.equal(await f.page.getByRole('heading', { name: 'Paiement reçu', exact: true }).count(), 0);
-      assert.equal(await f.page.getByText('Envoi EXP-TEST-001', { exact: true }).count(), 0);
+      assert.equal(await f.page.getByText('Expédition EXP-TEST-001', { exact: true }).count(), 0);
       f.respond = async () => ({ body: payment({ currency: 'USD' }) });
       await f.page.getByRole('button', { name: 'Réessayer la vérification', exact: true }).click();
       await f.page.getByRole('button', { name: 'Réessayer la vérification', exact: true }).waitFor();
@@ -294,7 +294,7 @@ async function main() {
       release.resolve(); await completed.promise;
       await f.page.waitForTimeout(100);
       await confirmed(f, { reference: 'EXP-SECOND' });
-      assert.equal(await f.page.getByText('Envoi EXP-TEST-001', { exact: true }).count(), 0);
+      assert.equal(await f.page.getByText('Expédition EXP-TEST-001', { exact: true }).count(), 0);
       assert.match(await f.page.getByRole('main').innerText(), /81,00\s*€/);
       assert.deepEqual(f.paymentCalls.map(call => call.input), [{ token: tokenA }, { token: tokenB }]);
     });
@@ -386,7 +386,7 @@ async function main() {
       f.respond = async (_call, count) => count === 1 ? { status: 403, body: { ok: false, error: 'Actor forbidden' } } : { body: payment() };
       await f.page.goto(`${base}/colis/${ids.P}?payment=returned`);
       await f.page.getByRole('heading', { name: 'Vérification indisponible', exact: true }).waitFor();
-      assert.equal(await f.page.getByText('Envoi EXP-TEST-001', { exact: true }).count(), 0);
+      assert.equal(await f.page.getByText('Expédition EXP-TEST-001', { exact: true }).count(), 0);
       await f.page.getByRole('button', { name: 'Utiliser un autre compte', exact: true }).click();
       await f.page.getByLabel('Email', { exact: true }).fill('audit@example.test');
       await f.page.getByLabel('Mot de passe', { exact: true }).fill('test-password-long');

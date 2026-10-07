@@ -44,6 +44,9 @@ test('the contact shown for a client: email, then phone, then « @identifiant »
   assert.equal(clientContactLabel(null), '');
   // An imported row (strings everywhere, maybe with @) reads the same way.
   assert.equal(clientContactLabel({ email: '', tel: '', telegramUsername: '@import_row' }), '@import_row');
+  // A landline alone is a phone (decision of 7 October 2026: mobile or landline).
+  assert.equal(clientContactLabel({ ...payet, email: '', tel: null, telFixe: '0262 00 00 01' }), '0262 00 00 01');
+  assert.equal(clientContactLabel({ ...payet, email: '', telFixe: '0262 00 00 01' }), '0692 44 55 66', 'The mobile first.');
 });
 
 test('the searched text includes the client reference and the Telegram username with and without @', () => {
@@ -72,6 +75,13 @@ test('searchClients matches the reference and the Telegram username, with or wit
   assert.deepEqual(ids('mc.grondin@'), ['c5']);
   assert.deepEqual(ids(''), ['c3', 'c4', 'c5']);
   assert.deepEqual(ids('inconnu'), []);
+  // Both phones, written with or without their separators.
+  const landline = { ...hoarau, id: 'c6', ref: 'CLI-0006', telegramUsername: null, telFixe: '0262 00 00 01' };
+  const withLandline = query => Array.from(searchClients([...clients, landline], query), client => client.id);
+  assert.deepEqual(withLandline('0262 00 00 01'), ['c6']);
+  assert.deepEqual(withLandline('0262'), ['c6']);
+  assert.deepEqual(withLandline('0262000001'), ['c6']);
+  assert.deepEqual(withLandline('0692445566'), ['c3']);
 });
 
 test('French counts: singular below two, plural from two', () => {

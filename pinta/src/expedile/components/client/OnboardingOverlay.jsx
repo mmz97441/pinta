@@ -61,18 +61,37 @@ const STEPS = [
   },
 ];
 
-/** Rendered on document.body: an animated (transformed) page wrapper would trap a fixed overlay. */
-export default function OnboardingOverlay({ onDone }) {
-  const { authCl } = useApp();
+// The guide closed while « onboarded » could not be saved: it stays closed for this visit and comes back
+// at the next sign-in (the choice was not recorded). Per tab; blocked storage only shortens this to the page.
+const DISMISSED = 'expedile-onboarding-dismissed';
+const dismissedKey = clientId => `${DISMISSED}:${clientId || 'client'}`;
+function wasDismissed(clientId) { try { return sessionStorage.getItem(dismissedKey(clientId)) === '1'; } catch { return false; } }
+function rememberDismissed(clientId) { try { sessionStorage.setItem(dismissedKey(clientId), '1'); } catch { /* closed for this page only */ } }
+
+/** Rendered on document.body: an animated (transformed) page wrapper would trap a fixed overlay.
+ * `replay`: opened on request (« Revoir le guide »), whatever was decided before. */
+export default function OnboardingOverlay({ onDone, replay = false }) {
+  const { authCl, flash } = useApp();
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
-  const finish = async () => { if (saving) return; setSaving(true); try { await onDone(); } catch { setError('Votre progression n’a pas pu être enregistrée. Réessayez.'); setSaving(false); } };
-  const dialogRef = useDialog(true, finish);
+  const [closed, setClosed] = useState(() => !replay && wasDismissed(authCl?.id));
+  // Closing always works: when the server cannot record it, the guide closes all the same and says it will return.
+  const finish = async () => {
+    if (saving || closed) return;
+    setSaving(true);
+    try { await onDone(); }
+    catch {
+      rememberDismissed(authCl?.id);
+      setClosed(true);
+      flash({ msg: 'Le guide est fermé. Votre choix n’a pas pu être enregistré\u00a0: il vous sera de nouveau proposé à votre prochaine connexion.', type: 'info', duration: 8000 });
+    }
+  };
+  const dialogRef = useDialog(!closed, finish);
   const current = STEPS[step];
   const Icon = current.icon;
   const isLast = step === STEPS.length - 1;
   const destination = getDestByCP(authCl?.cp)?.nom || 'Votre île';
+  if (closed) return null;
 
   return createPortal(
     <div
@@ -120,7 +139,6 @@ export default function OnboardingOverlay({ onDone }) {
           {STEPS.map((_, i) => <button key={i} aria-label={`Voir l’étape ${i + 1}`} aria-current={i === step ? 'step' : undefined} onClick={() => setStep(i)} className="min-w-11 min-h-11 flex items-center justify-center"><span className="h-2 rounded-full transition-all" style={{ width: i === step ? 24 : 8, background: i === step ? 'var(--brand-text)' : 'var(--text-muted)' }} /></button>)}
         </div>
 
-        {error && <p role="alert" className="text-sm text-red-600 px-6 pb-3">{error}</p>}
         <div className="flex gap-3 px-6 pb-6">
           {step > 0 && (
             <button

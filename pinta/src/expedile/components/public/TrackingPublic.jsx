@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom';
 import { Package, CheckCircle, Clock, CreditCard, Plane, Shield, Warehouse, Truck, AlertTriangle, Ruler, Check } from 'lucide-react';
 import { DESTINATIONS, getDestByCP } from '../../constants';
 import { configurationError } from '../../lib/supabase';
-import { publicJourney } from '../../domain/clientJourney';
+import { publicJourney, publicDeparture, clientDate } from '../../domain/clientJourney';
 import { kg } from '../../utils/format';
 import { plural } from '../../domain/plural';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
@@ -29,16 +29,6 @@ function getPhaseIndex(statut) {
     if (PUBLIC_PHASES[i].statuts.includes(statut)) return i;
   }
   return 0;
-}
-
-function formatDate(dateStr) {
-  if (!dateStr) return null;
-  return new Date(dateStr).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' });
-}
-
-function formatETA(value) {
-  const date = new Date(/^\d{4}-\d{2}-\d{2}$/.test(value || '') ? `${value}T12:00:00` : value);
-  return Number.isFinite(date.getTime()) ? date.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' }) : null;
 }
 
 const surface = { background: 'var(--bg-elevated)', borderColor: 'var(--border-subtle)' };
@@ -127,6 +117,8 @@ export default function TrackingPublic() {
           const phaseIdx = getPhaseIndex(c.statut);
           const phase = PUBLIC_PHASES[phaseIdx];
           const journey = publicJourney(c);
+          // A day still to come before the departure, the confirmed day once shipped: never a past day as planned.
+          const departure = publicDeparture(c);
           return (
             <article key={c.ref} className="rounded-2xl border shadow-sm overflow-hidden" style={surface} aria-labelledby={`public-${c.ref}`}>
               <div className="px-5 py-4 border-b border-slate-100">
@@ -143,8 +135,8 @@ export default function TrackingPublic() {
                 <section aria-label={`État actuel ${c.ref}`} className="space-y-2">
                   <h3 className="text-base font-bold text-slate-800">{journey.label}</h3>
                   <p className="text-sm text-slate-600">{journey.actor && <strong>{journey.actor} · </strong>}{journey.next}</p>
-                  <p className="text-sm text-slate-500">{journey.event ? `${journey.event.label} le ${formatDate(journey.event.date)}` : 'Date du dernier événement non renseignée.'}</p>
-                  {c.eta && formatETA(c.eta) && ['autorise', 'en_preparation', 'devis_envoye', 'attente_paiement', 'paye', 'expedie'].includes(c.statut) && <p className="text-sm text-slate-600">Départ prévu&nbsp;: <strong>{formatETA(c.eta)}</strong>. Il s’agit du départ, pas de la date de livraison.</p>}
+                  <p className="text-sm text-slate-500">{journey.event && clientDate(journey.event.date) ? `${journey.event.label} le ${clientDate(journey.event.date)}` : 'Date du dernier événement non renseignée.'}</p>
+                  {departure && <p data-testid="public-departure" className="text-sm text-slate-600">{departure.label} <strong>{departure.day}</strong>. Il s’agit du départ, pas de la date de livraison.</p>}
                 </section>
                 <details className="mt-4 border-t border-slate-200">
                   <summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-slate-600">Parcours du colis</summary>
@@ -176,9 +168,9 @@ export default function TrackingPublic() {
                   {!c.preparedPackages?.length && !c.receptionCartons?.length && <p className="text-sm text-slate-500">Mesures détaillées non renseignées.</p>}
                 </details>
 
-                {c.dateReception && (
+                {clientDate(c.dateReception) && (
                   <p className="text-sm text-slate-500 mt-3">
-                    Reçu le {formatDate(c.dateReception)}
+                    Reçu le {clientDate(c.dateReception)}
                   </p>
                 )}
               </div>

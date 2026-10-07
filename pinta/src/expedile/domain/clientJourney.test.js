@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { cartonManifest, clientJourney, clientWorkState, clientShipmentPath, quotePresentation, publicJourney, outgoingTracking, latestLogisticsEvent,
-  clientPhaseState, latestShipmentNews, clientDate, plannedDepartureMessage, plannedDepartureShown, cartonMeasures, measureText, clientTaskExplanation, PLANNED_DEPARTURE_STATUSES } from './clientJourney.js';
+  clientPhaseState, latestShipmentNews, clientDate, plannedDepartureMessage, plannedDepartureShown, cartonMeasures, measureText, clientTaskExplanation, PLANNED_DEPARTURE_STATUSES,
+  clientDay, firstWaitDay, waitUntilInstant, publicDeparture } from './clientJourney.js';
 
 test('reopened consent takes priority over the historical quote on staff and client projections', () => {
   for (const statut of ['receptionne', 'mesure', 'attente_feu_vert', 'autorise', 'refuse_client']) {
@@ -275,4 +276,73 @@ test('a requested document says why it is needed and what follows', () => {
   assert.match(clientTaskExplanation({ statut: 'en_preparation', conversationStatut: 'attente_client', factures: [{ id: 'f', valide: true }] }, {}), /^Notre équipe vous a posé une question/);
   assert.equal(clientTaskExplanation({ statut: 'paye', paiementDate: '2026-10-02', factures: [] }, {}), '');
   for (const text of [particulier, pro]) assert.deepEqual(typographyProblems(text), []);
+});
+
+/** Runs `run` with the device in another time zone (Node reads TZ again on each change). */
+function inZone(zone, run) {
+  const previous = globalThis.process.env.TZ;
+  globalThis.process.env.TZ = zone;
+  try { return run(); } finally { if (previous === undefined) delete globalThis.process.env.TZ; else globalThis.process.env.TZ = previous; }
+}
+
+test('a chosen day reads on that day in every territory, never one day early in the Antilles', () => {
+  const now = Date.parse('2026-10-07T12:00:00Z');
+  for (const zone of ['America/Martinique', 'America/Guadeloupe', 'Indian/Reunion', 'Indian/Mayotte', 'Europe/Paris']) inZone(zone, () => {
+    // « Attendre jusqu’au 20 octobre », kept by the server as its midnight UTC; a subscription end (date column).
+    assert.equal(clientDay('2026-10-20T00:00:00+00:00', { now }), '20\u00a0octobre', zone);
+    assert.equal(clientDay('2026-10-20', { now }), '20\u00a0octobre', zone);
+    assert.equal(clientDay('2026-11-01', { now }), '1er\u00a0novembre', zone);
+    assert.equal(clientDay('2027-01-01', { now }), '1er\u00a0janvier 2027', zone);
+  });
+  assert.equal(clientDay(null), null);
+  assert.equal(clientDay(undefined), null, 'never « today » for a missing day');
+  assert.equal(clientDay('pas une date'), null);
+});
+
+test('« Attendre jusqu’au » offers the first day the server accepts, never the device’s today', () => {
+  // The server keeps the chosen day as its midnight UTC and refuses one that is not in the future.
+  const accepted = (day, now) => Date.parse(waitUntilInstant(day)) > now;
+  for (const zone of ['America/Martinique', 'Indian/Reunion', 'Europe/Paris']) inZone(zone, () => {
+    for (const instant of ['2026-10-07T00:00:00Z', '2026-10-07T03:30:00Z', '2026-10-07T12:00:00Z', '2026-10-07T21:30:00Z', '2026-10-07T23:59:59Z']) {
+      const now = Date.parse(instant);
+      const first = firstWaitDay(now);
+      assert.ok(accepted(first, now), `${zone} ${instant}: ${first} is accepted`);
+      const local = new Date(now); const today = `${local.getFullYear()}-${String(local.getMonth() + 1).padStart(2, '0')}-${String(local.getDate()).padStart(2, '0')}`;
+      assert.ok(first > today, `${zone} ${instant}: today (${today}) is never offered`);
+      const before = new Date(Date.parse(`${first}T12:00:00Z`) - 86400000).toISOString().slice(0, 10);
+      assert.ok(!accepted(before, now) || before <= today, `${zone} ${instant}: ${first} is the first such day`);
+    }
+  });
+  assert.equal(waitUntilInstant('2026-10-20'), '2026-10-20T00:00:00Z');
+  assert.equal(waitUntilInstant(''), null);
+  assert.equal(waitUntilInstant('2026-02-30'), null);
+});
+
+test('the shared page never presents a past or completed departure as planned', () => {
+  const now = Date.parse('2026-10-07T12:00:00Z');
+  assert.deepEqual(publicDeparture({ statut: 'paye', eta: '2026-10-14', envoiStatut: 'planifie' }, now), { label: 'Départ prévu\u00a0:', day: 'mercredi 14\u00a0octobre' });
+  assert.deepEqual(publicDeparture({ statut: 'attente_paiement', eta: '2026-10-07' }, now), { label: 'Départ prévu\u00a0:', day: 'mercredi 7\u00a0octobre' }, 'today (Paris) is still to come');
+  assert.equal(publicDeparture({ statut: 'paye', eta: '2026-10-01', envoiStatut: 'planifie' }, now), null, 'a past day');
+  assert.equal(publicDeparture({ statut: 'paye', eta: '2026-10-09', envoiStatut: 'parti' }, now), null, 'a departure that left without this parcel');
+  assert.equal(publicDeparture({ statut: 'paye', eta: '2026-10-09', envoiStatut: 'archive' }, now), null);
+  assert.deepEqual(publicDeparture({ statut: 'expedie', eta: '2026-10-01', envoiStatut: 'parti' }, now), { label: 'Départ du', day: 'jeudi 1er\u00a0octobre' });
+  assert.equal(publicDeparture({ statut: 'expedie', eta: '2026-10-03', envoiStatut: 'planifie' }, now), null, 'shipped, its departure not confirmed');
+  for (const statut of ['receptionne', 'attente_feu_vert', 'transit', 'livre', 'annule']) assert.equal(publicDeparture({ statut, eta: '2026-10-14', envoiStatut: 'planifie' }, now), null, statut);
+  assert.equal(publicDeparture({ statut: 'paye' }, now), null);
+});
+
+test('the portal names an expedition, never a « dossier »', () => {
+  const texts = [];
+  for (const statut of ['receptionne', 'mesure', 'attente_feu_vert', 'autorise', 'refuse_client', 'en_preparation', 'devis_envoye', 'paye', 'expedie', 'transit', 'dedouanement', 'arrive', 'livraison', 'livre', 'annule', 'inconnu']) {
+    const journey = clientJourney({ statut, messages: [] });
+    texts.push(journey.label, journey.next);
+    const task = clientWorkState({ statut, factures: [{ id: 'f', valide: true }] });
+    texts.push(task.action, clientTaskExplanation({ statut }, {}, task));
+    const observer = publicJourney({ statut, devisTotal: 80, devisBrouillon: false, quoteNeedsReview: false });
+    texts.push(observer.label, observer.next);
+  }
+  texts.push(clientTaskExplanation({ statut: 'en_preparation' }, {}, { kind: 'messages' }));
+  assert.deepEqual(texts.filter(text => /\bdossiers?\b/i.test(text || '')), []);
+  assert.equal(clientWorkState({ statut: 'livre' }).action, 'Consulter l’expédition');
+  assert.equal(clientJourney({ statut: 'annule' }).label, 'Expédition annulée');
 });

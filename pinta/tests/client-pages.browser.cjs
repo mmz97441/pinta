@@ -170,7 +170,7 @@ const importRow = (i, fields = {}) => {
 };
 const csv = rows => Buffer.from(`Nom;Prénom;Email;Telegram;Téléphone;Adresse;Code postal;Ville\n${rows.join('\n')}`);
 // 24 complete rows (lines 2 to 25) and four refused ones (lines 26 to 29).
-const REFUSED_ROWS = ['Ligne 26 : téléphone manquant', 'Ligne 27 : prénom et ville manquants', 'Ligne 28 (Import26) : email invalide', 'Ligne 29 : code postal non desservi'];
+const REFUSED_ROWS = ['Ligne 26 : téléphone manquant', 'Ligne 27 : prénom et ville manquants', 'Ligne 28 : email invalide', 'Ligne 29 : code postal non desservi'];
 const longCsv = csv([...Array.from({ length: 24 }, (_, i) => importRow(i, i === 3 ? { telegram: '@import_telegram' } : {})),
   importRow(24, { tel: '' }), importRow(25, { prenom: '', ville: '' }), importRow(26, { email: 'pas-un-email' }), importRow(27, { cp: '75011' })]);
 // The seven required fields of the new client form, valid.
@@ -477,7 +477,7 @@ async function main() {
       }
       for (const [label, value, key, message] of [
         ['Email', 'pas-un-email', 'email', 'Indiquez un email valide.'],
-        ['Téléphone', '0692 12 34', 'tel', 'Indiquez un numéro d’au moins 9 chiffres (espaces, points, tirets et + initial acceptés).'],
+        ['Téléphone', '0692 12 34', 'tel', 'Indiquez un numéro d’au moins 9 chiffres (espaces, points, tirets, parenthèses et + initial acceptés).'],
         ['Code postal', '75011', 'cp', 'Ce code postal n’est pas une destination desservie : Guadeloupe (971), Martinique (972), La Réunion (974) et Mayotte (976).'],
         ['Code postal', '9740', 'cp', 'Indiquez un code postal à 5 chiffres.'],
       ]) {
@@ -578,6 +578,9 @@ async function main() {
       await form.getByRole('button', { name: 'Enregistrer', exact: true }).click();
       await form.getByRole('alert').getByText('Coordonnées non enregistrées : Une information obligatoire ne peut pas être effacée : prénom. Vos saisies sont conservées.', { exact: true }).waitFor();
       assert.equal(await f.page.locator('[aria-atomic="true"][role="status"]').count(), 0, 'No success toast.');
+      // One report, under the form (no error toast); the field the refusal names is marked.
+      assert.equal(await f.page.locator('[data-toast]').count(), 0, 'No toast at all.');
+      assert.equal(await form.getByLabel('Prénom', { exact: true }).getAttribute('aria-invalid'), 'true', 'The refused field is marked.');
       assert.equal(await form.getByLabel('Prénom', { exact: true }).inputValue(), 'Camille-Rose');
     });
 
@@ -762,6 +765,97 @@ async function main() {
       assert.equal((await focused(f)).text, 'Importer des clients');
       assert.equal(posts(f).length, 0, 'Nothing imported.');
     }, { width });
+    // ── 12. A landline alone is a phone (decision of 7 October 2026): complete, shown, callable, found ──
+    for (const [width, theme] of MATRIX) await scenario(`landline-only-client-${width}-${theme}`, async f => {
+      // Exemple Camille: the base record has only a landline (0262 00 00 01).
+      await open(f, `/clients/${CLIENT.exemple}`, 'Exemple Camille');
+      const header = f.page.locator('header').filter({ has: f.page.getByRole('heading', { level: 1 }) });
+      assert.match(await header.innerText(), /0262 00 00 01\s*·\s*fixe/, 'the landline is in the header');
+      assert.equal(await f.page.getByRole('link', { name: 'Appeler', exact: true }).getAttribute('href'), 'tel:0262000001');
+      await tab(f, 'Coordonnées').click();
+      const form = f.page.locator('form[aria-labelledby="client-contact-title"]');
+      assert.equal(await form.getByText(/Fiche incomplète/).count(), 0, 'a landline-only record is complete');
+      assert.equal(await form.getByText('À compléter', { exact: true }).count(), 0);
+      assert.equal(await form.getByLabel('Téléphone fixe', { exact: true }).inputValue(), '0262 00 00 01');
+      assert.equal(await form.getByLabel('Téléphone', { exact: true }).getAttribute('required'), null, 'the mobile is optional beside a landline');
+      await audit(f, 'landline-only-contact');
+      // The list finds the client by either form of the number.
+      await open(f, '/clients', 'Clients');
+      for (const query of ['0262 00 00 01', '0262000001']) {
+        await f.page.getByLabel('Rechercher un client').fill(query);
+        await f.page.getByText('1 client affiché sur 5', { exact: true }).waitFor();
+        await f.page.getByRole('button').filter({ hasText: 'Exemple Camille' }).first().waitFor();
+      }
+    }, { width, theme });
+    await scenario('phones-a-mobile-can-be-removed-while-a-landline-remains', async f => {
+      const form = f.page.locator('form[aria-labelledby="client-contact-title"]');
+      await open(f, `/clients/${CLIENT.payet}`, 'Payet Flavie');
+      await tab(f, 'Coordonnées').click();
+      await form.getByLabel('Téléphone fixe', { exact: true }).fill('(0269) 61-22-33');
+      await form.getByLabel('Téléphone', { exact: true }).fill('');
+      await form.getByRole('button', { name: 'Enregistrer', exact: true }).click();
+      await toast(f, 'Coordonnées enregistrées.');
+      assert.deepEqual(patches(f).map(request => request.input), [{ tel: null, tel_fixe: '(0269) 61-22-33' }], 'parentheses accepted, as by the database');
+      // Grondin has a mobile only: emptying it is refused before anything is sent.
+      await open(f, `/clients/${CLIENT.grondin}`, 'Grondin Marie-Christine');
+      await tab(f, 'Coordonnées').click();
+      await form.getByLabel('Téléphone', { exact: true }).fill('');
+      await form.getByText('Le téléphone est obligatoire : gardez au moins un numéro, mobile ou fixe.', { exact: true }).waitFor();
+      await form.getByLabel('Téléphone fixe', { exact: true }).fill('0590 1');
+      await form.getByRole('button', { name: 'Enregistrer', exact: true }).click();
+      await form.getByText('Indiquez un numéro d’au moins 9 chiffres (espaces, points, tirets, parenthèses et + initial acceptés).', { exact: true }).waitFor();
+      assert.equal((await focused(f)).name, 'telFixe');
+      assert.equal(patches(f).length, 1, 'nothing more sent');
+    });
+    // ── 13. A refusal of the database: one report under the form, the refused field marked (no toast) ──
+    for (const [width, theme] of [[1440, 'light'], [390, 'dark']]) await scenario(`contact-refused-by-the-database-is-reported-once-${width}-${theme}`, async f => {
+      await f.context.route('**/rest/v1/clients*', route => route.request().method() === 'PATCH'
+        ? route.fulfill({ status: 400, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify({ code: '23514', message: 'Fiche client incomplète : il manque la ville.', details: null, hint: 'client_required_fields:ville' }) })
+        : route.fallback());
+      await open(f, `/clients/${CLIENT.exemple}`, 'Exemple Camille');
+      await tab(f, 'Coordonnées').click();
+      const form = f.page.locator('form[aria-labelledby="client-contact-title"]');
+      await form.getByLabel('Commune de livraison', { exact: true }).fill('Le Chaudron');
+      await form.getByRole('button', { name: 'Enregistrer', exact: true }).click();
+      await form.getByRole('alert').getByText('Coordonnées non enregistrées : Fiche client incomplète : il manque la ville. Vos saisies sont conservées.', { exact: true }).waitFor();
+      await f.page.waitForFunction(() => document.activeElement?.getAttribute('name') === 'ville');
+      const ville = form.getByLabel('Ville', { exact: true });
+      const described = await ville.evaluate(node => ({ invalid: node.getAttribute('aria-invalid'), text: (node.getAttribute('aria-describedby') || '').split(' ').map(id => document.getElementById(id)?.textContent).join(' ') }));
+      assert.deepEqual(described, { invalid: 'true', text: 'Cette valeur a été refusée : vérifiez-la.' });
+      await f.page.waitForTimeout(400);
+      assert.equal(await f.page.locator('[data-toast]').count(), 0, 'reported once, under the form: no toast');
+      assert.equal(await form.getByLabel('Commune de livraison', { exact: true }).inputValue(), 'Le Chaudron', 'the entry is kept');
+      await audit(f, 'contact-refused-once', { tall: false });
+      await ville.fill('Saint-Denis Centre');
+      assert.equal(await ville.getAttribute('aria-invalid'), 'false', 'a changed field is no longer marked');
+    }, { width, theme });
+    // ── 14. A new client may give a landline alone; each number entered is checked under its field ──
+    await scenario('new-client-with-a-landline-only', async f => {
+      await open(f, '/clients/new', 'Nouveau client');
+      await fillNewClient(f, { ...NEW_CLIENT, Téléphone: '' });
+      await f.page.getByLabel('Téléphone fixe', { exact: true }).fill('0262');
+      await createButton(f).click();
+      assert.equal((await focused(f)).name, 'telFixe');
+      await f.page.getByText('Indiquez un numéro d’au moins 9 chiffres (espaces, points, tirets, parenthèses et + initial acceptés).', { exact: true }).waitFor();
+      assert.equal(await f.page.getByLabel('Téléphone', { exact: true }).getAttribute('required'), null, 'the mobile is optional beside a landline');
+      assert.equal(posts(f).length, 0);
+      await f.page.getByLabel('Téléphone fixe', { exact: true }).fill('0262 41 22 33');
+      await createButton(f).click();
+      await heading(f, 'Client créé').waitFor();
+      const written = posts(f)[0].input;
+      assert.deepEqual([written.tel, written.tel_fixe], [null, '0262 41 22 33']);
+    }, { width: 390, theme: 'light' });
+    // ── 15. The import lists every reason of a refused row at once; a landline alone is accepted ──
+    await scenario('import-lists-every-reason-and-accepts-a-landline', async f => {
+      await open(f, '/clients', 'Clients');
+      await f.page.getByRole('button', { name: 'Importer des clients', exact: true }).click();
+      const dialog = f.page.getByRole('dialog', { name: 'Importer des clients' });
+      await dialog.locator('input[type=file]').setInputFiles({ name: 'clients.csv', mimeType: 'text/csv', buffer: Buffer.from('Nom;Prénom;Email;Téléphone;Téléphone fixe;Adresse;Code postal;Ville\nDupont;Luc;luc@x;0692;;;75001;Paris\nHoarau;Marie;marie@example.test;;0262 41 22 33;2 rue des Lilas;97400;Saint-Denis') });
+      await dialog.getByText('1 client sélectionné sur 1 ligne valide', { exact: true }).waitFor();
+      assert.deepEqual(await dialog.locator('details li').allTextContents(), ['Ligne 2 : adresse manquante, email invalide, téléphone invalide, code postal non desservi']);
+      await dialog.getByText('Ligne 3 · Marie Hoarau', { exact: true }).waitFor();
+      await audit(f, 'import-every-reason', { selector: '[role="dialog"]', tall: false });
+    }, { width: 390, theme: 'dark' });
     const workers = Math.max(1, Number(process.env.PINTA_CLIENT_PAGES_CONCURRENCY) || 3);
     await Promise.all(Array.from({ length: workers }, async () => { while (queue.length) await execute(queue.shift()); }));
     assert.ok(results.length > 0, 'At least one scenario ran.');

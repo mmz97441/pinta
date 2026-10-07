@@ -36,6 +36,8 @@ export function AppProvider({ children }) {
   const [auth, setAuth] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [authError, setAuthError] = useState('');
+  // The account could not be read (network, server): the session is kept and retryIdentity() reads it again.
+  const [identityError, setIdentityError] = useState('');
   const [passwordRecovery, setPasswordRecovery] = useState(false);
   const [dataLoading, setDataLoading] = useState(false);
   const [dataError, setDataError] = useState('');
@@ -337,6 +339,7 @@ export function AppProvider({ children }) {
       const token = ++generation.current;
       setAuthLoading(true);
       setAuthError('');
+      setIdentityError('');
       setSbReady(false);
       if (!session) {
         sb.setDataScope('staff');
@@ -374,7 +377,10 @@ export function AppProvider({ children }) {
       } catch (error) {
         if (token === generation.current) {
           setAuth(null);
-          setAuthError(error.message);
+          // A failed read of the account keeps the session: the login page offers to try again, it never
+          // presents an outage as an account problem (« pas encore rattaché », « profil inaccessible »).
+          if (error?.code === sb.IDENTITY_UNAVAILABLE) setIdentityError(error.message);
+          else setAuthError(error.message);
         }
         throw error;
       } finally {
@@ -444,6 +450,12 @@ export function AppProvider({ children }) {
     const {
       data: { session },
     } = await supabase.auth.getSession();
+    await establishSession(session);
+  }, [establishSession]);
+  // After a failed read of the account: read it again with the session kept on this device.
+  const retryIdentity = useCallback(async () => {
+    const { data: { session }, error } = await supabase.auth.getSession();
+    if (error) throw error;
     await establishSession(session);
   }, [establishSession]);
   const retryLoad = useCallback(() => auth && loadData(auth, generation.current), [auth, loadData]);
@@ -815,8 +827,9 @@ export function AppProvider({ children }) {
         }
         return saved;
       } catch (error) {
-        // The client's own forms (profile, guide) show the refusal inline, in their words.
-        if (authRef.current?.type === 'client') throw error;
+        // The client's own forms (profile, guide) and a staff form saving `silent`ly (the client page) show the
+        // refusal inline, under the field it concerns: never a second report in a toast.
+        if (silent || authRef.current?.type === 'client') throw error;
         throw reportError(error);
       }
     },
@@ -1081,6 +1094,9 @@ export function AppProvider({ children }) {
     },
     [reportError],
   );
+  // The client's own decision (portal). Its consent block shows a refusal under the action, never in a toast.
+  // A version refused as stale (« Le dossier a changé… ») or a request that has moved on is read again first:
+  // the block then shows what the server holds (a new carton, for instance) and a new attempt can succeed.
   const feuVert = useCallback(
     async (id, ok, options = {}) => {
       const c = dataRef.current.find((c) => c.id === id);
@@ -1091,20 +1107,28 @@ export function AppProvider({ children }) {
         p_wait_until: options.waitUntil || null,
         p_reason: options.reason || null,
       });
-      if (error) throw reportError(error);
+      if (error) {
+        if (/a changé|ne peut plus être modifiée/i.test(error.message || '')) {
+          error.stale = true;
+          error.refreshed = (await refreshColis(id).catch(() => null)) || null;
+        }
+        throw error;
+      }
       if (row) replaceColis(sb.mapColis(Array.isArray(row) ? row[0] : row));
-      await refreshColis(id);
-      setEnvois(await sb.fetchEnvois());
-      flash(
-        ok === 'wait'
+      // The decision is recorded: a later read that fails never turns it into a failure.
+      await refreshColis(id).catch(() => {});
+      try { setEnvois(await sb.fetchEnvois()); } catch { /* the departures are read again on the next refresh */ }
+      flash({
+        msg: ok === 'wait'
           ? 'Votre demande d’attente est enregistrée.'
           : ok
-            ? 'Accord enregistré pour ce dossier.'
-            : 'Refus enregistré.',
-      );
+            ? 'Votre accord est enregistré pour cette expédition.'
+            : 'Votre refus est enregistré.',
+        type: 'success',
+      });
       return true;
     },
-    [replaceColis, refreshColis, flash, reportError],
+    [replaceColis, refreshColis, flash],
   );
   const feuVertBulk = useCallback(
     async (ids, options = {}) => {
@@ -1413,6 +1437,8 @@ export function AppProvider({ children }) {
     setAuth,
     authLoading,
     authError,
+    identityError,
+    retryIdentity,
     dataLoading,
     dataError,
     retryLoad,

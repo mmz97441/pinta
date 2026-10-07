@@ -13,8 +13,8 @@ import { currentInvoices } from '../../domain/invoiceDocuments';
 import { plural, pluralWord } from '../../domain/plural';
 import {
   cartonManifest, clientJourney, clientWorkState, quotePresentation, PAYMENT_TERMS, outgoingTracking, latestShipmentNews,
-  clientDate, clientPhaseState, clientTaskExplanation, plannedDepartureMessage, plannedDepartureShown, cartonMeasures,
-  measureText, frenchNumber,
+  clientDate, clientDay, clientPhaseState, clientTaskExplanation, plannedDepartureMessage, plannedDepartureShown, cartonMeasures,
+  measureText, frenchNumber, firstWaitDay, waitUntilInstant,
 } from '../../domain/clientJourney';
 import { useApp } from '../../context/AppContext';
 import { SecureImage } from '../ui/SecureFile';
@@ -31,6 +31,19 @@ const DELIVERY_DATE_PENDING = ['expedie', 'transit', 'dedouanement'];
 // Theme-safe surfaces: Tailwind utilities that brand.css remaps in dark mode, plus explicit dark: variants.
 const SECONDARY_BUTTON = 'flex min-h-11 items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold brand-t transition-all duration-200 ease-out hover:bg-slate-50 active:scale-[0.98] dark:hover:bg-white/5';
 const PRIMARY_BUTTON = 'min-h-11 inline-flex items-center justify-center gap-2 rounded-xl brand-bg px-4 py-3 text-sm font-semibold text-white transition-all duration-200 ease-out hover:translate-y-[-1px] active:scale-[0.98] disabled:opacity-50';
+const NB = '\u00a0';
+// A technical refusal (network, database) is never shown as is to the client.
+const TECHNICAL = /failed|fetch|network|load failed|violat|constraint|exception|unexpected|syntax|null value|duplicate key|permission denied|jwt|error/i;
+/** What a refused decision tells the client: why, and what to do now. `field: 'date'` goes under the date. */
+function decisionRefusal(error, decision, firstWait) {
+  const message = String(error?.message || '');
+  if (/date de reprise/i.test(message)) return { field: 'date', message: `Choisissez une date de reprise à partir du ${clientDate(firstWait)}.` };
+  if (/ne peut plus être modifiée/i.test(message)) return { stale: true, message: `Cette demande a déjà reçu une réponse ou a changé${NB}: l’état de votre expédition est à jour ci-dessous.` };
+  if (error?.stale) return { stale: true, message: decision === 'wait'
+    ? `Votre expédition vient d’être mise à jour (un nouveau carton, par exemple)${NB}: vérifiez-la, puis enregistrez à nouveau votre attente.`
+    : `Votre expédition vient d’être mise à jour (un nouveau carton, par exemple)${NB}: vérifiez-la ci-dessous, puis confirmez à nouveau.` };
+  return { message: `Votre réponse n’a pas été enregistrée.${message && !TECHNICAL.test(message) ? ` ${message}` : ' Vérifiez votre connexion, puis réessayez.'}` };
+}
 
 // ── Phase accordion step ───────────────────────────────────────────────────────
 // Icons and chevrons use theme tokens: navy text in light mode, the light brand text in dark mode.
@@ -96,12 +109,16 @@ function CartonMeasures({ colis, pendingText = '' }) {
 export default function ClientDetailView() {
   const navigate = useNavigate();
   const [, setParams] = useSearchParams();
-  const { sel, selDest, feuVert, ask, flash, authCl, envois = [], fetchPlannedDepartures } = useApp();
+  const { sel, selDest, feuVert, ask, flash, authCl, envois = [], fetchPlannedDepartures, refreshColis } = useApp();
 
   const curPhaseIdx = sel ? getPhaseIndex(sel.statut) : 0;
   const [timeOpen, setTimeOpen] = useState(curPhaseIdx);
   const [decisionPending, setDecisionPending] = useState(false);
   const [decisionError, setDecisionError] = useState('');
+  // A decision refused because the expedition changed meanwhile: it was read again, this notice says so.
+  const [updateNotice, setUpdateNotice] = useState('');
+  const [waitError, setWaitError] = useState(null);
+  const [trackingRetry, setTrackingRetry] = useState(false);
   const [showWait, setShowWait] = useState(false);
   const [waitVersion, setWaitVersion] = useState(null);
   const [waitUntil, setWaitUntil] = useState('');
@@ -113,7 +130,8 @@ export default function ClientDetailView() {
   const [departure, setDeparture] = useState({ colisId: null, state: 'idle', date: null });
   const [departureAttempt, setDepartureAttempt] = useState(0);
   const departureWanted = plannedDepartureShown(sel);
-  useEffect(() => { setTimeOpen(curPhaseIdx); setDecisionError(''); setShowWait(false); }, [sel?.id, curPhaseIdx]);
+  useEffect(() => { setTimeOpen(curPhaseIdx); setDecisionError(''); setWaitError(null); setShowWait(false); }, [sel?.id, curPhaseIdx]);
+  useEffect(() => { setUpdateNotice(''); }, [sel?.id]);
   useEffect(() => { setDescOpen(false); }, [sel?.id]);
   useEffect(() => {
     // A long description is clamped to two lines; the toggle appears only when text is actually hidden.
@@ -159,26 +177,55 @@ export default function ClientDetailView() {
   const consentWithoutInvoice = sel.statut === 'attente_feu_vert' && !pro && currentInvoices(sel.factures).length === 0;
   const taskExplanation = clientTaskExplanation(sel, authCl, task);
   const waitedSince = clientDate(sel.attenteClientDate);
-  const waitReview = clientDate(sel.attenteClientUntil);
+  // A day the client chose: on that day in every territory (never one day early in the Antilles).
+  const waitReview = clientDay(sel.attenteClientUntil);
+  // The first day the server accepts as a resumption date (never today).
+  const firstWait = firstWaitDay();
   const openPanel = panel => setParams(previous => { const next = new URLSearchParams(previous); next.set('panel', panel); return next; }, { replace: true });
 
   const toggleStep = (idx) => {
     if (clientPhaseState(idx, sel.statut) !== 'future') setTimeOpen((prev) => prev === idx ? null : idx);
   };
   const recordDecision = async (decision, options) => {
-    setDecisionPending(true); setDecisionError('');
+    setDecisionPending(true); setDecisionError(''); setWaitError(null); setUpdateNotice('');
     try { await feuVert(sel.id, decision, { expectedUpdatedAt: sel.updatedAt, ...options }); setShowWait(false); }
-    catch (error) { setDecisionError(error.message || 'Votre réponse n’a pas été enregistrée. Réessayez.'); }
+    catch (error) {
+      // A stale version: the expedition has been read again (feuVert), the decision now concerns what is shown.
+      // The message goes where the person acts: in the open wait form, else at the top of the current step.
+      const refusal = decisionRefusal(error, decision, firstWait);
+      if (decision === 'wait') {
+        setWaitError(refusal);
+        if (refusal.stale && error.refreshed?.updatedAt) setWaitVersion(error.refreshed.updatedAt);
+      } else if (refusal.stale) setUpdateNotice(refusal.message);
+      else setDecisionError(refusal.message);
+    }
     finally { setDecisionPending(false); }
+  };
+  const submitWait = (event) => {
+    event.preventDefault();
+    if (decisionPending) return;
+    // A date the server would refuse is said under the field, before anything is sent.
+    if (waitUntil && waitUntil < firstWait) {
+      setWaitError({ field: 'date', message: `Choisissez une date de reprise à partir du ${clientDate(firstWait)}.` });
+      document.getElementById('client-wait-until')?.focus();
+      return;
+    }
+    recordDecision('wait', { expectedUpdatedAt: waitVersion, waitUntil: waitUntilInstant(waitUntil), reason: waitReason.trim() });
+  };
+  const retryTracking = async () => {
+    setTrackingRetry(true);
+    try { await refreshColis(sel.id); }
+    catch { flash({ msg: 'Le suivi transporteur est toujours indisponible. Réessayez dans un instant.', type: 'error' }); }
+    finally { setTrackingRetry(false); }
   };
   const handleFeuVert = (ok) => {
     const count = manifest.count;
     // The dialog takes plain text: non-breaking hyphens keep « EXP-TEST-001 » on one line.
     const reference = String(sel.ref).replace(/-/g, '\u2011');
     ask(ok ? 'Autoriser cette préparation' : 'Refuser cette préparation',
-      ok ? `Vous autorisez la préparation du dossier ${reference}, avec ${plural(count, 'carton')} ${pluralWord(count, 'actuellement réceptionné', 'actuellement réceptionnés')}.${manifest.trackings.length ? '\n\n' + manifest.trackings.join(' · ') : ''}\n\nLes nouveaux cartons ne sont pas inclus. Le devis final suivra la préparation.${consentWithoutInvoice ? '\n\nVotre facture d’achat reste à joindre\u00a0: elle nous permet d’établir votre devis.' : ''}`
-        : `Vous refusez la préparation du dossier ${reference}\u00a0: vos cartons ne seront pas préparés. Notre équipe vous contactera pour convenir avec vous de la suite.\n\nPour simplement attendre d’autres achats, choisissez plutôt «\u00a0Attendre d’autres achats\u00a0».`,
-      () => recordDecision(ok), { danger: !ok, okLabel: ok ? 'J’autorise ce dossier' : 'Confirmer le refus' });
+      ok ? `Vous autorisez la préparation de l’expédition ${reference}, avec ${plural(count, 'carton')} ${pluralWord(count, 'actuellement réceptionné', 'actuellement réceptionnés')}.${manifest.trackings.length ? '\n\n' + manifest.trackings.join(' · ') : ''}\n\nLes nouveaux cartons ne sont pas inclus. Le devis final suivra la préparation.${consentWithoutInvoice ? '\n\nVotre facture d’achat reste à joindre\u00a0: elle nous permet d’établir votre devis.' : ''}`
+        : `Vous refusez la préparation de l’expédition ${reference}\u00a0: vos cartons ne seront pas préparés. Notre équipe vous contactera pour convenir avec vous de la suite.\n\nPour simplement attendre d’autres achats, choisissez plutôt «\u00a0Attendre d’autres achats\u00a0».`,
+      () => recordDecision(ok), { danger: !ok, okLabel: ok ? 'J’autorise la préparation' : 'Confirmer le refus' });
   };
   const handleRevoke = () => {
     openPanel('messages');
@@ -228,23 +275,34 @@ export default function ClientDetailView() {
             <>
               {clientWaiting && <p className="border-l-2 border-slate-300 pl-3 text-sm text-slate-600">Votre attente est enregistrée&nbsp;: aucune préparation ne commence tant que vous n’avez pas donné votre accord.</p>}
               {decisionError && <p role="alert" className="text-sm text-red-700">{decisionError}</p>}
-              <p className="text-sm font-semibold text-slate-700">{plural(count, 'carton')} {pluralWord(count, 'réceptionné')} · dossier <span className="whitespace-nowrap">{sel.ref}</span></p>
+              <p className="text-sm font-semibold text-slate-700">{plural(count, 'carton')} {pluralWord(count, 'réceptionné')} · expédition <span className="whitespace-nowrap">{sel.ref}</span></p>
               {manifest.trackings.length > 0 && <p className="break-words text-sm text-slate-600">{pluralWord(manifest.trackings.length, 'Numéro de suivi de vos achats', 'Numéros de suivi de vos achats')}&nbsp;: {manifest.trackings.join(' · ')}</p>}
               <p className="text-sm text-slate-600">Votre accord concerne {count > 1 ? `ces ${plural(count, 'carton')}` : 'ce carton'} uniquement. Vous recevrez le prix final après la préparation.</p>
               {consentWithoutInvoice && (
                 <p data-testid="consent-without-invoice" className="flex items-start gap-2 rounded-xl border p-3 text-sm" style={{ backgroundColor: 'var(--attention-bg)', borderColor: 'var(--attention-border)', color: 'var(--attention-text)' }}>
                   <FileText size={16} className="mt-0.5 shrink-0" aria-hidden="true" />
-                  <span>Votre facture d’achat n’est pas encore dans votre dossier&nbsp;: vous pouvez tout de même donner votre accord dès maintenant. Joignez-la ensuite dans «&nbsp;Mes factures&nbsp;»&nbsp;: elle nous permet d’établir votre devis.</span>
+                  <span>Votre facture d’achat n’est pas encore dans votre expédition&nbsp;: vous pouvez tout de même donner votre accord dès maintenant. Joignez-la ensuite dans «&nbsp;Mes factures&nbsp;»&nbsp;: elle nous permet d’établir votre devis.</span>
                 </p>
               )}
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 <button type="button" disabled={decisionPending} onClick={() => handleFeuVert(true)} className="flex min-h-11 items-center justify-center gap-2 rounded-xl brand-bg px-3 py-3 text-sm font-bold text-white transition-all duration-200 ease-out hover:translate-y-[-1px] active:scale-[0.98] disabled:opacity-50"><ThumbsUp size={16} aria-hidden="true" />{decisionPending ? 'Enregistrement…' : 'Autoriser la préparation'}</button>
                 <button type="button" disabled={decisionPending} onClick={() => { if (!showWait) setWaitVersion(sel.updatedAt); setShowWait(v => !v); }} aria-expanded={showWait} className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-slate-300 px-3 py-3 text-sm font-semibold text-slate-700 transition-all duration-200 ease-out active:scale-[0.98]"><Clock size={16} aria-hidden="true" />Attendre d’autres achats</button>
               </div>
-              {showWait && <form className="space-y-3 rounded-xl border border-slate-200 p-3" onSubmit={(event) => { event.preventDefault(); recordDecision('wait', { expectedUpdatedAt: waitVersion, waitUntil: waitUntil || null, reason: waitReason.trim() }); }}>
+              {showWait && <form noValidate className="space-y-3 rounded-xl border border-slate-200 p-3" onSubmit={submitWait}>
                 <p className="text-sm text-slate-600">Nous conservons vos cartons et suspendons nos relances. Cette demande ne déclenche aucune préparation&nbsp;: vous donnerez votre accord quand vous serez prêt(e).</p>
                 <label className="block text-sm font-semibold text-slate-600">Votre précision<textarea required maxLength={500} value={waitReason} onChange={(e) => setWaitReason(e.target.value)} className="mt-1 block w-full rounded-lg border border-slate-200 bg-white p-2 text-sm" /></label>
-                <label className="block text-sm font-semibold text-slate-600">Attendre jusqu’au (facultatif)<input type="date" min={new Date().toLocaleDateString('en-CA')} value={waitUntil} onChange={(e) => setWaitUntil(e.target.value)} className="mt-1 block min-h-11 w-full rounded-lg border border-slate-200 bg-white px-2 text-sm" /></label>
+                <div>
+                  {/* The first day offered is the first one the server accepts: never today. */}
+                  <label htmlFor="client-wait-until" className="block text-sm font-semibold text-slate-600">Attendre jusqu’au (facultatif)</label>
+                  <input id="client-wait-until" type="date" min={firstWait} value={waitUntil}
+                    onChange={(e) => { setWaitUntil(e.target.value); if (waitError?.field === 'date') setWaitError(null); }}
+                    aria-invalid={waitError?.field === 'date' ? 'true' : undefined} aria-describedby={waitError?.field === 'date' ? 'client-wait-until-error' : 'client-wait-until-hint'}
+                    className={`mt-1 block min-h-11 w-full rounded-lg border bg-white px-2 text-sm ${waitError?.field === 'date' ? 'border-red-600' : 'border-slate-200'}`} />
+                  {waitError?.field === 'date'
+                    ? <p id="client-wait-until-error" role="alert" className="mt-1 text-sm text-red-700">{waitError.message}</p>
+                    : <p id="client-wait-until-hint" className="mt-1 text-sm text-slate-600">À partir du {clientDate(firstWait)}. Sans date, nous attendons simplement votre accord.</p>}
+                </div>
+                {waitError && waitError.field !== 'date' && <p role="alert" className="text-sm text-red-700">{waitError.message}</p>}
                 <button disabled={decisionPending || !waitReason.trim()} className="min-h-11 w-full rounded-xl brand-bg text-sm font-semibold text-white transition-all duration-200 ease-out active:scale-[0.98] disabled:opacity-50">{decisionPending ? 'Enregistrement…' : 'Enregistrer mon attente'}</button>
               </form>}
               <details className="border-t border-slate-200 pt-2">
@@ -300,7 +358,7 @@ export default function ClientDetailView() {
                 Préparation refusée
               </p>
               <p className="mt-1 text-sm leading-relaxed text-red-700">
-                Vous avez refusé la préparation de ce dossier. Notre équipe vous contactera pour convenir avec vous de la suite.
+                Vous avez refusé la préparation de cette expédition. Notre équipe vous contactera pour convenir avec vous de la suite.
               </p>
             </div>
           )}
@@ -482,7 +540,7 @@ export default function ClientDetailView() {
         <button
           type="button"
           onClick={() => navigate('/colis')}
-          aria-label="Retour à mes colis" className="flex min-h-11 min-w-11 flex-shrink-0 items-center justify-center rounded-xl transition-all duration-200 ease-out hover:bg-slate-100 active:scale-[0.98] dark:hover:bg-white/10"
+          aria-label="Retour à mes expéditions" className="flex min-h-11 min-w-11 flex-shrink-0 items-center justify-center rounded-xl transition-all duration-200 ease-out hover:bg-slate-100 active:scale-[0.98] dark:hover:bg-white/10"
         >
           <ArrowLeft size={18} className="text-slate-600" aria-hidden="true" />
         </button>
@@ -495,6 +553,7 @@ export default function ClientDetailView() {
 
       <section aria-label="État actuel et prochaine étape" className="rounded-2xl border border-slate-200 bg-white p-4">
         <div className="max-w-2xl space-y-3">
+          {updateNotice && <p role="alert" data-testid="decision-update-notice" className="flex items-start gap-2 rounded-xl border p-3 text-sm" style={{ backgroundColor: 'var(--attention-bg)', borderColor: 'var(--attention-border)', color: 'var(--attention-text)' }}><RefreshCw size={16} className="mt-0.5 shrink-0" aria-hidden="true" /><span>{updateNotice}</span></p>}
           <div><p className="text-sm font-semibold uppercase tracking-wide text-slate-500">Étape actuelle</p><h2 className="mt-1 text-lg font-bold text-slate-800">{journey.label}</h2></div>
           {delivered ? (
             <div data-testid="delivered-celebration" className="space-y-1.5 rounded-2xl bg-emerald-50 p-4 text-center">
@@ -514,7 +573,7 @@ export default function ClientDetailView() {
           {clientWaiting && (
             <div data-testid="client-waiting" className="rounded-xl bg-slate-50 p-3 text-sm text-slate-700">
               <p>{sel.attenteClientMotif || 'Vous avez demandé à attendre avant la préparation.'}</p>
-              <p className="mt-1">Votre attente est enregistrée{waitedSince ? ` depuis le ${waitedSince}` : ''}{waitReview ? ` · Réexamen prévu ${journey.reviewDue ? 'depuis' : 'le'} ${waitReview}` : ''}.</p>
+              <p className="mt-1">Votre attente est enregistrée{waitedSince ? ` depuis le ${waitedSince}` : ''}{waitReview ? ` · Réexamen prévu ${journey.reviewDue ? 'depuis le' : 'le'} ${waitReview}` : ''}.</p>
             </div>
           )}
           {departureDayShown && (
@@ -538,7 +597,9 @@ export default function ClientDetailView() {
             </p>
           )}
           {shipmentStarted && <>
-            {trackingOut ? <a href={`https://parcelsapp.com/fr/tracking/${encodeURIComponent(trackingOut)}`} target="_blank" rel="noopener noreferrer" className={`${SECONDARY_BUTTON} w-full sm:w-auto`}><ExternalLink size={16} aria-hidden="true" />Suivre mon colis</a> : <p className="text-sm text-slate-600">Le suivi transporteur vers votre adresse n’est pas encore renseigné. Les étapes de votre expédition restent visibles ici.</p>}
+            {trackingOut ? <a href={`https://parcelsapp.com/fr/tracking/${encodeURIComponent(trackingOut)}`} target="_blank" rel="noopener noreferrer" className={`${SECONDARY_BUTTON} w-full sm:w-auto`}><ExternalLink size={16} aria-hidden="true" />Suivre mon colis</a>
+              : sel.outgoingTrackingError ? <p role="status" data-testid="outgoing-tracking-unavailable" className="flex flex-wrap items-center gap-x-2 text-sm text-slate-600"><span>Le numéro de suivi transporteur n’a pas pu être chargé pour le moment. Les étapes de votre expédition restent visibles ici.</span><button type="button" disabled={trackingRetry} onClick={retryTracking} className="min-h-11 font-semibold underline brand-t disabled:opacity-60">{trackingRetry ? 'Nouvelle tentative…' : 'Réessayer'}</button></p>
+              : <p className="text-sm text-slate-600">Le suivi transporteur vers votre adresse n’est pas encore renseigné. Les étapes de votre expédition restent visibles ici.</p>}
             {!delivered && !(sel.statut === 'expedie' && departureDayShown) && <p data-testid="latest-news" className="text-sm text-slate-600">{news && clientDate(news.date) ? `Dernière nouvelle\u00a0: ${news.label.toLocaleLowerCase('fr')} le ${clientDate(news.date)}.` : 'La date de la dernière nouvelle n’est pas encore disponible.'}{DELIVERY_DATE_PENDING.includes(sel.statut) ? ' La date de livraison vous sera précisée dès qu’elle sera confirmée.' : ''}</p>}
           </>}
           {clientWaiting && <details className="border-t border-slate-200 pt-2"><summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-slate-700">Reprendre ma décision</summary>{phaseContent(1)}</details>}
@@ -550,7 +611,7 @@ export default function ClientDetailView() {
         {journey.event?.historical && <p className="text-sm text-slate-500">Historique · {journey.event.label} le {clientDate(journey.event.date)}</p>}
         {sel.finalPackages?.length > 0 && <details className="rounded-xl border border-slate-200 p-3"><summary className="min-h-11 cursor-pointer text-sm font-semibold text-slate-700">{previousPreparation ? 'Mesures précédentes conservées' : 'Colis préparés pour l’envoi'} · {plural(sel.finalPackages.length, 'colis', 'colis')}{!previousPreparation ? ` ${pluralWord(sel.finalPackages.length, 'sortant')}` : ''}</summary><div className="space-y-2 text-sm text-slate-600">{previousPreparation && <p>Ces mesures appartiennent à une préparation précédente.</p>}{sel.finalPackages.map((box,index) => <p key={index}>Colis {index + 1} · {measureText(box)}</p>)}</div></details>}
         {sel.statut !== 'annule' && <ProgressBar statut={sel.statut} size="md" showLabel={false} />}
-        {sel.statut === 'annule' && <p className="text-sm text-slate-600">Ce dossier a été annulé. Vos documents{sel.messages?.length ? ' et vos échanges' : ''} restent consultables ici.</p>}
+        {sel.statut === 'annule' && <p className="text-sm text-slate-600">Cette expédition a été annulée. Vos documents{sel.messages?.length ? ' et vos échanges' : ''} restent consultables ici.</p>}
         {sel.statut !== 'annule' && <div className="space-y-2">{PHASES_CLIENT.map((phase, idx) => {
           const state = clientPhaseState(idx, sel.statut);
           if (state === 'future' || (idx === 1 && (task.kind === 'agreement' || clientWaiting)) || (idx === 3 && (task.kind === 'payment' || journey.quoteUpdating))) return null;

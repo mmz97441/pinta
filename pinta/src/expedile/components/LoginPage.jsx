@@ -1,22 +1,75 @@
 import React, { useState } from 'react';
-import { LogIn, AlertCircle, Eye, EyeOff, ArrowLeft } from 'lucide-react';
+import { LogIn, AlertCircle, Eye, EyeOff, ArrowLeft, RefreshCw, LogOut } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { BRAND } from '../constants';
 import { supabase, configurationError } from '../lib/supabase';
+import { IDENTITY_UNAVAILABLE } from '../lib/supabaseData';
 import useDocumentTitle from '../hooks/useDocumentTitle';
 
-/** Supabase Auth answers in English: the person reads French, never a technical message. */
-function loginMessage(error) {
+/** A request that never reached the server (offline, blocked): the only case presented as a connection problem. */
+function networkFailure(error, text) {
+  const status = Number(error?.status);
+  return (error?.name === 'AuthRetryableFetchError' && !(status >= 500)) || error?.status === 0 || error instanceof TypeError
+    || /failed to fetch|networkerror|load failed|network request failed|fetch failed/i.test(text);
+}
+
+/** Supabase Auth answers in English: the person reads French, never a technical message. `reset`: the
+ * « Mot de passe oublié » form, whose limit concerns the links sent. */
+function loginMessage(error, { reset = false } = {}) {
   const text = String(error?.message || error || '').trim();
-  if (/invalid login credentials/i.test(text)) return 'Email ou mot de passe incorrect.';
-  if (/email not confirmed/i.test(text)) return 'Votre email n’est pas encore confirmé. Ouvrez le lien reçu par email, puis reconnectez-vous.';
-  if (/security purposes|rate limit|too many/i.test(text)) return 'Un lien vient d’être demandé. Patientez une minute avant d’en demander un nouveau.';
-  if (!text || /failed to fetch|networkerror|load failed/i.test(text) || /^[\x20-\x7E]*$/.test(text)) return 'Connexion impossible pour le moment. Vérifiez votre accès à internet, puis réessayez.';
+  const code = String(error?.code || '');
+  const status = Number(error?.status);
+  if (/invalid login credentials/i.test(text) || code === 'invalid_credentials') return 'Email ou mot de passe incorrect.';
+  if (/email not confirmed/i.test(text) || code === 'email_not_confirmed') return 'Votre email n’est pas encore confirmé. Ouvrez le lien reçu par email, puis reconnectez-vous.';
+  if (/security purposes|rate limit|too many/i.test(text) || /^over_.*rate_limit$/.test(code) || status === 429) return reset
+    ? 'Un lien vient d’être demandé. Patientez une minute avant d’en demander un nouveau.'
+    : 'Trop de tentatives de connexion. Patientez une minute, puis réessayez.';
+  if (/validate email|invalid format|email address .*invalid/i.test(text) || ['validation_failed', 'email_address_invalid'].includes(code)) return 'Vérifiez l’adresse email\u00a0: elle doit ressembler à nom@exemple.fr.';
+  if (/banned/i.test(text) || code === 'user_banned') return 'Ce compte est suspendu. Contactez l’équipe Expedîle.';
+  if (networkFailure(error, text)) return 'Connexion impossible pour le moment. Vérifiez votre accès à internet, puis réessayez.';
+  if (status >= 500) return 'Le service de connexion est momentanément indisponible. Réessayez dans un instant.';
+  // Any other message of the server (English) is never shown as is, nor as an internet problem.
+  if (!text || /^[\x20-\x7E]*$/.test(text)) return 'La demande n’a pas abouti. Réessayez dans un instant ou contactez l’équipe Expedîle.';
   return text;
 }
 
+/** The account could not be read (network, server): the session is kept, the person tries again or changes account. */
+function IdentityUnavailable({ message }) {
+  const { retryIdentity, signOut } = useApp();
+  const [busy, setBusy] = useState('');
+  const [leaveError, setLeaveError] = useState('');
+  const retry = async () => {
+    if (busy) return;
+    setBusy('retry'); setLeaveError('');
+    try { await retryIdentity(); } catch { /* still unavailable: this panel is shown again */ }
+    finally { setBusy(''); }
+  };
+  const leave = async () => {
+    if (busy) return;
+    setBusy('leave'); setLeaveError('');
+    try { await signOut(); }
+    catch { setLeaveError('La déconnexion n’a pas abouti. Réessayez lorsque votre connexion sera revenue.'); }
+    finally { setBusy(''); }
+  };
+  return <section aria-labelledby="identity-title" className="space-y-5">
+    <div>
+      <h1 id="identity-title" className="text-2xl font-black tracking-tight" style={{ color: 'var(--brand-text)' }}>Connexion momentanément impossible</h1>
+      <p role="alert" className="mt-2 text-sm text-slate-600">{message}</p>
+    </div>
+    <button type="button" onClick={retry} disabled={Boolean(busy)}
+      className="w-full min-h-11 flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold transition-all duration-200 ease-out active:scale-[0.98] hover:translate-y-[-1px] disabled:opacity-50 disabled:translate-y-0"
+      style={{ background: `linear-gradient(135deg, ${BRAND.gold}, ${BRAND.goldD})`, color: BRAND.navyD }}>
+      <RefreshCw size={16} aria-hidden="true" className={busy === 'retry' ? 'animate-spin' : ''} />{busy === 'retry' ? 'Nouvelle tentative…' : 'Réessayer'}
+    </button>
+    <button type="button" onClick={leave} disabled={Boolean(busy)} className="w-full min-h-11 flex items-center justify-center gap-2 rounded-xl border border-slate-200 text-sm font-semibold text-slate-700 transition-all duration-200 ease-out active:scale-[0.98] disabled:opacity-50">
+      <LogOut size={16} aria-hidden="true" />{busy === 'leave' ? 'Déconnexion…' : 'Utiliser un autre compte'}
+    </button>
+    {leaveError && <p role="alert" className="text-sm text-red-700">{leaveError}</p>}
+  </section>;
+}
+
 export default function LoginPage() {
-  const { signIn, authError } = useApp();
+  const { signIn, authError, identityError } = useApp();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPwd, setShowPwd] = useState(false);
@@ -25,7 +78,7 @@ export default function LoginPage() {
   const [success, setSuccess] = useState('');
   const [recoveryInvalid] = useState(() => window.location.pathname === '/password' && new URLSearchParams(window.location.hash.slice(1)).has('error'));
   const [mode, setMode] = useState(() => window.location.pathname === '/password' && new URLSearchParams(window.location.hash.slice(1)).has('error') ? 'forgot' : 'login'); // 'login' | 'forgot'
-  useDocumentTitle(mode === 'login' ? 'Connexion' : 'Mot de passe oublié');
+  useDocumentTitle(identityError ? 'Connexion momentanément impossible' : mode === 'login' ? 'Connexion' : 'Mot de passe oublié');
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -36,7 +89,8 @@ export default function LoginPage() {
     try {
       await signIn(email.trim(), password);
     } catch (err) {
-      setError(loginMessage(err));
+      // An unreadable account is shown by its own panel (identityError), never as a wrong password.
+      if (err?.code !== IDENTITY_UNAVAILABLE) setError(loginMessage(err));
     }
     setLoading(false);
   };
@@ -54,12 +108,12 @@ export default function LoginPage() {
         redirectTo: `${window.location.origin}/password`,
       });
       if (resetError) {
-        setError(loginMessage(resetError));
+        setError(loginMessage(resetError, { reset: true }));
       } else {
         setSuccess('Si un compte correspond à cette adresse, vous recevrez un lien de réinitialisation. Vérifiez aussi les courriers indésirables.');
       }
     } catch (err) {
-      setError(loginMessage(err));
+      setError(loginMessage(err, { reset: true }));
     }
     setLoading(false);
   };
@@ -126,9 +180,12 @@ export default function LoginPage() {
         </div>
 
         <div className="w-full max-w-sm">
+          {identityError ? <IdentityUnavailable message={identityError} /> : <>
           {recoveryInvalid && <p role="alert" className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">Ce lien de récupération n’est plus valable. Saisissez votre email pour recevoir un nouveau lien.</p>}
+          {/* Keyed forms: switching to « Mot de passe oublié » mounts a new form, so the click that opens it can
+              never activate (submit) the new form's button rendered at the same place. */}
           {mode === 'login' ? (
-            <form onSubmit={handleLogin} className="space-y-5">
+            <form key="login" onSubmit={handleLogin} className="space-y-5">
               <div>
                 <h1 className="text-2xl font-black tracking-tight" style={{ color: 'var(--brand-text)' }}>
                   Connexion
@@ -186,8 +243,8 @@ export default function LoginPage() {
               </button>
             </form>
           ) : (
-            /* Forgot password */
-            <form onSubmit={handleForgotPassword} className="space-y-5">
+            /* Forgot password: the link is sent only by its own submit button. */
+            <form key="forgot" onSubmit={handleForgotPassword} className="space-y-5">
               <button type="button" onClick={() => { setMode('login'); setError(''); setSuccess(''); }}
                 className="flex items-center gap-1 text-[12px] text-slate-500 hover:text-slate-800 transition-colors">
                 <ArrowLeft size={12} /> Retour à la connexion
@@ -232,8 +289,9 @@ export default function LoginPage() {
               </button>
             </form>
           )}
+          </>}
 
-          <details className="mt-5 border-t border-slate-200 pt-2"><summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-slate-700">Première connexion&nbsp;?</summary><p className="text-sm text-slate-600">Utilisez l’email et les instructions d’accès transmis par notre équipe. Vous n’avez pas reçu votre invitation&nbsp;?</p><a className="inline-flex min-h-11 items-center text-sm font-semibold underline" href="mailto:contact@expedile.fr?subject=Mon%20acc%C3%A8s%20Exped%C3%AEle">Demander mon accès à l’équipe</a></details>
+          {!identityError && <details className="mt-5 border-t border-slate-200 pt-2"><summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-slate-700">Première connexion&nbsp;?</summary><p className="text-sm text-slate-600">Utilisez l’email et les instructions d’accès transmis par notre équipe. Vous n’avez pas reçu votre invitation&nbsp;?</p><a className="inline-flex min-h-11 items-center text-sm font-semibold underline" href="mailto:contact@expedile.fr?subject=Mon%20acc%C3%A8s%20Exped%C3%AEle">Demander mon accès à l’équipe</a></details>}
           <p className="mt-8 text-[11px] text-slate-400 text-center md:hidden">© {new Date().getFullYear()} Expedîle</p>
         </div>
       </div>

@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as XLSX from 'xlsx';
 import { parseClientFile, detectDuplicates } from '../src/expedile/utils/importClients.js';
+import { importRowIssue } from '../src/expedile/domain/clientRequirements.js';
 
 const csv = 'Nom;Prénom;Email;Téléphone;Code postal;Date naissance\nLéon;Camille;camille+colis@example.test;0262123456;97400;01/02/1990';
 const makeFile = (content, name = 'clients.csv', type = 'text/csv') => new File([content], name, { type });
@@ -59,7 +60,22 @@ test('Importer rejects unsupported MIME and oversized files before parsing', asy
 test('Manual mapping restores unrecognised headers and rejects invalid email before import', async () => {
  const file=makeFile('Customer;Contact\nCamille;camille@example.test\nIncorrect;invalid');
  const parsed=await parseClientFile(file,{Customer:'nom',Contact:'email'});
- assert.equal(parsed.clients.length,1);assert.equal(parsed.clients[0]._sourceRow,2);assert.match(parsed.errors[0],/email invalide/);
+ // Every row is read; the required information lists all the reasons of a refused row at once.
+ assert.deepEqual(parsed.clients.map(client=>[client._sourceRow,client.nom,client.email]),[[2,'Camille','camille@example.test'],[3,'Incorrect','invalid']]);
+ assert.deepEqual(parsed.errors,[]);
+ assert.equal(importRowIssue(parsed.clients[1]),'prénom, téléphone, adresse, code postal et ville manquants, email invalide');
+ assert.equal(importRowIssue(parsed.clients[0]),'prénom, téléphone, adresse, code postal et ville manquants');
+});
+test('A refused row lists every missing and invalid field, not only the first one', async () => {
+ const parsed=await parseClientFile(makeFile('Nom;Prénom;Email;Téléphone;Adresse;Code postal;Ville\nDupont;Luc;luc@x;0692;;75001;Paris\n;;;;;;\nPayet;;;;;;'));
+ assert.equal(parsed.clients.length,2,'a row without any value is not a client');
+ assert.equal(importRowIssue(parsed.clients[0]),'adresse manquante, email invalide, téléphone invalide, code postal non desservi');
+ assert.equal(importRowIssue(parsed.clients[1]),'prénom, email, téléphone, adresse, code postal et ville manquants');
+ assert.deepEqual(parsed.errors,[],'no reason is given twice');
+});
+test('A landline alone satisfies the phone of an imported row', async () => {
+ const parsed=await parseClientFile(makeFile('Nom;Prénom;Email;Téléphone fixe;Adresse;Code postal;Ville\nHoarau;Marie;marie@example.test;0262 41 22 33;2 rue des Lilas;97400;Saint-Denis\nGrondin;Paul;paul@example.test;(0596) 12-34-56;3 rue des Lilas;97200;Fort-de-France'));
+ assert.deepEqual(parsed.clients.map(client=>[client.tel,client.telFixe,importRowIssue(client)]),[['','0262 41 22 33',''],['','(0596) 12-34-56','']]);
 });
 test('Importer detects duplicate emails within the same file without creating anything',()=>{
  const result=detectDuplicates([{nom:'A',email:'same@example.test'},{nom:'B',email:'SAME@example.test'}],[]);

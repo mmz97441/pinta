@@ -27,6 +27,26 @@ const requiredValue = (values, key) => key === 'tel' ? phoneOf(values) : values?
 const digitCount = value => (String(value ?? '').match(/\d/g) || []).length;
 const frenchList = items => items.length > 1 ? `${items.slice(0, -1).join(', ')} et ${items[items.length - 1]}` : items.join('');
 
+// The phone format of the database (guard_client_required_fields): digits, ASCII spaces, dots, dashes,
+// parentheses and a leading +, with at least 9 digits. A no-break space or a + inside the number is refused there.
+const PHONE_FORMAT = /^\+?[0-9 .()-]+$/;
+export const PHONE_FORMAT_MESSAGE = 'Indiquez un numéro d’au moins 9 chiffres (espaces, points, tirets, parenthèses et + initial acceptés).';
+/** A phone number the database accepts, once trimmed. */
+export const validPhone = value => PHONE_FORMAT.test(String(value ?? '').trim()) && digitCount(value) >= 9;
+/** The dialable form of a number for a tel: link (digits and a leading +), '' when it is not a valid phone. */
+export const dialablePhone = value => validPhone(value) ? String(value).trim().replace(/(?!^\+)[^\d]/g, '') : '';
+
+/**
+ * The phone errors of a form holding a mobile (`tel`) and a landline (`telFixe`): one number is required,
+ * and each number entered must be valid. The missing requirement is reported under the mobile.
+ */
+export function phoneErrors(values, { missing = missingMessage('tel'), invalid = PHONE_FORMAT_MESSAGE } = {}) {
+  const errors = {};
+  for (const key of ['tel', 'telFixe']) if (filled(values?.[key]) && !validPhone(values[key])) errors[key] = invalid;
+  if (!filled(values?.tel) && !filled(values?.telFixe)) errors.tel = missing;
+  return errors;
+}
+
 /** The served destination of a postal code: five digits whose first three are a destination. */
 export function servedDestination(cp) {
   const value = String(cp ?? '').replace(/\s/g, '');
@@ -37,8 +57,8 @@ export function servedDestination(cp) {
 export function requiredFieldFormatError(key, value) {
   const text = String(value ?? '').trim();
   if (key === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(text)) return 'Indiquez un email valide.';
-  // Spaces, dots, dashes and a leading + are accepted around at least 9 digits.
-  if (key === 'tel' && (!/^\+?[\d\s.-]+$/.test(text) || digitCount(text) < 9)) return 'Indiquez un numéro d’au moins 9 chiffres (espaces, points, tirets et + initial acceptés).';
+  // The format of the database: spaces, dots, dashes, parentheses and a leading + around at least 9 digits.
+  if (['tel', 'telFixe'].includes(key) && !validPhone(text)) return PHONE_FORMAT_MESSAGE;
   if (key === 'cp' && !servedDestination(text)) return /^\d{5}$/.test(text.replace(/\s/g, ''))
     ? `Ce code postal n’est pas une destination desservie : ${frenchList(SERVED)}.`
     : 'Indiquez un code postal à 5 chiffres.';
@@ -67,6 +87,24 @@ export const clientRequiredValue = (client, key) => key === 'adresseLigne1' ? cl
 /** The required fields an existing client still misses (older records), in form order. */
 export function missingRequiredFields(client) {
   return REQUIRED_CLIENT_KEYS.filter(key => !filled(clientRequiredValue(client, key)));
+}
+
+/** « le prénom et l’adresse »: the required fields named in a sentence. */
+export const requiredFieldsPhrase = keys => frenchList(keys.map(key => `${FIELD[key].subject.charAt(0).toLocaleLowerCase('fr')}${FIELD[key].subject.slice(1)}`));
+
+// The columns a refusal of the database names (HINT client_required_fields:<columns>), as form fields.
+const REFUSED_COLUMNS = { prenom: 'prenom', nom: 'nom', email: 'email', tel: 'tel', tel_fixe: 'telFixe', adresse: 'adresseLigne1', adresse_ligne1: 'adresseLigne1', cp: 'cp', ville: 'ville' };
+const REFUSED_WORDS = [['prenom', /pr[ée]nom/], ['nom', /(^|[^a-zà-ÿ])nom([^a-zà-ÿ@]|$)/], ['email', /e-?mail|courriel/], ['tel', /t[ée]l[ée]phone/], ['adresseLigne1', /adresse/], ['cp', /code postal/], ['ville', /ville/]];
+/**
+ * The form fields a refusal of the client guard (SQLSTATE 23514) names, in form order: from its HINT
+ * « client_required_fields:prenom,tel », otherwise from the words of its French message. [] when none is named.
+ */
+export function refusedClientFields(error) {
+  const hint = /client_required_fields:([\w,]+)/.exec(String(error?.hint ?? ''));
+  if (hint) return [...new Set(hint[1].split(',').map(column => REFUSED_COLUMNS[column]).filter(Boolean))];
+  // An example address (« nom@domaine.fr ») never names a field.
+  const text = String(error?.message ?? '').toLocaleLowerCase('fr').replace(/\S+@\S+/g, ' ');
+  return REFUSED_WORDS.filter(([, pattern]) => pattern.test(text)).map(([key]) => key);
 }
 
 /**

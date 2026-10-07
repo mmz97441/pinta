@@ -434,7 +434,7 @@ export default function ChatPanel({ colis, client, embedded = false, active = tr
 
       {(expanded || embedded) && (
         <div className={embedded ? 'min-w-0' : 'px-4 pb-4 anim-slide-down'}>
-          <p className="text-xs text-gray-600 dark:text-gray-300 mb-3">{state==='a_traiter'?'Votre message attend une réponse de notre équipe.':state==='attente_client'?'Notre équipe attend votre retour.':'Vous pouvez nous écrire pour toute question sur ce dossier.'}</p>
+          <p className="text-xs text-gray-600 dark:text-gray-300 mb-3">{state==='a_traiter'?'Votre message attend une réponse de notre équipe.':state==='attente_client'?'Notre équipe attend votre retour.':'Vous pouvez nous écrire pour toute question sur cette expédition.'}</p>
           {/* Focusable: the history scrolls by keyboard even without a link inside. */}
           {hasMessages && (
             <div ref={scrollRef} role="log" aria-label="Messages avec l’équipe" tabIndex={0} className="chat-portal-log mb-3 max-h-80 space-y-1.5 overflow-y-auto">

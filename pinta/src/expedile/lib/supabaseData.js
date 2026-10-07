@@ -27,6 +27,8 @@ export function mapColis(row) {
     desc: row.desc_contenu || '',
     valeur: row.valeur_declaree,
     outgoingTracking: row.outgoing_tracking || null,
+    // Client portal: the carrier number could not be read (client_outgoing_tracking failed).
+    outgoingTrackingError: row._outgoing_tracking_error === true,
     trackings: row.trackings || [],
     trackingsDetail: row.trackings_detail || [],
     casier: row.casier,
@@ -333,23 +335,38 @@ export async function findColisByReference(value, { signal } = {}) {
   return data?.[0] || null;
 }
 
+// An expedition link (/colis/:id) names a uuid; any other text designates no expedition.
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// The steps where client_outgoing_tracking can return the carrier number of the departure.
+const SHIPPED_STATUSES = ['expedie', 'transit', 'dedouanement', 'arrive', 'livraison', 'livre'];
+
 export async function fetchColis(colisId = null, { archived = false, clientId = null, envoiId = null } = {}) {
+  const clientScope = dataScope === 'client';
+  // Client portal: a truncated or malformed link is an expedition that does not exist (never « indisponible »).
+  if (colisId && clientScope && !UUID.test(String(colisId))) return [];
   const scope = (q) => colisId ? q.eq('id', colisId) : clientId ? q.eq('client_id', clientId) : envoiId ? q.eq('envoi_id', envoiId) : q.eq('archive', archived);
-  const colisRows = await fetchAllRows('colis', scope);
+  let colisRows;
+  try { colisRows = await fetchAllRows('colis', scope); }
+  catch (error) { if (colisId && clientScope && error?.code === '22P02') return []; throw error; }
   if (!colisRows.length) return [];
   const grouped = { factures: {}, lignes: {}, messages: {} };
   const outgoing = new Map();
+  const outgoingErrors = new Set();
   const receptionDates = new Map();
   const receptionDatesErrors = new Set();
-  const clientScope = dataScope === 'client';
   const mappers = { factures: mapFact, lignes: mapLigne, messages: mapMessage };
   // Load only relations belonging to the requested working set, in bounded requests.
   for (let i = 0; i < colisRows.length; i += 100) {
     const ids = colisRows.slice(i, i + 100).map((c) => c.id);
-    if (clientScope) {
-      const { data: tracking, error } = await supabase.rpc('client_outgoing_tracking', { p_colis_ids: ids });
-      if (error) throw error;
-      for (const item of Array.isArray(tracking) ? tracking : []) outgoing.set(item.colis_id, item.tracking_principal);
+    // The carrier number of a shipped expedition is optional to consultation: a failed read keeps the
+    // expeditions displayed, with the tracking reported as unavailable, never as « not yet known ».
+    const shippedIds = clientScope ? colisRows.slice(i, i + 100).filter((c) => SHIPPED_STATUSES.includes(c.statut)).map((c) => c.id) : [];
+    if (shippedIds.length) {
+      try {
+        const { data: tracking, error } = await supabase.rpc('client_outgoing_tracking', { p_colis_ids: shippedIds });
+        if (error) throw error;
+        for (const item of Array.isArray(tracking) ? tracking : []) outgoing.set(item.colis_id, item.tracking_principal);
+      } catch { for (const id of shippedIds) outgoingErrors.add(id); }
     }
     // Date evidence is optional to consultation: a failed ledger read keeps
     // the dossier visible and surfaces an explicit date error, never a guess.
@@ -383,6 +400,7 @@ export async function fetchColis(colisId = null, { archived = false, clientId = 
       mapColis({
         ...row,
         outgoing_tracking: outgoing.get(row.id) || null,
+        _outgoing_tracking_error: outgoingErrors.has(row.id),
         reception_dates: receptionDates.get(row.id) ?? row.reception_dates ?? null,
         _reception_dates_error: receptionDatesErrors.has(row.id),
         _factures: grouped.factures[row.id] || [],
@@ -409,15 +427,26 @@ export async function fetchClientPlannedDepartures(colisIds = []) {
   return dates;
 }
 
+/** A failed read of the account (network, server): not an account problem. The session is kept and the read can be retried. */
+export const IDENTITY_UNAVAILABLE = 'identity_unavailable';
+function identityUnavailable(cause) {
+  const error = new Error('Nous n’arrivons pas à ouvrir votre espace pour le moment. Votre session est conservée\u00a0: réessayez dans un instant.');
+  error.code = IDENTITY_UNAVAILABLE;
+  error.cause = cause;
+  return error;
+}
+
 export async function resolveIdentity(session) {
   if (!session?.user) return null;
   const userId = session.user.id;
+  // A read error is never reported as an account problem; only an answer without the row is one.
   const { data: profile, error } = await supabase
     .from('profiles')
     .select('*')
     .eq('id', userId)
-    .single();
-  if (error) throw new Error('Profil inaccessible. Contactez l’équipe Expedîle.');
+    .maybeSingle();
+  if (error) throw identityUnavailable(error);
+  if (!profile) throw new Error('Profil inaccessible. Contactez l’équipe Expedîle.');
   if (profile.actif === false) throw new Error('Ce compte est désactivé.');
   if (['directeur', 'vice_directeur', 'logisticien', 'preparateur'].includes(profile.role)) {
     const { data: staff, error: staffError } = await supabase
@@ -425,7 +454,7 @@ export async function resolveIdentity(session) {
       .select('*, staff_permissions(*)')
       .eq('auth_id', userId)
       .maybeSingle();
-    if (staffError) throw staffError;
+    if (staffError) throw identityUnavailable(staffError);
     if (!staff || staff.actif === false)
       throw new Error('Accès équipe non activé. Contactez la direction.');
     return {
@@ -448,8 +477,9 @@ export async function resolveIdentity(session) {
     .from('client_clients')
     .select('*')
     .eq('user_id', userId)
-    .single();
-  if (clientError || !client)
+    .maybeSingle();
+  if (clientError) throw identityUnavailable(clientError);
+  if (!client)
     throw new Error(
       'Votre compte n’est pas encore rattaché à un dossier client. Contactez l’équipe.',
     );

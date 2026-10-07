@@ -15,7 +15,7 @@ import * as sb from '../../lib/supabaseData';
 import { nextAction } from '../../domain/workQueues';
 import usePersistentDraft from '../../hooks/usePersistentDraft';
 import { receptionCartonManifest } from '../../domain/reception';
-import { REQUIRED_CLIENT_FIELDS, REQUIRED_CLIENT_KEYS, COMPLETION_FIELDS, filled, newClientErrors, requiredFieldFormatError, blankingMessage, servedDestination } from '../../domain/clientRequirements';
+import { REQUIRED_CLIENT_FIELDS, REQUIRED_CLIENT_KEYS, COMPLETION_FIELDS, filled, newClientErrors, requiredFieldFormatError, blankingMessage, missingMessage, servedDestination, phoneOf, phoneErrors, validPhone, dialablePhone, refusedClientFields, PHONE_FORMAT_MESSAGE } from '../../domain/clientRequirements';
 
 // ── Shared styles: brand.css tokens, readable in the light and dark themes ─────
 const BORDER = 'border-[color:var(--border-subtle)]';
@@ -27,7 +27,12 @@ const DANGER = 'inline-flex min-h-11 items-center justify-center gap-2 rounded-x
 const CHIP = 'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold';
 const ACTIVE_EXCLUDED = ['livre', 'annule'];
 
-const CONTACT_FIELDS = ['nom', 'prenom', 'tel', 'email', 'telegramUsername', 'ville', 'cp', 'adresseLigne1', 'adresseLigne2', 'commune', 'infosLivraison', 'canal'];
+const CONTACT_FIELDS = ['nom', 'prenom', 'tel', 'telFixe', 'email', 'telegramUsername', 'ville', 'cp', 'adresseLigne1', 'adresseLigne2', 'commune', 'infosLivraison', 'canal'];
+const PHONE_FIELDS = ['tel', 'telFixe'];
+// The phone requirement is met by the mobile or the landline (decision of 7 October 2026, as in the database).
+const requiredOf = (values, key) => key === 'tel' ? phoneOf(values) : values?.[key];
+const PHONE_BLANKING = 'Le téléphone est obligatoire : gardez au moins un numéro, mobile ou fixe.';
+const PHONE_HINT = 'Mobile de préférence. Un fixe seul suffit.';
 const ADMIN_FIELDS = ['type', 'raisonSociale', 'siret', 'interlocuteur', 'modePaiement', 'notes'];
 // What the toast names once these fields are saved.
 const ADMIN_PARTS = [[['type'], 'type de client'], [['raisonSociale', 'siret', 'interlocuteur', 'modePaiement'], 'facturation professionnelle'], [['notes'], 'notes internes']];
@@ -44,7 +49,7 @@ const comparable = (key, value) => key === 'telegramUsername' ? normalizeTelegra
 /** The editable values of a client, as the forms show them. */
 function formValues(cl) {
   return {
-    nom: cl.nomFamille !== undefined ? cl.nomFamille || '' : cl.nom || '', prenom: cl.prenom || '', tel: cl.tel || '', email: cl.email || '',
+    nom: cl.nomFamille !== undefined ? cl.nomFamille || '' : cl.nom || '', prenom: cl.prenom || '', tel: cl.tel || '', telFixe: cl.telFixe || '', email: cl.email || '',
     telegramUsername: formatTelegramHandle(cl.telegramUsername),
     ville: cl.ville || '', cp: cl.cp || '', adresseLigne1: cl.adresseLigne1 || cl.adresse || '', adresseLigne2: cl.adresseLigne2 || '',
     commune: cl.commune || cl.ville || '', infosLivraison: cl.infosLivraison || '', canal: cl.canal || 'telegram',
@@ -295,6 +300,8 @@ function EditClientPage({ cl, onDone }) {
   const [panel, setPanel] = useState(requestedField ? 'contact' : 'overview');
   const [saving, setSaving] = useState(null);
   const [contactError, setContactError] = useState('');
+  // The fields a refusal of the database names (SQLSTATE 23514): marked under the field until it changes.
+  const [serverErrors, setServerErrors] = useState({});
   const [adminFailures, setAdminFailures] = useState([]);
   const [deleteError, setDeleteError] = useState('');
   const [contactAttempt, setContactAttempt] = useState(0);
@@ -327,6 +334,10 @@ function EditClientPage({ cl, onDone }) {
   const dest = cl.cp ? getDestByCP(cl.cp) : null;
   const knownDestination = dest && DESTINATIONS[String(cl.cp).slice(0, 3)];
   const handle = formatTelegramHandle(cl.telegramUsername);
+  // The mobile, then the landline (« fixe »); « Appeler » dials the mobile, else the landline.
+  const phones = [{ kind: 'mobile', value: String(cl.tel || '').trim() }, { kind: 'fixe', value: String(cl.telFixe || '').trim() }].filter(phone => phone.value)
+    .map((phone, index, list) => ({ ...phone, label: phone.kind === 'fixe' ? 'fixe' : list.length > 1 ? 'mobile' : '' }));
+  const callNumber = [cl.tel, cl.telFixe].map(dialablePhone).find(Boolean) || '';
   const canEdit = can('perm_clients_modifier');
   const canEditSubscription = can('perm_clients_modifier_abonnement');
 
@@ -338,7 +349,11 @@ function EditClientPage({ cl, onDone }) {
   const dirtyOf = keys => keys.filter(key => has(changes, key) && comparable(key, changes[key]) !== comparable(key, baseline[key]));
   const contactDirty = dirtyOf(CONTACT_FIELDS);
   const adminDirty = dirtyOf(ADMIN_FIELDS);
-  const patch = (key, value) => { setChanges(prev => ({ ...(prev || {}), [key]: value })); setTouched(prev => ({ ...prev, [key]: true })); };
+  const patch = (key, value) => {
+    setChanges(prev => ({ ...(prev || {}), [key]: value })); setTouched(prev => ({ ...prev, [key]: true }));
+    // A field refused by the database is checked again once it changes (both phones answer one requirement).
+    setServerErrors(prev => omit(prev, PHONE_FIELDS.includes(key) ? PHONE_FIELDS : [key]));
+  };
   const currentSubscription = subscriptionValues(cl);
   const [subscriptionDraft, setSubscriptionDraft, { clear: clearSubscriptionDraft }] = usePersistentDraft(`client:subscription:${cl.id}`, null);
   const subscriptionDirty = Boolean(subscriptionDraft?.values && subscriptionDraft?.baseline) && !sameSubscription(subscriptionDraft.values, subscriptionDraft.baseline);
@@ -354,35 +369,49 @@ function EditClientPage({ cl, onDone }) {
 
   // ── Duplicate detection ───────────────────────────────────────────────────
   const duplicates = useMemo(() => {
-    if (!draft.nom && !draft.tel) return [];
+    if (!draft.nom && !draft.tel && !draft.telFixe) return [];
+    // Both phones of each client are compared (digits only, the last eight).
+    const digits = values => [values.tel, values.telFixe].map(phone => String(phone || '').replace(/\D/g, '')).filter(phone => phone.length >= 6);
+    const mine = digits(draft);
     return clients.filter((c) => {
       if (c.id === cl.id) return false;
       const nameLower = (draft.nom || '').toLowerCase().trim();
       const cNameLower = (c.nom || '').toLowerCase().trim();
       const nameMatch = nameLower.length >= 3 && cNameLower.length >= 3 && (cNameLower.includes(nameLower) || nameLower.includes(cNameLower));
-      const cleanTel = (draft.tel || '').replace(/[\s\-+]/g, '');
-      const cCleanTel = (c.tel || '').replace(/[\s\-+]/g, '');
-      const telMatch = cleanTel.length >= 6 && cCleanTel.length >= 6 && (cleanTel.endsWith(cCleanTel.slice(-8)) || cCleanTel.endsWith(cleanTel.slice(-8)));
+      const telMatch = digits(c).some(other => mine.some(phone => phone.endsWith(other.slice(-8)) || other.endsWith(phone.slice(-8))));
       return nameMatch || telMatch;
     });
-  }, [cl.id, draft.nom, draft.tel, clients]);
+  }, [cl.id, draft.nom, draft.tel, draft.telFixe, clients]);
 
   // ── Validation: a changed required field is checked; a filled one cannot be emptied, while an
   // older record that still misses some of them is saved with what is completed (non-blocking). ──
   const contactErrors = {};
   for (const key of REQUIRED_CLIENT_KEYS) {
-    if (!contactDirty.includes(key)) continue;
+    if (key === 'tel' || !contactDirty.includes(key)) continue;
     if (!filled(draft[key])) { if (filled(baseline[key])) contactErrors[key] = blankingMessage(key); }
     else { const error = requiredFieldFormatError(key, draft[key]); if (error) contactErrors[key] = error; }
   }
-  const toComplete = key => !filled(baseline[key]) && !filled(draft[key]);
+  // The phone: a mobile or a landline. Each changed number must be valid; a record that had a phone keeps
+  // one (removing one of two numbers is allowed, as in the database).
+  const phonesChanged = PHONE_FIELDS.filter(key => contactDirty.includes(key));
+  for (const key of phonesChanged) if (filled(draft[key]) && !validPhone(draft[key])) contactErrors[key] = PHONE_FORMAT_MESSAGE;
+  if (phonesChanged.length && !filled(phoneOf(draft)) && filled(phoneOf(baseline))) contactErrors[phonesChanged[0]] = PHONE_BLANKING;
+  const toComplete = key => !filled(requiredOf(baseline, key)) && !filled(requiredOf(draft, key));
   const incomplete = REQUIRED_CLIENT_FIELDS.filter(({ key }) => toComplete(key)).map(field => field.noun);
-  const shownError = key => (touched[key] || contactAttempt > 0) ? contactErrors[key] : undefined;
-  const requiredProps = key => ({
+  const shownError = key => serverErrors[key] || ((touched[key] || contactAttempt > 0) ? contactErrors[key] : undefined);
+  const contactProps = key => ({
     name: key, value: draft[key], onChange: (event) => patch(key, event.target.value), error: shownError(key),
-    toComplete: toComplete(key), highlight: requestedField === key && !filled(draft[key]),
-    valid: touched[key] && filled(draft[key]) && !contactErrors[key],
+    valid: touched[key] && filled(draft[key]) && !contactErrors[key] && !serverErrors[key],
   });
+  const requiredProps = key => ({
+    ...contactProps(key), toComplete: toComplete(key), highlight: requestedField === key && !filled(requiredOf(draft, key)),
+  });
+  /** Under a field the database refused: what is missing or invalid in it, in the words of the form. */
+  const refusalMessage = key => {
+    const value = requiredOf(draft, key);
+    if (!filled(value)) return key === 'tel' || key === 'telFixe' ? (filled(phoneOf(baseline)) ? PHONE_BLANKING : missingMessage('tel')) : filled(baseline[key]) ? blankingMessage(key) : missingMessage(key);
+    return requiredFieldFormatError(key, value) || 'Cette valeur a été refusée : vérifiez-la.';
+  };
   // After a refused save, the first invalid field receives the focus.
   useEffect(() => { if (contactAttempt) contactForm.current?.querySelector('[aria-invalid="true"]')?.focus(); }, [contactAttempt]);
   // The field the link asked for comes into view with the focus, once, when the page opens.
@@ -401,18 +430,27 @@ function EditClientPage({ cl, onDone }) {
     if (Object.keys(contactErrors).length) { setContactAttempt(n => n + 1); return; }
     const keys = canEdit ? contactDirty : [];
     // Required values are written trimmed (the postal code without spaces); a still-empty one is not written.
-    const value = key => !REQUIRED_CLIENT_KEYS.includes(key) ? draft[key] : key === 'cp' ? String(draft.cp ?? '').replace(/\s/g, '') : String(draft[key] ?? '').trim();
-    const written = keys.filter(key => !REQUIRED_CLIENT_KEYS.includes(key) || filled(value(key)));
+    // A phone removed while the other number remains is written empty (null).
+    const value = key => PHONE_FIELDS.includes(key) ? String(draft[key] ?? '').trim() || null
+      : !REQUIRED_CLIENT_KEYS.includes(key) ? draft[key] : key === 'cp' ? String(draft.cp ?? '').replace(/\s/g, '') : String(draft[key] ?? '').trim();
+    const written = keys.filter(key => !REQUIRED_CLIENT_KEYS.includes(key) || filled(value(key)) || (key === 'tel' && filled(baseline.tel)));
     if (!written.length) { setChanges(prev => omit(prev, keys)); return; }
-    setSaving('contact'); setContactError('');
+    setSaving('contact'); setContactError(''); setServerErrors({});
     try {
       const payload = Object.fromEntries(written.map(key => [key, value(key)]));
       if (written.includes('adresseLigne1')) payload.adresse = payload.adresseLigne1;
+      // `true`: this form reports the outcome itself, under its fields (no toast for a refusal).
       await updateClient(cl.id, payload, true);
       setChanges(prev => omit(prev, keys)); setTouched({}); setContactAttempt(0);
       flash({ msg: 'Coordonnées enregistrées.', type: 'success' });
       setPanel('overview');
-    } catch (error) { setContactError(`Coordonnées non enregistrées : ${error.message || 'réessayez.'} Vos saisies sont conservées.`); }
+    } catch (error) {
+      // A refusal of the database guard names its fields: each one is marked, the first takes the focus.
+      const refused = error?.code === '23514' ? refusedClientFields(error).filter(key => CONTACT_FIELDS.includes(key)) : [];
+      setServerErrors(Object.fromEntries(refused.map(key => [key, refusalMessage(key)])));
+      setContactError(`Coordonnées non enregistrées : ${error?.message || 'réessayez.'} Vos saisies sont conservées.`);
+      if (refused.length) setContactAttempt(n => n + 1);
+    }
     finally { setSaving(null); }
   }
 
@@ -450,7 +488,7 @@ function EditClientPage({ cl, onDone }) {
     else setPanel('overview');
   }
 
-  const cancelContact = () => { setChanges(prev => omit(prev, CONTACT_FIELDS)); setTouched({}); setContactError(''); setContactAttempt(0); setPanel('overview'); };
+  const cancelContact = () => { setChanges(prev => omit(prev, CONTACT_FIELDS)); setTouched({}); setContactError(''); setServerErrors({}); setContactAttempt(0); setPanel('overview'); };
   const cancelAdmin = () => { setChanges(prev => omit(prev, ADMIN_FIELDS)); clearSubscriptionDraft(); setAdminFailures([]); setAdminAttempt(0); setPanel('overview'); };
   const reloadSubscription = async () => {
     try { await rereadClient(cl.id, setClients); clearSubscriptionDraft(); setAdminFailures([]); flash('Fiche actualisée : vérifiez l’offre enregistrée avant de la modifier.'); }
@@ -512,8 +550,8 @@ function EditClientPage({ cl, onDone }) {
                   : <span className={CHIP} style={{ background: 'var(--attention-bg)', color: 'var(--attention-text)' }}>Telegram non lié</span>}
               </div>
               <p className="text-sm text-secondary">{knownDestination && <span aria-hidden="true">{dest.flag} </span>}{[cl.ville, knownDestination ? dest.nom : null].filter(Boolean).join(' · ') || 'Destination à compléter'}</p>
-              {(cl.tel || cl.email || handle) && <ul className="space-y-0.5 text-sm text-secondary">
-                {cl.tel && <li className="flex items-start gap-1.5"><Phone size={14} className="mt-1 shrink-0" aria-hidden="true" /><span className="font-mono">{cl.tel}</span></li>}
+              {(phones.length > 0 || cl.email || handle) && <ul className="space-y-0.5 text-sm text-secondary">
+                {phones.map(({ kind, value, label }) => <li key={kind} className="flex items-start gap-1.5"><Phone size={14} className="mt-1 shrink-0" aria-hidden="true" /><span className="font-mono">{value}</span>{label && <span>· {label}</span>}</li>)}
                 {cl.email && <li className="flex items-start gap-1.5"><Mail size={14} className="mt-1 shrink-0" aria-hidden="true" /><span className="min-w-0 [overflow-wrap:anywhere]">{cl.email}</span></li>}
                 {handle && <li className="flex items-start gap-1.5"><Send size={14} className="mt-1 shrink-0" aria-hidden="true" /><span className="min-w-0 [overflow-wrap:anywhere]">Telegram {handle}</span></li>}
               </ul>}
@@ -544,7 +582,7 @@ function EditClientPage({ cl, onDone }) {
             <h2 className="font-bold text-primary">Joindre ce client</h2>
             <p className="text-sm text-secondary">{cl.telegramChatId ? 'Telegram lié' : 'Telegram non lié'} · {cl.userId ? 'Espace client rattaché à cette fiche' : 'Accès au portail à activer'}</p>
             <div className="flex flex-wrap gap-2">
-              {cl.tel && <a href={`tel:${cl.tel}`} className={SECONDARY}><Phone size={16} aria-hidden="true" />Appeler</a>}
+              {callNumber && <a href={`tel:${callNumber}`} className={SECONDARY}><Phone size={16} aria-hidden="true" />Appeler</a>}
               {cl.email && <a href={`mailto:${cl.email}`} className={SECONDARY}><Mail size={16} aria-hidden="true" />Préparer un email</a>}
               {can('perm_colis_receptionner') && <button type="button" onClick={() => navigate(`/reception?${new URLSearchParams({ client: cl.id, returnTo: `/clients/${cl.id}` })}`)} className={PRIMARY}>Réceptionner pour ce client</button>}
             </div>
@@ -583,7 +621,7 @@ function EditClientPage({ cl, onDone }) {
             <AlertTriangle size={16} className="mt-0.5 shrink-0" aria-hidden="true" />
             <div>
               <p className="text-sm font-bold">Doublon possible</p>
-              <ul className="mt-1 space-y-1 text-sm">{duplicates.map((dup) => <li key={dup.id}><span className="font-bold">{dup.nom}</span>{dup.tel && <span className="ml-1 font-mono">{dup.tel}</span>}{dup.email && <span className="ml-1 [overflow-wrap:anywhere]">{dup.email}</span>}</li>)}</ul>
+              <ul className="mt-1 space-y-1 text-sm">{duplicates.map((dup) => <li key={dup.id}><span className="font-bold">{dup.nom}</span>{filled(phoneOf(dup)) && <span className="ml-1 font-mono">{phoneOf(dup)}</span>}{dup.email && <span className="ml-1 [overflow-wrap:anywhere]">{dup.email}</span>}</li>)}</ul>
             </div>
           </div>}
           <fieldset disabled={!canEdit || Boolean(saving)} className="space-y-4">
@@ -593,15 +631,17 @@ function EditClientPage({ cl, onDone }) {
               <ValidatedField label="Nom" required {...requiredProps('nom')} placeholder="NOM" autoComplete="off" />
               <ValidatedField label="Prénom" required {...requiredProps('prenom')} placeholder="Prénom" autoComplete="off" />
               <ValidatedField label="Email" required type="email" {...requiredProps('email')} placeholder="adresse@exemple.com" />
-              <ValidatedField label="Téléphone" required type="tel" mono {...requiredProps('tel')} placeholder="+262 692 …" />
-              <ValidatedField label="Identifiant Telegram" name="telegramUsername" value={draft.telegramUsername} onChange={(e) => patch('telegramUsername', e.target.value)} placeholder="@identifiant" autoComplete="off" hint="Le @ est facultatif." className="sm:col-span-2" />
+              <ValidatedField label="Identifiant Telegram" name="telegramUsername" value={draft.telegramUsername} onChange={(e) => patch('telegramUsername', e.target.value)} placeholder="@identifiant" autoComplete="off" hint="Le @ est facultatif." />
+              {/* One number is required: the mobile, or the landline alone (as in the database). */}
+              <ValidatedField label="Téléphone" required={!filled(draft.telFixe)} type="tel" mono {...requiredProps('tel')} placeholder="ex. +262 692 12 34 56" autoComplete="off" hint={PHONE_HINT} />
+              <ValidatedField label="Téléphone fixe" type="tel" mono {...contactProps('telFixe')} placeholder="ex. 0262 41 22 33" autoComplete="off" />
             </div>
             <ValidatedField label="Adresse de livraison" required multiline {...requiredProps('adresseLigne1')} placeholder="Numéro, rue, résidence, étage…" />
             <div className="grid gap-3 sm:grid-cols-2">
               <ValidatedField label="Complément d’adresse" name="adresseLigne2" value={draft.adresseLigne2} onChange={(e) => patch('adresseLigne2', e.target.value)} className="sm:col-span-2" />
-              <ValidatedField label="Code postal" required mono {...requiredProps('cp')} placeholder="97400"
+              <ValidatedField label="Code postal" required mono {...requiredProps('cp')} placeholder="ex. 97400"
                 hint={servedDestination(draft.cp) ? <span className="flex items-center gap-1"><span aria-hidden="true">{servedDestination(draft.cp).flag}</span>{servedDestination(draft.cp).nom}</span> : null} />
-              <ValidatedField label="Ville" required {...requiredProps('ville')} placeholder="Saint-Denis" />
+              <ValidatedField label="Ville" required {...requiredProps('ville')} placeholder="ex. Saint-Denis" />
               <ValidatedField label="Commune de livraison" name="commune" value={draft.commune} onChange={(e) => patch('commune', e.target.value)} />
               <ValidatedField label="Instructions de livraison" name="infosLivraison" value={draft.infosLivraison} onChange={(e) => patch('infosLivraison', e.target.value)} />
             </div>
@@ -711,9 +751,11 @@ function NewClientPage({ onDone, onCancel }) {
   const [saving, setSaving] = useState(false); const [createError, setCreateError] = useState(''); const [justCreated, setJustCreated] = useState(null); const [attempt, setAttempt] = useState(0);
   const formRef = useRef(null); const errorRef = useRef(null);
   const set = (key, value) => setNd(p => ({ ...p, [key]: value }));
-  // Prénom, nom, email, téléphone and a complete address are required for a client account.
+  // Prénom, nom, email, téléphone and a complete address are required for a client account. The phone is
+  // the mobile or the landline: each number entered is checked under its own field.
   const errors = {
-    ...newClientErrors(nd),
+    ...omit(newClientErrors(nd), ['tel']),
+    ...phoneErrors(nd),
     ...(nd.type === 'pro' && !nd.raisonSociale.trim() ? { raisonSociale: 'La raison sociale est obligatoire.' } : {}),
   };
   // After a refused submit, the first invalid field (in reading order) receives the focus.
@@ -730,7 +772,7 @@ function NewClientPage({ onDone, onCancel }) {
     setSaving(true); setCreateError('');
     try {
       const telegram = normalizeTelegramUsername(nd.telegramUsername);
-      const trimmed = Object.fromEntries(REQUIRED_CLIENT_KEYS.map(key => [key, String(nd[key] ?? '').trim()]));
+      const trimmed = Object.fromEntries([...REQUIRED_CLIENT_KEYS, 'telFixe'].map(key => [key, String(nd[key] ?? '').trim()]));
       const payload = { ...nd, ...trimmed, cp: trimmed.cp.replace(/\s/g, ''), adresse: trimmed.adresseLigne1, telegramUsername: telegram, canal: telegram ? 'telegram' : 'email', abonnement: can('perm_clients_modifier_abonnement') ? nd.abonnement : 'freemium', abonnementDebut: null, abonnementFin: null, dateNaissance: nd.dateNaissance || null, points: 0 };
       const id = await addNewClient(payload);
       if (!id) throw new Error('La création n’a pas été confirmée.');
@@ -765,14 +807,15 @@ function NewClientPage({ onDone, onCancel }) {
         {nd.type === 'pro' && field('raisonSociale', 'Raison sociale')}
       </section>
       <section className="card space-y-3 p-4"><h2 className="font-semibold text-primary">Contact</h2>
-        <div className="grid gap-3 sm:grid-cols-2">{field('email', 'Email', 'email')}{field('tel', 'Téléphone', 'tel', { placeholder: '+262 692 12 34 56' })}</div>
+        {field('email', 'Email', 'email')}
+        <div className="grid gap-3 sm:grid-cols-2">{field('tel', 'Téléphone', 'tel', { placeholder: 'ex. +262 692 12 34 56', required: !filled(nd.telFixe), hint: PHONE_HINT })}{field('telFixe', 'Téléphone fixe', 'tel', { placeholder: 'ex. 0262 41 22 33' })}</div>
         {field('telegramUsername', 'Identifiant Telegram (facultatif)', 'text', { placeholder: '@identifiant', autoComplete: 'off', hint: 'Le @ est facultatif.' })}
       </section>
       <section className="card space-y-3 p-4"><h2 className="font-semibold text-primary">Adresse de livraison</h2>
         {field('adresseLigne1', 'Adresse', 'text', { placeholder: 'Numéro, rue, résidence, étage…' })}
         {field('adresseLigne2', 'Complément d’adresse (facultatif)')}
         <div className="grid gap-3 sm:grid-cols-2">
-          {field('cp', 'Code postal', 'text', { placeholder: '97400', hint: destination ? <span className="flex items-center gap-1"><span aria-hidden="true">{destination.flag}</span>Destination : {destination.nom}</span> : 'Réunion, Mayotte, Guadeloupe ou Martinique.' })}
+          {field('cp', 'Code postal', 'text', { placeholder: 'ex. 97400', hint: destination ? <span className="flex items-center gap-1"><span aria-hidden="true">{destination.flag}</span>Destination : {destination.nom}</span> : 'Réunion, Mayotte, Guadeloupe ou Martinique.' })}
           {field('ville', 'Ville')}
         </div>
       </section>

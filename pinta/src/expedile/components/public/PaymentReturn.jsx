@@ -131,7 +131,7 @@ function Receipt({ token, colisId, cancelled }) {
         </div>
         {!loading && !error && !needsSession && payment && <>
           <div className="mt-6 border-t pt-5" style={{ borderColor: 'var(--border-subtle)' }}>
-            <p className="text-sm font-semibold">Envoi {payment.reference}</p>
+            <p className="text-sm font-semibold">Expédition {payment.reference}</p>
             {payment.amountCents != null && <p className="mt-2 text-2xl font-bold">{new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(payment.amountCents / 100)}<span className="ml-2 text-sm font-normal" style={secondary}>{payment.status === 'paid' ? payment.isLive === false ? 'simulés' : 'reçus' : 'à vérifier'}</span></p>}
             {payment.status === 'paid' && receiptDate(payment.paidAt) && <p className="mt-1 text-sm" style={secondary}>Confirmé le {receiptDate(payment.paidAt)}</p>}
             {payment.status !== 'paid' && payment.isLive === false && <p className="mt-2 text-sm font-semibold" style={secondary}>Mode test · aucun règlement réel</p>}

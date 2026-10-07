@@ -2,6 +2,7 @@ import { receptionCartonManifest } from './reception.js';
 import { currentInvoices } from './invoiceDocuments.js';
 import { invoicesFrozenReason } from './invoiceLock.js';
 import { plural } from './plural.js';
+import { isoCalendarDay, parisCalendarDay } from './departureGroups.js';
 import { PHASES_CLIENT, getPhaseIndex } from '../constants/index.js';
 /** Client-facing facts only. A status never implies a delivery date. */
 export function cartonManifest(colis) {
@@ -47,7 +48,7 @@ const STATES = {
   mesure: ['Mesures enregistrées', 'Notre équipe', 'Vos cartons sont mesurés. Notre équipe vous envoie ensuite la demande d’accord pour les préparer.'],
   attente_feu_vert: ['Votre accord est attendu', 'À vous', 'Donnez votre accord pour la préparation, ou demandez à attendre d’autres achats.'],
   autorise: ['Votre accord est enregistré', 'Notre équipe', `Merci${NB}! Notre équipe va regrouper et réemballer vos achats${NB}; vous serez prévenu(e) dès que votre devis sera prêt.`],
-  refuse_client: ['Préparation refusée', 'Notre équipe', 'Notre équipe vous contactera pour convenir avec vous de la suite de votre dossier.'],
+  refuse_client: ['Préparation refusée', 'Notre équipe', 'Notre équipe vous contactera pour convenir avec vous de la suite de votre expédition.'],
   en_preparation: ['Préparation en cours', 'Notre équipe', `Notre équipe regroupe et réemballe vos achats, puis calcule le prix final${NB}; vous serez prévenu(e) dès que votre devis sera prêt.`],
   devis_envoye: ['Devis reçu — en attente de paiement', 'À vous', 'Consultez votre devis et réglez-le selon les modalités indiquées.'],
   attente_paiement: ['Devis reçu — en attente de paiement', 'À vous', 'Consultez votre devis et réglez-le selon les modalités indiquées.'],
@@ -58,10 +59,10 @@ const STATES = {
   arrive: ['Colis au dépôt local', 'Notre équipe', `Votre colis est arrivé au dépôt local${NB}: notre équipe organise sa livraison et vous en précisera les modalités.`],
   livraison: ['Livraison en cours', 'Transporteur', 'Votre colis est en cours de livraison. La date vous sera précisée dès qu’elle sera confirmée.'],
   livre: ['Colis livré', null, `Votre colis est bien arrivé. Merci de votre confiance, et à bientôt pour votre prochain envoi${NB}!`],
-  annule: ['Dossier annulé', null, 'Les dispositions convenues avec notre équipe figurent dans vos échanges.'],
+  annule: ['Expédition annulée', null, 'Les dispositions convenues avec notre équipe figurent dans vos échanges.'],
 };
-// The cancelled dossier without any exchange: nothing to consult, a way to ask.
-const CANCELLED_WITHOUT_MESSAGES = `Pour toute question sur ce dossier, écrivez à notre équipe depuis «${NB}Messages${NB}».`;
+// The cancelled expedition without any exchange: nothing to consult, a way to ask.
+const CANCELLED_WITHOUT_MESSAGES = `Pour toute question sur cette expédition, écrivez à notre équipe depuis «${NB}Messages${NB}».`;
 
 export function clientJourney(colis, now = Date.now()) {
   const waiting = hasClientRequestedWait(colis);
@@ -76,7 +77,7 @@ export function clientJourney(colis, now = Date.now()) {
     : quoteUpdating ? ['Devis en cours de mise à jour', 'Notre équipe', `Notre équipe ajoute votre nouvelle facture au devis${NB}; vous recevrez le devis mis à jour dès qu’il sera prêt. Aucun règlement n’est demandé d’ici là.`]
     : quoteNeedsReview ? ['Devis en cours de révision', 'Notre équipe', 'Notre équipe vérifie les changements et vous transmettra un nouveau devis. Aucun règlement n’est demandé pour le devis retiré.']
     : colis.statut === 'annule' && !(colis.messages?.length > 0) ? [...STATES.annule.slice(0, 2), CANCELLED_WITHOUT_MESSAGES]
-    : STATES[colis.statut] || ['État à préciser', 'Notre équipe', 'Notre équipe confirme la prochaine étape de votre dossier.'];
+    : STATES[colis.statut] || ['État à préciser', 'Notre équipe', 'Notre équipe confirme la prochaine étape de votre expédition.'];
   const events = [
     ['Réception enregistrée', colis.dateReception], ['Demande d’accord envoyée', colis.demandeFeuVertEnvoyeeAt],
     ['Attente demandée', colis.attenteClientDate], [colis.feuVert === 'refuse' || colis.statut === 'refuse_client' ? 'Refus enregistré' : 'Accord enregistré', colis.feuVertDate],
@@ -108,7 +109,7 @@ export function needsQuoteRecalculation(colis) {
 /** One expedition belongs to one section; a withdrawn quote never requests payment. */
 export function clientWorkState(colis, client = {}) {
   const journey = clientJourney(colis);
-  if (['livre', 'annule'].includes(colis.statut) || colis.archive) return { section: 'history', kind: 'none', action: 'Consulter le dossier', journey };
+  if (['livre', 'annule'].includes(colis.statut) || colis.archive) return { section: 'history', kind: 'none', action: 'Consulter l’expédition', journey };
   const rejected = currentInvoices(colis.factures).some(invoice => invoice.rejetMotif || invoice.rejet_motif);
   // A preparation pause never dismisses an independent request for a document
   // correction or a reply, and completing either request never gives consent.
@@ -141,7 +142,7 @@ export function clientTaskExplanation(colis, client = {}, task = clientWorkState
       : 'Dès réception, notre équipe la vérifie puis prépare votre devis.';
     return `${why} ${after}`;
   }
-  if (task.kind === 'messages') return `Notre équipe vous a posé une question${NB}: votre réponse lui permet de poursuivre votre dossier.`;
+  if (task.kind === 'messages') return `Notre équipe vous a posé une question${NB}: votre réponse lui permet de poursuivre votre expédition.`;
   return '';
 }
 
@@ -167,7 +168,7 @@ const PUBLIC_NEXT = {
   receptionne: 'Mesure des cartons par l’équipe, puis demande d’accord au client.',
   mesure: 'Demande d’accord à transmettre au client avant la préparation.',
   autorise: 'Préparation des achats par l’équipe, puis envoi du devis au client.',
-  refuse_client: 'L’équipe convient avec le client de la suite du dossier.',
+  refuse_client: 'L’équipe convient avec le client de la suite de l’expédition.',
   en_preparation: 'Regroupement et réemballage des achats, puis calcul du prix final.',
   paye: 'Préparation du départ du colis.',
   expedie: 'Le colis a pris le départ vers sa destination.',
@@ -176,7 +177,7 @@ const PUBLIC_NEXT = {
   arrive: 'Le colis est au dépôt local. L’équipe organise sa livraison.',
   livraison: 'Livraison en cours. La date sera précisée lorsqu’elle sera confirmée.',
   livre: 'Le colis a été livré.',
-  annule: 'Ce dossier a été annulé.',
+  annule: 'Cette expédition a été annulée.',
 };
 
 /** Public readers are observers, never the account holder or payer. */
@@ -229,6 +230,31 @@ export function clientDate(value, { weekday = false, now = Date.now() } = {}) {
     .replace(/(\d(?:er)?) (?=\p{L})/u, `$1${NB}`);
 }
 
+/**
+ * A calendar day the client chose or agreed (« Attendre jusqu’au », the end of a subscription), on that day
+ * whatever the device's time zone: a date-only value as is, a stored instant on its Paris day (a day kept as
+ * its midnight UTC reads one day early in the Antilles otherwise). « 20 octobre », « 1er novembre ».
+ */
+export function clientDay(value, options = {}) {
+  if (!value) return null;
+  const day = isoCalendarDay(String(value)) || parisCalendarDay(value);
+  return day ? clientDate(day, options) : null;
+}
+
+/** The instant sent for a day chosen in « Attendre jusqu’au »: its midnight UTC, whatever the server's time zone. */
+export const waitUntilInstant = day => isoCalendarDay(day) ? `${day}T00:00:00Z` : null;
+
+/**
+ * The first day « Attendre jusqu’au » offers (YYYY-MM-DD): the server refuses a resumption that is not in the
+ * future (the chosen day is kept as its midnight UTC), and the device's own today is never offered either.
+ */
+export function firstWaitDay(now = Date.now()) {
+  const next = new Date(now + 86400000);
+  const utc = next.toISOString().slice(0, 10);
+  const local = `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}-${String(next.getDate()).padStart(2, '0')}`;
+  return utc > local ? utc : local;
+}
+
 // client_planned_departures: the steps where the shared tracking page shows the departure.
 export const PLANNED_DEPARTURE_STATUSES = ['autorise', 'en_preparation', 'devis_envoye', 'attente_paiement', 'paye', 'expedie'];
 export function plannedDepartureShown(colis) {
@@ -246,6 +272,21 @@ export function plannedDepartureMessage(colis, departure = {}, now = Date.now())
     : { kind: 'date', label: `Départ prévu${NB}:`, day, note: 'Il s’agit du départ, pas de la date de livraison.' };
   if (colis.statut === 'expedie') return null;
   return { kind: 'pending', text: `Votre date de départ n’est pas encore fixée${NB}: elle s’affichera ici dès que notre équipe l’aura confirmée.` };
+}
+
+/**
+ * The departure line of the shared tracking page, by the rule of client_planned_departures: before the
+ * departure, a day still to come (Paris) of a departure that has not left; once shipped, the day of the
+ * departure that has left (« Départ du »). A past, stale or archived day is never presented as planned.
+ */
+export function publicDeparture(colis, now = Date.now()) {
+  const day = isoCalendarDay(String(colis?.eta ?? '').slice(0, 10));
+  if (!day || !PLANNED_DEPARTURE_STATUSES.includes(colis?.statut)) return null;
+  const departed = ['parti', 'arrive'].includes(colis.envoiStatut);
+  const label = clientDate(day, { weekday: true, now });
+  if (colis.statut === 'expedie') return departed ? { label: 'Départ du', day: label } : null;
+  if (departed || colis.envoiStatut === 'archive' || day < parisCalendarDay(now)) return null;
+  return { label: `Départ prévu${NB}:`, day: label };
 }
 
 const NUMBER = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 2 });
