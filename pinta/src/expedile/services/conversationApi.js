@@ -19,11 +19,11 @@ export async function setConversationState(colis, state) {
 export async function assignColisWork(colis, values) {
   const { data, error } = await supabase.rpc('assign_colis_work', {
     p_colis_id: colis.id,
-    p_responsible_staff_id: Object.hasOwn(values, 'responsibleStaffId') ? values.responsibleStaffId : colis.responsibleStaffId ?? null,
-    p_next_action: Object.hasOwn(values, 'nextAction') ? values.nextAction : colis.nextAction ?? null,
-    p_next_action_at: Object.hasOwn(values, 'nextActionAt') ? values.nextActionAt : colis.nextActionAt ?? null,
+    p_responsible_staff_id: Object.prototype.hasOwnProperty.call(values, 'responsibleStaffId') ? values.responsibleStaffId : colis.responsibleStaffId ?? null,
+    p_next_action: Object.prototype.hasOwnProperty.call(values, 'nextAction') ? values.nextAction : colis.nextAction ?? null,
+    p_next_action_at: Object.prototype.hasOwnProperty.call(values, 'nextActionAt') ? values.nextActionAt : colis.nextActionAt ?? null,
     p_expected_updated_at: colis.updatedAt,
-    p_action_changed: Object.hasOwn(values, 'nextAction') || Object.hasOwn(values, 'nextActionAt'),
+    p_action_changed: Object.prototype.hasOwnProperty.call(values, 'nextAction') || Object.prototype.hasOwnProperty.call(values, 'nextActionAt'),
   });
   if (error) throw error;
   return data;

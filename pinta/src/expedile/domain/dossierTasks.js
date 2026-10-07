@@ -72,7 +72,7 @@ export function resolveDossierTask(dossier = {}, search = '', workActions = [], 
   const action = workActions.find(item => item.id === params.get('action') && (item.colis_id || item.colisId) === dossier.id);
   const section = params.get('section');
   if (section === 'devis' && action?.kind === 'documents') return 'documents';
-  if (Object.hasOwn(DOSSIER_TASKS, section)) return section;
+  if (Object.prototype.hasOwnProperty.call(DOSSIER_TASKS, section)) return section;
   const actionTask = { documents: 'documents', quote: 'devis', preparation: 'preparation', departure: 'expedition' }[action?.kind];
   if (actionTask) return actionTask;
   if (action?.kind === 'reception') return dossier.statut === 'receptionne' ? 'reception' : 'accord';
@@ -84,7 +84,7 @@ export function resolveDossierTask(dossier = {}, search = '', workActions = [], 
 export function dossierTaskUrl(dossierId, task, search = '', options = {}) {
   const params = new URLSearchParams(search);
   params.delete('invoice'); params.delete('action'); params.delete('onglet'); params.delete('modifier');
-  const section = options.invoiceId ? 'documents' : Object.hasOwn(DOSSIER_TASKS, task) ? task : 'reception';
+  const section = options.invoiceId ? 'documents' : Object.prototype.hasOwnProperty.call(DOSSIER_TASKS, task) ? task : 'reception';
   params.set('section', section);
   if (options.edit && ['reception', 'preparation', 'devis'].includes(section)) params.set('modifier', section);
   if (options.invoiceId) params.set('invoice', options.invoiceId);

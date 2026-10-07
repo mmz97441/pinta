@@ -421,3 +421,7 @@ html.dark { --unread-bg: #23313A; --unread-hover: #2A3B46; --unread-accent: #C4D
 .stretched-link:focus-visible::after { outline: 3px solid var(--brand-gold); outline-offset: 2px; }
 /* The desktop navigation of the client portal, on the navy header. */
 .client-top-nav a[aria-current='page'] { color: #FFFFFF; box-shadow: inset 0 -3px 0 #E8C779; }
+
+/* Safari before 15.4 ignores dvh: the same rule first sets vh, which newer browsers then replace. */
+.h-\[100dvh\] { height: 100vh; height: 100dvh; }
+.min-h-\[100dvh\] { min-height: 100vh; min-height: 100dvh; }

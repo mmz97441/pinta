@@ -54,6 +54,6 @@ export function revisionHasQuote(colis) {
   // Saving measurements also sets devisBrouillon=true. That flag, an initial
   // zero or a retired quote's version stamp alone does not prove a draft quote.
   return Boolean(Number.isFinite(total) && (total > 0 || total === 0 && Number(colis.quoteVersion) > 0)
-    || snapshot && (Object.hasOwn(snapshot, 'inputs') || Object.hasOwn(snapshot, 'amounts'))
+    || snapshot && (Object.prototype.hasOwnProperty.call(snapshot, 'inputs') || Object.prototype.hasOwnProperty.call(snapshot, 'amounts'))
     || colis.payplugPaymentId || colis.payplugPaymentUrl || ['devis_envoye', 'attente_paiement'].includes(colis.statut));
 }

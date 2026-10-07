@@ -39,7 +39,7 @@ const filePresent = invoice => Boolean(text(invoice.fichier || invoice.fichierUr
 export function buildDossierOverview(dossier = {}, { client = {}, envois = [], can = () => false, now = Date.now() } = {}) {
   const documentsVisible = DOCUMENT_PERMISSIONS.some(can);
   const financeVisible = canSeeDossierFinances(can);
-  const knownStatus = Object.hasOwn(STATUTS, dossier.statut);
+  const knownStatus = Object.prototype.hasOwnProperty.call(STATUTS, dossier.statut);
   const closed = dossier.archive || ['annule', 'livre'].includes(dossier.statut);
   const stopped = dossier.archive || dossier.statut === 'annule';
   const stoppedSummary = dossier.archive ? 'Dossier archivé · aucune action attendue' : 'Dossier annulé · aucune action attendue';

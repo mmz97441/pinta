@@ -354,7 +354,7 @@ export function dossierTableMissingAmountLabel(payment, key) {
 /** Export has a strict view allowlist, even if an unexpected descriptor is
  * supplied. It cannot fall back to the old all-fields/client-contact export. */
 export function dossierTableExportColumns(view, columns) {
-  if (!Object.hasOwn(exportKeys, view) || !Array.isArray(columns)) throw new Error('La vue et ses colonnes doivent être précisées avant l’export.');
+  if (!Object.prototype.hasOwnProperty.call(exportKeys, view) || !Array.isArray(columns)) throw new Error('La vue et ses colonnes doivent être précisées avant l’export.');
   const seenKeys = new Set(), seenLabels = new Set();
   return columns.filter(column => {
     if (!exportKeys[view].includes(column?.key) || seenKeys.has(column.key)) return false;

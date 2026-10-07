@@ -55,7 +55,7 @@ export function resolveLineDuty(line, category, destinationCode) {
   if (!validDutyRates(duty.rates)) errors.push('Renseignez les deux taux d’octroi de mer entre 0 et 100 %.');
   const corrected = !validDutyRates(duty.baseRates) || duty.rates?.om !== duty.baseRates.om || duty.rates?.omr !== duty.baseRates.omr;
   if (corrected && !String(duty.overrideReason || '').trim()) errors.push('Indiquez le motif de la correction des taux.');
-  return { ok: !errors.length, rates: duty.rates || null, customs: structuredClone(duty), errors };
+  return { ok: !errors.length, rates: duty.rates || null, customs: JSON.parse(JSON.stringify(duty)), errors };  // plain JSON data; structuredClone needs Safari 15.4
 }
 
 /** Prefer the frozen classification on manifests and published quote exports. */

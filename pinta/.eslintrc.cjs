@@ -13,7 +13,11 @@ const missingInSafari14 = [
 ].flatMap(([name, instead]) => ['name', 'value'].map(key => ({
   selector: `CallExpression[callee.type='MemberExpression'][callee.property.${key}='${name}']`,
   message: `${name}() n’existe pas dans Safari 14, cible du build (vite.config.js) : ${instead}.`,
-})));
+}))).concat([
+  { selector: "CallExpression[callee.object.name='Object'][callee.property.name='hasOwn']", message: 'Object.hasOwn() n’existe pas dans Safari 14 : utilisez Object.prototype.hasOwnProperty.call(objet, clé).' },
+  { selector: "CallExpression[callee.name='structuredClone']", message: 'structuredClone() n’existe pas dans Safari 14 : copiez les données JSON avec JSON.parse(JSON.stringify(valeur)).' },
+  { selector: "MemberExpression[property.name='size'][object.type='NewExpression'][object.callee.name='URLSearchParams']", message: 'URLSearchParams.size n’existe pas avant Safari 17 : testez params.toString().' },
+]);
 
 module.exports = {
   root: true,

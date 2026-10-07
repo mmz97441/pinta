@@ -494,7 +494,8 @@ export default function StaffColisPage() {
     if (!selectedFromUrl) return;
     const params = new URLSearchParams(location.search);
     params.delete('dossier');
-    const back = `${location.pathname}${params.size ? `?${params}` : ''}`;
+    const query = params.toString(); // URLSearchParams.size needs Safari 17
+    const back = `${location.pathname}${query ? `?${query}` : ''}`;
     navigate(`/colis/${encodeURIComponent(selectedFromUrl)}?${new URLSearchParams({ returnTo: back })}`, { replace: true });
   }, [selectedFromUrl, location.pathname, location.search, navigate]);
   // A tab opens with its own remembered grouping, not the previous tab's.
