@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   checkedByLine, checkFeedback, checkMoment, checkerName, clearedFeedback, controlTotals, countFeedback, countIssue,
   dossierControl, elsewhereFeedback, expectedParcelCount, LAYOUT_NOTICE, loadedDossiers, mergeLoadingCheck,
-  parisClockLabel, readScannedCode, refusedFeedback, severalFeedback, unreadableFeedback,
+  parisClockLabel, readScannedCode, refusedFeedback, severalFeedback, trailingParcelCode, unreadableFeedback,
 } from './loadingControl.js';
 
 // 14 h 32 in Paris on Wednesday 7 October 2026 (summer time: UTC+2).
@@ -119,6 +119,15 @@ test('a scan answers with the server counts when the dossier was prepared again 
   assert.equal(checkFeedback(scan, { status: 'recorded', checked: 3, expected: 3 }, [check('d-two', 1, 3)]).detail, 'Tous ses colis sont vérifiés : expédition prête à partir.');
   // Without counts (an older answer), the screen's own checks.
   assert.equal(checkFeedback(readScannedCode('EXP-2YE537-1-2', [TWO]), { status: 'recorded' }, [check('d-two', 1, 2)]).detail, 'Il reste 1 colis à vérifier pour ce dossier.');
+});
+
+test('a label scanned into a text field is told apart from what the person wrote', () => {
+  assert.deepEqual(trailingParcelCode('Colis non remisEXP-2YE537-1-2'), { text: 'EXP-2YE537-1-2', start: 15 });
+  assert.deepEqual(trailingParcelCode('EXP-2YE537-2-2'), { text: 'EXP-2YE537-2-2', start: 0 });
+  assert.deepEqual(trailingParcelCode('Paiement attendu exp-1042-1-1'), { text: 'exp-1042-1-1', start: 17 });
+  assert.deepEqual(trailingParcelCode('Report EXP)éYE("è)&)é'), { text: 'EXP)éYE("è)&)é', start: 7 }, 'A scanner set to an English keyboard.');
+  for (const text of ['', 'Paiement attendu', 'Voir EXP-2YE537', 'EXP-2YE537 · Colis 1/2', 'EXP-2YE537-1-2 manquant', 'Colis EXP-2YE537-3-2', null])
+    assert.equal(trailingParcelCode(text), null, String(text));
 });
 
 test('a parcel of another departure, of none, shipped or unknown is set aside with the reason', () => {

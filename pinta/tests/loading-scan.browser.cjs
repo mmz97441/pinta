@@ -326,6 +326,12 @@ async function main() {
       await review(f).getByRole('alert').filter({ hasText: 'Indiquez le motif du report des autres dossiers.' }).waitFor();
       assert.equal(calls(f, 'confirm_departure').length, 0);
       await review(f).getByRole('textbox', { name: 'Motif du report des dossiers non cochés' }).fill('Colis non remis au transporteur');
+      await until(() => review(f).getByRole('alert').count(), 0, 'The reason asked for, once written, is no longer asked for');
+      // A label scanned while the reason has the focus is checked as a scan, never written into the reason.
+      await scan(f, 'EXP-7RT5WQ-1-3');
+      await until(() => checksOf(f, D.three), [[1, 3, 'scan']], 'A label scanned from the reason field is checked');
+      await until(() => review(f).getByRole('textbox', { name: 'Motif du report des dossiers non cochés' }).inputValue(), 'Colis non remis au transporteur', 'The reason keeps only what was written');
+      await until(() => focusedIsField(f), true, 'The scan field takes the focus back');
       assert.equal(normalize(await review(f).getByText(/expéditions? cochées?/).innerText()), '2 expéditions cochées · 3 à reporter.');
       await tallShot(f, 'ready-to-confirm-1440');
       await confirmButton().click();
@@ -371,6 +377,10 @@ async function main() {
       await review(f).getByRole('alert').filter({ hasText: 'Contrôle incomplet : EXP-4KM2PQ (0/1 colis vérifié). Scannez ou comptez ses colis, ou reportez-le.' }).waitFor();
       await until(() => review(f).getByRole('checkbox', { name: /EXP-4KM2PQ/ }).isChecked(), false, 'Read again after the refusal');
       assert.equal(f.tables.envois.find(row => row.id === TODAY).statut, 'planifie');
+      // Scanned again: the refusal no longer describes the loading and leaves.
+      await scan(f, 'EXP-4KM2PQ-1-1');
+      await until(() => review(f).getByRole('checkbox', { name: /EXP-4KM2PQ/ }).isChecked(), true, 'Scanned again');
+      await until(() => review(f).getByRole('alert').count(), 0, 'The former refusal leaves once the loading changed');
       const reads = calls(f, 'get_loading_checks').length;
       assert.ok(reads >= 4, `Checks read regularly (${reads})`);
     });

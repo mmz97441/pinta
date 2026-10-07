@@ -156,10 +156,11 @@ function CountDialog({ dossier, expected, envoiId, onClose, onSaved, onStale }) 
  * confirms set aside; `canConfirm`: the dossiers carry the boxes of the confirmation, otherwise their state only.
  * Callbacks: `onCheck(check)` a recorded check, `onCleared(colisId)` a dossier's checks removed, `onRefreshChecks()`
  * and `onReload()` (resolves the dossiers read again) return promises, `onToggle(colisId, checked)`,
- * `onPendingChange(count)` the checks still being recorded.
+ * `onPendingChange(count)` the checks still being recorded. `scanRef` receives the function handling a code scanned
+ * elsewhere on the page (a label scanned while the focus was in another field), as the scan field does.
  */
 export default function LoadingScanPanel({
-  envoi, dossiers, checks, checksError, canConfirm, excluded = [], busy, inputRef, returnTo, now,
+  envoi, dossiers, checks, checksError, canConfirm, excluded = [], busy, inputRef, scanRef, returnTo, now,
   onToggle, onCheck, onCleared, onRefreshChecks, onReload, onPendingChange,
 }) {
   const { clients, data, envois, teamUsers, setCfm } = useApp();
@@ -277,6 +278,11 @@ export default function LoadingScanPanel({
   };
 
   useEffect(() => { onPendingChange?.(pending); }, [pending]);
+  useEffect(() => {
+    if (!scanRef) return undefined;
+    scanRef.current = (text) => { primeAudio(); enqueue(text, 'scan'); };
+    return () => { scanRef.current = null; };
+  });
   // After a count, the field takes the focus back once the dialog has given it to its opener.
   useEffect(() => {
     if (counting || !focusScan.current) return;

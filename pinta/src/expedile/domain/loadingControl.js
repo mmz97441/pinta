@@ -128,6 +128,19 @@ export function readScannedCode(text, dossiers = []) {
   return { kind: 'parcel', dossier, index: code.index, count: code.count, bare: false, ...base };
 }
 
+/**
+ * A label scanned while the focus is in a text field: the handheld scanner types its code at the caret
+ * (« Colis non remisEXP-2YE537-1-2 »), then Enter. { text, start } when `before` (the text before the caret) ends
+ * with a full parcel code (reference, parcel and count, as the labels hold it), null otherwise: a reference written
+ * in a sentence, or « EXP-2YE537 · Colis 1/2 » copied from a label, stays text.
+ */
+export function trailingParcelCode(before) {
+  const match = /(EXP\S*)$/i.exec(String(before ?? ''));
+  if (!match) return null;
+  const code = parseParcelCode(match[1]);
+  return code.ok && code.index !== null ? { text: match[1], start: match.index } : null;
+}
+
 const reasonText = readiness => readiness.reasons.map(reason => reason.text.charAt(0).toLocaleLowerCase('fr') + reason.text.slice(1)).join(', ');
 const remainingLine = remaining => `Il reste ${plural(remaining, 'colis', 'colis')} à vérifier pour ce dossier.`;
 const completeLine = dossier => {

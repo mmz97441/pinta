@@ -4,7 +4,7 @@ import { AlertTriangle, Archive, CalendarCheck, CalendarPlus, Check, CheckCircle
 import usePersistentDraft from '../../hooks/usePersistentDraft';
 import { useMinuteNow } from '../../hooks/useMinuteNow';
 import { departureReadiness } from '../../domain/departureReadiness';
-import { loadedDossiers, mergeLoadingCheck } from '../../domain/loadingControl';
+import { loadedDossiers, mergeLoadingCheck, trailingParcelCode } from '../../domain/loadingControl';
 import { departureDayLabel, isoCalendarDay, parisCalendarDay } from '../../domain/departureGroups';
 import { subscriptionEndNote, wishesAfterSubscription, wishesSubscriptionConfirmation } from '../../domain/departureWishes';
 import { closingLabel, departureDefaultClosing, destinationName, OPEN_DEPARTURE_STATUSES } from '../../domain/departurePlanning';
@@ -101,6 +101,19 @@ export default function StaffDepartures({ embedded = false }) {
   });
   const deferredReason = selection[loadingId]?.reason || '';
   const setDeferredReason = reason => setSelection(previous => ({ ...previous, [loadingId]: { ...previous[loadingId], reason } }));
+  // A label scanned while the focus is in the reason (the scanner types its code, then Enter): checked as a scan,
+  // never kept in the reason, and the scan field takes the focus back for the next labels.
+  const reasonKeyDown = (event) => {
+    if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent?.isComposing || !scanCode.current) return;
+    const field = event.currentTarget;
+    if (field.selectionStart !== field.selectionEnd) return;
+    const found = trailingParcelCode(field.value.slice(0, field.selectionStart));
+    if (!found) return;
+    event.preventDefault();
+    setDeferredReason(`${field.value.slice(0, found.start)}${field.value.slice(field.selectionEnd)}`.trim());
+    scanCode.current(found.text);
+    scanInput.current?.focus({ preventScroll: true });
+  };
   const [manifest, setManifest] = useState(null);
   const [editing, setEditing] = useState(null);
   const [editErrors, setEditErrors] = useState({});
@@ -118,6 +131,8 @@ export default function StaffDepartures({ embedded = false }) {
   const editDate = useRef(null);
   const reviewHeading = useRef(null);
   const scanInput = useRef(null);
+  // The loading panel's handling of a scanned code (LoadingScanPanel fills it).
+  const scanCode = useRef(null);
   const reviewRef = useRef(review);
   reviewRef.current = review;
   // Each reading of the checks has its number: an older answer never replaces a newer one or a recorded check.
@@ -249,7 +264,12 @@ export default function StaffDepartures({ embedded = false }) {
       throw issue;
     }
   }, []);
-  const refreshChecks = () => (reviewRef.current ? loadChecks(reviewRef.current.envoi.id) : Promise.resolve([]));
+  // After a scan, a count or a clearing on this screen: a refusal of the confirmation shown before (« Contrôle
+  // incomplet… ») no longer describes the loading; the next confirmation checks it again.
+  const refreshChecks = () => {
+    setScopeError('review', '');
+    return reviewRef.current ? loadChecks(reviewRef.current.envoi.id) : Promise.resolve([]);
+  };
   const recordedCheck = check => {
     checksSequence.current += 1;
     setChecks(previous => (previous.envoiId === reviewRef.current?.envoi.id ? { ...previous, rows: mergeLoadingCheck(previous.rows, check) } : previous));
@@ -462,12 +482,12 @@ export default function StaffDepartures({ embedded = false }) {
       <p className="text-sm text-gray-600">Scannez l’étiquette de chaque colis remis au transporteur, ou comptez à la main les colis d’un dossier. {reviewCanConfirm ? 'Un dossier est coché dès que tous ses colis sont vérifiés ; les dossiers non cochés seront à reprogrammer.' : 'Un dossier est prêt à partir dès que tous ses colis sont vérifiés.'}</p>
       <LoadingScanPanel
         envoi={review.envoi} dossiers={review.dossiers} checks={reviewChecks} checksError={checks.envoiId === review.envoi.id ? checks.error : null}
-        canConfirm={reviewCanConfirm} excluded={excluded} busy={busy} inputRef={scanInput} returnTo={returnTo} now={now}
+        canConfirm={reviewCanConfirm} excluded={excluded} busy={busy} inputRef={scanInput} scanRef={scanCode} returnTo={returnTo} now={now}
         onToggle={(id, ticked) => setAside(id, !ticked)} onCheck={recordedCheck} onCleared={clearedChecks}
         onRefreshChecks={refreshChecks} onReload={reloadReview} onPendingChange={setScanPending}
       />
       {reviewCanConfirm ? <>
-        <label className="block text-sm text-gray-700">Motif du report des dossiers non cochés<textarea value={deferredReason} onChange={event => setDeferredReason(event.target.value)} className={`${SEARCH_FIELD} py-2`} maxLength={500} /></label>
+        <label className="block text-sm text-gray-700">Motif du report des dossiers non cochés<textarea value={deferredReason} onChange={event => { setDeferredReason(event.target.value); if (errors.review) setScopeError('review', ''); }} onKeyDown={reasonKeyDown} className={`${SEARCH_FIELD} py-2`} maxLength={500} /></label>
         <p className="text-sm font-semibold">{plural(reviewLoaded.length, 'expédition cochée', 'expéditions cochées')} · {review.dossiers.length - reviewLoaded.length} à reporter.{scanPending > 0 ? ' Contrôles en cours d’enregistrement…' : ''}</p>
       </> : <p className="departures-reason flex items-start gap-2"><Info size={16} aria-hidden="true" className="mt-0.5 shrink-0" />Vos contrôles sont enregistrés pour toute l’équipe. La confirmation du départ est réservée à la direction et aux personnes autorisées à modifier les départs et à expédier les colis : prévenez-les quand tous les colis sont vérifiés.</p>}
       {errors.review && <p role="alert" className="departures-error"><AlertTriangle size={16} aria-hidden="true" />{errors.review}</p>}
