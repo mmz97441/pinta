@@ -59,21 +59,24 @@ function subpaths(data) {
 /** A fill colour of pdf.js (« #rrggbb ») that a scanner reads as white: the light bands of the label. */
 const lightFill = hex => { const value = parseInt(String(hex).slice(1), 16); return ((value >> 16) & 255) + ((value >> 8) & 255) + (value & 255) > 3 * 160; };
 /**
- * The page's text items (no-break spaces read as spaces), the box of each one (ascent 0,75 em, descent 0,25 em) and
- * each filled subpath as a rectangle with its colour (`light`), in millimetres from the top left.
+ * The page's text items (no-break spaces read as spaces), the box and the size in points of each one (ascent 0,75 em,
+ * descent 0,25 em), each filled subpath as a rectangle with its colour (`light`), in millimetres from the top left, and
+ * every fill and stroke colour the page sets (« #rrggbb »).
  */
 async function readPage(pdf, number) {
   const page = await pdf.getPage(number);
   const height = page.view[3];
   const items = (await page.getTextContent()).items.filter(item => item.str.trim());
   const text = items.map(item => item.str.replace(/\u00a0/g, ' '));
-  const boxes = items.map(item => ({ text: item.str, left: item.transform[4] / MM, right: (item.transform[4] + item.width) / MM,
+  const boxes = items.map(item => ({ text: item.str, size: item.height, left: item.transform[4] / MM, right: (item.transform[4] + item.width) / MM,
     top: (height - item.transform[5] - 0.75 * item.height) / MM, bottom: (height - item.transform[5] + 0.25 * item.height) / MM }));
   const operators = await page.getOperatorList();
   const rects = [];
+  const colors = new Set();
   let fill = '#000000';
   operators.fnArray.forEach((fn, index) => {
-    if (fn === pdfjs.OPS.setFillRGBColor) { fill = operators.argsArray[index][0]; return; }
+    if (fn === pdfjs.OPS.setStrokeRGBColor) { colors.add(operators.argsArray[index][0]); return; }
+    if (fn === pdfjs.OPS.setFillRGBColor) { fill = operators.argsArray[index][0]; colors.add(fill); return; }
     if (fn !== pdfjs.OPS.constructPath) return;
     const [paint, [path]] = operators.argsArray[index];
     if (paint !== pdfjs.OPS.fill && paint !== pdfjs.OPS.eoFill) return;
@@ -82,7 +85,7 @@ async function readPage(pdf, number) {
       rects.push({ left: Math.min(...xs) / MM, right: Math.max(...xs) / MM, top: (height - Math.max(...ys)) / MM, bottom: (height - Math.min(...ys)) / MM, light: lightFill(fill) });
     }
   });
-  return { view: page.view, text, boxes, rects };
+  return { view: page.view, text, boxes, rects, colors };
 }
 /** The QR code's dark modules, sampled at each module's centre from the rectangles drawn in its area, and its place. */
 function sampleQr(rects, size) {
@@ -236,6 +239,18 @@ test('the PDF: a 100 × 150 mm page per parcel, its text, a QR code of the code 
     assert.ok(bars.unit >= 0.3, `module ${bars.unit.toFixed(3)} mm`);
     assert.ok(bars.left >= 10 * bars.unit && 100 - bars.right >= 10 * bars.unit, 'quiet zones');
   }
+});
+
+test('the label prints in pure black on white: no tint for a 203 dpi monochrome printer to dot, no text under 7 pt', async () => {
+  // Navy, a grey band or grey text come out of such a printer as a dot pattern in which small text breaks up.
+  const { labels } = parcelLabels([prepared()], { getClient });
+  const page = await readPage(await readPdf(buildParcelLabelsPdf(labels).doc), 1);
+  assert.deepEqual([...page.colors].filter(color => !['#000000', '#ffffff'].includes(color)), [], 'black and white only');
+  assert.ok(page.colors.has('#000000') && page.colors.has('#ffffff'), 'white text on the black header');
+  assert.deepEqual(page.boxes.filter(box => box.size < 6.99).map(box => `${box.text} (${box.size.toFixed(2)} pt)`), [], 'no text under 7 pt');
+  // White text on the black header is bold and whole: the brand line is not cut short.
+  for (const text of ['EXPEDÎLE', 'Réexpédition Paris – DOM-TOM', 'NORD', 'LA RÉUNION', 'EXPÉDITEUR', 'DESTINATAIRE', 'Instructions : Sonner deux fois'])
+    assert.ok(page.text.includes(text), `« ${text} » in ${JSON.stringify(page.text)}`);
 });
 
 test('long addresses, a company and a long name stay on the label, above the barcode', async () => {

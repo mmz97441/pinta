@@ -21,9 +21,11 @@ import { pdfText } from './pdfFormat.js';
 
 const PAGE = { width: 100, height: 150 };
 const MARGIN = 4;
-const NAVY = [27, 58, 75];
+// Pure black on white only: a 203 dpi monochrome (thermal) printer turns any tint (a navy band, a grey
+// background, grey text) into a dot pattern in which small text breaks up. Text printed in white on the
+// black header is bold and at least 7.5 pt; no text is under 7 pt.
 const INK = [0, 0, 0];
-const MUTED = [90, 90, 90];
+const PAPER = [255, 255, 255];
 const QR_SIZE = 32; // mm, the symbol itself; its quiet zone is the white around it
 // Where the QR code sits: four modules of white (6,1 mm for the 21 modules of these codes)
 // stay clear of the sender line above, of the left column and of the label's right edge.
@@ -201,25 +203,23 @@ function drawLabel(doc, label) {
   const right = W - MARGIN;
   const { recipient } = label;
 
-  // Header: the delivery sector of La Réunion, the brand and the destination.
-  doc.setFillColor(...NAVY);
+  // Header, white on black: the delivery sector of La Réunion, the brand and the destination.
+  doc.setFillColor(...INK);
   doc.rect(0, 0, W, 12, 'F');
   let brandX = MARGIN;
   if (recipient.sector) {
-    doc.setFillColor(255, 255, 255);
+    doc.setFillColor(...PAPER);
     doc.roundedRect(3, 2, 21, 8, 1.2, 1.2, 'F');
-    write(doc, recipient.sector, 13.5, 7.7, { size: 11, minSize: 8, maxWidth: 19, bold: true, color: NAVY, align: 'center' });
+    write(doc, recipient.sector, 13.5, 7.7, { size: 11, minSize: 8, maxWidth: 19, bold: true, align: 'center' });
     brandX = 27;
   }
-  write(doc, 'EXPEDÎLE', brandX, 6.2, { size: 12, bold: true, color: [255, 255, 255], maxWidth: 36 });
-  write(doc, 'Réexpédition Paris – DOM-TOM', brandX, 10, { size: 6.5, color: [255, 255, 255], maxWidth: 40 });
-  if (recipient.destination) write(doc, recipient.destination, right, 8, { size: 11, minSize: 7, bold: true, color: [255, 255, 255], maxWidth: W - brandX - 42, align: 'right' });
+  write(doc, 'EXPEDÎLE', brandX, 6.2, { size: 12, bold: true, color: PAPER, maxWidth: 36 });
+  write(doc, 'Réexpédition Paris – DOM-TOM', brandX, 10, { size: 7.5, bold: true, color: PAPER, maxWidth: 40 });
+  if (recipient.destination) write(doc, recipient.destination, right, 8, { size: 11, minSize: 7, bold: true, color: PAPER, maxWidth: W - brandX - 42, align: 'right' });
 
-  // Sender.
-  doc.setFillColor(243, 244, 246);
-  doc.rect(0, 12, W, 7.5, 'F');
-  write(doc, 'EXPÉDITEUR', MARGIN, 14.9, { size: 5.5, bold: true, color: MUTED });
-  write(doc, SENDER, MARGIN, 18, { size: 7, minSize: 6, color: [55, 55, 55] });
+  // Sender. No band and no rule under it: the QR code's quiet zone starts just below.
+  write(doc, 'EXPÉDITEUR', MARGIN, 14.9, { size: 7, bold: true });
+  write(doc, SENDER, MARGIN, 18, { size: 7, minSize: 6 });
 
   // The parcel: reference and position, large; casier and its own measures. The QR code on the right.
   const column = 50; // the QR code's quiet zone starts beyond it
@@ -245,15 +245,15 @@ function drawLabel(doc, label) {
 
   // Recipient, for the driver at destination. Lines that cannot fit above the barcode are left out
   // (the delivery instructions first), never drawn over it.
-  write(doc, 'DESTINATAIRE', MARGIN, 68, { size: 6, bold: true, color: MUTED });
+  write(doc, 'DESTINATAIRE', MARGIN, 68, { size: 7, bold: true });
   const rows = [];
   if (recipient.company) rows.push({ text: recipient.company, size: 15, minSize: 10, bold: true, height: 6.2 });
   if (recipient.name) rows.push(recipient.company ? { text: recipient.name, size: 11, minSize: 8, height: 4.8 } : { text: recipient.name, size: 15, minSize: 10, bold: true, height: 6.2 });
   rows.push(...addressRows(doc, recipient.lines));
   rows.push({ text: `${recipient.postcode} ${recipient.town}`, size: 13, minSize: 9, bold: true, height: 5.8 });
-  if (recipient.destination) rows.push({ text: recipient.destination, size: 15, minSize: 10, bold: true, color: NAVY, height: 6.4 });
+  if (recipient.destination) rows.push({ text: recipient.destination, size: 15, minSize: 10, bold: true, height: 6.4 });
   if (recipient.phones.length) rows.push({ text: `Tél. ${recipient.phones.join(' · ')}`, size: 10.5, minSize: 8, height: 4.8 });
-  if (recipient.instructions) rows.push({ text: `Instructions : ${recipient.instructions}`, size: 8, minSize: 7, height: 4, color: [55, 55, 55], optional: true });
+  if (recipient.instructions) rows.push({ text: `Instructions : ${recipient.instructions}`, size: 8, minSize: 7, height: 4, optional: true });
   let y = 68;
   const bottom = 111.5;
   for (const row of rows) {
