@@ -122,14 +122,19 @@ export function parcelLabels(dossiers, { getClient } = {}) {
   return { labels, skipped };
 }
 
-/** « EXP-2YE537, EXP-3HF210 : étiquettes disponibles après l’optimisation des colis », one line per reason. */
-export function skippedLabelLines(skipped) {
+/** The dossiers left out, one group per reason in the order met: `[{ refs, message }]`. */
+export function skippedLabelGroups(skipped) {
   const byReason = new Map();
   for (const item of skipped || []) {
     const message = item.reason === 'address' && item.missing?.length ? `${LABEL_SKIP_MESSAGES.address} (${item.missing.join(', ')})` : item.message;
     byReason.set(message, [...(byReason.get(message) || []), item.ref]);
   }
-  return [...byReason].map(([message, refs]) => `${refs.join(', ')} : ${message}`);
+  return [...byReason].map(([message, refs]) => ({ refs, message }));
+}
+
+/** « EXP-2YE537, EXP-3HF210 : étiquettes disponibles après l’optimisation des colis », one line per reason. */
+export function skippedLabelLines(skipped) {
+  return skippedLabelGroups(skipped).map(({ refs, message }) => `${refs.join(', ')} : ${message}`);
 }
 
 // ── Drawing ─────────────────────────────────────────────────────────────────
@@ -290,16 +295,18 @@ export function buildParcelLabelsPdf(labels) {
  * Builds the labels of `dossiers` and opens them, inside the click that asked for them:
  * in `target` when the click already opened a window (window.open('', '_blank') before
  * loading this module), else in a new window, else as a download.
- * Returns `{ count, dossiers, skipped, lines, method: 'window' | 'download' | null, filename }`
- * (`lines`: skippedLabelLines): nothing printable opens nothing (and closes `target`).
+ * Returns `{ count, dossiers, skipped, lines, groups, method: 'window' | 'download' | null, filename }`
+ * (`lines`: skippedLabelLines, `groups`: the same as skippedLabelGroups, for the screens to keep each
+ * reference whole): nothing printable opens nothing (and closes `target`).
  * Throws when the document cannot be built.
  */
 export function printParcelLabels(dossiers, { getClient, target = null } = {}) {
   const { labels, skipped } = parcelLabels(dossiers, { getClient });
   const lines = skippedLabelLines(skipped);
+  const groups = skippedLabelGroups(skipped);
   if (!labels.length) {
     if (target && !target.closed) target.close();
-    return { count: 0, dossiers: 0, skipped, lines, method: null, filename: null };
+    return { count: 0, dossiers: 0, skipped, lines, groups, method: null, filename: null };
   }
   const { doc, filename } = buildParcelLabelsPdf(labels);
   const url = URL.createObjectURL(doc.output('blob'));
@@ -318,5 +325,5 @@ export function printParcelLabels(dossiers, { getClient, target = null } = {}) {
   }
   // The opened tab keeps its copy; the address is released once it has surely loaded.
   setTimeout(() => URL.revokeObjectURL(url), 10 * 60 * 1000);
-  return { count: labels.length, dossiers: new Set(labels.map(label => label.dossierId)).size, skipped, lines, method, filename };
+  return { count: labels.length, dossiers: new Set(labels.map(label => label.dossierId)).size, skipped, lines, groups, method, filename };
 }

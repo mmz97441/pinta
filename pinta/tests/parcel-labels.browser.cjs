@@ -1,8 +1,10 @@
 /* Outgoing parcel labels in the browser: « Imprimer les étiquettes (N colis) » once the optimisation is saved, with
  * the permission « Imprimer les étiquettes » and hidden without it; its reprint after payment; the « Étiquettes »
- * action of the /colis selection with the dossiers left out; an incomplete address, whose client record link is offered
- * only to the people allowed to change it; the window opened by the click itself while the label module loads (iPad
- * Safari), the download when the window is refused, and a loading failure stated on screen.
+ * action of the /colis selection with the dossiers left out, its outcome above the buttons (nothing moves under the
+ * pointer) and its alerts toned; an incomplete address, whose client record link is offered only to the people allowed
+ * to change it; the window opened by the click itself while the label module loads (iPad Safari), styled like the app,
+ * the button keeping the keyboard focus meanwhile; the download when the window is refused, its file name whole; a
+ * loading failure stated on screen; and every outcome without a tab brought into view above the bottom navigation.
  * setup() mocks every request: nothing reaches Supabase, Telegram or PayPlug, and printing writes nothing.
  * The PDF a click creates is read back from its blob, checked with pdf.js, and its first page drawn to a PNG. */
 const { chromium } = require(process.env.PINTA_PLAYWRIGHT_MODULE || 'playwright');
@@ -136,6 +138,34 @@ async function printWithoutWrites(f, click, settled) {
   assert.deepEqual(f.requests.slice(before).filter(request => request.method !== 'GET' && request.path !== BACKGROUND_REFRESH), [], 'printing labels writes nothing');
 }
 async function closePopups(f) { for (const page of f.context.pages()) if (page !== f.page) await page.close(); }
+/**
+ * Scrolls the page so that `locator` ends `gap` px above the bottom of what is visible: the top of the phone's bottom
+ * navigation, else the window's bottom. Returns that limit; the outcome under the button then starts out of view.
+ */
+async function nearTheBottom(f, locator, gap = 12) {
+  await locator.scrollIntoViewIfNeeded();
+  const { limit, bottom } = await locator.evaluate((node, gap) => {
+    const nav = document.querySelector('[data-staff-bottom-nav]');
+    const limit = nav && nav.getBoundingClientRect().height > 0 ? nav.getBoundingClientRect().top : innerHeight;
+    let scroller = node.parentElement;
+    while (scroller && !(scroller.scrollHeight > scroller.clientHeight + 4 && /(auto|scroll)/.test(getComputedStyle(scroller).overflowY))) scroller = scroller.parentElement;
+    (scroller || document.scrollingElement).scrollTop += node.getBoundingClientRect().bottom - (limit - gap);
+    return { limit, bottom: node.getBoundingClientRect().bottom };
+  }, gap);
+  assert.ok(bottom > limit - gap - 2 && bottom <= limit, `the button ends ${Math.round(limit - bottom)} px above the bottom limit`);
+  return limit;
+}
+/** Waits until `locator` is entirely visible between the top of the window and `limit` (a smooth scroll takes a moment). */
+async function fullyVisible(f, locator, limit) {
+  const node = await locator.elementHandle();
+  await f.page.waitForFunction(([node, limit]) => { const rect = node.getBoundingClientRect(); return rect.top >= 0 && rect.bottom <= limit + 0.5; }, [node, limit], { timeout: 8000 })
+    .catch(async () => { throw new Error(`outcome out of view: ${JSON.stringify(await node.evaluate(item => item.getBoundingClientRect().toJSON()))}, visible down to ${limit}`); });
+}
+/** The tops of the line boxes of an element's text: a single one when the text keeps to one line. */
+const lineTops = locator => locator.evaluate(node => { const range = document.createRange(); range.selectNodeContents(node); return [...new Set([...range.getClientRects()].map(rect => Math.round(rect.top)))]; });
+/** The centre of the selection bar's « Étiquettes » button, and what a second click there would hit. */
+const pointAt = button => button.evaluate(node => { const rect = node.getBoundingClientRect(); return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2, top: rect.top, left: rect.left }; });
+const hits = (f, point, button) => button.evaluate((node, { x, y }) => node.contains(document.elementFromPoint(x, y)), point);
 /** Waits until the label module that the button preloads is in memory: the next click opens the PDF itself. */
 async function labelModuleReady(f) {
   for (let attempt = 0; attempt < 100 && !f.labelChunk; attempt += 1) await f.page.waitForTimeout(100);
@@ -218,6 +248,10 @@ async function main() {
       await f.page.goto(`${base}/colis/${ids.P}?section=preparation`);
       const guidance = f.page.getByTestId('task-guidance');
       await guidance.getByRole('heading', { name: 'Préparation enregistrée', exact: true }).waitFor();
+      // Idle, the place kept for the outcome lays out no box: the card ends with its own padding under the block.
+      const room = await labelsBlock(f).evaluate(node => { const card = node.closest('[data-testid="task-guidance"]'); const style = getComputedStyle(card);
+        return Math.round(card.getBoundingClientRect().bottom - node.getBoundingClientRect().bottom - parseFloat(style.paddingBottom) - parseFloat(style.borderBottomWidth)); });
+      assert.equal(room, 0, 'nothing hangs under the idle label block');
       // Once the button's module is preloaded, the click builds the PDF and opens it itself (iPad Safari): no blank window first.
       await labelModuleReady(f);
       await printWithoutWrites(f, () => guidance.getByRole('button', { name: 'Imprimer les étiquettes (1 colis)', exact: true }).click(),
@@ -262,6 +296,13 @@ async function main() {
       // A new page: its first document.
       assertLabelPages(await pdfPages(await labelPdf(f, 1)), [{ index: 1, count: 1, size: '30 × 20 × 20 cm', weight: '3 kg' }]);
       await closePopups(f);
+      // A refused window downloads the file; its name, which carries the reference, stays whole in the bar too.
+      await f.page.evaluate(() => { window.__labels.refuse = true; });
+      const [download] = await Promise.all([f.page.waitForEvent('download'), bar(f).getByRole('button', { name: 'Étiquettes du dossier sélectionné', exact: true }).click()]);
+      assert.equal(download.suggestedFilename(), `etiquettes-${REF}.pdf`);
+      const downloaded = bar(f).getByRole('status').filter({ hasText: `1 étiquette téléchargée (etiquettes-${REF}.pdf). Ouvrez le fichier pour l’imprimer sur étiquettes 100 × 150 mm.` });
+      await downloaded.waitFor();
+      assert.deepEqual(await downloaded.locator('.keep-token').allInnerTexts(), [`(etiquettes-${REF}.pdf).`]);
     });
 
     for (const [width, theme] of [[1440, 'dark'], [390, 'light']]) await scenario(`selection-labels-and-dossiers-left-out-${width}-${theme}`, { width, theme }, async f => {
@@ -270,19 +311,35 @@ async function main() {
       await bar(f).getByText('2 dossiers sélectionnés', { exact: true }).waitFor();
       const action = bar(f).getByRole('button', { name: 'Étiquettes des 2 dossiers sélectionnés', exact: true });
       assert.equal(await action.innerText(), 'Étiquettes');
+      const before = await pointAt(action);
       await printWithoutWrites(f, () => action.click(),
         () => bar(f).getByRole('status').filter({ hasText: `1 étiquette ouverte dans un nouvel onglet. Imprimez sur étiquettes 100 × 150 mm. ${OTHER.ref} : étiquettes disponibles après l’optimisation des colis` }).waitFor());
+      // The outcome takes its own line above the buttons: « Étiquettes » stays under the pointer.
+      const after = await pointAt(action);
+      assert.ok(Math.abs(after.top - before.top) <= 1 && Math.abs(after.left - before.left) <= 6, `the button stays in place: ${JSON.stringify({ before, after })}`);
+      assert.equal(await hits(f, before, action), true, 'a second click at the same place reaches « Étiquettes »');
+      const outcome = bar(f).getByRole('status');
+      assert.ok((await outcome.boundingBox()).y + 1 < before.top, 'the outcome reads above the buttons');
+      // The reference left out moves to the next line whole, never split at its hyphen.
+      assert.deepEqual(await outcome.locator('.keep-token').allInnerTexts(), [OTHER.ref]);
+      assert.equal((await lineTops(outcome.locator('.keep-token'))).length, 1);
       assertLabelPages(await pdfPages(await labelPdf(f, 1)), [{ index: 1, count: 1, size: '30 × 20 × 20 cm', weight: '3 kg' }]);
       await closePopups(f);
       await noOverflow(f);
       await axe(f, '[aria-label="Actions sur la sélection"]');
       await f.page.screenshot({ path: path.join(output, `selection-labels-${width}-${theme}.png`) });
-      // A new selection forgets that outcome; nothing printable opens nothing and says why.
+      // A new selection forgets that outcome; nothing printable opens nothing and says why, as a warning.
       await f.page.getByRole('checkbox', { name: `Sélectionner le dossier ${REF}`, exact: true }).uncheck();
       await bar(f).getByText('1 dossier sélectionné', { exact: true }).waitFor();
       await bar(f).locator('.dossier-bulk-note').filter({ hasText: 'ouverte' }).waitFor({ state: 'detached' });
-      await bar(f).getByRole('button', { name: 'Étiquettes du dossier sélectionné', exact: true }).click();
-      await bar(f).getByRole('alert').filter({ hasText: `Aucune étiquette à imprimer. ${OTHER.ref} : étiquettes disponibles après l’optimisation des colis` }).waitFor();
+      const single = bar(f).getByRole('button', { name: 'Étiquettes du dossier sélectionné', exact: true });
+      const point = await pointAt(single);
+      await single.click();
+      const nothing = bar(f).getByRole('alert').filter({ hasText: `Aucune étiquette à imprimer. ${OTHER.ref} : étiquettes disponibles après l’optimisation des colis` });
+      await nothing.waitFor();
+      assert.equal(await nothing.getAttribute('data-tone'), 'warning');
+      assert.deepEqual(await nothing.locator('.keep-token').allInnerTexts(), [OTHER.ref]);
+      assert.equal(await hits(f, point, single), true, 'the alert does not take the place of « Étiquettes »');
       assert.equal((await labelsState(f)).opens.length, 1, 'no window for a selection without labels');
       await f.page.screenshot({ path: path.join(output, `selection-without-labels-${width}-${theme}.png`) });
     });
@@ -290,9 +347,13 @@ async function main() {
     await scenario('an-incomplete-address-prints-nothing-and-opens-the-client-record-1440-light', {}, async f => {
       f.tables.clients[0].adresse_ligne1 = null;
       await f.page.goto(`${base}/colis/${ids.P}?section=preparation`);
+      // The button at the bottom of the window: no tab opens, so the alert is brought into view.
+      const limit = await nearTheBottom(f, labelsButton(f, 1));
       await labelsButton(f, 1).click();
       const alert = labelsBlock(f).getByRole('alert');
       await alert.filter({ hasText: `Aucune étiquette. ${REF} : adresse du destinataire à compléter avant d’imprimer les étiquettes (adresse)` }).waitFor();
+      await fullyVisible(f, alert, limit);
+      assert.deepEqual(await alert.locator('.keep-token').allInnerTexts(), [REF]);
       assert.deepEqual((await labelsState(f)).blobs, [], 'no document without the address');
       await alert.getByRole('button', { name: 'Compléter la fiche client', exact: true }).click();
       await f.page.waitForURL(url => url.pathname === `/clients/${ids.C}` && url.searchParams.get('completer') === 'adresse' && url.searchParams.get('returnTo') === `/colis/${ids.P}?section=preparation`);
@@ -301,11 +362,15 @@ async function main() {
     await scenario('an-incomplete-address-without-the-right-to-change-the-record-390-dark', { role: 'preparateur', width: 390, theme: 'dark',
       permissions: { perm_colis_preparer: true, perm_envois_etiquettes: true, perm_clients_voir: true } }, async f => {
       f.tables.clients[0].adresse_ligne1 = null;
+      await f.page.emulateMedia({ reducedMotion: 'reduce' });
       await f.page.goto(`${base}/colis/${ids.P}?section=preparation`);
       await waitTheme(f, 'dark');
+      // Just above the phone's bottom navigation: the alert is brought into view, without animation here.
+      const limit = await nearTheBottom(f, labelsButton(f, 1));
       await labelsButton(f, 1).click();
       const alert = labelsBlock(f).getByRole('alert');
       await alert.filter({ hasText: `Aucune étiquette. ${REF} : adresse du destinataire à compléter avant d’imprimer les étiquettes (adresse)` }).waitFor();
+      await fullyVisible(f, alert, limit);
       // Completing the record is offered only to the people allowed to change it.
       assert.equal(await alert.getByRole('button').count(), 0, 'no « Compléter la fiche client » without perm_clients_modifier');
       assert.deepEqual((await labelsState(f)).blobs, [], 'no document without the address');
@@ -315,20 +380,38 @@ async function main() {
       await f.page.screenshot({ path: path.join(output, 'incomplete-address-read-only-390-dark.png') });
     });
 
-    await scenario('a-click-before-the-module-opens-the-window-first-1440-light', {}, async f => {
+    // The window opened by the click reads like the app until the labels replace it: --bg-canvas and --text-primary.
+    const WAITING = { light: { background: 'rgb(250, 250, 246)', color: 'rgb(42, 40, 38)', scheme: 'light' }, dark: { background: 'rgb(28, 26, 23)', color: 'rgb(232, 228, 220)', scheme: 'dark' } };
+    for (const [width, theme] of [[1440, 'light'], [390, 'dark']]) await scenario(`a-click-before-the-module-opens-the-window-first-${width}-${theme}`, { width, theme }, async f => {
       let release;
       const held = new Promise(resolve => { release = resolve; });
       await f.context.route(LABEL_CHUNK, async route => { await held; await route.fallback(); });
       await f.page.goto(`${base}/colis/${ids.P}?section=preparation`);
+      await waitTheme(f, theme);
       const button = labelsButton(f, 1);
-      await button.click();
+      // From the keyboard: Enter on the focused button.
+      await button.focus();
+      const [waiting] = await Promise.all([f.page.waitForEvent('popup'), f.page.keyboard.press('Enter')]);
       await labelsBlock(f).getByRole('status').filter({ hasText: 'Préparation des étiquettes…' }).waitFor();
-      assert.equal(await button.isDisabled(), true, 'one print at a time');
+      assert.deepEqual([await button.getAttribute('aria-disabled'), await button.getAttribute('aria-busy')], ['true', 'true'], 'one print at a time');
+      assert.equal(await button.evaluate(node => document.activeElement === node), true, 'the button keeps the keyboard focus while the labels are prepared');
+      // A second Enter meanwhile opens nothing more.
+      await f.page.keyboard.press('Enter');
       assert.deepEqual((await labelsState(f)).opens, [['', '_blank']], 'the click itself opened the window');
+      const look = await waiting.evaluate(() => {
+        const style = getComputedStyle(document.body);
+        return { lang: document.documentElement.lang, title: document.title, viewport: document.querySelector('meta[name="viewport"]')?.content, text: document.body.textContent,
+          background: style.backgroundColor, color: style.color, size: style.fontSize, weight: style.fontWeight, margin: style.margin, display: style.display, scheme: getComputedStyle(document.documentElement).colorScheme };
+      });
+      assert.deepEqual(look, { lang: 'fr', title: 'Étiquettes Expedîle', viewport: 'width=device-width, initial-scale=1', text: 'Préparation des étiquettes…',
+        background: WAITING[theme].background, color: WAITING[theme].color, size: '16px', weight: '600', margin: '0px', display: 'grid', scheme: WAITING[theme].scheme });
+      await waiting.screenshot({ path: path.join(output, `waiting-window-${width}-${theme}.png`) });
       release();
       await labelsBlock(f).getByRole('status').filter({ hasText: '1 étiquette ouverte dans un nouvel onglet.' }).waitFor();
       assertLabelPages(await pdfPages(await labelPdf(f, 1)), [{ index: 1, count: 1, size: '30 × 20 × 20 cm', weight: '3 kg' }]);
       assert.equal((await labelsState(f)).opens.length, 1, 'the PDF went into that window, no second one');
+      assert.equal(await button.getAttribute('aria-disabled'), null);
+      assert.equal(await button.evaluate(node => document.activeElement === node), true, 'the focus is still on the button once the labels are opened');
       await closePopups(f);
     });
 
@@ -337,10 +420,18 @@ async function main() {
       const button = labelsButton(f, 1);
       await button.waitFor();
       await f.page.evaluate(() => { window.__labels.refuse = true; });
+      const limit = await nearTheBottom(f, button);
       const [download] = await Promise.all([f.page.waitForEvent('download'), button.click()]);
       assert.equal(download.suggestedFilename(), `etiquettes-${REF}.pdf`);
       assertLabelPages(await pdfPages(await fs.readFile(await download.path())), [{ index: 1, count: 1, size: '30 × 20 × 20 cm', weight: '3 kg' }]);
-      await labelsBlock(f).getByRole('status').filter({ hasText: `1 étiquette téléchargée (etiquettes-${REF}.pdf). Ouvrez le fichier pour l’imprimer sur étiquettes 100 × 150 mm.` }).waitFor();
+      const status = labelsBlock(f).getByRole('status').filter({ hasText: `1 étiquette téléchargée (etiquettes-${REF}.pdf). Ouvrez le fichier pour l’imprimer sur étiquettes 100 × 150 mm.` });
+      await status.waitFor();
+      // No tab to look at: the message comes into view above the bottom navigation, the file name on one line.
+      await fullyVisible(f, status, limit);
+      // The file name, with the brackets and the full stop against it, never split at its hyphen nor left without them.
+      const name = status.locator('.keep-token');
+      assert.deepEqual(await name.allInnerTexts(), [`(etiquettes-${REF}.pdf).`]);
+      assert.equal((await lineTops(name)).length, 1, 'the file name is never split at its hyphen');
       await noOverflow(f);
       await labelsBlock(f).scrollIntoViewIfNeeded();
       await f.page.screenshot({ path: path.join(output, 'refused-window-download-390-dark.png') });
@@ -349,15 +440,28 @@ async function main() {
     await scenario('a-loading-failure-is-stated-and-closes-the-waiting-window-1440-dark', { theme: 'dark' }, async f => {
       await f.context.route(LABEL_CHUNK, route => route.abort());
       await f.page.goto(`${base}/colis/${ids.P}?section=preparation`);
+      const limit = await nearTheBottom(f, labelsButton(f, 1));
       await labelsButton(f, 1).click();
       // Chrome keeps a failed module import until the page is reloaded: the message asks for the reload.
-      await labelsBlock(f).getByRole('alert').filter({ hasText: 'Les étiquettes n’ont pas pu être chargées. Vérifiez la connexion puis rechargez la page pour réessayer.' }).waitFor();
+      const failure = labelsBlock(f).getByRole('alert').filter({ hasText: 'Les étiquettes n’ont pas pu être chargées. Vérifiez la connexion puis rechargez la page pour réessayer.' });
+      await failure.waitFor();
+      await fullyVisible(f, failure, limit);
       assert.deepEqual((await labelsState(f)).opens, [['', '_blank']]);
       for (let attempt = 0; attempt < 50 && f.context.pages().length > 1; attempt += 1) await f.page.waitForTimeout(100);
       assert.equal(f.context.pages().length, 1, 'the waiting window is closed');
       assert.equal(await labelsButton(f, 1).isEnabled(), true, 'the person can try again');
+      assert.equal(await labelsButton(f, 1).getAttribute('aria-disabled'), null);
       await labelsBlock(f).scrollIntoViewIfNeeded();
       await f.page.screenshot({ path: path.join(output, 'loading-failure-1440-dark.png') });
+      // The selection bar states the same failure as an error, apart from its neutral notes.
+      await f.page.goto(`${base}/colis`);
+      await f.page.getByRole('checkbox', { name: `Sélectionner le dossier ${REF}`, exact: true }).check();
+      await bar(f).getByRole('button', { name: 'Étiquettes du dossier sélectionné', exact: true }).click();
+      const barFailure = bar(f).getByRole('alert').filter({ hasText: 'Les étiquettes n’ont pas pu être chargées.' });
+      await barFailure.waitFor();
+      assert.equal(await barFailure.getAttribute('data-tone'), 'error');
+      for (let attempt = 0; attempt < 50 && f.context.pages().length > 1; attempt += 1) await f.page.waitForTimeout(100);
+      await f.page.screenshot({ path: path.join(output, 'selection-loading-failure-1440-dark.png') });
     });
   } finally {
     await browser.close();

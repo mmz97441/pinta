@@ -21,7 +21,7 @@ const bundle = await build({ entryPoints: [path.join(directory, '../src/expedile
 } }] });
 const loaded = { exports: {} };
 new Function('module', 'exports', 'require', bundle.outputFiles[0].text)(loaded, loaded.exports, require);
-const { parcelLabels, buildParcelLabelsPdf, printParcelLabels, skippedLabelLines, LABEL_SKIP_MESSAGES } = loaded.exports;
+const { parcelLabels, buildParcelLabelsPdf, printParcelLabels, skippedLabelLines, skippedLabelGroups, LABEL_SKIP_MESSAGES } = loaded.exports;
 const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
 const STANDARD_FONTS = path.join(path.dirname(require.resolve('pdfjs-dist/package.json')), 'standard_fonts') + path.sep;
 const MM = 72 / 25.4;
@@ -195,6 +195,9 @@ test('dossiers without labels are returned with their reason, never printed', ()
     'EXP-DDDDD4 : expédition annulée, aucune étiquette à imprimer',
   ]);
   assert.equal(skippedLabelLines(skipped)[5], `EXP-HHHHH8 : ${LABEL_SKIP_MESSAGES.address} (adresse, ville)`);
+  // The same groups for the screens, which keep each reference whole: the lines are their text.
+  assert.deepEqual(skippedLabelGroups(skipped)[0], { refs: ['EXP-AAAAA1', 'EXP-BBBBB2', 'EXP-CCCCC3'], message: LABEL_SKIP_MESSAGES['not-prepared'] });
+  assert.deepEqual(skippedLabelGroups(skipped).map(({ refs, message }) => `${refs.join(', ')} : ${message}`), skippedLabelLines(skipped));
   // Mixed with a prepared dossier: its labels are made, the others are listed.
   const mixed = parcelLabels([dossiers[0], prepared()], { getClient });
   assert.deepEqual([mixed.labels.length, mixed.skipped.map(item => item.ref)], [2, ['EXP-AAAAA1']]);
@@ -303,6 +306,8 @@ test('printing opens the document in the window of the click, else in a new one,
     const waiting = { closed: false, close() { this.closed = true; } };
     const none = printParcelLabels([prepared({ finalPackages: [], outgoingParcelCount: null })], { getClient, target: waiting });
     assert.deepEqual([none.count, none.method, none.lines, waiting.closed], [0, null, ['EXP-2YE537 : étiquettes disponibles après l’optimisation des colis'], true]);
+    assert.deepEqual(none.groups, [{ refs: ['EXP-2YE537'], message: 'étiquettes disponibles après l’optimisation des colis' }]);
+    assert.deepEqual(first.groups, []);
     assert.equal(opened.length, 2);
   } finally {
     timers.forEach(timer => timer.callback());
