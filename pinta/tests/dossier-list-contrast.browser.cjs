@@ -55,13 +55,8 @@ async function measure(locator) {
         await f.page.mouse.move(0, 0); const normal = await check('normal');
         await row().hover(); const hovered = await check('hover'); assert.notDeepEqual(hovered.background, normal.background, `${name}: perceptible hover`);
         await f.page.mouse.move(0, 0); await f.page.keyboard.press('Tab'); await row().getByRole('button', { name: 'EXP-TEST-001', exact: true }).focus(); await check('focus', true);
-        // Select through the real checkbox before resizing to mobile cards.
-        if (width === 390) await f.page.setViewportSize({ width: 1440, height: 1000 });
-        // Wait for the table row itself: right after the resize the card's checkbox can still be in the page.
-        const tableRow = f.page.locator(`[data-dossier-row="${ids.P}"]:visible`);
-        await tableRow.waitFor({ state: 'visible' });
-        await tableRow.getByRole('checkbox', { name: 'Sélectionner le dossier EXP-TEST-001', exact: true }).check();
-        if (width === 390) await f.page.setViewportSize({ width, height: 1000 });
+        // Select through the real checkbox of what the person sees: the table row, or the card on a phone (44 px box).
+        await row().getByRole('checkbox', { name: 'Sélectionner le dossier EXP-TEST-001', exact: true }).check();
         await row().waitFor({ state: 'visible' }); await f.page.mouse.move(0, 0); await f.page.evaluate(() => document.activeElement?.blur());
         const selected = await check('selected'); assert.equal(selected.selected, 'true'); assert.notDeepEqual(selected.background, normal.background, `${name}: perceptible selection`);
         await row().hover(); const selectedHover = await check('selected-hover'); assert.deepEqual(selectedHover.background, selected.background, `${name}: hover preserves selection`);
