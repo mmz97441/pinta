@@ -269,7 +269,7 @@ async function newClientScenario(browser, { width, height }, dark) {
   assert.equal(state.covered, false, `${tag}: nothing covers it`);
   assert.deepEqual(state.prenom, ['true', 'Le prénom est obligatoire.']);
   assert.deepEqual(state.mobile, [null, null], `${tag}: the empty mobile is not the refused number`);
-  assert.deepEqual(state.landline, ['true', 'Indiquez un numéro d’au moins 9 chiffres (espaces, points, tirets et + initial acceptés).'], `${tag}: the phone error sits under the landline typed`);
+  assert.deepEqual(state.landline, ['true', 'Indiquez un numéro d’au moins 9 chiffres (espaces, points, tirets, parenthèses et + initial acceptés).'], `${tag}: the phone error sits under the landline typed`);
   if (width < 640) assert.ok(state.postalCode >= 250, `${tag}: the postal code keeps the whole width on a phone (${state.postalCode} px)`);
   assert.equal(state.overflowX, false);
   await f.page.screenshot({ path: path.join(out, `new-client-refused-${tag}.png`) });

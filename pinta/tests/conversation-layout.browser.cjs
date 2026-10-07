@@ -64,7 +64,9 @@ async function main(){
       await f.page.getByRole('button',{name:'Mettre en attente',exact:true}).waitFor();
       await reply(f).fill('Brouillon conservé sur un écran court.');
       const send=f.page.getByRole('button',{name:'Envoyer le message',exact:true});await send.focus();await send.scrollIntoViewIfNeeded();
-      const action=await send.boundingBox(),nav=await f.page.getByRole('button',{name:'Dossiers',exact:true}).locator('..').boundingBox();
+      // While typing on a short phone the bottom bar steps aside: then the screen's own bottom is the limit.
+      const navButton=f.page.getByRole('button',{name:'Dossiers',exact:true});
+      const action=await send.boundingBox(),nav=await navButton.count()?await navButton.locator('..').boundingBox():{y:await f.page.evaluate(()=>innerHeight)};
       const ancestors=await send.evaluate(node=>{const result=[];for(let p=node;p;p=p.parentElement){const r=p.getBoundingClientRect(),c=getComputedStyle(p);result.push({tag:p.tagName,id:p.id,class:p.className,y:r.y,height:r.height,scrollTop:p.scrollTop,client:p.clientHeight,total:p.scrollHeight,overflow:c.overflowY});}return result;});
       assert.ok(action.y>=48&&action.y+action.height<=nav.y,'The short-screen fallback scroll reaches the whole send button above navigation: '+JSON.stringify({action,nav,ancestors}));
       assert.equal(await send.isEnabled(),true);await reply(f).focus();await reply(f).scrollIntoViewIfNeeded();

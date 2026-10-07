@@ -24,7 +24,7 @@ function passwordMessage(error) {
  * L'utilisateur DOIT changer son mot de passe pour accéder à l'app.
  */
 export default function ForceChangePassword({ staffUser, onDone, onCancel, recovery }) {
-  const { auth, flash } = useApp();
+  const { auth } = useApp();
   const navigate = useNavigate();
   // Opened from the profile: « Annuler » and the confirmation lead back there.
   const returnTo = useLocation().state?.returnTo === '/profil' ? '/profil' : null;
@@ -62,8 +62,7 @@ export default function ForceChangePassword({ staffUser, onDone, onCancel, recov
         if (completionError) { setError('Votre mot de passe est modifié, mais votre accès n’a pas pu être confirmé. Réessayez\u00a0: votre nouveau mot de passe sera simplement confirmé.'); setLoading(false); return; }
       }
 
-      // Confirmed by Supabase Auth: said once, on the page that follows.
-      flash({ msg: 'Votre mot de passe est modifié.', type: 'success', duration: 8000 });
+      // Confirmed by Supabase Auth: the application says it once, on the page that follows (App.jsx onDone).
       await onDone();
       if (returnTo) navigate(returnTo, { replace: true });
     } catch (err) {

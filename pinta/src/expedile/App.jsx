@@ -433,7 +433,7 @@ function AppContent() {
         const created = Boolean(auth.u?.mustChangePassword);
         await completePasswordRecovery();
         // Confirmed by Auth: said once the space is back on screen.
-        flash({ msg: created ? 'Mot de passe enregistré.' : 'Mot de passe modifié.', type: 'success', duration: 8000 });
+        flash({ msg: created ? 'Mot de passe enregistré.' : 'Votre mot de passe est modifié.', type: 'success', duration: 8000 });
         // A chosen change returns where it was asked, never through « / »; when the
         // password page has already sent the person back itself, its return stands.
         if (!voluntary) navigate('/', { replace: true });

@@ -559,7 +559,7 @@ async function checkClientReturns(f) {
   await f.page.evaluate(() => { window.__paths = []; const record = () => window.__paths.push(location.pathname); for (const name of ['pushState', 'replaceState']) { const original = history[name].bind(history); history[name] = (...args) => { const result = original(...args); record(); return result; }; } });
   await f.page.locator('form').getByRole('button').filter({ hasText: /mot de passe/i }).last().click();
   await f.page.waitForURL(url => url.pathname === '/profil');
-  await f.page.locator('[data-toast="success"]').filter({ hasText: 'Mot de passe modifié.' }).waitFor();
+  await f.page.locator('[data-toast="success"]').filter({ hasText: 'Votre mot de passe est modifié.' }).waitFor();
   assert.equal((await f.page.evaluate(() => window.__paths)).includes('/'), false, 'Never through the home page.');
   await axe(f, 'client password changed'); await shot(f, 'client-password-changed');
 }

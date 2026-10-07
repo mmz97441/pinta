@@ -605,7 +605,7 @@ async function failColisLoad(f) {
    await f.page.getByRole('button', { name: 'Définir mon mot de passe et continuer', exact: true }).click();
    await f.page.waitForURL(url => url.pathname === '/plus');
    await f.page.getByRole('heading', { name: 'Votre espace', exact: true }).waitFor();
-   const toast = f.page.locator('[data-toast="success"]').filter({ hasText: 'Mot de passe modifié.' });
+   const toast = f.page.locator('[data-toast="success"]').filter({ hasText: 'Votre mot de passe est modifié.' });
    await toast.waitFor();
    assert.ok(f.requests.some(request => request.method === 'PUT' && request.path === '/auth/v1/user'), 'The new password went to Auth.');
    await axeClean(f, 'password changed');
