@@ -1,0 +1,185 @@
+/* Loading control of a departure (LoadingScanPanel.jsx, CameraScanner.jsx): the scan bar, each dossier's parcels,
+   the count and camera dialogs. The dialogs live under <body>, outside the page: they carry the same colours.
+   Every text keeps 4.5:1 or more on its fill in both themes; touch targets are 44 px. Positions are written
+   side by side (top, right, bottom, left) rather than with « inset », which Safari 14.0 does not read. */
+.loading-scan, .loading-dialog {
+  --scan-success-text: #166534;
+  --scan-success-bg: #ecfdf3;
+  --scan-success-border: #86d1a5;
+  --scan-error-text: #991b1b;
+  --scan-error-bg: #fef2f2;
+  --scan-error-border: #f0b4b4;
+  --scan-info-text: #1f4b63;
+  --scan-info-bg: #eef4f8;
+  --scan-info-border: #b9cfdc;
+  --scan-chip-border: #a8a29a;
+}
+html.dark .loading-scan, html.dark .loading-dialog {
+  --scan-success-text: #b0dfc0;
+  --scan-success-bg: #203a2d;
+  --scan-success-border: #3f6d52;
+  --scan-error-text: #f4b9b9;
+  --scan-error-bg: #44282a;
+  --scan-error-border: #7a4245;
+  --scan-info-text: #c4dae5;
+  --scan-info-bg: #1f3340;
+  --scan-info-border: #3d5c70;
+  --scan-chip-border: #7d756b;
+}
+
+/* Form pattern: label 12 px uppercase, help 13 px, error 14 px. */
+.loading-label { display: block; font-size: .75rem; line-height: 1.3; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--text-secondary); }
+.loading-help { margin-top: 4px; font-size: .8125rem; line-height: 1.4; color: var(--text-secondary); }
+.loading-field-error { margin-top: 4px; font-size: .875rem; line-height: 1.4; font-weight: 600; color: var(--scan-error-text); }
+.loading-field {
+  width: 100%; min-height: 48px; padding: 8px 12px; border: 2px solid #e5e7eb; border-radius: 12px;
+  background: #fff; color: var(--text-primary); font-size: 1.0625rem; letter-spacing: .02em;
+  transition: border-color .2s ease-out;
+}
+.loading-field:focus { border-color: #60a5fa; }
+.loading-field[aria-invalid='true'] { border-color: #dc2626; }
+html.dark .loading-field { background: var(--bg-surface); border-color: var(--border-subtle); }
+html.dark .loading-field:focus { border-color: #7b9dc4; }
+
+/* Buttons of the panel and its dialogs: secondary by default, the primary navy (light navy in dark). */
+.loading-button {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 0 14px;
+  border: 1px solid #d1d5db; border-radius: 12px; background: transparent; color: var(--text-primary);
+  font-size: .875rem; font-weight: 600; line-height: 1.2; text-align: center;
+  transition: transform .2s ease-out, background-color .2s ease-out, border-color .2s ease-out;
+}
+.loading-button:hover:not(:disabled) { background: var(--bg-surface); }
+.loading-button:active:not(:disabled) { transform: scale(.98); }
+.loading-button:disabled { opacity: .5; }
+.loading-button--primary { border-color: var(--brand-navy); background: var(--brand-navy); color: #fff; }
+.loading-button--primary:hover:not(:disabled) { background: var(--brand-navy-l); transform: translateY(-1px); }
+html.dark .loading-button { border-color: var(--border-subtle); }
+html.dark .loading-button--primary { border-color: #c4dae5; background: #c4dae5; color: #122a36; }
+html.dark .loading-button--primary:hover:not(:disabled) { background: #d6e6ee; }
+.loading-button--light { border-color: rgba(255, 255, 255, .7); color: #fff; }
+.loading-button--light:hover:not(:disabled) { background: rgba(255, 255, 255, .12); }
+.loading-icon-button {
+  display: inline-flex; flex: none; align-items: center; justify-content: center; width: 44px; height: 44px;
+  border-radius: 12px; color: var(--text-secondary); transition: background-color .2s ease-out, transform .2s ease-out;
+}
+.loading-icon-button:hover:not(:disabled) { background: var(--bg-surface); }
+.loading-icon-button:active:not(:disabled) { transform: scale(.98); }
+
+/* The scan bar stays at the top of the screen while the dossiers scroll under it: the field, the last answer and
+   the totals remain in view during a whole series of scans. */
+.loading-scan-bar {
+  position: sticky; top: 0; z-index: 5; margin: 0 -16px; padding: 12px 16px;
+  border-bottom: 1px solid var(--border-subtle); display: grid; gap: 10px;
+}
+.loading-scan-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; margin-top: 6px; }
+.loading-scan-input { position: relative; min-width: 0; }
+.loading-scan-input .loading-field { padding-left: 40px; }
+.loading-scan-input-icon { position: absolute; top: 50%; left: 13px; transform: translateY(-50%); color: var(--text-secondary); pointer-events: none; }
+.loading-scan-row .loading-button { min-height: 48px; }
+/* The field's focus ring (3 px away) never touches the line under it. */
+.loading-scan-help { margin-top: 10px; }
+/* A phone keeps the bar short: the camera button shows its icon (its name is unchanged), and the help, which the
+   introduction above already gives, is read by screen readers only. */
+@media (max-width: 639px) {
+  .loading-camera-button { width: 48px; padding: 0; }
+  .loading-camera-text, .loading-scan-help {
+    position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+  }
+}
+
+/* The last answer: colour, icon and words; empty (and flat) until the first scan. */
+.loading-scan-feedback {
+  display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border: 1px solid; border-radius: 12px;
+  font-size: .9375rem; line-height: 1.45; overflow-wrap: anywhere;
+}
+.loading-scan-feedback:empty { padding: 0; border-width: 0; }
+.loading-scan-feedback-icon { flex: none; margin-top: 1px; }
+.loading-scan-feedback-title { font-size: 1.0625rem; font-weight: 700; }
+.loading-scan-feedback[data-tone='success'] { color: var(--scan-success-text); background: var(--scan-success-bg); border-color: var(--scan-success-border); }
+.loading-scan-feedback[data-tone='warning'] { color: var(--attention-text); background: var(--attention-bg); border-color: var(--attention-border); }
+.loading-scan-feedback[data-tone='error'] { color: var(--scan-error-text); background: var(--scan-error-bg); border-color: var(--scan-error-border); }
+.loading-scan-feedback[data-tone='info'] { color: var(--scan-info-text); background: var(--scan-info-bg); border-color: var(--scan-info-border); }
+.loading-scan-layout { display: flex; align-items: flex-start; gap: 6px; margin-top: 4px; font-weight: 600; }
+.loading-scan-layout svg { margin-top: 3px; }
+.loading-warning { display: flex; align-items: flex-start; gap: 6px; font-size: .875rem; line-height: 1.4; color: var(--attention-text); }
+.loading-warning svg { margin-top: 2px; }
+.loading-totals { display: flex; flex-wrap: wrap; align-items: center; column-gap: 8px; row-gap: 2px; font-size: 1rem; font-weight: 700; color: var(--text-primary); }
+.loading-pending { display: inline-flex; align-items: center; gap: 4px; font-size: .875rem; font-weight: 600; color: var(--text-secondary); }
+/* Narrow screens: one total per line, never a separator left at the end of a line. */
+@media (max-width: 479px) {
+  .loading-totals { flex-direction: column; align-items: flex-start; }
+  .loading-totals-dot { display: none; }
+}
+
+/* Dossiers of the loading. */
+.loading-scan { display: grid; gap: 16px; }
+.loading-dossier {
+  display: grid; gap: 4px; margin: 0 -8px; padding: 12px 8px; border-bottom: 1px solid var(--border-subtle); border-radius: 8px;
+  transition: background-color .2s ease-out, box-shadow .2s ease-out; scroll-margin: 200px 0 120px;
+}
+.loading-dossier[data-flash='success'] { background: var(--scan-success-bg); box-shadow: inset 4px 0 0 var(--scan-success-text); }
+.loading-dossier[data-flash='warning'] { background: var(--attention-bg); box-shadow: inset 4px 0 0 var(--attention-text); }
+.loading-dossier[data-flash='error'] { background: var(--scan-error-bg); box-shadow: inset 4px 0 0 var(--scan-error-text); }
+.loading-dossier[data-flash='info'] { background: var(--scan-info-bg); box-shadow: inset 4px 0 0 var(--scan-info-text); }
+.loading-dossier-check { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; min-height: 44px; font-size: 1rem; }
+.loading-dossier-check input { width: 22px; height: 22px; flex: none; }
+.loading-dossier-name { min-width: 0; overflow-wrap: anywhere; }
+.loading-dossier-name strong { white-space: nowrap; }
+.loading-ready { display: inline-flex; align-items: center; gap: 4px; font-size: .875rem; font-weight: 700; color: var(--scan-success-text); }
+.loading-progress { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
+.loading-progress-count { font-size: .9375rem; font-weight: 700; color: var(--text-primary); }
+.loading-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.loading-chip {
+  display: inline-flex; align-items: center; gap: 4px; min-height: 28px; padding: 2px 10px; border: 1px dashed var(--scan-chip-border);
+  border-radius: 999px; font-size: .8125rem; font-weight: 600; color: var(--text-secondary); white-space: nowrap;
+}
+.loading-chip[data-done='true'] { border-style: solid; border-color: var(--scan-success-border); background: var(--scan-success-bg); color: var(--scan-success-text); }
+.loading-checked-by { display: flex; align-items: flex-start; gap: 6px; font-size: .875rem; font-weight: 600; color: var(--scan-success-text); }
+.loading-checked-by svg { margin-top: 2px; }
+.loading-hint { font-size: .875rem; line-height: 1.4; color: var(--text-secondary); }
+.loading-dossier-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+
+/* Dialogs (count, camera): above the phone navigation (z-50), below confirmations (z-[100]). */
+.loading-dialog-backdrop {
+  position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 95; display: flex; align-items: flex-end; justify-content: center;
+  padding: 12px; background: rgba(15, 23, 42, .5);
+}
+@media (min-width: 640px) { .loading-dialog-backdrop { align-items: center; padding: 20px; } }
+.loading-dialog-panel {
+  display: flex; flex-direction: column; gap: 12px; width: 100%; max-width: 28rem; max-height: 92vh; max-height: 92dvh; overflow-y: auto;
+  padding: 16px; border-radius: 20px; background: var(--bg-elevated); color: var(--text-primary); box-shadow: var(--shadow-3);
+}
+.loading-dialog-panel:focus { outline: none; }
+.loading-dialog-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin: -4px -8px 0 0; }
+.loading-dialog-title { display: flex; align-items: center; gap: 8px; padding-top: 8px; font-size: 1.125rem; font-weight: 700; overflow-wrap: anywhere; }
+.loading-dialog-title svg { flex: none; }
+.loading-dialog-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.loading-count-form { display: grid; gap: 12px; }
+.loading-count-intro { font-size: .9375rem; line-height: 1.45; color: var(--text-secondary); }
+/* The field's focus ring (3 px away) touches neither its label nor the line under it. */
+.loading-count-form .loading-field { margin-top: 8px; }
+.loading-count-form .loading-field + p { margin-top: 10px; }
+
+/* Camera: the picture fills the panel's width, a frame shows where to hold the label. */
+.camera-scan { max-width: 36rem; }
+@media (max-width: 639px) {
+  .camera-scan-backdrop { padding: 0; }
+  .camera-scan { max-width: none; max-height: 100vh; max-height: 100dvh; min-height: 100vh; min-height: 100dvh; border-radius: 0; }
+  /* Without a picture (camera refused or missing), a sheet at the bottom like the other dialogs. */
+  .camera-scan[data-state='error'] { min-height: 0; border-radius: 20px 20px 0 0; }
+}
+.camera-scan-view { position: relative; flex: none; height: 55vh; height: 55dvh; max-height: 420px; overflow: hidden; border-radius: 14px; background: #0b0f14; }
+.camera-scan-video { display: block; width: 100%; height: 100%; object-fit: cover; }
+.camera-scan-frame {
+  position: absolute; top: 18%; right: 22%; bottom: 18%; left: 22%; border: 3px solid #e8c779; border-radius: 14px;
+  box-shadow: 0 0 0 9999px rgba(11, 15, 20, .35); pointer-events: none;
+}
+.camera-scan-state {
+  position: absolute; top: 0; right: 0; bottom: 0; left: 0; display: flex; align-items: center; justify-content: center; gap: 10px;
+  padding: 20px; color: #fff; font-size: 1rem; line-height: 1.45;
+}
+/* A camera refused or missing: the reason alone, the picture's place given back. */
+.camera-scan-view[data-state='error'] { height: auto; max-height: none; }
+.camera-scan-view[data-state='error'] .camera-scan-video { display: none; }
+.camera-scan-error { display: flex; align-items: flex-start; gap: 12px; padding: 16px; background: #2b1416; color: #fde2e2; font-size: 1rem; line-height: 1.45; }
+.camera-scan-error p { margin-bottom: 12px; }

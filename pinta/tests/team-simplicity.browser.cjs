@@ -66,10 +66,17 @@ const results = [];
   f.tables.colis.push({...f.tables.colis[0],id:second,ref:'EXP-BLOQUE',statut:'attente_paiement'});
   await f.login();await f.page.goto(base+'/departs');await f.page.getByRole('button',{name:'Vérifier et confirmer le chargement',exact:true}).click();
   const review=f.page.getByRole('region',{name:'Vérifier le chargement',exact:true});await review.getByRole('heading',{name:'Prêts à charger (1)'}).waitFor();await review.getByRole('heading',{name:'À débloquer (1)'}).waitFor();
-  await review.getByRole('checkbox',{name:/EXP-TEST-001/}).check();
+  // Loading control (2026-10-07): the dossier is ticked once its parcel is checked (here counted by hand); the tick,
+  // kept by the server, and the deferral reason, kept in this tab, survive the return from the blocked dossier.
+  assert.equal(await review.getByRole('checkbox',{name:/EXP-TEST-001/}).isChecked(),false);
+  await review.getByRole('button',{name:'Compter à la main les colis de EXP-TEST-001',exact:true}).click();
+  const counting=f.page.getByRole('dialog',{name:'Compter les colis de EXP-TEST-001',exact:true});await counting.getByLabel('Colis remis au transporteur',{exact:true}).fill('1');await counting.getByRole('button',{name:'Enregistrer le comptage',exact:true}).click();await counting.waitFor({state:'detached'});
+  await f.page.waitForFunction(()=>[...document.querySelectorAll('input[type=checkbox]')].some(box=>box.checked&&box.closest('label')?.textContent.includes('EXP-TEST-001')));
+  await review.getByRole('textbox',{name:'Motif du report des dossiers non cochés'}).fill('Paiement attendu');
   await review.getByRole('link',{name:'Vérifier le paiement',exact:true}).click();
   const returnTo=new URL(f.page.url()).searchParams.get('returnTo');assert.ok(returnTo.includes('loading='));await f.page.goto(base+returnTo);
-  await review.getByRole('checkbox',{name:/EXP-TEST-001/}).waitFor();assert.equal(await review.getByRole('checkbox',{name:/EXP-TEST-001/}).isChecked(),true);
+  await review.getByRole('checkbox',{name:/EXP-TEST-001/}).waitFor();await f.page.waitForFunction(()=>[...document.querySelectorAll('input[type=checkbox]')].some(box=>box.checked&&box.closest('label')?.textContent.includes('EXP-TEST-001')));
+  assert.equal(await review.getByRole('textbox',{name:'Motif du report des dossiers non cochés'}).inputValue(),'Paiement attendu');
   assert.equal(f.requests.some(r=>r.path.endsWith('/confirm_departure')),false);
  });
  await scenario('inbox-document-preview-before-confirmed-assignment',async f=>{

@@ -459,7 +459,9 @@ async function main() {
       await load.click();
       const review = f.page.getByRole('region', { name: 'Vérifier le chargement', exact: true });
       await review.waitFor();
-      await assertSeenAndFocused(f, review.getByRole('heading', { level: 2, name: 'Chargement de ENV-2026-099' }), 'Loading review');
+      // Its title in view and its scan field focused: the first label can be scanned at once (2026-10-07).
+      await assertSeenAndFocused(f, review.getByLabel('Scanner un colis', { exact: true }), 'Loading review: the scan field');
+      assert.equal(await review.getByRole('heading', { level: 2, name: 'Chargement de ENV-2026-099' }).evaluate(element => { const box = element.getBoundingClientRect(); return box.top >= 0 && box.bottom <= innerHeight; }), true, 'Loading review: its title in view');
       await review.getByText('2 colis préparés · 19,5 kg', { exact: true }).waitFor();
       await shot(f, `loading-review-${width}`);
       await review.getByRole('button', { name: 'Fermer le chargement', exact: true }).click();

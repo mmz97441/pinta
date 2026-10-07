@@ -92,6 +92,8 @@ jobs:
           PINTA_DOSSIER_DEPARTURES_OUT=/tmp/pinta-dossier-departures node tests/dossier-departures.browser.cjs || failed_suites="$failed_suites dossier-departures.browser.cjs"
           PINTA_DOSSIER_ACCORDS_OUT=/tmp/pinta-dossier-accords node tests/dossier-accords.browser.cjs || failed_suites="$failed_suites dossier-accords.browser.cjs"
           PINTA_DEPARTURES_PAGE_OUT=/tmp/pinta-departures-page node tests/departures-page.browser.cjs || failed_suites="$failed_suites departures-page.browser.cjs"
+          # Loading control of a departure; its pictures go with those of the departures page (already uploaded).
+          PINTA_LOADING_SCAN_OUT=/tmp/pinta-departures-page/loading-scan node tests/loading-scan.browser.cjs || failed_suites="$failed_suites loading-scan.browser.cjs"
           node tests/parcel-reference-search.cjs || failed_suites="$failed_suites parcel-reference-search.cjs"
           node tests/reçu-documents-factures.cjs || failed_suites="$failed_suites reçu-documents-factures.cjs"
           node tests/invoice-review-indicator.cjs || failed_suites="$failed_suites invoice-review-indicator.cjs"

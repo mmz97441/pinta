@@ -4,7 +4,7 @@ const { openTaskNavigation } = require('./task-navigation.helper.cjs');
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
-const { setup, base, ids, scanLoading } = require('./browser-regression.cjs');
+const { setup, base, ids } = require('./browser-regression.cjs');
 const { fixture: invoicesFixture, C } = require('./invoice-workspace.cjs');
 const { waitForCurrentInvoice } = require('./invoice-list.helper.cjs');
 const output = process.env.PINTA_TASK_READINESS_OUT || '/tmp/pinta-task-readiness';
@@ -148,11 +148,16 @@ async function allScreensReadOnly(f){const snapshot=JSON.stringify([f.tables.col
         await fromWork(f,'quote');assert.equal(await quoteSave(f).isEnabled(),true);await capture(f,'05-devis',mobile);await quoteSave(f).click();await workspace(f).getByRole('button',{name:'Envoyer le devis au client',exact:true}).click();await workspace(f).getByRole('heading',{name:'Devis enregistré',exact:true}).waitFor();assert.equal(row.statut,'devis_envoye');assert.equal(row.devis_brouillon,false);
         await openTaskNavigation(f);await taskSelect(f).selectOption('paiement');await capture(f,'06-paiement',mobile);await workspace(f).getByRole('button',{name:'Confirmer réception du paiement',exact:true}).click();await f.page.getByRole('dialog').getByRole('button',{name:'Confirmer le paiement reçu',exact:true}).click();await workspace(f).getByRole('heading',{name:'Paiement confirmé',exact:true}).waitFor();assert.equal(row.statut,'paye');assert.equal(row.paiement_montant,row.devis_total);
         await fromWork(f,'departure');await capture(f,'07-expedition',mobile);await workspace(f).getByRole('group',{name:'Affecter à un départ',exact:true}).locator(`[data-shortcut][data-envoi="${DEPARTURE}"]`).click();await workspace(f).getByText('Départ enregistré.',{exact:true}).waitFor();
-        // Loading control (2026-10-07): the parcel is scanned before the confirmation, here through the mocked command.
-        scanLoading(f,DEPARTURE,[ids.P]);
-        await workspace(f).getByRole('button',{name:'Vérifier le départ et son manifeste',exact:true}).click();await f.page.getByRole('button',{name:'Vérifier et confirmer le chargement',exact:true}).click();await f.page.getByRole('checkbox',{name:/EXP-TEST-001/}).check();
+        // Loading control (2026-10-07): on the loading screen, the parcel handed over is counted by hand (its reference is
+        // no label code), which ticks the dossier; nothing is ticked before.
+        await workspace(f).getByRole('button',{name:'Vérifier le départ et son manifeste',exact:true}).click();await f.page.getByRole('button',{name:'Vérifier et confirmer le chargement',exact:true}).click();
+        const loading=f.page.getByRole('region',{name:'Vérifier le chargement',exact:true});await loading.getByLabel('Scanner un colis',{exact:true}).waitFor();
+        assert.equal(await loading.getByRole('checkbox',{name:/EXP-TEST-001/}).isChecked(),false,'Not ticked before its parcel is checked');assert.equal(await loading.getByRole('checkbox',{name:/EXP-TEST-001/}).isDisabled(),true);
+        await loading.getByRole('button',{name:'Compter à la main les colis de EXP-TEST-001',exact:true}).click();const counting=f.page.getByRole('dialog',{name:'Compter les colis de EXP-TEST-001',exact:true});
+        await counting.getByLabel('Colis remis au transporteur',{exact:true}).fill('1');await counting.getByRole('button',{name:'Enregistrer le comptage',exact:true}).click();await counting.waitFor({state:'detached'});
+        await f.page.waitForFunction(()=>[...document.querySelectorAll('input[type=checkbox]')].some(box=>box.checked&&box.closest('label')?.textContent.includes('EXP-TEST-001')));
         await f.page.getByRole('button',{name:'Confirmer le départ de 1 expédition',exact:true}).click();await f.page.getByRole('region',{name:'Manifeste confirmé',exact:true}).waitFor();assert.equal(row.statut,'expedie');
-        assert.deepEqual(f.tables.departure_manifests[0].snapshot.items[0].loading_checks.map(check=>[check.colis_id,check.parcel_index,check.parcel_count,check.method,check.checked_by]),[[row.id,1,1,'scan',ids.A]],'The manifest keeps the loading check');
+        assert.deepEqual(f.tables.departure_manifests[0].snapshot.items[0].loading_checks.map(check=>[check.colis_id,check.parcel_index,check.parcel_count,check.method,check.checked_by]),[[row.id,1,1,'count',ids.A]],'The manifest keeps the loading check');
         await open(f,'expedition');await workspace(f).getByRole('button',{name:'Confirmer le départ en vol',exact:true}).click();await workspace(f).getByRole('button',{name:'Passer en dédouanement',exact:true}).click();await workspace(f).getByRole('button',{name:/^Confirmer l[’']arrivée à destination$/}).click();
         await workspace(f).getByRole('heading',{name:'Transport arrivé à destination',exact:true}).waitFor();assert.equal(row.statut,'arrive');assert.equal(await workspace(f).getByRole('button',{name:'Lancer la livraison',exact:true}).count(),0,'Transport history does not expose a delivery command');
         await openTaskNavigation(f);await taskSelect(f).selectOption('livraison');await capture(f,'08-livraison',mobile);await workspace(f).getByRole('button',{name:'Lancer la livraison',exact:true}).click();await workspace(f).getByRole('button',{name:'Confirmer la livraison',exact:true}).click();await f.page.getByRole('dialog').getByRole('button',{name:'Confirmer la livraison',exact:true}).click();await workspace(f).getByRole('heading',{name:'Livraison terminée',exact:true}).waitFor();assert.equal(row.statut,'livre');assert.ok(row.date_livraison);

@@ -1,7 +1,7 @@
 const { openSavedReception } = require('./reception-page.helper.cjs');
 /* Browser UI regression. All business APIs are local fixtures, never real clients. */
 const { chromium } = require('playwright');
-const { setup, base, ids, scanLoading } = require('./browser-regression.cjs');
+const { setup, base, ids } = require('./browser-regression.cjs');
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
@@ -170,10 +170,12 @@ async function main() {
     Object.assign(f.tables.colis[0], { envoi_id: E, statut: 'paye', paiement_date: '2026-09-11T10:00:00Z', paiement_montant: 60, devis_total: 60 });
     f.tables.colis.push({ ...clone(f.tables.colis[0]), id: 'cccccccc-0000-4000-8000-000000000001', ref: 'EXP-REPORT', statut: 'autorise', paiement_date: null });
     f.tables.colis.push({ ...clone(f.tables.colis[0]), id: 'dddddddd-0000-4000-8000-000000000001', ref: 'EXP-ANNULE', statut: 'annule', devis_total: 999 });
-    let snapshot = null; const calls = [];
+    let snapshot = null; const calls = []; let clearedElsewhere = false;
     await f.context.route('**/rest/v1/rpc/confirm_departure', async route => {
       const input = route.request().postDataJSON(); calls.push(input);
       assert.equal(input.p_loaded.length, 1); assert.equal(input.p_loaded[0].id, ids.P); assert.equal(input.p_deferred_reason, 'Documents à compléter');
+      // The first time, a colleague has just redone the control on another device: the checks are gone.
+      if (!clearedElsewhere) { clearedElsewhere = true; f.tables.departure_loading_checks = []; }
       // The server refuses a dossier whose parcels are not all scanned or counted (the mocked control of browser-regression.cjs).
       const refusal = f.loadingControl(input.p_envoi_id, input.p_loaded);
       if (refusal) return route.fulfill({ status: refusal.status, contentType: 'application/json', body: JSON.stringify(refusal.body) });
@@ -188,22 +190,34 @@ async function main() {
     await f.login(); await f.page.goto(`${base}/departs?envoi=${E}`);
     await f.page.getByRole('button', { name: 'Vérifier et confirmer le chargement', exact: true }).click();
     const review = f.page.getByRole('region', { name: 'Vérifier le chargement' });
-    await review.getByRole('checkbox').first().check();
+    await review.getByRole('checkbox', { name: /EXP-TEST-001/ }).waitFor();
     assert.equal(await review.getByRole('checkbox').count(), 2, 'Cancelled dossier excluded');
+    // Loading control (2026-10-07): a dossier is ticked once its parcels are checked, here counted by hand.
+    const countParcels = async () => {
+      await review.getByRole('button', { name: 'Compter à la main les colis de EXP-TEST-001', exact: true }).click();
+      const dialog = f.page.getByRole('dialog', { name: 'Compter les colis de EXP-TEST-001', exact: true });
+      await dialog.getByLabel('Colis remis au transporteur', { exact: true }).fill('1');
+      await dialog.getByRole('button', { name: 'Enregistrer le comptage', exact: true }).click();
+      await dialog.waitFor({ state: 'detached' });
+      await f.page.waitForFunction(() => [...document.querySelectorAll('input[type=checkbox]')].some(box => box.checked && box.closest('label')?.textContent.includes('EXP-TEST-001')));
+    };
+    assert.equal(await review.getByRole('checkbox', { name: /EXP-TEST-001/ }).isChecked(), false);
+    await countParcels();
     await review.getByRole('button', { name: /Confirmer le départ de 1/ }).click();
     await f.page.getByRole('alert').filter({ hasText: 'motif du report' }).waitFor();
     assert.equal(calls.length, 0);
     await review.getByRole('textbox', { name: 'Motif du report des dossiers non cochés' }).fill('Documents à compléter');
-    // Loading control (2026-10-07): without its parcel scanned, the server's refusal is shown as it is.
+    // Its check removed on another device meanwhile: the server's refusal is shown as it is, the checks read again.
     await review.getByRole('button', { name: /Confirmer le départ de 1/ }).click();
     await review.getByRole('alert').filter({ hasText: 'Contrôle incomplet : EXP-TEST-001 (0/1 colis vérifié). Scannez ou comptez ses colis, ou reportez-le.' }).waitFor();
     assert.equal(calls.length, 1); assert.equal(f.tables.envois[0].statut, 'planifie');
-    // Scanned through the mocked command, the departure is confirmed and its manifest keeps the check.
-    scanLoading(f, E, [ids.P]);
+    await f.page.waitForFunction(() => [...document.querySelectorAll('input[type=checkbox]')].some(box => !box.checked && box.closest('label')?.textContent.includes('EXP-TEST-001')));
+    // Counted again, the departure is confirmed and its manifest keeps the check.
+    await countParcels();
     await review.getByRole('button', { name: /Confirmer le départ de 1/ }).click();
     await f.page.getByRole('region', { name: 'Manifeste confirmé' }).waitFor();
     assert.equal(calls.length, 2);
-    assert.deepEqual(snapshot.items[0].loading_checks.map(check => [check.parcel_index, check.parcel_count, check.method, check.checked_by_name]), [[1, 1, 'scan', 'Test Camille']]);
+    assert.deepEqual(snapshot.items[0].loading_checks.map(check => [check.parcel_index, check.parcel_count, check.method, check.checked_by_name]), [[1, 1, 'count', 'Test Camille']]);
     f.tables.colis[0].archive = true; f.tables.colis[0].devis_total = 888;
     await f.page.reload(); await f.page.getByRole('button', { name: 'Voir le manifeste', exact: true }).click();
     await f.page.getByRole('region', { name: 'Manifeste confirmé' }).waitFor();

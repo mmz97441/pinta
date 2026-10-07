@@ -1,10 +1,10 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams, Link, useLocation } from 'react-router-dom';
-import { AlertTriangle, Archive, CalendarCheck, CalendarPlus, Check, CheckCircle, ChevronRight, Clock, Loader2, Pencil, Plane, RefreshCw } from 'lucide-react';
+import { AlertTriangle, Archive, CalendarCheck, CalendarPlus, Check, CheckCircle, ChevronRight, Clock, Info, Loader2, Pencil, Plane, RefreshCw } from 'lucide-react';
 import usePersistentDraft from '../../hooks/usePersistentDraft';
 import { useMinuteNow } from '../../hooks/useMinuteNow';
 import { departureReadiness } from '../../domain/departureReadiness';
-import { dossierTaskUrl } from '../../domain/dossierTasks';
+import { loadedDossiers, mergeLoadingCheck } from '../../domain/loadingControl';
 import { departureDayLabel, isoCalendarDay, parisCalendarDay } from '../../domain/departureGroups';
 import { subscriptionEndNote, wishesAfterSubscription, wishesSubscriptionConfirmation } from '../../domain/departureWishes';
 import { closingLabel, departureDefaultClosing, destinationName, OPEN_DEPARTURE_STATUSES } from '../../domain/departurePlanning';
@@ -20,12 +20,16 @@ import { DESTINATIONS, STATUTS } from '../../constants';
 import * as sb from '../../lib/supabaseData';
 import { confirmDeparture, departureManifest, exportDeparture } from '../../services/departures';
 import DepartureDocuments from './DepartureDocuments';
+import { fetchLoadingChecks, loadingCheckError } from '../../services/loadingChecks';
+import LoadingScanPanel from './LoadingScanPanel';
 import './staffDepartures.css';
 
 const FIELD = 'mt-1 min-h-11 w-full rounded-xl border-2 border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 transition-all duration-200 ease-out focus:border-blue-400 aria-[invalid=true]:border-red-500';
 const BUTTON = 'min-h-11 inline-flex items-center justify-center gap-2 rounded-xl border border-gray-300 px-3 text-sm font-semibold transition-all duration-200 ease-out active:scale-[0.98] disabled:opacity-50 disabled:active:scale-100';
 const PRIMARY = `${BUTTON} brand-bg text-white hover:-translate-y-px disabled:hover:translate-y-0`;
 const SEARCH_FIELD = 'mt-1 min-h-11 w-full rounded-xl border border-gray-300 bg-white px-3 text-sm text-gray-800';
+// The checks of every device are read again this often while the loading is open on a visible page.
+const CHECKS_REFRESH_MS = 5000;
 const isLegacySingle = (colis) => !colis.finalPackages?.length && !colis.outgoingParcelCount && [colis.finL,colis.finW,colis.finH,colis.finP].every((value) => Number(value) > 0);
 const NOT_LOADABLE = ['annule', 'livre', 'expedie', 'transit', 'dedouanement', 'arrive', 'livraison'];
 // The commercial invoice has its own block, before and after the departure (DepartureDocuments).
@@ -78,14 +82,23 @@ export default function StaffDepartures({ embedded = false }) {
   const envoiFilter = params.get('envoi');
   const departureView = params.get('vue') || 'a-preparer';
   const loadingId = params.get('loading');
-  const [search, setSearch] = useState('');
+  // The loading's draft in this tab, by departure: the dossiers fully checked that the person set aside (deferred
+  // with the others) and the reason of the deferral. Which dossiers are checked comes from the server's checks.
   const [selection, setSelection] = usePersistentDraft('departures:loading-selection', {});
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState(EMPTY_PLAN);
   const [planErrors, setPlanErrors] = useState({});
   const [review, setReview] = useState(null);
-  const selected = selection[loadingId]?.ids || [];
-  const setSelected = next => setSelection(previous => ({ ...previous, [loadingId]: { ...previous[loadingId], ids: typeof next === 'function' ? next(previous[loadingId]?.ids || []) : next } }));
+  // The departure's loading checks (get_loading_checks), shared by every device; `error` ({ reason, message }): the
+  // last refresh failed, the rows are those of the last reading.
+  const [checks, setChecks] = useState({ envoiId: null, rows: [], error: null });
+  const [scanPending, setScanPending] = useState(0);
+  const excluded = Array.isArray(selection[loadingId]?.excluded) ? selection[loadingId].excluded : [];
+  const setAside = (id, aside) => setSelection(previous => {
+    const current = previous[loadingId] || {};
+    const others = (Array.isArray(current.excluded) ? current.excluded : []).filter(item => item !== id);
+    return { ...previous, [loadingId]: { ...current, excluded: aside ? [...others, id] : others } };
+  });
   const deferredReason = selection[loadingId]?.reason || '';
   const setDeferredReason = reason => setSelection(previous => ({ ...previous, [loadingId]: { ...previous[loadingId], reason } }));
   const [manifest, setManifest] = useState(null);
@@ -104,6 +117,13 @@ export default function StaffDepartures({ embedded = false }) {
   const planDate = useRef(null);
   const editDate = useRef(null);
   const reviewHeading = useRef(null);
+  const scanInput = useRef(null);
+  const reviewRef = useRef(review);
+  reviewRef.current = review;
+  // Each reading of the checks has its number: an older answer never replaces a newer one or a recorded check.
+  const checksSequence = useRef(0);
+  // Dossiers met in the checks but not in the loading: the loading is read again once for them.
+  const unknownChecked = useRef(new Set());
   const manifestHeading = useRef(null);
   // The button that opened the loading review or the manifest: closing them gives it the focus back.
   const opener = useRef(null);
@@ -188,12 +208,51 @@ export default function StaffDepartures({ embedded = false }) {
   };
 
   // ── Loading review and manifest ──────────────────────────────────────
+  // The dossiers the departure can take, the departure's version and its loading checks, read together: the
+  // control is mandatory, so a loading whose checks cannot be read does not open.
   const startReview = async (envoi) => {
-    const all = await sb.fetchColis(null, { envoiId: envoi.id });
-    const latest = (await sb.fetchEnvois()).find((item) => item.id === envoi.id);
+    const [all, envoiRows, checkRows] = await Promise.all([sb.fetchColis(null, { envoiId: envoi.id }), sb.fetchEnvois(), fetchLoadingChecks(envoi.id)]);
+    const latest = envoiRows.find((item) => item.id === envoi.id);
     if (!latest) throw new Error('Départ introuvable.');
-    setReview({ envoi: latest, dossiers: all.filter((item) => item.envoi === envoi.id && !NOT_LOADABLE.includes(item.statut) && !item.dateExpedition) });
-    setManifest(null); setSearch('');
+    const dossiers = all.filter((item) => item.envoi === envoi.id && !NOT_LOADABLE.includes(item.statut) && !item.dateExpedition);
+    checksSequence.current += 1;
+    setChecks({ envoiId: envoi.id, rows: checkRows, error: null });
+    setReview({ envoi: latest, dossiers });
+    setManifest(null);
+    return dossiers;
+  };
+  /** The open loading read again (a scan of a dossier it does not list, a refusal of the server): its dossiers. */
+  const reloadReview = async () => {
+    const current = reviewRef.current;
+    return current ? startReview(current.envoi) : null;
+  };
+  /** The checks of every device, for the open loading. An answer older than the last change is dropped. */
+  const loadChecks = useCallback(async (envoiId) => {
+    checksSequence.current += 1;
+    const sequence = checksSequence.current;
+    try {
+      const rows = await fetchLoadingChecks(envoiId);
+      if (sequence !== checksSequence.current) return rows;
+      setChecks({ envoiId, rows, error: null });
+      // A dossier checked elsewhere that this loading does not list (assigned meanwhile): read the loading again.
+      const unknown = rows.map(row => row.colisId).filter(id => reviewRef.current?.envoi.id === envoiId && !reviewRef.current.dossiers.some(item => item.id === id) && !unknownChecked.current.has(id));
+      if (unknown.length) { unknown.forEach(id => unknownChecked.current.add(id)); reloadReview().catch(() => {}); }
+      return rows;
+    } catch (issue) {
+      if (sequence === checksSequence.current) setChecks(previous => (previous.envoiId === envoiId ? { ...previous, error: { reason: issue?.reason || 'unknown', message: issue?.message || '' } } : previous));
+      throw issue;
+    }
+  }, []);
+  const refreshChecks = () => (reviewRef.current ? loadChecks(reviewRef.current.envoi.id) : Promise.resolve([]));
+  const recordedCheck = check => {
+    checksSequence.current += 1;
+    setChecks(previous => (previous.envoiId === reviewRef.current?.envoi.id ? { ...previous, rows: mergeLoadingCheck(previous.rows, check) } : previous));
+  };
+  const clearedChecks = colisId => {
+    checksSequence.current += 1;
+    setChecks(previous => ({ ...previous, rows: previous.rows.filter(row => row.colisId !== colisId) }));
+    // Redone from the start: once checked again, the dossier is ticked again.
+    setAside(colisId, false);
   };
   const openReview = (envoi, event) => {
     opener.current = event.currentTarget;
@@ -204,11 +263,24 @@ export default function StaffDepartures({ embedded = false }) {
     setReview(null); setScopeError('review', ''); setParams(withoutParam('loading'));
     pendingFocus.current = opener.current;
   };
+  const reviewChecks = review && checks.envoiId === review.envoi.id ? checks.rows : [];
+  const reviewLoaded = review ? loadedDossiers(review.dossiers, reviewChecks, excluded) : [];
   const confirm = async () => {
-    const loaded = review.dossiers.filter((item) => selected.includes(item.id)).map((item) => isLegacySingle(item) ? { ...item, outgoingParcelCount: 1 } : item);
-    if (!loaded.length) throw new Error('Sélectionnez les dossiers réellement embarqués.');
+    if (scanPending > 0) throw new Error('Des contrôles sont en cours d’enregistrement : attendez leur fin, puis confirmez.');
+    const loaded = reviewLoaded.map((item) => isLegacySingle(item) ? { ...item, outgoingParcelCount: 1 } : item);
+    if (!loaded.length) throw new Error('Aucune expédition n’est prête : scannez ou comptez les colis des dossiers embarqués.');
     if (loaded.length < review.dossiers.length && !deferredReason.trim()) throw new Error('Indiquez le motif du report des autres dossiers.');
-    const saved = await confirmDeparture(review.envoi, loaded, deferredReason);
+    let saved;
+    try { saved = await confirmDeparture(review.envoi, loaded, deferredReason); }
+    catch (issue) {
+      // « Contrôle incomplet » (checks removed on another device meanwhile): the server's words, and the checks read again.
+      if (/^loading_check:/.test(String(issue?.hint || ''))) {
+        const explained = loadingCheckError(issue);
+        await loadChecks(review.envoi.id).catch(() => {});
+        throw new Error(explained.message);
+      }
+      throw issue;
+    }
     const id = review.envoi.id;
     const affected = review.dossiers;
     setEnvois((previous) => previous.map((item) => item.id === saved.id ? saved : item));
@@ -288,18 +360,30 @@ export default function StaffDepartures({ embedded = false }) {
     if (!loadingId || review?.envoi.id === loadingId || busy) return;
     const envoi = envois.find(item => item.id === loadingId);
     if (!envoi) return;
+    // Checking a loading needs the permission to ship parcels.
+    if (!can('perm_colis_expedier')) { setParams(withoutParam('loading'), { replace: true }); return; }
     run(async () => {
       try { await startReview(envoi); }
       catch (issue) { setParams(withoutParam('loading'), { replace: true }); throw issue; }
     }, visibleIds.has(envoi.id) ? cardScope(envoi.id) : 'page');
   }, [loadingId, envois, busy]);
-  // The panel opened from a card far below comes into view with the focus on its title.
+  // The panel opened from a card far below comes into view, the scan field ready for the first label.
   const reviewKey = review?.envoi.id || null;
   useEffect(() => {
     if (!reviewKey) return;
+    unknownChecked.current = new Set();
     reviewHeading.current?.scrollIntoView({ block: 'start' });
-    reviewHeading.current?.focus({ preventScroll: true });
+    (scanInput.current || reviewHeading.current)?.focus({ preventScroll: true });
   }, [reviewKey]);
+  // Shared progress: the checks of every device, every 5 s while the loading is open and the page visible, and
+  // as soon as the page comes back into view.
+  useEffect(() => {
+    if (!reviewKey) return undefined;
+    const tick = () => { if (document.visibilityState === 'visible') loadChecks(reviewKey).catch(() => {}); };
+    const timer = setInterval(tick, CHECKS_REFRESH_MS);
+    document.addEventListener('visibilitychange', tick);
+    return () => { clearInterval(timer); document.removeEventListener('visibilitychange', tick); };
+  }, [reviewKey, loadChecks]);
   const manifestKey = manifest ? `${manifest.envoi?.id}:${manifest.confirmedAt}` : null;
   useEffect(() => {
     if (!manifestKey) return;
@@ -318,6 +402,8 @@ export default function StaffDepartures({ embedded = false }) {
 
   const canPlan = can('perm_envois_creer');
   const exports = EXPORTS.filter(([, , permission]) => can(permission));
+  // Scanning needs the permission to ship parcels; confirming the departure, the permission to modify it too.
+  const reviewCanConfirm = can('perm_colis_expedier') && can('perm_envois_modifier');
 
   return <div className={`departures-page ${embedded ? '' : 'mx-auto max-w-6xl p-4 sm:p-6'} space-y-5`}>
     <header className="flex flex-wrap items-center justify-between gap-3">
@@ -367,24 +453,23 @@ export default function StaffDepartures({ embedded = false }) {
 
     {review && <section aria-label="Vérifier le chargement" className="space-y-4 rounded-xl border-2 border-slate-400 bg-white p-4">
       <h2 ref={reviewHeading} tabIndex={-1} className="departures-panel-heading text-lg font-bold brand-t">Chargement de {review.envoi.ref}</h2>
-      <p className="text-sm text-gray-600">Cochez les expéditions réellement embarquées. Les autres seront à reprogrammer.</p>
-      <label className="block text-sm font-semibold">Rechercher ou scanner une EXP<input value={search} onChange={event => setSearch(event.target.value)} className={SEARCH_FIELD} /></label>
-      {[[true,'Prêts à charger'],[false,'À débloquer']].map(([ready,label]) => {
-        const all = review.dossiers.filter(item => departureReadiness(item).eligible === ready);
-        const rows = all.filter(item => !search || [item.ref,clients.find(client => client.id === item.clientId)?.nom].join(' ').toLocaleLowerCase('fr').includes(search.toLocaleLowerCase('fr')));
-        return <div key={label}><h3 className="font-semibold">{label} ({all.length})</h3>{rows.map(item => {
-          const status = departureReadiness(item);
-          return <article key={item.id} className="border-b border-gray-100 py-3"><label className="flex min-h-11 items-center gap-3 text-sm"><input type="checkbox" checked={selected.includes(item.id)} disabled={busy || !status.eligible} onChange={event => setSelected(previous => event.target.checked ? [...previous,item.id] : previous.filter(id => id !== item.id))} /><span><strong>{item.ref}</strong> · {clients.find(client => client.id === item.clientId)?.nom}</span></label>
-            {status.eligible && <p className="text-sm text-gray-600">{preparedSummary(status.count, status.weights?.realWeight)}{status.legacySingle ? ' · En cochant, je confirme un colis physique (ancien dossier).' : ''}</p>}
-            {status.reasons.map(reason => <div key={reason.task} className="flex flex-wrap items-center justify-between gap-2 text-sm text-amber-800"><span>{reason.text}</span><Link to={dossierTaskUrl(item.id,reason.task,new URLSearchParams({returnTo}).toString())} className="inline-flex min-h-11 items-center underline">{reason.task === 'paiement' ? 'Vérifier le paiement' : 'Vérifier la préparation'}</Link></div>)}
-          </article>;
-        })}{!rows.length && <p className="py-2 text-sm text-gray-600">{search ? 'Aucun dossier ne correspond à cette recherche.' : 'Aucun dossier dans ce groupe.'}</p>}</div>;
-      })}
-      <label className="block text-sm text-gray-700">Motif du report des dossiers non cochés<textarea value={deferredReason} onChange={event => setDeferredReason(event.target.value)} className={`${SEARCH_FIELD} py-2`} maxLength={500} /></label>
-      <p role="status" className="text-sm font-semibold">{plural(review.dossiers.filter(item => selected.includes(item.id) && departureReadiness(item).eligible).length, 'expédition cochée', 'expéditions cochées')} · {review.dossiers.filter(item => !selected.includes(item.id)).length} à reporter. La sélection est conservée pendant vos vérifications.</p>
-      {selected.some(id => !review.dossiers.some(item => item.id === id && departureReadiness(item).eligible)) && <p role="alert" className="text-sm text-red-700">Un dossier coché a changé. Actualisez le chargement et revérifiez votre sélection.</p>}
+      <p className="text-sm text-gray-600">Scannez l’étiquette de chaque colis remis au transporteur, ou comptez à la main les colis d’un dossier. {reviewCanConfirm ? 'Un dossier est coché dès que tous ses colis sont vérifiés ; les dossiers non cochés seront à reprogrammer.' : 'Un dossier est prêt à partir dès que tous ses colis sont vérifiés.'}</p>
+      <LoadingScanPanel
+        envoi={review.envoi} dossiers={review.dossiers} checks={reviewChecks} checksError={checks.envoiId === review.envoi.id ? checks.error : null}
+        canConfirm={reviewCanConfirm} excluded={excluded} busy={busy} inputRef={scanInput} returnTo={returnTo} now={now}
+        onToggle={(id, ticked) => setAside(id, !ticked)} onCheck={recordedCheck} onCleared={clearedChecks}
+        onRefreshChecks={refreshChecks} onReload={reloadReview} onPendingChange={setScanPending}
+      />
+      {reviewCanConfirm ? <>
+        <label className="block text-sm text-gray-700">Motif du report des dossiers non cochés<textarea value={deferredReason} onChange={event => setDeferredReason(event.target.value)} className={`${SEARCH_FIELD} py-2`} maxLength={500} /></label>
+        <p className="text-sm font-semibold">{plural(reviewLoaded.length, 'expédition cochée', 'expéditions cochées')} · {review.dossiers.length - reviewLoaded.length} à reporter.{scanPending > 0 ? ' Contrôles en cours d’enregistrement…' : ''}</p>
+      </> : <p className="departures-reason flex items-start gap-2"><Info size={16} aria-hidden="true" className="mt-0.5 shrink-0" />Vos contrôles sont enregistrés pour toute l’équipe. La confirmation du départ est réservée à la direction et aux personnes autorisées à modifier les départs et à expédier les colis : prévenez-les quand tous les colis sont vérifiés.</p>}
       {errors.review && <p role="alert" className="departures-error"><AlertTriangle size={16} aria-hidden="true" />{errors.review}</p>}
-      <div className="flex flex-wrap gap-2"><button type="button" disabled={busy || !selected.length || selected.some(id => !review.dossiers.some(item => item.id === id && departureReadiness(item).eligible))} onClick={() => run(confirm, 'review')} className={PRIMARY}><Check size={16} aria-hidden="true" />Confirmer le départ de {plural(selected.length, 'expédition')}</button><button type="button" disabled={busy} className={BUTTON} onClick={closeReview}>Fermer le chargement</button><button type="button" className={BUTTON} disabled={busy} onClick={() => run(() => startReview(review.envoi), 'review')}>Actualiser le chargement</button></div>
+      <div className="flex flex-wrap gap-2">
+        {reviewCanConfirm && <button type="button" disabled={busy || scanPending > 0 || !reviewLoaded.length} onClick={() => run(confirm, 'review')} className={PRIMARY}><Check size={16} aria-hidden="true" />Confirmer le départ de {plural(reviewLoaded.length, 'expédition')}</button>}
+        <button type="button" disabled={busy} className={BUTTON} onClick={closeReview}>Fermer le chargement</button>
+        <button type="button" className={BUTTON} disabled={busy} onClick={() => run(() => startReview(review.envoi), 'review')}>Actualiser le chargement</button>
+      </div>
     </section>}
 
     {manifest && <section aria-label="Manifeste confirmé" className="space-y-3 rounded-xl border border-emerald-300 bg-white p-4">
@@ -432,7 +517,9 @@ export default function StaffDepartures({ embedded = false }) {
     const result = assignResults[envoi.id];
     const day = departureDayLabel(envoi.date, { today: now });
     const canModify = can('perm_envois_modifier');
-    const canLoad = !departed && OPEN_DEPARTURE_STATUSES.includes(envoi.statut) && can('perm_colis_expedier') && canModify;
+    // The loading opens to scan with the permission to ship parcels; its confirmation also needs to modify the departure.
+    const canCheck = !departed && OPEN_DEPARTURE_STATUSES.includes(envoi.statut) && can('perm_colis_expedier');
+    const loadLabel = canModify ? 'Vérifier et confirmer le chargement' : 'Vérifier le chargement';
     const editingThis = editing?.id === envoi.id;
     const scope = cardScope(envoi.id);
     return <article key={envoi.id} data-departure-card={envoi.id} aria-labelledby={`departure-title-${envoi.id}`} className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
@@ -484,9 +571,9 @@ export default function StaffDepartures({ embedded = false }) {
 
       <div className="flex flex-wrap items-center gap-2">
         {!departed && canModify && !editingThis && <button type="button" data-action="edit" className={BUTTON} disabled={busy} onClick={() => startEditing(envoi)}><Pencil size={16} aria-hidden="true" />Modifier le planning</button>}
-        {canLoad && (loadable.length
-          ? <button type="button" data-action="loading" disabled={busy} className={PRIMARY} onClick={(event) => openReview(envoi, event)}>Vérifier et confirmer le chargement</button>
-          : <><button type="button" data-action="loading" disabled className={BUTTON} aria-describedby={`departure-no-load-${envoi.id}`}>Vérifier et confirmer le chargement</button><span id={`departure-no-load-${envoi.id}`} className="departures-reason">Aucun dossier affecté à ce départ</span></>)}
+        {canCheck && (loadable.length
+          ? <button type="button" data-action="loading" disabled={busy} className={PRIMARY} onClick={(event) => openReview(envoi, event)}>{busy && loadingId === envoi.id && review?.envoi.id !== envoi.id && <Loader2 size={16} aria-hidden="true" className="animate-spin" />}{loadLabel}</button>
+          : <><button type="button" data-action="loading" disabled className={BUTTON} aria-describedby={`departure-no-load-${envoi.id}`}>{loadLabel}</button><span id={`departure-no-load-${envoi.id}`} className="departures-reason">Aucun dossier affecté à ce départ</span></>)}
         {departed && <button type="button" data-action="manifest" disabled={busy} className={BUTTON} onClick={(event) => openManifest(envoi, event)}>Voir le manifeste</button>}
         {departed && canModify && envoi.statut === 'parti' && <button key="arrive" type="button" data-action="arrive" disabled={busy} className={BUTTON} onClick={() => confirmStep(envoi, 'arrive')}>Confirmer l’arrivée</button>}
         {departed && canModify && envoi.statut === 'arrive' && <button key="archive" type="button" data-action="archive" disabled={busy} className={BUTTON} onClick={() => confirmStep(envoi, 'archive')}><Archive size={16} aria-hidden="true" />Archiver ce départ</button>}
