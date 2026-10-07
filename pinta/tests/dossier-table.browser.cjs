@@ -287,6 +287,17 @@ async function main() {
       assert.equal(shown,true,'Its focused handle shows on top.');
       await f.page.evaluate(()=>document.activeElement?.blur());await scroller.evaluate(node=>{node.scrollLeft=0;});await settle(f);m=await box();
       assert.ok(Math.abs(m.grip.x+m.grip.width/2-m.th.x)<=1,'Once the focus has left, Action’s handle straddles its border again.');
+      // A press focuses a handle, never as a keyboard focus, even right after a key: the table does not scroll under
+      // the pointer (a border 5 px from the pinned client column), and Action keeps the shared border afterwards.
+      const near=await scroller.evaluate(node=>{const client=node.querySelector('thead th[data-column="client"]').getBoundingClientRect(),border=node.querySelector('thead th[data-column="statut"]').getBoundingClientRect().right;node.scrollLeft+=border-client.right-5;return node.scrollLeft;});await settle(f);
+      const statutHandle=await f.page.getByRole('separator',{name:'Redimensionner Travail à faire',exact:true}).boundingBox();
+      await f.page.mouse.move(statutHandle.x+statutHandle.width-2,statutHandle.y+statutHandle.height/2);await f.page.mouse.down();await settle(f);
+      assert.equal(await f.page.evaluate(()=>document.activeElement?.getAttribute('aria-label')),'Redimensionner Travail à faire');
+      assert.equal(await scroller.evaluate(node=>node.scrollLeft),near,'A press on a handle never scrolls the table.');
+      await f.page.mouse.up();
+      await scroller.evaluate(node=>{node.scrollLeft=node.scrollWidth;});await f.page.waitForFunction(()=>document.querySelector('.dossier-list-main')?.dataset.moreRight===undefined);await settle(f);m=await box();
+      assert.deepEqual(await f.page.evaluate(([x,y])=>[-9,-5,-1,0,1,5,9].map(dx=>document.elementFromPoint(x+dx,y)?.closest('.dossier-table-resize')?.getAttribute('aria-label')||null),[m.th.x,m.th.y+m.th.height/2]),Array(7).fill('Redimensionner Action'),'Another handle taken by the pointer leaves the shared border to Action.');
+      await f.page.evaluate(()=>document.activeElement?.blur());await scroller.evaluate(node=>{node.scrollLeft=0;});await settle(f);m=await box();
       const drag=async dx=>{const start=m.grip.x+m.grip.width/2,y=m.grip.y+m.grip.height/2;await f.page.mouse.move(start,y);await f.page.mouse.down();await f.page.mouse.move(start+dx/2,y);await f.page.mouse.move(start+dx,y);await f.page.mouse.up();};
       const initial=m.width,left=m.th.x;
       await drag(-60);await f.page.waitForFunction(width=>Number(document.querySelector('[aria-label="Redimensionner Action"]').getAttribute('aria-valuenow'))===width,initial+60);
@@ -1333,6 +1344,18 @@ async function main() {
         const cut=await f.page.locator('table.dossier-data-table thead .dossier-table-heading-text').evaluateAll(nodes=>nodes.filter(node=>node.scrollWidth>node.clientWidth+1).map(node=>`${node.textContent} ${node.scrollWidth}>${node.clientWidth}`));
         assert.deepEqual(cut,[],`${name}: every heading reads whole.`);
         if(view==='daily'){const head=await f.page.locator('table.dossier-data-table thead').boundingBox();await f.page.screenshot({path:`${output}/headings-${label}.png`,clip:{x:0,y:head.y,width,height:head.height}});}
+      }
+      if(size){
+        // A column its heading holds wider than its saved width follows the pointer from the first pixel.
+        await f.page.goto(`${base}/colis?table=daily`);await rows(f).first().waitFor();await settle(f);
+        const owner=f.page.locator('thead th[data-column="owner"]'),grip=f.page.getByRole('separator',{name:'Redimensionner Qui s’en occupe',exact:true});
+        await owner.evaluate(th=>{document.getElementById('dossier-table-scroll').scrollLeft=th.offsetLeft-400;});await settle(f);
+        const drawn=(await owner.boundingBox()).width,saved=Number(await grip.getAttribute('aria-valuenow'));
+        assert.ok(drawn>saved+1,`At ${size} px « Qui s’en occupe » is drawn at ${drawn} px, wider than its saved ${saved} px.`);
+        const g=await grip.boundingBox(),x=g.x+g.width/2,y=g.y+g.height/2;
+        await f.page.mouse.move(x,y);await f.page.mouse.down();await f.page.mouse.move(x+10,y);await f.page.mouse.move(x+20,y);await settle(f);
+        assert.ok(Math.abs((await owner.boundingBox()).width-(drawn+20))<=1,'Its border follows the pointer at once.');
+        await f.page.mouse.up();
       }
       assert.deepEqual(businessWrites(f),[]);
     },{device});

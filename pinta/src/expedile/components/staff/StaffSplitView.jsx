@@ -799,11 +799,13 @@ export default function StaffColisPage() {
  * scroller, which these cover. The table scrolls on, by what covers the control
  * and its ring, along each axis the control is not pinned on: a control of a
  * pinned column or of the heading row never moves the table along that axis.
- * A mouse or touch focus never scrolls (the control was under the pointer); nor
- * does a browser without :focus-visible (Safari before 15.4). */
+ * A mouse or touch focus never scrolls (the control was under the pointer), not
+ * even a resize handle's, which its press focuses by script (data-pointer-focus:
+ * :focus-visible may match it after a key); nor does a browser without
+ * :focus-visible (Safari before 15.4). */
 const FOCUS_CLEARANCE = 8; // the ring, 3 px away and 2 px wide, and some air
 function revealKeyboardFocus(scroller, target) {
-  if (!target || target === scroller || !scroller.contains(target)) return;
+  if (!target || target === scroller || !scroller.contains(target) || target.hasAttribute('data-pointer-focus')) return;
   let keyboard = false;
   try { keyboard = target.matches(':focus-visible'); } catch { /* :focus-visible unknown: the native scrolling only */ }
   const table = keyboard && scroller.querySelector('table.dossier-data-table');

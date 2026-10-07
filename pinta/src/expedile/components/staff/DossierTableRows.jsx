@@ -222,7 +222,10 @@ function CellContent({ column, c, client, model, alerts, onOpen, onOpenDossier, 
  * the list (Action), so its handle sits on its left border and follows the pointer: dragging
  * that border left widens the column, right narrows it (the arrow keys move it the same way).
  * A drag keeps the direction it started with, even when the table comes to fit the list, or
- * to overflow it, meanwhile (Action's handle then moves to its other border). */
+ * to overflow it, meanwhile (Action's handle then moves to its other border). It starts from
+ * the width drawn, which a heading may hold above the saved one: the border follows the
+ * pointer at once. A press focuses the handle without the table's keyboard scrolling
+ * (`data-pointer-focus`, read by StaffSplitView) and without Action's handle stepping aside. */
 function ColumnResize({ column, width, onResize, onFocusChange, edge = 'end' }) {
   const sign = edge === 'start' ? -1 : 1;
   const drag = useRef(null);
@@ -230,9 +233,15 @@ function ColumnResize({ column, width, onResize, onFocusChange, edge = 'end' }) 
   const currentWidth = clampColumnWidth(column, width);
   return <button type="button" role="separator" aria-orientation="vertical" aria-label={`Redimensionner ${column.label}`} aria-valuemin={min} aria-valuemax={max} aria-valuenow={currentWidth} aria-valuetext={`${currentWidth} pixels`} title={`Largeur de ${column.label} : glisser ce bord. Double-clic ou Entrée pour rétablir ; flèches gauche/droite pour régler.`}
     className={`dossier-table-resize${edge === 'start' ? ' dossier-table-resize-start' : ''}`} onClick={stopPropagation}
-    onFocus={() => onFocusChange?.(true)} onBlur={() => onFocusChange?.(false)}
+    onFocus={event => { if (!event.currentTarget.hasAttribute('data-pointer-focus')) onFocusChange?.(true); }} onBlur={() => onFocusChange?.(false)}
     onDoubleClick={event => { event.preventDefault(); event.stopPropagation(); onResize(column, initial); }}
-    onPointerDown={event => { if (event.button !== 0) return; event.preventDefault(); event.stopPropagation(); event.currentTarget.focus({ preventScroll: true }); drag.current = { x: event.clientX, width: currentWidth, sign }; event.currentTarget.setPointerCapture(event.pointerId); }}
+    onPointerDown={event => {
+      if (event.button !== 0) return;
+      event.preventDefault(); event.stopPropagation();
+      const handle = event.currentTarget, drawn = Math.round(handle.parentElement?.getBoundingClientRect().width || 0);
+      handle.setAttribute('data-pointer-focus', ''); handle.focus({ preventScroll: true }); handle.removeAttribute('data-pointer-focus');
+      drag.current = { x: event.clientX, width: Math.max(currentWidth, drawn), sign }; handle.setPointerCapture(event.pointerId);
+    }}
     onPointerMove={event => { if (drag.current) onResize(column, drag.current.width + drag.current.sign * (event.clientX - drag.current.x)); }}
     onPointerUp={event => { drag.current = null; if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId); }}
     onPointerCancel={() => { drag.current = null; }} onLostPointerCapture={() => { drag.current = null; }}
@@ -241,10 +250,13 @@ function ColumnResize({ column, width, onResize, onFocusChange, edge = 'end' }) 
 
 /** `selection` of the displayed dossiers: 'all', 'some' (a mixed checkbox) or 'none'. */
 export function DossierTableHead({ columns = TABLE_COLUMNS.daily, onSelectAll, selection = 'none', onSort, sortCol, sortDir, widths, onResize, filters = {}, onFilterColumn, openFilterKey = null, actionPinned = false }) {
-  // The column whose resize handle has the focus: the pinned Action's handle, which straddles
-  // its border, then steps back inside it, so the neighbour's handle under it shows its focus.
+  // The column whose resize handle has the keyboard focus. The pinned Action's handle straddles
+  // its left border, over the handle of the column before it: while that handle has the keyboard
+  // focus, Action's steps back inside its own column, so the focused handle shows on top. A
+  // press never moves it: beside that border, the pointer always resizes Action.
   const [resizeFocus, setResizeFocus] = useState(null);
-  return <tr className="dossier-table-head" data-resize-focus={resizeFocus || undefined}>
+  const beforeAction = columns[columns.findIndex(column => column.key === 'action') - 1]?.key;
+  return <tr className="dossier-table-head" data-resize-focus={resizeFocus && resizeFocus === beforeAction ? 'before-action' : undefined}>
     <th scope="col" className="dossier-table-select" data-column="select">
       <label className="dossier-table-checkbox"><SelectionCheckbox aria-label="Sélectionner tous les dossiers affichés" selection={selection} onChange={onSelectAll} /></label>
     </th>

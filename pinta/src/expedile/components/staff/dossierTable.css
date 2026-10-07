@@ -216,9 +216,9 @@ html:not(.dark) .dossier-table-filter[aria-pressed='true']::after { background: 
    Action heading, above its neighbour, keeps that border for itself, so a press anywhere on
    it resizes Action and the border follows the pointer. */
 .dossier-table-resize-start { right: auto; left: -10px; width: 20px; justify-content: center; }
-/* While another column's handle has the focus, Action's keeps to its own side of the border:
-   the neighbour's handle, on the other side, shows its focus (table scrolled to its end). */
-.dossier-table-head[data-resize-focus]:not([data-resize-focus='action']) .dossier-table-resize-start { left: 0; width: 10px; justify-content: flex-start; }
+/* While the handle of the column before Action has the keyboard focus, Action's keeps to its own
+   side of the border: that handle, on the other side, shows its focus (table scrolled to its end). */
+.dossier-table-head[data-resize-focus='before-action'] .dossier-table-resize-start { left: 0; width: 10px; justify-content: flex-start; }
 .dossier-table-head th[data-resize-edge='start'] { padding: 0 6px 0 12px; }
 /* « Dimensions finales »: one line per outgoing parcel. Each part of a line
    (« Colis 2 : », « 19,5 × 17 × 11 cm · », « 0,73 kg vol. ») is kept whole, so a
