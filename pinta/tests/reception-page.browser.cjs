@@ -60,7 +60,7 @@ function focusGeometry(page) {
     const box = node => { const rect = node.getBoundingClientRect(); return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom, height: rect.height, width: rect.width }; };
     const field = document.activeElement;
     const footer = document.querySelector('.reception-footer');
-    const buttons = [...footer.querySelectorAll('button')].filter(button => /^(Enregistrer et ajouter un carton|Terminer la réception)$/.test(button.textContent.trim())).map(box);
+    const buttons = [...footer.querySelectorAll('button')].filter(button => /^(Enregistrer et ajouter un carton|Terminer la réception)$/.test((button.getAttribute('aria-label') || button.textContent).trim())).map(box);
     const summary = footer.querySelector('[aria-live="polite"]');
     const rect = field.getBoundingClientRect();
     const covering = [[rect.left + 4, rect.top + 4], [rect.left + rect.width / 2, rect.top + rect.height / 2], [rect.right - 4, rect.bottom - 4]]
