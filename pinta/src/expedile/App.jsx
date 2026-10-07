@@ -91,7 +91,7 @@ function StaffShellSkeleton() {
       <div className="flex-1 min-h-0 overflow-hidden pb-[calc(4.5rem+env(safe-area-inset-bottom))] lg:pb-0"><LoadingView /></div>
     </div>
     <div aria-hidden="true" className="lg:hidden fixed bottom-0 left-0 right-0 z-50 border-t border-gray-200 flex items-center justify-around py-2 px-1" style={{ background: 'var(--bg-elevated)', paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }}>
-      {[0, 1, 2, 3].map((item) => <div key={item} className="flex-1 min-h-11 flex flex-col items-center justify-center gap-0.5 px-1 py-1"><div className="h-5 w-5 rounded-md bg-gray-200" /><div className="h-2.5 w-12 rounded bg-gray-200" /></div>)}
+      {[0, 1, 2, 3].map((item) => <div key={item} className="flex-1 min-h-11 flex flex-col items-center justify-center gap-0.5 px-1 py-1"><div className="h-5 w-5 rounded-md bg-gray-200" /><div className="h-4 flex items-center"><div className="h-2.5 w-12 rounded bg-gray-200" /></div></div>)}
     </div>
   </div>;
 }

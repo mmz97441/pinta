@@ -217,7 +217,7 @@ async function checkBusiness(f) {
   const calls = await mockBusinessSave(f);
   try {
     await f.page.goto(`${base}/settings?tab=metier`);
-    const panel = f.page.getByRole('main');
+    const panel = f.page.getByTestId('settings-panel');
     await panel.getByRole('heading', { name: 'Stockage et rappels', exact: true }).waitFor();
     await panel.getByRole('heading', { name: 'Tarif de stockage de référence', exact: true }).waitFor();
     await panel.getByText('Indicatif : les frais de stockage s’ajoutent au devis par l’équipe, jamais automatiquement.', { exact: true }).waitFor();
@@ -272,7 +272,7 @@ async function checkFailedLoad(f) {
     ? route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ message: 'Indisponibilité simulée' }) }) : route.fallback());
   await f.login();
   await f.page.goto(`${base}/settings?tab=metier`);
-  const main = f.page.getByRole('main');
+  const main = f.page.getByTestId('settings-panel');
   const alert = main.getByRole('alert');
   await alert.getByRole('heading', { name: 'Chargement impossible', exact: true }).waitFor();
   assert.match(flat(await alert.innerText()), /La configuration n’a pas pu être chargée \(Indisponibilité simulée\)\. Aucun réglage n’est modifiable tant qu’elle n’est pas chargée/);
@@ -310,7 +310,7 @@ async function checkChannels(f) {
   await sendConsentRequest(f, '2026-10-06T22:05:00.000Z');
   assert.equal(f.tables.messages.length, 2);
   await spa(f, '/settings?tab=telegram');
-  const main = f.page.getByRole('main');
+  const main = f.page.getByTestId('settings-panel');
   await main.getByRole('heading', { name: 'Canaux de contact', exact: true }).waitFor();
   const telegram = main.locator('[data-channel="telegram"]'), email = main.locator('[data-channel="email"]');
   // The latest delivery (not the oldest), in French and Paris time; the log covers this page only.
@@ -393,7 +393,7 @@ async function checkToasts(f) {
     await f.page.locator('article', { hasText: 'Divers' }).getByRole('button', { name: 'Supprimer', exact: true }).click();
     const dialog = f.page.getByRole('dialog');
     await dialog.getByRole('button').filter({ hasText: /^(Supprimer|Confirmer)$/ }).last().click();
-    await f.page.getByRole('main').getByText('Catégorie supprimée.', { exact: true }).waitFor();
+    await f.page.getByTestId('settings-panel').getByText('Catégorie supprimée.', { exact: true }).waitFor();
     await f.page.waitForTimeout(400);
     assert.equal(await f.page.locator('[data-toast]').count(), 0, 'No toast doubles the inline confirmation.');
   } finally { await f.context.unroute('**/rest/v1/rpc/delete_admin_category'); }
@@ -480,9 +480,11 @@ async function checkClientLoadingShell(f) {
   await f.context.route('**/rest/v1/client_colis*', async route => { await held; return route.fallback(); });
   try {
     await f.page.reload({ waitUntil: 'domcontentloaded' });
-    const skeleton = f.page.getByTestId('shell-skeleton');
-    await skeleton.waitFor();
-    assert.equal(await skeleton.getAttribute('data-shell'), 'client');
+    // Before the profile is known, the shell placeholder; once the client is known, the portal's own
+    // skeleton inside its real header and navigation. Either way, nothing may move when the page appears.
+    const shell = f.page.getByTestId('shell-skeleton');
+    await shell.or(f.page.locator('[data-testid^="client-skeleton-"]')).first().waitFor();
+    if (await shell.count()) assert.equal(await shell.getAttribute('data-shell'), 'client');
     const header = () => f.page.evaluate(() => { const node = document.querySelector('.glass-dark'); const r = node.getBoundingClientRect(); return { top: Math.round(r.top), height: Math.round(r.height) }; });
     const navBar = () => f.page.evaluate(() => { const node = document.querySelector('[data-testid="shell-skeleton"] > .fixed, nav[aria-label="Navigation principale"]'); const r = node.getBoundingClientRect(); return { top: Math.round(r.top), height: Math.round(r.height) }; });
     const before = { header: await header(), nav: await navBar() };
