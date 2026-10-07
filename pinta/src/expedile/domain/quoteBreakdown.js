@@ -33,6 +33,26 @@ export function allocateCents(total, weights) {
   return parts.map(part => (sign * part) / 100);
 }
 
+/**
+ * The divisor a saved quote was priced with. The server computes the volumetric weight
+ * with its own divisor while the snapshot keeps the one the browser sent: when they
+ * differ (a browser still holding an older setting), the divisor implied by the saved
+ * amounts (total volume ÷ saved volumetric weight) is the one that was billed.
+ */
+export function savedQuoteDivisor(snapshot) {
+  const inputs = snapshot?.inputs || {};
+  const stated = num(inputs.volumetricDivisor);
+  const volumes = (Array.isArray(inputs.finalPackages) ? inputs.finalPackages : []).map(box => ['dimL', 'dimW', 'dimH'].reduce((product, key) => product * (num(box?.[key]) || 0), 1));
+  const totalVolume = volumes.reduce((sum, volume) => sum + volume, 0);
+  const saved = num(snapshot?.amounts?.volumetricWeight);
+  if (volumes.length && volumes.every(volume => volume > 0) && saved > 0) {
+    const implied = totalVolume / saved;
+    if (stated > 0 && Math.abs(implied - stated) <= stated * 1e-6) return stated;
+    return Math.round(implied * 1000) / 1000;
+  }
+  return stated > 0 ? stated : null;
+}
+
 /** The volumetric weight of one parcel (L × l × h ÷ divisor, in kg), or null. */
 export function parcelVolumetricWeight(box, divisor) {
   const dims = ['dimL', 'dimW', 'dimH'].map(key => num(box?.[key]));
@@ -57,7 +77,7 @@ export function savedQuoteBreakdown(snapshot, { categories = [] } = {}) {
   const inputs = snapshot?.inputs || {};
   if (!amounts || !finite(amounts.total)) return null;
   const categoryById = new Map((Array.isArray(categories) ? categories : []).map(category => [category.id, category]));
-  const divisor = num(inputs.volumetricDivisor);
+  const divisor = savedQuoteDivisor(snapshot);
   const packages = (Array.isArray(inputs.finalPackages) ? inputs.finalPackages : []).map(box => ({
     dimL: num(box?.dimL), dimW: num(box?.dimW), dimH: num(box?.dimH), poids: num(box?.poids),
     volumetricWeight: parcelVolumetricWeight(box, divisor),

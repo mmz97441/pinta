@@ -25,7 +25,7 @@ export function buildCommercialInvoiceWorkbook(invoice) {
     ['Date', invoiceDayLabel(meta.date) || 'Non renseignée'],
     ['Départ prévu', invoiceDayLabel(meta.departureDate) || 'Non renseigné'],
     ['Destination', meta.destination || 'Non renseignée'],
-    ['Mode de transport', meta.mode || 'Non renseigné'],
+    ...(meta.mode ? [['Mode de transport', meta.mode]] : []),
     ['Expéditions', meta.dossiers],
     ['Nombre de colis', meta.parcels],
     ['Poids brut total (kg)', meta.weight > 0 ? meta.weight : 'Non renseigné'],

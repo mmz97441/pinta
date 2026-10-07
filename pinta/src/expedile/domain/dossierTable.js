@@ -10,7 +10,7 @@ import { dossierDepartureWish, wishedDepartureLabel } from './departurePlanning.
 import { CONSENT_LABELS, consentRelance, consentState, consentSummary } from './consentQueue.js';
 import { clientDisplayName } from './clientGroups.js';
 import { volumetricDivisor } from './quote.js';
-import { parcelVolumetricWeight } from './quoteBreakdown.js';
+import { parcelVolumetricWeight, savedQuoteDivisor } from './quoteBreakdown.js';
 import { kg } from '../utils/format.js';
 
 const SORT_TYPES = new Set(['text', 'number', 'date']);
@@ -302,7 +302,7 @@ const sameParcels = (saved, boxes) => saved.length > 0 && saved.length === boxes
  * the list then shows the dimensions alone. */
 export function dossierVolumetricDivisor(dossier, boxes, settings) {
   const inputs = dossier?.devisSnapshot?.inputs;
-  const quoted = measured(inputs?.volumetricDivisor);
+  const quoted = savedQuoteDivisor(dossier?.devisSnapshot);
   if (Array.isArray(inputs?.finalPackages) && Array.isArray(boxes) && Number.isFinite(quoted) && quoted > 0 && sameParcels(inputs.finalPackages, boxes))
     return { value: quoted, source: 'quote' };
   const configured = volumetricDivisor(settings || {});

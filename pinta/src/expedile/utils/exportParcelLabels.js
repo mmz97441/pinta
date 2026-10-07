@@ -5,7 +5,7 @@ import { formatParcelCode, parcelCodeText, parseParcelCode } from '../domain/par
 import { hasCurrentPreparation } from '../domain/preparationReadiness.js';
 import { servedDestination } from '../domain/clientRequirements.js';
 import { drawCode128 } from './code128.js';
-import { pdfText } from './exportDevisPDF.js';
+import { pdfText } from './pdfFormat.js';
 
 // The labels of the outgoing parcels: one 100 × 150 mm page per parcel of a prepared
 // dossier (its current preparation: finalPackages, outgoingParcelCount). Each label

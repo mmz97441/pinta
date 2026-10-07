@@ -49,7 +49,7 @@ export function buildCommercialInvoicePDF(invoice) {
     ['Date', invoiceDayLabel(meta.date) || 'Non renseignée'],
     ['Départ prévu', invoiceDayLabel(meta.departureDate) || 'Non renseigné'],
     ['Destination', meta.destination || 'Non renseignée'],
-    ['Mode de transport', meta.mode || 'Non renseigné'],
+    ...(meta.mode ? [['Mode de transport', meta.mode]] : []),
     ['Expéditions', String(meta.dossiers)],
     ['Nombre de colis', String(meta.parcels)],
     ['Poids brut total', meta.weight > 0 ? pdfUnit(meta.weight, 'kg') : 'Non renseigné'],

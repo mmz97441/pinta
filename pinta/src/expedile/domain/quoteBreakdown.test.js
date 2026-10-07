@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { calculateQuote } from './quote.js';
-import { allocateCents, parcelVolumetricWeight, savedQuoteBreakdown } from './quoteBreakdown.js';
+import { allocateCents, parcelVolumetricWeight, savedQuoteBreakdown, savedQuoteDivisor } from './quoteBreakdown.js';
 
 const sum = parts => Math.round(parts.reduce((acc, part) => acc + part, 0) * 100) / 100;
 
@@ -68,4 +68,17 @@ test('the real weight is retained when it is the heavier, and old snapshots stil
   assert.equal(detail.feesTotal, 4);
   assert.equal(savedQuoteBreakdown(null), null);
   assert.equal(savedQuoteBreakdown({ inputs: {} }), null, 'No saved amounts: nothing to read.');
+});
+
+test('the divisor of a saved quote is the one its saved amounts were computed with', () => {
+  const packages = [{ dimL: 40, dimW: 35, dimH: 10, poids: 1 }, { dimL: 30, dimW: 20, dimH: 10, poids: 1 }];
+  // 20 000 cm³ ÷ 5000 = 4 kg: the stated divisor matches.
+  assert.equal(savedQuoteDivisor({ inputs: { finalPackages: packages, volumetricDivisor: 5000 }, amounts: { volumetricWeight: 4 } }), 5000);
+  // A browser still holding 5000 while the server used 6000: the amounts tell.
+  assert.equal(savedQuoteDivisor({ inputs: { finalPackages: packages, volumetricDivisor: 5000 }, amounts: { volumetricWeight: 20000 / 6000 } }), 6000);
+  assert.equal(savedQuoteDivisor({ inputs: { finalPackages: packages, volumetricDivisor: 4000 } }), 4000, 'Without saved amounts, the stated divisor.');
+  assert.equal(savedQuoteDivisor({ inputs: {} }), null);
+  const detail = savedQuoteBreakdown({ inputs: { finalPackages: packages, volumetricDivisor: 5000 }, amounts: { total: 50, transport: 40, realWeight: 2, volumetricWeight: 20000 / 6000, billableWeight: 20000 / 6000 } });
+  assert.equal(detail.weights.divisor, 6000);
+  assert.equal(sum(detail.weights.packages.map(parcel => parcel.volumetricWeight)), sum([20000 / 6000]));
 });
