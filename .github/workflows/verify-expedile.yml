@@ -81,62 +81,65 @@ jobs:
             if curl --silent --fail http://127.0.0.1:4175/ > /dev/null; then break; fi
             sleep 1
           done
-          node tests/browser-staff-sync.cjs
-          node tests/payment-return.browser.cjs
-          node tests/dossier-list-contrast.browser.cjs
-          node tests/dossier-table.browser.cjs
-          node tests/dossier-table-comfort.browser.cjs
-          PINTA_DOSSIER_DEPARTURES_OUT=/tmp/pinta-dossier-departures node tests/dossier-departures.browser.cjs
-          PINTA_DOSSIER_ACCORDS_OUT=/tmp/pinta-dossier-accords node tests/dossier-accords.browser.cjs
-          PINTA_DEPARTURES_PAGE_OUT=/tmp/pinta-departures-page node tests/departures-page.browser.cjs
-          node tests/parcel-reference-search.cjs
-          node tests/reçu-documents-factures.cjs
-          node tests/invoice-review-indicator.cjs
-          node tests/invoice-workspace.cjs
-          node tests/invoice-completion.browser.cjs
-          node tests/invoice-quote-withdrawal.browser.cjs
-          node tests/client-late-invoice.browser.cjs
-          node tests/preparation-autonomous.browser.cjs
-          node tests/task-flow.browser.cjs
-          node tests/task-readiness.browser.cjs
-          node tests/task-back-navigation.browser.cjs
-          node tests/shipment-revision.browser.cjs
-          node tests/quote-task-conflict.browser.cjs
-          node tests/customs-quote.browser.cjs
-          node tests/dossier-shell.browser.cjs
-          node tests/parcours-dossier.browser.cjs
-          node tests/dossier-overview.browser.cjs
-          node tests/conversation-layout.browser.cjs
-          PINTA_CONVERSATIONS_OUT=/tmp/pinta-conversations node tests/conversations-inbox.browser.cjs
-          node tests/reception-page.browser.cjs
-          node tests/personal-work.browser.cjs
-          PINTA_WORK_LAYOUT_OUT=/tmp/pinta-work-layout node tests/work-layout.browser.cjs
-          node tests/task-claim.browser.cjs
-          node tests/collaborative-work.browser.cjs
-          node tests/reception-without-notification.browser.cjs
-          node tests/client-lightweight.browser.cjs
-          node tests/task-message.browser.cjs
-          PINTA_WORKSPACE_OUT=/tmp/pinta-workspace-tasks node tests/organisation-workspace.browser.cjs
-          PINTA_PREPARATION_OUT=/tmp/pinta-preparation-client-tasks node tests/browser-preparation-client.cjs
+          # Every suite runs; the step fails at the end with the list of failed suites.
+          failed_suites=""
+          node tests/browser-staff-sync.cjs || failed_suites="$failed_suites browser-staff-sync.cjs"
+          node tests/payment-return.browser.cjs || failed_suites="$failed_suites payment-return.browser.cjs"
+          node tests/dossier-list-contrast.browser.cjs || failed_suites="$failed_suites dossier-list-contrast.browser.cjs"
+          node tests/dossier-table.browser.cjs || failed_suites="$failed_suites dossier-table.browser.cjs"
+          node tests/dossier-table-comfort.browser.cjs || failed_suites="$failed_suites dossier-table-comfort.browser.cjs"
+          PINTA_DOSSIER_DEPARTURES_OUT=/tmp/pinta-dossier-departures node tests/dossier-departures.browser.cjs || failed_suites="$failed_suites dossier-departures.browser.cjs"
+          PINTA_DOSSIER_ACCORDS_OUT=/tmp/pinta-dossier-accords node tests/dossier-accords.browser.cjs || failed_suites="$failed_suites dossier-accords.browser.cjs"
+          PINTA_DEPARTURES_PAGE_OUT=/tmp/pinta-departures-page node tests/departures-page.browser.cjs || failed_suites="$failed_suites departures-page.browser.cjs"
+          node tests/parcel-reference-search.cjs || failed_suites="$failed_suites parcel-reference-search.cjs"
+          node tests/reçu-documents-factures.cjs || failed_suites="$failed_suites reçu-documents-factures.cjs"
+          node tests/invoice-review-indicator.cjs || failed_suites="$failed_suites invoice-review-indicator.cjs"
+          node tests/invoice-workspace.cjs || failed_suites="$failed_suites invoice-workspace.cjs"
+          node tests/invoice-completion.browser.cjs || failed_suites="$failed_suites invoice-completion.browser.cjs"
+          node tests/invoice-quote-withdrawal.browser.cjs || failed_suites="$failed_suites invoice-quote-withdrawal.browser.cjs"
+          node tests/client-late-invoice.browser.cjs || failed_suites="$failed_suites client-late-invoice.browser.cjs"
+          node tests/preparation-autonomous.browser.cjs || failed_suites="$failed_suites preparation-autonomous.browser.cjs"
+          node tests/task-flow.browser.cjs || failed_suites="$failed_suites task-flow.browser.cjs"
+          node tests/task-readiness.browser.cjs || failed_suites="$failed_suites task-readiness.browser.cjs"
+          node tests/task-back-navigation.browser.cjs || failed_suites="$failed_suites task-back-navigation.browser.cjs"
+          node tests/shipment-revision.browser.cjs || failed_suites="$failed_suites shipment-revision.browser.cjs"
+          node tests/quote-task-conflict.browser.cjs || failed_suites="$failed_suites quote-task-conflict.browser.cjs"
+          node tests/customs-quote.browser.cjs || failed_suites="$failed_suites customs-quote.browser.cjs"
+          node tests/dossier-shell.browser.cjs || failed_suites="$failed_suites dossier-shell.browser.cjs"
+          node tests/parcours-dossier.browser.cjs || failed_suites="$failed_suites parcours-dossier.browser.cjs"
+          node tests/dossier-overview.browser.cjs || failed_suites="$failed_suites dossier-overview.browser.cjs"
+          node tests/conversation-layout.browser.cjs || failed_suites="$failed_suites conversation-layout.browser.cjs"
+          PINTA_CONVERSATIONS_OUT=/tmp/pinta-conversations node tests/conversations-inbox.browser.cjs || failed_suites="$failed_suites conversations-inbox.browser.cjs"
+          node tests/reception-page.browser.cjs || failed_suites="$failed_suites reception-page.browser.cjs"
+          node tests/personal-work.browser.cjs || failed_suites="$failed_suites personal-work.browser.cjs"
+          PINTA_WORK_LAYOUT_OUT=/tmp/pinta-work-layout node tests/work-layout.browser.cjs || failed_suites="$failed_suites work-layout.browser.cjs"
+          node tests/task-claim.browser.cjs || failed_suites="$failed_suites task-claim.browser.cjs"
+          node tests/collaborative-work.browser.cjs || failed_suites="$failed_suites collaborative-work.browser.cjs"
+          node tests/reception-without-notification.browser.cjs || failed_suites="$failed_suites reception-without-notification.browser.cjs"
+          node tests/client-lightweight.browser.cjs || failed_suites="$failed_suites client-lightweight.browser.cjs"
+          node tests/task-message.browser.cjs || failed_suites="$failed_suites task-message.browser.cjs"
+          PINTA_WORKSPACE_OUT=/tmp/pinta-workspace-tasks node tests/organisation-workspace.browser.cjs || failed_suites="$failed_suites organisation-workspace.browser.cjs"
+          PINTA_PREPARATION_OUT=/tmp/pinta-preparation-client-tasks node tests/browser-preparation-client.cjs || failed_suites="$failed_suites browser-preparation-client.cjs"
           npm run test:browser
-          node tests/accessibility.cjs
-          node tests/ux-team-browser.cjs
-          node tests/reception-concurrency.browser.cjs
-          node tests/reception-devis.browser.cjs
-          node tests/measurements-display.browser.cjs
-          node tests/received-cartons.browser.cjs
-          node tests/carton-numbering.browser.cjs
-          node tests/ux-devis.browser.cjs
-          node tests/pdf-preview.browser.cjs
-          node tests/operations-simplicity.browser.cjs
-          node tests/team-simplicity.browser.cjs
-          node tests/client-simplicity.browser.cjs
-          node tests/client-dossier-detail.browser.cjs
-          node tests/client-portal.browser.cjs
-          node tests/chat-retry.browser.cjs
-          node tests/admin-simplicity.browser.cjs
-          PINTA_CLIENT_PAGES_OUT=/tmp/pinta-client-pages node tests/client-pages.browser.cjs
-          PINTA_SETTINGS_DEVIS_OUT=/tmp/pinta-settings-devis node tests/settings-devis.browser.cjs
+          node tests/accessibility.cjs || failed_suites="$failed_suites accessibility.cjs"
+          node tests/ux-team-browser.cjs || failed_suites="$failed_suites ux-team-browser.cjs"
+          node tests/reception-concurrency.browser.cjs || failed_suites="$failed_suites reception-concurrency.browser.cjs"
+          node tests/reception-devis.browser.cjs || failed_suites="$failed_suites reception-devis.browser.cjs"
+          node tests/measurements-display.browser.cjs || failed_suites="$failed_suites measurements-display.browser.cjs"
+          node tests/received-cartons.browser.cjs || failed_suites="$failed_suites received-cartons.browser.cjs"
+          node tests/carton-numbering.browser.cjs || failed_suites="$failed_suites carton-numbering.browser.cjs"
+          node tests/ux-devis.browser.cjs || failed_suites="$failed_suites ux-devis.browser.cjs"
+          node tests/pdf-preview.browser.cjs || failed_suites="$failed_suites pdf-preview.browser.cjs"
+          node tests/operations-simplicity.browser.cjs || failed_suites="$failed_suites operations-simplicity.browser.cjs"
+          node tests/team-simplicity.browser.cjs || failed_suites="$failed_suites team-simplicity.browser.cjs"
+          node tests/client-simplicity.browser.cjs || failed_suites="$failed_suites client-simplicity.browser.cjs"
+          node tests/client-dossier-detail.browser.cjs || failed_suites="$failed_suites client-dossier-detail.browser.cjs"
+          node tests/client-portal.browser.cjs || failed_suites="$failed_suites client-portal.browser.cjs"
+          node tests/chat-retry.browser.cjs || failed_suites="$failed_suites chat-retry.browser.cjs"
+          node tests/admin-simplicity.browser.cjs || failed_suites="$failed_suites admin-simplicity.browser.cjs"
+          PINTA_CLIENT_PAGES_OUT=/tmp/pinta-client-pages node tests/client-pages.browser.cjs || failed_suites="$failed_suites client-pages.browser.cjs"
+          PINTA_SETTINGS_DEVIS_OUT=/tmp/pinta-settings-devis node tests/settings-devis.browser.cjs || failed_suites="$failed_suites settings-devis.browser.cjs"
+          if [ -n "$failed_suites" ]; then echo "Suites en échec :$failed_suites"; exit 1; fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:
