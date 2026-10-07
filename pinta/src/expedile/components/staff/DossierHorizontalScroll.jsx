@@ -43,9 +43,15 @@ export default function DossierHorizontalScroll({ scrollRef, layoutKey, onEdgesC
     const observer = new ResizeObserver(update);
     observer.observe(element);
     if (table) observer.observe(table);
+    // A column can change width without the table changing size (wrapped headings, the pinned action):
+    // follow the heading cells too, and measure again once the fonts are ready.
+    if (table) for (const th of table.querySelectorAll('thead th[data-column]')) observer.observe(th);
+    let active = true;
+    document.fonts?.ready?.then(() => { if (active) update(); });
     element.addEventListener('scroll', update, { passive: true });
     window.addEventListener('resize', update, { passive: true });
     return () => {
+      active = false;
       observer.disconnect();
       element.removeEventListener('scroll', update);
       window.removeEventListener('resize', update);
