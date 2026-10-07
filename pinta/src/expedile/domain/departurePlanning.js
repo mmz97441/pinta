@@ -237,11 +237,16 @@ export function departureFieldText(dossier = {}, envois = [], { today = Date.now
   return { state: 'none', prefix: 'Départ', value: 'à choisir' };
 }
 
-/** The closing that matters for the dossier's consent: its departure's
- * closing, else the closing of its desired day (the server's
- * _colis_departure_closing). `{ closing, day, habitual }` (`habitual`: the
- * Wednesday 17 h, without a loading closing of its own), or null. */
-export function dossierDepartureClosing(dossier = {}, envoi = null) {
+/** The closing that matters for the dossier's consent (the server's
+ * _colis_departure_closing): its departure's closing; without one, the
+ * closing of the open departure planned on its desired day (the one
+ * _departure_for_day would assign: the lowest id among the departures the
+ * dossier can join that day), else the Wednesday 17 h of that day.
+ * `{ closing, day, habitual }` (`habitual`: the Wednesday 17 h, without a
+ * loading closing of its own), or null. `client`, `envois` and `now` find the
+ * departure planned on the desired day; without them that day's Wednesday
+ * 17 h applies. */
+export function dossierDepartureClosing(dossier = {}, envoi = null, { client = {}, envois = [], now = Date.now() } = {}) {
   const envoiId = dossier.envoi || dossier.envoiId;
   if (envoiId) {
     if (!envoi || envoi.id !== envoiId) return null;
@@ -249,7 +254,11 @@ export function dossierDepartureClosing(dossier = {}, envoi = null) {
     return closing ? { closing, day: isoCalendarDay(envoi.date), habitual: departureClosingHabitual(envoi) } : null;
   }
   const wish = dossierDepartureWish(dossier);
-  return wish ? { closing: departureDefaultClosing(wish), day: wish, habitual: true } : null;
+  if (!wish) return null;
+  const planned = plannedDeparturesFor(dossier, client, envois, now).filter(item => isoCalendarDay(item.date) === wish)
+    .sort((left, right) => compareKey(String(left.id), String(right.id)))[0];
+  return planned ? { closing: departureClosing(planned), day: wish, habitual: departureClosingHabitual(planned) }
+    : { closing: departureDefaultClosing(wish), day: wish, habitual: true };
 }
 
 /** The 48 hours before a closing that has not passed yet. */

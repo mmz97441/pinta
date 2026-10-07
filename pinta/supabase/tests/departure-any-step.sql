@@ -313,11 +313,12 @@ INSERT INTO colis(id,client_id,ref,statut,feu_vert,envoi_id,depart_souhaite,atte
 -- Voluntary waits are recorded after the receipts: a new receipt of the same client resumes them (resume_wait_on_receipt).
 UPDATE colis SET attente_client_motif='Attend d’autres colis',attente_client_date=now()-interval '1 day',attente_client_until=now()+interval '5 days' WHERE id='da300000-0000-4000-8000-000000000043';
 UPDATE colis SET attente_client_motif='Attend d’autres colis',attente_client_date=now()-interval '2 days',attente_client_until=now()-interval '1 day' WHERE id='da300000-0000-4000-8000-000000000044';
-SELECT das_assert((SELECT state='ready' AND blocked_reason IS NULL AND action_hint='Demander l’accord avant la clôture du départ' AND due_at=now()+interval '24 hours' FROM das_reception('da300000-0000-4000-8000-000000000031')),'S7 receptionne inside the window: ask consent before the closing, due at the closing');
+-- Since 2026-10-07 (consent relance follow-up) a received dossier is measured first: « Mesurer puis demander l’accord ».
+SELECT das_assert((SELECT state='ready' AND blocked_reason IS NULL AND action_hint='Mesurer puis demander l’accord avant la clôture du départ' AND due_at=now()+interval '24 hours' FROM das_reception('da300000-0000-4000-8000-000000000031')),'S7 receptionne inside the window: measure then ask consent before the closing, due at the closing');
 SELECT das_assert((SELECT state='ready' AND action_hint IS NULL AND due_at IS NULL FROM das_reception('da300000-0000-4000-8000-000000000032')),'S7 mesure outside the window: unchanged');
-SELECT das_assert((SELECT action_hint='Demander l’accord avant la clôture du départ' AND due_at=now()+interval '2 hours' FROM das_reception('da300000-0000-4000-8000-000000000033')),'S7 an earlier manual date stays the due date');
+SELECT das_assert((SELECT action_hint='Mesurer puis demander l’accord avant la clôture du départ' AND due_at=now()+interval '2 hours' FROM das_reception('da300000-0000-4000-8000-000000000033')),'S7 an earlier manual date stays the due date');
 SELECT das_assert((SELECT state='ready' AND action_hint IS NULL AND due_at IS NULL FROM das_reception('da300000-0000-4000-8000-000000000034')),'S7 mesure with a far desired day: unchanged');
-SELECT das_assert((SELECT action_hint='Demander l’accord avant la clôture du départ' AND due_at=now()+interval '36 hours' FROM das_reception('da300000-0000-4000-8000-000000000035'))
+SELECT das_assert((SELECT action_hint='Mesurer puis demander l’accord avant la clôture du départ' AND due_at=now()+interval '36 hours' FROM das_reception('da300000-0000-4000-8000-000000000035'))
   AND (SELECT action_hint='Demander l’accord avant la clôture du départ' AND due_at=now()+interval '48 hours' FROM das_reception('da300000-0000-4000-8000-000000000036'))
   AND (SELECT action_hint IS NULL AND due_at IS NULL FROM das_reception('da300000-0000-4000-8000-000000000037')),'S7 the window is the 48 hours before the closing, both ends included');
 SELECT das_assert((SELECT state='ready' AND blocked_reason IS NULL AND action_hint='Relancer le client avant la clôture du départ' AND due_at=now()+interval '24 hours' FROM das_reception('da300000-0000-4000-8000-000000000041')),'S7 awaited consent inside the window: not blocked, relance due at the closing');
@@ -342,7 +343,7 @@ UPDATE staff_work_actions SET state='waiting',blocked_reason='Accord client atte
 UPDATE staff_work_actions SET state='ready',blocked_reason=NULL,action_hint='Relancer le client avant la clôture du départ',due_at=now()-interval '1 day' WHERE colis_id='da300000-0000-4000-8000-000000000045' AND kind='reception';
 SELECT das_as('director');
 SELECT refresh_staff_work_actions();
-SELECT das_assert((SELECT state='ready' AND action_hint='Demander l’accord avant la clôture du départ' AND due_at=now()+interval '24 hours' FROM das_reception('da300000-0000-4000-8000-000000000031')),'S7 refresh: the window opened on a ready reception task');
+SELECT das_assert((SELECT state='ready' AND action_hint='Mesurer puis demander l’accord avant la clôture du départ' AND due_at=now()+interval '24 hours' FROM das_reception('da300000-0000-4000-8000-000000000031')),'S7 refresh: the window opened on a ready reception task');
 SELECT das_assert((SELECT state='ready' AND blocked_reason IS NULL AND action_hint='Relancer le client avant la clôture du départ' AND due_at=now()+interval '24 hours' FROM das_reception('da300000-0000-4000-8000-000000000041')),'S7 refresh: the window opened on a blocked consent');
 SELECT das_assert((SELECT state='waiting' AND blocked_reason='Accord client attendu' AND action_hint IS NULL AND due_at IS NULL FROM das_reception('da300000-0000-4000-8000-000000000045')),'S7 refresh: the closing passed');
 SELECT das_as('postgres');

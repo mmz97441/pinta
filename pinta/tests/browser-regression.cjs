@@ -62,6 +62,9 @@ function fixtures(role) {
         nom: 'Exemple',
         prenom: 'Camille',
         email: 'camille@example.test',
+        // A complete record (prénom, nom, email, téléphone, address): « À vérifier » stays silent. A landline,
+        // so the screens that offer to call or invite a mobile keep their usual state.
+        tel_fixe: '0262 00 00 01',
         cp: '97400',
         ville: 'Saint-Denis',
         adresse_ligne1: '1 rue Exemple',

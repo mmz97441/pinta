@@ -237,6 +237,19 @@ test('the consent closing is the departure closing, or the closing of the desire
   assert.equal(dossierDepartureClosing({ envoi: 'reunion-08' }, null), null, 'An unreadable departure gives no closing.');
   assert.deepEqual(dossierDepartureClosing({ departSouhaite: '2026-10-09' }), { closing: '2026-10-07T15:00:00.000Z', day: '2026-10-09', habitual: true });
   assert.equal(dossierDepartureClosing({}), null);
+  // A departure the dossier can join planned on its desired day closes it, as _departure_for_day assigns it.
+  const wish = { statut: 'mesure', departSouhaite: '2026-10-22' };
+  const oct22 = envoi('reunion-22', '2026-10-22', { loadingClosesAt: '2026-10-07T07:00:00Z' });
+  const closingOf = (envois, now = today) => dossierDepartureClosing(wish, null, { client: reunion, envois, now });
+  assert.deepEqual(closingOf([oct22]), { closing: '2026-10-07T07:00:00.000Z', day: '2026-10-22', habitual: false }, 'Its own loading closing.');
+  assert.deepEqual(closingOf([{ ...oct22, loadingClosesAt: null }]), { closing: '2026-10-21T15:00:00.000Z', day: '2026-10-22', habitual: true }, 'Its Wednesday 17 h.');
+  for (const [other, label] of [[{ ...oct22, destinationCode: '971' }, 'another destination'], [{ ...oct22, statut: 'parti' }, 'gone'], [{ ...oct22, loadingClosesAt: '2026-10-06T07:00:00Z' }, 'loading closed'],
+    [{ ...oct22, date: '2026-10-23' }, 'another day'], [{ ...oct22, statut: 'archive' }, 'archived']])
+    assert.deepEqual(closingOf([other]), { closing: '2026-10-21T15:00:00.000Z', day: '2026-10-22', habitual: true }, `${label}: the day's Wednesday 17 h.`);
+  // Two departures that day: the lowest id, like the server (ORDER BY e.id).
+  assert.equal(closingOf([{ ...oct22, id: 'reunion-22-b', ref: 'ENV-A', loadingClosesAt: '2026-10-07T09:00:00Z' }, { ...oct22, id: 'reunion-22-a', ref: 'ENV-B' }]).closing, '2026-10-07T07:00:00.000Z');
+  assert.deepEqual(dossierDepartureClosing(wish, null, { envois: [oct22] }), { closing: '2026-10-21T15:00:00.000Z', day: '2026-10-22', habitual: true }, 'Without the client the destination is unknown: the Wednesday rule.');
+  assert.deepEqual(dossierDepartureClosing({ ...wish, envoi: 'reunion-08' }, assigned, { client: reunion, envois: [oct22] }), { closing: '2026-10-07T15:00:00.000Z', day: '2026-10-08', habitual: true }, 'An assigned departure wins.');
   // The 48 hours before the closing, closing excluded.
   assert.equal(consentRelanceOpen('2026-10-07T15:00:00Z', Date.parse('2026-10-05T15:00:00Z')), true);
   assert.equal(consentRelanceOpen('2026-10-07T15:00:00Z', Date.parse('2026-10-05T14:59:00Z')), false);

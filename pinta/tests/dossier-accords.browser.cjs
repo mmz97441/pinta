@@ -13,8 +13,9 @@
  * - dossiers EXP-ACC001…013, listed in fixture() with their status, client and
  *   departure. The consent states: ACC001 and ACC010 to submit (receptionne),
  *   ACC002, ACC006 and ACC012 to submit (mesure), ACC003 awaited (with
- *   relances), ACC004 and ACC005 waiting at the client's request (until 25 Oct,
- *   then without a date); ACC011 is archived; the others are past consent.
+ *   relances, the last one more than 24 hours ago: the relance is due again),
+ *   ACC004 and ACC005 waiting at the client's request (until 25 Oct, then
+ *   without a date); ACC011 is archived; the others are past consent.
  * - ACC006 has the desired day 19 November and no departure (« Départ à créer »).
  * - « Accords clients » lists ACC001–006, 010 and 012 in four client bands
  *   (ACCORD_GROUPS); addRelances() adds the relances of its column scenarios.
@@ -72,11 +73,12 @@ async function fixture(browser, { role = 'directeur', width = 1440, height = wid
   await f.context.addInitScript(value => localStorage.setItem('expedile-theme', value), theme);
   await f.context.addInitScript(installGroupReader);
   const client = (id, fields) => ({ id, user_id: null, telegram_chat_id: null, type: 'particulier', abonnement: 'freemium', abonnement_debut: null, abonnement_fin: null, onboarded: true, created_at: '2026-09-01T08:00:00Z', ...fields });
+  // Complete records (prénom, nom, email, téléphone, address): « À vérifier » says nothing about them.
   f.tables.clients = [
-    client(CLIENT.payet, { ref: 'CLI-ACC-01', nom: 'Payet', prenom: 'Flavie', email: 'flavie@example.test', cp: '97400', ville: 'Saint-Denis', adresse_ligne1: '12 rue de Paris', user_id: uuid('a2000000', 1), telegram_chat_id: 8001 }),
-    client(CLIENT.hoarau, { ref: 'CLI-ACC-02', nom: 'Hoarau', prenom: 'Lucas', email: 'lucas@example.test', cp: '97430', ville: 'Le Tampon', adresse_ligne1: '8 chemin des Fleurs', user_id: uuid('a2000000', 2), telegram_chat_id: 8002, abonnement: 'premium', abonnement_debut: '2025-10-18', abonnement_fin: '2026-10-18' }),
-    client(CLIENT.jacoby, { ref: 'CLI-ACC-03', nom: 'Jacoby', prenom: 'Nadia', email: 'nadia@example.test', cp: '97110', ville: 'Pointe-à-Pitre', adresse_ligne1: '4 rue Schœlcher', telegram_chat_id: 8003 }),
-    client(CLIENT.grondin, { ref: 'CLI-ACC-04', nom: 'Grondin', prenom: 'Paul', email: 'paul@example.test', cp: '97410', ville: 'Saint-Pierre', adresse_ligne1: '3 rue des Bons Enfants', telegram_chat_id: 8004 }),
+    client(CLIENT.payet, { ref: 'CLI-ACC-01', nom: 'Payet', prenom: 'Flavie', email: 'flavie@example.test', tel: '0692 20 00 01', cp: '97400', ville: 'Saint-Denis', adresse_ligne1: '12 rue de Paris', user_id: uuid('a2000000', 1), telegram_chat_id: 8001 }),
+    client(CLIENT.hoarau, { ref: 'CLI-ACC-02', nom: 'Hoarau', prenom: 'Lucas', email: 'lucas@example.test', tel: '0692 20 00 02', cp: '97430', ville: 'Le Tampon', adresse_ligne1: '8 chemin des Fleurs', user_id: uuid('a2000000', 2), telegram_chat_id: 8002, abonnement: 'premium', abonnement_debut: '2025-10-18', abonnement_fin: '2026-10-18' }),
+    client(CLIENT.jacoby, { ref: 'CLI-ACC-03', nom: 'Jacoby', prenom: 'Nadia', email: 'nadia@example.test', tel: '0690 20 00 03', cp: '97110', ville: 'Pointe-à-Pitre', adresse_ligne1: '4 rue Schœlcher', telegram_chat_id: 8003 }),
+    client(CLIENT.grondin, { ref: 'CLI-ACC-04', nom: 'Grondin', prenom: 'Paul', email: 'paul@example.test', tel: '0692 20 00 04', cp: '97410', ville: 'Saint-Pierre', adresse_ligne1: '3 rue des Bons Enfants', telegram_chat_id: 8004 }),
   ];
   const departure = (id, ref, date, code, fields = {}) => ({ id, ref, date_depart: date, destination_code: code, statut: 'planifie', mode_transport: 'aerien', loading_closes_at: null, departed_at: null, manifest_version: 0, updated_at: '2026-10-01T08:00:00Z', ...fields });
   f.tables.envois = [
@@ -119,7 +121,8 @@ async function fixture(browser, { role = 'directeur', width = 1440, height = wid
   f.tables.messages = [
     message(1, 3, 'demande_feu_vert', '2026-10-02T09:00:00Z'),
     message(2, 3, 'relance_feu_vert', '2026-10-04T09:00:00Z'),
-    message(3, 3, 'relance_feu_vert', '2026-10-05T09:30:00Z'),
+    // 24 h 30 before NOW: no longer followed up (a request or relance is followed up for 24 hours).
+    message(3, 3, 'relance_feu_vert', '2026-10-05T07:30:00Z'),
     message(4, 4, 'demande_feu_vert', '2026-10-01T09:00:00Z'),
     message(5, 5, 'demande_feu_vert', '2026-10-01T10:00:00Z'),
   ];
@@ -191,6 +194,26 @@ const editDeparture = f => overview(f).getByRole('button', { name: 'Modifier le 
 const combobox = scope => scope.getByRole('combobox', { name: 'Départ de cette expédition', exact: true });
 const listbox = scope => scope.getByRole('listbox');
 const alertBand = f => f.page.getByRole('region', { name: 'À vérifier', exact: true });
+/** The band's lines in order: the sentence and its link, if any. */
+const bandLines = f => alertBand(f).locator('li').evaluateAll(items => items.map(item => {
+  const link = item.querySelector('a');
+  return { text: item.querySelector('p').textContent.trim(), link: link && { label: link.textContent.trim(), href: link.getAttribute('href') } };
+}));
+// « À vérifier » lines of the consent and of the desired day (the Wednesday 7 October 17 h closing of 8 October).
+const CUTOFF_8 = 'Accord du client à obtenir avant mercredi 7 octobre, 17 h (clôture habituelle du départ du jeudi 8 octobre).';
+const MEASURE_CUTOFF_8 = 'Cartons à mesurer puis accord du client à demander avant mercredi 7 octobre, 17 h (clôture habituelle du départ du jeudi 8 octobre).';
+const TO_ASSIGN_19 = 'Un départ est prévu le jeudi 19 novembre, jour souhaité : affectez-y le dossier.';
+/** The dossier page shows its departure, read from the planning: what the band needs to decide is loaded. */
+async function departureShown(f, text) {
+  await f.page.waitForFunction(expected => document.querySelector('[data-testid="dossier-overview"] .dossier-departure-text')?.innerText.replace(/\s+/g, ' ').trim() === expected, text);
+}
+/** Lets the page's minute clock see another instant, as on a page left open (no reload). Only the 30-second
+ * clock (useMinuteNow) may show the change: 31 seconds do not reach the one-minute data refresh, and an instant
+ * within the hour of the session does not renew it. Once per loaded page. */
+async function idleUntil(f, instant) {
+  await f.page.clock.setFixedTime(new Date(instant));
+  await f.page.clock.runFor(31000);
+}
 /** Opens a dossier as the list does, once it has pinned its step in the URL. */
 async function openDossier(f, id, query = '') {
   await f.page.goto(`${base}/colis/${id}?returnTo=%2Fcolis${query ? `&${query}` : ''}`);
@@ -331,7 +354,12 @@ function addRelances(f) {
 async function main() {
   await fs.mkdir(output, { recursive: true });
   const browser = await chromium.launch({ headless: true });
+  // PINTA_DOSSIER_ACCORDS_SHARD=i/n runs every n-th scenario from the i-th (0-based): the shards cover the suite once.
+  const [shard, shards] = (process.env.PINTA_DOSSIER_ACCORDS_SHARD || '0/1').split('/').map(Number);
+  let index = -1;
   async function scenario(name, run, options = {}) {
+    index += 1;
+    if (index % shards !== shard) return;
     if (process.env.PINTA_DOSSIER_ACCORDS_FILTER && !name.includes(process.env.PINTA_DOSSIER_ACCORDS_FILTER)) return;
     const f = await fixture(browser, options);
     try {
@@ -743,6 +771,9 @@ async function main() {
       f.before = structuredClone(f.tables.colis);
       await openDossier(f, DOSSIER.ACC006);
       assert.equal((await departureText(overview(f))).text, 'Départ souhaité : jeudi 19 novembre · départ prévu, à affecter');
+      // « À vérifier » asks to assign it (the band is rendered before counting what it does not say).
+      await alertBand(f).getByText(TO_ASSIGN_19, { exact: true }).waitFor();
+      await alertBand(f).getByRole('link', { name: 'Affecter au départ', exact: true }).waitFor();
       assert.equal(await alertBand(f).getByText(/^Départ souhaité le/).count(), 0, 'Its departure is planned: nothing to create.');
       await openOverviewEditor(f);
       assert.ok((await optionList(overview(f))).some(item => item.envoi === nov19), 'Its departure is offered.');
@@ -977,6 +1008,200 @@ async function main() {
       await openDossier(f, DOSSIER.ACC006);
       const link = alertBand(f).getByRole('link', { name: 'Choisir ou créer le départ', exact: true });
       await link.click();
+      await combobox(overview(f)).waitFor();await listbox(overview(f)).waitFor();
+      await f.page.waitForURL(url => !url.searchParams.has('modifier'));
+      assertNoBusinessWrite(f);
+    }, { role: 'logisticien', permissions: { perm_colis_affecter_envoi: true, perm_envois_voir: true } });
+
+    // ── C'. Consent follow-up, measures first, the departure planned on the desired day (2026-10-07) ──
+    for (const theme of ['light', 'dark']) for (const width of [1440, 390]) await scenario(`a-request-or-relance-is-followed-up-24-hours-then-the-band-relances-on-an-idle-page-${width}-${theme}`, async f => {
+      // EXP-ACC003: a relance sent 23 h 50 ago is still followed up: no relance before its 24 hours end, at 10 h 10.
+      f.tables.messages.push({ id: uuid('b2000000', 300), colis_id: DOSSIER.ACC003, type: 'staff', auteur_nom: 'Camille', texte: 'Bonjour, votre accord est toujours attendu.', canal: 'telegram', template: 'relance_feu_vert', statut: 'envoye', lu: true, created_at: '2026-10-05T08:10:00Z' });
+      await openDossier(f, DOSSIER.ACC003);await waitTheme(f, theme);
+      await departureShown(f, 'Départ : jeudi 8 octobre · Réunion');
+      assert.equal(await alertBand(f).count(), 0, 'Followed up: nothing to check.');
+      await f.page.screenshot({ path: `${output}/followed-up-${width}-${theme}.png`, fullPage: true });
+      // The page stays open: once the 24 hours have passed, before the closing, the minute clock brings the line back.
+      await idleUntil(f, '2026-10-06T08:10:00Z');
+      const band = alertBand(f);
+      await band.getByText(CUTOFF_8, { exact: true }).waitFor();
+      const link = band.getByRole('link', { name: 'Relancer le client', exact: true });
+      const box = await link.boundingBox();
+      assert.ok(box.height >= 44 && box.x >= 0 && box.x + box.width <= width + 1, 'A 44px link inside the screen.');
+      for (const part of await textStyles(band.locator('.dossier-alerts-title, .dossier-alerts-text, .dossier-alerts-action'))) {
+        assert.ok(part.size >= 12, `${part.text}: ${part.size}px`); assert.ok(part.ratio >= 4.5, `${part.text}: ${part.ratio.toFixed(2)}:1`);
+      }
+      await noPageOverflow(f);await axe(f);
+      await f.page.screenshot({ path: `${output}/relance-back-${width}-${theme}.png`, fullPage: true });
+      assertNoBusinessWrite(f);
+    }, { width, theme });
+
+    await scenario('a-failed-relance-is-relanced-and-the-band-follows-the-relance-window-on-an-idle-page', async f => {
+      // EXP-ACC003: the relance of 30 minutes ago failed: it did not reach the client, the relance is due at once.
+      f.tables.messages.push({ id: uuid('b2000000', 301), colis_id: DOSSIER.ACC003, type: 'staff', auteur_nom: 'Camille', texte: 'Bonjour, votre accord est toujours attendu.', canal: 'telegram', template: 'relance_feu_vert', statut: 'echec', lu: true, created_at: '2026-10-06T07:30:00Z' });
+      // EXP-ACC012 now leaves on Friday 9 October, its loading closing on Thursday 8 at 10 h 10 (Paris): the relance
+      // window opens today at 10 h 10. EXP-ACC010 (received) leaves for the Guadeloupe on 8 October, its loading
+      // closing today at 10 h 10: the window closes then.
+      const early = uuid('d2000000', 13), closing = uuid('d2000000', 14);
+      addDepartures(f, extraDeparture(early, 'ENV-2026-111', '2026-10-09', '974', { loading_closes_at: '2026-10-08T08:10:00Z' }),
+        extraDeparture(closing, 'ENV-2026-112', '2026-10-08', '971', { loading_closes_at: '2026-10-06T08:10:00Z' }));
+      row(f, DOSSIER.ACC012).envoi_id = early;row(f, DOSSIER.ACC010).envoi_id = closing;f.before = structuredClone(f.tables.colis);
+      await openDossier(f, DOSSIER.ACC003);
+      assert.deepEqual((await bandLines(f)).map(({ text, link }) => [text, link?.label]), [[CUTOFF_8, 'Relancer le client']]);
+      // Left open, each page shows the window opening, then closing, through its minute clock alone.
+      await openDossier(f, DOSSIER.ACC012);
+      await departureShown(f, 'Départ : vendredi 9 octobre · Réunion');
+      assert.equal(await alertBand(f).count(), 0, 'The window opens in 10 minutes: nothing to check yet.');
+      await idleUntil(f, '2026-10-06T08:10:00Z');
+      await alertBand(f).getByText('Accord du client à obtenir avant jeudi 8 octobre, 10 h 10 (clôture du départ du vendredi 9 octobre).', { exact: true }).waitFor();
+      await f.page.clock.setFixedTime(NOW);
+      await openDossier(f, DOSSIER.ACC010);
+      await alertBand(f).getByText('Cartons à mesurer puis accord du client à demander avant mardi 6 octobre, 10 h 10 (clôture du départ du jeudi 8 octobre).', { exact: true }).waitFor();
+      await idleUntil(f, '2026-10-06T08:10:00Z');
+      await alertBand(f).waitFor({ state: 'detached' });
+      assertNoBusinessWrite(f);
+    });
+
+    for (const theme of ['light', 'dark']) for (const width of [1440, 390]) await scenario(`received-cartons-are-measured-before-the-consent-${width}-${theme}`, async f => {
+      // EXP-ACC001 (received, not measured) now leaves on 8 October: its consent closes within 48 hours.
+      row(f, DOSSIER.ACC001).envoi_id = DEPARTURE.reunion8;f.before = structuredClone(f.tables.colis);
+      await openDossier(f, DOSSIER.ACC001);await waitTheme(f, theme);
+      const displayed = new URL(f.page.url()), reception = new URLSearchParams(displayed.search);
+      reception.set('section', 'reception');
+      assert.deepEqual(await bandLines(f), [{ text: MEASURE_CUTOFF_8, link: { label: 'Mesurer les cartons', href: `${displayed.pathname}?${reception}#dossier-work` } }]);
+      const link = alertBand(f).getByRole('link', { name: 'Mesurer les cartons', exact: true });
+      const box = await link.boundingBox();
+      assert.ok(box.height >= 44 && box.x >= 0 && box.x + box.width <= width + 1, 'A 44px link inside the screen.');
+      await noPageOverflow(f);await axe(f);
+      await f.page.screenshot({ path: `${output}/measure-before-cutoff-${width}-${theme}.png`, fullPage: true });
+      // The link opens the reception task, where the cartons are measured, with the way back to the list.
+      await link.click();
+      await f.page.waitForURL(url => url.searchParams.get('section') === 'reception' && url.hash === '#dossier-work' && url.searchParams.get('returnTo') === '/colis');
+      await workspace(f).getByRole('button', { name: 'Enregistrer les mesures de réception', exact: true }).waitFor();
+      // The list mark names the same line.
+      await f.page.goto(`${base}/colis`);
+      await f.page.locator(`[data-dossier-row="${DOSSIER.ACC001}"]:visible`).getByRole('img', { name: `À vérifier : ${MEASURE_CUTOFF_8}`, exact: true }).waitFor();
+      assertNoBusinessWrite(f);
+    }, { width, theme });
+
+    for (const theme of ['light', 'dark']) for (const width of [1440, 390]) await scenario(`a-departure-planned-on-the-desired-day-is-to-assign-and-closes-the-consent-${width}-${theme}`, async f => {
+      // 19 November is now planned for the Réunion, its own loading closing on Wednesday 7 October at 9 h (Paris).
+      const nov19 = uuid('d2000000', 12);
+      addDepartures(f, extraDeparture(nov19, 'ENV-2026-110', '2026-11-19', '974', { loading_closes_at: '2026-10-07T07:00:00Z' }));
+      await openDossier(f, DOSSIER.ACC006);await waitTheme(f, theme);
+      const consent = 'Accord du client à obtenir avant mercredi 7 octobre, 9 h (clôture du départ du jeudi 19 novembre).';
+      const band = alertBand(f);
+      if (width < 640) {
+        // Two lines fold behind « À vérifier · 2 points »; the heading stays outside the summary (a button).
+        const fold = band.locator('summary');
+        await fold.getByText('2 points', { exact: true }).waitFor();
+        assert.equal(await band.locator('summary h2, summary [role="heading"]').count(), 0, 'No heading inside the summary.');
+        assert.equal(await band.getByRole('heading', { level: 2, name: 'À vérifier', exact: true }).count(), 1, 'The band keeps its heading.');
+        assert.ok((await band.boundingBox()).height <= 72, 'Folded, the band keeps one line above the dossier.');
+        const summary = await fold.boundingBox();
+        assert.ok(summary.height >= 44, 'The fold is a 44px target.');
+        await fold.click();
+      } else {
+        await band.getByRole('heading', { level: 2, name: 'À vérifier', exact: true }).waitFor();
+        assert.equal(await band.locator('summary').count(), 0);
+      }
+      const displayed = new URL(f.page.url()), accord = new URLSearchParams(displayed.search), field = new URLSearchParams(displayed.search);
+      accord.set('section', 'accord');field.set('modifier', 'depart');
+      assert.deepEqual(await bandLines(f), [
+        { text: consent, link: { label: 'Demander l’accord', href: `${displayed.pathname}?${accord}#dossier-work` } },
+        { text: TO_ASSIGN_19, link: { label: 'Affecter au départ', href: `${displayed.pathname}?${field}` } },
+      ]);
+      for (const target of await band.getByRole('link').all()) { const box = await target.boundingBox(); assert.ok(box.height >= 44 && box.x >= 0 && box.x + box.width <= width + 1, 'A 44px link inside the screen.'); }
+      for (const part of await textStyles(band.locator('.dossier-alerts-title, .dossier-alerts-count, .dossier-alerts-text, .dossier-alerts-action'))) {
+        assert.ok(part.size >= 12, `${part.text}: ${part.size}px`); assert.ok(part.ratio >= 4.5, `${part.text}: ${part.ratio.toFixed(2)}:1`);
+      }
+      await noPageOverflow(f);await axe(f);
+      await f.page.screenshot({ path: `${output}/departure-to-assign-${width}-${theme}.png`, fullPage: true });
+      // « Affecter au départ » opens the Départ field; choosing that departure assigns it and the line goes.
+      await band.getByRole('link', { name: 'Affecter au départ', exact: true }).click();
+      await combobox(overview(f)).waitFor();await listbox(overview(f)).waitFor();
+      await f.page.waitForURL(url => !url.searchParams.has('modifier'));
+      await option(overview(f), nov19).click();
+      await f.page.waitForFunction(id => document.querySelector('[data-testid="dossier-overview"] .dossier-departure-line')?.dataset.envoi === id, nov19);
+      assert.deepEqual(commands(f, 'assign_colis_departure'), [{ p_colis_id: DOSSIER.ACC006, p_envoi_id: nov19, p_expected_updated_at: f.before.find(item => item.id === DOSSIER.ACC006).updated_at }]);
+      await band.getByText(TO_ASSIGN_19, { exact: true }).waitFor({ state: 'detached' });
+      // Assigned, its closing is the same: the consent line stays.
+      await band.getByText(consent, { exact: true }).waitFor();
+      assertOnlyDepartureWrites(f);
+    }, { width, theme });
+
+    await scenario('the-measure-and-assign-links-follow-the-permissions', async f => {
+      row(f, DOSSIER.ACC001).envoi_id = DEPARTURE.reunion8;f.before = structuredClone(f.tables.colis);
+      addDepartures(f, extraDeparture(uuid('d2000000', 12), 'ENV-2026-110', '2026-11-19', '974'));
+      // Measuring without asking for consent or assigning departures: the measure link only.
+      await openDossier(f, DOSSIER.ACC001);
+      assert.deepEqual((await bandLines(f)).map(({ text, link }) => [text, link?.label]), [[MEASURE_CUTOFF_8, 'Mesurer les cartons']]);
+      await openDossier(f, DOSSIER.ACC002);
+      assert.deepEqual((await bandLines(f)).map(({ text, link }) => [text, link?.label]), [[CUTOFF_8, undefined]]);
+      await openDossier(f, DOSSIER.ACC006);
+      assert.deepEqual((await bandLines(f)).map(({ text, link }) => [text, link?.label]), [[TO_ASSIGN_19, undefined]]);
+      assertNoBusinessWrite(f);
+    }, { role: 'preparateur', permissions: { perm_colis_preparer: true, perm_colis_mesurer: true, perm_envois_voir: true } });
+
+    // ── C''. An incomplete client record (decided on 2026-10-07): every missing field, the first one opened ──
+    for (const theme of ['light', 'dark']) for (const width of [1440, 390]) await scenario(`an-incomplete-client-record-lists-every-missing-field-and-opens-the-first-${width}-${theme}`, async f => {
+      // Paul Grondin has no téléphone nor address any more; Nadia Jacoby only misses her address.
+      Object.assign(f.tables.clients.find(client => client.id === CLIENT.grondin), { tel: null, adresse_ligne1: null });
+      Object.assign(f.tables.clients.find(client => client.id === CLIENT.jacoby), { adresse_ligne1: '' });
+      // EXP-ACC006 (desired day 19 November, no departure that day): two lines, folded on a phone.
+      await openDossier(f, DOSSIER.ACC006);await waitTheme(f, theme);
+      const band = alertBand(f);
+      if (width < 640) {
+        await band.locator('summary').getByText('2 points', { exact: true }).waitFor();
+        await band.locator('summary').click();
+      }
+      const displayed = new URL(f.page.url()), from = displayed.pathname + displayed.search, field = new URLSearchParams(displayed.search);
+      field.set('modifier', 'depart');
+      assert.deepEqual(await bandLines(f), [
+        { text: 'Fiche client incomplète : il manque le téléphone et l’adresse.', link: { label: 'Compléter la fiche', href: `/clients/${CLIENT.grondin}?${new URLSearchParams({ completer: 'telephone', returnTo: from })}` } },
+        { text: 'Départ souhaité le jeudi 19 novembre : aucun départ n’est prévu ce jour-là pour la Réunion.', link: { label: 'Choisir ou créer le départ', href: `${displayed.pathname}?${field}` } },
+      ]);
+      for (const target of await band.getByRole('link').all()) { const box = await target.boundingBox(); assert.ok(box.height >= 44 && box.x >= 0 && box.x + box.width <= width + 1, 'A 44px link inside the screen.'); }
+      for (const part of await textStyles(band.locator('.dossier-alerts-title, .dossier-alerts-count, .dossier-alerts-text, .dossier-alerts-action'))) {
+        assert.ok(part.size >= 12, `${part.text}: ${part.size}px`); assert.ok(part.ratio >= 4.5, `${part.text}: ${part.ratio.toFixed(2)}:1`);
+      }
+      await noPageOverflow(f);await axe(f);
+      await f.page.screenshot({ path: `${output}/client-incomplete-${width}-${theme}.png`, fullPage: true });
+      // « Compléter la fiche » opens the client page on the first missing field, with the way back to the dossier.
+      await band.getByRole('link', { name: 'Compléter la fiche', exact: true }).click();
+      await f.page.waitForURL(url => url.pathname === `/clients/${CLIENT.grondin}` && url.searchParams.get('completer') === 'telephone' && url.searchParams.get('returnTo') === from);
+      // Only a field online payment needs is missing for an individual who has not paid: the online-payment wording.
+      await openDossier(f, DOSSIER.ACC010);
+      const jacoby = new URL(f.page.url());
+      assert.deepEqual(await bandLines(f), [{ text: 'Fiche client incomplète pour le paiement en ligne : il manque l’adresse.', link: { label: 'Compléter la fiche', href: `/clients/${CLIENT.jacoby}?${new URLSearchParams({ completer: 'adresse', returnTo: jacoby.pathname + jacoby.search })}` } }]);
+      // The list mark names the lines too.
+      await f.page.goto(`${base}/colis`);
+      await f.page.locator(`[data-dossier-row="${DOSSIER.ACC010}"]:visible`).getByRole('img', { name: 'À vérifier : Fiche client incomplète pour le paiement en ligne : il manque l’adresse.', exact: true }).waitFor();
+      assertNoBusinessWrite(f);
+    }, { width, theme });
+
+    for (const [name, permissions, label] of [
+      ['reading-the-client-record-only', { perm_colis_preparer: true, perm_clients_voir: true }, 'Voir la fiche client'],
+      ['without-the-client-page', { perm_colis_preparer: true }, undefined],
+    ]) await scenario(`${name}-the-incomplete-record-keeps-its-line-without-asking-to-complete`, async f => {
+      Object.assign(f.tables.clients.find(client => client.id === CLIENT.grondin), { tel: null });
+      await openDossier(f, DOSSIER.ACC006);
+      const displayed = new URL(f.page.url());
+      const lines = await bandLines(f);
+      assert.deepEqual(lines.map(({ text, link }) => [text, link?.label]), [['Fiche client incomplète : il manque le téléphone.', label], ['Départ souhaité le jeudi 19 novembre : aucun départ n’est prévu ce jour-là pour la Réunion.', undefined]]);
+      // Reading only: the client page opens without the request to complete a field.
+      if (label) assert.equal(lines[0].link.href, `/clients/${CLIENT.grondin}?${new URLSearchParams({ returnTo: displayed.pathname + displayed.search })}`);
+      assertNoBusinessWrite(f);
+    }, { role: 'preparateur', permissions });
+
+    await scenario('the-assign-link-is-offered-to-whoever-the-field-opens-for', async f => {
+      row(f, DOSSIER.ACC001).envoi_id = DEPARTURE.reunion8;f.before = structuredClone(f.tables.colis);
+      addDepartures(f, extraDeparture(uuid('d2000000', 12), 'ENV-2026-110', '2026-11-19', '974'));
+      await openDossier(f, DOSSIER.ACC001);
+      assert.deepEqual((await bandLines(f)).map(({ text, link }) => [text, link?.label]), [[MEASURE_CUTOFF_8, undefined]], 'Without perm_colis_mesurer no measure link.');
+      await openDossier(f, DOSSIER.ACC006);
+      assert.deepEqual((await bandLines(f)).map(({ text, link }) => [text, link?.label]), [[TO_ASSIGN_19, 'Affecter au départ']]);
+      await alertBand(f).getByRole('link', { name: 'Affecter au départ', exact: true }).click();
       await combobox(overview(f)).waitFor();await listbox(overview(f)).waitFor();
       await f.page.waitForURL(url => !url.searchParams.has('modifier'));
       assertNoBusinessWrite(f);

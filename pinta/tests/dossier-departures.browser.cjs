@@ -69,13 +69,14 @@ async function fixture(browser, { role = 'directeur', width = 1440, height = wid
   await f.context.addInitScript(value => localStorage.setItem('expedile-theme', value), theme);
   await f.context.addInitScript(installGroupReader);
   const client = (id, fields) => ({ id, user_id: null, telegram_chat_id: null, type: 'particulier', abonnement: 'freemium', abonnement_debut: null, abonnement_fin: null, onboarded: true, created_at: '2026-09-01T08:00:00Z', ...fields });
+  // Every record has its téléphone; the incomplete one misses its email and address (both needed for online payment).
   f.tables.clients = [
-    client(CLIENT.complete, { ref: 'CLI-DEP-01', nom: 'Hoarau', prenom: 'Flavie', email: 'flavie@example.test', cp: '97400', ville: 'Saint-Denis', adresse_ligne1: '12 rue de Paris', user_id: uuid('a1000000', 1), telegram_chat_id: 7001 }),
-    client(CLIENT.noContact, { ref: 'CLI-DEP-02', nom: 'Payet', prenom: 'Jean', email: 'jean@example.test', cp: '97410', ville: 'Saint-Pierre', adresse_ligne1: '3 rue des Bons Enfants' }),
-    client(CLIENT.incomplete, { ref: 'CLI-DEP-03', nom: 'Jacoby', prenom: 'Nadia', email: null, cp: '97110', ville: 'Pointe-à-Pitre', adresse_ligne1: null, telegram_chat_id: 7003 }),
-    client(CLIENT.subscription, { ref: 'CLI-DEP-04', nom: 'Grondin', prenom: 'Lucas', email: 'lucas@example.test', cp: '97430', ville: 'Le Tampon', adresse_ligne1: '8 chemin des Fleurs', user_id: uuid('a1000000', 4), telegram_chat_id: 7004, abonnement: 'premium', abonnement_debut: '2025-10-18', abonnement_fin: '2026-10-18' }),
-    client(CLIENT.martinique, { ref: 'CLI-DEP-05', nom: 'Rosier', prenom: 'Paul', email: 'paul@example.test', cp: '97200', ville: 'Fort-de-France', adresse_ligne1: '5 rue Victor Hugo', telegram_chat_id: 7005 }),
-    client(CLIENT.pro, { ref: 'CLI-DEP-06', nom: 'Lagon Services', prenom: '', type: 'pro', raison_sociale: 'Lagon Services', email: null, cp: '97600', ville: 'Mamoudzou', adresse_ligne1: '1 place du Marché', telegram_chat_id: 7006 }),
+    client(CLIENT.complete, { ref: 'CLI-DEP-01', nom: 'Hoarau', prenom: 'Flavie', email: 'flavie@example.test', tel: '0692 10 00 01', cp: '97400', ville: 'Saint-Denis', adresse_ligne1: '12 rue de Paris', user_id: uuid('a1000000', 1), telegram_chat_id: 7001 }),
+    client(CLIENT.noContact, { ref: 'CLI-DEP-02', nom: 'Payet', prenom: 'Jean', email: 'jean@example.test', tel: '0692 10 00 02', cp: '97410', ville: 'Saint-Pierre', adresse_ligne1: '3 rue des Bons Enfants' }),
+    client(CLIENT.incomplete, { ref: 'CLI-DEP-03', nom: 'Jacoby', prenom: 'Nadia', email: null, tel: '0690 10 00 03', cp: '97110', ville: 'Pointe-à-Pitre', adresse_ligne1: null, telegram_chat_id: 7003 }),
+    client(CLIENT.subscription, { ref: 'CLI-DEP-04', nom: 'Grondin', prenom: 'Lucas', email: 'lucas@example.test', tel: '0692 10 00 04', cp: '97430', ville: 'Le Tampon', adresse_ligne1: '8 chemin des Fleurs', user_id: uuid('a1000000', 4), telegram_chat_id: 7004, abonnement: 'premium', abonnement_debut: '2025-10-18', abonnement_fin: '2026-10-18' }),
+    client(CLIENT.martinique, { ref: 'CLI-DEP-05', nom: 'Rosier', prenom: 'Paul', email: 'paul@example.test', tel: '0696 10 00 05', cp: '97200', ville: 'Fort-de-France', adresse_ligne1: '5 rue Victor Hugo', telegram_chat_id: 7005 }),
+    client(CLIENT.pro, { ref: 'CLI-DEP-06', nom: 'Lagon Services', prenom: 'Hélène', type: 'pro', raison_sociale: 'Lagon Services', email: 'contact@lagon.example.test', tel: '0269 10 00 06', cp: '97600', ville: 'Mamoudzou', adresse_ligne1: '1 place du Marché', telegram_chat_id: 7006 }),
   ];
   const departure = (id, ref, date, code, fields = {}) => ({ id, ref, date_depart: date, destination_code: code, statut: 'planifie', mode_transport: 'aerien', loading_closes_at: null, departed_at: null, manifest_version: 0, updated_at: '2026-10-01T08:00:00Z', ...fields });
   f.tables.envois = [
@@ -572,14 +573,16 @@ async function main() {
         await openDossier(f, id);
         assert.equal(await alertBand(f).count(), 0, `${REF[id]} has nothing to check.`);
       }
-      // The record cases lead to the client page, which can lead back to the dossier as displayed.
-      for (const [id, text, label, client] of [[DOSSIER.DEP002, NO_CONTACT, 'Inviter le client', CLIENT.noContact], [DOSSIER.DEP003, missingBilling('l’email et l’adresse'), 'Compléter la fiche', CLIENT.incomplete]]) {
+      // The record cases lead to the client page, which can lead back to the dossier as displayed. « Compléter la
+      // fiche » asks the client page for the first missing field (`completer`).
+      for (const [id, text, label, client, completer] of [[DOSSIER.DEP002, NO_CONTACT, 'Inviter le client', CLIENT.noContact, null], [DOSSIER.DEP003, missingBilling('l’email et l’adresse'), 'Compléter la fiche', CLIENT.incomplete, 'email']]) {
         await openDossier(f, id);
         const displayed = new URL(f.page.url()), from = displayed.pathname + displayed.search;
-        assert.deepEqual(await bandLines(f), [{ text, link: { label, href: `/clients/${client}?${new URLSearchParams({ returnTo: from })}` } }]);
+        assert.deepEqual(await bandLines(f), [{ text, link: { label, href: `/clients/${client}?${new URLSearchParams({ ...(completer ? { completer } : {}), returnTo: from })}` } }]);
         if (id === DOSSIER.DEP002) await f.page.screenshot({ path: `${output}/a-verifier-no-contact-1440-light.png`, fullPage: true });
         await alertBand(f).getByRole('link', { name: label, exact: true }).click();
-        await f.page.waitForURL(url => url.pathname === `/clients/${client}`);
+        // The client page may consume `completer` once its form is open: the navigation itself carries it.
+        await f.page.waitForURL(url => url.pathname === `/clients/${client}` && url.searchParams.get('completer') === completer);
         assert.equal(new URL(f.page.url()).searchParams.get('returnTo'), from);
         await f.page.getByRole('region', { name: 'Contact disponible', exact: true }).waitFor();
         if (id === DOSSIER.DEP002) await f.page.getByRole('button', { name: 'Inviter à l’espace client', exact: true }).waitFor();
@@ -603,6 +606,11 @@ async function main() {
       await alertBand(f).getByRole('link', { name: 'Écrire au client', exact: true }).click();
       await f.page.waitForFunction(() => document.activeElement?.matches('textarea[id^="staff-message-"]'));
       assert.equal(f.page.url(), url);
+      // Every record needs its email too: a professional, who never pays online, reads the plain incomplete record.
+      f.tables.clients.find(client => client.id === CLIENT.pro).email = null;
+      await openDossier(f, DOSSIER.DEP008);
+      const pro = new URL(f.page.url()), proFrom = pro.pathname + pro.search;
+      assert.deepEqual(await bandLines(f), [{ text: 'Fiche client incomplète : il manque l’email.', link: { label: 'Compléter la fiche', href: `/clients/${CLIENT.pro}?${new URLSearchParams({ completer: 'email', returnTo: proFrom })}` } }]);
       assertNoBusinessWrite(f, DOSSIER_READ_ONLY_RPCS);
     });
 
