@@ -183,7 +183,7 @@ SET LOCAL ROLE authenticated;
 SELECT correction_reject($q$SELECT correct_colis_task(id,'accord','{}',updated_at,'Nouvel accord') FROM colis WHERE id='ca300000-0000-4000-8000-000000000001'$q$,'physically dispatched dossier is frozen','22023');
 RESET ROLE;
 UPDATE colis SET date_expedition=NULL WHERE id='ca300000-0000-4000-8000-000000000001';
-INSERT INTO envois(id,destination_code,date_depart,statut) VALUES('ca500000-0000-4000-8000-000000000001','974',current_date,'planifie');
+INSERT INTO envois(id,destination_code,date_depart,statut) VALUES('ca500000-0000-4000-8000-000000000001','974',(now() AT TIME ZONE 'Europe/Paris')::date,'planifie');
 UPDATE colis SET envoi_id='ca500000-0000-4000-8000-000000000001' WHERE id='ca300000-0000-4000-8000-000000000001';
 SELECT set_config('expedile.confirm_departure','allowed',true);
 UPDATE envois SET departed_at=now(),manifest_version=1 WHERE id='ca500000-0000-4000-8000-000000000001';
