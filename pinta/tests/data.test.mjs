@@ -297,3 +297,30 @@ test('invoice arrival and validation dates are read but never written back', asy
     for (const key of ['created_at', 'createdAt', 'valide_le', 'valideLe']) assert.equal(key in payload, false, `${key} must stay server-owned`);
   }
 });
+test('the Telegram username is written without @ by every client write, and read without @', async () => {
+  const sent = [];
+  const query = {
+    insert(payload) { sent.push(['insert', payload]); this.row = { id: 'c-new', ...payload }; return this; },
+    update(payload) { sent.push(['update', payload]); this.row = { id: 'c1', nom: 'Payet', ...payload }; return this; },
+    eq() { return this; },
+    select() { return this; },
+    async single() { return { data: this.row, error: null }; },
+  };
+  const sb = await service({ from: () => query });
+  const created = await sb.insertClient({ nom: 'Payet', cp: '97400', telegramUsername: '  @flaviep ' });
+  assert.equal(sent[0][1].telegram_username, 'flaviep');
+  assert.equal(created.telegramUsername, 'flaviep');
+  await sb.insertClient({ nom: 'Sans Telegram', cp: '97400', telegramUsername: '@' });
+  assert.equal(sent[1][1].telegram_username, null, 'An empty handle is stored as no username.');
+  const updated = await sb.updateClient('c1', { telegramUsername: '@@jmhoarau' });
+  assert.deepEqual({ ...sent[2][1] }, { telegram_username: 'jmhoarau' }, 'Only the changed field is sent, normalised.');
+  assert.equal(updated.telegramUsername, 'jmhoarau');
+  await sb.updateClient('c1', { telegramUsername: '' });
+  assert.deepEqual({ ...sent[3][1] }, { telegram_username: null });
+  await sb.updateClient('c1', { notes: 'Sans identifiant' });
+  assert.equal('telegram_username' in sent[4][1], false, 'A write without the username leaves it untouched.');
+  // Older rows saved with an @ read like the others.
+  assert.equal(sb.mapClient({ id: 'old', telegram_username: '@ancien' }).telegramUsername, 'ancien');
+  assert.equal(sb.mapClient({ id: 'none', telegram_username: null }).telegramUsername, null);
+  assert.equal(sb.mapClient({ id: 'blank', telegram_username: ' @ ' }).telegramUsername, null);
+});

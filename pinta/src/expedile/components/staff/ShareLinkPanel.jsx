@@ -1,34 +1,32 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useId } from 'react';
 import {
   Link2, Copy, Check, Send, ShieldOff, Eye, Sparkles,
-  Loader2, AlertCircle, RefreshCw,
+  Loader2, AlertCircle, RefreshCw, ExternalLink,
 } from 'lucide-react';
-import { BRAND } from '../../constants';
 import * as sb from '../../lib/supabaseData';
 import { useApp } from '../../context/AppContext';
 import { sendTelegram } from '../../services/telegramApi';
-import { getPrenom } from '../../utils';
+import { getPrenom, countLabel } from '../../utils';
+
+// brand.css tokens: every surface, border and text follows the light and dark themes.
+const BORDER = 'border-[color:var(--border-subtle)]';
+const PRIMARY = 'inline-flex min-h-11 items-center justify-center gap-2 rounded-xl brand-bg px-4 py-2 text-sm font-semibold text-white transition-transform duration-200 ease-out hover:-translate-y-px active:translate-y-0 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0';
+const SECONDARY = 'inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-gray-300 dark:border-[color:var(--border-subtle)] bg-elevated px-4 py-2 text-sm font-semibold text-primary transition-transform duration-200 ease-out hover:bg-surface active:scale-[0.98] disabled:opacity-50';
+// Telegram blue (#0088cc) darkened so white text reaches 5.6:1.
+const TELEGRAM_BLUE = '#006DA3';
 
 /**
  * ShareLinkPanel — gestion du lien de suivi partagé pour un client.
  *
- * États :
- *   - loading      : chargement initial
- *   - none         : aucun lien créé
- *   - active       : lien actif (token valide, non révoqué)
- *   - revoked      : lien révoqué
- *
- * Actions staff :
- *   - Créer le lien
- *   - Copier dans le presse-papier
- *   - Partager via Telegram (si client.telegramChatId)
- *   - Révoquer (avec confirmation)
+ * États : loading (chargement initial), none (aucun lien), active (lien valide),
+ * revoked (lien révoqué), error (lecture impossible).
+ * Actions staff : créer, copier, envoyer via Telegram (client lié), révoquer (avec confirmation).
  */
 export default function ShareLinkPanel({ client, currentUserId, flash, ask }) {
-  const {data,refreshColis,can}=useApp();
-  const dossiers=data.filter(c=>c.clientId===client?.id&&!c.archive);
-  const [referenceId,setReferenceId]=useState('');
-  const dossierId=dossiers.length===1?dossiers[0].id:referenceId;
+  const { data, refreshColis, can } = useApp();
+  const dossiers = data.filter(c => c.clientId === client?.id && !c.archive);
+  const [referenceId, setReferenceId] = useState('');
+  const dossierId = dossiers.length === 1 ? dossiers[0].id : referenceId;
   const [link, setLink] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -37,6 +35,8 @@ export default function ShareLinkPanel({ client, currentUserId, flash, ask }) {
   const [creating, setCreating] = useState(false);
   const [sendingTg, setSendingTg] = useState(false);
   const [revoking, setRevoking] = useState(false);
+  const telegramHint = useId();
+  const referenceField = useId();
 
   // Charger le lien existant
   const reload = useCallback(async () => {
@@ -56,17 +56,17 @@ export default function ShareLinkPanel({ client, currentUserId, flash, ask }) {
   useEffect(() => { reload(); }, [reload]);
 
   const url = link ? `${window.location.origin}/suivi/${link.token}` : '';
-  const isActive = link && !link.revoked_at;
   const isRevoked = link && !!link.revoked_at;
 
   const handleCreate = async () => {
+    if (creating) return;
     setCreating(true);
     try {
       const newLink = await sb.createShareLink(client.id, currentUserId);
       setLink(newLink);
       flash?.({ msg: 'Lien de suivi créé', type: 'success' });
     } catch (e) {
-      flash?.({ msg: 'Erreur création : ' + e.message, type: 'warning' });
+      flash?.({ msg: `Le lien de suivi n’a pas été créé : ${e.message}`, type: 'error' });
     } finally {
       setCreating(false);
     }
@@ -80,20 +80,20 @@ export default function ShareLinkPanel({ client, currentUserId, flash, ask }) {
       setCopied(true);
       setTimeout(() => setCopied(false), 1800);
     } catch {
-      flash?.({ msg: 'Impossible de copier', type: 'warning' });
+      flash?.({ msg: 'Copie impossible : sélectionnez le lien pour le copier.', type: 'warning' });
     } finally {
       setCopying(false);
     }
   };
 
+  // Why the Telegram sending is unavailable, shown next to the button.
+  const telegramBlocked = !client?.telegramChatId ? 'Envoi par Telegram indisponible : le Telegram du client n’est pas lié. Il peut le lier avec son invitation personnelle.'
+    : !can('perm_comm_telegram') ? 'Votre rôle ne permet pas d’envoyer un message Telegram.'
+      : !dossiers.length ? 'Envoi par Telegram indisponible : le message se rattache à un dossier en cours, et ce client n’en a pas.'
+        : !dossierId ? 'Choisissez le dossier de référence pour envoyer le lien par Telegram.' : '';
+
   const handleTelegramShare = async () => {
-    if (!client?.telegramChatId) {
-      flash?.({ msg: 'Client non lié à Telegram', type: 'warning' });
-      return;
-    }
-    if (!url) return;
-    if(!dossierId){flash?.({msg:'Choisissez le dossier de référence pour cet échange.',type:'warning'});return;}
-    if (!can('perm_comm_telegram')) return;
+    if (!url || telegramBlocked || sendingTg) return;
     setSendingTg(true);
     const prenom = getPrenom(client) || 'bonjour';
     const message = `Bonjour ${prenom} 👋\n\nVoici votre lien de suivi à partager avec votre famille :\n\n${url}\n\nIls pourront suivre l'avancement de chaque colis sans créer de compte.\n\nL'équipe Expedîle`;
@@ -104,9 +104,22 @@ export default function ShareLinkPanel({ client, currentUserId, flash, ask }) {
       try { await refreshColis(dossierId); }
       catch { flash?.({ msg: 'Lien envoyé ; rechargez le dossier pour actualiser les échanges.', type: 'warning' }); }
     } catch (error) {
-      flash?.({ msg: 'Échec envoi Telegram : ' + error.message, type: 'warning' });
+      flash?.({ msg: `Lien non envoyé par Telegram : ${error.message}`, type: 'error' });
     } finally {
       setSendingTg(false);
+    }
+  };
+
+  const doRevoke = async () => {
+    setRevoking(true);
+    try {
+      await sb.revokeShareLink(link.id);
+      await reload();
+      flash?.({ msg: 'Lien révoqué', type: 'success' });
+    } catch (e) {
+      flash?.({ msg: `Le lien n’a pas été révoqué : ${e.message}`, type: 'error' });
+    } finally {
+      setRevoking(false);
     }
   };
 
@@ -125,29 +138,17 @@ export default function ShareLinkPanel({ client, currentUserId, flash, ask }) {
     );
   };
 
-  const doRevoke = async () => {
-    setRevoking(true);
-    try {
-      await sb.revokeShareLink(link.id);
-      await reload();
-      flash?.({ msg: 'Lien révoqué', type: 'success' });
-    } catch (e) {
-      flash?.({ msg: 'Erreur : ' + e.message, type: 'warning' });
-    } finally {
-      setRevoking(false);
-    }
-  };
-
   // ── Loading skeleton ────────────────────────────────────────────────
   if (loading) {
     return (
       <Section>
-        <div className="space-y-2.5">
-          <div className="h-3 w-32 rounded bg-slate-100 animate-pulse" />
-          <div className="h-10 rounded-xl bg-slate-100 animate-pulse" />
+        <SectionHeader />
+        <div role="status" aria-label="Chargement du lien de suivi" className="space-y-2.5">
+          <div className="h-4 w-40 animate-pulse rounded bg-slate-100" />
+          <div className="h-11 animate-pulse rounded-xl bg-slate-100" />
           <div className="flex gap-2">
-            <div className="h-9 w-28 rounded-xl bg-slate-100 animate-pulse" />
-            <div className="h-9 w-28 rounded-xl bg-slate-100 animate-pulse" />
+            <div className="h-11 w-36 animate-pulse rounded-xl bg-slate-100" />
+            <div className="h-11 w-36 animate-pulse rounded-xl bg-slate-100" />
           </div>
         </div>
       </Section>
@@ -158,13 +159,14 @@ export default function ShareLinkPanel({ client, currentUserId, flash, ask }) {
   if (error) {
     return (
       <Section>
-        <div className="flex items-start gap-2.5 text-rose-700 bg-rose-50/60 rounded-xl px-3 py-2.5">
-          <AlertCircle size={14} className="mt-0.5 flex-shrink-0" />
-          <div className="flex-1 min-w-0">
-            <p className="text-xs font-semibold">Lien indisponible</p>
-            <p className="text-[11px] text-rose-600 mt-0.5">{error}</p>
+        <SectionHeader />
+        <div role="alert" className="flex flex-wrap items-start gap-3 rounded-xl border border-red-200 dark:border-red-900 bg-red-50 px-3 py-2.5 text-red-800">
+          <AlertCircle size={16} className="mt-1 shrink-0" aria-hidden="true" />
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold">Lien de suivi indisponible</p>
+            <p className="text-sm">{error}</p>
           </div>
-          <button onClick={reload} className="text-xs font-bold underline hover:no-underline">Réessayer</button>
+          <button type="button" onClick={reload} className={SECONDARY}><RefreshCw size={16} aria-hidden="true" />Réessayer</button>
         </div>
       </Section>
     );
@@ -174,33 +176,23 @@ export default function ShareLinkPanel({ client, currentUserId, flash, ask }) {
   if (!link) {
     return (
       <Section>
-        <SectionHeader /><p className="text-sm text-gray-600">Suivi public destiné aux proches : toute personne possédant ce lien peut consulter l’avancement des dossiers. Il ne donne pas accès à l’espace privé, aux factures ni aux messages.</p>
-        <div className="rounded-2xl border border-slate-200/80 bg-gradient-to-br from-slate-50/40 to-white px-5 py-6">
-          <div className="flex items-start gap-4">
-            <div
-              className="flex-shrink-0 w-11 h-11 rounded-xl flex items-center justify-center"
-              style={{ background: `${BRAND.navy}0d`, color: BRAND.navy }}
-            >
+        <SectionHeader />
+        <Explanation />
+        <div className={`rounded-2xl border ${BORDER} bg-surface px-5 py-6`}>
+          <div className="flex flex-col items-start gap-4 sm:flex-row">
+            <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-elevated brand-t" aria-hidden="true">
               <Link2 size={18} strokeWidth={2} />
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-slate-900 leading-snug">
-                Pas encore de lien de suivi
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold leading-snug text-primary">Pas encore de lien de suivi</p>
+              <p className="mt-1 max-w-md text-sm leading-relaxed text-secondary">
+                Générez un lien unique que <span className="font-semibold text-primary">{client.prenom || client.nom}</span> pourra partager
+                avec sa famille : suivi des colis, sans compte à créer.
               </p>
-              <p className="text-[11px] text-slate-500 leading-relaxed mt-1 max-w-md">
-                Générez un lien unique que <span className="font-semibold text-slate-700">{client.prenom || client.nom}</span> pourra partager
-                avec sa famille. Suivi des colis, sans compte requis.
-              </p>
-              <button
-                onClick={handleCreate}
-                disabled={creating}
-                className="mt-3.5 inline-flex items-center gap-1.5 text-xs font-bold text-white px-3.5 py-2 rounded-xl transition-all duration-200 ease-out hover:translate-y-[-1px] active:translate-y-0 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed"
-                style={{ background: BRAND.navy, boxShadow: `0 4px 14px -4px ${BRAND.navy}60` }}
-              >
+              <button type="button" onClick={handleCreate} disabled={creating} className={`${PRIMARY} mt-3.5`}>
                 {creating
-                  ? <><Loader2 size={13} className="animate-spin" />Création…</>
-                  : <><Sparkles size={13} strokeWidth={2.25} />Créer le lien de suivi</>
-                }
+                  ? <><Loader2 size={16} className="animate-spin" aria-hidden="true" />Création…</>
+                  : <><Sparkles size={16} strokeWidth={2.25} aria-hidden="true" />Créer le lien de suivi</>}
               </button>
             </div>
           </div>
@@ -213,26 +205,22 @@ export default function ShareLinkPanel({ client, currentUserId, flash, ask }) {
   if (isRevoked) {
     return (
       <Section>
-        <SectionHeader /><p className="text-sm text-gray-600">Suivi public destiné aux proches : toute personne possédant ce lien peut consulter l’avancement des dossiers. Il ne donne pas accès à l’espace privé, aux factures ni aux messages.</p>
-        <div className="rounded-2xl border border-slate-200/80 bg-white px-5 py-5">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center">
-              <ShieldOff size={14} className="text-slate-500" />
+        <SectionHeader />
+        <Explanation />
+        <div className={`rounded-2xl border ${BORDER} bg-elevated px-5 py-5`}>
+          <div className="mb-3 flex items-center gap-3">
+            <div className="flex size-9 items-center justify-center rounded-full bg-surface" aria-hidden="true">
+              <ShieldOff size={16} className="text-secondary" />
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-slate-900">Lien révoqué</p>
-              <p className="text-[11px] text-slate-500 mt-0.5">
-                {formatDate(link.revoked_at)} · {link.access_count || 0} consultation{link.access_count > 1 ? 's' : ''} avant révocation
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-primary">Lien révoqué</p>
+              <p className="mt-0.5 text-sm text-secondary">
+                Révoqué le {formatDate(link.revoked_at)} · {countLabel(link.access_count || 0, 'consultation', 'consultations')} avant révocation
               </p>
             </div>
           </div>
-          <button
-            onClick={handleCreate}
-            disabled={creating}
-            className="w-full inline-flex items-center justify-center gap-1.5 text-xs font-bold text-white px-3.5 py-2.5 rounded-xl transition-all duration-200 hover:translate-y-[-1px] active:scale-[0.98] disabled:opacity-60"
-            style={{ background: BRAND.navy }}
-          >
-            {creating ? <><Loader2 size={13} className="animate-spin" />Création…</> : <><RefreshCw size={13} />Générer un nouveau lien</>}
+          <button type="button" onClick={handleCreate} disabled={creating} className={`${PRIMARY} w-full`}>
+            {creating ? <><Loader2 size={16} className="animate-spin" aria-hidden="true" />Création…</> : <><RefreshCw size={16} aria-hidden="true" />Générer un nouveau lien</>}
           </button>
         </div>
       </Section>
@@ -242,91 +230,62 @@ export default function ShareLinkPanel({ client, currentUserId, flash, ask }) {
   // ── Active ──────────────────────────────────────────────────────────
   return (
     <Section>
-      <SectionHeader /><p className="text-sm text-gray-600">Suivi public destiné aux proches : toute personne possédant ce lien peut consulter l’avancement des dossiers. Il ne donne pas accès à l’espace privé, aux factures ni aux messages.</p>
-
-      <a className="inline-flex min-h-11 items-center underline" href={url} target="_blank" rel="noreferrer">Prévisualiser ce que verra le destinataire</a>
-      <div className="rounded-2xl border border-slate-200/80 bg-white overflow-hidden">
+      <SectionHeader />
+      <Explanation />
+      <a className="inline-flex min-h-11 items-center gap-1.5 text-sm font-semibold underline underline-offset-2 brand-t" href={url} target="_blank" rel="noreferrer">
+        Prévisualiser ce que verra le destinataire<ExternalLink size={14} aria-hidden="true" />
+      </a>
+      <div className={`overflow-hidden rounded-2xl border ${BORDER} bg-elevated`}>
         {/* Status bar */}
-        <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-slate-100 flex-wrap">
-          <div className="flex items-center gap-2 min-w-0">
-            <span className="relative flex h-2 w-2 flex-shrink-0">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-60" />
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+        <div className={`flex flex-wrap items-center justify-between gap-3 border-b ${BORDER} px-4 py-1.5`}>
+          <div className="flex min-w-0 flex-wrap items-center gap-2 text-sm text-secondary">
+            <span className="relative flex size-2 shrink-0" aria-hidden="true">
+              <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-400 opacity-60" />
+              <span className="relative inline-flex size-2 rounded-full bg-emerald-500" />
             </span>
-            <span className="text-[11px] font-bold uppercase tracking-widest text-emerald-700 whitespace-nowrap">
-              Actif
-            </span>
-            <span className="text-[11px] text-slate-400">·</span>
-            <span className="text-[11px] text-slate-500 inline-flex items-center gap-1 whitespace-nowrap">
-              <Eye size={10} />
-              {link.access_count || 0} {link.access_count === 1 ? 'vue' : 'vues'}
-            </span>
-            {link.last_accessed_at && (
-              <span className="text-[11px] text-slate-400 hidden sm:inline whitespace-nowrap">
-                · {relativeDate(link.last_accessed_at)}
-              </span>
-            )}
+            <span className="font-bold uppercase tracking-wider text-green-800">Actif</span>
+            <span aria-hidden="true">·</span>
+            <span className="inline-flex items-center gap-1 whitespace-nowrap"><Eye size={14} aria-hidden="true" />{countLabel(link.access_count || 0, 'vue', 'vues')}</span>
+            {link.last_accessed_at && <span className="whitespace-nowrap">· dernière consultation {relativeDate(link.last_accessed_at)}</span>}
           </div>
           <button
+            type="button"
             onClick={handleRevoke}
             disabled={revoking}
-            className="text-[11px] font-semibold text-slate-500 hover:text-rose-600 transition-colors inline-flex items-center gap-1 disabled:opacity-50 whitespace-nowrap"
+            className="inline-flex min-h-11 items-center gap-1.5 whitespace-nowrap rounded-xl px-3 text-sm font-semibold text-secondary transition-transform duration-200 ease-out hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-950/40 dark:hover:text-red-200 disabled:opacity-50"
           >
-            {revoking ? <Loader2 size={11} className="animate-spin" /> : <ShieldOff size={11} />}
+            {revoking ? <Loader2 size={16} className="animate-spin" aria-hidden="true" /> : <ShieldOff size={16} aria-hidden="true" />}
             Révoquer
           </button>
         </div>
 
-        {dossiers.length>1&&<label className="block text-xs font-semibold px-5 pt-4">Dossier de référence<select value={referenceId} onChange={e=>setReferenceId(e.target.value)} className="w-full min-h-[44px] mt-1 border rounded-xl px-3 bg-transparent"><option value="">Choisir le dossier de cet échange</option>{dossiers.map(c=><option key={c.id} value={c.id}>{c.ref} — {c.desc}</option>)}</select></label>}
+        {dossiers.length > 1 && <div className="px-4 pt-4"><label htmlFor={referenceField} className="block text-[11px] font-bold uppercase tracking-wider text-gray-600">Dossier de référence</label><select id={referenceField} value={referenceId} onChange={e => setReferenceId(e.target.value)} className="mt-1 min-h-11 w-full rounded-xl border-2 border-gray-200 bg-elevated px-3 text-sm text-primary"><option value="">Choisir le dossier de cet échange</option>{dossiers.map(c => <option key={c.id} value={c.id}>{c.ref} — {c.desc}</option>)}</select></div>}
         {/* URL display */}
-        <div className="px-5 py-4 space-y-3">
-          <div className="group relative">
-            <code className="block text-[11px] font-mono text-slate-700 bg-slate-50/60 rounded-lg px-3 py-2.5 pr-12 border border-slate-200/60 truncate select-all">
-              {url}
-            </code>
-            <button
-              onClick={handleCopy}
-              disabled={copying}
-              title="Copier le lien"
-              className="absolute top-1/2 right-1.5 -translate-y-1/2 w-8 h-8 rounded-md flex items-center justify-center transition-all duration-200 hover:bg-white hover:shadow-sm active:scale-90"
-              style={{ color: copied ? '#059669' : BRAND.navy }}
-            >
-              {copied ? <Check size={14} strokeWidth={2.5} /> : <Copy size={13} strokeWidth={2} />}
-            </button>
-            {copied && (
-              <span className="absolute -top-2 right-2 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200/60 animate-in fade-in slide-in-from-top-1 duration-200">
-                Copié
-              </span>
-            )}
-          </div>
+        <div className="space-y-3 px-4 py-4">
+          <code className={`block rounded-lg border ${BORDER} bg-surface px-3 py-2.5 font-mono text-sm text-primary [overflow-wrap:anywhere] select-all`}>
+            {url}
+          </code>
 
           {/* Action buttons */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            <button
-              onClick={handleCopy}
-              disabled={copying}
-              className="inline-flex items-center justify-center gap-1.5 text-xs font-bold px-3 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300 active:scale-[0.98] transition-all"
-              style={{ color: BRAND.navy }}
-            >
-              {copied ? <Check size={13} strokeWidth={2.5} /> : <Copy size={13} />}
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <button type="button" onClick={handleCopy} disabled={copying} className={`${SECONDARY} brand-t`}>
+              {copied ? <Check size={16} strokeWidth={2.5} aria-hidden="true" /> : <Copy size={16} aria-hidden="true" />}
               {copied ? 'Copié' : 'Copier le lien'}
             </button>
             <button
+              type="button"
               onClick={handleTelegramShare}
-              disabled={sendingTg || !client?.telegramChatId || !dossierId || !can('perm_comm_telegram')}
-              title={!client?.telegramChatId ? 'Client non lié à Telegram' : 'Envoyer au client via Telegram'}
-              className="inline-flex items-center justify-center gap-1.5 text-xs font-bold px-3 py-2.5 rounded-xl text-white transition-all hover:translate-y-[-1px] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:translate-y-0 whitespace-nowrap"
-              style={{ background: '#0088cc' }}
+              disabled={sendingTg || Boolean(telegramBlocked)}
+              aria-describedby={telegramBlocked ? telegramHint : undefined}
+              className="inline-flex min-h-11 items-center justify-center gap-2 whitespace-nowrap rounded-xl px-4 py-2 text-sm font-semibold text-white transition-transform duration-200 ease-out hover:-translate-y-px active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0"
+              style={{ background: TELEGRAM_BLUE }}
             >
-              {sendingTg ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
+              {sendingTg ? <Loader2 size={16} className="animate-spin" aria-hidden="true" /> : <Send size={16} aria-hidden="true" />}
               {sendingTg ? 'Envoi…' : 'Envoyer via Telegram'}
             </button>
           </div>
-          {!client?.telegramChatId && (
-            <p className="text-[10px] text-slate-400 leading-relaxed">
-              Le client doit utiliser son invitation Telegram personnelle depuis son profil pour activer les notifications.
-            </p>
-          )}
+          {telegramBlocked && <p id={telegramHint} className="text-sm leading-relaxed text-secondary">{telegramBlocked}</p>}
+          <p className="sr-only" aria-live="polite">{copied ? 'Lien copié dans le presse-papiers.' : ''}</p>
         </div>
       </div>
     </Section>
@@ -336,18 +295,20 @@ export default function ShareLinkPanel({ client, currentUserId, flash, ask }) {
 // ── Sub-components ──────────────────────────────────────────────────
 
 function Section({ children }) {
-  return <div className="space-y-3">{children}</div>;
+  return <section aria-labelledby="share-link-title" className="space-y-3">{children}</section>;
 }
 
 function SectionHeader() {
   return (
-    <div className="flex items-baseline justify-between">
-      <h3 className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">
-        Partager le suivi avec un proche
-      </h3>
-      <span className="text-[10px] text-slate-400">expire 10j après livraison</span>
+    <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+      <h2 id="share-link-title" className="font-bold text-primary">Partager le suivi avec un proche</h2>
+      <span className="text-sm text-secondary">Valable jusqu’à 10 jours après la dernière livraison</span>
     </div>
   );
+}
+
+function Explanation() {
+  return <p className="text-sm text-secondary">Suivi public destiné aux proches : toute personne possédant ce lien peut consulter l’avancement des dossiers. Il ne donne pas accès à l’espace privé, aux factures ni aux messages.</p>;
 }
 
 function formatDate(iso) {
@@ -359,10 +320,9 @@ function relativeDate(iso) {
   if (!iso) return '';
   const diff = Date.now() - new Date(iso).getTime();
   const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'à l\'instant';
-  if (mins < 60) return `il y a ${mins}min`;
+  if (mins < 1) return 'à l’instant';
+  if (mins < 60) return `il y a ${countLabel(mins, 'minute', 'minutes')}`;
   const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `il y a ${hrs}h`;
-  const days = Math.floor(hrs / 24);
-  return `il y a ${days}j`;
+  if (hrs < 24) return `il y a ${countLabel(hrs, 'heure', 'heures')}`;
+  return `il y a ${countLabel(Math.floor(hrs / 24), 'jour', 'jours')}`;
 }

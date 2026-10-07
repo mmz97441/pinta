@@ -43,7 +43,7 @@ async function main() {
     f.tables.colis.push(old);
     await f.login(); await f.page.goto(`${base}/clients/${ids.C}`);
     await f.page.getByRole('heading', { name: 'Expéditions ouvertes (1)' }).waitFor();
-    assert.equal(await f.page.getByLabel('Nom *', { exact: true }).isVisible(), false);
+    assert.equal(await f.page.getByLabel('Nom', { exact: true }).isVisible(), false);
     await f.page.getByText('Historique complet (2 dossiers)', { exact: true }).click();
     await f.page.getByText('EXP-ARCHIVE · Archivé', { exact: true }).waitFor();
     await audit(f, 'client-summary-desktop');

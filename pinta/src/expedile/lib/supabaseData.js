@@ -6,6 +6,7 @@ import { randomId } from './randomId';
 import { normalizeStaffPermissions, staffPermissionSaveArgs } from '../domain/staffPermissions';
 import { departureClosing } from '../domain/departurePlanning';
 import { functionErrorMessage } from '../services/functionErrors';
+import { normalizeTelegramUsername } from '../utils/clientDisplay.js';
 
 let dataScope = 'staff';
 export function setDataScope(type) {
@@ -148,7 +149,8 @@ export function mapClient(row) {
     methode_paiement: row.methode_paiement,
     methodePaiement: row.methode_paiement,
     telegramChatId: row.telegram_chat_id || null,
-    telegramUsername: row.telegram_username || null,
+    // Stored without @; older rows may still carry it.
+    telegramUsername: normalizeTelegramUsername(row.telegram_username) || null,
     // Pro fields
     raisonSociale: row.raison_sociale || '',
     siret: row.siret || '',
@@ -792,6 +794,8 @@ export async function updateClient(id, changes) {
     const snakeKey = map[key] || key;
     snakeChanges[snakeKey] = val === '' && dateFields.includes(snakeKey) ? null : val;
   }
+  // One stored format for the Telegram username: trimmed, without @.
+  if ('telegram_username' in snakeChanges) snakeChanges.telegram_username = normalizeTelegramUsername(snakeChanges.telegram_username) || null;
   if (dataScope === 'client') {
     const { data, error } = await supabase.rpc('update_client_profile', {
       p_changes: snakeChanges,
@@ -1027,7 +1031,7 @@ export async function insertClient(clientData) {
     points: clientData.points || 0,
     onboarded: clientData.onboarded || false,
     notes: clientData.notes || null,
-    telegram_username: clientData.telegramUsername || null,
+    telegram_username: normalizeTelegramUsername(clientData.telegramUsername) || null,
     abonnement: clientData.abonnement || 'freemium',
     abonnement_debut: clientData.abonnementDebut || null,
     abonnement_fin: clientData.abonnementFin || null,

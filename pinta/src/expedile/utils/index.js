@@ -1,4 +1,7 @@
 import { getDestByCP } from '../constants';
+import { clientSearchText } from './clientDisplay.js';
+
+export { normalizeTelegramUsername, formatTelegramHandle, clientContactLabel, clientSearchText, countLabel } from './clientDisplay.js';
 
 // ══════════ FORMATAGE ══════════
 export function eur(n) {
@@ -202,12 +205,10 @@ export function fuzzy(haystack, needle) {
   return terms.every((t) => h.includes(t));
 }
 
+// Name, destination, contact, client reference (CLI-…) and Telegram username (with or without @).
 export function searchClients(clients, q) {
   if (!q || !q.trim()) return clients;
-  return clients.filter((c) => {
-    const txt = `${c.nom} ${c.ville} ${c.cp} ${c.tel || ''} ${c.email || ''} ${c.type || ''}`;
-    return fuzzy(txt, q);
-  });
+  return clients.filter((c) => fuzzy(clientSearchText(c), q));
 }
 
 export function searchGlobal(clients, data, q) {

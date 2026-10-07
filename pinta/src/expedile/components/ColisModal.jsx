@@ -1106,7 +1106,7 @@ export default function ColisModal({ open, onClose, initialColisId, initialClien
                   />
                   <ReceptionInput label="Identifiant Telegram"
                     type="text"
-                    placeholder="Telegram @username"
+                    placeholder="@identifiant"
                     value={newClientForm.telegramUsername}
                     onChange={(e) => setNCField('telegramUsername', e.target.value)}
                     className={inputCls(false)}
