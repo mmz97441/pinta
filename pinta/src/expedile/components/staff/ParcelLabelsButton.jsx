@@ -3,6 +3,7 @@ import { AlertTriangle, Loader2, Printer } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import { hasCurrentPreparation } from '../../domain/preparationReadiness';
+import { legacySingleParcel } from '../../domain/loadingControl';
 import { plural, pluralWord } from '../../domain/plural';
 
 // The outgoing parcel labels (utils/exportParcelLabels.js): one 100 × 150 mm page per
@@ -96,11 +97,12 @@ export function useParcelLabels() {
 
 /**
  * « Imprimer les étiquettes (N colis) » for one dossier: shown once its optimisation is
- * saved (current preparation), to the people allowed to print labels.
+ * saved (current preparation), or for its one parcel when it was measured before the
+ * parcels were listed (legacySingleParcel), to the people allowed to print labels.
  */
 export default function ParcelLabelsButton({ dossier }) {
   const { can } = useApp();
-  if (!dossier || !can('perm_envois_etiquettes') || !hasCurrentPreparation(dossier)) return null;
+  if (!dossier || !can('perm_envois_etiquettes') || !(hasCurrentPreparation(dossier) || legacySingleParcel(dossier))) return null;
   return <DossierParcelLabels dossier={dossier} />;
 }
 
@@ -110,7 +112,8 @@ function DossierParcelLabels({ dossier }) {
   const location = useLocation();
   const { state, print } = useParcelLabels();
   const hint = useId();
-  const count = Number(dossier.outgoingParcelCount) || (Array.isArray(dossier.finalPackages) ? dossier.finalPackages.length : 1);
+  // A legacy measure (no parcel list, no outgoing count) is one parcel.
+  const count = legacySingleParcel(dossier) ? 1 : Number(dossier.outgoingParcelCount) || (Array.isArray(dossier.finalPackages) ? dossier.finalPackages.length : 1);
   const preparing = state.phase === 'preparing';
   const result = state.phase === 'done' ? state.result : null;
   const skipped = result && !result.count ? result.skipped[0] : null;

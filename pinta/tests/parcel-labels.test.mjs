@@ -10,6 +10,7 @@ import { build } from 'esbuild';
 import QRCode from 'qrcode';
 import { CODE128_PATTERNS } from '../src/expedile/utils/code128.js';
 import { parseParcelCode } from '../src/expedile/domain/parcelCode.js';
+import { readScannedCode } from '../src/expedile/domain/loadingControl.js';
 
 const directory = path.dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
@@ -147,6 +148,22 @@ test('one label per outgoing parcel: its code, its measures, the casier and the 
   // A legacy preparation (finalPackages NULL) is one parcel with the scalar measures; strings from the database are numbers.
   const legacy = parcelLabels([prepared({ finalPackages: null, outgoingParcelCount: 1, finL: '30', finW: '20', finH: '20', finP: '3' })], { getClient });
   assert.deepEqual(legacy.labels.map(label => [label.code, label.parcel]), [['EXP-2YE537-1-1', { dimL: 30, dimW: 20, dimH: 20, poids: 3 }]]);
+});
+
+test('a dossier measured before the parcels were listed gets the one label the loading control expects', () => {
+  // As 20260912000005 leaves it, and confirm_departure only fills outgoing_parcel_count once it has left.
+  const legacy = prepared({ ref: 'EXP-0042', statut: 'paye', finalPackages: null, outgoingParcelCount: null, preparationCompositionVersion: 0, finalMeasurementsVersion: 0,
+    finL: '30', finW: '20', finH: '20', finP: '4' });
+  const { labels, skipped } = parcelLabels([legacy], { getClient });
+  assert.deepEqual(skipped, []);
+  assert.deepEqual(labels.map(label => [label.code, label.codeText, label.index, label.count, label.parcel]),
+    [['EXP-0042-1-1', 'EXP-0042 · Colis 1/1', 1, 1, { dimL: 30, dimW: 20, dimH: 20, poids: 4 }]]);
+  // The code the loading control reads back as the dossier's one parcel.
+  const scan = readScannedCode(labels[0].code, [legacy]);
+  assert.deepEqual([scan.kind, scan.dossier.id, scan.index, scan.count], ['parcel', 'dossier-1', 1, 1]);
+  // Measures of an older composition (a carton added since), none at all, or an explicit empty list: no label.
+  for (const patch of [{ preparationCompositionVersion: 1 }, { finalMeasurementsVersion: null }, { finP: null }, { finalPackages: [] }, { outgoingParcelCount: 2 }])
+    assert.deepEqual(parcelLabels([{ ...legacy, ...patch }], { getClient }).skipped.map(item => item.reason), ['not-prepared'], JSON.stringify(patch));
 });
 
 test('dossiers without labels are returned with their reason, never printed', () => {

@@ -45,8 +45,10 @@ async function fixture(browser, { role = 'directeur', permissions = null, width 
   if (state === 'empty') Object.assign(parcel, { final_packages: [], fin_l: null, fin_w: null, fin_h: null, fin_p: null, outgoing_parcel_count: null, final_measurements_version: null, final_measurements_at: null });
   if (state === 'quoted') Object.assign(parcel, { statut: 'devis_envoye', quote_version: 1, devis_brouillon: false, devis_total: 77.5, devis_envoye_le: '2026-09-10T08:00:00Z',
     devis_snapshot: { inputs: { destination: { code: '974', nom: 'La Réunion', tva: 8.5 } }, amounts: { total: 77.5 } } });
-  if (state === 'paid') Object.assign(parcel, { statut: 'paye', quote_version: 1, devis_brouillon: false, devis_total: 77.5, devis_envoye_le: '2026-09-10T08:00:00Z', paiement_montant: 77.5, paiement_date: '2026-09-11T08:00:00Z',
+  if (state === 'paid' || state === 'legacy') Object.assign(parcel, { statut: 'paye', quote_version: 1, devis_brouillon: false, devis_total: 77.5, devis_envoye_le: '2026-09-10T08:00:00Z', paiement_montant: 77.5, paiement_date: '2026-09-11T08:00:00Z',
     devis_snapshot: { inputs: { destination: { code: '974', nom: 'La Réunion', tva: 8.5 } }, amounts: { total: 77.5 } } });
+  // Measured before the outgoing parcels were listed (20260912000005): one final measure, no list, no outgoing count.
+  if (state === 'legacy') Object.assign(parcel, { final_packages: null, outgoing_parcel_count: null, preparation_composition_version: 0, final_measurements_version: 0 });
   // A second dossier of the same client, agreed but not prepared yet.
   f.tables.colis.push({ ...JSON.parse(JSON.stringify(parcel)), id: OTHER.id, ref: OTHER.ref, statut: 'autorise', casier: 'A-07', final_packages: [], fin_l: null, fin_w: null, fin_h: null, fin_p: null,
     outgoing_parcel_count: null, final_measurements_version: null, final_measurements_at: null, quote_version: 0, devis_total: null, devis_snapshot: null, paiement_date: null, paiement_montant: null });
@@ -238,6 +240,28 @@ async function main() {
       await axe(f, '[data-testid="parcel-labels"]');
       await labelsBlock(f).scrollIntoViewIfNeeded();
       await f.page.screenshot({ path: path.join(output, `reprint-after-payment-${width}-${theme}.png`), fullPage: width < 768 });
+    });
+
+    // A dossier measured before the outgoing parcels were listed: its one parcel gets the label « 1/1 » that the
+    // loading control expects, on its read-only preparation and from the /colis selection.
+    await scenario('labels-of-a-dossier-measured-before-the-parcels-were-listed-1440-light', { state: 'legacy' }, async f => {
+      await f.page.goto(`${base}/colis/${ids.P}?section=preparation`);
+      const guidance = f.page.getByTestId('task-guidance');
+      await guidance.getByRole('heading', { name: 'Préparation terminée', exact: true }).waitFor();
+      await printWithoutWrites(f, () => guidance.getByRole('button', { name: 'Imprimer les étiquettes (1 colis)', exact: true }).click(),
+        () => labelsBlock(f).getByRole('status').filter({ hasText: '1 étiquette ouverte dans un nouvel onglet.' }).waitFor());
+      assertLabelPages(await pdfPages(await labelPdf(f, 1)), [{ index: 1, count: 1, size: '30 × 20 × 20 cm', weight: '3 kg' }]);
+      await closePopups(f);
+      await axe(f, '[data-testid="parcel-labels"]');
+      await labelsBlock(f).scrollIntoViewIfNeeded();
+      await f.page.screenshot({ path: path.join(output, 'legacy-dossier-label-1440-light.png') });
+      await f.page.goto(`${base}/colis`);
+      await f.page.getByRole('checkbox', { name: `Sélectionner le dossier ${REF}`, exact: true }).check();
+      await printWithoutWrites(f, () => bar(f).getByRole('button', { name: 'Étiquettes du dossier sélectionné', exact: true }).click(),
+        () => bar(f).getByRole('status').filter({ hasText: '1 étiquette ouverte dans un nouvel onglet.' }).waitFor());
+      // A new page: its first document.
+      assertLabelPages(await pdfPages(await labelPdf(f, 1)), [{ index: 1, count: 1, size: '30 × 20 × 20 cm', weight: '3 kg' }]);
+      await closePopups(f);
     });
 
     for (const [width, theme] of [[1440, 'dark'], [390, 'light']]) await scenario(`selection-labels-and-dossiers-left-out-${width}-${theme}`, { width, theme }, async f => {

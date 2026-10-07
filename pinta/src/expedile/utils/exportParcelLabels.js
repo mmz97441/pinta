@@ -3,12 +3,14 @@ import QRCode from 'qrcode';
 import { getSecteurByCP } from '../constants/index.js';
 import { formatParcelCode, parcelCodeText, parseParcelCode } from '../domain/parcelCode.js';
 import { hasCurrentPreparation } from '../domain/preparationReadiness.js';
+import { legacySingleParcel } from '../domain/loadingControl.js';
 import { servedDestination } from '../domain/clientRequirements.js';
 import { drawCode128 } from './code128.js';
 import { pdfText } from './pdfFormat.js';
 
 // The labels of the outgoing parcels: one 100 × 150 mm page per parcel of a prepared
-// dossier (its current preparation: finalPackages, outgoingParcelCount). Each label
+// dossier (its current preparation: finalPackages, outgoingParcelCount; a dossier measured
+// before the parcels were listed has its one parcel, « 1/1 », as the loading control expects). Each label
 // carries « EXP-2YE537-1-2 » as a QR code and as a Code 128 barcode — the reference,
 // the parcel's position and the dossier's parcel count, nothing personal — and the
 // recipient in plain text for the driver at destination.
@@ -45,7 +47,8 @@ const trim = value => String(value ?? '').trim();
 const textLines = value => String(value ?? '').split(/\r?\n/).map(line => line.trim()).filter(Boolean);
 const upper = value => trim(value).toLocaleUpperCase('fr-FR');
 
-/** The saved outgoing parcels, as hasCurrentPreparation() certifies them (legacy NULL: the scalar totals). */
+/** The saved outgoing parcels, as hasCurrentPreparation() certifies them (legacy NULL: the scalar totals, one
+ * parcel, as for legacySingleParcel()). */
 function preparedBoxes(dossier) {
   return dossier.finalPackages == null
     ? [{ dimL: dossier.finL, dimW: dossier.finW, dimH: dossier.finH, poids: dossier.finP }]
@@ -94,7 +97,7 @@ export function parcelLabels(dossiers, { getClient } = {}) {
     const skip = (reason, extra = {}) => skipped.push({ id: dossier.id ?? null, ref: ref || 'Dossier sans référence', clientId: dossier.clientId ?? null, reason, message: LABEL_SKIP_MESSAGES[reason], ...extra });
     if (dossier.statut === 'annule') { skip('cancelled'); continue; }
     if (dossier.archive) { skip('archived'); continue; }
-    if (!hasCurrentPreparation(dossier)) { skip('not-prepared'); continue; }
+    if (!hasCurrentPreparation(dossier) && !legacySingleParcel(dossier)) { skip('not-prepared'); continue; }
     const boxes = preparedBoxes(dossier);
     const count = boxes.length;
     // The scanners read the code back with parseParcelCode: a reference it cannot read gets no label.

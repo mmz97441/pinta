@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   checkedByLine, checkFeedback, checkMoment, checkerName, clearedFeedback, controlTotals, countFeedback, countIssue,
-  dossierControl, elsewhereFeedback, expectedParcelCount, LAYOUT_NOTICE, loadedDossiers, mergeLoadingCheck,
+  dossierControl, elsewhereFeedback, expectedParcelCount, LAYOUT_NOTICE, legacySingleParcel, loadedDossiers, mergeLoadingCheck,
   parisClockLabel, readScannedCode, refusedFeedback, severalFeedback, trailingParcelCode, unreadableFeedback,
 } from './loadingControl.js';
 
@@ -128,6 +128,17 @@ test('a label scanned into a text field is told apart from what the person wrote
   assert.deepEqual(trailingParcelCode('Report EXP)éYE("è)&)é'), { text: 'EXP)éYE("è)&)é', start: 7 }, 'A scanner set to an English keyboard.');
   for (const text of ['', 'Paiement attendu', 'Voir EXP-2YE537', 'EXP-2YE537 · Colis 1/2', 'EXP-2YE537-1-2 manquant', 'Colis EXP-2YE537-3-2', null])
     assert.equal(trailingParcelCode(text), null, String(text));
+});
+
+test('a dossier measured before the parcels were listed has one parcel to label, while its measures are current', () => {
+  // As 20260912000005 leaves it: composition version 0, final measures version 0, no parcel list, no outgoing count.
+  const legacy = { id: 'd-old', ref: 'EXP-0042', statut: 'paye', finalPackages: null, outgoingParcelCount: null, finL: 30, finW: 20, finH: 20, finP: 4, preparationCompositionVersion: 0, finalMeasurementsVersion: 0 };
+  assert.equal(legacySingleParcel(legacy), true);
+  assert.equal(expectedParcelCount(legacy), 1);
+  for (const patch of [{ preparationCompositionVersion: 1 }, { finalMeasurementsVersion: null }, { finalPackages: [] }, { outgoingParcelCount: 1 }, { finP: null }, { finL: 0 }])
+    assert.equal(legacySingleParcel({ ...legacy, ...patch }), false, JSON.stringify(patch));
+  assert.equal(legacySingleParcel(TWO), false, 'A current preparation lists its parcels.');
+  assert.equal(legacySingleParcel(null), false);
 });
 
 test('a parcel of another departure, of none, shipped or unknown is set aside with the reason', () => {

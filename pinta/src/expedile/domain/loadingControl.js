@@ -26,6 +26,17 @@ export function expectedParcelCount(dossier) {
 }
 
 /**
+ * A dossier prepared before the outgoing parcels were listed (September 2026): one final measure (fin_*), no parcel
+ * list and no outgoing count, saved for its current composition (no carton added since). Its one parcel is expected
+ * as « 1/1 » by the loading control, and its label carries « EXP-0042-1-1 ».
+ */
+export function legacySingleParcel(dossier) {
+  return Boolean(dossier) && dossier.finalPackages == null && dossier.outgoingParcelCount == null
+    && dossier.finalMeasurementsVersion != null && dossier.finalMeasurementsVersion === dossier.preparationCompositionVersion
+    && departureReadiness(dossier).legacySingle;
+}
+
+/**
  * One dossier's control from the departure's checks: only the checks of its current number of parcels count (a
  * label printed for another preparation does not), one per parcel.
  * { expected, checked, done: [parcel numbers], complete, checks: [one per parcel], latest }
