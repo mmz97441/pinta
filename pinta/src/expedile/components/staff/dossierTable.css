@@ -926,3 +926,7 @@ html.dark .dossier-empty-action[data-primary='true'] { color: #122a36; backgroun
   .dossier-horizontal-scroll input[type='range']::-webkit-slider-thumb { background: Highlight; }
   .dossier-horizontal-scroll input[type='range']::-moz-range-thumb { background: Highlight; }
 }
+
+/* Safari before 15.4 (no native <dialog>): the dialog element is shown as a fixed overlay. */
+.dossier-dialog-fallback-backdrop { position: fixed; inset: 0; z-index: 999; background: rgba(15, 23, 42, .45); }
+dialog.dossier-column-options[data-fallback-modal='true'] { display: block; position: fixed; z-index: 1000; margin: 0; }

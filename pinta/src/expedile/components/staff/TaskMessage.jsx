@@ -1,4 +1,5 @@
 import { useTaskAccess } from '../../context/TaskAccessContext';
+import { randomId } from '../../lib/randomId';
 import React, { useEffect, useRef, useState } from 'react';
 import { useApp } from '../../context/AppContext';
 
@@ -53,7 +54,7 @@ export default function TaskMessage({ template, message, label = 'Informer le cl
     } else {
       const text = proposed(pending?.template || template, nextChannel);
       const nextBaseline = { text, context: currentContext, consentVersion: sel?.consentRequestVersion ?? 0, updatedAt: sel?.updatedAt };
-      if (pending) Object.assign(pending, { key: crypto.randomUUID(), channel: nextChannel, text, baseline: nextBaseline });
+      if (pending) Object.assign(pending, { key: randomId(), channel: nextChannel, text, baseline: nextBaseline });
       setChannel(nextChannel); setDraft(text); setBaseline(nextBaseline); setFeedback(null);
     }
     setOpen(true);
@@ -62,7 +63,7 @@ export default function TaskMessage({ template, message, label = 'Informer le cl
     if (lock.current || disabled || stale || !allowed || !draft.trim() || !sel || !client) return;
     lock.current = true; setBusy(true); setFeedback(null);
     if (!request.current) request.current = {
-      key: crypto.randomUUID(), colisId: sel.id, clientId: client.id, template,
+      key: randomId(), colisId: sel.id, clientId: client.id, template,
       channel, text: draft, baseline, beforeSend, prepared: false, queueStarted: false,
     };
     const attempt = request.current;

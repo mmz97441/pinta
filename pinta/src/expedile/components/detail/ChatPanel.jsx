@@ -1,4 +1,5 @@
 import useWorkDraft from '../../hooks/useWorkDraft';
+import { randomId } from '../../lib/randomId';
 import React, { Suspense, lazy, useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { Send, MessageCircle, ChevronDown, Check, CheckCheck, Clock, AlertCircle, MoreHorizontal, PenLine } from 'lucide-react';
 import usePersistentDraft from '../../hooks/usePersistentDraft';
@@ -198,7 +199,7 @@ export default function ChatPanel({ colis, client, embedded = false, active = tr
     if (!msgTxt.trim() || sending || sendGuard.current) return;
     if (isStaff && !canHandle) return;
     const txt = msgTxt; const id = sel.id;
-    const attempt = sendAttempt?.text === txt ? sendAttempt : { key: crypto.randomUUID(), text: txt, channel: isStaff && selClient?.telegramChatId ? 'telegram' : 'portal' };
+    const attempt = sendAttempt?.text === txt ? sendAttempt : { key: randomId(), text: txt, channel: isStaff && selClient?.telegramChatId ? 'telegram' : 'portal' };
     setSendAttempt(attempt); sendGuard.current = true; setSending(true); setSendError(''); setSendResult('');
     // A client's message is in the team's conversation once the insert is confirmed;
     // the team's delivery states (Telegram…) are not the client's concern.

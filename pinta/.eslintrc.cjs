@@ -15,6 +15,7 @@ const missingInSafari14 = [
   message: `${name}() n’existe pas dans Safari 14, cible du build (vite.config.js) : ${instead}.`,
 }))).concat([
   { selector: "CallExpression[callee.object.name='Object'][callee.property.name='hasOwn']", message: 'Object.hasOwn() n’existe pas dans Safari 14 : utilisez Object.prototype.hasOwnProperty.call(objet, clé).' },
+  { selector: "CallExpression[callee.object.name='crypto'][callee.property.name='randomUUID']", message: 'crypto.randomUUID() n’existe pas avant Safari 15.4 : utilisez randomId() (lib/randomId.js).' },
   { selector: "CallExpression[callee.name='structuredClone']", message: 'structuredClone() n’existe pas dans Safari 14 : copiez les données JSON avec JSON.parse(JSON.stringify(valeur)).' },
   { selector: "MemberExpression[property.name='size'][object.type='NewExpression'][object.callee.name='URLSearchParams']", message: 'URLSearchParams.size n’existe pas avant Safari 17 : testez params.toString().' },
 ]);

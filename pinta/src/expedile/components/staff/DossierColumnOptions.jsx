@@ -1,4 +1,4 @@
-import React, { useLayoutEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X, ArrowLeft } from 'lucide-react';
 import { clampColumnWidth, columnFilterChoices, columnFilterModes, columnWidthBounds, sanitizeColumnFilter } from '../../domain/dossierTablePreferences';
@@ -12,15 +12,26 @@ import { clampColumnWidth, columnFilterChoices, columnFilterModes, columnWidthBo
  * The top layer also escapes the scrolling page header that holds the
  * triggers. Closing returns focus to the trigger, or to `fallbackFocus` when
  * the trigger is gone. */
+// Safari before 15.4 has no <dialog>: the same element then opens as a fixed overlay over a
+// backdrop that closes it, and Escape still closes it.
+const NATIVE_MODAL = typeof HTMLDialogElement !== 'undefined' && typeof HTMLDialogElement.prototype.showModal === 'function';
 export function ColumnDialog({ title, anchor, focusKey, onClose, children, closeLabel = 'Fermer le filtre', id = 'dossier-column-dialog', titleId = 'dossier-column-title', testId = 'column-filter-dialog', className = '', align = 'start', placement = 'anchored', width: preferredWidth = 340, fallbackFocus = '[data-column-filters-button]' }) {
   const dialog = useRef(null);
   const initialTrigger = useRef(anchor || document.activeElement);
   const fallback = useRef(fallbackFocus);
   const [position, setPosition] = useState({ left: 12, top: 12, maxHeight: 'calc(100dvh - 24px)' });
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
   useLayoutEffect(() => {
     const node = dialog.current;
-    node.showModal();
-    return () => { node.close(); const trigger = initialTrigger.current?.isConnected ? initialTrigger.current : document.querySelector(fallback.current); trigger?.focus({ preventScroll: true }); };
+    if (NATIVE_MODAL) node.showModal(); else node.setAttribute('open', '');
+    return () => { if (NATIVE_MODAL) node.close(); else node.removeAttribute('open'); const trigger = initialTrigger.current?.isConnected ? initialTrigger.current : document.querySelector(fallback.current); trigger?.focus({ preventScroll: true }); };
+  }, []);
+  useEffect(() => {
+    if (NATIVE_MODAL) return undefined;
+    const escape = event => { if (event.key === 'Escape') { event.preventDefault(); closeRef.current(); } };
+    document.addEventListener('keydown', escape);
+    return () => document.removeEventListener('keydown', escape);
   }, []);
   useLayoutEffect(() => {
     const node = dialog.current;
@@ -60,12 +71,12 @@ export function ColumnDialog({ title, anchor, focusKey, onClose, children, close
     const target = dialog.current?.querySelector('[data-filter-focus]');
     target?.focus({ preventScroll: true });
   }, [focusKey]);
-  return createPortal(<dialog ref={dialog} id={id} aria-modal="true" aria-labelledby={titleId} data-testid={testId} data-placement={placement} className={className ? `dossier-column-options ${className}` : 'dossier-column-options'} style={position}
+  return createPortal(<>{!NATIVE_MODAL && <div className="dossier-dialog-fallback-backdrop" aria-hidden="true" onClick={onClose} />}<dialog ref={dialog} id={id} aria-modal="true" data-fallback-modal={NATIVE_MODAL ? undefined : 'true'} aria-labelledby={titleId} data-testid={testId} data-placement={placement} className={className ? `dossier-column-options ${className}` : 'dossier-column-options'} style={position}
     onCancel={event => { event.preventDefault(); onClose(); }}
     onClick={event => { if (event.target !== event.currentTarget) return; const rect = event.currentTarget.getBoundingClientRect(); if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) onClose(); }}>
     <div className="dossier-column-dialog-heading"><h2 id={titleId}>{title}</h2><button type="button" className="dossier-column-close" aria-label={closeLabel} onClick={onClose}><X size={18} aria-hidden="true" /></button></div>
     {children}
-  </dialog>, document.body);
+  </dialog></>, document.body);
 }
 
 export default function DossierColumnOptions({ columns, columnKey, anchor, fromMenu, filters, widths, suggestions = [], onSelect, onFilter, onResize, onResetWidths, onClose }) {

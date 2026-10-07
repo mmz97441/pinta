@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
+import { randomId } from '../lib/randomId';
 import { createPortal } from 'react-dom';
 import { X, FileText, Search, UserPlus, Package, Camera, AlertTriangle } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -151,7 +152,7 @@ export default function ColisModal({ open, onClose, initialColisId, initialClien
   const [photoPreview, setPhotoPreview] = useState(null);
   const [receipt, setReceipt] = useState(() => startAppend && savedDraft?.receipt?.finished ? { ...savedDraft.receipt, finished: false } : savedDraft?.receipt || null);
   const [discarding, setDiscarding] = useState(false);
-  const [requestId, setRequestId] = useState(() => savedDraft?.requestId || crypto.randomUUID());
+  const [requestId, setRequestId] = useState(() => savedDraft?.requestId || randomId());
   const [pendingAppend, setPendingAppend] = useState(savedDraft?.pendingAppend || null);
   const [pendingCreate, setPendingCreate] = useState(savedDraft?.pendingCreate || null);
   const [restoredPhoto, setRestoredPhoto] = useState(savedDraft?.photoName && !(savedDraft?.nf?.photoFile instanceof File) ? savedDraft.photoName : '');
@@ -298,7 +299,7 @@ export default function ColisModal({ open, onClose, initialColisId, initialClien
     setReceipt(null);
     setRestoredPhoto('');
     setDiscarding(false);
-    setRequestId(crypto.randomUUID());
+    setRequestId(randomId());
     setPendingAppend(null);
     setPendingCreate(null);
     if (!fullPage) onClose();
@@ -317,7 +318,7 @@ export default function ColisModal({ open, onClose, initialColisId, initialClien
 
   const confirmReceipt = (colis, firstIndex, count, action, client = selectedClient) => {
     const nextForm = { ...EMPTY_FORM, casier: colis.casier || '' };
-    const nextRequestId = crypto.randomUUID();
+    const nextRequestId = randomId();
     const nextReceipt = { colis, first: firstIndex + 1, last: firstIndex + count, count, finished: action === 'finish' };
     // Persist success even if the operator left this screen while the request completed.
     if (fullPage) persistDraft({ nf: nextForm, clientSearchQ: client?.nom || '', selectedClient: client, mode: 'rattacher', rattacherTarget: receptionDraftDossier(colis), checkedInterdits: [], newClientMode: false, newClientForm: EMPTY_NEW_CLIENT, receipt: { ...nextReceipt, colis: receptionDraftDossier(colis) }, photoName: '', requestId: nextRequestId, pendingAppend: null, pendingCreate: null });
