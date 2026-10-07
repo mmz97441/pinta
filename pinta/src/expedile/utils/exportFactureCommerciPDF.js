@@ -17,6 +17,10 @@ const GREY = [96, 96, 96];
 const MARGIN = 14;
 // Quantity and amounts: right-aligned, in the body, the header and the totals.
 const NUMERIC = new Set([4, 5, 6, 7, 8]);
+// A right-aligned figure is placed from its measured width: jsPDF measures a no-break space (« 1 189,50 € ») at
+// 0.53 em where Helvetica draws 0.28 em, so an amount of 1 000 € or more would stop short of the others in its
+// column. Its spaces are plain in the cells (the columns are wide enough for it never to wrap there).
+const cellNumber = text => text.replace(/\u00a0/g, ' ');
 
 /** The PDF document and its file name, « facture-commerciale-ENV-2026-036.pdf » from the manifest,
  *  « facture-commerciale-ENV-2026-036-avant-depart.pdf » before the departure (nothing is saved). */
@@ -80,14 +84,16 @@ export function buildCommercialInvoicePDF(invoice) {
     margin: { left: MARGIN, right: MARGIN, bottom: 16 },
     head: [COMMERCIAL_INVOICE_COLUMNS.map(pdfText)],
     body: rows.map(row => [
-      row.ref, row.clientName, row.hsCode, row.description, pdfNumber(row.quantity),
-      pdfMoney(row.unitPrice), pdfMoney(row.value), pdfMoney(row.transport), pdfMoney(row.total),
+      row.ref, row.clientName, row.hsCode, row.description, cellNumber(pdfNumber(row.quantity)),
+      cellNumber(pdfMoney(row.unitPrice)), cellNumber(pdfMoney(row.value)), cellNumber(pdfMoney(row.transport)), cellNumber(pdfMoney(row.total)),
     ].map(pdfText)),
     foot: [[
       { content: pdfText('Total'), colSpan: 6 },
-      pdfMoney(totals.value), pdfMoney(totals.transport), pdfMoney(totals.total),
+      cellNumber(pdfMoney(totals.value)), cellNumber(pdfMoney(totals.transport)), cellNumber(pdfMoney(totals.total)),
     ]],
     showFoot: 'lastPage',
+    // An article is never cut across two pages (its description on several lines): the row moves whole.
+    rowPageBreak: 'avoid',
     theme: 'striped',
     styles: { fontSize: 7.5, cellPadding: 1.6, overflow: 'linebreak', valign: 'top', textColor: [30, 30, 30], lineColor: [222, 226, 230] },
     headStyles: { fillColor: NAVY, textColor: 255, fontStyle: 'bold', valign: 'bottom' },

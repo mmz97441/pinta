@@ -27,17 +27,29 @@ const { buildCommercialInvoicePDF } = loaded.exports;
 const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
 const STANDARD_FONTS = path.join(path.dirname(require.resolve('pdfjs-dist/package.json')), 'standard_fonts') + path.sep;
 
-/** The pages of the PDF: their size and every text item, no-break spaces read as spaces. */
+/** The pages of the PDF: their size and every text item, no-break spaces read as spaces; `boxes`, the same items
+ *  with where pdf.js draws them (points from the bottom left: `right` is where the text ends). */
 async function readPdf(doc) {
   const pdf = await pdfjs.getDocument({ data: new Uint8Array(doc.output('arraybuffer')), useSystemFonts: false, isEvalSupported: false, standardFontDataUrl: STANDARD_FONTS }).promise;
   const pages = [];
   for (let number = 1; number <= pdf.numPages; number++) {
     const page = await pdf.getPage(number);
     const content = await page.getTextContent();
-    pages.push({ view: page.view, items: content.items.map(item => item.str.replace(/\u00a0/g, ' ')).filter(text => text.trim()) });
+    const boxes = content.items.filter(item => item.str.trim()).map(item => ({ text: item.str.replace(/\u00a0/g, ' '), x: item.transform[4], y: item.transform[5], right: item.transform[4] + item.width }));
+    pages.push({ view: page.view, items: boxes.map(item => item.text), boxes });
   }
   return pages;
 }
+// Article descriptions as customers write them, from one line to three in the PDF's description column.
+const LONG_DESCRIPTIONS = [
+  'Machine à expresso automatique avec broyeur intégré, réservoir 1,8 l et buse vapeur',
+  'Robot pâtissier multifonction 1 500 W bol inox 5 l, accessoires de pâtisserie et livre de recettes',
+  'Mini scelleuse',
+  'Lot de 6 tasses en porcelaine blanche avec soucoupes assorties, passe au lave-vaisselle',
+  'Organisateur évier',
+  'Aspirateur balai sans fil 25,2 V autonomie 45 minutes avec brosse motorisée et station murale de recharge',
+  'Coffret de 12 verres à vin en cristal sans plomb, gravés à la main, emballage cadeau',
+];
 
 const categories = [
   { id: 'cat-cuir', label: 'Cuir', codeHs: '4205', taux: { 974: { om: 5, omr: 2.5 } } },
@@ -122,6 +134,55 @@ test('a long invoice keeps its basis line once, under the header of its first pa
   assert.ok(pages.length > 1, `${pages.length} pages`);
   assert.deepEqual(pages.map(page => page.items.includes(BEFORE_DEPARTURE)), pages.map((page, index) => index === 0));
   assert.ok(pages.at(-1).items.includes(`ENV-2026-036 · Page ${pages.length}/${pages.length}`));
+});
+
+test('an article is never cut across two pages: each page begins with a whole row, its reference first', async () => {
+  const model = invoice();
+  // 40 articles, most of them described on two or three lines in the PDF.
+  const rows = Array.from({ length: 40 }, (_, index) => ({ ...model.rows[index % model.rows.length], description: `${LONG_DESCRIPTIONS[index % LONG_DESCRIPTIONS.length]} (${index + 1})` }));
+  const pages = await readPdf(buildCommercialInvoicePDF({ ...model, rows }).doc);
+  assert.ok(pages.length > 1, `${pages.length} pages`);
+  const references = new Set(rows.map(row => row.ref));
+  pages.slice(1).forEach((page, index) => {
+    // The column titles are repeated at the top of each page; « Total », the last of them, comes before the rows.
+    const firstRow = page.items[page.items.indexOf('Total') + 1];
+    assert.ok(references.has(firstRow), `Page ${index + 2} begins with « ${firstRow} », not with a reference: a row was cut`);
+  });
+  // Each article is on the PDF once, its last words included.
+  const printed = pages.flatMap(page => page.items).join(' ');
+  for (const row of rows) assert.equal(printed.split(row.description.slice(-7)).length - 1, 1, `« ${row.description} »`);
+});
+
+test('the PDF amounts of a column end on the same edge, from 1 000 € too', async () => {
+  const { doc } = buildCommercialInvoicePDF(invoice());
+  const [{ boxes }] = await readPdf(doc);
+  // Each amount belongs to the column whose right-aligned title ends nearest (« Transport affecté » may take two
+  // lines); the totals are in the columns of their amounts.
+  const title = test => boxes.find(item => test(item.text)).right;
+  const columns = [title(text => text === 'P.U. HT'), title(text => text === 'Valeur HT'), title(text => text.endsWith('affecté')), title(text => text === 'Total')].map(edge => ({ edge, amounts: [] }));
+  for (const item of boxes.filter(entry => /^\d[\d ]*,\d{2} €$/.test(entry.text))) columns.reduce((near, column) => (Math.abs(column.edge - item.right) < Math.abs(near.edge - item.right) ? column : near)).amounts.push(item);
+  assert.deepEqual(columns.map(column => column.amounts.length), [4, 5, 5, 5], 'four articles in each column, a total under three of them');
+  assert.ok(columns.some(column => column.amounts.some(item => item.text.length > 8) && column.amounts.some(item => item.text.length <= 8)), 'amounts under and from 1 000 € in a column');
+  for (const { amounts } of columns) {
+    const ends = amounts.map(item => item.right);
+    assert.ok(Math.max(...ends) - Math.min(...ends) < 0.3, `${amounts.map(item => `« ${item.text} » ends at ${item.right.toFixed(2)} pt`).join(', ')}`);
+  }
+});
+
+test('the Excel sheet: the description and recipient columns are as wide as their text, up to a cap', () => {
+  const model = invoice();
+  const description = 'Machine à expresso automatique avec broyeur intégré, réservoir 1,8 l'; // 68 characters
+  assert.equal(description.length, 68);
+  const recipient = 'Société Réunionnaise de Distribution Hôtelière'; // 46 characters
+  const rows = [...model.rows, { ...model.rows[3], description, clientName: recipient }];
+  const widths = sheet => sheet['!cols'].map(column => column.wch);
+  const wide = widths(buildCommercialInvoiceWorkbook({ ...model, rows }).book.Sheets[COMMERCIAL_INVOICE_SHEET]);
+  assert.ok(wide[3] >= 70, `Description: ${wide[3]} characters wide`);
+  assert.equal(wide[1], 45, 'Destinataire: capped at 45');
+  // Short texts keep the usual widths; a very long description stops at 80.
+  assert.deepEqual(widths(buildCommercialInvoiceWorkbook(model).book.Sheets[COMMERCIAL_INVOICE_SHEET]), [16, 28, 14, 44, 6, 12, 13, 18, 13]);
+  const endless = widths(buildCommercialInvoiceWorkbook({ ...model, rows: [{ ...model.rows[0], description: 'x'.repeat(200) }] }).book.Sheets[COMMERCIAL_INVOICE_SHEET]);
+  assert.equal(endless[3], 80);
 });
 
 test('the Excel sheet: numbers in euros, HS codes as text, totals as sums of the rows', () => {

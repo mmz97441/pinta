@@ -58,7 +58,10 @@ export function buildCommercialInvoiceWorkbook(invoice) {
     const column = XLSX.utils.encode_col(c);
     Object.assign(cell(sheet, totalRow, c), { f: `SUM(${column}${first + 1}:${column}${last + 1})`, z: MONEY_FORMAT });
   }
-  sheet['!cols'] = [16, 28, 14, 44, 6, 12, 13, 18, 13].map(wch => ({ wch }));
+  // SheetJS writes no wrap style: the description and recipient columns take the width of their longest text, up to
+  // a cap, so that text is read whole in the sheet and in print rather than cut mid-word by the next column.
+  const widest = (field, least, most) => Math.min(most, rows.reduce((width, row) => Math.max(width, String(row[field] ?? '').length + 2), least));
+  sheet['!cols'] = [16, widest('clientName', 28, 45), 14, widest('description', 44, 80), 6, 12, 13, 18, 13].map(wch => ({ wch }));
   sheet['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: columnsRow, c: 0 }, e: { r: last, c: COMMERCIAL_INVOICE_COLUMNS.length - 1 } }) };
   const book = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(book, sheet, COMMERCIAL_INVOICE_SHEET);
