@@ -263,6 +263,10 @@ export function mapMessage(row) {
     template: row.template || null,
     msgId: row.msg_id || row.wa_id,
     lu: row.lu || false,
+    // Staff only: a failed or cancelled outbox row wins over another one of the same message.
+    outboxStatus: Array.isArray(row.notification_outbox)
+      ? (row.notification_outbox.find((outbox) => ['failed', 'cancelled'].includes(outbox?.status)) || row.notification_outbox[0])?.status ?? null
+      : null,
     attachmentPath: row.attachment_path || null,
     attachmentName: row.attachment_name || null,
     attachmentType: row.attachment_type || null,
@@ -352,7 +356,9 @@ export async function fetchColis(colisId = null, { archived = false, clientId = 
     const result = await Promise.all(
       Object.keys(grouped).map(async (table) => [
         table,
-        await fetchAllRows(table, (q) => q.in('colis_id', ids)),
+        // Staff: each message also reads the state of its outbox row (a send cancelled or
+        // failed in the database leaves messages.statut unchanged).
+        await fetchAllRows(table, (q) => q.in('colis_id', ids), 'id', table === 'messages' && !clientScope ? '*,notification_outbox(status)' : '*'),
       ]),
     );
     await datesLoaded;
