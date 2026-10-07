@@ -286,6 +286,25 @@ try{
   f.tables.factures[0].montant=26.56;const line=f.tables.lignes[0];
   f.tables.lignes=[{...line,description:'Mini scelleuse',qte:1,prix_unitaire:16.64,custom_duty:mapped(catalog[0])},{...line,id:'55555555-5555-4555-8555-555555555556',description:'Organisateur évier',qte:1,prix_unitaire:9.92,categorie_id:'cat-vaisselle'}];
  }
+ // Every detail of the saved quote opened, then read once they all are.
+ async function openAll(f,group){
+  for(const summary of await group.locator('summary').all())await summary.click();
+  await f.page.waitForFunction(()=>[...document.querySelectorAll('[aria-label="Devis enregistré"] details')].every(node=>node.open));
+ }
+ // A saved quote read back as the server froze it: one parcel of 30 × 20 × 20 cm and 3 kg (real weight
+ // retained), 25 € + 5 €/kg; article 1 classified 01012100 with rates corrected to OM 2 % / OMR 1 %,
+ // article 2 in the base category, which has no HS code. `total` is the recorded devis_total.
+ function frozenQuote(total=46.98){
+  const duty={...mapped(catalog[0]),rates:{om:2,omr:1},overrideReason:'Taux réduits justifiés par le certificat d’origine.'};
+  const lines=[
+   {id:ids.L,factureId:ids.F,description:'Mini scelleuse',quantity:1,unitPrice:30,categoryId:'cat-test',categoryLabel:'Divers',rates:{om:2,omr:1},customDuty:duty},
+   {id:'55555555-5555-4555-8555-555555555557',factureId:ids.F,description:'Organisateur évier',quantity:2,unitPrice:5,categoryId:'cat-test',categoryLabel:'Divers',rates:{om:5,omr:2.5}},
+  ];
+  const taxLines=[{...lines[0],value:30,transportShare:30,cif:60,om:1.2,omr:0.6},{...lines[1],value:10,transportShare:10,cif:20,om:1,omr:0.5}];
+  return {statut:'devis_envoye',devis_total:total,quote_version:1,devis_brouillon:false,devis_envoye_le:'2026-10-07T08:00:00Z',devis_snapshot:{schemaVersion:1,currency:'EUR',mode:'final',
+   inputs:{client:{type:'particulier'},destination:{code:'974',tva:8.5},tarif:{base:25,parKg:5},volumetricDivisor:5000,finalPackages:[{dimL:30,dimW:20,dimH:20,poids:3}],lines,fees:[]},
+   amounts:{transport:40,om:2.2,omr:1.1,tva:3.68,fees:0,total:46.98,realWeight:3,volumetricWeight:2.4,billableWeight:3,merchandiseValue:40,taxLines},savings:0}};
+ }
  // The deliberate save of the draft, then the quote sent: the dossier shows its saved quote.
  async function saveAndSend(f){
   await f.login();await f.page.goto(`${base}/colis/${ids.P}?section=devis`);await mainSave(f).click();
@@ -326,7 +345,7 @@ try{
  await scenario('saved-quote-of-a-professional-client-has-transport-and-fees-without-taxes',{},async f=>{
   f.tables.clients[0].type='pro';Object.assign(f.tables.colis[0],{frais_divers:[{libelle:'Palette',montant:12}],mode_paiement_pro:'virement'});
   await saveAndSend(f);const group=savedQuote(f);
-  for(const summary of await group.locator('summary').all())await summary.click();
+  await openAll(f,group);
   const text=plain(await group.innerText());
   assert.ok(text.includes('Transport 40,00 € Comprendre le calcul du transport Poids réel 3 kg Poids volumétrique 2,4 kg 30 × 20 × 20 cm · réel 3 kg · vol. 2,4 kg'),text);
   assert.ok(text.includes('Poids retenu 3 kg (le plus lourd : réel)'),text);
@@ -336,7 +355,36 @@ try{
  await scenario('saved-quote-without-amounts-keeps-the-short-summary',{},async f=>{
   Object.assign(f.tables.colis[0],{statut:'devis_envoye',devis_total:77,quote_version:1,devis_brouillon:false,devis_envoye_le:'2026-10-07T08:00:00Z',devis_snapshot:{inputs:{lines:[{id:ids.L,description:'Article vérifié',quantity:1,unitPrice:100,rates:{om:10,omr:2.5}}]}}});
   await f.login();await f.page.goto(`${base}/colis/${ids.P}?section=devis`);await f.page.getByRole('heading',{name:'Devis enregistré',exact:true}).waitFor();
-  const group=savedQuote(f);await group.locator('summary').click();
+  const group=savedQuote(f);await openAll(f,group);
   assert.equal(plain(await group.innerText()),'Total 77,00 € Articles et taux enregistrés (1) Article vérifié 1 × 100,00 € HT OM : 10 % · OMR : 2,5 % Valeurs conservées avec ce devis.');
+ });
+ for(const dark of [false,true])await scenario(`saved-quote-names-a-missing-hs-code-and-keeps-the-rate-correction-390-${dark?'dark':'light'}`,{},async f=>{
+  Object.assign(f.tables.colis[0],frozenQuote());const before=structuredClone(f.tables.colis[0]);
+  await f.page.setViewportSize({width:390,height:844});await f.context.addInitScript(dark=>localStorage.setItem('expedile-theme',dark?'dark':'light'),dark);
+  await f.login();await f.page.goto(`${base}/colis/${ids.P}?section=devis`);await f.page.getByRole('heading',{name:'Devis enregistré',exact:true}).waitFor();
+  await f.page.waitForFunction(dark=>document.documentElement.classList.contains('dark')===dark,dark);
+  const group=savedQuote(f);await openAll(f,group);
+  const text=plain(await group.innerText());
+  for(const expected of [
+   'Transport 40,00 € Comprendre le calcul du transport Poids réel 3 kg Poids volumétrique 2,4 kg 30 × 20 × 20 cm · réel 3 kg · vol. 2,4 kg Poids volumétrique = longueur × largeur × hauteur ÷ 5 000 Poids retenu 3 kg (le plus lourd : réel) Tarif : 25,00 € + 5,00 € par kg',
+   'Taxes 6,98 € Détail des taxes Octroi de mer 2,20 € Octroi de mer régional 1,10 € TVA 8,5 % 3,68 € sur 43,30 € (transport + octroi de mer)',
+   'Frais convenus Aucun frais Total 46,98 € Articles et taux enregistrés (2)',
+   'Mini scelleuse Code SH 01012100 · Chevaux reproducteurs de race pure 1 × 30,00 € HT = 30,00 € Part de transport 30,00 € · Base OM / OMR 60,00 € OM 2 % : 1,20 € · OMR 1 % : 0,60 € Motif de correction : Taux réduits justifiés par le certificat d’origine.',
+   'Organisateur évier Code SH à renseigner · Divers 2 × 5,00 € HT = 10,00 € Part de transport 10,00 € · Base OM / OMR 20,00 € OM 5 % : 1,00 € · OMR 2,5 % : 0,50 €',
+  ])assert.ok(text.includes(expected),`« ${expected} » in « ${text} »`);
+  assert.doesNotMatch(text,/faites vérifier/,'Consistent totals raise no warning.');
+  // The missing code is marked with its warning icon, readable in both themes.
+  const missing=group.getByText('Code SH à renseigner · Divers',{exact:true});assert.equal(await missing.count(),1);
+  assert.equal(await missing.locator('xpath=..').locator('svg').count(),1);
+  assert.equal(await f.page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false);
+  const axe=await new AxeBuilder({page:f.page}).include('[aria-label="Devis enregistré"][role="group"]').withTags(['wcag2a','wcag2aa','wcag21aa']).analyze();assert.deepEqual(axe.violations.map(v=>v.id),[]);
+  assert.deepEqual(f.tables.colis[0],before);assert.deepEqual(writes(f),[]);
+ });
+ await scenario('saved-quote-warns-when-the-recorded-total-differs-from-its-detail',{},async f=>{
+  Object.assign(f.tables.colis[0],frozenQuote(47.98));
+  await f.login();await f.page.goto(`${base}/colis/${ids.P}?section=devis`);await f.page.getByRole('heading',{name:'Devis enregistré',exact:true}).waitFor();
+  const group=savedQuote(f);await group.getByRole('status').filter({hasText:'faites vérifier ce devis'}).waitFor();
+  assert.ok(plain(await group.innerText()).includes('Total 47,98 € Le détail enregistré totalise 46,98 € : faites vérifier ce devis avant tout règlement.'),'The recorded total stays shown beside the warning.');
+  assert.deepEqual(writes(f),[]);
  });
 }finally{await browser.close();await fs.writeFile(`${output}/results.json`,JSON.stringify(results,null,2));console.log(JSON.stringify(results,null,2));}})().catch(e=>{console.error(e);process.exitCode=1;});
