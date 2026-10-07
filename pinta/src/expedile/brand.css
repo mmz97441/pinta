@@ -93,6 +93,8 @@ html.dark .border-slate-200 { border-color: var(--border-subtle) !important; }
 html.dark .border-slate-100 { border-color: var(--border-subtle) !important; }
 html.dark .border-gray-200  { border-color: var(--border-subtle) !important; }
 html.dark .border-gray-100  { border-color: var(--border-subtle) !important; }
+html.dark .divide-gray-100 > :not([hidden]) ~ :not([hidden]), html.dark .divide-gray-200 > :not([hidden]) ~ :not([hidden]),
+html.dark .divide-slate-100 > :not([hidden]) ~ :not([hidden]), html.dark .divide-slate-200 > :not([hidden]) ~ :not([hidden]) { border-color: var(--border-subtle) !important; }
 
 /* ══════════ BRAND legacy utility classes (kept for backward compat) ══════════ */
 .brand-bg       { background: var(--brand-navy); }
@@ -342,7 +344,9 @@ html .staff-sidebar button[aria-current='page'] { background-color: rgba(255,255
 .text-sm { font-size: 1rem; line-height: 1.5; }
 .text-xs, .text-\[9px\], .text-\[10px\], .text-\[11px\], .text-\[12px\] { font-size: .875rem; line-height: 1.45; }
 input:not([type='checkbox']):not([type='radio']), select, textarea { font-size: 1rem; }
-button, summary, a { overflow-wrap: anywhere; }
+/* A long word (email, link, reference) breaks only when it cannot fit its line:
+   « anywhere » also shrank chips, references and status pills letter by letter. */
+button, summary, a { overflow-wrap: break-word; }
 button, input, select, textarea { max-width: 100%; }
 
 /* Toasts (flash): an elevated surface, a coloured edge and an icon per tone.
@@ -376,3 +380,44 @@ html.dark .expedile-toast--error   { --toast-accent: #E59A9A; --toast-bg: #44282
   max-width: 440px;
   bottom: max(8px, env(safe-area-inset-bottom));
 }
+
+/* A row of chips inside a clickable card (reference, casier, status pill): the
+   chips go to the next line instead of being squeezed, since every element may
+   shrink (`* { min-width: 0 }`). Browsers without :has() keep the previous layout. */
+button .flex.items-center:has(> .inline-flex.rounded-full) { flex-wrap: wrap; row-gap: .25rem; }
+/* Touch screens: a field under 16 px makes iOS Safari zoom the whole page on focus. */
+@media (pointer: coarse) {
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']):not([type='file']),
+  select, textarea { font-size: max(16px, 1em) !important; }
+}
+
+/* Hovered surfaces follow the theme: the static remaps above do not match
+   Tailwind's hover:bg-* selectors (a hovered card turned near-white in dark). */
+html.dark .hover\:bg-slate-50:hover, html.dark .hover\:bg-gray-50:hover,
+html.dark .hover\:bg-slate-100:hover, html.dark .hover\:bg-gray-100:hover { background-color: #38332D !important; }
+html.dark .hover\:bg-slate-200:hover, html.dark .hover\:bg-gray-200:hover { background-color: #4A443C !important; }
+html.dark .hover\:bg-blue-50:hover, html.dark .hover\:bg-blue-100:hover, html.dark .hover\:bg-sky-50:hover { background-color: #284759 !important; }
+html.dark .hover\:bg-red-50:hover, html.dark .hover\:bg-red-100:hover { background-color: #553134 !important; }
+html.dark .hover\:bg-green-50:hover, html.dark .hover\:bg-emerald-50:hover { background-color: #284838 !important; }
+html.dark .hover\:bg-amber-100:hover, html.dark .hover\:bg-orange-100:hover { background-color: #4A3B26 !important; }
+
+/* ══════════ CLIENT PORTAL ══════════ */
+/* Loading placeholders, a little darker than the page in both themes. */
+:root { --skeleton-bg: #ECE7DC; --skeleton-strong: #DCD5C6; }
+html.dark { --skeleton-bg: #3A3530; --skeleton-strong: #4A443C; }
+.skeleton-bar { background-color: var(--skeleton-bg); border-radius: 6px; animation: pulse-soft 1.6s ease-in-out infinite; }
+.skeleton-strong { background-color: var(--skeleton-strong); }
+/* An unread notification keeps its marks on hover and in both themes. */
+:root { --unread-bg: #EEF4F7; --unread-hover: #E3EDF2; --unread-accent: #1B3A4B; --notification-hover: #F6F2E9; }
+html.dark { --unread-bg: #23313A; --unread-hover: #2A3B46; --unread-accent: #C4DAE5; --notification-hover: #38332D; }
+.notification-item { background-color: var(--bg-elevated); border: 1px solid var(--border-subtle); transition: background-color .2s ease-out; }
+.notification-item:hover { background-color: var(--notification-hover); }
+.notification-item[data-unread='true'] { background-color: var(--unread-bg); border-color: var(--unread-accent); box-shadow: inset 4px 0 0 var(--unread-accent); }
+.notification-item[data-unread='true']:hover { background-color: var(--unread-hover); }
+/* A card whose title control covers the whole card (other controls sit above it). */
+.stretched-link { min-height: 0; }
+.stretched-link::after { content: ''; position: absolute; inset: 0; border-radius: 1rem; }
+.stretched-link:focus-visible { outline: none; }
+.stretched-link:focus-visible::after { outline: 3px solid var(--brand-gold); outline-offset: 2px; }
+/* The desktop navigation of the client portal, on the navy header. */
+.client-top-nav a[aria-current='page'] { color: #FFFFFF; box-shadow: inset 0 -3px 0 #E8C779; }

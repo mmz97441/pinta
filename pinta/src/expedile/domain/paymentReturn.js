@@ -20,7 +20,7 @@ export function paymentReturnMessage(payment, cancelled = false) {
   if (payment.status === 'unavailable') return { title: 'Paiement à vérifier avec notre équipe', message: 'Nous ne pouvons pas confirmer ce règlement pour le moment. Ne payez pas une seconde fois avant notre vérification.' };
   return {
     title: cancelled ? 'Paiement à vérifier' : 'Confirmation du paiement en cours',
-    message: cancelled ? 'Vous êtes revenu de la page de paiement. Aucun règlement n’est encore confirmé ici. Nous vérifions son état.' : 'Nous attendons la confirmation du paiement. Cela peut prendre quelques instants. Ne payez pas une seconde fois.',
+    message: cancelled ? 'Vous avez quitté la page de paiement. Aucun règlement n’est encore confirmé ici. Nous vérifions son état.' : 'Nous attendons la confirmation du paiement. Cela peut prendre quelques instants. Ne payez pas une seconde fois.',
   };
 }
 

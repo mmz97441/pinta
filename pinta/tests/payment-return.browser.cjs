@@ -178,7 +178,10 @@ async function main() {
       f.respond = async () => ({ body: payment({ status: 'pending', paidAt: null }) });
       await open(f, `?token=${tokenA}&payment=cancelled`);
       await f.page.getByRole('heading', { name: 'Paiement à vérifier', exact: true }).waitFor();
-      await f.page.getByText('Vous êtes revenu de la page de paiement. Aucun règlement n’est encore confirmé ici. Nous vérifions son état.', { exact: true }).waitFor();
+      // Inclusive wording (final review 2026-10-07), same facts: nothing confirmed yet, verification in progress.
+      await f.page.getByText('Vous avez quitté la page de paiement. Aucun règlement n’est encore confirmé ici. Nous vérifions son état.', { exact: true }).waitFor();
+      assert.equal(await f.page.getByText(/Vous êtes revenu/).count(), 0);
+      assert.equal(await f.page.getByRole('link', { name: 'Retour à mon espace client', exact: true }).getAttribute('href'), '/');
       assert.equal(await f.page.getByRole('heading', { name: 'Ce lien de paiement est fermé', exact: true }).count(), 0);
       assert.equal(await f.page.getByRole('region', { name: 'Suite de votre envoi' }).count(), 0);
     });

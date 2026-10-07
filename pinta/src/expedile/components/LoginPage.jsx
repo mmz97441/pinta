@@ -3,6 +3,17 @@ import { LogIn, AlertCircle, Eye, EyeOff, ArrowLeft } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { BRAND } from '../constants';
 import { supabase, configurationError } from '../lib/supabase';
+import useDocumentTitle from '../hooks/useDocumentTitle';
+
+/** Supabase Auth answers in English: the person reads French, never a technical message. */
+function loginMessage(error) {
+  const text = String(error?.message || error || '').trim();
+  if (/invalid login credentials/i.test(text)) return 'Email ou mot de passe incorrect.';
+  if (/email not confirmed/i.test(text)) return 'Votre email n’est pas encore confirmé. Ouvrez le lien reçu par email, puis reconnectez-vous.';
+  if (/security purposes|rate limit|too many/i.test(text)) return 'Un lien vient d’être demandé. Patientez une minute avant d’en demander un nouveau.';
+  if (!text || /failed to fetch|networkerror|load failed/i.test(text) || /^[\x20-\x7E]*$/.test(text)) return 'Connexion impossible pour le moment. Vérifiez votre accès à internet, puis réessayez.';
+  return text;
+}
 
 export default function LoginPage() {
   const { signIn, authError } = useApp();
@@ -14,17 +25,18 @@ export default function LoginPage() {
   const [success, setSuccess] = useState('');
   const [recoveryInvalid] = useState(() => window.location.pathname === '/password' && new URLSearchParams(window.location.hash.slice(1)).has('error'));
   const [mode, setMode] = useState(() => window.location.pathname === '/password' && new URLSearchParams(window.location.hash.slice(1)).has('error') ? 'forgot' : 'login'); // 'login' | 'forgot'
+  useDocumentTitle(mode === 'login' ? 'Connexion' : 'Mot de passe oublié');
 
   const handleLogin = async (e) => {
     e.preventDefault();
-    if (!email.trim() || !password) { setError('Email et mot de passe requis'); return; }
+    if (!email.trim() || !password) { setError('Saisissez votre email et votre mot de passe.'); return; }
     setLoading(true);
     setError('');
 
     try {
       await signIn(email.trim(), password);
     } catch (err) {
-      setError(err.message === 'Invalid login credentials' ? 'Email ou mot de passe incorrect.' : err.message || 'Connexion impossible. Réessayez.');
+      setError(loginMessage(err));
     }
     setLoading(false);
   };
@@ -32,7 +44,7 @@ export default function LoginPage() {
   const handleForgotPassword = async (e) => {
     e.preventDefault();
     if (configurationError) { setError(configurationError); return; }
-    if (!email.trim()) { setError('Saisissez votre email'); return; }
+    if (!email.trim()) { setError('Saisissez votre email.'); return; }
     setLoading(true);
     setError('');
     setSuccess('');
@@ -42,15 +54,16 @@ export default function LoginPage() {
         redirectTo: `${window.location.origin}/password`,
       });
       if (resetError) {
-        setError(resetError.message);
+        setError(loginMessage(resetError));
       } else {
         setSuccess('Si un compte correspond à cette adresse, vous recevrez un lien de réinitialisation. Vérifiez aussi les courriers indésirables.');
       }
     } catch (err) {
-      setError(err.message === 'Invalid login credentials' ? 'Email ou mot de passe incorrect.' : err.message || 'Connexion impossible. Réessayez.');
+      setError(loginMessage(err));
     }
     setLoading(false);
   };
+  const shownError = error || (authError ? loginMessage(authError) : '');
 
   return (
     <div className="min-h-[100dvh] grid grid-cols-1 md:grid-cols-2 bg-white">
@@ -82,18 +95,19 @@ export default function LoginPage() {
 
         {/* Tagline central */}
         <div className="relative z-10 max-w-md">
-          <h2 className="text-3xl font-black text-white leading-tight tracking-tight">
-            Vos colis, suivis<br />
-            <span style={{ color: BRAND.gold }}>en temps réel.</span>
-          </h2>
-          <p className="mt-4 text-sm text-white/70 leading-relaxed max-w-sm">
-            La plateforme logistique qui automatise la réexpédition de Paris vers
-            les DOM-TOM. Mesure, devis, paiement, livraison — un seul outil.
+          <p className="text-3xl font-black text-white leading-tight tracking-tight">
+            Vos achats, de Paris<br />
+            <span style={{ color: BRAND.gold }}>jusqu’à votre île.</span>
+          </p>
+          <p className="mt-4 text-sm text-white/80 leading-relaxed max-w-sm">
+            Retrouvez vos expéditions, donnez votre accord de préparation,
+            transmettez vos factures et réglez vos devis depuis votre espace.
+            Notre équipe vous prévient à chaque étape.
           </p>
         </div>
 
         {/* Footer */}
-        <p className="relative z-10 text-[11px] text-white/40">
+        <p className="relative z-10 text-[11px] text-white/70">
           © {new Date().getFullYear()} Expedîle · Tous droits réservés
         </p>
       </div>
@@ -104,9 +118,9 @@ export default function LoginPage() {
         <div className="md:hidden mb-8 flex flex-col items-center select-none">
           <div className="flex items-baseline gap-0 leading-none">
             <span className="text-4xl font-black tracking-tighter" style={{ color: 'var(--brand-text)' }}>EXPÉD</span>
-            <span className="text-4xl font-black tracking-tighter" style={{ color: BRAND.gold }}>ÎLE</span>
+            <span className="text-4xl font-black tracking-tighter" style={{ color: 'var(--text-accent)' }}>ÎLE</span>
           </div>
-          <p className="mt-2 text-[10px] font-semibold uppercase" style={{ color: 'var(--brand-text)', letterSpacing: '0.18em', opacity: 0.7 }}>
+          <p className="mt-2 text-[10px] font-semibold uppercase" style={{ color: 'var(--brand-text)', letterSpacing: '0.18em' }}>
             Paris → Réunion · Mayotte · Antilles
           </p>
         </div>
@@ -150,10 +164,10 @@ export default function LoginPage() {
                 </div>
               </div>
 
-              {(error || authError) && (
+              {shownError && (
                 <div className="flex items-center gap-2 p-2.5 rounded-lg bg-red-50 border border-red-200">
                   <AlertCircle size={14} className="text-red-500 flex-shrink-0" />
-                  <p role="alert" className="text-xs text-red-700">{error || authError}</p>
+                  <p role="alert" className="text-xs text-red-700">{shownError}</p>
                 </div>
               )}
 
@@ -163,12 +177,12 @@ export default function LoginPage() {
                 style={{ background: `linear-gradient(135deg, ${BRAND.gold}, ${BRAND.goldD})`, color: BRAND.navyD, boxShadow: `0 4px 14px -4px ${BRAND.gold}80` }}
               >
                 <LogIn size={16} />
-                {loading ? 'Connexion...' : 'Se connecter'}
+                {loading ? 'Connexion…' : 'Se connecter'}
               </button>
 
               <button type="button" onClick={() => { setMode('forgot'); setError(''); setSuccess(''); }}
                 className="w-full text-center text-[12px] text-slate-500 hover:text-slate-800 transition-colors">
-                Mot de passe oublié ?
+                Mot de passe oublié&nbsp;?
               </button>
             </form>
           ) : (
@@ -197,10 +211,10 @@ export default function LoginPage() {
                 />
               </div>
 
-              {(error || authError) && (
+              {shownError && (
                 <div className="flex items-center gap-2 p-2.5 rounded-lg bg-red-50 border border-red-200">
                   <AlertCircle size={14} className="text-red-500 flex-shrink-0" />
-                  <p role="alert" className="text-xs text-red-700">{error || authError}</p>
+                  <p role="alert" className="text-xs text-red-700">{shownError}</p>
                 </div>
               )}
               {success && (
@@ -214,12 +228,12 @@ export default function LoginPage() {
                 className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold transition-all active:scale-[0.98] hover:translate-y-[-1px] disabled:opacity-50 disabled:translate-y-0"
                 style={{ background: `linear-gradient(135deg, ${BRAND.gold}, ${BRAND.goldD})`, color: BRAND.navyD, boxShadow: `0 4px 14px -4px ${BRAND.gold}80` }}
               >
-                {loading ? 'Envoi...' : success ? 'Recevoir un nouveau lien' : 'Envoyer le lien de réinitialisation'}
+                {loading ? 'Envoi…' : success ? 'Recevoir un nouveau lien' : 'Envoyer le lien de réinitialisation'}
               </button>
             </form>
           )}
 
-          <details className="mt-5 border-t border-slate-200 pt-2"><summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-slate-700">Première connexion ?</summary><p className="text-sm text-slate-600">Utilisez l’email et les instructions d’accès transmis par notre équipe. Vous n’avez pas reçu votre invitation ?</p><a className="inline-flex min-h-11 items-center text-sm font-semibold underline" href="mailto:contact@expedile.fr?subject=Mon%20acc%C3%A8s%20Exped%C3%AEle">Demander mon accès à l’équipe</a></details>
+          <details className="mt-5 border-t border-slate-200 pt-2"><summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-slate-700">Première connexion&nbsp;?</summary><p className="text-sm text-slate-600">Utilisez l’email et les instructions d’accès transmis par notre équipe. Vous n’avez pas reçu votre invitation&nbsp;?</p><a className="inline-flex min-h-11 items-center text-sm font-semibold underline" href="mailto:contact@expedile.fr?subject=Mon%20acc%C3%A8s%20Exped%C3%AEle">Demander mon accès à l’équipe</a></details>
           <p className="mt-8 text-[11px] text-slate-400 text-center md:hidden">© {new Date().getFullYear()} Expedîle</p>
         </div>
       </div>

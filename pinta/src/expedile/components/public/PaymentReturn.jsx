@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import { AlertTriangle, CheckCircle2, Clock, Loader2, Package, RefreshCw, Truck } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Clock, Home, Loader2, RefreshCw, Truck } from 'lucide-react';
 import { supabase, configurationError } from '../../lib/supabase';
 import { paymentReturnFacts, paymentReturnMessage, paymentShipmentMessage, receiptDate } from '../../domain/paymentReturn';
 
@@ -122,7 +122,7 @@ function Receipt({ token, colisId, cancelled }) {
 
   return <div className="min-h-[100dvh] px-4 py-6 sm:py-10" style={{ background: 'var(--bg-canvas)', color: 'var(--text-primary)' }}>
     <div className="mx-auto max-w-lg">
-      <header className="mb-7 flex items-center justify-between gap-4"><span className="flex items-center gap-2 text-lg font-extrabold"><Package size={24} aria-hidden="true" />EXPÉDÎLE</span><span className="text-sm" style={secondary}>Votre paiement</span></header>
+      <header className="mb-7 flex items-center justify-between gap-4"><b className="text-lg font-black tracking-tight" style={{ color: 'var(--brand-text)' }}>EXPÉD<span style={{ color: 'var(--text-accent)' }}>ÎLE</span></b><span className="text-sm" style={secondary}>Votre paiement</span></header>
       <main className="rounded-2xl border p-5 shadow-sm sm:p-8" style={surface} aria-label="Retour de paiement">
         <div aria-live="polite" aria-atomic="true">
           <Icon size={36} aria-hidden="true" className={checking ? 'animate-spin' : ''} style={{ color: payment?.status === 'paid' && !error ? 'var(--success)' : 'var(--text-secondary)' }} />
@@ -143,7 +143,10 @@ function Receipt({ token, colisId, cancelled }) {
         {!checking && !needsSession && !error?.invalid && <button disabled={busy} onClick={() => setRetry(value => value + 1)} className={`${primaryClass} mt-6`}><RefreshCw size={17} aria-hidden="true" className={`mr-2 inline ${busy ? 'animate-spin' : ''}`} />{busy ? 'Vérification…' : error ? 'Réessayer la vérification' : payment?.status === 'paid' ? 'Actualiser le suivi' : 'Vérifier le paiement'}</button>}
         {error?.canSignIn && <button className={`${primaryClass} mt-6`} onClick={() => { setError(null); setNeedsSession(true); }}>Utiliser un autre compte</button>}
       </main>
-      <footer className="mt-5 text-center text-sm" style={secondary}><a href={contact} className="inline-flex min-h-11 items-center font-semibold underline underline-offset-4">Contacter l’équipe</a><p className="mt-1">Gardez cette page pour retrouver la confirmation et le suivi.</p></footer>
+      <footer className="mt-5 text-center text-sm" style={secondary}>
+        <div className="flex flex-wrap items-center justify-center gap-x-6"><a href="/" className="inline-flex min-h-11 items-center gap-2 font-semibold underline underline-offset-4" style={{ color: 'var(--brand-text)' }}><Home size={16} aria-hidden="true" />Retour à mon espace client</a><a href={contact} className="inline-flex min-h-11 items-center font-semibold underline underline-offset-4">Contacter l’équipe</a></div>
+        <p className="mt-1">Gardez cette page pour retrouver la confirmation et le suivi. Votre espace client affiche aussi la suite de votre envoi.</p>
+      </footer>
     </div>
   </div>;
 }

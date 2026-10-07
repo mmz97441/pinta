@@ -63,6 +63,8 @@ export function AppProvider({ children }) {
   const [unreadNotifs, setUnreadNotifs] = useState(0);
   const [notificationsLoading, setNotificationsLoading] = useState(false);
   const [notificationsError, setNotificationsError] = useState('');
+  // Client portal: secondary reads that failed without hiding the expeditions.
+  const [loadIssues, setLoadIssues] = useState({});
   const notificationLimit = useRef(50);
   const notificationSequence = useRef(0);
   const [archivesLoaded, setArchivesLoaded] = useState(false);
@@ -228,9 +230,63 @@ export function AppProvider({ children }) {
     notificationLimit.current += 50;
     await refreshNotifications();
   }, [notificationsLoading, refreshNotifications]);
+  // The client's expeditions (client_colis, client_clients) never depend on a
+  // secondary read: notifications, departures, rates and settings are applied
+  // as they arrive, and a failure is reported in its own area (the
+  // notifications page, loadIssues). A failed refresh after a successful load
+  // keeps sbReady and the displayed expeditions; only a failed first load
+  // leaves the portal without data, shown as such and retryable.
+  const loadClientData = useCallback(async (identity, token) => {
+    const sequence = ++notificationSequence.current;
+    const current = () => token === generation.current;
+    setNotificationsLoading(true);
+    setLoadIssues({});
+    const notificationsRead = sb.fetchNotificationPage(identity.session.user.id).then((page) => {
+      if (!current() || sequence !== notificationSequence.current) return;
+      notificationLimit.current = 50;
+      setNotifs(page.rows); setNotificationTotal(page.total); setUnreadNotifs(page.unread); setNotificationsError('');
+    }, (error) => {
+      if (!current() || sequence !== notificationSequence.current) return;
+      setNotificationsError(error.message || 'Notifications indisponibles');
+    }).finally(() => {
+      if (current() && sequence === notificationSequence.current) setNotificationsLoading(false);
+    });
+    const issue = (key) => (error) => {
+      if (current()) setLoadIssues((previous) => ({ ...previous, [key]: error.message || 'Lecture indisponible' }));
+    };
+    const secondaryReads = Promise.all([
+      sb.fetchEnvois().then((rows) => { if (current()) setEnvois(rows); }, issue('envois')),
+      sb.fetchCategories().then((rows) => { if (current()) setCategories(rows); }, issue('categories')),
+      sb.fetchTarifs().then((rows) => { if (current()) setTarifs(rows); }, issue('tarifs')),
+      sb.fetchSettings().then((configuration) => {
+        if (!current()) return;
+        setSettings(configuration.settings.business || {});
+        setAdminSettingsBaseline(configuration.settings);
+        setMessageTemplates(configuration.templates);
+        setProduitsInterditsState(configuration.settings.produits_interdits || PRODUITS_INTERDITS);
+      }, issue('settings')),
+    ]);
+    try {
+      const [colisRows, clientRows] = await Promise.all([sb.fetchColis(), sb.fetchClients()]);
+      if (!current()) return;
+      dataRef.current = colisRows;
+      setArchivesLoaded(false);
+      setData(colisRows);
+      setClients(clientRows);
+      setInboxItems([]);
+      setSbReady(true);
+    } catch (error) {
+      if (!current()) return;
+      setDataError(`Chargement impossible : ${error.message}`);
+    } finally {
+      if (current()) setDataLoading(false);
+    }
+    await Promise.all([notificationsRead, secondaryReads]);
+  }, []);
   const loadData = useCallback(async (identity, token) => {
     setDataLoading(true);
     setDataError('');
+    if (identity.type === 'client') return loadClientData(identity, token);
     try {
       const [colisRows, clientRows, envoiRows, catRows, tarifRows, notifications, configuration] =
         await Promise.all([
@@ -275,7 +331,7 @@ export function AppProvider({ children }) {
     } finally {
       if (token === generation.current) setDataLoading(false);
     }
-  }, []);
+  }, [loadClientData]);
   const establishSession = useCallback(
     async (session) => {
       const token = ++generation.current;
@@ -754,10 +810,13 @@ export function AppProvider({ children }) {
         const saved = await sb.updateClient(id, changes);
         if (token === generation.current) {
           setClients((prev) => prev.map((c) => (c.id === id ? saved : c)));
-          if (!silent) flash('Client mis à jour');
+          // The client edits their own details: the confirmation speaks to them.
+          if (!silent) flash(authRef.current?.type === 'client' ? 'Vos informations sont enregistrées.' : 'Client mis à jour');
         }
         return saved;
       } catch (error) {
+        // The client's own forms (profile, guide) show the refusal inline, in their words.
+        if (authRef.current?.type === 'client') throw error;
         throw reportError(error);
       }
     },
@@ -1401,6 +1460,7 @@ export function AppProvider({ children }) {
     notificationsHasMore: notifs.length < notificationTotal,
     notificationsLoading,
     notificationsError,
+    loadIssues,
     refreshNotifications,
     loadMoreNotifications,
     unreadNotifs,

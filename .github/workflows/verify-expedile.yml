@@ -132,6 +132,7 @@ jobs:
           node tests/team-simplicity.browser.cjs
           node tests/client-simplicity.browser.cjs
           node tests/client-dossier-detail.browser.cjs
+          node tests/client-portal.browser.cjs
           node tests/chat-retry.browser.cjs
           node tests/admin-simplicity.browser.cjs
           PINTA_CLIENT_PAGES_OUT=/tmp/pinta-client-pages node tests/client-pages.browser.cjs

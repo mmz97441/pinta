@@ -1,6 +1,6 @@
-import React, { useState, useEffect, lazy, Suspense } from 'react';
-import { BrowserRouter, Routes, Route, useNavigate, useParams, useLocation, Navigate } from 'react-router-dom';
-import { Settings, Users, LogOut, LayoutDashboard, Package, ChevronLeft, ChevronRight, Plus, FileText, Key, AlertTriangle, MessageCircle, Plane, MoreHorizontal } from 'lucide-react';
+import React, { useState, useEffect, useLayoutEffect, lazy, Suspense } from 'react';
+import { BrowserRouter, Routes, Route, Link, useNavigate, useParams, useLocation, Navigate } from 'react-router-dom';
+import { Settings, Users, LogOut, LayoutDashboard, Package, ChevronLeft, ChevronRight, Plus, FileText, Key, AlertTriangle, MessageCircle, Plane, MoreHorizontal, RefreshCw } from 'lucide-react';
 import './brand.css';
 import { getPrenom } from './utils';
 import { needsConversationAction } from './domain/conversations';
@@ -39,7 +39,9 @@ const ClientNotifs = lazy(() => import('./components/client/ClientNotifs'));
 const ClientProfil = lazy(() => import('./components/client/ClientProfil'));
 import ClientDetailView from './components/client/ClientDetailView';
 import ClientDossierContext from './components/client/ClientDossierContext';
-import ClientBottomNav from './components/client/ClientBottomNav';
+import ClientBottomNav, { ClientTopNav } from './components/client/ClientBottomNav';
+import { ClientDossiersError, ClientPortalSkeleton, PublicTrackingSkeleton, clientViewForPath } from './components/client/ClientPortalStates';
+import useDocumentTitle from './hooks/useDocumentTitle';
 
 import DetailHeader from './components/detail/DetailHeader';
 import DossierAlerts from './components/detail/DossierAlerts';
@@ -279,30 +281,59 @@ function StaffColisDetail() {
 }
 
 // ── Wrapper: Client colis detail (reads :id from URL) ──
+function MissingClientColis() {
+  return <div className="max-w-lg mx-auto py-8 space-y-4"><h1 className="text-xl font-bold text-gray-900">Expédition introuvable</h1>
+    <p className="text-sm text-gray-600">Cette expédition n’existe pas ou n’est pas rattachée à votre compte. Toutes vos expéditions restent consultables dans votre espace, et notre équipe peut vous aider si besoin.</p>
+    <div className="flex flex-wrap items-center gap-3"><Link className="inline-flex min-h-11 items-center px-4 rounded-xl brand-bg text-white font-semibold transition-all duration-200 ease-out hover:translate-y-[-1px] active:scale-[0.98]" to="/colis">Retour à mes expéditions</Link><a className="inline-flex min-h-11 items-center text-sm font-semibold underline" href="mailto:contact@expedile.fr?subject=Une%20exp%C3%A9dition%20introuvable">Contacter l’équipe</a></div></div>;
+}
+
 function ClientColisDetail() {
   const { id } = useParams();
-  const { setSelId, sel, data, dataLoading, refreshColis } = useApp();
+  const { setSelId, sel, data, dataLoading, dataError, sbReady, refreshColis, retryLoad } = useApp();
   const [detailLoading, setDetailLoading] = useState(true);
   const [detailError, setDetailError] = useState('');
+  const [attempt, setAttempt] = useState(0);
+  const known = data.some((c) => c.id === id);
+  useDocumentTitle(sel?.id === id && sel.ref ? `Expédition ${sel.ref}` : 'Mon expédition');
 
+  // Selected before paint: an expedition already shown in a list opens at once
+  // and stays visible while its latest version is read.
+  useLayoutEffect(() => {
+    if (!id) return undefined;
+    setSelId(id);
+    return () => setSelId(null);
+  }, [id, setSelId]);
   useEffect(() => {
     let active = true;
     setDetailLoading(true); setDetailError('');
-    if (id) { setSelId(id); refreshColis(id).catch((error) => { if (active) setDetailError(error.message || 'Chargement impossible.'); }).finally(() => { if (active) setDetailLoading(false); }); }
-    return () => { active = false; setSelId(null); };
-  }, [id, setSelId, refreshColis]);
+    if (id) refreshColis(id).catch((error) => { if (active) setDetailError(error.message || 'Chargement impossible.'); }).finally(() => { if (active) setDetailLoading(false); });
+    return () => { active = false; };
+  }, [id, refreshColis, attempt]);
 
-  if (dataLoading || detailLoading) return <LoadingView bare label="Chargement du dossier…" />;
-  if (detailError) return <div role="alert" className="p-6 text-sm text-red-700">{detailError}<button onClick={() => window.location.reload()} className="block min-h-11 font-semibold underline">Réessayer</button></div>;
-  if (!data.some((c) => c.id === id)) return <MissingColis isClient />;
-  if (!sel || sel.id !== id) return <LoadingView bare label="Ouverture du dossier…" />;
+  const retry = () => { if (!sbReady) retryLoad(); setAttempt((value) => value + 1); };
+  if (!known) {
+    if (dataLoading || detailLoading) return <ClientPortalSkeleton view="detail" />;
+    if (detailError || (!sbReady && dataError)) return <ClientDossiersError onRetry={retry} title="Cette expédition ne peut pas s’afficher pour le moment" />;
+    return <MissingClientColis />;
+  }
+  if (!sel || sel.id !== id) return <ClientPortalSkeleton view="detail" />;
 
   return (
     <div className="space-y-4">
+      {detailLoading && <p role="status" className="sr-only">Actualisation de votre expédition…</p>}
+      {detailError && <div role="status" className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border px-4 py-2 text-sm" style={{ background: 'var(--attention-bg)', color: 'var(--attention-text)', borderColor: 'var(--attention-border)' }}>
+        <span className="min-w-0 flex-1">Les dernières nouvelles de cette expédition n’ont pas pu être chargées. Vous voyez les informations du dernier chargement.</span>
+        <button type="button" onClick={retry} className="min-h-11 font-semibold underline">Réessayer</button>
+      </div>}
       <ClientDetailView />
       <ClientDossierContext key={sel.id} />
     </div>
   );
+}
+
+function PasswordScreen(props) {
+  useDocumentTitle(props.recovery ? 'Réinitialiser mon mot de passe' : 'Mot de passe');
+  return <ForceChangePassword {...props} />;
 }
 
 function AppContent() {
@@ -315,7 +346,8 @@ function AppContent() {
   useEffect(() => { setOnboardingDismissed(false); }, [auth?.session?.user?.id]);
   const needsPassword = passwordRecovery || auth?.u?.mustChangePassword || location.pathname === '/password';
 
-  if (authLoading) return <AppLoading />;
+  // A client identity is known before its expeditions: the portal shows its own skeletons meanwhile.
+  if (authLoading && auth?.type !== 'client') return <AppLoading />;
   if (!auth) return <LoginPage />;
 
   const handleLogout = async () => {
@@ -323,7 +355,7 @@ function AppContent() {
     catch (error) { flash({ msg: error.message || 'Déconnexion impossible. Réessayez.', type: 'error' }); }
   };
 
-  if (needsPassword) return <ForceChangePassword
+  if (needsPassword) return <PasswordScreen
     staffUser={auth.u?.mustChangePassword ? { id: auth.u.staffId } : null}
     recovery={passwordRecovery}
     onDone={async () => { await completePasswordRecovery(); navigate('/', { replace: true }); }}
@@ -543,64 +575,77 @@ function AppContent() {
   }
 
   // ── Client layout ──
+  const clientView = clientViewForPath(location.pathname);
+  // First load (or a retry after a failed first load): skeletons. A later
+  // refresh keeps the expeditions displayed, with a notice if it fails.
+  const clientLoading = dataLoading && !sbReady;
+  const clientRefreshFailed = sbReady && !!dataError;
+  const initial = (authCl?.prenom || getPrenom(authCl) || authCl?.nom || '?').trim().charAt(0).toUpperCase();
   return (
     <div style={{ fontFamily: "system-ui, -apple-system, 'Segoe UI', sans-serif", background: 'var(--bg-canvas)' }} className="min-h-[100dvh]">
       <Toast />
       <ConfirmDialog />
 
-      {loadBanner}
-
-      {/* Header */}
-      <div
-        className="glass-dark border-b border-white border-opacity-5 px-4 py-3.5 flex items-center justify-between sticky top-0 z-20"
+      <header
+        className="glass-dark border-b border-white border-opacity-5 sticky top-0 z-20"
         style={{ background: 'linear-gradient(135deg, rgba(18,42,54,0.98), rgba(27,58,75,0.98))' }}
       >
-        <div className="flex items-center gap-2.5">
-          <b className="text-lg text-white tracking-tight">
-            EXPÉD<span style={{ color: BRAND.gold }}>ÎLE</span>
-          </b>
-        </div>
-        <div className="flex items-center gap-2">
-          <ThemeToggle compact />
-          {authCl && (
-            <button
-              aria-label="Mon profil"
-              onClick={() => navigate('/profil')}
-              className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl text-white hover:bg-white hover:bg-opacity-10 transition-all"
-            >
-              <span className="text-sm font-medium text-gray-300">{getPrenom(authCl)}</span>
-              <div
-                className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-black flex-shrink-0"
-                style={{ background: `linear-gradient(135deg, ${BRAND.gold}, ${BRAND.goldD})`, color: BRAND.navyD }}
+        <div className="mx-auto flex min-h-[60px] max-w-xl md:max-w-3xl lg:max-w-5xl xl:max-w-6xl items-stretch justify-between gap-3 px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center gap-2.5">
+            <b className="text-lg text-white tracking-tight">
+              EXPÉD<span style={{ color: BRAND.gold }}>ÎLE</span>
+            </b>
+          </div>
+          <ClientTopNav />
+          <div className="flex items-center gap-2">
+            <ThemeToggle onDark />
+            {authCl && (
+              <Link
+                to="/profil"
+                aria-label={getPrenom(authCl) ? `Mon profil · ${getPrenom(authCl)}` : 'Mon profil'}
+                className="flex min-h-11 items-center gap-2 rounded-xl px-2.5 text-white transition-all duration-200 ease-out hover:bg-white/10"
               >
-                {(authCl.nom || '?').charAt(0).toUpperCase()}
-              </div>
-            </button>
-          )}
+                <span className="max-w-[7rem] truncate text-sm font-medium text-white/90 sm:max-w-[12rem]">{getPrenom(authCl)}</span>
+                <span
+                  aria-hidden="true"
+                  className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-sm font-black"
+                  style={{ background: `linear-gradient(135deg, ${BRAND.gold}, ${BRAND.goldD})`, color: BRAND.navyD }}
+                >
+                  {initial}
+                </span>
+              </Link>
+            )}
+          </div>
         </div>
-      </div>
+      </header>
 
-      <div className="max-w-xl md:max-w-3xl lg:max-w-5xl xl:max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4 space-y-4">
-        <div className="pb-20">
-          {showOnboarding && (
-            <OnboardingOverlay
-              onDone={async () => {
-                if (authCl) await updateClient(authCl.id, { onboarded: true }, true);
-                setOnboardingDismissed(true);
-              }}
-            />
-          )}
-          {dataLoading ? <LoadingView bare /> : <Suspense fallback={<LoadingView bare />}><ScreenBoundary key={location.pathname}><Routes>
-            <Route path="/" element={<ClientAccueil />} />
-            <Route path="/colis" element={<ClientColis />} />
-            <Route path="/colis/:id" element={<ClientColisDetail />} />
-            <Route path="/notifications" element={<ClientNotifs />} />
-            <Route path="/profil" element={<ClientProfil />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes></ScreenBoundary></Suspense>}
-          <ClientBottomNav />
+      {clientRefreshFailed && <div role="status" className="border-b px-4 py-2 text-sm" style={{ background: 'var(--attention-bg)', color: 'var(--attention-text)', borderColor: 'var(--attention-border)' }}>
+        <div className="mx-auto flex max-w-xl md:max-w-3xl lg:max-w-5xl xl:max-w-6xl flex-wrap items-center gap-x-3 gap-y-1 sm:px-2 lg:px-4">
+          <RefreshCw size={16} aria-hidden="true" className="shrink-0" />
+          <span className="min-w-0 flex-1">Nous n’arrivons pas à actualiser vos expéditions pour le moment. Les informations affichées sont celles du dernier chargement.</span>
+          <button type="button" onClick={retryLoad} disabled={dataLoading} className="min-h-11 font-semibold underline disabled:opacity-60">{dataLoading ? 'Actualisation…' : 'Réessayer'}</button>
         </div>
-      </div>
+      </div>}
+
+      <main className="mx-auto max-w-xl md:max-w-3xl lg:max-w-5xl xl:max-w-6xl px-4 sm:px-6 lg:px-8 pt-4 pb-[calc(6.5rem+env(safe-area-inset-bottom))] lg:pb-12">
+        {showOnboarding && (
+          <OnboardingOverlay
+            onDone={async () => {
+              if (authCl) await updateClient(authCl.id, { onboarded: true }, true);
+              setOnboardingDismissed(true);
+            }}
+          />
+        )}
+        {clientLoading ? <ClientPortalSkeleton view={clientView} /> : <Suspense fallback={<ClientPortalSkeleton view={clientView} />}><ScreenBoundary key={location.pathname}><Routes>
+          <Route path="/" element={<ClientAccueil />} />
+          <Route path="/colis" element={<ClientColis />} />
+          <Route path="/colis/:id" element={<ClientColisDetail />} />
+          <Route path="/notifications" element={<ClientNotifs />} />
+          <Route path="/profil" element={<ClientProfil />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes></ScreenBoundary></Suspense>}
+      </main>
+      <ClientBottomNav />
     </div>
   );
 }
@@ -614,7 +659,7 @@ function AppRoutes() {
       <Routes>
         <Route path="/paiement/retour" element={<Suspense fallback={<LoadingView label="Vérification du paiement…" />}><ScreenBoundary><PaymentReturn /></ScreenBoundary></Suspense>} />
         {/* Route publique — suivi partagé par token (pas d'auth nécessaire) */}
-        <Route path="/suivi/:token" element={<Suspense fallback={<LoadingView />}><ScreenBoundary><TrackingPublic /></ScreenBoundary></Suspense>} />
+        <Route path="/suivi/:token" element={<Suspense fallback={<PublicTrackingSkeleton />}><ScreenBoundary><TrackingPublic /></ScreenBoundary></Suspense>} />
         {/* Toute autre route passe par l'app authentifiée */}
         <Route path="/*" element={
           <AppProvider>

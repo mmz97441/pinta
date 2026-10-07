@@ -1,23 +1,26 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { Package, CheckCircle, Clock, CreditCard, Plane, Shield, Warehouse, Truck, Loader2, AlertTriangle, Ruler } from 'lucide-react';
-import { BRAND, STATUTS, DESTINATIONS, getDestByCP } from '../../constants';
+import { Package, CheckCircle, Clock, CreditCard, Plane, Shield, Warehouse, Truck, AlertTriangle, Ruler, Check } from 'lucide-react';
+import { DESTINATIONS, getDestByCP } from '../../constants';
 import { configurationError } from '../../lib/supabase';
 import { publicJourney } from '../../domain/clientJourney';
 import { kg } from '../../utils/format';
+import { plural } from '../../domain/plural';
+import useDocumentTitle from '../../hooks/useDocumentTitle';
+import { PublicBrandHeader, PublicTrackingSkeleton, useSavedTheme } from '../client/ClientPortalStates';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
 // Phases détaillées pour le client (8 étapes visibles)
 const PUBLIC_PHASES = [
-  { key: 'reception',    label: 'Reçu',         icon: Package,     statuts: ['receptionne', 'mesure'] },
+  { key: 'reception',    label: 'Réception',    icon: Package,     statuts: ['receptionne', 'mesure'] },
   { key: 'accord',       label: 'Accord',       icon: CheckCircle, statuts: ['attente_feu_vert', 'autorise', 'refuse_client'] },
   { key: 'preparation',  label: 'Préparation',  icon: Clock,       statuts: ['en_preparation'] },
   { key: 'paiement',     label: 'Paiement',     icon: CreditCard,  statuts: ['devis_envoye', 'attente_paiement', 'paye'] },
-  { key: 'vol',          label: 'En vol',       icon: Plane,       statuts: ['expedie', 'transit'] },
+  { key: 'transport',    label: 'Transport',    icon: Plane,       statuts: ['expedie', 'transit'] },
   { key: 'dedouanement', label: 'Douane',       icon: Shield,      statuts: ['dedouanement'] },
-  { key: 'depot',        label: 'Au dépôt',     icon: Warehouse,   statuts: ['arrive'] },
+  { key: 'depot',        label: 'Dépôt local',  icon: Warehouse,   statuts: ['arrive'] },
   { key: 'livraison',    label: 'Livraison',    icon: Truck,       statuts: ['livraison', 'livre'] },
 ];
 
@@ -38,6 +41,8 @@ function formatETA(value) {
   return Number.isFinite(date.getTime()) ? date.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' }) : null;
 }
 
+const surface = { background: 'var(--bg-elevated)', borderColor: 'var(--border-subtle)' };
+
 export default function TrackingPublic() {
   const { token } = useParams();
   const [data, setData] = useState(null);
@@ -45,6 +50,8 @@ export default function TrackingPublic() {
   const [error, setError] = useState(null);
   const [retry, setRetry] = useState(0);
   const [invalidLink, setInvalidLink] = useState(false);
+  useSavedTheme();
+  useDocumentTitle(error ? 'Suivi indisponible' : 'Suivi d’expédition');
 
   useEffect(() => {
     setData(null); setError(null); setInvalidLink(false); setLoading(true);
@@ -65,143 +72,124 @@ export default function TrackingPublic() {
         else setData(res);
         setLoading(false);
       })
-      .catch(() => { if (!controller.signal.aborted) { setError('Connexion impossible. Réessayez plus tard.'); setLoading(false); } });
+      .catch(() => { if (!controller.signal.aborted) { setError('Connexion impossible. Réessayez dans un instant.'); setLoading(false); } });
     return () => controller.abort();
   }, [token, retry]);
 
-  if (loading) {
-    return (
-      <div className="min-h-[100dvh] flex items-center justify-center" style={{ background: '#F8FAFC' }}>
-        <div className="flex flex-col items-center gap-3">
-          <Loader2 size={32} className="animate-spin" style={{ color: BRAND.navy }} />
-          <p className="text-sm text-gray-500">Chargement du suivi...</p>
-        </div>
-      </div>
-    );
-  }
+  if (loading) return <PublicTrackingSkeleton />;
 
   if (error) {
     return (
-      <div className="min-h-[100dvh] flex items-center justify-center p-4" style={{ background: '#F8FAFC' }}>
-        <div className="max-w-md w-full bg-white rounded-2xl shadow-lg p-8 text-center">
-          <div className="w-16 h-16 rounded-full bg-red-50 flex items-center justify-center mx-auto mb-4">
-            <AlertTriangle size={28} className="text-red-500" />
+      <div className="min-h-[100dvh]" style={{ background: 'var(--bg-canvas)' }}>
+        <PublicBrandHeader />
+        <main className="flex items-center justify-center p-4 py-10">
+          <div className="max-w-md w-full rounded-2xl border p-8 text-center shadow-sm" style={surface}>
+            <div className="w-16 h-16 rounded-full bg-red-50 flex items-center justify-center mx-auto mb-4">
+              <AlertTriangle size={28} className="text-red-700" aria-hidden="true" />
+            </div>
+            <h1 className="text-lg font-black mb-2" style={{ color: 'var(--brand-text)' }}>Suivi indisponible</h1>
+            <p className="text-sm text-slate-600">{error}</p>
+            {invalidLink ? <p className="text-sm text-slate-600 mt-4">Contactez l’expéditeur pour obtenir un nouveau lien.</p> : <button className="mt-4 min-h-11 rounded-xl px-4 text-sm font-semibold text-white brand-bg transition-all duration-200 ease-out active:scale-[0.98]" onClick={() => setRetry(value => value + 1)}>Réessayer le suivi</button>}
           </div>
-          <h1 className="text-lg font-black mb-2" style={{ color: BRAND.navy }}>Suivi indisponible</h1>
-          <p className="text-sm text-gray-500">{error}</p>
-          {invalidLink ? <p className="text-sm text-gray-600 mt-4">Contactez l’expéditeur pour obtenir un nouveau lien.</p> : <button className="mt-4 min-h-11 rounded-xl px-4 text-sm font-semibold text-white" style={{ backgroundColor: BRAND.navy }} onClick={() => setRetry(value => value + 1)}>Réessayer le suivi</button>}
-        </div>
+        </main>
       </div>
     );
   }
 
   const dest = data?.destination?.cp ? getDestByCP(data.destination.cp) : null;
   const destInfo = dest ? DESTINATIONS[dest.code] : null;
+  const count = data.colis.length;
 
   return (
-    <div className="min-h-[100dvh]" style={{ background: '#F8FAFC' }}>
-      {/* Header */}
-      <div className="bg-white border-b border-gray-100">
-        <div className="max-w-3xl mx-auto px-4 py-5 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Package size={24} style={{ color: BRAND.navy }} />
-            <span className="text-base font-black" style={{ color: BRAND.navy, letterSpacing: '-0.02em' }}>Expedîle</span>
-          </div>
-          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Suivi partagé</span>
-        </div>
-      </div>
+    <div className="min-h-[100dvh]" style={{ background: 'var(--bg-canvas)', color: 'var(--text-primary)' }}>
+      <PublicBrandHeader />
 
-      <div className="max-w-3xl mx-auto px-4 py-6 space-y-4">
-        {/* Intro card */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-          <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Envoyé par</p>
-          <p className="text-xl font-black mb-3" style={{ color: BRAND.navy }}>{data.expediteur}</p>
+      <main className="max-w-3xl mx-auto px-4 py-6 space-y-4">
+        {/* Intro */}
+        <section className="rounded-2xl border p-5 shadow-sm" style={surface} aria-labelledby="public-tracking-title">
+          <h1 id="public-tracking-title" className="text-xl font-black" style={{ color: 'var(--brand-text)' }}>{count > 1 ? 'Suivi des expéditions' : 'Suivi de l’expédition'}</h1>
+          <p className="mt-2 text-sm text-slate-600">Envoyé par <strong className="font-bold" style={{ color: 'var(--brand-text)' }}>{data.expediteur}</strong></p>
           {destInfo && (
-            <div className="flex items-center gap-2 text-sm">
-              <span className="text-xl">{destInfo.flag}</span>
-              <span className="text-gray-600">Destination :</span>
-              <span className="font-bold" style={{ color: BRAND.navy }}>
+            <p className="mt-1 flex flex-wrap items-center gap-x-2 text-sm">
+              <span className="text-xl" aria-hidden="true">{destInfo.flag}</span>
+              <span className="text-slate-600">Destination&nbsp;:</span>
+              <span className="font-bold" style={{ color: 'var(--brand-text)' }}>
                 {data.destination.ville || destInfo.nom || destInfo.label}
               </span>
-            </div>
+            </p>
           )}
-          <p className="text-xs text-gray-400 mt-3">
-            {data.colis.length} expédition{data.colis.length > 1 ? 's' : ''} · informations de suivi
+          <p className="text-sm text-slate-600 mt-3">
+            {plural(count, 'expédition')} · informations de suivi partagées par l’expéditeur
           </p>
-        </div>
+        </section>
 
-        {/* Cards colis */}
         {data.colis.map((c) => {
           const phaseIdx = getPhaseIndex(c.statut);
+          const phase = PUBLIC_PHASES[phaseIdx];
           const journey = publicJourney(c);
           return (
-            <div key={c.ref} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-              {/* Header du colis */}
-              <div className="px-5 py-4 border-b border-gray-50 flex items-start justify-between gap-3">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1 flex-wrap">
-                    <span className="font-black text-base" style={{ color: BRAND.navy }}>{c.ref}</span>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: '#E0F2FE', color: '#075985' }}>
-                      {journey.waiting ? 'Attente demandée' : journey.quoteNeedsReview ? 'Devis en révision' : STATUTS[c.statut]?.label || c.statut}
-                    </span>
-                  </div>
-                  <p className="text-sm text-gray-600 truncate">{c.desc || 'Expédition'}</p>
-                  {c.receivedCount != null && <p className="mt-1 text-xs text-slate-600">{c.receivedCount} carton{c.receivedCount > 1 ? 's' : ''} reçu{c.receivedCount > 1 ? 's' : ''}{c.outgoingParcelCount != null ? ` · ${c.outgoingParcelCount} colis sortant${c.outgoingParcelCount > 1 ? 's' : ''} confirmé${c.outgoingParcelCount > 1 ? 's' : ''}` : ''}</p>}
-                  {c.destinationCode && DESTINATIONS[c.destinationCode] && <p className="mt-1 text-xs text-slate-600">Destination de cette expédition : {DESTINATIONS[c.destinationCode].nom}</p>}
+            <article key={c.ref} className="rounded-2xl border shadow-sm overflow-hidden" style={surface} aria-labelledby={`public-${c.ref}`}>
+              <div className="px-5 py-4 border-b border-slate-100">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                  <h2 id={`public-${c.ref}`} className="font-black text-base" style={{ color: 'var(--brand-text)' }}>{c.ref}</h2>
+                  <span className="rounded-full px-2.5 py-0.5 text-sm font-semibold brand-bg-l brand-t">Étape {phaseIdx + 1} sur {PUBLIC_PHASES.length} · {phase.label}</span>
                 </div>
+                <p className="mt-1 text-sm text-slate-600 break-words">{c.desc || 'Expédition'}</p>
+                {c.receivedCount != null && <p className="mt-1 text-sm text-slate-600">{plural(c.receivedCount, 'carton reçu', 'cartons reçus')}{c.outgoingParcelCount != null ? ` · ${plural(c.outgoingParcelCount, 'colis sortant confirmé', 'colis sortants confirmés')}` : ''}</p>}
+                {c.destinationCode && DESTINATIONS[c.destinationCode] && <p className="mt-1 text-sm text-slate-600">Destination de cette expédition&nbsp;: {DESTINATIONS[c.destinationCode].nom}</p>}
               </div>
 
-              {/* Timeline */}
               <div className="px-5 py-5">
                 <section aria-label={`État actuel ${c.ref}`} className="space-y-2">
-                  <h2 className="text-base font-bold text-slate-800">{journey.label}</h2>
+                  <h3 className="text-base font-bold text-slate-800">{journey.label}</h3>
                   <p className="text-sm text-slate-600">{journey.actor && <strong>{journey.actor} · </strong>}{journey.next}</p>
-                  <p className="text-xs text-slate-500">{journey.event ? `${journey.event.label} le ${formatDate(journey.event.date)}` : 'Date du dernier événement non renseignée.'}</p>
-                  {c.eta && formatETA(c.eta) && ['autorise', 'en_preparation', 'devis_envoye', 'attente_paiement', 'paye', 'expedie'].includes(c.statut) && <p className="text-sm text-slate-600">Départ prévu : <strong>{formatETA(c.eta)}</strong>. Il s’agit du départ, pas de la date de livraison.</p>}
+                  <p className="text-sm text-slate-500">{journey.event ? `${journey.event.label} le ${formatDate(journey.event.date)}` : 'Date du dernier événement non renseignée.'}</p>
+                  {c.eta && formatETA(c.eta) && ['autorise', 'en_preparation', 'devis_envoye', 'attente_paiement', 'paye', 'expedie'].includes(c.statut) && <p className="text-sm text-slate-600">Départ prévu&nbsp;: <strong>{formatETA(c.eta)}</strong>. Il s’agit du départ, pas de la date de livraison.</p>}
                 </section>
                 <details className="mt-4 border-t border-slate-200">
                   <summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-slate-600">Parcours du colis</summary>
-                  <ol aria-label="Progression du colis" className="grid grid-cols-1 sm:grid-cols-2 gap-2">{PUBLIC_PHASES.map((phase, index) => {
-                    const Icon = phase.icon;
-                    return <li key={phase.key} aria-current={index === phaseIdx ? 'step' : undefined} className={`flex items-center gap-2 py-2 text-sm ${index === phaseIdx ? 'font-bold text-slate-800' : 'text-slate-500'}`}><Icon size={16} /><span>{phase.label}</span><span className="ml-auto text-xs">{index < phaseIdx ? 'Étape passée' : index === phaseIdx ? 'En cours' : 'À venir'}</span></li>;
+                  <ol aria-label="Progression du colis" className="space-y-1 pb-2">{PUBLIC_PHASES.map((step, index) => {
+                    const Icon = step.icon;
+                    const state = index < phaseIdx ? 'Étape passée' : index === phaseIdx ? 'En cours' : 'À venir';
+                    return <li key={step.key} aria-current={index === phaseIdx ? 'step' : undefined} className={`flex items-center gap-3 rounded-xl px-2 py-2 text-sm ${index === phaseIdx ? 'brand-bg-l font-bold text-slate-800' : index < phaseIdx ? 'text-slate-700' : 'text-slate-500'}`}>
+                      <span aria-hidden="true" className="w-6 shrink-0 text-right tabular-nums">{index + 1}</span>
+                      <Icon size={16} aria-hidden="true" className="shrink-0" />
+                      <span className="min-w-0 flex-1">{step.label}</span>
+                      <span className="inline-flex shrink-0 items-center gap-1 text-sm">{index < phaseIdx && <Check size={14} aria-hidden="true" />}{state}</span>
+                    </li>;
                   })}</ol>
                 </details>
 
-                {/* Photo préparation */}
                 {c.photoPrep && (
                   <div className="mt-4">
-                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Photo de votre colis</p>
-                    <div className="rounded-xl overflow-hidden border border-gray-100">
+                    <p className="text-sm font-bold text-slate-600 mb-2">Photo de votre colis</p>
+                    <div className="rounded-xl overflow-hidden border border-slate-100">
                       <img src={c.photoPrep} alt={`Colis ${c.ref}`} className="w-full h-auto object-cover" />
                     </div>
                   </div>
                 )}
 
-                <details className="mt-3 border-t border-slate-200"><summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-slate-600"><Ruler size={14} className="mr-2 inline" />Cartons et mesures</summary>
+                <details className="mt-3 border-t border-slate-200"><summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-slate-600"><Ruler size={14} className="mr-2 inline" aria-hidden="true" />Cartons et mesures</summary>
                   {c.preparationNeedsReview && <p className="mb-2 text-sm text-slate-600">Les mesures après optimisation sont à confirmer pour la composition actuelle.</p>}
                   {c.preparedPackages?.length > 0 && <div className="space-y-2"><p className="text-sm font-semibold text-slate-700">Après optimisation</p>{c.preparedPackages.map((box,index) => <p key={index} className="text-sm text-slate-600">Colis sortant {index + 1} · {box.L} × {box.W} × {box.H} cm · {kg(box.P)}</p>)}</div>}
                   {c.receptionCartons?.length > 0 && <div className="mt-3 space-y-2"><p className="text-sm font-semibold text-slate-700">À réception</p>{c.receptionCartons.map((box,index) => <p key={index} className="text-sm text-slate-600">Carton {index + 1} · {box ? `${box.L} × ${box.W} × ${box.H} cm · ${kg(box.P)}` : 'Mesures non renseignées'}</p>)}</div>}
                   {!c.preparedPackages?.length && !c.receptionCartons?.length && <p className="text-sm text-slate-500">Mesures détaillées non renseignées.</p>}
                 </details>
 
-                {/* Date réception */}
                 {c.dateReception && (
-                  <p className="text-[10px] text-gray-400 mt-3">
+                  <p className="text-sm text-slate-500 mt-3">
                     Reçu le {formatDate(c.dateReception)}
                   </p>
                 )}
               </div>
-            </div>
+            </article>
           );
         })}
 
-        {/* Footer */}
-        <div className="text-center pt-6 pb-4">
-          <p className="text-[10px] text-gray-400">
-            Suivi partagé · <span className="font-bold" style={{ color: BRAND.navy }}>Expedîle</span>
-          </p>
-        </div>
-      </div>
+        <p className="text-center pt-6 pb-4 text-sm text-slate-500">
+          Suivi partagé · <span className="font-bold" style={{ color: 'var(--brand-text)' }}>Expedîle</span>
+        </p>
+      </main>
     </div>
   );
 }

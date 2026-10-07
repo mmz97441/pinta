@@ -64,7 +64,7 @@ export default function ForceChangePassword({ staffUser, onDone, onCancel, recov
             <Shield size={20} style={{ color: BRAND.gold }} />
           </div>
           <div>
-            <h2 className="text-lg font-black text-white">{recovery ? 'Réinitialiser votre mot de passe' : onCancel ? 'Modifier mon mot de passe' : 'Créer mon mot de passe'}</h2>
+            <h1 className="text-lg font-black text-white">{recovery ? 'Réinitialiser votre mot de passe' : onCancel ? 'Modifier mon mot de passe' : 'Créer mon mot de passe'}</h1>
             <p className="text-sm text-gray-300">{auth?.session?.user?.email || "Définissez votre mot de passe personnel pour continuer"}</p>
           </div>
         </div>
