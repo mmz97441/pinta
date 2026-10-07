@@ -84,7 +84,7 @@ function TaxesPart({ professional, taxes }) {
         <Row label="Octroi de mer" value={eur(taxes.om)} />
         <Row label="Octroi de mer régional" value={eur(taxes.omr)} />
         <Row label={taxes.tvaRate != null ? `TVA ${percent(taxes.tvaRate)}` : 'TVA'} value={eur(taxes.tva)} />
-        <p className="text-slate-600">sur {eur(taxes.tvaBase)} (transport + octroi de mer)</p>
+        <p className="text-slate-600">sur {eur(taxes.tvaBase)} (transport + octroi de mer + octroi de mer régional)</p>
       </div>
     </details>
   </div>;

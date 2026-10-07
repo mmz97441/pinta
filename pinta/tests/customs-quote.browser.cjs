@@ -326,7 +326,7 @@ try{
   const text=plain(await group.innerText());
   for(const expected of [
    'Transport 39,00 € Comprendre le calcul du transport Poids réel 1,9 kg Poids volumétrique 2,8 kg 40 × 35 × 10 cm · réel 1,9 kg · vol. 2,8 kg Poids volumétrique = longueur × largeur × hauteur ÷ 5 000 Poids retenu 2,8 kg (le plus lourd : volumétrique) Tarif : 25,00 € + 5,00 € par kg',
-   'Taxes 10,88 € Détail des taxes Octroi de mer 5,33 € Octroi de mer régional 1,64 € TVA 8,5 % 3,91 € sur 45,97 € (transport + octroi de mer)',
+   'Taxes 10,88 € Détail des taxes Octroi de mer 5,33 € Octroi de mer régional 1,64 € TVA 8,5 % 3,91 € sur 45,97 € (transport + octroi de mer + octroi de mer régional)',
    mobile?'Frais convenus Aucun frais Total 49,88 €':'Frais convenus 4,00 € Détail des frais Emballage renforcé 4,00 € Total 53,88 €',
    'Articles et taux enregistrés (2) Le transport est réparti selon la valeur des articles (quantité × prix unitaire HT). Les montants sont arrondis au centime ; leur somme correspond aux totaux du devis.',
    'Mini scelleuse Code SH 01012100 · Chevaux reproducteurs de race pure 1 × 16,64 € HT = 16,64 € Part de transport 24,43 € · Base OM / OMR 41,07 € OM 10 % : 4,11 € · OMR 2,5 % : 1,03 €',
@@ -335,6 +335,8 @@ try{
   // The shares shown add up exactly to the totals shown.
   const sum=pattern=>Math.round([...text.matchAll(pattern)].reduce((total,match)=>total+amount(match[1]),0)*100)/100;
   assert.equal(sum(/Part de transport ([\d,]+) €/g),39);assert.equal(sum(/OM [\d,]+ % : ([\d,]+) €/g),5.33);assert.equal(sum(/OMR [\d,]+ % : ([\d,]+) €/g),1.64);
+  // The TVA base named is the sum of the amounts it names: transport 39,00 + OM 5,33 + OMR 1,64.
+  assert.equal(Math.round((amount(text.match(/^Transport ([\d,]+) €/)[1])+amount(text.match(/Octroi de mer ([\d,]+) €/)[1])+amount(text.match(/Octroi de mer régional ([\d,]+) €/)[1]))*100)/100,amount(text.match(/TVA [\d,]+ % [\d,]+ € sur ([\d,]+) €/)[1]));
   assert.equal(await f.page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false);
   const axe=await new AxeBuilder({page:f.page}).include('[aria-label="Devis enregistré"][role="group"]').withTags(['wcag2a','wcag2aa','wcag21aa']).analyze();assert.deepEqual(axe.violations.map(v=>v.id),[]);
   // A viewport tall enough for the whole opened quote: the page scrolls inside its own frame.
@@ -367,7 +369,7 @@ try{
   const text=plain(await group.innerText());
   for(const expected of [
    'Transport 40,00 € Comprendre le calcul du transport Poids réel 3 kg Poids volumétrique 2,4 kg 30 × 20 × 20 cm · réel 3 kg · vol. 2,4 kg Poids volumétrique = longueur × largeur × hauteur ÷ 5 000 Poids retenu 3 kg (le plus lourd : réel) Tarif : 25,00 € + 5,00 € par kg',
-   'Taxes 6,98 € Détail des taxes Octroi de mer 2,20 € Octroi de mer régional 1,10 € TVA 8,5 % 3,68 € sur 43,30 € (transport + octroi de mer)',
+   'Taxes 6,98 € Détail des taxes Octroi de mer 2,20 € Octroi de mer régional 1,10 € TVA 8,5 % 3,68 € sur 43,30 € (transport + octroi de mer + octroi de mer régional)',
    'Frais convenus Aucun frais Total 46,98 € Articles et taux enregistrés (2)',
    'Mini scelleuse Code SH 01012100 · Chevaux reproducteurs de race pure 1 × 30,00 € HT = 30,00 € Part de transport 30,00 € · Base OM / OMR 60,00 € OM 2 % : 1,20 € · OMR 1 % : 0,60 € Motif de correction : Taux réduits justifiés par le certificat d’origine.',
    'Organisateur évier Code SH à renseigner · Divers 2 × 5,00 € HT = 10,00 € Part de transport 10,00 € · Base OM / OMR 20,00 € OM 5 % : 1,00 € · OMR 2,5 % : 0,50 €',
