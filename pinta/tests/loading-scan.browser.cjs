@@ -278,6 +278,7 @@ async function main() {
       await f.context.addInitScript(() => {
         // The tones played (their frequencies): one per answer, none for the lines left out.
         window.__tones = [];
+        if (typeof OscillatorNode !== 'function') return;
         const start = OscillatorNode.prototype.start;
         OscillatorNode.prototype.start = function (...args) { window.__tones.push(this.frequency.value); return start.apply(this, args); };
       });
@@ -290,21 +291,25 @@ async function main() {
           if (title && window.__titles[window.__titles.length - 1] !== title) window.__titles.push(title);
         }).observe(zone, { childList: true, subtree: true, characterData: true });
       });
-      const seen = () => f.page.evaluate(() => ({ titles: window.__titles.splice(0), tones: window.__tones.splice(0) }));
+      // Where the device has no sound (Web Audio unavailable), the titles alone say that each answer came once.
+      const audible = await f.page.evaluate(() => { try { const Context = window.AudioContext || window.webkitAudioContext; new Context().close(); return true; } catch { return false; } });
+      const seen = () => f.page.evaluate(() => ({ titles: window.__titles.splice(0), tones: window.__tones.splice(0) }))
+        .then(({ titles, tones }) => (audible ? { titles, tones } : { titles }));
+      const heard = tones => (audible ? { tones } : {});
       const settled = () => until(() => review(f).locator('.loading-pending').count(), 0, 'Every line handled');
       // The former label of a one-parcel dossier, typed at 5 ms per key: its reference is its parcel 1/1.
       await scanner(f, FORMER_LABEL.one, 5);
       await until(() => checksOf(f, D.one), [[1, 1, 'scan']], 'The reference line is checked');
       await settled();
       await until(() => feedbackText(f), 'EXP-4KM2PQ · colis 1/1 vérifié Tous ses colis sont vérifiés : expédition prête à partir.', 'Its answer stays');
-      assert.deepEqual(await seen(), { titles: ['EXP-4KM2PQ · colis 1/1 vérifié'], tones: [1046] }, 'One answer, one tone: no « Code illisible » for the other lines');
+      assert.deepEqual(await seen(), { titles: ['EXP-4KM2PQ · colis 1/1 vérifié'], ...heard([1046]) }, 'One answer, one tone: no « Code illisible » for the other lines');
       assert.equal(await field(f).inputValue(), '', 'Nothing left in the field');
       // The former label of a two-parcel dossier: it names no parcel; the answer says it is a former label.
       await scanner(f, FORMER_LABEL.two, 5);
       await settled();
       await until(() => feedbackText(f), 'Ancienne étiquette de EXP-2YE537 Ce dossier compte 2 colis : imprimez ses nouvelles étiquettes, une par colis, ou comptez ses colis à la main.', 'Former label explained');
       assert.equal(await feedback(f).getAttribute('data-tone'), 'warning');
-      assert.deepEqual(await seen(), { titles: ['EXP-2YE537 compte 2 colis : scannez l’étiquette de chaque colis ou comptez-les', 'Ancienne étiquette de EXP-2YE537'], tones: [660, 660] }, 'One warning tone');
+      assert.deepEqual(await seen(), { titles: ['EXP-2YE537 compte 2 colis : scannez l’étiquette de chaque colis ou comptez-les', 'Ancienne étiquette de EXP-2YE537'], ...heard([660, 660]) }, 'One warning tone');
       assert.deepEqual(checksOf(f, D.two), [], 'Nothing recorded for a label that names no parcel');
       await shot(f, 'former-label-two-parcels-1440');
       // A code that is not a label, scanned on its own, is still answered.
@@ -617,7 +622,12 @@ async function main() {
       assert.equal(await dialog.count(), 1, 'The dialog stays open');
       assert.equal(await dialog.getAttribute('data-state'), 'error');
       await shot(f, `camera-refused-scanner-${width}-${theme}`);
-      await f.page.keyboard.press('Escape');
+      if (width > 640) {
+        // A key pressed by mistake, long before, never takes the button's key: Space presses « Fermer la caméra ».
+        await f.page.keyboard.press('a');
+        await new Promise(resolve => setTimeout(resolve, 1100));
+        await f.page.keyboard.press(' ');
+      } else await f.page.keyboard.press('Escape');
       await dialog.waitFor({ state: 'detached' });
       await until(() => button.evaluate(element => document.activeElement === element), true, 'The focus goes back to the camera button');
       // The scan field still works after the camera.

@@ -143,8 +143,8 @@ export default function CameraScanner({ onClose, onCode, onTyped, children }) {
         if (!silentKey(event)) forget();
         return;
       }
-      if (event.key === ' ' && !typed) return;
       if (now - lastKey > TYPED_PAUSE_MS) forget();
+      if (event.key === ' ' && !typed) return;
       typed += event.key;
       lastKey = now;
       keys.track(event);
