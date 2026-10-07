@@ -594,7 +594,8 @@ async function main() {
         const height = await element.evaluate(node => node.getBoundingClientRect().height);
         assert.ok(height >= 44, `${label}: ${height}px`);
       }
-      const reads = () => f.requests.filter(request => request.method === 'GET' && request.path.endsWith('/rest/v1/colis')).length;
+      // The departure's own dossiers (envoi_id filter): a background refresh of the whole list does not count.
+      const reads = () => f.requests.filter(request => request.method === 'GET' && request.path.endsWith('/rest/v1/colis') && /envoi_id=eq\./.test(request.search || '')).length;
       const before = reads();
       const file = await downloadOf(f, pdf, `invoice-before-${width}-${theme}`);
       assert.equal(file.name, 'facture-commerciale-ENV-2026-045.pdf');
@@ -688,7 +689,8 @@ async function main() {
       const { documents, invoice, pdf, excel } = await openInvoice(f, left);
       assert.deepEqual(await documents.locator('button').evaluateAll(nodes => nodes.map(node => node.textContent)), ['Manifeste Excel', 'Données douane', 'Facture commerciale en PDF', 'Facture commerciale en Excel']);
       const manifests = () => f.manifestReads;
-      const colisReads = () => f.requests.filter(request => request.method === 'GET' && request.path.endsWith('/rest/v1/colis')).length;
+      // The departure's own dossiers (envoi_id filter): a background refresh of the whole list does not count.
+      const colisReads = () => f.requests.filter(request => request.method === 'GET' && request.path.endsWith('/rest/v1/colis') && /envoi_id=eq\./.test(request.search || '')).length;
       const [beforeManifests, beforeReads] = [manifests(), colisReads()];
       const file = await downloadOf(f, pdf, `invoice-manifest-${width}-${theme}`);
       assert.equal(file.name, 'facture-commerciale-ENV-2026-034.pdf');

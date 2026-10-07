@@ -400,7 +400,7 @@ async function setup(browser, role, { failTable = null, timezoneId = null, devic
       method = req.method();
     if (url.origin === base && !url.pathname.startsWith('/api/')) return route.continue();
     const input = ['POST', 'PATCH', 'PUT'].includes(method) ? req.postDataJSON() : null;
-    requests.push({ method, path: url.pathname, input });
+    requests.push({ method, path: url.pathname, search: url.search, input });
     if (method === 'GET' && url.pathname.includes('/storage/v1/object/sign/')) {
       const { jsPDF } = require('jspdf');
       const pdf = new jsPDF(); pdf.text('Facture fictive - Boutique A - 100 EUR HT', 20, 30);

@@ -178,6 +178,9 @@ async function run() {
       await f.page.goto(base + '/colis?work=preparation');
       await f.page.evaluate(() => document.documentElement.classList.add('dark'));
       await f.page.waitForTimeout(350);
+      // Audited from the top of the list: a card scrolled under the sticky toolbar is hidden on purpose, not a defect.
+      await f.page.evaluate(() => { window.scrollTo(0, 0); document.querySelectorAll('*').forEach(node => { if (node.scrollTop) node.scrollTop = 0; }); });
+      await f.page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
       assert.equal(await f.page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
       await f.page.screenshot({ path: path.join(out, `file-${mobile ? 'mobile' : 'desktop'}-dark.png`), fullPage: true });
       const darkAxe = await new AxeBuilder({ page: f.page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
