@@ -1,9 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  checkedByLine, checkFeedback, checkMoment, checkerName, clearedFeedback, controlTotals, countFeedback, countIssue,
-  dossierControl, elsewhereFeedback, expectedParcelCount, LAYOUT_NOTICE, legacySingleParcel, loadedDossiers, mergeLoadingCheck,
-  parisClockLabel, readScannedCode, refusedFeedback, severalFeedback, trailingParcelCode, unreadableFeedback,
+  checkedByLine, checkFeedback, checkMoment, checkerName, clearedFeedback, continuesLabel, controlTotals, countFeedback, countIssue,
+  dossierControl, elsewhereFeedback, expectedParcelCount, keyLine, LAYOUT_NOTICE, legacySingleParcel, loadedDossiers, mergeLoadingCheck,
+  oldLabelFeedback, parisClockLabel, readScannedCode, refusedFeedback, scannerTyped, severalFeedback, silentKey, trailingParcelCode,
+  typedCharacter, unreadableFeedback,
 } from './loadingControl.js';
 
 // 14 h 32 in Paris on Wednesday 7 October 2026 (summer time: UTC+2).
@@ -139,6 +140,72 @@ test('a dossier measured before the parcels were listed has one parcel to label,
     assert.equal(legacySingleParcel({ ...legacy, ...patch }), false, JSON.stringify(patch));
   assert.equal(legacySingleParcel(TWO), false, 'A current preparation lists its parcels.');
   assert.equal(legacySingleParcel(null), false);
+});
+
+test('a former label read whole by the camera is read by its reference, then explained', () => {
+  const dossiers = [TWO, ONE, LEGACY];
+  const old = ref => `${ref}\nGRONDIN ANLI\n5 RUE DU PORT\n97410 SAINT-PIERRE\nLA RÉUNION\n0692000002`;
+  const one = readScannedCode(old('EXP-4KM2PQ'), dossiers);
+  assert.deepEqual([one.kind, one.dossier.id, one.index, one.count, one.bare, one.oldLabel], ['parcel', 'd-one', 1, 1, true, true], 'One parcel: its reference is « colis 1/1 », as when the scanner types it line by line.');
+  const several = readScannedCode(old('EXP-2YE537').replace(/\n/g, '\r\n'), dossiers);
+  assert.deepEqual([several.kind, several.dossier.id, several.expected, several.oldLabel], ['several', 'd-two', 2, true]);
+  assert.deepEqual(oldLabelFeedback(several), { tone: 'warning', title: 'Ancienne étiquette de EXP-2YE537', detail: 'Ce dossier compte 2 colis : imprimez ses nouvelles étiquettes, une par colis, ou comptez ses colis à la main.' });
+  assert.deepEqual(readScannedCode(old('EXP-ZZZZZZ'), dossiers), { kind: 'elsewhere', ref: 'EXP-ZZZZZZ', layoutCorrected: false, oldLabel: true });
+  // Only a bare reference on the first line: anything else stays unreadable.
+  assert.equal(readScannedCode('EXP-2YE537-1-2\nHOARAU FLAVIE', dossiers).kind, 'unreadable');
+  assert.equal(readScannedCode('GRONDIN ANLI\nEXP-4KM2PQ', dossiers).kind, 'unreadable');
+  assert.equal(readScannedCode('EXP-4KM2PQ\n', dossiers).oldLabel, undefined, 'One line followed by a line break is a plain scan.');
+});
+
+test('the keys of a line tell a scanner from a person', () => {
+  const key = (key, timeStamp, fields = {}) => ({ key, timeStamp, ctrlKey: false, metaKey: false, altKey: false, isComposing: false, ...fields });
+  const type = (line, text, from, gap) => { Array.from(text).forEach((char, index) => line.track(key(char, from + index * gap))); return from + (text.length - 1) * gap; };
+  // A scanner: a few milliseconds per key, Shift for capitals (and French digits) ignored, Enter at once.
+  const scanner = keyLine();
+  let last = type(scanner, 'Colis non remis', 1000, 180);
+  scanner.track(key('Shift', last + 600));
+  last = type(scanner, 'EXP-2YE537-1-2', last + 602, 4);
+  const scanned = scanner.track(key('Enter', last + 6));
+  assert.deepEqual(scanned, { start: 1000, enter: last + 6, fast: 14, scanner: true });
+  assert.equal(scannerTyped(scanned, 'EXP-2YE537-1-2'), true);
+  assert.equal(scannerTyped(scanned, 'EXP)éYE("è)&)é'), true, 'One key per character, whatever the keyboard layout.');
+  assert.equal(scannerTyped(scanned, 'Colis non remisEXP-2YE537-1-2'), false, 'The reason itself was typed by hand.');
+  assert.equal(scanner.track(key('a', 9000)), null, 'The next line starts again.');
+  // A person: 120 ms per key, even with the code at the end.
+  const person = keyLine();
+  last = type(person, 'Colis manquant EXP-2YE537-2/2', 0, 120);
+  const typed = person.track(key('Enter', last + 120));
+  assert.deepEqual([typed.fast, typed.scanner], [1, false]);
+  assert.equal(scannerTyped(typed, 'EXP-2YE537-2/2'), false);
+  // Fast keys, then Enter much later: not a scanner's Enter.
+  const paused = keyLine();
+  last = type(paused, 'EXP-2YE537-1-2', 0, 3);
+  assert.equal(paused.track(key('Enter', last + 400)).scanner, false);
+  // Backspace or an arrow starts the code again; a shortcut types nothing.
+  const corrected = keyLine();
+  last = type(corrected, 'EXP-2YE', 0, 3);
+  corrected.track(key('Backspace', last + 3));
+  last = type(corrected, 'EXP-2YE537-1-2', last + 6, 3);
+  assert.equal(corrected.track(key('Enter', last + 3)).fast, 14);
+  assert.equal(typedCharacter(key('v', 0, { metaKey: true })), false);
+  assert.equal(typedCharacter(key('e', 0, { isComposing: true })), false);
+  assert.equal(typedCharacter(key(' ', 0)), true);
+  assert.deepEqual(['Shift', 'Dead', 'CapsLock', 'Tab', 'Enter', 'a'].map(name => silentKey(key(name, 0))), [true, true, true, false, false, false]);
+  // Enter alone: no character, no scanner.
+  assert.deepEqual(keyLine().track(key('Enter', 50)), { start: null, enter: 50, fast: 0, scanner: false });
+  assert.equal(scannerTyped(null, 'EXP-2YE537-1-2'), false);
+});
+
+test('a line a scanner types just after the previous Enter belongs to the same label', () => {
+  const line = (start, scanner = true) => ({ start, enter: start + 60, fast: 12, scanner });
+  assert.equal(continuesLabel(line(1010), 1000), true);
+  assert.equal(continuesLabel(line(1099), 1000), true);
+  assert.equal(continuesLabel(line(1100), 1000), false, 'A tenth of a second later: another label.');
+  assert.equal(continuesLabel(line(1010, false), 1000), false, 'Typed by hand: never the rest of a label.');
+  assert.equal(continuesLabel(line(990), 1000), false);
+  assert.equal(continuesLabel(line(1010), null), false, 'No line before.');
+  assert.equal(continuesLabel(null, 1000), false);
+  assert.equal(continuesLabel({ start: null, enter: 1010, fast: 0, scanner: false }, 1000), false);
 });
 
 test('a parcel of another departure, of none, shipped or unknown is set aside with the reason', () => {

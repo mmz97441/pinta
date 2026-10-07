@@ -36,6 +36,8 @@ async function fixture(browser, { role = 'directeur', width = 1440, height = wid
   f.page.setDefaultTimeout(10000);
   await f.page.setViewportSize({ width, height });
   await f.page.emulateMedia({ reducedMotion: 'reduce' });
+  // The browser's own Event.timeStamp, kept before Playwright's clock replaces it (see scanner()).
+  await f.context.addInitScript(() => { window.__nativeTimeStamp = Object.getOwnPropertyDescriptor(Event.prototype, 'timeStamp'); });
   await f.page.clock.setFixedTime(NOW);
   f.server.now = () => NOW.getTime();
   await f.context.addInitScript(value => { try { localStorage.setItem('expedile-theme', value); } catch { /* the system theme applies */ } }, theme);
@@ -150,8 +152,31 @@ async function openLoading(f, { button = 'Vérifier et confirmer le chargement' 
   await field(f).waitFor();
   await until(() => focusedIsField(f), true, 'The scan field takes the focus when the loading opens');
 }
-/** A handheld scanner: the code typed very fast, then Enter, wherever the focus is. */
-const scan = (f, code) => f.page.keyboard.type(`${code}\n`);
+/**
+ * A handheld scanner, wherever the focus is: each key stamped `gap` ms after the previous one, as the device sends
+ * them; « \n » is Enter. Its keys go through the DevTools protocol with their own times: Playwright's keyboard waits
+ * for the page between two keys, and its clock replaces Event.timeStamp with a time read when the page first reads
+ * it, so both would time the page (slower in CI) rather than the device. Two scans are at least 300 ms apart.
+ */
+async function scanner(f, text, gap = 4) {
+  await f.page.evaluate(() => { if (window.__nativeTimeStamp) Object.defineProperty(Event.prototype, 'timeStamp', window.__nativeTimeStamp); });
+  f.cdp = f.cdp || await f.context.newCDPSession(f.page);
+  let at = Math.max(Date.now(), (f.scannedAt || 0) + 300);
+  for (const char of text) {
+    const enter = char === '\n', upper = char.toUpperCase();
+    const key = enter ? 'Enter' : char, typed = enter ? '\r' : char;
+    const code = enter ? 'Enter' : char === ' ' ? 'Space' : char === '-' ? 'Minus' : /^[A-Z]$/.test(upper) ? `Key${upper}` : /^\d$/.test(char) ? `Digit${char}` : '';
+    const keyCode = enter ? 13 : char === ' ' ? 32 : char === '-' ? 189 : /^[A-Z0-9]$/.test(upper) ? upper.charCodeAt(0) : 0;
+    await f.cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key, code, windowsVirtualKeyCode: keyCode, text: typed, unmodifiedText: typed, timestamp: at / 1000 });
+    await f.cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key, code, windowsVirtualKeyCode: keyCode, timestamp: (at + 1) / 1000 });
+    at += gap;
+  }
+  f.scannedAt = at;
+}
+/** A label scanned: its code, then Enter. */
+const scan = (f, code) => scanner(f, `${code}\n`);
+// The QR code of a former label (before October 2026): the reference, then the recipient, one line each.
+const FORMER_LABEL = { one: 'EXP-4KM2PQ\nGRONDIN ANLI\n5 RUE DU PORT\n97410 SAINT-PIERRE\nLA REUNION\n0692000002\n', two: 'EXP-2YE537\nHOARAU FLAVIE\n12 RUE DE PARIS\n97400 SAINT-DENIS\nLA REUNION\n0692000001\n' };
 
 async function main() {
   await fs.mkdir(output, { recursive: true });
@@ -247,6 +272,47 @@ async function main() {
       await shot(f, 'bare-reference-two-parcels-1440');
     });
 
+    // ── 2b. A former label (its QR code: the reference, then the recipient line by line) read by a scanner that
+    // turns each line into Enter: the reference is answered, the rest of the label never ──
+    await scenario('former-label-typed-line-by-line-gets-one-answer', async f => {
+      await f.context.addInitScript(() => {
+        // The tones played (their frequencies): one per answer, none for the lines left out.
+        window.__tones = [];
+        const start = OscillatorNode.prototype.start;
+        OscillatorNode.prototype.start = function (...args) { window.__tones.push(this.frequency.value); return start.apply(this, args); };
+      });
+      await openLoading(f);
+      // Every title the answer zone shows, in order.
+      await feedback(f).evaluate(zone => {
+        window.__titles = [];
+        new MutationObserver(() => {
+          const title = zone.querySelector('.loading-scan-feedback-title')?.textContent || '';
+          if (title && window.__titles[window.__titles.length - 1] !== title) window.__titles.push(title);
+        }).observe(zone, { childList: true, subtree: true, characterData: true });
+      });
+      const seen = () => f.page.evaluate(() => ({ titles: window.__titles.splice(0), tones: window.__tones.splice(0) }));
+      const settled = () => until(() => review(f).locator('.loading-pending').count(), 0, 'Every line handled');
+      // The former label of a one-parcel dossier, typed at 5 ms per key: its reference is its parcel 1/1.
+      await scanner(f, FORMER_LABEL.one, 5);
+      await until(() => checksOf(f, D.one), [[1, 1, 'scan']], 'The reference line is checked');
+      await settled();
+      await until(() => feedbackText(f), 'EXP-4KM2PQ · colis 1/1 vérifié Tous ses colis sont vérifiés : expédition prête à partir.', 'Its answer stays');
+      assert.deepEqual(await seen(), { titles: ['EXP-4KM2PQ · colis 1/1 vérifié'], tones: [1046] }, 'One answer, one tone: no « Code illisible » for the other lines');
+      assert.equal(await field(f).inputValue(), '', 'Nothing left in the field');
+      // The former label of a two-parcel dossier: it names no parcel; the answer says it is a former label.
+      await scanner(f, FORMER_LABEL.two, 5);
+      await settled();
+      await until(() => feedbackText(f), 'Ancienne étiquette de EXP-2YE537 Ce dossier compte 2 colis : imprimez ses nouvelles étiquettes, une par colis, ou comptez ses colis à la main.', 'Former label explained');
+      assert.equal(await feedback(f).getAttribute('data-tone'), 'warning');
+      assert.deepEqual(await seen(), { titles: ['EXP-2YE537 compte 2 colis : scannez l’étiquette de chaque colis ou comptez-les', 'Ancienne étiquette de EXP-2YE537'], tones: [660, 660] }, 'One warning tone');
+      assert.deepEqual(checksOf(f, D.two), [], 'Nothing recorded for a label that names no parcel');
+      await shot(f, 'former-label-two-parcels-1440');
+      // A code that is not a label, scanned on its own, is still answered.
+      await scan(f, '1Z999AA10123456784');
+      await until(() => feedback(f).getAttribute('data-tone'), 'error', 'An unreadable code alone is answered');
+      assert.equal(calls(f, 'record_loading_check').length, 1, 'Only the one-parcel reference was sent');
+    });
+
     // ── 3. Counting by hand, wrong then right; redoing a control ──
     for (const width of [1440, 390]) await scenario(`manual-count-wrong-then-right-and-redo-${width}`, async f => {
       await openLoading(f);
@@ -311,10 +377,25 @@ async function main() {
       await until(() => [checksOf(f, D.two).length, checksOf(f, D.one).length], [2, 1], 'Three labels recorded');
       await until(() => confirmButton().innerText().then(normalize), 'Confirmer le départ de 2 expéditions', 'Two dossiers ticked');
       // A ticked dossier set aside is deferred with the others; ticked again, it leaves.
-      await review(f).getByRole('checkbox', { name: /EXP-4KM2PQ/ }).uncheck();
-      const why = await review(f).getByRole('checkbox', { name: /EXP-4KM2PQ/ }).evaluate(element => document.getElementById(element.getAttribute('aria-describedby'))?.textContent);
+      const setAside = review(f).getByRole('checkbox', { name: /EXP-4KM2PQ/ });
+      await setAside.uncheck();
+      const why = await setAside.evaluate(element => document.getElementById(element.getAttribute('aria-describedby'))?.textContent);
       assert.equal(why, 'Décochée : ce dossier sera reporté.');
       assert.equal(normalize(await confirmButton().innerText()), 'Confirmer le départ de 1 expédition');
+      // The next label, scanned while the focus is still on that box: checked as a scan, the box keeps its choice.
+      assert.equal(await setAside.evaluate(element => document.activeElement === element), true, 'The box just unticked has the focus');
+      await scan(f, 'EXP-7RT5WQ-1-3');
+      await until(() => checksOf(f, D.three), [[1, 3, 'scan']], 'A label scanned with the focus on a dossier box');
+      assert.deepEqual(calls(f, 'record_loading_check').filter(request => request.input.p_colis_id === D.three).map(request => request.input.p_method), ['scan'], 'Recorded once');
+      await until(() => focusedIsField(f), true, 'The scan field has the focus');
+      assert.equal(await setAside.isChecked(), false, 'Still set aside');
+      // Space on a box still ticks and unticks it.
+      await setAside.focus();
+      await f.page.keyboard.press(' ');
+      await until(() => setAside.isChecked(), true, 'Space ticks the box');
+      await f.page.keyboard.press(' ');
+      await until(() => setAside.isChecked(), false, 'Space unticks the box');
+      assert.equal(await setAside.evaluate(element => document.activeElement === element), true, 'Space never goes to the scan field');
       // The person's choice stays in this tab: the page reloaded, the loading reopens with it.
       await f.page.reload();
       await review(f).waitFor();
@@ -328,8 +409,8 @@ async function main() {
       await review(f).getByRole('textbox', { name: 'Motif du report des dossiers non cochés' }).fill('Colis non remis au transporteur');
       await until(() => review(f).getByRole('alert').count(), 0, 'The reason asked for, once written, is no longer asked for');
       // A label scanned while the reason has the focus is checked as a scan, never written into the reason.
-      await scan(f, 'EXP-7RT5WQ-1-3');
-      await until(() => checksOf(f, D.three), [[1, 3, 'scan']], 'A label scanned from the reason field is checked');
+      await scan(f, 'EXP-7RT5WQ-2-3');
+      await until(() => checksOf(f, D.three), [[1, 3, 'scan'], [2, 3, 'scan']], 'A label scanned from the reason field is checked');
       await until(() => review(f).getByRole('textbox', { name: 'Motif du report des dossiers non cochés' }).inputValue(), 'Colis non remis au transporteur', 'The reason keeps only what was written');
       await until(() => focusedIsField(f), true, 'The scan field takes the focus back');
       assert.equal(normalize(await review(f).getByText(/expéditions? cochées?/).innerText()), '2 expéditions cochées · 3 à reporter.');
@@ -345,6 +426,29 @@ async function main() {
       assert.deepEqual(manifest.items.map(item => [item.colis.ref, item.loading_checks.map(check => [check.parcel_index, check.method, check.checked_by_name])]).sort(),
         [['EXP-2YE537', [[1, 'scan', 'Madly Payet'], [2, 'scan', 'Madly Payet']]], ['EXP-4KM2PQ', [[1, 'scan', 'Madly Payet']]]]);
       assert.equal(await review(f).count(), 0, 'The loading closes once confirmed');
+    });
+
+    // ── 4a. A parcel code written by hand in the reason stays text; the same code scanned there is a scan ──
+    await scenario('hand-typed-code-in-the-reason-stays-text', async f => {
+      await openLoading(f);
+      await scan(f, 'EXP-2YE537-1-2');
+      await until(() => checksOf(f, D.two), [[1, 2, 'scan']], 'First parcel scanned');
+      const reason = review(f).getByRole('textbox', { name: 'Motif du report des dossiers non cochés' });
+      await reason.click();
+      // A person writes which parcel is missing, at a person's speed, then Enter: a new line of the reason.
+      await f.page.keyboard.type('Colis manquant EXP-2YE537-2/2', { delay: 120 });
+      await f.page.keyboard.press('Enter');
+      await until(() => reason.inputValue(), 'Colis manquant EXP-2YE537-2/2\n', 'The reason keeps what was written');
+      await new Promise(resolve => setTimeout(resolve, 800));
+      assert.deepEqual(checksOf(f, D.two), [[1, 2, 'scan']], 'The parcel written as missing is not checked');
+      assert.equal(calls(f, 'record_loading_check').length, 1, 'Nothing sent');
+      assert.equal(await reason.evaluate(element => document.activeElement === element), true, 'The reason keeps the focus');
+      assert.equal(await review(f).getByRole('checkbox', { name: /EXP-2YE537/ }).isChecked(), false);
+      // The same label scanned there: checked, never written into the reason.
+      await scan(f, 'EXP-2YE537-2-2');
+      await until(() => checksOf(f, D.two), [[1, 2, 'scan'], [2, 2, 'scan']], 'A label scanned in the reason is checked');
+      await until(() => reason.inputValue(), 'Colis manquant EXP-2YE537-2/2', 'Only what was written stays');
+      await until(() => focusedIsField(f), true, 'The scan field takes the focus back');
     });
 
     // ── 4b. A reading of the loading still under way when the departure is confirmed never reopens it ──
@@ -499,12 +603,26 @@ async function main() {
       assert.deepEqual([normalize(await dialog.locator('.loading-scan-feedback').innerText()), await dialog.locator('.loading-scan-feedback').getAttribute('data-tone')], ['', null], 'The camera panel shows only what the camera reads');
       assert.equal(f.assets.some(item => item.includes('cameraScanWorker')), false, 'No decoder loaded for a refused camera');
       await shot(f, `camera-refused-${width}-${theme}`); await axe(f, 'Camera refused');
+      // « La douchette reste disponible »: a label scanned now is checked as a scan, its Enter never closes the dialog.
+      assert.equal(await dialog.evaluate(element => element.contains(document.activeElement) && document.activeElement.tagName), 'BUTTON', 'A button of the dialog has the focus');
+      await scan(f, 'EXP-7RT5WQ-1-3');
+      await until(() => checksOf(f, D.three), [[1, 3, 'scan']], 'A scanner label while the camera is open');
+      assert.deepEqual(calls(f, 'record_loading_check').map(request => request.input.p_method), ['scan']);
+      await until(() => dialog.locator('.loading-scan-feedback').innerText().then(normalize), 'EXP-7RT5WQ · colis 1/3 vérifié Il reste 2 colis à vérifier pour ce dossier.', 'Its answer in the camera panel');
+      // A former label, line by line (its spaces included): one answer, the dialog still open.
+      await scanner(f, FORMER_LABEL.one, 5);
+      await until(() => checksOf(f, D.one), [[1, 1, 'scan']], 'The former label of a one-parcel dossier');
+      await until(() => review(f).locator('.loading-pending').count(), 0, 'Every line handled');
+      await until(() => dialog.locator('.loading-scan-feedback').innerText().then(normalize), 'EXP-4KM2PQ · colis 1/1 vérifié Tous ses colis sont vérifiés : expédition prête à partir.', 'One answer for the former label');
+      assert.equal(await dialog.count(), 1, 'The dialog stays open');
+      assert.equal(await dialog.getAttribute('data-state'), 'error');
+      await shot(f, `camera-refused-scanner-${width}-${theme}`);
       await f.page.keyboard.press('Escape');
       await dialog.waitFor({ state: 'detached' });
       await until(() => button.evaluate(element => document.activeElement === element), true, 'The focus goes back to the camera button');
       // The scan field still works after the camera.
-      await scan(f, 'EXP-4KM2PQ-1-1');
-      await until(() => checksOf(f, D.one), [[1, 1, 'scan']], 'Scanner after the camera');
+      await scan(f, 'EXP-2YE537-2-2');
+      await until(() => checksOf(f, D.two), [[2, 2, 'scan']], 'Scanner after the camera');
     }, { width, theme, camera: 'denied' });
     await scenario('camera-missing-explains', async f => {
       await openLoading(f);
@@ -532,6 +650,12 @@ async function main() {
       await new Promise(resolve => setTimeout(resolve, 2500));
       assert.equal(calls(f, 'record_loading_check').length, 1, 'The same code is ignored while it stays in view');
       await shot(f, 'camera-reading-1440');
+      // The scanner while the camera reads: its label is checked as a scan, its answer shown here, the camera stays.
+      await scan(f, 'EXP-7RT5WQ-1-3');
+      await until(() => checksOf(f, D.three), [[1, 3, 'scan']], 'A scanner label while the camera reads');
+      assert.deepEqual(calls(f, 'record_loading_check').map(request => [request.input.p_colis_id, request.input.p_method]), [[D.two, 'camera'], [D.three, 'scan']]);
+      await until(() => dialog.locator('.loading-scan-feedback').innerText().then(normalize), 'EXP-7RT5WQ · colis 1/3 vérifié Il reste 2 colis à vérifier pour ce dossier.', 'The scanner\'s answer in the camera panel');
+      assert.equal(await dialog.getAttribute('data-state'), 'scanning', 'The camera keeps reading');
       await f.page.mouse.click(8, 8);
       await dialog.waitFor({ state: 'detached' });
       assert.equal(await f.page.evaluate(() => window.__cameraOpened), 1);
@@ -565,6 +689,34 @@ async function main() {
       assert.equal(await dialog.evaluate(element => { const box = element.getBoundingClientRect(); return box.left >= 0 && box.right <= innerWidth + 0.5 && element.scrollWidth <= element.clientWidth + 1; }), true, 'The count dialog fits');
       await shot(f, 'narrow-phone-wide-fonts-count');
     }, { width: 320, height: 640 });
+
+    // ── 7c. A phone: the scanned dossier lands under the scan bar, however long the last answer ──
+    await scenario('phone-scanned-dossier-lands-under-the-scan-bar', async f => {
+      await openLoading(f);
+      const placement = id => f.page.evaluate(id => {
+        const bar = document.querySelector('.loading-scan-bar').getBoundingClientRect();
+        const row = document.querySelector(`[data-loading-dossier="${id}"]`);
+        const name = row.querySelector('.loading-dossier-name').getBoundingClientRect();
+        const hit = document.elementFromPoint(name.left + 4, name.top + name.height / 2);
+        // The first dossier of a group: its group's title, whole, above it.
+        const title = row.previousElementSibling && row.previousElementSibling.classList.contains('loading-group-title') ? row.previousElementSibling.getBoundingClientRect() : null;
+        return { barBottom: Math.round(bar.bottom), nameTop: Math.round(name.top), nameBottom: Math.round(name.bottom), titleTop: title ? Math.round(title.top) : null, inView: name.bottom <= innerHeight, visible: Boolean(hit && row.contains(hit)) };
+      }, id);
+      // Below the screen, then above it, then after a long answer (a stale label: three lines in the bar).
+      for (const [code, id, answer] of [
+        ['EXP-0042', D.legacy, 'EXP-0042 · colis 1/1 vérifié'],
+        ['EXP-2YE537-1-2', D.two, 'EXP-2YE537 · colis 1/2 vérifié'],
+        ['EXP-2YE537-3-3', D.two, 'EXP-2YE537 · colis 3/3 non vérifié'],
+      ]) {
+        await scan(f, code);
+        await until(() => feedback(f).locator('.loading-scan-feedback-title').innerText().then(normalize), answer, `Answer to ${code}`);
+        await until(() => review(f).locator('.loading-pending').count(), 0, `${code} handled`);
+        await settle(f);
+        const where = await placement(id);
+        assert.ok(where.nameTop >= where.barBottom && where.inView && where.visible && (where.titleTop === null || where.titleTop >= where.barBottom), `${code}: the dossier under the bar, in view (${JSON.stringify(where)})`);
+      }
+      await shot(f, 'phone-stale-label-dossier-under-the-bar-390');
+    }, { width: 390 });
 
     // ── 8. Every state, light and dark, desktop and phone, with axe ──
     for (const theme of ['light', 'dark']) for (const width of [1440, 390]) await scenario(`states-${theme}-${width}`, async f => {

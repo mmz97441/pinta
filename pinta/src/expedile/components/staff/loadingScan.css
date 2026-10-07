@@ -111,11 +111,12 @@ html.dark .loading-button--primary:hover:not(:disabled) { background: #d6e6ee; }
   .loading-totals-dot { display: none; }
 }
 
-/* Dossiers of the loading. */
+/* Dossiers of the loading. A scanned dossier is brought just under the scan bar (its top margin, the bar's height,
+   is set when it is scrolled to) and above the phone navigation. */
 .loading-scan { display: grid; gap: 16px; }
 .loading-dossier {
   display: grid; gap: 4px; margin: 0 -8px; padding: 12px 8px; border-bottom: 1px solid var(--border-subtle); border-radius: 8px;
-  transition: background-color .2s ease-out, box-shadow .2s ease-out; scroll-margin: 200px 0 120px;
+  transition: background-color .2s ease-out, box-shadow .2s ease-out; scroll-margin-bottom: 120px;
 }
 .loading-dossier[data-flash='success'] { background: var(--scan-success-bg); box-shadow: inset 4px 0 0 var(--scan-success-text); }
 .loading-dossier[data-flash='warning'] { background: var(--attention-bg); box-shadow: inset 4px 0 0 var(--attention-text); }

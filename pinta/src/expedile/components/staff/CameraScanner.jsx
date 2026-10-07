@@ -2,19 +2,23 @@ import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Camera, CameraOff, Loader2, RefreshCw, X } from 'lucide-react';
 import { useDialog } from '../ui/useDialog';
-import { SAME_CODE_PAUSE_MS } from '../../domain/loadingControl';
+import { keyLine, SAME_CODE_PAUSE_MS, silentKey, typedCharacter } from '../../domain/loadingControl';
 import './loadingScan.css';
 
 // « Scanner avec la caméra » of the loading control: the tablet's rear camera reads the labels' QR codes (and their
 // barcodes where the browser reads them) continuously; each code goes to the same handler as the scan field. The
 // browser's BarcodeDetector is used when it reads QR codes (Chrome on Android); otherwise a QR decoder (jsQR) runs in
 // a worker, loaded only now, so the page never waits for it. A code seen again is ignored until it has left the
-// view for 2 s. Nothing is recorded or shown here: the panel displays what the loading control answered.
+// view for 2 s. The handheld scanner keeps working while the camera is open: what it types goes to the loading
+// control as a scan. Nothing is recorded or shown here: the panel displays what the loading control answered.
 
 // The longer side of the frames given to the QR decoder: a label held 20 to 40 cm away stays readable.
 const FRAME_SIDE = 720;
 // Pause between two readings: four to six frames a second, at most one reading at a time.
 const READ_PAUSE_MS = 120;
+// A key typed more than this after the previous one starts another code: a key pressed by mistake long before never
+// takes the Enter of a button.
+const TYPED_PAUSE_MS = 1000;
 
 const MESSAGES = {
   unsupported: 'La caméra n’est pas accessible depuis ce navigateur (connexion non sécurisée ou navigateur trop ancien). Utilisez la douchette ou saisissez le code de l’étiquette.',
@@ -99,16 +103,56 @@ async function openDecoder() {
 /**
  * The camera panel: a modal dialog (title, the camera's picture with its frame, the last answer of the loading
  * control given as `children`), closed by its buttons, Escape or a click beside it. `onCode(text)` receives each
- * code read, once per appearance.
+ * code read, once per appearance; `onTyped(text, line)` each code the handheld scanner types meanwhile (`line`: the
+ * timing of its keys, keyLine).
  */
-export default function CameraScanner({ onClose, onCode, children }) {
+export default function CameraScanner({ onClose, onCode, onTyped, children }) {
   const videoRef = useRef(null);
   const onCodeRef = useRef(onCode);
   onCodeRef.current = onCode;
+  const onTypedRef = useRef(onTyped);
+  onTypedRef.current = onTyped;
   const pressedBackdrop = useRef(false);
   const [attempt, setAttempt] = useState(0);
   const [state, setState] = useState({ phase: 'opening', error: '', decoder: null });
   const dialogRef = useDialog(true, onClose);
+
+  // The scanner types where the focus is, here on a button of the dialog: its characters are kept (never reaching
+  // the buttons: a space would press one), and its Enter sends them as a scan instead of closing the dialog. Read
+  // before anything else on the page (window, capture phase). With nothing typed, Space and Enter press the button.
+  useEffect(() => {
+    const keys = keyLine();
+    let typed = '';
+    let lastKey = -Infinity;
+    const forget = () => { typed = ''; keys.reset(); };
+    const keydown = (event) => {
+      const now = performance.now();
+      if (event.key === 'Enter') {
+        const text = typed;
+        const line = keys.track(event);
+        const recent = now - lastKey <= TYPED_PAUSE_MS;
+        forget();
+        if (!text || !recent || event.ctrlKey || event.metaKey || event.altKey || event.isComposing) return;
+        event.preventDefault();
+        event.stopPropagation();
+        onTypedRef.current?.(text, line);
+        return;
+      }
+      if (!typedCharacter(event)) {
+        // Shift (capitals) and the keys typing nothing alone change nothing; Tab, Escape or an arrow end the code.
+        if (!silentKey(event)) forget();
+        return;
+      }
+      if (event.key === ' ' && !typed) return;
+      if (now - lastKey > TYPED_PAUSE_MS) forget();
+      typed += event.key;
+      lastKey = now;
+      keys.track(event);
+      event.preventDefault();
+    };
+    window.addEventListener('keydown', keydown, true);
+    return () => window.removeEventListener('keydown', keydown, true);
+  }, []);
 
   useEffect(() => {
     let stopped = false;

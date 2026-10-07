@@ -10,8 +10,9 @@ import { preparedSummary } from '../../domain/departureBoard';
 import { dossierTaskUrl } from '../../domain/dossierTasks';
 import { plural } from '../../domain/plural';
 import {
-  checkedByLine, checkFeedback, clearedFeedback, controlTotals, countFeedback, countIssue, dossierControl, elsewhereFeedback,
-  expectedParcelCount, LAYOUT_NOTICE, mergeLoadingCheck, readScannedCode, refusedFeedback, severalFeedback, unreadableFeedback,
+  checkedByLine, checkFeedback, clearedFeedback, continuesLabel, controlTotals, countFeedback, countIssue, dossierControl, elsewhereFeedback,
+  expectedParcelCount, keyLine, LAYOUT_NOTICE, mergeLoadingCheck, oldLabelFeedback, readScannedCode, refusedFeedback, severalFeedback,
+  unreadableFeedback,
 } from '../../domain/loadingControl';
 import { clearLoadingChecks, recordLoadingCheck, recordLoadingCount } from '../../services/loadingChecks';
 import './loadingScan.css';
@@ -28,6 +29,15 @@ const TONE_ICONS = { success: CheckCircle, warning: AlertTriangle, error: XCircl
 const RELOAD_PAUSE_MS = 5000;
 // A scanned dossier stays highlighted this long.
 const FLASH_MS = 2500;
+// Inputs whose keys type no text (a dossier's box, a button): a key typed there belongs to the scan field.
+const KEYLESS_INPUTS = new Set(['checkbox', 'radio', 'button', 'submit', 'reset', 'image', 'range', 'color', 'file']);
+
+/** A control that takes typed text (a field, the reason, a list), or a dialog: it keeps its keys. */
+function takesText(target) {
+  if (!target || typeof target.closest !== 'function') return false;
+  if (target.isContentEditable || target.closest('textarea, select, [role="dialog"]')) return true;
+  return target.tagName === 'INPUT' && !KEYLESS_INPUTS.has(String(target.type || '').toLowerCase());
+}
 
 // ── A short beep and a vibration, where the device has them ─────────────────
 let audio = null;
@@ -157,7 +167,8 @@ function CountDialog({ dossier, expected, envoiId, onClose, onSaved, onStale }) 
  * Callbacks: `onCheck(check)` a recorded check, `onCleared(colisId)` a dossier's checks removed, `onRefreshChecks()`
  * and `onReload()` (resolves the dossiers read again) return promises, `onToggle(colisId, checked)`,
  * `onPendingChange(count)` the checks still being recorded. `scanRef` receives the function handling a code scanned
- * elsewhere on the page (a label scanned while the focus was in another field), as the scan field does.
+ * elsewhere on the page (a label scanned while the focus was in another field), as the scan field does:
+ * `(text, line)`, `line` the timing of its keys (keyLine).
  */
 export default function LoadingScanPanel({
   envoi, dossiers, checks, checksError, canConfirm, excluded = [], busy, inputRef, scanRef, returnTo, now,
@@ -176,6 +187,14 @@ export default function LoadingScanPanel({
   const lastReload = useRef(-Infinity);
   const sequence = useRef(0);
   const focusScan = useRef(false);
+  // The keys typed into the scan field (keyLine), and the line its last Enter ended, which the form sends just after.
+  const fieldKeys = useRef(null);
+  if (!fieldKeys.current) fieldKeys.current = keyLine();
+  const fieldLine = useRef(null);
+  // The Enter of the last line typed (scan field, camera, reason) and the first line of the label being read: a
+  // scanner sends a former label's QR code line by line (reference, name, address, phone).
+  const lastEnter = useRef(null);
+  const labelHead = useRef(null);
   const latest = useRef({});
   latest.current = { envoi, dossiers, checks, data, envois, teamUsers, onCheck, onCleared, onRefreshChecks, onReload };
 
@@ -193,22 +212,30 @@ export default function LoadingScanPanel({
   const reload = () => latest.current.onReload().catch(() => null);
 
   // One scanned text: read it, find its dossier, then let the server record it (or say why not).
-  const handle = async ({ text, method }) => {
+  const handle = async ({ text, method, sameLabel = false }) => {
     const { envoi: current, teamUsers: team } = latest.current;
     let scan = readScannedCode(text, latest.current.dossiers);
     if (scan.kind === 'empty') return;
+    if (scan.kind === 'unreadable' && sameLabel) {
+      // The rest of a former label (name, address, phone), typed by the scanner just after its reference: never
+      // answered line by line, the reference's answer stays. Several parcels: the label is explained once.
+      const head = labelHead.current;
+      if (head && head.kind === 'several' && !head.explained) { head.explained = true; show(oldLabelFeedback(head), head.dossier.id, { sound: false }); }
+      return;
+    }
+    labelHead.current = scan;
     if (scan.kind === 'unreadable') { show(unreadableFeedback(scan.text)); return; }
     if (scan.kind === 'elsewhere' && performance.now() - lastReload.current > RELOAD_PAUSE_MS) {
       // The departure's list on the server first: a dossier assigned to it meanwhile is found there.
       lastReload.current = performance.now();
       const fresh = await reload();
-      if (fresh) scan = readScannedCode(text, fresh);
+      if (fresh) { scan = readScannedCode(text, fresh); labelHead.current = scan; }
     }
     if (scan.kind === 'elsewhere') {
       show({ ...elsewhereFeedback(scan.ref, { dossiers: latest.current.data, envois: latest.current.envois, envoiId: current.id }), layout: scan.layoutCorrected });
       return;
     }
-    if (scan.kind === 'several') { show({ ...severalFeedback(scan), layout: scan.layoutCorrected }, scan.dossier.id); return; }
+    if (scan.kind === 'several') { show({ ...(scan.oldLabel ? oldLabelFeedback(scan) : severalFeedback(scan)), layout: scan.layoutCorrected }, scan.dossier.id); return; }
     try {
       const result = await recordLoadingCheck(current.id, scan.dossier.id, scan.index, scan.count, method);
       const rows = result.check ? mergeLoadingCheck(latest.current.checks, result.check) : latest.current.checks;
@@ -237,19 +264,29 @@ export default function LoadingScanPanel({
     // The checks of the other devices too, once this series is recorded.
     latest.current.onRefreshChecks().catch(() => {});
   };
-  const enqueue = (text, method) => {
-    queue.current.push({ text, method });
+  const enqueue = (text, method, { sameLabel = false } = {}) => {
+    queue.current.push({ text, method, sameLabel });
     setPending((count) => count + 1);
     drain();
+  };
+  /** A line typed by a scanner or a person (scan field, camera open, reason), `line` the timing of its keys. */
+  const enqueueTyped = (text, line = null) => {
+    const previous = lastEnter.current;
+    lastEnter.current = line ? line.enter : null;
+    enqueue(text, 'scan', { sameLabel: continuesLabel(line, previous) });
   };
   const submit = (event) => {
     event.preventDefault();
     primeAudio();
     const input = inputRef.current;
     const text = input ? input.value : '';
+    // The line its Enter ended (none after a click on « Valider »).
+    const line = fieldLine.current;
+    fieldLine.current = null;
+    fieldKeys.current.reset();
     // Emptied at once and kept focused: the next scan starts on an empty field.
     if (input) { input.value = ''; input.focus(); }
-    if (text.trim()) enqueue(text, 'scan');
+    if (text.trim()) enqueueTyped(text, line);
   };
 
   const counted = (dossier, result) => {
@@ -280,7 +317,7 @@ export default function LoadingScanPanel({
   useEffect(() => { onPendingChange?.(pending); }, [pending]);
   useEffect(() => {
     if (!scanRef) return undefined;
-    scanRef.current = (text) => { primeAudio(); enqueue(text, 'scan'); };
+    scanRef.current = (text, line) => { primeAudio(); enqueueTyped(text, line); };
     return () => { scanRef.current = null; };
   });
   // After a count, the field takes the focus back once the dialog has given it to its opener.
@@ -295,28 +332,43 @@ export default function LoadingScanPanel({
     const node = document.querySelector(`[data-loading-dossier="${flash.id}"]`);
     if (node) {
       const box = node.getBoundingClientRect();
-      const top = Math.max(0, barRef.current ? barRef.current.getBoundingClientRect().bottom : 0);
+      const bar = barRef.current;
+      const top = Math.max(0, bar ? bar.getBoundingClientRect().bottom : 0);
       if (box.top < top || box.bottom > window.innerHeight) {
         const still = typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-        node.scrollIntoView({ block: 'center', behavior: still ? 'auto' : 'smooth' });
+        // Just under the bar, which stays at the top of the page: its height follows the length of the last answer.
+        // The first dossier of a group keeps the group's title above it, whole.
+        const title = node.previousElementSibling && node.previousElementSibling.classList.contains('loading-group-title') ? node.previousElementSibling : null;
+        node.style.scrollMarginTop = `${Math.ceil((bar ? bar.offsetHeight : 0) + (title ? title.offsetHeight : 0)) + 8}px`;
+        node.scrollIntoView({ block: 'start', behavior: still ? 'auto' : 'smooth' });
       }
     }
     const timer = setTimeout(() => setFlash((current) => (current && current.key === flash.key ? null : current)), FLASH_MS);
     return () => clearTimeout(timer);
   }, [flash?.key]);
-  // A scanner types wherever the focus is: a code typed outside a field (after a click on a dossier's button)
-  // still goes to the scan field, never into the page. Fields and dialogs keep their keys.
+  // A scanner types wherever the focus is: a code typed outside a text field (after a click on a dossier's box or
+  // button) still goes to the scan field, never into the page. Text fields and dialogs keep their keys; Space keeps
+  // ticking a box or pressing a button.
   useEffect(() => {
-    const redirect = (event) => {
+    const keydown = (event) => {
+      const field = inputRef.current;
+      if (field && event.target === field) {
+        // The keys of the scan field, timed: its Enter ends the line the form then sends.
+        const line = fieldKeys.current.track(event);
+        if (line) fieldLine.current = line;
+        return;
+      }
       if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey || event.isComposing) return;
       if (typeof event.key !== 'string' || event.key.length !== 1 || event.key === ' ') return;
-      const target = event.target;
-      if (target && typeof target.closest === 'function' && target.closest('input, textarea, select, [contenteditable="true"], [role="dialog"]')) return;
-      if (document.querySelector('[role="dialog"][aria-modal="true"]')) return;
-      inputRef.current?.focus({ preventScroll: true });
+      if (takesText(event.target) || document.querySelector('[role="dialog"][aria-modal="true"]')) return;
+      if (!field) return;
+      // The first key of a code: the field takes it, and the next ones.
+      fieldKeys.current.reset();
+      fieldKeys.current.track(event);
+      field.focus({ preventScroll: true });
     };
-    document.addEventListener('keydown', redirect, true);
-    return () => document.removeEventListener('keydown', redirect, true);
+    document.addEventListener('keydown', keydown, true);
+    return () => document.removeEventListener('keydown', keydown, true);
   }, []);
 
   const totals = controlTotals(dossiers, checks);
@@ -383,13 +435,16 @@ export default function LoadingScanPanel({
     {GROUPS.map(([ready, label]) => {
       const rows = dossiers.filter((item) => departureReadiness(item).eligible === ready);
       return <div key={label} className="loading-group">
-        <h3 className="font-semibold">{label} ({rows.length})</h3>
+        <h3 className="loading-group-title font-semibold">{label} ({rows.length})</h3>
         {rows.map(renderDossier)}
         {!rows.length && <p className="py-2 text-sm text-gray-600">Aucun dossier dans ce groupe.</p>}
       </div>;
     })}
     {countingDossier && <CountDialog dossier={countingDossier} expected={expectedParcelCount(countingDossier)} envoiId={envoi.id} onClose={() => setCounting(null)} onSaved={(result) => counted(countingDossier, result)} onStale={reload} />}
-    {/* An answer given before the camera opened (a code typed or scanned with the scanner) is not shown in it. */}
-    {camera !== null && <CameraScanner onClose={() => setCamera(null)} onCode={(text) => enqueue(text, 'camera')}><ScanFeedback feedback={feedback && feedback.key > camera ? feedback : null} /></CameraScanner>}
+    {/* An answer given before the camera opened is not shown in it; those that follow are, the scanner's too (a
+        label scanned with the scanner while the camera is open is checked as a scan). */}
+    {camera !== null && <CameraScanner onClose={() => setCamera(null)} onCode={(text) => enqueue(text, 'camera')} onTyped={(text, line) => { primeAudio(); enqueueTyped(text, line); }}>
+      <ScanFeedback feedback={feedback && feedback.key > camera ? feedback : null} />
+    </CameraScanner>}
   </div>;
 }

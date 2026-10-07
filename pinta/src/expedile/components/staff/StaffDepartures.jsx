@@ -4,7 +4,7 @@ import { AlertTriangle, Archive, CalendarCheck, CalendarPlus, Check, CheckCircle
 import usePersistentDraft from '../../hooks/usePersistentDraft';
 import { useMinuteNow } from '../../hooks/useMinuteNow';
 import { departureReadiness } from '../../domain/departureReadiness';
-import { loadedDossiers, mergeLoadingCheck, trailingParcelCode } from '../../domain/loadingControl';
+import { keyLine, loadedDossiers, mergeLoadingCheck, scannerTyped, trailingParcelCode } from '../../domain/loadingControl';
 import { departureDayLabel, isoCalendarDay, parisCalendarDay } from '../../domain/departureGroups';
 import { subscriptionEndNote, wishesAfterSubscription, wishesSubscriptionConfirmation } from '../../domain/departureWishes';
 import { closingLabel, departureDefaultClosing, destinationName, OPEN_DEPARTURE_STATUSES } from '../../domain/departurePlanning';
@@ -102,16 +102,21 @@ export default function StaffDepartures({ embedded = false }) {
   const deferredReason = selection[loadingId]?.reason || '';
   const setDeferredReason = reason => setSelection(previous => ({ ...previous, [loadingId]: { ...previous[loadingId], reason } }));
   // A label scanned while the focus is in the reason (the scanner types its code, then Enter): checked as a scan,
-  // never kept in the reason, and the scan field takes the focus back for the next labels.
+  // never kept in the reason, and the scan field takes the focus back for the next labels. A code typed by hand
+  // (« Colis manquant EXP-2YE537-2/2 ») stays in the reason: only a scanner types a whole code in a few
+  // milliseconds, then Enter at once (keyLine, from the keys' own times).
+  const reasonKeys = useRef(null);
+  if (!reasonKeys.current) reasonKeys.current = keyLine();
   const reasonKeyDown = (event) => {
+    const line = reasonKeys.current.track(event.nativeEvent);
     if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent?.isComposing || !scanCode.current) return;
     const field = event.currentTarget;
     if (field.selectionStart !== field.selectionEnd) return;
     const found = trailingParcelCode(field.value.slice(0, field.selectionStart));
-    if (!found) return;
+    if (!found || !scannerTyped(line, found.text)) return;
     event.preventDefault();
     setDeferredReason(`${field.value.slice(0, found.start)}${field.value.slice(field.selectionEnd)}`.trim());
-    scanCode.current(found.text);
+    scanCode.current(found.text, line);
     scanInput.current?.focus({ preventScroll: true });
   };
   const [manifest, setManifest] = useState(null);

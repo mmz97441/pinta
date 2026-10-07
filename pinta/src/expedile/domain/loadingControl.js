@@ -13,6 +13,13 @@ import { plural } from './plural.js';
 export const SAME_CODE_PAUSE_MS = 2000;
 /** A handheld scanner set to an English (QWERTY) keyboard on a French device (parseParcelCode restores its code). */
 export const LAYOUT_NOTICE = 'La douchette est réglée en clavier anglais : passez-la en français (AZERTY).';
+/** A handheld scanner types a code's characters a few milliseconds apart, then Enter at once: a person never types
+ * a whole code that fast. */
+export const SCANNER_KEY_GAP_MS = 50;
+/** A line whose first key comes less than this after the previous line's Enter is the rest of the same label: a
+ * scanner turns the line breaks of a QR code into Enter (the former labels held the reference, then the recipient's
+ * name, address and phone, one per line). */
+export const SCANNER_LINE_GAP_MS = 100;
 
 // Statuses of a dossier that has left or will not leave: never part of a loading.
 const CLOSED = new Set(['expedie', 'transit', 'dedouanement', 'arrive', 'livraison', 'livre', 'annule']);
@@ -124,12 +131,17 @@ export function checkedByLine(control, { now = Date.now(), team = [] } = {}) {
  * - { kind: 'several', dossier, ref, expected } for a bare reference of a dossier of several parcels;
  * - { kind: 'elsewhere', ref } for a reference that is not one of its dossiers.
  * `layoutCorrected`: the scanner typed with an English keyboard (the code was restored, see LAYOUT_NOTICE).
+ * `oldLabel`: the QR code of a former label read whole by the camera (the reference on its first line, then the
+ * recipient), read as its bare reference.
  */
 export function readScannedCode(text, dossiers = []) {
-  const code = parseParcelCode(text);
+  const lines = String(text ?? '').split(/[\r\n]+/).map(line => line.trim()).filter(Boolean);
+  const first = lines.length > 1 ? parseParcelCode(lines[0]) : null;
+  const oldLabel = Boolean(first?.ok && first.index === null);
+  const code = oldLabel ? first : parseParcelCode(text);
   if (!code.ok) return code.reason === 'empty' ? { kind: 'empty' } : { kind: 'unreadable', text: String(text ?? '').replace(/\s+/g, ' ').trim() };
   const dossier = (dossiers || []).find(item => item && upper(item.ref) === code.ref) || null;
-  const base = { ref: dossier?.ref || code.ref, layoutCorrected: code.layoutCorrected };
+  const base = { ref: dossier?.ref || code.ref, layoutCorrected: code.layoutCorrected, ...(oldLabel ? { oldLabel: true } : {}) };
   if (!dossier) return { kind: 'elsewhere', ...base };
   if (code.index === null) {
     const expected = expectedParcelCount(dossier);
@@ -152,6 +164,63 @@ export function trailingParcelCode(before) {
   return code.ok && code.index !== null ? { text: match[1], start: match.index } : null;
 }
 
+// Keys that never type anything, pressed alone: a scanner presses Shift for capitals (and for the digits of a French
+// keyboard), a dead key starts an accented letter.
+const SILENT_KEYS = new Set(['Shift', 'Control', 'Alt', 'AltGraph', 'Meta', 'OS', 'CapsLock', 'NumLock', 'Fn', 'FnLock', 'Dead', 'Unidentified', 'Process']);
+
+/** A character typed (one printable key, Shift allowed), not a shortcut or a composition in progress. */
+export function typedCharacter(event) {
+  return Boolean(event) && typeof event.key === 'string' && event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey && !event.isComposing;
+}
+
+/** A key that types nothing by itself (Shift, a dead key…): it neither types nor interrupts a code. */
+export function silentKey(event) {
+  return Boolean(event) && SILENT_KEYS.has(event.key);
+}
+
+/**
+ * The keys of a line as they are typed, from their events' times (`timeStamp`, the time each key was pressed even
+ * when the page is busy): `track(event)` on each keydown. On Enter it returns the line just ended,
+ * { start, enter, fast, scanner }: `start` the time of its first character (null without one), `enter` the time of
+ * its Enter, `fast` how many of its last characters came each less than SCANNER_KEY_GAP_MS after the previous one,
+ * `scanner` its Enter came that fast too. Any other key returns null; a key that types nothing (Backspace, an
+ * arrow, Tab) starts the line again. `reset()` forgets the line.
+ */
+export function keyLine() {
+  let start = null, last = null, fast = 0;
+  const reset = () => { start = null; last = null; fast = 0; };
+  return {
+    track(event) {
+      const at = Number(event?.timeStamp);
+      if (!event || silentKey(event) || !Number.isFinite(at)) return null;
+      if (event.key === 'Enter') {
+        const line = { start, enter: at, fast, scanner: last !== null && at - last < SCANNER_KEY_GAP_MS };
+        reset();
+        return line;
+      }
+      if (!typedCharacter(event)) { reset(); return null; }
+      fast = last !== null && at - last < SCANNER_KEY_GAP_MS ? fast + 1 : 1;
+      if (start === null) start = at;
+      last = at;
+      return null;
+    },
+    reset,
+  };
+}
+
+/** `text`, at the end of the line, was typed by a scanner: each of its characters less than SCANNER_KEY_GAP_MS
+ * after the previous one, and Enter at once. Typed by hand, it stays text. */
+export function scannerTyped(line, text) {
+  return Boolean(line?.scanner) && line.fast >= Array.from(String(text ?? '')).length;
+}
+
+/** The line continues the label of the previous one: a scanner typed it, its first key less than SCANNER_LINE_GAP_MS
+ * after the previous line's Enter (`previousEnter`, from keyLine). */
+export function continuesLabel(line, previousEnter) {
+  return Boolean(line?.scanner) && Number.isFinite(line.start) && Number.isFinite(previousEnter)
+    && line.start >= previousEnter && line.start - previousEnter < SCANNER_LINE_GAP_MS;
+}
+
 const reasonText = readiness => readiness.reasons.map(reason => reason.text.charAt(0).toLocaleLowerCase('fr') + reason.text.slice(1)).join(', ');
 const remainingLine = remaining => `Il reste ${plural(remaining, 'colis', 'colis')} à vérifier pour ce dossier.`;
 const completeLine = dossier => {
@@ -168,6 +237,12 @@ export function unreadableFeedback(text) {
 /** A bare reference of a dossier of several parcels: each label is scanned, or the parcels counted. */
 export function severalFeedback(scan) {
   return { tone: 'warning', title: `${scan.ref} compte ${scan.expected} colis : scannez l’étiquette de chaque colis ou comptez-les`, detail: null };
+}
+
+/** A former label (its QR code: the reference, then the recipient) of a dossier of several parcels: it names no
+ * parcel, so its new labels are printed (one per parcel), or its parcels counted. */
+export function oldLabelFeedback(scan) {
+  return { tone: 'warning', title: `Ancienne étiquette de ${scan.ref}`, detail: `Ce dossier compte ${scan.expected} colis : imprimez ses nouvelles étiquettes, une par colis, ou comptez ses colis à la main.` };
 }
 
 /**
