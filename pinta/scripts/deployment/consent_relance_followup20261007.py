@@ -164,8 +164,10 @@ BEGIN
   OR position('AND NOT (c.attente_client_date IS NULL AND relance_open AND followup IS NULL)' IN pg_get_functiondef('public.sync_staff_work_actions(uuid)'::regprocedure))=0 THEN
   RAISE EXCEPTION 'A replaced function does not carry the reviewed body'; END IF;
  FOREACH fn IN ARRAY ARRAY['_colis_departure_closing(colis)','_reception_work_hint(colis)','sync_staff_work_actions(uuid)'] LOOP
-  IF has_function_privilege('anon','public.'||fn,'EXECUTE') OR has_function_privilege('authenticated','public.'||fn,'EXECUTE') OR has_function_privilege('service_role','public.'||fn,'EXECUTE') THEN
-   RAISE EXCEPTION 'Replaced functions changed grants: %',fn; END IF;
+  -- Never callable by the API roles. service_role keeps whatever it had before (production grants it
+  -- sync_staff_work_actions by default); the invariants compare every replaced function's ACL before and after.
+  IF has_function_privilege('anon','public.'||fn,'EXECUTE') OR has_function_privilege('authenticated','public.'||fn,'EXECUTE') THEN
+   RAISE EXCEPTION 'A replaced function is callable through the API: %',fn; END IF;
  END LOOP;
  IF has_function_privilege('anon','public.refresh_staff_work_actions()','EXECUTE') OR NOT has_function_privilege('authenticated','public.refresh_staff_work_actions()','EXECUTE') THEN
   RAISE EXCEPTION 'The refresh changed grants'; END IF;
