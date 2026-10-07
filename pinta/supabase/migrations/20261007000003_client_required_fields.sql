@@ -8,7 +8,8 @@
 -- Updating through the API never blanks nor invalidates a mandatory field. A legacy incomplete row is completed field by
 -- field: a field left unchanged, or still blank (NULL, '' and spaces alike), is not checked; a changed field must be
 -- valid. Phone, at row level: refused when the row had a valid phone, or a phone is being entered, and none of tel and
--- tel_fixe is valid afterwards (removing one of two valid phones is allowed).
+-- tel_fixe is valid afterwards (removing one of two valid phones is allowed). Every number entered or changed, mobile or landline,
+-- must itself be valid (a valid mobile does not excuse a malformed landline); an unchanged legacy number is tolerated.
 -- « Through the API » is a request under the PostgREST roles authenticated or anon. PostgREST sets that role for the whole
 -- request and the setting stays in force inside the SECURITY DEFINER commands the request calls, so the portal's
 -- update_client_profile is checked as well. The other commands writing clients change no mandatory field (points,
@@ -22,8 +23,8 @@
 
 CREATE FUNCTION guard_client_required_fields() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
 DECLARE
- new_row jsonb; old_row jsonb; item record; val text; prev text;
- phone_now boolean:=false; phone_before boolean:=false; phone_entered boolean:=false;
+ new_row jsonb; old_row jsonb; item record; ph record; val text; prev text;
+ phone_now boolean:=false; phone_before boolean:=false; phone_entered boolean:=false; phone_malformed boolean:=false;
  missing text[]:='{}'; invalid text[]:='{}'; bad text[]:='{}';
 BEGIN
  IF current_setting('role') NOT IN ('authenticated','anon') THEN RETURN NEW; END IF;
@@ -39,10 +40,15 @@ BEGIN
   phone_entered:=(nullif(btrim(NEW.tel),'') IS NOT NULL AND NEW.tel IS DISTINCT FROM OLD.tel)
    OR (nullif(btrim(NEW.tel_fixe),'') IS NOT NULL AND NEW.tel_fixe IS DISTINCT FROM OLD.tel_fixe);
  END IF;
+ -- Each number entered (INSERT) or changed (UPDATE) must be valid on its own.
+ FOR ph IN SELECT * FROM (VALUES (NEW.tel,CASE WHEN TG_OP='UPDATE' THEN OLD.tel END),(NEW.tel_fixe,CASE WHEN TG_OP='UPDATE' THEN OLD.tel_fixe END)) p(now_val,old_val) LOOP
+  CONTINUE WHEN nullif(btrim(ph.now_val),'') IS NULL OR (TG_OP='UPDATE' AND ph.now_val IS NOT DISTINCT FROM ph.old_val);
+  phone_malformed:=phone_malformed OR NOT coalesce(btrim(ph.now_val)~'^\+?[0-9 .()-]+$' AND length(regexp_replace(ph.now_val,'[^0-9]','','g'))>=9,false);
+ END LOOP;
  FOR item IN SELECT * FROM (VALUES (1,'prenom','le prénom'),(2,'nom','le nom'),(3,'email','l’email'),(4,'tel','le téléphone'),
    (5,'adresse','l’adresse'),(6,'cp','le code postal'),(7,'ville','la ville')) x(n,col,label) ORDER BY n LOOP
   IF item.col='tel' THEN
-   CONTINUE WHEN phone_now OR (TG_OP='UPDATE' AND NOT phone_before AND NOT phone_entered);
+   CONTINUE WHEN NOT phone_malformed AND (phone_now OR (TG_OP='UPDATE' AND NOT phone_before AND NOT phone_entered));
    IF nullif(btrim(NEW.tel),'') IS NULL AND nullif(btrim(NEW.tel_fixe),'') IS NULL THEN
     missing:=array_append(missing,item.label);
    ELSE

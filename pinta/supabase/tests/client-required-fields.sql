@@ -133,8 +133,8 @@ SELECT rqf_accept(rqf_insert(jsonb_build_object('tel',t)),'C5 phone «'||t||'» 
  FROM unnest(ARRAY['0692123456','+262 (0)692-12.34.56','0692.12.34.56','(0262) 41-00-00','+33 6 12 34 56 78','692123456']) t;
 -- C6 one phone is enough, the mobile or the landline; a malformed second phone does not block.
 SELECT rqf_accept(rqf_insert('{"tel":null,"tel_fixe":"0262 41 00 00"}'),'C6 a landline alone satisfies the phone');
-SELECT rqf_accept(rqf_insert('{"tel":"12","tel_fixe":"0262410000"}'),'C6 a valid landline next to a malformed mobile');
-SELECT rqf_accept(rqf_insert('{"tel_fixe":"bureau"}'),'C6 a valid mobile next to a malformed landline');
+SELECT rqf_reject(rqf_insert('{"tel":"12","tel_fixe":"0262410000"}'),'C6 a malformed mobile is refused even next to a valid landline',rqf_phone(),'client_required_fields:tel');
+SELECT rqf_reject(rqf_insert('{"tel_fixe":"bureau"}'),'C6 a malformed landline is refused even next to a valid mobile',rqf_phone(),'client_required_fields:tel');
 SELECT rqf_reject(rqf_insert('{"tel":"","tel_fixe":"12"}'),'C6 a malformed landline alone',rqf_phone(),'client_required_fields:tel');
 -- C7 postcode: 5 digits (no space: the destination is read as left(cp,3)) of a served destination.
 SELECT rqf_reject(rqf_insert(jsonb_build_object('cp',p)),'C7 postcode «'||p||'»','Code postal invalide : il doit comporter 5 chiffres.','client_required_fields:cp')
@@ -181,8 +181,7 @@ UPDATE clients SET tel_fixe=NULL WHERE id='7c200000-0000-4000-8000-000000000004'
 SELECT rqf_assert((SELECT tel='0692 00 00 01' AND tel_fixe IS NULL FROM rqf_client('7c200000-0000-4000-8000-000000000004')),'U5 one of two phones can be removed while the other stays valid');
 UPDATE clients SET tel='',tel_fixe='0262 41 00 00' WHERE id='7c200000-0000-4000-8000-000000000004';
 SELECT rqf_assert((SELECT tel='' AND tel_fixe='0262 41 00 00' FROM rqf_client('7c200000-0000-4000-8000-000000000004')),'U5 the mobile is replaced by a landline in one save');
-UPDATE clients SET tel='bureau' WHERE id='7c200000-0000-4000-8000-000000000004';
-SELECT rqf_assert((SELECT tel='bureau' FROM rqf_client('7c200000-0000-4000-8000-000000000004')),'U5 a malformed second phone does not block while a valid phone remains');
+SELECT rqf_reject($q$UPDATE clients SET tel='bureau' WHERE id='7c200000-0000-4000-8000-000000000004'$q$,'U5 a malformed mobile cannot be entered, even while a valid landline remains',rqf_phone(),'client_required_fields:tel');
 -- U6 legacy incomplete row: editable without completing everything; a completed field must be valid and stays filled.
 UPDATE clients SET notes='Ancien client' WHERE id='7c200000-0000-4000-8000-000000000002';
 -- The staff form sends '' for every empty field: still blank, so not a change.
