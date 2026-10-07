@@ -1,9 +1,11 @@
-/* The client's offer before a name: « P » Premium (gold), « F » Freemium (neutral).
-   An ended Premium is outlined and struck through; its wording says when it ended. */
-.plan-badge { display: inline-flex; align-items: center; justify-content: center; flex: none; min-width: 1.6em; height: 1.6em; padding: 0 .2em; border-radius: .4em; font-size: .875em; font-weight: 800; line-height: 1; letter-spacing: 0; cursor: default; }
+/* The client's offer before a name: « P » Premium (gold), « F » Freemium (neutral), an
+   ended Premium outlined (its screen also says it in words). Never under 12px: the letter
+   is what the team reads first. Baseline-aligned with the name it starts. */
+.plan-badge { display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; min-width: 1.45em; height: 1.45em; padding: 0 .2em; border-radius: .35em; font-size: max(12px, .875em); font-weight: 800; line-height: 1; letter-spacing: 0; vertical-align: baseline; cursor: default; }
 .plan-badge[data-plan='premium'] { background: #E8B84B; color: #1B3A4B; }
-.plan-badge[data-plan='premium'][data-ended='true'] { background: transparent; color: #7A5A12; box-shadow: inset 0 0 0 1.5px #B8862A; text-decoration: line-through; }
+.plan-badge[data-plan='premium'][data-ended='true'] { background: transparent; color: #7A5A12; box-shadow: inset 0 0 0 1.5px #B8862A; }
 .plan-badge[data-plan='freemium'] { background: #EFEBE3; color: #3F4752; box-shadow: inset 0 0 0 1px #D2CABB; }
 html.dark .plan-badge[data-plan='premium'] { background: #E8B84B; color: #122A36; }
 html.dark .plan-badge[data-plan='premium'][data-ended='true'] { background: transparent; color: #E8C779; box-shadow: inset 0 0 0 1.5px #E8C779; }
 html.dark .plan-badge[data-plan='freemium'] { background: #2F2B26; color: #E2DCD0; box-shadow: inset 0 0 0 1px #4A443C; }
+@media (forced-colors: active) { .plan-badge { forced-color-adjust: none; background: Canvas; color: CanvasText; box-shadow: inset 0 0 0 1px CanvasText; } }

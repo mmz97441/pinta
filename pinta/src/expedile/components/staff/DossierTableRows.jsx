@@ -11,6 +11,7 @@ import { clampColumnWidth, columnWidthBounds } from '../../domain/dossierTablePr
 import { consentTone, paymentTone, statusTone } from '../../domain/dossierTableTone';
 import { consentRelance, consentState, consentWaitLabel } from '../../domain/consentQueue';
 import PlanBadge from '../ui/PlanBadge';
+import { clientPlan } from '../../domain/clientPlan';
 import { clientDisplayName } from '../../domain/clientGroups';
 import { SelectionCheckbox } from './DossierGroupHeader';
 import { dossierAlertsLabel } from '../../domain/dossierAlerts';
@@ -63,12 +64,15 @@ function ClientIdentity({ client }) {
   const destination = knownDestination ? getDestByCP(client.cp) : null;
   const sector = getSecteurByCP(client?.cp);
   const zone = [destination?.label, sector ? sector[0] + sector.slice(1).toLowerCase() : ''].filter(Boolean).join(' · ');
-  // The offer at a glance, before the name: « P » Premium, « F » Freemium. An unknown client has no offer to show.
+  // The offer at a glance, before the name: « P » Premium, « F » Freemium. An ended Premium
+  // also says so in words, readable without hovering. An unknown client has no offer to show.
+  const plan = client ? clientPlan(client) : null;
   return <div>
     <span className="dossier-table-client-line">
-      {client && <PlanBadge client={client} />}
+      {plan && <PlanBadge plan={plan} />}
       <span className="dossier-table-client-name">{name}</span>
     </span>
+    {plan?.ended && <span className="dossier-table-plan-ended">{plan.label} terminé le {plan.endLabel}</span>}
     {zone && <span className="dossier-table-secondary">{zone}</span>}
   </div>;
 }

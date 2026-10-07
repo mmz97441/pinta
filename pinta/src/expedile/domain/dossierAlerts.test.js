@@ -11,7 +11,7 @@ const complete = {
   id: 'client-1', userId: 'user-1', telegramChatId: 7001, type: 'particulier',
   nom: 'Hoarau Flavie', nomFamille: 'Hoarau', prenom: 'Flavie', email: 'flavie@example.test', tel: '0692 12 34 56', telFixe: '',
   adresse: '12 rue de Paris', adresseLigne1: '12 rue de Paris', cp: '97400', ville: 'Saint-Denis', commune: '',
-  abonnement: 'freemium', abonnementFin: null,
+  abonnement: 'premium_annuel', abonnementFin: null,
 };
 const departure = (id, date) => ({ id, date, destinationCode: '974', ref: `ENV-${id}` });
 const OCT_22 = departure('reunion-22', '2026-10-22');
@@ -178,10 +178,10 @@ test('assigning a departure after the end of the subscription asks for a confirm
 });
 
 test('the subscription end is compared on its calendar day', () => {
-  assert.deepEqual(departureAfterSubscription(OCT_22, { abonnementFin: '2026-10-21' }), { departureDay: '2026-10-22', endDay: '2026-10-21' });
-  assert.equal(departureAfterSubscription(OCT_22, { abonnementFin: '2026-10-22' }), null);
-  assert.equal(departureAfterSubscription(OCT_22, { abonnementFin: 'bientôt' }), null);
-  assert.equal(departureAfterSubscription(departure('bad', '2026-02-30'), { abonnementFin: '2026-01-01' }), null);
+  assert.deepEqual(departureAfterSubscription(OCT_22, { abonnement: 'premium', abonnementFin: '2026-10-21' }), { departureDay: '2026-10-22', endDay: '2026-10-21' });
+  assert.equal(departureAfterSubscription(OCT_22, { abonnement: 'premium', abonnementFin: '2026-10-22' }), null);
+  assert.equal(departureAfterSubscription(OCT_22, { abonnement: 'premium', abonnementFin: 'bientôt' }), null);
+  assert.equal(departureAfterSubscription(departure('bad', '2026-02-30'), { abonnement: 'premium', abonnementFin: '2026-01-01' }), null);
   assert.equal(departureAfterSubscription(OCT_22, undefined), null);
 });
 
@@ -412,4 +412,11 @@ test('the five alerts keep their order: contact, billing, consent, departure to 
   assert.equal(list[3].text, 'Départ souhaité le jeudi 8 octobre : aucun départ n’est prévu ce jour-là pour la Réunion.');
   assert.equal(list[4].text, 'Le départ du jeudi 8 octobre est après la fin de son abonnement (1er octobre). Contactez le client.');
   assert.match(dossierAlertsLabel(list), /^À vérifier : Le client n’a ni espace client.* Accord du client à obtenir avant .* Départ souhaité le jeudi 8 octobre .* Contactez le client\.$/);
+});
+
+test('a Freemium client has no subscription to end: a leftover end date raises nothing', () => {
+  const former = { abonnement: 'freemium', abonnementFin: '2026-10-01' };
+  assert.equal(departureAfterSubscription(OCT_22, former), null);
+  assert.deepEqual(keys(alerts({ envoi: OCT_22.id }, former, OCT_22)), []);
+  assert.equal(subscriptionEndConfirmation(OCT_22, { ...complete, ...former }, { today }), null);
 });

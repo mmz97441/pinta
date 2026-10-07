@@ -135,6 +135,7 @@ jobs:
           node tests/client-simplicity.browser.cjs || failed_suites="$failed_suites client-simplicity.browser.cjs"
           node tests/client-dossier-detail.browser.cjs || failed_suites="$failed_suites client-dossier-detail.browser.cjs"
           node tests/client-portal.browser.cjs || failed_suites="$failed_suites client-portal.browser.cjs"
+          PINTA_SUBSCRIPTION_END_OUT=/tmp/pinta-subscription-end node tests/subscription-end.browser.cjs || failed_suites="$failed_suites subscription-end.browser.cjs"
           node tests/chat-retry.browser.cjs || failed_suites="$failed_suites chat-retry.browser.cjs"
           node tests/admin-simplicity.browser.cjs || failed_suites="$failed_suites admin-simplicity.browser.cjs"
           PINTA_CLIENT_PAGES_OUT=/tmp/pinta-client-pages node tests/client-pages.browser.cjs || failed_suites="$failed_suites client-pages.browser.cjs"

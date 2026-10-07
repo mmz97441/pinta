@@ -259,7 +259,8 @@ async function main() {
       await options.getByRole('button',{name:'Effacer ce filtre',exact:true}).click();await options.waitFor({state:'hidden'});await waitIds(f,[P,P2,P3,P4,P5,P6]);
       await assertNoBusinessChange(f,before);
     });
-    // The client's offer before the name: « P » Premium, « F » Freemium, an ended Premium marked as such.
+    // The client's offer before the name: « P » Premium, « F » Freemium, an ended Premium marked as such
+    // (in words too, readable without hovering); a dossier without a known client shows no offer.
     for(const width of [1440,390])for(const dark of [false,true])await scenario(`client-offer-reads-p-or-f-before-the-name-${width}-${dark?'dark':'light'}`,async f=>{
       await f.page.setViewportSize({width,height:width===390?844:1000});await f.context.addInitScript(dark=>localStorage.setItem('expedile-theme',dark?'dark':'light'),dark);
       const base=f.tables.clients[0];
@@ -267,7 +268,7 @@ async function main() {
       const free={...structuredClone(base),id:'c1000000-0000-4000-8000-000000000002',ref:'CLI-FREE',nom:'Freemium',prenom:'Fanny',user_id:null,abonnement:'freemium',abonnement_debut:null,abonnement_fin:null};
       const ended={...structuredClone(base),id:'c1000000-0000-4000-8000-000000000003',ref:'CLI-ENDED',nom:'Ancien',prenom:'Paul',user_id:null,abonnement:'premium_mensuel',abonnement_debut:'2019-01-01',abonnement_fin:'2020-01-31'};
       f.tables.clients.push(free,ended);
-      f.tables.colis.find(item=>item.id===P2).client_id=free.id;f.tables.colis.find(item=>item.id===P3).client_id=ended.id;
+      f.tables.colis.find(item=>item.id===P2).client_id=free.id;f.tables.colis.find(item=>item.id===P3).client_id=ended.id;f.tables.colis.find(item=>item.id===P4).client_id=null;
       const before=structuredClone(f.tables.colis);await open(f);
       const badge=id=>row(f,id).locator('.plan-badge');
       for(const [id,letter,name] of [[P,'P','Forfait Premium annuel'],[P2,'F','Forfait Freemium'],[P3,'P','Forfait Premium mensuel terminé le 31 janvier 2020']]){
@@ -277,11 +278,22 @@ async function main() {
         assert.equal(await badge(id).getAttribute('title'),name);
       }
       await settle(f);
-      for(const id of [P,P2,P3])assert.ok(await badge(id).evaluate(node=>window.__pintaContrast.text(node))>=4.5,`${id}: the letter keeps 4.5:1`);
-      // Before the name, on its first line.
-      const [b,n]=await Promise.all([badge(P).boundingBox(),row(f,P).locator('.dossier-table-client-name').boundingBox()]);
-      assert.ok(b.x<n.x,'The badge comes before the name.');
-      assert.ok(Math.abs(b.y-n.y)<12,'Badge and name share the first line.');
+      for(const id of [P,P2,P3]){
+        assert.ok(await badge(id).evaluate(node=>window.__pintaContrast.text(node))>=4.5,`${id}: the letter keeps 4.5:1`);
+        assert.ok(await badge(id).evaluate(node=>parseFloat(getComputedStyle(node).fontSize))>=12,`${id}: the letter is never under 12px`);
+      }
+      // Readable without hovering: an ended Premium says so under the name, at 4.5:1.
+      const endedLine=row(f,P3).locator('.dossier-table-plan-ended');
+      assert.equal((await endedLine.innerText()).trim(),'Premium mensuel terminé le 31 janvier 2020');
+      assert.ok(await endedLine.evaluate(node=>window.__pintaContrast.text(node))>=4.5);
+      for(const id of [P,P2])assert.equal(await row(f,id).locator('.dossier-table-plan-ended').count(),0);
+      // An unknown client: no offer is invented.
+      assert.equal(await badge(P4).count(),0);
+      assert.equal((await cell(f,P4,'client').innerText()).trim(),'Client non renseigné');
+      // Before the name's first letter, on the same line.
+      const [b,first]=await Promise.all([badge(P).boundingBox(),row(f,P).locator('.dossier-table-client-name').evaluate(node=>{const range=document.createRange();range.setStart(node.firstChild,0);range.setEnd(node.firstChild,1);const r=range.getBoundingClientRect();return{x:r.x,y:r.y,height:r.height};})]);
+      assert.ok(b.x+b.width<=first.x+1,'The badge comes before the name.');
+      assert.ok(Math.abs((b.y+b.height/2)-(first.y+first.height/2))<6,'Badge and first letter share the line.');
       await noPageOverflow(f);
       await f.page.screenshot({path:`${output}/client-offer-${width}-${dark?'dark':'light'}.png`});
       await assertNoBusinessChange(f,before);

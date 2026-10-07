@@ -931,6 +931,9 @@ html.dark .dossier-empty-action[data-primary='true'] { color: #122a36; backgroun
 .dossier-dialog-fallback-backdrop { position: fixed; inset: 0; z-index: 999; background: rgba(15, 23, 42, .45); }
 dialog.dossier-column-options[data-fallback-modal='true'] { display: block; position: fixed; z-index: 1000; margin: 0; }
 
-/* The offer badge (ui/PlanBadge) on the first line of the client's name. */
-.dossier-table-client-line { display: flex; align-items: baseline; gap: .45em; }
-.dossier-table-client-line > .dossier-table-client-name { flex: 1 1 auto; min-width: 0; }
+/* The offer badge (ui/PlanBadge) starts the client's name, which wraps under it and keeps
+   the whole cell width (a narrow column never breaks a name in the middle of a word). */
+.dossier-table-client-line { display: block; }
+.dossier-table-client-line > .dossier-table-client-name { display: inline; }
+.dossier-table-client-line > .plan-badge { margin-inline-end: .45em; }
+.dossier-table-plan-ended { display: block; margin-top: 4px; color: var(--attention-text); font-size: var(--dossier-small-text-size, 14px); font-weight: 600; }

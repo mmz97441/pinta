@@ -1,7 +1,8 @@
-import { calendarDateLabel, departureDayLabel, isoCalendarDay, parisCalendarDay } from './departureGroups.js';
+import { calendarDateLabel, departureDayLabel, isoCalendarDay } from './departureGroups.js';
 import { OPEN_DEPARTURE_STATUSES, closedDepartureWording, closingLabel, consentRelanceOpen, destinationName, dossierDepartureClosing, dossierDestinationCode, dossierWishState } from './departurePlanning.js';
 import { dossierTaskUrl } from './dossierTasks.js';
 import { paymentRecorded } from './invoiceLock.js';
+import { subscriptionEndDay } from './clientPlan.js';
 
 // « À vérifier » on a dossier: what the team checks with the client. These are
 // pointers only: nothing here blocks a step, writes or sends a message.
@@ -41,7 +42,7 @@ function dossierPage(dossier, dossierUrl) {
  * `{ departureDay, endDay }` (YYYY-MM-DD), otherwise null. */
 export function departureAfterSubscription(envoi, client) {
   const departureDay = isoCalendarDay(envoi?.date);
-  const endDay = client?.abonnementFin ? parisCalendarDay(client.abonnementFin) : null;
+  const endDay = subscriptionEndDay(client);
   return departureDay && endDay && departureDay > endDay ? { departureDay, endDay } : null;
 }
 

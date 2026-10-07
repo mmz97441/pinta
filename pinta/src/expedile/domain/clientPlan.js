@@ -1,4 +1,4 @@
-import { calendarDateLabel, isoCalendarDay, parisCalendarDay } from './departureGroups.js';
+import { calendarDateLabel, parisCalendarDay } from './departureGroups.js';
 
 // The client's offer at a glance: « P » for a paid offer (Premium monthly or yearly,
 // and the former Premium and VIP offers), « F » for Freemium.
@@ -9,6 +9,15 @@ import { calendarDateLabel, isoCalendarDay, parisCalendarDay } from './departure
 const LABELS = Object.freeze({ freemium: 'Freemium', premium: 'Premium', premium_mensuel: 'Premium mensuel', premium_annuel: 'Premium annuel', vip: 'VIP annuel' });
 const PAID = new Set(['premium', 'premium_mensuel', 'premium_annuel', 'vip']);
 const dayNumber = day => Date.parse(`${day}T00:00:00Z`) / 86400000;
+const offerOf = client => String(client?.abonnement || 'freemium');
+const isPaidOffer = offer => PAID.has(offer) || offer.startsWith('premium');
+
+/** The last day (YYYY-MM-DD, Paris) of a paid subscription; null for Freemium, whose
+ * leftover end date from a former subscription has nothing left to end. */
+export function subscriptionEndDay(client) {
+  const value = client?.abonnementFin;
+  return isPaidOffer(offerOf(client)) && value ? parisCalendarDay(value) : null;
+}
 
 /**
  * { key: 'premium' | 'freemium', letter: 'P' | 'F', label, paid, endDay, daysLeft, ended, endLabel, description }
@@ -16,10 +25,10 @@ const dayNumber = day => Date.parse(`${day}T00:00:00Z`) / 86400000;
  * - `description`: the full wording, read by screen readers and shown on hover.
  */
 export function clientPlan(client, now = Date.now()) {
-  const offer = String(client?.abonnement || 'freemium');
-  const paid = PAID.has(offer) || offer.startsWith('premium');
+  const offer = offerOf(client);
+  const paid = isPaidOffer(offer);
   const label = LABELS[offer] || (paid ? 'Premium' : 'Freemium');
-  const endDay = paid ? isoCalendarDay(String(client?.abonnementFin || '').slice(0, 10)) : null;
+  const endDay = subscriptionEndDay(client);
   const today = parisCalendarDay(now);
   const daysLeft = endDay && today ? Math.round(dayNumber(endDay) - dayNumber(today)) : null;
   const ended = daysLeft !== null && daysLeft < 0;
