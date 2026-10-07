@@ -121,8 +121,12 @@ async function run() {
       await dialog.getByPlaceholder('Rechercher un client…').fill('Nouveau test');
       await dialog.getByRole('button', { name: /Créer « Nouveau test/ }).click();
       await dialog.getByLabel('Nom *', { exact: true }).fill('Nouveau test');
-      await dialog.getByLabel('Email', { exact: true }).fill('nouveau@example.test');
+      await dialog.getByLabel('Prénom *', { exact: true }).fill('Camille');
+      await dialog.getByLabel('Téléphone mobile', { exact: true }).fill('0692 12 34 56');
+      await dialog.getByLabel('Email *', { exact: true }).fill('nouveau@example.test');
+      await dialog.getByLabel('Adresse *', { exact: true }).fill('4 rue des Lilas');
       await dialog.getByLabel('Code postal *', { exact: true }).fill('97400');
+      await dialog.getByLabel('Ville *', { exact: true }).fill('Saint-Denis');
       await dialog.getByLabel('Casier', { exact: false }).fill('C-01');
       await dialog.getByLabel('Numéro de suivi · carton 1').fill('NEW-SCAN');
       await dialog.getByRole('button', { name: 'Terminer la réception', exact: true }).click();

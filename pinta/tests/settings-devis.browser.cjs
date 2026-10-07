@@ -399,23 +399,23 @@ async function checkToasts(f) {
   } finally { await f.context.unroute('**/rest/v1/rpc/delete_admin_category'); }
   // « Client ajouté » never covers the page heading or its actions.
   await f.page.goto(`${base}/clients/new`);
-  await f.page.getByLabel('Nom *', { exact: true }).fill('Ti Kaz Import');
-  await f.page.getByLabel('Code postal de destination *').fill('97410');
-  await f.page.getByLabel('Email', { exact: true }).fill('contact@tikaz.example');
+  for (const [label, value] of Object.entries({ Nom: 'Ti Kaz Import', Prénom: 'Marie', Email: 'contact@tikaz.example', Téléphone: '0692 12 34 56', Adresse: '4 rue des Lilas', 'Code postal': '97410', Ville: 'Saint-Pierre' })) {
+    await f.page.getByLabel(label, { exact: true }).fill(value);
+  }
   await f.page.getByRole('button', { name: 'Créer le client', exact: true }).click();
   await f.page.locator('[data-toast]').filter({ hasText: 'Client ajouté' }).waitFor();
   assertToastClear(f, await toastGeometry(f), 'Client ajouté');
   await axe(f, 'client added toast'); await shot(f, 'toast-client-added');
   // A failed revocation is an error, in the error style.
+  // The share link lives in « Synthèse », the tab a client page opens on.
   await f.page.goto(`${base}/clients/${ids.C}`);
-  await f.page.getByRole('button', { name: 'Coordonnées', exact: true }).click();
   await f.page.getByRole('button', { name: 'Créer le lien de suivi', exact: true }).click();
   await f.page.getByRole('button', { name: /Révoquer/ }).first().waitFor();
   await f.context.route('**/rest/v1/share_links*', route => route.request().method() === 'PATCH' ? route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ message: 'Service indisponible (essai)' }) }) : route.fallback());
   try {
     await f.page.getByRole('button', { name: /Révoquer/ }).first().click();
     await f.page.getByRole('dialog').getByRole('button', { name: 'Révoquer', exact: true }).click();
-    const toast = f.page.locator('[data-toast]').filter({ hasText: 'Erreur : Service indisponible (essai)' });
+    const toast = f.page.locator('[data-toast]').filter({ hasText: 'Le lien n’a pas été révoqué : Service indisponible (essai)' });
     await toast.waitFor();
     const geometry = await toastGeometry(f);
     assert.equal(geometry.kind, 'error'); assert.equal(geometry.role, 'alert');

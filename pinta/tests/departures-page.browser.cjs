@@ -57,7 +57,7 @@ const EXPECTED_PARIS = {
   createdClosings: ['Clôture : mercredi 21 octobre, 17 h (heure de Paris)', 'Clôture : mercredi 28 octobre, 17 h (heure de Paris)'],
   manifest: 'Confirmé le jeudi 1er octobre, 8 h (heure de Paris) · 1 expédition · 2 colis physiques.',
   manifestLine: 'EXP-SHIPPED · 2 colis préparés · 19,5 kg',
-  recap: { september: '1 colis', october: '0 colis', defaultMonth: '9' },
+  recap: { september: '1 dossier sur la période', october: '0 dossier sur la période', defaultMonth: '9' },
 };
 const PERMISSIONS = ['perm_colis_affecter_envoi', 'perm_colis_expedier', 'perm_envois_voir', 'perm_envois_creer', 'perm_envois_modifier', 'perm_envois_reaffecter', 'perm_export_colis', 'perm_export_factures', 'perm_export_dau', 'perm_clients_voir', 'perm_export_recap_pro'];
 const only = (...granted) => Object.fromEntries(PERMISSIONS.map(key => [key, granted.includes(key)]));
@@ -208,9 +208,9 @@ async function observeParisTime(f) {
   seen.manifestLine = normalize(await manifest.locator('p').nth(1).textContent());
   await f.page.goto(`${base}/clients/${CLIENT.pro}`);
   await f.page.getByRole('button', { name: 'Abonnement et administration', exact: true }).click();
-  await f.page.getByRole('button', { name: /Facturation/ }).click();
+  await f.page.getByRole('button', { name: /Récapitulatif mensuel/ }).click();
   const month = f.page.getByLabel('Mois du récapitulatif', { exact: true });
-  const count = f.page.locator('p').filter({ hasText: /^\d+ colis$/ }).first();
+  const count = f.page.locator('p').filter({ hasText: /^\d+ dossiers? sur la période$/ }).first();
   seen.recap = { defaultMonth: await month.inputValue() };
   await f.page.getByLabel('Année du récapitulatif', { exact: true }).selectOption('2026');
   await month.selectOption('8'); seen.recap.september = await count.textContent();

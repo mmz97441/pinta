@@ -21,8 +21,11 @@ const FIELD = Object.fromEntries(REQUIRED_CLIENT_FIELDS.map(field => [field.key,
 const SERVED = Object.values(DESTINATIONS).map(destination => `${destination.nom} (${destination.code})`);
 
 export const filled = value => String(value ?? '').trim() !== '';
+/** « Téléphone » is the mobile, else the landline: either one satisfies the requirement (as in the database rule). */
+export const phoneOf = values => filled(values?.tel) ? values.tel : values?.telFixe ?? '';
+const requiredValue = (values, key) => key === 'tel' ? phoneOf(values) : values?.[key];
 const digitCount = value => (String(value ?? '').match(/\d/g) || []).length;
-const frenchList = items => items.length > 1 ? `${items.slice(0, -1).join(', ')} et ${items.at(-1)}` : items.join('');
+const frenchList = items => items.length > 1 ? `${items.slice(0, -1).join(', ')} et ${items[items.length - 1]}` : items.join('');
 
 /** The served destination of a postal code: five digits whose first three are a destination. */
 export function servedDestination(cp) {
@@ -51,7 +54,7 @@ export const blankingMessage = key => `${FIELD[key].subject} est obligatoire : $
 export function newClientErrors(values) {
   const errors = {};
   for (const { key } of REQUIRED_CLIENT_FIELDS) {
-    const value = values?.[key];
+    const value = requiredValue(values, key);
     const error = filled(value) ? requiredFieldFormatError(key, value) : missingMessage(key);
     if (error) errors[key] = error;
   }
@@ -59,7 +62,7 @@ export function newClientErrors(values) {
 }
 
 /** The value of a required field on a loaded client (the address may still be in its former column). */
-export const clientRequiredValue = (client, key) => key === 'adresseLigne1' ? client?.adresseLigne1 || client?.adresse || '' : client?.[key] ?? '';
+export const clientRequiredValue = (client, key) => key === 'adresseLigne1' ? client?.adresseLigne1 || client?.adresse || '' : key === 'tel' ? phoneOf(client) : client?.[key] ?? '';
 
 /** The required fields an existing client still misses (older records), in form order. */
 export function missingRequiredFields(client) {
@@ -71,8 +74,8 @@ export function missingRequiredFields(client) {
  * manquants », « email invalide ». '' when the row can be imported.
  */
 export function importRowIssue(row) {
-  const missing = REQUIRED_CLIENT_FIELDS.filter(({ key }) => !filled(row?.[key]));
-  const invalid = REQUIRED_CLIENT_FIELDS.filter(({ key }) => filled(row?.[key]) && requiredFieldFormatError(key, row[key]));
+  const missing = REQUIRED_CLIENT_FIELDS.filter(({ key }) => !filled(requiredValue(row, key)));
+  const invalid = REQUIRED_CLIENT_FIELDS.filter(({ key }) => filled(requiredValue(row, key)) && requiredFieldFormatError(key, requiredValue(row, key)));
   const parts = [];
   if (missing.length) {
     const feminine = missing.every(field => field.feminine);

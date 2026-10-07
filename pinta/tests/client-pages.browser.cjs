@@ -450,7 +450,7 @@ async function main() {
       await f.page.getByLabel('Présentation').selectOption('list');
       const row = f.page.getByRole('row').filter({ hasText: 'Hoarau Jean-Marc' });
       await row.getByRole('cell', { name: '@jmhoarau', exact: true }).waitFor();
-      await f.page.getByRole('row').filter({ hasText: 'Payet Flavie' }).getByRole('cell', { name: '88.00 €', exact: true }).waitFor();
+      await f.page.getByRole('row').filter({ hasText: 'Payet Flavie' }).getByRole('cell', { name: '88,00 €', exact: true }).waitFor();
       assert.equal(await f.page.getByText('dossiers chargés').count(), 0);
     });
 
@@ -612,7 +612,7 @@ async function main() {
       for (const chip of sizes) assert.ok(chip.size >= 11, `${chip.text} ${chip.size}px`);
       await header.getByText('1 dossier au total', { exact: true }).waitFor();
       await header.getByText('1 actif', { exact: true }).waitFor();
-      await header.getByText('1234.50 € encaissés', { exact: true }).waitFor();
+      await header.getByText('1 234,50 € encaissés', { exact: true }).waitFor();
       await shot(f, 'detail-header', { tall: false });
       await open(f, `/clients/${CLIENT.exemple}`, 'Exemple Camille');
       await f.page.getByText('Historique complet (1 dossier)', { exact: true }).waitFor();

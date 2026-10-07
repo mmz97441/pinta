@@ -15,6 +15,7 @@ import { useDialog } from './ui/useDialog';
 import { receptionCartons, receptionMeasurements, receptionMeasurementIssues, receptionCartonManifest, hasCompleteReceptionMeasurements, RECEPTION_MEASURES, removeReceptionCarton, RECEPTION_APPEND_STATUSES, receptionAppendBlockReason, receptionAppendImpact, receptionDossierReturn } from '../domain/reception';
 import { safeWorkReturn } from '../domain/personalWork';
 import { plural } from '../domain/plural';
+import { newClientErrors } from '../domain/clientRequirements';
 import { usePersistentDraft } from '../hooks/usePersistentDraft';
 import './reception.css';
 
@@ -368,12 +369,8 @@ export default function ColisModal({ open, onClose, initialColisId, initialClien
   const setNCField = (key, val) => setNewClientForm((prev) => ({ ...prev, [key]: val }));
 
   const validateNewClient = () => {
-    const errs = {};
-    if (!newClientForm.nom.trim() || newClientForm.nom.trim().length < 2) errs.nom = 'Nom requis (min. 2 car.)';
-    if (!newClientForm.cp.trim() || !/^9[7-8]\d{3}$/.test(newClientForm.cp.replace(/\s/g, ''))) errs.cp = 'Code postal DOM-TOM requis (97xxx)';
-    if (newClientForm.tel && !/^\+?\d[\d\s\-]{6,18}$/.test(newClientForm.tel.replace(/\s/g, ''))) errs.tel = 'Numéro invalide';
-    if (newClientForm.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newClientForm.email.trim())) errs.contact = 'Adresse email invalide';
-    if (!newClientForm.email.trim() && !newClientForm.telegramUsername.trim()) errs.contact = 'Email ou Telegram requis (au moins un moyen de contact)';
+    // The information required for every client account (domain/clientRequirements.js, same rule as the database).
+    const errs = newClientErrors(newClientForm);
     if (newClientForm.type === 'pro' && !newClientForm.raisonSociale.trim()) errs.raisonSociale = 'Raison sociale requise pour un pro';
     setNewClientErr(errs);
     return Object.keys(errs).length === 0;
@@ -1049,15 +1046,18 @@ export default function ColisModal({ open, onClose, initialColisId, initialClien
                       onChange={(e) => setNCField('nom', e.target.value)}
                       className={inputCls(newClientErr.nom)}
                     />
-                    {newClientErr.nom && <p className="mt-0.5 text-[10px] text-red-500">{newClientErr.nom}</p>}
+                    {newClientErr.nom && <p className="mt-0.5 text-[11px] text-red-500">{newClientErr.nom}</p>}
                   </div>
-                  <ReceptionInput label="Prénom"
-                    type="text"
-                    placeholder="Prénom"
-                    value={newClientForm.prenom}
-                    onChange={(e) => setNCField('prenom', e.target.value)}
-                    className={inputCls(false)}
-                  />
+                  <div>
+                    <ReceptionInput label="Prénom *"
+                      type="text"
+                      placeholder="Prénom"
+                      value={newClientForm.prenom}
+                      onChange={(e) => setNCField('prenom', e.target.value)}
+                      className={inputCls(newClientErr.prenom)}
+                    />
+                    {newClientErr.prenom && <p className="mt-0.5 text-[11px] text-red-500">{newClientErr.prenom}</p>}
+                  </div>
                   {newClientForm.type === 'particulier' && (
                     <ReceptionInput label="Date de naissance"
                       type="date"
@@ -1074,18 +1074,17 @@ export default function ColisModal({ open, onClose, initialColisId, initialClien
               {/* ── Contact ── */}
               <div className="space-y-2">
                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Contact</p>
-                {newClientErr.contact && <p className="text-[10px] text-red-500 font-bold bg-red-50 border border-red-200 rounded-lg px-2 py-1">{newClientErr.contact}</p>}
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <ReceptionInput label="Téléphone mobile"
                       type="tel"
-                      placeholder="Tél. mobile *"
+                      placeholder="Tél. mobile"
                       value={newClientForm.tel}
                       onChange={(e) => setNCField('tel', e.target.value)}
                       className={inputCls(newClientErr.tel)}
                       style={{ fontFamily: 'monospace' }}
                     />
-                    {newClientErr.tel && <p className="mt-0.5 text-[10px] text-red-500">{newClientErr.tel}</p>}
+                    {newClientErr.tel && <p className="mt-0.5 text-[11px] text-red-500">{newClientErr.tel}</p>}
                   </div>
                   <ReceptionInput label="Téléphone fixe"
                     type="tel"
@@ -1096,14 +1095,18 @@ export default function ColisModal({ open, onClose, initialColisId, initialClien
                     style={{ fontFamily: 'monospace' }}
                   />
                 </div>
+                <p className="text-[11px] text-gray-500">Un numéro mobile ou fixe est obligatoire.</p>
                 <div className="grid grid-cols-2 gap-2">
-                  <ReceptionInput label="Email"
-                    type="email"
-                    placeholder="Email *"
-                    value={newClientForm.email}
-                    onChange={(e) => setNCField('email', e.target.value)}
-                    className={inputCls(false)}
-                  />
+                  <div>
+                    <ReceptionInput label="Email *"
+                      type="email"
+                      placeholder="Email"
+                      value={newClientForm.email}
+                      onChange={(e) => setNCField('email', e.target.value)}
+                      className={inputCls(newClientErr.email)}
+                    />
+                    {newClientErr.email && <p className="mt-0.5 text-[11px] text-red-500">{newClientErr.email}</p>}
+                  </div>
                   <ReceptionInput label="Identifiant Telegram"
                     type="text"
                     placeholder="@identifiant"
@@ -1117,13 +1120,16 @@ export default function ColisModal({ open, onClose, initialColisId, initialClien
               {/* ── Adresse livraison ── */}
               <div className="space-y-2">
                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Adresse de livraison</p>
-                <ReceptionInput label="Adresse"
-                  type="text"
-                  placeholder="Adresse ligne 1 *"
-                  value={newClientForm.adresseLigne1}
-                  onChange={(e) => setNCField('adresseLigne1', e.target.value)}
-                  className={inputCls(false)}
-                />
+                <div>
+                  <ReceptionInput label="Adresse *"
+                    type="text"
+                    placeholder="Adresse ligne 1"
+                    value={newClientForm.adresseLigne1}
+                    onChange={(e) => setNCField('adresseLigne1', e.target.value)}
+                    className={inputCls(newClientErr.adresseLigne1)}
+                  />
+                  {newClientErr.adresseLigne1 && <p className="mt-0.5 text-[11px] text-red-500">{newClientErr.adresseLigne1}</p>}
+                </div>
                 <ReceptionInput label="Complément d’adresse"
                   type="text"
                   placeholder="Adresse ligne 2 (complément)"
@@ -1141,15 +1147,18 @@ export default function ColisModal({ open, onClose, initialColisId, initialClien
                       className={inputCls(newClientErr.cp)}
                       style={{ fontFamily: 'monospace' }}
                     />
-                    {newClientErr.cp && <p className="mt-0.5 text-[10px] text-red-500">{newClientErr.cp}</p>}
+                    {newClientErr.cp && <p className="mt-0.5 text-[11px] text-red-500">{newClientErr.cp}</p>}
                   </div>
-                  <ReceptionInput label="Ville"
-                    type="text"
-                    placeholder="Ville"
-                    value={newClientForm.ville}
-                    onChange={(e) => setNCField('ville', e.target.value)}
-                    className={inputCls(false)}
-                  />
+                  <div>
+                    <ReceptionInput label="Ville *"
+                      type="text"
+                      placeholder="Ville"
+                      value={newClientForm.ville}
+                      onChange={(e) => setNCField('ville', e.target.value)}
+                      className={inputCls(newClientErr.ville)}
+                    />
+                    {newClientErr.ville && <p className="mt-0.5 text-[11px] text-red-500">{newClientErr.ville}</p>}
+                  </div>
                   <ReceptionInput label="Commune"
                     type="text"
                     placeholder="Commune"
