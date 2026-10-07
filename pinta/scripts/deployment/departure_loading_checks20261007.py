@@ -51,9 +51,9 @@ REPORTED = {
 COMMANDS = ['record_loading_check(uuid,uuid,integer,integer,text)', 'record_loading_count(uuid,uuid,integer)',
             'clear_loading_checks(uuid,uuid)', 'get_loading_checks(uuid)']
 HELPERS = ['_loading_expected_parcels(colis)', '_loading_checker_name(uuid)', '_loading_check_json(departure_loading_checks)',
-           '_loading_check_target(uuid,uuid,boolean)']
+           '_loading_check_target(uuid,uuid,boolean)', '_loading_checks_forget()']
 NEW_NAMES = ['record_loading_check', 'record_loading_count', 'clear_loading_checks', 'get_loading_checks',
-             '_loading_expected_parcels', '_loading_checker_name', '_loading_check_json', '_loading_check_target']
+             '_loading_expected_parcels', '_loading_checker_name', '_loading_check_json', '_loading_check_target', '_loading_checks_forget']
 RELIED = ','.join("'" + signature + "'" for signature in sorted({**EXPECTED_SOURCE, **REPORTED}))
 CREATED = ','.join("'" + name + "'" for name in NEW_NAMES)
 # The answer to a call under the API role without permission (post check).
@@ -139,6 +139,9 @@ BEGIN
   OR NOT EXISTS(SELECT 1 FROM pg_indexes WHERE schemaname='public' AND tablename='departure_loading_checks' AND indexname='departure_loading_checks_colis') THEN
   RAISE EXCEPTION 'Unexpected key, foreign keys, checks or index of departure_loading_checks'; END IF;
  IF EXISTS(SELECT 1 FROM public.departure_loading_checks) THEN RAISE EXCEPTION 'The release must not record any check'; END IF;
+ IF NOT EXISTS(SELECT 1 FROM pg_trigger t WHERE t.tgrelid='public.colis'::regclass AND t.tgname='colis_loading_checks_forget' AND NOT t.tgisinternal
+   AND t.tgfoid='public._loading_checks_forget()'::regprocedure AND t.tgenabled='O') THEN
+  RAISE EXCEPTION 'The trigger forgetting the checks of a dossier that leaves or is prepared again is missing'; END IF;
  FOREACH fn IN ARRAY ARRAY[""" + ','.join("'" + signature + "'" for signature in COMMANDS) + r"""] LOOP
   IF has_function_privilege('anon','public.'||fn,'EXECUTE') OR has_function_privilege('service_role','public.'||fn,'EXECUTE') OR NOT has_function_privilege('authenticated','public.'||fn,'EXECUTE')
    OR EXISTS(SELECT 1 FROM pg_proc p CROSS JOIN LATERAL aclexplode(p.proacl) a WHERE p.oid=('public.'||fn)::regprocedure AND a.grantee=0)

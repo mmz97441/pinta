@@ -78,6 +78,22 @@ BEGIN
  RETURN c;
 END; $$;
 
+-- A check vouches for the parcels of the current preparation, handed over for this departure. A dossier that leaves the
+-- departure (reassigned, deferred at confirmation, detached) or is prepared again loses its checks: an older check never
+-- vouches for other boxes or another departure. The confirmed manifest has already kept the evidence of loaded dossiers.
+CREATE FUNCTION _loading_checks_forget() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
+BEGIN
+ DELETE FROM departure_loading_checks k WHERE k.colis_id=NEW.id
+  AND (k.envoi_id IS DISTINCT FROM NEW.envoi_id
+   OR OLD.final_measurements_version IS DISTINCT FROM NEW.final_measurements_version
+   OR OLD.preparation_composition_version IS DISTINCT FROM NEW.preparation_composition_version);
+ RETURN NULL;
+END; $$;
+CREATE TRIGGER colis_loading_checks_forget AFTER UPDATE OF envoi_id,final_measurements_version,preparation_composition_version ON colis
+ FOR EACH ROW WHEN (OLD.envoi_id IS DISTINCT FROM NEW.envoi_id OR OLD.final_measurements_version IS DISTINCT FROM NEW.final_measurements_version
+  OR OLD.preparation_composition_version IS DISTINCT FROM NEW.preparation_composition_version)
+ EXECUTE FUNCTION _loading_checks_forget();
+
 -- One label scanned (handheld scanner or camera) for a dossier of the departure. Returns {status 'recorded'|'already',
 -- checked, expected, check}: a label scanned again keeps its first check (who, when, method).
 CREATE FUNCTION record_loading_check(p_envoi_id uuid,p_colis_id uuid,p_parcel_index integer,p_parcel_count integer,p_method text) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
@@ -216,4 +232,4 @@ END; $$;
 
 REVOKE ALL ON FUNCTION record_loading_check(uuid,uuid,integer,integer,text),record_loading_count(uuid,uuid,integer),clear_loading_checks(uuid,uuid),get_loading_checks(uuid) FROM PUBLIC,anon,service_role;
 GRANT EXECUTE ON FUNCTION record_loading_check(uuid,uuid,integer,integer,text),record_loading_count(uuid,uuid,integer),clear_loading_checks(uuid,uuid),get_loading_checks(uuid) TO authenticated;
-REVOKE ALL ON FUNCTION _loading_expected_parcels(colis),_loading_checker_name(uuid),_loading_check_json(departure_loading_checks),_loading_check_target(uuid,uuid,boolean) FROM PUBLIC,anon,authenticated,service_role;
+REVOKE ALL ON FUNCTION _loading_expected_parcels(colis),_loading_checker_name(uuid),_loading_check_json(departure_loading_checks),_loading_check_target(uuid,uuid,boolean),_loading_checks_forget() FROM PUBLIC,anon,authenticated,service_role;

@@ -14,7 +14,7 @@ BEGIN
    OR NOT (SELECT prosecdef AND proconfig @> ARRAY['search_path=public, pg_temp'] AND proowner=owner FROM pg_proc WHERE oid=fn::regprocedure) THEN
    RAISE EXCEPTION 'FAIL: command security %',fn; END IF;
  END LOOP;
- FOREACH fn IN ARRAY ARRAY['_loading_expected_parcels(colis)','_loading_checker_name(uuid)','_loading_check_json(departure_loading_checks)','_loading_check_target(uuid,uuid,boolean)'] LOOP
+ FOREACH fn IN ARRAY ARRAY['_loading_expected_parcels(colis)','_loading_checker_name(uuid)','_loading_check_json(departure_loading_checks)','_loading_checks_forget()','_loading_check_target(uuid,uuid,boolean)'] LOOP
   IF has_function_privilege('anon',fn,'EXECUTE') OR has_function_privilege('authenticated',fn,'EXECUTE') OR has_function_privilege('service_role',fn,'EXECUTE')
    OR NOT (SELECT proconfig @> ARRAY['search_path=public, pg_temp'] AND proowner=owner FROM pg_proc WHERE oid=fn::regprocedure) THEN
    RAISE EXCEPTION 'FAIL: private helper executable or without fixed search_path %',fn; END IF;
@@ -339,13 +339,33 @@ SELECT lc_assert((SELECT snapshot#>'{items,0,loading_checks}'=jsonb_build_array(
   FROM lc_manifest),'C8 the manifest keeps each loaded dossier''s checks: parcel, method, who and when');
 SELECT lc_assert((SELECT count(*)=3 AND bool_and(colis_id IN ('1c300000-0000-4000-8000-000000000011','1c300000-0000-4000-8000-000000000012')) FROM get_loading_checks('1c400000-0000-4000-8000-000000000005')),'C8 after the departure, the reading keeps the loaded dossiers'' checks only');
 SELECT lc_as('postgres');
-SELECT lc_assert((SELECT count(*)=1 FROM departure_loading_checks WHERE colis_id='1c300000-0000-4000-8000-000000000013'),'C8 the partial check of a deferred dossier stays stored, outside the reading');
+SELECT lc_assert(NOT EXISTS(SELECT 1 FROM departure_loading_checks WHERE colis_id='1c300000-0000-4000-8000-000000000013'),'C8 a deferred dossier leaves the departure with no check left: the next departure checks its parcels again');
 SELECT lc_as('expediteur');
 SELECT lc_reject($q$SELECT record_loading_check('1c400000-0000-4000-8000-000000000005','1c300000-0000-4000-8000-000000000011',1,2,'scan')$q$,'C8 once confirmed, nothing more is checked','22023','loading_check:departure_closed');
 SELECT lc_reject($q$SELECT clear_loading_checks('1c400000-0000-4000-8000-000000000005','1c300000-0000-4000-8000-000000000011')$q$,'C8 once confirmed, the evidence cannot be cleared','22023','loading_check:departure_closed');
 SELECT lc_as('postgres');
 SELECT lc_assert((SELECT detail::jsonb->'loaded_ids'=jsonb_build_array('1c300000-0000-4000-8000-000000000011','1c300000-0000-4000-8000-000000000012') AND (detail::jsonb->>'physical_parcels')::integer=3
   FROM audit_actions WHERE action='departure_confirmed' AND detail::jsonb->>'envoi_id'='1c400000-0000-4000-8000-000000000005'),'C8 unchanged audit of the confirmation');
+-- ── C9. A check vouches for the current preparation on this departure only ──
+INSERT INTO envois(id,ref,destination_code,date_depart,statut) VALUES('1c400000-0000-4000-8000-000000000007','LC-ENV-7','974',(now() AT TIME ZONE 'Europe/Paris')::date+21,'planifie');
+UPDATE colis SET envoi_id='1c400000-0000-4000-8000-000000000007' WHERE id='1c300000-0000-4000-8000-000000000015';
+SELECT lc_as('expediteur');
+SELECT record_loading_check('1c400000-0000-4000-8000-000000000007','1c300000-0000-4000-8000-000000000015',1,1,'scan');
+SELECT lc_as('postgres');
+UPDATE colis SET final_measurements_version=final_measurements_version+1,preparation_composition_version=preparation_composition_version+1 WHERE id='1c300000-0000-4000-8000-000000000015';
+SELECT lc_assert(NOT EXISTS(SELECT 1 FROM departure_loading_checks WHERE colis_id='1c300000-0000-4000-8000-000000000015'),'C9 a dossier prepared again loses its checks: its new boxes are checked again');
+SELECT lc_as('expediteur');
+SELECT record_loading_check('1c400000-0000-4000-8000-000000000007','1c300000-0000-4000-8000-000000000015',1,1,'scan');
+SELECT lc_as('postgres');
+UPDATE colis SET statut=statut WHERE id='1c300000-0000-4000-8000-000000000015';
+SELECT lc_assert(EXISTS(SELECT 1 FROM departure_loading_checks WHERE colis_id='1c300000-0000-4000-8000-000000000015'),'C9 any other change of the dossier keeps its checks');
+UPDATE colis SET envoi_id='1c400000-0000-4000-8000-000000000002' WHERE id='1c300000-0000-4000-8000-000000000015';
+UPDATE colis SET envoi_id='1c400000-0000-4000-8000-000000000007' WHERE id='1c300000-0000-4000-8000-000000000015';
+SELECT lc_assert(NOT EXISTS(SELECT 1 FROM departure_loading_checks WHERE colis_id='1c300000-0000-4000-8000-000000000015'),'C9 a dossier moved off its departure and back is checked again');
+DELETE FROM envois WHERE id='1c400000-0000-4000-8000-000000000007' AND NOT EXISTS(SELECT 1 FROM colis WHERE envoi_id='1c400000-0000-4000-8000-000000000007');
+UPDATE colis SET envoi_id=NULL WHERE id='1c300000-0000-4000-8000-000000000015';
+DELETE FROM envois WHERE id='1c400000-0000-4000-8000-000000000007';
+
 -- Deleting a departure that never left removes its checks with it.
 INSERT INTO envois(id,ref,destination_code,date_depart,statut) VALUES('1c400000-0000-4000-8000-000000000006','LC-ENV-6','974',(now() AT TIME ZONE 'Europe/Paris')::date+14,'planifie');
 UPDATE colis SET envoi_id='1c400000-0000-4000-8000-000000000006' WHERE id='1c300000-0000-4000-8000-000000000015';

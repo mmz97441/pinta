@@ -305,6 +305,8 @@ export default function StaffDepartures({ embedded = false }) {
         await loadChecks(review.envoi.id).catch(() => {});
         throw new Error(explained.message);
       }
+      // No answer at all (connection lost): the confirmation may or may not have been recorded.
+      if (!issue?.code) throw new Error('La connexion a été interrompue : le départ n’est peut-être pas confirmé. Actualisez le chargement avant de réessayer.');
       throw issue;
     }
     const id = review.envoi.id;
