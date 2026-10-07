@@ -247,9 +247,14 @@ async function failColisLoad(f) {
    assert.equal(await focused(displayButton(f)), true);
    assert.equal(await table.getByRole('columnheader', { name: 'Casier', exact: true }).count(), 0);
    dialog = await display(f);
+   // One step at a time: each click is applied before the next one (a quick second click could be lost on a slow machine).
+   const sizeField = dialog.getByLabel('Taille du texte des tâches', { exact: true });
+   const sizeIs = async value => { for (let attempt = 0; attempt < 30 && await sizeField.inputValue() !== value; attempt += 1) await f.page.waitForTimeout(100); return sizeField.inputValue(); };
+   const before = Number(await sizeField.inputValue());
    await dialog.getByRole('button', { name: 'Agrandir le texte des tâches', exact: true }).click();
+   assert.equal(await sizeIs(String(before + 1)), String(before + 1));
    await dialog.getByRole('button', { name: 'Agrandir le texte des tâches', exact: true }).click();
-   assert.equal(await dialog.getByLabel('Taille du texte des tâches', { exact: true }).inputValue(), '17');
+   assert.equal(await sizeIs('17'), '17');
    await closeDisplay(f);
    assert.equal(await fontSize(), 17);
    await f.page.reload(); await f.page.getByRole('heading', { name: 'Mon travail', exact: true }).waitFor();
