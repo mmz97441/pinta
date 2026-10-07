@@ -13,7 +13,7 @@ export const PERMISSION_CATEGORIES = [
       { key: 'perm_colis_calculer_devis', label: 'Calculer le devis' },
       { key: 'perm_colis_envoyer_devis', label: 'Envoyer le devis au client' },
       { key: 'perm_colis_confirmer_paiement', label: 'Confirmer un paiement' },
-      { key: 'perm_colis_affecter_envoi', label: 'Affecter à un envoi' },
+      { key: 'perm_colis_affecter_envoi', label: 'Affecter à un départ' },
       { key: 'perm_colis_expedier', label: 'Expédier' },
       { key: 'perm_colis_changer_statut_expedition', label: 'Changer le statut d\'expédition' },
       { key: 'perm_colis_annuler', label: 'Annuler un colis' },
@@ -44,18 +44,18 @@ export const PERMISSION_CATEGORIES = [
   {
     key: 'comm', label: 'Communication', permissions: [
       { key: 'perm_comm_telegram', label: 'Envoyer un message Telegram' },
-      { key: 'perm_comm_email', label: 'Envoyer un email' },
+      { key: 'perm_comm_email', label: 'Préparer un email (brouillon)' },
       { key: 'perm_comm_demander_facture', label: 'Demander une facture au client' },
       { key: 'perm_comm_message_libre', label: 'Envoyer un message libre' },
       { key: 'perm_comm_voir_chat_autres', label: 'Voir le chat des autres utilisateurs' },
     ],
   },
   {
-    key: 'envois', label: 'Envois', permissions: [
-      { key: 'perm_envois_voir', label: 'Voir les envois' },
-      { key: 'perm_envois_creer', label: 'Créer un envoi' },
-      { key: 'perm_envois_modifier', label: 'Modifier un envoi' },
-      { key: 'perm_envois_reaffecter', label: 'Réaffecter un colis à un autre envoi' },
+    key: 'envois', label: 'Départs', permissions: [
+      { key: 'perm_envois_voir', label: 'Voir les départs' },
+      { key: 'perm_envois_creer', label: 'Créer un départ' },
+      { key: 'perm_envois_modifier', label: 'Modifier un départ' },
+      { key: 'perm_envois_reaffecter', label: 'Réaffecter un colis à un autre départ' },
       { key: 'perm_envois_etiquettes', label: 'Imprimer les étiquettes' },
     ],
   },

@@ -55,12 +55,72 @@ import './components/detail/dossierConversation.css';
 import AuditLog from './components/detail/AuditLog';
 import { DOSSIER_TASKS, dossierTaskUrl, resolveDossierTask } from './domain/dossierTasks';
 
-function LoadingView({ label = 'Chargement de votre espace…' }) {
-  return <div role="status" aria-live="polite" className="max-w-5xl mx-auto w-full p-6 space-y-5">
+// ── Loading views ──
+// One neutral skeleton for every screen, on the page gutters, so the heading
+// appears where its placeholder was. bg-gray-200 stays visible on the page
+// background in both themes (brand.css maps it in dark mode).
+const BONE = 'animate-pulse rounded-lg bg-gray-200';
+const APP_FONT = "system-ui, -apple-system, 'Segoe UI', sans-serif";
+function LoadingView({ label = 'Chargement de votre espace…', bare = false }) {
+  return <div role="status" aria-live="polite" aria-busy="true" data-testid="loading-view" className={bare ? 'w-full space-y-4' : 'mx-auto w-full max-w-[1600px] space-y-4 px-4 py-4 sm:px-6 lg:px-8'}>
     <p className="text-sm font-semibold text-gray-600">{label}</p>
-    <div className="h-8 w-1/2 rounded-xl bg-gray-100 animate-pulse" />
-    <div className="grid grid-cols-2 gap-4">{[0, 1, 2, 3].map((i) => <div key={i} className="h-28 rounded-xl bg-gray-100 animate-pulse" />)}</div>
+    <div aria-hidden="true" className="space-y-4">
+      <div className={`${BONE} h-8 w-64 max-w-[75%]`} />
+      <div className={`${BONE} h-4 w-[28rem] max-w-full`} />
+      <div className="flex gap-2 pt-1"><div className={`${BONE} h-11 w-32`} /><div className={`${BONE} h-11 w-24`} /></div>
+      <div className="space-y-2">{[0, 1, 2, 3, 4].map((row) => <div key={row} className={`${BONE} h-16 w-full`} />)}</div>
+    </div>
   </div>;
+}
+const Logo = () => <b className="text-lg text-white tracking-tight">EXPÉD<span style={{ color: BRAND.gold }}>ÎLE</span></b>;
+/** The staff shell (navy navigation column, mobile bars) with neutral placeholders: same sizes as the real one. */
+function StaffShellSkeleton() {
+  return <div data-testid="shell-skeleton" data-shell="staff" style={{ fontFamily: APP_FONT }} className="h-[100dvh] flex overflow-hidden">
+    <div aria-hidden="true" className="hidden lg:flex w-[220px] flex-shrink-0 flex-col border-r border-gray-800" style={{ background: 'linear-gradient(180deg, #122A36 0%, #1B3A4B 100%)' }}>
+      <div className="px-4 py-4"><Logo /></div>
+      <div className="mx-3 mb-2 h-[3.75rem] rounded-xl bg-white/10" />
+      <div className="flex-1 space-y-1 px-3">{[96, 132, 112, 72, 80, 72, 96].map((width, item) => <div key={item} className="flex h-11 items-center gap-3 px-3"><div className="h-[18px] w-[18px] shrink-0 rounded-md bg-white/10" /><div className="h-3 rounded bg-white/10" style={{ width }} /></div>)}</div>
+      <div className="border-t border-white/10 px-3 pb-3 pt-3"><div className="flex items-center gap-2.5"><div className="h-8 w-8 shrink-0 rounded-full bg-white/10" /><div className="h-3 w-24 rounded bg-white/10" /></div><div className="mt-2 h-10" /></div>
+    </div>
+    <div className="flex-1 flex flex-col min-w-0 bg-gray-50">
+      <div aria-hidden="true" className="lg:hidden min-h-12 px-4 flex items-center justify-between border-b border-gray-200"><span className="font-black brand-t">EXPÉD<span className="brand-t-gold">ÎLE</span></span><div className="flex items-center gap-2"><div className={`${BONE} h-8 w-24`} /><div className={`${BONE} h-8 w-8`} /></div></div>
+      <div className="flex-1 min-h-0 overflow-hidden pb-[calc(4.5rem+env(safe-area-inset-bottom))] lg:pb-0"><LoadingView /></div>
+    </div>
+    <div aria-hidden="true" className="lg:hidden fixed bottom-0 left-0 right-0 z-50 border-t border-gray-200 flex items-center justify-around py-2 px-1" style={{ background: 'var(--bg-elevated)', paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }}>
+      {[0, 1, 2, 3].map((item) => <div key={item} className="flex-1 min-h-11 flex flex-col items-center justify-center gap-0.5 px-1 py-1"><div className="h-5 w-5 rounded-md bg-gray-200" /><div className="h-2.5 w-12 rounded bg-gray-200" /></div>)}
+    </div>
+  </div>;
+}
+/** The client portal shell: header bar and bottom navigation, with neutral placeholders. */
+function ClientShellSkeleton() {
+  return <div data-testid="shell-skeleton" data-shell="client" style={{ fontFamily: APP_FONT, background: 'var(--bg-canvas)' }} className="min-h-[100dvh]">
+    <div aria-hidden="true" className="glass-dark border-b border-white border-opacity-5 px-4 py-3.5 flex items-center justify-between sticky top-0 z-20" style={{ background: 'linear-gradient(135deg, rgba(18,42,54,0.98), rgba(27,58,75,0.98))' }}>
+      {/* Same height as the header buttons: 40 px, 44 px on touch and narrow screens (brand.css). */}
+      <Logo /><div className="flex items-center gap-2"><div className="h-10 w-10 rounded-xl bg-white/10 max-lg:h-11 [@media(pointer:coarse)]:h-11" /><div className="h-10 w-28 rounded-xl bg-white/10 max-lg:h-11 [@media(pointer:coarse)]:h-11" /></div>
+    </div>
+    <div className="max-w-xl md:max-w-3xl lg:max-w-5xl xl:max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4 space-y-4"><div className="pb-20"><LoadingView bare /></div></div>
+    <div aria-hidden="true" className="fixed bottom-0 left-0 right-0 glass-nav z-40" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+      <div className="flex max-w-xl md:max-w-3xl lg:max-w-5xl xl:max-w-6xl mx-auto">{[0, 1, 2, 3].map((item) => <div key={item} className="flex-1 flex flex-col items-center py-2"><div className="h-[33px] w-[33px] rounded-xl bg-gray-200" /><div className="mt-0.5 h-5 w-14 rounded bg-gray-200" /></div>)}</div>
+    </div>
+  </div>;
+}
+// The portal of the last session on this device, so a client does not see the staff shell first.
+const SHELL_HINT = 'expedile-shell';
+const readShellHint = () => { try { return localStorage.getItem(SHELL_HINT); } catch { return null; } };
+// Supabase Auth keeps a restored session as sb-<project>-auth-token; without one, the login page comes next.
+const hasStoredSession = () => { try { return Object.keys(localStorage).some((key) => /^sb-.+-auth-token$/.test(key)); } catch { return false; } };
+/** While the session is restored and the data load. The placeholders only shape the screen: the portal itself
+ * is still decided by the resolved profile (auth.type), never by this hint. */
+function AppLoading() {
+  const { auth } = useApp();
+  const kind = auth ? (auth.type === 'staff' ? 'staff' : 'client') : !hasStoredSession() ? 'none' : readShellHint() === 'client' ? 'client' : 'staff';
+  useEffect(() => {
+    if (!auth) return;
+    try { localStorage.setItem(SHELL_HINT, kind); } catch { /* the hint only shapes a placeholder */ }
+  }, [auth, kind]);
+  if (kind === 'staff') return <StaffShellSkeleton />;
+  if (kind === 'client') return <ClientShellSkeleton />;
+  return <div className="min-h-[100dvh] flex items-center"><LoadingView /></div>;
 }
 
 class ScreenBoundary extends React.Component {
@@ -232,10 +292,10 @@ function ClientColisDetail() {
     return () => { active = false; setSelId(null); };
   }, [id, setSelId, refreshColis]);
 
-  if (dataLoading || detailLoading) return <LoadingView label="Chargement du dossier…" />;
+  if (dataLoading || detailLoading) return <LoadingView bare label="Chargement du dossier…" />;
   if (detailError) return <div role="alert" className="p-6 text-sm text-red-700">{detailError}<button onClick={() => window.location.reload()} className="block min-h-11 font-semibold underline">Réessayer</button></div>;
   if (!data.some((c) => c.id === id)) return <MissingColis isClient />;
-  if (!sel || sel.id !== id) return <LoadingView label="Ouverture du dossier…" />;
+  if (!sel || sel.id !== id) return <LoadingView bare label="Ouverture du dossier…" />;
 
   return (
     <div className="space-y-4">
@@ -255,7 +315,7 @@ function AppContent() {
   useEffect(() => { setOnboardingDismissed(false); }, [auth?.session?.user?.id]);
   const needsPassword = passwordRecovery || auth?.u?.mustChangePassword || location.pathname === '/password';
 
-  if (authLoading) return <div className="min-h-[100dvh] flex items-center"><LoadingView /></div>;
+  if (authLoading) return <AppLoading />;
   if (!auth) return <LoginPage />;
 
   const handleLogout = async () => {
@@ -530,7 +590,7 @@ function AppContent() {
               }}
             />
           )}
-          {dataLoading ? <LoadingView /> : <Suspense fallback={<LoadingView />}><ScreenBoundary key={location.pathname}><Routes>
+          {dataLoading ? <LoadingView bare /> : <Suspense fallback={<LoadingView bare />}><ScreenBoundary key={location.pathname}><Routes>
             <Route path="/" element={<ClientAccueil />} />
             <Route path="/colis" element={<ClientColis />} />
             <Route path="/colis/:id" element={<ClientColisDetail />} />

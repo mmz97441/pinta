@@ -822,8 +822,8 @@ export function AppProvider({ children }) {
     if (!category) throw new Error('Catégorie introuvable. Rechargez les paramètres.');
     await sb.deleteAdminCategory(id, { label: category.label, codeHs: category.codeHs || '', taux: category.taux });
     setCategories(previous => previous.filter(cat => cat.id !== id));
-    flash('Catégorie supprimée');
-  }, [categories, flash]);
+    // Paramètres confirms the deletion inline, like every other setting: no toast on top.
+  }, [categories]);
   const saveSettings = useCallback(async (values, expected = adminSettingsBaseline.business ?? null) => {
     const saved = await sb.saveSetting('business', values, expected);
     setSettings(saved); setAdminSettingsBaseline(previous => ({ ...previous, business: saved }));

@@ -37,10 +37,10 @@ async function main() {
       const measures = f.page.getByRole('region', { name: 'Mesures des cartons', exact: true });
       await measures.getByText('Totaux à réception', { exact: true }).waitFor();
       await measures.locator('summary').filter({ hasText: 'Comprendre le poids facturable' }).click();
-      assert.equal(await measures.getByText('2.67 kg', { exact: true }).count(), 2);
+      assert.equal(await measures.getByText('2,67 kg', { exact: true }).count(), 2);
       await measures.locator('summary').filter({ hasText: 'Détail du poids facturable après optimisation' }).click();
-      await measures.getByText('Poids volumétrique : 1.33 kg · Poids facturable : 2.00 kg', { exact: true }).waitFor();
-      assert.equal(await measures.getByText(/10\.67|99 kg/).count(), 0);
+      await measures.getByText('Poids volumétrique : 1,33 kg · Poids facturable : 2 kg', { exact: true }).waitFor();
+      assert.equal(await measures.getByText(/10[.,]67|99 kg/).count(), 0);
       await measures.scrollIntoViewIfNeeded();
       await f.page.screenshot({ path: path.join(out, `mesures-config-${mobile ? 'mobile' : 'desktop'}.png`), fullPage: true });
       f.tables.colis[0].nb_colis = 3;
@@ -51,7 +51,7 @@ async function main() {
       await measures.getByText(/Complétez les mesures de chaque carton pour obtenir le total à réception/).waitFor();
       assert.equal(await measures.getByText('Totaux à réception', { exact: true }).count(), 0);
       await measures.getByText('Mesures après optimisation à compléter ; aucun poids calculé.', { exact: true }).waitFor();
-      assert.equal(await measures.getByText('Poids volumétrique : 1.33 kg · Poids facturable : 2.00 kg', { exact: true }).count(), 0);
+      assert.equal(await measures.getByText('Poids volumétrique : 1,33 kg · Poids facturable : 2 kg', { exact: true }).count(), 0);
       f.tables.colis[0].final_packages = [];
       f.tables.colis[0].fin_w = 20;
       await f.page.reload();

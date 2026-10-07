@@ -1,4 +1,6 @@
-import { eur, getPrenom } from '../utils';
+// Message amounts keep the format of the Edge renderer (_shared/messageTemplate.ts):
+// the preview must stay identical to the delivered text.
+import { messageEur as eur, getPrenom } from '../utils';
 import { receptionCartonManifest, hasCompleteReceptionMeasurements } from '../domain/reception';
 import { measureShipment, volumetricDivisor } from '../domain/quote';
 import { invoiceRequestText } from '../domain/invoiceRequest';

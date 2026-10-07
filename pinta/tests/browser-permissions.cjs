@@ -242,15 +242,15 @@ async function main() {
     await scenario('per-user-drafts-and-direction-fixed-access', {}, async f => {
       await openPermissions(f); await check(f, 'Mesurer / peser').check();
       await selectUser(f, 'Jo Transport'); assert.equal(await check(f, 'Mesurer / peser').isChecked(), false);
-      await check(f, 'Voir les envois').check();
-      await selectUser(f, 'Alex Mesures'); assert.equal(await check(f, 'Mesurer / peser').isChecked(), true); assert.equal(await check(f, 'Voir les envois').isChecked(), false);
+      await check(f, 'Voir les départs').check();
+      await selectUser(f, 'Alex Mesures'); assert.equal(await check(f, 'Mesurer / peser').isChecked(), true); assert.equal(await check(f, 'Voir les départs').isChecked(), false);
       await noWrites(f); await save(f).click(); await saved(f);
       assert.equal(f.calls[0].p_staff_id, TARGET);
-      await selectUser(f, 'Jo Transport'); assert.equal(await check(f, 'Voir les envois').isChecked(), true);
+      await selectUser(f, 'Jo Transport'); assert.equal(await check(f, 'Voir les départs').isChecked(), true);
       assert.equal(f.records.get(SECOND).perm_envois_voir, false, 'Saving Alex never writes Jo’s draft');
       await f.page.getByRole('button', { name: 'Modèles de messages', exact: true }).click();
       await f.page.getByRole('button', { name: 'Équipe et accès', exact: true }).click();
-      await selectUser(f, 'Jo Transport'); assert.equal(await check(f, 'Voir les envois').isChecked(), true, 'A settings-tab change must retain unsaved values');
+      await selectUser(f, 'Jo Transport'); assert.equal(await check(f, 'Voir les départs').isChecked(), true, 'A settings-tab change must retain unsaved values');
       await selectUser(f, 'Test Camille'); await f.page.getByText('Accès total lié au rôle', { exact: false }).waitFor();
       assert.equal(await f.page.getByRole('checkbox').count(), 0);
       if (await save(f).count()) assert.equal(await save(f).isDisabled(), true, 'Immutable direction rights cannot be edited');

@@ -114,7 +114,7 @@ async function main() {
       assert.equal(f.requests.some(request => request.path.endsWith('/get_invoice_review_context')), false);
       await preparation.click(); await section(f).waitFor();
       const recap = section(f).getByRole('region', { name: 'Relais après préparation', exact: true });
-      assert.match(await recap.innerText(), /40 × 20 × 10 cm · 2.5 kg/); assert.match(await recap.innerText(), /Colis 2/);
+      assert.match(await recap.innerText(), /40 × 20 × 10 cm · 2,5\skg/); assert.match(await recap.innerText(), /Colis 2/);
       assert.equal(await field(f, 'Longueur', 'cm').count(), 0); assert.equal(await save(f).count(), 0);
       assert.equal(await section(f).getByRole('button', { name: 'Modifier les mesures', exact: true }).count(), 0);
       assert.equal(measurementCalls(f).length, 0);

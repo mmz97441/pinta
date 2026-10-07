@@ -1,5 +1,6 @@
 import { getDestByCP } from './index';
-import { eur, trackStr, getPrenom, nbCartons, renderCartonsDetail } from '../utils';
+// Message text: same amount format as the saved templates and the Edge renderer.
+import { messageEur as eur, trackStr, getPrenom, nbCartons, renderCartonsDetail } from '../utils';
 
 // Poids réel total + poids volumétrique total d'un colis, calculés à partir
 // des mesures par carton si dispo, sinon à partir des dims globales.

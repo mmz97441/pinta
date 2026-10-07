@@ -16,8 +16,8 @@ const LINK = 'https://secure.payplug.com/pay/fictitious-link';
 const flat = text => String(text).replace(/[  ]/g, ' ');
 const AXE_TAGS = ['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa'];
 const TEXT = {
-  sentWithLink: 'Le devis envoyé au client (152.40 €) va être retiré. Son lien de paiement sera d’abord annulé chez PayPlug : le client ne pourra plus régler l’ancien montant.\nVous pourrez ensuite modifier la vérification de la facture, puis vérifier et envoyer un nouveau devis avec un nouveau lien.\nAucun message n’est envoyé au client par cette action.',
-  sentWithoutLink: 'Le devis envoyé au client (152.40 €) va être retiré. Vous pourrez ensuite modifier la vérification de la facture, puis vérifier et envoyer un nouveau devis. Aucun message n’est envoyé au client par cette action.',
+  sentWithLink: 'Le devis envoyé au client (152,40 €) va être retiré. Son lien de paiement sera d’abord annulé chez PayPlug : le client ne pourra plus régler l’ancien montant.\nVous pourrez ensuite modifier la vérification de la facture, puis vérifier et envoyer un nouveau devis avec un nouveau lien.\nAucun message n’est envoyé au client par cette action.',
+  sentWithoutLink: 'Le devis envoyé au client (152,40 €) va être retiré. Vous pourrez ensuite modifier la vérification de la facture, puis vérifier et envoyer un nouveau devis. Aucun message n’est envoyé au client par cette action.',
   liveLinkOnly: 'Un lien de paiement est encore actif pour ce dossier. Il sera d’abord annulé chez PayPlug. Vous pourrez ensuite modifier la vérification de la facture. Aucun message n’est envoyé au client par cette action.',
   uncertain: 'PayPlug n’a pas confirmé l’annulation de l’ancien lien. Rien n’a été modifié. Vérifiez dans PayPlug si le client a payé, puis réessayez.',
   paid: 'Un paiement est signalé chez PayPlug pour ce devis. Le devis est conservé et ne peut plus être modifié. Actualisez le dossier dans un instant.',

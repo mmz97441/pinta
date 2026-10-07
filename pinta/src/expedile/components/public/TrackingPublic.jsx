@@ -4,6 +4,7 @@ import { Package, CheckCircle, Clock, CreditCard, Plane, Shield, Warehouse, Truc
 import { BRAND, STATUTS, DESTINATIONS, getDestByCP } from '../../constants';
 import { configurationError } from '../../lib/supabase';
 import { publicJourney } from '../../domain/clientJourney';
+import { kg } from '../../utils/format';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
@@ -178,8 +179,8 @@ export default function TrackingPublic() {
 
                 <details className="mt-3 border-t border-slate-200"><summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-slate-600"><Ruler size={14} className="mr-2 inline" />Cartons et mesures</summary>
                   {c.preparationNeedsReview && <p className="mb-2 text-sm text-slate-600">Les mesures après optimisation sont à confirmer pour la composition actuelle.</p>}
-                  {c.preparedPackages?.length > 0 && <div className="space-y-2"><p className="text-sm font-semibold text-slate-700">Après optimisation</p>{c.preparedPackages.map((box,index) => <p key={index} className="text-sm text-slate-600">Colis sortant {index + 1} · {box.L} × {box.W} × {box.H} cm · {box.P} kg</p>)}</div>}
-                  {c.receptionCartons?.length > 0 && <div className="mt-3 space-y-2"><p className="text-sm font-semibold text-slate-700">À réception</p>{c.receptionCartons.map((box,index) => <p key={index} className="text-sm text-slate-600">Carton {index + 1} · {box ? `${box.L} × ${box.W} × ${box.H} cm · ${box.P} kg` : 'Mesures non renseignées'}</p>)}</div>}
+                  {c.preparedPackages?.length > 0 && <div className="space-y-2"><p className="text-sm font-semibold text-slate-700">Après optimisation</p>{c.preparedPackages.map((box,index) => <p key={index} className="text-sm text-slate-600">Colis sortant {index + 1} · {box.L} × {box.W} × {box.H} cm · {kg(box.P)}</p>)}</div>}
+                  {c.receptionCartons?.length > 0 && <div className="mt-3 space-y-2"><p className="text-sm font-semibold text-slate-700">À réception</p>{c.receptionCartons.map((box,index) => <p key={index} className="text-sm text-slate-600">Carton {index + 1} · {box ? `${box.L} × ${box.W} × ${box.H} cm · ${kg(box.P)}` : 'Mesures non renseignées'}</p>)}</div>}
                   {!c.preparedPackages?.length && !c.receptionCartons?.length && <p className="text-sm text-slate-500">Mesures détaillées non renseignées.</p>}
                 </details>
 

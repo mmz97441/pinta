@@ -1,47 +1,62 @@
-import React from 'react';
+import React, { useLayoutEffect, useState } from 'react';
+import { Info, CheckCircle, AlertTriangle, XCircle } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { BRAND } from '../../constants';
+import { toastContent, toastPlacement } from '../../domain/toast';
+// Styles: .expedile-toast in brand.css.
+
+const ICONS = { info: Info, success: CheckCircle, warning: AlertTriangle, error: XCircle };
+
+/** Width of the staff navigation column (0 when it is hidden: phone, tablet, client portal). */
+function useRailWidth(active) {
+  const [width, setWidth] = useState(0);
+  useLayoutEffect(() => {
+    if (!active) return undefined;
+    const rail = document.querySelector('.staff-sidebar');
+    const measure = () => setWidth(rail ? rail.getBoundingClientRect().width : 0);
+    measure();
+    const observer = rail && typeof ResizeObserver === 'function' ? new ResizeObserver(measure) : null;
+    observer?.observe(rail);
+    window.addEventListener('resize', measure);
+    return () => { observer?.disconnect(); window.removeEventListener('resize', measure); };
+  }, [active]);
+  return width;
+}
 
 export default function Toast() {
-  const { toast, setToast } = useApp();
+  const { toast, setToast, isStaff } = useApp();
+  const rail = useRailWidth(Boolean(toast) && isStaff);
   if (!toast) return null;
 
-  // Support both simple string and rich object { msg, type, action }
-  const isRich = typeof toast === 'object';
-  const msg = isRich ? toast.msg : toast;
-  const type = isRich ? toast.type : 'info'; // 'info' | 'success' | 'warning' | 'error'
-  const action = isRich ? toast.action : null; // { label, onClick }
-
-  const bgMap = {
-    info: 'rgba(27,58,75,0.95)',
-    success: 'rgba(22,101,52,0.95)',
-    warning: 'rgba(146,64,14,0.95)',
-    error: 'rgba(153,27,27,0.95)',
-  };
+  const { msg, type, action } = toastContent(toast);
+  const Icon = ICONS[type];
+  const placement = toastPlacement(isStaff ? rail : 0);
+  const style = placement.kind === 'bottom-bar' ? undefined
+    : { left: placement.left, bottom: 12, width: placement.kind === 'rail' ? placement.width : `min(${placement.width}px, calc(100vw - ${placement.left + 12}px))` };
 
   return (
     <div
       role={type === 'error' ? 'alert' : 'status'}
       aria-atomic="true"
-      className="pointer-events-none fixed top-4 left-4 right-4 z-50 px-5 py-3.5 rounded-2xl text-white text-sm font-semibold text-center whitespace-pre-line anim-slide-down"
-      style={{
-        maxWidth: 440,
-        margin: '0 auto',
-        background: bgMap[type] || bgMap.info,
-        backdropFilter: 'blur(16px)',
-        boxShadow: '0 8px 32px rgba(0,0,0,0.18), 0 0 0 1px rgba(255,255,255,0.06) inset',
-      }}
+      data-toast={type}
+      data-placement={placement.kind}
+      className={`expedile-toast expedile-toast--${type} ${placement.kind === 'bottom-bar' ? 'expedile-toast--bar' : ''} pointer-events-none fixed z-[60] anim-fade-up`}
+      style={style}
     >
-      <div>{msg}</div>
-      {action && (
-        <button
-          onClick={() => { action.onClick(); setToast(''); }}
-          className="pointer-events-auto min-h-11 mt-2 px-4 py-1.5 rounded-lg text-xs font-bold transition-colors"
-          style={{ background: 'rgba(255,255,255,0.2)', color: '#fff' }}
-        >
-          {action.label}
-        </button>
-      )}
+      <div className="flex items-start gap-2.5">
+        <Icon size={18} className="expedile-toast__icon mt-0.5 shrink-0" aria-hidden="true" />
+        <div className="min-w-0 flex-1">
+          <p className="whitespace-pre-line text-xs font-semibold">{msg}</p>
+          {action && (
+            <button
+              type="button"
+              onClick={() => { action.onClick(); setToast(''); }}
+              className="expedile-toast__action pointer-events-auto mt-2 min-h-11 rounded-lg px-3 text-sm font-bold transition-all duration-200 ease-out active:scale-[0.98]"
+            >
+              {action.label}
+            </button>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

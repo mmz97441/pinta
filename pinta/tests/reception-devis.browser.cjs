@@ -28,7 +28,7 @@ async function main() {
         await current.page.getByLabel(`${label} · carton 2 (${label === 'Poids réel' ? 'kg' : 'cm'})`, { exact: true }).fill(String(value));
       }
       await current.page.getByText('Comprendre le calcul du transport', { exact: true }).click();
-      await current.page.getByText('3.20 kg', { exact: true }).first().waitFor();
+      await current.page.getByText('3,2 kg', { exact: true }).first().waitFor();
       assert.equal(await current.page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
       await current.page.screenshot({ path: path.join(output, `reception-${device}.png`), fullPage: true });
       const save = current.page.getByRole('button', { name: 'Enregistrer les mesures de réception', exact: true });

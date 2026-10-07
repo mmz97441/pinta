@@ -43,7 +43,7 @@ const results = [];
   await f.page.getByRole('button',{name:'Détails du dossier',exact:true}).click();
   const context=f.page.getByRole('dialog',{name:'Contexte du dossier',exact:true});
   await context.getByRole('heading',{name:'Après optimisation · 2 colis préparés',exact:true}).waitFor();
-  await context.getByText('Poids total préparé : 8.00 kg',{exact:true}).waitFor();
+  await context.getByText('Poids total préparé : 8 kg',{exact:true}).waitFor();
   await context.getByRole('button',{name:'Fermer le contexte du dossier',exact:true}).click();
   await f.page.getByRole('tab',{name:/Conversation/}).click();
   await f.page.getByLabel('Votre réponse au client',{exact:true}).waitFor();

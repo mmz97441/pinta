@@ -5,8 +5,10 @@ import { dossierTaskUrl } from '../../domain/dossierTasks';
 import { receptionCartonManifest, receptionDateSummary } from '../../domain/reception';
 import { formatDossierTableDate } from '../../domain/dossierTable';
 import { measureShipment, volumetricDivisor } from '../../domain/quote';
+import { kg } from '../../utils/format';
 
 const measuredValue = (value) => value != null && Number.isFinite(Number(value)) && Number(value) > 0 ? value : '—';
+const measuredWeight = (value) => value != null && Number.isFinite(Number(value)) && Number(value) > 0 ? kg(value) : '—\u00a0kg';
 
 /** Read-only receipt manifest shared by the full dossier and the inline team panel. */
 export default function ReceivedCartons({ colis, settings, onCompleteReception }) {
@@ -43,7 +45,7 @@ export default function ReceivedCartons({ colis, settings, onCompleteReception }
 
   return <section aria-label="Mesures des cartons" className="space-y-3 min-w-0">
     <h3 className="text-xs font-bold text-gray-700">Mesures à réception — avant optimisation · {manifest.nbColis} carton{manifest.nbColis > 1 ? 's' : ''}</h3>
-    <p className="text-sm text-gray-600">Casier {colis.casier || "à renseigner"}{before ? ` · ${before.realWeight.toFixed(2)} kg reçus` : ""}</p>
+    <p className="text-sm text-gray-600">Casier {colis.casier || "à renseigner"}{before ? ` · ${kg(before.realWeight)} reçus` : ""}</p>
     {colis.dateReception && Number.isFinite(Date.parse(colis.dateReception)) && <p className="text-xs text-gray-600">Réception du dossier : <time dateTime={colis.dateReception}>{formatDossierTableDate(colis.dateReception)}</time></p>}
     {receptionDates.error && <p role="status" className="text-sm text-amber-800">Les anciennes dates d’arrivée n’ont pas pu être chargées. Actualisez le dossier pour les retrouver.</p>}
     <ol className="space-y-2">
@@ -62,7 +64,7 @@ export default function ReceivedCartons({ colis, settings, onCompleteReception }
             {receptionDates.dates[index]?.receivedAt ? <>Arrivé à l’entrepôt le <time dateTime={receptionDates.dates[index].receivedAt}>{formatDossierTableDate(receptionDates.dates[index].receivedAt)}</time></> : 'Date d’arrivée non renseignée'}
           </p>
           <p className="text-xs text-gray-700">
-            {measuredValue(box.dimL)} × {measuredValue(box.dimW)} × {measuredValue(box.dimH)} cm · {measuredValue(box.poids)} kg
+            {measuredValue(box.dimL)} × {measuredValue(box.dimW)} × {measuredValue(box.dimH)} cm · {measuredWeight(box.poids)}
 
           </p>
           {!weights && <p className="text-xs text-gray-600">Mesures à réception incomplètes — carton {index + 1} à compléter</p>}
@@ -72,9 +74,9 @@ export default function ReceivedCartons({ colis, settings, onCompleteReception }
 
     {manifest.nbColis > 1 && before && <div className="rounded-xl border border-gray-200 p-3 space-y-1.5">
       <h4 className="text-xs font-bold text-gray-700">Totaux à réception</h4>
-      <div className="flex justify-between gap-3 text-xs text-gray-600"><span>Poids total</span><span className="font-semibold shrink-0">{before.realWeight.toFixed(2)} kg</span></div>
-      <details><summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-gray-600">Comprendre le poids facturable</summary><div className="space-y-2"><div className="flex justify-between gap-3 text-xs text-gray-600"><span>Vol. total</span><span className="font-semibold shrink-0">{before.volumetricWeight.toFixed(2)} kg</span></div>
-      <div className="flex justify-between gap-3 text-xs font-bold" style={{ color: 'var(--brand-text)' }}><span>Poids facturable avant optimisation</span><span className="shrink-0">{before.billableWeight.toFixed(2)} kg</span></div><p className="text-xs text-gray-500">Le poids volumétrique dépend des dimensions de chaque carton. Le transport retient le plus élevé entre poids réel et volumétrique.</p></div></details>
+      <div className="flex justify-between gap-3 text-xs text-gray-600"><span>Poids total</span><span className="font-semibold shrink-0">{kg(before.realWeight)}</span></div>
+      <details><summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-gray-600">Comprendre le poids facturable</summary><div className="space-y-2"><div className="flex justify-between gap-3 text-xs text-gray-600"><span>Vol. total</span><span className="font-semibold shrink-0">{kg(before.volumetricWeight)}</span></div>
+      <div className="flex justify-between gap-3 text-xs font-bold" style={{ color: 'var(--brand-text)' }}><span>Poids facturable avant optimisation</span><span className="shrink-0">{kg(before.billableWeight)}</span></div><p className="text-xs text-gray-500">Le poids volumétrique dépend des dimensions de chaque carton. Le transport retient le plus élevé entre poids réel et volumétrique.</p></div></details>
     </div>}
     {!before && <p className="text-xs text-gray-600">Complétez les mesures de chaque carton pour obtenir le total à réception.</p>}
 
@@ -82,9 +84,9 @@ export default function ReceivedCartons({ colis, settings, onCompleteReception }
     {hasFinalInput && <div className="rounded-xl border border-amber-200 bg-amber-50 dark:bg-slate-800 p-3 space-y-1.5">
       <h4 className="text-sm font-bold" style={{ color: 'var(--brand-text)' }}>Après optimisation · {finalBoxes.length} colis préparé{finalBoxes.length > 1 ? "s" : ""}</h4>
       {preparationStale && <p role="status" className="text-sm font-semibold text-amber-900">Mesures précédentes à revoir : la composition des cartons a changé. Enregistrez à nouveau la préparation avant le devis.</p>}
-      {after && <p className="text-sm font-semibold text-gray-700">{preparationStale ? "Poids des mesures précédentes" : "Poids total préparé"} : {after.realWeight.toFixed(2)} kg</p>}
-      {finalBoxes.map((box, index) => <p key={index} className="text-sm text-gray-700">Colis préparé {index + 1} · {measuredValue(box.dimL)} × {measuredValue(box.dimW)} × {measuredValue(box.dimH)} cm · {measuredValue(box.poids)} kg</p>)}
-      {after ? <details><summary className="min-h-11 cursor-pointer py-3 text-sm text-gray-600">Détail du poids facturable après optimisation</summary><p className="text-xs text-gray-600">Poids volumétrique : {after.volumetricWeight.toFixed(2)} kg · Poids facturable : {after.billableWeight.toFixed(2)} kg</p></details>
+      {after && <p className="text-sm font-semibold text-gray-700">{preparationStale ? "Poids des mesures précédentes" : "Poids total préparé"} : {kg(after.realWeight)}</p>}
+      {finalBoxes.map((box, index) => <p key={index} className="text-sm text-gray-700">Colis préparé {index + 1} · {measuredValue(box.dimL)} × {measuredValue(box.dimW)} × {measuredValue(box.dimH)} cm · {measuredWeight(box.poids)}</p>)}
+      {after ? <details><summary className="min-h-11 cursor-pointer py-3 text-sm text-gray-600">Détail du poids facturable après optimisation</summary><p className="text-xs text-gray-600">Poids volumétrique : {kg(after.volumetricWeight)} · Poids facturable : {kg(after.billableWeight)}</p></details>
         : <p className="text-xs text-gray-500">Mesures après optimisation à compléter ; aucun poids calculé.</p>}
     </div>}
   </section>;

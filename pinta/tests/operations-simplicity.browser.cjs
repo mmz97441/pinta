@@ -82,8 +82,8 @@ async function audit(f, name, include = '[data-testid="dossier-task-workspace"]'
    await f.page.getByRole('button',{name:/^Détails/}).click();
    const panel=f.page.getByRole('dialog',{name:'Contexte du dossier',exact:true});
    await panel.getByRole('button',{name:'Réception',exact:true}).click();
-   await panel.getByText('Poids total préparé : 8.00 kg',{exact:true}).waitFor();
-   assert.match(await panel.innerText(),/2 colis préparés/); assert.match(await panel.innerText(),/Casier.*6.00 kg reçus/);
+   await panel.getByText('Poids total préparé : 8 kg',{exact:true}).waitFor();
+   assert.match(await panel.innerText(),/2 colis préparés/); assert.match(await panel.innerText(),/Casier.*6\skg reçus/);
    assert.equal(await panel.getByRole('button',{name:'Inviter sur Telegram',exact:true}).count(),0);
    assert.equal(await panel.getByText('Comprendre le poids facturable',{exact:true}).locator('..').evaluate(node=>node.open),false);
    await audit(f,'multi-parcels-context','[data-testid="dossier-context"]'); assert.deepEqual(mutations(f),[]);
@@ -92,7 +92,7 @@ async function audit(f, name, include = '[data-testid="dossier-task-workspace"]'
    Object.assign(f.tables.colis[0],{statut:'receptionne',final_packages:[box,{...box,poids:5}],preparation_composition_version:2,final_measurements_version:1,dims_par_colis:[]});
    await open(f,'accord');await f.page.getByRole('button',{name:/^Détails/}).click();const context=f.page.getByRole('dialog',{name:'Contexte du dossier',exact:true});
    await context.getByRole('button',{name:'Réception',exact:true}).click();
-   await context.getByRole('status').filter({hasText:'Mesures précédentes à revoir'}).waitFor();assert.match(await context.innerText(),/Poids des mesures précédentes : 8.00 kg/);assert.equal(await context.getByText('Poids total préparé : 8.00 kg',{exact:true}).count(),0);
+   await context.getByRole('status').filter({hasText:'Mesures précédentes à revoir'}).waitFor();assert.match(await context.innerText(),/Poids des mesures précédentes : 8\skg/);assert.equal(await context.getByText('Poids total préparé : 8 kg',{exact:true}).count(),0);
    await context.getByRole('button',{name:'Compléter les mesures à réception',exact:true}).click();await context.waitFor({state:'hidden'});
    await region(f).getByRole('button',{name:'Enregistrer les mesures de réception',exact:true}).waitFor();assert.equal(new URL(f.page.url()).searchParams.get('section'),'reception');assert.deepEqual(mutations(f),[]);
   });

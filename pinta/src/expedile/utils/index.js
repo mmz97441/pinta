@@ -3,11 +3,8 @@ import { clientSearchText } from './clientDisplay.js';
 
 export { normalizeTelegramUsername, formatTelegramHandle, clientContactLabel, clientSearchText, countLabel } from './clientDisplay.js';
 
-// ══════════ FORMATAGE ══════════
-export function eur(n) {
-  const v = Number(n);
-  return (isFinite(v) ? v : 0).toFixed(2) + ' €';
-}
+// ══════════ FORMATAGE ══════════ (format.js: amounts, weights and dates)
+export { eur, kg, messageEur, parisDateTime } from './format.js';
 
 export function uid() {
   return Math.random().toString(36).slice(2, 8);

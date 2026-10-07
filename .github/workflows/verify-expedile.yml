@@ -132,6 +132,7 @@ jobs:
           node tests/chat-retry.browser.cjs
           node tests/admin-simplicity.browser.cjs
           PINTA_CLIENT_PAGES_OUT=/tmp/pinta-client-pages node tests/client-pages.browser.cjs
+          PINTA_SETTINGS_DEVIS_OUT=/tmp/pinta-settings-devis node tests/settings-devis.browser.cjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -185,3 +186,4 @@ jobs:
             /tmp/pinta-client-simplicity
             /tmp/pinta-admin-simplicity
             /tmp/pinta-client-pages
+            /tmp/pinta-settings-devis

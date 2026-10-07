@@ -344,3 +344,35 @@ html .staff-sidebar button[aria-current='page'] { background-color: rgba(255,255
 input:not([type='checkbox']):not([type='radio']), select, textarea { font-size: 1rem; }
 button, summary, a { overflow-wrap: anywhere; }
 button, input, select, textarea { max-width: 100%; }
+
+/* Toasts (flash): an elevated surface, a coloured edge and an icon per tone.
+   Placement (ui/Toast.jsx, domain/toast.js): over the staff navigation column
+   on desktop, over the bottom navigation bar elsewhere, never over the page. */
+.expedile-toast {
+  --toast-accent: var(--brand-text);
+  --toast-bg: var(--bg-elevated);
+  background: var(--toast-bg);
+  color: var(--text-primary);
+  border: 1px solid var(--border-subtle);
+  border-left: 4px solid var(--toast-accent);
+  border-radius: 14px;
+  box-shadow: var(--shadow-3);
+  padding: 10px 12px;
+}
+.expedile-toast__icon { color: var(--toast-accent); }
+.expedile-toast__action { background: var(--bg-surface); color: var(--brand-text); }
+/* Accents keep 4.5:1 on their tint in both themes; the text keeps --text-primary. */
+.expedile-toast--success { --toast-accent: #047857; --toast-bg: #ECFDF5; }
+.expedile-toast--warning { --toast-accent: #92400E; --toast-bg: #FFFBEB; }
+.expedile-toast--error   { --toast-accent: #B91C1C; --toast-bg: #FEF2F2; }
+html.dark .expedile-toast--success { --toast-accent: #7AB089; --toast-bg: #203A2D; }
+html.dark .expedile-toast--warning { --toast-accent: #D9A862; --toast-bg: #3C3020; }
+html.dark .expedile-toast--error   { --toast-accent: #E59A9A; --toast-bg: #44282A; }
+/* Phone, tablet and client portal: on top of the bottom navigation bar. */
+.expedile-toast--bar {
+  left: 12px;
+  right: 12px;
+  margin: 0 auto;
+  max-width: 440px;
+  bottom: max(8px, env(safe-area-inset-bottom));
+}

@@ -61,7 +61,7 @@ async function main() {
       const third = measures.getByRole('listitem', { name: 'Carton 3', exact: true });
       await third.getByText('QA-ATTACH-003', { exact: true }).waitFor();
       await third.getByText('Boutique C', { exact: true }).waitFor();
-      assert.match(await third.innerText(), /15 × 25 × 35 cm · 1.5 kg/);
+      assert.match(await third.innerText(), /15 × 25 × 35 cm · 1,5\skg/);
       await assertFocusedCarton(f.page, third);
       assert.equal(f.tables.colis.length, 1, 'Attaching a carton keeps the same dossier');
       assert.equal(f.tables.colis[0].nb_colis, 3);
@@ -93,7 +93,7 @@ async function main() {
       const fourth = measures.getByRole('listitem', { name: 'Carton 4', exact: true });
       await fourth.getByText('Numéro de suivi non renseigné', { exact: true }).waitFor();
       await fourth.getByText('Fournisseur non renseigné', { exact: true }).waitFor();
-      assert.match(await fourth.innerText(), /10 × 10 × 10 cm · 0.6 kg/);
+      assert.match(await fourth.innerText(), /10 × 10 × 10 cm · 0,6\skg/);
       await assertFocusedCarton(f.page, fourth);
       assert.equal(new URL(f.page.url()).pathname, '/colis/' + ids.P);
       assert.equal(new URL(f.page.url()).searchParams.get('returnTo'), '/colis?sort=client&dir=desc');
@@ -106,7 +106,7 @@ async function main() {
       await f.page.getByRole('button', { name: 'Voir le carton reçu', exact: true }).click();
       const second = measures.getByRole('listitem', { name: 'Carton 2', exact: true });
       await second.getByText('Mesures à réception incomplètes — carton 2 à compléter', { exact: true }).waitFor();
-      assert.match(await second.innerText(), /30 × — × 10 cm · 2 kg/);
+      assert.match(await second.innerText(), /30 × — × 10 cm · 2\skg/);
       assert.equal(await measures.getByText('Totaux à réception', { exact: true }).count(), 0);
       await f.page.waitForFunction(isDark => document.documentElement.classList.contains('dark') === isDark, dark);
       await measures.scrollIntoViewIfNeeded();

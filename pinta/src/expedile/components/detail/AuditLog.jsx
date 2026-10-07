@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { STATUTS, BRAND } from '../../constants';
-import { eur } from '../../utils';
+import { eur, kg } from '../../utils';
 import { fetchLogsForColis, fetchAuditActions } from '../../lib/supabaseData';
 
 const ACTION_NAMES = {
@@ -35,9 +35,9 @@ function CorrectionHistory({ entry }) {
     if (entry.action === 'correction_accord') return `${({ autorise: 'Accord donné', refuse: 'Préparation refusée', en_attente: 'Accord à demander' })[row.feu_vert] || 'Accord à vérifier'}${row.feu_vert_date ? ` · ${formatDate(row.feu_vert_date)}` : ''}`;
     const receipt = entry.action === 'correction_reception';
     const boxes = receipt ? row.dims_par_colis : row.final_packages;
-    if (boxes?.length) return boxes.map((box, index) => `${receipt ? 'Carton' : 'Colis préparé'} ${index + 1} : ${box.dimL} × ${box.dimW} × ${box.dimH} cm · ${box.poids} kg`).join(' ; ');
+    if (boxes?.length) return boxes.map((box, index) => `${receipt ? 'Carton' : 'Colis préparé'} ${index + 1} : ${box.dimL} × ${box.dimW} × ${box.dimH} cm · ${kg(box.poids)}`).join(' ; ');
     const [length, width, height, weight] = receipt ? [row.dim_l, row.dim_w, row.dim_h, row.poids] : [row.fin_l, row.fin_w, row.fin_h, row.fin_p];
-    return weight ? `Ancien récapitulatif : ${length ?? '—'} × ${width ?? '—'} × ${height ?? '—'} cm · ${weight} kg` : 'Mesures non renseignées';
+    return weight ? `Ancien récapitulatif : ${length ?? '—'} × ${width ?? '—'} × ${height ?? '—'} cm · ${kg(weight)}` : 'Mesures non renseignées';
   };
   return <div className="mt-2 space-y-1 text-sm text-slate-700 dark:text-slate-200"><p><strong>Avant : </strong>{values(entry.before)}</p><p><strong>Après : </strong>{values(entry.after)}</p></div>;
 }

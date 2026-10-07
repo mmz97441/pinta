@@ -747,7 +747,7 @@ async function main() {
     assert.equal(sections.length, 7, 'All seven settings sections remain reachable on mobile');
     for (const section of sections) {
       await settingsSection.selectOption(section.value);
-      await f.page.getByRole('heading', { name: section.value === 'users' ? 'Utilisateurs et permissions' : section.label, exact: true }).waitFor();
+      await f.page.getByRole('heading', { name: section.label, exact: true }).waitFor();
       assert.ok(await settingsSection.evaluate(element => { const rect = element.getBoundingClientRect(); return rect.x >= 0 && rect.right <= innerWidth + 1; }), 'Settings selector stays entirely inside mobile viewport');
     }
     observations.push({ test: 'mobile-settings-labels-and-section-navigation', pass: true });
