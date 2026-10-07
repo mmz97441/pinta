@@ -197,8 +197,10 @@ export function SelectionParcelLabels({ dossiers }) {
   const shown = preparing || Boolean(result?.count);
   const label = dossiers.length === 1 ? 'Étiquettes du dossier sélectionné' : `Étiquettes des ${plural(dossiers.length, 'dossier')} sélectionnés`;
   // The outcome takes its own line above the buttons: the bar, anchored by its bottom, grows away from them, so
-  // « Étiquettes » stays under the pointer. contain keeps a long outcome from widening the bar (max-content).
-  const line = { order: -1, flexBasis: '100%', maxWidth: 'none', contain: 'inline-size' };
+  // « Étiquettes » stays under the pointer. Its text never widens the bar (max-content): contain, and width 0 where
+  // contain is not supported (Safari 14), where the widened bar would otherwise put « Exporter » under the pointer;
+  // flex-basis still gives it the bar's whole line.
+  const line = { order: -1, flexBasis: '100%', width: 0, maxWidth: 'none', contain: 'inline-size' };
   return <>
     <button type="button" className="dossier-bulk-button" disabled={preparing || !dossiers.length} onClick={() => print(dossiers)} aria-label={label} title={label}>
       Étiquettes

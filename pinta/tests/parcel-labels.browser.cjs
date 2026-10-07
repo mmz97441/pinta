@@ -1,10 +1,11 @@
 /* Outgoing parcel labels in the browser: « Imprimer les étiquettes (N colis) » once the optimisation is saved, with
  * the permission « Imprimer les étiquettes » and hidden without it; its reprint after payment; the « Étiquettes »
  * action of the /colis selection with the dossiers left out, its outcome above the buttons (nothing moves under the
- * pointer) and its alerts toned; an incomplete address, whose client record link is offered only to the people allowed
- * to change it; the window opened by the click itself while the label module loads (iPad Safari), styled like the app,
- * the button keeping the keyboard focus meanwhile; the download when the window is refused, its file name whole; a
- * loading failure stated on screen; and every outcome without a tab brought into view above the bottom navigation.
+ * pointer, even without CSS containment as in Safari 14) and its alerts toned; an incomplete address, whose client
+ * record link is offered only to the people allowed to change it; the window opened by the click itself while the label
+ * module loads (iPad Safari), styled like the app, the button keeping the keyboard focus meanwhile; the download when
+ * the window is refused, its file name whole; a loading failure stated on screen; and every outcome without a tab
+ * brought into view above the bottom navigation.
  * setup() mocks every request: nothing reaches Supabase, Telegram or PayPlug, and printing writes nothing.
  * The PDF a click creates is read back from its blob, checked with pdf.js, and its first page drawn to a PNG. */
 const { chromium } = require(process.env.PINTA_PLAYWRIGHT_MODULE || 'playwright');
@@ -342,6 +343,36 @@ async function main() {
       assert.equal(await hits(f, point, single), true, 'the alert does not take the place of « Étiquettes »');
       assert.equal((await labelsState(f)).opens.length, 1, 'no window for a selection without labels');
       await f.page.screenshot({ path: path.join(output, `selection-without-labels-${width}-${theme}.png`) });
+    });
+
+    // A browser without CSS containment (Safari before 15.4, so Safari 14): the outcome's text must not widen the bar
+    // either, else « Étiquettes » slides away and « Exporter » comes under the pointer (84 px at 1440 px).
+    await scenario('selection-labels-stay-under-the-pointer-without-css-containment-1440-light', {}, async f => {
+      await f.page.goto(`${base}/colis`);
+      await f.page.addStyleTag({ content: '.dossier-bulk-bar > p { contain: none !important; }' });
+      for (const ref of [REF, OTHER.ref]) await f.page.getByRole('checkbox', { name: `Sélectionner le dossier ${ref}`, exact: true }).check();
+      const action = bar(f).getByRole('button', { name: 'Étiquettes des 2 dossiers sélectionnés', exact: true });
+      const before = await pointAt(action);
+      await action.click();
+      const outcome = bar(f).getByRole('status').filter({ hasText: '1 étiquette ouverte dans un nouvel onglet.' });
+      await outcome.waitFor();
+      await closePopups(f);
+      const after = await pointAt(action);
+      assert.ok(Math.abs(after.top - before.top) <= 1 && Math.abs(after.left - before.left) <= 6, `the button stays in place: ${JSON.stringify({ before, after })}`);
+      assert.equal(await hits(f, before, action), true, 'a second click at the same place reaches « Étiquettes », never « Exporter »');
+      // The outcome still takes the bar's whole line, its text wrapping inside it.
+      const [width, line] = await outcome.evaluate(node => { const style = getComputedStyle(node.parentElement);
+        return [node.getBoundingClientRect().width, node.parentElement.getBoundingClientRect().width - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight) - parseFloat(style.borderLeftWidth) - parseFloat(style.borderRightWidth)]; });
+      assert.ok(Math.abs(width - line) <= 1, `the outcome spans the bar: ${width} of ${line} px`);
+      // Nothing printable: the warning takes the same line.
+      await f.page.getByRole('checkbox', { name: `Sélectionner le dossier ${REF}`, exact: true }).uncheck();
+      const single = bar(f).getByRole('button', { name: 'Étiquettes du dossier sélectionné', exact: true });
+      await bar(f).locator('.dossier-bulk-note').filter({ hasText: 'ouverte' }).waitFor({ state: 'detached' });
+      const point = await pointAt(single);
+      await single.click();
+      await bar(f).getByRole('alert').filter({ hasText: 'Aucune étiquette à imprimer.' }).waitFor();
+      assert.equal(await hits(f, point, single), true, 'the warning leaves « Étiquettes » under the pointer');
+      await noOverflow(f);
     });
 
     await scenario('an-incomplete-address-prints-nothing-and-opens-the-client-record-1440-light', {}, async f => {
