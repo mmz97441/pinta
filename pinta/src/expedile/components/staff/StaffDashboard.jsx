@@ -14,6 +14,7 @@ import { exportColisExcel } from '../../utils/exportExcel';
 import { exportFactureCommerciale } from '../../utils/exportFactureCommerciale';
 import { exportDAUData } from '../../utils/exportDAU';
 import { exportFactureCommerciPDF } from '../../utils/exportFactureCommerciPDF';
+import { buildCommercialInvoice } from '../../domain/commercialInvoice';
 import { exportRecapProExcel } from '../../utils/exportRecapPro';
 import KPIDashboard from './KPIDashboard';
 
@@ -1619,7 +1620,9 @@ export default function StaffDashboard({ onNewColis }) {
                     <button
                       onClick={(ev) => {
                         ev.stopPropagation();
-                        const nb = exportFactureCommerciale(e, group.colis, clients, categories);
+                        const invoice = buildCommercialInvoice({ envoi: e, items: group.colis.map(c => ({ colis: c, client: getClient(c.clientId) })), categories });
+                        if (!invoice.ok) { flash(invoice.errors[0].message); return; }
+                        const nb = exportFactureCommerciale(invoice);
                         flash(`Facture commerciale ${e.ref} — ${nb} articles exportés`);
                       }}
                       className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-semibold transition-all active:scale-95 hover:bg-gray-100"
@@ -1634,7 +1637,9 @@ export default function StaffDashboard({ onNewColis }) {
                     <button
                       onClick={(ev) => {
                         ev.stopPropagation();
-                        const nb = exportFactureCommerciPDF(e, group.colis, clients, categories);
+                        const invoice = buildCommercialInvoice({ envoi: e, items: group.colis.map(c => ({ colis: c, client: getClient(c.clientId) })), categories });
+                        if (!invoice.ok) { flash(invoice.errors[0].message); return; }
+                        const nb = exportFactureCommerciPDF(invoice);
                         flash(`PDF facture commerciale ${e.ref} — ${nb} articles`);
                       }}
                       className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-semibold transition-all active:scale-95 hover:bg-gray-100"

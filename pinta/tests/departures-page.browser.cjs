@@ -14,13 +14,22 @@
  *   EXP-WISH-1…3 wishing 15 Oct (Réunion, one paid); EXP-WISH-MAYOTTE and
  *   EXP-WISH-ARCHIVED wishing 15 Oct but not for it; EXP-WISH-CLOSED wishing the
  *   closed 29 Oct; EXP-SHIPPED on the 1 Oct departure; EXP-PRO-PAID paid at
- *   23:00 Paris on 30 September by a professional client. */
+ *   23:00 Paris on 30 September by a professional client;
+ * - commercial invoice (commercialInvoiceFixture, added by its scenarios):
+ *   EXP-LOAD-1 gets a saved quote (two articles, 122,50 € of transport),
+ *   EXP-LOAD-PRO (Lagon Services SARL, paid, one parcel of 8 kg, its own article
+ *   lines, 65 € of transport) and EXP-LOAD-WAIT (awaiting payment) join the
+ *   15 Oct departure; EXP-SHIPPED's frozen manifest carries the same quote. */
 const { chromium } = require('playwright');
 const AxeBuilder = require('@axe-core/playwright').default;
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { setup, base, ids } = require('./browser-regression.cjs');
+const XLSX = require('xlsx');
+// The downloaded PDF is read back with pdf.js, as tests/commercial-invoice-export.test.mjs does.
+const pdfjsReady = import('pdfjs-dist/legacy/build/pdf.mjs');
+const STANDARD_FONTS = path.join(path.dirname(require.resolve('pdfjs-dist/package.json')), 'standard_fonts') + path.sep;
 const output = process.env.PINTA_DEPARTURES_PAGE_OUT || '/tmp/pinta-departures-page';
 const results = [];
 
@@ -36,6 +45,7 @@ const DEPARTURE = {
 const DOSSIER = {
   load: uuid('e2000000', 1), wish1: uuid('e2000000', 2), wish2: uuid('e2000000', 3), wish3: uuid('e2000000', 4),
   wishMayotte: uuid('e2000000', 5), wishArchived: uuid('e2000000', 6), wishClosed: uuid('e2000000', 7), shipped: uuid('e2000000', 8), pro: uuid('e2000000', 9),
+  loadPro: uuid('e2000000', 10), loadWait: uuid('e2000000', 11),
 };
 // What every device shows, whatever its time zone (Paris time).
 const EXPECTED_PARIS = {
@@ -572,6 +582,130 @@ async function main() {
       assert.deepEqual(await left.locator('details button').allTextContents(), ['Manifeste Excel']);
     }, { role: 'logisticien', permissions: only('perm_envois_voir', 'perm_export_colis') });
 
+    // ── 9b. Commercial invoice ──────────────────────────────────────────
+    // Before the departure: its dossiers ready to load, read again at each export; the others listed.
+    for (const [width, theme] of [[1440, 'light'], [390, 'dark']]) await scenario(`commercial-invoice-before-departure-pdf-and-excel-${width}-${theme}`, async f => {
+      await openPage(f);
+      const target = card(f, 'ENV-2026-045');
+      const { documents, invoice, pdf, excel } = await openInvoice(f, target);
+      for (const [label, element] of [['summary', documents.locator('summary')], ['PDF', pdf], ['Excel', excel]]) {
+        const height = await element.evaluate(node => node.getBoundingClientRect().height);
+        assert.ok(height >= 44, `${label}: ${height}px`);
+      }
+      const reads = () => f.requests.filter(request => request.method === 'GET' && request.path.endsWith('/rest/v1/colis')).length;
+      const before = reads();
+      const file = await downloadOf(f, pdf, `invoice-before-${width}-${theme}`);
+      assert.equal(file.name, 'facture-commerciale-ENV-2026-045.pdf');
+      assert.ok(reads() > before, 'The dossiers are read again from the server at the export.');
+      const items = await pdfItems(file.path);
+      for (const expected of ['FACTURE COMMERCIALE', 'GROUPE DELIVREX', 'ENV-2026-045', '07/10/2026', '15/10/2026', 'La Réunion', 'Aérien', '27,5 kg',
+        'N° expédition', 'Destinataire', 'Code SH', 'Description', 'Qté', 'P.U. HT', 'Valeur HT',
+        'EXP-LOAD-1', 'Hoarau Flavie', '42050090', 'Mini scelleuse', '16,64 €', '76,75 €', '93,39 €', '39241000', 'Organisateur évier', '45,75 €', '55,67 €',
+        'EXP-LOAD-PRO', 'Lagon Services SARL', '0901210000', 'Café torréfié 1 kg', '15,00 €', '60,00 €', '37,14 €', '97,14 €', '6911100000', 'Tasses en porcelaine', '27,86 €', '72,86 €',
+        '131,56 €', '187,50 €', '319,06 €',
+        'Transport réparti au prorata de la valeur des articles (quantité × prix unitaire HT). Valeurs en euros.', 'Document généré par Expedîle — usage douanier uniquement'])
+        assert.ok(items.includes(expected), `PDF: « ${expected} »`);
+      for (const absent of ['EXP-LOAD-WAIT', 'Ancienne commande remplacée', 'undefined', 'NaN']) assert.ok(!items.join('\n').includes(absent), `PDF: no « ${absent} »`);
+      // What the invoice leaves out, with what it waits for.
+      const excluded = invoice.locator('.departure-invoice-excluded');
+      await excluded.getByRole('heading', { name: 'Non inclus (1)', exact: true }).waitFor();
+      assert.equal(normalize(await excluded.locator('.departure-invoice-ref').textContent()), 'EXP-LOAD-WAIT');
+      assert.equal(normalize(await excluded.locator('.departure-invoice-reason').textContent()), 'Paiement non confirmé');
+      const payment = excluded.getByRole('link', { name: 'Vérifier le paiement EXP-LOAD-WAIT', exact: true });
+      const link = new URL(await payment.getAttribute('href'), base);
+      assert.deepEqual([link.pathname, link.searchParams.get('section'), link.searchParams.get('returnTo')], [`/colis/${DOSSIER.loadWait}`, 'paiement', '/departs']);
+      assert.ok(await payment.evaluate(node => node.getBoundingClientRect().height) >= 44, 'The link is a 44 px target.');
+      const sheet = await downloadOf(f, excel, `invoice-before-${width}-${theme}`);
+      assert.equal(sheet.name, 'facture-commerciale-ENV-2026-045.xlsx');
+      const book = XLSX.readFile(sheet.path, { cellNF: true });
+      assert.deepEqual(book.SheetNames, ['Facture commerciale']);
+      const rows = XLSX.utils.sheet_to_json(book.Sheets['Facture commerciale'], { header: 1, raw: true, defval: null });
+      assert.deepEqual(rows.slice(1, 9).map(row => row.slice(0, 2)), [['N° de facture', 'ENV-2026-045'], ['Date', '07/10/2026'], ['Départ prévu', '15/10/2026'], ['Destination', 'La Réunion'], ['Mode de transport', 'Aérien'], ['Expéditions', 2], ['Nombre de colis', 3], ['Poids brut total (kg)', 27.5]]);
+      const head = rows.findIndex(row => row[0] === 'N° expédition');
+      assert.deepEqual(rows.slice(head, head + 6), [
+        ['N° expédition', 'Destinataire', 'Code SH', 'Description', 'Qté', 'P.U. HT', 'Valeur HT', 'Transport affecté', 'Total'],
+        ['EXP-LOAD-1', 'Hoarau Flavie', '42050090', 'Mini scelleuse', 1, 16.64, 16.64, 76.75, 93.39],
+        ['EXP-LOAD-1', 'Hoarau Flavie', '39241000', 'Organisateur évier', 1, 9.92, 9.92, 45.75, 55.67],
+        ['EXP-LOAD-PRO', 'Lagon Services SARL', '0901210000', 'Café torréfié 1 kg', 4, 15, 60, 37.14, 97.14],
+        ['EXP-LOAD-PRO', 'Lagon Services SARL', '6911100000', 'Tasses en porcelaine', 6, 7.5, 45, 27.86, 72.86],
+        ['Total', null, null, null, null, null, 131.56, 187.5, 319.06],
+      ]);
+      const code = book.Sheets['Facture commerciale'][XLSX.utils.encode_cell({ r: head + 3, c: 2 })];
+      assert.deepEqual([code.t, code.v], ['s', '0901210000'], 'The HS code stays text, with its leading zero.');
+      assert.equal(book.Sheets['Facture commerciale'][XLSX.utils.encode_cell({ r: head + 3, c: 7 })].z, '#,##0.00 "€"');
+      assert.equal(await f.page.locator('[aria-atomic="true"]').filter({ hasText: /facture/i }).count(), 0, 'A download is not announced by a toast.');
+      assert.equal(await invoice.getByRole('alert').count(), 0);
+      noWrite(f);
+      await documents.screenshot({ path: path.join(output, `commercial-invoice-before-${width}-${theme}.png`) });
+      await axe(f, `commercial invoice ${width} ${theme}`);
+    }, { width, theme, before: f => commercialInvoiceFixture(f) });
+    // A missing HS code: what to fix, the dossier to open, and nothing downloaded.
+    for (const [width, theme] of [[1440, 'dark'], [390, 'light']]) await scenario(`commercial-invoice-blocked-without-hs-code-${width}-${theme}`, async f => {
+      const downloads = [];
+      f.page.on('download', item => downloads.push(item.suggestedFilename()));
+      await openPage(f);
+      const target = card(f, 'ENV-2026-045');
+      const { documents, invoice, pdf, excel } = await openInvoice(f, target);
+      for (const button of [pdf, excel]) {
+        await Promise.all([
+          f.page.waitForResponse(response => response.url().includes('/rest/v1/colis?') && response.request().method() === 'GET'),
+          button.click(),
+        ]);
+        const alert = invoice.getByRole('alert').filter({ hasText: 'Facture non générée : 1 point à corriger.' });
+        await alert.waitFor();
+        assert.equal(normalize(await alert.locator('li').first().locator('span').first().textContent()), 'EXP-LOAD-PRO : code SH manquant pour « Tasses en porcelaine »');
+        const open = alert.getByRole('link', { name: 'Ouvrir EXP-LOAD-PRO', exact: true });
+        const link = new URL(await open.getAttribute('href'), base);
+        assert.deepEqual([link.pathname, link.searchParams.get('section'), link.searchParams.get('returnTo')], [`/colis/${DOSSIER.loadPro}`, 'devis', '/departs']);
+        assert.equal(await alert.getByRole('link', { name: 'Compléter les catégories', exact: true }).getAttribute('href'), '/settings?tab=categories');
+        for (const element of [open, alert.getByRole('link', { name: 'Compléter les catégories', exact: true })]) assert.ok(await element.evaluate(node => node.getBoundingClientRect().height) >= 44);
+        await invoice.getByRole('heading', { name: 'Non inclus (1)', exact: true }).waitFor();
+      }
+      assert.deepEqual(downloads, [], 'Nothing is downloaded while a code is missing.');
+      noWrite(f);
+      await documents.screenshot({ path: path.join(output, `commercial-invoice-blocked-${width}-${theme}.png`) });
+      await axe(f, `commercial invoice blocked ${width} ${theme}`);
+    }, { width, theme, before: f => commercialInvoiceFixture(f, { missingCode: true }) });
+    await scenario('commercial-invoice-before-departure-hidden-without-permission', async f => {
+      await openPage(f);
+      const target = card(f, 'ENV-2026-045');
+      await target.getByRole('button', { name: 'Vérifier et confirmer le chargement', exact: true }).waitFor();
+      assert.equal(await target.locator('summary').filter({ hasText: 'Documents du départ' }).count(), 0);
+      assert.equal(await page(f).getByRole('button', { name: /Facture commerciale/ }).count(), 0);
+    }, { role: 'logisticien', permissions: only('perm_envois_voir', 'perm_envois_modifier', 'perm_colis_expedier', 'perm_export_colis', 'perm_export_dau'), before: f => commercialInvoiceFixture(f) });
+    await scenario('commercial-invoice-before-departure-offered-with-the-permission-on-cards-with-dossiers', async f => {
+      await openPage(f);
+      const { invoice } = await openInvoice(f, card(f, 'ENV-2026-045'));
+      assert.deepEqual(await invoice.locator('button').evaluateAll(nodes => nodes.map(node => node.textContent)), ['Facture commerciale en PDF', 'Facture commerciale en Excel']);
+      assert.equal(await card(f, 'ENV-2026-037').locator('summary').count(), 0, 'A departure without dossier has no document.');
+    }, { role: 'logisticien', permissions: only('perm_envois_voir', 'perm_export_factures'), before: f => commercialInvoiceFixture(f) });
+    // After the departure: the frozen manifest, a code missing at the confirmation completed since in the categories.
+    for (const [width, theme] of [[1440, 'light'], [390, 'dark']]) await scenario(`commercial-invoice-after-departure-from-the-manifest-${width}-${theme}`, async f => {
+      await openPage(f, '?vue=partis');
+      const left = card(f, 'ENV-2026-034');
+      const { documents, invoice, pdf, excel } = await openInvoice(f, left);
+      assert.deepEqual(await documents.locator('button').evaluateAll(nodes => nodes.map(node => node.textContent)), ['Manifeste Excel', 'Données douane', 'Facture commerciale en PDF', 'Facture commerciale en Excel']);
+      const manifests = () => f.manifestReads;
+      const colisReads = () => f.requests.filter(request => request.method === 'GET' && request.path.endsWith('/rest/v1/colis')).length;
+      const [beforeManifests, beforeReads] = [manifests(), colisReads()];
+      const file = await downloadOf(f, pdf, `invoice-manifest-${width}-${theme}`);
+      assert.equal(file.name, 'facture-commerciale-ENV-2026-034.pdf');
+      assert.equal(manifests(), beforeManifests + 1, 'Read from the confirmed manifest');
+      assert.equal(colisReads(), beforeReads, 'never from the current dossiers');
+      const items = await pdfItems(file.path);
+      for (const expected of ['ENV-2026-034', '01/10/2026', 'Guadeloupe', 'Aérien', '19,5 kg', 'EXP-SHIPPED', 'Hoarau Flavie', '42050090', '39241000', '76,75 €', '45,75 €', '26,56 €', '122,50 €', '149,06 €'])
+        assert.ok(items.includes(expected), `PDF: « ${expected} »`);
+      const sheet = await downloadOf(f, excel, `invoice-manifest-${width}-${theme}`);
+      assert.equal(sheet.name, 'facture-commerciale-ENV-2026-034.xlsx');
+      const rows = XLSX.utils.sheet_to_json(XLSX.readFile(sheet.path).Sheets['Facture commerciale'], { header: 1, raw: true, defval: null });
+      const head = rows.findIndex(row => row[0] === 'N° expédition');
+      assert.deepEqual(rows.slice(head + 1, head + 4).map(row => [row[0], row[2], row[7], row[8]]), [['EXP-SHIPPED', '42050090', 76.75, 93.39], ['EXP-SHIPPED', '39241000', 45.75, 55.67], ['Total', null, 122.5, 149.06]]);
+      assert.equal(await invoice.locator('.departure-invoice-excluded').count(), 0, 'Nothing is left out of a confirmed manifest.');
+      noWrite(f);
+      await left.screenshot({ path: path.join(output, `commercial-invoice-manifest-${width}-${theme}.png`) });
+      await axe(f, `commercial invoice manifest ${width} ${theme}`);
+    }, { width, theme, before: f => commercialInvoiceFixture(f) });
+
     // ── 10. French numbers ──────────────────────────────────────────────
     await scenario('weights-in-french-in-loading-review-and-manifest', async f => {
       await openPage(f);
@@ -791,6 +925,92 @@ async function trackAssignments(f) {
     await new Promise(resolve => setTimeout(resolve, 150));
     await route.fallback();
   });
+}
+
+/** The commercial invoice's data (see the header): HS codes on the categories, EXP-LOAD-1's
+ * saved quote, a professional and a dossier awaiting payment on the 15 Oct departure, and
+ * EXP-SHIPPED's frozen manifest with the same quote, whose plastic category had no HS code
+ * at the confirmation. `missingCode`: the porcelain category has none either. */
+async function commercialInvoiceFixture(f, { missingCode = false } = {}) {
+  f.tables.categories.push(
+    { id: 'cat-cuir', label: 'Cuir', code_hs: '4205', position: 2 },
+    { id: 'cat-plastique', label: 'Vaisselle plastique', code_hs: '39241000', position: 3 },
+    { id: 'cat-cafe', label: 'Café', code_hs: '0901210000', position: 4 },
+    { id: 'cat-porcelaine', label: 'Porcelaine', code_hs: missingCode ? null : '6911100000', position: 5 },
+  );
+  f.tables.clients.find(row => row.id === CLIENT.pro).raison_sociale = 'Lagon Services SARL';
+  const article = (id, description, unitPrice, categoryId) => ({ id, description, quantity: 1, unitPrice, categoryId });
+  const lines = [article('l-inv-1', 'Mini scelleuse', 16.64, 'cat-cuir'), article('l-inv-2', 'Organisateur évier', 9.92, 'cat-plastique')];
+  // 25 € + 19,5 kg × 5 € = 122,50 € of transport; the first article's customs code is frozen with the quote.
+  const particulier = {
+    schemaVersion: 1, currency: 'EUR', mode: 'final',
+    inputs: { client: { type: 'particulier', nom: 'Hoarau Flavie' }, destination: { code: '974', nom: 'La Réunion', tva: 8.5 }, tarif: { base: 25, parKg: 5 }, volumetricDivisor: 5000, finalPackages: f.prepared.final_packages, lines, fees: [] },
+    amounts: { realWeight: 19.5, volumetricWeight: 10.8, billableWeight: 19.5, transport: 122.5, total: 140,
+      taxLines: [{ ...lines[0], value: 16.64, customDuty: { code: '42050090', label: 'Ouvrages en cuir' } }, { ...lines[1], value: 9.92 }] },
+  };
+  // A professional's quote: transport only, its articles are the dossier's lines.
+  const professional = { schemaVersion: 1, currency: 'EUR', mode: 'final', inputs: { client: { type: 'pro' }, destination: { code: '974', nom: 'La Réunion', tva: 0 }, tarif: { base: 25, parKg: 5 }, volumetricDivisor: 5000, lines: [], fees: [] }, amounts: { transport: 65, total: 65, taxLines: [] } };
+  f.tables.colis.find(row => row.id === DOSSIER.load).devis_snapshot = particulier;
+  f.tables.colis.find(row => row.id === DOSSIER.shipped).devis_snapshot = particulier;
+  f.tables.colis.push(
+    f.dossier(DOSSIER.loadPro, 'EXP-LOAD-PRO', CLIENT.pro, { ...f.paid, devis_total: 65, paiement_montant: 65, devis_snapshot: professional, final_packages: [box(40, 30, 30, 8)], outgoing_parcel_count: 1, fin_l: 40, fin_w: 30, fin_h: 30, fin_p: 8, preparation_composition_version: 1, final_measurements_version: 1, envoi_id: DEPARTURE.reunion15 }),
+    f.dossier(DOSSIER.loadWait, 'EXP-LOAD-WAIT', CLIENT.reunion, { ...f.prepared, statut: 'attente_paiement', devis_total: 140, devis_snapshot: particulier, envoi_id: DEPARTURE.reunion15 }),
+  );
+  // The professional's invoice replaces an older one, whose article is not declared.
+  f.tables.factures.push(
+    { id: 'f-inv-pro', colis_id: DOSSIER.loadPro, vendeur: 'Brûlerie du Port', montant: 105, valide: true, fichier_url: `${DOSSIER.loadPro}/facture.pdf`, replaces_facture_id: 'f-inv-old' },
+    { id: 'f-inv-old', colis_id: DOSSIER.loadPro, vendeur: 'Brûlerie du Port', montant: 99, valide: true, fichier_url: `${DOSSIER.loadPro}/ancienne.pdf` },
+  );
+  f.tables.lignes.push(
+    { id: 'l-inv-p1', colis_id: DOSSIER.loadPro, facture_id: 'f-inv-pro', description: 'Café torréfié 1 kg', qte: 4, prix_unitaire: 15, categorie_id: 'cat-cafe' },
+    { id: 'l-inv-p2', colis_id: DOSSIER.loadPro, facture_id: 'f-inv-pro', description: 'Tasses en porcelaine', qte: 6, prix_unitaire: 7.5, categorie_id: 'cat-porcelaine' },
+    { id: 'l-inv-old', colis_id: DOSSIER.loadPro, facture_id: 'f-inv-old', description: 'Ancienne commande remplacée', qte: 1, prix_unitaire: 99, categorie_id: 'cat-cafe' },
+  );
+  // The confirmed manifest, its categories as they were at the confirmation (registered last: answered first).
+  f.manifestReads = 0;
+  await f.context.route('**/rest/v1/rpc/get_departure_manifest', async route => {
+    f.manifestReads += 1;
+    const input = route.request().postDataJSON();
+    const envoi = f.tables.envois.find(item => item.id === input.p_envoi_id);
+    const frozen = [{ id: 'cat-cuir', label: 'Cuir', code_hs: '4205' }, { id: 'cat-plastique', label: 'Vaisselle plastique', code_hs: null }];
+    const items = f.tables.colis.filter(item => item.envoi_id === input.p_envoi_id && item.date_expedition)
+      .map(item => ({ colis: item, client: f.tables.clients.find(row => row.id === item.client_id), lignes: [], factures: [], categories: frozen }));
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ envoi, confirmed_at: envoi?.departed_at, items, deferred: [], excluded: [] }) });
+  });
+}
+
+/** Opens « Documents du départ » on a card: its « Facture commerciale » block and buttons. */
+async function openInvoice(f, target) {
+  const documents = target.locator('details.departures-documents');
+  await documents.locator('summary').filter({ hasText: 'Documents du départ' }).click();
+  const invoice = documents.getByRole('region', { name: 'Facture commerciale', exact: true });
+  await invoice.waitFor();
+  return {
+    documents, invoice,
+    pdf: invoice.getByRole('button', { name: 'Facture commerciale en PDF', exact: true }),
+    excel: invoice.getByRole('button', { name: 'Facture commerciale en Excel', exact: true }),
+  };
+}
+
+/** Clicks and keeps the downloaded file in the output folder: its suggested name and its path. */
+async function downloadOf(f, button, tag) {
+  const [download] = await Promise.all([f.page.waitForEvent('download'), button.click()]);
+  const name = download.suggestedFilename();
+  const file = path.join(output, `${tag}-${name}`);
+  await download.saveAs(file);
+  return { name, path: file };
+}
+
+/** Every text item of the PDF's pages, no-break spaces read as spaces. */
+async function pdfItems(file) {
+  const pdfjs = await pdfjsReady;
+  const pdf = await pdfjs.getDocument({ data: new Uint8Array(await fs.readFile(file)), useSystemFonts: false, isEvalSupported: false, standardFontDataUrl: STANDARD_FONTS }).promise;
+  const items = [];
+  for (let number = 1; number <= pdf.numPages; number++) {
+    const content = await (await pdf.getPage(number)).getTextContent();
+    items.push(...content.items.map(item => item.str.replace(/ /g, ' ')).filter(text => text.trim()));
+  }
+  return items;
 }
 
 main().catch(error => { console.error(error); process.exitCode = 1; });

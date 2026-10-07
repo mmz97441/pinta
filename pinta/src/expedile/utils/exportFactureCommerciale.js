@@ -1,73 +1,70 @@
 import * as XLSX from 'xlsx';
-import { customsDesignation } from '../domain/customs.js';
+import {
+  COMMERCIAL_INVOICE_COLUMNS, COMMERCIAL_INVOICE_EXPORTER, COMMERCIAL_INVOICE_FOOTER, COMMERCIAL_INVOICE_NOTE,
+  commercialInvoiceFileName, invoiceDayLabel,
+} from '../domain/commercialInvoice.js';
 
-/**
- * Generate a commercial invoice Excel for a given envoi (shipment batch).
- *
- * @param {Object} envoi - The envoi object {id, ref, date, ...}
- * @param {Array} colis - All colis in this envoi
- * @param {Array} clients - All clients
- * @param {Array} categories - All categories (with codeHs field)
- */
-export function exportFactureCommerciale(envoi, colis, clients, categories) {
-  const rows = [];
+// The commercial invoice of a departure (domain/commercialInvoice.js) as an Excel sheet
+// « Facture commerciale »: the departure, then the same columns as the PDF. Amounts are
+// numbers shown in euros (« 1 234,50 € » in French Excel), HS codes stay text (leading
+// zeros), the totals are sums of the article rows.
 
-  colis.forEach((c) => {
-    const cl = clients.find((x) => x.id === c.clientId);
-    const clientRef = `${c.ref} ${cl?.nom || ''}`;
+export const COMMERCIAL_INVOICE_SHEET = 'Facture commerciale';
+const MONEY_FORMAT = '#,##0.00 "€"';
+const MONEY_COLUMNS = [5, 6, 7, 8];
+const TOTAL_COLUMNS = [6, 7, 8];
+const cell = (sheet, r, c) => sheet[XLSX.utils.encode_cell({ r, c })];
 
-    (c.lignes || []).forEach((ligne) => {
-      const cat = categories.find((x) => x.id === ligne.cat);
-      const designation = customsDesignation(ligne, cat);
-      rows.push({
-        'Code HS': designation.code,
-        'Description': ligne.customDuty ? designation.label : ligne.desc || '',
-        'Qté': ligne.qte || 1,
-        'P.U HT': ligne.prix || 0,
-        'Prix total': (ligne.qte || 1) * (ligne.prix || 0),
-        'Référence': clientRef,
-      });
-    });
+/** The workbook and its file name, « facture-commerciale-ENV-2026-036.xlsx » (nothing is written). */
+export function buildCommercialInvoiceWorkbook(invoice) {
+  if (!invoice?.ok) throw new Error('La facture commerciale comporte des points à corriger : aucun document n’est généré.');
+  const { meta, rows, totals } = invoice;
+  const header = [
+    ['FACTURE COMMERCIALE'],
+    ['N° de facture', meta.number || 'Non renseigné'],
+    ['Date', invoiceDayLabel(meta.date) || 'Non renseignée'],
+    ['Départ prévu', invoiceDayLabel(meta.departureDate) || 'Non renseigné'],
+    ['Destination', meta.destination || 'Non renseignée'],
+    ['Mode de transport', meta.mode || 'Non renseigné'],
+    ['Expéditions', meta.dossiers],
+    ['Nombre de colis', meta.parcels],
+    ['Poids brut total (kg)', meta.weight > 0 ? meta.weight : 'Non renseigné'],
+    ['Exportateur', COMMERCIAL_INVOICE_EXPORTER.join(', ')],
+    [],
+  ];
+  const columnsRow = header.length;
+  const first = columnsRow + 1;
+  const last = first + rows.length - 1;
+  const totalRow = last + 1;
+  const sheet = XLSX.utils.aoa_to_sheet([
+    ...header,
+    [...COMMERCIAL_INVOICE_COLUMNS],
+    ...rows.map(row => [row.ref, row.clientName, row.hsCode, row.description, row.quantity, row.unitPrice, row.value, row.transport, row.total]),
+    ['Total', null, null, null, null, null, totals.value, totals.transport, totals.total],
+    [],
+    [COMMERCIAL_INVOICE_NOTE],
+    [COMMERCIAL_INVOICE_FOOTER],
+  ]);
+  for (let r = first; r <= last; r += 1) {
+    const code = cell(sheet, r, 2);
+    Object.assign(code, { t: 's', v: String(code.v), z: '@' });
+    for (const c of MONEY_COLUMNS) cell(sheet, r, c).z = MONEY_FORMAT;
+  }
+  // The totals are sums of the rows (their value is kept for readers that do not calculate).
+  for (const c of TOTAL_COLUMNS) {
+    const column = XLSX.utils.encode_col(c);
+    Object.assign(cell(sheet, totalRow, c), { f: `SUM(${column}${first + 1}:${column}${last + 1})`, z: MONEY_FORMAT });
+  }
+  sheet['!cols'] = [16, 28, 14, 44, 6, 12, 13, 18, 13].map(wch => ({ wch }));
+  sheet['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: columnsRow, c: 0 }, e: { r: last, c: COMMERCIAL_INVOICE_COLUMNS.length - 1 } }) };
+  const book = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(book, sheet, COMMERCIAL_INVOICE_SHEET);
+  return { book, filename: `${commercialInvoiceFileName(invoice)}.xlsx` };
+}
 
-    // If no lignes, add at least one line from the colis description
-    if (!c.lignes || c.lignes.length === 0) {
-      rows.push({
-        'Code HS': '',
-        'Description': c.desc || 'Marchandise diverse',
-        'Qté': 1,
-        'P.U HT': c.valeur || 0,
-        'Prix total': c.valeur || 0,
-        'Référence': clientRef,
-      });
-    }
-  });
-
-  // Add totals row
-  const sousTotal = rows.reduce((sum, r) => sum + (r['Prix total'] || 0), 0);
-  rows.push({});  // empty row
-  rows.push({
-    'Code HS': '',
-    'Description': '',
-    'Qté': '',
-    'P.U HT': 'Sous-total',
-    'Prix total': sousTotal,
-    'Référence': '',
-  });
-
-  const ws = XLSX.utils.json_to_sheet(rows);
-
-  // Auto-size columns
-  const headers = ['Code HS', 'Description', 'Qté', 'P.U HT', 'Prix total', 'Référence'];
-  ws['!cols'] = headers.map((h) => ({
-    wch: Math.max(h.length, ...rows.map((r) => String(r[h] || '').length)) + 2,
-  }));
-
-  const wb = XLSX.utils.book_new();
-  const sheetName = `Facture ${envoi?.ref || 'COM'}`;
-  XLSX.utils.book_append_sheet(wb, ws, sheetName.slice(0, 31));
-
-  const filename = `facture-commerciale-${envoi?.ref || 'export'}.xlsx`;
-  XLSX.writeFile(wb, filename);
-
-  return rows.length - 2; // number of article lines (excluding total rows)
+/** Downloads the Excel file; returns the number of article rows. */
+export function exportFactureCommerciale(invoice) {
+  const { book, filename } = buildCommercialInvoiceWorkbook(invoice);
+  XLSX.writeFile(book, filename, { compression: true });
+  return invoice.rows.length;
 }

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams, Link, useLocation } from 'react-router-dom';
-import { AlertTriangle, Archive, CalendarCheck, CalendarPlus, Check, CheckCircle, ChevronRight, Clock, Download, Loader2, Pencil, Plane, RefreshCw } from 'lucide-react';
+import { AlertTriangle, Archive, CalendarCheck, CalendarPlus, Check, CheckCircle, ChevronRight, Clock, Loader2, Pencil, Plane, RefreshCw } from 'lucide-react';
 import usePersistentDraft from '../../hooks/usePersistentDraft';
 import { useMinuteNow } from '../../hooks/useMinuteNow';
 import { departureReadiness } from '../../domain/departureReadiness';
@@ -19,6 +19,7 @@ import { plural } from '../../domain/plural';
 import { DESTINATIONS, STATUTS } from '../../constants';
 import * as sb from '../../lib/supabaseData';
 import { confirmDeparture, departureManifest, exportDeparture } from '../../services/departures';
+import DepartureDocuments from './DepartureDocuments';
 import './staffDepartures.css';
 
 const FIELD = 'mt-1 min-h-11 w-full rounded-xl border-2 border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 transition-all duration-200 ease-out focus:border-blue-400 aria-[invalid=true]:border-red-500';
@@ -27,7 +28,8 @@ const PRIMARY = `${BUTTON} brand-bg text-white hover:-translate-y-px disabled:ho
 const SEARCH_FIELD = 'mt-1 min-h-11 w-full rounded-xl border border-gray-300 bg-white px-3 text-sm text-gray-800';
 const isLegacySingle = (colis) => !colis.finalPackages?.length && !colis.outgoingParcelCount && [colis.finL,colis.finW,colis.finH,colis.finP].every((value) => Number(value) > 0);
 const NOT_LOADABLE = ['annule', 'livre', 'expedie', 'transit', 'dedouanement', 'arrive', 'livraison'];
-const EXPORTS = [['manifest', 'Manifeste Excel', 'perm_export_colis'], ['invoice', 'Facture commerciale', 'perm_export_factures'], ['dau', 'Données douane', 'perm_export_dau']];
+// The commercial invoice has its own block, before and after the departure (DepartureDocuments).
+const EXPORTS = [['manifest', 'Manifeste Excel', 'perm_export_colis'], ['dau', 'Données douane', 'perm_export_dau']];
 const EMPTY_PLAN = { date: '', destinationCode: '974', weeks: '1', closing: '' };
 const cardScope = id => `card:${id}`;
 const escapeRegExp = text => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -489,10 +491,7 @@ export default function StaffDepartures({ embedded = false }) {
         {departed && canModify && envoi.statut === 'parti' && <button key="arrive" type="button" data-action="arrive" disabled={busy} className={BUTTON} onClick={() => confirmStep(envoi, 'arrive')}>Confirmer l’arrivée</button>}
         {departed && canModify && envoi.statut === 'arrive' && <button key="archive" type="button" data-action="archive" disabled={busy} className={BUTTON} onClick={() => confirmStep(envoi, 'archive')}><Archive size={16} aria-hidden="true" />Archiver ce départ</button>}
       </div>
-      {departed && exports.length > 0 && <details className="departures-documents">
-        <summary>Documents du départ</summary>
-        <div className="flex flex-wrap items-start gap-2 pb-1">{exports.map(([type, label]) => <button type="button" key={type} disabled={busy} className={BUTTON} onClick={() => run(() => exportDeparture(envoi.id, type), scope)}><Download size={15} aria-hidden="true" />{label}</button>)}</div>
-      </details>}
+      <DepartureDocuments envoi={envoi} departed={departed} dossierCount={loadable.length} exports={exports} busy={busy} onExport={type => run(() => exportDeparture(envoi.id, type), scope)} />
       {errors[scope] && <p role="alert" className="departures-error"><AlertTriangle size={16} aria-hidden="true" />{errors[scope]}</p>}
     </article>;
   }
