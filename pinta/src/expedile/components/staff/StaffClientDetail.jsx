@@ -14,6 +14,7 @@ import { functionErrorMessage } from '../../services/functionErrors';
 import * as sb from '../../lib/supabaseData';
 import { nextAction } from '../../domain/workQueues';
 import usePersistentDraft from '../../hooks/usePersistentDraft';
+import { staffDataState } from '../../domain/dataLoad';
 import { receptionCartonManifest } from '../../domain/reception';
 import { REQUIRED_CLIENT_FIELDS, REQUIRED_CLIENT_KEYS, COMPLETION_FIELDS, filled, newClientErrors, requiredFieldFormatError, blankingMessage, missingMessage, servedDestination, phoneOf, phoneErrors, validPhone, dialablePhone, refusedClientFields, PHONE_FORMAT_MESSAGE } from '../../domain/clientRequirements';
 
@@ -277,7 +278,15 @@ export default function StaffClientDetail() {
   if (existing) return <EditClientPage key={existing.id} cl={existing} onDone={() => navigate('/clients')} />;
   // Loading, failed load and missing client are three different situations.
   if (dataLoading) return <DetailSkeleton />;
-  if (dataError || !sbReady) return <LoadFailure message={dataError} onBack={() => navigate('/clients')} />;
+  // Same rule as the other pages (domain/dataLoad.js): nothing read → the failure here; data held but the last
+  // refresh failed → the shell's banner already says so (with « Réessayer »), this page only says why it is empty.
+  const load = staffDataState({ sbReady, dataLoading, dataError, hasData: clients.length > 0 });
+  if (load.state === 'failed') return <LoadFailure message={load.reason} onBack={() => navigate('/clients')} />;
+  if (load.state === 'stale') return <section className="mx-auto max-w-xl space-y-3 p-6">
+    <h1 className="text-xl font-bold text-primary">Fiche pas encore disponible</h1>
+    <p className="text-secondary">La dernière actualisation des données a échoué : cette fiche n’a pas pu être chargée. Réessayez depuis le bandeau en haut de la page.</p>
+    <button type="button" className={SECONDARY} onClick={() => navigate('/clients')}><ArrowLeft size={16} aria-hidden="true" />Retour aux clients</button>
+  </section>;
   return <section className="mx-auto max-w-xl space-y-3 p-6">
     <h1 className="text-xl font-bold text-primary">Client introuvable</h1>
     <p className="text-secondary">Cette fiche n’est pas disponible ou vous n’avez plus accès à ce client.</p>
