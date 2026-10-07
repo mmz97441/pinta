@@ -688,7 +688,10 @@ async function main() {
       Object.assign(f.tables.factures.find(invoice => invoice.id === B), { created_at: '2026-09-12T08:00:00+00:00' });
       const expected = ['Facture 1 sur 3 · Boutique C · À vérifier', 'Facture 2 sur 3 · Boutique A · Vérifiée', 'Facture 3 sur 3 · Boutique B · À vérifier'];
       const checkNumbering = async () => {
-        assert.deepEqual(await invoiceNames(f.page), expected, 'Invoices are numbered by arrival, not by identifier.');
+        // The supplier names arrive with the invoice details: wait for them before comparing (5 s at most).
+        let names = await invoiceNames(f.page);
+        for (let attempt = 0; attempt < 50 && JSON.stringify(names) !== JSON.stringify(expected); attempt += 1) { await f.page.waitForTimeout(100); names = await invoiceNames(f.page); }
+        assert.deepEqual(names, expected, 'Invoices are numbered by arrival, not by identifier.');
         await waitForCurrentInvoice(f.page, B);
         assert.match(await shownInvoice(f).innerText(), /Facture 3 sur 3 · Boutique B/);
         await f.page.getByTestId('invoice-action-bar').filter({ hasText: 'Vous validez : Facture 3 sur 3 · Boutique B' }).waitFor();
