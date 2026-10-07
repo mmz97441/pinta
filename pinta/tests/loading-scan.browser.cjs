@@ -347,6 +347,31 @@ async function main() {
       assert.equal(await review(f).count(), 0, 'The loading closes once confirmed');
     });
 
+    // ── 4b. A reading of the loading still under way when the departure is confirmed never reopens it ──
+    await scenario('late-reading-never-reopens-a-confirmed-loading', async f => {
+      await openLoading(f);
+      for (const code of ['EXP-2YE537-1-2', 'EXP-2YE537-2-2', 'EXP-4KM2PQ-1-1']) await scan(f, code);
+      await until(() => [checksOf(f, D.two).length, checksOf(f, D.one).length], [2, 1], 'Three labels recorded');
+      await review(f).getByRole('textbox', { name: 'Motif du report des dossiers non cochés' }).fill('Colis non remis au transporteur');
+      // The next reading of the departure's dossiers is held until the confirmation is done.
+      let release; const held = new Promise(resolve => { release = resolve; }); let holding = true;
+      await f.context.route('**/rest/v1/colis?**', async route => {
+        if (holding && route.request().url().includes(`envoi_id=eq.${TODAY}`)) { holding = false; await held; }
+        return route.fallback();
+      });
+      await field(f).focus();
+      await scan(f, 'EXP-2YE537-3-3');
+      await until(() => feedback(f).getAttribute('data-tone'), 'error', 'A stale label is refused, the loading is read again');
+      await review(f).getByRole('button', { name: 'Confirmer le départ de 2 expéditions', exact: true }).click();
+      await f.page.getByRole('region', { name: 'Manifeste confirmé', exact: true }).waitFor();
+      const landed = f.page.waitForResponse(response => response.url().includes(`envoi_id=eq.${TODAY}`));
+      release();
+      await landed;
+      await new Promise(resolve => setTimeout(resolve, 500));
+      assert.equal(await review(f).count(), 0, 'The reading that lands after the confirmation does not reopen the loading');
+      await f.page.getByRole('region', { name: 'Manifeste confirmé', exact: true }).waitFor();
+    });
+
     // ── 5. Shared progress: checks of another device appear; a check removed meanwhile is refused at confirmation ──
     await scenario('shared-progress-between-devices', async f => {
       await openLoading(f);
