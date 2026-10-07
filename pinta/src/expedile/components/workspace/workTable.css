@@ -147,6 +147,9 @@ html.dark .work-page .hover\:bg-slate-50:hover { background-color: var(--bg-surf
    the date takes its own line, whole. A client name reads on one line; a long
    one ends with « … » and stays whole in its title. */
 .work-due-part { white-space: nowrap; }
+/* A casier code is read against the shelf: « C-002 » never splits at its hyphen
+   (the table gives its column the code's whole width). */
+.work-table td[data-work-column='casier'] { white-space: nowrap; overflow-wrap: normal; }
 .work-client { display: block; max-width: 9em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* From 1400px the seven default columns leave room for a longer name. */
 @media (min-width: 1400px) { .work-client { max-width: 14em; } }
@@ -171,8 +174,11 @@ html.dark .work-table-panel { --dossier-table-selected-bg: #203744; }
 .work-card { display: flex; flex-direction: column; gap: 2px; }
 .work-card[data-urgent='true'] { box-shadow: inset 3px 0 0 var(--work-urgent-edge); }
 .work-card[data-urgent='true']:focus-within { box-shadow: inset 3px 0 0 var(--work-urgent-edge), inset 0 0 0 2px var(--brand-text); }
-/* The title keeps its 44px link target; the margins give back its extra height. */
-.work-card-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: -8px 0 -6px; }
+/* The title keeps its 44px link target, the margins give back its extra height.
+   Titles of one row start at the same height, one line or two: the text sits at
+   the top of its target, the extra height below it. */
+.work-card-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; margin: -4px 0 -10px; }
+.work-card-heading .work-task-link { align-items: flex-start; padding-top: 2px; }
 .work-card-heading .dossier-pill { flex-shrink: 0; }
 .work-card-title { margin: 0; min-width: 0; font-size: 1.07em; line-height: 1.3; }
 .work-card-identity { margin: 0; color: var(--text-secondary); }
@@ -190,13 +196,7 @@ html.dark .work-table-panel { --dossier-table-selected-bg: #203744; }
 /* ── Empty list, load failure, preferences ──────────────────────────────── */
 /* One rule above the empty list; the preferences below bring their own. */
 .work-empty { padding: 32px 0; border-top: 1px solid var(--border-subtle); text-align: center; }
-.work-load-error { display: flex; align-items: flex-start; gap: 12px; padding: 16px; border: 1px solid #fecaca; border-radius: 12px; color: #991b1b; background: #fef2f2; }
-html.dark .work-load-error { border-color: #7f3a3a; color: #f4b9b9; background: #2c1d1b; }
-.work-load-error-icon { flex-shrink: 0; margin-top: 2px; }
-.work-load-error-body { display: grid; justify-items: start; gap: 8px; min-width: 0; }
-.work-load-error-body h2 { margin: 0; font-size: 17px; font-weight: 700; line-height: 1.35; }
-.work-load-error-body p { margin: 0; font-size: 15px; line-height: 1.45; color: var(--text-primary); }
-.work-load-error-body .work-load-error-reason { font-weight: 600; color: inherit; overflow-wrap: anywhere; }
+/* .work-load-error: workLoadError.css (shared with Équipe and Conversations). */
 .work-refresh-error { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0 12px; padding: 4px 4px 4px 12px; border: 1px solid #fecaca; border-radius: 12px; font-size: 14px; color: #b91c1c; }
 html.dark .work-refresh-error { border-color: #7f3a3a; color: #f4b9b9; }
 .work-refresh-error > p { margin: 0; padding: 8px 0; }

@@ -1,6 +1,6 @@
 import React, { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { AlertTriangle, ArrowRight, ChevronDown, ListFilter, Loader2, Search, Settings2, Users, RefreshCw } from 'lucide-react';
+import { ArrowRight, ChevronDown, ListFilter, Loader2, Search, Settings2, Users, RefreshCw } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { useMinuteNow } from '../../hooks/useMinuteNow';
 import useDossierTablePreferences from '../../hooks/useDossierTablePreferences';
@@ -8,11 +8,13 @@ import useWorkLayout from '../../hooks/useWorkLayout';
 import { PERSONAL_SECTIONS, availableMissions, buildPersonalWork, personalSection, workTotals, staffAvailable, staffDisplayName } from '../../domain/personalWork';
 import { WORK_TABLE_CHOICES, visibleWorkColumns } from '../../domain/workTable';
 import { plural } from '../../domain/plural';
+import { staffDataState } from '../../domain/dataLoad';
 import { DossierColumnVisibility } from '../staff/DossierColumnOptions';
 import WorkActionRow, { PRIMARY_COMMAND } from './WorkActionRow';
 import WorkActionTable from './WorkActionTable';
 import WorkDisplayOptions from './WorkDisplayOptions';
 import WorkPreferences from './WorkPreferences';
+import WorkLoadError from './WorkLoadError';
 import '../staff/dossierTable.css';
 import './workTable.css';
 
@@ -25,20 +27,6 @@ const COLUMN_NOTES = ['Choisissez les colonnes affichées, dans le tableau comme
 const exceptionNotice = 'Permission modifiée : organisez un relais avec une personne habilitée.';
 const linkButton = 'min-h-11 px-3 text-sm font-semibold underline';
 
-/** The dossiers or the tasks did not load: nothing on this page can be
- * counted, so no « À faire 0 » nor « pas de tâche », only the reason and a
- * retry. */
-function WorkLoadError({ reason, retrying, onRetry }) {
-  return <section role="alert" aria-labelledby="work-load-error-title" className="work-load-error">
-    <AlertTriangle size={20} aria-hidden="true" className="work-load-error-icon" />
-    <div className="work-load-error-body">
-      <h2 id="work-load-error-title">Vos tâches n’ont pas pu être chargées</h2>
-      <p className="work-load-error-reason">{reason}</p>
-      <p>Vos tâches enregistrées sont conservées. La liste et ses compteurs s’afficheront dès que le chargement aura réussi.</p>
-      <button type="button" disabled={retrying} onClick={onRetry} className={PRIMARY_COMMAND}><RefreshCw size={16} aria-hidden="true" className={retrying ? 'animate-spin' : undefined} />{retrying ? 'Nouvel essai…' : 'Réessayer'}</button>
-    </div>
-  </section>;
-}
 
 /** A relay waits for my decision while the colleague stays responsible, so it
  * sits above the list. On a phone the band folds to one line until opened. */
@@ -78,11 +66,12 @@ export default function PersonalWorkView() {
   const unfiltered = useMemo(() => buildPersonalWork({ actions: workActions, dossiers: data, clients, userId: auth?.u?.id, preference, can, now }), [workActions, data, clients, auth?.u?.id, preference, can, now]);
   const rows = view.sections[section]; const totals = workTotals(rows, data); const returnTo = location.pathname + location.search;
   const label = section === 'pool' ? 'À prendre' : PERSONAL_SECTIONS.find(item => item.id === section).label;
-  // The dossiers (the same condition as the shell's banner) or the tasks never
-  // loaded: an empty list would read as « no work ».
-  const dataFailed = Boolean(dataError) || (!sbReady && !dataLoading);
+  // The dossiers or the tasks never loaded: an empty list would read as « no
+  // work ». A failed refresh keeps the loaded tasks, under the shell's banner.
+  const dataLoad = staffDataState({ sbReady, dataLoading, dataError, hasData: data.length > 0 });
+  const dataFailed = dataLoad.state === 'failed';
   const loadFailed = dataFailed || (Boolean(workError) && !workActions.length);
-  const loadReason = dataFailed ? dataError || 'Connexion aux données interrompue.' : String(workError?.message || workError);
+  const loadReason = dataFailed ? dataLoad.reason : String(workError?.message || workError);
   const retryLoading = async () => {
     if (retrying) return;
     setRetrying(true);
@@ -155,7 +144,8 @@ export default function PersonalWorkView() {
       <div className="work-header-actions"><button type="button" onClick={() => navigate('/equipe')} className="dossier-toolbar-button"><Users size={18} aria-hidden="true" />Équipe</button>{!loadFailed && <button type="button" onClick={openPreferences} className="dossier-text-button">Ma disponibilité</button>}</div>
     </header>
     {!loadFailed && workError && rows.length > 0 && <div role="alert" className="work-refresh-error"><p>Actualisation des tâches impossible : {String(workError.message || workError).trim().replace(/[.\s]+$/, '')}. La liste affichée est la dernière chargée.</p><button type="button" disabled={retrying} onClick={retryLoading} className="dossier-text-button"><RefreshCw size={15} aria-hidden="true" className={retrying ? 'animate-spin' : undefined} />{retrying ? 'Nouvel essai…' : 'Réessayer'}</button></div>}
-    {loadFailed ? <WorkLoadError reason={loadReason} retrying={retrying} onRetry={retryLoading} /> : initialLoading ? <div role="status" className="space-y-3">
+    {/* The dossiers or the tasks did not load: nothing on this page can be counted. */}
+    {loadFailed ? <WorkLoadError title="Vos tâches n’ont pas pu être chargées" reason={loadReason} note="Vos tâches enregistrées sont conservées. La liste et ses compteurs s’afficheront dès que le chargement aura réussi." retrying={retrying} onRetry={retryLoading} /> : initialLoading ? <div role="status" className="space-y-3">
       <p className="text-sm text-slate-600">Chargement des tâches…</p>
       {layout === 'table'
         ? <div className="work-skeleton-table" aria-hidden="true">{[0, 1, 2, 3, 4].map(id => <span key={id} className="animate-pulse" />)}</div>

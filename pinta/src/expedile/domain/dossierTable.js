@@ -440,13 +440,16 @@ export function dossierFactHasValue(column, model = {}) {
  * guard_colis_permissions. « Expédié » is only reached by confirming the
  * loading of the departure (guard_colis_departure refuses a direct change):
  * it is never a bulk write, the list points to the departure instead. */
+// Each step reads as its status pill (STATUTS): « 2 dossiers passés à « En vol » »
+// above rows showing « En vol ».
+const bulkStep = (statut, from, permission, extra = {}) => Object.freeze({ statut, label: STATUTS[statut].label, from: Object.freeze(from), permission, ...extra });
 export const BULK_STATUS_STEPS = Object.freeze([
-  Object.freeze({ statut: 'expedie', label: 'Expédié', from: Object.freeze(['paye']), permission: 'perm_colis_expedier', viaDeparture: true }),
-  Object.freeze({ statut: 'transit', label: 'En transit', from: Object.freeze(['expedie']), permission: 'perm_colis_changer_statut_expedition' }),
-  Object.freeze({ statut: 'dedouanement', label: 'Dédouanement', from: Object.freeze(['transit']), permission: 'perm_colis_changer_statut_expedition' }),
-  Object.freeze({ statut: 'arrive', label: 'Arrivé', from: Object.freeze(['transit', 'dedouanement']), permission: 'perm_colis_changer_statut_expedition' }),
-  Object.freeze({ statut: 'livraison', label: 'En livraison', from: Object.freeze(['arrive']), permission: 'perm_colis_changer_statut_expedition' }),
-  Object.freeze({ statut: 'livre', label: 'Livré', from: Object.freeze(['livraison']), permission: 'perm_colis_changer_statut_expedition' }),
+  bulkStep('expedie', ['paye'], 'perm_colis_expedier', { viaDeparture: true }),
+  bulkStep('transit', ['expedie'], 'perm_colis_changer_statut_expedition'),
+  bulkStep('dedouanement', ['transit'], 'perm_colis_changer_statut_expedition'),
+  bulkStep('arrive', ['transit', 'dedouanement'], 'perm_colis_changer_statut_expedition'),
+  bulkStep('livraison', ['arrive'], 'perm_colis_changer_statut_expedition'),
+  bulkStep('livre', ['livraison'], 'perm_colis_changer_statut_expedition'),
 ]);
 const AFTER_DEPARTURE = new Set(['expedie', 'transit', 'dedouanement', 'arrive', 'livraison', 'livre']);
 export const BULK_STATUS_REASONS = Object.freeze({

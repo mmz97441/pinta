@@ -5,7 +5,7 @@ import { X, FileText, Search, UserPlus, Package, Camera, AlertTriangle } from 'l
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { BRAND, getDestByCP, PRODUITS_INTERDITS, ABONNEMENTS } from '../constants';
-import { uid, searchClients } from '../utils';
+import { uid, searchClients, eur } from '../utils';
 import { Badge } from './ui';
 import * as sb from '../lib/supabaseData';
 import { deliverMessage } from '../services/telegramApi';
@@ -17,7 +17,9 @@ import { receptionCartons, receptionMeasurements, receptionMeasurementIssues, re
 import { safeWorkReturn } from '../domain/personalWork';
 import { plural } from '../domain/plural';
 import { newClientErrors } from '../domain/clientRequirements';
+import { firstNewClientField, newClientAlert, phoneErrorField } from '../domain/receptionClient';
 import { usePersistentDraft } from '../hooks/usePersistentDraft';
+import { upperCaseInPlace } from './detail/casierInput';
 import './reception.css';
 
 // Below this visible height (keyboard open, landscape phone, short window),
@@ -140,6 +142,8 @@ export default function ColisModal({ open, onClose, initialColisId, initialClien
   const [newClientMode, setNewClientMode] = useState(savedDraft?.newClientMode || false);
   const [newClientForm, setNewClientForm] = useState(savedDraft?.newClientForm || EMPTY_NEW_CLIENT);
   const [newClientErr, setNewClientErr] = useState({});
+  // A refused new client: its first field to complete comes into view with the focus.
+  const [pendingClientFocus, setPendingClientFocus] = useState(null);
 
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
@@ -186,6 +190,14 @@ export default function ColisModal({ open, onClose, initialColisId, initialClien
     input?.focus(); input?.scrollIntoView({ block: 'center', behavior: 'smooth' });
     setPendingMeasureFocus(null);
   }, [open, saving, pendingMeasureFocus]);
+  useEffect(() => {
+    if (!open || saving || !pendingClientFocus) return;
+    const input = document.getElementById(`reception-client-${pendingClientFocus}`);
+    // Centred: clear of the sticky actions and of the bottom navigation.
+    input?.focus({ preventScroll: true });
+    input?.scrollIntoView({ block: 'center' });
+    setPendingClientFocus(null);
+  }, [open, saving, pendingClientFocus]);
   useLayoutEffect(() => {
     // Focus a newly created row after its refs exist, before another scanner
     // event can race the deferred effect from the previous row.
@@ -367,14 +379,20 @@ export default function ColisModal({ open, onClose, initialColisId, initialClien
   };
 
   // ── New client inline ─────────────────────────────────────
-  const setNCField = (key, val) => setNewClientForm((prev) => ({ ...prev, [key]: val }));
+  // Correcting a refused field takes its error away (both phones answer « le téléphone »).
+  const setNCField = (key, val) => {
+    setNewClientForm((prev) => ({ ...prev, [key]: val }));
+    const errorKey = key === 'telFixe' ? 'tel' : key;
+    setNewClientErr((prev) => (prev[errorKey] ? { ...prev, [errorKey]: undefined } : prev));
+  };
 
+  // The refused fields of the new client, by form key (none: it can be created).
   const validateNewClient = () => {
     // The information required for every client account (domain/clientRequirements.js, same rule as the database).
     const errs = newClientErrors(newClientForm);
     if (newClientForm.type === 'pro' && !newClientForm.raisonSociale.trim()) errs.raisonSociale = 'Raison sociale requise pour un pro';
     setNewClientErr(errs);
-    return Object.keys(errs).length === 0;
+    return errs;
   };
 
   // ── validation ────────────────────────────────────────────
@@ -467,8 +485,16 @@ export default function ColisModal({ open, onClose, initialColisId, initialClien
       cl = pendingCreate.client;
     } else if (newClientMode) {
       if (!appCtx.can('perm_clients_creer')) throw new Error('Votre accès ne permet pas de créer un client. Sélectionnez une fiche existante.');
-      if (!validateNewClient()) return;
-      if (!validate()) return;
+      // Every error in one pass: the client's fields and the cartons' measures.
+      const clientErrors = validateNewClient();
+      const formValid = validate();
+      if (Object.keys(clientErrors).length) {
+        // The client's fields come first in the form: they take the focus, not a measure.
+        setPendingMeasureFocus(null);
+        setPendingClientFocus(firstNewClientField(clientErrors, newClientForm));
+        return;
+      }
+      if (!formValid) return;
       clientId = await addNewClient({
         nom: newClientForm.nom.trim(),
         prenom: newClientForm.prenom.trim(),
@@ -651,6 +677,12 @@ export default function ColisModal({ open, onClose, initialColisId, initialClien
     }`;
 
   const labelCls = 'block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1';
+  // The new client's refused fields: the error under its field (the phone's under
+  // the number typed), the field marked invalid and described by it.
+  const ncError = key => key === 'tel' || key === 'telFixe' ? (phoneErrorField(newClientForm) === key ? newClientErr.tel : '') : newClientErr[key];
+  const ncField = key => ({ id: `reception-client-${key}`, 'aria-invalid': ncError(key) ? true : undefined, 'aria-describedby': ncError(key) ? `reception-client-${key}-error` : undefined });
+  const ncMessage = key => ncError(key) ? <p id={`reception-client-${key}-error`} className="mt-0.5 text-[11px] text-red-500">{ncError(key)}</p> : null;
+  const clientAlert = isStaff && newClientMode ? newClientAlert(newClientErr) : '';
 
   const notificationAccessible = !!(selectedClient?.telegramChatId || selectedClient?.userId);
 
@@ -932,9 +964,9 @@ export default function ColisModal({ open, onClose, initialColisId, initialClien
                 <div className="flex rounded-lg overflow-hidden border border-gray-200">
                   {[{ v: 'particulier', l: 'Particulier' }, { v: 'pro', l: 'Professionnel' }].map((t) => (
                     <button
-                      key={t.v} type="button"
+                      key={t.v} type="button" aria-pressed={newClientForm.type === t.v}
                       onClick={() => setNCField('type', t.v)}
-                      className={`px-3 py-1.5 text-xs font-bold transition-colors ${newClientForm.type === t.v ? 'bg-emerald-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`}
+                      className={`px-3 py-1.5 text-xs font-bold transition-colors ${newClientForm.type === t.v ? 'bg-emerald-700 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`}
                     >
                       {t.l}
                     </button>
@@ -946,7 +978,7 @@ export default function ColisModal({ open, onClose, initialColisId, initialClien
                   className="px-2 py-1.5 rounded-lg border border-gray-200 text-xs font-semibold bg-white"
                 >
                   {Object.entries(ABONNEMENTS).map(([k, v]) => (
-                    <option key={k} value={k}>{v.label} {v.prix > 0 ? `(${v.prix}€/${v.periode})` : ''}</option>
+                    <option key={k} value={k}>{v.prix > 0 ? `${v.label} (${eur(v.prix)} par ${v.periode})` : v.label}</option>
                   ))}
                 </select>
                 {newClientForm.abonnement !== 'freemium' && (
@@ -984,9 +1016,10 @@ export default function ColisModal({ open, onClose, initialColisId, initialClien
                         placeholder="Raison sociale *"
                         value={newClientForm.raisonSociale}
                         onChange={(e) => setNCField('raisonSociale', e.target.value)}
-                        className={inputCls(newClientErr.raisonSociale)}
+                        className={inputCls(ncError('raisonSociale'))}
+                        {...ncField('raisonSociale')}
                       />
-                      {newClientErr.raisonSociale && <p className="mt-0.5 text-[10px] text-red-500">{newClientErr.raisonSociale}</p>}
+                      {ncMessage('raisonSociale')}
                     </div>
                     <ReceptionInput label="SIRET"
                       type="text"
@@ -1045,9 +1078,10 @@ export default function ColisModal({ open, onClose, initialColisId, initialClien
                       placeholder={newClientForm.type === 'pro' ? 'Nom contact *' : 'Nom *'}
                       value={newClientForm.nom}
                       onChange={(e) => setNCField('nom', e.target.value)}
-                      className={inputCls(newClientErr.nom)}
+                      className={inputCls(ncError('nom'))}
+                      {...ncField('nom')}
                     />
-                    {newClientErr.nom && <p className="mt-0.5 text-[11px] text-red-500">{newClientErr.nom}</p>}
+                    {ncMessage('nom')}
                   </div>
                   <div>
                     <ReceptionInput label="Prénom *"
@@ -1055,9 +1089,10 @@ export default function ColisModal({ open, onClose, initialColisId, initialClien
                       placeholder="Prénom"
                       value={newClientForm.prenom}
                       onChange={(e) => setNCField('prenom', e.target.value)}
-                      className={inputCls(newClientErr.prenom)}
+                      className={inputCls(ncError('prenom'))}
+                      {...ncField('prenom')}
                     />
-                    {newClientErr.prenom && <p className="mt-0.5 text-[11px] text-red-500">{newClientErr.prenom}</p>}
+                    {ncMessage('prenom')}
                   </div>
                   {newClientForm.type === 'particulier' && (
                     <ReceptionInput label="Date de naissance"
@@ -1082,19 +1117,25 @@ export default function ColisModal({ open, onClose, initialColisId, initialClien
                       placeholder="Tél. mobile"
                       value={newClientForm.tel}
                       onChange={(e) => setNCField('tel', e.target.value)}
-                      className={inputCls(newClientErr.tel)}
+                      className={inputCls(ncError('tel'))}
                       style={{ fontFamily: 'monospace' }}
+                      {...ncField('tel')}
                     />
-                    {newClientErr.tel && <p className="mt-0.5 text-[11px] text-red-500">{newClientErr.tel}</p>}
+                    {ncMessage('tel')}
                   </div>
-                  <ReceptionInput label="Téléphone fixe"
-                    type="tel"
-                    placeholder="Tél. fixe"
-                    value={newClientForm.telFixe}
-                    onChange={(e) => setNCField('telFixe', e.target.value)}
-                    className={inputCls(false)}
-                    style={{ fontFamily: 'monospace' }}
-                  />
+                  {/* The phone error sits under the number typed: the landline when only it is filled. */}
+                  <div>
+                    <ReceptionInput label="Téléphone fixe"
+                      type="tel"
+                      placeholder="Tél. fixe"
+                      value={newClientForm.telFixe}
+                      onChange={(e) => setNCField('telFixe', e.target.value)}
+                      className={inputCls(ncError('telFixe'))}
+                      style={{ fontFamily: 'monospace' }}
+                      {...ncField('telFixe')}
+                    />
+                    {ncMessage('telFixe')}
+                  </div>
                 </div>
                 <p className="text-[11px] text-gray-500">Un numéro mobile ou fixe est obligatoire.</p>
                 <div className="grid grid-cols-2 gap-2">
@@ -1104,9 +1145,10 @@ export default function ColisModal({ open, onClose, initialColisId, initialClien
                       placeholder="Email"
                       value={newClientForm.email}
                       onChange={(e) => setNCField('email', e.target.value)}
-                      className={inputCls(newClientErr.email)}
+                      className={inputCls(ncError('email'))}
+                      {...ncField('email')}
                     />
-                    {newClientErr.email && <p className="mt-0.5 text-[11px] text-red-500">{newClientErr.email}</p>}
+                    {ncMessage('email')}
                   </div>
                   <ReceptionInput label="Identifiant Telegram"
                     type="text"
@@ -1127,9 +1169,10 @@ export default function ColisModal({ open, onClose, initialColisId, initialClien
                     placeholder="Adresse ligne 1"
                     value={newClientForm.adresseLigne1}
                     onChange={(e) => setNCField('adresseLigne1', e.target.value)}
-                    className={inputCls(newClientErr.adresseLigne1)}
+                    className={inputCls(ncError('adresseLigne1'))}
+                    {...ncField('adresseLigne1')}
                   />
-                  {newClientErr.adresseLigne1 && <p className="mt-0.5 text-[11px] text-red-500">{newClientErr.adresseLigne1}</p>}
+                  {ncMessage('adresseLigne1')}
                 </div>
                 <ReceptionInput label="Complément d’adresse"
                   type="text"
@@ -1138,17 +1181,20 @@ export default function ColisModal({ open, onClose, initialColisId, initialClien
                   onChange={(e) => setNCField('adresseLigne2', e.target.value)}
                   className={inputCls(false)}
                 />
-                <div className="grid grid-cols-3 gap-2">
+                {/* One field per row on a phone: the postal code and its error keep the whole width. */}
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
                   <div>
                     <ReceptionInput label="Code postal *"
                       type="text"
+                      inputMode="numeric"
                       placeholder="Code postal *"
                       value={newClientForm.cp}
                       onChange={(e) => setNCField('cp', e.target.value)}
-                      className={inputCls(newClientErr.cp)}
+                      className={inputCls(ncError('cp'))}
                       style={{ fontFamily: 'monospace' }}
+                      {...ncField('cp')}
                     />
-                    {newClientErr.cp && <p className="mt-0.5 text-[11px] text-red-500">{newClientErr.cp}</p>}
+                    {ncMessage('cp')}
                   </div>
                   <div>
                     <ReceptionInput label="Ville *"
@@ -1156,9 +1202,10 @@ export default function ColisModal({ open, onClose, initialColisId, initialClien
                       placeholder="Ville"
                       value={newClientForm.ville}
                       onChange={(e) => setNCField('ville', e.target.value)}
-                      className={inputCls(newClientErr.ville)}
+                      className={inputCls(ncError('ville'))}
+                      {...ncField('ville')}
                     />
-                    {newClientErr.ville && <p className="mt-0.5 text-[11px] text-red-500">{newClientErr.ville}</p>}
+                    {ncMessage('ville')}
                   </div>
                   <ReceptionInput label="Commune"
                     type="text"
@@ -1215,7 +1262,7 @@ export default function ColisModal({ open, onClose, initialColisId, initialClien
                   type="text"
                   id="reception-casier-existing" placeholder={rattacherTarget.casier || 'ex. A-03'}
                   value={nf.casier}
-                  onChange={(e) => setField('casier', e.target.value.toUpperCase())}
+                  onChange={(e) => setField('casier', upperCaseInPlace(e.target))}
                   className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm outline-none focus:border-blue-400 focus:bg-white"
                 />
               </details>
@@ -1464,6 +1511,7 @@ export default function ColisModal({ open, onClose, initialColisId, initialClien
               {isStaff ? <p>{fullPage ? "Aucun message envoyé au client lors de l’enregistrement." : "Enregistrez la réception, puis préparez la demande d’accord et de factures. Le message sera envoyé à votre confirmation."}</p> : mode === 'nouveau' && <p>{notificationAccessible ? `Notification proposée : ${selectedClient?.telegramChatId ? 'Telegram' : 'message dans l’espace client'}` : 'Accès client à activer : une action de contact sera créée pour l’équipe.'}</p>}
               {checkedInterdits.length > 0 && <p className="text-red-700 font-bold">{plural(checkedInterdits.length, 'produit interdit signalé', 'produits interdits signalés')}</p>}
             </div>
+            {clientAlert && <p role="alert" className={`${compactFooter ? 'mb-2' : 'mb-3'} text-sm font-semibold text-red-700`}>{clientAlert}</p>}
             {formErr.dimensions && <p role="alert" className={`${compactFooter ? 'mb-2' : 'mb-3'} text-sm font-semibold text-red-700`}>{formErr.dimensions}</p>}
             {saveError && <div role="alert" className={`${compactFooter ? 'mb-2' : 'mb-3'} text-sm font-semibold text-red-700`}><p>{saveError}</p>{fullPage && rattacherTarget && !pendingAppend && !pendingCreate && <button type="button" disabled={saving} className="min-h-11 underline" onClick={async () => { try { const updated = await appCtx.refreshColis(rattacherTarget.id); if (updated) { setRattacherTarget(updated); setSaveError('Le dossier est actualisé. Vos nouvelles mesures sont conservées : vérifiez le numéro du carton avant d’enregistrer.'); } } catch (error) { setSaveError(error.message); } }}>Actualiser le dossier sans perdre ma saisie</button>}</div>}
             {fullPage ? <div className={compactFooter ? 'grid grid-cols-2 gap-2' : 'grid gap-2 sm:grid-cols-2'}>

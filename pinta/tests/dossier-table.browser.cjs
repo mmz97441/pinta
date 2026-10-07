@@ -666,7 +666,7 @@ async function main() {
       assert.equal(await row(f,P).count(),0);assert.equal(f.claims.length,0);assert.deepEqual(businessWrites(f),[]);
     });
     for(const dark of [false,true])await scenario(`phone-bulk-status-is-chosen-then-applied-explicitly-${dark?'dark':'light'}`,async f=>{
-      // Two shipped dossiers: « En transit » is their one valid next step.
+      // Two shipped dossiers: « En vol » (the pill of « transit ») is their one valid next step.
       for(const id of [P4,P5])Object.assign(f.tables.colis.find(parcel=>parcel.id===id),{statut:'expedie',date_expedition:'2026-10-02T06:00:00Z'});
       await f.page.setViewportSize({width:390,height:844});await f.context.addInitScript(dark=>localStorage.setItem('expedile-theme',dark?'dark':'light'),dark);
       await open(f);await f.page.waitForFunction(dark=>document.documentElement.classList.contains('dark')===dark,dark);
@@ -684,12 +684,12 @@ async function main() {
       await f.page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
       assert.deepEqual(statusWrites(),[],'Choosing a status never changes a dossier.');assert.equal(await select.inputValue(),'transit');
       // « Appliquer » asks to confirm, with the dossiers and the target status.
-      await apply.click();const confirm=f.page.getByRole('dialog',{name:'Passer à « En transit »',exact:true});await confirm.waitFor();
+      await apply.click();const confirm=f.page.getByRole('dialog',{name:'Passer à « En vol »',exact:true});await confirm.waitFor();
       assert.deepEqual(await confirm.locator('[data-bulk-item] .dossier-bulk-ref').allTextContents(),['EXP-TAB004','EXP-TAB005']);
       assert.deepEqual(statusWrites(),[],'Nothing is written before the confirmation.');
       const frame=await confirm.boundingBox();assert.ok(frame.x>=0&&frame.x+frame.width<=391&&frame.y>=0&&frame.y+frame.height<=845,'The confirmation fits the phone.');
-      await confirm.getByRole('button',{name:'Passer à « En transit »',exact:true}).click();
-      await f.page.getByRole('dialog',{name:'Résultat du changement de statut',exact:true}).getByText('2 dossiers passés à « En transit ».',{exact:true}).waitFor();
+      await confirm.getByRole('button',{name:'Passer à « En vol »',exact:true}).click();
+      await f.page.getByRole('dialog',{name:'Résultat du changement de statut',exact:true}).getByText('2 dossiers passés à « En vol ».',{exact:true}).waitFor();
       await bar.waitFor({state:'hidden'});
       await f.page.getByRole('dialog',{name:'Résultat du changement de statut',exact:true}).getByRole('button',{name:'Fermer',exact:true}).click();
       const writes=statusWrites();assert.equal(writes.length,2,'Exactly one update per selected dossier.');
@@ -1043,8 +1043,10 @@ async function main() {
       const region=f.page.getByRole('region',{name:'Tableau des dossiers',exact:true});
       const problem=region.getByRole('alert');await problem.waitFor();
       assert.match(await problem.innerText(),/Les dossiers n’ont pas pu être chargés\./);assert.match(await problem.innerText(),/Motif : Indisponibilité simulée/);
-      // The application banner reads « Chargement impossible : … »; the list does not repeat it.
+      // One failure, said once: the shell's banner steps aside for the list's own message.
       assert.doesNotMatch(await problem.innerText(),/Chargement impossible/);
+      assert.equal(await f.page.getByRole('alert').filter({hasText:'Indisponibilité simulée'}).count(),1,'One message for one failure.');
+      assert.equal(await f.page.getByRole('button',{name:'Réessayer',exact:true}).filter({visible:true}).count(),1,'One « Réessayer ».');
       // Never « 0 dossier » nor « Aucun dossier ne correspond à ces filtres »: the list is unknown.
       assert.equal(await f.page.locator('.dossier-meta-count').count(),0,'No count while the dossiers are unknown.');
       assert.equal(await f.page.getByText(/^0 dossier/).count(),0);assert.equal(await f.page.getByText(/Aucun dossier ne correspond/).count(),0);
@@ -1078,28 +1080,28 @@ async function main() {
         return route.fallback();
       });
       await f.page.setViewportSize(sizeOf(width));await theme(f,dark);await open(f);await waitTheme(f,dark);
-      // Shipped dossiers: « En transit », and nothing else.
+      // Shipped dossiers: « En vol », and nothing else.
       await check(f,P4,'EXP-TAB004');await check(f,P5,'EXP-TAB005');await bar(f).getByText('2 dossiers sélectionnés',{exact:true}).waitFor();
-      assert.deepEqual(await offeredStatuses(f),['En transit']);
+      assert.deepEqual(await offeredStatuses(f),['En vol']);
       // Shipped + in transit: no common step, and the bar says why.
       await check(f,P6,'EXP-TAB006');assert.deepEqual(await offeredStatuses(f),[]);
       await bar(f).getByText('Étapes différentes : sélectionnez des dossiers au même statut pour les faire avancer ensemble.',{exact:true}).waitFor();
       // Before the departure: never a bulk status.
-      await uncheck(f,P4,'EXP-TAB004');await uncheck(f,P5,'EXP-TAB005');assert.deepEqual(await offeredStatuses(f),['Dédouanement','Arrivé'],'In the order of the chain.');
+      await uncheck(f,P4,'EXP-TAB004');await uncheck(f,P5,'EXP-TAB005');assert.deepEqual(await offeredStatuses(f),['En dédouanement','Arrivé destination'],'In the order of the chain.');
       await check(f,P2,'EXP-TAB002');assert.deepEqual(await offeredStatuses(f),[]);
       await bar(f).getByText('Avant le départ, un dossier avance par son parcours : pas de statut groupé.',{exact:true}).waitFor();
       await bar(f).getByRole('button',{name:'Désélectionner tout',exact:true}).click();
       // Confirm first: the dossiers and the target status; cancelling writes nothing.
       await check(f,P4,'EXP-TAB004');await check(f,P5,'EXP-TAB005');
-      await bar(f).getByRole('button',{name:'En transit',exact:true}).click();
-      const dialog=f.page.getByRole('dialog',{name:'Passer à « En transit »',exact:true});await dialog.waitFor();
-      assert.match(await dialog.innerText(),/Ces 2 dossiers passeront à « En transit » :/);
+      await bar(f).getByRole('button',{name:'En vol',exact:true}).click();
+      const dialog=f.page.getByRole('dialog',{name:'Passer à « En vol »',exact:true});await dialog.waitFor();
+      assert.match(await dialog.innerText(),/Ces 2 dossiers passeront à « En vol » :/);
       assert.deepEqual(await dialog.locator('[data-bulk-item] .dossier-bulk-ref').allTextContents(),['EXP-TAB004','EXP-TAB005']);
       assert.equal(await dialog.getByRole('button',{name:'Annuler',exact:true}).evaluate(node=>node===document.activeElement),true,'The safe choice has the focus.');
       await axeClean(f,'[data-testid="bulk-status-dialog"]');
       await f.page.screenshot({path:`${output}/bulk-confirm-${width}-${dark?'dark':'light'}.png`});
       for(const close of ['Escape','backdrop','X','Annuler']){
-        if(close!=='Escape'||await dialog.isHidden())await bar(f).getByRole('button',{name:'En transit',exact:true}).click();await dialog.waitFor();
+        if(close!=='Escape'||await dialog.isHidden())await bar(f).getByRole('button',{name:'En vol',exact:true}).click();await dialog.waitFor();
         if(close==='Escape')await f.page.keyboard.press('Escape');else if(close==='backdrop')await f.page.mouse.click(4,4);
         else if(close==='X')await dialog.getByRole('button',{name:'Fermer sans changer le statut',exact:true}).click();else await dialog.getByRole('button',{name:'Annuler',exact:true}).click();
         await dialog.waitFor({state:'hidden'});
@@ -1107,12 +1109,12 @@ async function main() {
       assert.deepEqual(f.patchUrls,[],'Closing the confirmation writes nothing.');
       // Confirmed: one write after the other, each with its version; a refusal keeps its reason.
       f.refuse=P5;const versions={[P4]:f.tables.colis.find(item=>item.id===P4).updated_at,[P5]:f.tables.colis.find(item=>item.id===P5).updated_at};
-      await bar(f).getByRole('button',{name:'En transit',exact:true}).click();await dialog.waitFor();
-      await dialog.getByRole('button',{name:'Passer à « En transit »',exact:true}).click();
+      await bar(f).getByRole('button',{name:'En vol',exact:true}).click();await dialog.waitFor();
+      await dialog.getByRole('button',{name:'Passer à « En vol »',exact:true}).click();
       const result=f.page.getByRole('dialog',{name:'Résultat du changement de statut',exact:true});await result.waitFor();
-      await result.getByText('1 dossier passé à « En transit » · 1 dossier non modifié, resté sélectionné.',{exact:true}).waitFor();
-      assert.equal(await result.locator(`[data-bulk-item="${P4}"] .dossier-bulk-result`).innerText(),'Passé à « En transit »');
-      assert.equal(await result.locator(`[data-bulk-item="${P5}"] .dossier-bulk-result`).innerText(),'Non modifié : Passage de « Expédié » à « En transit » refusé par le serveur.');
+      await result.getByText('1 dossier passé à « En vol » · 1 dossier non modifié, resté sélectionné.',{exact:true}).waitFor();
+      assert.equal(await result.locator(`[data-bulk-item="${P4}"] .dossier-bulk-result`).innerText(),'Passé à « En vol »');
+      assert.equal(await result.locator(`[data-bulk-item="${P5}"] .dossier-bulk-result`).innerText(),'Non modifié : Passage de « Expédié » à « En vol » refusé par le serveur.');
       assert.deepEqual(f.patchUrls.map(url=>{const query=new URL(url).searchParams;return [query.get('id'),query.get('updated_at')];}),[[`eq.${P4}`,`eq.${versions[P4]}`],[`eq.${P5}`,`eq.${versions[P5]}`]],'One write after the other, each with the version the person confirmed.');
       assert.deepEqual(f.requests.filter(request=>request.method==='PATCH'&&request.path==='/rest/v1/colis').map(request=>request.input),[{statut:'transit'}],'The refused write changed nothing.');
       assert.equal(f.tables.colis.find(item=>item.id===P4).statut,'transit');assert.equal(f.tables.colis.find(item=>item.id===P5).statut,'expedie');
@@ -1135,8 +1137,8 @@ async function main() {
       await f.page.getByLabel('Rechercher ou scanner un colis',{exact:true}).fill('EXP-SHIP');await row(f,parcelId(45)).waitFor();
       await f.page.getByRole('checkbox',{name:'Sélectionner tous les dossiers affichés',exact:true}).check();
       await bar(f).getByText('30 dossiers sélectionnés',{exact:true}).waitFor();
-      await bar(f).getByRole('button',{name:'En transit',exact:true}).click();
-      const dialog=f.page.getByRole('dialog',{name:'Passer à « En transit »',exact:true});await dialog.waitFor();
+      await bar(f).getByRole('button',{name:'En vol',exact:true}).click();
+      const dialog=f.page.getByRole('dialog',{name:'Passer à « En vol »',exact:true});await dialog.waitFor();
       assert.equal(await dialog.locator('[data-bulk-item]').count(),30);
       const frame=await dialog.boundingBox();assert.ok(frame.y>=0&&frame.y+frame.height<=700,'The long confirmation fits the screen.');
       assert.equal(await dialog.evaluate(node=>node.scrollHeight>node.clientHeight+1),true,'Its list scrolls inside.');
@@ -1145,10 +1147,40 @@ async function main() {
       await f.page.keyboard.press('Escape');await dialog.waitFor({state:'hidden'});
       assert.deepEqual(businessWrites(f),[]);
     });
+    // Two Escape presses with no click between are not cancellable: the browser itself
+    // would close the dialog. It stays while the changes are written, and the next change opens.
+    for(const dark of [false,true])await scenario(`two-escapes-during-a-bulk-change-never-close-it-nor-block-the-next-one-${dark?'dark':'light'}`,async f=>{
+      shipped(f,{[P4]:'expedie',[P5]:'expedie'});
+      let release;const gate=new Promise(resolve=>{release=resolve;});
+      await f.context.route('**/rest/v1/colis?*',async route=>{if(route.request().method()==='PATCH')await gate;return route.fallback();});
+      await theme(f,dark);await open(f);await waitTheme(f,dark);
+      await check(f,P4,'EXP-TAB004');await check(f,P5,'EXP-TAB005');
+      await bar(f).getByRole('button',{name:'En vol',exact:true}).click();
+      const dialog=f.page.getByRole('dialog',{name:'Passer à « En vol »',exact:true});await dialog.waitFor();
+      await dialog.getByRole('button',{name:'Passer à « En vol »',exact:true}).click();
+      await dialog.getByRole('status').filter({hasText:/^Mise à jour 1 sur 2/}).waitFor();
+      await f.page.keyboard.press('Escape');await f.page.keyboard.press('Escape');
+      await f.page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+      assert.equal(await f.page.locator('#dossier-bulk-dialog').evaluate(node=>node.open),true,'The dialog stays open while the changes are written.');
+      await dialog.getByRole('status').filter({hasText:/^Mise à jour/}).waitFor();
+      release();
+      const result=f.page.getByRole('dialog',{name:'Résultat du changement de statut',exact:true});
+      await result.getByText('2 dossiers passés à « En vol ».',{exact:true}).waitFor();
+      await axeClean(f,'[data-testid="bulk-status-dialog"]');
+      await result.getByRole('button',{name:'Fermer',exact:true}).click();await result.waitFor({state:'hidden'});
+      assert.deepEqual(f.tables.colis.filter(parcel=>[P4,P5].includes(parcel.id)).map(parcel=>parcel.statut),['transit','transit']);
+      // The next bulk change opens as usual: nothing is left blocked.
+      await check(f,P4,'EXP-TAB004');await check(f,P5,'EXP-TAB005');
+      assert.deepEqual(await offeredStatuses(f),['En dédouanement','Arrivé destination']);
+      await bar(f).getByRole('button',{name:'Arrivé destination',exact:true}).click();
+      const next=f.page.getByRole('dialog',{name:'Passer à « Arrivé destination »',exact:true});await next.waitFor();
+      await next.getByRole('button',{name:'Annuler',exact:true}).click();await next.waitFor({state:'hidden'});
+      assert.equal(f.claims.length,0);
+    });
     await scenario('bulk-status-is-not-offered-to-a-role-without-the-permission',async f=>{
       shipped(f,{[P4]:'expedie',[P5]:'expedie'});
       await open(f);await check(f,P4,'EXP-TAB004');await check(f,P5,'EXP-TAB005');await bar(f).getByText('2 dossiers sélectionnés',{exact:true}).waitFor();
-      assert.equal(await bar(f).getByRole('button',{name:'En transit',exact:true}).count(),0,'No status the role cannot use, not even disabled.');
+      assert.equal(await bar(f).getByRole('button',{name:'En vol',exact:true}).count(),0,'No status the role cannot use, not even disabled.');
       assert.equal(await bar(f).getByRole('combobox',{name:'Changer le statut',exact:true}).count(),0);
       assert.equal(await bar(f).locator('button:disabled').count(),0);
       await bar(f).getByText('Aucune action groupée n’est ouverte à votre rôle.',{exact:true}).waitFor();

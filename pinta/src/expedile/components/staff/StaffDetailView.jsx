@@ -642,7 +642,7 @@ export default function StaffDetailView({ workspace = false, active = true, task
             {manifest.trackingsDetail.map((carton, index) => {
               const box = multiDims[index] || {};
               return <fieldset key={index} className="rounded-xl border border-gray-200 p-3 space-y-3">
-                <legend className="px-1 text-sm font-semibold brand-t">Carton {index + 1}{carton.fournisseur ? ` · ${carton.fournisseur}` : ''}{carton.number ? ` · ${carton.number}` : ' · Sans numéro de suivi'}</legend>
+                <legend className="px-1 text-sm font-semibold brand-t">Carton {index + 1}{carton.fournisseur ? ` · ${carton.fournisseur}` : ''}{carton.number ? <> · <span className="keep-token">{carton.number}</span></> : ' · Sans numéro de suivi'}</legend>
                 {/* Short visible labels, as in the preparation form: « carton N » stays in the accessible name and in the legend. */}
                 <div className="grid grid-cols-2 gap-3">{[['dimL', 'Longueur', 'cm'], ['dimW', 'Largeur', 'cm'], ['dimH', 'Hauteur', 'cm'], ['poids', 'Poids réel', 'kg']].map(([key, label, unit]) => <Field key={key} displayLabel={label} label={`${label} · carton ${index + 1}`} type="number" min="0.01" step="0.01" unit={unit} disabled={actionLoading || !can('perm_colis_mesurer')} value={box[key] ?? ''} onChange={event => { receptionDirty.current = true; setMultiDims(previous => ({ ...previous, [index]: { ...previous[index], [key]: event.target.value } })); }} />)}</div>
               </fieldset>;

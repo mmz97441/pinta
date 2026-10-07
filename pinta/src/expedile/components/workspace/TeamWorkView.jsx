@@ -1,10 +1,12 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useLocation, useSearchParams, Link } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import { MISSIONS, WORK_KINDS, WORK_STATES, sortWorkActions, staffAvailable, actionPriority, actionWaiting, workTotals, workLoad, teamWorkQueues } from '../../domain/personalWork';
 import { useMinuteNow } from '../../hooks/useMinuteNow';
 import { plural } from '../../domain/plural';
 import WorkActionRow, { staffName, workDate } from './WorkActionRow';
+import WorkLoadError from './WorkLoadError';
+import { staffDataState } from '../../domain/dataLoad';
 
 const QUEUES = [
   { id: 'unassigned', label: 'Prêt à prendre', description: 'Ces tâches peuvent commencer et personne ne s’en occupe encore.', empty: 'Toutes les tâches prêtes ont une personne pour s’en occuper.' },
@@ -15,7 +17,8 @@ const QUEUES = [
 ];
 
 export default function TeamWorkView() {
-  const { data = [], clients = [], teamUsers = [], workActions = [], workPreferences = [], workLoading, workError, refreshWork, auth } = useApp();
+  const { data = [], clients = [], teamUsers = [], workActions = [], workPreferences = [], workLoading, workError, refreshWork, auth, sbReady, dataLoading, dataError, retryLoad } = useApp();
+  const [retrying, setRetrying] = useState(false);
   const [params, setParams] = useSearchParams();
   const location = useLocation();
   const now = useMinuteNow();
@@ -41,11 +44,29 @@ export default function TeamWorkView() {
   }), now);
   const totals = workTotals(rows, data);
   const returnTo = location.pathname + location.search;
+  // The dossiers or the tasks never loaded: no queue can be counted, so no
+  // « (0) » nor « every task has someone », only the reason and a retry.
+  const dataLoad = staffDataState({ sbReady, dataLoading, dataError, hasData: data.length > 0 });
+  const dataFailed = dataLoad.state === 'failed';
+  const loadFailed = dataFailed || (Boolean(workError) && !workActions.length);
+  const retry = async () => {
+    if (retrying) return;
+    setRetrying(true);
+    try { await (dataFailed ? retryLoad?.() : refreshWork()); }
+    catch { /* The reason stays on screen. */ }
+    finally { setRetrying(false); }
+  };
+  const header = <header className="flex flex-wrap items-start justify-between gap-3"><div><h1 className="text-2xl font-bold text-slate-900">Équipe</h1><p className="mt-1 text-sm text-slate-600">Repérez le travail à prendre, ce qui attend et les passages de relais.</p></div><Link to="/" className="min-h-11 rounded-lg border px-4 py-3 text-sm font-semibold">Mon travail</Link></header>;
   // The staff shell owns the page's single <main>.
+  if (loadFailed) return <div className="max-w-7xl mx-auto p-4 md:p-6 space-y-6">
+    {header}
+    <WorkLoadError title="Le travail de l’équipe n’a pas pu être chargé" reason={dataFailed ? dataLoad.reason : String(workError?.message || workError)}
+      note="Les tâches enregistrées sont conservées. Les files et leurs compteurs s’afficheront dès que le chargement aura réussi." retrying={retrying} onRetry={retry} />
+  </div>;
   return <div className="max-w-7xl mx-auto p-4 md:p-6 space-y-6">
-    <header className="flex flex-wrap items-start justify-between gap-3"><div><h1 className="text-2xl font-bold text-slate-900">Équipe</h1><p className="mt-1 text-sm text-slate-600">Repérez le travail à prendre, ce qui attend et les passages de relais.</p></div><Link to="/" className="min-h-11 rounded-lg border px-4 py-3 text-sm font-semibold">Mon travail</Link></header>
-    {workError && <p role="alert" className="rounded-xl border border-red-200 p-3 text-red-700">{workError.message || String(workError)} <button onClick={() => refreshWork().catch(() => {})} className="min-h-11 underline">Réessayer</button></p>}
-    <nav aria-label="Priorités de l’équipe" className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">{QUEUES.map(item => <button key={item.id} aria-pressed={queue.id === item.id} className={`min-h-11 rounded-xl border px-3 py-2 text-sm font-semibold ${queue.id === item.id ? 'border-slate-900 bg-slate-900 text-white dark:border-slate-200 dark:bg-slate-200 dark:text-slate-900' : 'border-slate-200 text-slate-700'}`} onClick={() => setParams({ queue: item.id })}>{item.label} ({queues[item.id].length})</button>)}</nav>
+    {header}
+    {workError && <p role="alert" className="rounded-xl border border-red-200 p-3 text-red-700">Actualisation des tâches impossible : {String(workError.message || workError).trim().replace(/[.\s]+$/, '')}. Les files affichées sont les dernières chargées. <button onClick={retry} disabled={retrying} className="min-h-11 underline">{retrying ? 'Nouvel essai…' : 'Réessayer'}</button></p>}
+    <nav aria-label="Priorités de l’équipe" className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">{QUEUES.map(item => <button key={item.id} aria-pressed={queue.id === item.id} className={`min-h-11 rounded-xl border px-3 py-2 text-sm font-semibold ${queue.id === item.id ? 'border-slate-900 bg-slate-900 text-white dark:border-[#c4dae5] dark:bg-[#c4dae5] dark:text-[#122a36]' : 'border-slate-200 text-slate-700'}`} onClick={() => setParams({ queue: item.id })}>{item.label} ({queues[item.id].length})</button>)}</nav>
     <section className="rounded-xl border border-slate-200 bg-white p-4">
       <div className="flex flex-wrap items-end gap-3"><label className="block min-w-0 flex-1 text-sm font-semibold">Rechercher une EXP ou un client<input value={params.get('q') || ''} onChange={event => update('q', event.target.value)} className="mt-1 min-h-11 w-full rounded-lg border px-3 font-normal" /></label><details><summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold">Filtrer les tâches{hasFilters ? ' · filtres actifs' : ''}</summary><div className="flex flex-wrap gap-3">
         <label className="text-xs font-semibold">Personne qui s’en occupe<select value={owner} onChange={event => update('owner', event.target.value)} className="mt-1 block min-h-11 max-w-full rounded-lg border px-2"><option value="">Toute l’équipe</option><option value="me">Moi</option><option value="unassigned">Sans responsable</option>{teamUsers.map(user => <option key={user.authId} value={user.authId}>{staffName(user.authId, teamUsers)}</option>)}</select></label>

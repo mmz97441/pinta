@@ -111,34 +111,50 @@ async function openSettingsTab(f, label) {
   else await f.page.getByRole('navigation', { name: 'Paramètres', exact: true }).getByRole('button', { name: label, exact: true }).click();
 }
 
-/** Where the toast is: inside the navigation column (desktop) or on the bottom bar (phone), and what it covers in the page. */
+/** Where the toast is, and what lies under it: no heading or control of the
+ * page, of the navigation column or of the bottom bar may sit under a toast. */
 async function toastGeometry(f) {
   await f.page.locator('[data-toast]').evaluate(node => Promise.all(node.getAnimations().map(animation => animation.finished)));
   return f.page.evaluate(() => {
     const node = document.querySelector('[data-toast]'), box = node.getBoundingClientRect();
     const rect = element => { const r = element?.getBoundingClientRect(); return r && r.width && r.height ? { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height } : null; };
-    const fixed = element => { for (let n = element; n && n.nodeType === 1; n = n.parentElement) if (getComputedStyle(n).position === 'fixed') return true; return false; };
     const bar = [...document.querySelectorAll('button[aria-label="Plus"], nav[aria-label="Navigation principale"] button')].map(button => button.closest('.fixed')).find(Boolean);
     const rail = rect(document.querySelector('.staff-sidebar')), nav = rect(bar);
-    const limit = nav ? nav.top : innerHeight;
-    // Visible page content (headings, actions, fields) under the toast; the navigation chrome is not page content.
+    const settings = rect(document.querySelector('.staff-sidebar button[aria-label="Paramètres"]'));
     const covered = [...document.querySelectorAll('h1, h2, h3, button, a[href], input, select, textarea, summary')]
-      .filter(element => element.getClientRects().length && !node.contains(element) && !element.closest('.staff-sidebar') && !fixed(element))
-      .filter(element => { const r = element.getBoundingClientRect(); const bottom = Math.min(r.bottom, limit); return r.top < bottom && r.left < box.right && r.right > box.left && r.top < box.bottom && bottom > box.top; })
-      .map(element => `${element.tagName} « ${element.textContent.trim().slice(0, 40)} »`);
-    return { kind: node.dataset.toast, placement: node.dataset.placement, role: node.getAttribute('role'), text: node.textContent.trim(), toast: rect(node), rail, nav, covered, accent: getComputedStyle(node).borderLeftColor, viewport: innerHeight };
+      .filter(element => element.getClientRects().length && !node.contains(element))
+      .filter(element => { const r = element.getBoundingClientRect(); return r.width > 0 && r.height > 0 && r.top < box.bottom && r.bottom > box.top && r.left < box.right && r.right > box.left; })
+      .map(element => `${element.tagName} « ${(element.getAttribute('aria-label') || element.textContent).trim().slice(0, 40)} »`);
+    // A click on the toast stays on it (never on what lies under it).
+    const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+    return { kind: node.dataset.toast, placement: node.dataset.placement, role: node.getAttribute('role'), text: node.textContent.trim(), toast: rect(node), rail, nav, settings, covered, takesClick: node.contains(hit), accent: getComputedStyle(node).borderLeftColor, viewport: innerHeight };
   });
 }
-function assertToastClear(f, geometry, label) {
-  assert.deepEqual(geometry.covered, [], `${label}: the toast covers no heading, action or field of the page.`);
+function assertToastClear(f, geometry, label, { collapsed = false } = {}) {
+  assert.deepEqual(geometry.covered, [], `${label}: the toast covers no heading, action or field, of the page or of the navigation.`);
+  assert.equal(geometry.takesClick, true, `${label}: a click on the toast stays on it.`);
   if (f.layout.mobile) {
-    assert.equal(geometry.placement, 'bottom-bar');
-    // Anchored on the bottom bar; a longer message grows upwards, still over no heading or action (covered above).
-    assert.ok(geometry.nav && geometry.toast.bottom > geometry.nav.top && geometry.toast.bottom <= geometry.viewport, `${label}: the toast sits on the bottom navigation bar (${JSON.stringify(geometry)}).`);
+    assert.ok(['bottom', 'top'].includes(geometry.placement), `${label}: centred above the bottom bar or below the top bar (${geometry.placement}).`);
+    assert.ok(geometry.nav && geometry.toast.bottom <= geometry.nav.top + 0.5 && geometry.toast.top >= 0, `${label}: never on the bottom navigation (${JSON.stringify(geometry)}).`);
+  } else if (collapsed) {
+    // The folded column (64 px) holds no message: a free corner of the page, beside it.
+    assert.ok(['bottom', 'bottom-end', 'top-end'].includes(geometry.placement), `${label}: a corner of the page (${geometry.placement}).`);
+    assert.ok(geometry.rail && geometry.toast.left >= geometry.rail.right, `${label}: never over the folded column (${JSON.stringify(geometry)}).`);
   } else {
     assert.equal(geometry.placement, 'rail');
-    assert.ok(geometry.rail && geometry.toast.left >= geometry.rail.left && geometry.toast.right <= geometry.rail.right + 0.5 && geometry.toast.bottom <= geometry.viewport, `${label}: the toast stays inside the navigation column (${JSON.stringify(geometry)}).`);
+    assert.ok(geometry.rail && geometry.settings && geometry.toast.left >= geometry.rail.left && geometry.toast.right <= geometry.rail.right + 0.5 && geometry.toast.bottom <= geometry.settings.top + 0.5,
+      `${label}: in the free space of the navigation column, above « Paramètres » and the account buttons (${JSON.stringify(geometry)}).`);
   }
+}
+/** A click (a tap on a phone) on the toast closes it, and nothing else happens. */
+async function dismissToast(f, label) {
+  const toast = f.page.locator('[data-toast]');
+  const box = await toast.boundingBox(), url = f.page.url();
+  if (f.layout.mobile) await f.page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2).catch(() => f.page.mouse.click(box.x + box.width / 2, box.y + box.height / 2));
+  else await f.page.mouse.click(box.x + box.width - 8, box.y + box.height / 2);
+  await toast.waitFor({ state: 'hidden' });
+  assert.equal(f.page.url(), url, `${label}: closing the toast navigates nowhere.`);
+  assert.equal(await f.page.locator('#login-email').count(), 0, `${label}: closing the toast never logs out.`);
 }
 
 // ── 1, 2, 3 · Estimation rapide ────────────────────────────────────────────
@@ -304,7 +320,7 @@ async function checkChannels(f) {
   await f.context.route('**/functions/v1/send-telegram', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, status: 'sent' }) }));
   await f.page.goto(`${base}/colis/${ids.P}?section=accord`);
   await sendConsentRequest(f, '2026-10-06T21:26:47.607Z');
-  // 9 · The confirmation sits on the navigation, never on the page.
+  // 9 · The confirmation covers no control: the navigation column's free space, or above the bottom bar.
   const geometry = await toastGeometry(f);
   assert.equal(geometry.kind, 'info'); assert.equal(geometry.role, 'status');
   assertToastClear(f, geometry, 'delivered message');
@@ -408,9 +424,12 @@ async function checkToasts(f) {
   await f.page.locator('[data-toast]').filter({ hasText: 'Client ajouté' }).waitFor();
   assertToastClear(f, await toastGeometry(f), 'Client ajouté');
   await axe(f, 'client added toast'); await shot(f, 'toast-client-added');
+  await dismissToast(f, 'Client ajouté');
   // A failed revocation is an error, in the error style.
   // The share link lives in « Synthèse », the tab a client page opens on.
   await f.page.goto(`${base}/clients/${ids.C}`);
+  // On a desktop, with the navigation column folded this time.
+  if (!f.layout.mobile) await f.page.getByRole('button', { name: 'Réduire la navigation', exact: true }).click();
   await f.page.getByRole('button', { name: 'Créer le lien de suivi', exact: true }).click();
   await f.page.getByRole('button', { name: /Révoquer/ }).first().waitFor();
   await f.context.route('**/rest/v1/share_links*', route => route.request().method() === 'PATCH' ? route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ message: 'Service indisponible (essai)' }) }) : route.fallback());
@@ -424,7 +443,7 @@ async function checkToasts(f) {
     const [r, g, b] = rgb(geometry.accent);
     assert.ok(r > g + 40 && r > b + 40, `The error edge is red (${geometry.accent}).`);
     assert.ok((await contrastOf(toast.locator('p'))).ratio >= 4.5);
-    assertToastClear(f, geometry, 'revocation error');
+    assertToastClear(f, geometry, 'revocation error', { collapsed: !f.layout.mobile });
     // The client page around it belongs to another screen: the audit covers the toast.
     await axe(f, 'revocation error toast', '[data-toast]'); await shot(f, 'toast-revoke-error');
   } finally { await f.context.unroute('**/rest/v1/share_links*'); }
@@ -478,25 +497,71 @@ async function checkLoadingShell(f) {
 }
 async function checkClientLoadingShell(f) {
   await f.login();
-  let release; const held = new Promise(resolve => { release = resolve; });
-  await f.context.route('**/rest/v1/client_colis*', async route => { await held; return route.fallback(); });
+  await f.page.getByRole('navigation', { name: 'Navigation principale', exact: true }).waitFor({ state: 'attached' });
+  // The resolved profile is remembered on this device: the next visit starts from the client shell.
+  await f.page.waitForFunction(() => localStorage.getItem('expedile-shell') === 'client');
+  const header = () => f.page.evaluate(() => { const node = document.querySelector('[data-testid="shell-skeleton"] .glass-dark, header.glass-dark'); const r = node.getBoundingClientRect(); return { top: Math.round(r.top), height: Math.round(r.height) }; });
+  // The bottom bar: its placeholder, then the real one (none from 1024 px: the links sit in the header).
+  const navBar = () => f.page.evaluate(() => { const node = document.querySelector('[data-testid="shell-skeleton"] [data-skeleton-bar], nav.glass-nav[aria-label="Navigation principale"]'); const r = node?.getBoundingClientRect(); return r?.height ? { top: Math.round(r.top), height: Math.round(r.height) } : null; });
+  // 1 · A returning client while the profile is read: the shell placeholder is the client's, never the staff's.
+  let release; let held = new Promise(resolve => { release = resolve; });
+  await f.context.route('**/rest/v1/profiles*', async route => { await held; return route.fallback(); });
   try {
     await f.page.reload({ waitUntil: 'domcontentloaded' });
-    // Before the profile is known, the shell placeholder; once the client is known, the portal's own
-    // skeleton inside its real header and navigation. Either way, nothing may move when the page appears.
     const shell = f.page.getByTestId('shell-skeleton');
-    await shell.or(f.page.locator('[data-testid^="client-skeleton-"]')).first().waitFor();
-    if (await shell.count()) assert.equal(await shell.getAttribute('data-shell'), 'client');
-    const header = () => f.page.evaluate(() => { const node = document.querySelector('.glass-dark'); const r = node.getBoundingClientRect(); return { top: Math.round(r.top), height: Math.round(r.height) }; });
-    const navBar = () => f.page.evaluate(() => { const node = document.querySelector('[data-testid="shell-skeleton"] > .fixed, nav[aria-label="Navigation principale"]'); const r = node.getBoundingClientRect(); return { top: Math.round(r.top), height: Math.round(r.height) }; });
+    await shell.waitFor();
+    assert.equal(await shell.getAttribute('data-shell'), 'client', 'A returning client never sees the staff navigation while the profile is read.');
     const before = { header: await header(), nav: await navBar() };
     await noPageOverflow(f, 'client loading shell'); await axe(f, 'client loading shell'); await shot(f, 'loading-shell-client');
     release();
-    await f.page.getByRole('navigation', { name: 'Navigation principale', exact: true }).waitFor();
+    await f.page.getByRole('navigation', { name: 'Navigation principale', exact: true }).waitFor({ state: 'attached' });
+    await f.page.waitForFunction(() => !document.querySelector('[data-testid="shell-skeleton"]'));
     const after = { header: await header(), nav: await navBar() };
     assert.deepEqual(after.header, before.header, 'Same header.');
-    assert.ok(Math.abs(after.nav.height - before.nav.height) <= 1 && Math.abs(after.nav.top - before.nav.top) <= 1, `Same bottom bar ${JSON.stringify([before.nav, after.nav])}`);
+    assert.deepEqual(Boolean(after.nav), Boolean(before.nav), `A bottom bar in both or in neither ${JSON.stringify([before.nav, after.nav])}`);
+    if (after.nav) assert.ok(Math.abs(after.nav.height - before.nav.height) <= 1 && Math.abs(after.nav.top - before.nav.top) <= 1, `Same bottom bar ${JSON.stringify([before.nav, after.nav])}`);
+  } finally { release(); await f.context.unroute('**/rest/v1/profiles*'); }
+  // 2 · Once the client is known, the portal's own skeletons, in its real header and navigation.
+  held = new Promise(resolve => { release = resolve; });
+  await f.context.route('**/rest/v1/client_colis*', async route => { await held; return route.fallback(); });
+  try {
+    await f.page.reload({ waitUntil: 'domcontentloaded' });
+    const shell = f.page.getByTestId('shell-skeleton');
+    await shell.or(f.page.locator('[data-testid^="client-skeleton-"]')).first().waitFor();
+    if (await shell.count()) assert.equal(await shell.getAttribute('data-shell'), 'client');
+    const before = { header: await header(), nav: await navBar() };
+    release();
+    await f.page.getByRole('navigation', { name: 'Navigation principale', exact: true }).waitFor({ state: 'attached' });
+    await f.page.waitForFunction(() => !document.querySelector('[data-testid="shell-skeleton"], [data-testid^="client-skeleton-"]'));
+    const after = { header: await header(), nav: await navBar() };
+    assert.deepEqual(after.header, before.header, 'Same header.');
+    assert.deepEqual(Boolean(after.nav), Boolean(before.nav));
+    if (after.nav) assert.ok(Math.abs(after.nav.height - before.nav.height) <= 1 && Math.abs(after.nav.top - before.nav.top) <= 1, `Same bottom bar ${JSON.stringify([before.nav, after.nav])}`);
   } finally { release(); await f.context.unroute('**/rest/v1/client_colis*'); }
+}
+
+/** A client's expedition that does not exist: the browser title says so too; a
+ * voluntary password change goes back to the profile, never through the home page. */
+async function checkClientReturns(f) {
+  await f.login();
+  const spa = path => f.page.evaluate(target => { history.pushState({}, '', target); dispatchEvent(new PopStateEvent('popstate')); }, path);
+  await f.page.getByRole('navigation', { name: 'Navigation principale', exact: true }).first().waitFor({ state: 'attached' });
+  await spa('/colis/aaaaaaaa-0000-4000-8000-000000000999');
+  await f.page.getByRole('heading', { level: 1, name: 'Expédition introuvable', exact: true }).waitFor();
+  await f.page.waitForFunction(() => document.title === 'Expédition introuvable — Expedîle');
+  await spa('/profil');
+  await spa('/password');
+  await f.page.getByRole('button', { name: 'Annuler', exact: true }).click();
+  await f.page.waitForURL(url => url.pathname === '/profil');
+  await spa('/password');
+  await f.page.getByLabel('Nouveau mot de passe', { exact: true }).fill('Expedile-client-2026');
+  await f.page.locator('#confirm-password').fill('Expedile-client-2026');
+  await f.page.evaluate(() => { window.__paths = []; const record = () => window.__paths.push(location.pathname); for (const name of ['pushState', 'replaceState']) { const original = history[name].bind(history); history[name] = (...args) => { const result = original(...args); record(); return result; }; } });
+  await f.page.locator('form').getByRole('button').filter({ hasText: /mot de passe/i }).last().click();
+  await f.page.waitForURL(url => url.pathname === '/profil');
+  await f.page.locator('[data-toast="success"]').filter({ hasText: 'Mot de passe modifié.' }).waitFor();
+  assert.equal((await f.page.evaluate(() => window.__paths)).includes('/'), false, 'Never through the home page.');
+  await axe(f, 'client password changed'); await shot(f, 'client-password-changed');
 }
 
 async function main() {
@@ -542,6 +607,7 @@ async function main() {
       ]);
       await session('failed-load', layout, [['failed-load', checkFailedLoad]], { noLogin: true });
       await session('client', layout, [['client-loading-shell', checkClientLoadingShell]], { role: 'client', noLogin: true });
+      await session('client-returns', layout, [['client-returns', checkClientReturns]], { role: 'client', noLogin: true });
     }
     // Without the categories permission, the estimate explains whom to ask (no link).
     await session('estimate-no-category-permission', LAYOUTS[3], [['estimate-no-category-permission', async f => {

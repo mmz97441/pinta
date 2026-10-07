@@ -5,7 +5,8 @@ import usePersistentDraft from '../../hooks/usePersistentDraft';
 import { useMinuteNow } from '../../hooks/useMinuteNow';
 import { departureReadiness } from '../../domain/departureReadiness';
 import { dossierTaskUrl } from '../../domain/dossierTasks';
-import { departureDayLabel, isoCalendarDay, parisCalendarDay } from '../../domain/departureGroups';
+import { calendarDateLabel, departureDayLabel, isoCalendarDay, parisCalendarDay } from '../../domain/departureGroups';
+import { wishesAfterSubscription, wishesSubscriptionConfirmation } from '../../domain/departureWishes';
 import { closingLabel, departureDefaultClosing, destinationName, OPEN_DEPARTURE_STATUSES } from '../../domain/departurePlanning';
 import {
   assignmentFailure, confirmedLine, countLabel, departureClosingLine, departureDeparted, departureEditErrors, departureInView, departureOverdue,
@@ -13,6 +14,8 @@ import {
 } from '../../domain/departureBoard';
 import { parisDateTimeInput, parisDateTimeInstant } from '../../domain/parisTime';
 import { useApp } from '../../context/AppContext';
+import { staffDataState } from '../../domain/dataLoad';
+import { plural } from '../../domain/plural';
 import { DESTINATIONS, STATUTS } from '../../constants';
 import * as sb from '../../lib/supabaseData';
 import { confirmDeparture, departureManifest, exportDeparture } from '../../services/departures';
@@ -27,6 +30,13 @@ const NOT_LOADABLE = ['annule', 'livre', 'expedie', 'transit', 'dedouanement', '
 const EXPORTS = [['manifest', 'Manifeste Excel', 'perm_export_colis'], ['invoice', 'Facture commerciale', 'perm_export_factures'], ['dau', 'Données douane', 'perm_export_dau']];
 const EMPTY_PLAN = { date: '', destinationCode: '974', weeks: '1', closing: '' };
 const cardScope = id => `card:${id}`;
+const escapeRegExp = text => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+/** A sentence whose references (« EXP-WISH-1 ») are never split at a hyphen. */
+const keepWhole = (text, tokens = []) => {
+  if (!tokens.length) return text;
+  const parts = text.split(new RegExp(`(${tokens.map(escapeRegExp).join('|')})`));
+  return <>{parts.map((part, index) => index % 2 ? <span key={index} className="whitespace-nowrap">{part}</span> : part)}</>;
+};
 const withoutParam = (name) => (previous) => { const next = new URLSearchParams(previous); next.delete(name); return next; };
 
 /** A labelled field with its help and its error under it (the form pattern). */
@@ -57,7 +67,7 @@ const focusFirstError = (errors, ids) => {
 };
 
 export default function StaffDepartures({ embedded = false }) {
-  const { envois, setEnvois, data, clients, can, refreshColis, refreshWork, flash, setCfm, assignDeparture, dataError, sbReady, retryLoad } = useApp();
+  const { envois, setEnvois, data, clients, can, refreshColis, refreshWork, flash, setCfm, ask, assignDeparture, dataError, dataLoading, sbReady, retryLoad } = useApp();
   const navigate = useNavigate();
   const location = useLocation();
   const [params, setParams] = useSearchParams();
@@ -109,7 +119,9 @@ export default function StaffDepartures({ embedded = false }) {
   const refresh = async () => { const rows = await sb.fetchEnvois(); setEnvois(rows); return rows; };
   const mergeEnvois = saved => setEnvois(previous => [...previous.filter(item => !saved.some(row => row.id === item.id)), ...saved]
     .sort((left, right) => (left.date || '').localeCompare(right.date || '')));
-  const loadFailed = Boolean(dataError) || !sbReady;
+  // Nothing loaded: the reason and « Réessayer » in place of the cards. A failed
+  // refresh keeps the cards under the shell's banner; planning waits for the connection.
+  const loadFailed = staffDataState({ sbReady, dataLoading, dataError, hasData: data.length > 0 || envois.length > 0 }).state === 'failed';
 
   // ── Planning form ────────────────────────────────────────────────────
   const openPlanning = () => { setForm(EMPTY_PLAN); setPlanErrors({}); setScopeError('plan', ''); setCreating(true); };
@@ -238,7 +250,15 @@ export default function StaffDepartures({ embedded = false }) {
   };
 
   // ── « Affecter ces dossiers » ─────────────────────────────────────────
-  const assignWishes = (envoi, proposed) => run(async () => {
+  // As in the dossier calendar, a departure after a client's subscription end is
+  // confirmed first, those dossiers named; cancelling writes nothing.
+  const assignWishes = (envoi, proposed) => {
+    if (busy || lock.current) return;
+    const confirmation = wishesSubscriptionConfirmation(envoi, proposed, clients, { today: now });
+    if (confirmation) ask(confirmation.title, keepWhole(confirmation.message, confirmation.refs), () => writeWishes(envoi, proposed), { okLabel: confirmation.okLabel });
+    else writeWishes(envoi, proposed);
+  };
+  const writeWishes = (envoi, proposed) => run(async () => {
     setAssigning(envoi.id);
     setAssignResults(previous => ({ ...previous, [envoi.id]: null }));
     const assigned = [], failures = [];
@@ -307,7 +327,7 @@ export default function StaffDepartures({ embedded = false }) {
         <button type="button" className={BUTTON} disabled={busy} onClick={() => (loadFailed ? retryLoad() : run(async () => { await refresh(); setAssignResults({}); }))}>
           <RefreshCw size={16} aria-hidden="true" className={busy ? 'animate-spin' : ''} />Actualiser
         </button>
-        {canPlan && <button ref={planButton} type="button" className={PRIMARY} disabled={loadFailed} aria-expanded={creating} aria-controls={creating ? 'departure-planning' : undefined} onClick={() => (creating ? closePlanning() : openPlanning())}>
+        {canPlan && <button ref={planButton} type="button" className={PRIMARY} disabled={!sbReady} aria-expanded={creating} aria-controls={creating ? 'departure-planning' : undefined} onClick={() => (creating ? closePlanning() : openPlanning())}>
           <CalendarPlus size={16} aria-hidden="true" />Planifier un départ
         </button>}
       </div>
@@ -359,10 +379,10 @@ export default function StaffDepartures({ embedded = false }) {
         })}{!rows.length && <p className="py-2 text-sm text-gray-600">{search ? 'Aucun dossier ne correspond à cette recherche.' : 'Aucun dossier dans ce groupe.'}</p>}</div>;
       })}
       <label className="block text-sm text-gray-700">Motif du report des dossiers non cochés<textarea value={deferredReason} onChange={event => setDeferredReason(event.target.value)} className={`${SEARCH_FIELD} py-2`} maxLength={500} /></label>
-      <p role="status" className="text-sm font-semibold">{review.dossiers.filter(item => selected.includes(item.id) && departureReadiness(item).eligible).length} expédition(s) cochée(s) · {review.dossiers.filter(item => !selected.includes(item.id)).length} à reporter. La sélection est conservée pendant vos vérifications.</p>
+      <p role="status" className="text-sm font-semibold">{plural(review.dossiers.filter(item => selected.includes(item.id) && departureReadiness(item).eligible).length, 'expédition cochée', 'expéditions cochées')} · {review.dossiers.filter(item => !selected.includes(item.id)).length} à reporter. La sélection est conservée pendant vos vérifications.</p>
       {selected.some(id => !review.dossiers.some(item => item.id === id && departureReadiness(item).eligible)) && <p role="alert" className="text-sm text-red-700">Un dossier coché a changé. Actualisez le chargement et revérifiez votre sélection.</p>}
       {errors.review && <p role="alert" className="departures-error"><AlertTriangle size={16} aria-hidden="true" />{errors.review}</p>}
-      <div className="flex flex-wrap gap-2"><button type="button" disabled={busy || !selected.length || selected.some(id => !review.dossiers.some(item => item.id === id && departureReadiness(item).eligible))} onClick={() => run(confirm, 'review')} className={PRIMARY}><Check size={16} aria-hidden="true" />Confirmer le départ de {selected.length} expédition(s)</button><button type="button" disabled={busy} className={BUTTON} onClick={closeReview}>Fermer le chargement</button><button type="button" className={BUTTON} disabled={busy} onClick={() => run(() => startReview(review.envoi), 'review')}>Actualiser le chargement</button></div>
+      <div className="flex flex-wrap gap-2"><button type="button" disabled={busy || !selected.length || selected.some(id => !review.dossiers.some(item => item.id === id && departureReadiness(item).eligible))} onClick={() => run(confirm, 'review')} className={PRIMARY}><Check size={16} aria-hidden="true" />Confirmer le départ de {plural(selected.length, 'expédition')}</button><button type="button" disabled={busy} className={BUTTON} onClick={closeReview}>Fermer le chargement</button><button type="button" className={BUTTON} disabled={busy} onClick={() => run(() => startReview(review.envoi), 'review')}>Actualiser le chargement</button></div>
     </section>}
 
     {manifest && <section aria-label="Manifeste confirmé" className="space-y-3 rounded-xl border border-emerald-300 bg-white p-4">
@@ -406,6 +426,7 @@ export default function StaffDepartures({ embedded = false }) {
     const overdue = departureOverdue(envoi, now);
     const closingLine = departureClosingLine(envoi, { today: now });
     const wished = departed ? [] : wishedDossiersFor(envoi, data, clients, now);
+    const lateEnd = new Map(wishesAfterSubscription(envoi, wished, clients).map(item => [item.dossier.id, item.endDay]));
     const result = assignResults[envoi.id];
     const day = departureDayLabel(envoi.date, { today: now });
     const canModify = can('perm_envois_modifier');
@@ -450,7 +471,7 @@ export default function StaffDepartures({ embedded = false }) {
         <h3 id={`departure-wishes-${envoi.id}`} className="departures-wishes-title"><CalendarCheck size={16} aria-hidden="true" /><span>{countLabel(wished.length, 'dossier souhaite', 'dossiers souhaitent')} partir ce <span className="whitespace-nowrap">jour-là</span></span></h3>
         <ul className="departures-wishes-list">{wished.map(dossier => <li key={dossier.id}>
           <Link to={`/colis/${dossier.id}?${new URLSearchParams({ returnTo })}`} className="departures-wishes-link">{dossier.ref}</Link>
-          <span className="departures-wishes-client">{[clients.find(client => client.id === dossier.clientId)?.nom, STATUTS[dossier.statut]?.label].filter(Boolean).join(' · ')}</span>
+          <span className="departures-wishes-client">{[clients.find(client => client.id === dossier.clientId)?.nom, STATUTS[dossier.statut]?.label, lateEnd.has(dossier.id) ? `abonnement terminé le ${calendarDateLabel(lateEnd.get(dossier.id), { today: now })}` : null].filter(Boolean).join(' · ')}</span>
         </li>)}</ul>
         {can('perm_colis_affecter_envoi')
           ? <button type="button" className={`${BUTTON} departures-accent`} disabled={busy} onClick={() => assignWishes(envoi, wished)}>{assigning === envoi.id ? <Loader2 size={16} aria-hidden="true" className="animate-spin" /> : <CalendarCheck size={16} aria-hidden="true" />}Affecter ces dossiers</button>

@@ -2,6 +2,7 @@ import React, { useEffect, useId, useRef, useState } from 'react';
 import { Check, Loader2 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { plural, pluralWord } from '../../domain/plural';
+import { upperCaseInPlace } from './casierInput';
 import './dossierActions.css';
 import './dossierDeparture.css';
 
@@ -64,7 +65,7 @@ export default function CasierEditor({ id, variant = 'panel', onDone }) {
         }
       }
       const message = moveAll ? `Casier ${next} enregistré pour ${saved} colis${kept ? ` (${kept} colis sur un départ non ${pluralWord(kept, 'déplacé')})` : ''}.` : `Casier ${next} enregistré.`;
-      flash(message);
+      flash({ msg: message, type: 'success' });
       onDone?.({ saved: true, message });
     } catch (failure) {
       const reason = failure?.message || 'Enregistrement impossible.';
@@ -85,7 +86,7 @@ export default function CasierEditor({ id, variant = 'panel', onDone }) {
     <div className="dossier-casier-row">
       <input ref={input} id={inputId} className="dossier-casier-input" value={value} readOnly={busy} autoComplete="off" spellCheck={false}
         aria-invalid={error ? true : undefined} aria-describedby={error ? errorId : undefined}
-        onChange={event => { setValue(event.target.value.toUpperCase()); setError(''); }} onKeyDown={onKeyDown} />
+        onChange={event => { setValue(upperCaseInPlace(event.target)); setError(''); }} onKeyDown={onKeyDown} />
       {/* The visible « Enregistrer » stays inside the accessible name, also while saving. */}
       <button type="button" className="dossier-primary-button" aria-label="Enregistrer le casier" disabled={busy} onClick={save}>
         {busy ? <Loader2 size={16} aria-hidden="true" className="animate-spin" /> : <Check size={16} aria-hidden="true" />}<span>Enregistrer</span>

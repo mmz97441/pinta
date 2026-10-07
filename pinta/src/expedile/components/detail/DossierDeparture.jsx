@@ -141,9 +141,10 @@ export default function DossierDeparture({ variant = 'summary', can: taskCan, re
       const done = await action();
       if (owner !== shownDossier.current) return;
       setChosen(null);
-      if (!summary) setFeedback(done.feedback);
-      flash(done.toast);
-      if (summary) setEditing(false);
+      // One confirmation, announced once: the field's own line in the task, a
+      // success toast once the overview's field closes.
+      if (summary) { flash({ msg: done.toast, type: 'success' }); setEditing(false); }
+      else setFeedback(done.feedback);
     } catch (failure) {
       if (owner !== shownDossier.current) return;
       if (failure?.code === '40001') {

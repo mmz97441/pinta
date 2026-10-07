@@ -1,0 +1,10 @@
+/* A list that could not be read (Mon travail, Équipe, Conversations): the
+   reason and « Réessayer » in place of the list. Title and reason 7.6:1 light,
+   9.6:1 dark; the note keeps the page text colour. */
+.work-load-error { display: flex; align-items: flex-start; gap: 12px; padding: 16px; border: 1px solid #fecaca; border-radius: 12px; color: #991b1b; background: #fef2f2; }
+html.dark .work-load-error { border-color: #7f3a3a; color: #f4b9b9; background: #2c1d1b; }
+.work-load-error-icon { flex-shrink: 0; margin-top: 2px; }
+.work-load-error-body { display: grid; justify-items: start; gap: 8px; min-width: 0; }
+.work-load-error-body h2 { margin: 0; font-size: 17px; font-weight: 700; line-height: 1.35; }
+.work-load-error-body p { margin: 0; font-size: 15px; line-height: 1.45; color: var(--text-primary); }
+.work-load-error-body .work-load-error-reason { font-weight: 600; color: inherit; overflow-wrap: anywhere; }

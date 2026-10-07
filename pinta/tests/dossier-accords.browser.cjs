@@ -492,8 +492,9 @@ async function main() {
         assert.deepEqual(commands(f, 'assign_colis_departure').at(-1), { p_colis_id: id, p_envoi_id: envoi, p_expected_updated_at: before });
         assert.equal((await departureText(scope)).text, `Départ : ${DAY_LABEL[envoi]} · ${destination}`);
         assert.equal(row(f, id).envoi_id, envoi);
-        if (task) await scope.getByRole('status').filter({ hasText: 'Départ enregistré.' }).waitFor();
-        else await focusOnEdit(f); // After the choice the focus returns to « Modifier ».
+        // One confirmation, announced once: the task's own line, or a success toast once the overview's field closes.
+        if (task) { await scope.getByRole('status').filter({ hasText: 'Départ enregistré.' }).waitFor(); assert.equal(await f.page.locator('[data-toast]').count(), 0, 'No toast doubles the line of the task.'); }
+        else { await f.page.locator('[data-toast="success"]').filter({ hasText: 'Départ enregistré' }).waitFor(); await focusOnEdit(f); } // After the choice the focus returns to « Modifier ».
       }
       // Choosing the dossier's own departure writes nothing.
       await open();
@@ -623,6 +624,11 @@ async function main() {
           const box = await target.boundingBox();
           assert.ok(box.height >= 44 && box.x >= 0 && box.x + box.width <= width + 1, `${width}px: 44px tall days inside the screen.`);
           if (width >= 360) assert.ok(box.width >= 44, `${width}px: 44px wide days (${box.width}).`);
+        }
+        // « Annuler » never breaks inside its word, the label beside it wraps instead.
+        if (scopeOf === overview) {
+          const lines = await scope.locator('.dossier-departure-label-row .dossier-departure-cancel').evaluate(node => { const range = document.createRange(); range.selectNodeContents(node); return new Set([...range.getClientRects()].filter(rect => rect.width > 0).map(rect => Math.round(rect.top))).size; });
+          assert.equal(lines, 1, `${width}px: « Annuler » on one line.`);
         }
         await picker(scope).screenshot({ path: `${output}/calendar-${scopeOf === overview ? 'overview' : 'task'}-${width}.png` });
       }
@@ -1226,6 +1232,23 @@ async function main() {
       await carton.screenshot({ path: `${output}/reception-labels-390.png` });
       assertNoBusinessWrite(f);
     }, { width: 390 });
+
+    // At 320 px a tracking number moves to the next line whole, never split at its hyphen.
+    await scenario('the-reception-task-keeps-tracking-numbers-whole-at-320', async f => {
+      const dossier = f.tables.colis.find(item => item.id === DOSSIER.ACC001);
+      dossier.trackings_detail = (dossier.trackings_detail || []).map((item, index) => ({ ...item, number: index ? item.number : 'TEST-001', fournisseur: 'Boutique A' }));
+      if (!dossier.trackings_detail.length) dossier.trackings_detail = [{ number: 'TEST-001', fournisseur: 'Boutique A' }];
+      dossier.trackings = dossier.trackings_detail.map(item => item.number).filter(Boolean);
+      f.before = structuredClone(f.tables.colis);
+      await openDossier(f, DOSSIER.ACC001, 'section=reception');
+      const token = workspace(f).locator('legend .keep-token').filter({ hasText: 'TEST-001' }).first();
+      await token.waitFor();
+      const lines = await token.evaluate(node => { const range = document.createRange(); range.selectNodeContents(node); return new Set([...range.getClientRects()].filter(rect => rect.width > 0).map(rect => Math.round(rect.top))).size; });
+      assert.equal(lines, 1, '« TEST-001 » on one line.');
+      await noPageOverflow(f);
+      await token.locator('xpath=ancestor::fieldset[1]').screenshot({ path: `${output}/reception-tracking-320.png` });
+      assertNoBusinessWrite(f);
+    }, { width: 320 });
 
     await scenario('a-long-invoice-file-name-is-never-clipped-at-its-start-on-a-phone', async f => {
       const invoice = f.tables.factures.find(item => item.colis_id === DOSSIER.ACC003);

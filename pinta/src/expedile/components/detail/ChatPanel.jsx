@@ -131,6 +131,21 @@ function MsgStatut({ statut, canal }) {
   return <span className="inline-flex items-center gap-1 text-xs">{icon}{label}</span>;
 }
 
+/** Brings `element` into view, above the on-screen keyboard too (the visual
+ * viewport is shorter than the window then): its scrolling containers move,
+ * never the element. */
+function keepAboveKeyboard(element) {
+  if (!element?.getClientRects().length) return;
+  element.scrollIntoView({ block: 'nearest' });
+  const visual = window.visualViewport;
+  if (!visual) return;
+  const over = element.getBoundingClientRect().bottom + 8 - (visual.offsetTop + visual.height);
+  if (over <= 0) return;
+  for (let node = element.parentElement; node; node = node.parentElement) {
+    if (/(auto|scroll)/.test(getComputedStyle(node).overflowY) && node.scrollHeight > node.clientHeight + node.scrollTop) { node.scrollTop += over; return; }
+  }
+}
+
 // ownership: the caller's task ownership (TaskOwnership compact), shown in the
 // status bar. Without it, the bar names the person following the conversation.
 export default function ChatPanel({ colis, client, embedded = false, active = true, ownership = null }) {
@@ -155,6 +170,7 @@ export default function ChatPanel({ colis, client, embedded = false, active = tr
   const moreRef = useRef(null);
   const moreButtonRef = useRef(null);
   const replyRef = useRef(null);
+  const sendRef = useRef(null);
 
   // The conversation menu closes like a popover: outside press or Escape.
   useEffect(() => {
@@ -168,11 +184,14 @@ export default function ChatPanel({ colis, client, embedded = false, active = tr
 
   // The staff reply grows with its text up to its CSS maximum, then scrolls.
   // A hidden tab has no layout: it is measured again when it becomes visible.
+  // While it is typed (a long reply on a phone, keyboard open), « Envoyer »
+  // under the field stays in view: the history scrolls away instead.
   useLayoutEffect(() => {
     const field = replyRef.current;
     if (!field?.getClientRects().length) return;
     field.style.height = '';
     field.style.height = `${field.scrollHeight + field.offsetHeight - field.clientHeight}px`;
+    if (document.activeElement === field) keepAboveKeyboard(sendRef.current);
   }, [msgTxt, active]);
 
   // Auto-expand only when there are messages
@@ -396,6 +415,7 @@ export default function ChatPanel({ colis, client, embedded = false, active = tr
             />
             <span className="chat-channel chat-composer__box-channel" data-channel={channel} aria-hidden="true"><ChannelIcon size={14} />{CHANNEL_LABELS[channel]}</span>
             <button
+              ref={sendRef}
               onClick={handleSend}
               disabled={!canHandle || sending || changingState || !msgTxt.trim()} aria-label="Envoyer le message"
               className="chat-send"

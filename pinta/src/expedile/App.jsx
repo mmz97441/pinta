@@ -9,6 +9,7 @@ import { needsConversationAction } from './domain/conversations';
 import { TaskAccessBoundary } from './context/TaskAccessContext';
 import { findDossierWorkAction, staffDisplayName } from './domain/personalWork';
 import { plural } from './domain/plural';
+import { shellLoadBanner, staffDataState } from './domain/dataLoad';
 import { staffName } from './components/workspace/WorkActionRow';
 import TaskOwnership from './components/workspace/TaskOwnership';
 import { AppProvider, useApp } from './context/AppContext';
@@ -95,22 +96,28 @@ function StaffShellSkeleton() {
     </div>
   </div>;
 }
-/** The client portal shell: header bar and bottom navigation, with neutral placeholders. */
+/** The client portal shell: header bar and bottom navigation, with neutral
+ * placeholders, built like the real ones (same height, same place, no bottom
+ * bar from 1024 px where the links sit in the header): nothing moves when the
+ * portal appears. */
 function ClientShellSkeleton() {
   return <div data-testid="shell-skeleton" data-shell="client" style={{ fontFamily: APP_FONT, background: 'var(--bg-canvas)' }} className="min-h-[100dvh]">
-    <div aria-hidden="true" className="glass-dark border-b border-white border-opacity-5 px-4 py-3.5 flex items-center justify-between sticky top-0 z-20" style={{ background: 'linear-gradient(135deg, rgba(18,42,54,0.98), rgba(27,58,75,0.98))' }}>
-      {/* Same height as the header buttons: 40 px, 44 px on touch and narrow screens (brand.css). */}
-      <Logo /><div className="flex items-center gap-2"><div className="h-10 w-10 rounded-xl bg-white/10 max-lg:h-11 [@media(pointer:coarse)]:h-11" /><div className="h-10 w-28 rounded-xl bg-white/10 max-lg:h-11 [@media(pointer:coarse)]:h-11" /></div>
+    <div aria-hidden="true" className="glass-dark border-b border-white border-opacity-5 sticky top-0 z-20" style={{ background: 'linear-gradient(135deg, rgba(18,42,54,0.98), rgba(27,58,75,0.98))' }}>
+      <div className="mx-auto flex min-h-[60px] max-w-xl md:max-w-3xl lg:max-w-5xl xl:max-w-6xl items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
+        <Logo /><div className="flex items-center gap-2"><div className="h-10 w-10 rounded-xl bg-white/10 max-lg:h-11 [@media(pointer:coarse)]:h-11" /><div className="h-10 w-28 rounded-xl bg-white/10 max-lg:h-11 [@media(pointer:coarse)]:h-11" /></div>
+      </div>
     </div>
     <div className="max-w-xl md:max-w-3xl lg:max-w-5xl xl:max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4 space-y-4"><div className="pb-20"><LoadingView bare /></div></div>
-    <div aria-hidden="true" className="fixed bottom-0 left-0 right-0 glass-nav z-40" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
-      <div className="flex max-w-xl md:max-w-3xl lg:max-w-5xl xl:max-w-6xl mx-auto">{[0, 1, 2, 3].map((item) => <div key={item} className="flex-1 flex flex-col items-center py-2"><div className="h-[33px] w-[33px] rounded-xl bg-gray-200" /><div className="mt-0.5 h-5 w-14 rounded bg-gray-200" /></div>)}</div>
+    <div aria-hidden="true" data-skeleton-bar="" className="lg:hidden fixed bottom-0 left-0 right-0 glass-nav z-40" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+      <div className="flex max-w-xl md:max-w-3xl mx-auto">{[0, 1, 2, 3].map((item) => <div key={item} className="min-h-14 flex-1 flex flex-col items-center justify-center py-2"><div className="h-[33px] w-[33px] rounded-xl bg-gray-200" /><div className="mt-0.5 h-5 w-14 rounded bg-gray-200" /></div>)}</div>
     </div>
   </div>;
 }
 // The portal of the last session on this device, so a client does not see the staff shell first.
+// AppContent writes it as soon as the profile is resolved (staff or client), whichever screen follows.
 const SHELL_HINT = 'expedile-shell';
 const readShellHint = () => { try { return localStorage.getItem(SHELL_HINT); } catch { return null; } };
+const writeShellHint = kind => { try { localStorage.setItem(SHELL_HINT, kind); } catch { /* the hint only shapes a placeholder */ } };
 // Supabase Auth keeps a restored session as sb-<project>-auth-token; without one, the login page comes next.
 const hasStoredSession = () => { try { return Object.keys(localStorage).some((key) => /^sb-.+-auth-token$/.test(key)); } catch { return false; } };
 /** While the session is restored and the data load. The placeholders only shape the screen: the portal itself
@@ -118,10 +125,6 @@ const hasStoredSession = () => { try { return Object.keys(localStorage).some((ke
 function AppLoading() {
   const { auth } = useApp();
   const kind = auth ? (auth.type === 'staff' ? 'staff' : 'client') : !hasStoredSession() ? 'none' : readShellHint() === 'client' ? 'client' : 'staff';
-  useEffect(() => {
-    if (!auth) return;
-    try { localStorage.setItem(SHELL_HINT, kind); } catch { /* the hint only shapes a placeholder */ }
-  }, [auth, kind]);
   if (kind === 'staff') return <StaffShellSkeleton />;
   if (kind === 'client') return <ClientShellSkeleton />;
   return <div className="min-h-[100dvh] flex items-center"><LoadingView /></div>;
@@ -141,10 +144,10 @@ class ScreenBoundary extends React.Component {
   }
 }
 
-function MissingColis({ isClient }) {
+function MissingColis() {
   return <div className="max-w-lg mx-auto p-8 space-y-4"><h1 className="text-xl font-bold text-gray-900">Dossier indisponible</h1>
     <p className="text-sm text-gray-600">Ce dossier n’existe pas ou votre compte n’y a pas accès.</p>
-    <a className="inline-flex min-h-11 items-center px-4 rounded-xl brand-bg text-white" href={isClient ? '/colis' : '/colis'}>Retour aux colis</a></div>;
+    <a className="inline-flex min-h-11 items-center px-4 rounded-xl brand-bg text-white" href="/colis">Retour aux colis</a></div>;
 }
 
 function Permission({ allowed, children }) {
@@ -155,29 +158,32 @@ function Permission({ allowed, children }) {
 // Fields that bring up a phone's on-screen keyboard.
 const TEXT_ENTRY = 'textarea, select, [contenteditable]:not([contenteditable="false"]), input:not([type="button"]):not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]):not([type="image"]):not([type="reset"]):not([type="submit"]):not([type="hidden"])';
 
-/** Below 1024px, a text field has the focus while the visible height is
- * reduced (an on-screen keyboard: the visual viewport noticeably shorter than
- * the window, or under 640px): the bottom navigation then steps aside. A
- * focus moving from one field to the next keeps it hidden (relatedTarget). */
+/** Below 1024px, while the on-screen keyboard is open for a text field (the
+ * visual viewport noticeably shorter than the window, or under 640px), the
+ * bottom navigation steps aside. The visible height decides: it is checked
+ * when the keyboard opens or closes (visualViewport resize) and when a text
+ * field takes the focus. Leaving a field never brings the bar back by itself:
+ * the press that moves the focus to a button must end on that button, not on
+ * a bar appearing under the finger (the keyboard closing brings it back). */
 function useTypingOnPhone() {
   const [typing, setTyping] = useState(false);
   useEffect(() => {
     const viewport = window.visualViewport;
-    const evaluate = element => {
+    const keyboardOpen = () => {
       const height = viewport ? viewport.height : window.innerHeight;
-      setTyping(Boolean(element?.matches?.(TEXT_ENTRY)) && window.innerWidth < 1024 && (window.innerHeight - height > 120 || height < 640));
+      return window.innerWidth < 1024 && (window.innerHeight - height > 120 || height < 640);
     };
-    const focusIn = event => evaluate(event.target);
-    const focusOut = event => evaluate(event.relatedTarget);
-    const resize = () => evaluate(document.activeElement);
+    const typingIn = element => Boolean(element?.matches?.(TEXT_ENTRY)) && keyboardOpen();
+    // A text field takes the focus with the keyboard already open: the bar steps aside.
+    const focusIn = event => { if (typingIn(event.target)) setTyping(true); };
+    // The keyboard opens or closes: the visible height and the focused element decide.
+    const resize = () => setTyping(typingIn(document.activeElement));
     resize();
     document.addEventListener('focusin', focusIn);
-    document.addEventListener('focusout', focusOut);
     window.addEventListener('resize', resize);
     viewport?.addEventListener('resize', resize);
     return () => {
       document.removeEventListener('focusin', focusIn);
-      document.removeEventListener('focusout', focusOut);
       window.removeEventListener('resize', resize);
       viewport?.removeEventListener('resize', resize);
     };
@@ -209,7 +215,6 @@ function StaffColisDetail() {
   const navigate = useNavigate();
   const location = useLocation();
   const [contextSection, setContextSection] = useState(null);
-  const [casierEditRequest, setCasierEditRequest] = useState(0);
   const [conversationVisited, setConversationVisited] = useState(null);
   const canMessages = ['perm_comm_message_libre', 'perm_comm_telegram', 'perm_comm_email', 'perm_comm_voir_chat_autres'].some(can);
   const conversationOpen = canMessages && new URLSearchParams(location.search).get('onglet') === 'conversation';
@@ -238,7 +243,7 @@ function StaffColisDetail() {
     return () => { active = false; setSelId(null); };
   }, [id, setSelId, refreshColis]);
 
-  useEffect(() => { setContextSection(null); setCasierEditRequest(0); }, [id]);
+  useEffect(() => { setContextSection(null); }, [id]);
   useEffect(() => {
     if (detailLoading || conversationOpen || location.hash !== '#dossier-work') return;
     const frame = requestAnimationFrame(() => {
@@ -313,7 +318,7 @@ function StaffColisDetail() {
           {({ line, editor }) => <DossierOverview dossier={sel} model={overview} currentTask={task}
             onNavigateTask={openOverviewTask} onCorrect={openOverviewEditor} onOpenContext={openContext} canEditQuote={canEditQuote}
             canEditCasier={canEditCasier} canEditReception={canEditMeasures('reception')} canEditPreparation={canEditMeasures('preparation')}
-            onEditCasier={() => { setContextSection('reception'); setCasierEditRequest(previous => previous + 1); }} departure={line} departureEditor={editor} />}
+            departure={line} departureEditor={editor} />}
         </DossierDeparture>
       </div>
       <div id="dossier-work" tabIndex={-1} className="mx-auto max-w-[1600px] scroll-mt-4 px-4 py-5 outline-none sm:px-6 lg:px-8" aria-label={`Travail : ${DOSSIER_TASKS[task]?.label || task}`} data-testid="dossier-task-workspace">
@@ -325,7 +330,7 @@ function StaffColisDetail() {
       {canMessages && <section role="tabpanel" id="dossier-panel-conversation" aria-labelledby="dossier-tab-conversation" hidden={!conversationOpen} className="dossier-conversation">
         {(conversationOpen || conversationVisited === id) && <><div className="dossier-conversation__chat"><ChatPanel key={id} colis={sel} client={selClient} embedded active={conversationOpen} ownership={conversationAction && <TaskOwnership key={conversationAction.id} action={conversationAction} compact />} /></div><details className="dossier-conversation__history"><summary><ChevronRight size={18} aria-hidden="true" />Ce qui a déjà été fait</summary><AuditLog key={id} expanded includeAudit={can('perm_admin_audit')} /></details></>}
       </section>}
-      <DossierContextPanel key={sel.id} section={contextSection} onSectionChange={setContextSection} onClose={() => setContextSection(null)} casierEditRequest={casierEditRequest} />
+      <DossierContextPanel key={sel.id} section={contextSection} onSectionChange={setContextSection} onClose={() => setContextSection(null)} />
     </div>
   );
 }
@@ -344,7 +349,9 @@ function ClientColisDetail() {
   const [detailError, setDetailError] = useState('');
   const [attempt, setAttempt] = useState(0);
   const known = data.some((c) => c.id === id);
-  useDocumentTitle(sel?.id === id && sel.ref ? `Expédition ${sel.ref}` : 'Mon expédition');
+  // The title says what the page says: the expedition, or that it cannot be found.
+  const missing = !known && !dataLoading && !detailLoading && !detailError && !(!sbReady && dataError);
+  useDocumentTitle(sel?.id === id && sel.ref ? `Expédition ${sel.ref}` : missing ? 'Expédition introuvable' : 'Mon expédition');
 
   // Selected before paint: an expedition already shown in a list opens at once
   // and stays visible while its latest version is read.
@@ -381,6 +388,9 @@ function ClientColisDetail() {
   );
 }
 
+// Where a voluntary password change returns: a page of this space, never the password page itself.
+const safePasswordOrigin = from => typeof from === 'string' && /^\/(?!\/)/.test(from) && !from.startsWith('/password') ? from : '';
+
 function PasswordScreen(props) {
   useDocumentTitle(props.recovery ? 'Réinitialiser mon mot de passe' : 'Mot de passe');
   return <ForceChangePassword {...props} />;
@@ -396,6 +406,8 @@ function AppContent() {
   const typingOnPhone = useTypingOnPhone();
   const [bottomNavRef, bottomNavHeight] = useMeasuredHeight();
   useEffect(() => { setOnboardingDismissed(false); }, [auth?.session?.user?.id]);
+  // Once the profile is resolved, the next visit starts from the right shell (staff or client).
+  useEffect(() => { if (auth?.type) writeShellHint(auth.type === 'staff' ? 'staff' : 'client'); }, [auth?.type]);
   const needsPassword = passwordRecovery || auth?.u?.mustChangePassword || location.pathname === '/password';
 
   // A client identity is known before its expeditions: the portal shows its own skeletons meanwhile.
@@ -410,14 +422,31 @@ function AppContent() {
   // never ends the session nor clears the drafts kept on this device.
   const confirmLogout = () => ask('Se déconnecter ?', 'Vos brouillons non enregistrés sur cet appareil seront effacés. Les dossiers et messages enregistrés sont conservés.', handleLogout, { okLabel: 'Se déconnecter' });
 
-  if (needsPassword) return <PasswordScreen
-    staffUser={auth.u?.mustChangePassword ? { id: auth.u.staffId } : null}
-    recovery={passwordRecovery}
-    onDone={async () => { await completePasswordRecovery(); navigate('/', { replace: true }); }}
-    onCancel={!passwordRecovery && !auth.u?.mustChangePassword ? () => navigate('/') : undefined}
-  />;
+  if (needsPassword) {
+    // A chosen change goes back where it was asked (« Plus », a page, the profile).
+    const voluntary = !passwordRecovery && !auth.u?.mustChangePassword;
+    const origin = safePasswordOrigin(location.state?.from) || (isStaff ? '/' : '/profil');
+    return <PasswordScreen
+      staffUser={auth.u?.mustChangePassword ? { id: auth.u.staffId } : null}
+      recovery={passwordRecovery}
+      onDone={async () => {
+        const created = Boolean(auth.u?.mustChangePassword);
+        await completePasswordRecovery();
+        // Confirmed by Auth: said once the space is back on screen.
+        flash({ msg: created ? 'Mot de passe enregistré.' : 'Mot de passe modifié.', type: 'success', duration: 8000 });
+        // A chosen change returns where it was asked, never through « / »; when the
+        // password page has already sent the person back itself, its return stands.
+        if (!voluntary) navigate('/', { replace: true });
+        else if (window.location.pathname === '/password') navigate(origin, { replace: true });
+      }}
+      onCancel={voluntary ? () => navigate(origin, { replace: true }) : undefined}
+    />;
+  }
 
-  const loadBanner = dataError || (!sbReady && !dataLoading) ? <div role="alert" className="bg-red-50 border-b border-red-200 text-red-800 text-xs px-4 py-3 flex flex-wrap items-center gap-2">
+  // A failed first load: the pages that state it themselves (reason and « Réessayer »)
+  // take the banner's place; loaded data kept after a failed refresh: the banner, everywhere.
+  const dataState = staffDataState({ sbReady, dataLoading, dataError, hasData: data.length > 0 });
+  const loadBanner = isStaff && shellLoadBanner(location.pathname, dataState.state) ? <div role="alert" className="bg-red-50 border-b border-red-200 text-red-800 text-xs px-4 py-3 flex flex-wrap items-center gap-2">
     <AlertTriangle size={16} /><span className="flex-1">{dataError || 'Connexion aux données interrompue. Réessayez avant de modifier un dossier.'}</span>
     <button onClick={retryLoad} className="font-bold underline min-h-11">Réessayer</button>
   </div> : null;
@@ -459,7 +488,7 @@ function AppContent() {
 
     return (
       <div style={{ fontFamily: "system-ui, -apple-system, 'Segoe UI', sans-serif" }} className="h-[100dvh] flex overflow-hidden">
-        <Toast />
+        <Toast route={location.pathname} />
         <ConfirmDialog />
 
         {/* ── Sidebar (desktop) ──────────────────────────────────────── */}
@@ -496,7 +525,8 @@ function AppContent() {
           </div>
 
           {/* Navigation */}
-          <nav className="flex-1 px-3 space-y-1">
+          {/* Its free space below the entries holds the toasts (ui/Toast.jsx). */}
+          <nav data-toast-zone="" className="flex-1 px-3 space-y-1">
             {NAV_ITEMS.filter((item) => item.key !== '/settings').map((item) => {
               const Icon = item.icon;
               const isActive = activePath === item.key;
@@ -542,7 +572,7 @@ function AppContent() {
             </div>
             <div className={`mt-2 flex items-center ${sidebarCollapsed ? 'flex-col gap-1' : 'justify-between'}`}>
               <ThemeToggle compact />
-              <button onClick={() => navigate('/password')} className="min-w-10 min-h-10 rounded-lg text-gray-400 hover:text-amber-400 hover:bg-white/10 flex items-center justify-center" title="Modifier le mot de passe" aria-label="Modifier le mot de passe"><Key size={16} /></button>
+              <button onClick={() => navigate('/password', { state: { from: location.pathname + location.search } })} className="min-w-10 min-h-10 rounded-lg text-gray-400 hover:text-amber-400 hover:bg-white/10 flex items-center justify-center" title="Modifier le mot de passe" aria-label="Modifier le mot de passe"><Key size={16} /></button>
               <button onClick={handleLogout} className="min-w-10 min-h-10 rounded-lg text-gray-400 hover:text-red-400 hover:bg-white/10 flex items-center justify-center" title="Se déconnecter" aria-label="Se déconnecter"><LogOut size={16} /></button>
             </div>
           </div>
@@ -551,7 +581,7 @@ function AppContent() {
         {/* ── Mobile bottom nav ──────────────────────────────────────── */}
         {/* Hidden while typing on a phone: the keyboard already takes the bottom of the screen. */}
         <div
-          ref={bottomNavRef} data-staff-bottom-nav="" data-typing={typingOnPhone ? 'true' : undefined}
+          ref={bottomNavRef} data-staff-bottom-nav="" data-toast-floor="" data-typing={typingOnPhone ? 'true' : undefined}
           className={`${typingOnPhone ? 'hidden' : 'flex'} lg:hidden fixed bottom-0 left-0 right-0 z-50 border-t border-gray-200 items-center justify-around py-2 px-1`}
           style={{ background: 'var(--bg-elevated)', paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }}
         >
@@ -578,13 +608,12 @@ function AppContent() {
 
         {/* ── Main content area ──────────────────────────────────────── */}
         <div className="flex-1 flex flex-col min-w-0 bg-gray-50">
-          <div className="lg:hidden min-h-12 px-4 flex items-center justify-between border-b border-gray-200">
+          <div data-toast-ceiling="" className="lg:hidden min-h-12 px-4 flex items-center justify-between border-b border-gray-200">
             <span className="font-black brand-t">EXPÉD<span className="brand-t-gold">ÎLE</span></span>
             {/* The logout lives in « Plus », away from the theme toggle. */}
             <div className="flex items-center gap-2">{can('perm_colis_receptionner') && <button aria-label="Réceptionner des cartons" onClick={() => navigate(`/reception?${new URLSearchParams({ returnTo: location.pathname + location.search })}`)} className="min-h-11 inline-flex items-center gap-1 whitespace-nowrap rounded-xl px-2 text-xs font-bold brand-t"><Plus size={18} className="shrink-0" />Recevoir</button>}<ThemeToggle compact /></div>
           </div>
-          {/* Mon travail states the failure, its reason and the retry in place of its list: one message. */}
-          {currentPath !== '/' && loadBanner}
+          {loadBanner}
           {/* The one <main> of every staff page: the pages render their content without their own.
               Below 1024px it keeps exactly the measured height of the bottom navigation free,
               nothing while the navigation steps aside for the keyboard (staffShell.css holds the
@@ -599,7 +628,7 @@ function AppContent() {
               <Route path="/plus" element={<div className="mx-auto max-w-xl space-y-4 p-5"><h1 className="text-2xl font-bold brand-t">Votre espace</h1><nav aria-label="Autres rubriques" className="grid gap-3">{moreItems.map(({ key, label, icon: Icon }) => <button key={key} onClick={() => navigate(key)} className="flex min-h-14 items-center gap-3 rounded-xl border border-gray-200 bg-white p-4 text-left font-semibold text-gray-800"><Icon size={20} aria-hidden="true" />{label}<ChevronRight size={18} aria-hidden="true" className="ml-auto" /></button>)}</nav>
                 {/* The account commands of the desktop sidebar, below 1024px. */}
                 <section aria-labelledby="plus-account-title" className="space-y-3 border-t border-gray-200 pt-4"><h2 id="plus-account-title" className="text-[11px] font-bold uppercase tracking-wider text-gray-600">Mon compte</h2><p className="text-sm text-gray-600">{fullName}</p>
-                  <button onClick={() => navigate('/password')} className="flex min-h-14 w-full items-center gap-3 rounded-xl border border-gray-200 bg-white p-4 text-left font-semibold text-gray-800"><Key size={20} aria-hidden="true" />Modifier le mot de passe<ChevronRight size={18} aria-hidden="true" className="ml-auto" /></button>
+                  <button onClick={() => navigate('/password', { state: { from: '/plus' } })} className="flex min-h-14 w-full items-center gap-3 rounded-xl border border-gray-200 bg-white p-4 text-left font-semibold text-gray-800"><Key size={20} aria-hidden="true" />Modifier le mot de passe<ChevronRight size={18} aria-hidden="true" className="ml-auto" /></button>
                   <button onClick={confirmLogout} className="flex min-h-14 w-full items-center gap-3 rounded-xl border border-gray-200 bg-white p-4 text-left font-semibold text-red-700"><LogOut size={20} aria-hidden="true" />Se déconnecter</button>
                 </section></div>} />
               <Route path="/reception" element={<Permission allowed={can('perm_colis_receptionner')}><ReceptionPage /></Permission>} />
@@ -661,10 +690,11 @@ function AppContent() {
   const initial = (authCl?.prenom || getPrenom(authCl) || authCl?.nom || '?').trim().charAt(0).toUpperCase();
   return (
     <div style={{ fontFamily: "system-ui, -apple-system, 'Segoe UI', sans-serif", background: 'var(--bg-canvas)' }} className="min-h-[100dvh]">
-      <Toast />
+      <Toast route={location.pathname} />
       <ConfirmDialog />
 
       <header
+        data-toast-ceiling=""
         className="glass-dark border-b border-white border-opacity-5 sticky top-0 z-20"
         style={{ background: 'linear-gradient(135deg, rgba(18,42,54,0.98), rgba(27,58,75,0.98))' }}
       >

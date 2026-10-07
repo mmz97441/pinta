@@ -6,7 +6,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const { setup, ids, base } = require('./browser-regression.cjs');
 const out = process.env.PINTA_RECEPTION_OUT || '/tmp/pinta-reception-page';
-// « layout » runs only the phone/tablet/desktop layout scenario.
+// « layout », « new-client » or « first-tap » runs only that group of scenarios.
 const only = process.env.PINTA_RECEPTION_FILTER || '';
 async function measures(page, number, values) {
   for (const [index, label] of ['Longueur', 'Largeur', 'Hauteur', 'Poids'].entries()) await page.getByLabel(`${label} à réception (${label === 'Poids' ? 'kg' : 'cm'}) · carton ${number}`, { exact: true }).fill(String(values[index]));
@@ -215,12 +215,140 @@ async function layoutScenario(browser, { width, height, keyboard }, dark) {
     scenarios: ['no-draft-notice-before-typing', 'open-expeditions-whole-words', keyboard ? 'compact-actions-with-keyboard' : 'full-actions', 'focused-entry-never-covered', 'neutral-placeholders', 'french-plurals', 'finish-tap-with-keyboard-open', 'axe'] };
 }
 
+/** A new client refused at reception (a required field missing or invalid):
+ * a line next to the actions says what is missing, the first field to complete
+ * comes into view with the focus, the phone error sits under the number typed.
+ * Nothing is written until the client is complete. */
+async function newClientScenario(browser, { width, height }, dark) {
+  const tag = `${width}-${dark ? 'dark' : 'light'}`;
+  const touch = width < 1024;
+  const f = await setup(touch ? touchBrowser(browser) : browser, 'directeur');
+  f.page.setDefaultTimeout(10000);
+  await f.page.setViewportSize({ width, height });
+  await f.page.addInitScript(isDark => { localStorage.setItem('expedile-theme', isDark ? 'dark' : 'light'); }, dark);
+  await f.login();
+  await f.page.goto(`${base}/reception`);
+  const region = f.page.getByRole('region', { name: 'Réceptionner des cartons', exact: true });
+  await region.getByLabel('Client', { exact: true }).fill('Martin');
+  await region.getByRole('button', { name: 'Créer « Martin »', exact: true }).click();
+  await region.getByLabel('Code postal *', { exact: true }).fill('97400');
+  // Only a landline, too short: its own field is refused, never the empty mobile.
+  await region.getByLabel('Téléphone fixe', { exact: true }).fill('01 23');
+  await region.getByLabel('Casier', { exact: false }).fill('B-02');
+  await measures(region, 1, [30, 30, 30, 2]);
+  const writes = () => f.requests.filter(request => request.method !== 'GET').map(request => `${request.method} ${request.path}`);
+  const before = writes().length;
+  const finish = region.getByRole('button', { name: 'Terminer la réception', exact: true });
+  const press = async () => {
+    const box = await finish.boundingBox();
+    // Where the finger or the pointer lands, without any automatic scroll first.
+    if (touch) await f.page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
+    else await f.page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+  };
+  await press();
+  const alert = f.page.locator('.reception-footer [role="alert"]');
+  await alert.waitFor();
+  assert.equal((await alert.innerText()).trim(), 'Fiche client incomplète : il manque le prénom, l’email, l’adresse et la ville ; le téléphone est à corriger.', `${tag}: the line next to the actions names what is missing`);
+  assert.deepEqual(writes().slice(before), [], `${tag}: nothing is written for an incomplete client`);
+  await f.page.waitForFunction(() => document.activeElement?.id === 'reception-client-prenom');
+  await settle(f.page);
+  const state = await f.page.evaluate(() => {
+    const field = document.activeElement, box = field.getBoundingClientRect();
+    const footer = document.querySelector('.reception-footer').getBoundingClientRect();
+    const describedBy = id => document.getElementById(document.getElementById(id)?.getAttribute('aria-describedby') || '')?.textContent || null;
+    return {
+      inView: box.top >= 0 && box.bottom <= footer.top + 0.5, covered: document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2) !== field,
+      prenom: [field.getAttribute('aria-invalid'), describedBy('reception-client-prenom')],
+      mobile: [document.getElementById('reception-client-tel').getAttribute('aria-invalid'), describedBy('reception-client-tel')],
+      landline: [document.getElementById('reception-client-telFixe').getAttribute('aria-invalid'), describedBy('reception-client-telFixe')],
+      postalCode: document.getElementById('reception-client-cp').getBoundingClientRect().width,
+      overflowX: document.documentElement.scrollWidth > innerWidth + 1,
+    };
+  });
+  assert.equal(state.inView, true, `${tag}: the first field to complete is in view, clear of the actions`);
+  assert.equal(state.covered, false, `${tag}: nothing covers it`);
+  assert.deepEqual(state.prenom, ['true', 'Le prénom est obligatoire.']);
+  assert.deepEqual(state.mobile, [null, null], `${tag}: the empty mobile is not the refused number`);
+  assert.deepEqual(state.landline, ['true', 'Indiquez un numéro d’au moins 9 chiffres (espaces, points, tirets et + initial acceptés).'], `${tag}: the phone error sits under the landline typed`);
+  if (width < 640) assert.ok(state.postalCode >= 250, `${tag}: the postal code keeps the whole width on a phone (${state.postalCode} px)`);
+  assert.equal(state.overflowX, false);
+  await f.page.screenshot({ path: path.join(out, `new-client-refused-${tag}.png`) });
+  if (dark) {
+    // A dark-mode example never reads as a value already typed: readable, yet clearly dimmer.
+    const tones = await region.getByLabel('Complément d’adresse', { exact: true }).evaluate(node => ({ placeholder: getComputedStyle(node, '::placeholder').color, value: getComputedStyle(node).color, background: getComputedStyle(node).backgroundColor }));
+    const channels = color => color.match(/[\d.]+/g).slice(0, 3).map(Number).map(value => value / 255).map(value => value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4);
+    const luminance = color => channels(color).reduce((sum, value, index) => sum + value * [0.2126, 0.7152, 0.0722][index], 0);
+    const ratio = (a, b) => (Math.max(luminance(a), luminance(b)) + 0.05) / (Math.min(luminance(a), luminance(b)) + 0.05);
+    assert.ok(ratio(tones.placeholder, tones.background) >= 4.5, `${tag}: the example stays readable (${JSON.stringify(tones)})`);
+    assert.ok(ratio(tones.value, tones.background) - ratio(tones.placeholder, tones.background) >= 4, `${tag}: the example is clearly dimmer than a value (${JSON.stringify(tones)})`);
+    // A refused field keeps its red edge in dark mode (the email: refused, without the focus).
+    const email = region.getByLabel('Email *', { exact: true });
+    await email.evaluate(node => Promise.all(node.getAnimations().map(animation => animation.finished)));
+    assert.equal(await email.evaluate(node => getComputedStyle(node).borderTopColor), 'rgb(229, 154, 154)');
+  }
+  const audit = await new AxeBuilder({ page: f.page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
+  assert.deepEqual(audit.violations.map(item => ({ id: item.id, nodes: item.nodes.map(node => node.target) })), [], `${tag}: no accessibility violation`);
+  // Completed: the line goes away field by field, then one press creates the client and the expedition.
+  await region.getByLabel('Prénom *', { exact: true }).fill('Luc');
+  await region.getByLabel('Téléphone fixe', { exact: true }).fill('0262 41 22 33');
+  await region.getByLabel('Email *', { exact: true }).fill('luc.martin@example.test');
+  await region.getByLabel('Adresse *', { exact: true }).fill('4 rue des Lilas');
+  await region.getByLabel('Ville *', { exact: true }).fill('Saint-Denis');
+  await alert.waitFor({ state: 'detached' });
+  await press();
+  await f.page.getByRole('heading', { name: 'Réception enregistrée', exact: true }).waitFor();
+  const client = f.tables.clients.find(row => row.prenom === 'Luc');
+  assert.equal(client?.tel_fixe, '0262 41 22 33', `${tag}: the client is created with the landline`);
+  assert.deepEqual(f.errors, []);
+  await f.context.close();
+  return { viewport: `${width}x${height}`, theme: dark ? 'dark' : 'light', pass: true, scenarios: ['refused-new-client-alert-next-to-the-actions', 'first-field-to-complete-focused-in-view', 'phone-error-under-the-number-typed', 'postal-code-full-width-on-a-phone', 'axe', 'completed-client-created-in-one-press'] };
+}
+
+/** The keyboard is open (the visible height reduced, the bottom navigation
+ * aside) and the compact actions stick to the bottom of the form: the first
+ * tap at their visible place saves, without scrolling the form to its end. */
+async function firstTapScenario(browser, { width, height, keyboard }, label) {
+  const f = await setup(touchBrowser(browser), 'directeur');
+  f.page.setDefaultTimeout(10000);
+  await f.page.setViewportSize({ width, height });
+  await f.login();
+  await f.page.goto(`${base}/reception`);
+  const region = f.page.getByRole('region', { name: 'Réceptionner des cartons', exact: true });
+  await region.getByLabel('Client', { exact: true }).fill('Camille');
+  await region.getByRole('button').filter({ hasText: 'Exemple Camille' }).first().click();
+  await region.getByRole('button', { name: 'Créer une nouvelle expédition (nouveau EXP)', exact: true }).click();
+  await region.getByLabel('Casier', { exact: false }).fill('C-77');
+  await region.getByLabel('Longueur à réception (cm) · carton 1', { exact: true }).click();
+  await f.page.setViewportSize({ width, height: keyboard });
+  await f.page.waitForFunction(() => document.querySelector('.reception-footer')?.dataset.compact === 'true');
+  await measures(region, 1, [41, 31, 21, 2.6]);
+  await settle(f.page);
+  const stuck = await f.page.evaluate(keyboardHeight => {
+    const footer = document.querySelector('.reception-footer').getBoundingClientRect();
+    return { bottom: Math.round(footer.bottom), nav: getComputedStyle(document.querySelector('[data-staff-bottom-nav]')).display, keyboardHeight };
+  }, keyboard);
+  assert.equal(stuck.bottom, keyboard, `${width}: the actions are stuck to the bottom of the visible area`);
+  assert.equal(stuck.nav, 'none', `${width}: the bottom navigation steps aside for the keyboard`);
+  const button = region.getByRole('button', { name: label, exact: true });
+  const box = await button.boundingBox();
+  await f.page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
+  if (label === 'Terminer la réception') await f.page.getByRole('heading', { name: 'Réception enregistrée', exact: true }).waitFor({ timeout: 4000 });
+  else await region.getByRole('heading', { name: 'Carton 2', exact: true }).waitFor({ timeout: 4000 });
+  assert.equal(f.tables.colis.filter(row => !/^EXP-(TEST|ACC)/.test(row.ref || '')).length, 1, `${width}: one expedition created by the first tap on « ${label} »`);
+  assert.deepEqual(f.errors, []);
+  await f.page.screenshot({ path: path.join(out, `first-tap-${width}-${label === 'Terminer la réception' ? 'finish' : 'continue'}.png`) });
+  await f.context.close();
+  return { viewport: `${width}x${keyboard}`, action: label, pass: true, scenarios: ['first-tap-on-stuck-compact-actions-saves'] };
+}
+
 async function run() {
   await fs.mkdir(out, { recursive: true });
   const browser = await chromium.launch({ headless: true });
   const results = [];
   try {
     if (!only || only === 'layout') for (const layout of LAYOUTS) for (const dark of [false, true]) results.push(await layoutScenario(browser, layout, dark));
+    if (!only || only === 'new-client') for (const layout of LAYOUTS) for (const dark of [false, true]) results.push(await newClientScenario(browser, layout, dark));
+    if (!only || only === 'first-tap') for (const layout of LAYOUTS.filter(item => item.keyboard)) for (const label of ['Terminer la réception', 'Enregistrer et ajouter un carton']) results.push(await firstTapScenario(browser, layout, label));
     if (!only) for (const mobile of [false, true]) for (const dark of [false, true]) {
       const f = await setup(browser, 'directeur');
       f.page.setDefaultTimeout(10000);

@@ -11,6 +11,8 @@ import usePersistentDraft from '../../hooks/usePersistentDraft';
 import { useMinuteNow } from '../../hooks/useMinuteNow';
 import { findColisByReference, normalizeColisReference } from '../../lib/supabaseData';
 import { buildDossierTableModel, defineDossierTableColumn, isDossierTableColumnSortable, sortDossierTableRows, dossierTableSortDirectionLabel, BULK_STATUS_STEPS, BULK_STATUS_REASONS, bulkStatusPlan, bulkRefusalReason, countLabel, countWord } from '../../domain/dossierTable';
+import { staffDataState } from '../../domain/dataLoad';
+import useMediaQuery from '../../hooks/useMediaQuery';
 import { staffAvailable, sortWorkActions, workActionUrl } from '../../domain/personalWork';
 import DossierColumnOptions, { ColumnDialog, DossierColumnVisibility } from './DossierColumnOptions';
 import DossierHorizontalScroll from './DossierHorizontalScroll';
@@ -78,19 +80,6 @@ const STATUT_GROUPS = [
  * list (the search stays pinned), « Filtres » opens as a sheet and the
  * automatic layout shows cards. dossierTable.css follows `data-compact`. */
 const COMPACT_QUERY = '(max-width: 767px), (max-height: 500px) and (max-width: 1023px)';
-function useMediaQuery(query) {
-  const read = () => typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia(query).matches;
-  const [matches, setMatches] = useState(read);
-  useEffect(() => {
-    if (typeof window.matchMedia !== 'function') return undefined;
-    const list = window.matchMedia(query);
-    const update = () => setMatches(list.matches);
-    update();
-    list.addEventListener('change', update);
-    return () => list.removeEventListener('change', update);
-  }, [query]);
-  return matches;
-}
 
 // ════════════════════════════════════════════════════════════════════════════
 // DASHBOARD PAGE — exported for / route
@@ -505,8 +494,9 @@ export default function StaffColisPage() {
   };
 
   // A failed load never reads as an empty list: no count, no « Aucun dossier ».
-  const dataProblem = dataError || (!sbReady && !dataLoading ? 'Connexion aux données interrompue.' : '');
-  const loadFailed = Boolean(dataProblem) && data.length === 0;
+  // A failed refresh keeps the loaded dossiers under the shell's banner.
+  const { state: dataLoad, reason: dataProblem } = staffDataState({ sbReady, dataLoading, dataError, hasData: data.length > 0 });
+  const loadFailed = dataLoad === 'failed';
   const visibleCount = sorted.length;
 
   const filterFields = <div className="dossier-filters-fields">

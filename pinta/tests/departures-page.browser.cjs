@@ -619,6 +619,47 @@ async function main() {
       await toast(f, '3 dossiers affectés à ENV-2026-045.').waitFor();
       await shot(f, 'wishes-assigned-light-1440');
     }, { before: trackAssignments });
+    // The same rule as the dossier calendar: a departure after the end of the
+    // client's subscription is confirmed first, the dossiers named; cancelling writes nothing.
+    for (const theme of ['light', 'dark']) await scenario(`wished-dossiers-after-the-subscription-end-are-confirmed-first-${theme}`, async f => {
+      await openPage(f);
+      const target = card(f, 'ENV-2026-045');
+      const wishes = target.getByRole('region', { name: '3 dossiers souhaitent partir ce jour-là', exact: true });
+      await wishes.waitFor();
+      assert.equal(await wishes.getByText(/abonnement terminé le 12 octobre/).count(), 3, 'Each late dossier says so in the list.');
+      const assign = wishes.getByRole('button', { name: 'Affecter ces dossiers', exact: true });
+      await assign.click();
+      const question = f.page.getByRole('dialog', { name: 'Affecter quand même ?', exact: true });
+      await question.waitFor();
+      assert.equal(normalize(await question.getByText(/^Le départ du/).textContent()), 'Le départ du jeudi 15 octobre est après la fin de l’abonnement de Flavie (12 octobre) : EXP-WISH-1, EXP-WISH-2 et EXP-WISH-3.');
+      await axe(f, `subscription confirmation ${theme}`);
+      await shot(f, `wishes-subscription-confirm-${theme}-1440`);
+      await question.getByRole('button', { name: 'Annuler', exact: true }).click();
+      await question.waitFor({ state: 'hidden' });
+      assert.deepEqual(f.assignments, [], 'Cancelling assigns nothing.');
+      noWrite(f);
+      await assign.click();
+      await question.getByRole('button', { name: 'Affecter quand même', exact: true }).click();
+      await target.getByRole('status').filter({ hasText: '3 dossiers affectés' }).waitFor();
+      assert.deepEqual(f.assignments.map(item => item.id), [DOSSIER.wish1, DOSSIER.wish2, DOSSIER.wish3]);
+    }, { theme, before: async f => { await trackAssignments(f); Object.assign(f.tables.clients.find(item => item.id === CLIENT.reunion), { abonnement: 'premium', abonnement_debut: '2025-10-12', abonnement_fin: '2026-10-12' }); } });
+    // Loaded, then the minute's refresh of the dossiers fails: the departures stay
+    // (never « Les départs n’ont pas pu être chargés »), the banner gives the reason.
+    for (const [width, theme] of [[1440, 'light'], [390, 'dark']]) await scenario(`a-failed-refresh-keeps-the-departures-${width}-${theme}`, async f => {
+      await openPage(f);
+      await card(f, 'ENV-2026-045').waitFor();
+      const cards = await f.page.locator('[data-departure-card]').count();
+      await f.context.route('**/rest/v1/colis?*', route => new URL(route.request().url()).searchParams.get('select') === 'id,updated_at,client_id'
+        ? route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ message: 'Actualisation refusée (essai)' }) }) : route.fallback());
+      await f.page.evaluate(() => window.dispatchEvent(new Event('focus')));
+      await f.page.getByRole('alert').filter({ hasText: 'Actualisation des dossiers impossible : Actualisation refusée (essai)' }).waitFor();
+      assert.equal(await f.page.getByText(/Les départs n’ont pas pu être chargés/).count(), 0, 'A failed refresh is never a failed load.');
+      assert.equal(await f.page.locator('[data-departure-card]').count(), cards, 'The departures stay on screen.');
+      assert.equal(await page(f).getByRole('button', { name: 'Planifier un départ', exact: true }).first().isEnabled(), true);
+      await axe(f, `refresh failure ${width} ${theme}`);
+      await shot(f, `refresh-failure-${width}-${theme}`);
+    }, { width, theme });
+
     await scenario('wished-dossier-changed-meanwhile-asks-to-reload-it', async f => {
       await openPage(f);
       const target = card(f, 'ENV-2026-045');

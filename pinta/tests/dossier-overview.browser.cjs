@@ -167,6 +167,19 @@ async function main() {
       assert.equal(businessWrites(f).length,1);assert.equal(f.tables.colis[0].casier,'B-12');assert.equal(f.tables.colis[0].casier_historique.length,1);
       await f.page.reload();await overview(f).getByText('B-12',{exact:true}).waitFor();
     });
+    // A lowercase letter typed in the middle of the casier stays where it is typed (capitals as typed).
+    await scenario('casier-typing-in-the-middle-keeps-the-caret-there',async f=>{
+      paid(f);await f.login();await open(f);
+      await overview(f).getByRole('button',{name:'Modifier le casier du dossier',exact:true}).click();
+      const input=overview(f).getByLabel('Casier du dossier',{exact:true});await input.waitFor();await focusInCasierEditor(f);
+      const state=()=>input.evaluate(node=>({value:node.value,caret:node.selectionStart}));
+      await input.evaluate(node=>node.setSelectionRange(1,1));
+      await f.page.keyboard.type('x');assert.deepEqual(await state(),{value:'AX-03',caret:2});
+      await f.page.keyboard.type('y');assert.deepEqual(await state(),{value:'AXY-03',caret:3});
+      await input.evaluate(node=>node.setSelectionRange(1,1));await f.page.keyboard.type('Z');assert.deepEqual(await state(),{value:'AZXY-03',caret:2});
+      await overview(f).getByRole('button',{name:'Enregistrer le casier',exact:true}).click();await input.waitFor({state:'detached'});
+      assert.equal(f.tables.colis[0].casier,'AZXY-03');
+    });
     await scenario('casier-failed-save-keeps-draft-and-retry-does-not-duplicate-history',async f=>{
       paid(f);let fail=true;let attempts=0;
       await f.context.route('**/rest/v1/colis?*',route=>{if(route.request().method()==='PATCH'&&route.request().postDataJSON()?.casier){attempts++;if(fail)return route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({message:'Enregistrement indisponible pour cet essai.'})});}return route.fallback();});
@@ -201,6 +214,12 @@ async function main() {
       await f.page.screenshot({path:`${output}/casier-panel-${width}x${height}-${dark?'dark':'light'}.png`});
       await input.fill('B-12');await dialog.getByRole('button',{name:'Enregistrer le casier',exact:true}).click();
       await dialog.getByRole('status').filter({hasText:'Casier B-12 enregistré.'}).waitFor();
+      // The confirmation toast is a success, painted above the panel (never hidden under it).
+      const toast=f.page.locator('[data-toast]').filter({hasText:'Casier B-12 enregistré.'});await toast.waitFor();
+      assert.equal(await toast.getAttribute('data-toast'),'success');
+      await toast.evaluate(node=>Promise.all(node.getAnimations().map(animation=>animation.finished)));
+      assert.equal(await toast.evaluate(node=>{const box=node.getBoundingClientRect();const hit=document.elementFromPoint(box.left+box.width/2,box.top+box.height/2);return node.contains(hit);}),true,'The toast is above the details panel.');
+      await f.page.screenshot({path:`${output}/casier-panel-toast-${width}x${height}-${dark?'dark':'light'}.png`});
       await f.page.waitForFunction(()=>document.activeElement?.getAttribute('aria-label')==='Modifier le casier');
       assert.equal(f.tables.colis[0].casier,'B-12');assert.equal(f.tables.colis[0].casier_historique.length,2);
       const axe=await new AxeBuilder({page:f.page}).include('[data-testid="dossier-context"]').withTags(['wcag2a','wcag2aa','wcag21aa','wcag22aa']).analyze();assert.deepEqual(axe.violations.map(v=>({id:v.id,nodes:v.nodes.map(n=>n.target)})),[]);

@@ -27,6 +27,20 @@ export function ColumnDialog({ title, anchor, focusKey, onClose, children, close
     if (NATIVE_MODAL) node.showModal(); else node.setAttribute('open', '');
     return () => { if (NATIVE_MODAL) node.close(); else node.removeAttribute('open'); const trigger = initialTrigger.current?.isConnected ? initialTrigger.current : document.querySelector(fallback.current); trigger?.focus({ preventScroll: true }); };
   }, []);
+  // A second Escape without a click in between is not cancellable: the browser
+  // closes the dialog itself. It opens again at once and its owner decides, so
+  // a dialog that refuses to close (a change being written) stays on screen.
+  useEffect(() => {
+    if (!NATIVE_MODAL) return undefined;
+    const node = dialog.current;
+    const closedByBrowser = () => {
+      if (!node.isConnected || node.open) return;
+      node.showModal();
+      closeRef.current();
+    };
+    node.addEventListener('close', closedByBrowser);
+    return () => node.removeEventListener('close', closedByBrowser);
+  }, []);
   useEffect(() => {
     if (NATIVE_MODAL) return undefined;
     const escape = event => { if (event.key === 'Escape') { event.preventDefault(); closeRef.current(); } };

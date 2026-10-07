@@ -70,6 +70,8 @@ html.dark .conversation-inbox {
 .conversation-inbox .conversation-segments > button > span { gap: 4px; padding: 0 5px; }
 .conversation-segments b { font-weight: 600; font-variant-numeric: tabular-nums; }
 .conversation-workerror { margin: 0 18px 8px; padding: 10px 12px; border: 1px solid #fecaca; border-radius: 12px; font-size: 14px; color: #b91c1c; }
+/* A failed load (WorkLoadError) keeps the list's side margins, like its rows' text. */
+.conversation-list__body > .work-load-error { margin: 4px 16px 12px; }
 html.dark .conversation-workerror { border-color: #7f3a3a; color: #f4b9b9; }
 
 .conversation-section__title {

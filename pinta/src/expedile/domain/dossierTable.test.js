@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { TABLE_COLUMNS, buildDossierTableModel as model, buildDossierTableExportRows, dossierTableExportColumns, formatDossierTableDate, dossierTableMissingAmountLabel, sortDossierTableRows, BULK_STATUS_STEPS, BULK_STATUS_REASONS, bulkStatusPlan, bulkRefusalReason, dossierFactHasValue, countLabel, countWord, parallelTasksLabel, STALE_TASK_REASON, consentRequestLabel } from './dossierTable.js';
 import { actionWaiting, workActionUrl } from './personalWork.js';
+import { STATUTS } from '../constants/index.js';
 
 const now = Date.parse('2026-10-02T12:00:00Z');
 const dossier = { id: 'parcel', ref: 'EXP-QA', statut: 'autorise', feuVert: 'autorise', responsibleStaffId: 'referent', nbColis: 3 };
@@ -542,12 +543,14 @@ test('a bulk status change offers only the next steps valid for every selected d
   const at = (...statuts) => statuts.map((statut, index) => ({ id: `d${index}`, statut }));
   const offered = (...statuts) => bulkStatusPlan(at(...statuts)).choices.map(step => step.label);
   // The order of the journey; « Expédié » first, but only ever through the departure.
-  assert.deepEqual(BULK_STATUS_STEPS.map(step => step.label), ['Expédié', 'En transit', 'Dédouanement', 'Arrivé', 'En livraison', 'Livré']);
+  // The labels of the status pills (STATUTS), so the bar, its dialogs and the rows read the same.
+  assert.deepEqual(BULK_STATUS_STEPS.map(step => step.label), ['Expédié', 'En vol', 'En dédouanement', 'Arrivé destination', 'En cours de livraison', 'Livré']);
+  for (const step of BULK_STATUS_STEPS) assert.equal(step.label, STATUTS[step.statut].label, step.statut);
   // fn_valider_transition_statut: expedie → transit, transit → dedouanement | arrive, dedouanement → arrive, arrive → livraison, livraison → livre.
-  assert.deepEqual(offered('expedie', 'expedie'), ['En transit']);
-  assert.deepEqual(offered('transit'), ['Dédouanement', 'Arrivé']);
-  assert.deepEqual(offered('transit', 'dedouanement'), ['Arrivé'], 'Arrivé follows both steps.');
-  assert.deepEqual(offered('arrive'), ['En livraison']);
+  assert.deepEqual(offered('expedie', 'expedie'), ['En vol']);
+  assert.deepEqual(offered('transit'), ['En dédouanement', 'Arrivé destination']);
+  assert.deepEqual(offered('transit', 'dedouanement'), ['Arrivé destination'], 'Arrivé follows both steps.');
+  assert.deepEqual(offered('arrive'), ['En cours de livraison']);
   assert.deepEqual(offered('livraison', 'livraison'), ['Livré']);
   // guard_colis_departure refuses a direct « Expédié »: the departure confirms it.
   assert.deepEqual(bulkStatusPlan(at('paye', 'paye')), { choices: [], reason: BULK_STATUS_REASONS.departure, departure: true });
@@ -565,7 +568,7 @@ test('a bulk status change offers only the next steps valid for every selected d
 });
 
 test('a refused bulk change keeps the server’s reason, in plain words', () => {
-  assert.equal(bulkRefusalReason({ message: 'Transition invalide : livre → transit' }), 'Passage de « Livré » à « En transit » refusé par le serveur.');
+  assert.equal(bulkRefusalReason({ message: 'Transition invalide : livre → transit' }), 'Passage de « Livré » à « En vol » refusé par le serveur.');
   assert.equal(bulkRefusalReason(new Error('Permission insuffisante pour ce changement de statut')), 'Permission insuffisante pour ce changement de statut');
   assert.equal(bulkRefusalReason({ message: 'Ce dossier a été modifié par un collègue. Rechargez-le avant de réessayer.' }), 'Ce dossier a été modifié par un collègue. Rechargez-le avant de réessayer.');
   for (const empty of [null, {}, { message: '  ' }]) assert.equal(bulkRefusalReason(empty), 'Refusé par le serveur, sans motif précisé.');

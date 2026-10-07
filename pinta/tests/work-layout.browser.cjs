@@ -588,6 +588,115 @@ async function failColisLoad(f) {
    await confirm.getByRole('button', { name: 'Se déconnecter', exact: true }).click();
    await f.page.getByLabel('Email', { exact: true }).waitFor();
   }, { dark, viewport: { width: 390, height: 844 } });
+  // A voluntary change from « Plus »: « Annuler » goes back to Plus; once Auth confirms,
+  // the change is said (never a silent return) and Plus comes back.
+  for (const dark of [false, true]) await scenario(`a-password-change-from-plus-is-confirmed-and-cancel-returns-to-plus-${dark ? 'dark' : 'light'}`, async f => {
+   const plus = async () => { await f.page.locator('[data-staff-bottom-nav]').getByRole('button', { name: 'Plus', exact: true }).click(); await f.page.getByRole('heading', { name: 'Votre espace', exact: true }).waitFor(); };
+   const account = f.page.getByRole('region', { name: 'Mon compte', exact: true });
+   await plus();
+   await account.getByRole('button', { name: 'Modifier le mot de passe', exact: true }).click();
+   await f.page.waitForURL(url => url.pathname === '/password');
+   await f.page.getByRole('button', { name: 'Annuler', exact: true }).click();
+   await f.page.waitForURL(url => url.pathname === '/plus');
+   await f.page.getByRole('heading', { name: 'Votre espace', exact: true }).waitFor();
+   await account.getByRole('button', { name: 'Modifier le mot de passe', exact: true }).click();
+   await f.page.getByLabel('Nouveau mot de passe', { exact: true }).fill('Expedile-nouveau-2026');
+   await f.page.locator('#confirm-password').fill('Expedile-nouveau-2026');
+   await f.page.getByRole('button', { name: 'Définir mon mot de passe et continuer', exact: true }).click();
+   await f.page.waitForURL(url => url.pathname === '/plus');
+   await f.page.getByRole('heading', { name: 'Votre espace', exact: true }).waitFor();
+   const toast = f.page.locator('[data-toast="success"]').filter({ hasText: 'Mot de passe modifié.' });
+   await toast.waitFor();
+   assert.ok(f.requests.some(request => request.method === 'PUT' && request.path === '/auth/v1/user'), 'The new password went to Auth.');
+   await axeClean(f, 'password changed');
+   await shot(f, `password-changed-390-${dark ? 'dark' : 'light'}`);
+  }, { dark, viewport: { width: 390, height: 844 } });
+  // The tasks loaded, then a refresh of the dossiers failed: Mon travail keeps its
+  // list (never « Vos tâches n’ont pas pu être chargées »), the banner gives the reason.
+  for (const [width, dark] of [[1440, false], [390, true]]) await scenario(`a-failed-refresh-keeps-the-loaded-tasks-${width}-${dark ? 'dark' : 'light'}`, async f => {
+   await todo(f).locator('[data-work-action]').first().waitFor();
+   const before = await todo(f).locator('[data-work-action]').count();
+   // The minute's reconciliation reads the dossier index: refused, without the retries of a 503.
+   await f.context.route('**/rest/v1/colis?*', route => new URL(route.request().url()).searchParams.get('select') === 'id,updated_at,client_id'
+     ? route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ message: 'Actualisation refusée (essai)' }) }) : route.fallback());
+   await f.page.evaluate(() => window.dispatchEvent(new Event('focus')));
+   const banner = f.page.getByRole('alert').filter({ hasText: 'Actualisation des dossiers impossible' });
+   await banner.waitFor();
+   assert.match(await banner.innerText(), /Actualisation refusée \(essai\)/);
+   assert.equal(await loadFailure(f).count(), 0, 'A failed refresh is never a failed load.');
+   assert.equal(await todo(f).locator('[data-work-action]').count(), before, 'The loaded tasks stay on screen.');
+   assert.match(await f.page.locator('.work-presence').innerText(), /Disponible/, 'The availability, read from the loaded data, stays.');
+   await axeClean(f, 'refresh failure');
+   await shot(f, `refresh-failure-${width}-${dark ? 'dark' : 'light'}`);
+  }, { dark, viewport: { width, height: width === 390 ? 844 : 900 } });
+  // Équipe: the tasks never loaded is an error with its reason, never « (0) » nor
+  // « every task has someone »; the shell banner steps aside for it.
+  for (const [width, dark] of [[1440, false], [1440, true], [390, false], [390, true]]) await scenario(`team-page-failed-load-is-an-error-never-empty-queues-${width}-${dark ? 'dark' : 'light'}`, async f => {
+   await loadFailure(f).waitFor();
+   // In the application, without reloading: the failure is the one of the first load.
+   await f.page.evaluate(() => { history.pushState({}, '', '/equipe'); dispatchEvent(new PopStateEvent('popstate')); });
+   await f.page.getByRole('heading', { name: 'Équipe', exact: true }).waitFor();
+   const failure = f.page.getByRole('alert').filter({ has: f.page.getByRole('heading', { name: 'Le travail de l’équipe n’a pas pu être chargé', exact: true }) });
+   await failure.waitFor();
+   await failure.getByText('Chargement impossible : Indisponibilité simulée', { exact: true }).waitFor();
+   assert.equal(await f.page.getByRole('alert').filter({ hasText: 'Indisponibilité simulée' }).count(), 1, 'One message: the shell banner steps aside for the page’s own.');
+   assert.equal(await f.page.getByRole('navigation', { name: 'Priorités de l’équipe', exact: true }).count(), 0, 'No queue counted from unknown tasks.');
+   assert.equal(await f.page.getByText(/Toutes les tâches prêtes ont une personne|\(0\)/).count(), 0);
+   await axeClean(f, 'team failed load');
+   await shot(f, `team-load-failure-${width}-${dark ? 'dark' : 'light'}`);
+   f.failColis = false;
+   await failure.getByRole('button', { name: 'Réessayer', exact: true }).click();
+   await f.page.getByRole('navigation', { name: 'Priorités de l’équipe', exact: true }).waitFor();
+   assert.equal(await failure.count(), 0);
+  }, { dark, viewport: { width, height: width === 390 ? 844 : 900 }, before: failColisLoad });
+  // One primary fill on every staff screen: navy in light mode, the light navy with navy text in
+  // dark mode (Mon travail, Équipe, Départs, Clients, Paramètres); the open settings rubric reads
+  // as selected, never as a second primary button.
+  for (const dark of [false, true]) await scenario(`one-primary-fill-on-every-staff-screen-${dark ? 'dark' : 'light'}`, async f => {
+   const expected = dark ? { fill: 'rgb(196, 218, 229)', text: 'rgb(18, 42, 54)' } : { fill: 'rgb(27, 58, 75)', text: 'rgb(255, 255, 255)' };
+   const spa = path => f.page.evaluate(target => { history.pushState({}, '', target); dispatchEvent(new PopStateEvent('popstate')); }, path);
+   const look = async (locator, label) => { await locator.waitFor(); await f.page.mouse.move(0, 0); const { fill, text } = await commandLook(locator); assert.deepEqual({ fill, text }, expected, `${label}: the primary fill`); };
+   await look(row(f, 'quote').getByRole('button', { name: 'Continuer', exact: true }), 'Mon travail');
+   await spa('/equipe');
+   await look(f.page.getByRole('navigation', { name: 'Priorités de l’équipe', exact: true }).locator('button[aria-pressed="true"]'), 'Équipe, the open queue');
+   const take = f.page.getByRole('main').getByRole('button', { name: 'Je m’en occupe', exact: true }).first();
+   if (await take.count()) await look(take, 'Équipe, « Je m’en occupe »');
+   await spa('/departs');
+   await look(f.page.getByRole('button', { name: 'Planifier un départ', exact: true }).first(), 'Départs');
+   await spa('/clients');
+   await look(f.page.getByRole('button', { name: 'Nouveau client', exact: true }).first(), 'Clients');
+   await spa('/settings?tab=tarifs');
+   await look(f.page.getByRole('button', { name: 'Enregistrer les tarifs', exact: true }), 'Paramètres');
+   const rubric = await commandLook(f.page.getByRole('navigation', { name: 'Paramètres', exact: true }).locator('button[aria-current="page"]'));
+   assert.notEqual(rubric.fill, expected.fill, 'The open rubric is not a second primary button.');
+   // Hovered, it stays readable (never the primary's light fill under its light text).
+   await f.page.getByRole('navigation', { name: 'Paramètres', exact: true }).locator('button[aria-current="page"]').hover();
+   await axeClean(f, 'settings rubric');
+   await shot(f, `primary-settings-${dark ? 'dark' : 'light'}`);
+  }, { dark, viewport: { width: 1440, height: 900 } });
+  // A casier code is read against the shelf: never « C- » above « 002 »; Linux's wider fonts included.
+  for (const width of [1440, 1280]) await scenario(`casier-codes-never-split-in-the-table-${width}`, async f => {
+   await f.page.addStyleTag({ content: '* { font-family: Verdana, "DejaVu Sans", sans-serif !important; }' });
+   await todo(f).locator('table').waitFor();
+   const cells = await todo(f).locator('td[data-work-column="casier"]').evaluateAll(nodes => nodes.map(node => { const range = document.createRange(); range.selectNodeContents(node); return { text: node.textContent.trim(), lines: new Set([...range.getClientRects()].filter(rect => rect.width > 0).map(rect => Math.round(rect.top))).size }; }));
+   assert.ok(cells.length > 0);
+   for (const cell of cells) assert.equal(cell.lines, cell.text ? 1 : 0, `« ${cell.text} » on one line`);
+   assert.equal(await pageOverflow(f), false);
+   await shot(f, `casier-whole-${width}`);
+  }, { viewport: { width, height: 900 } });
+  // Tablet cards: the titles of one row start at the same height, one line or two.
+  for (const dark of [false, true]) await scenario(`card-titles-of-a-row-line-up-768-${dark ? 'dark' : 'light'}`, async f => {
+   await todo(f).locator('article[data-work-action]').first().waitFor();
+   // A longer title (« Demander l’accord avant la clôture du départ ») takes two lines beside a one-line title.
+   await f.page.addStyleTag({ content: 'section[aria-label="À faire"] article[data-work-action]:nth-of-type(2) .work-task-link { max-width: 6.5em; }' });
+   const titles = await todo(f).locator('article[data-work-action] .work-task-link').evaluateAll(nodes => nodes.map(node => { const card = node.closest('article').getBoundingClientRect(); const range = document.createRange(); range.selectNodeContents(node); const rects = [...range.getClientRects()].filter(rect => rect.width > 0); return { row: Math.round(card.top), text: Math.round(rects[0].top - card.top), lines: new Set(rects.map(rect => Math.round(rect.top))).size }; }));
+   assert.equal(titles[1].lines, 2, 'The second title takes two lines.');
+   const rows = new Map(); for (const title of titles) rows.set(title.row, [...(rows.get(title.row) || []), title.text]);
+   assert.ok([...rows.values()].some(row => row.length > 1), 'Two cards side by side.');
+   for (const [top, row] of rows) assert.ok(Math.max(...row) - Math.min(...row) <= 1, `Row at ${top}: titles start at ${row.join(', ')} px`);
+   await axeClean(f, 'cards');
+   await shot(f, `card-titles-768-${dark ? 'dark' : 'light'}`);
+  }, { dark, viewport: { width: 768, height: 1024 } });
   for (const dark of [false, true]) await scenario(`the-bottom-navigation-steps-aside-while-typing-${dark ? 'dark' : 'light'}`, async f => {
    const nav = f.page.locator('[data-staff-bottom-nav]');
    const reserve = expected => mainReserve(f, expected);
@@ -605,10 +714,18 @@ async function failColisLoad(f) {
    assert.ok(field.y >= 0 && field.y + field.height <= 500, 'The field stays in view');
    await axeClean(f, 'typing');
    await shot(f, `typing-390x500-${dark ? 'dark' : 'light'}`);
+   // Leaving the field alone keeps the bar aside while the keyboard is open: a
+   // press that moves the focus to a button ends on that button, never on a bar
+   // appearing under the finger. The keyboard closing brings it back.
    await search.evaluate(node => node.blur());
+   await f.page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+   assert.equal(await nav.isVisible(), false, 'Still aside on blur while the keyboard is open');
+   await f.page.setViewportSize({ width: 390, height: 844 });
    await nav.waitFor();
-   assert.equal(await reserve(`${height}px`), `${height}px`, 'Back on blur, with its exact reserve');
+   assert.equal(await reserve(`${height}px`), `${height}px`, 'Back when the keyboard closes, with its exact reserve');
+   // The keyboard opens again on the field, then closes while the field keeps the focus.
    await search.focus();
+   await f.page.setViewportSize({ width: 390, height: 500 });
    await nav.waitFor({ state: 'hidden' });
    await f.page.setViewportSize({ width: 390, height: 844 });
    await nav.waitFor();

@@ -14,6 +14,8 @@ import { getClientDest } from '../../utils';
 import { useMinuteNow } from '../../hooks/useMinuteNow';
 import { staffName } from './WorkActionRow';
 import InboxAttachment from './InboxAttachment';
+import WorkLoadError from './WorkLoadError';
+import { staffDataState } from '../../domain/dataLoad';
 import TaskOwnership from './TaskOwnership';
 import ChatPanel from '../detail/ChatPanel';
 import DossierContextPanel from '../detail/DossierContextPanel';
@@ -42,7 +44,8 @@ function useWideScreen() {
 }
 
 export default function ConversationsView() {
-  const { data = [], clients = [], inboxItems = [], workActions = [], workError, workLoading, teamUsers = [], auth, can, ask, flash, refreshInbox, refreshColis, refreshWork, sel, setSelId } = useApp();
+  const { data = [], clients = [], inboxItems = [], workActions = [], workError, workLoading, teamUsers = [], auth, can, ask, flash, refreshInbox, refreshColis, refreshWork, sel, setSelId, sbReady, dataLoading, dataError, retryLoad } = useApp();
+  const [retrying, setRetrying] = useState(false);
   const [params, setParams] = useSearchParams();
   const location = useLocation();
   const navigate = useNavigate();
@@ -132,6 +135,15 @@ export default function ConversationsView() {
   const openAction = openDossier && workActions.find(action => action.colis_id === openDossier.id && action.kind === 'conversation' && action.state !== 'done');
   const selectedClient = clientMap.get(selectedInbox?.client_id || selectedInbox?.clientId);
   const initialLoading = workLoading && !workSeen && !workActions.length;
+  // The dossiers and their messages never loaded: no conversation can be listed
+  // nor counted, so no « 0 » nor « Aucune conversation », only the reason and a retry.
+  const dataLoad = staffDataState({ sbReady, dataLoading, dataError, hasData: data.length > 0 });
+  const loadFailed = dataLoad.state === 'failed';
+  const retryLoading = async () => {
+    if (retrying) return;
+    setRetrying(true);
+    try { await retryLoad?.(); } catch { /* The reason stays on screen. */ } finally { setRetrying(false); }
+  };
   const change = (key, value) => setParams(previous => { const next = new URLSearchParams(previous); value ? next.set(key, value) : next.delete(key); return next; }, { replace: true });
   const clearFilters = () => setParams(previous => { const next = new URLSearchParams(previous); next.delete('q'); next.delete('state'); next.delete('owner'); return next; }, { replace: true });
   const select = (key, id) => { setParams(previous => { const next = new URLSearchParams(previous); next.delete('dossier'); next.delete('ouvert'); next.delete('inbox'); next.set(key, id); return next; }); setError(''); setAssignment(''); };
@@ -212,7 +224,7 @@ export default function ConversationsView() {
   const list = <div className="conversation-list">
     <div className="conversation-list__header">
       <h1>Conversations</h1>
-      <div className="dossier-toolbar conversation-toolbar">
+      {!loadFailed && <><div className="dossier-toolbar conversation-toolbar">
         <div className="dossier-toolbar-search relative">
           <Search size={18} aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
           <input type="search" value={params.get('q') || ''} onChange={event => change('q', event.target.value)} aria-label="Rechercher un client ou EXP" placeholder="Client, EXP, message…" className="w-full" />
@@ -223,7 +235,7 @@ export default function ConversationsView() {
       </div>
       <div role="group" aria-label="Traitement des conversations" className="dossier-scope conversation-segments">
         {SEGMENTS.map(([key, label]) => <button key={key || 'all'} type="button" aria-pressed={state === key} onClick={() => change('state', key)}><span>{label}{['a_traiter', 'attente_client'].includes(key) && <> <b>{counts[key]}</b></>}</span></button>)}
-      </div>
+      </div></>}
     </div>
     {filtersOpen && <ColumnDialog title="Filtres" anchor={filtersButton.current} onClose={() => setFiltersOpen(false)} id="conversation-filters-dialog" titleId="conversation-filters-title" testId="conversation-filters-dialog" closeLabel="Fermer les filtres" align="end">
       <div className="grid gap-3">
@@ -232,8 +244,10 @@ export default function ConversationsView() {
       </div>
     </ColumnDialog>}
     <div className="conversation-list__body">
-      {workError && <p role="alert" className="conversation-workerror">Suivi des actions indisponible : {workError.message || String(workError)} <button onClick={() => refreshWork().catch(() => {})} className="min-h-11 underline">Réessayer</button></p>}
-      {initialLoading ? <div role="status" aria-label="Chargement des conversations">{[0, 1, 2, 3, 4, 5].map(index => <div key={index} className="conversation-skeleton animate-pulse" aria-hidden="true"><span /><div><span style={{ width: `${48 + (index % 3) * 12}%` }} /><span style={{ width: `${72 - (index % 2) * 14}%` }} /></div><div><span /><span /></div></div>)}</div> : <>
+      {loadFailed && <WorkLoadError title="Les conversations n’ont pas pu être chargées" reason={dataLoad.reason}
+        note="Les messages enregistrés sont conservés. La liste et ses compteurs s’afficheront dès que le chargement aura réussi." retrying={retrying} onRetry={retryLoading} />}
+      {!loadFailed && workError && <p role="alert" className="conversation-workerror">Suivi des actions indisponible : {workError.message || String(workError)} <button onClick={() => refreshWork().catch(() => {})} className="min-h-11 underline">Réessayer</button></p>}
+      {loadFailed ? null : initialLoading ? <div role="status" aria-label="Chargement des conversations">{[0, 1, 2, 3, 4, 5].map(index => <div key={index} className="conversation-skeleton animate-pulse" aria-hidden="true"><span /><div><span style={{ width: `${48 + (index % 3) * 12}%` }} /><span style={{ width: `${72 - (index % 2) * 14}%` }} /></div><div><span /><span /></div></div>)}</div> : <>
         {inbox.length > 0 && <section aria-label="Messages sans dossier" className="conversation-section" data-tone="inbox">
           <h2 className="conversation-section__title"><Paperclip size={14} aria-hidden="true" />À rattacher à un dossier · {inbox.length}</h2>
           <ul className="conversation-rows">{inbox.map(inboxRow)}</ul>
@@ -261,7 +275,7 @@ export default function ConversationsView() {
   const cartons = openDossier ? receptionCartonManifest(openDossier).nbColis : 0;
   const channel = openClient?.telegramChatId ? 'telegram' : 'portal';
   const ChannelIcon = channel === 'telegram' ? Send : MessageCircle;
-  const pane = assignmentForm || (openDossier ? <section aria-labelledby="conversation-thread-title" className="conversation-thread">
+  const pane = loadFailed ? null : assignmentForm || (openDossier ? <section aria-labelledby="conversation-thread-title" className="conversation-thread">
     <header className="conversation-thread__header">
       <span className="conversation-avatar" aria-hidden="true">{nameInitials(clientDisplayName(openClient))}</span>
       <div className="conversation-thread__identity">

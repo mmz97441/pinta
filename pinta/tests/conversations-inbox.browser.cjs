@@ -63,7 +63,7 @@ async function main() {
     try {
       await f.login(); await run(f);
       assert.deepEqual(f.errors, []); assert.deepEqual(f.networkDenied, []);
-      assert.equal(f.requests.some(request => /\/(queue_message|send-telegram|send-email)$/.test(request.path)), false, 'Reading, selecting and drafting never send a message.');
+      if (!options?.sends) assert.equal(f.requests.some(request => /\/(queue_message|send-telegram|send-email)$/.test(request.path)), false, 'Reading, selecting and drafting never send a message.');
       results.push({ test: name, pass: true });
     } catch (error) {
       process.exitCode = 1; results.push({ test: name, pass: false, error: error.stack });
@@ -458,9 +458,85 @@ async function main() {
       const audit = await new AxeBuilder({ page: f.page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
       assert.deepEqual(audit.violations.map(issue => ({ id: issue.id, nodes: issue.nodes.map(node => node.target) })), []);
       await f.page.screenshot({ path: `${output}/keyboard-390x500-${dark ? 'dark' : 'light'}.png` });
+      // Leaving the field alone never brings the bar back under the finger:
+      // it returns when the keyboard closes (the visible height grows back).
       await reply(f).evaluate(node => node.blur());
+      await f.page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      assert.equal(await f.page.locator('[data-staff-bottom-nav]').isVisible(), false, 'Still hidden while the keyboard is open.');
+      await f.page.setViewportSize({ width: 390, height: 844 });
       await f.page.locator('[data-staff-bottom-nav]').waitFor();
     });
+
+    // A real finger on « Envoyer » while the keyboard is open: the first tap sends.
+    // The bar must not come back between the press and the release (it would take the release).
+    for (const dark of [false, true]) await scenario(`the-first-tap-on-envoyer-with-the-keyboard-open-sends-${dark ? 'dark' : 'light'}`, async f => {
+      await f.context.addInitScript(theme => localStorage.setItem('expedile-theme', theme), dark ? 'dark' : 'light');
+      await f.page.setViewportSize({ width: 390, height: 844 });
+      await f.page.goto(`${base}/colis/${ids.P}?onglet=conversation&returnTo=%2Fconversations`);
+      await reply(f).waitFor();
+      await reply(f).focus();
+      await f.page.setViewportSize({ width: 390, height: 500 });
+      await reply(f).evaluate(node => node.scrollIntoView({ block: 'nearest' }));
+      await f.page.locator('[data-staff-bottom-nav]').waitFor({ state: 'hidden' });
+      await reply(f).fill('Bonjour Camille, votre deuxième carton est bien arrivé.');
+      const send = f.page.getByRole('button', { name: 'Envoyer le message', exact: true });
+      const box = await send.boundingBox();
+      assert.ok(box.y >= 0 && box.y + box.height <= 500, `« Envoyer » is in view: ${JSON.stringify(box)}`);
+      const queued = () => f.requests.filter(request => request.path === '/rest/v1/rpc/queue_message').length;
+      // Where a finger lands, without any automatic scroll first.
+      await f.page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
+      await log(f).getByText('Bonjour Camille, votre deuxième carton est bien arrivé.', { exact: true }).waitFor({ timeout: 5000 });
+      assert.equal(queued(), 1, 'One tap, one message: the first tap is never lost.');
+      await f.page.screenshot({ path: `${output}/first-tap-send-390x500-${dark ? 'dark' : 'light'}.png` });
+    }, { sends: true, setup: { device: { hasTouch: true, isMobile: true } } });
+
+    // A real reply (greeting, context, signature: seven lines) typed with the keyboard
+    // open: « Envoyer », under the growing field, stays in view and takes the tap.
+    for (const [width, height, keyboard, dark] of [[390, 844, 500, false], [390, 844, 500, true], [320, 640, 360, false]]) await scenario(`a-long-reply-keeps-envoyer-in-view-${width}-${dark ? 'dark' : 'light'}`, async f => {
+      await f.context.addInitScript(theme => localStorage.setItem('expedile-theme', theme), dark ? 'dark' : 'light');
+      await f.page.setViewportSize({ width, height });
+      await f.page.goto(`${base}/colis/${ids.P}?onglet=conversation&returnTo=%2Fconversations`);
+      await reply(f).waitFor();
+      await reply(f).focus();
+      await f.page.setViewportSize({ width, height: keyboard });
+      await reply(f).evaluate(node => node.scrollIntoView({ block: 'nearest' }));
+      const lines = ['Bonjour Camille,', 'Nous avons bien reçu votre deuxième colis.', 'Il sera regroupé avec le premier.', 'Le devis suivra dès la mesure.', 'Vous serez notifiée.', 'Belle journée,', 'L’équipe Expedîle'];
+      for (const [index, line] of lines.entries()) { await f.page.keyboard.type(line); if (index < lines.length - 1) await f.page.keyboard.press('Shift+Enter'); }
+      await f.page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      const state = await f.page.evaluate(() => {
+        const send = document.querySelector('button[aria-label="Envoyer le message"]'), box = send.getBoundingClientRect();
+        const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+        return { send: [Math.round(box.top), Math.round(box.bottom)], reachable: send.contains(hit), focused: document.activeElement?.getAttribute('aria-label') || document.activeElement?.id };
+      });
+      assert.ok(state.send[0] >= 0 && state.send[1] <= keyboard, `« Envoyer » stays above the keyboard: ${JSON.stringify(state)}`);
+      assert.equal(state.reachable, true, 'Nothing covers « Envoyer ».');
+      assert.equal(await reply(f).inputValue(), lines.join('\n'), 'The whole reply is kept.');
+      await f.page.screenshot({ path: `${output}/long-reply-${width}x${keyboard}-${dark ? 'dark' : 'light'}.png` });
+      const audit = await new AxeBuilder({ page: f.page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
+      assert.deepEqual(audit.violations.map(issue => ({ id: issue.id, nodes: issue.nodes.map(node => node.target) })), []);
+    });
+
+    // The dossiers and their messages could not be read: an error with its reason
+    // and « Réessayer », never « Aucune conversation » nor a count of 0, said once.
+    for (const [width, dark] of [[1440, false], [1440, true], [390, false], [390, true]]) await scenario(`a-failed-load-is-an-error-never-an-empty-inbox-${width}-${dark ? 'dark' : 'light'}`, async f => {
+      await f.context.addInitScript(theme => localStorage.setItem('expedile-theme', theme), dark ? 'dark' : 'light');
+      await open(f, '/conversations', width, width === 390 ? 844 : 1000);
+      const failure = f.page.getByRole('alert').filter({ has: f.page.getByRole('heading', { name: 'Les conversations n’ont pas pu être chargées', exact: true }) });
+      await failure.waitFor();
+      await failure.getByText('Chargement impossible : Indisponibilité simulée', { exact: false }).waitFor();
+      assert.equal(await f.page.getByRole('alert').filter({ hasText: 'Indisponibilité simulée' }).count(), 1, 'One message: the shell banner steps aside for the page’s own.');
+      assert.equal(await f.page.getByText('Aucune conversation pour le moment.', { exact: true }).count(), 0);
+      assert.equal(await f.page.getByRole('group', { name: 'Traitement des conversations', exact: true }).count(), 0, 'No count of conversations that could not be read.');
+      assert.equal(await f.page.getByRole('heading', { name: 'Choisissez une conversation', exact: true }).count(), 0);
+      const retry = failure.getByRole('button', { name: 'Réessayer', exact: true });
+      const box = await retry.boundingBox(); assert.ok(box.height >= 44);
+      const frame = await failure.boundingBox(), list = await f.page.locator('.conversation-list').boundingBox();
+      assert.ok(frame.x >= list.x + 15.5 && frame.x + frame.width <= list.x + list.width - 15.5, `The message keeps the list's side margins (${JSON.stringify({ frame, list })}).`);
+      assert.equal(await overflow(f), false);
+      const audit = await new AxeBuilder({ page: f.page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
+      assert.deepEqual(audit.violations.map(issue => ({ id: issue.id, nodes: issue.nodes.map(node => node.target) })), []);
+      await f.page.screenshot({ path: `${output}/load-failed-${width}-${dark ? 'dark' : 'light'}.png` });
+    }, { setup: { failTable: 'colis' } });
 
     await scenario('short-phone-keeps-the-composer-reachable', async f => {
       await open(f, '/conversations', 390, 568);
@@ -473,7 +549,12 @@ async function main() {
       await send.scrollIntoViewIfNeeded();
       const typing = await send.boundingBox();
       assert.ok(typing.y >= 48 && typing.y + typing.height <= 568, `The send button is reachable while typing: ${JSON.stringify(typing)}`);
+      // Moving the focus to « Envoyer » keeps the bar aside while the keyboard is
+      // open (it would come back under the finger); closing the keyboard brings it back.
       await send.focus();
+      await f.page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      assert.equal(await f.page.locator('[data-staff-bottom-nav]').isVisible(), false, 'The focus leaving the field never brings the bar back by itself.');
+      await f.page.evaluate(() => window.dispatchEvent(new Event('resize')));
       await f.page.locator('[data-staff-bottom-nav]').waitFor();
       await send.scrollIntoViewIfNeeded();
       const action = await send.boundingBox(), nav = await f.page.getByRole('button', { name: 'Dossiers', exact: true }).locator('..').boundingBox();

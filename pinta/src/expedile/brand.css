@@ -107,6 +107,16 @@ html.dark .divide-slate-100 > :not([hidden]) ~ :not([hidden]), html.dark .divide
 .brand-bd-gold  { border-color: var(--brand-gold); }
 
 html.dark .brand-t { color: #C4DAE5; }
+/* One primary fill on every staff screen in dark mode: the light navy with navy
+   text of Mon travail, the dossier and its calendar (10.3:1), never a navy
+   block on the dark canvas. */
+html.dark .staff-main button.brand-bg, html.dark .staff-main a.brand-bg { color: #122A36; background: #C4DAE5; }
+html.dark .staff-main button.brand-bg:hover:not(:disabled), html.dark .staff-main a.brand-bg:hover { background: #D6E6EE; }
+/* The open settings rubric reads as selected, not as a second primary button
+   (hovered too: never the primary's light fill under its light text). */
+.staff-main nav[aria-label='Paramètres'] button[aria-current='page'] { color: var(--brand-text); background: rgb(27 58 75 / .08); box-shadow: inset 4px 0 0 var(--brand-text); }
+html.dark .staff-main nav[aria-label='Paramètres'] button[aria-current='page'],
+html.dark .staff-main nav[aria-label='Paramètres'] button[aria-current='page']:hover:not(:disabled) { color: #C4DAE5; background: rgb(196 218 229 / .12); }
 
 /* Actions principales et onglets actifs : une seule couleur d'accent (navy), jamais un quasi-noir. */
 html:not(.dark) .bg-slate-900     { background-color: var(--brand-navy); }
@@ -268,7 +278,11 @@ html.dark input, html.dark textarea, html.dark select {
   border-color: var(--border-subtle);
   color-scheme: dark;
 }
-html.dark input::placeholder, html.dark textarea::placeholder { color: var(--text-muted); }
+/* A dark-mode example (« Saint-Denis », « 97400 ») must never read as a value already
+   typed: 5.1:1 on a field (4.6:1 on a raised one), against 12.5:1 for the value. */
+html.dark input::placeholder, html.dark textarea::placeholder { color: #9A9286; opacity: 1; }
+/* A refused field keeps its red edge in dark mode (the rule above sets every field's edge). */
+html.dark input[aria-invalid='true'], html.dark textarea[aria-invalid='true'], html.dark select[aria-invalid='true'] { border-color: #E59A9A; }
 @media (pointer: coarse), (max-width: 1023px) {
   button, a, select, input:not([type='checkbox']):not([type='radio']) { min-height: 44px; }
   button:has(> svg:only-child) { min-width: 44px; }
@@ -347,11 +361,17 @@ input:not([type='checkbox']):not([type='radio']), select, textarea { font-size: 
 /* A long word (email, link, reference) breaks only when it cannot fit its line:
    « anywhere » also shrank chips, references and status pills letter by letter. */
 button, summary, a { overflow-wrap: break-word; }
+/* A code read against the parcel (tracking number, reference) moves to the next
+   line as a whole, never split at its hyphen; only a code longer than the whole
+   line breaks, as a last resort. */
+.keep-token { display: inline-block; max-width: 100%; overflow-wrap: anywhere; }
 button, input, select, textarea { max-width: 100%; }
 
 /* Toasts (flash): an elevated surface, a coloured edge and an icon per tone.
-   Placement (ui/Toast.jsx, domain/toast.js): over the staff navigation column
-   on desktop, over the bottom navigation bar elsewhere, never over the page. */
+   Placement (ui/Toast.jsx, domain/toast.js): never over a control — the free
+   space of the staff navigation column on a desktop, else a free corner of the
+   page, above the bottom bars and below the top bar. A click on a toast closes
+   it and never reaches what lies under it. */
 .expedile-toast {
   --toast-accent: var(--brand-text);
   --toast-bg: var(--bg-elevated);
@@ -372,14 +392,6 @@ button, input, select, textarea { max-width: 100%; }
 html.dark .expedile-toast--success { --toast-accent: #7AB089; --toast-bg: #203A2D; }
 html.dark .expedile-toast--warning { --toast-accent: #D9A862; --toast-bg: #3C3020; }
 html.dark .expedile-toast--error   { --toast-accent: #E59A9A; --toast-bg: #44282A; }
-/* Phone, tablet and client portal: on top of the bottom navigation bar. */
-.expedile-toast--bar {
-  left: 12px;
-  right: 12px;
-  margin: 0 auto;
-  max-width: 440px;
-  bottom: max(8px, env(safe-area-inset-bottom));
-}
 
 /* A row of chips inside a clickable card (reference, casier, status pill): the
    chips go to the next line instead of being squeezed, since every element may

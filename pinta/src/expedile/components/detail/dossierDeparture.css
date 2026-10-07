@@ -37,6 +37,8 @@ html.dark .dossier-departure-picker { --departure-ring: #e8c779; --departure-rin
    on a desktop the line ends with the shortcuts, the widest part of the field. */
 .dossier-departure-label-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; max-width: max(36rem, calc(var(--shortcut-count, 3) * 15rem)); }
 .dossier-departure-label-row .dossier-departure-label { margin-bottom: 0; }
+/* At 320 px the label wraps, never « Annuler » inside its word. */
+.dossier-departure-label-row .dossier-departure-cancel { flex-shrink: 0; white-space: nowrap; overflow-wrap: normal; }
 .dossier-departure-cancel { min-height: 44px; padding: 0 4px; font-size: .875rem; font-weight: 600; color: var(--brand-text); text-decoration: underline; text-underline-offset: 3px; }
 .dossier-departure-cancel[aria-disabled='true'], .dossier-departure-cancel:disabled { opacity: .5; cursor: progress; }
 .dossier-departure-saving { display: inline-flex; align-items: center; gap: 8px; font-size: .875rem; font-weight: 600; color: var(--text-secondary); }
