@@ -108,18 +108,38 @@ export function refusedClientFields(error) {
 }
 
 /**
+ * The errors of a new client's required fields, by form key, with the phone
+ * rule of every creation path (staff form, reception, import): one number is
+ * required, and each number entered (mobile `tel`, landline `telFixe`) must be
+ * valid, so no client is created with a number that would then block the
+ * saving of their own profile.
+ */
+export function newClientFieldErrors(values) {
+  const errors = newClientErrors(values);
+  delete errors.tel;
+  return { ...errors, ...phoneErrors(values) };
+}
+
+/**
  * Why an imported row is refused: « téléphone manquant », « prénom et ville
- * manquants », « email invalide ». '' when the row can be imported.
+ * manquants », « email invalide », « téléphone fixe invalide ». '' when the row
+ * can be imported. Each number given (mobile, landline) must be valid.
  */
 export function importRowIssue(row) {
   const missing = REQUIRED_CLIENT_FIELDS.filter(({ key }) => !filled(requiredValue(row, key)));
-  const invalid = REQUIRED_CLIENT_FIELDS.filter(({ key }) => filled(requiredValue(row, key)) && requiredFieldFormatError(key, requiredValue(row, key)));
+  const invalid = REQUIRED_CLIENT_FIELDS.filter(({ key }) => key !== 'tel' && filled(requiredValue(row, key)) && requiredFieldFormatError(key, requiredValue(row, key)));
   const parts = [];
   if (missing.length) {
     const feminine = missing.every(field => field.feminine);
     parts.push(`${frenchList(missing.map(field => field.noun))} ${missing.length > 1 ? (feminine ? 'manquantes' : 'manquants') : (feminine ? 'manquante' : 'manquant')}`);
   }
+  const phones = phoneErrors(row);
   // Five digits outside the served destinations read « non desservi », any other format « invalide ».
-  for (const field of invalid) parts.push(field.key === 'cp' && /^\d{5}$/.test(String(row.cp).replace(/\s/g, '')) ? 'code postal non desservi' : `${field.noun} invalide`);
+  for (const field of REQUIRED_CLIENT_FIELDS) {
+    if (field.key === 'tel') {
+      if (filled(row?.tel) && phones.tel) parts.push('téléphone invalide');
+      if (phones.telFixe) parts.push('téléphone fixe invalide');
+    } else if (invalid.includes(field)) parts.push(field.key === 'cp' && /^\d{5}$/.test(String(row.cp).replace(/\s/g, '')) ? 'code postal non desservi' : `${field.noun} invalide`);
+  }
   return parts.join(', ');
 }

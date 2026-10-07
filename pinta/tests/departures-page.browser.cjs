@@ -626,7 +626,9 @@ async function main() {
       const target = card(f, 'ENV-2026-045');
       const wishes = target.getByRole('region', { name: '3 dossiers souhaitent partir ce jour-là', exact: true });
       await wishes.waitFor();
-      assert.equal(await wishes.getByText(/abonnement terminé le 12 octobre/).count(), 3, 'Each late dossier says so in the list.');
+      // On 7 October, a subscription ending on the 12th still runs: said in the future tense.
+      assert.equal(await wishes.getByText(/abonnement jusqu’au 12 octobre/).count(), 3, 'Each late dossier says so in the list.');
+      assert.equal(await wishes.getByText(/abonnement terminé/).count(), 0, 'Never as already ended.');
       const assign = wishes.getByRole('button', { name: 'Affecter ces dossiers', exact: true });
       await assign.click();
       const question = f.page.getByRole('dialog', { name: 'Affecter quand même ?', exact: true });
@@ -643,6 +645,27 @@ async function main() {
       await target.getByRole('status').filter({ hasText: '3 dossiers affectés' }).waitFor();
       assert.deepEqual(f.assignments.map(item => item.id), [DOSSIER.wish1, DOSSIER.wish2, DOSSIER.wish3]);
     }, { theme, before: async f => { await trackAssignments(f); Object.assign(f.tables.clients.find(item => item.id === CLIENT.reunion), { abonnement: 'premium', abonnement_debut: '2025-10-12', abonnement_fin: '2026-10-12' }); } });
+    // On a phone, a wished reference is read whole (never « EXP- / WISH- / 1 »), the client and the
+    // subscription note wrap beside or below it; a subscription already ended reads in the past tense.
+    for (const [width, theme, end, note] of [[390, 'light', '2026-10-12', 'abonnement jusqu’au 12 octobre'], [390, 'dark', '2026-10-05', 'abonnement terminé le 5 octobre'], [320, 'light', '2026-10-12', 'abonnement jusqu’au 12 octobre']]) await scenario(`wished-references-stay-whole-on-a-phone-with-the-subscription-end-in-its-tense-${width}-${theme}`, async f => {
+      await openPage(f);
+      const wishes = card(f, 'ENV-2026-045').getByRole('region', { name: '3 dossiers souhaitent partir ce jour-là', exact: true });
+      await wishes.waitFor();
+      const lines = await wishes.locator('.departures-wishes-list li').evaluateAll(items => items.map(item => {
+        const link = item.querySelector('a'), range = document.createRange(); range.selectNodeContents(link);
+        const box = item.closest('.departures-wishes').getBoundingClientRect(), rect = link.getBoundingClientRect();
+        return { ref: link.textContent, lines: new Set([...range.getClientRects()].filter(r => r.width > 0).map(r => Math.round(r.top))).size, inside: rect.left >= box.left - 0.5 && rect.right <= box.right + 0.5, note: item.querySelector('.departures-wishes-client').textContent };
+      }));
+      assert.deepEqual(lines.map(line => line.ref), ['EXP-WISH-1', 'EXP-WISH-2', 'EXP-WISH-3']);
+      for (const line of lines) {
+        assert.equal(line.lines, 1, `${line.ref} on one line (${JSON.stringify(line)})`);
+        assert.ok(line.inside, `${line.ref} inside the list`);
+        assert.ok(line.note.endsWith(note), `${line.ref}: « ${note} » (${line.note})`);
+      }
+      assert.equal(await f.page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false, 'No horizontal scroll');
+      await axe(f, `wishes ${width} ${theme}`);
+      await wishes.screenshot({ path: `${output}/wishes-list-${width}-${theme}.png` });
+    }, { width, theme, before: async f => { Object.assign(f.tables.clients.find(item => item.id === CLIENT.reunion), { abonnement: 'premium', abonnement_debut: '2025-10-12', abonnement_fin: end }); } });
     // Loaded, then the minute's refresh of the dossiers fails: the departures stay
     // (never « Les départs n’ont pas pu être chargés »), the banner gives the reason.
     for (const [width, theme] of [[1440, 'light'], [390, 'dark']]) await scenario(`a-failed-refresh-keeps-the-departures-${width}-${theme}`, async f => {

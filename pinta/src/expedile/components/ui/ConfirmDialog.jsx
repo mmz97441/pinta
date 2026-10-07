@@ -100,7 +100,7 @@ export default function ConfirmDialog() {
           {!inlineError?.final && <button
             disabled={busy}
             onClick={confirm}
-            className={`flex-1 min-h-[44px] px-4 py-2 leading-tight rounded-xl font-semibold text-white flex justify-center items-center gap-2 ${cfm.danger ? 'bg-red-600' : 'bg-[#17324D]'} disabled:opacity-50`}
+            className={`flex-1 min-h-[44px] px-4 py-2 leading-tight rounded-xl font-semibold text-white flex justify-center items-center gap-2 ${cfm.danger ? 'bg-red-600' : 'bg-[#17324D] dark:bg-[#C4DAE5] dark:text-[#122A36]'} disabled:opacity-50`}
           >
             {busy && <Loader2 size={16} className="animate-spin" />}
             {cfm.okLabel || 'Confirmer'}

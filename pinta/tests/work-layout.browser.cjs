@@ -17,8 +17,8 @@ const displayDialog = f => f.page.getByRole('dialog', { name: 'Affichage', exact
 // sortWorkActions: overdue, then work in progress (ties by id), then by deadline and age.
 const ORDER = ['quote', 'documents', 'reply', 'reception', 'prepare', 'departure'];
 
-async function fixture(browser, { dark = false, timezoneId } = {}) {
- const f = await setup(browser, 'directeur', { timezoneId });
+async function fixture(browser, { dark = false, timezoneId, device } = {}) {
+ const f = await setup(browser, 'directeur', { timezoneId, device });
  f.page.setDefaultTimeout(10000);
  // Screenshots never catch a tab underline halfway through its transition.
  await f.page.emulateMedia({ reducedMotion: 'reduce' });
@@ -577,6 +577,10 @@ async function failColisLoad(f) {
    await account.getByRole('button', { name: 'Se déconnecter', exact: true }).click();
    const confirm = f.page.getByRole('dialog', { name: 'Se déconnecter ?', exact: true });
    await confirm.getByText(/brouillons non enregistrés/).waitFor();
+   // The confirmations share the one primary fill: never a navy block in dark mode.
+   const ok = await commandLook(confirm.getByRole('button', { name: 'Se déconnecter', exact: true }));
+   assert.deepEqual({ fill: ok.fill, text: ok.text }, dark ? { fill: 'rgb(196, 218, 229)', text: 'rgb(18, 42, 54)' } : { fill: 'rgb(23, 50, 77)', text: 'rgb(255, 255, 255)' }, 'The confirmation’s primary fill');
+   assert.ok(contrast(ok.fill, ok.text) >= 4.5, `The confirmation reads at 4.5:1 or more (${contrast(ok.fill, ok.text).toFixed(2)})`);
    await shot(f, `logout-confirm-390-${dark ? 'dark' : 'light'}`);
    await confirm.getByRole('button', { name: 'Annuler', exact: true }).click();
    await confirm.waitFor({ state: 'hidden' });
@@ -714,12 +718,25 @@ async function failColisLoad(f) {
    assert.ok(field.y >= 0 && field.y + field.height <= 500, 'The field stays in view');
    await axeClean(f, 'typing');
    await shot(f, `typing-390x500-${dark ? 'dark' : 'light'}`);
-   // Leaving the field alone keeps the bar aside while the keyboard is open: a
-   // press that moves the focus to a button ends on that button, never on a bar
-   // appearing under the finger. The keyboard closing brings it back.
-   await search.evaluate(node => node.blur());
+   // A press that takes the focus from the field (a mouse here; a finger in the reception
+   // and chat tests): the bar stays aside while the press lasts, so the release lands on
+   // the control, never on a bar appearing under it; once the press has ended, it is back.
+   const filters = f.page.locator('summary').filter({ hasText: /^Filtrer/ });
+   const press = await filters.boundingBox();
+   await f.page.mouse.move(press.x + press.width / 2, press.y + press.height / 2);
+   await f.page.mouse.down();
    await f.page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-   assert.equal(await nav.isVisible(), false, 'Still aside on blur while the keyboard is open');
+   assert.equal(await nav.isVisible(), false, 'Still aside while the press lasts');
+   await f.page.mouse.up();
+   await f.page.getByLabel('Mission', { exact: true }).waitFor();
+   await nav.waitFor();
+   assert.equal(await reserve(`${height}px`), `${height}px`, 'Back once the press has ended, with its exact reserve');
+   // Back in the field, then a script takes the focus away: no press to wait for, back at once.
+   await search.focus();
+   await nav.waitFor({ state: 'hidden' });
+   await search.evaluate(node => node.blur());
+   await nav.waitFor();
+   // The keyboard closes: the bar stays, with its exact reserve.
    await f.page.setViewportSize({ width: 390, height: 844 });
    await nav.waitFor();
    assert.equal(await reserve(`${height}px`), `${height}px`, 'Back when the keyboard closes, with its exact reserve');
@@ -731,6 +748,66 @@ async function failColisLoad(f) {
    await nav.waitFor();
    assert.equal(await reserve(`${height}px`), `${height}px`, 'Back when the keyboard closes');
   }, { dark, viewport: { width: 390, height: 844 } });
+  // A window under 1024 × 640 (a snapped or zoomed laptop, a small tablet on its side with a
+  // scanner) has no on-screen keyboard: once the focus leaves the field, the bar always comes
+  // back (click elsewhere, Tab, a scan validated with Enter), never only on a resize.
+  for (const dark of [false, true]) await scenario(`the-bottom-navigation-comes-back-after-a-field-in-a-short-window-900x600-${dark ? 'dark' : 'light'}`, async f => {
+   const nav = f.page.locator('[data-staff-bottom-nav]');
+   await nav.waitFor();
+   assert.equal(await f.page.locator('.staff-sidebar').isVisible(), false, 'No navigation column under 1024 px: the bar is the only navigation');
+   const search = f.page.getByLabel('Rechercher dans mes tâches', { exact: true });
+   await search.click();
+   await nav.waitFor({ state: 'hidden' });
+   // A click on a part of the page that takes no focus.
+   const brand = await f.page.locator('[data-toast-ceiling] span.brand-t').first().boundingBox();
+   await f.page.mouse.click(brand.x + 10, brand.y + brand.height / 2);
+   await nav.waitFor();
+   assert.equal(await f.page.evaluate(() => document.activeElement === document.body), true, 'The focus left the field');
+   const barHeight = await nav.evaluate(node => node.getBoundingClientRect().height);
+   assert.equal(await mainReserve(f, `${barHeight}px`), `${barHeight}px`, 'The page keeps exactly the bar free again');
+   // Tab from the field to the next control.
+   await search.click();
+   await nav.waitFor({ state: 'hidden' });
+   await f.page.keyboard.press('Tab');
+   await nav.waitFor();
+   assert.equal(await f.page.evaluate(() => document.activeElement?.matches('input, textarea, select')), false, 'The focus is on a control, not a field');
+   // Typed (or scanned) then validated with Enter: the one dossier found opens, with the bar.
+   await f.page.goto(`${base}/colis`);
+   const scan = f.page.getByLabel('Rechercher ou scanner un colis', { exact: true });
+   await scan.click();
+   await nav.waitFor({ state: 'hidden' });
+   await f.page.keyboard.type('Kréol');
+   await f.page.locator('[data-dossier-row]:visible').filter({ hasText: 'EXP-2026-0355' }).first().waitFor();
+   await f.page.keyboard.press('Enter');
+   await f.page.waitForURL(url => url.pathname === '/colis/d3550000-0000-4000-8000-000000000355');
+   await f.page.getByTestId('dossier-task-header').waitFor();
+   await nav.waitFor();
+   await axeClean(f, 'short window, after a scan');
+   await shot(f, `bar-back-900x600-${dark ? 'dark' : 'light'}`);
+  }, { dark, viewport: { width: 900, height: 600 } });
+  // A phone on its side (844 × 390, touch): the keyboard closes while the field keeps the
+  // focus (Android's Back), then a tap on the page takes the focus away: the bar comes back.
+  for (const dark of [false, true]) await scenario(`the-bottom-navigation-comes-back-after-a-tap-once-the-keyboard-closed-844x390-${dark ? 'dark' : 'light'}`, async f => {
+   const nav = f.page.locator('[data-staff-bottom-nav]');
+   await nav.waitFor();
+   const search = f.page.getByLabel('Rechercher dans mes tâches', { exact: true });
+   const field = await search.boundingBox();
+   await f.page.touchscreen.tap(field.x + field.width / 2, field.y + field.height / 2);
+   await nav.waitFor({ state: 'hidden' });
+   // The keyboard opens (180 px left), then closes with the focus kept in the field.
+   await f.page.setViewportSize({ width: 844, height: 180 });
+   await nav.waitFor({ state: 'hidden' });
+   await f.page.setViewportSize({ width: 844, height: 390 });
+   await f.page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+   assert.equal(await search.evaluate(node => node === document.activeElement), true, 'The field keeps the focus');
+   assert.equal(await nav.isVisible(), false, 'A field still focused on a short screen keeps the bar aside');
+   const brand = await f.page.locator('[data-toast-ceiling] span.brand-t').first().boundingBox();
+   await f.page.touchscreen.tap(brand.x + 10, brand.y + brand.height / 2);
+   await nav.waitFor();
+   assert.equal(await f.page.evaluate(() => document.activeElement === document.body), true, 'The tap took the focus from the field');
+   await axeClean(f, 'landscape phone, after a tap');
+   await shot(f, `bar-back-844x390-${dark ? 'dark' : 'light'}`);
+  }, { dark, viewport: { width: 844, height: 390 }, device: { hasTouch: true, isMobile: true } });
   await scenario('opening-a-task-on-a-phone-lands-on-its-work-area', async f => {
    const link = row(f, 'prepare').getByRole('link', { name: /^Ouvrir Optimiser les colis/ });
    assert.ok((await link.getAttribute('href')).endsWith('#dossier-work'));

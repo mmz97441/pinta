@@ -51,6 +51,12 @@ test('an imported row is refused with its reason in French', () => {
   assert.equal(importRowIssue({ ...complete, cp: '75011' }), 'code postal non desservi');
   assert.equal(importRowIssue({ ...complete, cp: '974' }), 'code postal invalide');
   assert.equal(importRowIssue({ ...complete, tel: '', email: 'x' }), 'téléphone manquant, email invalide');
+  // Each number given is checked, as in every creation path: a valid mobile never covers an invalid landline.
+  assert.equal(importRowIssue({ ...complete, telFixe: '-' }), 'téléphone fixe invalide');
+  assert.equal(importRowIssue({ ...complete, tel: '0692', telFixe: '0262 41 22 34' }), 'téléphone invalide');
+  assert.equal(importRowIssue({ ...complete, tel: '0692', telFixe: '0262', email: 'x' }), 'email invalide, téléphone invalide, téléphone fixe invalide');
+  assert.equal(importRowIssue({ ...complete, tel: '', telFixe: '01 23' }), 'téléphone fixe invalide');
+  assert.equal(importRowIssue({ ...complete, telFixe: '0262 41 22 34' }), '');
 });
 
 test('the phone format is the database one: parentheses accepted, a no-break space or an inner + refused', () => {

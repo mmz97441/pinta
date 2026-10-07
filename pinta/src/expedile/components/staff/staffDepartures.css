@@ -51,10 +51,12 @@ html.dark .departures-page {
 }
 .departures-wishes-title { display: flex; align-items: center; gap: 8px; font-size: .9375rem; font-weight: 700; }
 .departures-wishes-list { display: flex; flex-wrap: wrap; gap: 0 16px; margin: 4px 0 8px; }
-.departures-wishes-list li { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+/* A reference is read whole (« EXP-2026-0412 », never split at a hyphen): the
+   client's name and the notes beside it wrap, below it when the line is short. */
+.departures-wishes-list li { display: inline-flex; flex-wrap: wrap; align-items: center; column-gap: 6px; min-width: 0; max-width: 100%; }
 .departures-wishes-link {
-  display: inline-flex; align-items: center; min-height: 44px; font-weight: 700;
-  color: var(--brand-text); text-decoration: underline; text-underline-offset: 3px; overflow-wrap: anywhere;
+  display: inline-flex; flex: none; align-items: center; min-height: 44px; font-weight: 700; white-space: nowrap; overflow-wrap: normal;
+  color: var(--brand-text); text-decoration: underline; text-underline-offset: 3px;
 }
 .departures-wishes-client { font-size: .875rem; color: var(--text-secondary); overflow-wrap: anywhere; }
 .departures-accent { color: var(--brand-text); border-color: var(--brand-text); }

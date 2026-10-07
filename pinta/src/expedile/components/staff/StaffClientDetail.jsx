@@ -14,9 +14,10 @@ import { functionErrorMessage } from '../../services/functionErrors';
 import * as sb from '../../lib/supabaseData';
 import { nextAction } from '../../domain/workQueues';
 import usePersistentDraft from '../../hooks/usePersistentDraft';
-import { staffDataState } from '../../domain/dataLoad';
+import { holdsStaffData, staffDataState } from '../../domain/dataLoad';
+import useShellLoadBanner from '../../hooks/useShellLoadBanner';
 import { receptionCartonManifest } from '../../domain/reception';
-import { REQUIRED_CLIENT_FIELDS, REQUIRED_CLIENT_KEYS, COMPLETION_FIELDS, filled, newClientErrors, requiredFieldFormatError, blankingMessage, missingMessage, servedDestination, phoneOf, phoneErrors, validPhone, dialablePhone, refusedClientFields, PHONE_FORMAT_MESSAGE } from '../../domain/clientRequirements';
+import { REQUIRED_CLIENT_FIELDS, REQUIRED_CLIENT_KEYS, COMPLETION_FIELDS, filled, newClientFieldErrors, requiredFieldFormatError, blankingMessage, missingMessage, servedDestination, phoneOf, validPhone, dialablePhone, refusedClientFields, PHONE_FORMAT_MESSAGE } from '../../domain/clientRequirements';
 
 // ── Shared styles: brand.css tokens, readable in the light and dark themes ─────
 const BORDER = 'border-[color:var(--border-subtle)]';
@@ -268,7 +269,7 @@ function LoadFailure({ message, onBack }) {
 export default function StaffClientDetail() {
   const navigate = useNavigate();
   const { id: routeId } = useParams();
-  const { clients, can, dataLoading, dataError, sbReady } = useApp();
+  const { clients, data = [], envois = [], can, dataLoading, dataError, sbReady } = useApp();
   const isNewRoute = !routeId || routeId === 'new';
   if (isNewRoute) {
     if (!can('perm_clients_creer')) return <p role="alert" className="p-6 text-sm text-secondary">Votre rôle ne permet pas de créer un client.</p>;
@@ -280,7 +281,7 @@ export default function StaffClientDetail() {
   if (dataLoading) return <DetailSkeleton />;
   // Same rule as the other pages (domain/dataLoad.js): nothing read → the failure here; data held but the last
   // refresh failed → the shell's banner already says so (with « Réessayer »), this page only says why it is empty.
-  const load = staffDataState({ sbReady, dataLoading, dataError, hasData: clients.length > 0 });
+  const load = staffDataState({ sbReady, dataLoading, dataError, hasData: holdsStaffData({ data, clients, envois }) });
   if (load.state === 'failed') return <LoadFailure message={load.reason} onBack={() => navigate('/clients')} />;
   if (load.state === 'stale') return <section className="mx-auto max-w-xl space-y-3 p-6">
     <h1 className="text-xl font-bold text-primary">Fiche pas encore disponible</h1>
@@ -301,6 +302,8 @@ function EditClientPage({ cl, onDone }) {
   const navigate = useNavigate();
   const location = useLocation();
   const { clients, data: loaded, can, flash, ask, auth, updateClient, deleteClient, setClients } = useApp();
+  // The shell's banner states an interrupted load with its « Réessayer »: the history refers to it.
+  const outage = useShellLoadBanner();
   // Opened from a dossier (« À vérifier », « Ouvrir la fiche client »): the way back is that dossier.
   const returnTo = safeWorkReturn(new URLSearchParams(location.search).get('returnTo'), '');
   const backToDossier = returnTo.startsWith('/colis/');
@@ -611,7 +614,9 @@ function EditClientPage({ cl, onDone }) {
             <summary className="min-h-11 cursor-pointer py-3 font-semibold text-primary">{`Historique complet${history ? ` (${countLabel(history.length, 'dossier', 'dossiers')})` : ''}`}</summary>
             <div className="pb-3">
               {historyLoading && <p role="status" className="text-sm text-secondary">Chargement de l’historique, archives comprises…</p>}
-              {historyError && !historyLoading && <div role="alert" className="space-y-2 text-sm text-red-700"><p>Historique indisponible : {historyError}</p><button type="button" onClick={() => setHistoryAttempt(n => n + 1)} className={SECONDARY}><RefreshCw size={16} aria-hidden="true" />Réessayer</button></div>}
+              {historyError && !historyLoading && (outage
+                ? <p className="text-sm text-secondary">Historique indisponible pour le moment : réessayez le chargement depuis le bandeau en haut de la page.</p>
+                : <div role="alert" className="space-y-2 text-sm text-red-700"><p>Historique indisponible : {historyError}</p><button type="button" onClick={() => setHistoryAttempt(n => n + 1)} className={SECONDARY}><RefreshCw size={16} aria-hidden="true" />Réessayer</button></div>)}
               {history && !history.length && <p className="text-sm text-secondary">Aucun dossier pour ce client.</p>}
               {history?.length > 0 && <ul>{history.map((item) => <li key={item.id}>
                 <button type="button" onClick={() => navigate(`/colis/${item.id}`)} className={`flex min-h-14 w-full items-center justify-between gap-2 border-t ${BORDER} text-left text-sm transition-transform duration-200 ease-out hover:bg-surface`}>
@@ -763,8 +768,7 @@ function NewClientPage({ onDone, onCancel }) {
   // Prénom, nom, email, téléphone and a complete address are required for a client account. The phone is
   // the mobile or the landline: each number entered is checked under its own field.
   const errors = {
-    ...omit(newClientErrors(nd), ['tel']),
-    ...phoneErrors(nd),
+    ...newClientFieldErrors(nd),
     ...(nd.type === 'pro' && !nd.raisonSociale.trim() ? { raisonSociale: 'La raison sociale est obligatoire.' } : {}),
   };
   // After a refused submit, the first invalid field (in reading order) receives the focus.

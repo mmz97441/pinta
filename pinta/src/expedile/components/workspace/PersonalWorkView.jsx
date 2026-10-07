@@ -8,13 +8,14 @@ import useWorkLayout from '../../hooks/useWorkLayout';
 import { PERSONAL_SECTIONS, availableMissions, buildPersonalWork, personalSection, workTotals, staffAvailable, staffDisplayName } from '../../domain/personalWork';
 import { WORK_TABLE_CHOICES, visibleWorkColumns } from '../../domain/workTable';
 import { plural } from '../../domain/plural';
-import { staffDataState } from '../../domain/dataLoad';
+import { holdsStaffData, staffDataState } from '../../domain/dataLoad';
 import { DossierColumnVisibility } from '../staff/DossierColumnOptions';
 import WorkActionRow, { PRIMARY_COMMAND } from './WorkActionRow';
 import WorkActionTable from './WorkActionTable';
 import WorkDisplayOptions from './WorkDisplayOptions';
 import WorkPreferences from './WorkPreferences';
 import WorkLoadError from './WorkLoadError';
+import useParamInput from '../../hooks/useParamInput';
 import '../staff/dossierTable.css';
 import './workTable.css';
 
@@ -43,7 +44,7 @@ function WorkHandoffs({ count, phone, children }) {
 }
 
 export default function PersonalWorkView() {
-  const { auth, data = [], clients = [], can, workActions = [], workPreferences = [], workLoading, workError, refreshWork, dataError, dataLoading, sbReady, retryLoad } = useApp();
+  const { auth, data = [], clients = [], envois = [], can, workActions = [], workPreferences = [], workLoading, workError, refreshWork, dataError, dataLoading, sbReady, retryLoad } = useApp();
   const [params, setParams] = useSearchParams();
   const location = useLocation(); const navigate = useNavigate(); const now = useMinuteNow();
   const [preferencesRequest, setPreferencesRequest] = useState(0);
@@ -68,7 +69,7 @@ export default function PersonalWorkView() {
   const label = section === 'pool' ? 'À prendre' : PERSONAL_SECTIONS.find(item => item.id === section).label;
   // The dossiers or the tasks never loaded: an empty list would read as « no
   // work ». A failed refresh keeps the loaded tasks, under the shell's banner.
-  const dataLoad = staffDataState({ sbReady, dataLoading, dataError, hasData: data.length > 0 });
+  const dataLoad = staffDataState({ sbReady, dataLoading, dataError, hasData: holdsStaffData({ data, clients, envois }) });
   const dataFailed = dataLoad.state === 'failed';
   const loadFailed = dataFailed || (Boolean(workError) && !workActions.length);
   const loadReason = dataFailed ? dataLoad.reason : String(workError?.message || workError);
@@ -83,6 +84,8 @@ export default function PersonalWorkView() {
   const refreshing = workLoading && !initialLoading;
   const displayName = staffDisplayName(auth?.u);
   const setFilter = (key, value) => setParams(old => { const next = new URLSearchParams(old); if (value || key === 'mission') next.set(key, value); else next.delete(key); return next; }, { replace: true });
+  // The text as typed or scanned; the address follows it (hooks/useParamInput.js).
+  const [searchText, changeSearch] = useParamInput(search, value => setFilter('q', value));
   const clearFilters = () => setParams(old => { const next = new URLSearchParams(old); next.set('mission', ''); next.delete('q'); return next; }, { replace: true });
   const showSection = nextSection => setParams(old => { const next = new URLSearchParams(old); next.set('mission', ''); next.delete('q'); next.set('section', nextSection); return next; }, { replace: true });
   const globalSearchUrl = `/colis${search.trim() ? `?${new URLSearchParams({ q: search.trim() })}` : ''}`;
@@ -159,7 +162,7 @@ export default function PersonalWorkView() {
         <div className="dossier-toolbar-search relative">
           <label htmlFor={searchId} className="sr-only">Rechercher dans mes tâches</label>
           <Search size={18} aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-          <input id={searchId} type="search" value={search} onChange={event => setFilter('q', event.target.value)} placeholder="Client, EXP, tâche…" className="min-h-11 w-full pl-10 pr-3 text-sm" />
+          <input id={searchId} type="search" value={searchText} onChange={event => changeSearch(event.target.value)} placeholder="Client, EXP, tâche…" className="min-h-11 w-full pl-10 pr-3 text-sm" />
         </div>
         <details ref={filterRef} className="work-filter" onToggle={event => setFilterOpen(event.currentTarget.open)}
           onKeyDown={event => { if (event.key !== 'Escape' || !event.currentTarget.open) return; event.stopPropagation(); event.currentTarget.open = false; event.currentTarget.querySelector('summary')?.focus(); }}>

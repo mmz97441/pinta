@@ -150,6 +150,9 @@ async function layoutScenario(browser, { width, height, keyboard }, dark) {
   await settle(f.page);
   let geometry = await focusGeometry(f.page);
   assert.equal(geometry.compact, false, `${tag}: full actions on a tall screen`);
+  // One primary fill: navy in light mode, the light navy with navy text in dark mode, never a navy block.
+  const primary = await region.getByRole('button', { name: 'Enregistrer et ajouter un carton', exact: true }).evaluate(node => ({ fill: getComputedStyle(node).backgroundColor, text: getComputedStyle(node).color }));
+  assert.deepEqual(primary, dark ? { fill: 'rgb(196, 218, 229)', text: 'rgb(18, 42, 54)' } : { fill: 'rgb(27, 58, 75)', text: 'rgb(255, 255, 255)' }, `${tag}: the shared primary fill`);
   assert.ok(geometry.summaryHeight > 20, `${tag}: the summary shows on a tall screen`);
   assertUncovered(geometry, `${tag} tall`);
   if (keyboard) {
@@ -248,7 +251,7 @@ async function newClientScenario(browser, { width, height }, dark) {
   await press();
   const alert = f.page.locator('.reception-footer [role="alert"]');
   await alert.waitFor();
-  assert.equal((await alert.innerText()).trim(), 'Fiche client incomplète : il manque le prénom, l’email, l’adresse et la ville ; le téléphone est à corriger.', `${tag}: the line next to the actions names what is missing`);
+  assert.equal((await alert.innerText()).trim(), 'Fiche client incomplète : il manque le prénom, l’email, l’adresse et la ville ; le téléphone fixe est à corriger.', `${tag}: the line next to the actions names what is missing, and the number to correct`);
   assert.deepEqual(writes().slice(before), [], `${tag}: nothing is written for an incomplete client`);
   await f.page.waitForFunction(() => document.activeElement?.id === 'reception-client-prenom');
   await settle(f.page);
@@ -288,20 +291,42 @@ async function newClientScenario(browser, { width, height }, dark) {
   }
   const audit = await new AxeBuilder({ page: f.page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
   assert.deepEqual(audit.violations.map(item => ({ id: item.id, nodes: item.nodes.map(node => node.target) })), [], `${tag}: no accessibility violation`);
-  // Completed: the line goes away field by field, then one press creates the client and the expedition.
+  // Completed: the line goes away field by field.
   await region.getByLabel('Prénom *', { exact: true }).fill('Luc');
   await region.getByLabel('Téléphone fixe', { exact: true }).fill('0262 41 22 33');
   await region.getByLabel('Email *', { exact: true }).fill('luc.martin@example.test');
   await region.getByLabel('Adresse *', { exact: true }).fill('4 rue des Lilas');
   await region.getByLabel('Ville *', { exact: true }).fill('Saint-Denis');
   await alert.waitFor({ state: 'detached' });
+  // A valid mobile never covers an invalid landline: each number typed is checked (as in the
+  // staff form and the import), so no client is created with a number that would then block
+  // the saving of their own profile.
+  await region.getByLabel('Téléphone mobile', { exact: true }).fill('0692 12 34 56');
+  await region.getByLabel('Téléphone fixe', { exact: true }).fill('-');
+  await press();
+  await alert.waitFor();
+  assert.equal((await alert.innerText()).trim(), 'Fiche client à corriger : le téléphone fixe est à corriger.', `${tag}: the landline is named`);
+  await f.page.waitForFunction(() => document.activeElement?.id === 'reception-client-telFixe');
+  const phones = await f.page.evaluate(() => {
+    const describedBy = id => document.getElementById(document.getElementById(id)?.getAttribute('aria-describedby') || '')?.textContent || null;
+    return { mobile: [document.getElementById('reception-client-tel').getAttribute('aria-invalid'), describedBy('reception-client-tel')], landline: [document.getElementById('reception-client-telFixe').getAttribute('aria-invalid'), describedBy('reception-client-telFixe')] };
+  });
+  assert.deepEqual(phones, { mobile: [null, null], landline: ['true', 'Indiquez un numéro d’au moins 9 chiffres (espaces, points, tirets, parenthèses et + initial acceptés).'] }, `${tag}: the error under the landline only`);
+  assert.deepEqual(writes().slice(before), [], `${tag}: nothing is written while a number is invalid`);
+  // Read at rest: the colour transitions of the fields corrected just before are over.
+  await f.page.evaluate(() => Promise.all(document.getAnimations().filter(animation => animation.effect?.getComputedTiming().endTime !== Infinity).map(animation => animation.finished)));
+  await f.page.screenshot({ path: path.join(out, `new-client-landline-refused-${tag}.png`) });
+  // Corrected, one press creates the client and the expedition.
+  await region.getByLabel('Téléphone fixe', { exact: true }).fill('0262 41 22 33');
+  await alert.waitFor({ state: 'detached' });
   await press();
   await f.page.getByRole('heading', { name: 'Réception enregistrée', exact: true }).waitFor();
   const client = f.tables.clients.find(row => row.prenom === 'Luc');
   assert.equal(client?.tel_fixe, '0262 41 22 33', `${tag}: the client is created with the landline`);
+  assert.equal(client?.tel, '0692 12 34 56', `${tag}: and the mobile`);
   assert.deepEqual(f.errors, []);
   await f.context.close();
-  return { viewport: `${width}x${height}`, theme: dark ? 'dark' : 'light', pass: true, scenarios: ['refused-new-client-alert-next-to-the-actions', 'first-field-to-complete-focused-in-view', 'phone-error-under-the-number-typed', 'postal-code-full-width-on-a-phone', 'axe', 'completed-client-created-in-one-press'] };
+  return { viewport: `${width}x${height}`, theme: dark ? 'dark' : 'light', pass: true, scenarios: ['refused-new-client-alert-next-to-the-actions', 'first-field-to-complete-focused-in-view', 'phone-error-under-the-number-typed', 'postal-code-full-width-on-a-phone', 'axe', 'invalid-landline-refused-beside-a-valid-mobile', 'completed-client-created-in-one-press'] };
 }
 
 /** The keyboard is open (the visible height reduced, the bottom navigation

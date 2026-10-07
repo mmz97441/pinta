@@ -103,13 +103,21 @@ export function AppProvider({ children }) {
     try { localStorage.setItem('expedile-theme', theme); } catch { /* the choice lasts for this visit */ }
   }, [theme]);
   const toggleTheme = useCallback(() => setTheme((t) => (t === 'dark' ? 'light' : 'dark')), []);
+  // A toast waiting behind a modal dialog (ui/Toast.jsx holds it there): its time
+  // only starts once it can be read.
+  const toastHeld = useRef(false);
+  const toastDuration = useRef(3000);
   const flash = useCallback((message) => {
     clearTimeout(flashTimer.current);
     setToast(message);
-    flashTimer.current = setTimeout(
-      () => setToast(''),
-      typeof message === 'object' ? message.duration || 6000 : 3000,
-    );
+    toastDuration.current = typeof message === 'object' ? message.duration || 6000 : 3000;
+    if (!toastHeld.current) flashTimer.current = setTimeout(() => setToast(''), toastDuration.current);
+  }, []);
+  const holdToast = useCallback((held) => {
+    if (toastHeld.current === held) return;
+    toastHeld.current = held;
+    clearTimeout(flashTimer.current);
+    if (!held) flashTimer.current = setTimeout(() => setToast(''), toastDuration.current);
   }, []);
   useEffect(() => () => clearTimeout(flashTimer.current), []);
   const reportError = useCallback(
@@ -786,8 +794,10 @@ export function AppProvider({ children }) {
     if (!sbReady)
       throw new Error('Les données ne sont pas disponibles. Rechargez avant de modifier.');
   }, [sbReady]);
+  // `report: false`: the caller states the refusal itself (the bulk status dialog lists each dossier's
+  // reason), so no toast repeats it.
   const upd = useCallback(
-    (id, changes, { expectedUpdatedAt } = {}) => {
+    (id, changes, { expectedUpdatedAt, report = true } = {}) => {
       const operation = (queues.current.get(id) || Promise.resolve())
         .catch(() => {})
         .then(async () => {
@@ -798,7 +808,7 @@ export function AppProvider({ children }) {
           return token === generation.current ? replaceColis(saved) : saved;
         })
         .catch((error) => {
-          throw reportError(error);
+          throw report ? reportError(error) : error;
         });
       queues.current.set(id, operation);
       operation
@@ -1504,6 +1514,7 @@ export function AppProvider({ children }) {
     selDest,
     toast,
     setToast,
+    holdToast,
     page,
     setPage,
     clientTab,

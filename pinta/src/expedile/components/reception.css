@@ -11,6 +11,10 @@
 }
 .reception-token { flex: none; }
 
+/* « Ajouter ici » of an open expedition: the shared primary fill, the light navy
+   with navy text in dark mode (brand.css), never a navy block on the dark page. */
+html.dark .staff-main .reception-choice-action.brand-bg { color: #122A36; background: #C4DAE5; }
+
 /* An open expedition the carton can join. */
 .reception-choice { background-color: #fff; border-color: #E5E7EB; }
 html.dark .reception-choice { background-color: var(--bg-elevated); border-color: var(--border-subtle); }

@@ -27,7 +27,9 @@ export default function ClientDossierContext() {
   useEffect(() => {
     if (!['documents', 'messages'].includes(panel)) return;
     setVisited(previous => ({ ...previous, [panel]: true }));
-    content.current?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    // Straight to the panel (a link from a notification lands on it): no long glide under the
+    // sticky header, where its links would sit over the page's buttons as they pass.
+    content.current?.scrollIntoView({ block: 'start' });
     content.current?.focus({ preventScroll: true });
   }, [panel]);
   if (!sel) return null;

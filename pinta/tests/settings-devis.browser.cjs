@@ -134,7 +134,8 @@ function assertToastClear(f, geometry, label, { collapsed = false } = {}) {
   assert.deepEqual(geometry.covered, [], `${label}: the toast covers no heading, action or field, of the page or of the navigation.`);
   assert.equal(geometry.takesClick, true, `${label}: a click on the toast stays on it.`);
   if (f.layout.mobile) {
-    assert.ok(['bottom', 'top'].includes(geometry.placement), `${label}: centred above the bottom bar or below the top bar (${geometry.placement}).`);
+    // Centred first; when a control lies there, a narrower corner (domain/toast.js), never over it.
+    assert.ok(['bottom', 'top', 'bottom-end', 'bottom-start', 'top-end', 'top-start'].includes(geometry.placement), `${label}: centred above the bottom bar or below the top bar, else a corner (${geometry.placement}).`);
     assert.ok(geometry.nav && geometry.toast.bottom <= geometry.nav.top + 0.5 && geometry.toast.top >= 0, `${label}: never on the bottom navigation (${JSON.stringify(geometry)}).`);
   } else if (collapsed) {
     // The folded column (64 px) holds no message: a free corner of the page, beside it.
@@ -522,13 +523,22 @@ async function checkClientLoadingShell(f) {
     if (after.nav) assert.ok(Math.abs(after.nav.height - before.nav.height) <= 1 && Math.abs(after.nav.top - before.nav.top) <= 1, `Same bottom bar ${JSON.stringify([before.nav, after.nav])}`);
   } finally { release(); await f.context.unroute('**/rest/v1/profiles*'); }
   // 2 · Once the client is known, the portal's own skeletons, in its real header and navigation.
+  // The expeditions are held: the portal's skeleton is the state reached on any machine. A shell
+  // placeholder drawn on the way (a slow machine shows it a moment) is recorded as it appears,
+  // never read after it is gone: it must be the client's too.
+  await f.page.addInitScript(() => {
+    window.__expedileShells = [];
+    new MutationObserver(() => {
+      for (const node of document.querySelectorAll('[data-testid="shell-skeleton"]')) if (!window.__expedileShells.includes(node.dataset.shell)) window.__expedileShells.push(node.dataset.shell);
+    }).observe(document, { childList: true, subtree: true });
+  });
   held = new Promise(resolve => { release = resolve; });
   await f.context.route('**/rest/v1/client_colis*', async route => { await held; return route.fallback(); });
   try {
     await f.page.reload({ waitUntil: 'domcontentloaded' });
-    const shell = f.page.getByTestId('shell-skeleton');
-    await shell.or(f.page.locator('[data-testid^="client-skeleton-"]')).first().waitFor();
-    if (await shell.count()) assert.equal(await shell.getAttribute('data-shell'), 'client');
+    await f.page.locator('[data-testid^="client-skeleton-"]').first().waitFor();
+    const shells = await f.page.evaluate(() => window.__expedileShells);
+    assert.ok(shells.every(kind => kind === 'client'), `Only the client's shell placeholder, if any (${JSON.stringify(shells)}).`);
     const before = { header: await header(), nav: await navBar() };
     release();
     await f.page.getByRole('navigation', { name: 'Navigation principale', exact: true }).waitFor({ state: 'attached' });

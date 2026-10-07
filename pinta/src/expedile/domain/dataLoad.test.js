@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { shellLoadBanner, staffDataState } from './dataLoad.js';
+import { holdsStaffData, shellLoadBanner, staffDataState } from './dataLoad.js';
 
 test('a failed first load is a failure; a failed refresh keeps the loaded data', () => {
   assert.deepEqual(staffDataState({ sbReady: false, dataLoading: false, dataError: 'Chargement impossible : Indisponibilité simulée', hasData: false }), { state: 'failed', reason: 'Chargement impossible : Indisponibilité simulée' });
@@ -16,11 +16,22 @@ test('a failed first load is a failure; a failed refresh keeps the loaded data',
   assert.equal(staffDataState({ dataLoading: true, dataError: 'ancien message' }).state, 'loading');
 });
 
-test('the shell banner never repeats a failure the page states itself', () => {
-  for (const path of ['/', '/colis', '/departs', '/conversations', '/equipe', '/settings', '/clients', '/clients/new', '/clients/abc'])
+test('held data are the dossiers, the clients or the departures of an earlier load', () => {
+  assert.equal(holdsStaffData({ data: [], clients: [], envois: [] }), false);
+  assert.equal(holdsStaffData({}), false);
+  assert.equal(holdsStaffData({ data: [{ id: 'd' }] }), true);
+  // Clients loaded, no active dossier: a failed retry keeps them (stale, the banner says it), never « failed ».
+  assert.equal(holdsStaffData({ data: [], clients: [{ id: 'c' }] }), true);
+  assert.equal(staffDataState({ sbReady: false, dataError: 'Chargement impossible : réseau', hasData: holdsStaffData({ data: [], clients: [{ id: 'c' }] }) }).state, 'stale');
+  assert.equal(holdsStaffData({ envois: [{ id: 'e' }] }), true);
+});
+
+test('the shell banner never repeats a failure the page states itself, nor hides it', () => {
+  for (const path of ['/', '/colis', '/departs', '/conversations', '/equipe', '/settings', '/clients', '/clients/abc'])
     assert.equal(shellLoadBanner(path, 'failed'), false, path);
-  for (const path of ['/colis/abc', '/devis', '/reception', '/plus']) assert.equal(shellLoadBanner(path, 'failed'), true, path);
+  // The new-client form has no failure of its own: the banner states it there.
+  for (const path of ['/clients/new', '/colis/abc', '/devis', '/reception', '/plus']) assert.equal(shellLoadBanner(path, 'failed'), true, path);
   // Loaded data kept after a failed refresh: the banner gives the reason everywhere, Mon travail included.
-  for (const path of ['/', '/colis', '/departs', '/colis/abc']) assert.equal(shellLoadBanner(path, 'stale'), true, path);
+  for (const path of ['/', '/colis', '/departs', '/colis/abc', '/clients', '/clients/new', '/settings']) assert.equal(shellLoadBanner(path, 'stale'), true, path);
   for (const state of ['ready', 'loading']) assert.equal(shellLoadBanner('/devis', state), false, state);
 });

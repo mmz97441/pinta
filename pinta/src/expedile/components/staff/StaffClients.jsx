@@ -8,6 +8,7 @@ import { useDialog } from '../ui/useDialog';
 import { parseClientFile, detectDuplicates, COL_MAP } from '../../utils/importClients';
 import { importRowIssue } from '../../domain/clientRequirements';
 import usePersistentDraft from '../../hooks/usePersistentDraft';
+import { holdsStaffData, staffDataState } from '../../domain/dataLoad';
 
 // Tokens of brand.css: subtle borders and surfaces follow the light and dark themes.
 const BORDER = 'border-[color:var(--border-subtle)]';
@@ -210,7 +211,7 @@ function ListSkeleton() {
 
 export default function StaffClients() {
   const navigate = useNavigate();
-  const { clients, data, can, dataLoading, dataError, sbReady, retryLoad } = useApp();
+  const { clients, data, envois = [], can, dataLoading, dataError, sbReady, retryLoad } = useApp();
   const [view, setView] = usePersistentDraft('clients:list', { search: '', filter: 'all', layout: 'cards', selected: null });
   const [importing, setImporting] = useState(false);
   const [retrying, setRetrying] = useState(false);
@@ -232,7 +233,10 @@ export default function StaffClients() {
   const filter = FILTERS.some(([key]) => key === view.filter) ? view.filter : 'all';
   const search = (view.search || '').trim();
   const visible = searchClients(clients, view.search).filter(client => filter === 'all' || (filter === 'pro' ? client.type === 'pro' : filter === 'telegram' ? Boolean(client.telegramChatId) : activeOf(client.id) > 0));
-  const state = clients.length ? 'ready' : dataLoading ? 'loading' : dataError || !sbReady ? 'error' : 'empty';
+  // The shell's rule (domain/dataLoad.js): nothing read → the failure here, with « Réessayer »; data held
+  // after a failed refresh or retry → the list (or its empty view) under the shell's banner, which says it.
+  const load = staffDataState({ sbReady, dataLoading, dataError, hasData: holdsStaffData({ data, clients, envois }) });
+  const state = clients.length ? 'ready' : load.state === 'loading' ? 'loading' : load.state === 'failed' ? 'error' : 'empty';
   const restored = useRef(false);
   useEffect(() => {
     if (restored.current || !view.selected || !visible.length) return;

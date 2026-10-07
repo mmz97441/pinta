@@ -5,8 +5,8 @@ import usePersistentDraft from '../../hooks/usePersistentDraft';
 import { useMinuteNow } from '../../hooks/useMinuteNow';
 import { departureReadiness } from '../../domain/departureReadiness';
 import { dossierTaskUrl } from '../../domain/dossierTasks';
-import { calendarDateLabel, departureDayLabel, isoCalendarDay, parisCalendarDay } from '../../domain/departureGroups';
-import { wishesAfterSubscription, wishesSubscriptionConfirmation } from '../../domain/departureWishes';
+import { departureDayLabel, isoCalendarDay, parisCalendarDay } from '../../domain/departureGroups';
+import { subscriptionEndNote, wishesAfterSubscription, wishesSubscriptionConfirmation } from '../../domain/departureWishes';
 import { closingLabel, departureDefaultClosing, destinationName, OPEN_DEPARTURE_STATUSES } from '../../domain/departurePlanning';
 import {
   assignmentFailure, confirmedLine, countLabel, departureClosingLine, departureDeparted, departureEditErrors, departureInView, departureOverdue,
@@ -14,7 +14,7 @@ import {
 } from '../../domain/departureBoard';
 import { parisDateTimeInput, parisDateTimeInstant } from '../../domain/parisTime';
 import { useApp } from '../../context/AppContext';
-import { staffDataState } from '../../domain/dataLoad';
+import { holdsStaffData, staffDataState } from '../../domain/dataLoad';
 import { plural } from '../../domain/plural';
 import { DESTINATIONS, STATUTS } from '../../constants';
 import * as sb from '../../lib/supabaseData';
@@ -121,7 +121,7 @@ export default function StaffDepartures({ embedded = false }) {
     .sort((left, right) => (left.date || '').localeCompare(right.date || '')));
   // Nothing loaded: the reason and « Réessayer » in place of the cards. A failed
   // refresh keeps the cards under the shell's banner; planning waits for the connection.
-  const loadFailed = staffDataState({ sbReady, dataLoading, dataError, hasData: data.length > 0 || envois.length > 0 }).state === 'failed';
+  const loadFailed = staffDataState({ sbReady, dataLoading, dataError, hasData: holdsStaffData({ data, clients, envois }) }).state === 'failed';
 
   // ── Planning form ────────────────────────────────────────────────────
   const openPlanning = () => { setForm(EMPTY_PLAN); setPlanErrors({}); setScopeError('plan', ''); setCreating(true); };
@@ -471,7 +471,7 @@ export default function StaffDepartures({ embedded = false }) {
         <h3 id={`departure-wishes-${envoi.id}`} className="departures-wishes-title"><CalendarCheck size={16} aria-hidden="true" /><span>{countLabel(wished.length, 'dossier souhaite', 'dossiers souhaitent')} partir ce <span className="whitespace-nowrap">jour-là</span></span></h3>
         <ul className="departures-wishes-list">{wished.map(dossier => <li key={dossier.id}>
           <Link to={`/colis/${dossier.id}?${new URLSearchParams({ returnTo })}`} className="departures-wishes-link">{dossier.ref}</Link>
-          <span className="departures-wishes-client">{[clients.find(client => client.id === dossier.clientId)?.nom, STATUTS[dossier.statut]?.label, lateEnd.has(dossier.id) ? `abonnement terminé le ${calendarDateLabel(lateEnd.get(dossier.id), { today: now })}` : null].filter(Boolean).join(' · ')}</span>
+          <span className="departures-wishes-client">{[clients.find(client => client.id === dossier.clientId)?.nom, STATUTS[dossier.statut]?.label, lateEnd.has(dossier.id) ? subscriptionEndNote(lateEnd.get(dossier.id), { today: now }) : null].filter(Boolean).join(' · ')}</span>
         </li>)}</ul>
         {can('perm_colis_affecter_envoi')
           ? <button type="button" className={`${BUTTON} departures-accent`} disabled={busy} onClick={() => assignWishes(envoi, wished)}>{assigning === envoi.id ? <Loader2 size={16} aria-hidden="true" className="animate-spin" /> : <CalendarCheck size={16} aria-hidden="true" />}Affecter ces dossiers</button>

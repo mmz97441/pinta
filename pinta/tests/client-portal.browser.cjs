@@ -804,7 +804,8 @@ async function main() {
       return f;
     });
 
-    // 20. The onboarding guide always closes; an unrecorded choice is said, and the guide returns at the next sign-in.
+    // 20. The onboarding guide always closes; an unrecorded choice is said as it behaves: closed in this
+    // tab, offered again in a new tab or at a next visit.
     for (const [width, theme] of [[390, 'light'], [1440, 'dark']]) await scenario(`guide-save-failure-${width}-${theme}`, async () => {
       const f = await session(browser, { width, theme, login: false });
       f.tables.clients[0].onboarded = false;
@@ -816,8 +817,14 @@ async function main() {
       await dialog.getByRole('button', { name: /^Passer/ }).click();
       await dialog.waitFor({ state: 'detached', timeout: 20000 });
       assert.ok(saves.calls > 0, 'the choice was sent');
-      await page.locator('[data-toast]').filter({ hasText: 'Le guide est fermé. Votre choix n’a pas pu être enregistré : il vous sera de nouveau proposé à votre prochaine connexion.' }).waitFor();
+      await page.locator('[data-toast]').filter({ hasText: 'Le guide est fermé. Votre choix n’a pas pu être enregistré : le guide vous sera de nouveau proposé dans un nouvel onglet ou lors de votre prochaine visite.' }).waitFor();
+      assert.equal(await page.getByText(/prochaine connexion/).count(), 0, 'Never promised for the next sign-in, which is not what happens.');
       await shot(f, 'guide-save-failure', { fullPage: false });
+      // What the message says: a new tab of the same session offers the guide again.
+      const second = await f.context.newPage();
+      await second.goto(`${base}/colis`);
+      await second.getByTestId('onboarding-overlay').waitFor();
+      await second.close();
       for (const [label, heading] of [[/^Expéditions/, 'Mes expéditions'], ['Profil', 'Camille Exemple'], ['Accueil', 'Bonjour Camille']]) {
         await navLink(f, label).click();
         await page.getByRole('heading', { level: 1, name: heading, exact: true }).waitFor();
@@ -879,6 +886,15 @@ async function main() {
       assert.doesNotMatch(normalize(await unavailable.innerText()), /pas encore renseigné/, 'a failure is never « not yet known »');
       await axe(page, 'outgoing tracking failure'); await typographyOk(page, 'outgoing tracking failure', 'main');
       await shot(f, 'outgoing-tracking-failure');
+      // A new attempt that fails again says so beside its button, never a silent « Réessayer ».
+      const before = tracking.calls;
+      await unavailable.getByRole('button', { name: 'Réessayer', exact: true }).click();
+      await unavailable.getByText('Le numéro de suivi transporteur est toujours indisponible. Réessayez dans un instant : les étapes de votre expédition restent visibles ici.', { exact: true }).waitFor();
+      assert.ok(tracking.calls > before, 'the tracking was read again');
+      await unavailable.getByRole('button', { name: 'Réessayer', exact: true }).waitFor();
+      assert.equal(await page.locator('[data-toast]').count(), 0, 'said beside the button, not in a toast');
+      await axe(page, 'outgoing tracking still failing'); await typographyOk(page, 'outgoing tracking still failing', 'main');
+      await shot(f, 'outgoing-tracking-still-failing');
       tracking.on = false;
       f.tables.envois[0].tracking_principal = 'SORTANT-123';
       await unavailable.getByRole('button', { name: 'Réessayer', exact: true }).click();
@@ -962,6 +978,46 @@ async function main() {
       await form.getByRole('button', { name: 'Enregistrer mon attente', exact: true }).click();
       await page.locator('[data-toast]').filter({ hasText: 'Votre demande d’attente est enregistrée.' }).waitFor();
       assert.deepEqual(decisions.map(input => input.p_expected_updated_at), ['2026-09-09T08:00:00Z', '2026-09-10T08:00:00Z']);
+      return f;
+    });
+
+    // 24c. A pause refused because a carton arrived meanwhile (the server set the expedition back to
+    // « mesure » and answers « Cette demande ne peut plus être modifiée »): the form stays open with the
+    // reason under it and the text typed, on the expedition read again; nothing can be sent until the
+    // consent is asked again, and the client closes it.
+    for (const [width, theme] of [[390, 'light'], [1440, 'dark']]) await scenario(`wait-refused-after-a-new-carton-${width}-${theme}`, async () => {
+      const f = await session(browser, { width, theme, login: false });
+      const decisions = [];
+      await f.context.route('**/rest/v1/rpc/client_decision', route => {
+        if (route.request().method() === 'OPTIONS') return route.fallback();
+        decisions.push(route.request().postDataJSON());
+        if (f.tables.colis[0].statut !== 'attente_feu_vert') return route.fulfill({ status: 400, contentType: 'application/json', headers: CORS, body: JSON.stringify({ code: 'P0001', message: 'Cette demande ne peut plus être modifiée', details: null, hint: null }) });
+        return route.fallback();
+      });
+      await f.login();
+      const page = f.page;
+      await page.goto(`${base}/colis/${ids.P}`);
+      const region = page.getByRole('region', { name: 'État actuel et prochaine étape', exact: true });
+      await region.getByText('2 cartons réceptionnés · expédition EXP-TEST-001').waitFor();
+      await page.getByRole('button', { name: 'Attendre d’autres achats', exact: true }).click();
+      await page.getByLabel('Votre précision').fill('J’attends une autre commande');
+      // Meanwhile the team receives a third carton: measures and consent start again.
+      const parcel = f.tables.colis[0];
+      Object.assign(parcel, { nb_colis: 3, trackings: [...parcel.trackings, 'TEST-003'], trackings_detail: [...parcel.trackings_detail, { number: 'TEST-003', fournisseur: 'Boutique C' }],
+        statut: 'mesure', feu_vert: 'en_attente', demande_feu_vert_envoyee_at: null, updated_at: '2026-09-10T08:00:00Z' });
+      await page.getByRole('button', { name: 'Enregistrer mon attente', exact: true }).click();
+      const form = page.getByTestId('client-wait-form');
+      await form.getByRole('alert').filter({ hasText: 'Votre attente n’a pas été enregistrée : votre expédition a changé entre-temps (un nouveau carton, par exemple).' }).waitFor();
+      // The expedition read again is shown above: its current step.
+      await region.getByRole('heading', { name: 'Mesures enregistrées', exact: true }).waitFor();
+      assert.equal(await form.getByLabel('Votre précision').inputValue(), 'J’attends une autre commande', 'the text typed is kept');
+      assert.equal(await form.getByRole('button', { name: 'Enregistrer mon attente', exact: true }).isDisabled(), true, 'nothing can be sent now');
+      assert.equal(await page.locator('[data-toast]').count(), 0, 'said in the form, never in a toast');
+      assert.equal(decisions.length, 1);
+      await axe(page, `wait refused ${width} ${theme}`); await typographyOk(page, 'wait refused', 'main');
+      await shot(f, 'wait-refused-new-carton', { fullPage: false });
+      await form.getByRole('button', { name: 'Fermer', exact: true }).click();
+      await form.waitFor({ state: 'detached' });
       return f;
     });
 

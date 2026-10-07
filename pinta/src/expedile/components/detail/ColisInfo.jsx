@@ -11,7 +11,6 @@ import CasierEditor, { casierEditable } from './CasierEditor';
 export default function ColisInfo({ compact = false, onCompleteReception, casierEditRequest = 0 }) {
   const { sel, selClient: cl, selDest, isStaff, flash, settings, can } = useApp();
   const [editCasier, setEditCasier] = useState(false);
-  const [casierSaved, setCasierSaved] = useState('');
   const [showCasierHist, setShowCasierHist] = useState(false);
   const casierEditButton = useRef(null);
   const wasEditingCasier = useRef(false);
@@ -23,7 +22,7 @@ export default function ColisInfo({ compact = false, onCompleteReception, casier
     handledCasierRequest.current = casierEditRequest;
     // A direct request opens the editor without replacing an unsaved correction
     // when the live dossier receives a colleague's update.
-    if (!editCasier) { setCasierSaved(''); setEditCasier(true); }
+    if (!editCasier) setEditCasier(true);
   }, [casierEditRequest, canEditCasier, editCasier]);
   // The editor focuses its own field; closing it returns to « Modifier le casier ».
   useEffect(() => {
@@ -137,21 +136,20 @@ export default function ColisInfo({ compact = false, onCompleteReception, casier
           or the editor in its place, its label above the field. */}
       {(sel.casier || isStaff) && (
         <div className="mt-2 pt-2 border-t">
-          {editCasier && canEditCasier ? <CasierEditor variant="panel" onDone={result => { setCasierSaved(result?.saved ? result.message : ''); setEditCasier(false); }} /> : (
+          {editCasier && canEditCasier ? <CasierEditor variant="panel" onDone={() => setEditCasier(false)} /> : (
             <div className="flex min-h-11 items-center gap-2">
               <span className="text-xs font-bold text-gray-600">Casier :</span>
               <span className={`text-sm font-mono font-bold ${sel.casier ? '' : 'text-gray-500 italic'}`} style={sel.casier ? { color: 'var(--brand-text)' } : {}}>
                 {sel.casier || 'Non attribué'}
               </span>
               {canEditCasier && (
-                <button ref={casierEditButton} aria-label="Modifier le casier" onClick={() => { setCasierSaved(''); setEditCasier(true); }} className="min-h-11 min-w-11 flex items-center justify-center rounded-lg text-gray-600 hover:text-gray-800">
+                <button ref={casierEditButton} aria-label="Modifier le casier" onClick={() => setEditCasier(true)} className="min-h-11 min-w-11 flex items-center justify-center rounded-lg text-gray-600 hover:text-gray-800">
                   <Edit3 size={16} aria-hidden="true" />
                 </button>
               )}
             </div>
           )}
-          {/* The toast stays under this panel: the confirmation is repeated here. */}
-          {casierSaved && !editCasier && <p role="status" className="dossier-casier-saved">{casierSaved}</p>}
+          {/* A saved casier is confirmed once, by the toast drawn above this panel (CasierEditor). */}
 
           {/* Casier history */}
           {sel.casierHistorique && sel.casierHistorique.length > 0 && (

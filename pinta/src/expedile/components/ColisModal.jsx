@@ -16,8 +16,8 @@ import { useDialog } from './ui/useDialog';
 import { receptionCartons, receptionMeasurements, receptionMeasurementIssues, receptionCartonManifest, hasCompleteReceptionMeasurements, RECEPTION_MEASURES, removeReceptionCarton, RECEPTION_APPEND_STATUSES, receptionAppendBlockReason, receptionAppendImpact, receptionDossierReturn } from '../domain/reception';
 import { safeWorkReturn } from '../domain/personalWork';
 import { plural } from '../domain/plural';
-import { newClientErrors } from '../domain/clientRequirements';
-import { firstNewClientField, newClientAlert, phoneErrorField } from '../domain/receptionClient';
+import { missingMessage, newClientFieldErrors } from '../domain/clientRequirements';
+import { firstNewClientField, newClientAlert } from '../domain/receptionClient';
 import { usePersistentDraft } from '../hooks/usePersistentDraft';
 import { upperCaseInPlace } from './detail/casierInput';
 import './reception.css';
@@ -379,17 +379,21 @@ export default function ColisModal({ open, onClose, initialColisId, initialClien
   };
 
   // ── New client inline ─────────────────────────────────────
-  // Correcting a refused field takes its error away (both phones answer « le téléphone »).
+  // Correcting a refused field takes its error away; either number answers « a phone is required ».
   const setNCField = (key, val) => {
     setNewClientForm((prev) => ({ ...prev, [key]: val }));
-    const errorKey = key === 'telFixe' ? 'tel' : key;
-    setNewClientErr((prev) => (prev[errorKey] ? { ...prev, [errorKey]: undefined } : prev));
+    setNewClientErr((prev) => {
+      const next = { ...prev, [key]: undefined };
+      if (key === 'telFixe' && prev.tel === missingMessage('tel')) next.tel = undefined;
+      return prev[key] || next.tel !== prev.tel ? next : prev;
+    });
   };
 
   // The refused fields of the new client, by form key (none: it can be created).
   const validateNewClient = () => {
-    // The information required for every client account (domain/clientRequirements.js, same rule as the database).
-    const errs = newClientErrors(newClientForm);
+    // The information required for every client account (domain/clientRequirements.js): the same rule as the
+    // staff form and the import, each number entered (mobile, landline) checked under its own field.
+    const errs = newClientFieldErrors(newClientForm);
     if (newClientForm.type === 'pro' && !newClientForm.raisonSociale.trim()) errs.raisonSociale = 'Raison sociale requise pour un pro';
     setNewClientErr(errs);
     return errs;
@@ -491,7 +495,7 @@ export default function ColisModal({ open, onClose, initialColisId, initialClien
       if (Object.keys(clientErrors).length) {
         // The client's fields come first in the form: they take the focus, not a measure.
         setPendingMeasureFocus(null);
-        setPendingClientFocus(firstNewClientField(clientErrors, newClientForm));
+        setPendingClientFocus(firstNewClientField(clientErrors));
         return;
       }
       if (!formValid) return;
@@ -677,9 +681,9 @@ export default function ColisModal({ open, onClose, initialColisId, initialClien
     }`;
 
   const labelCls = 'block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1';
-  // The new client's refused fields: the error under its field (the phone's under
-  // the number typed), the field marked invalid and described by it.
-  const ncError = key => key === 'tel' || key === 'telFixe' ? (phoneErrorField(newClientForm) === key ? newClientErr.tel : '') : newClientErr[key];
+  // The new client's refused fields: the error under its field (each number under its own;
+  // a missing phone under the mobile), the field marked invalid and described by it.
+  const ncError = key => newClientErr[key];
   const ncField = key => ({ id: `reception-client-${key}`, 'aria-invalid': ncError(key) ? true : undefined, 'aria-describedby': ncError(key) ? `reception-client-${key}-error` : undefined });
   const ncMessage = key => ncError(key) ? <p id={`reception-client-${key}-error`} className="mt-0.5 text-[11px] text-red-500">{ncError(key)}</p> : null;
   const clientAlert = isStaff && newClientMode ? newClientAlert(newClientErr) : '';
@@ -712,7 +716,7 @@ export default function ColisModal({ open, onClose, initialColisId, initialClien
       <p className="text-sm text-gray-700">{selectedClient?.nom} · {plural(receptionCartonManifest(receipt.colis).nbColis, 'carton reçu', 'cartons reçus')} dans cette expédition.</p>
       <p className="text-sm text-gray-700">Aucun message envoyé au client.</p>
     </div>
-    <button type="button" className="w-full min-h-12 rounded-xl px-4 py-3 font-bold text-white" style={{ background: BRAND.navy }} onClick={() => openReceivedDossier(receipt.colis, receipt.first - 1)}>Ouvrir le dossier {receipt.colis.ref}</button>
+    <button type="button" className="brand-bg w-full min-h-12 rounded-xl px-4 py-3 font-bold text-white" onClick={() => openReceivedDossier(receipt.colis, receipt.first - 1)}>Ouvrir le dossier {receipt.colis.ref}</button>
     <div className="flex flex-wrap gap-3">
       <button type="button" className="min-h-11 rounded-xl border border-gray-300 px-4 text-sm font-semibold text-gray-700" onClick={() => { setReceipt({ ...receipt, finished: false }); setPendingMeasureFocus({ index: 0, key: 'dimL' }); }}>Ajouter un carton à cette expédition</button>
       <button type="button" className="min-h-11 rounded-xl border border-gray-300 px-4 text-sm font-semibold text-gray-700" onClick={resetAndClose}>Réceptionner pour un autre client</button>
@@ -798,8 +802,7 @@ export default function ColisModal({ open, onClose, initialColisId, initialClien
                             setNewClientForm((prev) => ({ ...prev, nom: clientSearchQ.trim() }));
                             setClientSearchOpen(false);
                           }}
-                          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold text-white transition-all active:scale-95"
-                          style={{ background: BRAND.navy }}
+                          className="brand-bg inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold text-white transition-all active:scale-95"
                         >
                           <UserPlus size={13} />
                           Créer « {clientSearchQ.trim()} »
@@ -908,7 +911,7 @@ export default function ColisModal({ open, onClose, initialColisId, initialClien
                                 {plural(receptionCartonManifest(c).nbColis, 'carton déjà rattaché', 'cartons déjà rattachés')}
                               </span>
                             </span>
-                            <span className="reception-choice-action reception-token block text-center text-xs font-bold px-3 py-2 rounded-lg sm:py-1.5" style={{ background: BRAND.navy, color: 'white' }}>
+                            <span className="reception-choice-action reception-token brand-bg block text-center text-xs font-bold text-white px-3 py-2 rounded-lg sm:py-1.5">
                               Ajouter ici
                             </span>
                           </button>
@@ -1123,7 +1126,7 @@ export default function ColisModal({ open, onClose, initialColisId, initialClien
                     />
                     {ncMessage('tel')}
                   </div>
-                  {/* The phone error sits under the number typed: the landline when only it is filled. */}
+                  {/* Each number typed is checked under its own field (a missing phone: under the mobile). */}
                   <div>
                     <ReceptionInput label="Téléphone fixe"
                       type="tel"
@@ -1515,7 +1518,7 @@ export default function ColisModal({ open, onClose, initialColisId, initialClien
             {formErr.dimensions && <p role="alert" className={`${compactFooter ? 'mb-2' : 'mb-3'} text-sm font-semibold text-red-700`}>{formErr.dimensions}</p>}
             {saveError && <div role="alert" className={`${compactFooter ? 'mb-2' : 'mb-3'} text-sm font-semibold text-red-700`}><p>{saveError}</p>{fullPage && rattacherTarget && !pendingAppend && !pendingCreate && <button type="button" disabled={saving} className="min-h-11 underline" onClick={async () => { try { const updated = await appCtx.refreshColis(rattacherTarget.id); if (updated) { setRattacherTarget(updated); setSaveError('Le dossier est actualisé. Vos nouvelles mesures sont conservées : vérifiez le numéro du carton avant d’enregistrer.'); } } catch (error) { setSaveError(error.message); } }}>Actualiser le dossier sans perdre ma saisie</button>}</div>}
             {fullPage ? <div className={compactFooter ? 'grid grid-cols-2 gap-2' : 'grid gap-2 sm:grid-cols-2'}>
-              <button type="button" disabled={saving || Boolean(pendingAppend || pendingCreate)} onClick={() => runSave(() => mode === 'rattacher' ? handleRattacher('continue') : handleReceptionner(false, 'continue'))} className={`${compactFooter ? 'min-h-11 px-2 py-1.5 leading-tight whitespace-nowrap' : 'min-h-12 px-4 py-3'} rounded-xl text-sm font-bold text-white transition-all duration-200 ease-out hover:-translate-y-px active:scale-[0.98] disabled:opacity-60`} style={{ background: BRAND.navy }} aria-label={saving ? undefined : 'Enregistrer et ajouter un carton'}>{saving ? 'Enregistrement…' : compactFooter ? 'Ajouter un carton' : 'Enregistrer et ajouter un carton'}</button>
+              <button type="button" disabled={saving || Boolean(pendingAppend || pendingCreate)} onClick={() => runSave(() => mode === 'rattacher' ? handleRattacher('continue') : handleReceptionner(false, 'continue'))} className={`${compactFooter ? 'min-h-11 px-2 py-1.5 leading-tight whitespace-nowrap' : 'min-h-12 px-4 py-3'} brand-bg rounded-xl text-sm font-bold text-white transition-all duration-200 ease-out hover:-translate-y-px active:scale-[0.98] disabled:opacity-60`} aria-label={saving ? undefined : 'Enregistrer et ajouter un carton'}>{saving ? 'Enregistrement…' : compactFooter ? 'Ajouter un carton' : 'Enregistrer et ajouter un carton'}</button>
               <button type="button" disabled={saving || Boolean(pendingAppend || pendingCreate)} onClick={() => runSave(() => mode === 'rattacher' ? handleRattacher('finish') : handleReceptionner(false, 'finish'))} className={`${compactFooter ? 'min-h-11 px-2 py-1.5 leading-tight whitespace-nowrap' : 'min-h-12 px-4 py-3'} rounded-xl border border-gray-300 text-sm font-bold text-gray-800 transition-all duration-200 ease-out active:scale-[0.98] disabled:opacity-60`} aria-label="Terminer la réception">{compactFooter ? 'Terminer' : 'Terminer la réception'}</button>
             </div> : <div className="flex flex-wrap sm:flex-nowrap gap-3">
               <button

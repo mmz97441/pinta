@@ -9,7 +9,7 @@ import { needsConversationAction } from './domain/conversations';
 import { TaskAccessBoundary } from './context/TaskAccessContext';
 import { findDossierWorkAction, staffDisplayName } from './domain/personalWork';
 import { plural } from './domain/plural';
-import { shellLoadBanner, staffDataState } from './domain/dataLoad';
+import useShellLoadBanner from './hooks/useShellLoadBanner';
 import { staffName } from './components/workspace/WorkActionRow';
 import TaskOwnership from './components/workspace/TaskOwnership';
 import { AppProvider, useApp } from './context/AppContext';
@@ -159,14 +159,18 @@ function Permission({ allowed, children }) {
 const TEXT_ENTRY = 'textarea, select, [contenteditable]:not([contenteditable="false"]), input:not([type="button"]):not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]):not([type="image"]):not([type="reset"]):not([type="submit"]):not([type="hidden"])';
 
 /** Below 1024px, while the on-screen keyboard is open for a text field (the
- * visual viewport noticeably shorter than the window, or under 640px), the
- * bottom navigation steps aside. The visible height decides: it is checked
- * when the keyboard opens or closes (visualViewport resize) and when a text
- * field takes the focus. Leaving a field never brings the bar back by itself:
- * the press that moves the focus to a button must end on that button, not on
- * a bar appearing under the finger (the keyboard closing brings it back). */
-function useTypingOnPhone() {
+ * visual viewport noticeably shorter than the window, or under 640px: a phone
+ * on its side, a short or zoomed window), the bottom navigation steps aside.
+ * A text field taking the focus, or the visible height changing (the keyboard
+ * opening or closing), decides. Once the focus leaves text entry, the bar
+ * always comes back: at once for the keyboard (Tab, a scanner's Enter) or a
+ * script; for a finger or a mouse, once the press has ended (the frame after
+ * its click), so the bar never appears under the finger between the press and
+ * the release. `route`: a page change may remove the focused field without
+ * any focus event. */
+function useTypingOnPhone(route) {
   const [typing, setTyping] = useState(false);
+  const recheck = useRef(() => {});
   useEffect(() => {
     const viewport = window.visualViewport;
     const keyboardOpen = () => {
@@ -174,20 +178,45 @@ function useTypingOnPhone() {
       return window.innerWidth < 1024 && (window.innerHeight - height > 120 || height < 640);
     };
     const typingIn = element => Boolean(element?.matches?.(TEXT_ENTRY)) && keyboardOpen();
+    const settle = () => setTyping(typingIn(document.activeElement));
+    // A press of a finger or a mouse, from pointerdown to its click (or its cancellation).
+    let pressing = false;
+    let frame = 0;
     // A text field takes the focus with the keyboard already open: the bar steps aside.
     const focusIn = event => { if (typingIn(event.target)) setTyping(true); };
+    // The focus leaves text entry: the bar comes back, after the press when one is under way.
+    const focusOut = event => { if (!pressing && !event.relatedTarget?.matches?.(TEXT_ENTRY)) setTyping(false); };
+    const pressStart = () => { pressing = true; cancelAnimationFrame(frame); };
+    // The click (or the end of the gesture) has reached its target: the next frame decides.
+    const pressEnd = () => {
+      if (!pressing) return;
+      pressing = false;
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => { if (!pressing) settle(); });
+    };
     // The keyboard opens or closes: the visible height and the focused element decide.
-    const resize = () => setTyping(typingIn(document.activeElement));
-    resize();
+    const resize = () => settle();
+    recheck.current = () => { if (!pressing) settle(); };
+    settle();
+    const ends = ['click', 'auxclick', 'contextmenu', 'pointercancel', 'dragend', 'keydown'];
     document.addEventListener('focusin', focusIn);
+    document.addEventListener('focusout', focusOut);
+    window.addEventListener('pointerdown', pressStart, true);
+    for (const type of ends) window.addEventListener(type, pressEnd, true);
     window.addEventListener('resize', resize);
     viewport?.addEventListener('resize', resize);
     return () => {
+      cancelAnimationFrame(frame);
+      recheck.current = () => {};
       document.removeEventListener('focusin', focusIn);
+      document.removeEventListener('focusout', focusOut);
+      window.removeEventListener('pointerdown', pressStart, true);
+      for (const type of ends) window.removeEventListener(type, pressEnd, true);
       window.removeEventListener('resize', resize);
       viewport?.removeEventListener('resize', resize);
     };
   }, []);
+  useEffect(() => { recheck.current(); }, [route]);
   return typing;
 }
 
@@ -210,8 +239,11 @@ function useMeasuredHeight() {
 function StaffColisDetail() {
   const { id } = useParams();
   const { setSelId, sel, selClient, data, dataLoading, refreshColis, can, workActions = [], auth, teamUsers = [], envois = [] } = useApp();
+  // The shell's banner already states an interrupted load, with its « Réessayer ».
+  const outage = useShellLoadBanner();
   const [detailLoading, setDetailLoading] = useState(true);
   const [detailError, setDetailError] = useState('');
+  const [detailAttempt, setDetailAttempt] = useState(0);
   const navigate = useNavigate();
   const location = useLocation();
   const [contextSection, setContextSection] = useState(null);
@@ -241,7 +273,7 @@ function StaffColisDetail() {
     setDetailLoading(true); setDetailError('');
     if (id) { setSelId(id); refreshColis(id).catch((error) => { if (active) setDetailError(error.message || 'Chargement impossible.'); }).finally(() => { if (active) setDetailLoading(false); }); }
     return () => { active = false; setSelId(null); };
-  }, [id, setSelId, refreshColis]);
+  }, [id, setSelId, refreshColis, detailAttempt]);
 
   useEffect(() => { setContextSection(null); }, [id]);
   useEffect(() => {
@@ -265,8 +297,23 @@ function StaffColisDetail() {
   }, [detailLoading, id, sel?.id, task, location.search, location.hash, location.state, navigate]);
 
   if (dataLoading || detailLoading) return <LoadingView label="Chargement du dossier…" />;
-  if (detailError) return <div role="alert" className="p-6 text-sm text-red-700">{detailError}<button onClick={() => window.location.reload()} className="block min-h-11 font-semibold underline">Réessayer</button></div>;
-  if (!data.some((c) => c.id === id)) return <MissingColis />;
+  const held = data.some((c) => c.id === id);
+  if (detailError) {
+    // An interrupted load is already stated by the shell's banner, with its « Réessayer »
+    // (domain/dataLoad.js): the dossier of the last load stays readable under it, or the
+    // page says why it is empty, never a second failure message.
+    if (outage && !held) return <section className="max-w-lg mx-auto p-8 space-y-4">
+      <h1 className="text-xl font-bold text-gray-900">Dossier pas encore disponible</h1>
+      <p className="text-sm text-gray-600">Le chargement des données a échoué : ce dossier n’a pas pu être lu. Réessayez depuis le bandeau en haut de la page. Rien n’a été modifié.</p>
+      <Link className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-gray-300 px-4 text-sm font-semibold text-gray-800" to="/colis"><ChevronLeft size={16} aria-hidden="true" />Retour aux dossiers</Link>
+    </section>;
+    if (!outage) return <section role="alert" className="max-w-lg mx-auto p-8 space-y-4">
+      <h1 className="flex items-center gap-2 text-xl font-bold text-gray-900"><AlertTriangle size={20} className="text-red-700" aria-hidden="true" />Chargement impossible</h1>
+      <p className="text-sm text-gray-600">Ce dossier n’a pas pu être chargé ({detailError.replace(/[.\s]+$/, '')}). Rien n’a été modifié : réessayez dans un instant.</p>
+      <button type="button" onClick={() => setDetailAttempt((value) => value + 1)} className="inline-flex min-h-11 items-center gap-2 rounded-xl px-4 text-sm font-semibold text-white brand-bg active:scale-[0.98]"><RefreshCw size={16} aria-hidden="true" />Réessayer</button>
+    </section>;
+  }
+  if (!held) return <MissingColis />;
   if (!sel || sel.id !== id) return <LoadingView label="Ouverture du dossier…" />;
 
   const taskAction = findDossierWorkAction(sel, workActions, task, { can, actionId: new URLSearchParams(location.search).get('action') });
@@ -400,10 +447,11 @@ function AppContent() {
   const navigate = useNavigate();
   const location = useLocation();
   const { auth, authLoading, authError, signOut, isStaff, authCl, updateClient, sbReady, dataLoading, dataError, retryLoad, passwordRecovery, completePasswordRecovery, can, flash, ask, data = [], inboxItems = [] } = useApp();
+  const shellBanner = useShellLoadBanner();
   const conversationCount = data.filter(item => !item.archive && needsConversationAction(item)).length + inboxItems.filter(item => item.status === 'unassigned').length;
   const [onboardingDismissed, setOnboardingDismissed] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const typingOnPhone = useTypingOnPhone();
+  const typingOnPhone = useTypingOnPhone(location.key);
   const [bottomNavRef, bottomNavHeight] = useMeasuredHeight();
   useEffect(() => { setOnboardingDismissed(false); }, [auth?.session?.user?.id]);
   // Once the profile is resolved, the next visit starts from the right shell (staff or client).
@@ -445,8 +493,7 @@ function AppContent() {
 
   // A failed first load: the pages that state it themselves (reason and « Réessayer »)
   // take the banner's place; loaded data kept after a failed refresh: the banner, everywhere.
-  const dataState = staffDataState({ sbReady, dataLoading, dataError, hasData: data.length > 0 });
-  const loadBanner = isStaff && shellLoadBanner(location.pathname, dataState.state) ? <div role="alert" className="bg-red-50 border-b border-red-200 text-red-800 text-xs px-4 py-3 flex flex-wrap items-center gap-2">
+  const loadBanner = shellBanner ? <div role="alert" className="bg-red-50 border-b border-red-200 text-red-800 text-xs px-4 py-3 flex flex-wrap items-center gap-2">
     <AlertTriangle size={16} /><span className="flex-1">{dataError || 'Connexion aux données interrompue. Réessayez avant de modifier un dossier.'}</span>
     <button onClick={retryLoad} className="font-bold underline min-h-11">Réessayer</button>
   </div> : null;

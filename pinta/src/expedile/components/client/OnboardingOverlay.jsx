@@ -61,8 +61,9 @@ const STEPS = [
   },
 ];
 
-// The guide closed while « onboarded » could not be saved: it stays closed for this visit and comes back
-// at the next sign-in (the choice was not recorded). Per tab; blocked storage only shortens this to the page.
+// The guide closed while « onboarded » could not be saved: it stays closed in this tab (reloads included)
+// and is offered again in a new tab or at a next visit, since the choice was not recorded (sessionStorage is
+// per tab; blocked storage only shortens this to the page). The toast says exactly that.
 const DISMISSED = 'expedile-onboarding-dismissed';
 const dismissedKey = clientId => `${DISMISSED}:${clientId || 'client'}`;
 function wasDismissed(clientId) { try { return sessionStorage.getItem(dismissedKey(clientId)) === '1'; } catch { return false; } }
@@ -83,7 +84,7 @@ export default function OnboardingOverlay({ onDone, replay = false }) {
     catch {
       rememberDismissed(authCl?.id);
       setClosed(true);
-      flash({ msg: 'Le guide est fermé. Votre choix n’a pas pu être enregistré\u00a0: il vous sera de nouveau proposé à votre prochaine connexion.', type: 'info', duration: 8000 });
+      flash({ msg: 'Le guide est fermé. Votre choix n’a pas pu être enregistré\u00a0: le guide vous sera de nouveau proposé dans un nouvel onglet ou lors de votre prochaine visite.', type: 'info', duration: 8000 });
     }
   };
   const dialogRef = useDialog(!closed, finish);

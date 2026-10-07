@@ -52,7 +52,34 @@ test('phone and tablet: centred, above the bottom bars, else below the top bar',
   assert.deepEqual([tablet.left, tablet.width], [164, 440]);
 });
 
-test('the toast never covers a control: the first free place, else the page place covering the fewest', () => {
+test('phone and tablet: then the corners, narrower, beside a short heading or a toolbar group', () => {
+  const tablet = toastCandidates({ viewport: { width: 768, top: 0, height: 1024 }, ceiling: 48, floor: 961, heightFor });
+  assert.deepEqual(tablet.map(item => item.kind), ['bottom', 'top', 'bottom-end', 'bottom-start', 'top-end', 'top-start']);
+  const corner = Object.fromEntries(tablet.slice(2).map(item => [item.kind, [item.left, item.top, item.width]]));
+  assert.deepEqual(corner, { 'bottom-end': [456, 899, 300], 'bottom-start': [12, 899, 300], 'top-end': [456, 56, 300], 'top-start': [12, 56, 300] });
+  assert.ok(tablet.every(item => item.bottom <= 961 && item.top >= 48), 'Between the top bar and the bottom navigation.');
+  // A phone: the corners leave a strip free on one side.
+  const phone = toastCandidates({ viewport: { width: 390, top: 0, height: 844 }, ceiling: 48, floor: 781, heightFor });
+  assert.deepEqual(phone.filter(item => item.kind.endsWith('-end')).map(item => [item.left, item.right]), [[78, 378], [78, 378]]);
+  // 320 px: the centred bar is already as narrow as a corner, nothing more to try.
+  assert.deepEqual(toastCandidates({ viewport: { width: 320, top: 0, height: 640 }, ceiling: 48, floor: 580, heightFor }).map(item => item.kind), ['bottom', 'top']);
+});
+
+test('a toast keeps its place while that place stays clear, and moves only off a control', () => {
+  const viewport = { width: 1440, top: 0, height: 900 };
+  const candidates = toastCandidates({ viewport, rail: { left: 0, right: 64, width: 64 }, heightFor });
+  // Held at the top-end corner: a free bottom corner does not pull it back.
+  assert.equal(chooseToastPlacement(candidates, [], { current: 'top-end' }).kind, 'top-end');
+  // A row scrolled under it: the first clear place.
+  const topEnd = candidates.find(item => item.kind === 'top-end');
+  const row = box(topEnd.left, topEnd.top + 10, 200, 40);
+  assert.equal(chooseToastPlacement(candidates, [row], { current: 'top-end' }).kind, 'bottom');
+  // Nothing clear: the fewest covered, said by `covered` (ui/Toast.jsx closes it at the next scroll).
+  const everywhere = candidates.map(item => box(item.left + 4, item.top + 4, 20, 20));
+  assert.equal(chooseToastPlacement(candidates, everywhere, { current: 'bottom' }).covered, 1);
+});
+
+test('the toast never covers a control: the first free place, else the page place hiding the least', () => {
   const viewport = { width: 1440, top: 0, height: 900 };
   const rail = { left: 0, right: 220, width: 220 };
   const candidates = toastCandidates({ viewport, rail, zone: { top: 436, bottom: 693 }, heightFor });
@@ -60,11 +87,27 @@ test('the toast never covers a control: the first free place, else the page plac
   // Something clickable in the free space (an entry, a backdrop control): a free corner of the page.
   assert.equal(chooseToastPlacement(candidates, [box(20, 640, 150, 40)]).kind, 'bottom');
   assert.equal(chooseToastPlacement(candidates, [box(20, 640, 150, 40), box(300, 850, 120, 44)]).kind, 'bottom-end');
-  // Covered everywhere: the page place covering the fewest controls, never the navigation column.
+  // Covered everywhere: the page place hiding the least of the controls (by area), never the
+  // navigation column. Here bottom-end hides 100 × 24 px of one control, bottom 120 × 34 px of one,
+  // top-end parts of two.
   const crowded = [box(20, 640, 150, 40), box(300, 850, 120, 44), box(1300, 860, 100, 30), box(1350, 20, 60, 40), box(1200, 40, 60, 30)];
   const chosen = chooseToastPlacement(candidates, crowded);
-  assert.equal(chosen.kind, 'bottom');
+  assert.equal(chosen.kind, 'bottom-end');
   assert.equal(chosen.covered, 1);
   assert.equal(crowded.filter(control => overlaps(chosen, control)).length, 1);
+  assert.equal(Object.prototype.hasOwnProperty.call(chosen, 'area'), false, 'Only the place and what it covers.');
   assert.equal(chooseToastPlacement([], []), null);
+});
+
+test('with no clear place, the edge of a button rather than a whole clickable row', () => {
+  // A tablet list: the rows fill the bottom places; the top-end corner only grazes a tab.
+  const viewport = { width: 768, top: 0, height: 1024 };
+  const tall = () => 54;
+  const candidates = toastCandidates({ viewport, ceiling: 48, floor: 961, heightFor: tall });
+  const tabs = [box(16, 104, 120, 44), box(156, 104, 90, 44), box(266, 104, 70, 44), box(350, 104, 118, 44)];
+  const heading = box(16, 58, 205, 30);
+  const rows = [box(0, 795, 768, 99), box(0, 894, 768, 67)];
+  const chosen = chooseToastPlacement(candidates, [...tabs, heading, ...rows]);
+  assert.equal(chosen.kind, 'top-end', 'Only 12 × 6 px of « Accords clients » hidden, its centre clear.');
+  assert.equal(chosen.covered, 1);
 });

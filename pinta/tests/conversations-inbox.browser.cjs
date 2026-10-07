@@ -458,13 +458,26 @@ async function main() {
       const audit = await new AxeBuilder({ page: f.page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
       assert.deepEqual(audit.violations.map(issue => ({ id: issue.id, nodes: issue.nodes.map(node => node.target) })), []);
       await f.page.screenshot({ path: `${output}/keyboard-390x500-${dark ? 'dark' : 'light'}.png` });
-      // Leaving the field alone never brings the bar back under the finger:
-      // it returns when the keyboard closes (the visible height grows back).
-      await reply(f).evaluate(node => node.blur());
+      // A press that takes the focus from the field (a mouse here; a finger on « Envoyer » in the
+      // next scenario): the bar stays aside while the press lasts, so the release lands on the
+      // control, never on a bar appearing under the pointer; once the press has ended, it is back.
+      const nav = f.page.locator('[data-staff-bottom-nav]');
+      const more = f.page.getByRole('button', { name: 'Autres actions sur la conversation', exact: true });
+      const target = await more.boundingBox();
+      await f.page.mouse.move(target.x + target.width / 2, target.y + target.height / 2);
+      await f.page.mouse.down();
       await f.page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-      assert.equal(await f.page.locator('[data-staff-bottom-nav]').isVisible(), false, 'Still hidden while the keyboard is open.');
+      assert.equal(await nav.isVisible(), false, 'Still hidden while the press lasts.');
+      await f.page.mouse.up();
+      await f.page.waitForFunction(() => document.querySelector('button[aria-label="Autres actions sur la conversation"]')?.getAttribute('aria-expanded') === 'true');
+      await nav.waitFor();
+      // Back in the field, then a script takes the focus away: no press to wait for, back at once.
+      await reply(f).focus();
+      await nav.waitFor({ state: 'hidden' });
+      await reply(f).evaluate(node => node.blur());
+      await nav.waitFor();
       await f.page.setViewportSize({ width: 390, height: 844 });
-      await f.page.locator('[data-staff-bottom-nav]').waitFor();
+      await nav.waitFor();
     });
 
     // A real finger on « Envoyer » while the keyboard is open: the first tap sends.
@@ -549,12 +562,9 @@ async function main() {
       await send.scrollIntoViewIfNeeded();
       const typing = await send.boundingBox();
       assert.ok(typing.y >= 48 && typing.y + typing.height <= 568, `The send button is reachable while typing: ${JSON.stringify(typing)}`);
-      // Moving the focus to « Envoyer » keeps the bar aside while the keyboard is
-      // open (it would come back under the finger); closing the keyboard brings it back.
+      // The focus moved to « Envoyer » by the keyboard or a script: no press to protect, the bar
+      // comes back at once (never only on a resize), and « Envoyer » stays reachable above it.
       await send.focus();
-      await f.page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-      assert.equal(await f.page.locator('[data-staff-bottom-nav]').isVisible(), false, 'The focus leaving the field never brings the bar back by itself.');
-      await f.page.evaluate(() => window.dispatchEvent(new Event('resize')));
       await f.page.locator('[data-staff-bottom-nav]').waitFor();
       await send.scrollIntoViewIfNeeded();
       const action = await send.boundingBox(), nav = await f.page.getByRole('button', { name: 'Dossiers', exact: true }).locator('..').boundingBox();

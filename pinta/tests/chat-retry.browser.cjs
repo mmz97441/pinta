@@ -88,9 +88,23 @@ const navigate = (page, to) => page.evaluate(url => { window.history.pushState({
       ...Array.from({ length: 6 }, (_, index) => staff(`s${index + 4}`, 'envoye', 'telegram', `Suivi ${index + 1} : vos cartons restent ensemble en attendant le colis Zalando.`, String(25 + index))),
     ];
   };
-  for (const [width, height] of [[1440, 1000], [1280, 800], [390, 844]]) for (const dark of [false, true]) await run('client', `client-thread-reads-vous-without-team-delivery-states-${width}-${dark ? 'dark' : 'light'}`, async f => {
+  // The page and the log at rest (five unchanged frames): axe measures the targets where they stay,
+  // never one passing under the sticky header while a scroll is still under way.
+  const scrollAtRest = page => page.evaluate(() => new Promise(resolve => {
+    const log = document.querySelector('#client-conversation [role="log"]');
+    let last = '', still = 0, frames = 0;
+    const tick = () => {
+      const now = `${scrollX},${scrollY},${log ? log.scrollTop : ''}`;
+      still = now === last ? still + 1 : 0; last = now; frames += 1;
+      if (still >= 5 || frames > 600) resolve(still >= 5); else requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }));
+  // `wide`: the wider fonts of a Linux machine (the CI), here on every machine.
+  for (const [width, height, fonts] of [[1440, 1000], [1280, 800], [1280, 800, 'wide'], [390, 844]]) for (const dark of [false, true]) await run('client', `client-thread-reads-vous-without-team-delivery-states-${width}${fonts ? '-wide-fonts' : ''}-${dark ? 'dark' : 'light'}`, async f => {
     clientThread(f);
     await f.context.addInitScript(theme => localStorage.setItem('expedile-theme', theme), dark ? 'dark' : 'light');
+    if (fonts) await f.context.addInitScript(() => { const apply = () => { const style = document.createElement('style'); style.textContent = '* { font-family: Verdana, "DejaVu Sans", sans-serif !important; }'; document.head.appendChild(style); }; if (document.head) apply(); else document.addEventListener('DOMContentLoaded', apply); });
     await f.page.setViewportSize({ width, height });
     await f.login(); await f.page.goto(`${base}/colis/${ids.P}?panel=messages`);
     const thread = f.page.locator('#client-conversation');
@@ -114,9 +128,10 @@ const navigate = (page, to) => page.evaluate(url => { window.history.pushState({
     const bottom = await log.evaluate(node => node.scrollTop);
     await f.page.keyboard.press('PageUp');
     await f.page.waitForFunction(start => document.querySelector('#client-conversation [role="log"]').scrollTop < start, bottom);
+    assert.equal(await scrollAtRest(f.page), true, 'The page and the log come to rest.');
     const audit = await new AxeBuilder({ page: f.page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
     assert.deepEqual(audit.violations.map(item => ({ id: item.id, nodes: item.nodes.map(node => node.target) })), []);
-    await f.page.screenshot({ path: `${out}/client-thread-${width}-${dark ? 'dark' : 'light'}.png`, fullPage: true });
+    await f.page.screenshot({ path: `${out}/client-thread-${width}${fonts ? '-wide-fonts' : ''}-${dark ? 'dark' : 'light'}.png`, fullPage: true });
     // A sent message: the client is told the team has it and answers here.
     await thread.getByLabel('Votre message à l’équipe', { exact: true }).fill('Le colis Zalando est arrivé chez vous ?');
     await thread.getByRole('button', { name: 'Envoyer le message', exact: true }).click();

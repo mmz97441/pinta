@@ -192,8 +192,6 @@ html.dark .dossier-casier-input[aria-invalid='true'] { border-color: #f4b9b9; }
 .dossier-casier-all { display: inline-flex; align-items: center; gap: 10px; min-height: 44px; justify-self: start; font-size: .875rem; line-height: 1.4; color: var(--text-secondary); cursor: pointer; }
 .dossier-casier-all input { flex-shrink: 0; width: 20px; height: 20px; accent-color: var(--brand-navy); }
 html.dark .dossier-casier-all input { accent-color: #c4dae5; }
-.dossier-casier-saved { font-size: .875rem; color: #047857; }
-html.dark .dossier-casier-saved { color: #b0dfc0; }
 .dossier-departure-feedback { font-size: .875rem; color: #047857; }
 html.dark .dossier-departure-feedback { color: #b0dfc0; }
 @media (prefers-reduced-motion: reduce) {

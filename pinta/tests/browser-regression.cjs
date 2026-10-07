@@ -797,6 +797,79 @@ async function main() {
     assert.equal(await f.page.getByText('EXP-TEST-001', { exact: true }).count(), 0);
     observations.push({ test: 'failed-related-data-no-demo-fallback', pass: true });
     await f.context.close();
+
+    // ── An interrupted load is stated once per screen, with one « Réessayer » (domain/dataLoad.js) ──
+    const spa = (page, target) => page.evaluate(route => { history.pushState({}, '', route); dispatchEvent(new PopStateEvent('popstate')); }, target);
+    const failures = page => page.evaluate(() => {
+      const shown = node => { const box = node.getBoundingClientRect(); return box.width > 0 && box.height > 0 && getComputedStyle(node).visibility !== 'hidden'; };
+      return { alerts: [...document.querySelectorAll('[role="alert"]')].filter(shown).map(node => node.innerText.replace(/\s+/g, ' ').trim()),
+        retries: [...document.querySelectorAll('button')].filter(shown).filter(button => /^Réessayer$/.test(button.textContent.trim())).length };
+    });
+    // The screen is settled once its own reads are over: no loading view, the expected heading.
+    async function oneFailure(page, route, heading, label) {
+      await spa(page, route);
+      await (typeof heading === 'string' ? page.getByRole('heading', { name: heading, exact: true }).first() : heading(page)).waitFor({ timeout: 20000 });
+      await page.waitForFunction(() => !document.querySelector('[data-testid="loading-view"]') && !document.body.innerText.includes('Chargement de l’historique'), null, { timeout: 20000 });
+      const state = await failures(page);
+      assert.equal(state.alerts.length, 1, `${label} ${route}: one failure message (${JSON.stringify(state)})`);
+      assert.equal(state.retries, 1, `${label} ${route}: one « Réessayer » (${JSON.stringify(state)})`);
+      return state;
+    }
+    // 1. The first load failed, nothing held: the new-client form shows the shell's banner (it
+    // has no failure of its own); the dossier page states nothing a second time.
+    f = await setup(browser, 'directeur', { failTable: 'colis' });
+    await f.login();
+    let state = await oneFailure(f.page, '/clients/new', 'Nouveau client', 'first load');
+    assert.match(state.alerts[0], /Indisponibilité simulée/);
+    await oneFailure(f.page, `/colis/${P}`, 'Dossier pas encore disponible', 'first load');
+    await f.page.getByText('Réessayez depuis le bandeau en haut de la page.', { exact: false }).waitFor();
+    await oneFailure(f.page, '/settings', 'Chargement impossible', 'first load');
+    await f.page.screenshot({ path: path.join(output, 'load-failure-first-settings.png') });
+    assert.equal(f.networkDenied.length, 0, f.networkDenied.join('\n'));
+    observations.push({ test: 'first-load-failure-stated-once-per-screen', pass: true });
+    await f.context.close();
+
+    // 2. Loaded, then a refresh and its « Réessayer » failed: the data held stay readable under
+    // the banner, never a second failure (Paramètres read only, the dossier, the client history).
+    for (const team of ['with-dossiers', 'clients-only']) {
+      f = await setup(browser, 'directeur');
+      // A team with clients but no active dossier yet: the failure must still be visible.
+      if (team === 'clients-only') f.tables.colis = [];
+      const outage = { index: false, all: false };
+      await f.context.route('**/rest/v1/colis?*', route => {
+        const request = route.request(), url = new URL(request.url());
+        if (request.method() !== 'GET') return route.fallback();
+        const index = url.searchParams.get('select') === 'id,updated_at,client_id';
+        return outage.all || (outage.index && index) ? route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ message: outage.all ? 'Indisponibilité simulée' : 'Actualisation refusée (essai)' }) }) : route.fallback();
+      });
+      await f.login();
+      await f.page.getByRole('heading', { name: 'Mon travail', exact: true }).waitFor();
+      outage.index = true;
+      await f.page.evaluate(() => window.dispatchEvent(new Event('focus')));
+      const banner = f.page.getByRole('alert').filter({ hasText: 'Actualisation des dossiers impossible' });
+      await banner.waitFor();
+      outage.all = true;
+      await banner.getByRole('button', { name: 'Réessayer', exact: true }).click();
+      await f.page.getByRole('alert').filter({ hasText: 'Chargement impossible : Indisponibilité simulée' }).waitFor({ timeout: 20000 });
+      state = await oneFailure(f.page, '/clients', 'Clients', team);
+      assert.match(state.alerts[0], /Chargement impossible : Indisponibilité simulée/, 'The banner, on the clients list too.');
+      await f.page.getByText('Exemple Camille', { exact: true }).first().waitFor();
+      await oneFailure(f.page, '/settings', 'Paramètres', team);
+      await f.page.getByTestId('settings-read-only').waitFor();
+      assert.equal(await f.page.getByRole('button', { name: 'Enregistrer les tarifs', exact: true }).isDisabled(), true, 'Read only until the data are loaded again.');
+      await f.page.screenshot({ path: path.join(output, `load-failure-retry-settings-${team}.png`) });
+      if (team === 'with-dossiers') {
+        await oneFailure(f.page, `/colis/${P}`, page => page.getByTestId('dossier-task-header'), team);
+        await oneFailure(f.page, `/clients/${C}`, 'Exemple Camille', team);
+      } else {
+        // An unknown client page refers to the banner, which is shown.
+        await oneFailure(f.page, '/clients/c9999999-0000-4000-8000-000000000999', 'Fiche pas encore disponible', team);
+        await f.page.getByText('Réessayez depuis le bandeau en haut de la page.', { exact: false }).waitFor();
+      }
+      assert.equal(f.networkDenied.length, 0, f.networkDenied.join('\n'));
+      observations.push({ test: `failed-retry-stated-once-per-screen-${team}`, pass: true });
+      await f.context.close();
+    }
   } catch (error) {
     observations.push({ test: 'failure', message: error.stack });
     const failedPage = browser.contexts().flatMap(context => context.pages()).pop();

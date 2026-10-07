@@ -45,7 +45,7 @@ function arrivalDatesFixture(f) {
 }
 
 async function fixture(browser, options = {}) {
-  const f = await setup(browser, options.restricted ? 'preparateur' : 'directeur');
+  const f = await setup(browser, options.restricted ? 'preparateur' : 'directeur', { device: options.device || {} });
   f.page.setDefaultTimeout(10000);await f.context.addInitScript(installContrast);
   f.tables.staff_users.push({ id: B, auth_id: B, nom: 'Madly', role: 'directeur', actif: true, staff_permissions: {} });
   if (options.restricted) {
@@ -70,6 +70,8 @@ async function fixture(browser, options = {}) {
   f.tables.factures = f.tables.colis.map((parcel, i) => ({...invoice,id:`invoice-${i}`,colis_id:parcel.id}));
   f.tables.lignes = f.tables.colis.map((parcel, i) => ({...line,id:`line-${i}`,colis_id:parcel.id,facture_id:`invoice-${i}`}));
   f.tables.envois = [{id:D,ref:'DEP-QA-01',destination_code:'974',date_depart:'2099-10-03',statut:'planifie',updated_at:'2026-10-01T08:00:00Z'}];
+  // A full working list (the toast tests): more dossiers like the first one, without a task.
+  for (let n = 0; n < (options.more || 0); n++) f.tables.colis.push(parcel(parcelId(100 + n), `EXP-LIST${String(100 + n)}`, {statut:'mesure',feu_vert:'en_attente',final_packages:[],fin_l:null,fin_w:null,fin_h:null,fin_p:null,final_measurements_version:null,outgoing_parcel_count:0,devis_total:0,quote_version:0}));
   const work = (id, colisId, kind, changes = {}) => ({id,colis_id:colisId,kind,state:'ready',assignee_id:null,version:4,created_at:'2026-10-01T08:00:00Z',updated_at:'2026-10-01T08:00:00Z',...changes});
   f.tables.staff_work_actions = [
     work(RECEIVE,P,'reception'),
@@ -1113,6 +1115,7 @@ async function main() {
       await dialog.getByRole('button',{name:'Passer à « En vol »',exact:true}).click();
       const result=f.page.getByRole('dialog',{name:'Résultat du changement de statut',exact:true});await result.waitFor();
       await result.getByText('1 dossier passé à « En vol » · 1 dossier non modifié, resté sélectionné.',{exact:true}).waitFor();
+      assert.equal(await f.page.locator('[data-toast]').count(),0,'The dialog states the result: no toast repeats it under its backdrop.');
       assert.equal(await result.locator(`[data-bulk-item="${P4}"] .dossier-bulk-result`).innerText(),'Passé à « En vol »');
       assert.equal(await result.locator(`[data-bulk-item="${P5}"] .dossier-bulk-result`).innerText(),'Non modifié : Passage de « Expédié » à « En vol » refusé par le serveur.');
       assert.deepEqual(f.patchUrls.map(url=>{const query=new URL(url).searchParams;return [query.get('id'),query.get('updated_at')];}),[[`eq.${P4}`,`eq.${versions[P4]}`],[`eq.${P5}`,`eq.${versions[P5]}`]],'One write after the other, each with the version the person confirmed.');
@@ -1368,6 +1371,143 @@ async function main() {
       await axeClean(f,'[data-testid="column-filter-dialog"]');await f.page.screenshot({path:`${output}/columns-cards-390-${dark?'dark':'light'}.png`});
       await columns.press('Escape');assert.deepEqual(businessWrites(f),[]);
     });
+    // ── Toasts over the list: never over a command, never swallowing its first click ──
+    // A real message of the list: the archives cannot be read (a refused read, never retried).
+    const failArchives = f => f.context.route('**/rest/v1/colis?*', route => new URL(route.request().url()).searchParams.get('archive') === 'eq.true' && route.request().method() === 'GET'
+      ? reply(route, { message: 'Archives indisponibles (essai)' }, 500) : route.fallback());
+    const archivesToast = f => f.page.locator('[data-toast="error"]').filter({ hasText: 'Les archives n’ont pas pu être chargées. Archives indisponibles (essai)' });
+    // What the shown toast hides: each command or clickable row whose visible part (inside its
+    // scrolling list) it overlaps, and whether the centre of that visible part is under it.
+    const toastCover = f => f.page.evaluate(() => {
+      const toast = document.querySelector('[data-toast]');
+      if (!toast || getComputedStyle(toast).visibility === 'hidden') return null;
+      const box = toast.getBoundingClientRect();
+      const covered = [];
+      for (const control of document.querySelectorAll('button, a[href], input:not([type="hidden"]), select, textarea, summary, [role="button"], [role="link"], [role="tab"], [role="checkbox"], tr[data-dossier-row]')) {
+        if (toast.contains(control)) continue;
+        const r = control.getBoundingClientRect();
+        if (!r.width || !r.height) continue;
+        let part = { left: Math.max(r.left, 0), top: Math.max(r.top, 0), right: Math.min(r.right, innerWidth), bottom: Math.min(r.bottom, innerHeight) };
+        for (let parent = control.parentElement; parent && parent !== document.body; parent = parent.parentElement) {
+          const style = getComputedStyle(parent);
+          if (!/(auto|scroll|hidden|clip)/.test(`${style.overflowX} ${style.overflowY}`)) continue;
+          const clip = parent.getBoundingClientRect();
+          part = { left: Math.max(part.left, clip.left), top: Math.max(part.top, clip.top), right: Math.min(part.right, clip.right), bottom: Math.min(part.bottom, clip.bottom) };
+        }
+        if (part.right - part.left < 1 || part.bottom - part.top < 1) continue;
+        if (part.right <= box.left || part.left >= box.right || part.bottom <= box.top || part.top >= box.bottom) continue;
+        const x = (part.left + part.right) / 2, y = (part.top + part.bottom) / 2;
+        toast.style.visibility = 'hidden';
+        const under = document.elementFromPoint(x, y);
+        toast.style.visibility = '';
+        if (!under || !(control === under || control.contains(under))) continue;
+        const top = document.elementFromPoint(x, y);
+        covered.push({ name: (control.getAttribute('aria-label') || control.textContent).trim().replace(/\s+/g, ' ').slice(0, 40), centreHidden: Boolean(top && toast.contains(top)) });
+      }
+      return { placement: toast.dataset.placement, box: [box.left, box.top, box.width, box.height].map(Math.round), covered };
+    });
+    const toastSettled = f => f.page.locator('[data-toast]').evaluate(node => Promise.all(node.getAnimations().map(animation => animation.finished)));
+    for (const [width, dark, collapse] of [[1440, false, true], [1440, true, true], [1280, false, false], [768, false, false], [768, true, false]]) await scenario(`a-toast-never-hides-a-command-or-a-clickable-row-and-the-first-click-opens-the-dossier-${width}${collapse ? 'c' : ''}-${dark ? 'dark' : 'light'}`, async f => {
+      await failArchives(f);
+      await f.page.setViewportSize(width === 768 ? { width, height: 1024 } : sizeOf(width));await theme(f,dark);await open(f);await waitTheme(f,dark);
+      if (collapse) await f.page.getByRole('button',{name:'Réduire la navigation',exact:true}).click();
+      await filtersButton(f).click();
+      await f.page.getByRole('button',{name:'Inclure les archives',exact:true}).click();
+      await archivesToast(f).waitFor();
+      // The filters close: the page changes under the toast, which moves clear of it.
+      await filtersButton(f).click();
+      await f.page.getByRole('group',{name:'Filtres des dossiers',exact:true}).waitFor({state:'hidden'});
+      await toastSettled(f);
+      // Polled: the toast moves on the frame after the page changed (slower machines included).
+      const settled = state => state && state.covered.every(item => !item.centreHidden) && (!collapse || (state.placement === 'top-end' && !state.covered.length)) && (width !== 1280 || state.placement === 'rail');
+      let cover;
+      for (const until = Date.now() + 4000; Date.now() < until;) { cover = await toastCover(f); if (settled(cover)) break; await f.page.evaluate(() => new Promise(resolve => requestAnimationFrame(resolve))); }
+      assert.ok(cover, 'The message is shown.');
+      assert.deepEqual(cover.covered.filter(item => item.centreHidden), [], `No command, nor clickable row, has its centre under the toast (${JSON.stringify(cover)}).`);
+      // Desktop, navigation folded: the corner beside the heading's text (a block heading is not its text).
+      if (collapse) { assert.equal(cover.placement, 'top-end'); assert.deepEqual(cover.covered, [], 'Nothing at all under the toast.'); }
+      if (width === 1280) assert.equal(cover.placement, 'rail', 'The free space of the navigation column.');
+      await axeClean(f);
+      await f.page.screenshot({path:`${output}/toast-over-list-${width}${collapse ? 'c' : ''}-${dark?'dark':'light'}.png`});
+      // The first click on the lowest visible dossier (where a toast used to sit) opens it.
+      const last = await f.page.evaluate(() => {
+        const nav = document.querySelector('[data-staff-bottom-nav]'), floor = nav && getComputedStyle(nav).display !== 'none' ? nav.getBoundingClientRect().top : innerHeight;
+        const list = document.querySelector('#dossier-table-scroll')?.getBoundingClientRect();
+        const rows = [...document.querySelectorAll('tr[data-dossier-row]')].map(row => ({ id: row.dataset.dossierRow, box: row.getBoundingClientRect() }))
+          .filter(row => row.box.height && row.box.top >= (list?.top || 0) && row.box.bottom <= Math.min(floor, list?.bottom || innerHeight));
+        const lowest = rows[rows.length - 1];
+        const ref = lowest && document.querySelector(`tr[data-dossier-row="${lowest.id}"] [data-column="client"]`)?.getBoundingClientRect();
+        return lowest && { id: lowest.id, x: ref.left + ref.width / 2, y: ref.top + ref.height / 2 };
+      });
+      assert.ok(last, 'A whole row in view.');
+      if (width === 768) await f.page.touchscreen.tap(last.x, last.y); else await f.page.mouse.click(last.x, last.y);
+      await f.page.waitForURL(url => url.pathname === `/colis/${last.id}`, { timeout: 5000 });
+      assert.deepEqual(businessWrites(f),[]);
+    }, { more: 18, device: width === 768 ? { hasTouch: true, isMobile: true } : {} });
+    // A phone: the message of an action taken in the filters sheet (a modal dialog) waits behind
+    // it, never drawn under its backdrop; then, once the person scrolls the list under it, the
+    // toast moves off the commands or closes, and the first tap on « Consulter » opens the dossier.
+    for (const dark of [false, true]) await scenario(`a-phone-toast-waits-behind-the-filters-sheet-then-never-swallows-a-tap-after-a-scroll-390-${dark ? 'dark' : 'light'}`, async f => {
+      await failArchives(f);
+      await f.page.setViewportSize({width:390,height:844});await theme(f,dark);await open(f);await waitTheme(f,dark);
+      await filtersButton(f).click();
+      const sheet = f.page.getByTestId('filters-sheet');await sheet.waitFor();
+      await sheet.getByRole('button',{name:'Inclure les archives',exact:true}).click();
+      await f.page.locator('[data-toast]').waitFor({state:'attached'});
+      await sheet.getByRole('button',{name:'Inclure les archives',exact:true}).waitFor();
+      await f.page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      assert.equal(await f.page.locator('[data-toast]').evaluate(node => getComputedStyle(node).visibility), 'hidden', 'Behind the modal sheet: not drawn under its backdrop.');
+      await f.page.screenshot({path:`${output}/toast-behind-sheet-390-${dark?'dark':'light'}.png`});
+      await sheet.getByRole('button',{name:/^Voir/}).click();await sheet.waitFor({state:'hidden'});
+      await archivesToast(f).waitFor();
+      await toastSettled(f);
+      const shown = await toastCover(f);
+      assert.deepEqual(shown.covered.filter(item => item.centreHidden), [], `Shown once the sheet is closed, over no command (${JSON.stringify(shown)}).`);
+      await axeClean(f);
+      await f.page.screenshot({path:`${output}/toast-after-sheet-390-${dark?'dark':'light'}.png`});
+      // The person scrolls the list (a wheel here, a finger on a phone) under the toast.
+      const list = await f.page.locator('[data-dossier-card]:visible').first().boundingBox();
+      await f.page.mouse.move(195, list.y + 40);
+      for (let step = 0; step < 6; step++) { await f.page.mouse.wheel(0, 120); await f.page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))); }
+      let after;
+      for (const until = Date.now() + 4000; Date.now() < until;) { after = await toastCover(f); if (!after || after.covered.every(item => !item.centreHidden)) break; await f.page.evaluate(() => new Promise(resolve => requestAnimationFrame(resolve))); }
+      assert.ok(!after || after.covered.every(item => !item.centreHidden), `After the scroll, the toast hides no command: moved or closed (${JSON.stringify(after)}).`);
+      // The « Consulter » nearest the bottom of the screen: one tap opens its dossier.
+      const target = await f.page.evaluate(() => {
+        const nav = document.querySelector('[data-staff-bottom-nav]').getBoundingClientRect();
+        const buttons = [...document.querySelectorAll('[data-dossier-card] [data-column="action"] button')].map(button => ({ button, box: button.getBoundingClientRect() }))
+          .filter(item => item.box.height && item.box.top >= 60 && item.box.bottom <= nav.top);
+        const lowest = buttons[buttons.length - 1];
+        return lowest && { id: lowest.button.closest('[data-dossier-card]').dataset.dossierCard, x: lowest.box.left + lowest.box.width / 2, y: lowest.box.top + lowest.box.height / 2 };
+      });
+      assert.ok(target, 'A « Consulter » in view.');
+      await f.page.touchscreen.tap(target.x, target.y);
+      await f.page.waitForURL(url => url.pathname === `/colis/${target.id}`, { timeout: 5000 });
+      assert.deepEqual(businessWrites(f),[]);
+    }, { more: 18, device: { hasTouch: true, isMobile: true } });
+    // The bulk result dialog states the result itself: no toast repeats it under its backdrop
+    // (a click on such a toast closed the dialog and lost the per-dossier reasons).
+    for (const dark of [false, true]) await scenario(`the-bulk-result-dialog-is-the-only-report-no-toast-under-it-390-${dark ? 'dark' : 'light'}`, async f => {
+      shipped(f,{[P4]:'expedie',[P5]:'expedie'});
+      await f.page.setViewportSize({width:390,height:844});await theme(f,dark);await open(f);await waitTheme(f,dark);
+      await check(f,P4,'EXP-TAB004');await check(f,P5,'EXP-TAB005');
+      await bar(f).getByRole('combobox',{name:'Changer le statut',exact:true}).selectOption('transit');
+      await bar(f).getByRole('button',{name:'Appliquer',exact:true}).click();
+      const dialog=f.page.getByRole('dialog',{name:'Passer à « En vol »',exact:true});await dialog.waitFor();
+      await dialog.getByRole('button',{name:'Passer à « En vol »',exact:true}).click();
+      const result=f.page.getByRole('dialog',{name:'Résultat du changement de statut',exact:true});
+      await result.getByRole('status').filter({hasText:'2 dossiers passés à « En vol ».'}).waitFor();
+      await f.page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      assert.equal(await f.page.locator('[data-toast]').count(), 0, 'No toast under the result dialog.');
+      // A tap on the summary keeps the dialog and its reasons.
+      const summary = await result.getByRole('status').boundingBox();
+      await f.page.touchscreen.tap(summary.x + summary.width / 2, summary.y + summary.height / 2);
+      assert.equal(await f.page.locator('#dossier-bulk-dialog').evaluate(node => node.open), true);
+      await axeClean(f,'[data-testid="bulk-status-dialog"]');
+      await f.page.screenshot({path:`${output}/bulk-result-no-toast-390-${dark?'dark':'light'}.png`});
+      await result.getByRole('button',{name:'Fermer',exact:true}).click();await result.waitFor({state:'hidden'});
+      assert.equal(await f.page.locator('[data-toast]').count(), 0, 'Nor once it is closed: the result was read in the dialog.');
+    }, { device: { hasTouch: true, isMobile: true } });
   } finally {await browser.close();await fs.writeFile(`${output}/results.json`,JSON.stringify(results,null,2));}
 }
 main().catch(error=>{console.error(error);process.exitCode=1;});

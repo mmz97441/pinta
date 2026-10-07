@@ -11,7 +11,8 @@ import usePersistentDraft from '../../hooks/usePersistentDraft';
 import { useMinuteNow } from '../../hooks/useMinuteNow';
 import { findColisByReference, normalizeColisReference } from '../../lib/supabaseData';
 import { buildDossierTableModel, defineDossierTableColumn, isDossierTableColumnSortable, sortDossierTableRows, dossierTableSortDirectionLabel, BULK_STATUS_STEPS, BULK_STATUS_REASONS, bulkStatusPlan, bulkRefusalReason, countLabel, countWord } from '../../domain/dossierTable';
-import { staffDataState } from '../../domain/dataLoad';
+import { holdsStaffData, staffDataState } from '../../domain/dataLoad';
+import useParamInput from '../../hooks/useParamInput';
 import useMediaQuery from '../../hooks/useMediaQuery';
 import { staffAvailable, sortWorkActions, workActionUrl } from '../../domain/personalWork';
 import DossierColumnOptions, { ColumnDialog, DossierColumnVisibility } from './DossierColumnOptions';
@@ -120,6 +121,10 @@ export default function StaffColisPage() {
   const setActiveDest = (value) => setParam('dest', value);
   const search = searchParams.get('q') || '';
   const setSearch = (value) => setParam('q', value);
+  // The text as typed or scanned; the address follows it (hooks/useParamInput.js).
+  const [searchText, changeSearch] = useParamInput(search, setSearch);
+  // Enter pressed before the address caught up with the text (a scanner validates at once).
+  const pendingEnter = useRef(null);
   const exactReference = normalizeColisReference(search);
   const [referenceLookup, setReferenceLookup] = useState({ reference: '', status: 'idle', row: null, error: '' });
   const [referenceAttempt, setReferenceAttempt] = useState(0);
@@ -446,17 +451,16 @@ export default function StaffColisPage() {
     const results = [];
     for (const item of run.items) {
       // The version the person confirmed: a colleague's change is reported, never overwritten.
-      try { await upd(item.id, { statut: run.statut }, { expectedUpdatedAt: item.updatedAt || undefined }); results.push({ id: item.id, ok: true }); }
+      // Each refusal is listed in the result dialog with its reason: no toast under it.
+      try { await upd(item.id, { statut: run.statut }, { expectedUpdatedAt: item.updatedAt || undefined, report: false }); results.push({ id: item.id, ok: true }); }
       catch (error) { results.push({ id: item.id, ok: false, reason: bulkRefusalReason(error) }); }
       setBulkRun(current => current && { ...current, results: [...results] });
     }
     const refused = results.filter(result => !result.ok).map(result => result.id);
     setSelectedIds(new Set(refused));
+    // The result dialog stays open and states the outcome (its role="status" summary and each
+    // dossier's line): no toast repeats it, under the dialog's backdrop.
     setBulkRun(current => current && { ...current, phase: 'done', results });
-    const changed = results.length - refused.length;
-    flash(refused.length
-      ? { msg: `${countLabel(changed, 'dossier')} mis à jour · ${countLabel(refused.length, 'dossier')} non ${countWord(refused.length, 'modifié', 'modifiés')}, encore ${countWord(refused.length, 'sélectionné', 'sélectionnés')}`, type: 'warning' }
-      : { msg: `${countLabel(changed, 'dossier')} ${countWord(changed, 'passé', 'passés')} à « ${run.label} »`, type: 'success' });
   };
   const closeBulkRun = () => { if (!bulkRunning) setBulkRun(null); };
   const toggleSelection = id => setSelectedIds(previous => { const next = new Set(previous); if (next.has(id)) next.delete(id); else next.add(id); return next; });
@@ -477,6 +481,13 @@ export default function StaffColisPage() {
   // A row, its reference or the only search result opens the dossier itself,
   // which resolves its current step; only the action button opens the task.
   const openDossier = id => navigate(`/colis/${encodeURIComponent(id)}?${new URLSearchParams({ returnTo })}`);
+  // Enter: the dossier of an exact reference, or the only dossier found.
+  const submitSearch = () => { if (exactReference) openReferenceDossier(); else if (sorted.length === 1) openDossier(sorted[0].id); };
+  useEffect(() => {
+    if (pendingEnter.current === null || pendingEnter.current !== search) return;
+    pendingEnter.current = null;
+    submitSearch();
+  }, [search]);
   const openTask = (id, action) => action ? navigate(workActionUrl(action, returnTo, data.find(item => item.id === id))) : openDossier(id);
   const selectedFromUrl = searchParams.get('dossier');
   useEffect(() => {
@@ -495,7 +506,7 @@ export default function StaffColisPage() {
 
   // A failed load never reads as an empty list: no count, no « Aucun dossier ».
   // A failed refresh keeps the loaded dossiers under the shell's banner.
-  const { state: dataLoad, reason: dataProblem } = staffDataState({ sbReady, dataLoading, dataError, hasData: data.length > 0 });
+  const { state: dataLoad, reason: dataProblem } = staffDataState({ sbReady, dataLoading, dataError, hasData: holdsStaffData({ data, clients, envois }) });
   const loadFailed = dataLoad === 'failed';
   const visibleCount = sorted.length;
 
@@ -535,10 +546,10 @@ export default function StaffColisPage() {
           <div className="dossier-toolbar">
             <div className="dossier-toolbar-search relative">
               <Search size={18} aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
-              <input type="search" value={search} onChange={e => setSearch(e.target.value)} aria-label="Rechercher ou scanner un colis"
-                onKeyDown={event => { if (event.key !== 'Enter') return; if (exactReference) openReferenceDossier(); else if (sorted.length === 1) openDossier(sorted[0].id); }}
+              <input type="search" value={searchText} onChange={e => { pendingEnter.current = null; changeSearch(e.target.value); }} aria-label="Rechercher ou scanner un colis"
+                onKeyDown={event => { if (event.key !== 'Enter') return; if (searchText !== search) pendingEnter.current = searchText; else submitSearch(); }}
                 placeholder="Référence, client, casier ou suivi…" className="min-h-11 w-full pl-10 pr-10 text-sm" />
-              {search && <button aria-label="Effacer la recherche" onClick={() => setSearch('')} className="absolute right-0 top-0 flex min-h-11 w-10 items-center justify-center text-gray-500"><X size={17} aria-hidden="true" /></button>}
+              {searchText && <button aria-label="Effacer la recherche" onClick={() => changeSearch('')} className="absolute right-0 top-0 flex min-h-11 w-10 items-center justify-center text-gray-500"><X size={17} aria-hidden="true" /></button>}
             </div>
             <div role="group" aria-label="Choisir les tâches affichées" className="dossier-scope">
               {[['all', 'Tous'], ['mine', 'Mes tâches'], ['pool', 'À prendre']].map(([value, label]) => <button key={value} type="button" aria-pressed={taskScope === value}

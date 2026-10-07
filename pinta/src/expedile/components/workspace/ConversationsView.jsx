@@ -15,7 +15,8 @@ import { useMinuteNow } from '../../hooks/useMinuteNow';
 import { staffName } from './WorkActionRow';
 import InboxAttachment from './InboxAttachment';
 import WorkLoadError from './WorkLoadError';
-import { staffDataState } from '../../domain/dataLoad';
+import useParamInput from '../../hooks/useParamInput';
+import { holdsStaffData, staffDataState } from '../../domain/dataLoad';
 import TaskOwnership from './TaskOwnership';
 import ChatPanel from '../detail/ChatPanel';
 import DossierContextPanel from '../detail/DossierContextPanel';
@@ -44,7 +45,7 @@ function useWideScreen() {
 }
 
 export default function ConversationsView() {
-  const { data = [], clients = [], inboxItems = [], workActions = [], workError, workLoading, teamUsers = [], auth, can, ask, flash, refreshInbox, refreshColis, refreshWork, sel, setSelId, sbReady, dataLoading, dataError, retryLoad } = useApp();
+  const { data = [], clients = [], envois = [], inboxItems = [], workActions = [], workError, workLoading, teamUsers = [], auth, can, ask, flash, refreshInbox, refreshColis, refreshWork, sel, setSelId, sbReady, dataLoading, dataError, retryLoad } = useApp();
   const [retrying, setRetrying] = useState(false);
   const [params, setParams] = useSearchParams();
   const location = useLocation();
@@ -137,7 +138,7 @@ export default function ConversationsView() {
   const initialLoading = workLoading && !workSeen && !workActions.length;
   // The dossiers and their messages never loaded: no conversation can be listed
   // nor counted, so no « 0 » nor « Aucune conversation », only the reason and a retry.
-  const dataLoad = staffDataState({ sbReady, dataLoading, dataError, hasData: data.length > 0 });
+  const dataLoad = staffDataState({ sbReady, dataLoading, dataError, hasData: holdsStaffData({ data, clients, envois }) });
   const loadFailed = dataLoad.state === 'failed';
   const retryLoading = async () => {
     if (retrying) return;
@@ -145,6 +146,8 @@ export default function ConversationsView() {
     try { await retryLoad?.(); } catch { /* The reason stays on screen. */ } finally { setRetrying(false); }
   };
   const change = (key, value) => setParams(previous => { const next = new URLSearchParams(previous); value ? next.set(key, value) : next.delete(key); return next; }, { replace: true });
+  // The text as typed; the address follows it (hooks/useParamInput.js).
+  const [queryText, changeQuery] = useParamInput(params.get('q') || '', value => change('q', value));
   const clearFilters = () => setParams(previous => { const next = new URLSearchParams(previous); next.delete('q'); next.delete('state'); next.delete('owner'); return next; }, { replace: true });
   const select = (key, id) => { setParams(previous => { const next = new URLSearchParams(previous); next.delete('dossier'); next.delete('ouvert'); next.delete('inbox'); next.set(key, id); return next; }); setError(''); setAssignment(''); };
   const close = () => { setParams(previous => { const next = new URLSearchParams(previous); next.delete('dossier'); next.delete('ouvert'); next.delete('inbox'); return next; }); };
@@ -227,7 +230,7 @@ export default function ConversationsView() {
       {!loadFailed && <><div className="dossier-toolbar conversation-toolbar">
         <div className="dossier-toolbar-search relative">
           <Search size={18} aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
-          <input type="search" value={params.get('q') || ''} onChange={event => change('q', event.target.value)} aria-label="Rechercher un client ou EXP" placeholder="Client, EXP, message…" className="w-full" />
+          <input type="search" value={queryText} onChange={event => changeQuery(event.target.value)} aria-label="Rechercher un client ou EXP" placeholder="Client, EXP, message…" className="w-full" />
         </div>
         <button ref={filtersButton} type="button" className="dossier-toolbar-button dossier-toolbar-icon-button" aria-label={`Filtres${owner ? ' · 1' : ''}`} aria-haspopup="dialog" aria-expanded={filtersOpen} aria-controls={filtersOpen ? 'conversation-filters-dialog' : undefined} onClick={() => setFiltersOpen(open => !open)}>
           <ListFilter size={18} aria-hidden="true" />{owner && <span className="dossier-toolbar-badge" aria-hidden="true">1</span>}

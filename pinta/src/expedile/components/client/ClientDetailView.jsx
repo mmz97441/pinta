@@ -44,6 +44,9 @@ function decisionRefusal(error, decision, firstWait) {
     : `Votre expédition vient d’être mise à jour (un nouveau carton, par exemple)${NB}: vérifiez-la ci-dessous, puis confirmez à nouveau.` };
   return { message: `Votre réponse n’a pas été enregistrée.${message && !TECHNICAL.test(message) ? ` ${message}` : ' Vérifiez votre connexion, puis réessayez.'}` };
 }
+// A pause refused because the expedition no longer awaits the client's consent (a carton arrived and is
+// being measured, or the request was already answered): the form stays open with this reason under it.
+const WAIT_NO_LONGER_POSSIBLE = `Votre attente n’a pas été enregistrée${NB}: votre expédition a changé entre-temps (un nouveau carton, par exemple). Son état est à jour ci-dessus. Si votre accord est de nouveau nécessaire, nous vous le demanderons, et vous pourrez alors enregistrer votre attente.`;
 
 // ── Phase accordion step ───────────────────────────────────────────────────────
 // Icons and chevrons use theme tokens: navy text in light mode, the light brand text in dark mode.
@@ -119,7 +122,12 @@ export default function ClientDetailView() {
   const [updateNotice, setUpdateNotice] = useState('');
   const [waitError, setWaitError] = useState(null);
   const [trackingRetry, setTrackingRetry] = useState(false);
+  // A new attempt to read the carrier tracking failed again: said next to its « Réessayer ».
+  const [trackingRetryFailed, setTrackingRetryFailed] = useState(false);
   const [showWait, setShowWait] = useState(false);
+  // A pause the server refused: its form stays open with the reason under it, whatever step the
+  // expedition read again has reached (the step change would otherwise close it).
+  const waitKept = useRef(false);
   const [waitVersion, setWaitVersion] = useState(null);
   const [waitUntil, setWaitUntil] = useState('');
   const [waitReason, setWaitReason] = useState('J’attends d’autres achats');
@@ -130,8 +138,8 @@ export default function ClientDetailView() {
   const [departure, setDeparture] = useState({ colisId: null, state: 'idle', date: null });
   const [departureAttempt, setDepartureAttempt] = useState(0);
   const departureWanted = plannedDepartureShown(sel);
-  useEffect(() => { setTimeOpen(curPhaseIdx); setDecisionError(''); setWaitError(null); setShowWait(false); }, [sel?.id, curPhaseIdx]);
-  useEffect(() => { setUpdateNotice(''); }, [sel?.id]);
+  useEffect(() => { waitKept.current = false; setWaitError(null); setShowWait(false); setUpdateNotice(''); setTrackingRetryFailed(false); }, [sel?.id]);
+  useEffect(() => { setTimeOpen(curPhaseIdx); setDecisionError(''); if (!waitKept.current) { setWaitError(null); setShowWait(false); } }, [sel?.id, curPhaseIdx]);
   useEffect(() => { setDescOpen(false); }, [sel?.id]);
   useEffect(() => {
     // A long description is clamped to two lines; the toggle appears only when text is actually hidden.
@@ -186,16 +194,23 @@ export default function ClientDetailView() {
   const toggleStep = (idx) => {
     if (clientPhaseState(idx, sel.statut) !== 'future') setTimeOpen((prev) => prev === idx ? null : idx);
   };
+  const closeWait = () => { waitKept.current = false; setWaitError(null); setShowWait(false); };
   const recordDecision = async (decision, options) => {
     setDecisionPending(true); setDecisionError(''); setWaitError(null); setUpdateNotice('');
-    try { await feuVert(sel.id, decision, { expectedUpdatedAt: sel.updatedAt, ...options }); setShowWait(false); }
+    if (decision === 'wait') waitKept.current = false;
+    try { await feuVert(sel.id, decision, { expectedUpdatedAt: sel.updatedAt, ...options }); closeWait(); }
     catch (error) {
       // A stale version: the expedition has been read again (feuVert), the decision now concerns what is shown.
       // The message goes where the person acts: in the open wait form, else at the top of the current step.
       const refusal = decisionRefusal(error, decision, firstWait);
       if (decision === 'wait') {
-        setWaitError(refusal);
-        if (refusal.stale && error.refreshed?.updatedAt) setWaitVersion(error.refreshed.updatedAt);
+        // Whatever the refusal, the form stays open with its reason, on the expedition read again.
+        const refreshed = error.refreshed || await refreshColis(sel.id).catch(() => null);
+        const stillAsked = !refreshed || (refreshed.statut === 'attente_feu_vert' && !refreshed.archive);
+        waitKept.current = true;
+        setWaitError(stillAsked ? refusal : { closed: true, message: WAIT_NO_LONGER_POSSIBLE });
+        if (refreshed?.updatedAt) setWaitVersion(refreshed.updatedAt);
+        setShowWait(true);
       } else if (refusal.stale) setUpdateNotice(refusal.message);
       else setDecisionError(refusal.message);
     }
@@ -203,7 +218,7 @@ export default function ClientDetailView() {
   };
   const submitWait = (event) => {
     event.preventDefault();
-    if (decisionPending) return;
+    if (decisionPending || sel.statut !== 'attente_feu_vert' || sel.archive) return;
     // A date the server would refuse is said under the field, before anything is sent.
     if (waitUntil && waitUntil < firstWait) {
       setWaitError({ field: 'date', message: `Choisissez une date de reprise à partir du ${clientDate(firstWait)}.` });
@@ -212,10 +227,12 @@ export default function ClientDetailView() {
     }
     recordDecision('wait', { expectedUpdatedAt: waitVersion, waitUntil: waitUntilInstant(waitUntil), reason: waitReason.trim() });
   };
+  // A failed read of the tracking keeps the expedition (outgoingTrackingError, lib/supabaseData.js): a new
+  // failure is said next to the button, never a silent return to « Réessayer ».
   const retryTracking = async () => {
-    setTrackingRetry(true);
-    try { await refreshColis(sel.id); }
-    catch { flash({ msg: 'Le suivi transporteur est toujours indisponible. Réessayez dans un instant.', type: 'error' }); }
+    setTrackingRetry(true); setTrackingRetryFailed(false);
+    try { const fresh = await refreshColis(sel.id); if (fresh?.outgoingTrackingError) setTrackingRetryFailed(true); }
+    catch { setTrackingRetryFailed(true); }
     finally { setTrackingRetry(false); }
   };
   const handleFeuVert = (ok) => {
@@ -239,6 +256,30 @@ export default function ClientDetailView() {
     try { const { exportDevisPDF } = await import('../../utils/exportDevisPDF'); await exportDevisPDF(sel, authCl, getDestByCP(authCl?.cp)); }
     catch (error) { flash({ msg: 'Le PDF n’a pas pu être généré. ' + error.message, type: 'error' }); }
   };
+
+  // The pause form: in the consent request, or, once the server refused it because the expedition no
+  // longer awaits the client's consent (`possible` false), on its own in the current step, kept open with
+  // the reason under it and the text typed, until the client closes it.
+  const waitForm = (possible) => <form noValidate data-testid="client-wait-form" className="space-y-3 rounded-xl border border-slate-200 p-3" onSubmit={submitWait}>
+    <fieldset disabled={!possible} className="min-w-0 space-y-3">
+      <p className="text-sm text-slate-600">Nous conservons vos cartons et suspendons nos relances. Cette demande ne déclenche aucune préparation&nbsp;: vous donnerez votre accord quand vous serez prêt(e).</p>
+      <label className="block text-sm font-semibold text-slate-600">Votre précision<textarea required maxLength={500} value={waitReason} onChange={(e) => setWaitReason(e.target.value)} className="mt-1 block w-full rounded-lg border border-slate-200 bg-white p-2 text-sm" /></label>
+      <div>
+        {/* The first day offered is the first one the server accepts: never today. */}
+        <label htmlFor="client-wait-until" className="block text-sm font-semibold text-slate-600">Attendre jusqu’au (facultatif)</label>
+        <input id="client-wait-until" type="date" min={firstWait} value={waitUntil}
+          onChange={(e) => { setWaitUntil(e.target.value); if (waitError?.field === 'date') setWaitError(null); }}
+          aria-invalid={waitError?.field === 'date' ? 'true' : undefined} aria-describedby={waitError?.field === 'date' ? 'client-wait-until-error' : 'client-wait-until-hint'}
+          className={`mt-1 block min-h-11 w-full rounded-lg border bg-white px-2 text-sm ${waitError?.field === 'date' ? 'border-red-600' : 'border-slate-200'}`} />
+        {waitError?.field === 'date'
+          ? <p id="client-wait-until-error" role="alert" className="mt-1 text-sm text-red-700">{waitError.message}</p>
+          : <p id="client-wait-until-hint" className="mt-1 text-sm text-slate-600">À partir du {clientDate(firstWait)}. Sans date, nous attendons simplement votre accord.</p>}
+      </div>
+      {waitError && waitError.field !== 'date' && !(possible && waitError.closed) && <p role="alert" className="text-sm text-red-700">{waitError.message}</p>}
+      <button disabled={!possible || decisionPending || !waitReason.trim()} className="min-h-11 w-full rounded-xl brand-bg text-sm font-semibold text-white transition-all duration-200 ease-out active:scale-[0.98] disabled:opacity-50">{decisionPending ? 'Enregistrement…' : 'Enregistrer mon attente'}</button>
+    </fieldset>
+    {!possible && <button type="button" onClick={closeWait} className={`${SECONDARY_BUTTON} w-full`}>Fermer</button>}
+  </form>;
 
   // ── Phase content renderers ───────────────────────────────────────────────
   const phaseContent = (phaseIdx) => {
@@ -286,25 +327,9 @@ export default function ClientDetailView() {
               )}
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 <button type="button" disabled={decisionPending} onClick={() => handleFeuVert(true)} className="flex min-h-11 items-center justify-center gap-2 rounded-xl brand-bg px-3 py-3 text-sm font-bold text-white transition-all duration-200 ease-out hover:translate-y-[-1px] active:scale-[0.98] disabled:opacity-50"><ThumbsUp size={16} aria-hidden="true" />{decisionPending ? 'Enregistrement…' : 'Autoriser la préparation'}</button>
-                <button type="button" disabled={decisionPending} onClick={() => { if (!showWait) setWaitVersion(sel.updatedAt); setShowWait(v => !v); }} aria-expanded={showWait} className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-slate-300 px-3 py-3 text-sm font-semibold text-slate-700 transition-all duration-200 ease-out active:scale-[0.98]"><Clock size={16} aria-hidden="true" />Attendre d’autres achats</button>
+                <button type="button" disabled={decisionPending} onClick={() => { if (showWait) { closeWait(); return; } setWaitVersion(sel.updatedAt); setShowWait(true); }} aria-expanded={showWait} className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-slate-300 px-3 py-3 text-sm font-semibold text-slate-700 transition-all duration-200 ease-out active:scale-[0.98]"><Clock size={16} aria-hidden="true" />Attendre d’autres achats</button>
               </div>
-              {showWait && <form noValidate className="space-y-3 rounded-xl border border-slate-200 p-3" onSubmit={submitWait}>
-                <p className="text-sm text-slate-600">Nous conservons vos cartons et suspendons nos relances. Cette demande ne déclenche aucune préparation&nbsp;: vous donnerez votre accord quand vous serez prêt(e).</p>
-                <label className="block text-sm font-semibold text-slate-600">Votre précision<textarea required maxLength={500} value={waitReason} onChange={(e) => setWaitReason(e.target.value)} className="mt-1 block w-full rounded-lg border border-slate-200 bg-white p-2 text-sm" /></label>
-                <div>
-                  {/* The first day offered is the first one the server accepts: never today. */}
-                  <label htmlFor="client-wait-until" className="block text-sm font-semibold text-slate-600">Attendre jusqu’au (facultatif)</label>
-                  <input id="client-wait-until" type="date" min={firstWait} value={waitUntil}
-                    onChange={(e) => { setWaitUntil(e.target.value); if (waitError?.field === 'date') setWaitError(null); }}
-                    aria-invalid={waitError?.field === 'date' ? 'true' : undefined} aria-describedby={waitError?.field === 'date' ? 'client-wait-until-error' : 'client-wait-until-hint'}
-                    className={`mt-1 block min-h-11 w-full rounded-lg border bg-white px-2 text-sm ${waitError?.field === 'date' ? 'border-red-600' : 'border-slate-200'}`} />
-                  {waitError?.field === 'date'
-                    ? <p id="client-wait-until-error" role="alert" className="mt-1 text-sm text-red-700">{waitError.message}</p>
-                    : <p id="client-wait-until-hint" className="mt-1 text-sm text-slate-600">À partir du {clientDate(firstWait)}. Sans date, nous attendons simplement votre accord.</p>}
-                </div>
-                {waitError && waitError.field !== 'date' && <p role="alert" className="text-sm text-red-700">{waitError.message}</p>}
-                <button disabled={decisionPending || !waitReason.trim()} className="min-h-11 w-full rounded-xl brand-bg text-sm font-semibold text-white transition-all duration-200 ease-out active:scale-[0.98] disabled:opacity-50">{decisionPending ? 'Enregistrement…' : 'Enregistrer mon attente'}</button>
-              </form>}
+              {showWait && waitForm(true)}
               <details className="border-t border-slate-200 pt-2">
                 <summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-slate-600">Mesures et fonctionnement</summary>
                 <div className="space-y-3">
@@ -568,6 +593,7 @@ export default function ClientDetailView() {
           {task.kind === 'none' && (journey.quoteUpdating ? phaseContent(3) : <p className="text-sm text-slate-600">{journey.next}</p>)}
           {taskExplanation && <p data-testid="client-task-explanation" className="text-sm text-slate-600">{taskExplanation}</p>}
           {task.kind === 'agreement' && phaseContent(1)}
+          {showWait && waitError?.closed && !(sel.statut === 'attente_feu_vert' && !sel.archive) && waitForm(false)}
           {task.kind === 'payment' && phaseContent(3)}
           {['documents','messages'].includes(task.kind) && <button type="button" onClick={() => openPanel(task.kind)} className={`${PRIMARY_BUTTON} w-full sm:w-auto sm:px-6`}>{task.kind === 'documents' ? <Upload size={16} aria-hidden="true" /> : <MessageCircle size={16} aria-hidden="true" />}{task.action}</button>}
           {clientWaiting && (
@@ -598,7 +624,7 @@ export default function ClientDetailView() {
           )}
           {shipmentStarted && <>
             {trackingOut ? <a href={`https://parcelsapp.com/fr/tracking/${encodeURIComponent(trackingOut)}`} target="_blank" rel="noopener noreferrer" className={`${SECONDARY_BUTTON} w-full sm:w-auto`}><ExternalLink size={16} aria-hidden="true" />Suivre mon colis</a>
-              : sel.outgoingTrackingError ? <p role="status" data-testid="outgoing-tracking-unavailable" className="flex flex-wrap items-center gap-x-2 text-sm text-slate-600"><span>Le numéro de suivi transporteur n’a pas pu être chargé pour le moment. Les étapes de votre expédition restent visibles ici.</span><button type="button" disabled={trackingRetry} onClick={retryTracking} className="min-h-11 font-semibold underline brand-t disabled:opacity-60">{trackingRetry ? 'Nouvelle tentative…' : 'Réessayer'}</button></p>
+              : sel.outgoingTrackingError ? <p role="status" data-testid="outgoing-tracking-unavailable" className="flex flex-wrap items-center gap-x-2 text-sm text-slate-600"><span>{trackingRetryFailed ? 'Le numéro de suivi transporteur est toujours indisponible. Réessayez dans un instant\u00a0: les étapes de votre expédition restent visibles ici.' : 'Le numéro de suivi transporteur n’a pas pu être chargé pour le moment. Les étapes de votre expédition restent visibles ici.'}</span><button type="button" disabled={trackingRetry} onClick={retryTracking} className="min-h-11 font-semibold underline brand-t disabled:opacity-60">{trackingRetry ? 'Nouvelle tentative…' : 'Réessayer'}</button></p>
               : <p className="text-sm text-slate-600">Le suivi transporteur vers votre adresse n’est pas encore renseigné. Les étapes de votre expédition restent visibles ici.</p>}
             {!delivered && !(sel.statut === 'expedie' && departureDayShown) && <p data-testid="latest-news" className="text-sm text-slate-600">{news && clientDate(news.date) ? `Dernière nouvelle\u00a0: ${news.label.toLocaleLowerCase('fr')} le ${clientDate(news.date)}.` : 'La date de la dernière nouvelle n’est pas encore disponible.'}{DELIVERY_DATE_PENDING.includes(sel.statut) ? ' La date de livraison vous sera précisée dès qu’elle sera confirmée.' : ''}</p>}
           </>}

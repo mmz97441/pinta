@@ -213,10 +213,12 @@ async function main() {
       assert.equal(await f.page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false);
       await f.page.screenshot({path:`${output}/casier-panel-${width}x${height}-${dark?'dark':'light'}.png`});
       await input.fill('B-12');await dialog.getByRole('button',{name:'Enregistrer le casier',exact:true}).click();
-      await dialog.getByRole('status').filter({hasText:'Casier B-12 enregistré.'}).waitFor();
       // The confirmation toast is a success, painted above the panel (never hidden under it).
       const toast=f.page.locator('[data-toast]').filter({hasText:'Casier B-12 enregistré.'});await toast.waitFor();
       assert.equal(await toast.getAttribute('data-toast'),'success');
+      // Announced once: the toast is the only live message saying it (no repeat in the panel).
+      assert.equal(await f.page.locator('[role="status"], [role="alert"]').filter({hasText:'Casier B-12 enregistré.'}).count(),1,'One announcement of the saved casier.');
+      await dialog.getByText('B-12',{exact:true}).waitFor();
       await toast.evaluate(node=>Promise.all(node.getAnimations().map(animation=>animation.finished)));
       assert.equal(await toast.evaluate(node=>{const box=node.getBoundingClientRect();const hit=document.elementFromPoint(box.left+box.width/2,box.top+box.height/2);return node.contains(hit);}),true,'The toast is above the details panel.');
       await f.page.screenshot({path:`${output}/casier-panel-toast-${width}x${height}-${dark?'dark':'light'}.png`});

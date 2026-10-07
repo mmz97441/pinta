@@ -701,6 +701,37 @@ async function main() {
       await audit(f, 'share-link-revoked', { tall: true });
     }, { width, theme });
 
+    // Every creation path checks each number entered (domain/clientRequirements.js, as the reception
+    // form does): a valid mobile never covers an invalid landline, which would then block every save
+    // of the client's own profile; a valid landline never covers an invalid mobile either.
+    for (const [width, theme] of [[1440, 'light'], [390, 'dark']]) await scenario(`each-number-entered-is-checked-at-creation-and-import-${width}-${theme}`, async f => {
+      await open(f, '/clients/new', 'Nouveau client');
+      await fillNewClient(f, { ...NEW_CLIENT, 'Téléphone fixe': '-' });
+      await createButton(f).click();
+      await f.page.waitForFunction(() => document.activeElement?.getAttribute('name') === 'telFixe');
+      const landline = f.page.getByLabel('Téléphone fixe', { exact: true });
+      assert.equal(await landline.getAttribute('aria-invalid'), 'true', 'The landline typed is refused.');
+      const described = await landline.evaluate(node => (node.getAttribute('aria-describedby') || '').split(/\s+/).map(id => document.getElementById(id)?.textContent || '').join(' '));
+      assert.match(described, /Indiquez un numéro d’au moins 9 chiffres \(espaces, points, tirets, parenthèses et \+ initial acceptés\)\./, 'The reason under the landline.');
+      assert.notEqual(await f.page.getByLabel('Téléphone', { exact: true }).getAttribute('aria-invalid'), 'true', 'The valid mobile is not refused.');
+      assert.equal(posts(f).length, 0, 'Nothing is created while a number is invalid.');
+      await audit(f, 'new-client-invalid-landline');
+      await open(f, '/clients', 'Clients');
+      await f.page.getByRole('button', { name: 'Importer des clients', exact: true }).click();
+      const dialog = f.page.getByRole('dialog', { name: 'Importer des clients' });
+      await dialog.locator('input[type=file]').setInputFiles({ name: 'clients.csv', mimeType: 'text/csv', buffer: Buffer.from([
+        'Nom;Prénom;Email;Téléphone mobile;Téléphone fixe;Adresse;Code postal;Ville',
+        'Hoarau;Marie;marie@example.test;;0262 41 22 33;2 rue des Lilas;97400;Saint-Denis',
+        'Payet;Luc;luc@example.test;0692;0262 41 22 34;3 rue des Lilas;97400;Saint-Denis',
+        'Grondin;Paul;paul@example.test;0692 44 55 66;-;4 rue des Lilas;97400;Saint-Denis',
+      ].join('\n')) });
+      await dialog.getByText('1 client sélectionné sur 1 ligne valide', { exact: true }).waitFor();
+      assert.deepEqual(await dialog.locator('details li').allTextContents(), ['Ligne 3 : téléphone invalide', 'Ligne 4 : téléphone fixe invalide']);
+      await dialog.getByText('Ligne 2 · Marie Hoarau', { exact: true }).waitFor();
+      await audit(f, 'import-invalid-numbers', { selector: '[role="dialog"]', tall: false });
+      assert.equal(posts(f).length, 0);
+    }, { width, theme });
+
     // ── 9. The import window ────────────────────────────────────────────────────
     await scenario('import-creates-the-complete-rows-only', async f => {
       await open(f, '/clients', 'Clients');

@@ -6,6 +6,16 @@
 const FALLBACK_REASON = 'Connexion aux données interrompue.';
 
 /**
+ * Whether staff data are held from an earlier load: dossiers, clients or
+ * departures (they are read together, so a successful load leaves at least
+ * one of them for any team at work). The shell and every page decide with
+ * this same value, so a failure is never reported twice, nor hidden.
+ */
+export function holdsStaffData({ data = [], clients = [], envois = [] } = {}) {
+  return (data?.length || 0) > 0 || (clients?.length || 0) > 0 || (envois?.length || 0) > 0;
+}
+
+/**
  * - `failed`: nothing could be read (the first load failed and no data is
  *   held): the page states the reason with « Réessayer » in place of its list,
  *   never a count of 0 nor « nothing to do »;
@@ -23,9 +33,10 @@ export function staffDataState({ sbReady = false, dataLoading = false, dataError
 
 // The pages that state a failed first load themselves (reason and « Réessayer »
 // in place of their content): the shell's banner steps aside there, so the
-// same failure is never shown twice.
-const OWN_FAILURE = new Set(['/', '/colis', '/departs', '/conversations', '/equipe', '/settings']);
-const ownFailure = pathname => OWN_FAILURE.has(pathname) || pathname === '/clients' || pathname.startsWith('/clients/');
+// same failure is never shown twice. The new-client form has nothing to put
+// in its place: the banner states the failure there.
+const OWN_FAILURE = new Set(['/', '/colis', '/departs', '/conversations', '/equipe', '/settings', '/clients']);
+const ownFailure = pathname => OWN_FAILURE.has(pathname) || (pathname.startsWith('/clients/') && pathname !== '/clients/new');
 
 /** Whether the shell shows its load banner on this route for this state. */
 export function shellLoadBanner(pathname, state) {
