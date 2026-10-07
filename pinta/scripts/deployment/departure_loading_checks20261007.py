@@ -1,10 +1,13 @@
 """Release of the mandatory loading control of a departure (2026-10-07) without rewriting any business row.
 
-The migration creates the private table departure_loading_checks, four staff commands (record_loading_check,
-record_loading_count, clear_loading_checks, get_loading_checks), four private helpers, and replaces confirm_departure whole
-(copy of 2026-09-17 plus the control: each loaded dossier needs all its outgoing parcels checked; the manifest keeps the
-checks). From the release on, a departure is confirmed only once its parcels are scanned or counted: ship the loading
-screen with it.
+The migration creates the private table departure_loading_checks (no privilege for the API roles, service_role
+included), four staff commands (record_loading_check, record_loading_count, clear_loading_checks, and get_loading_checks,
+which returns the departure's checks as one JSON array so that PostgREST's max-rows never cuts them), four private
+helpers, the trigger colis_loading_checks_forget (after any update of a dossier: a dossier that leaves its departure or is
+prepared again, final_measurements_at included, loses its checks), and replaces confirm_departure whole (copy of
+2026-09-17 plus the control: each loaded dossier needs all its outgoing parcels checked; the manifest keeps the checks).
+From the release on, a departure is confirmed only once its parcels are scanned or counted: ship the loading screen with
+it.
 Operations, each run separately by the lead and only with the user's explicit go-ahead:
   preflight  read-only, plain SELECTs with every predicate written in the query (the read-only role of the Management API
              cannot EXECUTE application functions): refuses when the version is registered, when an object of the release
@@ -14,10 +17,13 @@ Operations, each run separately by the lead and only with the user's explicit go
              legacy single parcels, dossiers not prepared yet), first those leaving today (Paris). Departure and dossier
              references only go to the private backup (folder 0700, files 0600); counts on screen.
   rehearse   write transaction rolled back: migration, post checks (table private under RLS, grants, owners, the reviewed
-             confirmation body, a call under the API role without permission refused as reviewed), then the invariants
-             (business data unchanged, confirm_departure keeps its owner, grants and configuration).
+             confirmation body, the reviewed trigger definition, the one-value reading, a call under the API role
+             without permission refused as reviewed), then the invariants (business data unchanged, no check recorded by
+             the release, confirm_departure keeps its owner, grants and configuration).
   apply      same transaction, registered in schema_migrations, schema reload requested, committed.
-  verify     read-only checks, run in BEGIN … ROLLBACK because the read-only mode rejects DO blocks, and a fresh report.
+  verify     the post checks again, read-only, run in BEGIN … ROLLBACK because the read-only mode rejects DO blocks, and a
+             fresh report. They hold once the team has checked parcels: an empty table is an invariant of the release
+             transaction only.
 The migration SHA-256 is recorded at every step. Credentials stay in memory (management.py); nothing runs at import and no
 secret is printed. No Edge function changes in this lot.
 """
@@ -58,6 +64,16 @@ RELIED = ','.join("'" + signature + "'" for signature in sorted({**EXPECTED_SOUR
 CREATED = ','.join("'" + name + "'" for name in NEW_NAMES)
 # The answer to a call under the API role without permission (post check).
 API_MESSAGE = 'Permission d’expédition requise pour contrôler le chargement'
+# The reviewed trigger, as pg_get_triggerdef prints it on PostgreSQL 17; the post check drops the function's schema, which
+# the printer adds only when public is not on the search_path.
+TRIGGER = ('CREATE TRIGGER colis_loading_checks_forget AFTER UPDATE ON public.colis FOR EACH ROW WHEN (((old.envoi_id IS DISTINCT FROM new.envoi_id)'
+           ' OR (old.final_measurements_version IS DISTINCT FROM new.final_measurements_version)'
+           ' OR (old.preparation_composition_version IS DISTINCT FROM new.preparation_composition_version)'
+           ' OR (old.final_measurements_at IS DISTINCT FROM new.final_measurements_at))) EXECUTE FUNCTION _loading_checks_forget()')
+# The forget function's own condition on the preparation stamp (post check).
+FORGET_MARKER = 'OLD.final_measurements_at IS DISTINCT FROM NEW.final_measurements_at'
+# Every privilege the API roles must not hold on the checks table.
+TABLE_PRIVILEGES = 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER'
 OPEN = "('planifie','prochain','en_cours','en_preparation','pret')"
 CLOSED_DOSSIER = "('expedie','transit','dedouanement','arrive','livraison','livre','annule')"
 # _loading_expected_parcels, written in the query.
@@ -117,6 +133,9 @@ DECLARE old record;
 BEGIN
  IF EXISTS ((SELECT * FROM dlc_before EXCEPT SELECT * FROM dlc_after) UNION ALL (SELECT * FROM dlc_after EXCEPT SELECT * FROM dlc_before)) THEN
   RAISE EXCEPTION 'Loading control release modified existing business data'; END IF;
+ -- Here only (rehearse and apply), after the post checks: neither the release nor the post checks' refused API call
+ -- records a check. verify does not run it: once the team scans its parcels, the table holds checks.
+ IF EXISTS(SELECT 1 FROM public.departure_loading_checks) THEN RAISE EXCEPTION 'The release must not record any check'; END IF;
  SELECT * INTO old FROM dlc_confirm_before;
  IF (SELECT (proacl,proowner,proconfig) IS DISTINCT FROM (old.acl,old.owner,old.config) OR NOT prosecdef FROM pg_proc WHERE oid=old.oid) THEN
   RAISE EXCEPTION 'confirm_departure lost its owner, grants, configuration or definer security'; END IF;
@@ -128,20 +147,26 @@ DECLARE fn text; owner oid:=(SELECT proowner FROM pg_proc WHERE oid='public.""" 
 BEGIN
  IF NOT (SELECT relrowsecurity FROM pg_class WHERE oid='public.departure_loading_checks'::regclass)
   OR EXISTS(SELECT 1 FROM pg_policy WHERE polrelid='public.departure_loading_checks'::regclass)
-  OR has_table_privilege('anon','public.departure_loading_checks','SELECT') OR has_table_privilege('authenticated','public.departure_loading_checks','SELECT')
-  OR has_table_privilege('anon','public.departure_loading_checks','INSERT') OR has_table_privilege('authenticated','public.departure_loading_checks','INSERT')
-  OR has_table_privilege('authenticated','public.departure_loading_checks','UPDATE') OR has_table_privilege('authenticated','public.departure_loading_checks','DELETE') THEN
-  RAISE EXCEPTION 'The checks table must stay private: RLS without policy, no privilege for the API roles'; END IF;
+  OR EXISTS(SELECT 1 FROM unnest(ARRAY['public','anon','authenticated','service_role']) r
+   WHERE has_table_privilege(r,'public.departure_loading_checks','""" + TABLE_PRIVILEGES + r"""')) THEN
+  RAISE EXCEPTION 'The checks table must stay private: RLS without policy, no privilege for the API roles, service_role included'; END IF;
  IF (SELECT array_agg(a.attname ORDER BY a.attnum) FROM pg_index i JOIN pg_attribute a ON a.attrelid=i.indrelid AND a.attnum=ANY(i.indkey)
    WHERE i.indrelid='public.departure_loading_checks'::regclass AND i.indisprimary)<>ARRAY['envoi_id','colis_id','parcel_index']::name[]
   OR (SELECT count(*) FROM pg_constraint WHERE conrelid='public.departure_loading_checks'::regclass AND contype='f' AND confdeltype='c')<>3
   OR (SELECT count(*) FROM pg_constraint WHERE conrelid='public.departure_loading_checks'::regclass AND contype='c')<>2
   OR NOT EXISTS(SELECT 1 FROM pg_indexes WHERE schemaname='public' AND tablename='departure_loading_checks' AND indexname='departure_loading_checks_colis') THEN
   RAISE EXCEPTION 'Unexpected key, foreign keys, checks or index of departure_loading_checks'; END IF;
- IF EXISTS(SELECT 1 FROM public.departure_loading_checks) THEN RAISE EXCEPTION 'The release must not record any check'; END IF;
  IF NOT EXISTS(SELECT 1 FROM pg_trigger t WHERE t.tgrelid='public.colis'::regclass AND t.tgname='colis_loading_checks_forget' AND NOT t.tgisinternal
    AND t.tgfoid='public._loading_checks_forget()'::regprocedure AND t.tgenabled='O') THEN
   RAISE EXCEPTION 'The trigger forgetting the checks of a dossier that leaves or is prepared again is missing'; END IF;
+ -- Pinned: after any update of a dossier (no column list, so the changes of BEFORE triggers count), on its departure and its
+ -- preparation's versions and stamp.
+ IF (SELECT replace(pg_get_triggerdef(t.oid),' EXECUTE FUNCTION public._loading_checks_forget()',' EXECUTE FUNCTION _loading_checks_forget()')
+   FROM pg_trigger t WHERE t.tgrelid='public.colis'::regclass AND t.tgname='colis_loading_checks_forget') IS DISTINCT FROM '""" + TRIGGER + r"""'
+  OR position('""" + FORGET_MARKER + r"""' IN pg_get_functiondef('public._loading_checks_forget()'::regprocedure))=0 THEN
+  RAISE EXCEPTION 'The trigger forgetting the checks differs from the reviewed definition'; END IF;
+ IF NOT (SELECT prorettype='jsonb'::regtype AND NOT proretset FROM pg_proc WHERE oid='public.get_loading_checks(uuid)'::regprocedure) THEN
+  RAISE EXCEPTION 'get_loading_checks must return one jsonb value, which the API row limit never cuts'; END IF;
  FOREACH fn IN ARRAY ARRAY[""" + ','.join("'" + signature + "'" for signature in COMMANDS) + r"""] LOOP
   IF has_function_privilege('anon','public.'||fn,'EXECUTE') OR has_function_privilege('service_role','public.'||fn,'EXECUTE') OR NOT has_function_privilege('authenticated','public.'||fn,'EXECUTE')
    OR EXISTS(SELECT 1 FROM pg_proc p CROSS JOIN LATERAL aclexplode(p.proacl) a WHERE p.oid=('public.'||fn)::regprocedure AND a.grantee=0)

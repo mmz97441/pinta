@@ -156,3 +156,12 @@ if [ "$first_result,$second_result" != '0,0' ] || ! grep -qx 'recorded' "$logs/f
 sql -c "DO \$\$ BEGIN IF (SELECT count(*) FROM departure_loading_checks WHERE colis_id='1e300000-0000-4000-8000-000000000005')<>1
  OR (SELECT checked_by<>'$anne' OR method<>'scan' FROM departure_loading_checks WHERE colis_id='1e300000-0000-4000-8000-000000000005') THEN RAISE EXCEPTION 'A concurrent scan duplicated or rewrote the check'; END IF;
  RAISE NOTICE 'PASS: the same label scanned at once on two devices is recorded once, with the first scan'; END \$\$;"
+
+# 4. verify after the team's scans: the post checks hold while checks are recorded (an empty table is an invariant of the
+# release transaction only), and they refuse a forget trigger that drifted from the reviewed one.
+sql -c "DO \$\$ BEGIN IF (SELECT count(*) FROM departure_loading_checks)<3 THEN RAISE EXCEPTION 'The scans above should have left checks'; END IF; END \$\$;"
+{ printf 'BEGIN;\n'; release 'print(release.POST_CHECKS_SQL)'; printf 'ROLLBACK;\n'; } | sql
+if { printf 'BEGIN;\nDROP TRIGGER colis_loading_checks_forget ON colis;\nCREATE TRIGGER colis_loading_checks_forget AFTER UPDATE OF envoi_id,final_measurements_version,preparation_composition_version ON colis FOR EACH ROW EXECUTE FUNCTION _loading_checks_forget();\n'
+ release 'print(release.POST_CHECKS_SQL)'; printf 'ROLLBACK;\n'; } | sql 2> "$logs/drift.log"; then echo 'FAIL: verify accepted a forget trigger with a column list'; exit 1; fi
+if ! grep -q 'The trigger forgetting the checks differs from the reviewed definition' "$logs/drift.log"; then cat "$logs/drift.log"; exit 1; fi
+sql -c "DO \$\$ BEGIN RAISE NOTICE 'PASS: verify holds once parcels are checked, and refuses a forget trigger that differs from the reviewed one'; END \$\$;"

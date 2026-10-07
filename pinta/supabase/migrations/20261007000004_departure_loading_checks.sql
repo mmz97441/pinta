@@ -14,7 +14,8 @@
 -- checks recorded on another count stop counting and give way to the next valid check of that dossier.
 -- Commands (SECURITY DEFINER, fixed search_path, EXECUTE for authenticated only): record_loading_check (one scanned
 -- label), record_loading_count (the dossier's parcels counted by hand), clear_loading_checks (redo a dossier's control),
--- get_loading_checks (the departure's checks, for every device). Refusals raise a French message, shown as it is, with a
+-- get_loading_checks (the departure's checks as one JSON array, for every device: a single value is never cut by the
+-- API's row limit, whatever the number of parcels). Refusals raise a French message, shown as it is, with a
 -- HINT loading_check:<reason> the screen maps: SQLSTATE 42501 permission, P0002 not found, 40001 the screen is out of
 -- date, 22023 otherwise. Locks follow confirm_departure's order: the departure (FOR KEY SHARE, so it cannot be confirmed
 -- meanwhile), then the dossier (FOR UPDATE, one check at a time per dossier). A check changes neither the dossier nor the
@@ -34,9 +35,10 @@ CREATE TABLE departure_loading_checks (
 );
 CREATE INDEX departure_loading_checks_colis ON departure_loading_checks(colis_id);
 COMMENT ON TABLE departure_loading_checks IS 'Contrôle du chargement : chaque colis sortant scanné ou compté pour un départ, par qui et quand ; écrit uniquement par les commandes de contrôle.';
--- Written and read through the commands only: no policy, no privilege for the API roles.
+-- Written and read through the commands only: no policy, no privilege for the API roles, the server key included (the
+-- commands run as the owner; Supabase's default privileges would otherwise give service_role every right on the table).
 ALTER TABLE departure_loading_checks ENABLE ROW LEVEL SECURITY;
-REVOKE ALL ON departure_loading_checks FROM PUBLIC,anon,authenticated;
+REVOKE ALL ON departure_loading_checks FROM PUBLIC,anon,authenticated,service_role;
 
 -- Outgoing parcels a loading check expects, NULL while nothing is ready to load (same count as the loading screen).
 CREATE FUNCTION _loading_expected_parcels(c colis) RETURNS integer LANGUAGE sql IMMUTABLE SET search_path=public,pg_temp AS $$
@@ -81,17 +83,24 @@ END; $$;
 -- A check vouches for the parcels of the current preparation, handed over for this departure. A dossier that leaves the
 -- departure (reassigned, deferred at confirmation, detached) or is prepared again loses its checks: an older check never
 -- vouches for other boxes or another departure. The confirmed manifest has already kept the evidence of loaded dossiers.
+-- « Prepared again » is read on the preparation's own stamp: save_preparation_measurements and
+-- correct_colis_task('preparation') write final_measurements_at even when both versions stay equal (the same cartons packed
+-- into other boxes, possibly as many); an appended carton clears it and bumps the composition version through the BEFORE
+-- trigger invalidate_preparation_composition. No column list: a trigger listing columns ignores the changes made by BEFORE
+-- triggers, while the WHEN clause of an AFTER trigger sees the final row. Payments, quotes, the confirmation itself and
+-- every other write change none of these four columns and keep the checks.
 CREATE FUNCTION _loading_checks_forget() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
 BEGIN
  DELETE FROM departure_loading_checks k WHERE k.colis_id=NEW.id
   AND (k.envoi_id IS DISTINCT FROM NEW.envoi_id
    OR OLD.final_measurements_version IS DISTINCT FROM NEW.final_measurements_version
-   OR OLD.preparation_composition_version IS DISTINCT FROM NEW.preparation_composition_version);
+   OR OLD.preparation_composition_version IS DISTINCT FROM NEW.preparation_composition_version
+   OR OLD.final_measurements_at IS DISTINCT FROM NEW.final_measurements_at);
  RETURN NULL;
 END; $$;
-CREATE TRIGGER colis_loading_checks_forget AFTER UPDATE OF envoi_id,final_measurements_version,preparation_composition_version ON colis
+CREATE TRIGGER colis_loading_checks_forget AFTER UPDATE ON colis
  FOR EACH ROW WHEN (OLD.envoi_id IS DISTINCT FROM NEW.envoi_id OR OLD.final_measurements_version IS DISTINCT FROM NEW.final_measurements_version
-  OR OLD.preparation_composition_version IS DISTINCT FROM NEW.preparation_composition_version)
+  OR OLD.preparation_composition_version IS DISTINCT FROM NEW.preparation_composition_version OR OLD.final_measurements_at IS DISTINCT FROM NEW.final_measurements_at)
  EXECUTE FUNCTION _loading_checks_forget();
 
 -- One label scanned (handheld scanner or camera) for a dossier of the departure. Returns {status 'recorded'|'already',
@@ -159,16 +168,15 @@ BEGIN
  RETURN jsonb_build_object('status',CASE WHEN cleared>0 THEN 'cleared' ELSE 'none' END,'cleared',cleared,'checked',0,'expected',_loading_expected_parcels(c));
 END; $$;
 
--- The checks of the dossiers currently assigned to the departure, for every device of the team.
-CREATE FUNCTION get_loading_checks(p_envoi_id uuid)
-RETURNS TABLE(colis_id uuid,parcel_index integer,parcel_count integer,method text,checked_by uuid,checked_by_name text,checked_at timestamptz)
-LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path=public,pg_temp AS $$
+-- The checks of the dossiers currently assigned to the departure, for every device of the team: one JSON array of
+-- {colis_id, parcel_index, parcel_count, method, checked_by, checked_by_name, checked_at}, by dossier then parcel. A single
+-- value, so that PostgREST's max-rows (which cuts set-returning functions silently) never drops a check.
+CREATE FUNCTION get_loading_checks(p_envoi_id uuid) RETURNS jsonb LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path=public,pg_temp AS $$
 BEGIN
  IF NOT has_permission('perm_envois_voir') THEN RAISE EXCEPTION 'Permission de consultation des envois requise' USING ERRCODE='42501',HINT='loading_check:permission'; END IF;
  IF NOT EXISTS(SELECT 1 FROM envois e WHERE e.id=p_envoi_id) THEN RAISE EXCEPTION 'Départ introuvable' USING ERRCODE='P0002',HINT='loading_check:departure_not_found'; END IF;
- RETURN QUERY SELECT k.colis_id,k.parcel_index,k.parcel_count,k.method,k.checked_by,_loading_checker_name(k.checked_by),k.checked_at
-  FROM departure_loading_checks k JOIN colis c ON c.id=k.colis_id AND c.envoi_id=k.envoi_id
-  WHERE k.envoi_id=p_envoi_id ORDER BY k.colis_id,k.parcel_index;
+ RETURN (SELECT coalesce(jsonb_agg(_loading_check_json(k) ORDER BY k.colis_id,k.parcel_index),'[]')
+  FROM departure_loading_checks k JOIN colis c ON c.id=k.colis_id AND c.envoi_id=k.envoi_id WHERE k.envoi_id=p_envoi_id);
 END; $$;
 
 -- Confirmation (copy of 2026-09-17: every guard, lock, version check, the Paris day, the writes, the audit and the manifest)

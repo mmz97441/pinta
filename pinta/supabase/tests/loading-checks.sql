@@ -1,6 +1,7 @@
 -- Loading control of a departure (2026-10-07): grants, every refusal with its SQLSTATE, HINT and message, idempotence,
--- stale labels, counts, clearing, the reading shared between devices, the mandatory control at confirmation and the
--- manifest evidence. Every refusal leaves the checks, dossiers, departures, manifests and audit unchanged.
+-- stale labels, counts, clearing, the reading shared between devices (one JSON value, whole beyond a thousand checks),
+-- the mandatory control at confirmation and the manifest evidence, and the checks a dossier loses when the real commands
+-- prepare it again or move it. Every refusal leaves the checks, dossiers, departures, manifests and audit unchanged.
 BEGIN;
 GRANT USAGE ON SCHEMA public,auth TO authenticated,anon,service_role;
 
@@ -24,17 +25,26 @@ BEGIN
   RAISE EXCEPTION 'FAIL: confirm_departure lost its grants or security'; END IF;
  IF NOT (SELECT relrowsecurity FROM pg_class WHERE oid='departure_loading_checks'::regclass)
   OR EXISTS(SELECT 1 FROM pg_policy WHERE polrelid='departure_loading_checks'::regclass)
-  OR has_table_privilege('anon','departure_loading_checks','SELECT') OR has_table_privilege('authenticated','departure_loading_checks','SELECT')
-  OR has_table_privilege('authenticated','departure_loading_checks','INSERT') OR has_table_privilege('authenticated','departure_loading_checks','UPDATE')
-  OR has_table_privilege('authenticated','departure_loading_checks','DELETE') THEN
-  RAISE EXCEPTION 'FAIL: the checks table must stay private (RLS, no policy, no API privilege)'; END IF;
+  OR EXISTS(SELECT 1 FROM unnest(ARRAY['public','anon','authenticated','service_role']) r
+   WHERE has_table_privilege(r,'departure_loading_checks','SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')) THEN
+  RAISE EXCEPTION 'FAIL: the checks table must stay private (RLS, no policy, no privilege for the API roles, the server key included)'; END IF;
+ -- The shared reading is one JSON value (an array), so that the API's row limit never cuts it.
+ IF NOT (SELECT prorettype='jsonb'::regtype AND NOT proretset FROM pg_proc WHERE oid='get_loading_checks(uuid)'::regprocedure) THEN
+  RAISE EXCEPTION 'FAIL: get_loading_checks must return one jsonb value, not a set of rows'; END IF;
+ -- The forget trigger watches the final row (no column list, so the changes of BEFORE triggers count), the preparation's
+ -- stamp included.
+ IF NOT EXISTS(SELECT 1 FROM pg_trigger t WHERE t.tgrelid='colis'::regclass AND t.tgname='colis_loading_checks_forget' AND NOT t.tgisinternal AND t.tgenabled='O'
+   AND t.tgfoid='_loading_checks_forget()'::regprocedure AND cardinality(t.tgattr::int2[])=0 AND t.tgtype=17
+   AND pg_get_triggerdef(t.oid) LIKE '%(old.final_measurements_at IS DISTINCT FROM new.final_measurements_at)%')
+  OR position('OLD.final_measurements_at IS DISTINCT FROM NEW.final_measurements_at' IN pg_get_functiondef('_loading_checks_forget()'::regprocedure))=0 THEN
+  RAISE EXCEPTION 'FAIL: the forget trigger must fire after any update of colis and watch final_measurements_at'; END IF;
  IF (SELECT array_agg(a.attname ORDER BY a.attnum) FROM pg_index i JOIN pg_attribute a ON a.attrelid=i.indrelid AND a.attnum=ANY(i.indkey) WHERE i.indrelid='departure_loading_checks'::regclass AND i.indisprimary)<>ARRAY['envoi_id','colis_id','parcel_index']::name[]
   OR (SELECT count(*) FROM pg_constraint WHERE conrelid='departure_loading_checks'::regclass AND contype='f' AND confdeltype='c')<>3
   OR NOT EXISTS(SELECT 1 FROM pg_constraint WHERE conrelid='departure_loading_checks'::regclass AND contype='c' AND pg_get_constraintdef(oid) LIKE '%parcel_index >= 1%parcel_index <= parcel_count%')
   OR NOT EXISTS(SELECT 1 FROM pg_constraint WHERE conrelid='departure_loading_checks'::regclass AND contype='c' AND pg_get_constraintdef(oid) LIKE '%scan%camera%count%')
   OR NOT EXISTS(SELECT 1 FROM pg_indexes WHERE schemaname='public' AND indexname='departure_loading_checks_colis') THEN
   RAISE EXCEPTION 'FAIL: primary key, cascading foreign keys, checks or dossier index'; END IF;
- RAISE NOTICE 'PASS: command and helper grants, private table under RLS, key, cascades and checks';
+ RAISE NOTICE 'PASS: command and helper grants, private table under RLS (no API privilege, service_role included), key, cascades, checks, one-value reading and forget trigger';
 END $$;
 -- Even the broad legacy grants never open the table: no policy, so RLS refuses every direct row.
 GRANT ALL ON ALL TABLES IN SCHEMA public TO authenticated,service_role;
@@ -78,6 +88,10 @@ CREATE FUNCTION lc_rows(p_envoi uuid,p_colis uuid) RETURNS SETOF departure_loadi
 CREATE FUNCTION lc_loaded(VARIADIC p_colis uuid[]) RETURNS jsonb LANGUAGE sql SECURITY DEFINER AS $$
  SELECT jsonb_agg(jsonb_build_object('id',c.id,'updated_at',c.updated_at,'outgoing_parcel_count',coalesce(c.outgoing_parcel_count,1)) ORDER BY x.n)
  FROM unnest(p_colis) WITH ORDINALITY x(id,n) JOIN colis c ON c.id=x.id
+$$;
+-- The shared reading as rows, read by the caller (its permission applies): get_loading_checks returns one JSON array.
+CREATE FUNCTION lc_read(p_envoi uuid) RETURNS TABLE(colis_id uuid,parcel_index integer,parcel_count integer,method text,checked_by uuid,checked_by_name text,checked_at timestamptz) LANGUAGE sql AS $$
+ SELECT * FROM jsonb_to_recordset(get_loading_checks(p_envoi)) k(colis_id uuid,parcel_index integer,parcel_count integer,method text,checked_by uuid,checked_by_name text,checked_at timestamptz)
 $$;
 
 -- ── Fixtures ──
@@ -136,21 +150,21 @@ SELECT set_config('expedile.confirm_departure','',true);
 -- ── C1. Permissions ──
 SELECT lc_as('anon');
 SELECT lc_reject($q$SELECT record_loading_check('1c400000-0000-4000-8000-000000000001','1c300000-0000-4000-8000-000000000001',1,2,'scan')$q$,'C1 anonymous calls cannot execute the command','42501');
-SELECT lc_reject($q$SELECT * FROM get_loading_checks('1c400000-0000-4000-8000-000000000001')$q$,'C1 anonymous calls cannot read the checks','42501');
+SELECT lc_reject($q$SELECT get_loading_checks('1c400000-0000-4000-8000-000000000001')$q$,'C1 anonymous calls cannot read the checks','42501');
 SELECT lc_as('client');
 SELECT lc_reject($q$SELECT record_loading_check('1c400000-0000-4000-8000-000000000001','1c300000-0000-4000-8000-000000000001',1,2,'scan')$q$,'C1 a client cannot check a loading','42501','loading_check:permission','Permission d’expédition requise pour contrôler le chargement');
-SELECT lc_reject($q$SELECT * FROM get_loading_checks('1c400000-0000-4000-8000-000000000001')$q$,'C1 a client cannot read the checks','42501','loading_check:permission','Permission de consultation des envois requise');
+SELECT lc_reject($q$SELECT get_loading_checks('1c400000-0000-4000-8000-000000000001')$q$,'C1 a client cannot read the checks','42501','loading_check:permission','Permission de consultation des envois requise');
 SELECT lc_as('preparateur');
 SELECT lc_reject($q$SELECT record_loading_check('1c400000-0000-4000-8000-000000000001','1c300000-0000-4000-8000-000000000001',1,2,'scan')$q$,'C1 a scan needs perm_colis_expedier','42501','loading_check:permission','Permission d’expédition requise pour contrôler le chargement');
 SELECT lc_reject($q$SELECT record_loading_count('1c400000-0000-4000-8000-000000000001','1c300000-0000-4000-8000-000000000001',2)$q$,'C1 a count needs perm_colis_expedier','42501','loading_check:permission','Permission d’expédition requise pour contrôler le chargement');
 SELECT lc_reject($q$SELECT clear_loading_checks('1c400000-0000-4000-8000-000000000001','1c300000-0000-4000-8000-000000000001')$q$,'C1 clearing needs perm_colis_expedier','42501','loading_check:permission','Permission d’expédition requise pour contrôler le chargement');
 SELECT lc_as('lecteur');
 SELECT lc_reject($q$SELECT record_loading_check('1c400000-0000-4000-8000-000000000001','1c300000-0000-4000-8000-000000000001',1,2,'scan')$q$,'C1 reading the departures does not allow checking','42501');
-SELECT lc_assert((SELECT count(*)=0 FROM get_loading_checks('1c400000-0000-4000-8000-000000000001')),'C1 perm_envois_voir reads the checks (none yet)');
+SELECT lc_assert(get_loading_checks('1c400000-0000-4000-8000-000000000001')='[]'::jsonb,'C1 perm_envois_voir reads the checks: an empty array, none yet');
 SELECT lc_as('inactif');
 SELECT lc_reject($q$SELECT record_loading_check('1c400000-0000-4000-8000-000000000001','1c300000-0000-4000-8000-000000000001',1,2,'scan')$q$,'C1 an inactive account keeps no right','42501');
 SELECT lc_as('expediteur');
-SELECT lc_reject($q$SELECT * FROM get_loading_checks('1c400000-0000-4000-8000-000000000001')$q$,'C1 reading needs perm_envois_voir','42501','loading_check:permission','Permission de consultation des envois requise');
+SELECT lc_reject($q$SELECT get_loading_checks('1c400000-0000-4000-8000-000000000001')$q$,'C1 reading needs perm_envois_voir','42501','loading_check:permission','Permission de consultation des envois requise');
 SELECT lc_reject($q$INSERT INTO departure_loading_checks(envoi_id,colis_id,parcel_index,parcel_count,method,checked_by) VALUES('1c400000-0000-4000-8000-000000000001','1c300000-0000-4000-8000-000000000001',1,2,'scan',auth.uid())$q$,'C1 no direct write, even with broad legacy grants','42501');
 
 -- ── C2. Refusals, each with its HINT ──
@@ -178,7 +192,7 @@ SELECT lc_reject($q$SELECT record_loading_count('1c400000-0000-4000-8000-0000000
 SELECT lc_reject($q$SELECT clear_loading_checks('1c400000-0000-4000-8000-000000000003','1c300000-0000-4000-8000-000000000009')$q$,'C2 the checks of a departure that has left are frozen','22023','loading_check:departure_closed');
 SELECT lc_reject($q$SELECT clear_loading_checks('1c400000-0000-4000-8000-000000000001','1c300000-0000-4000-8000-000000000004')$q$,'C2 clearing a dossier of another departure','40001','loading_check:not_assigned');
 SELECT lc_as('lecteur');
-SELECT lc_reject($q$SELECT * FROM get_loading_checks('1c4fffff-0000-4000-8000-000000000001')$q$,'C2 reading an unknown departure','P0002','loading_check:departure_not_found','Départ introuvable');
+SELECT lc_reject($q$SELECT get_loading_checks('1c4fffff-0000-4000-8000-000000000001')$q$,'C2 reading an unknown departure','P0002','loading_check:departure_not_found','Départ introuvable');
 
 -- ── C3. A scan is recorded once, with who and when; scanning again keeps the first check ──
 SELECT lc_as('postgres');
@@ -210,10 +224,11 @@ SELECT lc_as('director');
 SELECT lc_assert((SELECT result->>'status'='recorded' AND (result->>'checked')::integer=2 AND result#>>'{check,method}'='camera' AND result#>>'{check,checked_by_name}'='Camille Hoarau'
   FROM (SELECT record_loading_check('1c400000-0000-4000-8000-000000000001','1c300000-0000-4000-8000-000000000001',2,2,'camera') AS result) r),'C3 the second parcel scanned with the tablet camera completes the dossier');
 SELECT lc_as('lecteur');
-SELECT lc_assert((SELECT jsonb_agg(jsonb_build_object('colis',colis_id,'index',parcel_index,'count',parcel_count,'method',method,'by',checked_by,'name',checked_by_name) ORDER BY parcel_index)
-  =jsonb_build_array(jsonb_build_object('colis','1c300000-0000-4000-8000-000000000001','index',1,'count',2,'method','scan','by','1c000000-0000-4000-8000-000000000002','name','Marc Grondin'),
-   jsonb_build_object('colis','1c300000-0000-4000-8000-000000000001','index',2,'count',2,'method','camera','by','1c000000-0000-4000-8000-000000000001','name','Camille Hoarau'))
-  FROM get_loading_checks('1c400000-0000-4000-8000-000000000001')),'C3 every device reads the same checks: parcel, count, method, who (id and name) and when');
+SELECT lc_assert(get_loading_checks('1c400000-0000-4000-8000-000000000001')=jsonb_build_array(
+   jsonb_build_object('colis_id','1c300000-0000-4000-8000-000000000001','parcel_index',1,'parcel_count',2,'method','scan','checked_by','1c000000-0000-4000-8000-000000000002','checked_by_name','Marc Grondin','checked_at',now()-interval '1 hour'),
+   jsonb_build_object('colis_id','1c300000-0000-4000-8000-000000000001','parcel_index',2,'parcel_count',2,'method','camera','checked_by','1c000000-0000-4000-8000-000000000001','checked_by_name','Camille Hoarau','checked_at',now())),
+ 'C3 every device reads the same checks, one JSON array of the seven fields: parcel, count, method, who (id and name) and when');
+SELECT lc_assert((SELECT count(*)=2 AND bool_and(checked_at IS NOT NULL AND checked_by IS NOT NULL) FROM lc_read('1c400000-0000-4000-8000-000000000001')),'C3 the array reads back as rows (jsonb_to_recordset)');
 
 -- ── C4. Counting by hand ──
 SELECT lc_as('expediteur');
@@ -227,11 +242,12 @@ SELECT lc_assert((SELECT count(*)=1 AND bool_and(method='count' AND parcel_index
 SELECT lc_as('expediteur');
 SELECT lc_assert((record_loading_check('1c400000-0000-4000-8000-000000000001','1c300000-0000-4000-8000-000000000008',1,1,'scan'))->>'status'='recorded','C4 a prepared dossier is checked before its payment is confirmed');
 
--- ── C5. Stale labels: a new preparation replaces the checks of the former count ──
+-- ── C5. Stale labels. Checks of another count, which a direct edit of the outgoing parcels leaves (no command does: the
+-- real re-preparation drops the checks, below), give way to the current labels ──
 SELECT lc_as('postgres');
 UPDATE colis SET final_packages='[{"dimL":40,"dimW":30,"dimH":30,"poids":8},{"dimL":30,"dimW":30,"dimH":20,"poids":6},{"dimL":20,"dimW":20,"dimH":20,"poids":5.5}]',outgoing_parcel_count=3 WHERE id='1c300000-0000-4000-8000-000000000001';
 SELECT lc_as('lecteur');
-SELECT lc_assert((SELECT count(*)=2 AND bool_and(parcel_count=2) FROM get_loading_checks('1c400000-0000-4000-8000-000000000001') WHERE colis_id='1c300000-0000-4000-8000-000000000001'),'C5 the checks of the former labels stay visible with their count');
+SELECT lc_assert((SELECT count(*)=2 AND bool_and(parcel_count=2) FROM lc_read('1c400000-0000-4000-8000-000000000001') WHERE colis_id='1c300000-0000-4000-8000-000000000001'),'C5 the checks of the former labels stay visible with their count');
 SELECT lc_as('expediteur');
 SELECT lc_reject($q$SELECT record_loading_check('1c400000-0000-4000-8000-000000000001','1c300000-0000-4000-8000-000000000001',2,2,'scan')$q$,'C5 an old label is refused once the dossier has three parcels','22023','loading_check:stale_label','Étiquette périmée : ce dossier compte maintenant 3 colis. Réimprimez ses étiquettes.');
 SELECT lc_assert((SELECT result->>'status'='recorded' AND (result->>'checked')::integer=1 AND (result->>'expected')::integer=3
@@ -243,6 +259,17 @@ SELECT lc_assert((SELECT result->>'status'='recorded' AND (result->>'checked')::
   FROM (SELECT record_loading_count('1c400000-0000-4000-8000-000000000001','1c300000-0000-4000-8000-000000000001',3) AS result) r),'C5 a count completes the parcels not scanned yet');
 SELECT lc_as('postgres');
 SELECT lc_assert((SELECT jsonb_agg(method ORDER BY parcel_index)=jsonb_build_array('count','scan','count') FROM lc_rows('1c400000-0000-4000-8000-000000000001','1c300000-0000-4000-8000-000000000001')),'C5 a scanned parcel keeps its scan; the counted ones say count');
+-- Prepared again through the command: LC-UNPAID (one parcel, scanned in C4) packed into two parcels loses its check at once.
+SELECT lc_as('director');
+SELECT lc_assert((save_preparation_measurements('1c300000-0000-4000-8000-000000000008','[{"dimL":20,"dimW":20,"dimH":10,"poids":1},{"dimL":20,"dimW":20,"dimH":10,"poids":1}]',lc_version('1c300000-0000-4000-8000-000000000008'),1))#>>'{colis,outgoing_parcel_count}'='2',
+ 'C5 a checked dossier is packed again into two parcels through save_preparation_measurements');
+SELECT lc_as('lecteur');
+SELECT lc_assert(NOT EXISTS(SELECT 1 FROM lc_read('1c400000-0000-4000-8000-000000000001') WHERE colis_id='1c300000-0000-4000-8000-000000000008'),'C5 its former check is gone at once, on every device');
+SELECT lc_as('expediteur');
+SELECT lc_reject($q$SELECT record_loading_check('1c400000-0000-4000-8000-000000000001','1c300000-0000-4000-8000-000000000008',1,1,'scan')$q$,'C5 its former label is refused as stale','22023','loading_check:stale_label','Étiquette périmée : ce dossier compte maintenant 2 colis. Réimprimez ses étiquettes.');
+SELECT lc_assert((SELECT result->>'status'='recorded' AND (result->>'checked')::integer=1 AND (result->>'expected')::integer=2
+  FROM (SELECT record_loading_check('1c400000-0000-4000-8000-000000000001','1c300000-0000-4000-8000-000000000008',1,2,'scan') AS result) r),'C5 its new label is recorded');
+SELECT lc_as('postgres');
 
 -- ── C6. Clearing a dossier's control, audited ──
 UPDATE departure_loading_checks SET checked_at=now()-interval '10 minutes' WHERE colis_id='1c300000-0000-4000-8000-000000000001';
@@ -264,8 +291,8 @@ SELECT lc_assert((SELECT count(*)=1 FROM audit_actions WHERE action='loading_che
 -- ── C7. The reading follows the dossiers currently on the departure ──
 UPDATE colis SET envoi_id='1c400000-0000-4000-8000-000000000002' WHERE id='1c300000-0000-4000-8000-000000000002';
 SELECT lc_as('lecteur');
-SELECT lc_assert(NOT EXISTS(SELECT 1 FROM get_loading_checks('1c400000-0000-4000-8000-000000000001') WHERE colis_id='1c300000-0000-4000-8000-000000000002')
-  AND NOT EXISTS(SELECT 1 FROM get_loading_checks('1c400000-0000-4000-8000-000000000002')),'C7 a dossier moved to another departure leaves the reading of both departures');
+SELECT lc_assert(NOT EXISTS(SELECT 1 FROM lc_read('1c400000-0000-4000-8000-000000000001') WHERE colis_id='1c300000-0000-4000-8000-000000000002')
+  AND get_loading_checks('1c400000-0000-4000-8000-000000000002')='[]'::jsonb,'C7 a dossier moved to another departure leaves the reading of both departures');
 SELECT lc_as('expediteur');
 SELECT lc_reject($q$SELECT record_loading_count('1c400000-0000-4000-8000-000000000001','1c300000-0000-4000-8000-000000000002',1)$q$,'C7 the moved dossier is no longer checked here','40001','loading_check:not_assigned');
 SELECT lc_as('postgres');
@@ -337,8 +364,10 @@ SELECT lc_assert((SELECT snapshot#>'{items,0,loading_checks}'=jsonb_build_array(
   AND snapshot#>'{items,1,loading_checks}'=jsonb_build_array(
    jsonb_build_object('colis_id','1c300000-0000-4000-8000-000000000012','parcel_index',1,'parcel_count',1,'method','count','checked_by','1c000000-0000-4000-8000-000000000002','checked_by_name','Marc Grondin','checked_at',now()))
   FROM lc_manifest),'C8 the manifest keeps each loaded dossier''s checks: parcel, method, who and when');
-SELECT lc_assert((SELECT count(*)=3 AND bool_and(colis_id IN ('1c300000-0000-4000-8000-000000000011','1c300000-0000-4000-8000-000000000012')) FROM get_loading_checks('1c400000-0000-4000-8000-000000000005')),'C8 after the departure, the reading keeps the loaded dossiers'' checks only');
+SELECT lc_assert((SELECT count(*)=3 AND bool_and(colis_id IN ('1c300000-0000-4000-8000-000000000011','1c300000-0000-4000-8000-000000000012')) FROM lc_read('1c400000-0000-4000-8000-000000000005')),'C8 after the departure, the reading keeps the loaded dossiers'' checks only');
 SELECT lc_as('postgres');
+SELECT lc_assert((SELECT count(*)=3 FROM departure_loading_checks WHERE envoi_id='1c400000-0000-4000-8000-000000000005' AND colis_id IN ('1c300000-0000-4000-8000-000000000011','1c300000-0000-4000-8000-000000000012')),
+ 'C8 a loaded dossier keeps its checks through confirm_departure: the confirmation changes neither its departure nor its preparation');
 SELECT lc_assert(NOT EXISTS(SELECT 1 FROM departure_loading_checks WHERE colis_id='1c300000-0000-4000-8000-000000000013'),'C8 a deferred dossier leaves the departure with no check left: the next departure checks its parcels again');
 SELECT lc_as('expediteur');
 SELECT lc_reject($q$SELECT record_loading_check('1c400000-0000-4000-8000-000000000005','1c300000-0000-4000-8000-000000000011',1,2,'scan')$q$,'C8 once confirmed, nothing more is checked','22023','loading_check:departure_closed');
@@ -346,33 +375,98 @@ SELECT lc_reject($q$SELECT clear_loading_checks('1c400000-0000-4000-8000-0000000
 SELECT lc_as('postgres');
 SELECT lc_assert((SELECT detail::jsonb->'loaded_ids'=jsonb_build_array('1c300000-0000-4000-8000-000000000011','1c300000-0000-4000-8000-000000000012') AND (detail::jsonb->>'physical_parcels')::integer=3
   FROM audit_actions WHERE action='departure_confirmed' AND detail::jsonb->>'envoi_id'='1c400000-0000-4000-8000-000000000005'),'C8 unchanged audit of the confirmation');
--- ── C9. A check vouches for the current preparation on this departure only ──
+-- ── C9. A check vouches for the current preparation on this departure only. The real commands that prepare a dossier
+-- again (the same count included) or add a carton to it drop its checks; payment, the quote's own write and any other
+-- change keep them; a dossier moved off its departure and back is checked again ──
 INSERT INTO envois(id,ref,destination_code,date_depart,statut) VALUES('1c400000-0000-4000-8000-000000000007','LC-ENV-7','974',(now() AT TIME ZONE 'Europe/Paris')::date+21,'planifie');
+-- LC-P6: one carton received, prepared into two parcels two hours ago, neither quoted nor paid; LC-P7: prepared into one
+-- parcel, its quote sent and waiting for the payment. Both are on LC-ENV-7.
+INSERT INTO colis(id,client_id,ref,statut,feu_vert,envoi_id,nb_colis,dims_par_colis,dim_l,dim_w,dim_h,poids,fin_l,fin_w,fin_h,fin_p,final_packages,outgoing_parcel_count,preparation_composition_version,final_measurements_version,final_measurements_at) VALUES
+ ('1c300000-0000-4000-8000-000000000016','1c200000-0000-4000-8000-000000000001','LC-P6','en_preparation','autorise','1c400000-0000-4000-8000-000000000007',1,'[{"dimL":50,"dimW":40,"dimH":40,"poids":20}]',50,40,40,20,
+  40,30,30,19.5,'[{"dimL":40,"dimW":30,"dimH":30,"poids":12},{"dimL":30,"dimW":30,"dimH":20,"poids":7.5}]',2,1,1,now()-interval '2 hours');
+INSERT INTO colis(id,client_id,ref,statut,feu_vert,envoi_id,fin_l,fin_w,fin_h,fin_p,final_packages,outgoing_parcel_count,preparation_composition_version,final_measurements_version,final_measurements_at,devis_total,devis_snapshot,devis_brouillon) VALUES
+ ('1c300000-0000-4000-8000-000000000017','1c200000-0000-4000-8000-000000000001','LC-P7','devis_envoye','autorise','1c400000-0000-4000-8000-000000000007',20,20,20,2,
+  '[{"dimL":20,"dimW":20,"dimH":20,"poids":2}]',1,1,1,now()-interval '3 hours',20,'{"inputs":{"destination":{"code":"974"}}}',false);
+SELECT lc_as('expediteur');
+SELECT record_loading_check('1c400000-0000-4000-8000-000000000007','1c300000-0000-4000-8000-000000000016',1,2,'scan');
+SELECT record_loading_check('1c400000-0000-4000-8000-000000000007','1c300000-0000-4000-8000-000000000016',2,2,'camera');
+SELECT record_loading_check('1c400000-0000-4000-8000-000000000007','1c300000-0000-4000-8000-000000000017',1,1,'scan');
+-- Packed again into two other boxes: the same cartons and count, so both versions stay at 1; the preparation is stamped.
+SELECT lc_as('director');
+SELECT lc_assert((save_preparation_measurements('1c300000-0000-4000-8000-000000000016','[{"dimL":60,"dimW":40,"dimH":40,"poids":16},{"dimL":20,"dimW":20,"dimH":10,"poids":3.5}]',lc_version('1c300000-0000-4000-8000-000000000016'),1))#>>'{colis,outgoing_parcel_count}'='2',
+ 'C9 a checked dossier is packed again into two other boxes through save_preparation_measurements');
+SELECT lc_as('postgres');
+SELECT lc_assert((SELECT preparation_composition_version=1 AND final_measurements_version=1 AND final_measurements_at=now() FROM colis WHERE id='1c300000-0000-4000-8000-000000000016')
+  AND NOT EXISTS(SELECT 1 FROM lc_rows('1c400000-0000-4000-8000-000000000007','1c300000-0000-4000-8000-000000000016')),
+ 'C9 prepared again with the same count and versions: the checks of the former boxes are dropped');
+SELECT lc_as('lecteur');
+SELECT lc_assert((SELECT array_agg(colis_id)=ARRAY['1c300000-0000-4000-8000-000000000017'::uuid] FROM lc_read('1c400000-0000-4000-8000-000000000007')),'C9 no device reads them any more; the other dossier''s check stays');
+SELECT lc_as('expediteur');
+SELECT lc_assert((SELECT result->>'status'='recorded' AND (result->>'checked')::integer=1 AND (result->>'expected')::integer=2
+  FROM (SELECT record_loading_check('1c400000-0000-4000-8000-000000000007','1c300000-0000-4000-8000-000000000016',1,2,'scan') AS result) r),'C9 the label of a new box is recorded afresh, never « already checked »');
+SELECT record_loading_check('1c400000-0000-4000-8000-000000000007','1c300000-0000-4000-8000-000000000016',2,2,'scan');
+-- Corrected through correct_colis_task('preparation'): other boxes, the same count.
+SELECT lc_as('director');
+SELECT lc_assert((correct_colis_task('1c300000-0000-4000-8000-000000000016','preparation','{"boxes":[{"dimL":45,"dimW":35,"dimH":30,"poids":14},{"dimL":25,"dimW":20,"dimH":15,"poids":5.5}]}',
+  lc_version('1c300000-0000-4000-8000-000000000016'),'Colis refaits au chargement'))->>'changed'='true','C9 the preparation is corrected into two other boxes');
+SELECT lc_as('postgres');
+SELECT lc_assert((SELECT preparation_composition_version=1 AND final_measurements_version=1 AND outgoing_parcel_count=2 FROM colis WHERE id='1c300000-0000-4000-8000-000000000016')
+  AND NOT EXISTS(SELECT 1 FROM lc_rows('1c400000-0000-4000-8000-000000000007','1c300000-0000-4000-8000-000000000016')),'C9 a corrected preparation drops the checks too');
+-- Counted again; then the quote's own write (the same boxes, its amounts), a payment and other changes keep the checks.
+SELECT lc_as('expediteur');
+SELECT lc_assert((record_loading_count('1c400000-0000-4000-8000-000000000007','1c300000-0000-4000-8000-000000000016',2))->>'checked'='2','C9 the corrected parcels are counted');
+SELECT lc_as('postgres');
+UPDATE colis SET final_packages=final_packages,fin_l=fin_l,fin_w=fin_w,fin_h=fin_h,fin_p=fin_p,devis_brouillon=true,statut=statut,casier='LC-9' WHERE id='1c300000-0000-4000-8000-000000000016';
+SELECT lc_as('director');
+SELECT lc_assert((mark_manual_payment('1c300000-0000-4000-8000-000000000017',20)).statut='paye','C9 the checked dossier''s payment is recorded');
+SELECT lc_as('postgres');
+SELECT lc_assert((SELECT count(*)=2 FROM lc_rows('1c400000-0000-4000-8000-000000000007','1c300000-0000-4000-8000-000000000016'))
+  AND (SELECT count(*)=1 FROM lc_rows('1c400000-0000-4000-8000-000000000007','1c300000-0000-4000-8000-000000000017')),'C9 the quote''s write, a payment and any other change of the dossier keep its checks');
+-- A carton added: the BEFORE trigger changes the composition, the preparation is to redo.
+SELECT lc_as('director');
+SELECT lc_assert((append_reception_cartons('1c300000-0000-4000-8000-000000000016','[{"dimL":20,"dimW":20,"dimH":20,"poids":2}]',lc_version('1c300000-0000-4000-8000-000000000016')))->>'added'='1','C9 a carton is added to the checked dossier');
+SELECT lc_as('postgres');
+SELECT lc_assert((SELECT preparation_composition_version=2 AND final_measurements_version IS NULL AND final_measurements_at IS NULL AND outgoing_parcel_count IS NULL FROM colis WHERE id='1c300000-0000-4000-8000-000000000016')
+  AND NOT EXISTS(SELECT 1 FROM lc_rows('1c400000-0000-4000-8000-000000000007','1c300000-0000-4000-8000-000000000016')),'C9 a carton added drops the checks at once, although the composition changed in a BEFORE trigger');
+SELECT lc_as('expediteur');
+SELECT lc_reject($q$SELECT record_loading_check('1c400000-0000-4000-8000-000000000007','1c300000-0000-4000-8000-000000000016',1,2,'scan')$q$,'C9 nothing is checked before its new preparation','22023','loading_check:not_prepared');
+-- Moved off its departure and back.
+SELECT lc_as('postgres');
 UPDATE colis SET envoi_id='1c400000-0000-4000-8000-000000000007' WHERE id='1c300000-0000-4000-8000-000000000015';
 SELECT lc_as('expediteur');
 SELECT record_loading_check('1c400000-0000-4000-8000-000000000007','1c300000-0000-4000-8000-000000000015',1,1,'scan');
 SELECT lc_as('postgres');
-UPDATE colis SET final_measurements_version=final_measurements_version+1,preparation_composition_version=preparation_composition_version+1 WHERE id='1c300000-0000-4000-8000-000000000015';
-SELECT lc_assert(NOT EXISTS(SELECT 1 FROM departure_loading_checks WHERE colis_id='1c300000-0000-4000-8000-000000000015'),'C9 a dossier prepared again loses its checks: its new boxes are checked again');
-SELECT lc_as('expediteur');
-SELECT record_loading_check('1c400000-0000-4000-8000-000000000007','1c300000-0000-4000-8000-000000000015',1,1,'scan');
-SELECT lc_as('postgres');
-UPDATE colis SET statut=statut WHERE id='1c300000-0000-4000-8000-000000000015';
-SELECT lc_assert(EXISTS(SELECT 1 FROM departure_loading_checks WHERE colis_id='1c300000-0000-4000-8000-000000000015'),'C9 any other change of the dossier keeps its checks');
 UPDATE colis SET envoi_id='1c400000-0000-4000-8000-000000000002' WHERE id='1c300000-0000-4000-8000-000000000015';
 UPDATE colis SET envoi_id='1c400000-0000-4000-8000-000000000007' WHERE id='1c300000-0000-4000-8000-000000000015';
 SELECT lc_assert(NOT EXISTS(SELECT 1 FROM departure_loading_checks WHERE colis_id='1c300000-0000-4000-8000-000000000015'),'C9 a dossier moved off its departure and back is checked again');
-DELETE FROM envois WHERE id='1c400000-0000-4000-8000-000000000007' AND NOT EXISTS(SELECT 1 FROM colis WHERE envoi_id='1c400000-0000-4000-8000-000000000007');
-UPDATE colis SET envoi_id=NULL WHERE id='1c300000-0000-4000-8000-000000000015';
+UPDATE colis SET envoi_id=NULL WHERE envoi_id='1c400000-0000-4000-8000-000000000007';
+SELECT lc_assert(NOT EXISTS(SELECT 1 FROM departure_loading_checks WHERE envoi_id='1c400000-0000-4000-8000-000000000007'),'C9 dossiers detached from their departure keep no check');
 DELETE FROM envois WHERE id='1c400000-0000-4000-8000-000000000007';
-
--- Deleting a departure that never left removes its checks with it.
+-- A departure deleted before it leaves takes its checks with it (the foreign key cascades: a row the trigger cannot reach,
+-- its dossier being on no departure).
 INSERT INTO envois(id,ref,destination_code,date_depart,statut) VALUES('1c400000-0000-4000-8000-000000000006','LC-ENV-6','974',(now() AT TIME ZONE 'Europe/Paris')::date+14,'planifie');
-UPDATE colis SET envoi_id='1c400000-0000-4000-8000-000000000006' WHERE id='1c300000-0000-4000-8000-000000000015';
-SELECT lc_as('expediteur');
-SELECT record_loading_check('1c400000-0000-4000-8000-000000000006','1c300000-0000-4000-8000-000000000015',1,1,'scan');
-SELECT lc_as('postgres');
-UPDATE colis SET envoi_id=NULL WHERE id='1c300000-0000-4000-8000-000000000015';
+INSERT INTO departure_loading_checks(envoi_id,colis_id,parcel_index,parcel_count,method,checked_by) VALUES('1c400000-0000-4000-8000-000000000006','1c300000-0000-4000-8000-000000000015',1,1,'scan','1c000000-0000-4000-8000-000000000002');
 DELETE FROM envois WHERE id='1c400000-0000-4000-8000-000000000006';
-SELECT lc_assert(NOT EXISTS(SELECT 1 FROM departure_loading_checks WHERE envoi_id='1c400000-0000-4000-8000-000000000006'),'C8 the checks follow their departure when it is deleted');
+SELECT lc_assert(NOT EXISTS(SELECT 1 FROM departure_loading_checks WHERE envoi_id='1c400000-0000-4000-8000-000000000006'),'C9 the checks follow their departure when it is deleted');
+
+-- ── C10. The shared reading is one JSON value: the checks of a departure come back whole beyond the API's row limit
+-- (PostgREST max-rows, 1 000 on Supabase, cuts a set of rows silently, never a single value) ──
+INSERT INTO envois(id,ref,destination_code,date_depart,statut) VALUES('1c400000-0000-4000-8000-000000000008','LC-ENV-8','974',(now() AT TIME ZONE 'Europe/Paris')::date+28,'planifie');
+INSERT INTO colis(id,client_id,ref,statut,feu_vert,envoi_id,fin_l,fin_w,fin_h,fin_p,final_packages,outgoing_parcel_count,preparation_composition_version,final_measurements_version)
+SELECT ('1c600000-0000-4000-8000-'||lpad(n::text,12,'0'))::uuid,'1c200000-0000-4000-8000-000000000001','LC-BULK-'||n,'en_preparation','autorise','1c400000-0000-4000-8000-000000000008',20,20,20,2,
+ '[{"dimL":20,"dimW":20,"dimH":20,"poids":1},{"dimL":20,"dimW":20,"dimH":20,"poids":1}]',2,1,1 FROM generate_series(1,501) n;
+SELECT lc_as('expediteur');
+SELECT lc_assert((SELECT count(*)=501 AND bool_and(r->>'status'='recorded' AND (r->>'checked')::integer=2)
+  FROM (SELECT record_loading_count('1c400000-0000-4000-8000-000000000008',('1c600000-0000-4000-8000-'||lpad(n::text,12,'0'))::uuid,2) r FROM generate_series(1,501) n) x),
+ 'C10 the 1 002 parcels of 501 dossiers are counted for one departure');
+SELECT lc_as('lecteur');
+CREATE TEMP TABLE lc_bulk ON COMMIT DROP AS SELECT get_loading_checks('1c400000-0000-4000-8000-000000000008') AS checks;
+SELECT lc_assert((SELECT jsonb_typeof(checks)='array' AND jsonb_array_length(checks)=1002 FROM lc_bulk),'C10 one value holds all 1 002 checks of the departure');
+SELECT lc_assert((SELECT count(*)=1002 AND count(DISTINCT colis_id)=501 AND count(DISTINCT (colis_id,parcel_index))=1002
+  AND bool_and(parcel_count=2 AND method='count' AND checked_by='1c000000-0000-4000-8000-000000000002' AND checked_by_name='Marc Grondin' AND checked_at=now())
+  FROM lc_bulk CROSS JOIN LATERAL jsonb_to_recordset(checks) k(colis_id uuid,parcel_index integer,parcel_count integer,method text,checked_by uuid,checked_by_name text,checked_at timestamptz)),
+ 'C10 every check comes back whole: dossier, parcel, count, method, who and when');
+SELECT lc_assert((SELECT bool_and((SELECT array_agg(key ORDER BY key) FROM jsonb_object_keys(e) key)=ARRAY['checked_at','checked_by','checked_by_name','colis_id','method','parcel_count','parcel_index'])
+  FROM lc_bulk CROSS JOIN LATERAL jsonb_array_elements(checks) e),'C10 each element carries exactly the seven fields the screen reads');
+SELECT lc_assert((SELECT checks=(SELECT jsonb_agg(e ORDER BY (e->>'colis_id')::uuid,(e->>'parcel_index')::integer) FROM jsonb_array_elements(checks) e) FROM lc_bulk),'C10 ordered by dossier, then parcel');
 ROLLBACK;
