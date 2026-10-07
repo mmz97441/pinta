@@ -1,11 +1,16 @@
-import React from 'react';
-import { ArrowUpRight, Check, Clock, AlertTriangle, Lock, Circle, Minus, Pencil, Package, Ruler, FileText } from 'lucide-react';
+import React, { useEffect, useId, useRef, useState } from 'react';
+import { Check, Clock, AlertTriangle, Lock, Circle, Minus, Pencil, Package, Ruler, FileText, CalendarClock } from 'lucide-react';
 import { formatDossierTableDate } from '../../domain/dossierTable';
+import { plural } from '../../domain/plural';
+import CasierEditor from './CasierEditor';
 import './dossierOverview.css';
 
+// `planned`: a departure is assigned before the expedition is the current step;
+// the step names it (« Prévu le jeudi 8 octobre », the model's stateLabel).
 const STEP_STATES = {
   done: { label: 'Terminé', icon: Check },
   current: { label: 'À faire', icon: Circle },
+  planned: { label: 'Prévu', icon: CalendarClock },
   waiting: { label: 'En attente', icon: Clock },
   upcoming: { label: 'À venir', icon: Circle },
   review: { label: 'À revoir', icon: AlertTriangle },
@@ -23,9 +28,11 @@ function dimensions(boxes) {
   return `${numberFormat.format(box.dimL)} × ${numberFormat.format(box.dimW)} × ${numberFormat.format(box.dimH)} cm`;
 }
 
+// In-page actions: each opens a step, an editor or the details panel of this
+// page, never another site, so no external-link arrow.
 function OverviewAction({ onClick, label, children }) {
   if (!onClick) return null;
-  return <button type="button" className="dossier-overview-link" aria-label={label} onClick={onClick}>{children}<ArrowUpRight size={14} aria-hidden="true" /></button>;
+  return <button type="button" className="dossier-overview-link" aria-label={label} onClick={onClick}>{children}</button>;
 }
 
 function ReceivedCartonArrival({ box }) {
@@ -50,13 +57,13 @@ function Step({ step, viewedTask, onNavigateTask, summaryId }) {
   const viewed = viewedTask === step.id;
   const content = <>
     <span className="dossier-overview-step-label">{step.label}</span>
-    <span className="dossier-overview-step-state"><Icon size={14} aria-hidden="true" />{state.shortLabel || state.label}</span>
+    <span className="dossier-overview-step-state"><Icon size={14} aria-hidden="true" />{step.stateLabel || state.shortLabel || state.label}</span>
   </>;
   const title = [step.summary, stepDateLabel(step)].filter(Boolean).join(' · ');
   return <li data-step={step.id} data-state={step.state}>
     {step.canOpen && onNavigateTask ? <button type="button" className="dossier-overview-step"
       aria-current={viewed ? 'step' : undefined}
-      aria-label={`Consulter l’étape ${step.label} — ${state.label}`}
+      aria-label={`Consulter l’étape ${step.label} — ${step.stateLabel || state.label}`}
       aria-describedby={viewed ? summaryId : undefined}
       title={title || undefined} onClick={() => onNavigateTask(step.id)}>{content}</button>
       : <div className="dossier-overview-step dossier-overview-step-readonly" title={title || undefined}>{content}</div>}
@@ -67,11 +74,24 @@ function Step({ step, viewedTask, onNavigateTask, summaryId }) {
  * reading an earlier step never changes the dossier or sends a notification.
  * `departure` is the dossier's « Départ » line, next to Casier; `departureEditor`,
  * its open editor, follows the heading's actions so the focus order matches the
- * layout. */
+ * layout. « Modifier » next to Casier opens its editor in place, like the
+ * Départ field, at the same position (after the heading's actions). */
 export default function DossierOverview({
   dossier, model, currentTask: viewedTask, onNavigateTask, onOpenContext, onCorrect,
-  onEditCasier, canEditCasier = false, canEditReception = false, canEditPreparation = false, canEditQuote = false, departure = null, departureEditor = null,
+  canEditCasier = false, canEditReception = false, canEditPreparation = false, canEditQuote = false, departure = null, departureEditor = null,
 }) {
+  const [casierEditing, setCasierEditing] = useState(false);
+  const casierButton = useRef(null);
+  const casierWasEditing = useRef(false);
+  const casierEditorId = useId();
+  const casierOpen = casierEditing && canEditCasier;
+  useEffect(() => { casierWasEditing.current = false; setCasierEditing(false); }, [dossier?.id]);
+  // Closing the editor (saved or cancelled) gives the focus back to « Modifier ».
+  useEffect(() => {
+    if (casierOpen) { casierWasEditing.current = true; return; }
+    if (casierWasEditing.current) casierButton.current?.focus();
+    casierWasEditing.current = false;
+  }, [casierOpen]);
   if (!dossier || !model) return null;
   const received = model.received || {};
   const optimization = model.optimization || {};
@@ -91,15 +111,25 @@ export default function DossierOverview({
   const openedStep = steps.find(step => step.id === viewedTask);
   const openedStepSummaryId = `dossier-overview-opened-${dossier.id}`;
 
+  // Three stable groups: who (reference), what (Casier, Départ), where to go
+  // (open step, history). A group wraps whole, never one link alone.
   return <section aria-label="Vue d’ensemble du dossier" data-testid="dossier-overview" className="dossier-overview">
     <div className="dossier-overview-heading">
       <div className="dossier-overview-identity"><h2>Vue d’ensemble</h2><span data-overview="reference">{model.reference || dossier.ref}</span></div>
-      <div className="dossier-overview-casier" data-overview="casier"><span>Casier <strong>{model.casier || 'à renseigner'}</strong></span>
-        {canEditCasier && onEditCasier && <button type="button" className="dossier-overview-casier-edit" aria-label="Modifier le casier du dossier" onClick={onEditCasier}><Pencil size={14} aria-hidden="true" /><span>Modifier</span></button>}
+      <div className="dossier-overview-fields">
+        <div className="dossier-overview-casier" data-overview="casier"><span>Casier <strong>{model.casier || 'à renseigner'}</strong></span>
+          {canEditCasier && <button ref={casierButton} type="button" className="dossier-overview-casier-edit" aria-label="Modifier le casier du dossier"
+            aria-expanded={casierOpen} aria-controls={casierOpen ? casierEditorId : undefined} onClick={() => setCasierEditing(editing => !editing)}>
+            <Pencil size={14} aria-hidden="true" /><span>Modifier</span>
+          </button>}
+        </div>
+        {departure}
       </div>
-      {departure}
-      {canOpen(viewedTask) && <OverviewAction onClick={openTask(viewedTask)}>Aller à l’étape ouverte</OverviewAction>}
-      <OverviewAction onClick={openContext('historique')} label="Consulter l’historique du dossier">Historique</OverviewAction>
+      <div className="dossier-overview-links">
+        {canOpen(viewedTask) && <OverviewAction onClick={openTask(viewedTask)}>Aller à l’étape ouverte</OverviewAction>}
+        <OverviewAction onClick={openContext('historique')} label="Consulter l’historique du dossier">Historique</OverviewAction>
+      </div>
+      {casierOpen && <CasierEditor id={casierEditorId} variant="summary" onDone={() => setCasierEditing(false)} />}
       {departureEditor}
     </div>
 
@@ -123,7 +153,7 @@ export default function DossierOverview({
       </div>
       <div className="dossier-overview-fact dossier-overview-invoices" data-overview="invoices">
         <div><h3><FileText size={15} aria-hidden="true" />Factures</h3>
-          <p className="dossier-overview-summary">{invoices.visible ? invoices.summary || `${invoices.receivedCount || 0} reçue(s) · ${invoices.validatedCount || 0} validée(s)` : 'Accès réservé'}</p>
+          <p className="dossier-overview-summary">{invoices.visible ? invoices.summary || `${plural(invoices.receivedCount || 0, 'facture reçue', 'factures reçues')} · ${plural(invoices.validatedCount || 0, 'validée')}` : 'Accès réservé'}</p>
         </div>
         {invoices.visible && <OverviewAction onClick={openTask('documents') || openContext('documents')} label="Consulter les factures du dossier">Consulter</OverviewAction>}
       </div>
@@ -138,7 +168,7 @@ export default function DossierOverview({
     </div>
 
     {alerts.length > 0 && <details className="dossier-overview-alerts">
-      <summary><AlertTriangle size={15} aria-hidden="true" /><span>{alerts[0].message}{alerts.length > 1 ? ` · ${alerts.length - 1} autre${alerts.length > 2 ? 's' : ''} point${alerts.length > 2 ? 's' : ''} à vérifier` : ''}</span></summary>
+      <summary><AlertTriangle size={15} aria-hidden="true" /><span>{alerts[0].message}{alerts.length > 1 ? ` · ${plural(alerts.length - 1, 'autre point', 'autres points')} à vérifier` : ''}</span></summary>
       <ul>{alerts.map((alert, index) => <li key={alert.code || index}><span>{alert.message}</span>{canOpen(alert.task) && <OverviewAction onClick={openTask(alert.task)} label={`Vérifier : ${alert.message}`}>Vérifier</OverviewAction>}</li>)}</ul>
     </details>}
 

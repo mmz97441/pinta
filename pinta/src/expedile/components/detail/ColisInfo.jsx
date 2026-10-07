@@ -1,97 +1,39 @@
 import { SecureImage } from '../ui/SecureFile';
 import { createTelegramInvitation } from '../../services/telegramApi';
 import React, { useEffect, useRef, useState } from 'react';
-import { Edit3, Check, X, ChevronDown, ChevronUp, ClipboardList, Camera, AlertTriangle } from 'lucide-react';
+import { Edit3, ChevronDown, ChevronUp, ClipboardList, Camera, AlertTriangle } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { BRAND, ABONNEMENTS } from '../../constants';
-import { eur, hasTrack, trackStr, trackCount, telegramLink } from '../../utils';
+import { ABONNEMENTS } from '../../constants';
+import { eur } from '../../utils';
 import ReceivedCartons from './ReceivedCartons';
+import CasierEditor, { casierEditable } from './CasierEditor';
 
 export default function ColisInfo({ compact = false, onCompleteReception, casierEditRequest = 0 }) {
-  const { sel, selClient: cl, selDest, isStaff, upd, flash, data, settings, can } = useApp();
+  const { sel, selClient: cl, selDest, isStaff, flash, settings, can } = useApp();
   const [editCasier, setEditCasier] = useState(false);
-  const [casierTmp, setCasierTmp] = useState('');
-  const [moveAll, setMoveAll] = useState(false);
+  const [casierSaved, setCasierSaved] = useState('');
   const [showCasierHist, setShowCasierHist] = useState(false);
-  const casierInput = useRef(null);
   const casierEditButton = useRef(null);
   const wasEditingCasier = useRef(false);
   const handledCasierRequest = useRef(0);
 
-  const canEditCasier = isStaff && sel && !sel.archive && !['livre', 'annule'].includes(sel.statut)
-    && ['perm_colis_receptionner', 'perm_colis_preparer', 'perm_colis_modifier_dims'].some(permission => can(permission));
+  const canEditCasier = isStaff && casierEditable(sel, can);
   useEffect(() => {
     if (!canEditCasier || !casierEditRequest || casierEditRequest === handledCasierRequest.current) return;
     handledCasierRequest.current = casierEditRequest;
-    // A direct overview action opens the existing editor without replacing an
-    // unsaved correction when the live dossier receives a colleague's update.
-    if (!editCasier) { setCasierTmp(sel.casier || ''); setEditCasier(true); }
-  }, [casierEditRequest, canEditCasier, editCasier, sel?.casier]);
+    // A direct request opens the editor without replacing an unsaved correction
+    // when the live dossier receives a colleague's update.
+    if (!editCasier) { setCasierSaved(''); setEditCasier(true); }
+  }, [casierEditRequest, canEditCasier, editCasier]);
+  // The editor focuses its own field; closing it returns to « Modifier le casier ».
   useEffect(() => {
-    if (!editCasier) {
-      if (wasEditingCasier.current) casierEditButton.current?.focus();
-      wasEditingCasier.current = false;
-      return;
-    }
-    wasEditingCasier.current = true;
-    const frame = requestAnimationFrame(() => { casierInput.current?.focus(); casierInput.current?.scrollIntoView({ block: 'center' }); });
-    return () => cancelAnimationFrame(frame);
-  }, [editCasier, casierEditRequest]);
+    if (editCasier) { wasEditingCasier.current = true; return; }
+    if (wasEditingCasier.current) casierEditButton.current?.focus();
+    wasEditingCasier.current = false;
+  }, [editCasier]);
 
   if (!sel) return null;
   const canInvite = isStaff && (can('perm_comm_telegram') || can('perm_clients_creer'));
-
-  // ── Casier save handler (with moveAll support) ──
-  const handleSaveCasier = async () => {
-    if (!canEditCasier) return;
-    try {
-    const newCasier = casierTmp.trim();
-    if (!newCasier) { setEditCasier(false); setCasierTmp(''); return; }
-
-    const oldCasier = sel.casier;
-
-    // Build casier historique entry
-    const histEntry = oldCasier ? { casier: oldCasier, date: new Date().toISOString() } : null;
-    const updFields = { casier: newCasier };
-    if (histEntry) {
-      updFields.casierHistorique = [...(sel.casierHistorique || []), histEntry];
-    }
-    await upd(sel.id, updFields);
-
-    // Move all client's active colis if checked (same envoi only)
-    if (moveAll && cl) {
-      // Only move colis that have NO envoi (locked colis stay in their casier)
-      const activeColis = data.filter(
-        (c) => c.clientId === cl.id && c.id !== sel.id
-          && c.statut !== 'livre' && c.statut !== 'annule'
-          && !c.envoi // NEVER move a colis that has an envoi
-      );
-      for (const c of activeColis) {
-        const cHistEntry = c.casier ? { casier: c.casier, date: new Date().toISOString() } : null;
-        const cUpd = { casier: newCasier };
-        if (cHistEntry) {
-          cUpd.casierHistorique = [...(c.casierHistorique || []), cHistEntry];
-        }
-        await upd(c.id, cUpd);
-      }
-      const skipped = data.filter(
-        (c) => c.clientId === cl.id && c.id !== sel.id
-          && c.statut !== 'livre' && c.statut !== 'annule'
-          && c.envoi
-      ).length;
-      flash(skipped > 0
-        ? `Casier mis à jour pour ${activeColis.length + 1} colis (${skipped} colis sur un autre envoi non déplacés)`
-        : `Casier mis à jour pour ${activeColis.length + 1} colis`
-      );
-    } else {
-      flash('Casier mis à jour');
-    }
-
-    setEditCasier(false);
-    setCasierTmp('');
-    setMoveAll(false);
-    }catch(error){flash({msg:`Casier non enregistré : ${error.message}`,type:'error'});}
-  };
 
   return (
     <div className="card p-4 anim-fade">
@@ -191,62 +133,33 @@ export default function ColisInfo({ compact = false, onCompleteReception, casier
 
       <div className="mt-3 pt-3 border-t"><ReceivedCartons colis={sel} settings={settings} onCompleteReception={onCompleteReception} /></div>
 
-      {/* Casier */}
+      {/* Casier: one line (label, value and « Modifier » on the same centre line),
+          or the editor in its place, its label above the field. */}
       {(sel.casier || isStaff) && (
         <div className="mt-2 pt-2 border-t">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-bold text-gray-600">Casier :</span>
-            {editCasier && canEditCasier ? (
-              <div className="flex-1 space-y-2">
-                <div className="flex items-center gap-1">
-                  <input
-                    ref={casierInput}
-                    aria-label="Casier du dossier"
-                    value={casierTmp}
-                    onChange={(e) => setCasierTmp(e.target.value.toUpperCase())}
-                    className="min-h-11 px-2 py-1 border-2 border-amber-300 rounded-lg text-sm font-mono w-24"
-                    style={{ outline: 'none' }}
-                    autoFocus
-                  />
-                  <button aria-label="Enregistrer le casier" onClick={handleSaveCasier} className="min-h-11 min-w-11 flex items-center justify-center rounded-md text-green-700 hover:bg-green-50 transition-colors">
-                    <Check size={16} />
-                  </button>
-                  <button aria-label="Annuler la modification du casier" onClick={() => { setEditCasier(false); setCasierTmp(''); setMoveAll(false); }} className="min-h-11 min-w-11 flex items-center justify-center rounded-md text-gray-600 hover:bg-gray-100 transition-colors">
-                    <X size={16} />
-                  </button>
-                </div>
-                {isStaff && cl && (
-                  <label className="flex items-center gap-1.5 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={moveAll}
-                      onChange={(e) => setMoveAll(e.target.checked)}
-                      className="w-3.5 h-3.5 rounded accent-amber-500 cursor-pointer"
-                    />
-                    <span className="text-[11px] text-gray-600 font-medium">Appliquer à tous les colis de ce client</span>
-                  </label>
-                )}
-              </div>
-            ) : (
-              <div className="flex items-center gap-1">
-                <span className={`text-sm font-mono font-bold ${sel.casier ? '' : 'text-gray-500 italic'}`} style={sel.casier ? { color: 'var(--brand-text)' } : {}}>
-                  {sel.casier || 'Non attribué'}
-                </span>
-                {canEditCasier && (
-                  <button ref={casierEditButton} aria-label="Modifier le casier" onClick={() => { setCasierTmp(sel.casier || ''); setEditCasier(true); }} className="min-h-11 min-w-11 flex items-center justify-center text-xs text-gray-600 hover:text-gray-800 ml-1">
-                    <Edit3 size={12} />
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
+          {editCasier && canEditCasier ? <CasierEditor variant="panel" onDone={result => { setCasierSaved(result?.saved ? result.message : ''); setEditCasier(false); }} /> : (
+            <div className="flex min-h-11 items-center gap-2">
+              <span className="text-xs font-bold text-gray-600">Casier :</span>
+              <span className={`text-sm font-mono font-bold ${sel.casier ? '' : 'text-gray-500 italic'}`} style={sel.casier ? { color: 'var(--brand-text)' } : {}}>
+                {sel.casier || 'Non attribué'}
+              </span>
+              {canEditCasier && (
+                <button ref={casierEditButton} aria-label="Modifier le casier" onClick={() => { setCasierSaved(''); setEditCasier(true); }} className="min-h-11 min-w-11 flex items-center justify-center rounded-lg text-gray-600 hover:text-gray-800">
+                  <Edit3 size={16} aria-hidden="true" />
+                </button>
+              )}
+            </div>
+          )}
+          {/* The toast stays under this panel: the confirmation is repeated here. */}
+          {casierSaved && !editCasier && <p role="status" className="dossier-casier-saved">{casierSaved}</p>}
 
           {/* Casier history */}
           {sel.casierHistorique && sel.casierHistorique.length > 0 && (
             <div className="mt-1.5">
               <button
                 onClick={() => setShowCasierHist(!showCasierHist)}
-                className="flex items-center gap-1 text-[11px] text-gray-600 hover:text-gray-600 font-medium transition-colors"
+                aria-expanded={showCasierHist}
+                className="flex min-h-11 items-center gap-1 text-[11px] text-gray-600 hover:text-gray-600 font-medium transition-colors"
               >
                 Historique casier ({sel.casierHistorique.length})
                 {showCasierHist ? <ChevronUp size={12} /> : <ChevronDown size={12} />}

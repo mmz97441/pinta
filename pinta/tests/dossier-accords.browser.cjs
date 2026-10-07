@@ -51,15 +51,26 @@ const DEPARTURE = {
 // DOSSIER.ACC001 is the id of EXP-ACC001, and so on.
 const DOSSIER = Object.fromEntries(Array.from({ length: 13 }, (_, index) => [`ACC${pad(index + 1)}`, uuid('e2000000', index + 1)]));
 const REF = Object.fromEntries(Object.keys(DOSSIER).map(key => [DOSSIER[key], `EXP-${key}`]));
-// The option label of each upcoming departure, as the Départ field shows it. None has a
-// loading closing of its own: the Wednesday 17 h is their habitual closing, never a cut-off.
-const OPTION = {
-  [DEPARTURE.reunion8]: 'jeudi 8 octobre · clôture habituelle mercredi 7 octobre, 17 h',
-  [DEPARTURE.reunion15]: 'jeudi 15 octobre · clôture habituelle mercredi 14 octobre, 17 h',
-  [DEPARTURE.reunion22]: 'jeudi 22 octobre · clôture habituelle mercredi 21 octobre, 17 h',
-  [DEPARTURE.reunion29]: 'jeudi 29 octobre · clôture habituelle mercredi 28 octobre, 17 h',
-  [DEPARTURE.guadeloupe15]: 'jeudi 15 octobre · clôture habituelle mercredi 14 octobre, 17 h',
-  [DEPARTURE.guadeloupe22]: 'jeudi 22 octobre · clôture habituelle mercredi 21 octobre, 17 h',
+// Each upcoming departure as the Départ calendar shows it (lot P4b): its Paris day, its
+// shortcut (« jeu. 8 oct. » and its closing) and the accessible name of its day in the grid.
+// None has a loading closing of its own: the Wednesday 17 h is their habitual closing, never a cut-off.
+const DAY_OF = {
+  [DEPARTURE.reunion8]: '2026-10-08', [DEPARTURE.reunion15]: '2026-10-15', [DEPARTURE.reunion22]: '2026-10-22', [DEPARTURE.reunion29]: '2026-10-29',
+  [DEPARTURE.guadeloupe15]: '2026-10-15', [DEPARTURE.guadeloupe22]: '2026-10-22',
+};
+const DAY_LABEL = {
+  [DEPARTURE.reunion8]: 'jeudi 8 octobre', [DEPARTURE.reunion15]: 'jeudi 15 octobre', [DEPARTURE.reunion22]: 'jeudi 22 octobre', [DEPARTURE.reunion29]: 'jeudi 29 octobre',
+  [DEPARTURE.guadeloupe15]: 'jeudi 15 octobre', [DEPARTURE.guadeloupe22]: 'jeudi 22 octobre',
+};
+const CLOSING = {
+  [DEPARTURE.reunion8]: 'clôture habituelle mercredi 7 octobre, 17 h', [DEPARTURE.reunion15]: 'clôture habituelle mercredi 14 octobre, 17 h',
+  [DEPARTURE.reunion22]: 'clôture habituelle mercredi 21 octobre, 17 h', [DEPARTURE.reunion29]: 'clôture habituelle mercredi 28 octobre, 17 h',
+  [DEPARTURE.guadeloupe15]: 'clôture habituelle mercredi 14 octobre, 17 h', [DEPARTURE.guadeloupe22]: 'clôture habituelle mercredi 21 octobre, 17 h',
+};
+const SHORTCUT = {
+  [DEPARTURE.reunion8]: { day: 'jeu. 8 oct.', closing: 'clôture habituelle mer. 7, 17 h' }, [DEPARTURE.reunion15]: { day: 'jeu. 15 oct.', closing: 'clôture habituelle mer. 14, 17 h' },
+  [DEPARTURE.reunion22]: { day: 'jeu. 22 oct.', closing: 'clôture habituelle mer. 21, 17 h' }, [DEPARTURE.reunion29]: { day: 'jeu. 29 oct.', closing: 'clôture habituelle mer. 28, 17 h' },
+  [DEPARTURE.guadeloupe15]: { day: 'jeu. 15 oct.', closing: 'clôture habituelle mer. 14, 17 h' }, [DEPARTURE.guadeloupe22]: { day: 'jeu. 22 oct.', closing: 'clôture habituelle mer. 21, 17 h' },
 };
 const REUNION_PLANNED = [DEPARTURE.reunion8, DEPARTURE.reunion15, DEPARTURE.reunion22, DEPARTURE.reunion29];
 
@@ -192,8 +203,14 @@ const overview = f => f.page.getByTestId('dossier-overview');
 const workspace = f => f.page.getByTestId('dossier-task-workspace');
 const departureLine = scope => scope.locator('.dossier-departure-line');
 const editDeparture = f => overview(f).getByRole('button', { name: 'Modifier le départ du dossier', exact: true });
-const combobox = scope => scope.getByRole('combobox', { name: 'Départ de cette expédition', exact: true });
-const listbox = scope => scope.getByRole('listbox');
+// The Départ calendar (lot P4b): a group named by its visible label, its shortcuts, its month grid.
+const FIELD_NAME = { overview: 'Départ de cette expédition', task: 'Affecter à un départ' };
+const picker = scope => scope.locator('.dossier-departure-picker');
+const calendar = scope => scope.getByRole('grid');
+const shortcut = (scope, envoiId) => scope.locator(`[data-shortcut][data-envoi="${envoiId}"]`);
+const dayButton = (scope, day) => scope.locator(`.dossier-calendar-grid [data-day="${day}"]`);
+const proposal = scope => scope.locator('.dossier-departure-proposal');
+const proposalAction = (scope, action) => scope.locator(`.dossier-departure-picker [data-action="${action}"]`);
 const alertBand = f => f.page.getByRole('region', { name: 'À vérifier', exact: true });
 /** The band's lines in order: the sentence and its link, if any. */
 const bandLines = f => alertBand(f).locator('li').evaluateAll(items => items.map(item => {
@@ -226,25 +243,46 @@ async function departureText(scope) {
   const line = departureLine(scope);
   return { text: (await line.locator('.dossier-departure-text').innerText()).replace(/\s+/g, ' ').trim(), envoi: await line.getAttribute('data-envoi'), wish: await line.getAttribute('data-wish') };
 }
-/** The offered options, in order: departure label, its id, the « Prochain départ » mark and the current one. */
-function optionList(scope) {
-  return listbox(scope).getByRole('option').evaluateAll(nodes => nodes.map(node => ({
-    label: node.querySelector('.dossier-departure-option-text').textContent.trim(), kind: node.dataset.kind, envoi: node.dataset.envoi || null,
-    next: Boolean(node.querySelector('.dossier-departure-badge')), current: node.getAttribute('aria-current') === 'true',
+/** The shortcuts, in order: the departure, its day and closing, the dossier's own marked. */
+function shortcutList(scope) {
+  return scope.locator('[data-shortcut]').evaluateAll(nodes => nodes.map(node => ({
+    envoi: node.dataset.envoi, day: node.querySelector('.dossier-departure-shortcut-day').textContent.trim(),
+    closing: node.querySelector('.dossier-departure-shortcut-closing')?.textContent.trim() || null, current: node.getAttribute('aria-current') === 'true',
   })));
+}
+/** The days of the month shown: day → its kind, marks and accessible name. */
+function monthDays(scope) {
+  return calendar(scope).locator('[data-day]').evaluateAll(nodes => Object.fromEntries(nodes.map(node => [node.dataset.day, {
+    kind: node.dataset.kind, label: node.getAttribute('aria-label'), assigned: 'assigned' in node.dataset, wish: 'wish' in node.dataset,
+    chosen: 'chosen' in node.dataset, disabled: node.getAttribute('aria-disabled') === 'true', today: node.getAttribute('aria-current') === 'date',
+  }])));
+}
+/** Shows a month with ‹ ›, as a person does. */
+async function showMonth(scope, month) {
+  for (let step = 0; step < 24; step += 1) {
+    const shown = await calendar(scope).getAttribute('data-month');
+    if (shown === month) return;
+    await scope.getByRole('button', { name: shown < month ? 'Mois suivant' : 'Mois précédent', exact: true }).click();
+    await scope.locator(`.dossier-calendar-grid[data-month]:not([data-month="${shown}"])`).waitFor();
+  }
+  throw new Error(`Month ${month} not reached.`);
+}
+/** Picks a day of the grid (a departure is assigned at once; another day shows its proposal). */
+async function pickDay(scope, day) {
+  await showMonth(scope, day.slice(0, 7));
+  await dayButton(scope, day).click();
 }
 async function openOverviewEditor(f) {
   await editDeparture(f).click();
-  await combobox(overview(f)).waitFor();
-  await listbox(overview(f)).waitFor();
-  // The field takes the focus.
-  await f.page.waitForFunction(() => document.activeElement?.getAttribute('role') === 'combobox' && document.activeElement.closest('[data-testid="dossier-overview"]'));
+  await calendar(overview(f)).waitFor();
+  // The calendar takes the focus: its first shortcut, else its grid.
+  await f.page.waitForFunction(() => Boolean(document.activeElement?.closest('[data-testid="dossier-overview"] .dossier-departure-picker')));
 }
 const focusOnEdit = f => f.page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === 'Modifier le départ du dossier');
-const option = (scope, envoiId) => listbox(scope).locator(`[role="option"][data-envoi="${envoiId}"]`);
-const actionOption = (scope, kind) => listbox(scope).locator(`[role="option"][data-kind="${kind}"]`);
-const missingLine = scope => scope.locator('.dossier-departure-missing');
 const fieldError = scope => scope.locator('.dossier-departure-picker [role="alert"]');
+/** The line shows the given departure (`''`: none). */
+const lineShows = (f, scopeName, envoi) => f.page.waitForFunction(([selector, expected]) => document.querySelector(selector)?.dataset.envoi === expected,
+  [`${scopeName === 'task' ? '[data-testid="dossier-task-workspace"]' : '[data-testid="dossier-overview"]'} .dossier-departure-line`, envoi]);
 
 // ── « Accords clients » and the grouping by client ────────────────────────────
 // The dossiers whose consent is to obtain, one band per client, the client
@@ -383,16 +421,18 @@ async function main() {
       for (const id of [DOSSIER.ACC001, DOSSIER.ACC003, DOSSIER.ACC006, DOSSIER.ACC007, DOSSIER.ACC008]) {
         await openDossier(f, id);
         await openOverviewEditor(f);
-        // Typing a day without a departure only proposes; nothing is written.
-        await combobox(overview(f)).fill('26/11');
-        await missingLine(overview(f)).getByText('Aucun départ prévu le jeudi 26 novembre', { exact: false }).waitFor();
-        await combobox(overview(f)).press('Escape');
-        await combobox(overview(f)).waitFor({ state: 'detached' });
+        // Picking a day without a departure only proposes; nothing is written.
+        await pickDay(overview(f), '2026-11-26');
+        await proposal(overview(f)).getByText('Jeudi 26 novembre : aucun départ prévu', { exact: true }).waitFor();
+        await f.page.keyboard.press('Escape');
+        await picker(overview(f)).waitFor({ state: 'detached' });
         await focusOnEdit(f); // Escape closes the field and returns to « Modifier ».
       }
       await openDossier(f, DOSSIER.ACC008, 'section=expedition');
-      await combobox(workspace(f)).click();await listbox(workspace(f)).waitFor();
-      await combobox(workspace(f)).press('Escape');await listbox(workspace(f)).waitFor({ state: 'detached' });
+      await pickDay(workspace(f), '2026-11-26');await proposal(workspace(f)).waitFor();
+      // In the task the calendar stays; Escape withdraws the proposal.
+      await f.page.keyboard.press('Escape');await proposal(workspace(f)).waitFor({ state: 'detached' });
+      await calendar(workspace(f)).waitFor();
       assertNoBusinessWrite(f);
     });
 
@@ -429,31 +469,43 @@ async function main() {
       const scope = scopeOf(f), task = scopeOf === workspace;
       const planned = statut === 'en_preparation' ? [DEPARTURE.guadeloupe15, DEPARTURE.guadeloupe22] : REUNION_PLANNED;
       const destination = statut === 'en_preparation' ? 'Guadeloupe' : 'Réunion';
-      const open = async () => { if (task) await combobox(scope).click(); else await openOverviewEditor(f); await listbox(scope).waitFor(); };
+      const open = async () => { if (!task) await openOverviewEditor(f); await calendar(scope).waitFor(); };
       await open();
-      // The planned departures of the destination, soonest first, the next one marked; « Retirer le départ » when one is assigned.
-      assert.deepEqual(await optionList(scope), [
-        ...planned.map((envoi, index) => ({ label: OPTION[envoi], kind: 'departure', envoi, next: index === 0, current: envoi === start })),
-        ...(start ? [{ label: 'Retirer le départ', kind: 'remove', envoi: null, next: false, current: false }] : []),
-      ]);
-      assert.equal(await listbox(scope).getAttribute('aria-label'), `Départs prévus pour ${statut === 'en_preparation' ? 'la Guadeloupe' : 'la Réunion'}`);
-      assert.equal(await option(scope, planned[0]).getAttribute('aria-selected'), 'true', 'The next departure is suggested.');
+      // The field is the calendar group, named by its visible label.
+      assert.equal(await scope.getByRole('group', { name: FIELD_NAME[task ? 'task' : 'overview'], exact: true }).count(), 1);
+      // The next three departures of the destination, soonest first, as shortcuts; the dossier's own marked.
+      assert.equal(await scope.locator('.dossier-departure-shortcuts-title').innerText(), `Prochains départs pour ${statut === 'en_preparation' ? 'la Guadeloupe' : 'la Réunion'}`);
+      assert.deepEqual(await shortcutList(scope), planned.slice(0, 3).map(envoi => ({ envoi, ...SHORTCUT[envoi], current: envoi === start })));
+      // The grid opens on the month of the dossier's departure (else the next one), each departure day named.
+      assert.equal(await calendar(scope).getAttribute('data-month'), '2026-10');
+      const days = await monthDays(scope);
+      for (const envoi of planned) assert.equal(days[DAY_OF[envoi]].label, `${DAY_LABEL[envoi]}, ${envoi === start ? 'départ du dossier' : 'départ prévu'}, ${CLOSING[envoi]}`);
+      if (start) assert.equal(days[DAY_OF[start]].assigned, true);
+      // « Retirer le départ » only when one is assigned.
+      assert.equal(await proposalAction(scope, 'remove').count(), start ? 1 : 0);
       for (const [step, envoi] of path.entries()) {
         const before = row(f, id).updated_at;
         if (step > 0) await open();
-        await option(scope, envoi).click();
-        await f.page.waitForFunction(([selector, expected]) => document.querySelector(selector)?.dataset.envoi === expected, [`${task ? '[data-testid="dossier-task-workspace"]' : '[data-testid="dossier-overview"]'} .dossier-departure-line`, envoi]);
+        // The first change by a shortcut, the next one by its day in the grid: both assign at once.
+        if (step === 0 && planned.slice(0, 3).includes(envoi)) await shortcut(scope, envoi).click(); else await pickDay(scope, DAY_OF[envoi]);
+        await lineShows(f, task ? 'task' : 'overview', envoi);
         assert.deepEqual(commands(f, 'assign_colis_departure').at(-1), { p_colis_id: id, p_envoi_id: envoi, p_expected_updated_at: before });
-        assert.equal((await departureText(scope)).text, `Départ : ${OPTION[envoi].split(' · ')[0]} · ${destination}`);
+        assert.equal((await departureText(scope)).text, `Départ : ${DAY_LABEL[envoi]} · ${destination}`);
         assert.equal(row(f, id).envoi_id, envoi);
         if (task) await scope.getByRole('status').filter({ hasText: 'Départ enregistré.' }).waitFor();
         else await focusOnEdit(f); // After the choice the focus returns to « Modifier ».
       }
+      // Choosing the dossier's own departure writes nothing.
+      await open();
+      const current = path.at(-1);
+      if (planned.slice(0, 3).includes(current)) await shortcut(scope, current).click(); else await pickDay(scope, DAY_OF[current]);
+      if (!task) await focusOnEdit(f);
+      assert.equal(commands(f, 'assign_colis_departure').length, path.length);
       // Removing: one command, the dossier has no departure any more.
       const before = row(f, id).updated_at;
       await open();
-      await actionOption(scope, 'remove').click();
-      await f.page.waitForFunction(selector => document.querySelector(selector)?.dataset.envoi === '', `${task ? '[data-testid="dossier-task-workspace"]' : '[data-testid="dossier-overview"]'} .dossier-departure-line`);
+      await proposalAction(scope, 'remove').click();
+      await lineShows(f, task ? 'task' : 'overview', '');
       assert.deepEqual(commands(f, 'assign_colis_departure').at(-1), { p_colis_id: id, p_envoi_id: null, p_expected_updated_at: before });
       assert.equal((await departureText(scope)).text, 'Départ : à choisir');
       assert.equal(commands(f, 'assign_colis_departure').length, path.length + 1);
@@ -464,90 +516,205 @@ async function main() {
       assert.equal(commands(f, 'set_colis_departure_wish').length + commands(f, 'create_departure_for_colis').length, 0);
     });
 
-    await scenario('the-combobox-filters-by-typing-and-works-with-the-keyboard', async f => {
-      await openDossier(f, DOSSIER.ACC001);
-      await openOverviewEditor(f);
-      const scope = overview(f), input = combobox(scope);
-      assert.equal(await input.getAttribute('aria-expanded'), 'true');
-      assert.equal(await input.getAttribute('aria-controls'), await listbox(scope).getAttribute('id'));
-      // Arrows move the suggestion, which the field announces.
-      const active = async () => input.evaluate(node => document.getElementById(node.getAttribute('aria-activedescendant'))?.dataset.envoi || document.getElementById(node.getAttribute('aria-activedescendant'))?.dataset.kind || null);
-      assert.equal(await active(), DEPARTURE.reunion8);
-      await input.press('ArrowDown');assert.equal(await active(), DEPARTURE.reunion15);
-      await input.press('ArrowUp');await input.press('ArrowUp');assert.equal(await active(), DEPARTURE.reunion29, 'Up from the first goes to the last.');
-      // Typing filters: a word, then a date with its departure.
-      await input.fill('22');
-      assert.deepEqual((await optionList(scope)).map(item => item.envoi), [DEPARTURE.reunion22]);
-      await input.fill('jeudi 29');
-      assert.deepEqual((await optionList(scope)).map(item => item.envoi), [DEPARTURE.reunion29]);
-      assert.equal(await missingLine(scope).count(), 0, 'A departure exists that day.');
-      await input.fill('15/10');
-      assert.deepEqual(await optionList(scope), [{ label: OPTION[DEPARTURE.reunion15], kind: 'departure', envoi: DEPARTURE.reunion15, next: false, current: false }]);
-      // A weekday never moves the date: « jeudi 23 » is the next 23rd, named with its real weekday.
-      assert.equal(await scope.locator('.dossier-departure-hint').innerText(), 'Tapez une date : 23/10 ou 23 octobre.');
-      await input.fill('jeudi 23');
-      assert.equal(await missingLine(scope).innerText(), 'Aucun départ prévu le vendredi 23 octobre pour la Réunion');
-      // A past day proposes nothing.
-      await input.fill('1/10/2026');
-      assert.equal(await missingLine(scope).innerText(), 'Choisissez une date à venir.');
-      assert.equal(await listbox(scope).count(), 0);
-      // Enter chooses the suggestion.
-      await input.fill('22/10');await input.press('Enter');
-      await f.page.waitForFunction(id => document.querySelector('[data-testid="dossier-overview"] .dossier-departure-line')?.dataset.envoi === id, DEPARTURE.reunion22);
-      assert.deepEqual(commands(f, 'assign_colis_departure'), [{ p_colis_id: DOSSIER.ACC001, p_envoi_id: DEPARTURE.reunion22, p_expected_updated_at: f.before.find(item => item.id === DOSSIER.ACC001).updated_at }]);
-      // « Annuler » closes without writing.
-      await openOverviewEditor(f);await scope.getByRole('button', { name: 'Annuler', exact: true }).click();
-      await input.waitFor({ state: 'detached' });
-      assert.equal(commands(f, 'assign_colis_departure').length, 1);
-      assertOnlyDepartureWrites(f);
-    });
-
-    await scenario('a-typed-day-without-departure-is-created-after-confirmation-and-assigned', async f => {
+    // The month grid follows the WAI-ARIA date grid pattern: one tab stop, arrows by day and
+    // week, Home/End, PageUp/PageDown by month, Enter/Space to choose, Escape back to « Modifier ».
+    for (const width of [1440, 390]) await scenario(`the-calendar-works-with-the-keyboard-${width}`, async f => {
       await openDossier(f, DOSSIER.ACC001);
       await openOverviewEditor(f);
       const scope = overview(f);
-      await combobox(scope).fill('jeudi 26 novembre');
-      assert.equal(await missingLine(scope).innerText(), 'Aucun départ prévu le jeudi 26 novembre pour la Réunion');
-      assert.deepEqual(await optionList(scope), [{ label: 'Créer ce départ (aérien) et y affecter le dossier', kind: 'create', envoi: null, next: false, current: false }]);
-      const dialog = f.page.getByRole('dialog', { name: 'Créer le départ du jeudi 26 novembre ?', exact: true });
-      const message = 'Départ aérien pour la Réunion, clôture mercredi 25 novembre, 17 h. Le dossier EXP-ACC001 y sera affecté. Aucun message n’est envoyé au client.';
-      // Each way of closing the question writes nothing.
-      for (const close of ['Annuler', 'Escape', 'Fermer la confirmation', 'backdrop']) {
-        await actionOption(scope, 'create').click();
-        await dialog.getByText(message, { exact: true }).waitFor();
-        if (close === 'Escape') await f.page.keyboard.press('Escape');
-        else if (close === 'backdrop') await f.page.mouse.click(4, 4);
-        else await dialog.getByRole('button', { name: close, exact: true }).click();
-        await dialog.waitFor({ state: 'hidden' });
-        assert.equal(commands(f, 'create_departure_for_colis').length, 0, `${close}: nothing is created.`);
-        await combobox(scope).click();
+      const focused = () => f.page.evaluate(() => document.activeElement?.dataset.day || document.activeElement?.dataset.envoi || document.activeElement?.getAttribute('aria-label') || null);
+      // The calendar opens on its first shortcut, the next departure.
+      assert.equal(await focused(), DEPARTURE.reunion8);
+      assert.equal(await scope.getByRole('grid', { name: 'octobre 2026', exact: true }).count(), 1);
+      // The grid is a single tab stop, after the month buttons, on its focus day (the next departure).
+      assert.equal(await calendar(scope).locator('[data-day][tabindex="0"]').count(), 1);
+      await scope.getByRole('button', { name: 'Mois suivant', exact: true }).focus();
+      await f.page.keyboard.press('Tab');
+      assert.equal(await focused(), '2026-10-08');
+      for (const [key, day] of [['ArrowRight', '2026-10-09'], ['ArrowDown', '2026-10-16'], ['ArrowLeft', '2026-10-15'], ['ArrowUp', '2026-10-08'], ['Home', '2026-10-05'], ['End', '2026-10-11']]) {
+        await f.page.keyboard.press(key);
+        assert.equal(await focused(), day, key);
+        assert.equal(await calendar(scope).locator('[data-day][tabindex="0"]').getAttribute('data-day'), day, `${key}: the tab stop follows the focus.`);
       }
+      // PageDown and PageUp change the month; never before the current one.
+      await f.page.keyboard.press('PageDown');
+      assert.equal(await focused(), '2026-11-11');
+      assert.equal(await scope.getByRole('grid', { name: 'novembre 2026', exact: true }).count(), 1);
+      await f.page.keyboard.press('PageUp');assert.equal(await focused(), '2026-10-11');
+      await f.page.keyboard.press('PageUp');assert.equal(await focused(), '2026-10-01');
+      assert.equal(await calendar(scope).getAttribute('data-month'), '2026-10');
+      // A past day is not selectable: Enter does nothing.
+      assert.equal(await dayButton(scope, '2026-10-01').getAttribute('aria-disabled'), 'true');
+      await f.page.keyboard.press('Enter');
+      assert.equal(await proposal(scope).count(), 0);
+      // Enter on a day without departure: its proposal, right below.
+      for (const key of ['ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowRight']) await f.page.keyboard.press(key);
+      assert.equal(await focused(), '2026-10-23');
+      await f.page.keyboard.press('Enter');
+      await proposal(scope).getByText('Vendredi 23 octobre : aucun départ prévu', { exact: true }).waitFor();
+      assert.equal(await dayButton(scope, '2026-10-23').getAttribute('data-chosen'), 'true');
+      assert.equal(await calendar(scope).locator('td[aria-selected="true"] [data-day]').getAttribute('data-day'), '2026-10-23');
+      // Space on a departure day assigns it at once.
+      await f.page.keyboard.press('ArrowLeft');assert.equal(await focused(), '2026-10-22');
+      await f.page.keyboard.press('Space');
+      await lineShows(f, 'overview', DEPARTURE.reunion22);
+      await focusOnEdit(f);
+      assert.deepEqual(commands(f, 'assign_colis_departure'), [{ p_colis_id: DOSSIER.ACC001, p_envoi_id: DEPARTURE.reunion22, p_expected_updated_at: f.before.find(item => item.id === DOSSIER.ACC001).updated_at }]);
+      // « Annuler » and Escape close without writing, the focus back on « Modifier ».
+      await openOverviewEditor(f);await scope.getByRole('button', { name: 'Annuler', exact: true }).click();
+      await picker(scope).waitFor({ state: 'detached' });await focusOnEdit(f);
+      await openOverviewEditor(f);await f.page.keyboard.press('ArrowRight');await f.page.keyboard.press('Escape');
+      await picker(scope).waitFor({ state: 'detached' });await focusOnEdit(f);
+      assert.equal(commands(f, 'assign_colis_departure').length, 1);
+      await noPageOverflow(f);
+      assertOnlyDepartureWrites(f);
+    }, { width });
+
+    // Shortcuts, month navigation, day states and the legend, light and dark, phone and desktop.
+    for (const theme of ['light', 'dark']) for (const width of [1440, 390]) await scenario(`the-calendar-shows-departures-the-chosen-day-and-its-legend-${width}-${theme}`, async f => {
+      const closed = uuid('d2000000', 12);
+      addDepartures(f, extraDeparture(closed, 'ENV-2026-110', '2026-10-13', '974', { loading_closes_at: '2026-10-06T07:00:00Z' }));
+      await openDossier(f, DOSSIER.ACC003);await waitTheme(f, theme);
+      await openOverviewEditor(f);
+      const scope = overview(f);
+      const days = await monthDays(scope);
+      // Past days disabled, today marked, the dossier's departure marked and named, the closed day muted with its reason.
+      assert.deepEqual([days['2026-10-05'].kind, days['2026-10-05'].disabled], ['past', true]);
+      assert.deepEqual([days['2026-10-06'].today, days['2026-10-06'].label], [true, 'mardi 6 octobre, aucun départ prévu, aujourd’hui']);
+      assert.deepEqual([days['2026-10-08'].kind, days['2026-10-08'].assigned], ['departure', true]);
+      assert.equal(days['2026-10-08'].label, 'jeudi 8 octobre, départ du dossier, clôture habituelle mercredi 7 octobre, 17 h');
+      assert.deepEqual([days['2026-10-13'].kind, days['2026-10-13'].label], ['closed', 'mardi 13 octobre, départ clôturé']);
+      assert.deepEqual(await scope.locator('.dossier-calendar-legend li').allInnerTexts(), ['départ prévu', 'jour choisi', 'départ clôturé ou parti']);
+      // ‹ › change the month; not before the current one.
+      assert.equal(await scope.getByRole('button', { name: 'Mois précédent', exact: true }).isDisabled(), true);
+      await scope.getByRole('button', { name: 'Mois suivant', exact: true }).click();
+      await scope.getByRole('grid', { name: 'novembre 2026', exact: true }).waitFor();
+      assert.equal((await monthDays(scope))['2026-11-01'].kind, 'free');
+      await scope.getByRole('button', { name: 'Mois précédent', exact: true }).click();
+      await scope.getByRole('grid', { name: 'octobre 2026', exact: true }).waitFor();
+      // A closed day says so, without any proposal to create or keep it.
+      await dayButton(scope, '2026-10-13').click();
+      await proposal(scope).getByText('Le départ du mardi 13 octobre est clôturé : choisissez un autre jour.', { exact: true }).waitFor();
+      assert.equal(await proposalAction(scope, 'create').count() + await proposalAction(scope, 'wish').count(), 0);
+      // A free day: chosen (ringed), its proposal below.
+      await dayButton(scope, '2026-10-27').click();
+      await proposal(scope).getByText('Mardi 27 octobre : aucun départ prévu', { exact: true }).waitFor();
+      // 44px targets inside the screen, readable text, no horizontal scroll, no axe violation.
+      for (const target of [...await scope.locator('[data-shortcut], .dossier-calendar-step, .dossier-calendar-day, [data-action]').all()]) {
+        const box = await target.boundingBox();
+        assert.ok(box.height >= 44 && box.width >= 44 && box.x >= 0 && box.x + box.width <= width + 1, `44px targets inside the screen (${JSON.stringify(box)}).`);
+      }
+      for (const part of await textStyles(scope.locator('.dossier-departure-label, .dossier-departure-shortcuts-title, .dossier-departure-shortcut-day, .dossier-departure-shortcut-closing, .dossier-calendar-month, .dossier-calendar-grid th, .dossier-calendar-day:not([data-kind="past"]), .dossier-calendar-legend li, .dossier-departure-proposal-title, .dossier-departure-proposal-closing, [data-action]'))) {
+        assert.ok(part.size >= 12, `${part.text}: ${part.size}px`); assert.ok(part.ratio >= 4.5, `${part.text}: ${part.ratio.toFixed(2)}:1`);
+      }
+      await noPageOverflow(f);await axe(f);
+      await picker(scope).screenshot({ path: `${output}/calendar-${width}-${theme}.png` });
+      assertNoBusinessWrite(f);
+    }, { width, theme });
+
+    // The calendar fits a 360px phone with 44px days, and a 320px one without horizontal scroll.
+    for (const width of [360, 320]) await scenario(`the-calendar-fits-a-${width}px-phone`, async f => {
+      for (const [id, query, scopeOf] of [[DOSSIER.ACC003, '', overview], [DOSSIER.ACC008, 'section=expedition', workspace]]) {
+        await openDossier(f, id, query);
+        if (scopeOf === overview) await openOverviewEditor(f);
+        const scope = scopeOf(f);await calendar(scope).waitFor();
+        await noPageOverflow(f);
+        for (const target of await calendar(scope).locator('.dossier-calendar-day').all()) {
+          const box = await target.boundingBox();
+          assert.ok(box.height >= 44 && box.x >= 0 && box.x + box.width <= width + 1, `${width}px: 44px tall days inside the screen.`);
+          if (width >= 360) assert.ok(box.width >= 44, `${width}px: 44px wide days (${box.width}).`);
+        }
+        await picker(scope).screenshot({ path: `${output}/calendar-${scopeOf === overview ? 'overview' : 'task'}-${width}.png` });
+      }
+      assertNoBusinessWrite(f);
+    }, { width });
+
+    await scenario('a-day-without-departure-is-created-at-once-and-assigned-without-waiting-for-the-planning', async f => {
+      await openDossier(f, DOSSIER.ACC001);
+      await openOverviewEditor(f);
+      const scope = overview(f);
+      await pickDay(scope, '2026-11-26');
+      // The proposal, right below the calendar: create (with the closing it will get) or keep the day.
+      assert.equal(await proposal(scope).locator('.dossier-departure-proposal-title').innerText(), 'Jeudi 26 novembre : aucun départ prévu');
+      assert.equal(await proposalAction(scope, 'create').innerText(), 'Créer ce départ (aérien) et y affecter le dossier');
+      assert.equal(await proposal(scope).locator('.dossier-departure-proposal-closing').innerText(), 'clôture mercredi 25 novembre, 17 h (heure de Paris)');
+      assert.equal(await proposalAction(scope, 'wish').innerText(), 'Garder comme date souhaitée');
+      assert.equal(await dayButton(scope, '2026-11-26').getAttribute('aria-describedby'), await proposal(scope).locator('.dossier-departure-proposal-title').getAttribute('id'));
+      // Another day or Escape changes nothing.
+      await dayButton(scope, '2026-11-27').click();await proposal(scope).getByText('Vendredi 27 novembre : aucun départ prévu', { exact: true }).waitFor();
+      await f.page.keyboard.press('Escape');await picker(scope).waitFor({ state: 'detached' });
+      assert.equal(commands(f, 'create_departure_for_colis').length, 0);
       assert.equal(f.tables.envois.length, f.envoisBefore.length);
-      await actionOption(scope, 'create').click();
-      await dialog.getByRole('button', { name: 'Créer ce départ et y affecter le dossier', exact: true }).click();
-      await dialog.waitFor({ state: 'hidden' });
+      // The planning reloads in the background: the field never waits for it.
+      let release, held = 0;
+      const gate = new Promise(resolve => { release = resolve; });
+      await f.page.route('**/rest/v1/envois?*', async route => { if (route.request().method() === 'GET') { held += 1; await gate; } await route.fallback(); });
+      await openOverviewEditor(f);await pickDay(scope, '2026-11-26');
+      await proposalAction(scope, 'create').click();
+      assert.equal(await f.page.getByRole('dialog').count(), 0, 'No question for a creation without a departure to replace.');
       await f.page.waitForFunction(() => document.querySelector('[data-testid="dossier-overview"] .dossier-departure-line')?.dataset.envoi);
+      await picker(scope).waitFor({ state: 'detached' });await focusOnEdit(f);
+      const pending = held;
+      // Released (the route stays: once the gate is open, later reads pass through).
+      release();
+      assert.equal(pending, 1, 'The planning reload is still pending while the field is already done.');
       assert.deepEqual(commands(f, 'create_departure_for_colis'), [{ p_colis_id: DOSSIER.ACC001, p_date: '2026-11-26', p_expected_updated_at: f.before.find(item => item.id === DOSSIER.ACC001).updated_at }], 'Created once.');
       const created = f.tables.envois.find(envoi => !f.envoisBefore.some(item => item.id === envoi.id));
       assert.deepEqual({ date: created.date_depart, destination: created.destination_code, statut: created.statut, mode: created.mode_transport, closing: created.loading_closes_at },
         { date: '2026-11-26', destination: '974', statut: 'planifie', mode: 'aerien', closing: '2026-11-25T16:00:00.000Z' });
       assert.equal(row(f, DOSSIER.ACC001).envoi_id, created.id);
       assert.deepEqual(await departureText(overview(f)), { text: 'Départ : jeudi 26 novembre · Réunion', envoi: created.id, wish: '' });
-      // The new departure is now offered like the others.
+      // The new departure is now a departure day, the dossier's own; the calendar opens on its month.
       await openOverviewEditor(f);
-      assert.deepEqual((await optionList(scope)).filter(item => item.kind === 'departure').map(item => [item.envoi, item.current]), [...REUNION_PLANNED.map(envoi => [envoi, false]), [created.id, true]]);
+      assert.equal(await calendar(scope).getAttribute('data-month'), '2026-11');
+      const days = await monthDays(scope);
+      assert.deepEqual([days['2026-11-26'].kind, days['2026-11-26'].assigned], ['departure', true]);
+      assert.deepEqual((await shortcutList(scope)).map(item => item.envoi), REUNION_PLANNED.slice(0, 3));
       assertOnlyDepartureWrites(f);
       assert.equal(commands(f, 'assign_colis_departure').length + commands(f, 'set_colis_departure_wish').length, 0);
     });
 
-    await scenario('without-perm-envois-creer-a-typed-day-is-kept-as-the-desired-day', async f => {
+    await scenario('creating-a-departure-in-place-of-the-assigned-one-is-confirmed-first', async f => {
+      await openDossier(f, DOSSIER.ACC003);
+      await openOverviewEditor(f);
+      const scope = overview(f);
+      await pickDay(scope, '2026-11-26');
+      // Both choices say they replace the assigned departure.
+      assert.equal(await proposalAction(scope, 'create').innerText(), 'Créer ce départ (aérien) et y affecter le dossier à la place du départ du jeudi 8 octobre');
+      assert.equal(await proposalAction(scope, 'wish').innerText(), 'Garder comme date souhaitée à la place du départ du jeudi 8 octobre');
+      const dialog = f.page.getByRole('dialog', { name: 'Remplacer le départ du jeudi 8 octobre ?', exact: true });
+      await proposalAction(scope, 'create').click();
+      await dialog.getByText('Le dossier EXP-ACC003 quittera le départ du jeudi 8 octobre (ENV-2026-101) pour un nouveau départ aérien le jeudi 26 novembre, clôture mercredi 25 novembre, 17 h (heure de Paris). Aucun message n’est envoyé au client.', { exact: true }).waitFor();
+      await f.page.screenshot({ path: `${output}/replace-by-creation-question-1440.png` });
+      // Each way of closing the question writes nothing.
+      for (const close of ['Annuler', 'Escape', 'Fermer la confirmation', 'backdrop']) {
+        if (close !== 'Annuler') { await proposalAction(scope, 'create').click(); await dialog.waitFor(); }
+        if (close === 'Escape') await f.page.keyboard.press('Escape');
+        else if (close === 'backdrop') await f.page.mouse.click(4, 4);
+        else await dialog.getByRole('button', { name: close, exact: true }).click();
+        await dialog.waitFor({ state: 'hidden' });
+        assert.equal(commands(f, 'create_departure_for_colis').length, 0, `${close}: nothing is created.`);
+      }
+      await proposalAction(scope, 'create').click();
+      await dialog.getByRole('button', { name: 'Remplacer le départ', exact: true }).click();await dialog.waitFor({ state: 'hidden' });
+      await f.page.waitForFunction(id => { const value = document.querySelector('[data-testid="dossier-overview"] .dossier-departure-line')?.dataset.envoi; return value && value !== id; }, DEPARTURE.reunion8);
+      const created = f.tables.envois.find(envoi => !f.envoisBefore.some(item => item.id === envoi.id));
+      assert.deepEqual(commands(f, 'create_departure_for_colis'), [{ p_colis_id: DOSSIER.ACC003, p_date: '2026-11-26', p_expected_updated_at: f.before.find(item => item.id === DOSSIER.ACC003).updated_at }]);
+      assert.equal(row(f, DOSSIER.ACC003).envoi_id, created.id);
+      assert.deepEqual(await departureText(overview(f)), { text: 'Départ : jeudi 26 novembre · Réunion', envoi: created.id, wish: '' });
+      assertOnlyDepartureWrites(f);
+    });
+
+    await scenario('without-perm-envois-creer-a-day-is-kept-as-the-desired-day', async f => {
       await openDossier(f, DOSSIER.ACC001);
       await openOverviewEditor(f);
       const scope = overview(f);
-      await combobox(scope).fill('26/11');
-      assert.equal(await missingLine(scope).innerText(), 'Aucun départ prévu le jeudi 26 novembre pour la Réunion');
-      assert.deepEqual(await optionList(scope), [{ label: 'Garder cette date (départ à créer)', kind: 'wish', envoi: null, next: false, current: false }]);
-      await actionOption(scope, 'wish').click();
+      await pickDay(scope, '2026-11-26');
+      assert.equal(await proposal(scope).locator('.dossier-departure-proposal-title').innerText(), 'Jeudi 26 novembre : aucun départ prévu');
+      // Without the right to create: only the desired day.
+      assert.equal(await proposalAction(scope, 'create').count(), 0);
+      assert.equal(await proposalAction(scope, 'wish').innerText(), 'Garder comme date souhaitée');
+      await proposalAction(scope, 'wish').click();
       await f.page.waitForFunction(() => document.querySelector('[data-testid="dossier-overview"] .dossier-departure-line')?.dataset.wish === '2026-11-26');
       assert.deepEqual(commands(f, 'set_colis_departure_wish'), [{ p_colis_id: DOSSIER.ACC001, p_date: '2026-11-26', p_expected_updated_at: f.before.find(item => item.id === DOSSIER.ACC001).updated_at }]);
       assert.deepEqual(await departureText(overview(f)), { text: 'Départ souhaité : jeudi 26 novembre · à créer', envoi: '', wish: '2026-11-26' });
@@ -555,12 +722,14 @@ async function main() {
       // « À vérifier » says that this departure is to create, with the link to the field.
       await alertBand(f).getByText('Départ souhaité le jeudi 26 novembre : aucun départ n’est prévu ce jour-là pour la Réunion.', { exact: true }).waitFor();
       await alertBand(f).getByRole('link', { name: 'Choisir ou créer le départ', exact: true }).waitFor();
-      // A typed day with a planned departure assigns it, and replaces the wish.
+      // The calendar opens on the desired day's month, the day marked; « Retirer la date souhaitée » is offered.
       await openOverviewEditor(f);
-      await combobox(scope).fill('15/10');
-      assert.deepEqual((await optionList(scope)).map(item => item.envoi || item.kind), [DEPARTURE.reunion15, 'remove']);
-      await option(scope, DEPARTURE.reunion15).click();
-      await f.page.waitForFunction(id => document.querySelector('[data-testid="dossier-overview"] .dossier-departure-line')?.dataset.envoi === id, DEPARTURE.reunion15);
+      assert.equal(await calendar(scope).getAttribute('data-month'), '2026-11');
+      assert.deepEqual([(await monthDays(scope))['2026-11-26'].wish, (await monthDays(scope))['2026-11-26'].label], [true, 'jeudi 26 novembre, jour souhaité, aucun départ prévu']);
+      assert.equal(await proposalAction(scope, 'remove').innerText(), 'Retirer la date souhaitée');
+      // A departure day assigns it at once, and replaces the wish.
+      await pickDay(scope, '2026-10-15');
+      await lineShows(f, 'overview', DEPARTURE.reunion15);
       assert.deepEqual([row(f, DOSSIER.ACC001).envoi_id, row(f, DOSSIER.ACC001).depart_souhaite], [DEPARTURE.reunion15, null]);
       assert.equal(commands(f, 'create_departure_for_colis').length, 0);
       assertOnlyDepartureWrites(f);
@@ -570,9 +739,9 @@ async function main() {
       // Assigning (from no departure) is allowed, reassigning is not.
       await openDossier(f, DOSSIER.ACC006);
       await openOverviewEditor(f);
-      assert.deepEqual((await optionList(overview(f))).map(item => item.envoi || item.kind), [...REUNION_PLANNED, 'remove']);
-      assert.equal(await actionOption(overview(f), 'remove').innerText(), 'Retirer la date souhaitée', 'A desired day is no assignment.');
-      await actionOption(overview(f), 'remove').click();
+      assert.deepEqual((await shortcutList(overview(f))).map(item => item.envoi), REUNION_PLANNED.slice(0, 3));
+      assert.equal(await proposalAction(overview(f), 'remove').innerText(), 'Retirer la date souhaitée', 'A desired day is no assignment.');
+      await proposalAction(overview(f), 'remove').click();
       await f.page.waitForFunction(() => document.querySelector('[data-testid="dossier-overview"] .dossier-departure-line')?.dataset.wish === '');
       assert.deepEqual(commands(f, 'set_colis_departure_wish'), [{ p_colis_id: DOSSIER.ACC006, p_date: null, p_expected_updated_at: f.before.find(item => item.id === DOSSIER.ACC006).updated_at }]);
       assert.equal((await departureText(overview(f))).text, 'Départ : à choisir');
@@ -584,8 +753,10 @@ async function main() {
       assert.equal(await editDeparture(f).count(), 0);
       await openDossier(f, DOSSIER.ACC008, 'section=expedition');
       assert.equal((await departureText(workspace(f))).text, 'Départ : jeudi 15 octobre · Réunion');
-      assert.equal(await combobox(workspace(f)).count(), 0);
+      assert.equal(await calendar(workspace(f)).count(), 0);
       await workspace(f).getByText('L’affectation est modifiable par une personne habilitée à réaffecter les départs.', { exact: true }).waitFor();
+      // Read-only: no sentence about saving a choice.
+      assert.equal(await workspace(f).getByText(/Un départ choisi est enregistré aussitôt/).count(), 0);
       assertOnlyDepartureWrites(f);
     }, { role: 'preparateur', permissions: { perm_colis_affecter_envoi: true, perm_envois_voir: true, perm_colis_preparer: true } });
 
@@ -596,7 +767,7 @@ async function main() {
         assert.equal(await editDeparture(f).count(), 0, REF[id]);
       }
       await openDossier(f, DOSSIER.ACC008, 'section=expedition');
-      assert.equal(await combobox(workspace(f)).count(), 0);
+      assert.equal(await calendar(workspace(f)).count(), 0);
       await workspace(f).getByText('L’affectation est modifiable par une personne habilitée à réaffecter les départs.', { exact: true }).waitFor();
       // « À vérifier › Choisir ou créer le départ » is not offered either.
       await openDossier(f, DOSSIER.ACC006);
@@ -605,7 +776,7 @@ async function main() {
       // An edit request in the address opens nothing.
       await f.page.goto(`${base}/colis/${DOSSIER.ACC006}?returnTo=%2Fcolis&modifier=depart`);
       await f.page.waitForURL(url => !url.searchParams.has('modifier'));
-      assert.equal(await combobox(overview(f)).count(), 0);
+      assert.equal(await calendar(overview(f)).count(), 0);
       assertNoBusinessWrite(f);
     }, { role: 'preparateur', permissions: { perm_colis_preparer: true, perm_envois_voir: true, perm_colis_demander_feuvert: true } });
 
@@ -615,26 +786,26 @@ async function main() {
       const scope = overview(f);
       const question = f.page.getByRole('dialog', { name: 'Affecter quand même ?', exact: true });
       await openOverviewEditor(f);
-      await option(scope, DEPARTURE.reunion22).click();
+      await shortcut(scope, DEPARTURE.reunion22).click();
       await question.getByText('Le départ du jeudi 22 octobre est après la fin de l’abonnement de Lucas (18 octobre).', { exact: true }).waitFor();
       for (const button of await question.getByRole('button').all()) { const box = await button.boundingBox(); assert.ok(box.height >= 44 && box.width >= 44 && box.x >= 0 && box.x + box.width <= width + 1); }
       await question.getByRole('button', { name: 'Annuler', exact: true }).click();await question.waitFor({ state: 'hidden' });
       assert.equal(commands(f, 'assign_colis_departure').length, 0, 'Cancelling writes nothing.');
       assert.equal((await departureText(scope)).text, 'Départ : à choisir');
       // Inside the subscription: saved at once.
-      await combobox(scope).click();await option(scope, DEPARTURE.reunion15).click();
-      await f.page.waitForFunction(id => document.querySelector('[data-testid="dossier-overview"] .dossier-departure-line')?.dataset.envoi === id, DEPARTURE.reunion15);
+      await shortcut(scope, DEPARTURE.reunion15).click();
+      await lineShows(f, 'overview', DEPARTURE.reunion15);
       assert.equal(commands(f, 'assign_colis_departure').length, 1);
-      // A creation after the end: the subscription first, then the creation itself.
-      await openOverviewEditor(f);await combobox(scope).fill('26/11');
-      await actionOption(scope, 'create').click();
+      // A creation after the end, replacing the departure: the subscription first, then the replacement.
+      await openOverviewEditor(f);await pickDay(scope, '2026-11-26');
+      await proposalAction(scope, 'create').click();
       await question.getByText('Le départ du jeudi 26 novembre est après la fin de l’abonnement de Lucas (18 octobre).', { exact: true }).waitFor();
       await question.getByRole('button', { name: 'Affecter quand même', exact: true }).click();
-      const creation = f.page.getByRole('dialog', { name: 'Créer le départ du jeudi 26 novembre ?', exact: true });
-      await creation.waitFor();
+      const creation = f.page.getByRole('dialog', { name: 'Remplacer le départ du jeudi 15 octobre ?', exact: true });
+      await creation.getByText('Le dossier EXP-ACC012 quittera le départ du jeudi 15 octobre (ENV-2026-102) pour un nouveau départ aérien le jeudi 26 novembre, clôture mercredi 25 novembre, 17 h (heure de Paris). Aucun message n’est envoyé au client.', { exact: true }).waitFor();
       await noPageOverflow(f);
       await f.page.screenshot({ path: `${output}/create-departure-question-${width}.png` });
-      await creation.getByRole('button', { name: 'Créer ce départ et y affecter le dossier', exact: true }).click();
+      await creation.getByRole('button', { name: 'Remplacer le départ', exact: true }).click();
       await creation.waitFor({ state: 'hidden' });
       await f.page.waitForFunction(id => document.querySelector('[data-testid="dossier-overview"] .dossier-departure-line')?.dataset.envoi !== id, DEPARTURE.reunion15);
       assert.equal(commands(f, 'create_departure_for_colis').length, 1);
@@ -646,39 +817,54 @@ async function main() {
     await scenario('a-desired-day-after-the-end-of-the-subscription-is-confirmed-too', async f => {
       await openDossier(f, DOSSIER.ACC012);
       const scope = overview(f), question = f.page.getByRole('dialog', { name: 'Affecter quand même ?', exact: true });
-      await openOverviewEditor(f);await combobox(scope).fill('26/11');
-      await actionOption(scope, 'wish').click();
+      await openOverviewEditor(f);await pickDay(scope, '2026-11-26');
+      await proposalAction(scope, 'wish').click();
       await question.getByText('Le départ du jeudi 26 novembre est après la fin de l’abonnement de Lucas (18 octobre).', { exact: true }).waitFor();
       await f.page.keyboard.press('Escape');await question.waitFor({ state: 'hidden' });
       assert.equal(commands(f, 'set_colis_departure_wish').length, 0);
-      await combobox(scope).click();await actionOption(scope, 'wish').click();
+      // The question's Escape stays in the question: the calendar and its proposal are still open.
+      await proposal(scope).waitFor();
+      await proposalAction(scope, 'wish').click();
       await question.getByRole('button', { name: 'Affecter quand même', exact: true }).click();
       await f.page.waitForFunction(() => document.querySelector('[data-testid="dossier-overview"] .dossier-departure-line')?.dataset.wish === '2026-11-26');
       assert.equal(commands(f, 'set_colis_departure_wish').length, 1);
       assertOnlyDepartureWrites(f);
     }, { role: 'logisticien', permissions: { perm_colis_affecter_envoi: true, perm_envois_voir: true, perm_envois_reaffecter: true } });
 
-    for (const [command, label] of [['assign_colis_departure', 'a departure'], ['set_colis_departure_wish', 'a desired day'], ['create_departure_for_colis', 'a creation']]) await scenario(`a-version-conflict-on-${label.replace(/\s/g, '-')}-is-shown-in-the-field-and-changes-nothing`, async f => {
+    // A version conflict (40001) reloads the dossier with the existing refresh, says so in
+    // the field, writes nothing; a new attempt then carries the reloaded version.
+    for (const [command, label] of [['assign_colis_departure', 'a departure'], ['set_colis_departure_wish', 'a desired day'], ['create_departure_for_colis', 'a creation']]) await scenario(`a-version-conflict-on-${label.replace(/\s/g, '-')}-reloads-the-dossier-and-a-retry-uses-it`, async f => {
       await openDossier(f, DOSSIER.ACC001);
-      // A colleague saved the dossier meanwhile.
-      row(f, DOSSIER.ACC001).updated_at = '2026-10-06T07:59:00Z';
-      const saved = structuredClone(f.tables.colis), envois = structuredClone(f.tables.envois);
+      const colleague = '2026-10-06T07:59:00Z';
+      // A colleague saves the dossier just before our write reaches the server (deterministic:
+      // a background refresh cannot learn the new version first).
+      // (A one-shot flag rather than `times`: an expiring page route breaks the harness's fallback.)
+      let saved = false;
+      await f.page.route(`**/rest/v1/rpc/${command}`, async route => { if (!saved) { saved = true; row(f, DOSSIER.ACC001).updated_at = colleague; } await route.fallback(); });
       await openOverviewEditor(f);
       const scope = overview(f);
-      if (command === 'assign_colis_departure') await option(scope, DEPARTURE.reunion15).click();
-      else {
-        await combobox(scope).fill('26/11');
-        await actionOption(scope, command === 'create_departure_for_colis' ? 'create' : 'wish').click();
-        if (command === 'create_departure_for_colis') await f.page.getByRole('dialog').getByRole('button', { name: 'Créer ce départ et y affecter le dossier', exact: true }).click();
-      }
+      const act = async () => {
+        if (command === 'assign_colis_departure') await shortcut(scope, DEPARTURE.reunion15).click();
+        else await proposalAction(scope, command === 'create_departure_for_colis' ? 'create' : 'wish').click();
+      };
+      if (command !== 'assign_colis_departure') await pickDay(scope, '2026-11-26');
+      await act();
       await fieldError(scope).waitFor();
-      assert.equal(await fieldError(scope).innerText(), command === 'assign_colis_departure' ? 'Le dossier a changé. Rechargez-le.' : 'Le dossier a changé. Actualisez avant de réessayer.');
+      assert.equal(await fieldError(scope).innerText(), 'Le dossier a changé : il a été rechargé, vérifiez puis recommencez.');
       assert.equal(commands(f, command).length, 1);
-      assert.deepEqual(f.tables.colis, saved, 'Nothing is written.');
-      assert.deepEqual(f.tables.envois, envois);
+      const expected = structuredClone(f.before);expected.find(item => item.id === DOSSIER.ACC001).updated_at = colleague;
+      assert.deepEqual(f.tables.colis, expected, 'Nothing is written.');
+      assert.deepEqual(f.tables.envois, f.envoisBefore);
       assert.equal((await departureText(scope)).text, 'Départ : à choisir', 'Nothing is shown as saved.');
-      await combobox(scope).waitFor();
+      await calendar(scope).waitFor();
       await f.page.screenshot({ path: `${output}/conflict-${command}-1440.png` });
+      // The new attempt starts from the reloaded version and is saved.
+      await act();
+      if (command === 'set_colis_departure_wish') await f.page.waitForFunction(() => document.querySelector('[data-testid="dossier-overview"] .dossier-departure-line')?.dataset.wish === '2026-11-26');
+      else await f.page.waitForFunction(() => document.querySelector('[data-testid="dossier-overview"] .dossier-departure-line')?.dataset.envoi);
+      assert.equal(commands(f, command).length, 2);
+      assert.equal(commands(f, command).at(-1).p_expected_updated_at, colleague);
+      assert.equal(await fieldError(scope).count(), 0);
       assertOnlyDepartureWrites(f);
     }, { role: command === 'set_colis_departure_wish' ? 'logisticien' : 'directeur', permissions: command === 'set_colis_departure_wish' ? { perm_colis_affecter_envoi: true, perm_envois_voir: true } : null });
 
@@ -690,25 +876,23 @@ async function main() {
       await openDossier(f, DOSSIER.ACC001);
       await openOverviewEditor(f);
       const scope = overview(f);
-      assert.deepEqual((await optionList(scope)).slice(0, 2), [
-        { label: 'mardi 6 octobre · clôture habituelle mercredi 30 septembre, 17 h', kind: 'departure', envoi: today, next: true, current: false },
-        { label: OPTION[DEPARTURE.reunion8], kind: 'departure', envoi: DEPARTURE.reunion8, next: false, current: false },
+      assert.deepEqual((await shortcutList(scope)).slice(0, 2), [
+        { envoi: today, day: 'mar. 6 oct.', closing: 'clôture habituelle mer. 30, 17 h', current: false },
+        { envoi: DEPARTURE.reunion8, ...SHORTCUT[DEPARTURE.reunion8], current: false },
       ]);
-      // Its day typed: the departure itself, never « Aucun départ prévu ».
-      await combobox(scope).fill('6/10');
-      assert.deepEqual((await optionList(scope)).map(item => item.envoi), [today]);
-      assert.equal(await missingLine(scope).count(), 0);
-      await option(scope, today).click();
-      await f.page.waitForFunction(id => document.querySelector('[data-testid="dossier-overview"] .dossier-departure-line')?.dataset.envoi === id, today);
+      // Its day in the grid: the departure itself (and today), never « aucun départ prévu ».
+      const day = (await monthDays(scope))['2026-10-06'];
+      assert.deepEqual([day.kind, day.today, day.label], ['departure', true, 'mardi 6 octobre, départ prévu, clôture habituelle mercredi 30 septembre, 17 h, aujourd’hui']);
+      await dayButton(scope, '2026-10-06').click();
+      await lineShows(f, 'overview', today);
       assert.deepEqual(commands(f, 'assign_colis_departure'), [{ p_colis_id: DOSSIER.ACC001, p_envoi_id: today, p_expected_updated_at: f.before.find(item => item.id === DOSSIER.ACC001).updated_at }]);
       assert.equal(row(f, DOSSIER.ACC001).envoi_id, today, 'The server accepted it.');
       assert.equal((await departureText(scope)).text, 'Départ : mardi 6 octobre · Réunion');
       // The paid dossier's expedition task offers it too, first.
       await openDossier(f, DOSSIER.ACC008, 'section=expedition');
-      await combobox(workspace(f)).click();await listbox(workspace(f)).waitFor();
-      assert.deepEqual((await optionList(workspace(f))).slice(0, 2).map(item => [item.envoi, item.next]), [[today, true], [DEPARTURE.reunion8, false]]);
+      await calendar(workspace(f)).waitFor();
+      assert.deepEqual((await shortcutList(workspace(f))).slice(0, 2).map(item => item.envoi), [today, DEPARTURE.reunion8]);
       assert.equal(await workspace(f).getByText(/Aucun départ ouvert compatible/).count(), 0);
-      await combobox(workspace(f)).press('Escape');
       assertOnlyDepartureWrites(f);
     });
 
@@ -722,17 +906,19 @@ async function main() {
       await openDossier(f, DOSSIER.ACC001);
       await openOverviewEditor(f);
       const scope = overview(f);
-      assert.deepEqual((await optionList(scope)).map(item => item.envoi), REUNION_PLANNED, 'Neither is offered.');
-      for (const [typed, text] of [
-        ['13/10', 'Le départ du mardi 13 octobre pour la Réunion est clôturé : choisissez un autre jour.'],
-        ['mardi 20', 'Le départ du mardi 20 octobre pour la Réunion est déjà parti : choisissez un autre jour.'],
+      assert.deepEqual((await shortcutList(scope)).map(item => item.envoi), REUNION_PLANNED.slice(0, 3), 'Neither is offered.');
+      const days = await monthDays(scope);
+      assert.deepEqual([days['2026-10-13'].kind, days['2026-10-13'].label], ['closed', 'mardi 13 octobre, départ clôturé']);
+      assert.deepEqual([days['2026-10-20'].kind, days['2026-10-20'].label], ['closed', 'mardi 20 octobre, départ déjà parti']);
+      for (const [day, text] of [
+        ['2026-10-13', 'Le départ du mardi 13 octobre est clôturé : choisissez un autre jour.'],
+        ['2026-10-20', 'Le départ du mardi 20 octobre est déjà parti : choisissez un autre jour.'],
       ]) {
-        await combobox(scope).fill(typed);
-        await missingLine(scope).getByText(text, { exact: false }).waitFor();
-        assert.equal(await missingLine(scope).innerText(), text);
-        // That day has its departure: nothing to create, no day to keep, never « Aucun départ prévu ».
-        assert.equal(await listbox(scope).count(), 0, typed);
-        assert.equal(await scope.getByText(/Aucun départ prévu/).count(), 0, typed);
+        await dayButton(scope, day).click();
+        await proposal(scope).getByText(text, { exact: true }).waitFor();
+        // That day has its departure: nothing to create, no day to keep, never « aucun départ prévu ».
+        assert.equal(await proposalAction(scope, 'create').count() + await proposalAction(scope, 'wish').count(), 0, day);
+        assert.equal(await proposal(scope).getByText(/aucun départ prévu/).count(), 0, day);
       }
       await noPageOverflow(f);await axe(f);
       await scope.screenshot({ path: `${output}/field-closed-day-${width}.png` });
@@ -743,19 +929,19 @@ async function main() {
       await openDossier(f, DOSSIER.ACC003);
       const scope = overview(f);
       await openOverviewEditor(f);
-      await combobox(scope).fill('26/11');
-      assert.deepEqual(await optionList(scope), [
-        { label: 'Remplacer le départ par cette date (départ à créer)', kind: 'wish', envoi: null, next: false, current: false },
-        { label: 'Retirer le départ', kind: 'remove', envoi: null, next: false, current: false },
-      ]);
+      await pickDay(scope, '2026-11-26');
+      // Without the right to create, keeping the day is the only choice, and it says what it replaces.
+      assert.equal(await proposalAction(scope, 'create').count(), 0);
+      assert.equal(await proposalAction(scope, 'wish').innerText(), 'Garder comme date souhaitée à la place du départ du jeudi 8 octobre');
+      assert.equal(await proposalAction(scope, 'remove').innerText(), 'Retirer le départ');
       const dialog = f.page.getByRole('dialog', { name: 'Remplacer le départ du jeudi 8 octobre ?', exact: true });
-      await actionOption(scope, 'wish').click();
+      await proposalAction(scope, 'wish').click();
       await dialog.getByText('Le dossier EXP-ACC003 quittera le départ du jeudi 8 octobre (ENV-2026-101). Il gardera la date du jeudi 26 novembre, dont le départ reste à créer. Aucun message n’est envoyé au client.', { exact: true }).waitFor();
       await f.page.screenshot({ path: `${output}/replace-departure-question-1440.png` });
       await dialog.getByRole('button', { name: 'Annuler', exact: true }).click();await dialog.waitFor({ state: 'hidden' });
       assert.equal(commands(f, 'set_colis_departure_wish').length, 0, 'Cancelling keeps the departure.');
       assert.deepEqual(await departureText(scope), { text: 'Départ : jeudi 8 octobre · Réunion', envoi: DEPARTURE.reunion8, wish: '' });
-      await combobox(scope).click();await actionOption(scope, 'wish').click();
+      await proposalAction(scope, 'wish').click();
       await dialog.getByRole('button', { name: 'Remplacer le départ', exact: true }).click();await dialog.waitFor({ state: 'hidden' });
       await f.page.waitForFunction(() => document.querySelector('[data-testid="dossier-overview"] .dossier-departure-line')?.dataset.wish === '2026-11-26');
       assert.deepEqual(commands(f, 'set_colis_departure_wish'), [{ p_colis_id: DOSSIER.ACC003, p_date: '2026-11-26', p_expected_updated_at: f.before.find(item => item.id === DOSSIER.ACC003).updated_at }]);
@@ -777,8 +963,11 @@ async function main() {
       await alertBand(f).getByRole('link', { name: 'Affecter au départ', exact: true }).waitFor();
       assert.equal(await alertBand(f).getByText(/^Départ souhaité le/).count(), 0, 'Its departure is planned: nothing to create.');
       await openOverviewEditor(f);
-      assert.ok((await optionList(overview(f))).some(item => item.envoi === nov19), 'Its departure is offered.');
-      await combobox(overview(f)).press('Escape');
+      // The calendar opens on the desired day's month: that day is a departure day, still marked as desired.
+      assert.equal(await calendar(overview(f)).getAttribute('data-month'), '2026-11');
+      const wished = (await monthDays(overview(f)))['2026-11-19'];
+      assert.deepEqual([wished.kind, wished.wish], ['departure', true], 'Its departure is offered.');
+      await f.page.keyboard.press('Escape');await picker(overview(f)).waitFor({ state: 'detached' });
       await openDossier(f, DOSSIER.ACC012);
       assert.equal((await departureText(overview(f))).text, 'Départ souhaité : jeudi 1er octobre · date passée');
       const band = alertBand(f);
@@ -813,21 +1002,27 @@ async function main() {
       await openDossier(f, DOSSIER.ACC001);
       await openOverviewEditor(f);
       const scope = overview(f);
-      await option(scope, DEPARTURE.reunion15).click();
+      await shortcut(scope, DEPARTURE.reunion15).click();
       await f.page.waitForFunction(() => document.querySelector('[data-testid="dossier-overview"] .dossier-departure-picker')?.getAttribute('aria-busy') === 'true');
       assert.equal(pending, 1);
-      // Escape, « Modifier » and « Annuler » cannot close the field while the server answers.
-      await combobox(scope).press('Escape');
-      assert.equal(await combobox(scope).count(), 1, 'Escape keeps the field open during the write.');
+      await scope.getByRole('status').filter({ hasText: 'Enregistrement en cours…' }).waitFor();
+      // Escape, « Modifier », « Annuler » and another choice cannot interfere while the server answers.
+      await f.page.keyboard.press('Escape');
+      assert.equal(await picker(scope).count(), 1, 'Escape keeps the field open during the write.');
       assert.equal(await editDeparture(f).isDisabled(), true);
       assert.equal(await scope.getByRole('button', { name: 'Annuler', exact: true }).isDisabled(), true);
+      assert.equal(await shortcut(scope, DEPARTURE.reunion22).getAttribute('aria-disabled'), 'true');
+      // A person can still press it (it stays focusable): nothing more is sent.
+      await shortcut(scope, DEPARTURE.reunion22).click({ force: true });
+      assert.equal(pending, 1, 'One write at a time.');
       release();
       await fieldError(scope).waitFor();
-      assert.equal(await fieldError(scope).innerText(), 'Le dossier a changé. Rechargez-le.', 'The refusal shows in the field.');
+      // A version conflict: the dossier is reloaded and the field says so.
+      assert.equal(await fieldError(scope).innerText(), 'Le dossier a changé : il a été rechargé, vérifiez puis recommencez.', 'The refusal shows in the field.');
       assert.equal((await departureText(scope)).text, 'Départ : à choisir', 'Nothing is shown as saved.');
       assert.equal(await editDeparture(f).isDisabled(), false);
       // Answered, Escape closes it again.
-      await combobox(scope).press('Escape');await combobox(scope).waitFor({ state: 'detached' });
+      await f.page.keyboard.press('Escape');await picker(scope).waitFor({ state: 'detached' });
       assert.deepEqual(f.tables.colis, f.before, 'Nothing is written.');
     });
 
@@ -842,14 +1037,14 @@ async function main() {
           below: picker.getBoundingClientRect().top >= history.getBoundingClientRect().bottom - 1 };
       });
       assert.deepEqual(layout, { order: '0', follows: true, below: true }, 'No CSS reordering: in the DOM as on screen, the field follows the heading actions.');
-      // Shift+Tab from the field goes back through « Annuler », then the last heading action; Tab returns.
-      await combobox(overview(f)).focus();
+      // Shift+Tab from the field's first control (its first shortcut) goes back through « Annuler », then the last heading action; Tab returns.
+      await shortcut(overview(f), DEPARTURE.reunion8).focus();
       await f.page.keyboard.press('Shift+Tab');
       assert.equal(await f.page.evaluate(() => document.activeElement?.textContent.trim()), 'Annuler');
       await f.page.keyboard.press('Shift+Tab');
       assert.equal(await f.page.evaluate(() => document.activeElement?.getAttribute('aria-label')), 'Consulter l’historique du dossier');
       await f.page.keyboard.press('Tab');await f.page.keyboard.press('Tab');
-      assert.equal(await f.page.evaluate(() => document.activeElement?.getAttribute('role')), 'combobox');
+      assert.equal(await f.page.evaluate(() => document.activeElement?.dataset.envoi), DEPARTURE.reunion8);
       assertNoBusinessWrite(f);
     }, { width });
 
@@ -860,7 +1055,7 @@ async function main() {
       // The task field reads only, the colleague named above it, never a missing permission.
       await workspace(f).getByText(/s’occupe de cette tâche/).first().waitFor();
       await departureLine(workspace(f)).waitFor();
-      assert.equal(await combobox(workspace(f)).count(), 0);
+      assert.equal(await calendar(workspace(f)).count(), 0);
       assert.equal(await workspace(f).getByText(/personne habilitée|demande l’accès aux départs/).count(), 0);
       // The overview says the same: no « Modifier », and why.
       assert.equal(await editDeparture(f).count(), 0);
@@ -871,7 +1066,7 @@ async function main() {
       await f.page.goto(`${base}/colis/${DOSSIER.ACC008}?returnTo=%2Fcolis&section=reception&modifier=depart`);
       await f.page.waitForURL(url => !url.searchParams.has('modifier'));
       await departureLine(overview(f)).waitFor();
-      assert.equal(await combobox(overview(f)).count(), 0);
+      assert.equal(await calendar(overview(f)).count(), 0);
       assert.equal(await editDeparture(f).count(), 0);
       await noPageOverflow(f);await axe(f);
       assertNoBusinessWrite(f);
@@ -895,26 +1090,192 @@ async function main() {
       await f.page.screenshot({ path: `${output}/field-wish-${width}-${theme}.png`, fullPage: true });
       await openOverviewEditor(f);
       const scope = overview(f);
-      for (const target of [editDeparture(f), combobox(scope), ...await listbox(scope).getByRole('option').all()]) {
+      for (const target of [editDeparture(f), ...await scope.locator('[data-shortcut], .dossier-calendar-step, .dossier-calendar-day, [data-action]').all()]) {
         const box = await target.boundingBox();
         assert.ok(box.height >= 44 && box.x >= 0 && box.x + box.width <= width + 1, '44px targets inside the screen.');
       }
-      for (const part of await textStyles(scope.locator('.dossier-departure-text, .dossier-departure-label, .dossier-departure-hint, .dossier-departure-option-text, .dossier-departure-badge'))) {
+      for (const part of await textStyles(scope.locator('.dossier-departure-text, .dossier-departure-label, .dossier-departure-shortcuts-title, .dossier-departure-shortcut-day, .dossier-departure-shortcut-closing, .dossier-calendar-month, .dossier-calendar-grid th, .dossier-calendar-day:not([data-kind="past"]), .dossier-calendar-legend li'))) {
         assert.ok(part.size >= 12, `${part.text}: ${part.size}px`); assert.ok(part.ratio >= 4.5, `${part.text}: ${part.ratio.toFixed(2)}:1`);
       }
       await noPageOverflow(f);await axe(f);
       await f.page.screenshot({ path: `${output}/field-open-${width}-${theme}.png`, fullPage: true });
-      await combobox(scope).fill('26/11');await missingLine(scope).waitFor();
+      await pickDay(scope, '2026-11-26');await proposal(scope).waitFor();
       await noPageOverflow(f);await axe(f);
-      await scope.screenshot({ path: `${output}/field-typed-day-${width}-${theme}.png` });
-      // The expedition task shows the same field, open.
+      await scope.screenshot({ path: `${output}/field-picked-day-${width}-${theme}.png` });
+      // The expedition task shows the same calendar, open, named « Affecter à un départ ».
       await openDossier(f, DOSSIER.ACC008, 'section=expedition');await waitTheme(f, theme);
-      await combobox(workspace(f)).click();await listbox(workspace(f)).waitFor();
-      for (const target of await listbox(workspace(f)).getByRole('option').all()) { const box = await target.boundingBox(); assert.ok(box.height >= 44 && box.x >= 0 && box.x + box.width <= width + 1); }
+      await workspace(f).getByRole('group', { name: 'Affecter à un départ', exact: true }).waitFor();
+      for (const target of await workspace(f).locator('[data-shortcut], .dossier-calendar-step, .dossier-calendar-day, [data-action]').all()) { const box = await target.boundingBox(); assert.ok(box.height >= 44 && box.x >= 0 && box.x + box.width <= width + 1); }
       await noPageOverflow(f);await axe(f);
       await workspace(f).screenshot({ path: `${output}/task-field-${width}-${theme}.png` });
       assertNoBusinessWrite(f);
     }, { width, theme });
+
+    // ── A2. Final review of the dossier page (P4b) ──────────────────────────
+    const PREPARATEUR = { perm_colis_receptionner: true, perm_colis_mesurer: true, perm_colis_modifier_dims: true, perm_colis_demander_feuvert: true, perm_colis_preparer: true, perm_clients_voir: true,
+      perm_factures_voir: true, perm_factures_ajouter: true, perm_factures_ocr: true, perm_factures_modifier_articles: true, perm_comm_telegram: true, perm_comm_email: true, perm_comm_message_libre: true, perm_envois_voir: true };
+    const step = (f, id) => overview(f).locator(`[data-step="${id}"]`);
+    await scenario('an-assigned-departure-is-planned-until-the-expedition-is-the-current-step', async f => {
+      for (const [id, state, label] of [
+        [DOSSIER.ACC003, 'planned', 'Prévu le jeudi 8 octobre'], [DOSSIER.ACC007, 'planned', 'Prévu le jeudi 15 octobre'],
+        [DOSSIER.ACC008, 'current', 'À faire'], [DOSSIER.ACC001, 'upcoming', 'À venir'],
+      ]) {
+        await openDossier(f, id);
+        assert.equal(await step(f, 'expedition').getAttribute('data-state'), state, REF[id]);
+        assert.equal((await step(f, 'expedition').locator('.dossier-overview-step-state').innerText()).trim(), label, REF[id]);
+      }
+      // No departure: the step summary reads « À choisir », the word of the Départ field.
+      assert.match(await step(f, 'expedition').getByRole('button').getAttribute('title'), /^À choisir/);
+      assertNoBusinessWrite(f);
+    });
+
+    await scenario('without-the-finance-permission-the-expedition-shows-the-payment-but-no-amount-and-the-task-needs-an-authorised-person', async f => {
+      await openDossier(f, DOSSIER.ACC008, 'section=expedition');
+      const received = workspace(f).getByTestId('payment-received');
+      assert.equal((await received.innerText()).trim(), 'Paiement reçu');
+      assert.doesNotMatch(await workspace(f).innerText(), /120[.,]00|€/, 'No amount anywhere in the task.');
+      for (const id of ['devis', 'paiement']) assert.equal(await step(f, id).getAttribute('data-state'), 'restricted');
+      // The departure task is free, but this role cannot take it: the header says so, as the list does.
+      const ownership = f.page.getByTestId('dossier-task-header').getByTestId('task-ownership');
+      assert.equal((await ownership.getByRole('status').innerText()).trim(), 'Cette tâche nécessite une personne autorisée.');
+      assert.equal(await f.page.getByRole('button', { name: 'Je m’en occupe', exact: true }).count(), 0);
+      await noPageOverflow(f);await axe(f);
+      assertNoBusinessWrite(f);
+    }, { role: 'preparateur', permissions: PREPARATEUR });
+
+    await scenario('the-direction-sees-the-amount-received-and-an-accurate-departure-sentence', async f => {
+      await openDossier(f, DOSSIER.ACC008, 'section=expedition');
+      assert.match(await workspace(f).getByTestId('payment-received').innerText(), /^Paiement reçu\s+120[.,]00\s*€$/);
+      await workspace(f).getByText('Un départ choisi est enregistré aussitôt, sans message au client. Un jour sans départ vous propose d’en créer un. Si une confirmation est nécessaire (nouveau départ à la place de celui du dossier, par exemple), elle vous est demandée avant.', { exact: true }).waitFor();
+      assert.equal(await workspace(f).getByText(/s’enregistre immédiatement/).count(), 0);
+      assertNoBusinessWrite(f);
+    });
+
+    for (const theme of ['light', 'dark']) await scenario(`the-page-has-one-primary-button-style-${theme}`, async f => {
+      // Navy with white text in light mode; the light navy with navy text in dark mode.
+      const expected = theme === 'light' ? 'rgb(27, 58, 75)' : 'rgb(196, 218, 229)';
+      const look = locator => locator.evaluate(node => {
+        const rgba = value => { const n = value.match(/[\d.]+/g)?.map(Number) || []; return n.length >= 3 ? [...n.slice(0, 3), n[3] ?? 1] : [0, 0, 0, 0]; };
+        const over = (fg, bg) => [...fg.slice(0, 3).map((c, i) => c * fg[3] + bg[i] * (1 - fg[3])), 1];
+        const paint = element => { const chain = []; for (let n = element; n && n.nodeType === 1; n = n.parentElement) chain.push(rgba(getComputedStyle(n).backgroundColor)); return chain.reverse().reduce((bg, color) => over(color, bg), [255, 255, 255, 1]); };
+        const lum = rgb => rgb.slice(0, 3).map(c => c / 255).map(c => c <= .04045 ? c / 12.92 : ((c + .055) / 1.055) ** 2.4).reduce((s, c, i) => s + c * [.2126, .7152, .0722][i], 0);
+        const ratio = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + .05) / (Math.min(x, y) + .05); };
+        const style = getComputedStyle(node), own = paint(node), around = paint(node.parentElement);
+        return { background: style.backgroundColor, text: ratio(over(rgba(style.color), own), own), boundary: ratio(own, around) };
+      });
+      const cases = [
+        [DOSSIER.ACC013, '', f => workspace(f).getByRole('button', { name: 'Confirmer le départ en vol', exact: true })],
+        [DOSSIER.ACC008, 'section=expedition', f => workspace(f).getByRole('button', { name: 'Vérifier le départ et son manifeste', exact: true })],
+        [DOSSIER.ACC006, 'section=accord', f => workspace(f).getByRole('button', { name: 'Envoyer la demande d’accord', exact: true })],
+        [DOSSIER.ACC003, '', f => f.page.getByTestId('dossier-task-header').getByRole('button', { name: 'Je m’en occupe', exact: true })],
+      ];
+      for (const [id, query, target] of cases) {
+        await openDossier(f, id, query);await waitTheme(f, theme);
+        const button = target(f);await button.waitFor();
+        const result = await look(button);
+        assert.equal(result.background, expected, `${REF[id]}: the page primary.`);
+        assert.ok(result.text >= 4.5, `${REF[id]}: text ${result.text.toFixed(2)}:1`);
+        assert.ok(result.boundary >= 3, `${REF[id]}: ${result.boundary.toFixed(2)}:1 against its background.`);
+        await axe(f);
+      }
+      assertNoBusinessWrite(f);
+    }, { theme });
+
+    await scenario('the-way-out-of-a-task-is-a-plain-link-unless-the-dossier-has-more-to-follow', async f => {
+      const look = nav => nav.evaluate(node => ({ border: getComputedStyle(node).borderTopWidth, background: getComputedStyle(node).backgroundColor, dividers: [...node.querySelectorAll('*')].filter(child => parseFloat(getComputedStyle(child).borderTopWidth) > 0).length }));
+      await openDossier(f, DOSSIER.ACC013);
+      const after = workspace(f).getByRole('navigation', { name: 'Après cette tâche', exact: true });
+      await after.getByRole('link', { name: 'Retour à ma liste', exact: true }).waitFor();
+      assert.deepEqual(await look(after), { border: '0px', background: 'rgba(0, 0, 0, 0)', dividers: 0 }, 'Only « Retour à ma liste »: no box, no divider.');
+      // With the dossier's other open work, the box and its divider come back.
+      await openDossier(f, DOSSIER.ACC003, 'section=documents');
+      const busy = workspace(f).getByRole('navigation', { name: 'Après cette tâche', exact: true });
+      await busy.getByText('Suite et travail en parallèle', { exact: true }).waitFor();
+      const boxed = await look(busy);
+      assert.equal(boxed.border, '1px');assert.equal(boxed.dividers, 1);
+      await axe(f);
+      assertNoBusinessWrite(f);
+    });
+
+    for (const width of [1440, 390]) await scenario(`the-quote-panel-is-full-width-says-to-complete-once-and-names-the-destination-${width}`, async f => {
+      await openDossier(f, DOSSIER.ACC007, 'section=devis');
+      const summary = workspace(f).getByLabel('Résumé du devis', { exact: true });await summary.waitFor();
+      const [panel, page] = [await summary.boundingBox(), await overview(f).boundingBox()];
+      assert.ok(Math.abs(panel.width - page.width) <= 2 && Math.abs(panel.x - page.x) <= 2, `As wide as the other panels (${panel.width} / ${page.width}).`);
+      const text = await workspace(f).innerText();
+      assert.equal(text.match(/À compléter/g)?.length, 1, '« À compléter » once.');
+      assert.match(text, /0 \/ 1 article avec un code choisi · destination : Guadeloupe\./);
+      assert.doesNotMatch(text, /\b97[1-6]\b|\(s\)/);
+      const preparation = workspace(f).getByRole('button', { name: 'Préparation enregistrée', exact: true });
+      assert.equal(await preparation.locator('svg').count(), 1);assert.doesNotMatch(await preparation.innerText(), /✓/);
+      await workspace(f).getByRole('button', { name: '1 facture vérifiée', exact: true }).waitFor();
+      await noPageOverflow(f);await axe(f);
+      await f.page.screenshot({ path: `${output}/quote-panel-${width}.png`, fullPage: true });
+      assertNoBusinessWrite(f);
+    }, { width });
+
+    await scenario('the-reception-task-keeps-short-visible-labels-on-a-phone', async f => {
+      await openDossier(f, DOSSIER.ACC001, 'section=reception');
+      const carton = workspace(f).locator('fieldset').nth(1);
+      assert.deepEqual((await carton.locator('label').allTextContents()).map(label => label.trim()), ['Longueur', 'Largeur', 'Hauteur', 'Poids réel']);
+      // « carton 2 » stays in each field's accessible name.
+      for (const [label, unit] of [['Longueur', 'cm'], ['Largeur', 'cm'], ['Hauteur', 'cm'], ['Poids réel', 'kg']]) await workspace(f).getByLabel(`${label} · carton 2 (${unit})`, { exact: true }).waitFor();
+      const tops = await carton.locator('input').evaluateAll(nodes => nodes.map(node => Math.round(node.getBoundingClientRect().top)));
+      assert.equal(tops[0], tops[1], 'The two fields of a row line up.');assert.equal(tops[2], tops[3]);
+      await noPageOverflow(f);await axe(f);
+      await carton.screenshot({ path: `${output}/reception-labels-390.png` });
+      assertNoBusinessWrite(f);
+    }, { width: 390 });
+
+    await scenario('a-long-invoice-file-name-is-never-clipped-at-its-start-on-a-phone', async f => {
+      const invoice = f.tables.factures.find(item => item.colis_id === DOSSIER.ACC003);
+      Object.assign(invoice, { vendeur: 'Zalando SE — Commande 1029384756', fichier_nom: 'facture-zalando-commande-1029384756.pdf', valide: false, montant: null });
+      f.before = structuredClone(f.tables.colis);
+      await openDossier(f, DOSSIER.ACC003, 'section=documents');
+      const meta = workspace(f).locator('.iw-meta').first();await meta.waitFor();
+      const layout = await meta.evaluate(node => { const box = node.getBoundingClientRect(); return { left: box.left, items: [...node.querySelectorAll('.iw-meta-item, .iw-file')].map(item => item.getBoundingClientRect().left - box.left) }; });
+      assert.ok(layout.items.length >= 2 && layout.items.every(offset => offset >= -0.5), `Every item starts inside its row (${JSON.stringify(layout.items)}).`);
+      await noPageOverflow(f);await axe(f);
+      await workspace(f).locator('.iw-item').first().screenshot({ path: `${output}/invoice-item-390.png` });
+      assertNoBusinessWrite(f);
+    }, { width: 390 });
+
+    await scenario('the-proposal-of-a-picked-day-comes-into-view-above-the-phone-navigation', async f => {
+      await f.page.setViewportSize({ width: 390, height: 498 });
+      await openDossier(f, DOSSIER.ACC001);
+      await openOverviewEditor(f);
+      await dayButton(overview(f), '2026-10-30').click();
+      const create = proposalAction(overview(f), 'create');await create.waitFor();
+      await f.page.waitForFunction(() => {
+        const button = document.querySelector('[data-testid="dossier-overview"] [data-action="create"]');const box = button?.getBoundingClientRect();
+        const hit = box && document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+        return Boolean(hit && (hit === button || button.contains(hit)));
+      }, null, { timeout: 3000 });
+      await f.page.screenshot({ path: `${output}/proposal-in-view-390x498.png` });
+      assertNoBusinessWrite(f);
+    }, { width: 390 });
+
+    await scenario('a-creation-answered-after-a-logout-is-not-applied-to-the-next-session', async f => {
+      await openDossier(f, DOSSIER.ACC001);
+      await openOverviewEditor(f);
+      let release;
+      const answer = new Promise(resolve => { release = resolve; });
+      await f.page.route('**/rest/v1/rpc/create_departure_for_colis', async route => { await answer; await route.fallback(); });
+      await pickDay(overview(f), '2026-11-26');await proposalAction(overview(f), 'create').click();
+      await f.page.waitForFunction(() => document.querySelector('[data-testid="dossier-overview"] .dossier-departure-picker')?.getAttribute('aria-busy') === 'true');
+      // The person logs out while the server answers.
+      await f.page.getByRole('button', { name: 'Se déconnecter', exact: true }).filter({ visible: true }).click();
+      await f.page.getByLabel('Email', { exact: true }).waitFor();
+      const planningReads = () => f.requests.filter(request => request.method === 'GET' && request.path === '/rest/v1/envois').length;
+      const before = planningReads();
+      const answered = f.page.waitForResponse(response => response.url().includes('/rpc/create_departure_for_colis'));
+      release();await answered;
+      // The late answer belongs to the previous session: no planning reload, nothing applied
+      // (a bounded wait: the absence of a request has no event to wait for).
+      await f.page.waitForTimeout(500);
+      assert.equal(planningReads(), before, 'No planning reload for a previous session.');
+      await f.page.getByLabel('Email', { exact: true }).waitFor();
+    });
 
     // ── B. The list: the desired day and its group ──────────────────────────
     for (const width of [1440, 390]) await scenario(`the-list-shows-the-desired-day-and-groups-it-as-a-departure-to-create-${width}`, async f => {
@@ -957,16 +1318,18 @@ async function main() {
       assert.equal(href.searchParams.get('modifier'), 'depart');
       assert.equal(href.searchParams.get('returnTo'), '/colis');
       await link.click();
-      // The field opens with its suggestions, then the request leaves the address.
-      await combobox(overview(f)).waitFor();await listbox(overview(f)).waitFor();
+      // The calendar opens on the desired day's month (that day marked), then the request leaves the address.
+      await calendar(overview(f)).waitFor();
+      assert.equal(await calendar(overview(f)).getAttribute('data-month'), '2026-11');
+      assert.equal((await monthDays(overview(f)))['2026-11-19'].wish, true);
       await f.page.waitForURL(url => !url.searchParams.has('modifier') && url.searchParams.get('returnTo') === '/colis');
-      await f.page.waitForFunction(() => document.activeElement?.getAttribute('role') === 'combobox');
+      await f.page.waitForFunction(() => Boolean(document.activeElement?.closest('[data-testid="dossier-overview"] .dossier-departure-picker')));
       // From the Conversation tab too: the link goes back to the Colis tab.
       await f.page.getByRole('tab', { name: /^Conversation/ }).click();
       await f.page.waitForURL(url => url.searchParams.get('onglet') === 'conversation');
       await band.getByRole('link', { name: 'Choisir ou créer le départ', exact: true }).click();
       await f.page.waitForURL(url => !url.searchParams.has('onglet'));
-      await combobox(overview(f)).waitFor();
+      await calendar(overview(f)).waitFor();
       assertNoBusinessWrite(f);
     });
 
@@ -1009,7 +1372,7 @@ async function main() {
       await openDossier(f, DOSSIER.ACC006);
       const link = alertBand(f).getByRole('link', { name: 'Choisir ou créer le départ', exact: true });
       await link.click();
-      await combobox(overview(f)).waitFor();await listbox(overview(f)).waitFor();
+      await calendar(overview(f)).waitFor();
       await f.page.waitForURL(url => !url.searchParams.has('modifier'));
       assertNoBusinessWrite(f);
     }, { role: 'logisticien', permissions: { perm_colis_affecter_envoi: true, perm_envois_voir: true } });
@@ -1577,10 +1940,10 @@ async function main() {
   } finally { await browser.close(); await fs.writeFile(`${output}/results.json`, JSON.stringify(results, null, 2)); }
 }
 module.exports = {
-  fixture, CLIENT, DEPARTURE, DOSSIER, REF, NOW, OPTION, REUNION_PLANNED, READ_ONLY_RPCS, DEPARTURE_COMMANDS,
+  fixture, CLIENT, DEPARTURE, DOSSIER, REF, NOW, DAY_OF, DAY_LABEL, CLOSING, SHORTCUT, REUNION_PLANNED, READ_ONLY_RPCS, DEPARTURE_COMMANDS,
   writes, commands, assertNoBusinessWrite, assertOnlyDepartureWrites, row, noPageOverflow, axe, waitTheme, textStyles,
-  overview, workspace, departureLine, editDeparture, combobox, listbox, alertBand, openDossier, departureText, optionList, openOverviewEditor,
-  option, actionOption, missingLine, fieldError,
+  overview, workspace, departureLine, editDeparture, FIELD_NAME, picker, calendar, shortcut, dayButton, proposal, proposalAction,
+  alertBand, openDossier, departureText, shortcutList, monthDays, showMonth, pickDay, openOverviewEditor, focusOnEdit, fieldError, lineShows,
   ACCORD_GROUPS, ACCORD_DOSSIERS, ACCORD_COLUMNS, VIEW_LABELS, installGroupReader, visibleGroups, assertGroups, shownIds, countStatus, openAccords,
   openDisplay, closeDisplay, selectTab, viewTabs, storedPreference, tableCell, filterColumn, sortBy, addRelances,
 };

@@ -96,6 +96,25 @@ async function main() {
       assert.match(await arrivals.innerText(),/Carton 1/);assert.match(await arrivals.innerText(),/Carton 2/);assert.match(await arrivals.innerText(),/Date non renseignée/);
       assert.doesNotMatch(await arrivals.innerText(),/08\/09\/2026/);unchanged(f,before);
     });
+    // Final review P4b: the heading's page links wrap together (never « Historique » alone)
+    // and carry no external-link arrow; an assigned departure is planned until the expedition step.
+    for(const width of [1280,1024,390])await scenario(`heading-links-wrap-together-and-an-assigned-departure-is-planned-${width}`,async f=>{
+      received(f);const envoi='e7000000-0000-4000-8000-000000000001';
+      f.tables.envois=[{id:envoi,ref:'ENV-TEST-1',date_depart:'2099-01-08',destination_code:'974',statut:'planifie',mode_transport:'aerien',loading_closes_at:null,departed_at:null,manifest_version:0,updated_at:'2026-10-01T08:00:00Z'}];
+      f.tables.colis[0].envoi_id=envoi;const before=originals(f);
+      await f.page.setViewportSize({width,height:width<768?844:800});await f.login();await open(f,'accord');
+      const links=await overview(f).locator('.dossier-overview-links button').evaluateAll(nodes=>nodes.map(node=>{const box=node.getBoundingClientRect();return {top:Math.round(box.top),text:node.textContent.trim()};}));
+      assert.deepEqual(links.map(link=>link.text),['Aller à l’étape ouverte','Historique']);
+      assert.equal(new Set(links.map(link=>link.top)).size,1,`The two page links share their line: ${JSON.stringify(links)}`);
+      assert.equal(await overview(f).locator('.dossier-overview-link svg').count(),0,'In-page links: no external-link arrow.');
+      const expedition=step(f,'expedition');
+      assert.equal(await expedition.getAttribute('data-state'),'planned');
+      assert.equal((await expedition.locator('.dossier-overview-step-state').innerText()).trim(),'Prévu le jeudi 8 janvier 2099');
+      assert.match(await expedition.getByRole('button').getAttribute('aria-label'),/^Consulter l’étape Expédition — Prévu le jeudi 8 janvier 2099$/);
+      assert.equal(await f.page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false);
+      await overview(f).screenshot({path:`${output}/overview-heading-planned-${width}.png`});
+      unchanged(f,before);
+    });
     await scenario('future-step-navigation-is-consultation-and-keeps-the-real-business-stage',async f=>{
       received(f);const before=originals(f);await f.login();await open(f,'accord');
       for(const id of ['preparation','documents','devis','paiement','expedition','livraison','reception','accord']) {
@@ -113,29 +132,78 @@ async function main() {
       assert.notEqual(await step(f,'preparation').getAttribute('data-state'),'done');assert.notEqual(await step(f,'documents').getAttribute('data-state'),'done');
       assert.match(await overview(f).innerText(),/vérifier|confirmer|périm|manquant|compléter/i);unchanged(f,before);
     });
-    await scenario('casier-edit-opens-directly-and-persists-without-reopening-paid-steps',async f=>{
+    // « Modifier » next to Casier edits in place, like the Départ field (final review P4b): no panel opens.
+    const casierGeometry=scope=>scope.locator('.dossier-casier-editor').evaluate(node=>{
+      const rect=selector=>node.querySelector(selector).getBoundingClientRect();const label=rect('label.dossier-departure-label'),field=rect('.dossier-casier-input');
+      return {labelLeft:label.left,fieldLeft:field.left,labelBottom:label.bottom,fieldTop:field.top,targets:[...node.querySelectorAll('button, label.dossier-casier-all')].map(item=>{const box=item.getBoundingClientRect();return [Math.round(box.width),Math.round(box.height)];})};
+    });
+    const assertCasierLayout=geometry=>{
+      assert.ok(Math.abs(geometry.labelLeft-geometry.fieldLeft)<=2&&geometry.labelBottom<=geometry.fieldTop+1,`The label sits right above its field (${JSON.stringify(geometry)}).`);
+      assert.ok(geometry.targets.every(([width,height])=>width>=44&&height>=44),`44px targets: ${JSON.stringify(geometry.targets)}`);
+    };
+    const focusInCasierEditor=f=>f.page.waitForFunction(()=>document.activeElement?.tagName==='INPUT'&&Boolean(document.activeElement.closest('.dossier-casier-editor')));
+    await scenario('casier-edit-opens-in-place-and-persists-without-reopening-paid-steps',async f=>{
       paid(f);const before=structuredClone(f.tables.colis[0]);await f.login();await open(f);
-      await overview(f).getByRole('button',{name:/Modifier le casier/}).click();
-      const dialog=f.page.getByRole('dialog',{name:'Contexte du dossier',exact:true});const input=dialog.getByLabel('Casier du dossier',{exact:true});await input.waitFor();
-      await f.page.waitForFunction(()=>document.activeElement?.getAttribute('aria-label')==='Casier du dossier');
-      assert.equal(await input.inputValue(),'A-03');await input.fill('B-12');await dialog.getByRole('button',{name:'Enregistrer le casier',exact:true}).click();
-      await input.waitFor({state:'hidden'});
-      await f.page.waitForFunction(()=>document.activeElement?.getAttribute('aria-label')==='Modifier le casier');
-      await dialog.getByRole('button',{name:'Fermer le contexte du dossier',exact:true}).click();
+      const edit=overview(f).getByRole('button',{name:'Modifier le casier du dossier',exact:true});
+      await edit.click();assert.equal(await edit.getAttribute('aria-expanded'),'true');
+      const input=overview(f).getByLabel('Casier du dossier',{exact:true});await input.waitFor();await focusInCasierEditor(f);
+      assert.equal(await f.page.getByRole('dialog',{name:'Contexte du dossier',exact:true}).count(),0,'Edited in place: no panel opens.');
+      assertCasierLayout(await casierGeometry(overview(f)));
+      assert.equal(await input.inputValue(),'A-03');await input.fill('B-12');await overview(f).getByRole('button',{name:'Enregistrer le casier',exact:true}).click();
+      await input.waitFor({state:'detached'});
       await f.page.waitForFunction(()=>document.activeElement?.getAttribute('aria-label')==='Modifier le casier du dossier');
+      await overview(f).locator('[data-overview="casier"]').getByText('B-12',{exact:true}).waitFor();
       assert.equal(f.tables.colis[0].casier,'B-12');assert.equal(f.tables.colis[0].statut,'paye');assert.deepEqual(f.tables.colis[0].final_packages,before.final_packages);assert.deepEqual(f.tables.colis[0].dims_par_colis,before.dims_par_colis);
       assert.equal(businessWrites(f).length,1);assert.equal(businessWrites(f)[0].method,'PATCH');assert.equal(businessWrites(f)[0].path,'/rest/v1/colis');
+      // Escape and « Annuler » close the editor without writing, the focus back on « Modifier ».
+      for(const close of ['Escape','Annuler']){
+        await edit.click();await input.waitFor();await input.fill('Z-99');
+        if(close==='Escape')await input.press('Escape');else await overview(f).getByRole('button',{name:'Annuler la modification du casier',exact:true}).click();
+        await input.waitFor({state:'detached'});
+        await f.page.waitForFunction(()=>document.activeElement?.getAttribute('aria-label')==='Modifier le casier du dossier');
+      }
+      // Saving the same casier writes nothing.
+      await edit.click();await input.waitFor();await overview(f).getByRole('button',{name:'Enregistrer le casier',exact:true}).click();await input.waitFor({state:'detached'});
+      assert.equal(businessWrites(f).length,1);assert.equal(f.tables.colis[0].casier,'B-12');assert.equal(f.tables.colis[0].casier_historique.length,1);
       await f.page.reload();await overview(f).getByText('B-12',{exact:true}).waitFor();
     });
     await scenario('casier-failed-save-keeps-draft-and-retry-does-not-duplicate-history',async f=>{
       paid(f);let fail=true;let attempts=0;
       await f.context.route('**/rest/v1/colis?*',route=>{if(route.request().method()==='PATCH'&&route.request().postDataJSON()?.casier){attempts++;if(fail)return route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({message:'Enregistrement indisponible pour cet essai.'})});}return route.fallback();});
-      await f.login();await open(f);await overview(f).getByRole('button',{name:/Modifier le casier/}).click();
-      const dialog=f.page.getByRole('dialog',{name:'Contexte du dossier',exact:true});const input=dialog.getByLabel('Casier du dossier',{exact:true});await input.fill('D-08');
-      await dialog.getByRole('button',{name:'Enregistrer le casier',exact:true}).click();await f.page.getByText(/Casier non enregistré/).first().waitFor();
+      await f.login();await open(f);await overview(f).getByRole('button',{name:'Modifier le casier du dossier',exact:true}).click();
+      const input=overview(f).getByLabel('Casier du dossier',{exact:true});await input.fill('D-08');
+      const save=overview(f).getByRole('button',{name:'Enregistrer le casier',exact:true});
+      await save.click();const refusal=overview(f).locator('.dossier-casier-editor [role="alert"]');await refusal.waitFor();
+      assert.match(await refusal.innerText(),/^Casier non enregistré : /);assert.equal(await input.getAttribute('aria-invalid'),'true');
       assert.equal(await input.inputValue(),'D-08');assert.equal(f.tables.colis[0].casier,'A-03');fail=false;
-      await dialog.getByRole('button',{name:'Enregistrer le casier',exact:true}).click();await input.waitFor({state:'hidden'});
+      await save.click();await input.waitFor({state:'detached'});
       assert.equal(attempts,2);assert.equal(f.tables.colis[0].casier,'D-08');assert.equal(f.tables.colis[0].casier_historique.length,1);
+    });
+    // The details panel keeps its own casier editor: label above the field, and the
+    // panel above the phone/tablet bottom navigation, even with the keyboard open.
+    for(const [width,height,dark] of [[1440,900,false],[390,498,false],[390,498,true],[768,604,false]])await scenario(`casier-editor-in-the-details-panel-lines-up-above-the-navigation-${width}x${height}-${dark?'dark':'light'}`,async f=>{
+      paid(f);f.tables.colis[0].casier_historique=[{casier:'A-01',date:'2026-09-20T08:00:00Z'}];
+      await f.page.setViewportSize({width,height});await f.context.addInitScript(dark=>localStorage.setItem('expedile-theme',dark?'dark':'light'),dark);await f.login();await open(f);
+      await f.page.getByTestId('dossier-task-header').getByRole('button',{name:/^Détails/}).click();
+      const dialog=f.page.getByRole('dialog',{name:'Contexte du dossier',exact:true});
+      const covered=selector=>f.page.evaluate(selector=>{const node=document.querySelector(selector);const box=node.getBoundingClientRect();const hit=document.elementFromPoint(box.left+box.width/2,box.top+box.height/2);return !(hit&&(node===hit||node.contains(hit)||hit.contains(node)));},selector);
+      // The bottom navigation (phones and tablets) is under the panel while it is open.
+      const navigation=await f.page.evaluate(()=>{const bar=[...document.querySelectorAll('body *')].find(node=>getComputedStyle(node).position==='fixed'&&!node.closest('[data-testid="dossier-context"]')&&node.getBoundingClientRect().bottom>=innerHeight-1&&node.getBoundingClientRect().height>30&&node.getBoundingClientRect().height<120);if(!bar)return null;const box=bar.getBoundingClientRect();const hit=document.elementFromPoint(box.left+box.width/2,box.top+box.height/2);return {underPanel:Boolean(hit?.closest('[data-testid="dossier-context"]'))};});
+      if(width<1024)assert.deepEqual(navigation,{underPanel:true},'The panel covers the bottom navigation.');
+      await dialog.getByRole('button',{name:'Modifier le casier',exact:true}).click();
+      const input=dialog.getByLabel('Casier du dossier',{exact:true});await input.waitFor();await focusInCasierEditor(f);
+      assertCasierLayout(await casierGeometry(dialog));
+      for(const selector of ['[data-testid="dossier-context"] .dossier-casier-input','[data-testid="dossier-context"] [aria-label="Enregistrer le casier"]','[data-testid="dossier-context"] [aria-label="Annuler la modification du casier"]'])assert.equal(await covered(selector),false,`${selector} stays uncovered.`);
+      // The last line of the panel can always be reached.
+      await dialog.locator('.dossier-context-scroll').evaluate(node=>{node.scrollTop=node.scrollHeight;});
+      assert.equal(await covered('[data-testid="dossier-context"] label.dossier-casier-all'),false,'« Appliquer à tous les colis » stays reachable.');
+      assert.equal(await f.page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false);
+      await f.page.screenshot({path:`${output}/casier-panel-${width}x${height}-${dark?'dark':'light'}.png`});
+      await input.fill('B-12');await dialog.getByRole('button',{name:'Enregistrer le casier',exact:true}).click();
+      await dialog.getByRole('status').filter({hasText:'Casier B-12 enregistré.'}).waitFor();
+      await f.page.waitForFunction(()=>document.activeElement?.getAttribute('aria-label')==='Modifier le casier');
+      assert.equal(f.tables.colis[0].casier,'B-12');assert.equal(f.tables.colis[0].casier_historique.length,2);
+      const axe=await new AxeBuilder({page:f.page}).include('[data-testid="dossier-context"]').withTags(['wcag2a','wcag2aa','wcag21aa','wcag22aa']).analyze();assert.deepEqual(axe.violations.map(v=>({id:v.id,nodes:v.nodes.map(n=>n.target)})),[]);
     });
     await scenario('history-opens-the-journal-directly-without-mutating-the-dossier',async f=>{
       paid(f);const before=originals(f);await f.login();await open(f);
@@ -147,6 +215,50 @@ async function main() {
       await dialog.getByRole('button',{name:'Fermer le contexte du dossier',exact:true}).click();
       await f.page.waitForFunction(()=>document.activeElement?.getAttribute('aria-label')==='Consulter l’historique du dossier');
       unchanged(f,before);
+    });
+    // Who changed the status: the trigger records user_id (none for a server job).
+    for(const dark of [false,true])await scenario(`history-names-who-changed-the-status-and-stays-readable-${dark?'dark':'light'}`,async f=>{
+      paid(f);f.tables.clients[0].user_id='c1a1e000-0000-4000-8000-000000000001';
+      const log=(n,from,to,fields)=>({id:`log-${n}`,colis_id:ids.P,ancien_statut:from,nouveau_statut:to,user_nom:null,created_at:`2026-09-1${n}T08:00:00Z`,...fields});
+      f.tables.logs_statut=[
+        log(1,'receptionne','mesure',{user_id:ids.A}),
+        log(2,'mesure','attente_feu_vert',{user_id:null}),
+        log(3,'attente_feu_vert','autorise',{user_id:'c1a1e000-0000-4000-8000-000000000001'}),
+        log(4,'autorise','en_preparation',{user_id:'99999999-9999-4999-8999-999999999999'}),
+        log(5,'en_preparation','devis_envoye',{user_id:null,user_nom:'Import 2025'}),
+      ];
+      await f.context.addInitScript(dark=>localStorage.setItem('expedile-theme',dark?'dark':'light'),dark);await f.login();await open(f);
+      await overview(f).getByRole('button',{name:'Consulter l’historique du dossier',exact:true}).click();
+      const dialog=f.page.getByRole('dialog',{name:'Contexte du dossier',exact:true});const history=dialog.getByTestId('dossier-history');await history.waitFor();
+      // Newest first: a recorded name, a colleague missing from the team list, the client, a server job, a colleague.
+      assert.deepEqual(await history.locator('[data-history-author]').allInnerTexts(),['Import 2025','Membre de l’équipe','Exemple Camille (client)','Système','Test Camille']);
+      assert.doesNotMatch(await history.innerText(),/(^|\n)\s*—\s*:/,'No entry without an author.');
+      const look=await history.evaluate(node=>{
+        const rgb=value=>value.match(/[\d.]+/g).slice(0,3).map(Number);
+        const lum=color=>color.map(v=>v/255).map(v=>v<=.04045?v/12.92:((v+.055)/1.055)**2.4).reduce((sum,v,i)=>sum+v*[.2126,.7152,.0722][i],0);
+        const ratio=(a,b)=>{const x=lum(a),y=lum(b);return (Math.max(x,y)+.05)/(Math.min(x,y)+.05);};
+        const paint=element=>{for(let n=element;n;n=n.parentElement){const parts=getComputedStyle(n).backgroundColor.match(/[\d.]+/g).map(Number);if(parts.length<4||parts[3]>.5)return parts.slice(0,3);}return [255,255,255];};
+        const chips=[...node.querySelectorAll('.rounded-full')].filter(chip=>chip.textContent.trim()).map(chip=>({text:chip.textContent.trim(),background:lum(rgb(getComputedStyle(chip).backgroundColor)),ratio:ratio(rgb(getComputedStyle(chip).color),rgb(getComputedStyle(chip).backgroundColor))}));
+        const entry=node.querySelector('[data-history-entry]'),bullet=entry.querySelector('[aria-hidden="true"]'),card=paint(node);
+        return {chips,separator:ratio(rgb(getComputedStyle(entry).borderBottomColor),card),separatorLight:lum(rgb(getComputedStyle(entry).borderBottomColor)),bullet:ratio(rgb(getComputedStyle(bullet).backgroundColor),card)};
+      });
+      assert.equal(look.chips.length,10);
+      for(const chip of look.chips){assert.ok(chip.ratio>=4.5,`${chip.text}: ${chip.ratio.toFixed(2)}:1`);if(dark)assert.ok(chip.background<.1,`${chip.text}: a dark chip in dark mode, never a bright pill.`);}
+      assert.ok(look.bullet>=3,`Bullet ${look.bullet.toFixed(2)}:1 against the card.`);
+      if(dark)assert.ok(look.separatorLight<.1,'The separator is a dark line in dark mode, never a bright white rule.');
+      await dialog.screenshot({path:`${output}/history-${dark?'dark':'light'}.png`});
+      const axe=await new AxeBuilder({page:f.page}).include('[data-testid="dossier-context"]').withTags(['wcag2a','wcag2aa','wcag21aa','wcag22aa']).analyze();assert.deepEqual(axe.violations.map(v=>({id:v.id,nodes:v.nodes.map(n=>n.target)})),[]);
+      assert.deepEqual(businessWrites(f),[]);
+    });
+    await scenario('a-failed-history-read-is-an-error-with-a-retry-never-an-empty-journal',async f=>{
+      paid(f);let fail=true;
+      await f.context.route('**/rest/v1/logs_statut?*',route=>fail?route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({message:'Historique indisponible pour cet essai.'})}):route.fallback());
+      await f.login();await open(f);await overview(f).getByRole('button',{name:'Consulter l’historique du dossier',exact:true}).click();
+      const dialog=f.page.getByRole('dialog',{name:'Contexte du dossier',exact:true});
+      await dialog.getByRole('alert').filter({hasText:'L’historique n’a pas pu être chargé'}).waitFor();
+      assert.equal(await dialog.getByText('Aucun événement enregistré.',{exact:true}).count(),0);
+      fail=false;await dialog.getByRole('button',{name:'Réessayer',exact:true}).click();
+      await dialog.getByText('Aucun événement enregistré.',{exact:true}).waitFor();
     });
     await scenario('restricted-worker-cannot-open-financial-or-invoice-details-through-overview',async f=>{
       paid(f);const rights={id:'overview-rights',staff_id:ids.S,perm_colis_preparer:true};f.tables.staff_permissions=[rights];f.tables.staff_users[0].staff_permissions=rights;

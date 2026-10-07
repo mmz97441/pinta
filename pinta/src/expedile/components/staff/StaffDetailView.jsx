@@ -29,7 +29,10 @@ import TaskReopen from './TaskReopen';
 import TaskGuidance from './TaskGuidance';
 import { revisionLockedReason, shipmentRevisionBoxes } from '../../domain/shipmentRevision';
 import { departureFieldEditable, departureIssue, plannedDeparturesFor } from '../../domain/departurePlanning';
+import { canSeeDossierFinances } from '../../domain/dossierOverview';
+import { plural, pluralWord } from '../../domain/plural';
 import DossierDeparture from '../detail/DossierDeparture';
+import '../detail/dossierActions.css';
 
 const receptionDrafts = new Map();
 const preparationDrafts = new Map();
@@ -67,12 +70,14 @@ function statusBorderColor(statut) {
 }
 
 // ── Section block wrapper ────────────────────────────────────────────────────
+// The left border is the status colour; without one, the brand text token (navy
+// in light mode, light navy in dark mode) keeps the edge and the icon visible.
 function Section({ title, icon: Icon, color, children }) {
   return (
-    <div className="rounded-2xl border bg-white" style={{ borderLeft: `4px solid ${color || BRAND.navy}` }}>
+    <div className="rounded-2xl border bg-white" style={{ borderLeft: `4px solid ${color || 'var(--brand-text)'}` }}>
       <div className="px-4 pt-4 pb-3 border-b border-gray-100">
         <div className="flex items-center gap-2">
-          {Icon && <Icon size={16} style={{ color: color || BRAND.navy }} />}
+          {Icon && <Icon size={16} aria-hidden="true" style={{ color: color || 'var(--brand-text)' }} />}
           <span className="text-sm font-bold" style={{ color: 'var(--brand-text)' }}>{title}</span>
         </div>
       </div>
@@ -82,6 +87,8 @@ function Section({ title, icon: Icon, color, children }) {
 }
 
 // ── Input field ──────────────────────────────────────────────────────────────
+// `displayLabel` is the short visible label (« Longueur »); `label` the full
+// accessible name (« Longueur · carton 2 »), which contains it.
 function Field({ label, displayLabel, type = 'text', value, onChange, onBlur, placeholder, min, step, unit, disabled = false }) {
   return (
     <div className="flex flex-col gap-1">
@@ -110,20 +117,10 @@ function Field({ label, displayLabel, type = 'text', value, onChange, onBlur, pl
 }
 
 // ── Action button primary ────────────────────────────────────────────────────
-function BtnPrimary({ onClick, children, disabled, color }) {
+// One primary style for every step (dossierActions.css): never a status colour.
+function BtnPrimary({ onClick, children, disabled }) {
   return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className="flex items-center justify-center gap-2 w-full py-3 rounded-xl text-sm font-bold transition-all active:scale-95 disabled:opacity-40"
-      style={{
-        background: color
-          ? color
-          : `linear-gradient(135deg, ${BRAND.navy}, ${BRAND.navyL})`,
-        color: 'white',
-        boxShadow: `0 2px 10px ${color || BRAND.navy}30`,
-      }}
-    >
+    <button type="button" onClick={onClick} disabled={disabled} className="dossier-primary-button w-full py-3">
       {children}
     </button>
   );
@@ -300,6 +297,8 @@ export default function StaffDetailView({ workspace = false, active = true, task
   const canInvoiceWorkspace = ['perm_factures_voir', 'perm_factures_ajouter', 'perm_factures_valider', 'perm_factures_refuser', 'perm_factures_ocr', 'perm_factures_modifier_articles'].some(permission => rawCan(permission));
   const canQuoteWorkspace = ['perm_colis_calculer_devis', 'perm_colis_envoyer_devis', 'perm_finances_voir_total'].some(permission => rawCan(permission));
   const canCalculateQuote = can('perm_colis_calculer_devis');
+  // The rule of the overview's Devis and Paiement steps: no amount without it.
+  const financeVisible = canSeeDossierFinances(rawCan);
   const task = requestedTask || resolveDossierTask(sel || {}, location.search, workActions, can, cl || {});
   const editRequested = new URLSearchParams(location.search).get('modifier') === task;
   const consumeEditRequest = useCallback(() => {
@@ -408,7 +407,7 @@ export default function StaffDetailView({ workspace = false, active = true, task
     receptionDirty.current = false; receptionDrafts.delete(`${auth?.u?.id}:${sel.id}`);
     setReceptionConflict(false);
     setMultiDims(Object.fromEntries(saved.dimsParColis.map((box, index) => [index, box])));
-    flash(`Mesures de réception enregistrées (${manifest.nbColis} carton${manifest.nbColis > 1 ? 's' : ''}). Les mesures après optimisation seront saisies pendant la préparation.`);
+    flash(`Mesures de réception enregistrées (${plural(manifest.nbColis, 'carton')}). Les mesures après optimisation seront saisies pendant la préparation.`);
   }
 
   // Preview and saved quote use exactly the same explicit input values.
@@ -610,7 +609,7 @@ export default function StaffDetailView({ workspace = false, active = true, task
       return guidance('Devis en attente', stage === 'receptionne' ? 'Les mesures à réception doivent être enregistrées avant de demander l’accord du client.' : stage === 'refuse_client' ? 'Le client a refusé la préparation. La suite doit être convenue avec lui avant d’établir le devis.' : 'Le devis attend l’accord du client. Les factures et les mesures déjà enregistrées sont conservées.', stage === 'receptionne' ? 'reception' : 'accord');
     }
     if (task === 'paiement' && !['devis_envoye','attente_paiement'].includes(stage)) {
-      if (paymentRecorded || inTransport) return guidance('Paiement confirmé', `${eur(sel.paiementMontant || sel.devisTotal)} reçu(s). Vous pouvez consulter la suite du transport.`, nextUsefulTask);
+      if (paymentRecorded || inTransport) return guidance('Paiement confirmé', `${financeVisible ? `Paiement de ${eur(sel.paiementMontant || sel.devisTotal)} reçu.` : 'Paiement reçu.'} Vous pouvez consulter la suite du transport.`, nextUsefulTask);
       const withdrawn = needsQuoteRecalculation(sel);
       return guidance(withdrawn ? 'Devis à reprendre avant le règlement' : 'Règlement à venir', withdrawn ? 'Le devis précédent a été retiré. Aucun règlement n’est attendu pour cette version ; un nouveau devis doit être vérifié puis envoyé.' : 'Le client pourra régler après réception du devis. Consultez ce qu’il reste à préparer.', nextUsefulTask === 'paiement' ? 'devis' : nextUsefulTask);
     }
@@ -636,7 +635,7 @@ export default function StaffDetailView({ workspace = false, active = true, task
         const weights = measureShipment(boxes, divisor);
         const validTariff = tarif && [tarif.base, tarif.parKg].every(value => value !== '' && value != null && Number.isFinite(Number(value)) && Number(value) >= 0);
         const transport = weights && validTariff ? Number(tarif.base) + weights.billableWeight * Number(tarif.parKg) : null;
-        return <Section title={`Mesures de réception · ${manifest.nbColis} carton${manifest.nbColis > 1 ? 's' : ''}`} icon={Ruler} color={borderColor}>
+        return <Section title={`Mesures de réception · ${plural(manifest.nbColis, 'carton')}`} icon={Ruler} color={borderColor}>
           <div className="space-y-4">
             <p className="text-sm text-gray-600">Mesurez chaque carton tel qu’il est reçu. Après optimisation de l’emballage, de nouvelles dimensions et un nouveau poids seront saisis pour établir le devis.</p>
             {receptionConflict && <div role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">Un carton ou ses mesures ont été modifiés depuis votre saisie. Vos valeurs saisies restent affichées.<button type="button" className="min-h-11 block font-semibold underline" onClick={() => { setMultiDims(Object.fromEntries(manifest.dimsParColis.map((box, index) => [index, box]))); receptionVersion.current = sel.updatedAt; receptionDirty.current = false; receptionDrafts.delete(`${auth?.u?.id}:${sel.id}`); setReceptionConflict(false); setFormErr(''); }}>Reprendre les mesures enregistrées</button></div>}
@@ -644,7 +643,8 @@ export default function StaffDetailView({ workspace = false, active = true, task
               const box = multiDims[index] || {};
               return <fieldset key={index} className="rounded-xl border border-gray-200 p-3 space-y-3">
                 <legend className="px-1 text-sm font-semibold brand-t">Carton {index + 1}{carton.fournisseur ? ` · ${carton.fournisseur}` : ''}{carton.number ? ` · ${carton.number}` : ' · Sans numéro de suivi'}</legend>
-                <div className="grid grid-cols-2 gap-3">{[['dimL', 'Longueur', 'cm'], ['dimW', 'Largeur', 'cm'], ['dimH', 'Hauteur', 'cm'], ['poids', 'Poids réel', 'kg']].map(([key, label, unit]) => <Field key={key} label={`${label} · carton ${index + 1}`} type="number" min="0.01" step="0.01" unit={unit} disabled={actionLoading || !can('perm_colis_mesurer')} value={box[key] ?? ''} onChange={event => { receptionDirty.current = true; setMultiDims(previous => ({ ...previous, [index]: { ...previous[index], [key]: event.target.value } })); }} />)}</div>
+                {/* Short visible labels, as in the preparation form: « carton N » stays in the accessible name and in the legend. */}
+                <div className="grid grid-cols-2 gap-3">{[['dimL', 'Longueur', 'cm'], ['dimW', 'Largeur', 'cm'], ['dimH', 'Hauteur', 'cm'], ['poids', 'Poids réel', 'kg']].map(([key, label, unit]) => <Field key={key} displayLabel={label} label={`${label} · carton ${index + 1}`} type="number" min="0.01" step="0.01" unit={unit} disabled={actionLoading || !can('perm_colis_mesurer')} value={box[key] ?? ''} onChange={event => { receptionDirty.current = true; setMultiDims(previous => ({ ...previous, [index]: { ...previous[index], [key]: event.target.value } })); }} />)}</div>
               </fieldset>;
             })}
             {weights && <div className="p-3 rounded-xl bg-gray-50 border border-gray-200 space-y-1 text-sm">
@@ -665,7 +665,8 @@ export default function StaffDetailView({ workspace = false, active = true, task
 
       // ── MEASURED AT RECEPTION: request explicit preparation consent ───────
       case 'mesure': {
-        return <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5"><h2 className="text-lg font-bold text-slate-800">Demander l’accord du client</h2><p className="text-sm text-slate-600">{receptionCartonManifest(sel).nbColis} carton(s) reçus et mesurés · Casier {sel.casier || 'à renseigner'}</p>{sel.consentRequestVersion > 0 && <p role="status" className="text-sm font-semibold text-slate-700">Nouvelle demande à envoyer. La réponse précédente reste dans l’historique.</p>}<TaskMessage key={`consent-${sel.id}`} template="demande_feu_vert" autoPreview sendLabel="Envoyer la demande d’accord" label="Préparer la demande au client" disabled={actionLoading || !can('perm_colis_demander_feuvert')} beforeSend={options => demanderFeuVert(sel.id, options)} />{continuation}</section>;
+        const received = receptionCartonManifest(sel).nbColis;
+        return <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5"><h2 className="text-lg font-bold text-slate-800">Demander l’accord du client</h2><p className="text-sm text-slate-600">{plural(received, 'carton')} {pluralWord(received, 'reçu')} et {pluralWord(received, 'mesuré')} · Casier {sel.casier || 'à renseigner'}</p>{sel.consentRequestVersion > 0 && <p role="status" className="text-sm font-semibold text-slate-700">Nouvelle demande à envoyer. La réponse précédente reste dans l’historique.</p>}<TaskMessage key={`consent-${sel.id}`} template="demande_feu_vert" autoPreview sendLabel="Envoyer la demande d’accord" label="Préparer la demande au client" disabled={actionLoading || !can('perm_colis_demander_feuvert')} beforeSend={options => demanderFeuVert(sel.id, options)} />{continuation}</section>;
       }
       case 'attente_feu_vert': {
         return <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5"><h2 className="text-lg font-bold text-slate-800">En attente du client</h2><p className="text-sm text-slate-600">{!!sel.attenteClientDate ? 'Le client souhaite attendre d’autres cartons.' : 'La demande est enregistrée. L’accord du client est attendu.'}</p>{lastRequest && <p className="text-sm text-slate-600">Dernière demande : {lastRequest}</p>}{replyDate && <p className="text-sm text-slate-600">Réponse client : {replyDate}{sel.attenteClientMotif ? ` · ${sel.attenteClientMotif}` : ''}</p>}{sel.attenteClientUntil && <p className="text-sm text-slate-600">Attente demandée jusqu’au {dateLabel(sel.attenteClientUntil)}</p>}{!sel.attenteClientDate && <p className="text-sm text-slate-600">Consultez le dernier échange avant de relancer. La relance reste à votre initiative.</p>}{!sel.attenteClientDate && <TaskMessage key={`consent-${sel.id}`} template="relance_feu_vert" label="Préparer une relance" disabled={!can('perm_colis_demander_feuvert')} />}{onOpenContext && <button className="min-h-11 text-sm font-semibold text-slate-700 underline" onClick={() => onOpenContext('messages')}>Voir les échanges</button>}{sel.attenteClientDate && reopenControl('accord')}{continuation}</section>;
@@ -677,7 +678,7 @@ export default function StaffDetailView({ workspace = false, active = true, task
         return (
           <Section title="Préparer les colis" icon={Check} color={borderColor}>
             <div className="space-y-3">
-              <p className="text-sm text-slate-700">{sel.ref} · {cl?.nom} · Casier {sel.casier || "à renseigner"} · {receptionCartonManifest(sel).nbColis} carton(s) reçus</p>
+              <p className="text-sm text-slate-700">{sel.ref} · {cl?.nom} · Casier {sel.casier || "à renseigner"} · {plural(receptionCartonManifest(sel).nbColis, 'carton')} {pluralWord(receptionCartonManifest(sel).nbColis, 'reçu')}</p>
               <div className="flex items-center gap-2 p-2 rounded-lg bg-green-50 border border-green-200">
                 <Check size={12} className="text-green-500 flex-shrink-0" />
                 <p className="text-[10px] font-bold text-green-700">Accord client reçu</p>
@@ -699,7 +700,7 @@ export default function StaffDetailView({ workspace = false, active = true, task
               {sel.notesReception && <p className="rounded-xl bg-slate-50 p-3 text-sm text-slate-700">À savoir à réception : {sel.notesReception}</p>}{sel.produitInterdit && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-700">Un produit interdit est signalé. Faites régulariser le dossier avant de préparer.</p>}
               <BtnPrimary
                 onClick={() => runAction(async () => { await changerStatut(sel.id, 'en_preparation'); chooseSection('preparation'); })}
-                disabled={actionLoading || subExpired || sel.produitInterdit || !can('perm_colis_preparer')} color="#2563EB">
+                disabled={actionLoading || subExpired || sel.produitInterdit || !can('perm_colis_preparer')}>
                 <Check size={15} />
                 {actionLoading ? 'En cours...' : 'Commencer la préparation'}
               </BtnPrimary>
@@ -733,8 +734,10 @@ export default function StaffDetailView({ workspace = false, active = true, task
         const isPro = cl?.type === 'pro';
         const inputClass = 'min-h-11 min-w-0 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300';
         const changeFinal = (index, key, value) => { preparationDirty.current = true; setFinalPackages(previous => previous.map((box,position) => position === index ? { ...box, [key]: value } : box)); setMeasuresSaved(false); setDevisPrev(false); };
-        if (preparationView) return <section id="preparation-workspace" aria-label="Préparation après optimisation" className="mx-auto w-full max-w-3xl scroll-mt-48 space-y-5">
-          <div><h2 className="text-lg font-bold text-slate-800">Optimiser et mesurer les colis</h2><p className="mt-1 text-sm text-slate-600">{receptionCartonManifest(sel).nbColis} carton(s) reçus → {finalPackages.length} colis préparé(s) · Casier {sel.casier || "à renseigner"}</p></div>
+        const receivedCount = receptionCartonManifest(sel).nbColis;
+        // Full width, like every other step of the dossier.
+        if (preparationView) return <section id="preparation-workspace" aria-label="Préparation après optimisation" className="w-full min-w-0 scroll-mt-48 space-y-5">
+          <div><h2 className="text-lg font-bold text-slate-800">Optimiser et mesurer les colis</h2><p className="mt-1 text-sm text-slate-600">{plural(receivedCount, 'carton')} {pluralWord(receivedCount, 'reçu')} · {finalPackages.length} colis {pluralWord(finalPackages.length, 'préparé')} · Casier {sel.casier || "à renseigner"}</p></div>
           {(preparationEditing || measuresChanged || !savedWeights || !measuresCurrent) && <div id="quote-measures" className="scroll-mt-24"><Section title="Mesures après optimisation" icon={Ruler} color={borderColor}>
             <p className="mb-3 text-sm text-slate-600">Après regroupement et réemballage, mesurez et pesez chaque colis prêt à partir. Les mesures des cartons reçus sont conservées séparément.</p>
             {preparationBlock && <p role="alert" className="mb-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">{preparationBlock}</p>}
@@ -754,7 +757,7 @@ export default function StaffDetailView({ workspace = false, active = true, task
             {weights && <details className="mt-4 border-t border-gray-100 text-sm"><summary className="min-h-11 cursor-pointer py-3 font-semibold text-slate-600">Comprendre le calcul du transport</summary><div className="space-y-1"><Ligne label="Poids volumétrique" value={kg(weights.volumetricWeight)} /><Ligne label="Poids facturable" value={kg(weights.billableWeight)} /></div></details>}
           </Section></div>}
           {!preparationEditing && !measuresChanged && savedWeights && measuresCurrent && <section ref={preparationFeedback} tabIndex={-1} aria-label="Relais après préparation" className="scroll-mt-56 space-y-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
-            <p className="text-sm font-semibold text-emerald-800">Optimisation enregistrée · {savedFinalPackages(sel).length} colis sortant(s) · {kg(savedWeights.realWeight)}</p>{sel.finalMeasurementsAt && <p className="text-xs text-slate-600">Mesures enregistrées le {dateLabel(sel.finalMeasurementsAt)}</p>}
+            <p className="text-sm font-semibold text-emerald-800">Optimisation enregistrée · {savedFinalPackages(sel).length} colis {pluralWord(savedFinalPackages(sel).length, 'sortant')} · {kg(savedWeights.realWeight)}</p>{sel.finalMeasurementsAt && <p className="text-xs text-slate-600">Mesures enregistrées le {dateLabel(sel.finalMeasurementsAt)}</p>}
             <p className="text-sm text-slate-700">{savedFinalPackages(sel).map((box,index) => `Colis ${index + 1} : ${box.dimL} × ${box.dimW} × ${box.dimH} cm · ${kg(box.poids)}`).join(' ; ')}</p>
             <p className="text-sm text-slate-700">{nextUsefulTask === 'documents' ? 'Prochaine étape : vérifier les factures d’achat pour calculer le montant à payer.' : 'Prochaine étape : préparer le montant à payer par le client.'} {taskOwner(nextUsefulTask)}</p>
             {nextUsefulTask !== task && canViewTask(nextUsefulTask) && <BtnPrimary onClick={() => chooseSection(nextUsefulTask)}>{nextUsefulTask === 'documents' ? 'Vérifier les factures d’achat' : taskLinkLabels[nextUsefulTask]}</BtnPrimary>}
@@ -762,7 +765,7 @@ export default function StaffDetailView({ workspace = false, active = true, task
             {continuation}
           </section>}
           {can('perm_colis_preparer') && !preparationBlock && <>
-          <details className="border-t border-slate-200"><summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-slate-600">Consignes facultatives {selTags.length > 0 ? `· ${selTags.length} choisie(s)` : ''}</summary>          <div className="space-y-2">
+          <details className="border-t border-slate-200"><summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-slate-600">Consignes facultatives {selTags.length > 0 ? `· ${plural(selTags.length, 'choisie')}` : ''}</summary>          <div className="space-y-2">
             <p className="text-xs text-slate-600">Les étiquettes s’enregistrent dès le clic. Le commentaire s’enregistre avec « Enregistrer la consigne » ; les mesures ont leur propre bouton.</p>
             <div className="flex flex-wrap gap-2">{TAGS_PREPARATION.map((tag) => <button key={tag} disabled={actionLoading} onClick={() => runAction(async () => { const next = selTags.includes(tag) ? selTags.filter((item) => item !== tag) : [...selTags, tag]; await upd(sel.id, { tagsPreparation: next }); setSelTags(next); })} className={`min-h-11 rounded-full px-3 py-2 text-xs font-semibold ${selTags.includes(tag) ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-600'}`}>{tag}</button>)}</div>
             <textarea disabled={actionLoading} aria-label="Commentaire de préparation" value={commentaire} onChange={(event) => { const value = event.target.value; setCommentaire(value); commentDirty.current = value !== (sel.commentairePreparation || ""); if(commentDirty.current) preparationCommentDrafts.set(`${auth?.u?.id}:${sel.id}`, value); else preparationCommentDrafts.delete(`${auth?.u?.id}:${sel.id}`); }} placeholder="Instructions utiles à la préparation…" rows={2} className={inputClass} />
@@ -772,8 +775,10 @@ export default function StaffDetailView({ workspace = false, active = true, task
           <details><summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-slate-600">Photo du colis préparé</summary><p className="mb-2 text-xs text-slate-600">La photo s’enregistre séparément après sa confirmation.</p><WebcamCapture colisId={sel.id} colisRef={sel.ref} existingUrl={sel.photoPrep} onCapture={(path) => runAction(() => upd(sel.id, { photoPrep: path }))} /></details>
           </>}
         </section>;
-        return <div className={`min-w-0 space-y-5 ${workspace ? "mx-auto w-full max-w-3xl" : ""}`}>
-          <div><h2 className="text-lg font-bold text-slate-800">{verified ? 'Vérifier et envoyer le devis' : 'Établir le devis'}</h2><p className="mt-1 text-sm text-slate-600">{verified ? 'Le devis est enregistré. Vérifiez le montant et le destinataire avant de l’envoyer.' : 'Complétez le devis, puis enregistrez-le pour vérifier le montant avant l’envoi.'}</p></div><div aria-label="Résumé du devis" className="rounded-xl border border-slate-200 bg-white p-4"><p className="text-sm text-slate-600">{verified ? "Brouillon enregistré" : quote.ok ? "Estimation · prête à vérifier" : "À compléter"}</p><p className="text-2xl font-bold text-slate-800">{quote.ok ? eur(quote.amounts.total) : "Montant à compléter"}</p><p className="text-xs text-slate-600">{verified ? "Version enregistrée, non envoyée au client." : "Calcul actuel non enregistré."}</p></div>
+        // Full width like the other steps. « À compléter » is said once, here: the
+        // action bar below names what blocks instead of repeating it.
+        return <div className="w-full min-w-0 space-y-5">
+          <div><h2 className="text-lg font-bold text-slate-800">{verified ? 'Vérifier et envoyer le devis' : 'Établir le devis'}</h2><p className="mt-1 text-sm text-slate-600">{verified ? 'Le devis est enregistré. Vérifiez le montant et le destinataire avant de l’envoyer.' : 'Complétez le devis, puis enregistrez-le pour vérifier le montant avant l’envoi.'}</p></div><div aria-label="Résumé du devis" className="rounded-xl border border-slate-200 bg-white p-4"><p className="text-sm text-slate-600">{verified ? "Brouillon enregistré" : quote.ok ? "Estimation · prête à vérifier" : "Montant du devis"}</p><p className="text-2xl font-bold text-slate-800">{quote.ok ? eur(quote.amounts.total) : "À compléter"}</p><p className="text-xs text-slate-600">{verified ? "Version enregistrée, non envoyée au client." : quote.ok ? "Calcul actuel non enregistré." : "Les points à résoudre sont listés ci-dessous."}</p></div>
           {preparationConflict && <div role="alert" className="space-y-2 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
             <p>Le dossier a été modifié depuis votre saisie. Votre brouillon est conservé ; reprenez la version partagée avant d’enregistrer le devis.</p>
             {preparationConflictNotice}
@@ -783,8 +788,8 @@ export default function StaffDetailView({ workspace = false, active = true, task
           </div>}
           {!verified && <>
           <div className="flex flex-wrap gap-x-4 gap-y-2 border-y border-slate-200 py-3 text-sm" aria-label="Éléments du devis">
-            <button className="min-h-11 font-semibold text-slate-700 underline" onClick={() => chooseSection('preparation')}>{savedWeights && measuresCurrent ? 'Préparation enregistrée ✓' : 'Préparation à terminer'}</button>
-            {canInvoiceWorkspace && <button className="min-h-11 font-semibold text-slate-700 underline" onClick={() => chooseSection('documents')}>{currentInvoices(sel.factures || []).filter(invoice => invoice.valide).length} facture(s) vérifiée(s)</button>}
+            <button className="inline-flex min-h-11 items-center gap-1.5 font-semibold text-slate-700 underline" onClick={() => chooseSection('preparation')}>{savedWeights && measuresCurrent ? <>Préparation enregistrée<Check size={16} aria-hidden="true" /></> : 'Préparation à terminer'}</button>
+            {canInvoiceWorkspace && <button className="min-h-11 font-semibold text-slate-700 underline" onClick={() => chooseSection('documents')}>{plural(currentInvoices(sel.factures || []).filter(invoice => invoice.valide).length, 'facture vérifiée', 'factures vérifiées')}</button>}
           </div>
           {measuresChanged && <p role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">Un brouillon de mesures reste à enregistrer. <button className="min-h-11 font-semibold underline" onClick={() => chooseSection('preparation')}>Reprendre la préparation</button></p>}
           {!quote.ok && <div className="rounded-xl bg-amber-50 p-3"><p className="text-sm font-semibold text-amber-800">À résoudre avant le devis</p><ul className="mt-2 space-y-1 text-sm text-amber-800">{[...new Map(quote.errors.map(error => [error.message,error])).values()].map((error, index) => {
@@ -803,15 +808,15 @@ export default function StaffDetailView({ workspace = false, active = true, task
 
           {quote.ok && quote.warnings.length > 0 && <div className="space-y-1 rounded-xl bg-amber-50 p-3">{quote.warnings.map((warning, index) => <p key={index} className="text-xs text-amber-800">{warning}</p>)}</div>}
           {verified && !isPro && <details className="rounded-xl border border-slate-200 bg-white px-4"><summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-slate-600">Articles et taux retenus ({quote.snapshot.inputs.lines.length})</summary><p className="pb-2 text-sm text-slate-600">Le transport est réparti selon la valeur des articles : quantité × prix unitaire HT. Les taux OM et OMR de chaque article s’appliquent à sa valeur augmentée de sa part de transport. Les montants affichés sont arrondis ; le calcul conserve les décimales.</p><ul className="divide-y divide-slate-200 pb-3 text-sm">{quote.amounts.taxLines.map((line, index) => <li key={line.id || index} className="space-y-1 py-3"><p className="font-semibold text-slate-800">{line.description}</p><p>{line.quantity} × {eur(line.unitPrice)} HT · Marchandise : {eur(line.value)}</p><p className="text-slate-600">Part de transport : {eur(line.transportShare)} · Base OM / OMR : {eur(line.cif)}</p><p className="text-slate-600">{line.customDuty ? `${line.customDuty.code} · ${line.customDuty.label}` : line.categoryLabel} · OM {line.rates.om} % · OMR {line.rates.omr} %</p>{line.customDuty?.overrideReason && <p className="text-slate-600">Taux corrigés : {line.customDuty.overrideReason}</p>}</li>)}</ul></details>}
-          {quote.ok && <Section title={verified ? 'Brouillon enregistré · vérifier puis envoyer' : 'Estimation du devis'} icon={Eye} color={BRAND.navy}>
+          {quote.ok && <Section title={verified ? 'Brouillon enregistré · vérifier puis envoyer' : 'Estimation du devis'} icon={Eye}>
             <div className="space-y-2 text-sm"><Ligne label="Transport" value={eur(quote.amounts.transport)} />{!isPro && <><Ligne label="Taxes" value={eur(quote.amounts.om + quote.amounts.omr + quote.amounts.tva)} /><details><summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-slate-600">Détail des taxes</summary><Ligne label="Octroi de mer" value={eur(quote.amounts.om)} /><Ligne label="Octroi de mer régional" value={eur(quote.amounts.omr)} /><Ligne label={`TVA (${dest.tva} %)`} value={eur(quote.amounts.tva)} /></details></>}<Ligne label="Frais convenus" value={eur(quote.amounts.fees)} />{verified && fraisDivers.length > 0 && <details><summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-slate-600">Détail des frais</summary>{fraisDivers.map((fee, index) => <Ligne key={index} label={fee.libelle} value={eur(fee.montant)} />)}</details>}{quote.patch.economie > 0 && <Ligne label="Économie après optimisation" value={eur(quote.patch.economie)} />}</div>
           </Section>}
           <div id="quote-review" tabIndex={-1} data-testid="quote-action-bar" className={`${customsDirty ? 'lg:sticky' : 'sticky'} bottom-16 z-10 -mx-1 scroll-mt-48 border-t border-slate-200 bg-white px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-3px_12px_rgba(0,0,0,0.06)] lg:bottom-0`}>
-            <div className="mb-2 flex items-center justify-between gap-3"><div><p className="text-xs font-semibold text-slate-600">Total à régler</p><p className="text-lg font-bold text-slate-800">{quote.ok ? eur(quote.amounts.total) : 'À compléter'}</p></div><p role="status" className="max-w-[60%] text-right text-xs text-slate-600">{actionLoading ? 'Enregistrement en cours…' : verified ? 'Brouillon enregistré · vérifiez le détail avant envoi' : sel.devisBrouillon ? 'Modifications à enregistrer et vérifier' : 'Calcul non enregistré'}</p></div>
+            <div className="mb-2 flex items-center justify-between gap-3"><div><p className="text-xs font-semibold text-slate-600">Total à régler</p><p className="text-lg font-bold text-slate-800">{quote.ok ? eur(quote.amounts.total) : 'Non calculé'}</p></div><p role="status" className="max-w-[60%] text-right text-xs text-slate-600">{actionLoading ? 'Enregistrement en cours…' : verified ? 'Brouillon enregistré · vérifiez le détail avant envoi' : !quote.ok ? 'Points à résoudre avant l’enregistrement' : sel.devisBrouillon ? 'Modifications à enregistrer et vérifier' : 'Calcul non enregistré'}</p></div>
           {customsDirty && <p className="mb-2 text-sm font-semibold text-amber-800">Terminez le classement douanier avant d’enregistrer le devis.</p>}
           {!verified && !can('perm_colis_calculer_devis') && <p className="mb-2 text-sm text-slate-700">Une personne chargée du calcul doit vérifier et enregistrer ce devis avant son envoi.</p>}
           {pendingFee && <p role="status" className="mb-2 text-sm font-semibold text-amber-800">Un frais est en cours de saisie. <button className="min-h-11 underline" onClick={() => { document.getElementById('quote-fees')?.querySelector('details')?.setAttribute('open', ''); document.querySelector('#quote-fees input')?.focus(); }}>Terminer ou annuler ce frais</button></p>}
-          {!verified ? <BtnPrimary onClick={() => runAction(handleEnvoyerDevis)} disabled={pendingFee || customsDirty || !quote.ok || measuresChanged || preparationConflict || actionLoading || subExpired || !can('perm_colis_calculer_devis')}><Eye size={16} />{actionLoading ? 'Enregistrement…' : 'Enregistrer et vérifier le devis'}</BtnPrimary> : <div className="space-y-2"><p className="text-sm text-slate-700">Pour {cl?.nom} · {eur(sel.devisTotal)} · {cl?.telegramChatId ? "Telegram" : `Email : ${cl?.email || "à renseigner"}`}{isPro ? ` · ${{virement:"Virement bancaire",especes:"Espèces","30_jours":"Paiement à 30 jours",fin_de_mois:"Paiement en fin de mois"}[proPayMethod]}` : " · Règlement avant départ"}</p><BtnPrimary color="#15803D" onClick={() => runAction(handleConfirmDevisEnvoye)} disabled={customsDirty || actionLoading || preparationConflict || !quote.ok || subExpired || !can('perm_colis_envoyer_devis')}><Send size={16} />{actionLoading ? 'Envoi en cours…' : 'Envoyer le devis au client'}</BtnPrimary>{can('perm_colis_calculer_devis') && <button className="min-h-11 w-full rounded-xl border border-gray-200 text-sm font-semibold text-gray-600" onClick={() => setDevisPrev(false)}>Modifier le brouillon</button>}</div>}
+          {!verified ? <BtnPrimary onClick={() => runAction(handleEnvoyerDevis)} disabled={pendingFee || customsDirty || !quote.ok || measuresChanged || preparationConflict || actionLoading || subExpired || !can('perm_colis_calculer_devis')}><Eye size={16} />{actionLoading ? 'Enregistrement…' : 'Enregistrer et vérifier le devis'}</BtnPrimary> : <div className="space-y-2"><p className="text-sm text-slate-700">Pour {cl?.nom} · {eur(sel.devisTotal)} · {cl?.telegramChatId ? "Telegram" : `Email : ${cl?.email || "à renseigner"}`}{isPro ? ` · ${{virement:"Virement bancaire",especes:"Espèces","30_jours":"Paiement à 30 jours",fin_de_mois:"Paiement en fin de mois"}[proPayMethod]}` : " · Règlement avant départ"}</p><BtnPrimary onClick={() => runAction(handleConfirmDevisEnvoye)} disabled={customsDirty || actionLoading || preparationConflict || !quote.ok || subExpired || !can('perm_colis_envoyer_devis')}><Send size={16} />{actionLoading ? 'Envoi en cours…' : 'Envoyer le devis au client'}</BtnPrimary>{can('perm_colis_calculer_devis') && <button className="min-h-11 w-full rounded-xl border border-gray-200 text-sm font-semibold text-gray-600" onClick={() => setDevisPrev(false)}>Modifier le brouillon</button>}</div>}
           </div>
         </div>;
       }
@@ -830,12 +835,12 @@ export default function StaffDetailView({ workspace = false, active = true, task
         return (
           <Section title="En attente de paiement" icon={Clock} color={borderColor}>
             <div className="space-y-4">
-              <div className="p-4 rounded-xl bg-amber-50 border border-amber-200">
+              {financeVisible ? <div className="p-4 rounded-xl bg-amber-50 border border-amber-200">
                 <p className="text-xs font-bold text-amber-700 mb-1">Montant à payer</p>
                 <p className="text-2xl font-black" style={{ color: 'var(--brand-text)' }}>
                   {eur(sel.devisTotal)}
                 </p>
-              </div>
+              </div> : <p className="text-sm text-slate-600">Le devis est envoyé : le règlement du client est attendu. Le montant est réservé aux personnes habilitées aux devis et aux paiements.</p>}
               {sel.devisEnvoyeLe && <p className="text-sm text-slate-600">Devis envoyé le {dateLabel(sel.devisEnvoyeLe)}</p>}
               {isPro ? (
                 <>
@@ -849,7 +854,6 @@ export default function StaffDetailView({ workspace = false, active = true, task
                   <BtnPrimary
                     onClick={() => ask('Confirmer le règlement reçu ?', `${sel.ref} · ${cl?.nom} · ${eur(sel.devisTotal)} · ${PAY_METHODS[sel.modePaiementPro] || 'Mode à vérifier'}. Confirmez uniquement après réception effective du règlement. Aucun encaissement bancaire n’est déclenché.`, () => runAction(() => payer(sel.id, sel.devisTotal)), { okLabel: 'Confirmer le paiement reçu' })}
                     disabled={actionLoading || !sel.devisTotal || !can('perm_colis_confirmer_paiement')}
-                    color="#059669"
                   >
                     <Check size={15} />
                     Confirmer réception du paiement
@@ -889,18 +893,19 @@ export default function StaffDetailView({ workspace = false, active = true, task
         return (
           <Section title="Paiement reçu — Expédier" icon={Check} color={borderColor}>
             <div className="space-y-4">
-              <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200">
-                <p className="text-xs font-bold text-emerald-700 mb-1">Paiement reçu</p>
-                <p className="text-2xl font-black text-emerald-700">
+              {/* « Paiement reçu » is a fact for everyone; its amount follows the finance rule of the Devis and Paiement steps. */}
+              <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200" data-testid="payment-received">
+                <p className={financeVisible ? 'text-xs font-bold text-emerald-700 mb-1' : 'text-sm font-bold text-emerald-700'}>Paiement reçu</p>
+                {financeVisible && <p className="text-2xl font-black text-emerald-700">
                   {eur(sel.paiementMontant || sel.devisTotal)}
-                </p>
+                </p>}
               </div>
 
               {/* The same « Départ » field as the overview: after the end of the
                   subscription the choice is confirmed first; cancelling writes nothing. */}
               <DossierDeparture variant="task" can={can} />
 
-              <p className="text-xs text-slate-600">Le choix du départ s’enregistre immédiatement.</p>
+              {canAssign && !readOnly && <p className="text-xs text-slate-600">{can('perm_envois_creer') ? 'Un départ choisi est enregistré aussitôt, sans message au client. Un jour sans départ vous propose d’en créer un. Si une confirmation est nécessaire (nouveau départ à la place de celui du dossier, par exemple), elle vous est demandée avant.' : 'Un départ choisi est enregistré aussitôt, sans message au client. Si une confirmation est nécessaire, elle vous est demandée avant.'}</p>}
               {assignmentIssue && <p role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">Affectation à revoir : {assignmentIssue}. Choisissez un départ compatible avant le chargement.</p>}
               {!canAssign && !readOnly && <p className="text-sm text-slate-600">{assignRight ? 'Le choix du départ demande l’accès aux départs.' : `L’affectation est modifiable par une personne habilitée ${sel.envoi ? 'à réaffecter les départs' : 'à affecter les expéditions'}.`}</p>}
               {!availableEnvois.length && <p className="text-sm text-slate-600">Aucun départ ouvert compatible avec la destination du devis payé. La coordination doit prévoir le prochain départ.{can("perm_envois_creer") && <button className="min-h-11 block font-semibold underline" onClick={() => navigate("/departs")}>Ouvrir les départs pour en créer un</button>}</p>}
@@ -913,11 +918,9 @@ export default function StaffDetailView({ workspace = false, active = true, task
                 </div>
               )}
 
-              {/* Dark cyan: 5.4:1 under the white label (#0891B2 gave 3.7:1). */}
               <BtnPrimary
                 onClick={() => navigate(`/departs?envoi=${encodeURIComponent(sel.envoi)}`)}
                 disabled={!sel.envoi || !!assignmentIssue || subExpired || !can('perm_envois_voir')}
-                color="#0E7490"
               >
                 <Check size={15} />
                 Vérifier le départ et son manifeste
@@ -943,7 +946,6 @@ export default function StaffDetailView({ workspace = false, active = true, task
               <BtnPrimary
                 disabled={actionLoading || !can('perm_colis_changer_statut_expedition')}
                 onClick={() => runAction(() => changerStatut(sel.id, 'arrive'))}
-                color="#14B8A6"
               >
                 <Check size={15} />
                 Confirmer l'arrivée à destination
@@ -983,7 +985,6 @@ export default function StaffDetailView({ workspace = false, active = true, task
                     <BtnPrimary
                       disabled={actionLoading || !can('perm_colis_changer_statut_expedition')}
                       onClick={() => runAction(() => changerStatut(sel.id, 'dedouanement'))}
-                      color="#8B5CF6"
                     >
                       <Clock size={15} />
                       Passer en dédouanement
@@ -997,7 +998,6 @@ export default function StaffDetailView({ workspace = false, active = true, task
                         key={ns}
                         disabled={actionLoading || !can('perm_colis_changer_statut_expedition')}
                         onClick={() => ns === 'livre' ? ask('Confirmer la livraison ?', `${sel.ref} · ${cl?.nom}. Confirmez que tous les colis préparés de cette expédition ont été remis au client. La date de livraison sera enregistrée.`, () => runAction(() => changerStatut(sel.id, ns)), { okLabel: 'Confirmer la livraison' }) : runAction(() => changerStatut(sel.id, ns))}
-                        color={borderColor}
                       >
                         <Check size={15} />
                         {{ transit: 'Confirmer le départ en vol', arrive: 'Confirmer l’arrivée à destination', livraison: 'Lancer la livraison', livre: 'Confirmer la livraison' }[ns] || STATUTS[ns]?.label}
@@ -1029,7 +1029,7 @@ export default function StaffDetailView({ workspace = false, active = true, task
   // ════════════════════════════════════════════════════════════════════════
 
   return (
-    <div className="min-w-0 flex flex-col gap-4 pb-24 lg:pb-4">
+    <div className="dossier-task min-w-0 flex flex-col gap-4 pb-24 lg:pb-4">
       {formErr && !(preparationView && (sel.statut === 'en_preparation' || needsQuoteRecalculation(sel))) && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{formErr}</p>}
 
       {/* ── Action block ───────────────────────────────────────────────── */}

@@ -1,9 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { ChevronDown, ChevronUp } from 'lucide-react';
+import { ArrowRight, ChevronDown, ChevronUp } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { STATUTS, BRAND } from '../../constants';
+import { STATUTS } from '../../constants';
 import { eur, kg } from '../../utils';
 import { fetchLogsForColis, fetchAuditActions } from '../../lib/supabaseData';
+import { staffName } from '../workspace/WorkActionRow';
+
+/** Who changed the status: the name recorded with the event, else the person
+ * of the team (« Membre de l’équipe » when not in the loaded list), the client
+ * of the dossier, or « Système » for a server job (no user). */
+export function statusLogAuthor({ userId, userName } = {}, { teamUsers = [], client = null } = {}) {
+  if (userName) return userName;
+  if (!userId) return 'Système';
+  if (client?.userId && client.userId === userId) return `${client.nom || [client.prenom, client.nomFamille].filter(Boolean).join(' ') || 'Client'} (client)`;
+  return staffName(userId, teamUsers);
+}
 
 const ACTION_NAMES = {
   correction_reception: 'Mesures à réception corrigées',
@@ -43,7 +54,7 @@ function CorrectionHistory({ entry }) {
 }
 
 export default function AuditLog({ expanded = false, includeAudit }) {
-  const { sel, isStaff, can } = useApp();
+  const { sel, selClient, isStaff, can, teamUsers = [] } = useApp();
   const [entries, setEntries] = useState([]);
   const [collapsed, setCollapsed] = useState(!expanded);
   const [loading, setLoading] = useState(true);
@@ -65,7 +76,8 @@ export default function AuditLog({ expanded = false, includeAudit }) {
         ...statusLogs.map((l) => ({
           id: l.id,
           type: 'statut',
-          user: l.user,
+          userId: l.userId,
+          userName: l.userName,
           action: 'Changement de statut',
           detail: null,
           ancienStatut: l.ancienStatut,
@@ -88,7 +100,7 @@ export default function AuditLog({ expanded = false, includeAudit }) {
       // Sort by date descending
       all.sort((a, b) => new Date(b.date) - new Date(a.date));
       setEntries(all);
-    }).catch(failure => { if (active) setError(failure.message || 'L’historique n’a pas pu être chargé.'); })
+    }).catch(failure => { if (active) setError(`L’historique n’a pas pu être chargé${failure?.message ? ` : ${failure.message}` : '.'}`); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [sel?.id, sel?.statut, sel?.updatedAt, isStaff, auditAllowed, attempt]);
@@ -101,7 +113,7 @@ export default function AuditLog({ expanded = false, includeAudit }) {
         onClick={() => setCollapsed(!collapsed)}
         className="flex min-h-11 items-center gap-1.5 font-bold text-sm w-full text-left"
         aria-expanded={!collapsed}
-        style={{ color: BRAND.navy }}
+        style={{ color: 'var(--brand-text)' }}
       >
         {collapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
         Historique ({entries.length})
@@ -111,33 +123,36 @@ export default function AuditLog({ expanded = false, includeAudit }) {
       {error && <div role="alert" className="py-3 text-sm text-red-700 dark:text-red-300"><p>{error}</p><button className="min-h-11 font-semibold underline" onClick={() => setAttempt(value => value + 1)}>Réessayer</button></div>}
       {!loading && !error && entries.length === 0 && <p className="py-3 text-sm text-slate-600 dark:text-slate-300">Aucun événement enregistré.</p>}
 
+      {/* Tokens and remapped utilities only: the separators, bullets, accent and
+          status chips (STATUTS dark variants) keep their contrast in dark mode. */}
       {!collapsed && !loading && !error && (
-        <div className="mt-3 space-y-2">
+        <div className="mt-3 space-y-2" data-testid="dossier-history">
           {entries.map((e) => (
-            <div key={e.id} className="flex items-start gap-2 py-1.5 border-b border-gray-50 last:border-b-0">
+            <div key={e.id} data-history-entry={e.type} className="flex items-start gap-2 py-1.5 border-b border-slate-200 last:border-b-0">
               <div
-                className="flex-shrink-0 w-1.5 h-1.5 rounded-full mt-1.5"
-                style={{ background: e.type === 'statut' ? BRAND.navy : BRAND.gold }}
+                aria-hidden="true"
+                className="flex-shrink-0 w-2 h-2 rounded-full mt-1.5"
+                style={{ background: e.type === 'statut' ? 'var(--brand-text)' : 'var(--brand-gold)' }}
               />
               <div className="flex-1 min-w-0">
                 {e.type === 'statut' ? (
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="text-xs font-semibold text-gray-700">{e.user}</span>
-                    <span className="text-[10px] text-gray-400">:</span>
+                    <span className="text-xs font-semibold text-gray-700" data-history-author>{statusLogAuthor(e, { teamUsers, client: selClient })}</span>
+                    <span className="text-[10px] text-gray-500">:</span>
                     <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${STATUTS[e.ancienStatut]?.couleur || 'bg-gray-200 text-gray-600'}`}>
-                      {STATUTS[e.ancienStatut]?.label || e.ancienStatut || '—'}
+                      {STATUTS[e.ancienStatut]?.label || e.ancienStatut || 'Création'}
                     </span>
-                    <span className="text-gray-400">→</span>
+                    <ArrowRight size={14} aria-hidden="true" className="text-gray-500" /><span className="sr-only">vers</span>
                     <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${STATUTS[e.nouveauStatut]?.couleur || 'bg-gray-200 text-gray-600'}`}>
-                      {STATUTS[e.nouveauStatut]?.label || e.nouveauStatut || '—'}
+                      {STATUTS[e.nouveauStatut]?.label || e.nouveauStatut || 'Statut à vérifier'}
                     </span>
                   </div>
                 ) : (
                   <div>
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-xs font-semibold text-gray-700">{e.user}</span>
-                      <span className="text-[10px] text-gray-400">—</span>
-                      <span className="text-[10px] font-bold" style={{ color: BRAND.goldD }}>{ACTION_NAMES[e.action] || (String(e.action).includes('_') ? 'Action enregistrée sur le dossier' : e.action)}</span>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="text-xs font-semibold text-gray-700">{e.user && e.user !== '—' ? e.user : 'Auteur non précisé'}</span>
+                      <span className="text-[10px] text-gray-500">:</span>
+                      <span className="text-[10px] font-bold" style={{ color: 'var(--text-accent)' }}>{ACTION_NAMES[e.action] || (String(e.action).includes('_') ? 'Action enregistrée sur le dossier' : e.action)}</span>
                     </div>
                     <details className="text-sm text-gray-600"><summary className="min-h-11 cursor-pointer py-2">Détails de cet événement</summary>{e.detail && <p className="whitespace-pre-wrap break-words">{typeof e.detail === 'string' ? e.detail : JSON.stringify(e.detail, null, 2)}</p>}<CorrectionHistory entry={e} /></details>
                   </div>

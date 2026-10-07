@@ -12,8 +12,14 @@
 .dossier-overview summary { min-height: 44px; }
 .dossier-overview button:focus-visible,
 .dossier-overview summary:focus-visible { outline: 2px solid var(--brand-text); outline-offset: 3px; }
-.dossier-overview-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px 16px; }
-.dossier-overview-identity { display: flex; align-items: baseline; gap: 8px 12px; flex-wrap: wrap; }
+/* Three groups that wrap whole: the reference, the dossier's fields (Casier,
+   Départ) and the page links (open step, history), pushed to the end of their
+   line. A narrow width stacks the groups; a link never wraps alone. The open
+   editors (Casier, Départ) follow, each on its own full-width row. */
+.dossier-overview-heading { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 16px; }
+.dossier-overview-identity { display: flex; align-items: baseline; gap: 8px 12px; flex-wrap: wrap; flex: 0 0 auto; max-width: 100%; }
+.dossier-overview-fields { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 20px; flex: 1 1 auto; min-width: 0; }
+.dossier-overview-links { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 4px 16px; flex: 0 1 auto; margin-left: auto; min-width: 0; }
 .dossier-overview-identity h2 { font-size: 1rem; font-weight: 700; }
 .dossier-overview-identity > span { font-weight: 600; font-size: .875rem; overflow-wrap: anywhere; color: var(--brand-text); }
 .dossier-overview-casier { display: flex; align-items: center; gap: 4px 12px; flex-wrap: wrap; font-size: .875rem; }
@@ -53,12 +59,15 @@
 }
 .dossier-overview-path [data-state='done'] { --step-bg: #eaf7ef; --step-text: #17633e; --step-border: #a7cfb5; }
 .dossier-overview-path [data-state='current'] { --step-bg: #eaf2ff; --step-text: #174ea6; --step-border: #93b4e4; }
+/* Planned: a departure is assigned, the expedition is not the work of today. Calm, never the « À faire » blue. */
+.dossier-overview-path [data-state='planned'] { --step-bg: #f2f5f7; --step-text: #2f4a5c; --step-border: #a9bccb; }
 .dossier-overview-path [data-state='waiting'] { --step-bg: #fff5d8; --step-text: #79520a; --step-border: #d8b969; }
 .dossier-overview-path [data-state='review'],
 .dossier-overview-path [data-state='unknown'] { --step-bg: #fff0e9; --step-text: #943d16; --step-border: #dba58c; }
 html.dark .dossier-overview-path li { --step-bg: #282b2d; --step-text: #c4c8cd; --step-border: #555d64; }
 html.dark .dossier-overview-path [data-state='done'] { --step-bg: #153d2c; --step-text: #b9e8ca; --step-border: #386c4e; }
 html.dark .dossier-overview-path [data-state='current'] { --step-bg: #1b365a; --step-text: #c4deff; --step-border: #5279aa; }
+html.dark .dossier-overview-path [data-state='planned'] { --step-bg: #243039; --step-text: #c9dbe6; --step-border: #4f6577; }
 html.dark .dossier-overview-path [data-state='waiting'] { --step-bg: #44361b; --step-text: #f7db97; --step-border: #7b6538; }
 html.dark .dossier-overview-path [data-state='review'],
 html.dark .dossier-overview-path [data-state='unknown'] { --step-bg: #4a2d24; --step-text: #ffd3c0; --step-border: #94624d; }

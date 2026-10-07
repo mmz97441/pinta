@@ -1244,21 +1244,22 @@ export async function fetchAuditActions(colisId) {
   }));
 }
 
+// The status trigger records who changed the status (user_id = auth.uid(),
+// none for a server job); older rows may carry a name (user_nom). A failed read
+// is an error for the caller, never an empty history.
 export async function fetchLogsForColis(colisId) {
   const { data, error } = await supabase
     .from('logs_statut')
     .select('*')
     .eq('colis_id', colisId)
     .order('created_at', { ascending: false });
-  if (error) {
-    console.error('fetchLogs:', error.message);
-    return [];
-  }
+  if (error) throw error;
   return (data || []).map((row) => ({
     id: row.id,
     ancienStatut: row.ancien_statut,
     nouveauStatut: row.nouveau_statut,
-    user: row.user_nom || '—',
+    userId: row.user_id || null,
+    userName: typeof row.user_nom === 'string' && row.user_nom.trim() ? row.user_nom.trim() : null,
     commentaire: row.commentaire,
     date: row.created_at,
   }));

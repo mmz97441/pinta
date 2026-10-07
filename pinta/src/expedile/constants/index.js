@@ -35,22 +35,26 @@ export const BRAND = {
 };
 
 // ══════════ STATUTS COLIS ══════════
+// `couleur`: the status chip (Badge, history, reception choices). Amber, green,
+// red, blue, emerald, slate and gray are remapped for dark mode in brand.css;
+// the other hues carry their own dark variant here, never a bright cream pill.
+// Text contrast (measured): 4.88:1 or more in light mode, 7.1:1 or more in dark mode.
 export const STATUTS = {
-  receptionne:        { label: 'Réceptionné',                 labelClient: null,                            couleur: 'bg-orange-50 text-orange-700',   phase: 1, actionStaff: 'Mesurer ce colis',               actionClient: null },
+  receptionne:        { label: 'Réceptionné',                 labelClient: null,                            couleur: 'bg-orange-50 text-orange-700 dark:bg-[#4a2d24] dark:text-[#ffd3c0]',   phase: 1, actionStaff: 'Mesurer ce colis',               actionClient: null },
   mesure:             { label: 'Mesuré à réception',          labelClient: 'Mesuré',                        couleur: 'bg-amber-100 text-amber-800',    phase: 1, actionStaff: 'Demander le feu vert',            actionClient: null },
-  attente_feu_vert:   { label: "En attente d'accord client",  labelClient: 'Votre accord est attendu',      couleur: 'bg-orange-100 text-orange-800',  phase: 2, actionStaff: 'En attente du client',            actionClient: 'Donner votre accord' },
+  attente_feu_vert:   { label: "En attente d'accord client",  labelClient: 'Votre accord est attendu',      couleur: 'bg-orange-100 text-orange-800 dark:bg-[#4a2d24] dark:text-[#ffd3c0]',  phase: 2, actionStaff: 'En attente du client',            actionClient: 'Donner votre accord' },
   autorise:           { label: 'Autorisation reçue',          labelClient: 'Accord donné',                  couleur: 'bg-green-100 text-green-800',    phase: 2, actionStaff: 'Préparer ce colis',               actionClient: null },
   refuse_client:      { label: 'Refusé par le client',        labelClient: 'Refusé',                        couleur: 'bg-red-100 text-red-700',        phase: 2, actionStaff: 'Traiter le refus',                actionClient: null },
   en_preparation:     { label: 'En cours de préparation',     labelClient: null,                            couleur: 'bg-blue-100 text-blue-800',      phase: 3, actionStaff: 'Finaliser et envoyer le devis',   actionClient: null },
   devis_envoye:       { label: 'Devis envoyé',                labelClient: 'Devis reçu — en attente de paiement', couleur: 'bg-amber-100 text-amber-800',    phase: 4, actionStaff: 'En attente paiement',              actionClient: 'Payer' },
   attente_paiement:   { label: 'En attente de paiement',      labelClient: 'Devis reçu — en attente de paiement', couleur: 'bg-amber-100 text-amber-800',    phase: 4, actionStaff: 'En attente paiement',              actionClient: 'Payer' },
   paye:               { label: 'Payé',                        labelClient: null,                            couleur: 'bg-emerald-100 text-emerald-800',phase: 4, actionStaff: 'Expédier ce colis',               actionClient: null },
-  expedie:            { label: 'Expédié',                     labelClient: null,                            couleur: 'bg-cyan-100 text-cyan-800',      phase: 5, actionStaff: 'Marquer en transit',              actionClient: null },
-  transit:            { label: 'En vol',                      labelClient: null,                            couleur: 'bg-sky-100 text-sky-800',        phase: 5, actionStaff: 'Dédouanement ou arrivée',       actionClient: null },
+  expedie:            { label: 'Expédié',                     labelClient: null,                            couleur: 'bg-cyan-100 text-cyan-800 dark:bg-[#173a42] dark:text-[#a5e7f2]',      phase: 5, actionStaff: 'Marquer en transit',              actionClient: null },
+  transit:            { label: 'En vol',                      labelClient: null,                            couleur: 'bg-sky-100 text-sky-800 dark:bg-[#1b3550] dark:text-[#bfe0fb]',        phase: 5, actionStaff: 'Dédouanement ou arrivée',       actionClient: null },
   dedouanement:       { label: 'En dédouanement',              labelClient: 'En cours de dédouanement',      couleur: 'bg-slate-100 text-slate-700',    phase: 6, actionStaff: 'Confirmer arrivée',              actionClient: null },
-  arrive:             { label: 'Arrivé destination',          labelClient: null,                            couleur: 'bg-teal-100 text-teal-800',      phase: 7, actionStaff: 'Lancer la livraison',             actionClient: null },
-  livraison:          { label: 'En cours de livraison',       labelClient: null,                            couleur: 'bg-lime-100 text-lime-800',      phase: 8, actionStaff: 'Confirmer livraison',             actionClient: null },
-  livre:              { label: 'Livré',                       labelClient: null,                            couleur: 'bg-green-200 text-green-900',    phase: 8, actionStaff: null,                              actionClient: null },
+  arrive:             { label: 'Arrivé destination',          labelClient: null,                            couleur: 'bg-teal-100 text-teal-800 dark:bg-[#173d38] dark:text-[#aeeadf]',      phase: 7, actionStaff: 'Lancer la livraison',             actionClient: null },
+  livraison:          { label: 'En cours de livraison',       labelClient: null,                            couleur: 'bg-lime-100 text-lime-800 dark:bg-[#2c3a17] dark:text-[#d4ef9f]',      phase: 8, actionStaff: 'Confirmer livraison',             actionClient: null },
+  livre:              { label: 'Livré',                       labelClient: null,                            couleur: 'bg-green-200 text-green-900 dark:bg-[#1f3d2b] dark:text-[#bfeccd]',    phase: 8, actionStaff: null,                              actionClient: null },
   annule:             { label: 'Annulé',                      labelClient: null,                            couleur: 'bg-gray-100 text-gray-500',      phase: 0, actionStaff: null,                              actionClient: null },
 };
 

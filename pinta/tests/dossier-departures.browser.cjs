@@ -715,14 +715,14 @@ async function main() {
         await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(parcel) });
       });
       await openDossier(f, DOSSIER.DEP011);await waitTheme(f, theme);
-      // The expedition task's « Départ » field: the planned departures of the destination, then « Retirer le départ ».
+      // The expedition task's « Départ » calendar (lot P4b): the next departures of the destination as shortcuts, then « Retirer le départ ».
       const task = f.page.getByTestId('dossier-task-workspace');
-      const field = task.getByRole('combobox', { name: 'Départ de cette expédition', exact: true });
+      const field = task.getByRole('group', { name: 'Affecter à un départ', exact: true });
       const saved = () => task.locator('.dossier-departure-line').getAttribute('data-envoi');
-      const choose = async envoi => { await field.click();await task.locator(`[role="option"][data-envoi="${envoi}"]`).click(); };
-      await field.click();
-      assert.deepEqual(await task.getByRole('option').evaluateAll(options => options.map(option => option.dataset.envoi || option.dataset.kind)), [DEPARTURE.reunion15, DEPARTURE.reunion22, DEPARTURE.reunion29, 'remove']);
-      await field.press('Escape');
+      const choose = async envoi => { await field.locator(`[data-shortcut][data-envoi="${envoi}"]`).click(); };
+      await field.getByRole('grid').waitFor();
+      assert.deepEqual(await field.locator('[data-shortcut], [data-action="remove"]').evaluateAll(items => items.map(item => item.dataset.envoi || item.dataset.action)), [DEPARTURE.reunion15, DEPARTURE.reunion22, DEPARTURE.reunion29, 'remove']);
+      assert.equal(await field.locator(`[data-shortcut][data-envoi="${DEPARTURE.reunion15}"]`).getAttribute('aria-current'), 'true');
       assert.equal(await saved(), DEPARTURE.reunion15);
       assert.equal(await alertBand(f).count(), 0, 'The 15 October departure is inside the subscription.');
       const dialog = f.page.getByRole('dialog', { name: 'Affecter quand même ?', exact: true });

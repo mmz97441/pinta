@@ -13,6 +13,7 @@ import InlineDocument from './InvoiceDocument';
 import { conversationInvoiceEditable } from './ChatPanel';
 import AuditLog from './AuditLog';
 import StaffAssignment from '../staff/StaffAssignment';
+import './dossierActions.css';
 
 const BUTTON = 'inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 dark:border-slate-600 dark:text-slate-200';
 const SECTIONS = [
@@ -82,15 +83,17 @@ export default function DossierContextPanel({ section, onSectionChange, onClose,
     if (open) setVisited(previous => new Set([...previous, selected]));
   }, [open, selected]);
   if (!sel) return null;
-  return createPortal(<div hidden={!open} className="fixed inset-0 z-40" data-testid="dossier-context">
+  // z-[60]: above the phone and tablet bottom navigation (z-50), which the
+  // backdrop covers while the panel is open; confirmations (z-[100]) stay above.
+  return createPortal(<div hidden={!open} className="dossier-context fixed inset-0 z-[60]" data-testid="dossier-context">
     <div className="absolute inset-0 bg-slate-950/40" aria-hidden="true" onClick={onClose} />
     <aside ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Contexte du dossier" className="absolute inset-y-0 right-0 flex w-full max-w-xl flex-col bg-white shadow-2xl dark:bg-slate-900">
       <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 dark:border-slate-700"><div className="min-w-0"><h2 id="dossier-context-title" className="text-base font-bold text-slate-900 dark:text-white">Détails du dossier</h2><p className="truncate font-mono text-xs text-slate-600 dark:text-slate-300">{sel.ref}</p></div><button className={BUTTON} aria-label="Fermer le contexte du dossier" onClick={onClose}><X size={18} /></button></div>
       <nav aria-label="Informations du dossier" className="flex shrink-0 flex-wrap gap-1 border-b border-slate-200 p-2 dark:border-slate-700">{sections.map(item => {
         const Icon = item.icon;
-        return <button key={item.id} aria-current={item.id === selected ? 'page' : undefined} onClick={() => onSectionChange(item.id)} className={`inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl px-2 text-xs font-semibold ${item.id === selected ? 'bg-slate-800 text-white dark:bg-slate-200 dark:text-slate-900' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'}`}><Icon size={15} />{item.label}</button>;
+        return <button key={item.id} aria-current={item.id === selected ? 'page' : undefined} onClick={() => onSectionChange(item.id)} className={`dossier-context-tab inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl px-2 text-xs font-semibold ${item.id === selected ? '' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'}`}><Icon size={15} aria-hidden="true" />{item.label}</button>;
       })}</nav>
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 pb-[max(1rem,env(safe-area-inset-bottom))] text-slate-800 dark:text-slate-100">
+      <div className="dossier-context-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 pb-[calc(2rem+env(safe-area-inset-bottom))] text-slate-800 dark:text-slate-100">
         {visited.has('reception') && <div hidden={selected !== 'reception'}><ColisInfo compact casierEditRequest={casierEditRequest} onCompleteReception={() => { onClose(); navigate(dossierTaskUrl(sel.id, "reception", taskSearch ?? location.search)); }} /></div>}
         {canDocuments && visited.has('documents') && <div hidden={selected !== 'documents'}><DocumentContext onClose={onClose} taskSearch={taskSearch} /></div>}
         {visited.has('equipe') && <div hidden={selected !== 'equipe'}><StaffAssignment /></div>}

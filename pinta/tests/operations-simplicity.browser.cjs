@@ -173,15 +173,16 @@ async function audit(f, name, include = '[data-testid="dossier-task-workspace"]'
    f.tables.envois=[{id:'old',date_depart:'2099-09-12',statut:'planifie',destination_code:'974'},{id:'next',date_depart:'2099-09-19',statut:'planifie',destination_code:'974',loading_closes_at:'2099-09-18T12:00:00Z'},{id:'wrong',date_depart:'2099-09-19',statut:'planifie',destination_code:'976'}];
    let fail=true; const calls=[];
    await f.context.route('**/rest/v1/rpc/assign_colis_departure',async route=>{const input=route.request().postDataJSON();calls.push(input);if(fail){fail=false;return route.fulfill({status:409,contentType:'application/json',body:JSON.stringify({code:'40001',message:'Départ modifié par un collègue. Réessayez après vérification.'})});} paid.envoi_id=input.p_envoi_id;paid.updated_at='2026-09-17T12:00:00Z';return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(paid)});});
-   await open(f,'expedition'); const select=region(f).getByRole('combobox',{name:'Départ de cette expédition',exact:true});
+   await open(f,'expedition'); const field=region(f).getByRole('group',{name:'Affecter à un départ',exact:true});
    const saved=()=>region(f).locator('.dossier-departure-line').getAttribute('data-envoi');
-   const choose=async envoi=>{await select.click();await region(f).locator(`[role="option"][data-envoi="${envoi}"]`).click();};
-   await select.click();const list=region(f).getByRole('listbox');
-   assert.deepEqual(await list.getByRole('option').evaluateAll(rows=>rows.map(row=>row.dataset.envoi||row.dataset.kind)),['old','next','remove']);
-   assert.equal(await list.locator(':scope > :not([role="option"])').count(),0);
+   const choose=async envoi=>{await field.locator(`[data-shortcut][data-envoi="${envoi}"]`).click();};
+   await field.getByRole('grid').waitFor();
+   assert.deepEqual(await field.locator('[data-shortcut], [data-action="remove"]').evaluateAll(rows=>rows.map(row=>row.dataset.envoi||row.dataset.action)),['old','next','remove']);
+   assert.equal(await field.locator('[data-shortcut][data-envoi="old"]').getAttribute('aria-current'),'true');
    assert.equal(await saved(),'old');
-   assert.match(await region(f).innerText(),/s’enregistre immédiatement/);await region(f).locator('[role="option"][data-envoi="next"]').click();
-   await region(f).getByRole('alert').filter({hasText:'Départ modifié par un collègue'}).waitFor();
+   assert.match(await region(f).innerText(),/Un départ choisi est enregistré aussitôt, sans message au client\./);await choose('next');
+   // A version conflict: the dossier is reloaded and the field says so; nothing is shown as saved.
+   await region(f).getByRole('alert').filter({hasText:'Le dossier a changé : il a été rechargé, vérifiez puis recommencez.'}).waitFor();
    assert.equal(await saved(),'old'); assert.equal(paid.envoi_id,'old');
    await choose('next');await region(f).getByRole('status').filter({hasText:'Départ enregistré.'}).waitFor();
    assert.equal(paid.envoi_id,'next');assert.equal(calls.length,2);assert.ok(calls[1].p_expected_updated_at);noNotification(f);

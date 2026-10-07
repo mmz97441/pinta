@@ -207,7 +207,7 @@ try{
   await f.page.setViewportSize({width:390,height:844});await open(f);
   const proposals=panel(f).getByRole('group',{name:'Propositions pour l’article 1',exact:true});await proposals.waitFor();
   assert.equal(await proposals.getByRole('button',{name:/Utiliser la proposition/}).count(),1);
-  const alternatives=proposals.locator('summary').filter({hasText:'2 autre(s) proposition(s) à comparer'});await alternatives.focus();await alternatives.press('Enter');
+  const alternatives=proposals.locator('summary').filter({hasText:'2 autres propositions à comparer'});await alternatives.focus();await alternatives.press('Enter');
   await proposals.getByText(/Conditions à vérifier : Exclusivement/).waitFor();await proposals.getByText('OM externe : à renseigner · OMR externe : à renseigner',{exact:true}).waitFor();
   await proposals.getByText('Source historique à vérifier.',{exact:true}).waitFor();
   assert.equal(await proposals.getByRole('button',{name:/Utiliser la proposition/}).count(),3);

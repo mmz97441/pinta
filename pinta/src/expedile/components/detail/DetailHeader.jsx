@@ -8,7 +8,9 @@ import { receptionCartonManifest } from '../../domain/reception';
 import { workspaceReturnPath } from '../../domain/navigation';
 import { DOSSIER_TASKS, dossierTaskUrl, previousDossierTask, nextDossierTask } from '../../domain/dossierTasks';
 import { findDossierWorkAction } from '../../domain/personalWork';
+import { plural, pluralWord } from '../../domain/plural';
 import TaskOwnership from '../workspace/TaskOwnership';
+import './dossierActions.css';
 
 export default function DetailHeader({ task, conversation = false, onOpenContext }) {
   const navigate = useNavigate();
@@ -24,7 +26,7 @@ export default function DetailHeader({ task, conversation = false, onOpenContext
     const nextTask = nextDossierTask(task, can);
     const workAction = findDossierWorkAction(sel, workActions, task, { can, actionId: new URLSearchParams(location.search).get('action') });
     const stepButtonClass = 'inline-flex min-h-11 min-w-0 items-center justify-center gap-1.5 rounded-xl border border-slate-300 px-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 sm:px-3 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800';
-    return <header className="border-b border-slate-200 bg-white px-3 py-3 sm:px-6 dark:border-slate-700 dark:bg-slate-900" data-testid="dossier-task-header">
+    return <header className="dossier-task-header border-b border-slate-200 bg-white px-3 py-3 sm:px-6 dark:border-slate-700 dark:bg-slate-900" data-testid="dossier-task-header">
       <div className="mx-auto flex max-w-[1600px] flex-wrap items-center gap-2 sm:gap-3">
         <button aria-label="Retour à la liste de travail" onClick={() => navigate(workspaceReturnPath(location.search))} className="flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-xl text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"><ArrowLeft size={21} /></button>
         <div className="min-w-0 flex-1">
@@ -65,7 +67,7 @@ export default function DetailHeader({ task, conversation = false, onOpenContext
           )}
         </div>
         <p className="text-xs text-gray-300">
-          {isStaff && selClient ? `${selClient.nom} · ` : ''}{receptionCartonManifest(sel).nbColis} carton(s) reçus{sel.casier ? ` · Casier ${sel.casier}` : ''}
+          {isStaff && selClient ? `${selClient.nom} · ` : ''}{plural(receptionCartonManifest(sel).nbColis, 'carton')} {pluralWord(receptionCartonManifest(sel).nbColis, 'reçu')}{sel.casier ? ` · Casier ${sel.casier}` : ''}
         </p>
         {isStaff && <p className="mt-1 text-xs text-gray-300">Référent : {teamUsers.find((person) => person.authId === sel.responsibleStaffId)?.nom || 'À attribuer'}</p>}
       </div>

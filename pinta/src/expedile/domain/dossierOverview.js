@@ -6,11 +6,18 @@ import { currentInvoices, pendingInvoiceAttachments } from './invoiceDocuments.j
 import { invoiceBuckets, invoiceProgressSummary } from './invoiceProgress.js';
 import { invoicesFrozenReason } from './invoiceLock.js';
 import { buildDossierTableModel, formatDossierTableDate } from './dossierTable.js';
-import { parisCalendarDay } from './departureGroups.js';
+import { departureDayLabel, parisCalendarDay } from './departureGroups.js';
 import { wishedDepartureLabel } from './departurePlanning.js';
+import { plural, pluralWord } from './plural.js';
 
 const DOCUMENT_PERMISSIONS = ['perm_factures_voir', 'perm_factures_ajouter', 'perm_factures_valider', 'perm_factures_refuser', 'perm_factures_ocr', 'perm_factures_modifier_articles'];
 const FINANCE_PERMISSIONS = ['perm_finances_voir_total', 'perm_colis_calculer_devis', 'perm_colis_envoyer_devis', 'perm_colis_confirmer_paiement'];
+
+/** The finance rule of the dossier page: without it the Devis and Paiement
+ * steps read « Accès réservé », and no amount of the dossier is shown. */
+export function canSeeDossierFinances(can = () => false) {
+  return FINANCE_PERMISSIONS.some(permission => can(permission));
+}
 const BEFORE_APPROVAL = new Set(['receptionne', 'mesure', 'attente_feu_vert', 'refuse_client']);
 const AFTER_PREPARATION = new Set(['devis_envoye', 'attente_paiement', 'paye', 'expedie', 'transit', 'dedouanement', 'arrive', 'livraison', 'livre']);
 const AFTER_DEPARTURE = new Set(['expedie', 'transit', 'dedouanement', 'arrive', 'livraison', 'livre']);
@@ -31,7 +38,7 @@ const filePresent = invoice => Boolean(text(invoice.fichier || invoice.fichierUr
  * Selected screen, task ownership and commands deliberately stay outside it. */
 export function buildDossierOverview(dossier = {}, { client = {}, envois = [], can = () => false, now = Date.now() } = {}) {
   const documentsVisible = DOCUMENT_PERMISSIONS.some(can);
-  const financeVisible = FINANCE_PERMISSIONS.some(can);
+  const financeVisible = canSeeDossierFinances(can);
   const knownStatus = Object.hasOwn(STATUTS, dossier.statut);
   const closed = dossier.archive || ['annule', 'livre'].includes(dossier.statut);
   const stopped = dossier.archive || dossier.statut === 'annule';
@@ -61,10 +68,12 @@ export function buildDossierOverview(dossier = {}, { client = {}, envois = [], c
   })) : [];
   const receiptComplete = receiptBoxes.length > 0 && receiptBoxes.every(box => box.complete);
   const receptionDate = savedDate(dossier.dateReception, now);
+  // « 1 carton reçu », « 2 cartons reçus et mesurés ».
+  const cartonsReceived = manifest ? `${plural(manifest.nbColis, 'carton')} ${pluralWord(manifest.nbColis, 'reçu')}` : '';
   const received = {
     count: manifest?.nbColis ?? null, complete: receiptComplete, totalWeight: totalWeight(receiptBoxes), boxes: receiptBoxes,
     date: receptionDate, latestDate: receptionDates.lastReceivedAt, datesComplete: receptionDates.complete, datedCount: receptionDates.knownCount, datesError: receptionDates.error,
-    summary: !receiptKnown ? 'Réception à vérifier' : receiptComplete ? `${manifest.nbColis} carton(s) reçu(s) et mesuré(s)` : `${manifest.nbColis} carton(s) reçu(s) · mesures à compléter`,
+    summary: !receiptKnown ? 'Réception à vérifier' : receiptComplete ? `${cartonsReceived} et ${pluralWord(manifest.nbColis, 'mesuré')}` : `${cartonsReceived} · mesures à compléter`,
   };
 
   const rawFinal = Array.isArray(dossier.finalPackages) ? dossier.finalPackages
@@ -130,8 +139,9 @@ export function buildDossierOverview(dossier = {}, { client = {}, envois = [], c
     // A date in planning, an arrival status and a tracking number do not prove
     // this dossier was actually included in a confirmed departure.
     // A desired day without a departure reads like the list: « Souhaité le 20/11/2026 · à créer »
-    // (or « départ prévu, à affecter », « départ clôturé », « date passée »).
-    label: departureConfirmed ? 'Départ confirmé' : envoi ? table.departure.label === 'Départ confirmé' ? 'Départ à vérifier' : table.departure.label : dossier.envoi || dossier.envoiId ? 'Départ à vérifier' : wishedDepartureLabel(dossier, { client, envois, now }) || 'À planifier',
+    // (or « départ prévu, à affecter », « départ clôturé », « date passée »); no
+    // departure at all reads « À choisir », the word of the list and of the Départ field.
+    label: departureConfirmed ? 'Départ confirmé' : envoi ? table.departure.label === 'Départ confirmé' ? 'Départ à vérifier' : table.departure.label : dossier.envoi || dossier.envoiId ? 'Départ à vérifier' : wishedDepartureLabel(dossier, { client, envois, now }) || 'À choisir',
     readinessLabel: !departureConfirmed && table.departure.readinessLabel === 'Expédition enregistrée' ? 'Départ à vérifier' : table.departure.readinessLabel,
   };
   const deliveryDate = savedDate(dossier.dateLivraison, now);
@@ -166,6 +176,12 @@ export function buildDossierOverview(dossier = {}, { client = {}, envois = [], c
     : quoteDraft ? 'Devis enregistré · à vérifier et envoyer' : AFTER_PREPARATION.has(dossier.statut) ? 'Devis courant à retrouver' : 'Devis à établir après optimisation et vérification des factures';
   const paymentState = financialFacts.stateLabel === 'Payé' ? 'done' : financialFacts.stateLabel.includes('vérifier') ? 'review'
     : financialFacts.requested !== null ? financialFacts.requested === 0 ? 'review' : 'waiting' : currentTask === 'paiement' ? 'unknown' : 'upcoming';
+  // An assigned departure is « À faire » only once the expedition is the
+  // dossier's current step; before, it is planned: « Prévu le jeudi 8 octobre ».
+  const expeditionState = departureConfirmed ? 'done'
+    : AFTER_DEPARTURE.has(dossier.statut) || (dossier.envoi || dossier.envoiId) && !envoi ? 'unknown'
+    : envoi?.statut === 'annule' || envoi?.statut === 'archive' || plannedDate && plannedDate < parisCalendarDay(now) ? 'review'
+    : currentTask === 'expedition' ? 'current' : envoi ? 'planned' : 'upcoming';
 
   const facts = {
     reception: { state: receiptComplete ? 'done' : currentTask === 'reception' ? 'current' : receiptKnown && BEFORE_APPROVAL.has(dossier.statut) ? 'current' : 'unknown', summary: received.summary, date: receptionDate },
@@ -175,14 +191,14 @@ export function buildDossierOverview(dossier = {}, { client = {}, envois = [], c
       : rejectedInvoices.length ? 'review' : reviewInvoices.length ? invoicesFrozen ? 'not_required' : 'current' : invoiceBucketsNow.pendingAttachments ? 'unknown' : AFTER_PREPARATION.has(dossier.statut) ? 'unknown' : 'waiting', summary: invoices.summary, date: null },
     devis: { state: financeVisible ? quoteState : 'restricted', summary: financeVisible ? quoteSummary : 'Accès réservé au devis', date: financeVisible ? financialFacts.sentAt || (quoteRevised ? savedDate(dossier.devisEnvoyeLe, now) : null) : null },
     paiement: { state: financeVisible ? paymentState : 'restricted', summary: payment.stateLabel, date: financeVisible ? savedDate(dossier.paiementDate, now) : null },
-    expedition: { state: departureConfirmed ? 'done' : AFTER_DEPARTURE.has(dossier.statut) || (dossier.envoi || dossier.envoiId) && !envoi ? 'unknown'
-      : envoi?.statut === 'annule' || envoi?.statut === 'archive' || plannedDate && plannedDate < parisCalendarDay(now) ? 'review' : currentTask === 'expedition' || envoi ? 'current' : 'upcoming',
+    expedition: { state: expeditionState,
+      ...(expeditionState === 'planned' ? { stateLabel: plannedDate ? `Prévu le ${departureDayLabel(plannedDate, { today: now })}` : 'Départ prévu' } : {}),
       summary: departureConfirmed ? 'Départ enregistré' : AFTER_DEPARTURE.has(dossier.statut) ? 'Départ annoncé · confirmation à vérifier' : departure.label, date: confirmedAt || plannedDate },
     livraison: { state: delivery.state, summary: delivery.summary, date: delivery.date },
   };
   if (stopped) for (const fact of Object.values(facts)) {
-    if (['current', 'waiting', 'upcoming'].includes(fact.state)) {
-      fact.state = 'not_required'; fact.summary = stoppedSummary;
+    if (['current', 'waiting', 'upcoming', 'planned'].includes(fact.state)) {
+      fact.state = 'not_required'; fact.summary = stoppedSummary; delete fact.stateLabel;
     }
   }
   const steps = Object.entries(DOSSIER_TASKS).map(([id, task]) => ({ id, label: task.label, ...facts[id],

@@ -1,7 +1,11 @@
-/* « Départ » of a dossier: the overview line (next to Casier) and the open field
-   of the expedition task share one combobox. Tokens from brand.css with their
-   html.dark values; the active option uses the « current step » blue of the
-   overview path (8.1:1 light, 10.6:1 dark). */
+/* « Départ » of a dossier: the overview line (next to Casier) and its calendar,
+   shared with the open field of the expedition task. Tokens from brand.css and
+   dossierActions.css with their html.dark values:
+   - a day with a departure: the page primary (light 11.98:1, dark 10.29:1);
+   - the chosen day (the dossier's departure or desired day, or the day picked):
+     a gold ring, 4.8:1 light and 8.6:1 or more dark against the panel, and a
+     second gold on a departure day (7.3:1 on navy, 5.1:1 on the dark light navy);
+   - a closed day: secondary text on the surface, dashed (5.8:1 light, 7.3:1 dark). */
 .dossier-departure-line { display: flex; align-items: center; gap: 4px 12px; flex-wrap: wrap; min-width: 0; font-size: .875rem; }
 .dossier-departure-text { min-width: 0; overflow-wrap: anywhere; }
 .dossier-departure-edit { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; color: var(--brand-text); font-weight: 600; transition: color .2s ease-out; }
@@ -11,17 +15,14 @@
 .dossier-departure-locked { font-size: .8125rem; line-height: 1.4; color: var(--text-secondary); }
 
 .dossier-departure-picker {
-  --departure-active-bg: #eaf2ff;
-  --departure-active-text: #174ea6;
-  --departure-active-border: #93b4e4;
+  --departure-ring: #8a6a1f;
+  --departure-ring-on-departure: #e8c779;
+  display: grid;
+  gap: 12px;
   min-width: 0;
   color: var(--text-primary);
 }
-html.dark .dossier-departure-picker {
-  --departure-active-bg: #1b365a;
-  --departure-active-text: #c4deff;
-  --departure-active-border: #5279aa;
-}
+html.dark .dossier-departure-picker { --departure-ring: #e8c779; --departure-ring-on-departure: #6b5214; }
 /* In the overview heading the open field takes its own line: the overview places it after
    the heading's actions in the DOM, so the focus order follows the layout (no CSS reordering). */
 .dossier-departure-picker[data-variant='summary'] {
@@ -32,81 +33,173 @@ html.dark .dossier-departure-picker {
 }
 .dossier-departure-label,
 .dossier-departure-task-label { display: block; margin-bottom: 4px; font-size: .75rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--text-secondary); }
-/* « Annuler » sits at the end of the label line, so the field keeps the whole width on a phone. */
-.dossier-departure-label-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; max-width: 34rem; }
+/* « Annuler » sits at the end of the label line, so the calendar keeps the whole width on a phone;
+   on a desktop the line ends with the shortcuts, the widest part of the field. */
+.dossier-departure-label-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; max-width: max(36rem, calc(var(--shortcut-count, 3) * 15rem)); }
 .dossier-departure-label-row .dossier-departure-label { margin-bottom: 0; }
-.dossier-departure-input-row { display: flex; align-items: center; }
-.dossier-departure-input { position: relative; flex: 1 1 auto; min-width: 0; max-width: 34rem; }
-.dossier-departure-input input {
+.dossier-departure-cancel { min-height: 44px; padding: 0 4px; font-size: .875rem; font-weight: 600; color: var(--brand-text); text-decoration: underline; text-underline-offset: 3px; }
+.dossier-departure-cancel[aria-disabled='true'], .dossier-departure-cancel:disabled { opacity: .5; cursor: progress; }
+.dossier-departure-saving { display: inline-flex; align-items: center; gap: 8px; font-size: .875rem; font-weight: 600; color: var(--text-secondary); }
+.dossier-departure-none { max-width: 36rem; font-size: .875rem; line-height: 1.4; color: var(--text-secondary); }
+
+/* The next departures: one click assigns. The dossier's own reads as selected. */
+.dossier-departure-shortcuts-title { margin-bottom: 6px; font-size: .875rem; font-weight: 600; }
+/* Up to 15rem per shortcut: the closing line holds on one line on a desktop, two per row on a phone. */
+.dossier-departure-shortcuts { display: grid; grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr)); gap: 8px; max-width: calc(var(--shortcut-count, 3) * 15rem); margin: 0; padding: 0; list-style: none; }
+.dossier-departure-shortcut {
+  display: grid;
+  align-content: center;
+  gap: 2px;
   width: 100%;
+  height: 100%;
+  min-height: 56px;
+  padding: 8px 12px;
+  border: 1px solid var(--brand-text);
+  border-radius: 12px;
+  text-align: left;
+  color: var(--text-primary);
+  background: var(--bg-elevated);
+  transition: transform .2s ease-out, background-color .2s ease-out;
+}
+.dossier-departure-shortcut:hover:not([aria-disabled='true']) { background: var(--bg-surface); transform: translateY(-1px); }
+.dossier-departure-shortcut:active:not([aria-disabled='true']) { transform: translateY(1px); }
+.dossier-departure-shortcut[aria-current='true'] { color: var(--dossier-primary-text); background: var(--dossier-primary-bg); border-color: var(--dossier-primary-bg); }
+.dossier-departure-shortcut[aria-disabled='true'] { opacity: .6; cursor: progress; }
+.dossier-departure-shortcut-day { display: inline-flex; align-items: center; gap: 6px; font-size: .9375rem; font-weight: 700; }
+.dossier-departure-shortcut-closing { font-size: .8125rem; line-height: 1.35; color: var(--text-secondary); }
+.dossier-departure-shortcut-current { font-size: .8125rem; font-weight: 600; }
+.dossier-departure-shortcut[aria-current='true'] .dossier-departure-shortcut-closing { color: inherit; }
+
+/* The month grid (Paris days, Monday first). Each whole cell is the target (no
+   spacing between cells; the visible day is inset by a transparent border), so
+   a day stays 44px wide from a 360px phone, where the grid also uses the side
+   padding of its panel; on a 320px phone the cells narrow, never scroll. */
+.dossier-calendar { display: grid; gap: 6px; width: 100%; max-width: 23rem; min-width: 0; }
+@media (max-width: 420px) {
+  .dossier-departure-picker[data-variant='summary'] { --calendar-bleed: 12px; }
+  .dossier-departure-picker[data-variant='task'] { --calendar-bleed: 16px; }
+  .dossier-calendar { width: calc(100% + 2 * var(--calendar-bleed, 0px)); max-width: none; margin-inline: calc(-1 * var(--calendar-bleed, 0px)); }
+  /* Only the day grid uses the side padding: the month line and the legend stay aligned with the field. */
+  .dossier-calendar .dossier-calendar-nav, .dossier-calendar .dossier-calendar-legend { padding-inline: var(--calendar-bleed, 0px); }
+}
+.dossier-calendar-nav { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.dossier-calendar-month { font-size: 1rem; font-weight: 700; text-align: center; }
+.dossier-calendar-step {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 44px; min-height: 44px;
+  border: 1px solid var(--border-subtle); border-radius: 12px;
+  color: var(--brand-text); background: var(--bg-elevated);
+  transition: background-color .2s ease-out;
+}
+.dossier-calendar-step:hover:not(:disabled) { background: var(--bg-surface); }
+.dossier-calendar-step:disabled { opacity: .4; cursor: not-allowed; }
+.dossier-calendar-grid { width: 100%; table-layout: fixed; border-collapse: collapse; }
+.dossier-calendar-grid th { padding: 2px 0 4px; font-size: .8125rem; font-weight: 700; text-align: center; color: var(--text-secondary); }
+.dossier-calendar-grid td { padding: 0; text-align: center; }
+.dossier-calendar-day {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  min-height: 46px;
+  padding: 0;
+  border: 3px solid transparent;
+  border-radius: 13px;
+  background-clip: padding-box;
+  font-size: .9375rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+  background: transparent;
+  transition: background-color .2s ease-out, border-color .2s ease-out;
+}
+.dossier-calendar-day:hover:not([aria-disabled='true']) { background-color: var(--bg-surface); }
+.dossier-calendar-day[data-kind='departure'] { font-weight: 700; color: var(--dossier-primary-text); background-color: var(--dossier-primary-bg); }
+.dossier-calendar-day[data-kind='departure']:hover:not([aria-disabled='true']) { background-color: var(--dossier-primary-hover); }
+/* Dashed inside the visible day (the cell keeps its transparent edge). */
+.dossier-calendar-day[data-kind='closed'] { color: var(--text-secondary); background-color: var(--bg-surface); outline: 1px dashed var(--text-secondary); outline-offset: -4px; text-decoration: line-through; }
+.dossier-calendar-day[data-kind='closed']:focus-visible { outline: 3px solid var(--brand-gold); outline-offset: 3px; }
+.dossier-calendar-day[data-kind='past'] { color: var(--text-muted); opacity: .55; cursor: not-allowed; }
+.dossier-calendar-day[aria-current='date'] { font-weight: 700; text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 4px; }
+.dossier-calendar-day[data-assigned],
+.dossier-calendar-day[data-wish],
+.dossier-calendar-day[data-chosen] { box-shadow: inset 0 0 0 3px var(--departure-ring); border-radius: 999px; }
+.dossier-calendar-day[data-kind='departure'][data-assigned],
+.dossier-calendar-day[data-kind='departure'][data-wish] { box-shadow: inset 0 0 0 3px var(--departure-ring-on-departure); }
+.dossier-calendar-day[aria-disabled='true']:not([data-kind='past']) { cursor: progress; }
+.dossier-calendar-legend { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 2px 0 0; padding: 0; list-style: none; font-size: .8125rem; color: var(--text-secondary); }
+.dossier-calendar-legend li { display: inline-flex; align-items: center; gap: 6px; }
+.dossier-calendar-swatch { display: inline-block; width: 16px; height: 16px; border-radius: 5px; }
+.dossier-calendar-swatch[data-swatch='departure'] { background: var(--dossier-primary-bg); }
+.dossier-calendar-swatch[data-swatch='chosen'] { border-radius: 999px; box-shadow: inset 0 0 0 3px var(--departure-ring); }
+.dossier-calendar-swatch[data-swatch='closed'] { border: 1px dashed var(--text-secondary); background: var(--bg-surface); }
+
+/* What the chosen day offers, right below the calendar. The live region stays in
+   place while empty, without adding a gap to the field. */
+.dossier-departure-proposal-zone:empty { margin-top: -12px; }
+.dossier-departure-proposal { display: grid; gap: 8px; max-width: 36rem; padding: 12px; border: 1px solid var(--border-subtle); border-radius: 12px; background: var(--bg-surface); }
+.dossier-departure-proposal-title { font-weight: 700; line-height: 1.4; overflow-wrap: anywhere; }
+.dossier-departure-proposal-note { font-size: .875rem; line-height: 1.4; color: var(--text-secondary); }
+.dossier-departure-proposal-action { display: grid; gap: 4px; justify-items: start; }
+.dossier-departure-proposal-closing { font-size: .8125rem; color: var(--text-secondary); }
+.dossier-departure-proposal .dossier-primary-button { text-align: left; }
+.dossier-departure-secondary {
+  justify-self: start;
   min-height: 44px;
-  padding: 8px 40px 8px 12px;
-  border: 2px solid var(--border-subtle);
+  padding: 8px 14px;
+  border: 1px solid var(--brand-text);
   border-radius: 12px;
   font-size: .875rem;
+  font-weight: 600;
+  text-align: left;
+  color: var(--brand-text);
+  background: var(--bg-elevated);
+  transition: background-color .2s ease-out, transform .2s ease-out;
+}
+.dossier-departure-secondary:hover:not([aria-disabled='true']) { background: var(--bg-canvas); }
+.dossier-departure-secondary:active:not([aria-disabled='true']) { transform: translateY(1px); }
+.dossier-departure-proposal [aria-disabled='true'] { opacity: .5; cursor: progress; }
+.dossier-departure-tertiary { display: flex; flex-wrap: wrap; gap: 4px 16px; }
+
+.dossier-departure-error { max-width: 36rem; padding: 8px 12px; border-radius: 10px; font-size: .875rem; line-height: 1.4; color: #991b1b; background: #fef2f2; overflow-wrap: anywhere; }
+html.dark .dossier-departure-error { color: #f4b9b9; background: #44282a; }
+.dossier-departure-task { display: grid; gap: 6px; min-width: 0; }
+.dossier-departure-task .dossier-departure-task-label { margin-bottom: 0; }
+
+/* « Casier » edited in place (CasierEditor): in the overview it takes its own row
+   below the heading, like the Départ field; in the details panel it replaces the
+   « Casier : » line. The label sits above the field, so they always line up. */
+.dossier-casier-editor { display: grid; gap: 6px; min-width: 0; color: var(--text-primary); }
+.dossier-casier-editor[data-variant='summary'] { flex: 1 1 100%; margin-top: 4px; padding: 10px 0 4px; border-top: 1px solid var(--border-subtle); }
+.dossier-casier-editor .dossier-departure-label { margin-bottom: 0; }
+.dossier-casier-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; }
+.dossier-casier-input {
+  width: 10rem;
+  max-width: 100%;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 2px solid var(--border-subtle);
+  border-radius: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 1rem;
+  font-weight: 600;
   color: var(--text-primary);
   background: var(--bg-elevated);
   transition: border-color .2s ease-out;
 }
-.dossier-departure-input input:focus { border-color: var(--departure-active-border); }
-.dossier-departure-input input::placeholder { color: var(--text-muted); }
-.dossier-departure-busy { position: absolute; top: 50%; right: 14px; margin-top: -8px; color: var(--text-secondary); }
-.dossier-departure-cancel { min-height: 44px; padding: 0 4px; font-size: .875rem; font-weight: 600; color: var(--brand-text); text-decoration: underline; text-underline-offset: 3px; }
-.dossier-departure-hint { margin-top: 4px; font-size: .8125rem; line-height: 1.4; color: var(--text-secondary); }
-.dossier-departure-missing { margin-top: 8px; font-size: .875rem; line-height: 1.4; font-weight: 600; overflow-wrap: anywhere; }
-.dossier-departure-list {
-  max-width: 34rem;
-  max-height: 18rem;
-  margin: 8px 0 0;
-  padding: 4px;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  list-style: none;
-  border: 1px solid var(--border-subtle);
-  border-radius: 12px;
-  background: var(--bg-elevated);
-  box-shadow: 0 6px 18px rgba(27, 58, 75, .08);
-}
-.dossier-departure-option {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 4px 10px;
-  min-height: 44px;
-  padding: 8px 10px;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  font-size: .875rem;
-  line-height: 1.35;
-  cursor: pointer;
-  transition: background-color .2s ease-out, border-color .2s ease-out;
-}
-.dossier-departure-option + .dossier-departure-option { margin-top: 2px; }
-.dossier-departure-option[aria-selected='true'] { color: var(--departure-active-text); background: var(--departure-active-bg); border-color: var(--departure-active-border); }
-.dossier-departure-option:active { transform: translateY(1px); }
-.dossier-departure-option[data-kind='create'],
-.dossier-departure-option[data-kind='wish'] { font-weight: 600; }
-.dossier-departure-option[data-kind='remove'] { border-top-color: var(--border-subtle); border-radius: 0 0 8px 8px; }
-.dossier-departure-option[aria-selected='true'][data-kind='remove'] { border-color: var(--departure-active-border); border-radius: 8px; }
-.dossier-departure-option-icon { flex-shrink: 0; }
-.dossier-departure-option-text { flex: 1 1 12rem; min-width: 0; overflow-wrap: anywhere; }
-.dossier-departure-badge {
-  flex-shrink: 0;
-  padding: 1px 8px;
-  border: 1px solid var(--attention-border);
-  border-radius: 999px;
-  font-size: .75rem;
-  font-weight: 700;
-  color: var(--attention-text);
-  background: var(--attention-bg);
-}
-.dossier-departure-current { flex-shrink: 0; }
-.dossier-departure-error { max-width: 34rem; margin-top: 8px; padding: 8px 12px; border-radius: 10px; font-size: .875rem; line-height: 1.4; color: #991b1b; background: #fef2f2; overflow-wrap: anywhere; }
-html.dark .dossier-departure-error { color: #f4b9b9; background: #44282a; }
-.dossier-departure-task { display: grid; gap: 6px; min-width: 0; }
-.dossier-departure-task .dossier-departure-task-label { margin-bottom: 0; }
+.dossier-casier-input[aria-invalid='true'] { border-color: #b91c1c; }
+html.dark .dossier-casier-input[aria-invalid='true'] { border-color: #f4b9b9; }
+.dossier-casier-all { display: inline-flex; align-items: center; gap: 10px; min-height: 44px; justify-self: start; font-size: .875rem; line-height: 1.4; color: var(--text-secondary); cursor: pointer; }
+.dossier-casier-all input { flex-shrink: 0; width: 20px; height: 20px; accent-color: var(--brand-navy); }
+html.dark .dossier-casier-all input { accent-color: #c4dae5; }
+.dossier-casier-saved { font-size: .875rem; color: #047857; }
+html.dark .dossier-casier-saved { color: #b0dfc0; }
 .dossier-departure-feedback { font-size: .875rem; color: #047857; }
 html.dark .dossier-departure-feedback { color: #b0dfc0; }
+@media (prefers-reduced-motion: reduce) {
+  .dossier-departure-shortcut, .dossier-departure-secondary, .dossier-calendar-day { transition: none; }
+  .dossier-departure-shortcut:hover:not([aria-disabled='true']), .dossier-departure-shortcut:active:not([aria-disabled='true']) { transform: none; }
+}
 @media (forced-colors: active) {
-  .dossier-departure-option[aria-selected='true'] { outline: 2px solid Highlight; }
+  .dossier-calendar-day[data-kind='departure'] { border: 2px solid ButtonText; }
+  .dossier-calendar-day[data-assigned], .dossier-calendar-day[data-wish], .dossier-calendar-day[data-chosen] { outline: 2px solid Highlight; outline-offset: -4px; }
+  .dossier-calendar-swatch { border: 1px solid ButtonText; }
 }

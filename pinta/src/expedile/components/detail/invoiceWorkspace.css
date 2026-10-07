@@ -16,8 +16,9 @@
   --iw-num-text: var(--brand-text, #1B3A4B);
   --iw-num-current-bg: #1B3A4B;
   --iw-num-current-text: #FFFFFF;
-  --iw-primary-bg: #1B3A4B;
-  --iw-primary-text: #FFFFFF;
+  /* The dossier page's one primary (dossierActions.css), with its own values as fallback. */
+  --iw-primary-bg: var(--dossier-primary-bg, #1B3A4B);
+  --iw-primary-text: var(--dossier-primary-text, #FFFFFF);
   --iw-ok-text: #17633e;
   --iw-seg-verified: #2E7D50;
   --iw-seg-toVerify: #A87414;
@@ -32,7 +33,9 @@ html.dark .invoice-workspace {
   --iw-hover-border: #6F8794;
   --iw-num-current-bg: #C4DAE5;
   --iw-num-current-text: #122A36;
-  --iw-primary-bg: #24506A;
+  /* #24506A was 2.0:1 against the dark page: the light navy primary reads at 9.7:1 or more. */
+  --iw-primary-bg: var(--dossier-primary-bg, #C4DAE5);
+  --iw-primary-text: var(--dossier-primary-text, #122A36);
   --iw-ok-text: #B0DFC0;
   --iw-seg-verified: #6FBF8B;
   --iw-seg-toVerify: #E0B254;
@@ -79,6 +82,9 @@ html.dark .invoice-workspace {
   background: var(--iw-primary-bg); color: var(--iw-primary-text); font-weight: 700;
   transition: transform .2s ease-out, background-color .2s ease-out;
 }
+/* « Valider cette facture » is the step's primary action: the page's one primary
+   too (its green was 2.5:1 against the dark page). */
+.invoice-workspace button.bg-emerald-700 { color: var(--iw-primary-text); background-color: var(--iw-primary-bg); }
 .iw-primary:hover:not(:disabled) { transform: translateY(-1px); }
 .iw-primary:active:not(:disabled) { transform: translateY(1px); }
 .iw-primary:disabled { opacity: .5; }
@@ -114,11 +120,13 @@ html.dark .invoice-workspace {
 .iw-who { min-width: 0; }
 .iw-supplier { display: block; font-weight: 700; overflow-wrap: anywhere; }
 .iw-meta { display: block; overflow: hidden; font-size: .875rem; color: var(--text-secondary); overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
-/* Each item carries its « · » before it; the list is shifted left by one
-   separator width and clipped, so a wrapped line never starts with a dot. */
-.iw-meta-items { display: flex; flex-wrap: wrap; margin-left: -1.1em; }
-.iw-meta-item { min-width: 0; max-width: 100%; }
-.iw-meta-item::before { content: '·'; display: inline-block; width: 1.1em; text-align: center; }
+/* A « · » only between two items of the same line: each item after the first
+   draws its dot in the column gap before it. The first item of a wrapped line
+   has that dot outside the box, where .iw-meta clips it. No negative margin:
+   an item's own text (a long file name) always starts inside the row. */
+.iw-meta-items { display: flex; flex-wrap: wrap; column-gap: 1.1em; }
+.iw-meta-item { position: relative; min-width: 0; max-width: 100%; }
+.iw-meta-item + .iw-meta-item::before { content: '·'; position: absolute; top: 0; left: -1.1em; width: 1.1em; text-align: center; }
 .iw-file { display: inline-block; max-width: 18ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
 /* Why an invoice waits on the client: one line, full text in the tooltip. */
 .iw-reason { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; color: var(--iw-reason-text); }

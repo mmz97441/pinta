@@ -106,8 +106,10 @@ async function main() {
       f.tables.factures[0].valide = true;
       f.tables.colis[0].final_packages = clone(boxes); f.tables.colis[0].fin_p = 3.75; f.tables.colis[0].outgoing_parcel_count = 2;
       await f.page.goto(`${base}/colis/${ids.P}?section=devis`);
-      const preparation = f.page.getByRole('button', { name: 'Préparation enregistrée ✓', exact: true });
+      // The check mark is a lucide icon (aria-hidden), no longer a « ✓ » glyph in the name.
+      const preparation = f.page.getByRole('button', { name: 'Préparation enregistrée', exact: true });
       await preparation.waitFor();
+      assert.equal(await preparation.locator('svg').count(), 1); assert.doesNotMatch(await preparation.innerText(), /✓/);
       const verify = f.page.getByRole('button', { name: 'Enregistrer et vérifier le devis', exact: true });
       await verify.waitFor(); assert.equal(await verify.isEnabled(), true);
       assert.equal(await f.page.getByRole('region', { name: 'Factures d’achat', exact: true }).count(), 0);

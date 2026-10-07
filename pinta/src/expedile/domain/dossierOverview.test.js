@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildDossierOverview as overview } from './dossierOverview.js';
+import { buildDossierOverview as overview, canSeeDossierFinances } from './dossierOverview.js';
 
 const now = Date.parse('2026-10-02T12:00:00Z');
 const options = { now, can: () => true, client: { type: 'particulier', cp: '97400' } };
@@ -312,11 +312,52 @@ test('a desired day without a departure is the expedition summary, like the list
   assert.equal(step(result, 'expedition').summary, 'Souhaité le 19/11/2026 · à créer');
   assert.equal(step(result, 'expedition').state, 'upcoming', 'A desired day is not a planned departure.');
   assert.equal(result.departure.date, null);
-  assert.equal(step(overview(prepared, options), 'expedition').summary, 'À planifier');
+  // Without any departure: « À choisir », as in the list and the Départ field.
+  assert.equal(step(overview(prepared, options), 'expedition').summary, 'À choisir');
   const envois = [{ id: 'assigned', date: '2026-10-10', destinationCode: '974', statut: 'planifie' }];
   assert.match(step(overview({ ...paid, envoi: 'assigned', departSouhaite: '2026-11-19' }, { ...options, envois }), 'expedition').summary, /^Prévu le 10\/10\/2026/, 'The assigned departure wins.');
   // Once its day has a departure, the wish is to assign; a day gone reads as such.
   const planned = [{ id: 'nov19', date: '2026-11-19', destinationCode: '974', statut: 'planifie' }];
   assert.equal(step(overview({ ...prepared, departSouhaite: '2026-11-19' }, { ...options, envois: planned }), 'expedition').summary, 'Souhaité le 19/11/2026 · départ prévu, à affecter');
   assert.equal(step(overview({ ...prepared, departSouhaite: '2026-10-01' }, options), 'expedition').summary, 'Souhaité le 01/10/2026 · date passée');
+});
+
+test('an assigned departure is planned, not « À faire », until the expedition is the current step', () => {
+  const envois = [{ id: 'oct8', date: '2026-10-08', destinationCode: '974', statut: 'planifie' }];
+  for (const dossier of [{ ...reception, statut: 'attente_feu_vert', demandeFeuVertEnvoyeeAt: '2026-10-01T10:00:00Z' }, prepared, quoted]) {
+    const result = overview({ ...dossier, envoi: 'oct8' }, { ...options, envois });
+    const expedition = step(result, 'expedition');
+    assert.notEqual(result.currentTask, 'expedition');
+    assert.equal(expedition.state, 'planned', dossier.statut);
+    assert.equal(expedition.stateLabel, 'Prévu le jeudi 8 octobre');
+    assert.equal(expedition.date, '2026-10-08'); assert.equal(expedition.current, false);
+  }
+  // Paid: the expedition is the work to do; its summary still names the departure.
+  const due = step(overview({ ...paid, envoi: 'oct8' }, { ...options, envois }), 'expedition');
+  assert.equal(due.state, 'current'); assert.equal(due.stateLabel, undefined); assert.match(due.summary, /^Prévu le 08\/10\/2026/);
+  // Nothing assigned: to come; a cancelled or past departure: to review.
+  assert.equal(step(overview(prepared, { ...options, envois }), 'expedition').state, 'upcoming');
+  assert.equal(step(overview({ ...prepared, envoi: 'oct8' }, { ...options, envois: [{ ...envois[0], statut: 'annule' }] }), 'expedition').state, 'review');
+  assert.equal(step(overview({ ...prepared, envoi: 'oct8' }, { ...options, envois: [{ ...envois[0], date: '2026-10-01' }] }), 'expedition').state, 'review');
+  // A stopped dossier expects no departure any more.
+  const archived = step(overview({ ...prepared, envoi: 'oct8', archive: true }, { ...options, envois }), 'expedition');
+  assert.equal(archived.state, 'not_required'); assert.equal(archived.stateLabel, undefined);
+});
+
+test('received cartons read as French plurals, never « carton(s) »', () => {
+  assert.equal(overview({ ...reception, dimsParColis: [receivedBox(1), {}] }, options).received.summary, '2 cartons reçus · mesures à compléter');
+  assert.equal(overview(reception, options).received.summary, '2 cartons reçus et mesurés');
+  const one = overview({ ...reception, nbColis: 1, dimsParColis: [receivedBox(1)], trackingsDetail: [{ number: 'TRACK-1' }] }, options);
+  assert.equal(one.received.summary, '1 carton reçu et mesuré');
+  assert.doesNotMatch(JSON.stringify(overview(paid, options)), /\(s\)/);
+});
+
+test('one finance rule hides the quote and payment steps and every amount of the page', () => {
+  assert.equal(canSeeDossierFinances(() => false), false);
+  assert.equal(canSeeDossierFinances(permission => permission === 'perm_colis_preparer'), false);
+  for (const permission of ['perm_finances_voir_total', 'perm_colis_calculer_devis', 'perm_colis_envoyer_devis', 'perm_colis_confirmer_paiement']) {
+    assert.equal(canSeeDossierFinances(candidate => candidate === permission), true, permission);
+    assert.notEqual(step(overview(paid, { ...options, can: candidate => candidate === permission }), 'paiement').state, 'restricted');
+  }
+  assert.equal(step(overview(paid, { ...options, can: permission => permission === 'perm_colis_preparer' }), 'paiement').state, 'restricted');
 });

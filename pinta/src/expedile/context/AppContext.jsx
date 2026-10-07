@@ -1284,20 +1284,25 @@ export function AppProvider({ children }) {
   // Explicit, confirmed creation (aérien) of the missing departure of that day,
   // or reuse of the one already planned, then the dossier's assignment to it.
   const createDepartureForColis = useCallback(async (colis, date) => {
+    // The session of the request: an answer arriving after a logout or an
+    // account switch is never applied to the next session's data.
+    const token = generation.current;
     const { data: result, error } = await supabase.rpc('create_departure_for_colis', {
       p_colis_id: colis.id, p_date: date, p_expected_updated_at: colis.updatedAt,
     });
+    if (token !== generation.current) throw new Error('La session a changé pendant l’enregistrement. Reconnectez-vous au même compte pour vérifier le dossier.');
     if (error) throw error;
     if (!result?.colis?.id || !result?.envoi?.id) throw new Error('Création du départ non confirmée. Actualisez le dossier.');
     const envoi = sb.mapEnvoi(result.envoi);
-    const token = generation.current;
-    // The saved departure first, so the dossier can name it; then the whole planning.
-    setEnvois(previous => [...previous.filter(item => item.id !== envoi.id), envoi].sort((a, b) => (a.date || '').localeCompare(b.date || '')));
+    // The saved departure first, so the dossier can name it at once; the whole
+    // planning reloads in the background, without holding the field busy.
+    const byDate = (a, b) => (a.date || '').localeCompare(b.date || '');
+    setEnvois(previous => [...previous.filter(item => item.id !== envoi.id), envoi].sort(byDate));
     const saved = replaceColis(sb.mapColis(result.colis));
-    try {
-      const rows = await sb.fetchEnvois();
-      if (token === generation.current) setEnvois(rows);
-    } catch { /* The created departure is already listed; realtime refreshes the planning. */ }
+    // A read started before the server's commit cannot drop the confirmed departure.
+    sb.fetchEnvois()
+      .then(rows => { if (token === generation.current) setEnvois(rows.some(item => item.id === envoi.id) ? rows : [...rows, envoi].sort(byDate)); })
+      .catch(() => { /* The created departure is already listed; realtime refreshes the planning. */ });
     refreshWork().catch(() => {});
     return { colis: saved, envoi };
   }, [replaceColis, refreshWork]);
