@@ -90,6 +90,8 @@ function noMessages(s){for(const f of s.fixtures){assert.equal(f.requests.some(r
     await scenario('two-colleagues-taking-one-task-keeps-one-owner-and-independent-task',async s=>{
       await detail(s.first);await detail(s.second);
       await Promise.all(s.fixtures.map(f=>owner(f).getByRole('button',{name:'Je m’en occupe',exact:true}).click()));
+      // Both clicks reach the server, but a slower browser (CI) may still be sending the second one.
+      for(let wait=0;wait<100&&s.commands.length<2;wait++)await new Promise(resolve=>setTimeout(resolve,100));
       assert.equal(s.commands.length,2);assert.ok(s.commands.every(c=>c.input.p_command==='take'));
       const task=s.first.tables.staff_work_actions.find(a=>a.id===PREP);assert.equal(task.state,'in_progress');assert.equal(task.version,2);
       const loser=task.assignee_id===ids.A?s.second:s.first;
