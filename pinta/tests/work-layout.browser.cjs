@@ -5,6 +5,7 @@ const AxeBuilder = require('@axe-core/playwright').default;
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
+const { pathToFileURL } = require('node:url');
 const { setup, base, ids } = require('./browser-regression.cjs');
 const output = process.env.PINTA_WORK_LAYOUT_OUT || '/tmp/pinta-work-layout';
 const B = '88888888-1111-4111-8111-111111111111';
@@ -16,8 +17,8 @@ const displayDialog = f => f.page.getByRole('dialog', { name: 'Affichage', exact
 // sortWorkActions: overdue, then work in progress (ties by id), then by deadline and age.
 const ORDER = ['quote', 'documents', 'reply', 'reception', 'prepare', 'departure'];
 
-async function fixture(browser, { dark = false } = {}) {
- const f = await setup(browser, 'directeur');
+async function fixture(browser, { dark = false, timezoneId } = {}) {
+ const f = await setup(browser, 'directeur', { timezoneId });
  f.page.setDefaultTimeout(10000);
  // Screenshots never catch a tab underline halfway through its transition.
  await f.page.emulateMedia({ reducedMotion: 'reduce' });
@@ -54,8 +55,9 @@ async function fixture(browser, { dark = false } = {}) {
  ];
  return f;
 }
-function assertNoMutation(f) {
- assert.equal(f.requests.some(request => /\/(mutate_staff_work_action|save_staff_work_preferences|queue_message|save_quote|save_invoice_review|save_preparation_measurements)$/.test(request.path)), false, 'Display choices never write business data');
+// `writes`: the one command a scenario sends on purpose (the account's density).
+function assertNoMutation(f, writes = []) {
+ assert.equal(f.requests.some(request => /\/(mutate_staff_work_action|save_staff_work_preferences|queue_message|save_quote|save_invoice_review|save_preparation_measurements)$/.test(request.path) && !writes.some(path => request.path.endsWith('/' + path))), false, 'Display choices never write business data');
  assert.deepEqual(f.errors, []); assert.deepEqual(f.networkDenied, []);
 }
 async function layoutOf(f, region = todo(f)) {
@@ -74,9 +76,10 @@ async function assertSingleCopies(f) {
  const phone = await f.page.evaluate(() => innerWidth < 768);
  assert.equal(await row(f, 'relay').count(), phone ? 0 : 1, '[data-work-action="relay"] is rendered once, or folded on a phone');
 }
-// The staff shell clips the document: measure the page and the container that scrolls it.
+// The staff shell clips the document: measure the page and the container that scrolls it
+// (the shell's single <main>).
 const pageOverflow = f => f.page.evaluate(() => {
- const main = document.querySelector('main.work-page'), scroller = main?.parentElement;
+ const main = document.querySelector('.work-page'), scroller = main?.parentElement;
  return document.documentElement.scrollWidth > innerWidth + 1
   || Boolean(main && main.scrollWidth > main.clientWidth + 1)
   || Boolean(scroller && scroller.scrollWidth > scroller.clientWidth + 1);
@@ -86,6 +89,33 @@ async function closeDisplay(f) { await displayDialog(f).getByRole('button', { na
 async function chooseLayout(f, value) { const dialog = await display(f); await dialog.getByLabel('Affichage des tâches', { exact: true }).selectOption(value); await closeDisplay(f); }
 const focused = locator => locator.evaluate(node => node === document.activeElement);
 async function shot(f, name) { await f.page.mouse.move(0, 0); await f.page.screenshot({ path: path.join(output, name + '.png') }); }
+async function axeClean(f, label) {
+ const axe = await new AxeBuilder({ page: f.page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
+ assert.deepEqual(axe.violations.map(item => ({ id: item.id, nodes: item.nodes.map(node => node.target) })), [], label);
+}
+// WCAG relative luminance and contrast ratio of two computed rgb() colours.
+const luminance = color => { const [r, g, b] = color.match(/[\d.]+/g).slice(0, 3).map(Number).map(value => { const v = value / 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+const contrast = (a, b) => { const [light, dark] = [luminance(a), luminance(b)].sort((x, y) => y - x); return (light + 0.05) / (dark + 0.05); };
+// A filled command: its fill, text, shape and the first opaque background behind it.
+const commandLook = locator => locator.evaluate(node => {
+ let behind = getComputedStyle(document.body).backgroundColor;
+ for (let parent = node.parentElement; parent; parent = parent.parentElement) { const color = getComputedStyle(parent).backgroundColor; if (color && color !== 'rgba(0, 0, 0, 0)' && color !== 'transparent') { behind = color; break; } }
+ const style = getComputedStyle(node);
+ return { fill: style.backgroundColor, text: style.color, radius: style.borderRadius, weight: style.fontWeight, height: node.getBoundingClientRect().height, behind };
+});
+// The rendered lines of an element's text.
+const lineCount = locator => locator.evaluate(node => { const range = document.createRange(); range.selectNodeContents(node); return new Set([...range.getClientRects()].filter(rect => rect.width > 0).map(rect => Math.round(rect.top))).size; });
+// The bottom reserve of the shell's <main>, once settled: under reduced motion every
+// change still runs a 0.01ms transition (brand.css), finished at the next frame.
+const mainReserve = async (f, expected) => {
+ await f.page.waitForFunction(value => getComputedStyle(document.querySelector('main')).paddingBottom === value, expected, { timeout: 2000 }).catch(() => {});
+ return f.page.locator('main').evaluate(node => getComputedStyle(node).paddingBottom);
+};
+const loadFailure = (f, scope = f.page.locator('.work-page')) => scope.getByRole('alert').filter({ has: f.page.getByRole('heading', { name: 'Vos tâches n’ont pas pu être chargées', exact: true }) });
+async function failColisLoad(f) {
+ f.failColis = true;
+ await f.context.route('**/rest/v1/colis?*', route => f.failColis && route.request().method() === 'GET' ? route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ message: 'Indisponibilité simulée' }) }) : route.fallback());
+}
 
 (async () => {
  await fs.mkdir(output, { recursive: true });
@@ -95,8 +125,9 @@ async function shot(f, name) { await f.page.mouse.move(0, 0); await f.page.scree
   const f = await fixture(browser, options);
   try {
    if (options.viewport) await f.page.setViewportSize(options.viewport);
+   if (options.before) await options.before(f);
    await f.login(); await f.page.getByRole('heading', { name: 'Mon travail', exact: true }).waitFor();
-   await callback(f); assertNoMutation(f); results.push({ test: name, pass: true });
+   await callback(f); assertNoMutation(f, options.writes); results.push({ test: name, pass: true });
   } catch (error) {
    process.exitCode = 1; results.push({ test: name, pass: false, error: error.stack });
    await f.page.screenshot({ path: path.join(output, name + '-failure.png') }).catch(() => {});
@@ -145,7 +176,9 @@ async function shot(f, name) { await f.page.mouse.move(0, 0); await f.page.scree
    await row(f, 'documents').getByRole('link', { name: 'Facture reçue · À vérifier — EXP-TEST-001', exact: true }).waitFor();
    await row(f, 'reception').getByRole('cell', { name: /^Prévue · / }).waitFor();
    await f.page.getByRole('button', { name: 'En attente 1', exact: true }).click();
-   await row(f, 'waiting').getByText(/En attente : Vérification fournisseur · À revoir le /).waitFor();
+   // Beside its « En attente » pill the line gives the reason: « En attente » is said once.
+   await row(f, 'waiting').getByText(/^Raison : Vérification fournisseur · À revoir le /).waitFor();
+   assert.equal((await row(f, 'waiting').innerText()).match(/En attente/g).length, 1);
    await row(f, 'waiting').getByRole('button', { name: 'Voir', exact: true }).waitFor();
    await f.page.getByRole('button', { name: 'À prendre 1', exact: true }).click();
    const claim = row(f, 'pool').getByRole('button', { name: 'Je m’en occupe', exact: true });
@@ -328,6 +361,278 @@ async function shot(f, name) { await f.page.mouse.move(0, 0); await f.page.scree
    release();
    await loading.waitFor({ state: 'hidden' });
   }, { viewport: { width, height: width === 390 ? 844 : 900 } });
+  // ── Final review: load failure, commands, name, rules, density, shell ──
+  for (const [width, dark] of [[1440, false], [1440, true], [390, false], [390, true]]) await scenario(`a-failed-load-shows-its-reason-and-a-retry-never-empty-counts-${width}-${dark ? 'dark' : 'light'}`, async f => {
+   const work = f.page.locator('.work-page');
+   const failure = loadFailure(f);
+   await failure.waitFor();
+   await failure.getByText('Chargement impossible : Indisponibilité simulée', { exact: true }).waitFor();
+   assert.equal(await f.page.getByRole('alert').filter({ hasText: 'Indisponibilité simulée' }).count(), 1, 'One message: the shell banner steps aside for the page’s own');
+   for (const tab of [/^À faire/, /^En attente/, /^À prendre/]) assert.equal(await work.getByRole('button', { name: tab }).count(), 0, 'No count without loaded tasks');
+   assert.equal(await work.getByText(/pas de tâche|Aucune tâche/).count(), 0, 'A failed load never reads as « no work »');
+   assert.equal(await work.getByRole('button', { name: 'Ma disponibilité', exact: true }).count(), 0, 'Preferences are not offered from an unknown state');
+   assert.equal(await work.getByText(/Disponible|Indisponibilité déclarée/).count(), 0);
+   await axeClean(f, 'load failure');
+   await shot(f, `load-failure-${width}-${dark ? 'dark' : 'light'}`);
+   f.failColis = false;
+   await failure.getByRole('button', { name: 'Réessayer', exact: true }).click();
+   await f.page.getByRole('button', { name: 'À faire 6', exact: true }).waitFor();
+   assert.equal(await loadFailure(f).count(), 0);
+  }, { dark, viewport: { width, height: width === 390 ? 844 : 900 }, before: failColisLoad });
+  await scenario('a-failed-task-refresh-with-no-task-loaded-is-an-error-not-an-empty-list', async f => {
+   f.tables.staff_work_actions = [];
+   await f.page.reload(); await f.page.getByRole('heading', { name: 'Mon travail', exact: true }).waitFor();
+   const empty = f.page.getByRole('region', { name: 'Pourquoi la liste est vide', exact: true });
+   await empty.getByRole('heading', { name: 'Vous n’avez pas de tâche à faire pour le moment', exact: true }).waitFor();
+   let fail = true;
+   await f.context.route('**/rest/v1/staff_work_actions?*', route => fail ? route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ message: 'Suivi des tâches indisponible' }) }) : route.fallback());
+   await f.page.evaluate(() => window.dispatchEvent(new Event('focus')));
+   const failure = loadFailure(f);
+   await failure.getByText('Suivi des tâches indisponible', { exact: true }).waitFor();
+   assert.equal(await f.page.getByRole('button', { name: 'À faire 0', exact: true }).count(), 0);
+   assert.equal(await empty.count(), 0, '« Vous n’avez pas de tâche » is never shown for an unknown list');
+   fail = false;
+   await failure.getByRole('button', { name: 'Réessayer', exact: true }).click();
+   await empty.getByRole('heading', { name: 'Vous n’avez pas de tâche à faire pour le moment', exact: true }).waitFor();
+  });
+  for (const dark of [false, true]) await scenario(`filled-commands-share-one-style-and-stand-out-${dark ? 'dark' : 'light'}`, async f => {
+   await f.page.mouse.move(0, 0);
+   const relay = f.page.getByRole('region', { name: 'Relais à accepter', exact: true });
+   const looks = {
+    'Continuer · à commencer': await commandLook(row(f, 'quote').getByRole('button', { name: 'Continuer', exact: true })),
+    'Continuer · en cours': await commandLook(row(f, 'reply').getByRole('button', { name: 'Continuer', exact: true })),
+    'Accepter et ouvrir': await commandLook(relay.getByRole('button', { name: 'Accepter et ouvrir', exact: true })),
+   };
+   assert.equal(await row(f, 'quote').getByRole('button', { name: 'Continuer', exact: true }).innerHTML(), await row(f, 'reply').getByRole('button', { name: 'Continuer', exact: true }).innerHTML(), 'Both « Continuer » read the same: the word alone.');
+   await f.page.getByRole('button', { name: 'Ma disponibilité', exact: true }).click();
+   const form = f.page.getByRole('form', { name: 'Mes missions et disponibilité', exact: true });
+   looks.Enregistrer = await commandLook(form.getByRole('button', { name: 'Enregistrer', exact: true }));
+   await shot(f, `preferences-1440-${dark ? 'dark' : 'light'}`);
+   // An empty « À faire » with work to take offers « Voir les tâches à prendre ».
+   f.tables.staff_work_actions = f.tables.staff_work_actions.filter(action => action.id === 'pool');
+   await f.page.reload(); await f.page.getByRole('heading', { name: 'Mon travail', exact: true }).waitFor();
+   const see = f.page.getByRole('region', { name: 'Pourquoi la liste est vide', exact: true }).getByRole('button', { name: 'Voir les tâches à prendre', exact: true });
+   await f.page.mouse.move(0, 0);
+   looks['Voir les tâches à prendre'] = await commandLook(see);
+   await shot(f, `empty-1440-${dark ? 'dark' : 'light'}`);
+   await see.click();
+   await row(f, 'pool').waitFor(); await f.page.mouse.move(0, 0);
+   looks['Je m’en occupe'] = await commandLook(row(f, 'pool').getByRole('button', { name: 'Je m’en occupe', exact: true }));
+   const reference = looks['Continuer · en cours'];
+   for (const [name, look] of Object.entries(looks)) {
+    assert.deepEqual([look.fill, look.text, look.radius, look.weight], [reference.fill, reference.text, reference.radius, reference.weight], `${name} has the one filled style`);
+    assert.ok(look.height >= 44, `${name}: 44px target`);
+    assert.ok(contrast(look.fill, look.behind) >= 3, `${name}: ${contrast(look.fill, look.behind).toFixed(2)}:1 against the page`);
+    assert.ok(contrast(look.text, look.fill) >= 4.5, `${name}: text ${contrast(look.text, look.fill).toFixed(2)}:1`);
+   }
+  }, { dark, viewport: { width: 1440, height: 1000 } });
+  await scenario('the-sidebar-and-mon-travail-name-the-same-person', async f => {
+   const sidebar = f.page.locator('.staff-sidebar');
+   assert.equal((await sidebar.locator('[data-staff-name]').innerText()).trim(), 'Test', 'The first name, as in Mon travail');
+   assert.equal(await sidebar.locator('[data-staff-name]').getAttribute('title'), 'Test Camille');
+   assert.equal((await f.page.locator('.work-presence-name').innerText()).replace(/[\s·]+$/u, ''), 'Test');
+  });
+  await scenario('the-empty-list-and-the-preferences-are-separated-by-one-rule', async f => {
+   f.tables.staff_work_actions = f.tables.staff_work_actions.filter(action => action.id === 'pool');
+   await f.page.reload(); await f.page.getByRole('heading', { name: 'Mon travail', exact: true }).waitFor();
+   const empty = f.page.getByRole('region', { name: 'Pourquoi la liste est vide', exact: true });
+   await empty.waitFor();
+   assert.equal(await empty.evaluate(node => getComputedStyle(node).borderBottomWidth), '0px');
+   assert.equal(await f.page.locator('#work-preferences').evaluate(node => getComputedStyle(node).borderTopWidth), '1px');
+  });
+  await scenario('card-commands-line-up-at-the-bottom-of-each-row', async f => {
+   await chooseLayout(f, 'cards');
+   const cards = await todo(f).locator('article[data-work-action]').evaluateAll(nodes => nodes.map(node => { const card = node.getBoundingClientRect(), controls = node.querySelector('.work-card-controls').getBoundingClientRect(); return { top: Math.round(card.top), bottom: Math.round(card.bottom), controls: Math.round(controls.bottom) }; }));
+   const lines = [...new Set(cards.map(card => card.top))];
+   assert.ok(lines.length >= 2);
+   for (const top of lines) {
+    const line = cards.filter(card => card.top === top);
+    assert.ok(Math.max(...line.map(card => card.controls)) - Math.min(...line.map(card => card.controls)) <= 1, `Commands share one baseline in the row at ${top}px: ${JSON.stringify(line)}`);
+   }
+   await shot(f, 'cards-aligned-1440-light');
+   await f.page.getByRole('button', { name: 'En attente 1', exact: true }).click();
+   await row(f, 'waiting').waitFor();
+   assert.equal((await row(f, 'waiting').innerText()).match(/En attente/g).length, 1, 'A waiting card says « En attente » once');
+   await chooseLayout(f, 'auto');
+  }, { viewport: { width: 1440, height: 1100 } });
+  for (const width of [1440, 1280, 390]) await scenario(`missions-align-in-columns-coordination-included-${width}`, async f => {
+   await f.page.getByRole('button', { name: 'Mes missions et disponibilité', exact: true }).click();
+   const group = f.page.getByRole('group', { name: 'Missions proposées dans À prendre', exact: true });
+   await group.waitFor();
+   const boxes = await group.locator('label').evaluateAll(labels => labels.map(label => { const rect = label.getBoundingClientRect(); return { text: label.textContent.trim(), x: Math.round(rect.left), y: Math.round(rect.top), height: Math.round(rect.height) }; }));
+   assert.equal(boxes.length, 6);
+   const tops = [...new Set(boxes.map(box => box.y))].sort((a, b) => a - b);
+   const columns = boxes.filter(box => box.y === tops[0]).map(box => box.x);
+   assert.ok(boxes.every(box => columns.includes(box.x)), `Every mission sits in a column of the first row: ${JSON.stringify(boxes)}`);
+   for (let index = 1; index < tops.length; index += 1) assert.ok(tops[index] - tops[index - 1] <= boxes[0].height + 1, 'No extra gap before a row');
+   assert.equal(await f.page.getByText('Options d’affichage').count(), 0, 'The density moved to « Affichage »');
+   await group.scrollIntoViewIfNeeded();
+   await f.page.screenshot({ path: path.join(output, `missions-${width}.png`) });
+  }, { viewport: { width, height: 1000 } });
+  await scenario('density-is-chosen-in-affichage-and-saved-for-the-account', async f => {
+   const saves = [];
+   let refuse = false;
+   await f.context.route('**/rest/v1/rpc/save_staff_work_preferences', async route => {
+    const input = route.request().postDataJSON(); saves.push(input);
+    if (refuse) return route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ code: '40001', message: 'Les préférences ont changé. Rechargez votre vue.' }) });
+    const preference = f.tables.staff_work_preferences[0]; Object.assign(preference, input.p_preferences); preference.version += 1;
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(preference) });
+   });
+   const page = f.page.locator('.work-page');
+   const dialog = await display(f);
+   const density = dialog.getByLabel('Densité', { exact: true });
+   assert.equal(await density.inputValue(), 'comfortable');
+   await density.selectOption('compact');
+   await f.page.waitForFunction(() => document.querySelector('.work-page')?.dataset.density === 'compact');
+   assert.deepEqual(saves, [{ p_preferences: { density: 'compact' }, p_expected_version: 1 }], 'Only the density, with the version read');
+   assert.equal(await density.inputValue(), 'compact');
+   await axeClean(f, 'display dialog with density');
+   // A refused save keeps the confirmed density and says why, in the dialog.
+   refuse = true;
+   await density.selectOption('comfortable');
+   await dialog.getByRole('alert').filter({ hasText: 'La densité n’a pas été enregistrée' }).waitFor();
+   assert.equal(await density.inputValue(), 'compact');
+   assert.equal(await page.getAttribute('data-density'), 'compact');
+   assert.deepEqual(saves[1], { p_preferences: { density: 'comfortable' }, p_expected_version: 2 });
+   await shot(f, 'display-density-refused-1440-light');
+   await closeDisplay(f);
+  }, { writes: ['save_staff_work_preferences'] });
+  await scenario('an-unassigned-task-is-attributed-a-held-one-reassigned', async f => {
+   await f.page.getByRole('button', { name: 'À prendre 1', exact: true }).click();
+   await row(f, 'pool').getByRole('button', { name: 'Options', exact: true }).click();
+   const pool = f.page.locator('[data-work-action-panel="pool"]');
+   assert.equal(await pool.getByRole('button', { name: 'Réaffecter immédiatement', exact: true }).count(), 0);
+   await pool.getByRole('button', { name: 'Attribuer…', exact: true }).click();
+   const person = pool.getByLabel('Attribuer à', { exact: true });
+   assert.equal(await person.evaluate(node => node.required), true, 'A person is required to attribute a task');
+   assert.equal(await person.locator('option').first().innerText(), 'Choisir une personne disponible et habilitée');
+   await pool.getByRole('button', { name: 'Annuler', exact: true }).click();
+   await f.page.getByRole('button', { name: 'À faire 6', exact: true }).click();
+   await row(f, 'prepare').getByRole('button', { name: 'Options', exact: true }).click();
+   await f.page.locator('[data-work-action-panel="prepare"]').getByRole('button', { name: 'Réaffecter immédiatement', exact: true }).waitFor();
+  });
+  await scenario('deadlines-read-like-the-departure-labels-in-paris-time-and-keep-their-lines-at-1280', async f => {
+   const { workDate } = await import(pathToFileURL(path.join(__dirname, '../src/expedile/domain/personalWork.js')).href);
+   const quote = f.tables.staff_work_actions.find(action => action.id === 'quote');
+   const expected = workDate(quote.due_at, { now: Date.now() });
+   assert.match(expected, /^(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche) \d{1,2}(er)? [a-zéû]+( \d{4})?, \d{1,2} h( \d{2})?$/);
+   assert.deepEqual(await row(f, 'quote').locator('.work-due-part').allInnerTexts(), ['Dépassée ·', expected], 'A device in Auckland still reads the Paris time');
+   for (const id of ORDER) {
+    for (const part of await row(f, id).locator('.work-due-part, .work-client').all()) assert.equal(await lineCount(part), 1, `${id}: « ${await part.innerText()} » on one line`);
+   }
+   assert.equal(await row(f, 'prepare').locator('.work-client').getAttribute('title'), 'Boutique Kréol SARL', 'A long name stays whole in its title');
+   assert.ok(await todo(f).locator('.work-table-frame').evaluate(node => node.scrollWidth <= node.clientWidth + 1), 'The default columns fit at 1280px');
+   await shot(f, 'table-1280-light');
+  }, { viewport: { width: 1280, height: 900 }, timezoneId: 'Pacific/Auckland' });
+  await scenario('the-shell-gives-each-staff-page-one-main-landmark', async f => {
+   for (const route of ['/', '/colis', `/colis/${ids.P}`, `/colis/${ids.P}?onglet=conversation`, '/conversations', '/equipe', '/departs', '/clients', '/devis', '/plus']) {
+    await f.page.goto(base + route);
+    await f.page.locator('main h1').first().waitFor();
+    assert.equal(await f.page.locator('main').count(), 1, `${route}: one <main>`);
+    assert.equal(await f.page.locator('main main, main [role="main"]').count(), 0, `${route}: no nested main`);
+   }
+  });
+  await scenario('a-thread-opened-from-conversations-keeps-conversations-current', async f => {
+   const current = scope => f.page.locator(`${scope} [aria-current="page"]`);
+   for (const [route, expected] of [[`/colis/${ids.P}?onglet=conversation`, 'Conversations'], [`/colis/${ids.P}?returnTo=%2Fconversations%3Fstate%3Da_traiter`, 'Conversations'], [`/colis/${ids.P}?returnTo=%2Fcolis`, 'Dossiers d’expédition'], [`/colis/${ids.P}`, 'Dossiers d’expédition']]) {
+    await f.page.goto(base + route);
+    await f.page.getByTestId('dossier-task-header').waitFor();
+    assert.equal(await current('.staff-sidebar').getAttribute('aria-label'), expected, route);
+   }
+   await f.page.setViewportSize({ width: 390, height: 844 });
+   await f.page.goto(`${base}/colis/${ids.P}?onglet=conversation`);
+   await f.page.getByTestId('dossier-task-header').waitFor();
+   assert.equal(await current('[data-staff-bottom-nav]').getAttribute('aria-label'), 'Conversations');
+  });
+  for (const width of [320, 390]) for (const dark of [false, true]) await scenario(`bottom-navigation-labels-read-at-11px-on-one-line-${width}-${dark ? 'dark' : 'light'}`, async f => {
+   const nav = f.page.locator('[data-staff-bottom-nav]');
+   const labels = await nav.locator('button').evaluateAll(buttons => buttons.map(button => { const label = button.lastElementChild, rect = label.getBoundingClientRect(), box = button.getBoundingClientRect(), style = getComputedStyle(label); return { text: label.textContent, size: parseFloat(style.fontSize), lines: Math.round(rect.height / parseFloat(style.lineHeight)), inside: rect.left >= box.left - 0.5 && rect.right <= box.right + 0.5, target: box.height }; }));
+   assert.deepEqual(labels.map(label => label.text), ['Mon travail', 'Dossiers', 'Conversations', 'Plus']);
+   for (const label of labels) {
+    assert.ok(label.size >= 11, `${label.text}: ${label.size}px`);
+    assert.equal(label.lines, 1, `${label.text} on one line`);
+    assert.ok(label.inside, `${label.text} inside its button`);
+    assert.ok(label.target >= 44);
+   }
+   const height = await nav.evaluate(node => node.getBoundingClientRect().height);
+   assert.ok(height <= 72, `The bar stays within the space pages reserve: ${height}px`);
+   assert.equal(await mainReserve(f, `${height}px`), `${height}px`, 'The page keeps exactly the bar free: no strip');
+   await axeClean(f, 'phone shell');
+   await shot(f, `bottom-nav-${width}-${dark ? 'dark' : 'light'}`);
+  }, { dark, viewport: { width, height: 844 } });
+  for (const dark of [false, true]) await scenario(`phone-account-commands-live-in-plus-with-a-confirmed-logout-${dark ? 'dark' : 'light'}`, async f => {
+   assert.equal(await f.page.getByRole('button', { name: 'Se déconnecter', exact: true }).filter({ visible: true }).count(), 0, 'No one-tap logout beside the theme toggle');
+   await f.page.locator('[data-staff-bottom-nav]').getByRole('button', { name: 'Plus', exact: true }).click();
+   await f.page.getByRole('heading', { name: 'Votre espace', exact: true }).waitFor();
+   const account = f.page.getByRole('region', { name: 'Mon compte', exact: true });
+   await account.getByText('Test Camille', { exact: true }).waitFor();
+   await account.getByRole('button', { name: 'Modifier le mot de passe', exact: true }).waitFor();
+   await axeClean(f, 'Plus');
+   await shot(f, `plus-390-${dark ? 'dark' : 'light'}`);
+   await account.getByRole('button', { name: 'Se déconnecter', exact: true }).click();
+   const confirm = f.page.getByRole('dialog', { name: 'Se déconnecter ?', exact: true });
+   await confirm.getByText(/brouillons non enregistrés/).waitFor();
+   await shot(f, `logout-confirm-390-${dark ? 'dark' : 'light'}`);
+   await confirm.getByRole('button', { name: 'Annuler', exact: true }).click();
+   await confirm.waitFor({ state: 'hidden' });
+   assert.equal(await f.page.locator('#login-email').count(), 0, 'Cancelling keeps the session');
+   await account.getByRole('button', { name: 'Modifier le mot de passe', exact: true }).click();
+   await f.page.waitForURL(url => url.pathname === '/password');
+   await f.page.goBack();
+   await account.getByRole('button', { name: 'Se déconnecter', exact: true }).click();
+   await confirm.getByRole('button', { name: 'Se déconnecter', exact: true }).click();
+   await f.page.getByLabel('Email', { exact: true }).waitFor();
+  }, { dark, viewport: { width: 390, height: 844 } });
+  for (const dark of [false, true]) await scenario(`the-bottom-navigation-steps-aside-while-typing-${dark ? 'dark' : 'light'}`, async f => {
+   const nav = f.page.locator('[data-staff-bottom-nav]');
+   const reserve = expected => mainReserve(f, expected);
+   const height = await nav.evaluate(node => node.getBoundingClientRect().height);
+   assert.equal(await reserve(`${height}px`), `${height}px`);
+   const search = f.page.getByLabel('Rechercher dans mes tâches', { exact: true });
+   await search.focus();
+   assert.equal(await nav.isVisible(), true, 'A full-height screen keeps its navigation');
+   // The keyboard opens: 844 → 500px of visible height.
+   await f.page.setViewportSize({ width: 390, height: 500 });
+   await nav.waitFor({ state: 'hidden' });
+   assert.equal(await reserve('0px'), '0px', 'No space kept for a hidden bar');
+   await search.fill('EXP');
+   const field = await search.boundingBox();
+   assert.ok(field.y >= 0 && field.y + field.height <= 500, 'The field stays in view');
+   await axeClean(f, 'typing');
+   await shot(f, `typing-390x500-${dark ? 'dark' : 'light'}`);
+   await search.evaluate(node => node.blur());
+   await nav.waitFor();
+   assert.equal(await reserve(`${height}px`), `${height}px`, 'Back on blur, with its exact reserve');
+   await search.focus();
+   await nav.waitFor({ state: 'hidden' });
+   await f.page.setViewportSize({ width: 390, height: 844 });
+   await nav.waitFor();
+   assert.equal(await reserve(`${height}px`), `${height}px`, 'Back when the keyboard closes');
+  }, { dark, viewport: { width: 390, height: 844 } });
+  await scenario('opening-a-task-on-a-phone-lands-on-its-work-area', async f => {
+   const link = row(f, 'prepare').getByRole('link', { name: /^Ouvrir Optimiser les colis/ });
+   assert.ok((await link.getAttribute('href')).endsWith('#dossier-work'));
+   await link.click();
+   await f.page.waitForURL(url => url.hash === '#dossier-work' && url.searchParams.get('section') === 'preparation');
+   await f.page.waitForFunction(() => { const rect = document.getElementById('dossier-work')?.getBoundingClientRect(); return rect && rect.top >= 0 && rect.top < innerHeight / 2; });
+   await f.page.goBack();
+   await row(f, 'documents').getByRole('button', { name: 'Continuer', exact: true }).click();
+   await f.page.waitForURL(url => url.hash === '#dossier-work' && url.searchParams.get('section') === 'documents');
+   await f.page.waitForFunction(() => { const rect = document.getElementById('dossier-work')?.getBoundingClientRect(); return rect && rect.top >= 0 && rect.top < innerHeight / 2; });
+  }, { viewport: { width: 390, height: 844 } });
+  for (const width of [1440, 1280]) await scenario(`sidebar-icons-role-and-receive-button-${width}`, async f => {
+   const sidebar = f.page.locator('.staff-sidebar');
+   const icon = name => sidebar.getByRole('button', { name, exact: true }).locator('svg').getAttribute('class');
+   assert.notEqual(await icon('Équipe'), await icon('Clients'), 'Équipe and Clients have their own icons');
+   assert.ok(parseFloat(await sidebar.getByText('Direction', { exact: true }).evaluate(node => getComputedStyle(node).fontSize)) >= 11);
+   const receive = sidebar.getByRole('button', { name: 'Réceptionner des cartons', exact: true });
+   const label = await receive.evaluate(button => { const text = [...button.childNodes].find(node => node.nodeType === Node.TEXT_NODE); const range = document.createRange(); range.selectNodeContents(text); const rects = [...range.getClientRects()]; const box = button.getBoundingClientRect(); return { lines: new Set(rects.map(rect => Math.round(rect.top))).size, inside: rects.every(rect => rect.right <= box.right + 0.5) }; });
+   assert.ok(label.inside, 'The label never leaves its button');
+   // The sidebar is sized for the system fonts of macOS and Windows; the wider Linux
+   // fonts of the CI may wrap it on two lines, inside the button.
+   if (process.platform !== 'linux') assert.equal(label.lines, 1, '« Réceptionner des cartons » on one line');
+   await shot(f, `sidebar-${width}`);
+  }, { viewport: { width, height: 900 } });
   for (const width of [320, 390, 768, 1024, 1280, 1440, 1920]) await scenario(`no-page-overflow-at-${width}`, async f => {
    await f.page.getByRole('region', { name: 'À faire', exact: true }).locator('[data-work-action]').first().waitFor();
    assert.equal(await pageOverflow(f), false);

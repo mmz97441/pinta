@@ -123,6 +123,6 @@ export function receptionDateSummary(dossier = {}, { now = Date.now() } = {}) {
   });
   const known = dates.filter(Boolean).sort((a, b) => Date.parse(a.receivedAt) - Date.parse(b.receivedAt));
   return { dates, totalCount, knownCount: known.length, complete: known.length === totalCount,
-    firstReceivedAt: known[0]?.receivedAt || null, lastReceivedAt: known.at(-1)?.receivedAt || null,
+    firstReceivedAt: known[0]?.receivedAt || null, lastReceivedAt: known[known.length - 1]?.receivedAt || null,
     error: dossier.receptionDatesError === true };
 }

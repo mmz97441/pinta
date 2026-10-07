@@ -5,9 +5,12 @@ export const CONVERSATION_STATES = Object.freeze({
   termine: 'Traitée',
 });
 
+// Object.hasOwn is missing from Safari 14, the declared build target.
+const known = value => Object.prototype.hasOwnProperty.call(CONVERSATION_STATES, value);
+
 export function conversationState(colis) {
   const value = typeof colis === 'string' ? colis : colis?.conversationStatut ?? colis?.conversation_statut;
-  if (Object.hasOwn(CONVERSATION_STATES, value)) return value;
+  if (known(value)) return value;
   // Compatibility for imported/local fixtures that have no durable state yet.
   // Reading never closes work. Only a later delivered reply offers historical
   // evidence that the last free-form customer message may have been handled.

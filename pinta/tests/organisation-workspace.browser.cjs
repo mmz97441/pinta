@@ -162,7 +162,8 @@ const results = [];
   await f.page.goto(base + '/conversations?inbox=inbox-1');
   await f.page.getByLabel('Dossier du client').selectOption(P2);
   await f.page.getByRole('button', { name: 'Rattacher au dossier', exact: true }).click();
-  await f.page.getByRole('dialog').getByRole('button', { name: 'Confirmer le rattachement', exact: true }).click();
+  // The confirmation keeps a one-word label that never wraps (final review).
+  await f.page.getByRole('dialog').getByRole('button', { name: 'Rattacher', exact: true }).click();
   await f.page.locator('#staff-message-' + P2).waitFor();
   assert.equal(f.tables.client_inbox[0].assigned_colis_id, P2);
   results.push({ test: 'unassigned-message-shares-conversation-view-and-explicit-dossier-assignment', pass: true });

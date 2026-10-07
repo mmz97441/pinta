@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildPersonalWork, sortWorkActions, workTotals, availableMissions, workActionUrl, workActionOpensClient, staffAvailable, canWorkAction, personalSection, nextPersonalWorkAction, PERSONAL_SECTIONS, findDossierWorkAction, workLoad, teamWorkQueues } from './personalWork.js';
+import { buildPersonalWork, sortWorkActions, workTotals, availableMissions, workActionUrl, workActionOpensClient, staffAvailable, canWorkAction, personalSection, nextPersonalWorkAction, PERSONAL_SECTIONS, findDossierWorkAction, workLoad, teamWorkQueues, workDate, staffDisplayName } from './personalWork.js';
 const now = Date.parse('2026-09-12T12:00:00Z');
 const dossier = { id: 'parcel', clientId: 'client', ref: 'EXP-QA', nbColis: 3, responsibleStaffId: 'referent' };
 const base = { dossiers: [dossier], clients: [{ id: 'client', nom: 'Exemple' }], userId: 'worker', now, can: () => true };
@@ -208,4 +208,32 @@ test('team workload counts dependency blocks as waiting even when their stored s
  const actions = [action('ready'), action('progress', { state: 'in_progress' }), action('blocked-ready', { blocked_reason: 'Accord attendu' }), action('blocked-progress', { state: 'in_progress', blocked_reason: 'Factures attendues' }), action('wait', { state: 'waiting' }), action('done', { state: 'done' })];
  assert.deepEqual(workLoad(actions), { ready: 1, in_progress: 1, waiting: 3 });
  assert.deepEqual(workLoad([]), { ready: 0, in_progress: 0, waiting: 0 });
+});
+
+test('deadlines read like the dossier Départ labels, on Paris time whatever the device', () => {
+ const today = Date.parse('2026-10-05T10:00:00Z');
+ assert.equal(workDate('2026-10-21T15:00:00Z', { now: today }), 'mercredi 21 octobre, 17 h');
+ assert.equal(workDate('2026-10-08T07:30:00Z', { now: today }), 'jeudi 8 octobre, 9 h 30');
+ // 23:30 UTC is already the next day in Paris; the year shows when it is not the current one.
+ assert.equal(workDate('2026-10-05T23:30:00Z', { now: today }), 'mardi 6 octobre, 1 h 30');
+ assert.equal(workDate('2027-01-01T08:00:00Z', { now: today }), 'vendredi 1er janvier 2027, 9 h');
+ for (const missing of [null, undefined, '', 'demain']) assert.equal(workDate(missing, { now: today }), null);
+});
+
+test('a dossier task opens on its work area; a conversation and a client access do not', () => {
+ const task = new URL(workActionUrl(action('prepare'), '/?section=pool', dossier), 'https://example.test');
+ assert.equal(task.hash, '#dossier-work', 'The dossier page scrolls to and focuses its work area.');
+ assert.equal(task.searchParams.get('section'), 'preparation');
+ const conversation = new URL(workActionUrl(action('reply', { kind: 'conversation' }), '/', dossier), 'https://example.test');
+ assert.equal(conversation.hash, '');
+ assert.equal(conversation.searchParams.get('onglet'), 'conversation');
+ const access = new URL(workActionUrl(action('access', { kind: 'conversation', action_hint: 'Accès client à activer' }), '/', dossier), 'https://example.test');
+ assert.deepEqual([access.pathname, access.hash], ['/clients/client', '']);
+});
+
+test('a staff member reads the same name in the sidebar and Mon travail: the first name, else the name', () => {
+ assert.equal(staffDisplayName({ prenom: 'Madly', nom: 'Hoarau' }), 'Madly');
+ assert.equal(staffDisplayName({ prenom: '  ', nom: 'Camille' }), 'Camille');
+ assert.equal(staffDisplayName({ nom: 'Camille' }), 'Camille');
+ assert.equal(staffDisplayName(null), '');
 });

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { conversationPreview, conversationSince, conversationOverdue, waitingAge, conversationTime, conversationDay, conversationClock, sortConversations, linkLabel, previewText, clientDisplayName, nameInitials } from './conversationList.js';
+import { conversationPreview, conversationSince, conversationOverdue, waitingAge, conversationTime, conversationDay, conversationClock, sortConversations, linkLabel, previewText, clientDisplayName, nameInitials, textWithLinks, messageRecordedByTeam } from './conversationList.js';
 
 const now = Date.parse('2026-10-05T09:00:00Z'); // 11:00 in Paris
 const client = (texte, createdAt, extra = {}) => ({ type: 'client', texte, createdAt, ...extra });
@@ -97,4 +97,31 @@ test('client names and initials follow the list wording', () => {
   assert.equal(clientDisplayName(null), 'Client');
   assert.equal(nameInitials('Jean-Marc Hoarau'), 'JH');
   assert.equal(nameInitials('Client'), 'CL');
+});
+
+test('only http(s) addresses become links; closing punctuation stays text', () => {
+  assert.deepEqual(textWithLinks('Voici la facture https://www.example.test/facture.pdf.'), [{ text: 'Voici la facture ' }, { href: 'https://www.example.test/facture.pdf' }, { text: '.' }]);
+  assert.deepEqual(textWithLinks('(voir https://x.test/a_(b)) puis https://y.test/z), fin'), [{ text: '(voir ' }, { href: 'https://x.test/a_(b)' }, { text: ') puis ' }, { href: 'https://y.test/z' }, { text: '), fin' }]);
+  assert.deepEqual(textWithLinks('Suivi : https://www.example.test/suivi/123456?ref=abc'), [{ text: 'Suivi : ' }, { href: 'https://www.example.test/suivi/123456?ref=abc' }]);
+  for (const text of ['javascript:alert(1)', 'data:text/html,<b>x</b>', 'http://', 'Bonjour', '']) assert.equal(textWithLinks(text).some(part => part.href), false, text);
+  assert.deepEqual(textWithLinks(null), []);
+});
+
+test('a decision recorded by the team is the team’s, the client’s own is the client’s', () => {
+  const decision = extra => ({ type: 'client', template: 'client_decision_approve', texte: 'Accord de préparation enregistré pour ce dossier et ses cartons actuels.', ...extra });
+  assert.equal(messageRecordedByTeam(decision({ auteurId: 'staff-1', auteur: 'Camille' }), 'client-user'), true, 'client_decision called from a staff screen');
+  assert.equal(messageRecordedByTeam(decision({ auteurId: 'client-user' }), 'client-user'), false, 'The client in the espace client');
+  assert.equal(messageRecordedByTeam(decision({ auteurId: null, auteur: 'Client (Telegram)' }), 'client-user'), false, 'The client on Telegram');
+  assert.equal(messageRecordedByTeam({ type: 'client', texte: 'Bonjour', auteurId: 'staff-1' }, 'client-user'), false, 'Only a decision');
+  assert.equal(messageRecordedByTeam(decision({ type: 'staff', auteurId: 'staff-1' }), 'client-user'), false);
+});
+
+test('an approval is no question: « À répondre » previews the client’s question, a team decision names its author', () => {
+  const question = client('Pouvez-vous attendre mon colis ?', '2026-10-05T06:00:00Z');
+  const recorded = client('Accord de préparation enregistré pour ce dossier et ses cartons actuels.', '2026-10-05T07:00:00Z', { template: 'client_decision_approve', auteurId: 'staff-1', auteur: 'Camille' });
+  assert.equal(conversationPreview({ conversationStatut: 'a_traiter', messages: [question, recorded] }, { client: { userId: 'client-user' } }).text, 'Pouvez-vous attendre mon colis ?');
+  assert.deepEqual(conversationPreview({ conversationStatut: 'termine', messages: [question, recorded] }, { meId: 'me', teamUsers: [{ authId: 'staff-1', prenom: 'Camille' }], client: { userId: 'client-user' } }), { text: 'Camille : Accord de préparation enregistré pour ce dossier et ses cartons actuels.', fromStaff: true });
+  // The client's own approval keeps reading as the client's.
+  const own = { ...recorded, auteurId: 'client-user', auteur: 'Camille Exemple' };
+  assert.deepEqual(conversationPreview({ conversationStatut: 'termine', messages: [question, own] }, { client: { userId: 'client-user' } }), { text: 'Accord de préparation enregistré pour ce dossier et ses cartons actuels.', fromStaff: false });
 });

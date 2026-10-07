@@ -5,11 +5,13 @@ import { useApp } from '../../context/AppContext';
 import { WORK_KINDS, WORK_STATES, actionPriority, actionBlocked, actionWaiting, canWorkAction, staffAvailable, workActionUrl, workDate } from '../../domain/personalWork';
 import { cartonCount, workRowModel } from '../../domain/workTable';
 import { receptionCartonManifest } from '../../domain/reception';
+import { pluralWord } from '../../domain/plural';
 import InvoiceReviewIndicator from '../ui/InvoiceReviewIndicator';
 import TaskTakeButton from './TaskTakeButton';
+import { PRIMARY_COMMAND } from './workCommands';
 import { pendingWorkDrafts } from '../../domain/workDrafts';
 
-export { workDate };
+export { workDate, PRIMARY_COMMAND };
 export const staffName = (id, users = []) => { const person = users.find(user => user.authId === id); return person ? [person.prenom, person.nom].filter(Boolean).join(' ') : id ? 'Membre de l’équipe' : 'Non attribué'; };
 const controlClass = 'min-h-11 rounded-lg border border-slate-200 px-3 text-sm font-semibold disabled:opacity-40';
 const secondaryClass = 'min-h-11 rounded-lg px-2 text-sm font-semibold text-slate-600 underline underline-offset-4 hover:bg-slate-50 disabled:opacity-40';
@@ -111,9 +113,10 @@ export function useWorkActionControls(action, { returnTo = '/', inTask = false }
 export function WorkActionButtons({ controls, hideRedundantView = false, options = true, panelId, className = 'flex flex-wrap items-center gap-2' }) {
   const { action, inTask, busy, mode, setMode, setFormAction, own, recipient, coordinate, allowed, waiting, canContinue, hasPrimaryCommand, open, command } = controls;
   return <div className={className}>
-    {recipient && <><button disabled={busy || !allowed} onClick={() => command('accept', { start: !waiting }, true)} className={controlClass + ' bg-slate-900 text-white dark:bg-slate-200 dark:text-slate-900'}>{waiting ? 'Accepter le suivi' : 'Accepter et ouvrir'}</button><button disabled={busy} onClick={() => command('reject')} className={secondaryClass}>Décliner</button></>}
+    {recipient && <><button disabled={busy || !allowed} onClick={() => command('accept', { start: !waiting }, true)} className={PRIMARY_COMMAND}>{waiting ? 'Accepter le suivi' : 'Accepter et ouvrir'}</button><button disabled={busy} onClick={() => command('reject')} className={secondaryClass}>Décliner</button></>}
     {!recipient && !(inTask && own) && <TaskTakeButton key={action.id} action={action} onClaim={inTask ? undefined : open} />}
-    {!inTask && canContinue && <button onClick={open} className={controlClass + ' bg-slate-900 text-white dark:bg-slate-200 dark:text-slate-900'}>Continuer<ArrowRight size={14} className="inline ml-2" /></button>}
+    {/* The same « Continuer » as a task to start (TaskTakeButton): one look, the word alone. */}
+    {!inTask && canContinue && <button onClick={open} data-work-continue="" className={PRIMARY_COMMAND}>Continuer</button>}
     {!inTask && !canContinue && !(hideRedundantView && hasPrimaryCommand) && <button onClick={open} className={hasPrimaryCommand ? secondaryClass : controlClass}>Voir<ArrowRight size={14} className="inline ml-2" /></button>}
     {options && (own || coordinate) && <button aria-expanded={Boolean(mode)} aria-controls={mode && panelId ? panelId : undefined} onClick={() => { setFormAction(action); setMode(mode ? '' : 'menu'); }} className={secondaryClass} disabled={busy}>Options<ChevronDown size={14} className="inline ml-1" /></button>}
   </div>;
@@ -122,20 +125,23 @@ export function WorkActionButtons({ controls, hideRedundantView = false, options
 /** The Options menu, its forms and the conflict message, in this order. */
 export function WorkActionPanel({ controls, compact = false }) {
   const { action, busy, error, mode, setMode, note, setNote, target, setTarget, date, setDate, own, coordinate, allowed, candidates, teamUsers, command, submit, refreshTask } = controls;
+  // A task nobody holds is attributed, not « reassigned »: the choice of a person is then required.
+  const unassigned = !action.assignee_id;
+  const choosePerson = mode === 'handoff' || mode === 'reassign' && unassigned;
   return <>
     {mode === 'menu' && <div className="flex flex-wrap gap-2 text-sm">
       {own && <>{action.state === 'waiting' && !actionBlocked(action) && allowed && <button disabled={busy} onClick={() => command('resume', { start: true }, true)} className={controlClass}>Lever l’attente et continuer</button>}<button onClick={() => setMode('wait')} className={controlClass}>Mettre en attente</button><button onClick={() => setMode('handoff')} className={controlClass}>Passer à un collègue</button><button disabled={busy} onClick={() => command('release')} className={controlClass}>Remettre à disposition</button></>}
-      {coordinate && <><button onClick={() => setMode('reassign')} className={controlClass}>Réaffecter immédiatement</button><button onClick={() => setMode('prioritize')} className={controlClass}>Signaler une priorité</button></>}
+      {coordinate && <><button onClick={() => setMode('reassign')} className={controlClass}>{unassigned ? 'Attribuer…' : 'Réaffecter immédiatement'}</button><button onClick={() => setMode('prioritize')} className={controlClass}>Signaler une priorité</button></>}
     </div>}
     {mode && mode !== 'menu' && <form onSubmit={submit} className={`space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-3 ${compact ? '' : 'max-w-lg'}`}>
-      {['handoff', 'reassign'].includes(mode) && <label className="block text-sm font-semibold">{mode === 'handoff' ? 'Passer à' : 'Nouveau responsable'}<select required={mode === 'handoff'} value={target} onChange={event => setTarget(event.target.value)} className="mt-1 min-h-11 w-full rounded-lg border border-slate-300 bg-white px-2"><option value="">{mode === 'handoff' ? 'Choisir une personne disponible et habilitée' : 'File commune — non attribué'}</option>{candidates.map(user => <option key={user.authId} value={user.authId}>{staffName(user.authId, teamUsers)}</option>)}</select></label>}
+      {['handoff', 'reassign'].includes(mode) && <label className="block text-sm font-semibold">{mode === 'handoff' ? 'Passer à' : unassigned ? 'Attribuer à' : 'Nouveau responsable'}<select aria-label={mode === 'handoff' ? 'Passer à' : unassigned ? 'Attribuer à' : 'Nouveau responsable'} required={choosePerson} value={target} onChange={event => setTarget(event.target.value)} className="mt-1 min-h-11 w-full rounded-lg border border-slate-300 bg-white px-2"><option value="">{choosePerson ? 'Choisir une personne disponible et habilitée' : 'File commune — non attribué'}</option>{candidates.map(user => <option key={user.authId} value={user.authId}>{staffName(user.authId, teamUsers)}</option>)}</select></label>}
       <label className="block text-sm font-semibold">{mode === 'handoff' ? 'Consigne pour la reprise' : 'Motif'}<textarea aria-label={mode === 'handoff' ? 'Consigne pour la reprise' : 'Motif'} required maxLength={500} value={note} onChange={event => setNote(event.target.value)} rows={2} className="mt-1 w-full rounded-lg border border-slate-300 p-2" /></label>
       {['wait', 'prioritize'].includes(mode) && <label className="block text-sm font-semibold">{mode === 'wait' ? 'Date de réexamen (facultative)' : 'Priorité valable jusqu’au'}<input required={mode === 'prioritize'} type="datetime-local" value={date} onChange={event => setDate(event.target.value)} className="mt-1 min-h-11 w-full rounded-lg border border-slate-300 px-2" /></label>}
       {mode === 'handoff' && <p className="text-xs text-slate-600">Les informations enregistrées et cette consigne seront disponibles au collègue. Enregistrez vos saisies avant de passer la main. Vous gardez la tâche jusqu’à son acceptation.</p>}
       {mode === 'reassign' && <p className="text-sm text-slate-600">L’attribution change immédiatement, sans attendre l’accord de la personne choisie.</p>}
       {['handoff', 'reassign'].includes(mode) && !candidates.length && <p className="text-sm text-amber-800">Aucun collègue disponible ne dispose des droits nécessaires. Vérifiez la disponibilité et les permissions avec la direction.</p>}
       {mode === 'wait' && <p className="text-xs text-slate-600">Cette attente concerne le travail de l’équipe. Elle ne constitue pas une pause demandée par le client.</p>}
-      <div className="flex gap-2"><button disabled={busy} className={controlClass + ' bg-slate-900 text-white dark:bg-slate-200 dark:text-slate-900'}>{busy ? 'Enregistrement…' : mode === 'handoff' ? 'Proposer le relais' : 'Confirmer'}</button><button type="button" onClick={() => setMode('')} className={controlClass}>Annuler</button></div>
+      <div className="flex gap-2"><button disabled={busy} className={PRIMARY_COMMAND}>{busy ? 'Enregistrement…' : mode === 'handoff' ? 'Proposer le relais' : 'Confirmer'}</button><button type="button" onClick={() => setMode('')} className={controlClass}>Annuler</button></div>
     </form>}
     {error && <div role="alert" className="text-sm text-red-700">{error}<button onClick={refreshTask} className="ml-2 min-h-11 underline">Actualiser la tâche</button></div>}
   </>;
@@ -160,7 +166,7 @@ export function WorkTaskDetails({ model, action, dossier, returnTo, notice }) {
   const { teamUsers = [] } = useApp();
   return <>
     {model.assigneeId && <p className="work-task-detail">Réalise la tâche : {staffName(model.assigneeId, teamUsers)}</p>}
-    {model.waiting && <p className="work-task-detail"><strong>En attente : </strong>{model.waiting}</p>}
+    {model.waiting && <p className="work-task-detail"><strong>{model.waitingLabel} : </strong>{model.waiting}</p>}
     {notice && <p className="work-task-detail work-task-notice">{notice}</p>}
     {model.handoff && <p className="work-task-detail">Relais proposé à {staffName(model.handoff.to, teamUsers)} · acceptation attendue{model.handoff.note ? ` — ${model.handoff.note}` : ''}</p>}
     {action.kind === 'documents' && <div className="work-invoice"><InvoiceReviewIndicator dossier={dossier} returnTo={returnTo} /></div>}
@@ -218,11 +224,12 @@ function WorkActionListRow({ action, dossier, client, returnTo, now = Date.now()
           <h2 className="min-w-0 font-semibold text-slate-900"><Link to={workActionUrl(action, returnTo, dossier)} aria-label={`Ouvrir ${title} — ${dossier?.ref || 'dossier'}`} className="inline-flex min-h-11 items-center break-words hover:underline">{title}</Link></h2>
           <span className={`rounded-lg px-2 py-1 text-xs font-semibold ${priority.urgent ? 'bg-amber-50 text-amber-800' : 'bg-slate-100 text-slate-600'}`}>{WORK_STATES[action.state]}</span>
         </div>
-        <p className="text-sm text-slate-600 break-words"><strong className="font-semibold text-slate-700">{dossier?.ref || 'Dossier à consulter'}</strong> · {(client?.nomFamille ? [client.prenom, client.nomFamille].filter(Boolean).join(' ') : client?.nom) || 'Client'}{!compact && dossier ? ` · ${receptionCartonManifest(dossier).nbColis} carton(s) reçu(s)` : ''}</p>
-        {(priority.urgent || action.due_at) && <p className={`text-xs ${priority.urgent ? 'text-amber-800 font-semibold' : 'text-slate-600'}`}><Clock size={13} className="inline mr-1" />{priority.reason}{action.due_at ? ` · ${workDate(action.due_at)}` : ''}</p>}
+        <p className="text-sm text-slate-600 break-words"><strong className="font-semibold text-slate-700">{dossier?.ref || 'Dossier à consulter'}</strong> · {(client?.nomFamille ? [client.prenom, client.nomFamille].filter(Boolean).join(' ') : client?.nom) || 'Client'}{!compact && dossier ? ` · ${cartonCount(receptionCartonManifest(dossier).nbColis)} ${pluralWord(receptionCartonManifest(dossier).nbColis, 'reçu', 'reçus')}` : ''}</p>
+        {(priority.urgent || action.due_at) && <p className={`text-xs ${priority.urgent ? 'text-amber-800 font-semibold' : 'text-slate-600'}`}><Clock size={13} className="inline mr-1" />{priority.reason}{action.due_at ? ` · ${workDate(action.due_at, { now })}` : ''}</p>}
       </div>
       {(action.assignee_id || action.handoff_to) && <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-600"><span>Réalise la tâche : {action.assignee_id === auth?.u?.id ? 'vous' : staffName(action.assignee_id, teamUsers)}</span></div>}
-      {waiting && <p className="text-sm text-slate-700"><strong>En attente : </strong>{waiting}{action.review_at ? ` · À revoir le ${workDate(action.review_at)}` : ''}</p>}
+      {/* Beside the « En attente » state the line gives the reason, not the state again. */}
+      {waiting && <p className="text-sm text-slate-700"><strong>{action.state === 'waiting' ? 'Raison' : 'En attente'} : </strong>{waiting}{action.review_at ? ` · À revoir le ${workDate(action.review_at, { now })}` : ''}</p>}
       {notice && <p className="text-sm text-amber-800">{notice}</p>}
       {action.handoff_to && <p className="text-sm text-slate-700">Relais proposé à {staffName(action.handoff_to, teamUsers)} · acceptation attendue{action.handoff_note ? ` — ${action.handoff_note}` : ''}</p>}
       {action.kind === 'documents' && <InvoiceReviewIndicator dossier={dossier} returnTo={returnTo} />}

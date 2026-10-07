@@ -59,7 +59,7 @@ async function main() {
   const browser = await chromium.launch({ headless: true });
   async function scenario(name, run, options) {
     if (process.env.PINTA_CONVERSATIONS_FILTER && !name.includes(process.env.PINTA_CONVERSATIONS_FILTER)) return;
-    const f = await setup(browser, 'directeur'); f.page.setDefaultTimeout(12000); fixture(f, options);
+    const f = await setup(browser, 'directeur', options?.setup); f.page.setDefaultTimeout(12000); fixture(f, options);
     try {
       await f.login(); await run(f);
       assert.deepEqual(f.errors, []); assert.deepEqual(f.networkDenied, []);
@@ -163,7 +163,7 @@ async function main() {
       await f.page.waitForFunction(() => document.querySelectorAll('.conversation-row[data-unread]:not([data-inbox])').length === 1);
       assert.equal(f.tables.messages.find(item => item.id === 'm-05').lu, true);
       assert.deepEqual(f.tables.messages.filter(item => item.colis_id === ids.P && item.type === 'client').map(item => item.lu), [false, false], 'A conversation shown only in the list stays unread.');
-      await row(f, 'Pouvez-vous attendre mon dernier colis').getByText('2 non lu(s)').waitFor({ state: 'attached' });
+      await row(f, 'Pouvez-vous attendre mon dernier colis').getByText('2 messages non lus').waitFor({ state: 'attached' });
       const before = reads(f).length;
       await f.page.setViewportSize({ width: 1440, height: 1000 });
       await f.page.evaluate(() => window.dispatchEvent(new Event('focus')));
@@ -282,7 +282,7 @@ async function main() {
       await f.page.getByRole('heading', { name: 'Conversations', exact: true }).waitFor();
       await form.getByLabel('Dossier du client', { exact: true }).selectOption(P2);
       await form.getByRole('button', { name: 'Rattacher au dossier', exact: true }).click();
-      await f.page.getByRole('dialog').getByRole('button', { name: 'Confirmer le rattachement', exact: true }).click();
+      await f.page.getByRole('dialog').getByRole('button', { name: 'Rattacher', exact: true }).click();
       await f.page.waitForURL(url => url.searchParams.get('ouvert') === P2 && !url.searchParams.has('inbox'));
       await f.page.locator('#staff-message-' + P2).waitFor();
       await log(f).getByText('Voici la facture du deuxième colis', { exact: false }).waitFor();
@@ -324,7 +324,7 @@ async function main() {
       await f.page.waitForFunction(() => document.querySelectorAll('#conversation-client .chat-unread').length === 1);
       assert.equal(f.tables.messages.find(item => item.id === 'm-04').lu, false);
       assert.equal(f.tables.messages.find(item => item.id === 'm-03').lu, true);
-      await row(f, 'Pouvez-vous attendre mon dernier colis').getByText('1 non lu(s)').waitFor({ state: 'attached' });
+      await row(f, 'Pouvez-vous attendre mon dernier colis').getByText('1 message non lu').waitFor({ state: 'attached' });
       assert.equal(await f.page.getByRole('button', { name: 'Autres actions sur la conversation', exact: true }).evaluate(node => node === document.activeElement), true);
     });
 
@@ -361,12 +361,120 @@ async function main() {
       }
     });
 
+    // ── Final review: desktop rows, compact segments, safe links, decisions, keyboard ──
+    for (const [width, dark] of [[1280, false], [1280, true], [1366, false], [1440, false], [1440, true]]) await scenario(`the-list-keeps-its-computer-rows-and-one-row-of-segments-${width}-${dark ? 'dark' : 'light'}`, async f => {
+      await f.context.addInitScript(theme => localStorage.setItem('expedile-theme', theme), dark ? 'dark' : 'light');
+      await open(f, '/conversations', width, 800);
+      const list = await f.page.locator('.conversation-list').evaluate(node => ({ content: node.clientWidth, title: getComputedStyle(node.querySelector('.conversation-row__title')).flexDirection, since: getComputedStyle(node.querySelector('.conversation-row__since')).position, segments: node.querySelector('.conversation-segments').getBoundingClientRect().height }));
+      assert.ok(list.content >= 400, `${width}px: a 400px list keeps its computer rows (${list.content}px)`);
+      assert.equal(list.title, 'row', 'Name and reference share one line');
+      assert.notEqual(list.since, 'absolute', '« depuis » stays readable');
+      assert.ok(list.segments <= 52, `${width}px: the four segments hold on one row (${list.segments}px)`);
+      const audit = await new AxeBuilder({ page: f.page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
+      assert.deepEqual(audit.violations.map(issue => ({ id: issue.id, nodes: issue.nodes.map(node => node.target) })), []);
+      await f.page.screenshot({ path: `${output}/list-${width}-${dark ? 'dark' : 'light'}.png` });
+    });
+
+    for (const width of [1440, 390]) await scenario(`a-message-without-dossier-links-safely-and-its-confirmation-keeps-references-whole-${width}`, async f => {
+      await open(f, '/conversations', width, 900);
+      await row(f, 'Voici la facture du deuxième colis').click();
+      const form = f.page.getByRole('region', { name: 'Message à rattacher', exact: true });
+      const link = form.getByRole('link', { name: 'https://www.example.test/facture.pdf', exact: true });
+      assert.equal(await link.getAttribute('href'), 'https://www.example.test/facture.pdf');
+      assert.equal(await link.getAttribute('target'), '_blank');
+      assert.deepEqual((await link.getAttribute('rel')).split(/\s+/).sort(), ['noopener', 'noreferrer']);
+      // The reception dates read like the dossier list (formatDossierTableDate), the counts in French.
+      const options = await form.getByLabel('Dossier du client', { exact: true }).locator('option').allTextContents();
+      assert.ok(options.includes('EXP-TEST-003 · En cours de préparation · 2 cartons · reçu le 08/09/2026'), JSON.stringify(options));
+      assert.equal(options.some(option => option.includes('(s)')), false);
+      await form.getByLabel('Dossier du client', { exact: true }).selectOption(P2);
+      await form.getByRole('button', { name: 'Rattacher au dossier', exact: true }).click();
+      const dialog = f.page.getByRole('dialog', { name: 'Rattacher ce message ?', exact: true });
+      const reference = dialog.getByText('EXP-TEST-002', { exact: true });
+      assert.equal(await reference.evaluate(node => getComputedStyle(node).whiteSpace), 'nowrap');
+      assert.equal(await reference.evaluate(node => node.getClientRects().length), 1, 'The reference stays on one line');
+      const confirm = dialog.getByRole('button', { name: 'Rattacher', exact: true });
+      assert.ok((await confirm.boundingBox()).height <= 48, 'The confirmation label holds on one line');
+      await f.page.screenshot({ path: `${output}/inbox-confirm-${width}.png` });
+      await dialog.getByRole('button', { name: 'Annuler', exact: true }).click();
+      assert.equal(f.requests.some(request => request.path.endsWith('/telegram-inbox-assign')), false);
+    });
+
+    await scenario('the-folded-traitees-section-names-an-existing-list', async f => {
+      await open(f, '/conversations');
+      const toggle = f.page.getByRole('button', { name: /^Traitées · 1$/ });
+      assert.equal(await toggle.getAttribute('aria-expanded'), 'false');
+      const target = f.page.locator(`#${await toggle.getAttribute('aria-controls')}`);
+      assert.equal(await target.count(), 1, 'aria-controls names an element while folded');
+      assert.equal(await target.isHidden(), true);
+      assert.equal(await target.locator('li').count(), 0, 'A folded list renders no row');
+      await toggle.click();
+      await target.locator('li').first().waitFor();
+      assert.equal(await toggle.getAttribute('aria-expanded'), 'true');
+    });
+
+    await scenario('a-decision-recorded-by-the-team-is-signed-by-the-team-member', async f => {
+      f.tables.messages.push(
+        { id: 'm-08', colis_id: P3, type: 'client', template: 'client_decision_wait', texte: 'Attente volontaire enregistrée. Les relances sont suspendues.', created_at: minutesAgo(90), auteur_nom: 'Madly', auteur_id: B, canal: 'portal', lu: true },
+        { id: 'm-09', colis_id: P3, type: 'client', template: 'client_decision_approve', texte: 'Accord de préparation enregistré pour ce dossier et ses cartons actuels.', created_at: minutesAgo(80), auteur_nom: 'Payet Flavie', auteur_id: 'client-flavie', canal: 'portal', lu: true },
+      );
+      await open(f, `/conversations?ouvert=${P3}`);
+      const recorded = log(f).locator('.chat-message').filter({ hasText: 'Attente volontaire enregistrée' });
+      assert.equal(await recorded.getAttribute('data-from'), 'staff', 'Recorded by the team: on the team’s side');
+      const authors = await log(f).locator('.chat-author').allTextContents();
+      assert.deepEqual(authors.slice(-2), ['Madly', 'Flavie Payet'], 'The team member, then the client for the client’s own decision');
+      await f.page.screenshot({ path: `${output}/decision-recorded-by-team-1440.png` });
+    });
+
+    await scenario('a-keyboard-and-a-mouse-keep-the-ctrl-entree-hint', async f => {
+      await open(f, `/conversations?ouvert=${ids.P}`, 1440, 900);
+      assert.equal(await f.page.getByText('Ctrl + Entrée pour envoyer', { exact: true }).isVisible(), true);
+    });
+    await scenario('a-touch-screen-has-no-ctrl-entree-hint', async f => {
+      await f.page.setViewportSize({ width: 768, height: 1024 });
+      await f.page.goto(`${base}/colis/${ids.P}?onglet=conversation`);
+      await reply(f).waitFor();
+      // The tablet thread is wide enough for the help line: only the shortcut leaves it.
+      assert.equal(await f.page.locator('.chat-composer__help').isVisible(), true);
+      assert.equal(await f.page.locator('.chat-composer__shortcut').isVisible(), false, 'There is no Ctrl key to press on a touch screen');
+    }, { setup: { device: { hasTouch: true, isMobile: true } } });
+
+    for (const dark of [false, true]) await scenario(`a-phone-keyboard-keeps-envoyer-in-view-${dark ? 'dark' : 'light'}`, async f => {
+      await f.context.addInitScript(theme => localStorage.setItem('expedile-theme', theme), dark ? 'dark' : 'light');
+      await f.page.setViewportSize({ width: 390, height: 844 });
+      await f.page.goto(`${base}/colis/${P2}?onglet=conversation&returnTo=%2Fconversations`);
+      await reply(f).waitFor();
+      await reply(f).focus();
+      // The keyboard opens: the visible height falls to 500px and the field is brought into view.
+      await f.page.setViewportSize({ width: 390, height: 500 });
+      await reply(f).evaluate(node => node.scrollIntoView({ block: 'nearest' }));
+      await f.page.locator('[data-staff-bottom-nav]').waitFor({ state: 'hidden' });
+      await reply(f).fill('Bonjour Flavie, nous avons bien reçu votre deuxième colis.');
+      const send = await f.page.getByRole('button', { name: 'Envoyer le message', exact: true }).boundingBox();
+      const field = await reply(f).boundingBox();
+      assert.ok(field.y >= 0 && send.y + send.height <= 500, `« Envoyer » is in view with the keyboard: ${JSON.stringify({ field, send })}`);
+      await f.page.waitForFunction(() => getComputedStyle(document.querySelector('main')).paddingBottom === '0px', null, { timeout: 2000 }).catch(() => {});
+      assert.equal(await f.page.locator('main').evaluate(node => getComputedStyle(node).paddingBottom), '0px', 'No space kept for the hidden bar');
+      const audit = await new AxeBuilder({ page: f.page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
+      assert.deepEqual(audit.violations.map(issue => ({ id: issue.id, nodes: issue.nodes.map(node => node.target) })), []);
+      await f.page.screenshot({ path: `${output}/keyboard-390x500-${dark ? 'dark' : 'light'}.png` });
+      await reply(f).evaluate(node => node.blur());
+      await f.page.locator('[data-staff-bottom-nav]').waitFor();
+    });
+
     await scenario('short-phone-keeps-the-composer-reachable', async f => {
       await open(f, '/conversations', 390, 568);
       await row(f, 'Pouvez-vous attendre mon dernier colis').click();
       await reply(f).waitFor();
       await reply(f).fill('Réponse préparée sur un petit écran.');
       const send = f.page.getByRole('button', { name: 'Envoyer le message', exact: true });
+      // While the field has the focus on a short phone the navigation steps aside.
+      await f.page.locator('[data-staff-bottom-nav]').waitFor({ state: 'hidden' });
+      await send.scrollIntoViewIfNeeded();
+      const typing = await send.boundingBox();
+      assert.ok(typing.y >= 48 && typing.y + typing.height <= 568, `The send button is reachable while typing: ${JSON.stringify(typing)}`);
+      await send.focus();
+      await f.page.locator('[data-staff-bottom-nav]').waitFor();
       await send.scrollIntoViewIfNeeded();
       const action = await send.boundingBox(), nav = await f.page.getByRole('button', { name: 'Dossiers', exact: true }).locator('..').boundingBox();
       assert.ok(action.y >= 48 && action.y + action.height <= nav.y, `The send button is reachable above the navigation: ${JSON.stringify({ action, nav })}`);

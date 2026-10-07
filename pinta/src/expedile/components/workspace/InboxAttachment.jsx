@@ -9,7 +9,9 @@ export default function InboxAttachment({ item }) {
   const [busy, setBusy] = useState(false);
   const objectUrl = useRef(null);
   const generation = useRef(0);
-  const file = item.payload?.document || item.payload?.photo?.at(-1);
+  // Telegram lists a photo's sizes from the smallest: the last is the original.
+  const photos = Array.isArray(item.payload?.photo) ? item.payload.photo : [];
+  const file = item.payload?.document || photos[photos.length - 1];
   useEffect(() => {
     generation.current++; setDocument(null); setError(''); setBusy(false);
     return () => { generation.current++; if (objectUrl.current) URL.revokeObjectURL(objectUrl.current); objectUrl.current = null; };

@@ -8,7 +8,7 @@ import { BRAND } from '../../constants';
 import * as sb from '../../lib/supabaseData';
 import { setConversationState, markVisibleMessagesRead } from '../../services/conversationApi';
 import { CONVERSATION_STATES, conversationState, conversationLabel, messageDeliveryLabel } from '../../domain/conversations';
-import { CHANNEL_LABELS, clientDisplayName, conversationClock, conversationDay, conversationDayKey, linkLabel } from '../../domain/conversationList';
+import { CHANNEL_LABELS, clientDisplayName, conversationClock, conversationDay, conversationDayKey, linkLabel, messageRecordedByTeam, textWithLinks } from '../../domain/conversationList';
 import { supabase } from '../../lib/supabase';
 import { staffName } from '../workspace/WorkActionRow';
 import { invoicesEditable } from '../../domain/invoiceLock';
@@ -16,6 +16,17 @@ import useQuoteWithdrawal from '../../hooks/useQuoteWithdrawal';
 import './chatThread.css';
 
 const AttachmentPDFPreview = lazy(() => import('../ui/PDFPreview'));
+
+// Array.prototype.findLast and toSorted are missing from Safari 14, the declared build target.
+function lastWhere(list, predicate) {
+  for (let index = list.length - 1; index >= 0; index -= 1) if (predicate(list[index])) return list[index];
+  return undefined;
+}
+/** The open conversation task of a dossier, else the latest closed one. */
+function conversationTask(actions) {
+  return actions.find(action => action.state !== 'done')
+    || actions.reduce((latest, action) => !latest || Date.parse(action.updated_at) > Date.parse(latest.updated_at) ? action : latest, undefined);
+}
 
 // Same freeze evidence as the server (D4): payment amount or date, departure, closing.
 export function conversationInvoiceEditable(colis) {
@@ -189,15 +200,17 @@ export default function ChatPanel({ colis, client, embedded = false, active = tr
     const txt = msgTxt; const id = sel.id;
     const attempt = sendAttempt?.text === txt ? sendAttempt : { key: crypto.randomUUID(), text: txt, channel: isStaff && selClient?.telegramChatId ? 'telegram' : 'portal' };
     setSendAttempt(attempt); sendGuard.current = true; setSending(true); setSendError(''); setSendResult('');
-    try { await envMsg(id,txt,auth,{ idempotencyKey: attempt.key, channel: attempt.channel }); draft.clear(); attemptDraft.clear(); clearWorkDraft(); if (currentDossier.current === id) setSendResult('Message enregistré. Son état d’envoi apparaît dans la conversation.'); }
+    // A client's message is in the team's conversation once the insert is confirmed;
+    // the team's delivery states (Telegram…) are not the client's concern.
+    try { await envMsg(id,txt,auth,{ idempotencyKey: attempt.key, channel: attempt.channel }); draft.clear(); attemptDraft.clear(); clearWorkDraft(); if (currentDossier.current === id) setSendResult(isStaff ? 'Message enregistré. Son état d’envoi apparaît dans la conversation.' : 'Message envoyé à l’équipe : nous vous répondons ici.'); }
     catch(error){if (currentDossier.current === id) setSendError(error.message || 'Envoi impossible. Votre brouillon est conservé.');}
     finally {sendGuard.current = false; setSending(false);}
   };
   const clearMessageDraft = () => { draft.clear(); attemptDraft.clear(); clearWorkDraft(); setSendError(''); };
-  const retryNotice = sendAttempt && !sending ? <p role="status" className="mt-2 text-sm text-amber-800">{sendAttempt.text === msgTxt ? 'Une tentative d’envoi existe. Vérifiez son état dans la conversation ; réessayer reprend ce même message.' : 'Le texte a changé depuis une tentative d’envoi. Vérifiez la conversation avant d’envoyer ce nouveau message.'}</p> : null;
+  const retryNotice = sendAttempt && !sending ? <p role="status" className="mt-2 text-sm text-amber-800">{sendAttempt.text === msgTxt ? (isStaff ? 'Une tentative d’envoi existe. Vérifiez son état dans la conversation ; réessayer reprend ce même message.' : 'Un envoi n’a pas été confirmé. Vérifiez si votre message apparaît dans la conversation ; réessayer reprend ce même message, sans doublon.') : 'Le texte a changé depuis une tentative d’envoi. Vérifiez la conversation avant d’envoyer ce nouveau message.'}</p> : null;
   const state=conversationState(sel);
   const conversationActions=workActions.filter(action=>action.colis_id===sel.id&&action.kind==='conversation');
-  const conversationAction=conversationActions.find(action=>action.state!=='done') || conversationActions.toSorted((a,b)=>Date.parse(b.updated_at)-Date.parse(a.updated_at))[0];
+  const conversationAction=conversationTask(conversationActions);
   const colleagueHandling = isStaff && conversationAction?.state !== 'done' && Boolean(conversationAction?.assignee_id && conversationAction.assignee_id !== auth?.u?.id);
   const canHandle=!colleagueHandling && (can('perm_comm_message_libre')||can('perm_comm_telegram')||can('perm_comm_email'));
   const changeState=async(next)=>{
@@ -212,52 +225,48 @@ export default function ChatPanel({ colis, client, embedded = false, active = tr
 
   // ── Render text with clickable URLs ─────────────────────────────────────────
   // The thread shows links as host and path (shortLinks); the href never changes.
+  // Only http(s) addresses become links (textWithLinks), opened in a new tab
+  // without access to this page.
   const renderText = (text, { shortLinks = false } = {}) => {
     if (!text) return null;
-    const urlRegex = /(https?:\/\/[^\s]+)/g;
-    const parts = text.split(urlRegex);
-    return parts.map((part, i) => {
-      if (/https?:\/\/[^\s]+/.test(part)) {
-        const isImage = /\.(jpg|jpeg|png|gif|webp)/i.test(part);
+    return textWithLinks(text).map((part, i) => {
+      if (part.href) {
+        const isImage = /\.(jpg|jpeg|png|gif|webp)/i.test(part.href);
         return (
           <span key={i}>
             {isImage && (
-              <a href={part} target="_blank" rel="noopener noreferrer" className="block mt-1 mb-1">
-                <img src={part} alt="Pièce jointe" className="max-w-[200px] max-h-[150px] rounded-lg border border-gray-200" />
+              <a href={part.href} target="_blank" rel="noopener noreferrer" className="block mt-1 mb-1">
+                <img src={part.href} alt="Pièce jointe" className="max-w-[200px] max-h-[150px] rounded-lg border border-gray-200" />
               </a>
             )}
-            <a href={part} target="_blank" rel="noopener noreferrer" className={shortLinks ? 'chat-link' : 'underline text-blue-400 hover:text-blue-600 break-all'}>
-              {isImage ? 'Voir la pièce jointe' : shortLinks ? linkLabel(part) : part.length > 50 ? part.slice(0, 50) + '...' : part}
+            <a href={part.href} target="_blank" rel="noopener noreferrer" className={shortLinks ? 'chat-link' : 'chat-portal-link'}>
+              {isImage ? 'Voir la pièce jointe' : shortLinks ? linkLabel(part.href) : part.href.length > 50 ? part.href.slice(0, 50) + '…' : part.href}
             </a>
           </span>
         );
       }
-      return <span key={i}>{part}</span>;
+      return <span key={i}>{part.text}</span>;
     });
   };
 
   // ── Render a single message bubble (client portal) ──────────────────────────
+  // The client's own messages read « Vous », on the right. The team's messages,
+  // and a decision the team recorded for the client, sit on the left under their
+  // author. The team's delivery states (Telegram, pending, unconfirmed) and its
+  // unread marks are not shown to the client.
   const renderMessage = (m) => {
-    const isS = m.type === 'staff';
+    const own = m.type === 'client' && !messageRecordedByTeam(m, auth?.session?.user?.id);
     const isFacture = m.texte?.includes('Facture envoyée') || m.texte?.includes('📎');
     return (
-      <div key={m.id} className={`flex ${isS ? 'justify-end' : 'justify-start'} items-center gap-1`}>
-        {!isS && m.type === 'client' && !m.lu && (
-          <span className="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0" />
-        )}
+      <div key={m.id} data-from={own ? 'client' : 'team'} className={`flex ${own ? 'justify-end' : 'justify-start'}`}>
         <div
-          className={`max-w-[90%] sm:max-w-[80%] px-3 py-2 rounded-2xl text-sm ${isS ? 'text-white' : isFacture ? 'bg-green-50 border border-green-200' : 'bg-gray-100'}`}
-          style={isS ? { backgroundColor: BRAND.navy } : {}}
+          className={`max-w-[90%] sm:max-w-[80%] px-3 py-2 rounded-2xl text-sm ${own ? isFacture ? 'bg-green-50 border border-green-200 text-gray-900' : 'text-white' : 'bg-gray-100 text-gray-900'}`}
+          style={own && !isFacture ? { backgroundColor: BRAND.navy } : {}}
         >
-          <p className="text-xs mb-0.5">{m.auteur}</p>
+          <p className="text-xs font-semibold mb-0.5">{own ? 'Vous' : m.auteur}</p>
           <p className="whitespace-pre-line">{renderText(m.texte)}</p>
-          <ConversationAttachment message={m} colis={sel} canImport={isStaff && can('perm_factures_ajouter')} onImported={async id => { await refreshColis(id); await refreshWork?.(); }} />
-          {(m.heure || m.statut) && (
-            <div className="flex flex-wrap items-center justify-end gap-1 mt-1">
-              {m.heure && <span className="text-xs">{m.heure}</span>}
-              {isS && <MsgStatut statut={m.statut} />}
-            </div>
-          )}
+          <ConversationAttachment message={m} colis={sel} canImport={false} onImported={async id => { await refreshColis(id); }} />
+          {m.heure && <p className="mt-1 text-right text-xs">{m.heure}</p>}
         </div>
       </div>
     );
@@ -271,8 +280,11 @@ export default function ChatPanel({ colis, client, embedded = false, active = tr
     const firstName = selClient?.prenom?.trim();
     const channel = selClient?.telegramChatId ? 'telegram' : 'portal';
     const ChannelIcon = channel === 'telegram' ? Send : MessageCircle;
-    const lastSent = messages.findLast(message => message.type === 'staff');
-    const lastClientMessage = messages.findLast(message => message.type === 'client');
+    // A decision the team recorded for the client (client_decision from a staff
+    // screen) is the team's: never under the client's name, never « unread ».
+    const recordedByTeam = message => messageRecordedByTeam(message, selClient?.userId);
+    const lastSent = lastWhere(messages, message => message.type === 'staff');
+    const lastClientMessage = lastWhere(messages, message => message.type === 'client' && !recordedByTeam(message));
     // Reading is not handling: a closed conversation without a task names nobody.
     const ownerText = ownership || (state === 'termine' && !conversationAction) ? '' : staffName(conversationAction?.assignee_id, teamUsers);
     const busy = changingState || sending;
@@ -300,20 +312,22 @@ export default function ChatPanel({ colis, client, embedded = false, active = tr
     // One day separator per Paris day; the author once per consecutive group.
     let previousDay = null, previousAuthor = null;
     const thread = messages.map(m => {
-      const fromStaff = m.type === 'staff';
-      const author = m.type === 'client' ? clientName : m.auteur;
+      const byTeam = recordedByTeam(m);
+      const fromStaff = m.type === 'staff' || byTeam;
+      const author = byTeam ? (m.auteur && m.auteur !== 'Client' ? m.auteur : staffName(m.auteurId, teamUsers)) : m.type === 'client' ? clientName : m.auteur;
       const day = conversationDayKey(m.createdAt);
       const newDay = Boolean(day) && day !== previousDay;
       if (newDay) { previousDay = day; previousAuthor = null; }
-      const showAuthor = `${m.type}:${author}` !== previousAuthor;
-      previousAuthor = `${m.type}:${author}`;
+      const group = `${byTeam ? 'staff' : m.type}:${author}`;
+      const showAuthor = group !== previousAuthor;
+      previousAuthor = group;
       const kind = fromStaff ? 'staff' : m.texte?.includes('Facture envoyée') || m.texte?.includes('📎') ? 'document' : 'client';
       const time = conversationClock(m.createdAt) || m.heure;
       return <React.Fragment key={m.id}>
         {newDay && <p className="chat-day">{conversationDay(m.createdAt, now)}</p>}
         {showAuthor && <p className="chat-author" data-from={fromStaff ? 'staff' : 'client'}>{author}</p>}
         <div className="chat-message" data-from={fromStaff ? 'staff' : 'client'}>
-          {m.type === 'client' && !m.lu && <span className="chat-unread"><span className="sr-only">Non lu</span></span>}
+          {m.type === 'client' && !byTeam && !m.lu && <span className="chat-unread"><span className="sr-only">Non lu</span></span>}
           <div className="chat-bubble" data-kind={kind}>
             <p className="chat-bubble__text">{renderText(m.texte, { shortLinks: true })}</p>
             <ConversationAttachment message={m} colis={sel} canImport={can('perm_factures_ajouter')} onImported={async id => { await refreshColis(id); await refreshWork?.(); }} />
@@ -420,8 +434,9 @@ export default function ChatPanel({ colis, client, embedded = false, active = tr
       {(expanded || embedded) && (
         <div className={embedded ? 'min-w-0' : 'px-4 pb-4 anim-slide-down'}>
           <p className="text-xs text-gray-600 dark:text-gray-300 mb-3">{state==='a_traiter'?'Votre message attend une réponse de notre équipe.':state==='attente_client'?'Notre équipe attend votre retour.':'Vous pouvez nous écrire pour toute question sur ce dossier.'}</p>
+          {/* Focusable: the history scrolls by keyboard even without a link inside. */}
           {hasMessages && (
-            <div ref={scrollRef} className="space-y-1.5 mb-3 max-h-80 overflow-y-auto">
+            <div ref={scrollRef} role="log" aria-label="Messages avec l’équipe" tabIndex={0} className="chat-portal-log mb-3 max-h-80 space-y-1.5 overflow-y-auto">
               {(sel.messages || []).map(renderMessage)}
             </div>
           )}

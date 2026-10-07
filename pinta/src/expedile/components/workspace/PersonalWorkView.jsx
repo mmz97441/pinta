@@ -1,14 +1,15 @@
 import React, { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowRight, ChevronDown, ListFilter, Loader2, Search, Settings2, Users, RefreshCw } from 'lucide-react';
+import { AlertTriangle, ArrowRight, ChevronDown, ListFilter, Loader2, Search, Settings2, Users, RefreshCw } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { useMinuteNow } from '../../hooks/useMinuteNow';
 import useDossierTablePreferences from '../../hooks/useDossierTablePreferences';
 import useWorkLayout from '../../hooks/useWorkLayout';
-import { PERSONAL_SECTIONS, availableMissions, buildPersonalWork, personalSection, workTotals, staffAvailable } from '../../domain/personalWork';
+import { PERSONAL_SECTIONS, availableMissions, buildPersonalWork, personalSection, workTotals, staffAvailable, staffDisplayName } from '../../domain/personalWork';
 import { WORK_TABLE_CHOICES, visibleWorkColumns } from '../../domain/workTable';
+import { plural } from '../../domain/plural';
 import { DossierColumnVisibility } from '../staff/DossierColumnOptions';
-import WorkActionRow from './WorkActionRow';
+import WorkActionRow, { PRIMARY_COMMAND } from './WorkActionRow';
 import WorkActionTable from './WorkActionTable';
 import WorkDisplayOptions from './WorkDisplayOptions';
 import WorkPreferences from './WorkPreferences';
@@ -22,8 +23,22 @@ const SECTION_HELP = {
 };
 const COLUMN_NOTES = ['Choisissez les colonnes affichées, dans le tableau comme sur les cartes. La tâche et ses commandes restent visibles.', 'Vos choix sont mémorisés pour votre compte, sur cet appareil.'];
 const exceptionNotice = 'Permission modifiée : organisez un relais avec une personne habilitée.';
-const plural = (count, word) => `${count} ${word}${count > 1 ? 's' : ''}`;
-const primaryButton = 'min-h-11 rounded-xl bg-slate-900 px-4 text-sm font-semibold text-white';
+const linkButton = 'min-h-11 px-3 text-sm font-semibold underline';
+
+/** The dossiers or the tasks did not load: nothing on this page can be
+ * counted, so no « À faire 0 » nor « pas de tâche », only the reason and a
+ * retry. */
+function WorkLoadError({ reason, retrying, onRetry }) {
+  return <section role="alert" aria-labelledby="work-load-error-title" className="work-load-error">
+    <AlertTriangle size={20} aria-hidden="true" className="work-load-error-icon" />
+    <div className="work-load-error-body">
+      <h2 id="work-load-error-title">Vos tâches n’ont pas pu être chargées</h2>
+      <p className="work-load-error-reason">{reason}</p>
+      <p>Vos tâches enregistrées sont conservées. La liste et ses compteurs s’afficheront dès que le chargement aura réussi.</p>
+      <button type="button" disabled={retrying} onClick={onRetry} className={PRIMARY_COMMAND}><RefreshCw size={16} aria-hidden="true" className={retrying ? 'animate-spin' : undefined} />{retrying ? 'Nouvel essai…' : 'Réessayer'}</button>
+    </div>
+  </section>;
+}
 
 /** A relay waits for my decision while the colleague stays responsible, so it
  * sits above the list. On a phone the band folds to one line until opened. */
@@ -40,10 +55,11 @@ function WorkHandoffs({ count, phone, children }) {
 }
 
 export default function PersonalWorkView() {
-  const { auth, data = [], clients = [], can, workActions = [], workPreferences = [], workLoading, workError, refreshWork } = useApp();
+  const { auth, data = [], clients = [], can, workActions = [], workPreferences = [], workLoading, workError, refreshWork, dataError, dataLoading, sbReady, retryLoad } = useApp();
   const [params, setParams] = useSearchParams();
   const location = useLocation(); const navigate = useNavigate(); const now = useMinuteNow();
   const [preferencesRequest, setPreferencesRequest] = useState(0);
+  const [retrying, setRetrying] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
   const [displayOpen, setDisplayOpen] = useState(false);
   const [columnsAnchor, setColumnsAnchor] = useState(null);
@@ -62,8 +78,21 @@ export default function PersonalWorkView() {
   const unfiltered = useMemo(() => buildPersonalWork({ actions: workActions, dossiers: data, clients, userId: auth?.u?.id, preference, can, now }), [workActions, data, clients, auth?.u?.id, preference, can, now]);
   const rows = view.sections[section]; const totals = workTotals(rows, data); const returnTo = location.pathname + location.search;
   const label = section === 'pool' ? 'À prendre' : PERSONAL_SECTIONS.find(item => item.id === section).label;
-  const initialLoading = workLoading && !workActions.length;
+  // The dossiers (the same condition as the shell's banner) or the tasks never
+  // loaded: an empty list would read as « no work ».
+  const dataFailed = Boolean(dataError) || (!sbReady && !dataLoading);
+  const loadFailed = dataFailed || (Boolean(workError) && !workActions.length);
+  const loadReason = dataFailed ? dataError || 'Connexion aux données interrompue.' : String(workError?.message || workError);
+  const retryLoading = async () => {
+    if (retrying) return;
+    setRetrying(true);
+    try { await (dataFailed ? retryLoad?.() : refreshWork()); }
+    catch { /* The reason stays on screen. */ }
+    finally { setRetrying(false); }
+  };
+  const initialLoading = !loadFailed && workLoading && !workActions.length;
   const refreshing = workLoading && !initialLoading;
+  const displayName = staffDisplayName(auth?.u);
   const setFilter = (key, value) => setParams(old => { const next = new URLSearchParams(old); if (value || key === 'mission') next.set(key, value); else next.delete(key); return next; }, { replace: true });
   const clearFilters = () => setParams(old => { const next = new URLSearchParams(old); next.set('mission', ''); next.delete('q'); return next; }, { replace: true });
   const showSection = nextSection => setParams(old => { const next = new URLSearchParams(old); next.set('mission', ''); next.delete('q'); next.set('section', nextSection); return next; }, { replace: true });
@@ -100,8 +129,9 @@ export default function PersonalWorkView() {
   const hasFilters = Boolean(search || mission);
   const allowedMissions = availableMissions(can);
   const poolPreferencesActive = view.missions.length < allowedMissions.length;
+  // A failed refresh after a successful load: the last list stays, never read as « no work ».
   const empty = workError
-    ? { title: 'Vos tâches n’ont pas pu être chargées', text: 'Réessayez pour savoir quel travail est disponible.', retry: true }
+    ? { title: 'Vos tâches n’ont pas pu être actualisées', text: 'Réessayez pour savoir quel travail est disponible.', retry: true }
     : section === 'pool' && !available
     ? { title: 'Vous avez indiqué être indisponible', text: 'La prise de nouvelles tâches est suspendue. Vous pouvez toujours consulter vos tâches déjà attribuées.', preferences: 'Modifier ma disponibilité' }
     : !allowedMissions.length || (section === 'pool' && !view.missions.length)
@@ -116,14 +146,16 @@ export default function PersonalWorkView() {
             ? { title: 'Aucune de vos tâches n’est en attente', text: 'Retrouvez le travail disponible dans À faire ou À prendre.' }
             : { title: 'Vous n’avez pas de tâche à faire pour le moment', text: unfiltered.counts.pool ? 'Des tâches sont disponibles pour vous dans À prendre.' : unfiltered.counts.waiting ? 'Vos tâches en attente restent dans En attente.' : 'Vous pouvez consulter les dossiers de l’équipe.' };
 
-  return <main className="work-page space-y-4 px-4 pb-8 pt-4" data-density={preference?.density === 'compact' ? 'compact' : undefined} style={{ '--dossier-text-size': `${textSize}px` }}>
+  // The staff shell owns the page's single <main>.
+  return <div className="work-page space-y-4 px-4 pb-8 pt-4" data-density={preference?.density === 'compact' ? 'compact' : undefined} style={{ '--dossier-text-size': `${textSize}px` }}>
     <header className="work-header">
       <h1>Mon travail</h1>
-      <p className="work-presence"><span className="work-presence-dot" data-available={available ? 'true' : 'false'} aria-hidden="true" /><span className="work-presence-name">{auth?.u?.prenom || auth?.u?.nom} · </span>{available ? 'Disponible' : 'Indisponibilité déclarée'}</p>
-      <div className="work-header-actions"><button type="button" onClick={() => navigate('/equipe')} className="dossier-toolbar-button"><Users size={18} aria-hidden="true" />Équipe</button><button type="button" onClick={openPreferences} className="dossier-text-button">Ma disponibilité</button></div>
+      {loadFailed ? <p className="work-presence"><span className="work-presence-name">{displayName}</span></p>
+        : <p className="work-presence"><span className="work-presence-dot" data-available={available ? 'true' : 'false'} aria-hidden="true" /><span className="work-presence-name">{displayName} · </span>{available ? 'Disponible' : 'Indisponibilité déclarée'}</p>}
+      <div className="work-header-actions"><button type="button" onClick={() => navigate('/equipe')} className="dossier-toolbar-button"><Users size={18} aria-hidden="true" />Équipe</button>{!loadFailed && <button type="button" onClick={openPreferences} className="dossier-text-button">Ma disponibilité</button>}</div>
     </header>
-    {workError && rows.length > 0 && <div role="alert" className="rounded-xl border border-red-200 p-3 text-sm text-red-700">{String(workError.message || workError)}<button onClick={() => refreshWork().catch(() => {})} className="ml-3 min-h-11 underline"><RefreshCw size={14} className="inline mr-1" />Réessayer</button></div>}
-    {initialLoading ? <div role="status" className="space-y-3">
+    {!loadFailed && workError && rows.length > 0 && <div role="alert" className="work-refresh-error"><p>Actualisation des tâches impossible : {String(workError.message || workError).trim().replace(/[.\s]+$/, '')}. La liste affichée est la dernière chargée.</p><button type="button" disabled={retrying} onClick={retryLoading} className="dossier-text-button"><RefreshCw size={15} aria-hidden="true" className={retrying ? 'animate-spin' : undefined} />{retrying ? 'Nouvel essai…' : 'Réessayer'}</button></div>}
+    {loadFailed ? <WorkLoadError reason={loadReason} retrying={retrying} onRetry={retryLoading} /> : initialLoading ? <div role="status" className="space-y-3">
       <p className="text-sm text-slate-600">Chargement des tâches…</p>
       {layout === 'table'
         ? <div className="work-skeleton-table" aria-hidden="true">{[0, 1, 2, 3, 4].map(id => <span key={id} className="animate-pulse" />)}</div>
@@ -154,7 +186,7 @@ export default function PersonalWorkView() {
       {displayOpen && <WorkDisplayOptions anchor={displayButtonRef.current} onClose={() => setDisplayOpen(false)}
         visibleColumnCount={visibleKeys.length} columnCount={WORK_TABLE_CHOICES.length}
         onOpenColumns={() => { setDisplayOpen(false); setColumnsAnchor(displayButtonRef.current); }}
-        layout={layoutPreference} onLayoutChange={setLayout} textSize={textSize} onTextSizeChange={setTextSize} textSizeKey={auth?.u?.id} />}
+        layout={layoutPreference} onLayoutChange={setLayout} textSize={textSize} onTextSizeChange={setTextSize} textSizeKey={auth?.u?.id} preference={preference} />}
       {columnsAnchor && <DossierColumnVisibility columns={WORK_TABLE_CHOICES} visibleKeys={visibleKeys} required="task" notes={COLUMN_NOTES} anchor={columnsAnchor} onChange={setColumnVisible} onReset={resetColumns} onClose={() => setColumnsAnchor(null)} />}
       {search && <Link to={globalSearchUrl} className="work-inline-link">Chercher aussi dans tous les dossiers<ArrowRight size={15} aria-hidden="true" /></Link>}
       {hasFilters && <div className="work-notice"><p>Filtre actif{mission ? ` · ${allowedMissions.find(item => item.id === mission)?.label || 'Mission sélectionnée'}` : ''}{view.outsideFilterOwned.length > 0 ? ` · ${view.outsideFilterOwned.length} de vos tâches hors de cette sélection` : ''}</p><button onClick={clearFilters} className="dossier-text-button">Tout afficher</button></div>}
@@ -166,18 +198,19 @@ export default function PersonalWorkView() {
         {rows.length > 0 && <><p role="status"><strong>{plural(totals.actions, 'tâche')}</strong> · {plural(totals.dossiers, 'dossier')}</p><p className="work-count-help">{SECTION_HELP[section]}</p></>}
         {refreshing && <p role="status" className="work-refresh"><Loader2 size={14} aria-hidden="true" className="animate-spin" />Actualisation des tâches…</p>}
       </div>}
-      {rows.length ? <section aria-label={label}>{renderList(rows, label)}</section> : <section role={empty.retry ? 'alert' : undefined} aria-label="Pourquoi la liste est vide" className="border-y border-slate-200 py-8 text-center"><h2 className="font-semibold text-slate-900">{empty.title}</h2><p className="mt-2 text-sm text-slate-600">{empty.text}</p><div className="mt-3 flex flex-wrap justify-center gap-3">
-        {empty.retry && <button onClick={() => refreshWork().catch(() => {})} className={primaryButton}>Recharger les tâches</button>}
-        {empty.clear && <button onClick={clearFilters} className={primaryButton}>Effacer les filtres</button>}
-        {empty.preferences && <button onClick={openPreferences} className={primaryButton}>{empty.preferences}</button>}
-        {!hasFilters && !empty.preferences && !empty.retry && section !== 'pool' && unfiltered.counts.pool > 0 && <button onClick={() => showSection('pool')} className={primaryButton}>Voir les tâches à prendre</button>}
-        {section !== 'now' && unfiltered.counts.now > 0 && <button onClick={() => showSection('now')} className="min-h-11 px-3 text-sm font-semibold underline">Voir mes tâches à faire</button>}
-        {section !== 'waiting' && unfiltered.counts.waiting > 0 && <button onClick={() => showSection('waiting')} className="min-h-11 px-3 text-sm font-semibold underline">Voir mes tâches en attente</button>}
-        {section === 'pool' && !empty.retry && <Link to="/equipe?queue=waiting" className="inline-flex min-h-11 items-center px-3 text-sm font-semibold underline">Voir les attentes de l’équipe</Link>}
-        <Link to={globalSearchUrl} className="inline-flex min-h-11 items-center px-3 text-sm font-semibold underline">{search ? 'Chercher ce dossier dans toute l’équipe' : 'Voir les dossiers de l’équipe'}</Link>
+      {rows.length ? <section aria-label={label}>{renderList(rows, label)}</section> : <section role={empty.retry ? 'alert' : undefined} aria-label="Pourquoi la liste est vide" className="work-empty"><h2 className="font-semibold text-slate-900">{empty.title}</h2><p className="mt-2 text-sm text-slate-600">{empty.text}</p><div className="mt-3 flex flex-wrap items-center justify-center gap-3">
+        {empty.retry && <button disabled={retrying} onClick={retryLoading} className={PRIMARY_COMMAND}>{retrying ? 'Nouvel essai…' : 'Recharger les tâches'}</button>}
+        {empty.clear && <button onClick={clearFilters} className={PRIMARY_COMMAND}>Effacer les filtres</button>}
+        {empty.preferences && <button onClick={openPreferences} className={PRIMARY_COMMAND}>{empty.preferences}</button>}
+        {!hasFilters && !empty.preferences && !empty.retry && section !== 'pool' && unfiltered.counts.pool > 0 && <button onClick={() => showSection('pool')} className={PRIMARY_COMMAND}>Voir les tâches à prendre</button>}
+        {section !== 'now' && unfiltered.counts.now > 0 && <button onClick={() => showSection('now')} className={linkButton}>Voir mes tâches à faire</button>}
+        {section !== 'waiting' && unfiltered.counts.waiting > 0 && <button onClick={() => showSection('waiting')} className={linkButton}>Voir mes tâches en attente</button>}
+        {section === 'pool' && !empty.retry && <Link to="/equipe?queue=waiting" className={`inline-flex items-center ${linkButton}`}>Voir les attentes de l’équipe</Link>}
+        <Link to={globalSearchUrl} className={`inline-flex items-center ${linkButton}`}>{search ? 'Chercher ce dossier dans toute l’équipe' : 'Voir les dossiers de l’équipe'}</Link>
       </div></section>}
       {view.exceptions.length > 0 && <section id="work-exceptions" aria-label="Tâches hors missions ou permissions" className="work-region"><div className="work-region-heading"><h2>Tâches à réorganiser · {view.exceptions.length}</h2><Link to={`/equipe?owner=${auth.u.id}`} className="dossier-text-button work-text-link">Organiser un relais</Link></div>{renderList(view.exceptions, 'Tâches à réorganiser', exceptionNotice)}</section>}
     </>}
-    <section id="work-preferences" className="scroll-mt-4 border-t border-slate-200 pt-4"><WorkPreferences preference={preference} openRequest={preferencesRequest} /></section>
-  </main>;
+    {/* Preferences are loaded with the tasks: never offer to save them from an unknown state. */}
+    {!loadFailed && <section id="work-preferences" className="work-preferences-section scroll-mt-4"><WorkPreferences preference={preference} openRequest={preferencesRequest} /></section>}
+  </div>;
 }

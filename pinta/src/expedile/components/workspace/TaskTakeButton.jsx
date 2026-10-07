@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { UserCheck } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { actionWaiting, canWorkAction, staffAvailable } from '../../domain/personalWork';
+import { PRIMARY_COMMAND } from './workCommands';
 
 /** Assignment and start are atomic; business validation stays explicit. */
 export default function TaskTakeButton({ action, onClaim }) {
@@ -41,7 +42,10 @@ export default function TaskTakeButton({ action, onClaim }) {
   }
 
   return <div className="space-y-1.5">
-    <button disabled={busy || !available} onClick={claim} data-take-kind={own ? 'continue' : 'claim'} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40 dark:bg-slate-200 dark:text-slate-900"><UserCheck size={16} />{busy ? 'Ouverture…' : own ? 'Continuer' : 'Je m’en occupe'}</button>
+    {/* « Continuer » reads like the one of a task already started (WorkActionButtons): the word alone. */}
+    <button disabled={busy || !available} onClick={claim} data-take-kind={own ? 'continue' : 'claim'} className={PRIMARY_COMMAND}>{own
+      ? busy ? 'Ouverture…' : 'Continuer'
+      : <><UserCheck size={16} aria-hidden="true" />{busy ? 'Ouverture…' : 'Je m’en occupe'}</>}</button>
     {!available && <p className="text-xs text-slate-600 dark:text-slate-300">Vous êtes indisponible. Modifiez votre disponibilité dans Mon travail pour prendre une tâche.</p>}
     {error && <p role="alert" className="text-sm text-red-700 dark:text-red-300">{error}</p>}
   </div>;

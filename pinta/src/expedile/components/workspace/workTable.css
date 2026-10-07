@@ -109,12 +109,16 @@ html.dark .work-invoice > a { background-color: transparent !important; }
 .work-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .work-page .work-actions button { font-size: var(--dossier-small-text-size); white-space: nowrap; transition: background-color .2s ease-out, color .2s ease-out, border-color .2s ease-out; }
 .work-page .work-actions button:active:not(:disabled) { transform: translateY(1px); }
-.work-page .work-actions button[data-take-kind] { padding-left: 14px; padding-right: 14px; }
-/* Dark theme: the filled command takes the dossier list's soft blue rather than
-   a near-white block on every row (10:1 text). The quiet commands keep a dark hover. */
-html.dark .work-page .work-actions :is(button[data-take-kind], button.bg-slate-900),
-html.dark .work-page .work-panel button.bg-slate-900 { color: #122a36; background-color: #c4dae5; border-color: #c4dae5; }
-html.dark .work-page .work-actions :is(button[data-take-kind], button.bg-slate-900):hover:not(:disabled) { background-color: #d6e6ee; }
+/* Every filled command of a row (« Je m’en occupe », both « Continuer »,
+   « Accepter et ouvrir ») has the same width rhythm. */
+.work-page .work-actions button.bg-slate-900 { padding-left: 14px; padding-right: 14px; }
+/* The one filled command of the page (workCommands.js): navy in light theme
+   (brand.css); in dark theme the dossier list's soft blue, 12:1 against the
+   canvas and 10:1 for its text, never a dark block on the dark canvas. The
+   quiet commands keep a dark hover. */
+html.dark .work-page :is(button, a).bg-slate-900 { color: #122a36; background-color: #c4dae5; border-color: #c4dae5; }
+html.dark .work-page :is(button, a).bg-slate-900:hover:not(:disabled) { background-color: #d6e6ee; border-color: #d6e6ee; }
+html:not(.dark) .work-page :is(button, a).bg-slate-900:hover:not(:disabled) { background-color: var(--brand-navy-l); }
 html.dark .work-page .hover\:bg-slate-50:hover { background-color: var(--bg-surface); }
 .work-panel { padding-top: 4px; }
 
@@ -125,19 +129,27 @@ html.dark .work-page .hover\:bg-slate-50:hover { background-color: var(--bg-surf
 .work-table-frame { overflow-x: auto; overscroll-behavior-x: contain; }
 .work-table-frame[data-fits='true'] { overflow-x: clip; }
 .work-table { table-layout: auto; width: 100%; border: 1px solid var(--dossier-column-line); border-radius: 10px; background: var(--bg-canvas); }
-.work-table .dossier-table-head th { height: 44px; padding: 0 12px; font-size: var(--dossier-small-text-size); white-space: nowrap; }
+.work-table .dossier-table-head th { height: 44px; padding: 0 8px; font-size: var(--dossier-small-text-size); white-space: nowrap; }
 .work-table .dossier-table-head th:first-child { border-top-left-radius: 9px; }
 .work-table .dossier-table-head th:last-child { border-top-right-radius: 9px; }
 .work-table .work-table-row { cursor: auto; }
-/* Words wrap whole: a column never shrinks to a letter. */
-.work-table .work-table-row > td { padding: 6px 12px; overflow-wrap: break-word; }
+/* Words wrap whole: a column never shrinks to a letter. The 8px sides of the
+   dossier list leave the seven default columns their room at 1280px. */
+.work-table .work-table-row > td { padding: 6px 8px; overflow-wrap: break-word; }
 .work-table :is(th, td):last-child { border-right: 0; }
 .work-table tbody > tr:last-child > td { border-bottom: 0; }
 .work-table tbody > tr:last-child > td:first-child { border-bottom-left-radius: 9px; }
 .work-table tbody > tr:last-child > td:last-child { border-bottom-right-radius: 9px; }
 .work-table .work-table-number { text-align: right; font-variant-numeric: tabular-nums; }
-.work-table [data-work-column='task'] { min-width: 12em; }
-.work-table td[data-work-column='due'] > .work-due { max-width: 14em; }
+/* The task title is the column that wraps, between whole words. */
+.work-table [data-work-column='task'] { min-width: 9em; }
+/* The deadline never breaks inside its state or its date: in a narrow column
+   the date takes its own line, whole. A client name reads on one line; a long
+   one ends with « … » and stays whole in its title. */
+.work-due-part { white-space: nowrap; }
+.work-client { display: block; max-width: 9em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* From 1400px the seven default columns leave room for a longer name. */
+@media (min-width: 1400px) { .work-client { max-width: 14em; } }
 .work-table td[data-work-column='action'] .work-actions { flex-wrap: nowrap; }
 .work-table-row[data-urgent='true']:not(:has(:focus-visible)) > td:first-child { box-shadow: inset 3px 0 0 var(--work-urgent-edge); }
 /* A wide screen whose table scrolls keeps the commands in view, as in the
@@ -166,13 +178,32 @@ html.dark .work-table-panel { --dossier-table-selected-bg: #203744; }
 .work-card-identity { margin: 0; color: var(--text-secondary); }
 .work-card-facts { margin: 0; font-size: var(--dossier-small-text-size); color: var(--text-muted); }
 .work-card .work-due { margin: 2px 0 0; }
-.work-card-controls { margin-top: 10px; }
+/* Cards of one grid row share a height: their commands line up at the bottom. */
+.work-card-controls { margin-top: auto; padding-top: 10px; }
 .work-page[data-density='compact'] .work-card { padding-top: 10px; padding-bottom: 10px; }
 @media (max-width: 767px) {
   /* The main command takes the width beside « Options ». */
   .work-card .work-actions > :first-child { flex: 1 1 auto; }
   .work-card .work-actions > div:first-child > button { width: 100%; }
 }
+
+/* ── Empty list, load failure, preferences ──────────────────────────────── */
+/* One rule above the empty list; the preferences below bring their own. */
+.work-empty { padding: 32px 0; border-top: 1px solid var(--border-subtle); text-align: center; }
+.work-load-error { display: flex; align-items: flex-start; gap: 12px; padding: 16px; border: 1px solid #fecaca; border-radius: 12px; color: #991b1b; background: #fef2f2; }
+html.dark .work-load-error { border-color: #7f3a3a; color: #f4b9b9; background: #2c1d1b; }
+.work-load-error-icon { flex-shrink: 0; margin-top: 2px; }
+.work-load-error-body { display: grid; justify-items: start; gap: 8px; min-width: 0; }
+.work-load-error-body h2 { margin: 0; font-size: 17px; font-weight: 700; line-height: 1.35; }
+.work-load-error-body p { margin: 0; font-size: 15px; line-height: 1.45; color: var(--text-primary); }
+.work-load-error-body .work-load-error-reason { font-weight: 600; color: inherit; overflow-wrap: anywhere; }
+.work-refresh-error { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0 12px; padding: 4px 4px 4px 12px; border: 1px solid #fecaca; border-radius: 12px; font-size: 14px; color: #b91c1c; }
+html.dark .work-refresh-error { border-color: #7f3a3a; color: #f4b9b9; }
+.work-refresh-error > p { margin: 0; padding: 8px 0; }
+.work-refresh-error .dossier-text-button { display: inline-flex; align-items: center; gap: 6px; color: inherit; font-size: 14px; }
+.work-preferences-section { padding-top: 16px; border-top: 1px solid var(--border-subtle); }
+/* Missions in columns of equal width: the sixth sits under the first, aligned. */
+.work-preferences-missions { display: grid; grid-template-columns: repeat(auto-fill, minmax(11.5rem, 1fr)); gap: 0 16px; margin-top: 8px; }
 
 /* ── Loading ────────────────────────────────────────────────────────────── */
 .work-skeleton-table { display: grid; gap: 1px; overflow: hidden; border: 1px solid var(--dossier-column-line); border-radius: 10px; background: var(--dossier-column-line); }

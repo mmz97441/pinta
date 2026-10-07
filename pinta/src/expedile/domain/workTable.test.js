@@ -49,25 +49,28 @@ test('title, state pill, identity and physical facts', () => {
   assert.equal(workRowModel(action(), { ...dossier, nbColis: 1, trackings: ['A', 'B'] }, client, { now }).cartons, 2, 'Cartons follow the reception manifest.');
   assert.equal(cartonCount(1), '1 carton');
   assert.equal(cartonCount(3), '3 cartons');
+  assert.equal(cartonCount(0), '0 carton', 'French counts: 0 takes the singular (plural.js).');
 });
 
 test('the deadline reuses the priority wording; the table cell drops « Échéance »', () => {
   const overdue = '2026-10-03T10:00:00Z', planned = '2026-10-06T10:27:00Z';
-  assert.deepEqual(model({ due_at: overdue }).due, { text: `Dépassée · ${workDate(overdue)}`, label: `Échéance dépassée · ${workDate(overdue)}`, urgent: true });
+  // status and date are the two halves of the cell, each kept whole on its line.
+  assert.deepEqual(model({ due_at: overdue }).due, { text: `Dépassée · ${workDate(overdue, { now })}`, label: `Échéance dépassée · ${workDate(overdue, { now })}`, status: 'Dépassée', date: workDate(overdue, { now }), urgent: true });
+  assert.equal(model({ due_at: overdue }).due.date, 'samedi 3 octobre, 12 h', 'The deadline reads like the Départ labels, on Paris time.');
   assert.equal(model({ due_at: overdue }).urgent, true);
-  assert.deepEqual(model({ due_at: planned }).due, { text: `Prévue · ${workDate(planned)}`, label: `Échéance prévue · ${workDate(planned)}`, urgent: false });
-  assert.equal(model({ due_at: planned, state: 'in_progress' }).due.text, `Prévue · ${workDate(planned)}`, 'The « En cours » pill already says the work started.');
+  assert.deepEqual(model({ due_at: planned }).due, { text: `Prévue · ${workDate(planned, { now })}`, label: `Échéance prévue · ${workDate(planned, { now })}`, status: 'Prévue', date: workDate(planned, { now }), urgent: false });
+  assert.equal(model({ due_at: planned, state: 'in_progress' }).due.text, `Prévue · ${workDate(planned, { now })}`, 'The « En cours » pill already says the work started.');
   assert.equal(model().due, null);
   assert.equal(model({ state: 'in_progress' }).due, null);
   const priority = { priority_reason: 'Client en partance', priority_until: '2026-10-06T00:00:00Z' };
-  assert.deepEqual(model(priority).due, { text: 'Client en partance', label: 'Client en partance', urgent: true });
-  assert.equal(model({ ...priority, due_at: planned }).due.text, `Client en partance · ${workDate(planned)}`);
-  assert.deepEqual(model({ state: 'waiting', review_at: '2026-10-04T10:00:00Z' }).due, { text: 'Attente à réexaminer', label: 'Attente à réexaminer', urgent: true });
-  assert.equal(model({ blocked_reason: 'Facture manquante', due_at: planned }).due.text, `Prévue · ${workDate(planned)}`, 'A blocker is the waiting line, not the deadline.');
+  assert.deepEqual(model(priority).due, { text: 'Client en partance', label: 'Client en partance', status: 'Client en partance', date: null, urgent: true });
+  assert.equal(model({ ...priority, due_at: planned }).due.text, `Client en partance · ${workDate(planned, { now })}`);
+  assert.deepEqual(model({ state: 'waiting', review_at: '2026-10-04T10:00:00Z' }).due, { text: 'Attente à réexaminer', label: 'Attente à réexaminer', status: 'Attente à réexaminer', date: null, urgent: true });
+  assert.equal(model({ blocked_reason: 'Facture manquante', due_at: planned }).due.text, `Prévue · ${workDate(planned, { now })}`, 'A blocker is the waiting line, not the deadline.');
 });
 
 test('waiting, handoff and note lines; the current person is never named on their own task', () => {
-  assert.equal(model({ state: 'waiting', waiting_reason: 'Vérification fournisseur', review_at: '2026-10-09T08:00:00Z' }).waiting, `Vérification fournisseur · À revoir le ${workDate('2026-10-09T08:00:00Z')}`);
+  assert.equal(model({ state: 'waiting', waiting_reason: 'Vérification fournisseur', review_at: '2026-10-09T08:00:00Z' }).waiting, `Vérification fournisseur · À revoir le ${workDate('2026-10-09T08:00:00Z', { now })}`);
   assert.equal(model({ blocked_reason: 'Accord client attendu', waiting_reason: 'Autre' }).waiting, 'Accord client attendu');
   assert.equal(model().waiting, null);
   assert.deepEqual(model({ handoff_to: 'colleague', handoff_note: 'Carton fragile' }).handoff, { to: 'colleague', note: 'Carton fragile' });
@@ -77,4 +80,12 @@ test('waiting, handoff and note lines; the current person is never named on thei
   assert.equal(model().assigneeId, null);
   assert.equal(model({ assignee_id: 'colleague' }).assigneeId, 'colleague');
   assert.equal(model({ assignee_id: null }).assigneeId, null);
+});
+
+test('beside an « En attente » pill the waiting line gives the reason, never « En attente » twice', () => {
+  const waiting = model({ state: 'waiting', waiting_reason: 'Vérification fournisseur' });
+  assert.deepEqual([waiting.state.label, waiting.waitingLabel, waiting.waiting], ['En attente', 'Raison', 'Vérification fournisseur']);
+  // A blocker on a task still « À faire » or « En cours » has no such pill: its line says the wait.
+  assert.equal(model({ blocked_reason: 'Facture manquante' }).waitingLabel, 'En attente');
+  assert.equal(model({ state: 'in_progress', blocked_reason: 'Facture manquante' }).waitingLabel, 'En attente');
 });

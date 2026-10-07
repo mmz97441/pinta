@@ -15,6 +15,8 @@
   /* #0088cc is the Telegram mark; its text needs a darker shade to stay readable (5.2:1). */
   --conversation-telegram: #0088cc;
   --conversation-telegram-text: #0070a8;
+  /* A client's address in a message: 6.3:1 on the message background. */
+  --conversation-link: #1f5fad;
   min-width: 0;
   color: var(--text-primary);
   background: var(--bg-canvas);
@@ -32,6 +34,7 @@ html.dark .conversation-inbox {
   --conversation-unread: #8db8ff;
   --conversation-telegram: #5cb8e6;
   --conversation-telegram-text: #6fc3ec;
+  --conversation-link: #afcffa;
 }
 .conversation-inbox:not(.conversation-inbox--two-panes) { min-height: 100%; }
 /* 403px at 1440: the exchange keeps its status bar on one row. */
@@ -45,7 +48,10 @@ html.dark .conversation-inbox {
 /* ── List ─────────────────────────────────────────────────────────────── */
 .conversation-list { container: conversation-list / inline-size; display: flex; flex-direction: column; min-width: 0; background: var(--bg-elevated); }
 .conversation-inbox:not(.conversation-inbox--two-panes) .conversation-list { min-height: 100%; }
-.conversation-inbox--two-panes .conversation-list { min-height: 0; border-right: 1px solid var(--border-subtle); }
+/* The separator belongs to the pane: a border on the list would take 1px from
+   its 400px at 1280 and 1366, and switch the list to its phone rows. */
+.conversation-inbox--two-panes .conversation-list { min-height: 0; }
+.conversation-inbox--two-panes .conversation-pane { border-left: 1px solid var(--border-subtle); }
 /* Two panes: the header stays, the rows scroll on their own. */
 .conversation-inbox--two-panes .conversation-list__body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
 .conversation-list__header { display: grid; flex-shrink: 0; gap: 10px; padding: 18px 18px 8px; }
@@ -56,10 +62,12 @@ html.dark .conversation-inbox {
 .conversation-inbox .conversation-toolbar .dossier-toolbar-search input { height: 44px; padding-left: 40px; font-size: 15px; }
 .conversation-inbox .conversation-toolbar .dossier-toolbar-icon-button { width: 44px; padding: 0; }
 .conversation-inbox .conversation-toolbar .dossier-toolbar-badge { position: absolute; top: -6px; right: -6px; min-width: 18px; height: 18px; padding: 0 5px; font-size: 11px; box-shadow: 0 0 0 2px var(--bg-elevated); }
-/* Large counts wrap the segments onto a second row inside the track, never past it. */
+/* A compact control on one row from the 400px list: four labels with their
+   counts fit in 358px, wide system fonts included. Only very large counts wrap
+   the segments onto a second row, inside the track, never past it. */
 .conversation-inbox .conversation-segments { display: flex; flex-wrap: wrap; width: 100%; }
-.conversation-inbox .conversation-segments > button { flex: 1 1 auto; font-size: 14.5px; }
-.conversation-inbox .conversation-segments > button > span { gap: 5px; padding: 0 8px; }
+.conversation-inbox .conversation-segments > button { flex: 1 1 auto; font-size: 14px; font-weight: 500; }
+.conversation-inbox .conversation-segments > button > span { gap: 4px; padding: 0 5px; }
 .conversation-segments b { font-weight: 600; font-variant-numeric: tabular-nums; }
 .conversation-workerror { margin: 0 18px 8px; padding: 10px 12px; border: 1px solid #fecaca; border-radius: 12px; font-size: 14px; color: #b91c1c; }
 html.dark .conversation-workerror { border-color: #7f3a3a; color: #f4b9b9; }
@@ -137,8 +145,6 @@ html.dark .conversation-workerror { border-color: #7f3a3a; color: #f4b9b9; }
   .conversation-row__title { flex-direction: column; align-items: flex-start; gap: 0; }
   .conversation-row[data-inbox] .conversation-row__ref { display: none; }
   .conversation-row__since { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
-  .conversation-inbox .conversation-segments > button { font-size: 14px; }
-  .conversation-inbox .conversation-segments > button > span { gap: 4px; padding: 0 5px; }
 }
 @container conversation-list (max-width: 359px) {
   .conversation-inbox .conversation-segments { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -193,6 +199,7 @@ html.dark .conversation-primary-button { color: #122a36; background: #c4dae5; }
 .conversation-assign h2 { margin: 0; font-size: 18px; font-weight: 700; line-height: 1.35; overflow-wrap: anywhere; }
 .conversation-assign__intro { margin: 0; font-size: 15px; color: var(--text-secondary); }
 .conversation-assign__message { margin: 0; padding: 14px 16px; border: 1px solid var(--border-subtle); border-radius: 12px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 15px; background: var(--bg-elevated); }
+.conversation-link { color: var(--conversation-link); text-decoration: underline; text-underline-offset: 3px; overflow-wrap: anywhere; }
 .conversation-assign label { display: grid; gap: 6px; font-size: 14px; font-weight: 600; color: var(--text-secondary); }
 .conversation-assign select { min-height: 48px; width: 100%; padding: 0 12px; border: 1px solid var(--dossier-field-border); border-radius: 10px; font-size: 15px; font-weight: 400; color: var(--text-primary); background-color: var(--bg-elevated); }
 .conversation-assign .conversation-primary-button { justify-self: start; }

@@ -1,5 +1,6 @@
 import { receptionCartonManifest } from './reception.js';
 import { resolveDossierTask } from './dossierTasks.js';
+import { closingLabel } from './departurePlanning.js';
 
 export const MISSIONS = [
   { id: 'reception', label: 'Réception' }, { id: 'preparation', label: 'Optimisation' },
@@ -22,7 +23,15 @@ export const PERSONAL_SECTIONS = [
 // Existing bookmarks for work in progress remain in the combined action list.
 export function personalSection(value) { return ['pool', 'waiting'].includes(value) ? value : 'now'; }
 export const workTime = value => value ? Date.parse(value) : NaN;
-export const workDate = value => value && Number.isFinite(Date.parse(value)) ? new Date(value).toLocaleString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : null;
+/** A deadline as the dossier Départ labels read it, on Paris time whatever the
+ * device: « mercredi 21 octobre, 17 h », « jeudi 8 octobre, 9 h 30 », with the
+ * year when it is not the current one. */
+export const workDate = (value, { now = Date.now() } = {}) => value && Number.isFinite(Date.parse(value)) ? closingLabel(value, { today: now }) : null;
+/** The name a staff member reads for themselves, in the sidebar as in Mon
+ * travail: the first name, else the name on the account. */
+export function staffDisplayName(user) {
+  return String(user?.prenom || '').trim() || String(user?.nom || '').trim();
+}
 export function canWorkAction(action, can = () => false) {
   if (action.kind === 'conversation' && action.action_hint === 'Accès client à activer') return can('perm_clients_creer');
   return Boolean(WORK_KINDS[action.kind]?.permissions.some(permission => can(permission)));
@@ -131,12 +140,14 @@ export function safeWorkReturn(value, fallback = '/') {
 export function workActionOpensClient(action, dossier) {
   return action?.kind === 'conversation' && action.action_hint === 'Accès client à activer' && Boolean(dossier?.clientId);
 }
+/** A dossier task opens on its work area (#dossier-work, which the dossier page
+ * scrolls to and focuses): on a phone the form sits far below the overview. */
 export function workActionUrl(action, returnTo = '/', dossier) {
   const params = new URLSearchParams({ returnTo: safeWorkReturn(returnTo), action: action.id });
   if (workActionOpensClient(action, dossier)) return `/clients/${encodeURIComponent(dossier.clientId)}?${params}`;
   if (action.kind === 'conversation') return `/colis/${encodeURIComponent(action.colis_id)}?${new URLSearchParams({ onglet: 'conversation', action: action.id, returnTo: safeWorkReturn(returnTo) })}`;
   params.set('section', resolveDossierTask({ ...dossier, id: action.colis_id }, params, [action]));
-  return `/colis/${encodeURIComponent(action.colis_id)}?${params}`;
+  return `/colis/${encodeURIComponent(action.colis_id)}?${params}#dossier-work`;
 }
 
 /** Continuation is a suggestion, never a claim or change of responsibility.

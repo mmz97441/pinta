@@ -18,6 +18,12 @@ const DELIVERED = ['envoye', 'distribue', 'lu'];
 export const CHANNEL_LABELS = Object.freeze({ telegram: 'Telegram', portal: 'Espace client', email: 'E-mail' });
 
 const time = value => { const parsed = value ? Date.parse(value) : NaN; return Number.isFinite(parsed) ? parsed : null; };
+// Array.prototype.findLast(Index) and .at are missing from Safari 14, the declared build target.
+function lastIndexWhere(list, predicate) {
+  for (let index = list.length - 1; index >= 0; index -= 1) if (predicate(list[index])) return index;
+  return -1;
+}
+const lastWhere = (list, predicate) => list[lastIndexWhere(list, predicate)];
 function parisDay(value) {
   const parts = Object.fromEntries(DAY.formatToParts(new Date(value)).map(part => [part.type, part.value]));
   return { key: `${parts.year}-${parts.month}-${parts.day}`, year: parts.year };
@@ -51,6 +57,38 @@ export function previewText(text = '') {
   return String(text || '').replace(URL_PATTERN, '(lien)').replace(/\s+/g, ' ').trim();
 }
 
+// A web address ends before a space or an angle bracket; the punctuation that
+// closes a sentence stays text.
+const LINK_PATTERN = /https?:\/\/[^\s<>"]+/gi;
+const TRAILING_PUNCTUATION = /[.,;:!?»”’'"\]]+$/;
+/** A text as parts to display, in order: `{ text }` or `{ href }`. Only http(s)
+ * addresses become links, so a part never carries another scheme; React escapes
+ * the rest. A closing parenthesis stays in the address only when it opened one. */
+export function textWithLinks(text = '') {
+  const source = String(text ?? '');
+  const parts = [];
+  let from = 0;
+  for (const match of source.matchAll(LINK_PATTERN)) {
+    let href = match[0].replace(TRAILING_PUNCTUATION, '');
+    while (href.endsWith(')') && (href.match(/\(/g) || []).length < (href.match(/\)/g) || []).length) href = href.slice(0, -1).replace(TRAILING_PUNCTUATION, '');
+    if (!/^https?:\/\/[^/?#]+/i.test(href)) continue;
+    if (match.index > from) parts.push({ text: source.slice(from, match.index) });
+    parts.push({ href });
+    from = match.index + href.length;
+  }
+  if (from < source.length) parts.push({ text: source.slice(from) });
+  return parts;
+}
+
+/** A client decision recorded by a team member (client_decision from a staff
+ * screen) is stored as a client message whose author is that staff account.
+ * The client's own decisions carry the client's account (espace client) or no
+ * account at all (Telegram). */
+export function messageRecordedByTeam(message, clientUserId) {
+  return message?.type === 'client' && /^client_decision_/.test(message.template || '')
+    && Boolean(message.auteurId) && message.auteurId !== clientUserId;
+}
+
 function staffAuthor(message, meId, teamUsers) {
   if (meId && message.auteurId === meId) return 'Vous';
   const person = message.auteurId ? teamUsers.find(user => user.authId === message.auteurId) : null;
@@ -59,14 +97,17 @@ function staffAuthor(message, meId, teamUsers) {
 }
 
 /** What the list shows of a conversation: the client's question while it is
- * « À répondre », otherwise the last exchange, never a template greeting. */
-export function conversationPreview(dossier, { meId, teamUsers = [] } = {}) {
+ * « À répondre », otherwise the last exchange, never a template greeting. An
+ * approval or a wait is no question; a decision recorded by the team reads as
+ * the team's. */
+export function conversationPreview(dossier, { meId, teamUsers = [], client = null } = {}) {
   const messages = dossier?.messages || [];
+  const last = messages[messages.length - 1];
   const source = conversationState(dossier) === 'a_traiter'
-    ? messages.findLast(message => message.type === 'client') || messages.at(-1)
-    : messages.at(-1);
+    ? lastWhere(messages, message => message.type === 'client' && !HANDLED_DECISIONS.includes(message.template)) || last
+    : last;
   if (!source) return { text: 'Documents reçus', fromStaff: false };
-  const fromStaff = source.type === 'staff';
+  const fromStaff = source.type === 'staff' || messageRecordedByTeam(source, client?.userId);
   // A staff template opens with « Bonjour {prénom} 👋 » on its own line.
   const body = fromStaff ? String(source.texte || '').replace(/^\s*bonjour\b[^\n]*\n+(?=\s*\S)/i, '') : source.texte;
   const text = previewText(body) || (source.attachmentPath ? 'Document reçu' : 'Documents reçus');
@@ -78,7 +119,7 @@ export function conversationPreview(dossier, { meId, teamUsers = [] } = {}) {
 export function conversationSince(dossier) {
   if (dossier?.conversationOpenedAt) return dossier.conversationOpenedAt;
   const messages = dossier?.messages || [];
-  const answered = messages.findLastIndex(message => message.type === 'staff' && DELIVERED.includes(message.statut));
+  const answered = lastIndexWhere(messages, message => message.type === 'staff' && DELIVERED.includes(message.statut));
   return messages.slice(answered + 1).find(message => message.type === 'client' && !HANDLED_DECISIONS.includes(message.template))?.createdAt || null;
 }
 

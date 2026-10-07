@@ -184,12 +184,14 @@ function fixtures(role) {
     staff_permissions: [],
   };
 }
-async function setup(browser, role, { failTable = null, timezoneId = null } = {}) {
+async function setup(browser, role, { failTable = null, timezoneId = null, device = {} } = {}) {
+  // timezoneId: a device far from Paris (Réunion, New York…) proves that business times never follow it.
+  // device: touch and mobile emulation ({ hasTouch, isMobile }) for a tablet or a phone.
   const context = await browser.newContext({
     viewport: { width: 1440, height: 1000 },
     locale: 'fr-FR',
-    // A device time zone (Réunion, New York…) for the suites that prove Paris time.
     ...(timezoneId ? { timezoneId } : {}),
+    ...device,
   });
   await context.routeWebSocket('**/*', (socket) => socket.close());
   const tables = fixtures(role),

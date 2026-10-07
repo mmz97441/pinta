@@ -27,3 +27,7 @@ test('a message counts as sent only once delivered, and its state reads the same
   assert.equal(messageDeliveryLabel({statut:'envoi',canal:'email'}),'Brouillon manuel','No business e-mail provider: an e-mail stays a manual draft.');
   assert.equal(messageDeliveryLabel({}),null);assert.equal(messageDeliveryLabel(null),null);
 });
+test('only the three own states are durable states, never an inherited name', () => {
+  for (const value of ['toString', 'constructor', '__proto__', 'hasOwnProperty']) assert.equal(conversationState({ conversationStatut: value, messages: [] }), 'termine', value);
+  assert.equal(conversationState('attente_client'), 'attente_client');
+});

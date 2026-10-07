@@ -142,7 +142,8 @@ export function departureShortcuts(context, count = SHORTCUT_COUNT) {
 export function calendarMonthBounds(context) {
   const first = monthOf(context.today);
   const later = [addMonths(first, CALENDAR_MONTHS_AHEAD), ...context.planned.map(envoi => monthOf(envoi.date)), monthOf(context.assignedDay), monthOf(context.wishDay)];
-  return { first, last: later.filter(Boolean).sort().at(-1) };
+  const sorted = later.filter(Boolean).sort();
+  return { first, last: sorted[sorted.length - 1] };
 }
 
 const clampMonth = (month, { first, last }) => month < first ? first : month > last ? last : month;

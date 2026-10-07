@@ -201,11 +201,23 @@ html.dark .chat-thread .chat-composer__field { border-color: var(--chat-field); 
   .chat-thread .chat-composer__meta { display: none; }
   .chat-thread .chat-composer__box { grid-template-areas: 'field field' 'channel send'; }
   .chat-thread .chat-composer__box-channel { display: inline-flex; }
-  .chat-thread .chat-composer__field { min-height: 82px; }
+  /* « Envoyer » sits below the field: when the keyboard opens and the field is
+     brought into view, its row comes along (8px gap + 44px + 10px padding),
+     never left under the navigation. */
+  .chat-thread .chat-composer__field { min-height: 82px; scroll-margin-bottom: 64px; }
 }
 @container chat-thread (min-width: 640px) {
   .chat-thread .chat-more__phone { display: none; }
 }
+/* A touch screen has no Ctrl key to press. */
+@media (hover: none) and (pointer: coarse) {
+  .chat-thread .chat-composer__shortcut { display: none; }
+}
+
+/* ── Espace client: the client's own thread (ChatPanel outside the staff view) ── */
+.chat-portal-log:focus-visible { outline: 2px solid var(--brand-text); outline-offset: 2px; border-radius: 12px; }
+/* A link reads in its bubble's colour (white on the client's navy, dark on the team's grey). */
+.chat-portal-link { color: inherit; text-decoration: underline; text-underline-offset: 3px; overflow-wrap: anywhere; }
 @media (forced-colors: active) {
   .chat-thread .chat-state, .chat-thread .chat-day { border: 1px solid CanvasText; }
   .chat-thread .chat-unread { forced-color-adjust: none; background: Highlight; }

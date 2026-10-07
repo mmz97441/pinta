@@ -1,5 +1,4 @@
 import React, { useId, useLayoutEffect, useRef, useState } from 'react';
-import { Clock } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { workRowModel } from '../../domain/workTable';
 import { WorkActionButtons, WorkActionPanel, WorkTaskDetails, WorkTaskLink, useWorkActionControls } from './WorkActionRow';
@@ -22,9 +21,12 @@ function WorkTableRow({ action, dossier, client, columns, returnTo, now, notice 
         <div className="work-task-heading"><WorkTaskLink action={action} dossier={dossier} title={model.title} returnTo={returnTo} />{model.state && <span className="dossier-pill" data-tone={model.state.tone}>{model.state.label}</span>}</div>
         <WorkTaskDetails model={model} action={action} dossier={dossier} returnTo={returnTo} notice={notice} />
       </div>;
-      case 'due': return model.due ? <span className="work-due" data-urgent={model.due.urgent ? 'true' : undefined}><Clock size={15} aria-hidden="true" /><span>{model.due.text}</span></span> : <Placeholder />;
+      // The state and the date never break inside: a narrow column puts the date on its own
+      // line. The column is named « Échéance »: no clock icon beside each date.
+      case 'due': return model.due ? <span className="work-due" data-urgent={model.due.urgent ? 'true' : undefined}><span className="work-due-text"><span className="work-due-part">{model.due.status}{model.due.date ? ' ·' : ''}</span>{model.due.date ? ' ' : ''}{model.due.date && <span className="work-due-part">{model.due.date}</span>}</span></span> : <Placeholder />;
       case 'ref': return <span className="work-ref">{model.ref}</span>;
-      case 'client': return model.client;
+      // One line: a long name ends with « … » and stays whole in its title.
+      case 'client': return <span className="work-client" title={model.client}>{model.client}</span>;
       case 'casier': return model.casier || <Placeholder />;
       case 'cartons': return model.cartons ?? <Placeholder />;
       case 'action': return <WorkActionButtons controls={controls} hideRedundantView panelId={panelId} className="work-actions" />;

@@ -1,0 +1,13 @@
+/* Staff shell. Below 1024px the fixed bottom navigation covers the end of
+   <main>: App.jsx gives <main> exactly the navigation's measured height as
+   bottom padding (no strip between the page and the navigation), and none
+   while the navigation steps aside for the on-screen keyboard. Before the first
+   measurement, the former 4.5rem. From 1024px there is no bottom navigation:
+   no reserve, whatever the inline value. */
+.staff-main {
+  padding-bottom: calc(4.5rem + env(safe-area-inset-bottom));
+  scroll-padding-bottom: calc(4.5rem + env(safe-area-inset-bottom));
+}
+@media (min-width: 1024px) {
+  .staff-main { padding-bottom: 0 !important; scroll-padding-bottom: 0 !important; }
+}

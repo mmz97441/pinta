@@ -1,12 +1,14 @@
-import React, { useState, useEffect, useLayoutEffect, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useCallback, useRef, lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Link, useNavigate, useParams, useLocation, Navigate } from 'react-router-dom';
-import { Settings, Users, LogOut, LayoutDashboard, Package, ChevronLeft, ChevronRight, Plus, FileText, Key, AlertTriangle, MessageCircle, Plane, MoreHorizontal, RefreshCw } from 'lucide-react';
+import { Settings, Users, Contact, LogOut, LayoutDashboard, Package, ChevronLeft, ChevronRight, Plus, FileText, Key, AlertTriangle, MessageCircle, Plane, MoreHorizontal, RefreshCw } from 'lucide-react';
 import './brand.css';
+import './staffShell.css';
 import { getPrenom } from './utils';
 import { needsConversationAction } from './domain/conversations';
 
 import { TaskAccessBoundary } from './context/TaskAccessContext';
-import { findDossierWorkAction } from './domain/personalWork';
+import { findDossierWorkAction, staffDisplayName } from './domain/personalWork';
+import { plural } from './domain/plural';
 import { staffName } from './components/workspace/WorkActionRow';
 import TaskOwnership from './components/workspace/TaskOwnership';
 import { AppProvider, useApp } from './context/AppContext';
@@ -148,6 +150,54 @@ function MissingColis({ isClient }) {
 function Permission({ allowed, children }) {
   if (allowed) return children;
   return <div role="alert" className="p-8"><h1 className="text-lg font-bold text-gray-900">Accès limité</h1><p className="text-sm text-gray-600 mt-2">Votre rôle ne permet pas d’utiliser cet écran. Contactez votre responsable si nécessaire.</p></div>;
+}
+
+// Fields that bring up a phone's on-screen keyboard.
+const TEXT_ENTRY = 'textarea, select, [contenteditable]:not([contenteditable="false"]), input:not([type="button"]):not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]):not([type="image"]):not([type="reset"]):not([type="submit"]):not([type="hidden"])';
+
+/** Below 1024px, a text field has the focus while the visible height is
+ * reduced (an on-screen keyboard: the visual viewport noticeably shorter than
+ * the window, or under 640px): the bottom navigation then steps aside. A
+ * focus moving from one field to the next keeps it hidden (relatedTarget). */
+function useTypingOnPhone() {
+  const [typing, setTyping] = useState(false);
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    const evaluate = element => {
+      const height = viewport ? viewport.height : window.innerHeight;
+      setTyping(Boolean(element?.matches?.(TEXT_ENTRY)) && window.innerWidth < 1024 && (window.innerHeight - height > 120 || height < 640));
+    };
+    const focusIn = event => evaluate(event.target);
+    const focusOut = event => evaluate(event.relatedTarget);
+    const resize = () => evaluate(document.activeElement);
+    resize();
+    document.addEventListener('focusin', focusIn);
+    document.addEventListener('focusout', focusOut);
+    window.addEventListener('resize', resize);
+    viewport?.addEventListener('resize', resize);
+    return () => {
+      document.removeEventListener('focusin', focusIn);
+      document.removeEventListener('focusout', focusOut);
+      window.removeEventListener('resize', resize);
+      viewport?.removeEventListener('resize', resize);
+    };
+  }, []);
+  return typing;
+}
+
+/** The rendered height of an element (0 while hidden keeps the last one). */
+function useMeasuredHeight() {
+  const [height, setHeight] = useState(0);
+  const observer = useRef(null);
+  const ref = useCallback(node => {
+    observer.current?.disconnect();
+    observer.current = null;
+    if (!node) return;
+    const measure = () => { if (node.offsetHeight > 0) setHeight(node.offsetHeight); };
+    measure();
+    if (typeof ResizeObserver === 'function') { observer.current = new ResizeObserver(measure); observer.current.observe(node); }
+  }, []);
+  return [ref, height];
 }
 
 // ── Wrapper: Staff colis detail (reads :id from URL) ──
@@ -339,10 +389,12 @@ function PasswordScreen(props) {
 function AppContent() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { auth, authLoading, authError, signOut, isStaff, authCl, updateClient, sbReady, dataLoading, dataError, retryLoad, passwordRecovery, completePasswordRecovery, can, flash, data = [], inboxItems = [] } = useApp();
+  const { auth, authLoading, authError, signOut, isStaff, authCl, updateClient, sbReady, dataLoading, dataError, retryLoad, passwordRecovery, completePasswordRecovery, can, flash, ask, data = [], inboxItems = [] } = useApp();
   const conversationCount = data.filter(item => !item.archive && needsConversationAction(item)).length + inboxItems.filter(item => item.status === 'unassigned').length;
   const [onboardingDismissed, setOnboardingDismissed] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const typingOnPhone = useTypingOnPhone();
+  const [bottomNavRef, bottomNavHeight] = useMeasuredHeight();
   useEffect(() => { setOnboardingDismissed(false); }, [auth?.session?.user?.id]);
   const needsPassword = passwordRecovery || auth?.u?.mustChangePassword || location.pathname === '/password';
 
@@ -354,6 +406,9 @@ function AppContent() {
     try { await signOut(); navigate('/', { replace: true }); }
     catch (error) { flash({ msg: error.message || 'Déconnexion impossible. Réessayez.', type: 'error' }); }
   };
+  // On a phone the logout sits in « Plus », behind a confirmation: one stray tap
+  // never ends the session nor clears the drafts kept on this device.
+  const confirmLogout = () => ask('Se déconnecter ?', 'Vos brouillons non enregistrés sur cet appareil seront effacés. Les dossiers et messages enregistrés sont conservés.', handleLogout, { okLabel: 'Se déconnecter' });
 
   if (needsPassword) return <PasswordScreen
     staffUser={auth.u?.mustChangePassword ? { id: auth.u.staffId } : null}
@@ -381,12 +436,16 @@ function AppContent() {
       { key: '/conversations', label: 'Conversations', icon: MessageCircle, visible: can('perm_comm_message_libre') || can('perm_comm_telegram') || can('perm_comm_email') || can('perm_comm_voir_chat_autres') },
       { key: '/equipe', label: 'Équipe', icon: Users },
       { key: '/departs', label: 'Départs', icon: Plane, visible: can('perm_envois_voir') },
-      { key: '/clients', label: 'Clients', icon: Users, visible: can('perm_clients_voir') || can('perm_clients_creer') },
+      { key: '/clients', label: 'Clients', icon: Contact, visible: can('perm_clients_voir') || can('perm_clients_creer') },
       { key: '/devis', label: 'Estimation', icon: FileText, visible: can('perm_colis_calculer_devis') },
       { key: '/settings', label: 'Paramètres', icon: Settings, visible: ['perm_admin_parametres', 'perm_admin_utilisateurs', 'perm_admin_templates', 'perm_finances_modifier_tarifs', 'perm_admin_categories', 'perm_admin_produits_interdits'].some(can) },
     ].filter((item) => item.visible !== false);
 
-    const activePath = currentPath.startsWith('/colis') ? '/colis'
+    // A thread opened from Conversations stays under Conversations, on its dossier page too.
+    const search = new URLSearchParams(location.search);
+    const conversationThread = currentPath.startsWith('/colis/') && (search.get('onglet') === 'conversation' || (search.get('returnTo') || '').startsWith('/conversations'));
+    const activePath = conversationThread ? '/conversations'
+      : currentPath.startsWith('/colis') ? '/colis'
       : currentPath.startsWith('/clients') ? '/clients'
       : currentPath === '/devis' ? '/devis'
       : currentPath === '/settings' ? '/settings'
@@ -394,6 +453,9 @@ function AppContent() {
     const mobileItems = NAV_ITEMS.filter((item) => ['/', '/colis', '/conversations'].includes(item.key)).map((item) => ({ ...item, label: item.key === '/colis' ? 'Dossiers' : item.label }));
     mobileItems.push({ key: '/plus', label: 'Plus', icon: MoreHorizontal });
     const moreItems = NAV_ITEMS.filter((item) => !['/', '/colis', '/conversations'].includes(item.key));
+    const conversationDescription = `${plural(conversationCount, 'demande')} à traiter`;
+    const displayName = staffDisplayName(auth.u);
+    const fullName = [auth.u?.prenom, auth.u?.nom].filter(Boolean).join(' ') || displayName;
 
     return (
       <div style={{ fontFamily: "system-ui, -apple-system, 'Segoe UI', sans-serif" }} className="h-[100dvh] flex overflow-hidden">
@@ -421,14 +483,14 @@ function AppContent() {
             )}
           </div>
 
-          {/* New colis button */}
-          <div className="px-3 mb-2" hidden={!can('perm_colis_receptionner')}>
+          {/* New colis button: its label holds on one line in the 220px sidebar. */}
+          <div className="px-2 mb-2" hidden={!can('perm_colis_receptionner')}>
             <button
               aria-label="Réceptionner des cartons" onClick={() => navigate(`/reception?${new URLSearchParams({ returnTo: location.pathname + location.search })}`)}
-              className={`w-full flex items-center gap-2 rounded-xl text-left text-sm font-bold transition-all active:scale-95 ${sidebarCollapsed ? 'justify-center px-2 py-2.5' : 'px-3 py-2.5'}`}
+              className={`staff-sidebar-receive w-full min-h-11 flex items-center gap-1.5 rounded-xl px-2 text-left text-[13px] font-bold leading-tight tracking-[-0.02em] transition-all active:scale-95 ${sidebarCollapsed ? 'justify-center' : ''}`}
               style={{ background: `linear-gradient(135deg, ${BRAND.gold}, ${BRAND.goldD})`, color: BRAND.navyD }}
             >
-              <Plus size={16} strokeWidth={2.5} />
+              <Plus size={16} strokeWidth={2.5} aria-hidden="true" className="shrink-0" />
               {!sidebarCollapsed && 'Réceptionner des cartons'}
             </button>
           </div>
@@ -442,7 +504,7 @@ function AppContent() {
                 <button
                   key={item.key}
                   onClick={() => navigate(item.key)}
-                  aria-label={item.label} aria-description={item.key === '/conversations' ? `${conversationCount} demandes à traiter` : undefined} aria-current={isActive ? 'page' : undefined}
+                  aria-label={item.label} aria-description={item.key === '/conversations' ? conversationDescription : undefined} aria-current={isActive ? 'page' : undefined}
                   className={`w-full flex items-center gap-3 rounded-xl text-left transition-all ${
                     sidebarCollapsed ? 'justify-center px-2 py-2.5' : 'px-3 py-2.5'
                   } ${isActive
@@ -474,8 +536,9 @@ function AppContent() {
 
           <div className="px-3 pb-3 pt-3 border-t border-white/10">
             <div className={`flex items-center gap-2.5 ${sidebarCollapsed ? 'justify-center' : ''}`}>
-              <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-black shrink-0" style={{ background: `${BRAND.gold}30`, color: BRAND.gold }}>{(auth.u?.nom || '?').charAt(0)}</div>
-              {!sidebarCollapsed && <div className="flex-1"><p className="text-xs font-semibold text-gray-200 truncate" title={auth.u?.nom}>{auth.u?.nom}</p><p className="text-[10px] text-gray-400 mt-0.5">{{ directeur: 'Direction', vice_directeur: 'Direction adjointe', logisticien: 'Logistique', preparateur: 'Préparation' }[auth.u.role] || 'Équipe'}</p></div>}
+              {/* The same name as Mon travail: the first name, else the account name. */}
+              <div aria-hidden="true" className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-black shrink-0" style={{ background: `${BRAND.gold}30`, color: BRAND.gold }}>{(displayName || '?').charAt(0).toLocaleUpperCase('fr-FR')}</div>
+              {!sidebarCollapsed && <div className="min-w-0 flex-1"><p data-staff-name="" className="text-xs font-semibold text-gray-200 truncate" title={fullName}>{displayName}</p><p className="text-[11px] text-gray-300 mt-0.5">{{ directeur: 'Direction', vice_directeur: 'Direction adjointe', logisticien: 'Logistique', preparateur: 'Préparation' }[auth.u.role] || 'Équipe'}</p></div>}
             </div>
             <div className={`mt-2 flex items-center ${sidebarCollapsed ? 'flex-col gap-1' : 'justify-between'}`}>
               <ThemeToggle compact />
@@ -486,8 +549,10 @@ function AppContent() {
         </div>
 
         {/* ── Mobile bottom nav ──────────────────────────────────────── */}
+        {/* Hidden while typing on a phone: the keyboard already takes the bottom of the screen. */}
         <div
-          className="lg:hidden fixed bottom-0 left-0 right-0 z-50 border-t border-gray-200 flex items-center justify-around py-2 px-1"
+          ref={bottomNavRef} data-staff-bottom-nav="" data-typing={typingOnPhone ? 'true' : undefined}
+          className={`${typingOnPhone ? 'hidden' : 'flex'} lg:hidden fixed bottom-0 left-0 right-0 z-50 border-t border-gray-200 items-center justify-around py-2 px-1`}
           style={{ background: 'var(--bg-elevated)', paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }}
         >
           {mobileItems.map((item) => {
@@ -497,12 +562,14 @@ function AppContent() {
               <button
                 key={item.key}
                 onClick={() => navigate(item.key)}
-                  aria-label={item.label} aria-description={item.key === '/conversations' ? `${conversationCount} demandes à traiter` : undefined} aria-current={isActive ? 'page' : undefined}
-                className="flex-1 min-h-11 flex flex-col items-center justify-center gap-0.5 px-1 py-1"
+                  aria-label={item.label} aria-description={item.key === '/conversations' ? conversationDescription : undefined} aria-current={isActive ? 'page' : undefined}
+                className="staff-bottom-nav-item flex-1 min-w-max min-h-11 flex flex-col items-center justify-center gap-0.5 px-0.5 py-1"
               >
-                <span className="relative"><Icon size={20} style={{ color: isActive ? 'var(--brand-text)' : '#9CA3AF' }} strokeWidth={isActive ? 2.5 : 2} />{item.key === '/conversations' && conversationCount > 0 && <span aria-hidden="true" className="absolute -right-5 -top-2 rounded-full bg-blue-800 px-1 text-xs font-bold text-white">{conversationCount > 99 ? '99+' : conversationCount}</span>}</span>
-                {/* One line: a wrapped label would grow the bar over the space the pages reserve for it. */}
-                <span className={`whitespace-nowrap text-[9px] font-bold ${isActive ? 'text-gray-800' : 'text-gray-400'}`}>{item.label}</span>
+                <span className="relative"><Icon size={20} aria-hidden="true" style={{ color: isActive ? 'var(--brand-text)' : '#9CA3AF' }} strokeWidth={isActive ? 2.5 : 2} />{item.key === '/conversations' && conversationCount > 0 && <span aria-hidden="true" className="absolute -right-5 -top-2 rounded-full bg-blue-800 px-1 text-xs font-bold text-white">{conversationCount > 99 ? '99+' : conversationCount}</span>}</span>
+                {/* One line at 11px: a wrapped label would grow the bar over the space the pages
+                    reserve for it. At 320px a longer label (« Conversations ») takes its width
+                    from the shorter ones (min-w-max) rather than wrapping. */}
+                <span className={`whitespace-nowrap text-[11px] font-bold leading-4 ${isActive ? 'text-gray-800' : 'text-gray-500'}`}>{item.label}</span>
               </button>
             );
           })}
@@ -513,17 +580,28 @@ function AppContent() {
         <div className="flex-1 flex flex-col min-w-0 bg-gray-50">
           <div className="lg:hidden min-h-12 px-4 flex items-center justify-between border-b border-gray-200">
             <span className="font-black brand-t">EXPÉD<span className="brand-t-gold">ÎLE</span></span>
-            <div className="flex items-center gap-2">{can('perm_colis_receptionner') && <button aria-label="Réceptionner des cartons" onClick={() => navigate(`/reception?${new URLSearchParams({ returnTo: location.pathname + location.search })}`)} className="min-h-11 inline-flex items-center gap-1 whitespace-nowrap rounded-xl px-2 text-xs font-bold brand-t"><Plus size={18} className="shrink-0" />Recevoir</button>}<ThemeToggle compact /><button aria-label="Se déconnecter" onClick={handleLogout} className="min-h-11 min-w-11 flex items-center justify-center text-gray-500"><LogOut size={18} /></button></div>
+            {/* The logout lives in « Plus », away from the theme toggle. */}
+            <div className="flex items-center gap-2">{can('perm_colis_receptionner') && <button aria-label="Réceptionner des cartons" onClick={() => navigate(`/reception?${new URLSearchParams({ returnTo: location.pathname + location.search })}`)} className="min-h-11 inline-flex items-center gap-1 whitespace-nowrap rounded-xl px-2 text-xs font-bold brand-t"><Plus size={18} className="shrink-0" />Recevoir</button>}<ThemeToggle compact /></div>
           </div>
-          {loadBanner}
-          <div className="flex-1 min-h-0 overflow-y-auto pb-[calc(4.5rem+env(safe-area-inset-bottom))] scroll-pb-[calc(4.5rem+env(safe-area-inset-bottom))] lg:pb-0 lg:scroll-pb-0">
+          {/* Mon travail states the failure, its reason and the retry in place of its list: one message. */}
+          {currentPath !== '/' && loadBanner}
+          {/* The one <main> of every staff page: the pages render their content without their own.
+              Below 1024px it keeps exactly the measured height of the bottom navigation free,
+              nothing while the navigation steps aside for the keyboard (staffShell.css holds the
+              first-render reserve and the desktop). */}
+          <main className="staff-main flex-1 min-h-0 overflow-y-auto" style={bottomNavHeight ? { paddingBottom: typingOnPhone ? 0 : bottomNavHeight, scrollPaddingBottom: typingOnPhone ? 0 : bottomNavHeight } : undefined}>
             {dataLoading ? <LoadingView /> : <Suspense fallback={<LoadingView />}><ScreenBoundary key={location.pathname}>
             <Routes>
               <Route path="/equipe" element={<TeamWorkView />} />
               <Route path="/conversations" element={<Permission allowed={can('perm_comm_message_libre') || can('perm_comm_telegram') || can('perm_comm_email') || can('perm_comm_voir_chat_autres')}><ConversationsView /></Permission>} />
               <Route path="/departs" element={<Permission allowed={can('perm_envois_voir')}><StaffDepartures /></Permission>} />
               <Route path="/travail" element={<Navigate to="/" replace />} />
-              <Route path="/plus" element={<div className="mx-auto max-w-xl space-y-4 p-5"><h1 className="text-2xl font-bold brand-t">Votre espace</h1><nav aria-label="Autres rubriques" className="grid gap-3">{moreItems.map(({ key, label, icon: Icon }) => <button key={key} onClick={() => navigate(key)} className="flex min-h-14 items-center gap-3 rounded-xl border border-gray-200 bg-white p-4 text-left font-semibold text-gray-800"><Icon size={20} />{label}<ChevronRight size={18} className="ml-auto" /></button>)}</nav></div>} />
+              <Route path="/plus" element={<div className="mx-auto max-w-xl space-y-4 p-5"><h1 className="text-2xl font-bold brand-t">Votre espace</h1><nav aria-label="Autres rubriques" className="grid gap-3">{moreItems.map(({ key, label, icon: Icon }) => <button key={key} onClick={() => navigate(key)} className="flex min-h-14 items-center gap-3 rounded-xl border border-gray-200 bg-white p-4 text-left font-semibold text-gray-800"><Icon size={20} aria-hidden="true" />{label}<ChevronRight size={18} aria-hidden="true" className="ml-auto" /></button>)}</nav>
+                {/* The account commands of the desktop sidebar, below 1024px. */}
+                <section aria-labelledby="plus-account-title" className="space-y-3 border-t border-gray-200 pt-4"><h2 id="plus-account-title" className="text-[11px] font-bold uppercase tracking-wider text-gray-600">Mon compte</h2><p className="text-sm text-gray-600">{fullName}</p>
+                  <button onClick={() => navigate('/password')} className="flex min-h-14 w-full items-center gap-3 rounded-xl border border-gray-200 bg-white p-4 text-left font-semibold text-gray-800"><Key size={20} aria-hidden="true" />Modifier le mot de passe<ChevronRight size={18} aria-hidden="true" className="ml-auto" /></button>
+                  <button onClick={confirmLogout} className="flex min-h-14 w-full items-center gap-3 rounded-xl border border-gray-200 bg-white p-4 text-left font-semibold text-red-700"><LogOut size={20} aria-hidden="true" />Se déconnecter</button>
+                </section></div>} />
               <Route path="/reception" element={<Permission allowed={can('perm_colis_receptionner')}><ReceptionPage /></Permission>} />
               <Route path="/colis/:id" element={<StaffColisDetail />} />
               <Route path="/colis" element={
@@ -568,7 +646,7 @@ function AppContent() {
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
             </ScreenBoundary></Suspense>}
-          </div>
+          </main>
         </div>
       </div>
     );

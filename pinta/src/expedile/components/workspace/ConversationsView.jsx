@@ -1,12 +1,14 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useLocation, useSearchParams, useNavigate, Link } from 'react-router-dom';
 import { ArrowLeft, ArrowRight, ChevronDown, ListFilter, MessageCircle, PanelRightOpen, Paperclip, Search, Send } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { supabase } from '../../lib/supabase';
 import { functionErrorMessage } from '../../services/functionErrors';
 import { conversationState } from '../../domain/conversations';
-import { CHANNEL_LABELS, clientDisplayName, conversationOverdue, conversationPreview, conversationSince, conversationTime, nameInitials, previewText, sortConversations, waitingAge } from '../../domain/conversationList';
+import { CHANNEL_LABELS, clientDisplayName, conversationOverdue, conversationPreview, conversationSince, conversationTime, nameInitials, previewText, sortConversations, textWithLinks, waitingAge } from '../../domain/conversationList';
 import { receptionCartonManifest } from '../../domain/reception';
+import { formatDossierTableDate } from '../../domain/dossierTable';
+import { plural, pluralWord } from '../../domain/plural';
 import { STATUTS } from '../../constants';
 import { getClientDest } from '../../utils';
 import { useMinuteNow } from '../../hooks/useMinuteNow';
@@ -71,7 +73,9 @@ export default function ConversationsView() {
     if (!dossierId) return;
     const filters = new URLSearchParams(location.search);
     filters.delete('dossier'); filters.delete('ouvert'); filters.delete('action'); filters.delete('inbox'); filters.delete('returnTo');
-    const back = `/conversations${filters.size ? `?${filters}` : ''}`;
+    // URLSearchParams.size is missing from Safari 14 (build target): read the string.
+    const rest = filters.toString();
+    const back = `/conversations${rest ? `?${rest}` : ''}`;
     const next = new URLSearchParams({ onglet: 'conversation', returnTo: workspaceReturnPath(location.search, back) });
     if (params.get('action')) next.set('action', params.get('action'));
     navigate(`/colis/${encodeURIComponent(dossierId)}?${next}`, { replace: true });
@@ -85,22 +89,44 @@ export default function ConversationsView() {
   useEffect(() => { setContextSection(null); }, [openId]);
   const inboxId = params.get('inbox');
   const selectedInbox = inboxItems.find(item => item.id === inboxId && item.status === 'unassigned');
-  const clientMap = new Map(clients.map(item => [item.id, item]));
-  const actionFor = id => { const actions = workActions.filter(action => action.colis_id === id && action.kind === 'conversation'); return actions.find(action => action.state !== 'done') || actions.toSorted((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at))[0]; };
-  const ownerMatches = action => !owner || (owner === 'me' ? action?.assignee_id === auth?.u?.id : owner === 'unassigned' ? !action?.assignee_id : action?.assignee_id === owner);
-  const textMatches = text => !query || text.toLocaleLowerCase('fr').includes(query);
+  const meId = auth?.u?.id;
+  // Typing in the search and the background refreshes recompute only what
+  // changed: the lookups and the search text follow the loaded data, the
+  // filtering follows the query, the sort follows the filtered rows.
+  const clientMap = useMemo(() => new Map(clients.map(item => [item.id, item])), [clients]);
+  // The conversation task of each dossier: the open one, else the latest closed.
+  const actionByDossier = useMemo(() => {
+    const byDossier = new Map();
+    for (const action of workActions) {
+      if (action.kind !== 'conversation') continue;
+      const kept = byDossier.get(action.colis_id);
+      const open = action.state !== 'done', keptOpen = kept && kept.state !== 'done';
+      if (!kept || open && !keptOpen || open === keptOpen && !keptOpen && Date.parse(action.updated_at) > Date.parse(kept.updated_at)) byDossier.set(action.colis_id, action);
+    }
+    return byDossier;
+  }, [workActions]);
+  const searchText = useMemo(() => new Map(data.map(item => [item.id, [clientDisplayName(clientMap.get(item.clientId)), item.ref, ...(item.messages || []).map(message => message.texte)].join(' ').toLocaleLowerCase('fr')])), [data, clientMap]);
   // Search and owner apply to every segment: the counts answer « how many if I click ».
-  const visible = data.filter(item => !item.archive && (item.messages?.length || conversationState(item) !== 'termine')
-    && !(owner === 'unassigned' && conversationState(item) === 'termine' && !actionFor(item.id))
-    && ownerMatches(actionFor(item.id))
-    && textMatches([clientDisplayName(clientMap.get(item.clientId)), item.ref, ...(item.messages || []).map(message => message.texte)].join(' ')));
-  const counts = { a_traiter: 0, attente_client: 0, termine: 0 };
-  visible.forEach(item => { counts[conversationState(item)] += 1; });
-  const dossiers = sortConversations(visible.filter(item => !state || conversationState(item) === state));
-  const sections = SECTIONS.map(([key, label]) => ({ key, label, rows: dossiers.filter(item => conversationState(item) === key) })).filter(section => section.rows.length);
-  const inbox = inboxItems.filter(item => item.status === 'unassigned' && (!state || state === 'a_traiter') && ownerMatches(null) && textMatches([clientDisplayName(clientMap.get(item.client_id || item.clientId)), item.texte].join(' ')))
-    .toSorted((a, b) => (Date.parse(b.created_at) || 0) - (Date.parse(a.created_at) || 0));
-  const oldestToAnswer = sortConversations(visible).find(item => conversationState(item) === 'a_traiter');
+  const visible = useMemo(() => {
+    const ownerMatches = action => !owner || (owner === 'me' ? action?.assignee_id === meId : owner === 'unassigned' ? !action?.assignee_id : action?.assignee_id === owner);
+    return data.filter(item => !item.archive && (item.messages?.length || conversationState(item) !== 'termine')
+      && !(owner === 'unassigned' && conversationState(item) === 'termine' && !actionByDossier.get(item.id))
+      && ownerMatches(actionByDossier.get(item.id))
+      && (!query || searchText.get(item.id).includes(query)));
+  }, [data, owner, meId, actionByDossier, query, searchText]);
+  const sortedVisible = useMemo(() => sortConversations(visible), [visible]);
+  const counts = useMemo(() => {
+    const result = { a_traiter: 0, attente_client: 0, termine: 0 };
+    visible.forEach(item => { result[conversationState(item)] += 1; });
+    return result;
+  }, [visible]);
+  const dossiers = useMemo(() => state ? sortedVisible.filter(item => conversationState(item) === state) : sortedVisible, [sortedVisible, state]);
+  const sections = useMemo(() => SECTIONS.map(([key, label]) => ({ key, label, rows: dossiers.filter(item => conversationState(item) === key) })).filter(section => section.rows.length), [dossiers]);
+  // A message without dossier has no task: it is « Non attribué », hidden by any other owner.
+  const inbox = useMemo(() => inboxItems.filter(item => item.status === 'unassigned' && (!state || state === 'a_traiter') && (!owner || owner === 'unassigned')
+    && (!query || [clientDisplayName(clientMap.get(item.client_id || item.clientId)), item.texte].join(' ').toLocaleLowerCase('fr').includes(query)))
+    .sort((a, b) => (Date.parse(b.created_at) || 0) - (Date.parse(a.created_at) || 0)), [inboxItems, state, owner, query, clientMap]);
+  const oldestToAnswer = sortedVisible.find(item => conversationState(item) === 'a_traiter');
   const openDossier = openId ? data.find(item => item.id === openId) : null;
   const openClient = clientMap.get(openDossier?.clientId);
   const openAction = openDossier && workActions.find(action => action.colis_id === openDossier.id && action.kind === 'conversation' && action.state !== 'done');
@@ -128,18 +154,19 @@ export default function ConversationsView() {
   const conversationRow = item => {
     const name = clientDisplayName(clientMap.get(item.clientId));
     const itemState = conversationState(item);
-    const action = actionFor(item.id);
-    const unread = (item.messages || []).filter(message => message.type === 'client' && !message.lu).length;
+    const action = actionByDossier.get(item.id);
+    const messages = item.messages || [];
+    const unread = messages.filter(message => message.type === 'client' && !message.lu).length;
     const since = itemState === 'a_traiter' ? waitingAge(conversationSince(item), now) : '';
-    const when = conversationTime(item.conversationUpdatedAt || item.messages?.at(-1)?.createdAt || item.updatedAt, now);
+    const when = conversationTime(item.conversationUpdatedAt || messages[messages.length - 1]?.createdAt || item.updatedAt, now);
     // Reading is not handling: a closed exchange without a task is « Traitée », never « Non attribué ».
-    const ownerLabel = itemState === 'termine' && !action ? 'Traitée' : action?.assignee_id && action.assignee_id === auth?.u?.id ? 'Vous' : staffName(action?.assignee_id, teamUsers);
+    const ownerLabel = itemState === 'termine' && !action ? 'Traitée' : action?.assignee_id && action.assignee_id === meId ? 'Vous' : staffName(action?.assignee_id, teamUsers);
     return <li key={item.id}><button type="button" aria-current={openId === item.id ? 'true' : undefined} data-unread={unread > 0 || undefined} onClick={() => select(wide ? 'ouvert' : 'dossier', item.id)} className="conversation-row">
       <span className="conversation-avatar" aria-hidden="true">{nameInitials(name)}</span>
       <span className="conversation-row__main">
         <span className="conversation-row__title"><span className="conversation-row__name">{name}</span>{' '}<span className="conversation-row__ref">{item.ref}</span></span>
-        {' '}<span className="conversation-row__preview">{unread > 0 && <span className="conversation-row__dot" aria-hidden="true" />}{conversationPreview(item, { meId: auth?.u?.id, teamUsers }).text}</span>
-        {unread > 0 && <span className="sr-only"> {unread} non lu(s)</span>}
+        {' '}<span className="conversation-row__preview">{unread > 0 && <span className="conversation-row__dot" aria-hidden="true" />}{conversationPreview(item, { meId, teamUsers, client: clientMap.get(item.clientId) }).text}</span>
+        {unread > 0 && <span className="sr-only"> {plural(unread, 'message non lu', 'messages non lus')}</span>}
       </span>
       {' '}<span className="conversation-row__meta">
         {since ? <span data-overdue={conversationOverdue(item, now) || undefined}><span className="conversation-row__since">depuis </span>{since}</span> : when && <span>{when}</span>}
@@ -172,9 +199,13 @@ export default function ConversationsView() {
     {!wide && <button onClick={close} className="conversation-back"><ArrowLeft size={18} aria-hidden="true" />Retour aux conversations</button>}
     <h2>{clientDisplayName(selectedClient)} · Message sans dossier</h2>
     <p className="conversation-assign__intro">Vérifiez le contenu puis choisissez l’expédition concernée.</p>
-    <p className="conversation-assign__message">{selectedInbox.texte || 'Document reçu sur Telegram'}</p><InboxAttachment item={selectedInbox} />
-    <label>Dossier du client<select aria-label="Dossier du client" value={assignment} onChange={event => setAssignment(event.target.value)}><option value="">Choisir un dossier</option>{data.filter(item => item.clientId === (selectedInbox.client_id || selectedInbox.clientId)).map(item => <option key={item.id} value={item.id}>{[item.ref, item.desc || STATUTS[item.statut]?.label, `${receptionCartonManifest(item).nbColis} carton(s)`, item.dateReception ? new Date(item.dateReception).toLocaleDateString('fr-FR') : 'date à préciser'].filter(Boolean).join(' · ')}</option>)}</select></label>
-    <button disabled={!assignment || busy || !can('perm_comm_telegram')} onClick={() => ask('Rattacher ce message ?', `Le message et son document seront rattachés à ${data.find(item => item.id === assignment)?.ref || 'cette expédition'} pour ${clientDisplayName(selectedClient)}.`, assign, { okLabel: 'Confirmer le rattachement' })} className="conversation-primary-button">{busy ? 'Rattachement…' : 'Rattacher au dossier'}</button>
+    {/* The client's addresses open in a new tab, without access to this page. */}
+    <p className="conversation-assign__message">{selectedInbox.texte ? textWithLinks(selectedInbox.texte).map((part, index) => part.href
+      ? <a key={index} href={part.href} target="_blank" rel="noopener noreferrer" className="conversation-link">{part.href}</a>
+      : <React.Fragment key={index}>{part.text}</React.Fragment>) : 'Document reçu sur Telegram'}</p><InboxAttachment item={selectedInbox} />
+    <label>Dossier du client<select aria-label="Dossier du client" value={assignment} onChange={event => setAssignment(event.target.value)}><option value="">Choisir un dossier</option>{data.filter(item => item.clientId === (selectedInbox.client_id || selectedInbox.clientId)).map(item => <option key={item.id} value={item.id}>{[item.ref, item.desc || STATUTS[item.statut]?.label, plural(receptionCartonManifest(item).nbColis, 'carton'), item.dateReception ? `reçu le ${formatDossierTableDate(item.dateReception)}` : 'date à préciser'].filter(Boolean).join(' · ')}</option>)}</select></label>
+    {/* A reference never breaks at its hyphens; the confirmation's one-word label never wraps. */}
+    <button disabled={!assignment || busy || !can('perm_comm_telegram')} onClick={() => ask('Rattacher ce message ?', <>Le message et son document seront rattachés à <span className="whitespace-nowrap">{data.find(item => item.id === assignment)?.ref || 'cette expédition'}</span> pour {clientDisplayName(selectedClient)}.</>, assign, { okLabel: 'Rattacher' })} className="conversation-primary-button">{busy ? 'Rattachement…' : 'Rattacher au dossier'}</button>
     {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
   </section>;
 
@@ -214,7 +245,8 @@ export default function ConversationsView() {
             <h2 id={`conversation-section-${section.key}`} className="conversation-section__title">{collapsible
               ? <button type="button" className="conversation-section__toggle" aria-expanded={showHandled} aria-controls={`conversation-rows-${section.key}`} onClick={() => setShowHandled(value => !value)}>{section.label} · {section.rows.length}<ChevronDown size={15} aria-hidden="true" /></button>
               : <>{section.label} · {section.rows.length}{section.key === 'a_traiter' && <span className="conversation-section__hint">· la plus ancienne en haut</span>}</>}</h2>
-            {expanded && <ul id={`conversation-rows-${section.key}`} className="conversation-rows">{section.rows.map(conversationRow)}</ul>}
+            {/* Folded, the list stays in the page, empty and hidden: aria-controls always names an element. */}
+            <ul id={`conversation-rows-${section.key}`} hidden={!expanded} className="conversation-rows">{expanded && section.rows.map(conversationRow)}</ul>
           </section>;
         })}
         {!dossiers.length && !inbox.length && <div className="conversation-list__empty"><MessageCircle size={24} aria-hidden="true" /><p className="m-0">{empty.text}</p>{empty.action && <button className="conversation-text-button" onClick={empty.run}>{empty.action}</button>}</div>}
@@ -222,7 +254,8 @@ export default function ConversationsView() {
     </div>
   </div>;
 
-  if (!wide) return <main className="conversation-inbox">{assignmentForm || list}</main>;
+  // The staff shell owns the page's single <main>.
+  if (!wide) return <div className="conversation-inbox">{assignmentForm || list}</div>;
 
   const destination = openDossier ? getClientDest(openDossier.clientId, clients) : null;
   const cartons = openDossier ? receptionCartonManifest(openDossier).nbColis : 0;
@@ -233,7 +266,7 @@ export default function ConversationsView() {
       <span className="conversation-avatar" aria-hidden="true">{nameInitials(clientDisplayName(openClient))}</span>
       <div className="conversation-thread__identity">
         <h2 id="conversation-thread-title">{clientDisplayName(openClient)} <span className="conversation-thread__ref">{openDossier.ref}</span></h2>
-        <p className="conversation-thread__facts">{destination && <span>{destination.label}</span>}{destination && <span aria-hidden="true">·</span>}<span>{cartons} {cartons > 1 ? 'cartons reçus' : 'carton reçu'}</span><span aria-hidden="true">·</span><span className="conversation-channel" data-channel={channel}><ChannelIcon size={14} aria-hidden="true" />{CHANNEL_LABELS[channel]}</span></p>
+        <p className="conversation-thread__facts">{destination && <span>{destination.label}</span>}{destination && <span aria-hidden="true">·</span>}<span>{plural(cartons, 'carton')} {pluralWord(cartons, 'reçu', 'reçus')}</span><span aria-hidden="true">·</span><span className="conversation-channel" data-channel={channel}><ChannelIcon size={14} aria-hidden="true" />{CHANNEL_LABELS[channel]}</span></p>
       </div>
       <div className="conversation-thread__actions">
         <button type="button" className="dossier-toolbar-button" aria-label="Détails du dossier" aria-haspopup="dialog" onClick={() => setContextSection('reception')}><PanelRightOpen size={17} aria-hidden="true" /><span className="conversation-thread__action-text">Détails du dossier</span></button>
@@ -247,9 +280,9 @@ export default function ConversationsView() {
     {oldestToAnswer && <button type="button" className="conversation-primary-button" onClick={() => select('ouvert', oldestToAnswer.id)}>Ouvrir la plus ancienne à répondre<ArrowRight size={17} aria-hidden="true" /></button>}
   </div>);
 
-  return <main className="conversation-inbox conversation-inbox--two-panes">
+  return <div className="conversation-inbox conversation-inbox--two-panes">
     {list}
     <div className="conversation-pane">{pane}</div>
     {openDossier && sel?.id === openDossier.id && <DossierContextPanel key={openDossier.id} section={contextSection} onSectionChange={setContextSection} onClose={() => setContextSection(null)} taskSearch={`?${new URLSearchParams({ returnTo: location.pathname + location.search })}`} />}
-  </main>;
+  </div>;
 }

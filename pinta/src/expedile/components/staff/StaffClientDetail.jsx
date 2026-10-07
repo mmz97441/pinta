@@ -37,7 +37,7 @@ const MOIS_LABELS = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Jui
 
 const has = (object, key) => Object.prototype.hasOwnProperty.call(object || {}, key);
 const omit = (object, keys) => Object.fromEntries(Object.entries(object || {}).filter(([key]) => !keys.includes(key)));
-const listFr = items => items.length < 2 ? items.join('') : `${items.slice(0, -1).join(', ')} et ${items.at(-1)}`;
+const listFr = items => items.length < 2 ? items.join('') : `${items.slice(0, -1).join(', ')} et ${items[items.length - 1]}`;
 // Values compared to detect a change: the Telegram username is compared without its @.
 const comparable = (key, value) => key === 'telegramUsername' ? normalizeTelegramUsername(value) : String(value ?? '');
 
