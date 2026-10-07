@@ -120,6 +120,12 @@ test('a missing HS code blocks the invoice: never an empty or invented code (D33
   assert.equal(fixed.ok, true, JSON.stringify(fixed.errors));
   assert.deepEqual(fixed.rows.map(row => [row.hsCode, row.value, row.transport]), [['9405210000', 39.8, 39.95], ['4205', 12, 12.05]]);
   assert.equal(cents(fixed.rows.map(row => row.transport)), Math.round(lampe.devisSnapshot.amounts.transport * 100));
+  // A professional's articles are those of its invoices: the dossier opens on them, where a category is chosen.
+  const uncoded = professional([line('lp-9', 'Lampadaire', 1, 80, 'cat-sans-code', 'fp1'), line('lp-10', 'Ampoules', 2, 5, null, 'fp1')], proInvoices.slice(0, 2));
+  assert.deepEqual(buildCommercialInvoice({ envoi, items: [{ colis: uncoded, client: lagon }], categories }).errors.map(error => [error.kind, error.task, error.message]), [
+    ['hs-code', 'documents', 'EXP-PRO001 : code SH manquant pour « Lampadaire »'],
+    ['hs-code', 'documents', 'EXP-PRO001 : code SH manquant pour « Ampoules »'],
+  ]);
 });
 
 test('HS codes stay text: leading zeros are kept', () => {
@@ -161,6 +167,13 @@ test('after the departure, every dossier of the frozen manifest is included', ()
 test('a dossier without saved quote or without consignee name blocks the invoice', () => {
   const withoutQuote = { ...scelleuse(), devisSnapshot: null };
   assert.deepEqual(buildCommercialInvoice({ envoi, items: [{ colis: withoutQuote, client: flavie }], categories }).errors.map(error => error.message), ['EXP-2YE537 : aucun devis enregistré']);
+  // An older quote saved without its transport: never a transport of 0,00 € on a customs document.
+  const legacy = professional(proLines, proInvoices);
+  legacy.devisSnapshot = { ...legacy.devisSnapshot, amounts: { total: legacy.devisSnapshot.amounts.total } };
+  const withoutTransport = buildCommercialInvoice({ envoi, items: [{ colis: legacy, client: lagon }], categories });
+  assert.equal(withoutTransport.ok, false);
+  assert.deepEqual(withoutTransport.errors, [{ ref: 'EXP-PRO001', colisId: 'p3', kind: 'quote', task: 'devis', message: 'EXP-PRO001 : montant du transport absent du devis enregistré' }]);
+  assert.deepEqual(withoutTransport.rows, []);
   assert.deepEqual(buildCommercialInvoice({ envoi, items: [{ colis: scelleuse(), client: null }], categories }).errors.map(error => error.message), ['EXP-2YE537 : nom du destinataire manquant']);
   // A frozen classification that must be checked again (pro line) is never printed.
   const stale = [{ ...proLines[0], customDuty: { code: '0901110000', stale: true } }];

@@ -491,7 +491,7 @@ export default function StaffDepartures({ embedded = false }) {
         {departed && canModify && envoi.statut === 'parti' && <button key="arrive" type="button" data-action="arrive" disabled={busy} className={BUTTON} onClick={() => confirmStep(envoi, 'arrive')}>Confirmer l’arrivée</button>}
         {departed && canModify && envoi.statut === 'arrive' && <button key="archive" type="button" data-action="archive" disabled={busy} className={BUTTON} onClick={() => confirmStep(envoi, 'archive')}><Archive size={16} aria-hidden="true" />Archiver ce départ</button>}
       </div>
-      <DepartureDocuments envoi={envoi} departed={departed} dossierCount={loadable.length} exports={exports} busy={busy} onExport={type => run(() => exportDeparture(envoi.id, type), scope)} />
+      <DepartureDocuments key={departed ? 'departed' : 'loading'} envoi={envoi} departed={departed} dossierCount={loadable.length} exports={exports} busy={busy} onExport={type => run(() => exportDeparture(envoi.id, type), scope)} />
       {errors[scope] && <p role="alert" className="departures-error"><AlertTriangle size={16} aria-hidden="true" />{errors[scope]}</p>}
     </article>;
   }

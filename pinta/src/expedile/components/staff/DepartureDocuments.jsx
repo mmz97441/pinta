@@ -29,6 +29,8 @@ function byDossier(errors) {
  * has left: the manifest spreadsheets (`exports`, run by the page through `onExport`) and the
  * commercial invoice of the frozen manifest. A blocking point (an HS code missing…) is said
  * inline with the dossier to open, and nothing is downloaded; a download is its own feedback.
+ * The page keys it by the departure's state: a result read before the departure (its
+ * « Non inclus » list) never stays under the manifest once the departure has left.
  */
 export default function DepartureDocuments({ envoi, departed = false, dossierCount = 0, exports = [], busy = false, onExport }) {
   const { can, clients, categories } = useApp();

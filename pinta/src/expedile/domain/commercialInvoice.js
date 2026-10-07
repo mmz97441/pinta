@@ -114,8 +114,11 @@ export function buildCommercialInvoice({ envoi = null, items = [], categories = 
     if (!clientName) fail('consignee', 'nom du destinataire manquant', 'reception');
     const breakdown = savedQuoteBreakdown(colis.devisSnapshot, { categories: categoryList });
     if (!breakdown) { fail('quote', 'aucun devis enregistré', 'devis'); errors.push(...found); continue; }
+    // A quote saved without its transport (older record) never prints a transport of 0,00 €.
+    if (!finite(colis.devisSnapshot.amounts.transport)) { fail('quote', 'montant du transport absent du devis enregistré', 'devis'); errors.push(...found); continue; }
     const professional = breakdown.professional || client?.type === 'pro';
-    const articles = breakdown.lines.length ? quoteArticles(breakdown)
+    const fromQuote = breakdown.lines.length > 0;
+    const articles = fromQuote ? quoteArticles(breakdown)
       : professional ? dossierArticles(colis, lignes ?? colis.lignes, categoryById, breakdown.transport.amount) : [];
     if (!articles.length) { fail('articles', 'aucun article à déclarer', 'documents'); errors.push(...found); continue; }
 
@@ -124,7 +127,8 @@ export function buildCommercialInvoice({ envoi = null, items = [], categories = 
       if (!name) fail('article', 'description manquante pour un article', 'documents');
       else if (!(isNumber(article.quantity) && article.quantity > 0) || !(isNumber(article.unitPrice) && article.unitPrice >= 0)) fail('article', `quantité ou prix unitaire à corriger pour ${name}`, 'documents');
       if (article.customsToCheck) fail('customs', `classement douanier à vérifier pour ${name || 'un article'}`, 'documents');
-      else if (!article.hsCode) fail('hs-code', `code SH manquant pour ${name || 'un article'}`, 'devis');
+      // The quote's articles are shown with their code in its step; a professional's are its invoices' articles.
+      else if (!article.hsCode) fail('hs-code', `code SH manquant pour ${name || 'un article'}`, fromQuote ? 'devis' : 'documents');
     }
     // The shares always add up to the transport, unless no article has a value to share it by.
     if (articles.reduce((sum, article) => sum + toCents(article.transport), 0) !== toCents(breakdown.transport.amount)) {

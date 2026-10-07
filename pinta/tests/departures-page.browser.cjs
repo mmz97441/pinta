@@ -656,7 +656,7 @@ async function main() {
         assert.equal(normalize(await alert.locator('li').first().locator('span').first().textContent()), 'EXP-LOAD-PRO : code SH manquant pour « Tasses en porcelaine »');
         const open = alert.getByRole('link', { name: 'Ouvrir EXP-LOAD-PRO', exact: true });
         const link = new URL(await open.getAttribute('href'), base);
-        assert.deepEqual([link.pathname, link.searchParams.get('section'), link.searchParams.get('returnTo')], [`/colis/${DOSSIER.loadPro}`, 'devis', '/departs']);
+        assert.deepEqual([link.pathname, link.searchParams.get('section'), link.searchParams.get('returnTo')], [`/colis/${DOSSIER.loadPro}`, 'documents', '/departs'], 'The articles of a professional are those of its invoices.');
         assert.equal(await alert.getByRole('link', { name: 'Compléter les catégories', exact: true }).getAttribute('href'), '/settings?tab=categories');
         for (const element of [open, alert.getByRole('link', { name: 'Compléter les catégories', exact: true })]) assert.ok(await element.evaluate(node => node.getBoundingClientRect().height) >= 44);
         await invoice.getByRole('heading', { name: 'Non inclus (1)', exact: true }).waitFor();
@@ -705,6 +705,23 @@ async function main() {
       await left.screenshot({ path: path.join(output, `commercial-invoice-manifest-${width}-${theme}.png`) });
       await axe(f, `commercial invoice manifest ${width} ${theme}`);
     }, { width, theme, before: f => commercialInvoiceFixture(f) });
+    // The departure leaves while its card stays open (?envoi=): what was read before it never stays under its manifest.
+    await scenario('commercial-invoice-result-before-departure-cleared-once-it-has-left', async f => {
+      await openPage(f, `?envoi=${DEPARTURE.reunion15}`);
+      const target = card(f, 'ENV-2026-045');
+      const before = await openInvoice(f, target);
+      await downloadOf(f, before.pdf, 'invoice-cleared');
+      await before.invoice.getByRole('heading', { name: 'Non inclus (1)', exact: true }).waitFor();
+      // A colleague confirms the loading; « Actualiser » reads the departure again.
+      Object.assign(f.tables.envois.find(row => row.id === DEPARTURE.reunion15), { ...f.left, updated_at: '2026-10-07T21:00:00Z' });
+      await page(f).getByRole('button', { name: 'Actualiser', exact: true }).click();
+      await target.getByRole('button', { name: 'Voir le manifeste', exact: true }).waitFor();
+      assert.equal(await target.locator('.departure-invoice-excluded').count(), 0, 'The « Non inclus » list of the loading is gone.');
+      const after = await openInvoice(f, target);
+      await after.invoice.getByText('Depuis le manifeste confirmé', { exact: false }).waitFor();
+      assert.equal(await after.invoice.getByRole('alert').count(), 0);
+      noWrite(f);
+    }, { before: f => commercialInvoiceFixture(f) });
 
     // ── 10. French numbers ──────────────────────────────────────────────
     await scenario('weights-in-french-in-loading-review-and-manifest', async f => {
@@ -1008,7 +1025,7 @@ async function pdfItems(file) {
   const items = [];
   for (let number = 1; number <= pdf.numPages; number++) {
     const content = await (await pdf.getPage(number)).getTextContent();
-    items.push(...content.items.map(item => item.str.replace(/ /g, ' ')).filter(text => text.trim()));
+    items.push(...content.items.map(item => item.str.replace(/\u00a0/g, ' ')).filter(text => text.trim()));
   }
   return items;
 }

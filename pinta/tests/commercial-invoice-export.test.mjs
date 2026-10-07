@@ -32,7 +32,7 @@ async function readPdf(doc) {
   for (let number = 1; number <= pdf.numPages; number++) {
     const page = await pdf.getPage(number);
     const content = await page.getTextContent();
-    pages.push({ view: page.view, items: content.items.map(item => item.str.replace(/ /g, ' ')).filter(text => text.trim()) });
+    pages.push({ view: page.view, items: content.items.map(item => item.str.replace(/\u00a0/g, ' ')).filter(text => text.trim()) });
   }
   return pages;
 }
