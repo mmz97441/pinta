@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { calculateQuote } from './quote.js';
-import { buildCommercialInvoice, commercialInvoiceFileName, invoiceConsigneeName, invoiceDayLabel } from './commercialInvoice.js';
+import { buildCommercialInvoice, commercialInvoiceBasis, commercialInvoiceFileName, invoiceConsigneeName, invoiceDayLabel, invoiceIssueLabel } from './commercialInvoice.js';
 
 const cents = values => values.reduce((sum, value) => sum + Math.round(value * 100), 0);
 const categories = [
@@ -73,7 +73,7 @@ test('each article carries its dossier, its consignee, its frozen HS code and it
   assert.equal(cents(invoice.rows.filter(row => row.ref === 'EXP-2YE537').map(row => row.transport)), 3900);
   assert.equal(cents(invoice.rows.filter(row => row.ref === 'EXP-3TRIO1').map(row => row.transport)), 1000);
   assert.deepEqual(invoice.totals, { value: 41.56, transport: 49, total: 90.56 });
-  assert.deepEqual(invoice.meta, { number: 'ENV-2026-036', date: '2026-10-08', departureDate: '2026-10-15', destination: 'La Réunion', mode: 'Aérien', dossiers: 2, parcels: 2, weight: 2.9 },
+  assert.deepEqual(invoice.meta, { number: 'ENV-2026-036', date: '2026-10-08', departureDate: '2026-10-15', destination: 'La Réunion', mode: 'Aérien', dossiers: 2, parcels: 2, weight: 2.9, basis: 'loading', issuedAt: '2026-10-07T22:30:00.000Z' },
     'The issue day is the Paris day (00:30 on 8 October in Paris).');
 });
 
@@ -110,7 +110,8 @@ test('a missing HS code blocks the invoice: never an empty or invented code (D33
   const lampe = paidDossier({ id: 'p4', ref: 'EXP-LAMPE1', finalPackages: [box(30, 30, 30, 2)], lignes: [line('l-6', 'Lampe de chevet', 2, 19.9, 'cat-sans-code'), line('l-7', 'Abat-jour', 1, 12, 'cat-cuir')] }, flavie);
   const invoice = buildCommercialInvoice({ envoi, items: [{ colis: lampe, client: flavie }, { colis: scelleuse(), client: flavie }], categories });
   assert.equal(invoice.ok, false);
-  assert.deepEqual(invoice.errors, [{ ref: 'EXP-LAMPE1', colisId: 'p4', kind: 'hs-code', task: 'devis', message: 'EXP-LAMPE1 : code SH manquant pour « Lampe de chevet »' }]);
+  assert.deepEqual(invoice.errors, [{ ref: 'EXP-LAMPE1', colisId: 'p4', kind: 'hs-code', task: 'devis', category: 'Luminaires', message: 'EXP-LAMPE1 : code SH manquant pour « Lampe de chevet » (catégorie « Luminaires »)' }],
+    'The category whose customs code is missing is named.');
   assert.ok(invoice.rows.every(row => row.ref !== 'EXP-LAMPE1' && row.hsCode), 'The blocked dossier gives no row, and no row has an empty code.');
   // The category completed afterwards (Paramètres › Catégories et taxes) unblocks it.
   const completed = categories.map(category => (category.id === 'cat-sans-code' ? { ...category, codeHs: '9405210000' } : category));
@@ -122,10 +123,17 @@ test('a missing HS code blocks the invoice: never an empty or invented code (D33
   assert.equal(cents(fixed.rows.map(row => row.transport)), Math.round(lampe.devisSnapshot.amounts.transport * 100));
   // A professional's articles are those of its invoices: the dossier opens on them, where a category is chosen.
   const uncoded = professional([line('lp-9', 'Lampadaire', 1, 80, 'cat-sans-code', 'fp1'), line('lp-10', 'Ampoules', 2, 5, null, 'fp1')], proInvoices.slice(0, 2));
-  assert.deepEqual(buildCommercialInvoice({ envoi, items: [{ colis: uncoded, client: lagon }], categories }).errors.map(error => [error.kind, error.task, error.message]), [
-    ['hs-code', 'documents', 'EXP-PRO001 : code SH manquant pour « Lampadaire »'],
-    ['hs-code', 'documents', 'EXP-PRO001 : code SH manquant pour « Ampoules »'],
-  ]);
+  assert.deepEqual(buildCommercialInvoice({ envoi, items: [{ colis: uncoded, client: lagon }], categories }).errors.map(error => [error.kind, error.task, error.category, error.message]), [
+    ['hs-code', 'documents', 'Luminaires', 'EXP-PRO001 : code SH manquant pour « Lampadaire » (catégorie « Luminaires »)'],
+    ['hs-code', 'documents', null, 'EXP-PRO001 : code SH manquant pour « Ampoules » (sans catégorie)'],
+  ], 'Without a category, there is no category code to complete: one is to be chosen.');
+  // The porcelain of 7 October: the category without its code is the one to complete.
+  const porcelaine = categories.map(category => (category.id === 'cat-porcelaine' ? { ...category, codeHs: '' } : category));
+  assert.deepEqual(buildCommercialInvoice({ envoi, items: [{ colis: professional(proLines, proInvoices), client: lagon }], categories: porcelaine }).errors.map(error => error.message),
+    ['EXP-PRO001 : code SH manquant pour « Tasses en porcelaine » (catégorie « Porcelaine »)']);
+  // A quote whose category is gone since names the one saved with it.
+  assert.deepEqual(buildCommercialInvoice({ envoi, items: [{ colis: lampe, client: flavie }], categories: categories.filter(category => category.id !== 'cat-sans-code') }).errors.map(error => [error.category, error.message]),
+    [['Luminaires', 'EXP-LAMPE1 : code SH manquant pour « Lampe de chevet » (catégorie « Luminaires »)']]);
 });
 
 test('HS codes stay text: leading zeros are kept', () => {
@@ -161,6 +169,7 @@ test('after the departure, every dossier of the frozen manifest is included', ()
   assert.deepEqual(invoice.excluded, []);
   assert.equal(invoice.rows.length, 2);
   assert.equal(invoice.meta.date, '2026-10-15');
+  assert.deepEqual([invoice.meta.basis, invoice.meta.issuedAt], ['manifest', '2026-10-15T06:00:00.000Z']);
   assert.equal(buildCommercialInvoice({ envoi, items: [], categories, confirmed: true }).errors[0].message, 'Aucun dossier embarqué dans ce manifeste : aucun article à déclarer.');
 });
 
@@ -189,5 +198,33 @@ test('names, days and file names', () => {
   assert.equal(invoiceDayLabel(null), null);
   const invoice = buildCommercialInvoice({ envoi: { ...envoi, modeTransport: null, destinationCode: null }, items: [{ colis: scelleuse(), client: flavie }], categories });
   assert.deepEqual([invoice.meta.mode, invoice.meta.destination], [null, null], 'An unrecorded mode or destination is never guessed.');
-  assert.equal(commercialInvoiceFileName(invoice), 'facture-commerciale-ENV-2026-036');
+  assert.equal(commercialInvoiceFileName(invoice), 'facture-commerciale-ENV-2026-036-avant-depart');
+  assert.equal(commercialInvoiceFileName({ ...invoice, meta: { ...invoice.meta, basis: 'manifest' } }), 'facture-commerciale-ENV-2026-036');
+  assert.equal(invoiceIssueLabel('2026-10-07T12:32:00Z'), '07/10/2026 à 14 h 32');
+  assert.equal(invoiceIssueLabel('2026-10-07T14:05:00Z'), '07/10/2026 à 16 h 05', 'Minutes on two digits.');
+  assert.equal(invoiceIssueLabel('2026-10-01T06:00:45Z'), '01/10/2026 à 8 h', 'A whole hour as the closings of the page: « 8 h ».');
+  assert.equal(invoiceIssueLabel('2026-12-15T07:05:00Z'), '15/12/2026 à 8 h 05', 'Winter time: UTC+1.');
+  for (const value of [null, '', 'pas une date', '2026-10-07']) assert.equal(invoiceIssueLabel(value), null, `${JSON.stringify(value)}: no instant`);
+});
+
+test('two editions of one departure: the same number and day, never the same file nor the same basis line', () => {
+  const items = [{ colis: scelleuse(), client: flavie }, { colis: troisArticles(), client: anli }];
+  // 14 h 32 in Paris: the dossiers ready to load; 16 h 05: the confirmed manifest, one dossier deferred.
+  const loading = buildCommercialInvoice({ envoi, items, categories, issuedAt: Date.parse('2026-10-07T12:32:00Z') });
+  const manifest = buildCommercialInvoice({ envoi, items: items.slice(0, 1), categories, issuedAt: '2026-10-07T14:05:00Z', confirmed: true });
+  assert.equal(loading.ok && manifest.ok, true);
+  assert.deepEqual([loading.meta.number, loading.meta.date], [manifest.meta.number, manifest.meta.date], 'One departure, one number, one day.');
+  assert.notEqual(loading.totals.total, manifest.totals.total, 'Their content differs.');
+  assert.deepEqual([loading.meta.basis, loading.meta.issuedAt], ['loading', '2026-10-07T12:32:00.000Z']);
+  assert.deepEqual([manifest.meta.basis, manifest.meta.issuedAt], ['manifest', '2026-10-07T14:05:00.000Z']);
+  assert.equal(commercialInvoiceBasis(loading.meta), 'Établie avant la confirmation du départ, d’après les dossiers prêts à charger le 07/10/2026 à 14 h 32 (heure de Paris).');
+  assert.equal(commercialInvoiceBasis(manifest.meta), 'Établie d’après le manifeste du départ confirmé le 07/10/2026 à 16 h 05 (heure de Paris).');
+  assert.deepEqual([commercialInvoiceFileName(loading), commercialInvoiceFileName(manifest)], ['facture-commerciale-ENV-2026-036-avant-depart', 'facture-commerciale-ENV-2026-036']);
+  // Without a known instant (a manifest without its confirmation time), no time is invented.
+  const undated = buildCommercialInvoice({ envoi, items, categories, issuedAt: null, confirmed: true });
+  assert.deepEqual([undated.meta.date, undated.meta.issuedAt], [null, null]);
+  assert.equal(commercialInvoiceBasis(undated.meta), 'Établie d’après le manifeste du départ confirmé.');
+  assert.equal(commercialInvoiceBasis({ basis: 'loading', issuedAt: null }), 'Établie avant la confirmation du départ, d’après les dossiers prêts à charger.');
+  const dayOnly = buildCommercialInvoice({ envoi, items, categories, issuedAt: '2026-10-07' });
+  assert.deepEqual([dayOnly.meta.date, dayOnly.meta.issuedAt], ['2026-10-07', null], 'A day alone keeps its day, without a time.');
 });

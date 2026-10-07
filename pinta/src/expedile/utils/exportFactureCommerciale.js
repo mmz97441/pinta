@@ -1,13 +1,14 @@
 import * as XLSX from 'xlsx';
 import {
   COMMERCIAL_INVOICE_COLUMNS, COMMERCIAL_INVOICE_EXPORTER, COMMERCIAL_INVOICE_FOOTER, COMMERCIAL_INVOICE_NOTE,
-  commercialInvoiceFileName, invoiceDayLabel,
+  commercialInvoiceBasis, commercialInvoiceFileName, invoiceDayLabel,
 } from '../domain/commercialInvoice.js';
 
 // The commercial invoice of a departure (domain/commercialInvoice.js) as an Excel sheet
-// « Facture commerciale »: the departure, then the same columns as the PDF. Amounts are
-// numbers shown in euros (« 1 234,50 € » in French Excel), HS codes stay text (leading
-// zeros), the totals are sums of the article rows.
+// « Facture commerciale »: the title and the line saying which edition it is (before the
+// departure or from its manifest, and when), the departure, then the same columns as the
+// PDF. Amounts are numbers shown in euros (« 1 234,50 € » in French Excel), HS codes stay
+// text (leading zeros), the totals are sums of the article rows.
 
 export const COMMERCIAL_INVOICE_SHEET = 'Facture commerciale';
 const MONEY_FORMAT = '#,##0.00 "€"';
@@ -15,12 +16,14 @@ const MONEY_COLUMNS = [5, 6, 7, 8];
 const TOTAL_COLUMNS = [6, 7, 8];
 const cell = (sheet, r, c) => sheet[XLSX.utils.encode_cell({ r, c })];
 
-/** The workbook and its file name, « facture-commerciale-ENV-2026-036.xlsx » (nothing is written). */
+/** The workbook and its file name, « facture-commerciale-ENV-2026-036.xlsx » from the manifest,
+ *  « facture-commerciale-ENV-2026-036-avant-depart.xlsx » before the departure (nothing is written). */
 export function buildCommercialInvoiceWorkbook(invoice) {
   if (!invoice?.ok) throw new Error('La facture commerciale comporte des points à corriger : aucun document n’est généré.');
   const { meta, rows, totals } = invoice;
   const header = [
     ['FACTURE COMMERCIALE'],
+    [commercialInvoiceBasis(meta)],
     ['N° de facture', meta.number || 'Non renseigné'],
     ['Date', invoiceDayLabel(meta.date) || 'Non renseignée'],
     ['Départ prévu', invoiceDayLabel(meta.departureDate) || 'Non renseigné'],

@@ -54,7 +54,8 @@ export async function exportDeparture(envoiId, type) {
 
 /** The commercial invoice before the departure (domain/commercialInvoice.js): its dossiers
  *  read again from the server, like the loading review; those ready to load are included,
- *  the others listed with their reason. */
+ *  the others listed with their reason. It says so, with the instant of the export
+ *  (meta.basis 'loading', meta.issuedAt), and its files end with « -avant-depart ». */
 export async function loadingCommercialInvoice(envoi, { clients = [], categories = [], issuedAt = Date.now() } = {}) {
   const dossiers = loadableDossiers(envoi, await fetchColis(null, { envoiId: envoi.id }));
   return buildCommercialInvoice({
@@ -64,9 +65,10 @@ export async function loadingCommercialInvoice(envoi, { clients = [], categories
 }
 
 /** The commercial invoice of a departure that left, from its confirmed manifest: the loaded
- *  dossiers, their clients, articles and quotes as frozen at the confirmation, dated that
- *  day. A category that had no HS code then takes the one completed since in the categories
- *  (decision D33: a missing code is completed there, never invented). */
+ *  dossiers, their clients, articles and quotes as frozen at the confirmation, dated at that
+ *  instant (meta.basis 'manifest'). A category that had no HS code then takes the one
+ *  completed since in the categories (decision D33: a missing code is completed there, never
+ *  invented). */
 export async function manifestCommercialInvoice(envoiId, { categories = [] } = {}) {
   const manifest = await departureManifest(envoiId);
   const current = new Map(categories.map((category) => [category.id, category]));

@@ -2,13 +2,14 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import {
   COMMERCIAL_INVOICE_COLUMNS, COMMERCIAL_INVOICE_EXPORTER, COMMERCIAL_INVOICE_FOOTER, COMMERCIAL_INVOICE_NOTE,
-  commercialInvoiceFileName, invoiceDayLabel,
+  commercialInvoiceBasis, commercialInvoiceFileName, invoiceDayLabel,
 } from '../domain/commercialInvoice.js';
 import { pdfMoney, pdfNumber, pdfText, pdfUnit } from './pdfFormat.js';
 
 // The commercial invoice of a departure (domain/commercialInvoice.js) as an A4 landscape
-// PDF: the exporter and the departure, then one row per article with its share of the
-// transport, the totals and the allocation rule. Every text goes through pdfText: the
+// PDF: the exporter and the departure, the line saying which edition it is (before the
+// departure or from its manifest, and when), then one row per article with its share of
+// the transport, the totals and the allocation rule. Every text goes through pdfText: the
 // standard font cannot draw a character outside WinAnsi.
 
 const NAVY = [27, 58, 75];
@@ -17,7 +18,8 @@ const MARGIN = 14;
 // Quantity and amounts: right-aligned, in the body, the header and the totals.
 const NUMERIC = new Set([4, 5, 6, 7, 8]);
 
-/** The PDF document and its file name, « facture-commerciale-ENV-2026-036.pdf » (nothing is saved). */
+/** The PDF document and its file name, « facture-commerciale-ENV-2026-036.pdf » from the manifest,
+ *  « facture-commerciale-ENV-2026-036-avant-depart.pdf » before the departure (nothing is saved). */
 export function buildCommercialInvoicePDF(invoice) {
   if (!invoice?.ok) throw new Error('La facture commerciale comporte des points à corriger : aucun document n’est généré.');
   const { meta, rows, totals } = invoice;
@@ -64,9 +66,17 @@ export function buildCommercialInvoicePDF(invoice) {
     columnStyles: { 0: { cellWidth: 34, fontStyle: 'bold', textColor: GREY }, 1: { cellWidth: 58 } },
   });
 
+  // Under the header, what the document was established from and when.
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.setTextColor(...NAVY);
+  const basis = doc.splitTextToSize(pdfText(commercialInvoiceBasis(meta)), width - 2 * MARGIN);
+  const basisY = Math.max(doc.lastAutoTable.finalY, 46) + 6;
+  doc.text(basis, MARGIN, basisY, { lineHeightFactor: 1.3 });
+
   // Articles
   autoTable(doc, {
-    startY: Math.max(doc.lastAutoTable.finalY, 46) + 6,
+    startY: basisY + basis.length * 4.2 + 1.5,
     margin: { left: MARGIN, right: MARGIN, bottom: 16 },
     head: [COMMERCIAL_INVOICE_COLUMNS.map(pdfText)],
     body: rows.map(row => [

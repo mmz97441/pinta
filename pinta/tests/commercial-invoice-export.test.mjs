@@ -1,6 +1,8 @@
 // The commercial invoice of a departure, built with the real jsPDF and SheetJS and read back: the PDF with pdf.js
 // (A4 landscape, French amounts, every column, the transport of each article, the allocation rule and the
-// customs footer), the Excel sheet with SheetJS (numbers in euros, HS codes as text, totals as sums).
+// customs footer), the Excel sheet with SheetJS (numbers in euros, HS codes as text, totals as sums). Its two
+// editions (before the departure, from the manifest) say under their header what they were established from
+// and when, and never share a file name.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
@@ -53,14 +55,19 @@ function paid(fields, client, tarif) {
   assert.equal(quote.ok, true, JSON.stringify(quote.errors));
   return { ...colis, statut: 'paye', devisTotal: quote.amounts.total, devisSnapshot: quote.snapshot };
 }
-function invoice() {
+// Before the departure by default (the dossiers ready to load at 14 h 32 in Paris); `manifest`: the confirmed
+// manifest at 16 h 05 the same day.
+function invoice({ manifest = false } = {}) {
   const scelleuse = paid({ id: 'p1', ref: 'EXP-2YE537', finalPackages: [{ dimL: 40, dimW: 35, dimH: 10, poids: 1.9 }], lignes: [line('l-1', 'Mini scelleuse', 1, 16.64, 'cat-cuir'), line('l-2', 'Organisateur évier', 1, 9.92, 'cat-plastique')] }, flavie, { base: 25, parKg: 5 });
   scelleuse.devisSnapshot.amounts.taxLines[0].customDuty = { code: '42050090', label: 'Ouvrages en cuir', overrideReason: null };
   const pro = paid({ id: 'p3', ref: 'EXP-PRO001', finalPackages: [{ dimL: 40, dimW: 30, dimH: 30, poids: 12 }, { dimL: 30, dimW: 30, dimH: 20, poids: 7.5 }], lignes: [line('lp-1', 'Café torréfié 1 kg', 4, 15, 'cat-cafe'), line('lp-2', 'Machine à expresso', 1, 1189.5, 'cat-machine')] }, lagon, { base: 20, parKg: 5 });
-  const result = buildCommercialInvoice({ envoi: { id: 'env', ref: 'ENV-2026-036', date: '2026-10-15', destinationCode: '974', modeTransport: 'aerien' }, items: [{ colis: pro, client: lagon }, { colis: scelleuse, client: flavie }], categories, issuedAt: '2026-10-07T12:00:00Z' });
+  const result = buildCommercialInvoice({ envoi: { id: 'env', ref: 'ENV-2026-036', date: '2026-10-15', destinationCode: '974', modeTransport: 'aerien' }, items: [{ colis: pro, client: lagon }, { colis: scelleuse, client: flavie }], categories,
+    ...(manifest ? { issuedAt: '2026-10-07T14:05:00Z', confirmed: true } : { issuedAt: '2026-10-07T12:32:00Z' }) });
   assert.equal(result.ok, true, JSON.stringify(result.errors));
   return result;
 }
+const BEFORE_DEPARTURE = 'Établie avant la confirmation du départ, d’après les dossiers prêts à charger le 07/10/2026 à 14 h 32 (heure de Paris).';
+const FROM_MANIFEST = 'Établie d’après le manifeste du départ confirmé le 07/10/2026 à 16 h 05 (heure de Paris).';
 
 test('the model: transport per article to the cent, the professional by its company name', () => {
   const { rows, totals } = invoice();
@@ -75,7 +82,7 @@ test('the model: transport per article to the cent, the professional by its comp
 
 test('the PDF: A4 landscape, every column, French amounts, the allocation rule and the customs footer', async () => {
   const { doc, filename } = buildCommercialInvoicePDF(invoice());
-  assert.equal(filename, 'facture-commerciale-ENV-2026-036.pdf');
+  assert.equal(filename, 'facture-commerciale-ENV-2026-036-avant-depart.pdf');
   const pages = await readPdf(doc);
   assert.equal(pages.length, 1);
   const [, , pageWidth, pageHeight] = pages[0].view;
@@ -83,8 +90,10 @@ test('the PDF: A4 landscape, every column, French amounts, the allocation rule a
   assert.equal(Math.round(pageWidth), 842, 'A4: 297 mm wide');
   const items = pages[0].items;
   const all = items.join('\n');
-  for (const expected of ['EXPEDÎLE', 'FACTURE COMMERCIALE', 'GROUPE DELIVREX', '95731 ROISSY CH DE GAULLE', 'N° de facture', 'ENV-2026-036', '07/10/2026', '15/10/2026', 'La Réunion', 'Aérien', 'Nombre de colis', '3', '21,4 kg'])
+  for (const expected of ['EXPEDÎLE', 'FACTURE COMMERCIALE', BEFORE_DEPARTURE, 'GROUPE DELIVREX', '95731 ROISSY CH DE GAULLE', 'N° de facture', 'ENV-2026-036', '07/10/2026', '15/10/2026', 'La Réunion', 'Aérien', 'Nombre de colis', '3', '21,4 kg'])
     assert.ok(items.includes(expected), `« ${expected} » in the header`);
+  // The edition line sits under the header, above the articles.
+  assert.ok(items.indexOf(BEFORE_DEPARTURE) > items.indexOf('21,4 kg') && items.indexOf(BEFORE_DEPARTURE) < items.indexOf('N° expédition'), 'under the header');
   for (const column of ['N° expédition', 'Destinataire', 'Code SH', 'Description', 'Qté', 'P.U. HT', 'Valeur HT', 'Total']) assert.ok(items.includes(column), `column « ${column} »`);
   assert.ok(all.includes('Transport') && all.includes('affecté'), 'column « Transport affecté »');
   for (const expected of ['EXP-2YE537', 'Hoarau Flavie', '42050090', 'Mini scelleuse', '24,43 €', '41,07 €', 'EXP-PRO001', 'Lagon Services SARL', '0901210000', 'Machine à expresso', '1 189,50 €', '111,86 €', '1 301,36 €'])
@@ -93,21 +102,39 @@ test('the PDF: A4 landscape, every column, French amounts, the allocation rule a
   assert.ok(items.includes('Transport réparti au prorata de la valeur des articles (quantité × prix unitaire HT). Valeurs en euros.'));
   assert.ok(items.includes('Document généré par Expedîle — usage douanier uniquement'), 'the footer is drawn as text');
   assert.ok(items.includes('ENV-2026-036 · Page 1/1'));
-  for (const absent of ['undefined', 'NaN', 'null', '\u0000', '?']) assert.ok(!all.includes(absent), `no « ${absent} »`);
+  for (const absent of ['undefined', 'NaN', 'null', '\u0000', '?', 'rovisoire']) assert.ok(!all.includes(absent), `no « ${absent} »`);
   assert.ok(!items.some(text => /\d\.\d/.test(text)), 'no decimal point');
+});
+
+test('the PDF from the manifest: the same title and number, its own basis line and file name', async () => {
+  const { doc, filename } = buildCommercialInvoicePDF(invoice({ manifest: true }));
+  assert.equal(filename, 'facture-commerciale-ENV-2026-036.pdf');
+  const items = (await readPdf(doc)).flatMap(page => page.items);
+  for (const expected of ['FACTURE COMMERCIALE', FROM_MANIFEST, 'ENV-2026-036', '07/10/2026', 'ENV-2026-036 · Page 1/1']) assert.ok(items.includes(expected), `« ${expected} »`);
+  assert.ok(!items.includes(BEFORE_DEPARTURE) && !items.join('\n').includes('rovisoire'));
+});
+
+test('a long invoice keeps its basis line once, under the header of its first page', async () => {
+  const many = invoice();
+  const rows = Array.from({ length: 60 }, (_, index) => ({ ...many.rows[0], description: `Article ${index + 1}` }));
+  const { doc } = buildCommercialInvoicePDF({ ...many, rows });
+  const pages = await readPdf(doc);
+  assert.ok(pages.length > 1, `${pages.length} pages`);
+  assert.deepEqual(pages.map(page => page.items.includes(BEFORE_DEPARTURE)), pages.map((page, index) => index === 0));
+  assert.ok(pages.at(-1).items.includes(`ENV-2026-036 · Page ${pages.length}/${pages.length}`));
 });
 
 test('the Excel sheet: numbers in euros, HS codes as text, totals as sums of the rows', () => {
   const model = invoice();
   const { book, filename } = buildCommercialInvoiceWorkbook(model);
-  assert.equal(filename, 'facture-commerciale-ENV-2026-036.xlsx');
+  assert.equal(filename, 'facture-commerciale-ENV-2026-036-avant-depart.xlsx');
   const read = XLSX.read(XLSX.write(book, { type: 'buffer', bookType: 'xlsx' }), { cellNF: true, cellFormula: true });
   assert.deepEqual(read.SheetNames, [COMMERCIAL_INVOICE_SHEET]);
   assert.equal(COMMERCIAL_INVOICE_SHEET, 'Facture commerciale');
   const sheet = read.Sheets[COMMERCIAL_INVOICE_SHEET];
   const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: null });
-  assert.deepEqual(rows.slice(0, 10).map(row => row.slice(0, 2)), [
-    ['FACTURE COMMERCIALE', null], ['N° de facture', 'ENV-2026-036'], ['Date', '07/10/2026'], ['Départ prévu', '15/10/2026'], ['Destination', 'La Réunion'],
+  assert.deepEqual(rows.slice(0, 11).map(row => row.slice(0, 2)), [
+    ['FACTURE COMMERCIALE', null], [BEFORE_DEPARTURE, null], ['N° de facture', 'ENV-2026-036'], ['Date', '07/10/2026'], ['Départ prévu', '15/10/2026'], ['Destination', 'La Réunion'],
     ['Mode de transport', 'Aérien'], ['Expéditions', 2], ['Nombre de colis', 3], ['Poids brut total (kg)', 21.4], ['Exportateur', 'GROUPE DELIVREX, 5 RUE DE COPENHAGUE, ROISSY POLE BAT AERONEF CS 13918, 95731 ROISSY CH DE GAULLE'],
   ]);
   const head = rows.findIndex(row => row[0] === 'N° expédition');
@@ -125,6 +152,13 @@ test('the Excel sheet: numbers in euros, HS codes as text, totals as sums of the
     'Transport réparti au prorata de la valeur des articles (quantité × prix unitaire HT). Valeurs en euros.',
     'Document généré par Expedîle — usage douanier uniquement',
   ]);
+});
+
+test('the Excel sheet from the manifest: the same header, its own basis line and file name', () => {
+  const { book, filename } = buildCommercialInvoiceWorkbook(invoice({ manifest: true }));
+  assert.equal(filename, 'facture-commerciale-ENV-2026-036.xlsx');
+  const rows = XLSX.utils.sheet_to_json(book.Sheets[COMMERCIAL_INVOICE_SHEET], { header: 1, raw: true, defval: null });
+  assert.deepEqual(rows.slice(0, 4).map(row => row.slice(0, 2)), [['FACTURE COMMERCIALE', null], [FROM_MANIFEST, null], ['N° de facture', 'ENV-2026-036'], ['Date', '07/10/2026']]);
 });
 
 test('a blocked invoice is never exported', () => {

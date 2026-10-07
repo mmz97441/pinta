@@ -3,6 +3,7 @@ import { clientDisplayName } from './clientGroups.js';
 import { isoCalendarDay, parisCalendarDay } from './departureGroups.js';
 import { departureReadiness } from './departureReadiness.js';
 import { excludedInvoiceIds } from './invoiceDocuments.js';
+import { parisDateTimeInput } from './parisTime.js';
 import { roundMoney } from './quote.js';
 import { allocateCents, savedQuoteBreakdown } from './quoteBreakdown.js';
 
@@ -19,7 +20,11 @@ import { allocateCents, savedQuoteBreakdown } from './quoteBreakdown.js';
 // article lines are used, without those of rejected, replaced or duplicate invoices (as
 // the quote does), and the quote's transport is shared the same way. A missing HS code
 // blocks the document: a code is never left empty nor invented (decision D33).
-// Pure: no network; the issue instant is given by the caller (issuedAt).
+// Two editions share the departure's number: before the departure, from the dossiers
+// ready to load at the export (basis 'loading', file « …-avant-depart »); once it has
+// left, from its confirmed manifest (basis 'manifest'). Each prints what it was
+// established from and when (commercialInvoiceBasis), the title stays « FACTURE
+// COMMERCIALE ». Pure: no network; the issue instant is given by the caller (issuedAt).
 
 // The wording shared by the PDF and the Excel document.
 export const COMMERCIAL_INVOICE_COLUMNS = Object.freeze(['N° expédition', 'Destinataire', 'Code SH', 'Description', 'Qté', 'P.U. HT', 'Valeur HT', 'Transport affecté', 'Total']);
@@ -43,11 +48,13 @@ export function invoiceConsigneeName(client) {
   return company || clientDisplayName(client);
 }
 
-/** The articles of a saved quote, with their frozen HS code and transport share. */
+/** The articles of a saved quote, with their frozen HS code, their category's name
+ *  (the one saved with the quote when the category is gone) and transport share. */
 function quoteArticles(breakdown) {
   return breakdown.lines.map(line => ({
     description: line.description, quantity: line.quantity, unitPrice: line.unitPrice,
     value: line.value, transport: line.transportShare, hsCode: line.hsCode, customsToCheck: false,
+    category: line.hsLabel || null,
   }));
 }
 
@@ -65,6 +72,7 @@ function dossierArticles(colis, lines, categoryById, transport) {
     return {
       description: String(line.desc ?? line.description ?? '').trim(), quantity: num(line.qte), unitPrice: num(line.prix),
       value: roundMoney(values[index]), transport: shares[index], hsCode: code || null, customsToCheck: Boolean(duty?.stale),
+      category: String(category?.label || '').trim() || null,
     };
   });
 }
@@ -76,15 +84,20 @@ function dossierArticles(colis, lines, categoryById, transport) {
  * - Before the departure (`confirmed` false), only the dossiers ready to load
  *   (departureReadiness) are included; the others are listed in `excluded` with their reason.
  *   After it (`confirmed`, the frozen manifest), every loaded dossier is included.
- * - `errors` (`{ ref, colisId, kind, task, message }`, « EXP-… : code SH manquant pour « … » »):
- *   what blocks the document; `ok` is false and nothing may be exported. `kind` says what
- *   to fix ('hs-code', 'customs', 'article', 'articles', 'transport', 'quote', 'consignee',
- *   'empty'), `task` the dossier step that shows it.
+ * - `errors` (`{ ref, colisId, kind, task, message }`, « EXP-… : code SH manquant pour « … »
+ *   (catégorie « … ») »): what blocks the document; `ok` is false and nothing may be
+ *   exported. `kind` says what to fix ('hs-code', 'customs', 'article', 'articles',
+ *   'transport', 'quote', 'consignee', 'empty'), `task` the dossier step that shows it. An
+ *   'hs-code' point also carries `category`: the name of the category whose customs code is
+ *   missing (completed in Paramètres › Catégories et taxes), null for an article without
+ *   category (chosen with the dossier's invoices).
  * - `rows`: `{ ref, clientName, hsCode, description, quantity, unitPrice, value, transport, total }`,
  *   dossiers in reference order, articles in their quote order; amounts in euros, to the cent.
- * - `meta`: `{ number, date, departureDate, destination, mode, dossiers, parcels, weight }`:
+ * - `meta`: `{ number, date, departureDate, destination, mode, dossiers, parcels, weight, basis, issuedAt }`:
  *   the departure's reference, the issue day (Paris), the departure day, its destination and
- *   transport mode (null when not recorded), the outgoing parcels and their real weight (kg).
+ *   transport mode (null when not recorded), the outgoing parcels and their real weight (kg),
+ *   what the document was established from ('loading': the dossiers ready to load, before the
+ *   departure; 'manifest': the confirmed manifest) and the instant it was (ISO, null when unknown).
  * `lignes` is a dossier's article lines when they are not on `colis.lignes` (manifest).
  */
 export function buildCommercialInvoice({ envoi = null, items = [], categories = [], issuedAt = Date.now(), confirmed = false } = {}) {
@@ -108,7 +121,7 @@ export function buildCommercialInvoice({ envoi = null, items = [], categories = 
     parcels += readiness.count;
     weight += readiness.weights?.realWeight || 0;
     const found = [];
-    const fail = (kind, message, task) => found.push({ ref, colisId: colis.id || null, kind, task, message: `${ref || 'Dossier sans référence'} : ${message}` });
+    const fail = (kind, message, task, extra = {}) => found.push({ ref, colisId: colis.id || null, kind, task, message: `${ref || 'Dossier sans référence'} : ${message}`, ...extra });
 
     const clientName = invoiceConsigneeName(client);
     if (!clientName) fail('consignee', 'nom du destinataire manquant', 'reception');
@@ -128,7 +141,11 @@ export function buildCommercialInvoice({ envoi = null, items = [], categories = 
       else if (!(isNumber(article.quantity) && article.quantity > 0) || !(isNumber(article.unitPrice) && article.unitPrice >= 0)) fail('article', `quantité ou prix unitaire à corriger pour ${name}`, 'documents');
       if (article.customsToCheck) fail('customs', `classement douanier à vérifier pour ${name || 'un article'}`, 'documents');
       // The quote's articles are shown with their code in its step; a professional's are its invoices' articles.
-      else if (!article.hsCode) fail('hs-code', `code SH manquant pour ${name || 'un article'}`, fromQuote ? 'devis' : 'documents');
+      // The category is named: its customs code is what to complete (none: one is to be chosen).
+      else if (!article.hsCode) {
+        fail('hs-code', `code SH manquant pour ${name || 'un article'} (${article.category ? `catégorie ${quoted(article.category)}` : 'sans catégorie'})`,
+          fromQuote ? 'devis' : 'documents', { category: article.category });
+      }
     }
     // The shares always add up to the transport, unless no article has a value to share it by.
     if (articles.reduce((sum, article) => sum + toCents(article.transport), 0) !== toCents(breakdown.transport.amount)) {
@@ -151,6 +168,8 @@ export function buildCommercialInvoice({ envoi = null, items = [], categories = 
   }
   const value = rows.reduce((sum, row) => sum + toCents(row.value), 0);
   const transport = rows.reduce((sum, row) => sum + toCents(row.transport), 0);
+  // A calendar day alone gives no instant: no time is invented for it.
+  const instant = issuedAt === null || isoCalendarDay(issuedAt) ? NaN : new Date(issuedAt).getTime();
   return {
     ok: errors.length === 0 && rows.length > 0,
     errors,
@@ -166,6 +185,8 @@ export function buildCommercialInvoice({ envoi = null, items = [], categories = 
       dossiers: included,
       parcels,
       weight: Math.round(weight * 100) / 100,
+      basis: confirmed ? 'manifest' : 'loading',
+      issuedAt: Number.isFinite(instant) ? new Date(instant).toISOString() : null,
     },
   };
 }
@@ -176,8 +197,31 @@ export function invoiceDayLabel(day) {
   return value ? `${value.slice(8, 10)}/${value.slice(5, 7)}/${value.slice(0, 4)}` : null;
 }
 
-/** « facture-commerciale-ENV-2026-036 » (the extension is the exporter's). */
+/** « 07/10/2026 à 14 h 32 », « 01/10/2026 à 8 h » (Paris wall time, as the closings of the
+ *  « Départs » page); null without a valid instant (a calendar day alone has no time). */
+export function invoiceIssueLabel(value) {
+  const wall = isoCalendarDay(value) ? '' : parisDateTimeInput(value);
+  if (!wall) return null;
+  const hour = Number(wall.slice(11, 13)), minute = wall.slice(14, 16);
+  return `${invoiceDayLabel(wall.slice(0, 10))} à ${hour} h${minute === '00' ? '' : ` ${minute}`}`;
+}
+
+/** The line printed under the header, saying which edition this is: « Établie avant la
+ *  confirmation du départ, d’après les dossiers prêts à charger le 07/10/2026 à 14 h 32
+ *  (heure de Paris). » or « Établie d’après le manifeste du départ confirmé le 07/10/2026 à
+ *  16 h 05 (heure de Paris). »; without the instant when it is unknown. */
+export function commercialInvoiceBasis(meta) {
+  const issued = invoiceIssueLabel(meta?.issuedAt);
+  const at = issued ? ` le ${issued} (heure de Paris)` : '';
+  return meta?.basis === 'manifest'
+    ? `Établie d’après le manifeste du départ confirmé${at}.`
+    : `Établie avant la confirmation du départ, d’après les dossiers prêts à charger${at}.`;
+}
+
+/** « facture-commerciale-ENV-2026-036 » from the confirmed manifest,
+ *  « facture-commerciale-ENV-2026-036-avant-depart » before the departure: the two editions
+ *  never share a file name (the extension is the exporter's). */
 export function commercialInvoiceFileName(invoice) {
   const number = String(invoice?.meta?.number || 'depart').replace(/[^\w.-]+/g, '-');
-  return `facture-commerciale-${number}`;
+  return `facture-commerciale-${number}${invoice?.meta?.basis === 'manifest' ? '' : '-avant-depart'}`;
 }
