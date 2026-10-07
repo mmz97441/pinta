@@ -286,6 +286,11 @@ try{
   f.tables.factures[0].montant=26.56;const line=f.tables.lignes[0];
   f.tables.lignes=[{...line,description:'Mini scelleuse',qte:1,prix_unitaire:16.64,custom_duty:mapped(catalog[0])},{...line,id:'55555555-5555-4555-8555-555555555556',description:'Organisateur évier',qte:1,prix_unitaire:9.92,categorie_id:'cat-vaisselle'}];
  }
+ // The saved quote sits in the task's card, set off by a rule: no second card inside it (CLAUDE.md §11).
+ async function assertNoInnerCard(group,paddingTop='0px'){
+  const frame=await group.evaluate(node=>{const style=getComputedStyle(node);return {top:style.borderTopWidth,right:style.borderRightWidth,bottom:style.borderBottomWidth,left:style.borderLeftWidth,radius:style.borderTopLeftRadius,paddingTop:style.paddingTop,paddingLeft:style.paddingLeft,inCard:Boolean(node.parentElement.closest('[data-testid="task-guidance"]'))};});
+  assert.deepEqual(frame,{top:'1px',right:'0px',bottom:'0px',left:'0px',radius:'0px',paddingTop,paddingLeft:'0px',inCard:true},'A rule, not a card inside the task card.');
+ }
  // Every detail of the saved quote opened, then read once they all are.
  async function openAll(f,group){
   for(const summary of await group.locator('summary').all())await summary.click();
@@ -318,6 +323,7 @@ try{
   await f.page.setViewportSize(mobile?{width:390,height:844}:{width:1440,height:1000});await f.context.addInitScript(dark=>localStorage.setItem('expedile-theme',dark?'dark':'light'),dark);
   await saveAndSend(f);await f.page.waitForFunction(dark=>document.documentElement.classList.contains('dark')===dark,dark);
   const group=savedQuote(f);
+  await assertNoInnerCard(group);
   // Folded: the amounts only.
   assert.match(plain(await group.innerText()),mobile?/^Transport 39,00 € Comprendre le calcul du transport Taxes 10,88 € Détail des taxes Frais convenus Aucun frais Total 49,88 € Articles et taux enregistrés \(2\)$/:/^Transport 39,00 € Comprendre le calcul du transport Taxes 10,88 € Détail des taxes Frais convenus 4,00 € Détail des frais Total 53,88 € Articles et taux enregistrés \(2\)$/);
   assert.doesNotMatch(plain(await group.innerText()),/0,00 €/,'No « 0,00 € » line for a quote without fees.');
@@ -357,8 +363,26 @@ try{
  await scenario('saved-quote-without-amounts-keeps-the-short-summary',{},async f=>{
   Object.assign(f.tables.colis[0],{statut:'devis_envoye',devis_total:77,quote_version:1,devis_brouillon:false,devis_envoye_le:'2026-10-07T08:00:00Z',devis_snapshot:{inputs:{lines:[{id:ids.L,description:'Article vérifié',quantity:1,unitPrice:100,rates:{om:10,omr:2.5}}]}}});
   await f.login();await f.page.goto(`${base}/colis/${ids.P}?section=devis`);await f.page.getByRole('heading',{name:'Devis enregistré',exact:true}).waitFor();
-  const group=savedQuote(f);await openAll(f,group);
+  const group=savedQuote(f);await assertNoInnerCard(group,'12px');await openAll(f,group);
   assert.equal(plain(await group.innerText()),'Total 77,00 € Articles et taux enregistrés (1) Article vérifié 1 × 100,00 € HT OM : 10 % · OMR : 2,5 % Valeurs conservées avec ce devis.');
+ });
+ // The saving is not a part of the total: it follows the Total in green, in the words the client reads on the
+ // quote PDF and in the portal (« Économie réalisée grâce à l’optimisation »), never as an amount row above it.
+ for(const dark of [false,true])await scenario(`saved-quote-names-the-saving-after-the-total-390-${dark?'dark':'light'}`,{},async f=>{
+  const quote=frozenQuote();quote.devis_snapshot.savings=12.5;Object.assign(f.tables.colis[0],quote);
+  await f.page.setViewportSize({width:390,height:844});await f.context.addInitScript(dark=>localStorage.setItem('expedile-theme',dark?'dark':'light'),dark);
+  await f.login();await f.page.goto(`${base}/colis/${ids.P}?section=devis`);await f.page.getByRole('heading',{name:'Devis enregistré',exact:true}).waitFor();
+  await f.page.waitForFunction(dark=>document.documentElement.classList.contains('dark')===dark,dark);
+  const group=savedQuote(f);await group.waitFor();
+  const text=plain(await group.innerText());
+  assert.match(text,/^Transport 40,00 € Comprendre le calcul du transport Taxes 6,98 € Détail des taxes Frais convenus Aucun frais Total 46,98 € Économie réalisée grâce à l’optimisation : 12,50 € Articles et taux enregistrés \(2\)$/,text);
+  const saving=group.getByText('Économie réalisée grâce à l’optimisation',{exact:false});
+  assert.equal(await saving.evaluate(node=>getComputedStyle(node).color),dark?'rgb(176, 223, 192)':'rgb(4, 120, 87)','The saving reads in green, in both themes.');
+  const [total,after]=await Promise.all([group.getByText('Total',{exact:true}).boundingBox(),saving.boundingBox()]);assert.ok(after.y>=total.y+total.height,'The saving follows the Total.');
+  assert.equal(await f.page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false);
+  const axe=await new AxeBuilder({page:f.page}).include('[aria-label="Devis enregistré"][role="group"]').withTags(['wcag2a','wcag2aa','wcag21aa']).analyze();assert.deepEqual(axe.violations.map(v=>v.id),[]);
+  await group.scrollIntoViewIfNeeded();await f.page.getByTestId('task-guidance').screenshot({path:`${output}/saved-quote-saving-390-${dark?'dark':'light'}.png`});
+  assert.deepEqual(writes(f),[]);
  });
  for(const dark of [false,true])await scenario(`saved-quote-names-a-missing-hs-code-and-keeps-the-rate-correction-390-${dark?'dark':'light'}`,{},async f=>{
   Object.assign(f.tables.colis[0],frozenQuote());const before=structuredClone(f.tables.colis[0]);

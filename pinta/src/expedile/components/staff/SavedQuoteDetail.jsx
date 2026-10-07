@@ -118,7 +118,7 @@ function ArticleLine({ line, index }) {
 function ShortSummary({ colis }) {
   const amounts = colis.devisSnapshot?.amounts;
   const frozenLines = amounts?.taxLines || colis.devisSnapshot?.inputs?.lines || [];
-  return <div role="group" aria-label="Devis enregistré" className="space-y-2 rounded-xl border border-slate-200 p-4 text-sm">
+  return <div role="group" aria-label="Devis enregistré" className="space-y-2 border-t border-slate-200 pt-3 text-sm">
     {amounts && <><Ligne label="Transport" value={eur(amounts.transport)} /><Ligne label="Taxes" value={eur((amounts.om || 0) + (amounts.omr || 0) + (amounts.tva || 0))} /><Ligne label="Frais" value={eur(amounts.fees)} /></>}
     <Ligne label="Total" value={eur(colis.devisTotal)} />
     {frozenLines.length > 0 && <details aria-label="Articles et taux enregistrés"><summary className="min-h-11 cursor-pointer py-3 font-semibold">Articles et taux enregistrés ({frozenLines.length})</summary><ul className="divide-y divide-slate-200">{frozenLines.map((line, index) => <li key={line.id || index} className="space-y-1 py-3"><p className="font-semibold">{line.description}</p>{line.customDuty?.code && <p>{line.customDuty.code} · {line.customDuty.label}</p>}<p>{line.quantity} × {eur(line.unitPrice)} HT</p><p>OM : {line.rates?.om == null ? 'non renseigné' : percent(line.rates.om)} · OMR : {line.rates?.omr == null ? 'non renseigné' : percent(line.rates.omr)}</p>{line.customDuty?.overrideReason && <p>Motif de correction : {line.customDuty.overrideReason}</p>}</li>)}</ul><p className="py-2 text-slate-600">Valeurs conservées avec ce devis.</p></details>}
@@ -126,22 +126,24 @@ function ShortSummary({ colis }) {
 }
 
 /** « Devis enregistré »: the saved quote with its transport, taxes, fees and
- * articles, each detail folded like the quote being prepared. */
+ * articles, each detail folded like the quote being prepared. It sits in the
+ * task's own card: a rule sets it off, not a second card (CLAUDE.md §11). */
 export default function SavedQuoteDetail({ colis, categories = [] }) {
   const detail = savedQuoteBreakdown(colis?.devisSnapshot, { categories });
   if (!detail) return <ShortSummary colis={colis} />;
   const total = Number(colis.devisTotal);
   const mismatch = Number.isFinite(total) && Math.abs(total - detail.total) >= 0.005;
   // Labels stay near their amounts on a wide screen.
-  return <div role="group" aria-label="Devis enregistré" className="max-w-2xl rounded-xl border border-slate-200 px-4 py-2 text-sm">
+  return <div role="group" aria-label="Devis enregistré" className="max-w-2xl border-t border-slate-200 text-sm">
     <div className="divide-y divide-slate-200">
       <TransportPart weights={detail.weights} transport={detail.transport} />
       <TaxesPart professional={detail.professional} taxes={detail.taxes} />
       <FeesPart fees={detail.fees} feesTotal={detail.feesTotal} />
-      {detail.savings > 0 && <div className="py-2"><Row label="Économie après optimisation" value={eur(detail.savings)} /></div>}
       <div className="py-3">
         <Row label="Total" value={eur(total)} strong />
         {mismatch && <p role="status" className="mt-1 text-amber-800">Le détail enregistré totalise {eur(detail.total)} : faites vérifier ce devis avant tout règlement.</p>}
+        {/* Not a part of the total: the saving the optimisation brought, in the client's own words (quote PDF, portal). */}
+        {detail.savings > 0 && <p className="mt-1 text-emerald-700">Économie réalisée grâce à l’optimisation&nbsp;: {eur(detail.savings)}</p>}
       </div>
     </div>
     {detail.lines.length > 0 && <details aria-label="Articles et taux enregistrés" className="border-t border-slate-200">
