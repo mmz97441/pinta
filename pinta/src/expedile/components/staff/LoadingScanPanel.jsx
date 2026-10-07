@@ -357,13 +357,17 @@ export default function LoadingScanPanel({
     focusScan.current = false;
     inputRef.current?.focus({ preventScroll: true });
   }, [counting]);
-  // A scanned dossier comes into view (under the scan bar) and stays highlighted a moment.
+  // A scanned dossier comes into view (under the scan bar) and stays highlighted a moment. Not while a dossier's control
+  // has the focus (reached with Tab while the answer was awaited): the list then stays still, so that this control
+  // never goes under the bar or off the screen; the answer in the bar names the dossier checked.
   useEffect(() => {
     if (!flash) return undefined;
-    const node = document.querySelector(`[data-loading-dossier="${flash.id}"]`);
+    const bar = barRef.current;
+    const focused = document.activeElement;
+    const focusInList = Boolean(bar && bar.parentElement && focused && bar.parentElement.contains(focused) && !bar.contains(focused));
+    const node = focusInList ? null : document.querySelector(`[data-loading-dossier="${flash.id}"]`);
     if (node) {
       const box = node.getBoundingClientRect();
-      const bar = barRef.current;
       const top = Math.max(0, bar ? bar.getBoundingClientRect().bottom : 0);
       if (box.top < top || box.bottom > window.innerHeight) {
         const still = typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;

@@ -817,6 +817,20 @@ async function main() {
       await f.page.keyboard.press('Escape');
       await dialog.waitFor({ state: 'detached' });
       await underTheBar('Compter à la main les colis de EXP-2YE537', 'The focus given back by the dialog');
+      // A label scanned (the scanner types into the scan field), then Tab while its answer is awaited: once it comes,
+      // the list does not move to that dossier (far below), so the control reached stays under the bar; the answer
+      // names the dossier checked, highlighted where it is.
+      let release; const held = new Promise(resolve => { release = resolve; });
+      await f.context.route('**/rest/v1/rpc/record_loading_check', async route => { await held; return route.fallback(); });
+      await scan(f, 'EXP-0042');
+      await until(() => focusedIsField(f), true, 'The scanner typed into the scan field');
+      for (let step = 0; step < 3; step += 1) await f.page.keyboard.press('Tab');
+      await underTheBar('Compter à la main les colis de EXP-2YE537', 'Tab while the answer is awaited');
+      release();
+      await until(() => feedback(f).locator('.loading-scan-feedback-title').innerText().then(normalize), 'EXP-0042 · colis 1/1 vérifié', 'The answer, once recorded');
+      await until(() => dossierRow(f, D.legacy).getAttribute('data-flash'), 'success', 'The dossier checked is highlighted');
+      await settle(f);
+      await underTheBar('Compter à la main les colis de EXP-2YE537', 'Its answer never moves the list under the focus');
     }, { width: 1024, height: 768 });
 
     // ── 7e. A phone held sideways (a short screen): the scan bar is as short as on a phone held upright ──
