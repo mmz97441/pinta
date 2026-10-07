@@ -82,7 +82,7 @@ async function run() {
       await dialog.getByLabel('Fournisseur · carton 2').fill('Boutique D');
       await dialog.getByLabel('Numéro de suivi · carton 2').fill('SCAN-02');
       await dialog.getByLabel('Numéro de suivi · carton 2').press('Enter');
-      await dialog.getByText('0 / 3 carton(s) mesuré(s) à réception', { exact: false }).waitFor();
+      await dialog.getByText('0 / 3 cartons mesurés à réception', { exact: false }).waitFor();
       assert.equal(await dialog.getByRole('button', { name: /Mesurer maintenant|Mesurer plus tard/ }).count(), 0);
       await dialog.getByLabel('Longueur à réception (cm) · carton 1', { exact: true }).fill('20');
       await dialog.getByRole('button', { name: 'Terminer la réception', exact: true }).click();
@@ -91,7 +91,7 @@ async function run() {
       assert.ok(!f.requests.some(request => request.method === 'POST' && request.path === '/rest/v1/colis'));
       await measure(dialog, 1, [20, 30, 40, 2]);
       await measure(dialog, 2, [10, 15, 20, 0.5]);
-      await dialog.getByText('2 / 3 carton(s) mesuré(s) à réception', { exact: false }).waitFor();
+      await dialog.getByText('2 / 3 cartons mesurés à réception', { exact: false }).waitFor();
       const footer = await dialog.getByRole('button', { name: 'Terminer la réception', exact: true }).boundingBox();
       const viewport = f.page.viewportSize();
       assert.ok(footer.y >= 0 && footer.y + footer.height <= viewport.height, 'Receipt action remains visible');

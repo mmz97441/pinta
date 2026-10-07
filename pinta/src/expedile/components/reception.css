@@ -1,0 +1,30 @@
+/* Reception page (ColisModal in full page). Colours follow the brand.css tokens. */
+
+/* References, lockers and statuses are what the préparateur matches with the
+   physical parcel: they wrap as whole words, whatever a parent button sets
+   (brand.css gives buttons overflow-wrap: anywhere). */
+.reception-token,
+.reception-token * {
+  white-space: nowrap;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+.reception-token { flex: none; }
+
+/* An open expedition the carton can join. */
+.reception-choice { background-color: #fff; border-color: #E5E7EB; }
+html.dark .reception-choice { background-color: var(--bg-elevated); border-color: var(--border-subtle); }
+@media (hover: hover) {
+  .reception-choice:hover { background-color: #EFF6FF; border-color: #60A5FA; }
+  html.dark .reception-choice:hover { background-color: #203744; border-color: #4F7FA3; }
+}
+
+/* The sticky actions publish their height (--reception-footer-height, set from
+   a ResizeObserver): a focused entry scrolls clear of them, never under them. */
+.reception-body input,
+.reception-body textarea,
+.reception-body select,
+.reception-body button,
+.reception-body summary {
+  scroll-margin-bottom: calc(var(--reception-footer-height, 0px) + 16px);
+}
