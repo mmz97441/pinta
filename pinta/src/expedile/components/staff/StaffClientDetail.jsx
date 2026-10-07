@@ -7,6 +7,7 @@ import { eur, getPrenom } from '../../utils';
 import { Badge } from '../ui';
 import { exportRecapProExcel, clientPaymentLabel, monthlyProDossiers, proRecapDossier } from '../../utils/exportRecapPro';
 import { safeWorkReturn } from '../../domain/personalWork';
+import { parisMonth } from '../../domain/parisTime';
 import ShareLinkPanel from './ShareLinkPanel';
 import { supabase } from '../../lib/supabase';
 import { functionErrorMessage } from '../../services/functionErrors';
@@ -219,8 +220,9 @@ function EditClientPage({ cl, clients, data: initialData, updateClient, deleteCl
   const [clDraft, setClDraft, { clear: clearClientDraft }] = usePersistentDraft(`client:edit:${cl.id}`, initialDraft);
   const [touched, setTouched] = useState({});
   const [billingOpen, setBillingOpen] = useState(false);
-  const [billingMonth, setBillingMonth] = useState(new Date().getMonth());
-  const [billingYear, setBillingYear] = useState(new Date().getFullYear());
+  // The recap opens on the current Paris month, the month its payments are counted in.
+  const [billingMonth, setBillingMonth] = useState(() => parisMonth(Date.now()).month);
+  const [billingYear, setBillingYear] = useState(() => parisMonth(Date.now()).year);
 
   // ── Duplicate detection ───────────────────────────────────────────────────
   const duplicates = useMemo(() => {

@@ -1,0 +1,85 @@
+/* « Départs » page. Tokens from brand.css (text, borders, « À vérifier » amber)
+   with their html.dark values; the page adds its own success, error and
+   proposal colours below, each 7:1 or more on its fill in both themes. */
+.departures-page {
+  --departures-success-text: #166534;
+  --departures-success-bg: #ecfdf3;
+  --departures-success-border: #86d1a5;
+  --departures-error-text: #991b1b;
+  --departures-error-bg: #fef2f2;
+  --departures-error-border: #f0b4b4;
+  --departures-wish-bg: #eef4f8;
+  --departures-wish-border: #b9cfdc;
+}
+html.dark .departures-page {
+  --departures-success-text: #b0dfc0;
+  --departures-success-bg: #203a2d;
+  --departures-success-border: #3f6d52;
+  --departures-error-text: #f4b9b9;
+  --departures-error-bg: #44282a;
+  --departures-error-border: #7a4245;
+  --departures-wish-bg: #1f3340;
+  --departures-wish-border: #3d5c70;
+}
+
+/* Form pattern at the sizes of the dossier departure field: label 12 px, help 13 px, error 14 px. */
+.departures-label { display: block; font-size: .75rem; line-height: 1.3; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--text-secondary); }
+.departures-help { margin-top: 2px; font-size: .8125rem; line-height: 1.4; color: var(--text-secondary); }
+.departures-field-error { margin-top: 4px; font-size: .875rem; line-height: 1.4; font-weight: 600; color: var(--departures-error-text); }
+
+/* A panel opened from a card far below scrolls to the top of the page with some air. */
+.departures-panel-heading { scroll-margin-top: 16px; }
+.departures-panel-heading:focus { outline: none; }
+.departures-panel-heading:focus-visible { outline: 3px solid var(--brand-gold); outline-offset: 3px; }
+
+.departures-closing {
+  display: flex; align-items: center; gap: 6px; margin-top: 4px;
+  font-size: .875rem; line-height: 1.4; color: var(--text-secondary);
+}
+.departures-flag {
+  display: inline-flex; align-items: center; gap: 6px; margin-top: 6px; padding: 2px 8px;
+  border: 1px solid var(--attention-border); border-radius: 8px;
+  background: var(--attention-bg); color: var(--attention-text);
+  font-size: .875rem; font-weight: 600; line-height: 1.4;
+}
+.departures-reason { font-size: .875rem; line-height: 1.4; color: var(--text-secondary); }
+
+/* Dossiers whose desired day is this departure's day. */
+.departures-wishes {
+  padding: 12px; border: 1px solid var(--departures-wish-border); border-radius: 12px;
+  background: var(--departures-wish-bg); color: var(--text-primary);
+}
+.departures-wishes-title { display: flex; align-items: center; gap: 8px; font-size: .9375rem; font-weight: 700; }
+.departures-wishes-list { display: flex; flex-wrap: wrap; gap: 0 16px; margin: 4px 0 8px; }
+.departures-wishes-list li { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.departures-wishes-link {
+  display: inline-flex; align-items: center; min-height: 44px; font-weight: 700;
+  color: var(--brand-text); text-decoration: underline; text-underline-offset: 3px; overflow-wrap: anywhere;
+}
+.departures-wishes-client { font-size: .875rem; color: var(--text-secondary); overflow-wrap: anywhere; }
+.departures-accent { color: var(--brand-text); border-color: var(--brand-text); }
+
+.departures-success, .departures-error {
+  display: flex; align-items: flex-start; gap: 8px; padding: 8px 12px; border: 1px solid; border-radius: 12px;
+  font-size: .875rem; line-height: 1.45; overflow-wrap: anywhere;
+}
+.departures-success { color: var(--departures-success-text); background: var(--departures-success-bg); border-color: var(--departures-success-border); }
+.departures-error { color: var(--departures-error-text); background: var(--departures-error-bg); border-color: var(--departures-error-border); }
+.departures-success svg, .departures-error svg { flex: none; margin-top: 2px; }
+.departures-error ul { margin: 2px 0 0; padding-left: 18px; list-style: disc; }
+
+/* Documents of a departure: a disclosure on its own line, so opening it never stretches the actions. */
+.departures-documents > summary { width: fit-content; min-height: 44px; padding: 10px 0; cursor: pointer; font-size: .875rem; font-weight: 600; color: var(--text-primary); }
+
+/* Empty view: an illustration, what it means, and the action when the person can plan. */
+.departures-empty { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 40px 16px; text-align: center; }
+.departures-empty-icon {
+  display: grid; place-items: center; width: 56px; height: 56px; margin-bottom: 4px;
+  border-radius: 999px; background: var(--bg-surface); color: var(--brand-text);
+}
+html.dark .departures-empty-icon { background: var(--bg-elevated); border: 1px solid var(--border-subtle); }
+.departures-empty p { max-width: 32rem; font-size: .875rem; line-height: 1.5; color: var(--text-secondary); }
+
+/* Departures that could not be loaded: never an empty view. */
+.departures-load-error { display: flex; align-items: flex-start; gap: 12px; padding: 16px; border-radius: 12px; }
+.departures-load-error p + p { margin-top: 2px; }

@@ -19,3 +19,29 @@ test('saved quote remains authoritative for weight, amounts and article allocati
  const articles=XLSX.utils.sheet_to_json(result.workbook.Sheets['Coût de revient']);assert.equal(articles.reduce((sum,l)=>sum+Math.round(l['Transport prorata (€)']*100),0),1000);
 });
 test('billing period excludes unpaid, other clients and other months',()=>{assert.equal(buildProRecapWorkbook(client,[{...parcel,statut:'devis_envoye'}],8,2026),null);assert.equal(buildProRecapWorkbook(client,[parcel],7,2026),null);assert.equal(clientPaymentLabel({methodePaiement:'30_jours'}),'Paiement à 30 jours');assert.equal(clientPaymentLabel({modePaiement:'fin_mois'}),'Paiement en fin de mois');});
+test('the billing month is the Paris calendar month, whatever the device time zone',()=>{
+ const previous=process.env.TZ;
+ try{
+  for(const zone of ['Europe/Paris','Indian/Reunion','America/New_York','Pacific/Kiritimati']){
+   process.env.TZ=zone;
+   // 23:00 in Paris on 30 September (already 1 October in Réunion): September.
+   const late={...parcel,paiementDate:'2026-09-30T21:00:00Z'};
+   assert.equal(buildProRecapWorkbook(client,[late],8,2026)?.count,1,zone);
+   assert.equal(buildProRecapWorkbook(client,[late],9,2026),null,zone);
+   // Midnight in Paris (still 30 September in New York): October.
+   const midnight={...parcel,paiementDate:'2026-09-30T22:00:00Z'};
+   assert.equal(buildProRecapWorkbook(client,[midnight],9,2026)?.count,1,zone);
+   assert.equal(buildProRecapWorkbook(client,[midnight],8,2026),null,zone);
+   // New year in Paris: January of the next year.
+   assert.equal(buildProRecapWorkbook(client,[{...parcel,paiementDate:'2026-12-31T23:30:00Z'}],0,2027)?.count,1,zone);
+   // Without a dated payment, the reception day counts as it is.
+   assert.equal(buildProRecapWorkbook(client,[{...parcel,paiementDate:null,dateReception:'2026-09-30'}],8,2026)?.count,1,zone);
+   assert.equal(buildProRecapWorkbook(client,[{...parcel,paiementDate:null,dateReception:null}],new Date().getMonth(),new Date().getFullYear()),null,`${zone}: no date never falls into the current month`);
+   const rows=XLSX.utils.sheet_to_json(buildProRecapWorkbook(client,[late],8,2026).workbook.Sheets['Récap colis']);
+   assert.equal(rows[0]['Date paiement'],'30/09/2026',`${zone}: the payment day is the Paris day`);
+   assert.equal(rows[0]['Date réception'],'15/09/2026',zone);
+   const summary=XLSX.utils.sheet_to_json(buildProRecapWorkbook(client,[late],8,2026).workbook.Sheets['Résumé facturation']);
+   assert.equal(summary.find(r=>r.Champ==='Période').Valeur,'septembre 2026',zone);
+  }
+ }finally{if(previous===undefined)delete process.env.TZ;else process.env.TZ=previous;}
+});

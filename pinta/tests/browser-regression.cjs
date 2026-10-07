@@ -181,10 +181,12 @@ function fixtures(role) {
     staff_permissions: [],
   };
 }
-async function setup(browser, role, { failTable = null } = {}) {
+async function setup(browser, role, { failTable = null, timezoneId = null } = {}) {
   const context = await browser.newContext({
     viewport: { width: 1440, height: 1000 },
     locale: 'fr-FR',
+    // A device time zone (Réunion, New York…) for the suites that prove Paris time.
+    ...(timezoneId ? { timezoneId } : {}),
   });
   await context.routeWebSocket('**/*', (socket) => socket.close());
   const tables = fixtures(role),

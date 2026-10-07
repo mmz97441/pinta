@@ -85,6 +85,7 @@ jobs:
           node tests/dossier-table-comfort.browser.cjs
           PINTA_DOSSIER_DEPARTURES_OUT=/tmp/pinta-dossier-departures node tests/dossier-departures.browser.cjs
           PINTA_DOSSIER_ACCORDS_OUT=/tmp/pinta-dossier-accords node tests/dossier-accords.browser.cjs
+          PINTA_DEPARTURES_PAGE_OUT=/tmp/pinta-departures-page node tests/departures-page.browser.cjs
           node tests/parcel-reference-search.cjs
           node tests/reçu-documents-factures.cjs
           node tests/invoice-review-indicator.cjs
@@ -169,6 +170,7 @@ jobs:
             /tmp/pinta-dossier-table-comfort
             /tmp/pinta-dossier-departures
             /tmp/pinta-dossier-accords
+            /tmp/pinta-departures-page
             /tmp/pinta-receipt-flow
             /tmp/pinta-client-lightweight
             /tmp/pinta-task-message

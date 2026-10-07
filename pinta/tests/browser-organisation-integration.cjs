@@ -138,15 +138,16 @@ async function main() {
     assert.equal(await f.page.getByText(/notification disponible dans l’espace client/).count(), 0);
   });
   await scenario('departure-edit-conflict-preserves-colleague', 'directeur', async f => {
-    f.tables.envois = [{ id: E, ref: 'ENV-TEST', date_depart: '2026-09-12', destination_code: '974', statut: 'planifie', updated_at: '2026-09-12T01:00:00Z', manifest_version: 0 }];
+    // Future dates: the edit form refuses a day before today (Paris) before any write.
+    f.tables.envois = [{ id: E, ref: 'ENV-TEST', date_depart: '2099-09-12', destination_code: '974', statut: 'planifie', updated_at: '2026-09-12T01:00:00Z', manifest_version: 0 }];
     await f.login(); await f.page.goto(`${base}/departs`);
     await f.page.getByRole('button', { name: 'Modifier le planning', exact: true }).click();
-    await f.page.getByLabel('Date', { exact: true }).fill('2026-09-13');
-    f.tables.envois[0].date_depart = '2026-09-15'; f.tables.envois[0].updated_at = '2026-09-12T02:00:00Z';
+    await f.page.getByLabel('Date', { exact: true }).fill('2099-09-13');
+    f.tables.envois[0].date_depart = '2099-09-15'; f.tables.envois[0].updated_at = '2026-09-12T02:00:00Z';
     await f.page.getByRole('button', { name: 'Enregistrer le départ', exact: true }).click();
     await f.page.getByRole('alert').filter({ hasText: 'modifié par un collègue' }).waitFor();
-    assert.equal(f.tables.envois[0].date_depart, '2026-09-15');
-    assert.equal(await f.page.getByLabel('Date', { exact: true }).inputValue(), '2026-09-13');
+    assert.equal(f.tables.envois[0].date_depart, '2099-09-15');
+    assert.equal(await f.page.getByLabel('Date', { exact: true }).inputValue(), '2099-09-13');
   });
   await scenario('notifications-global-unread-and-pagination', 'client', async f => {
     f.tables.notifications = Array.from({ length: 72 }, (_, index) => ({ id: `notification-${index}`, user_id: ids.A, titre: `Notification ${index}`, msg: 'Événement de test', lu: index !== 71, created_at: new Date(Date.UTC(2026,8,12) - index * 60000).toISOString(), colis_id: null }));
