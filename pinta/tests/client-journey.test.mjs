@@ -35,9 +35,10 @@ test('client active phase content matches every lifecycle state and frozen quote
   app.sel = { ...app.sel, statut: 'devis_envoye', devisSnapshot: { version: 2, inputs: { finalBox: {}, client: { type: 'pro' }, destination: { tva: 5 }, fees: [{ libelle: 'Emballage réutilisable', montant: 2 }], paymentTerms: { mode: 'fin_de_mois' } }, amounts: { transport: 30, tva: 1.5, total: 33.5 } } };
   const html = module.exports.render();
   assert.match(html, /Emballage réutilisable/);
-  assert.match(html, /TVA \(5%\)/);
+  // French rate with a no-break space before « % ».
+  assert.match(html, /TVA \(5\s%\)/);
   assert.match(html, /Paiement en fin de mois/);
-  assert.doesNotMatch(html, /TVA \(8.5%\)/);
+  assert.doesNotMatch(html, /TVA \(8[.,]5\s?%\)/);
   assert.match(html, /version 2/);
   app.sel={...app.sel,statut:'mesure',devisTotal:null,devisBrouillon:true,devisEnvoyeLe:'2026-09-01',finalPackages:[{dimL:30,dimW:20,dimH:20,poids:3}],preparationCompositionVersion:1,finalMeasurementsVersion:1,outgoingParcelCount:1};
   const reopened=module.exports.render();

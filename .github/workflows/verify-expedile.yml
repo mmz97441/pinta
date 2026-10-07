@@ -70,6 +70,7 @@ jobs:
           sh ./supabase/tests/run-consent-reply.sh
           sh ./supabase/tests/run-consent-relance-followup.sh
           sh ./supabase/tests/run-client-required-fields.sh
+          sh ./supabase/tests/run-client-planned-departure.sh
       - run: npx playwright install --with-deps chromium
       - name: Parcours navigateur sans services externes
         run: |
@@ -130,6 +131,7 @@ jobs:
           node tests/operations-simplicity.browser.cjs
           node tests/team-simplicity.browser.cjs
           node tests/client-simplicity.browser.cjs
+          node tests/client-dossier-detail.browser.cjs
           node tests/chat-retry.browser.cjs
           node tests/admin-simplicity.browser.cjs
           PINTA_CLIENT_PAGES_OUT=/tmp/pinta-client-pages node tests/client-pages.browser.cjs
@@ -185,6 +187,7 @@ jobs:
             /tmp/pinta-team-simplicity
             /tmp/pinta-chat-retry
             /tmp/pinta-client-simplicity
+            /tmp/pinta-client-dossier-detail
             /tmp/pinta-admin-simplicity
             /tmp/pinta-client-pages
             /tmp/pinta-settings-devis

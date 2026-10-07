@@ -313,6 +313,14 @@ async function setup(browser, role, { failTable = null, timezoneId = null } = {}
       const rpc = url.pathname.split('/').pop(),
         colis = tables.colis.find((c) => c.id === input?.p_colis_id);
       if (rpc === 'client_outgoing_tracking') body = tables.colis.filter(c => input.p_colis_ids.includes(c.id) && tables.clients.some(client => client.id === c.client_id && client.user_id === user.id) && ['expedie','transit','dedouanement','arrive','livraison','livre'].includes(c.statut)).map(c => ({ colis_id: c.id, tracking_principal: tables.envois.find(envoi => envoi.id === c.envoi_id)?.tracking_principal || null }));
+      // client_planned_departures (20261007000002): own dossiers at the listed steps, a non-archived departure still to
+      // come before departure, the confirmed one after; supabase/tests/client-planned-departure.sql covers it in depth.
+      else if (rpc === 'client_planned_departures') body = tables.colis.filter(c => (input.p_colis_ids || []).includes(c.id) && tables.clients.some(client => client.id === c.client_id && client.user_id === user.id)
+        && !c.archive && ['autorise','en_preparation','devis_envoye','attente_paiement','paye','expedie'].includes(c.statut)).flatMap(c => {
+        const envoi = tables.envois.find(item => item.id === c.envoi_id);
+        const shown = Boolean(envoi?.date_depart) && envoi.statut !== 'archive' && (c.statut === 'expedie' ? Boolean(envoi.departed_at) : !envoi.departed_at && envoi.date_depart >= parisClock(server.now()).day);
+        return shown ? [{ colis_id: c.id, date_depart: envoi.date_depart }] : [];
+      });
       else if (rpc === 'suggest_customs_tariffs') body = (input.p_items || []).map(item => ({ lineId: item.lineId, candidates: [], status: 'no_match', notice: 'Catalogue fictif sans proposition automatique.' }));
       else if (rpc === 'get_invoice_review_context') body = {
         invoices: tables.factures.filter(invoice => invoice.colis_id === input.p_colis_id).map(invoice => { const reason = analysisReason(colis, invoice, null); return { factureId: invoice.id, reviewToken: 'fixture-review-' + invoice.id, extraction: null, draft: null, documentHash: null, duplicateCandidateIds: [], analysisAllowed: reason === null, analysisBlockedReason: reason }; }),

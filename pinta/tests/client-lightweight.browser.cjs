@@ -33,7 +33,7 @@ async function main() {
       assert.equal(await f.page.getByLabel('Facture ou photo', { exact: true }).count(), 0);
       assert.equal(await f.page.getByLabel('Votre message à l’équipe', { exact: true }).count(), 0);
       await f.page.getByRole('button', { name: 'Autoriser la préparation', exact: true }).click();
-      const dialog = f.page.getByRole('dialog'); await dialog.waitFor(); assert.match(await dialog.innerText(), /3 carton\(s\)/);
+      const dialog = f.page.getByRole('dialog'); await dialog.waitFor(); assert.match(await dialog.innerText(), /3 cartons actuellement réceptionnés/);
       await dialog.getByRole('button', { name: 'J’autorise ce dossier', exact: true }).click();
       await f.page.getByRole('button', { name: 'Transmettre mes factures', exact: true }).waitFor();
       assert.equal(f.tables.colis[0].statut, 'autorise');

@@ -20,8 +20,9 @@ async function main() {
     await current.page.goto(`${base}/colis/${P}`);
     await current.page.getByRole('button', { name: 'Autoriser la préparation', exact: true }).click();
     await current.page.getByRole('dialog').waitFor();
-    assert.match(await current.page.getByRole('dialog').innerText(), /3 carton\(s\)/);
-    assert.match(await current.page.getByRole('dialog').innerText(), /EXP-TEST-001/);
+    assert.match(await current.page.getByRole('dialog').innerText(), /3 cartons actuellement réceptionnés/);
+    // The reference keeps non-breaking hyphens in the dialog (one line); read as plain hyphens.
+    assert.match((await current.page.getByRole('dialog').innerText()).replace(/\u2011/g, '-'), /EXP-TEST-001/);
     await current.page.getByRole('button', { name: 'Annuler', exact: true }).click();
     await current.page.setViewportSize({ width: 390, height: 844 });
     await current.page.goto(`${base}/colis/${P}`);

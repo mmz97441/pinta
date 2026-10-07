@@ -1338,6 +1338,12 @@ export function AppProvider({ children }) {
     },
     [sendMsg, authCl, auth, refreshColis],
   );
+  // Client portal only: the planned departure day of the client's own dossiers (client_planned_departures),
+  // never the staff-only desired day. Errors propagate to the dossier, which shows them as such.
+  const fetchPlannedDepartures = useCallback(
+    async (ids) => (authRef.current?.type === 'client' ? sb.fetchClientPlannedDepartures(ids) : new Map()),
+    [],
+  );
   const value = {
     auth,
     setAuth,
@@ -1455,6 +1461,7 @@ export function AppProvider({ children }) {
     refreshColis,
     theme,
     toggleTheme,
+    fetchPlannedDepartures,
   };
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }

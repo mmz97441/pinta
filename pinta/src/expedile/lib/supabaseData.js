@@ -378,6 +378,20 @@ export async function fetchColis(colisId = null, { archived = false, clientId = 
     .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
 }
 
+/** Client portal: the planned departure day of the signed-in client's own dossiers (client_planned_departures).
+ *  Returns Map(colisId → 'YYYY-MM-DD'); a dossier without a returned day has no departure to announce. Errors propagate. */
+export async function fetchClientPlannedDepartures(colisIds = []) {
+  const ids = [...new Set(colisIds.filter(Boolean))];
+  const dates = new Map();
+  for (let i = 0; i < ids.length; i += 100) {
+    const { data, error } = await supabase.rpc('client_planned_departures', { p_colis_ids: ids.slice(i, i + 100) });
+    if (error) throw error;
+    for (const row of Array.isArray(data) ? data : [])
+      if (row?.colis_id && /^\d{4}-\d{2}-\d{2}$/.test(row.date_depart || '')) dates.set(row.colis_id, row.date_depart);
+  }
+  return dates;
+}
+
 export async function resolveIdentity(session) {
   if (!session?.user) return null;
   const userId = session.user.id;

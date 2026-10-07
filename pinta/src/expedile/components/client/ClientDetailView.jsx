@@ -1,15 +1,21 @@
-import { receptionCartonManifest } from '../../domain/reception';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   ArrowLeft, Package, CheckCircle, Wrench, CreditCard, Plane, MapPin,
   ChevronDown, ChevronUp, ChevronRight, AlertCircle, ThumbsUp, ThumbsDown, RotateCcw,
   ExternalLink, Clock, Download, Camera, Shield, Warehouse, Truck, RefreshCw, FileText, Upload,
+  MessageCircle, CalendarDays, Info,
 } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { hasPublishedQuote } from './quoteVisibility';
 import { hasCurrentPreparation } from '../../domain/preparationReadiness';
 import { invoiceRequestState } from '../../domain/invoiceRequest';
-import { cartonManifest, clientJourney, clientWorkState, quotePresentation, PAYMENT_TERMS, outgoingTracking, latestLogisticsEvent } from '../../domain/clientJourney';
+import { currentInvoices } from '../../domain/invoiceDocuments';
+import { plural, pluralWord } from '../../domain/plural';
+import {
+  cartonManifest, clientJourney, clientWorkState, quotePresentation, PAYMENT_TERMS, outgoingTracking, latestShipmentNews,
+  clientDate, clientPhaseState, clientTaskExplanation, plannedDepartureMessage, plannedDepartureShown, cartonMeasures,
+  measureText, frenchNumber,
+} from '../../domain/clientJourney';
 import { useApp } from '../../context/AppContext';
 import { SecureImage } from '../ui/SecureFile';
 import { BRAND, PHASES_CLIENT, getPhaseIndex, getDestByCP } from '../../constants';
@@ -19,107 +25,69 @@ import { Ligne, ProgressBar } from '../ui';
 
 // ── Phase icons ────────────────────────────────────────────────────────────────
 const PHASE_ICONS = [Package, CheckCircle, Wrench, CreditCard, Plane, Shield, Warehouse, Truck];
-
-// ── Phase state helper ─────────────────────────────────────────────────────────
-function getPhaseState(phaseIdx, curPhaseIdx) {
-  if (phaseIdx < curPhaseIdx) return 'done';
-  if (phaseIdx === curPhaseIdx) return 'active';
-  return 'future';
-}
+const SHIPPED = ['expedie', 'transit', 'dedouanement', 'arrive', 'livraison', 'livre'];
+// The delivery date is announced once, here, until the parcel is at the local depot.
+const DELIVERY_DATE_PENDING = ['expedie', 'transit', 'dedouanement'];
+// Theme-safe surfaces: Tailwind utilities that brand.css remaps in dark mode, plus explicit dark: variants.
+const SECONDARY_BUTTON = 'flex min-h-11 items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold brand-t transition-all duration-200 ease-out hover:bg-slate-50 active:scale-[0.98] dark:hover:bg-white/5';
+const PRIMARY_BUTTON = 'min-h-11 inline-flex items-center justify-center gap-2 rounded-xl brand-bg px-4 py-3 text-sm font-semibold text-white transition-all duration-200 ease-out hover:translate-y-[-1px] active:scale-[0.98] disabled:opacity-50';
 
 // ── Phase accordion step ───────────────────────────────────────────────────────
+// Icons and chevrons use theme tokens: navy text in light mode, the light brand text in dark mode.
 function PhaseStep({ phase, phaseIdx, state, open, onToggle, children }) {
   const Icon = PHASE_ICONS[phaseIdx] || Package;
   const isDone = state === 'done';
   const isActive = state === 'active';
-  const isFuture = state === 'future';
-
   return (
     <div
-      className={`rounded-2xl overflow-hidden transition-all ${
-        isActive ? 'card-elevated' : 'card'
-      }`}
-      style={
-        isActive
-          ? { borderLeft: `4px solid ${BRAND.navy}` }
-          : isDone
-          ? { borderLeft: `4px solid #10b981` }
-          : {}
-      }
+      className={`overflow-hidden rounded-2xl transition-all duration-200 ease-out ${isActive ? 'card-elevated' : 'card'}`}
+      style={{ borderLeft: `4px solid ${isActive ? 'var(--brand-text)' : 'var(--success)'}` }}
     >
       <button
+        type="button"
         onClick={onToggle}
-        className={`w-full flex items-center gap-3 px-4 text-left ${
-          isActive ? 'py-3.5' : isDone ? 'py-2.5' : 'py-2.5'
-        } ${isFuture ? 'opacity-40' : ''}`}
+        aria-expanded={open}
+        className={`flex min-h-11 w-full items-center gap-3 px-4 text-left ${isActive ? 'py-3.5' : 'py-2.5'}`}
       >
-        {/* Icon */}
-        <div
-          className={`flex-shrink-0 rounded-xl flex items-center justify-center ${
-            isActive ? 'w-9 h-9' : 'w-7 h-7'
-          }`}
-          style={
-            isDone
-              ? { backgroundColor: '#d1fae5' }
-              : isActive
-              ? { backgroundColor: BRAND.navy + '15' }
-              : { backgroundColor: '#f3f4f6' }
-          }
-        >
-          {isDone ? (
-            <CheckCircle size={isActive ? 18 : 15} className="text-emerald-600" />
-          ) : (
-            <Icon
-              size={isActive ? 18 : 15}
-              strokeWidth={isActive ? 2.2 : 1.8}
-              style={{ color: isActive ? BRAND.navy : '#9ca3af' }}
-            />
-          )}
-        </div>
-
-        {/* Label */}
-        <div className="flex-1 min-w-0">
-          <p
-            className={`leading-snug ${
-              isDone
-                ? 'text-sm font-semibold text-emerald-700'
-                : isActive
-                ? 'text-sm font-black text-gray-900'
-                : 'text-sm font-medium text-gray-400'
-            }`}
-          >
-            {phase.label}
-          </p>
-          {isActive && (
-            <p className="text-sm font-semibold mt-0.5" style={{ color: 'var(--text-accent)' }}>
-              Étape en cours
-            </p>
-          )}
-        </div>
-
-        {/* Chevron (only for done + active) */}
-        {!isFuture && (
-          <div
-            className={`flex-shrink-0 rounded-full flex items-center justify-center ${
-              isActive ? 'w-6 h-6' : 'w-5 h-5'
-            }`}
-            style={{ backgroundColor: isActive ? BRAND.navy + '12' : '#f3f4f6' }}
-          >
-            {open ? (
-              <ChevronUp size={isActive ? 13 : 11} style={{ color: isActive ? BRAND.navy : '#9ca3af' }} />
-            ) : (
-              <ChevronDown size={isActive ? 13 : 11} style={{ color: isActive ? BRAND.navy : '#9ca3af' }} />
-            )}
-          </div>
-        )}
+        <span aria-hidden="true" className={`flex flex-shrink-0 items-center justify-center rounded-xl ${isActive ? 'h-9 w-9 brand-bg-l' : 'h-7 w-7 bg-emerald-50'}`}>
+          {isDone ? <CheckCircle size={16} className="text-emerald-700" /> : <Icon size={18} strokeWidth={2.2} className="brand-t" />}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className={`block text-sm leading-snug ${isDone ? 'font-semibold text-emerald-800' : 'font-black text-slate-900'}`}>
+            {phase.label}{isDone && <span className="sr-only"> · étape terminée</span>}
+          </span>
+          {isActive && <span className="mt-0.5 block text-sm font-semibold" style={{ color: 'var(--text-accent)' }}>Étape en cours</span>}
+        </span>
+        <span aria-hidden="true" className={`flex flex-shrink-0 items-center justify-center rounded-full bg-slate-100 ${isActive ? 'h-7 w-7' : 'h-6 w-6'}`}>
+          {open ? <ChevronUp size={14} className="text-slate-600" /> : <ChevronDown size={14} className="text-slate-600" />}
+        </span>
       </button>
-
-      {/* Expanded content */}
-      {open && !isFuture && children && (
-        <div className="px-4 pb-4 anim-slide-down">
-          <div className="border-t border-gray-50 pt-3">{children}</div>
+      {open && children && (
+        <div className="anim-slide-down px-4 pb-4">
+          <div className="border-t border-slate-200 pt-3">{children}</div>
         </div>
       )}
+    </div>
+  );
+}
+
+/** One vocabulary (cartons): one line per measured carton, or the global measures of a dossier measured as a whole. */
+function CartonMeasures({ colis, pendingText = '' }) {
+  const measures = cartonMeasures(colis);
+  if (measures.mode === 'none') return pendingText ? (
+    <p className="flex items-center gap-1.5 rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-800"><Clock size={14} aria-hidden="true" />{pendingText}</p>
+  ) : null;
+  return (
+    <div className="space-y-2 rounded-xl bg-slate-50 p-3" data-testid="carton-measures">
+      <p className="text-sm font-black uppercase tracking-wider text-slate-500">{measures.title}</p>
+      {measures.mode === 'global'
+        ? <p className="text-sm text-slate-700">{measures.count > 1 ? 'Ces mesures concernent l’ensemble de vos cartons' : 'Mesures enregistrées'}&nbsp;: <span className="whitespace-nowrap font-semibold">{measureText(measures.global)}</span>.</p>
+        : <ul className="divide-y divide-slate-200 dark:divide-[var(--border-subtle)]">{measures.cartons.map(carton => (
+          <li key={carton.index} className="py-1.5 text-sm">
+            <p className="font-semibold text-slate-700">Carton {carton.index}{carton.number && <span className="font-normal text-slate-600"> · <span className="break-all">{carton.number}</span></span>}</p>
+            <p className="text-slate-600">{carton.measures ? measureText(carton.measures) : 'Mesures non renseignées'}</p>
+          </li>
+        ))}</ul>}
     </div>
   );
 }
@@ -128,7 +96,7 @@ function PhaseStep({ phase, phaseIdx, state, open, onToggle, children }) {
 export default function ClientDetailView() {
   const navigate = useNavigate();
   const [, setParams] = useSearchParams();
-  const { sel, selDest, feuVert, ask, flash, authCl, envois = [] } = useApp();
+  const { sel, selDest, feuVert, ask, flash, authCl, envois = [], fetchPlannedDepartures } = useApp();
 
   const curPhaseIdx = sel ? getPhaseIndex(sel.statut) : 0;
   const [timeOpen, setTimeOpen] = useState(curPhaseIdx);
@@ -138,7 +106,37 @@ export default function ClientDetailView() {
   const [waitVersion, setWaitVersion] = useState(null);
   const [waitUntil, setWaitUntil] = useState('');
   const [waitReason, setWaitReason] = useState('J’attends d’autres achats');
+  const [descOpen, setDescOpen] = useState(false);
+  const [descClamped, setDescClamped] = useState(false);
+  const descRef = useRef(null);
+  // client_planned_departures: { colisId, state: idle | loading | ready | error, date }.
+  const [departure, setDeparture] = useState({ colisId: null, state: 'idle', date: null });
+  const [departureAttempt, setDepartureAttempt] = useState(0);
+  const departureWanted = plannedDepartureShown(sel);
   useEffect(() => { setTimeOpen(curPhaseIdx); setDecisionError(''); setShowWait(false); }, [sel?.id, curPhaseIdx]);
+  useEffect(() => { setDescOpen(false); }, [sel?.id]);
+  useEffect(() => {
+    // A long description is clamped to two lines; the toggle appears only when text is actually hidden.
+    const element = descRef.current;
+    if (!element) return undefined;
+    const measure = () => setDescClamped(element.scrollHeight > element.clientHeight + 1);
+    measure();
+    const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(measure) : null;
+    observer?.observe(element);
+    return () => observer?.disconnect();
+  }, [sel?.desc, descOpen]);
+  useEffect(() => {
+    // The planned departure day of this dossier only (never the staff-only desired day). A refresh keeps the
+    // known day on screen; a failure is shown as such, never as « no date yet ».
+    const colisId = sel?.id;
+    if (!colisId || !departureWanted || typeof fetchPlannedDepartures !== 'function') { setDeparture({ colisId: null, state: 'idle', date: null }); return undefined; }
+    let active = true;
+    setDeparture(previous => previous.colisId === colisId && previous.state === 'ready' ? previous : { colisId, state: 'loading', date: null });
+    fetchPlannedDepartures([colisId])
+      .then(dates => { if (active) setDeparture({ colisId, state: 'ready', date: dates?.get?.(colisId) || null }); })
+      .catch(() => { if (active) setDeparture({ colisId, state: 'error', date: null }); });
+    return () => { active = false; };
+  }, [sel?.id, sel?.statut, sel?.envoi, sel?.updatedAt, departureWanted, fetchPlannedDepartures, departureAttempt]);
   if (!sel) return null;
   const manifest = cartonManifest(sel);
   const journey = clientJourney(sel);
@@ -147,16 +145,25 @@ export default function ClientDetailView() {
   const price = published.colis;
   const clientWaiting = journey.waiting;
   const trackingOut = outgoingTracking(sel, envois);
-  const logistics = latestLogisticsEvent(sel);
-  const shipmentStarted = ['expedie','transit','dedouanement','arrive','livraison','livre'].includes(sel.statut);
+  const shipmentStarted = SHIPPED.includes(sel.statut);
+  const delivered = sel.statut === 'livre';
+  const news = shipmentStarted ? latestShipmentNews(sel) : null;
+  const departureMessage = plannedDepartureMessage(sel, departure.colisId === sel.id ? departure : {});
+  const departureDayShown = departureMessage?.kind === 'date';
   const previousPreparation = !hasCurrentPreparation(sel) || ['receptionne','mesure','attente_feu_vert','refuse_client','annule'].includes(sel.statut);
+  const pro = authCl?.type === 'pro';
   // After the consent, before the quote: the purchase invoice still requested (same rule as the server), never for a professional.
   const invoiceReminder = ['autorise', 'en_preparation'].includes(sel.statut) && !sel.paiementDate && !sel.archive
-    && authCl?.type !== 'pro' && invoiceRequestState(sel).requested;
+    && !pro && invoiceRequestState(sel).requested;
+  // The consent request when no purchase invoice is in the dossier yet: the consent is possible, the invoice follows.
+  const consentWithoutInvoice = sel.statut === 'attente_feu_vert' && !pro && currentInvoices(sel.factures).length === 0;
+  const taskExplanation = clientTaskExplanation(sel, authCl, task);
+  const waitedSince = clientDate(sel.attenteClientDate);
+  const waitReview = clientDate(sel.attenteClientUntil);
   const openPanel = panel => setParams(previous => { const next = new URLSearchParams(previous); next.set('panel', panel); return next; }, { replace: true });
 
   const toggleStep = (idx) => {
-    if (getPhaseState(idx, curPhaseIdx) !== 'future') setTimeOpen((prev) => prev === idx ? null : idx);
+    if (clientPhaseState(idx, sel.statut) !== 'future') setTimeOpen((prev) => prev === idx ? null : idx);
   };
   const recordDecision = async (decision, options) => {
     setDecisionPending(true); setDecisionError('');
@@ -165,10 +172,12 @@ export default function ClientDetailView() {
     finally { setDecisionPending(false); }
   };
   const handleFeuVert = (ok) => {
-    const cartons = (sel.trackings || []).filter(Boolean);
+    const count = manifest.count;
+    // The dialog takes plain text: non-breaking hyphens keep « EXP-TEST-001 » on one line.
+    const reference = String(sel.ref).replace(/-/g, '\u2011');
     ask(ok ? 'Autoriser cette préparation' : 'Refuser cette préparation',
-      ok ? `Vous autorisez la préparation du dossier ${sel.ref}, avec ${manifest.count} carton(s) actuellement réceptionné(s).${cartons.length ? '\n\n' + cartons.join(' · ') : ''}\n\nLes nouveaux cartons ne sont pas inclus. Le devis final suivra la préparation.`
-        : `Vous refusez la préparation du dossier ${sel.ref}. Pour simplement attendre d’autres achats, choisissez « Attendre » à la place.`,
+      ok ? `Vous autorisez la préparation du dossier ${reference}, avec ${plural(count, 'carton')} ${pluralWord(count, 'actuellement réceptionné', 'actuellement réceptionnés')}.${manifest.trackings.length ? '\n\n' + manifest.trackings.join(' · ') : ''}\n\nLes nouveaux cartons ne sont pas inclus. Le devis final suivra la préparation.${consentWithoutInvoice ? '\n\nVotre facture d’achat reste à joindre\u00a0: elle nous permet d’établir votre devis.' : ''}`
+        : `Vous refusez la préparation du dossier ${reference}\u00a0: vos cartons ne seront pas préparés. Notre équipe vous contactera pour convenir avec vous de la suite.\n\nPour simplement attendre d’autres achats, choisissez plutôt «\u00a0Attendre d’autres achats\u00a0».`,
       () => recordDecision(ok), { danger: !ok, okLabel: ok ? 'J’autorise ce dossier' : 'Confirmer le refus' });
   };
   const handleRevoke = () => {
@@ -179,161 +188,119 @@ export default function ClientDetailView() {
     if (hasPublishedQuote(sel) && sel.payplugPaymentUrl && /^https:\/\//.test(sel.payplugPaymentUrl)) window.open(sel.payplugPaymentUrl, '_blank', 'noopener,noreferrer');
     else openPanel('messages');
   };
+  const downloadQuote = async () => {
+    try { const { exportDevisPDF } = await import('../../utils/exportDevisPDF'); await exportDevisPDF(sel, authCl, getDestByCP(authCl?.cp)); }
+    catch (error) { flash({ msg: 'Le PDF n’a pas pu être généré. ' + error.message, type: 'error' }); }
+  };
 
   // ── Phase content renderers ───────────────────────────────────────────────
   const phaseContent = (phaseIdx) => {
-    const phase = PHASES_CLIENT[phaseIdx];
-
     // Phase 0 – Réception
     if (phaseIdx === 0) {
-      const hasDims = sel.dimL && sel.dimW && sel.dimH && sel.poids;
+      const several = manifest.count > 1;
       return (
         <div className="space-y-3">
-          <p className="text-sm text-gray-500 leading-relaxed">
+          <p className="text-sm leading-relaxed text-slate-600">
             {sel.statut === 'receptionne'
-              ? 'Votre colis est arrivé à l\'entrepôt. Nous sommes en train de le mesurer.'
-              : 'Votre colis a été réceptionné et mesuré.'}
+              ? several ? 'Vos cartons sont arrivés à notre entrepôt. Notre équipe les mesure.' : 'Votre carton est arrivé à notre entrepôt. Notre équipe le mesure.'
+              : several ? `Vos ${plural(manifest.count, 'carton')} ont été réceptionnés et mesurés.` : 'Votre carton a été réceptionné et mesuré.'}
           </p>
-          {sel.dateReception && (
-            <p className="text-sm font-medium text-gray-400">
-              Reçu le {new Date(sel.dateReception).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
-              {' à '}{new Date(sel.dateReception).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+          {clientDate(sel.dateReception) && (
+            <p className="text-sm font-medium text-slate-500">
+              Reçu le {clientDate(sel.dateReception, { weekday: true })} à {new Date(sel.dateReception).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
             </p>
           )}
-          {sel.casier && (
-            <div className="flex items-center gap-2 text-sm text-gray-600 bg-gray-50 rounded-xl px-3 py-2">
-              <Package size={13} />
-              <span>Casier : <span className="font-black">{sel.casier}</span></span>
-            </div>
-          )}
-          {hasDims && sel.dimsParColis && sel.dimsParColis.length > 1 ? (
-            <div className="rounded-xl bg-gray-50 p-3 space-y-2">
-              <p className="text-sm font-black uppercase tracking-widest text-gray-400 mb-1">
-                Dimensions mesurées ({sel.dimsParColis.length} colis)
-              </p>
-              {sel.dimsParColis.map((d, i) => (
-                <div key={i} className="rounded-lg bg-white p-2 border border-gray-100">
-                  <p className="text-sm font-bold text-gray-400 mb-0.5">
-                    Carton {i + 1}{receptionCartonManifest(sel).trackingsDetail[i]?.number ? ` · ${receptionCartonManifest(sel).trackingsDetail[i].number}` : ' · Sans numéro de suivi'}
-                  </p>
-                  <Ligne label="Longueur × largeur × hauteur" value={`${d.dimL} × ${d.dimW} × ${d.dimH} cm`} />
-                  <Ligne label="Poids" value={`${d.poids} kg`} />
-                </div>
-              ))}
-            </div>
-          ) : hasDims ? (
-            <div className="rounded-xl bg-gray-50 p-3 space-y-1">
-              <p className="text-sm font-black uppercase tracking-widest text-gray-400 mb-2">Dimensions mesurées</p>
-              <Ligne label="Dimensions" value={`${sel.dimL} × ${sel.dimW} × ${sel.dimH} cm`} />
-              <Ligne label="Poids" value={`${sel.poids} kg`} />
-            </div>
-          ) : (
-            <p className="text-sm text-amber-600 flex items-center gap-1.5 bg-amber-50 rounded-xl px-3 py-2">
-              <Clock size={13} />
-              Mesures en cours…
-            </p>
-          )}
+          <CartonMeasures colis={sel} pendingText={sel.statut === 'receptionne' ? 'Mesures en cours…' : ''} />
         </div>
       );
     }
 
-    // Phase 2 – Accord (feu vert)
+    // Phase 1 – Accord (feu vert)
     if (phaseIdx === 1) {
       const isFV = sel.statut === 'attente_feu_vert' && !sel.archive;
       const isAutorise = sel.statut === 'autorise' || (sel.feuVert === 'autorise');
       const isRefuse = sel.statut === 'refuse_client';
+      const count = manifest.count;
 
       return (
         <div className="space-y-3">
           {isFV && (
             <>
-              {clientWaiting && <p className="border-l-2 border-slate-300 pl-3 text-sm text-slate-600">Votre attente est enregistrée. Aucune préparation ne commence tant que vous n’avez pas donné votre accord.</p>}
+              {clientWaiting && <p className="border-l-2 border-slate-300 pl-3 text-sm text-slate-600">Votre attente est enregistrée&nbsp;: aucune préparation ne commence tant que vous n’avez pas donné votre accord.</p>}
               {decisionError && <p role="alert" className="text-sm text-red-700">{decisionError}</p>}
-              <p className="text-sm font-semibold text-slate-700">{manifest.count} carton(s) réceptionné(s) · dossier {sel.ref}</p>
-              {manifest.trackings.length > 0 && <p className="break-words text-sm text-slate-600">Références connues : {manifest.trackings.join(' · ')}</p>}
-              <p className="text-sm text-slate-600">Votre accord concerne ces cartons uniquement. Vous recevrez le prix final après la préparation.</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <button disabled={decisionPending} onClick={() => handleFeuVert(true)} className="min-h-11 flex items-center justify-center gap-2 rounded-xl px-3 py-3 font-bold text-sm text-white brand-bg disabled:opacity-50"><ThumbsUp size={16} />{decisionPending ? 'Enregistrement…' : 'Autoriser la préparation'}</button>
-                <button disabled={decisionPending} onClick={() => { if (!showWait) setWaitVersion(sel.updatedAt); setShowWait(v => !v); }} aria-expanded={showWait} className="min-h-11 flex items-center justify-center gap-2 rounded-xl border border-slate-300 px-3 py-3 text-sm font-semibold text-slate-700"><Clock size={16} />Attendre d’autres achats</button>
-              </div>
-              {showWait && <form className="border border-gray-200 rounded-xl p-3 space-y-3" onSubmit={(event) => { event.preventDefault(); recordDecision('wait', { expectedUpdatedAt: waitVersion, waitUntil: waitUntil || null, reason: waitReason.trim() }); }}>
-                <p className="text-sm text-gray-600">Nous conservons votre dossier en attente. Cette demande ne déclenche aucune préparation.</p>
-                <label className="block text-sm font-semibold text-gray-600">Votre précision<textarea required maxLength={500} value={waitReason} onChange={(e) => setWaitReason(e.target.value)} className="mt-1 block w-full rounded-lg border border-gray-200 p-2 text-sm bg-white" /></label>
-                <label className="block text-sm font-semibold text-gray-600">Attendre jusqu’au (facultatif)<input type="date" min={new Date().toLocaleDateString('en-CA')} value={waitUntil} onChange={(e) => setWaitUntil(e.target.value)} className="mt-1 block min-h-11 w-full rounded-lg border border-gray-200 px-2 text-sm bg-white" /></label>
-                <button disabled={decisionPending || !waitReason.trim()} className="min-h-11 w-full rounded-xl brand-bg text-white text-sm font-semibold disabled:opacity-50">{decisionPending ? 'Enregistrement…' : 'Enregistrer mon attente'}</button>
-              </form>}
-              <details className="border-t border-slate-200 pt-2"><summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-slate-600">Mesures et fonctionnement</summary><div className="space-y-3">              {sel.dimsParColis && sel.dimsParColis.length > 1 ? (
-                <div className="rounded-xl bg-gray-50 p-3 space-y-2">
-                  <p className="text-sm font-black uppercase tracking-widest text-gray-400 mb-1">
-                    Dimensions mesurées ({sel.dimsParColis.length} colis)
-                  </p>
-                  {sel.dimsParColis.map((d, i) => (
-                    <div key={i} className="rounded-lg bg-white p-2 border border-gray-100">
-                      <p className="text-sm font-bold text-gray-400 mb-0.5">
-                        Carton {i + 1}{receptionCartonManifest(sel).trackingsDetail[i]?.number ? ` · ${receptionCartonManifest(sel).trackingsDetail[i].number}` : ' · Sans numéro de suivi'}
-                      </p>
-                      <Ligne label="Longueur × largeur × hauteur" value={`${d.dimL} × ${d.dimW} × ${d.dimH} cm`} />
-                      <Ligne label="Poids" value={`${d.poids} kg`} />
-                    </div>
-                  ))}
-                </div>
-              ) : sel.dimL ? (
-                <div className="rounded-xl bg-gray-50 p-3 space-y-1">
-                  <p className="text-sm font-black uppercase tracking-widest text-gray-400 mb-2">Dimensions mesurées</p>
-                  <Ligne label="Longueur × largeur × hauteur" value={`${sel.dimL} × ${sel.dimW} × ${sel.dimH} cm`} />
-                  <Ligne label="Poids" value={`${sel.poids} kg`} />
-                </div>
-              ) : null}
-              <div className="rounded-xl p-3 border border-blue-100" style={{ backgroundColor: BRAND.navy + '06' }}>
-                <p className="text-sm font-black uppercase tracking-widest mb-1.5" style={{ color: 'var(--brand-text)' }}>
-                  Comment ça marche ?
+              <p className="text-sm font-semibold text-slate-700">{plural(count, 'carton')} {pluralWord(count, 'réceptionné')} · dossier <span className="whitespace-nowrap">{sel.ref}</span></p>
+              {manifest.trackings.length > 0 && <p className="break-words text-sm text-slate-600">{pluralWord(manifest.trackings.length, 'Numéro de suivi de vos achats', 'Numéros de suivi de vos achats')}&nbsp;: {manifest.trackings.join(' · ')}</p>}
+              <p className="text-sm text-slate-600">Votre accord concerne {count > 1 ? `ces ${plural(count, 'carton')}` : 'ce carton'} uniquement. Vous recevrez le prix final après la préparation.</p>
+              {consentWithoutInvoice && (
+                <p data-testid="consent-without-invoice" className="flex items-start gap-2 rounded-xl border p-3 text-sm" style={{ backgroundColor: 'var(--attention-bg)', borderColor: 'var(--attention-border)', color: 'var(--attention-text)' }}>
+                  <FileText size={16} className="mt-0.5 shrink-0" aria-hidden="true" />
+                  <span>Votre facture d’achat n’est pas encore dans votre dossier&nbsp;: vous pouvez tout de même donner votre accord dès maintenant. Joignez-la ensuite dans «&nbsp;Mes factures&nbsp;»&nbsp;: elle nous permet d’établir votre devis.</span>
                 </p>
-                <div className="space-y-1.5 text-sm text-gray-600 leading-relaxed">
-                  <p>1. Vous donnez votre accord ci-dessous</p>
-                  <p>2. Nous regroupons et réemballons vos achats</p>
-                  <p>3. Vous recevez le devis final à payer</p>
-                </div>
+              )}
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <button type="button" disabled={decisionPending} onClick={() => handleFeuVert(true)} className="flex min-h-11 items-center justify-center gap-2 rounded-xl brand-bg px-3 py-3 text-sm font-bold text-white transition-all duration-200 ease-out hover:translate-y-[-1px] active:scale-[0.98] disabled:opacity-50"><ThumbsUp size={16} aria-hidden="true" />{decisionPending ? 'Enregistrement…' : 'Autoriser la préparation'}</button>
+                <button type="button" disabled={decisionPending} onClick={() => { if (!showWait) setWaitVersion(sel.updatedAt); setShowWait(v => !v); }} aria-expanded={showWait} className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-slate-300 px-3 py-3 text-sm font-semibold text-slate-700 transition-all duration-200 ease-out active:scale-[0.98]"><Clock size={16} aria-hidden="true" />Attendre d’autres achats</button>
               </div>
-              {clientWaiting && <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700"><p className="font-semibold">Votre demande d’attente est enregistrée</p><p className="mt-1">{sel.attenteClientMotif}{sel.attenteClientUntil ? ` · Jusqu’au ${new Date(sel.attenteClientUntil).toLocaleDateString('fr-FR')}` : ''}</p><p className="text-sm text-gray-500 mt-1">Vous pouvez utiliser le bouton « Autoriser la préparation » dès que vous êtes prêt.</p></div>}
-</div></details>
-              <button disabled={decisionPending} onClick={() => handleFeuVert(false)} className="min-h-11 flex items-center gap-2 text-sm font-semibold text-red-700"><ThumbsDown size={15} />Refuser la préparation</button>
+              {showWait && <form className="space-y-3 rounded-xl border border-slate-200 p-3" onSubmit={(event) => { event.preventDefault(); recordDecision('wait', { expectedUpdatedAt: waitVersion, waitUntil: waitUntil || null, reason: waitReason.trim() }); }}>
+                <p className="text-sm text-slate-600">Nous conservons vos cartons et suspendons nos relances. Cette demande ne déclenche aucune préparation&nbsp;: vous donnerez votre accord quand vous serez prêt(e).</p>
+                <label className="block text-sm font-semibold text-slate-600">Votre précision<textarea required maxLength={500} value={waitReason} onChange={(e) => setWaitReason(e.target.value)} className="mt-1 block w-full rounded-lg border border-slate-200 bg-white p-2 text-sm" /></label>
+                <label className="block text-sm font-semibold text-slate-600">Attendre jusqu’au (facultatif)<input type="date" min={new Date().toLocaleDateString('en-CA')} value={waitUntil} onChange={(e) => setWaitUntil(e.target.value)} className="mt-1 block min-h-11 w-full rounded-lg border border-slate-200 bg-white px-2 text-sm" /></label>
+                <button disabled={decisionPending || !waitReason.trim()} className="min-h-11 w-full rounded-xl brand-bg text-sm font-semibold text-white transition-all duration-200 ease-out active:scale-[0.98] disabled:opacity-50">{decisionPending ? 'Enregistrement…' : 'Enregistrer mon attente'}</button>
+              </form>}
+              <details className="border-t border-slate-200 pt-2">
+                <summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-slate-600">Mesures et fonctionnement</summary>
+                <div className="space-y-3">
+                  <CartonMeasures colis={sel} />
+                  <div className="rounded-xl border border-slate-200 p-3">
+                    <p className="mb-1.5 text-sm font-black uppercase tracking-wider brand-t">Comment ça marche&nbsp;?</p>
+                    <ol className="list-inside list-decimal space-y-1.5 text-sm leading-relaxed text-slate-600">
+                      <li>Vous donnez votre accord avec le bouton «&nbsp;Autoriser la préparation&nbsp;».</li>
+                      <li>Nous regroupons et réemballons vos achats.</li>
+                      <li>Vous recevez le devis final à payer.</li>
+                    </ol>
+                  </div>
+                  {clientWaiting && <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700"><p className="font-semibold">Votre demande d’attente</p>{sel.attenteClientMotif && <p className="mt-1">{sel.attenteClientMotif}</p>}<p className="mt-1 text-slate-600">Quand vous serez prêt(e), utilisez le bouton «&nbsp;Autoriser la préparation&nbsp;» ci-dessus.</p></div>}
+                </div>
+              </details>
+              <button type="button" disabled={decisionPending} onClick={() => handleFeuVert(false)} className="inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-red-700"><ThumbsDown size={16} aria-hidden="true" />Refuser la préparation</button>
             </>
           )}
           {isAutorise && (
             <>
-              <div className="rounded-xl p-3 bg-emerald-50 border border-emerald-100">
-                <p className="text-sm font-bold text-emerald-700 flex items-center gap-1.5 mb-1">
-                  <CheckCircle size={13} />
+              <div className="rounded-xl bg-emerald-50 p-3">
+                <p className="mb-1 flex items-center gap-1.5 text-sm font-bold text-emerald-800">
+                  <CheckCircle size={14} aria-hidden="true" />
                   Accord donné
                 </p>
-                <p className="text-sm text-emerald-800 leading-relaxed">
-                  Vous avez autorisé la préparation de ce colis. Expedîle va le préparer pour l'expédition.
+                <p className="text-sm leading-relaxed text-emerald-800">
+                  Vous avez autorisé la préparation de ce colis. Expedîle va le préparer pour l’expédition.
                 </p>
               </div>
               {invoiceReminder && (
                 <div data-testid="consent-invoice-reminder" className="space-y-2 rounded-xl border p-3" style={{ backgroundColor: 'var(--attention-bg)', borderColor: 'var(--attention-border)', color: 'var(--attention-text)' }}>
                   <p className="flex items-start gap-1.5 text-sm font-semibold"><FileText size={14} className="mt-0.5 shrink-0" aria-hidden="true" />Il nous manque encore votre facture d’achat.</p>
                   <p className="text-sm">Elle nous permet d’établir votre devis.</p>
-                  <button type="button" onClick={() => openPanel('documents')} className="min-h-11 inline-flex items-center gap-2 rounded-xl brand-bg px-4 py-2 text-sm font-semibold text-white transition-all duration-200 ease-out hover:translate-y-[-1px] active:scale-[0.98]"><Upload size={16} aria-hidden="true" />Joindre mes factures</button>
+                  <button type="button" onClick={() => openPanel('documents')} className={PRIMARY_BUTTON}><Upload size={16} aria-hidden="true" />Joindre mes factures</button>
                 </div>
               )}
               <button
+                type="button"
                 onClick={handleRevoke}
-                className="flex items-center gap-1.5 text-sm font-semibold text-gray-400 hover:text-red-500 transition-colors"
+                className="inline-flex min-h-11 items-center gap-1.5 text-sm font-semibold text-slate-600 transition-colors duration-200 ease-out hover:text-red-700"
               >
-                <RotateCcw size={11} />
+                <RotateCcw size={14} aria-hidden="true" />
                 Demander l’annulation de mon accord
               </button>
             </>
           )}
           {isRefuse && (
-            <div className="rounded-xl p-3 bg-red-50 border border-red-100">
-              <p className="text-sm font-bold text-red-700 flex items-center gap-1.5">
-                <AlertCircle size={13} />
+            <div className="rounded-xl bg-red-50 p-3">
+              <p className="flex items-center gap-1.5 text-sm font-bold text-red-700">
+                <AlertCircle size={14} aria-hidden="true" />
                 Préparation refusée
               </p>
-              <p className="text-sm text-red-600 mt-1 leading-relaxed">
-                Vous avez refusé la préparation. Contactez-nous pour toute question.
+              <p className="mt-1 text-sm leading-relaxed text-red-700">
+                Vous avez refusé la préparation de ce dossier. Notre équipe vous contactera pour convenir avec vous de la suite.
               </p>
             </div>
           )}
@@ -341,87 +308,83 @@ export default function ClientDetailView() {
       );
     }
 
-    // Phase 3 – Préparation
+    // Phase 2 – Préparation
     if (phaseIdx === 2) {
       return (
         <div className="space-y-2">
-          <p className="text-sm text-gray-500 leading-relaxed">
+          <p className="text-sm leading-relaxed text-slate-600">
             {curPhaseIdx === 2
               ? 'Nous regroupons et réemballons vos achats pour préparer leur envoi.'
               : 'La préparation est terminée.'}
           </p>
           {curPhaseIdx === 2 && (
-            <div className="flex items-center gap-2 text-sm text-blue-700 bg-blue-50 rounded-xl px-3 py-2">
-              <Wrench size={13} />
-              Traitement en cours — nous vous informerons dès que le devis est prêt
-            </div>
-          )}
-          {sel.casier && (
-            <div className="flex items-center gap-2 text-sm text-gray-600 bg-gray-50 rounded-xl px-3 py-2">
-              <Package size={13} />
-              <span>Casier : <span className="font-black">{sel.casier}</span></span>
-            </div>
+            <p className="flex items-center gap-2 rounded-xl bg-blue-50 px-3 py-2 text-sm text-blue-800">
+              <Wrench size={14} aria-hidden="true" />
+              Vous serez prévenu(e) dès que votre devis sera prêt.
+            </p>
           )}
           {sel.photoPrep && (
-            <div className="rounded-xl overflow-hidden border border-gray-200">
-              <SecureImage src={sel.photoPrep} alt="Photo de votre colis préparé" className="w-full h-auto" />
-              <div className="px-3 py-2 bg-gray-50 text-sm text-gray-500 flex items-center gap-1.5">
-                <Camera size={11} />
+            <div className="overflow-hidden rounded-xl border border-slate-200">
+              <SecureImage src={sel.photoPrep} alt="Photo de votre colis préparé" className="h-auto w-full" />
+              <p className="flex items-center gap-1.5 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+                <Camera size={14} aria-hidden="true" />
                 Photo de votre colis préparé par notre équipe
-              </div>
+              </p>
             </div>
           )}
         </div>
       );
     }
 
-    // Phase 4 – Devis & Paiement
+    // Phase 3 – Devis & Paiement
     if (phaseIdx === 3) {
       const isPay = ['devis_envoye', 'attente_paiement'].includes(sel.statut);
       const isPaye = sel.paiementMontant != null;
       const hasDevis = hasPublishedQuote(sel);
       // A late invoice is updating the quote: no old amount, no old link.
       const updating = sel.quoteUpdatePending && !isPaye;
+      const quotePro = published.client.type === 'pro';
+      const payLink = Boolean(sel.payplugPaymentUrl);
+      const savings = Number(price.economie) > 0 ? Number(price.economie) : 0;
+      const showQuote = hasDevis && !updating;
 
       return (
-        <div className="space-y-3">
+        <div className="max-w-xl space-y-3">
           {updating && (
-            <div role="status" data-testid="quote-update-pending" className="flex items-start gap-3 rounded-xl border border-blue-100 bg-blue-50 p-3 text-blue-800">
+            <div role="status" data-testid="quote-update-pending" className="flex items-start gap-3 rounded-xl border border-blue-100 bg-blue-50 p-3 text-blue-800 dark:border-transparent">
               <RefreshCw size={16} className="mt-0.5 shrink-0" aria-hidden="true" />
-              <div className="min-w-0"><p className="text-sm font-semibold">Votre devis est en cours de mise à jour</p><p className="mt-1 text-sm">Nous avons bien reçu votre nouvelle facture. Vous recevrez le nouveau devis dès qu’il sera prêt : vous n’avez rien à faire d’ici là.</p></div>
+              <div className="min-w-0"><p className="text-sm font-semibold">Votre devis est en cours de mise à jour</p><p className="mt-1 text-sm">Nous avons bien reçu votre nouvelle facture. Vous recevrez le nouveau devis dès qu’il sera prêt&nbsp;: vous n’avez rien à faire d’ici là.</p></div>
             </div>
           )}
-          {hasDevis && !updating && <p className="flex flex-wrap items-baseline justify-between gap-2 text-base font-semibold text-slate-800"><span>{isPaye ? 'Total du devis' : 'Montant à régler'}</span><strong className="text-2xl">{eur(price.devisTotal)}</strong></p>}
-          {hasDevis && isPay && !isPaye && !sel.archive && !updating && (
+          {showQuote && <p className="flex flex-wrap items-baseline justify-between gap-2 text-base font-semibold text-slate-800"><span>{isPaye ? 'Total du devis' : 'Montant à régler'}</span><strong className="text-2xl">{eur(price.devisTotal)}</strong></p>}
+          {showQuote && savings > 0 && <p data-testid="quote-savings" className="rounded-lg bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800">Économie réalisée grâce à l’optimisation&nbsp;: {eur(savings)}</p>}
+          {showQuote && isPay && !isPaye && !sel.archive && (payLink || quotePro ? (
             <button
+              type="button"
               onClick={handlePayer}
-              className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-black text-sm text-white active:scale-95 transition-all"
-              style={{
-                background: `linear-gradient(135deg, ${BRAND.gold}, ${BRAND.goldD})`,
-                boxShadow: `0 4px 16px rgba(232,184,75,0.35)`,
-                color: BRAND.navyD,
-              }}
+              className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl py-3.5 text-sm font-black transition-all duration-200 ease-out hover:translate-y-[-1px] active:scale-[0.98]"
+              style={{ background: `linear-gradient(135deg, ${BRAND.gold}, ${BRAND.goldD})`, boxShadow: '0 4px 16px rgba(232,184,75,0.35)', color: BRAND.navyD }}
             >
-              <CreditCard size={16} />
-              {sel.payplugPaymentUrl ? `Payer ${hasDevis ? eur(price.devisTotal) : ''}` : published.client.type === 'pro' ? 'Consulter les échanges de règlement' : 'Contacter l’équipe pour le règlement'}
+              <CreditCard size={16} aria-hidden="true" />
+              {payLink ? `Payer ${eur(price.devisTotal)}` : 'Consulter les échanges de règlement'}
             </button>
-          )}
-          {hasDevis && !updating && (
-            <details className="rounded-xl border border-gray-100 overflow-hidden">
-              <summary
-                className="min-h-11 cursor-pointer px-3 py-3 text-sm font-semibold"
-                style={{ backgroundColor: BRAND.navy + '08', color: 'var(--brand-text)' }}
-              >
+          ) : (
+            <div role="status" data-testid="payment-link-pending" className="space-y-1 rounded-xl bg-blue-50 p-3 text-sm text-blue-800">
+              <p className="flex items-start gap-2"><Info size={16} className="mt-0.5 shrink-0" aria-hidden="true" /><span>Votre lien de paiement sécurisé arrive&nbsp;: vous serez prévenu(e) dès qu’il est prêt.</span></p>
+              <button type="button" onClick={() => openPanel('messages')} className="ml-6 min-h-11 font-semibold underline">Poser une question à l’équipe</button>
+            </div>
+          ))}
+          {showQuote && (
+            <details className="overflow-hidden rounded-xl border border-slate-200">
+              <summary className="min-h-11 cursor-pointer px-3 py-3 text-sm font-semibold brand-t brand-bg-l">
                 Détail du devis
               </summary>
-              <div className="p-3 space-y-1">
+              <div className="space-y-1 p-3">
                 {price.avantOptimTransport != null && price.avantOptimTransport !== price.devisTransport && (
-                  <>
-                    <div className="flex justify-between text-sm mb-1">
-                      <span className="text-gray-400 line-through">Transport brut</span>
-                      <span className="text-gray-400 line-through">{eur(price.avantOptimTransport)}</span>
-                    </div>
-                  </>
+                  <div className="mb-1 flex justify-between text-sm">
+                    <span className="text-slate-500 line-through">Transport brut</span>
+                    <span className="text-slate-500 line-through">{eur(price.avantOptimTransport)}</span>
+                  </div>
                 )}
                 <Ligne label="Transport optimisé" value={eur(price.devisTransport)} />
                 {/* Taxes douanières par catégorie */}
@@ -429,59 +392,45 @@ export default function ClientDetailView() {
                 {price.devisOMR > 0 && <Ligne label="Octroi de mer régional" value={eur(price.devisOMR)} />}
                 {(price.fraisDivers || []).filter((f) => Number(f.montant) > 0).map((f, i) => <Ligne key={i} label={f.libelle || f.label || f.nom || 'Frais complémentaires'} value={eur(f.montant)} />)}
                 {price.devisTVA != null && price.devisTVA > 0 && (
-                  <Ligne label={published.destination.tva == null ? 'TVA (taux historique non documenté)' : `TVA (${published.destination.tva}%)`} value={eur(price.devisTVA)} />
+                  <Ligne label={published.destination.tva == null ? 'TVA (taux historique non documenté)' : `TVA (${frenchNumber(published.destination.tva, '%')})`} value={eur(price.devisTVA)} />
                 )}
-                <div className="border-t border-gray-100 mt-2 pt-2">
-                  <div className="flex justify-between items-center">
-                    <span className="font-black text-sm text-gray-900">Total</span>
-                    <span className="font-black text-lg" style={{ color: 'var(--brand-text)' }}>
-                      {eur(price.devisTotal)}
-                    </span>
+                <div className="mt-2 border-t border-slate-200 pt-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-black text-slate-900">Total</span>
+                    <span className="text-lg font-black brand-t">{eur(price.devisTotal)}</span>
                   </div>
-                  {price.economie != null && price.economie > 0 && (
-                    <div className="mt-1.5 text-sm font-bold text-emerald-600 bg-emerald-50 rounded-lg px-2.5 py-1.5 flex items-center gap-1">
-                      <span>Économie réalisée : {eur(price.economie)}</span>
-                    </div>
-                  )}
                 </div>
-                <p className="border-t border-slate-200 pt-3 text-sm text-slate-500">{published.version ? `Devis · version ${published.version}` : 'Devis historique'}{published.issuedAt ? ` · Établi le ${new Date(published.issuedAt).toLocaleDateString('fr-FR')}` : ''}</p>
+                <p className="border-t border-slate-200 pt-3 text-sm text-slate-500">{published.version ? `Devis · version ${published.version}` : 'Devis historique'}{clientDate(published.issuedAt) ? ` · Établi le ${clientDate(published.issuedAt)}` : ''}</p>
               </div>
             </details>
           )}
 
-          {hasDevis && !updating && <div className="border-t border-slate-200 pt-3 text-sm text-slate-600">
-            {published.paymentMode && <p className="mt-2">Modalités convenues : <strong>{PAYMENT_TERMS[published.paymentMode] || published.paymentMode}</strong>.</p>}
-            {published.client.type === 'pro' && !isPaye && <p className="mt-1">{published.paymentMode === 'virement' ? 'Utilisez les coordonnées bancaires transmises par notre équipe. Si vous ne les avez pas, demandez-les dans les échanges ci-dessous.' : ['30_jours','fin_de_mois'].includes(published.paymentMode) ? 'La date exacte d’échéance est celle communiquée par notre équipe. Consultez les échanges si elle ne figure pas sur votre devis.' : published.paymentMode === 'especes' ? 'Contactez notre équipe pour convenir de la remise du règlement.' : 'Les modalités sont à confirmer avec notre équipe.'} La réception du règlement sera confirmée ici.</p>}
-            {published.client.type === 'pro' && !isPaye && <div className="mt-2 space-y-2"><p className="text-sm">Référence à communiquer pour le règlement : <strong>{price.ref}</strong> · {eur(price.devisTotal)}.</p><button className="min-h-11 rounded-lg border border-slate-300 px-3 text-sm font-semibold" onClick={async () => { try { await navigator.clipboard.writeText(`${price.ref} · ${eur(price.devisTotal)}`); flash('Référence de règlement copiée'); } catch { flash({ msg: 'Copie indisponible. La référence reste affichée ci-dessus.', type: 'error' }); } }}>Copier la référence de règlement</button></div>}
-
+          {showQuote && (published.paymentMode || (quotePro && !isPaye)) && <div className="border-t border-slate-200 pt-3 text-sm text-slate-600">
+            {published.paymentMode && <p>Modalités convenues&nbsp;: <strong>{PAYMENT_TERMS[published.paymentMode] || published.paymentMode}</strong>.</p>}
+            {quotePro && !isPaye && <p className="mt-1">{published.paymentMode === 'virement' ? 'Utilisez les coordonnées bancaires transmises par notre équipe. Si vous ne les avez pas, demandez-les dans les échanges ci-dessous.' : ['30_jours','fin_de_mois'].includes(published.paymentMode) ? 'La date exacte d’échéance est celle communiquée par notre équipe. Consultez les échanges si elle ne figure pas sur votre devis.' : published.paymentMode === 'especes' ? 'Contactez notre équipe pour convenir de la remise du règlement.' : 'Les modalités sont à confirmer avec notre équipe.'} La réception du règlement sera confirmée ici.</p>}
+            {quotePro && !isPaye && <div className="mt-2 space-y-2"><p className="text-sm">Référence à communiquer pour le règlement&nbsp;: <strong className="whitespace-nowrap">{price.ref}</strong> · {eur(price.devisTotal)}.</p><button type="button" className="min-h-11 rounded-lg border border-slate-300 px-3 text-sm font-semibold" onClick={async () => { try { await navigator.clipboard.writeText(`${price.ref} · ${eur(price.devisTotal)}`); flash('Référence de règlement copiée'); } catch { flash({ msg: 'Copie indisponible. La référence reste affichée ci-dessus.', type: 'error' }); } }}>Copier la référence de règlement</button></div>}
           </div>}
           {isPaye && (
-            <div className="rounded-xl p-3 bg-emerald-50 border border-emerald-100 flex items-center gap-2">
-              <CheckCircle size={15} className="text-emerald-600 flex-shrink-0" />
+            <div className="flex items-center gap-2 rounded-xl bg-emerald-50 p-3">
+              <CheckCircle size={16} className="flex-shrink-0 text-emerald-700" aria-hidden="true" />
               <div>
-                <p className="text-sm font-bold text-emerald-700">Paiement confirmé</p>
-                <p className="text-sm text-emerald-600">{eur(sel.paiementMontant)} reçu</p>
+                <p className="text-sm font-bold text-emerald-800">Paiement confirmé</p>
+                <p className="text-sm text-emerald-800">{eur(sel.paiementMontant)} reçu{clientDate(sel.paiementDate) ? ` le ${clientDate(sel.paiementDate)}` : ''}. Merci&nbsp;!</p>
               </div>
             </div>
           )}
 
-          {hasDevis && !updating && (
-            <button
-              onClick={async () => { try { const { exportDevisPDF } = await import('../../utils/exportDevisPDF'); await exportDevisPDF(sel, authCl, getDestByCP(authCl?.cp)); } catch (error) { flash({ msg: 'Le PDF n’a pas pu être généré. ' + error.message, type: 'error' }); } }}
-              className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl font-bold text-sm transition-all active:scale-95"
-              style={{ background: `${BRAND.navy}10`, color: 'var(--brand-text)' }}
-            >
-              <Download size={15} />
+          {showQuote && (
+            <button type="button" onClick={downloadQuote} className={`${SECONDARY_BUTTON} w-full`}>
+              <Download size={16} aria-hidden="true" />
               Télécharger le devis (PDF)
             </button>
           )}
 
-
-
           {!hasDevis && !isPaye && !updating && (
-            <p className="text-sm text-gray-400 flex items-center gap-1.5 bg-gray-50 rounded-xl px-3 py-2">
-              <Clock size={13} />
-              {journey.quoteNeedsReview ? 'Votre devis est en cours de révision. Aucun règlement n’est demandé pour la version retirée.' : 'Le devis sera disponible prochainement'}
+            <p className="flex items-center gap-1.5 rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-600">
+              <Clock size={14} aria-hidden="true" />
+              {journey.quoteNeedsReview ? 'Votre devis est en cours de révision. Aucun règlement n’est demandé pour la version retirée.' : 'Votre devis sera disponible à la fin de la préparation\u00a0: vous serez prévenu(e) dès qu’il sera prêt.'}
             </p>
           )}
         </div>
@@ -492,121 +441,122 @@ export default function ClientDetailView() {
     if (phaseIdx === 4) {
       return (
         <div className="space-y-2">
-          <p className="text-sm text-gray-500 leading-relaxed">
+          <p className="text-sm leading-relaxed text-slate-600">
             {sel.statut === 'expedie'
               ? 'Votre colis a été remis au transporteur.'
               : sel.statut === 'transit'
               ? 'Votre colis est en route vers votre destination.'
-              : 'Votre colis est en route.'}
+              : 'Votre colis a voyagé jusqu’à votre destination.'}
           </p>
           {sel.statut === 'transit' && (
-            <div
+            <p
               className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-bold text-white"
-              style={{ background: `linear-gradient(135deg, ${BRAND.navy}, #0891B2)` }}
+              style={{ background: `linear-gradient(135deg, ${BRAND.navy}, #0E7490)` }}
             >
-              <Plane size={14} />
+              <Plane size={14} aria-hidden="true" />
               En route vers {selDest?.nom || 'votre destination'} {selDest?.flag || ''}
-            </div>
+            </p>
           )}
-          {trackingOut && <p className="break-words text-sm text-slate-600">Numéro de suivi vers votre adresse : <strong>{trackingOut}</strong></p>}
-          {manifest.trackings.length > 0 && <details><summary className="min-h-11 cursor-pointer py-3 text-sm text-slate-600">Suivis fournisseurs vers l’entrepôt</summary>{manifest.trackings.map(number => <a key={number} href={`https://parcelsapp.com/fr/tracking/${encodeURIComponent(number)}`} target="_blank" rel="noopener noreferrer" className="min-h-11 flex items-center gap-2 break-all text-sm underline"><ExternalLink size={16} />{number}</a>)}</details>}
+          {trackingOut && <p className="break-words text-sm text-slate-600">Numéro de suivi vers votre adresse&nbsp;: <strong>{trackingOut}</strong></p>}
+          {manifest.trackings.length > 0 && <details><summary className="min-h-11 cursor-pointer py-3 text-sm text-slate-600">Suivis fournisseurs vers l’entrepôt</summary>{manifest.trackings.map(number => <a key={number} href={`https://parcelsapp.com/fr/tracking/${encodeURIComponent(number)}`} target="_blank" rel="noopener noreferrer" className="flex min-h-11 items-center gap-2 break-all text-sm underline"><ExternalLink size={16} aria-hidden="true" />{number}</a>)}</details>}
         </div>
       );
     }
 
-    if (phaseIdx === 5) return <p className="text-sm text-slate-600">{sel.statut === 'dedouanement' ? 'Votre colis est en cours de dédouanement. Notre équipe suit cette étape avant sa mise à disposition au dépôt local.' : 'Étape de dédouanement passée.'}</p>;
+    if (phaseIdx === 5) return <p className="text-sm text-slate-600">{sel.statut === 'dedouanement' ? 'Votre colis est en cours de dédouanement. Notre équipe suit cette étape avant sa mise à disposition au dépôt local.' : 'Formalités de douane terminées.'}</p>;
     if (phaseIdx === 6) return <p className="text-sm text-slate-600">{sel.statut === 'arrive' ? 'Votre colis est arrivé au dépôt local. Notre équipe organise la livraison et vous informera des modalités confirmées.' : 'Passage au dépôt local enregistré.'}</p>;
     // Livraison
     if (phaseIdx === 7) {
-      const isLivre = sel.statut === 'livre';
-      const isEnLivraison = sel.statut === 'livraison';
-      const isArrive = sel.statut === 'arrive';
-
-      return (
-        <div className="space-y-3">
-          {isArrive && (
-            <div className="flex items-center gap-2 text-sm font-semibold text-teal-700 bg-teal-50 rounded-xl px-3 py-2">
-              <MapPin size={13} />
-              Colis arrivé à destination — livraison en cours de planification
-            </div>
-          )}
-          {isEnLivraison && (
-            <div className="flex items-center gap-2 text-sm font-semibold text-lime-700 bg-lime-50 rounded-xl px-3 py-2">
-              <MapPin size={13} />
-              Votre colis est en cours de livraison
-            </div>
-          )}
-          {isLivre && (
-            <div className="text-center py-3 space-y-2">
-              <CheckCircle size={40} className="mx-auto text-emerald-600" />
-              <p className="font-black text-xl text-gray-900">Livré !</p>
-              <p className="text-sm text-gray-500">
-                Votre colis a bien été livré à {selDest?.nom || 'votre domicile'}.
-              </p>
-              <div className="flex items-center justify-center gap-1.5 text-sm font-bold text-emerald-600">
-                <CheckCircle size={14} />
-                Livraison confirmée
-              </div>
-            </div>
-          )}
-          {!isLivre && !isEnLivraison && !isArrive && (
-            <p className="text-sm text-gray-400 flex items-center gap-1.5 bg-gray-50 rounded-xl px-3 py-2">
-              <Clock size={13} />
-              La livraison sera programmée à l'arrivée du colis
-            </p>
-          )}
-        </div>
-      );
+      return delivered
+        ? <p className="flex items-center gap-2 text-sm font-semibold text-emerald-800"><CheckCircle size={16} aria-hidden="true" />{clientDate(sel.dateLivraison) ? `Livraison confirmée le ${clientDate(sel.dateLivraison)}.` : 'Livraison confirmée.'}</p>
+        : <p className="flex items-center gap-2 rounded-xl bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800"><MapPin size={14} aria-hidden="true" />Votre colis est en cours de livraison</p>;
     }
 
     return null;
   };
 
   return (
-    <div className="anim-fade space-y-4">
+    <div className="anim-fade space-y-4" data-testid="client-dossier-detail">
       {/* ── Compact header with back ── */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-start gap-3">
         <button
+          type="button"
           onClick={() => navigate('/colis')}
-          aria-label="Retour à mes colis" className="flex-shrink-0 min-w-11 min-h-11 rounded-xl flex items-center justify-center transition-all active:scale-90 hover:bg-gray-100"
+          aria-label="Retour à mes colis" className="flex min-h-11 min-w-11 flex-shrink-0 items-center justify-center rounded-xl transition-all duration-200 ease-out hover:bg-slate-100 active:scale-[0.98] dark:hover:bg-white/10"
         >
-          <ArrowLeft size={18} className="text-gray-600" />
+          <ArrowLeft size={18} className="text-slate-600" aria-hidden="true" />
         </button>
-        <div className="flex-1 min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-lg font-black text-gray-900 leading-none">{sel.ref}</h2>
-
-          </div>
-          <p className="text-sm text-gray-400 truncate mt-0.5">{sel.desc}</p>
+        <div className="min-w-0 flex-1 pt-1">
+          <h1 className="whitespace-nowrap text-lg font-black leading-tight text-slate-900">{sel.ref}</h1>
+          {sel.desc && <p ref={descRef} id="client-dossier-description" className={`mt-0.5 break-words text-sm text-slate-600 ${descOpen ? '' : 'line-clamp-2'}`}>{sel.desc}</p>}
+          {sel.desc && (descClamped || descOpen) && <button type="button" aria-expanded={descOpen} aria-controls="client-dossier-description" onClick={() => setDescOpen(value => !value)} className="min-h-11 text-sm font-semibold underline brand-t">{descOpen ? 'Réduire la description' : 'Lire toute la description'}</button>}
         </div>
       </div>
 
-      <section aria-label="État actuel et prochaine étape" className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
-        <div><p className="text-sm font-semibold uppercase tracking-wide text-slate-500">Étape actuelle</p><h2 className="mt-1 text-lg font-bold text-slate-800">{journey.label}</h2></div>
-        {task.kind === 'none' ? <><p className="font-semibold text-slate-700">Aucune action attendue de votre part.</p>{journey.quoteUpdating ? phaseContent(3) : <p className="text-sm text-slate-600">{journey.next}</p>}</> : <p className="text-sm font-semibold text-slate-700">À vous · {task.action}</p>}
-        {task.kind === 'agreement' && phaseContent(1)}
-        {task.kind === 'payment' && phaseContent(3)}
-        {['documents','messages'].includes(task.kind) && <button onClick={() => openPanel(task.kind)} className="min-h-11 w-full rounded-xl brand-bg px-4 py-3 text-sm font-semibold text-white">{task.action}</button>}
-        {clientWaiting && <div className="rounded-xl bg-slate-50 p-3 text-sm text-slate-700"><p>{sel.attenteClientMotif || 'Vous avez demandé à attendre avant la préparation.'}</p><p className="mt-1">Attente enregistrée le {new Date(sel.attenteClientDate).toLocaleDateString('fr-FR')}{sel.attenteClientUntil ? ` · Réexamen prévu le ${new Date(sel.attenteClientUntil).toLocaleDateString('fr-FR')}` : ''}</p></div>}
-        {shipmentStarted && <>
-          {trackingOut ? <a href={`https://parcelsapp.com/fr/tracking/${encodeURIComponent(trackingOut)}`} target="_blank" rel="noopener noreferrer" className="min-h-11 flex items-center justify-center gap-2 rounded-xl border border-slate-300 px-3 py-3 text-sm font-semibold brand-t"><ExternalLink size={16} />Suivre mon colis</a> : <p className="text-sm text-slate-600">Le suivi transporteur vers votre adresse n’est pas encore renseigné. Les étapes de votre expédition restent visibles ici.</p>}
-          <p className="text-sm text-slate-600">{logistics ? `Dernière nouvelle : ${logistics.label.toLocaleLowerCase('fr')} le ${new Date(logistics.date).toLocaleDateString('fr-FR')}.` : 'La date de la dernière nouvelle n’est pas encore disponible.'}{sel.statut !== 'livre' ? ' La date de livraison sera précisée lorsqu’elle sera confirmée.' : ''}</p>
-        </>}
-        {clientWaiting && <details className="border-t border-slate-200 pt-2"><summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-slate-700">Reprendre ma décision</summary>{phaseContent(1)}</details>}
-        {journey.event && !journey.event.historical && <p className="text-sm text-slate-500">{journey.event.label} le {new Date(journey.event.date).toLocaleDateString('fr-FR')}</p>}
+      <section aria-label="État actuel et prochaine étape" className="rounded-2xl border border-slate-200 bg-white p-4">
+        <div className="max-w-2xl space-y-3">
+          <div><p className="text-sm font-semibold uppercase tracking-wide text-slate-500">Étape actuelle</p><h2 className="mt-1 text-lg font-bold text-slate-800">{journey.label}</h2></div>
+          {delivered ? (
+            <div data-testid="delivered-celebration" className="space-y-1.5 rounded-2xl bg-emerald-50 p-4 text-center">
+              <CheckCircle size={40} className="mx-auto text-emerald-700" aria-hidden="true" />
+              <p className="text-xl font-black text-emerald-800">Livré&nbsp;!</p>
+              <p className="text-sm text-emerald-800">Votre colis a bien été livré{selDest?.nom ? ` à ${selDest.nom}` : ''}.</p>
+              <p className="text-sm font-semibold text-emerald-800">{clientDate(sel.dateLivraison) ? `Livraison confirmée le ${clientDate(sel.dateLivraison)}.` : 'Livraison confirmée.'}</p>
+            </div>
+          ) : task.kind === 'none'
+            ? <p className="font-semibold text-slate-700">Aucune action attendue de votre part.</p>
+            : <p className="text-sm font-semibold text-slate-700">À vous · {task.action}</p>}
+          {task.kind === 'none' && (journey.quoteUpdating ? phaseContent(3) : <p className="text-sm text-slate-600">{journey.next}</p>)}
+          {taskExplanation && <p data-testid="client-task-explanation" className="text-sm text-slate-600">{taskExplanation}</p>}
+          {task.kind === 'agreement' && phaseContent(1)}
+          {task.kind === 'payment' && phaseContent(3)}
+          {['documents','messages'].includes(task.kind) && <button type="button" onClick={() => openPanel(task.kind)} className={`${PRIMARY_BUTTON} w-full sm:w-auto sm:px-6`}>{task.kind === 'documents' ? <Upload size={16} aria-hidden="true" /> : <MessageCircle size={16} aria-hidden="true" />}{task.action}</button>}
+          {clientWaiting && (
+            <div data-testid="client-waiting" className="rounded-xl bg-slate-50 p-3 text-sm text-slate-700">
+              <p>{sel.attenteClientMotif || 'Vous avez demandé à attendre avant la préparation.'}</p>
+              <p className="mt-1">Votre attente est enregistrée{waitedSince ? ` depuis le ${waitedSince}` : ''}{waitReview ? ` · Réexamen prévu ${journey.reviewDue ? 'depuis' : 'le'} ${waitReview}` : ''}.</p>
+            </div>
+          )}
+          {departureDayShown && (
+            <p data-testid="planned-departure" className="flex items-start gap-2 text-sm text-slate-700">
+              <CalendarDays size={16} className="mt-0.5 shrink-0 brand-t" aria-hidden="true" />
+              <span>{departureMessage.label} <strong>{departureMessage.day}</strong>. {departureMessage.note}</span>
+            </p>
+          )}
+          {departureMessage?.kind === 'pending' && (
+            <p data-testid="planned-departure" className="flex items-start gap-2 text-sm text-slate-600">
+              <CalendarDays size={16} className="mt-0.5 shrink-0 brand-t" aria-hidden="true" />
+              <span>{departureMessage.text}</span>
+            </p>
+          )}
+          {departureMessage?.kind === 'loading' && <div aria-hidden="true" data-testid="planned-departure-loading" className="h-5 w-72 max-w-full animate-pulse rounded-lg bg-slate-100" />}
+          {departureMessage?.kind === 'error' && (
+            <p role="status" data-testid="planned-departure" className="flex flex-wrap items-center gap-x-2 text-sm text-slate-600">
+              <CalendarDays size={16} className="shrink-0 brand-t" aria-hidden="true" />
+              <span>{departureMessage.text}</span>
+              <button type="button" onClick={() => setDepartureAttempt(value => value + 1)} className="min-h-11 font-semibold underline brand-t">Réessayer</button>
+            </p>
+          )}
+          {shipmentStarted && <>
+            {trackingOut ? <a href={`https://parcelsapp.com/fr/tracking/${encodeURIComponent(trackingOut)}`} target="_blank" rel="noopener noreferrer" className={`${SECONDARY_BUTTON} w-full sm:w-auto`}><ExternalLink size={16} aria-hidden="true" />Suivre mon colis</a> : <p className="text-sm text-slate-600">Le suivi transporteur vers votre adresse n’est pas encore renseigné. Les étapes de votre expédition restent visibles ici.</p>}
+            {!delivered && !(sel.statut === 'expedie' && departureDayShown) && <p data-testid="latest-news" className="text-sm text-slate-600">{news && clientDate(news.date) ? `Dernière nouvelle\u00a0: ${news.label.toLocaleLowerCase('fr')} le ${clientDate(news.date)}.` : 'La date de la dernière nouvelle n’est pas encore disponible.'}{DELIVERY_DATE_PENDING.includes(sel.statut) ? ' La date de livraison vous sera précisée dès qu’elle sera confirmée.' : ''}</p>}
+          </>}
+          {clientWaiting && <details className="border-t border-slate-200 pt-2"><summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-slate-700">Reprendre ma décision</summary>{phaseContent(1)}</details>}
+          {journey.event && !journey.event.historical && !shipmentStarted && !clientWaiting && clientDate(journey.event.date) && <p className="text-sm text-slate-500">{journey.event.label} le {clientDate(journey.event.date)}</p>}
+        </div>
       </section>
 
       <details className="rounded-xl border border-slate-200 p-3"><summary className="min-h-11 cursor-pointer py-2 text-sm font-semibold text-slate-700">Suivi et détails de l’expédition</summary><div className="space-y-4 pt-3">
-        {journey.event?.historical && <p className="text-sm text-slate-500">Historique · {journey.event.label} le {new Date(journey.event.date).toLocaleDateString('fr-FR')}</p>}
-        {sel.finalPackages?.length > 0 && <details className="rounded-xl border border-slate-200 p-3"><summary className="min-h-11 cursor-pointer text-sm font-semibold text-slate-700">{previousPreparation ? 'Mesures précédentes conservées' : 'Colis préparés pour l’envoi'} · {sel.finalPackages.length} colis{!previousPreparation ? ' sortant' : ''}{sel.finalPackages.length > 1 ? 's' : ''}</summary><div className="space-y-2 text-sm text-slate-600">{previousPreparation && <p>Ces mesures appartiennent à une préparation précédente.</p>}{sel.finalPackages.map((box,index) => <p key={index}>Colis {index + 1} · {box.dimL} × {box.dimW} × {box.dimH} cm · {box.poids} kg</p>)}</div></details>}
+        {journey.event?.historical && <p className="text-sm text-slate-500">Historique · {journey.event.label} le {clientDate(journey.event.date)}</p>}
+        {sel.finalPackages?.length > 0 && <details className="rounded-xl border border-slate-200 p-3"><summary className="min-h-11 cursor-pointer text-sm font-semibold text-slate-700">{previousPreparation ? 'Mesures précédentes conservées' : 'Colis préparés pour l’envoi'} · {plural(sel.finalPackages.length, 'colis', 'colis')}{!previousPreparation ? ` ${pluralWord(sel.finalPackages.length, 'sortant')}` : ''}</summary><div className="space-y-2 text-sm text-slate-600">{previousPreparation && <p>Ces mesures appartiennent à une préparation précédente.</p>}{sel.finalPackages.map((box,index) => <p key={index}>Colis {index + 1} · {measureText(box)}</p>)}</div></details>}
         {sel.statut !== 'annule' && <ProgressBar statut={sel.statut} size="md" showLabel={false} />}
-        {sel.statut === 'annule' && <p className="text-sm text-slate-600">Ce dossier a été annulé. Les documents et échanges restent consultables.</p>}
+        {sel.statut === 'annule' && <p className="text-sm text-slate-600">Ce dossier a été annulé. Vos documents{sel.messages?.length ? ' et vos échanges' : ''} restent consultables ici.</p>}
         {sel.statut !== 'annule' && <div className="space-y-2">{PHASES_CLIENT.map((phase, idx) => {
-          const state = getPhaseState(idx, curPhaseIdx);
+          const state = clientPhaseState(idx, sel.statut);
           if (state === 'future' || (idx === 1 && (task.kind === 'agreement' || clientWaiting)) || (idx === 3 && (task.kind === 'payment' || journey.quoteUpdating))) return null;
           return <PhaseStep key={phase.key} phase={phase} phaseIdx={idx} state={state} open={timeOpen === idx} onToggle={() => toggleStep(idx)}>{phaseContent(idx)}</PhaseStep>;
         })}</div>}
-        {!['annule','refuse_client'].includes(sel.statut) && curPhaseIdx < PHASES_CLIENT.length - 1 && <div><p className="mb-2 text-sm font-semibold text-slate-500">Prochaines étapes</p><div className="flex flex-wrap gap-2">{PHASES_CLIENT.slice(curPhaseIdx + 1).map(phase => <span key={phase.key} className="inline-flex items-center gap-1 text-sm text-slate-600"><ChevronRight size={12} />{phase.label}</span>)}</div></div>}
+        {!['annule','refuse_client'].includes(sel.statut) && curPhaseIdx < PHASES_CLIENT.length - 1 && <div><p className="mb-2 text-sm font-semibold text-slate-600">Prochaines étapes</p><div className="flex flex-wrap gap-2">{PHASES_CLIENT.slice(curPhaseIdx + 1).map(phase => <span key={phase.key} className="inline-flex items-center gap-1 text-sm text-slate-600"><ChevronRight size={14} aria-hidden="true" />{phase.label}</span>)}</div></div>}
       </div></details>
 
       {/* Spacer so last card isn't under bottom nav */}
