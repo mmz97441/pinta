@@ -1,11 +1,32 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+
+/** The column that slides under the pinned action column: a sliver (under 48px)
+ * is covered whole, so no header-less strip or cut word shows; a wider part
+ * fades out over 28px. dossierTable.css reads both widths. */
+function markHiddenColumn(element, table, moreRight) {
+  let cover = 0, fade = 8;
+  const action = moreRight && table?.querySelector('thead th[data-column="action"]');
+  if (action && getComputedStyle(action).position === 'sticky') {
+    const boundary = action.getBoundingClientRect().left;
+    const cut = [...table.querySelectorAll('thead th[data-column]')].filter(th => !['select', 'action'].includes(th.dataset.column))
+      .map(th => th.getBoundingClientRect()).find(rect => rect.left < boundary - 0.5 && rect.right > boundary + 0.5);
+    const visible = cut ? boundary - cut.left : 0;
+    if (visible > 0 && visible < 48) cover = Math.ceil(visible) + 1;
+    else if (visible >= 48) fade = 28;
+  }
+  element.style.setProperty('--dossier-edge-cover', `${cover}px`);
+  element.style.setProperty('--dossier-edge-fade', `${fade}px`);
+}
 
 /** Keep horizontal navigation reachable above the list (in the page header's
  * meta row), even when the system hides native scrollbars. The list remains the
- * only source of scroll state. */
-export default function DossierHorizontalScroll({ scrollRef, layoutKey }) {
+ * only source of scroll state. `onEdgesChange({ left, right })` says whether
+ * columns are hidden past each edge, so the list can mark them. */
+export default function DossierHorizontalScroll({ scrollRef, layoutKey, onEdgesChange }) {
   const [position, setPosition] = useState({ left: 0, max: 0 });
+  const report = useRef(onEdgesChange);
+  report.current = onEdgesChange;
   useEffect(() => {
     const element = scrollRef.current;
     if (!element) return;
@@ -14,6 +35,9 @@ export default function DossierHorizontalScroll({ scrollRef, layoutKey }) {
       const max = table?.getClientRects().length ? Math.max(0, element.scrollWidth - element.clientWidth) : 0;
       const left = Math.min(max, Math.max(0, element.scrollLeft));
       setPosition(previous => previous.max === max && previous.left === left ? previous : { left, max });
+      const edges = { left: max > 1 && left > 1, right: max > 1 && left < max - 1 };
+      report.current?.(previous => previous && previous.left === edges.left && previous.right === edges.right ? previous : edges);
+      markHiddenColumn(element, table, edges.right);
     };
     update();
     const observer = new ResizeObserver(update);

@@ -48,18 +48,24 @@ test('export keeps client text as text, without interpreting a formula or includ
 
 test('« Accords clients » exports its visible columns as text, with the consent wording of the screen', () => workbook(async filename => {
   const dossiers = [
-    { id: 'waiting', ref: 'EXP-WAIT', clientId: 'client', statut: 'attente_feu_vert', attenteClientDate: '2026-10-03T08:00:00Z', attenteClientUntil: '2026-10-25T08:00:00Z', demandeFeuVertEnvoyeeAt: '2026-10-01T22:30:00Z', casier: 'C-4', nbColis: 2,
+    // The wait ends in 2099: without a model, the export reads the consent on the current clock.
+    { id: 'waiting', ref: 'EXP-WAIT', clientId: 'client', statut: 'attente_feu_vert', attenteClientDate: '2026-10-03T08:00:00Z', attenteClientUntil: '2099-10-25T08:00:00Z', demandeFeuVertEnvoyeeAt: '2026-10-01T22:30:00Z', casier: 'C-4', nbColis: 2,
+      messages: [{ template: 'demande_feu_vert', statut: 'envoye', createdAt: '2026-10-01T22:30:00Z' }, { template: 'relance_feu_vert', statut: 'envoi', canal: 'telegram', createdAt: '2026-10-02T09:00:00Z' }] },
+    { id: 'pending', ref: 'EXP-PEND', clientId: 'client', statut: 'attente_feu_vert', demandeFeuVertEnvoyeeAt: '2026-10-01T22:30:00Z', casier: 'C-5', nbColis: 1,
       messages: [{ template: 'demande_feu_vert', statut: 'envoye', createdAt: '2026-10-01T22:30:00Z' }, { template: 'relance_feu_vert', statut: 'envoi', canal: 'telegram', createdAt: '2026-10-02T09:00:00Z' }] },
     { id: 'submit', ref: 'EXP-SUBMIT', clientId: 'client', statut: 'receptionne', devisTotal: 999 },
   ];
-  const models = new Map([['waiting', { departure: { label: 'Prévu le 08/10/2026' } }], ['submit', { departure: { label: 'Souhaité le 19/11/2026 · à créer' } }]]);
+  const models = new Map([['waiting', { departure: { label: 'Prévu le 08/10/2026' } }], ['pending', { departure: { label: 'À choisir' } }], ['submit', { departure: { label: 'Souhaité le 19/11/2026 · à créer' } }]]);
   const columns = [{ key: 'ref', label: 'Référence' }, { key: 'consentState', label: 'Accord' }, { key: 'consentRequestedAt', label: 'Demande envoyée le' }, { key: 'lastRelanceAt', label: 'Dernière relance' }, { key: 'casier', label: 'Casier' }, { key: 'departure', label: 'Départ prévu' }, { key: 'requested', label: 'Prix du devis', priceKind: 'quote' }, { key: 'statusLabel', label: 'Statut du dossier' }];
   exportDossierTableExcel(dossiers, [{ id: 'client', nom: 'Payet Flavie', email: 'private@example.test' }], models, 'accords', columns, filename);
   const sheet = XLSX.readFile(filename).Sheets.Dossiers;
   assert.deepEqual(XLSX.utils.sheet_to_json(sheet), [
-    // The request of 1 October 22:30 UTC is on 2 October in Réunion; a relance still pending says so.
-    { Référence: 'EXP-WAIT', Accord: 'Le client attend · jusqu’au 25/10', 'Demande envoyée le': '02/10/2026', 'Dernière relance': '02/10/2026 · En attente de livraison', Casier: 'C-4', 'Départ prévu': 'Prévu le 08/10/2026' },
-    { Référence: 'EXP-SUBMIT', Accord: 'À soumettre', 'Demande envoyée le': 'Non renseigné', 'Dernière relance': 'Non renseigné', Casier: 'À renseigner', 'Départ prévu': 'Souhaité le 19/11/2026 · à créer' },
+    // The request of 1 October 22:30 UTC is on 2 October in Réunion. The relance still queued when the
+    // client chose to wait (3 October) was cancelled by the server: it never reads as awaiting delivery.
+    { Référence: 'EXP-WAIT', Accord: 'Le client attend · jusqu’au 25/10', 'Demande envoyée le': '02/10/2026', 'Dernière relance': '02/10/2026 · Annulée · attente du client', Casier: 'C-4', 'Départ prévu': 'Prévu le 08/10/2026' },
+    // Without a wait, a relance still pending says so.
+    { Référence: 'EXP-PEND', Accord: 'Réponse attendue', 'Demande envoyée le': '02/10/2026', 'Dernière relance': '02/10/2026 · En attente de livraison', Casier: 'C-5', 'Départ prévu': 'À choisir' },
+    { Référence: 'EXP-SUBMIT', Accord: 'À soumettre', 'Demande envoyée le': 'Pas encore envoyée', 'Dernière relance': 'Aucune relance', Casier: 'À renseigner', 'Départ prévu': 'Souhaité le 19/11/2026 · à créer' },
   ], 'No price or status column of another view reaches this export.');
   assert.equal(sheet.C2.t, 's');assert.doesNotMatch(JSON.stringify(XLSX.utils.sheet_to_json(sheet)), /private|999/);
 }));

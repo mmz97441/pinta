@@ -85,7 +85,8 @@ const results = [];
  for(const width of [1440,390]) await scenario(`dossier-70-of-90-scroll-restored-${width}`,async f=>{
   f.tables.colis=Array.from({length:90},(_,index)=>({...f.tables.colis[0],id:`73333333-3333-4333-8333-${String(100000000000+index)}`,ref:`EXP-LIST-${String(index+1).padStart(3,'0')}`}));
   const selected=f.tables.colis[69];await f.page.setViewportSize({width,height:1000});await f.login();await f.page.goto(`${base}/colis?sort=ref&dir=asc`);
-  const table=f.page.locator('table'),list=table.locator('..');const target=width===1440?table.getByRole('button',{name:selected.ref,exact:true}):list.locator('article').getByRole('button',{name:selected.ref,exact:true});
+  // On a phone the whole list page scrolls (its header scrolls away with the cards).
+  const table=f.page.locator('table'),cardsArea=table.locator('..'),list=width===1440?cardsArea:f.page.locator('.dossier-list');const target=width===1440?table.getByRole('button',{name:selected.ref,exact:true}):cardsArea.locator('article').getByRole('button',{name:selected.ref,exact:true});
   await target.scrollIntoViewIfNeeded();const before=await list.evaluate(element=>element.scrollTop);assert.ok(before>1500);await target.click();
   await f.page.getByTestId('dossier-task-header').waitFor();
   assert.equal(new URL(f.page.url()).pathname,`/colis/${selected.id}`);

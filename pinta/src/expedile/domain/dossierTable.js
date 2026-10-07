@@ -7,9 +7,27 @@ import { workTitle, workSituation } from './collaborativeWork.js';
 import { receptionCartonManifest, receptionDateSummary } from './reception.js';
 import { parisCalendarDay } from './departureGroups.js';
 import { dossierDepartureWish, wishedDepartureLabel } from './departurePlanning.js';
-import { CONSENT_STAGE_LABELS, consentRelance, consentState, consentWaitLabel } from './consentQueue.js';
+import { CONSENT_LABELS, consentRelance, consentState, consentSummary } from './consentQueue.js';
+import { clientDisplayName } from './clientGroups.js';
 
 const SORT_TYPES = new Set(['text', 'number', 'date']);
+
+/** French agreement of a count: 0 and 1 take the singular (« 0 dossier »,
+ * « 1 dossier », « 2 dossiers »). Same rules as pluralWord()/plural() in
+ * domain/plural.js, which this package's base does not contain yet. */
+const COUNT_FORMAT = new Intl.NumberFormat('fr-FR');
+export function countWord(count, singular, plural = `${singular}s`) {
+  return Math.abs(Number(count) || 0) < 2 ? singular : plural;
+}
+/** « 3 dossiers », « 1 tâche », « 1 234 dossiers ». */
+export function countLabel(count, singular, plural) {
+  const value = Number(count) || 0;
+  return `${COUNT_FORMAT.format(value)} ${countWord(value, singular, plural)}`;
+}
+/** « 1 autre tâche en parallèle », « 2 autres tâches en parallèle ». */
+export function parallelTasksLabel(count) {
+  return `${countLabel(count, 'autre')} ${countWord(count, 'tâche')} en parallèle`;
+}
 const naturalTextOrder = new Intl.Collator('fr', { numeric: true, sensitivity: 'base' });
 
 /** A data column must declare its real value and its type once. Adding a column
@@ -23,7 +41,8 @@ export function defineDossierTableColumn(column) {
   return Object.freeze({ ...column, kind: 'data', sort: Object.freeze({ ...column.sort }) });
 }
 
-const clientName = client => client?.nomFamille ? [client.nomFamille, client.prenom].filter(Boolean).join(' ') : client?.nom || client?.prenom || null;
+// « Payet Flavie », as the rows and the client bands show the client.
+const clientName = client => clientDisplayName(client);
 const refColumn = defineDossierTableColumn({ key: 'ref', label: 'Référence', sort: { type: 'text', value: ({ dossier }) => dossier.ref } });
 const clientColumn = defineDossierTableColumn({ key: 'client', label: 'Client', sort: { type: 'text', value: ({ client }) => clientName(client) } });
 const actionColumn = defineDossierTableColumn({ key: 'action', label: 'Action', kind: 'action' });
@@ -39,9 +58,9 @@ const cartonsColumn = defineDossierTableColumn({ key: 'cartons', label: 'Cartons
 // A desired day without a departure (« Souhaité le … · à créer ») sorts on that day.
 const departureColumn = defineDossierTableColumn({ key: 'departure', label: 'Départ prévu', shortLabel: 'Départ', sort: { type: 'date', value: ({ dossier, model, envoi }) => /^(Prévu le|Date dépassée)/.test(model?.departure?.label || '') ? envoi?.date : dossierDepartureWish(dossier) } });
 // « Accords clients »: the consent still to obtain, the request and its last relance.
-const consentStateColumn = defineDossierTableColumn({ key: 'consentState', label: 'Accord', filter: { choices: Object.values(CONSENT_STAGE_LABELS) }, sort: { type: 'text', value: ({ dossier }) => consentState(dossier)?.label } });
+const consentStateColumn = defineDossierTableColumn({ key: 'consentState', label: 'Accord', filter: { choices: CONSENT_LABELS }, sort: { type: 'text', value: ({ dossier, model }) => (model?.consent ?? consentState(dossier))?.label } });
 const consentRequestColumn = defineDossierTableColumn({ key: 'consentRequestedAt', label: 'Demande envoyée le', shortLabel: 'Demande envoyée', sort: { type: 'date', value: ({ dossier }) => dossier.demandeFeuVertEnvoyeeAt } });
-const consentRelanceColumn = defineDossierTableColumn({ key: 'lastRelanceAt', label: 'Dernière relance', sort: { type: 'date', value: ({ dossier }) => consentRelance(dossier)?.at } });
+const consentRelanceColumn = defineDossierTableColumn({ key: 'lastRelanceAt', label: 'Dernière relance', sort: { type: 'date', value: ({ dossier, model }) => (model?.relance ?? consentRelance(dossier))?.at } });
 export const TABLE_COLUMNS = Object.freeze({
   daily: Object.freeze([refColumn, clientColumn, receptionDateColumn, statusColumn, paymentStateColumn,
     defineDossierTableColumn({ key: 'statut', label: 'Travail à faire', shortLabel: 'Travail', sort: { type: 'text', value: ({ model }) => model?.title === 'Tâches à actualiser' ? null : model?.title } }),
@@ -196,7 +215,7 @@ function departureModel(dossier, envois, optimized, payment, now, client) {
   const cancelled = envoi?.statut === 'annule';
   // Departures are planned on Paris days.
   const past = date && date < parisCalendarDay(now);
-  const label = !envoi ? departed ? 'Expédition enregistrée' : envoiId ? 'Départ à vérifier' : wishedDepartureLabel(dossier, { client, envois, now }) || 'À planifier'
+  const label = !envoi ? departed ? 'Expédition enregistrée' : envoiId ? 'Départ à vérifier' : wishedDepartureLabel(dossier, { client, envois, now }) || 'À choisir'
     : cancelled ? 'Départ annulé'
     : departed ? 'Départ confirmé'
     : envoi.statut === 'archive' ? 'Départ archivé'
@@ -222,6 +241,10 @@ function departureModel(dossier, envois, optimized, payment, now, client) {
   return { label, destination, packagesLabel: optimized ? `${dossier.outgoingParcelCount} colis après optimisation` : 'Colis après optimisation à confirmer', readinessLabel };
 }
 
+/** A task row the dossier has outgrown (its step moved on): the list offers to
+ * refresh the tasks right there (model.refreshable). */
+export const STALE_TASK_REASON = 'Le dossier a changé. Actualisez les tâches.';
+
 // The server turns the awaited consent into a relance before the departure
 // closing (sync_staff_work_actions): that reception action is work to do.
 const CONSENT_RELANCE_HINT = /^(Relancer le client avant la clôture|Demander l['’]accord avant la clôture)/;
@@ -240,7 +263,7 @@ function checkedAction(action, dossier, optimized, payment, now) {
     conversation: true,
     correction: open,
   }[action.kind];
-  if (!compatible) reason = 'Le dossier a changé. Actualisez les tâches.';
+  if (!compatible) reason = STALE_TASK_REASON;
   else if (action.kind === 'reception' && dossier.statut === 'attente_feu_vert'
     && !(dateTime(dossier.attenteClientUntil) !== null && dateTime(dossier.attenteClientUntil) <= now)
     && !CONSENT_RELANCE_HINT.test(action.action_hint?.trim() || ''))
@@ -278,7 +301,9 @@ export function buildDossierTableModel(dossier, { actions = [], me, can = () => 
   const optimizedDimensions = boxes.map((box, index) => `${boxes.length > 1 ? `Colis ${index + 1} : ` : ''}${dimensions(box.dimL)} × ${dimensions(box.dimW)} × ${dimensions(box.dimH)} cm`);
   // A legacy status cannot turn an incomplete recorded payment into “Payé”.
   const statusLabel = dossier.statut === 'paye' && payment.stateLabel !== PAYMENT_STATE_LABELS.paid ? payment.detailLabel : STATUTS[dossier.statut]?.label || 'Statut à vérifier';
-  const base = { reception: receptionDateSummary(dossier, { now }), payment, quotePrice, departure, optimized, optimizedDimensions, optimizedWeight, statusLabel };
+  // « Accords clients »: the consent and its last relance, on the same clock as the rest of the row.
+  const base = { reception: receptionDateSummary(dossier, { now }), payment, quotePrice, departure, optimized, optimizedDimensions, optimizedWeight, statusLabel,
+    consent: consentState(dossier, now), relance: consentRelance(dossier) };
   if (!workReady) return { ...base, action: null, title: 'Tâches à actualiser', detail: 'Actualisez les tâches pour retrouver leur attribution.', ownerName: '—', otherActionsCount: 0, matchesScope: scope === 'all' && !assigneeFilter };
   const rows = dossier.archive ? [] : sortWorkActions(actions.filter(action => action.colis_id === dossier.id && action.state !== 'done')
     .map(action => checkedAction(action, dossier, optimized, payment, now)), now);
@@ -304,7 +329,7 @@ export function buildDossierTableModel(dossier, { actions = [], me, can = () => 
     const priority = actionPriority(action, now);
     if (priority.urgent) detail = priority.reason + (canDo(action) ? '' : ` · ${detail}`);
   }
-  return { ...base, action, title, detail, ownerName: ownerName(action, me, teamUsers), otherActionsCount: Math.max(0, rows.length - (action ? 1 : 0)), matchesScope: scope === 'all' && !assigneeFilter || scoped.length > 0 };
+  return { ...base, action, title, detail, refreshable: action?.blocked_reason === STALE_TASK_REASON, ownerName: ownerName(action, me, teamUsers), otherActionsCount: Math.max(0, rows.length - (action ? 1 : 0)), matchesScope: scope === 'all' && !assigneeFilter || scoped.length > 0 };
 }
 
 const exportKeys = {
@@ -364,11 +389,11 @@ export function buildDossierTableExportRows(dossiers, clients, models, view, col
     const amount = key => typeof model?.payment?.[key] === 'number' && Number.isFinite(model.payment[key])
       ? model.payment[key] : dossierTableMissingAmountLabel(model?.payment, key);
     // The screen's wording: « Le client attend · jusqu’au 25/10 », « 06/10/2026 · Envoi non confirmé ».
-    const consent = consentState(dossier), relance = consentRelance(dossier);
+    const consent = model?.consent ?? consentState(dossier), relance = model?.relance ?? consentRelance(dossier);
     const values = {
       ref: dossier.ref || 'Sans référence',
       client: [name, zone].filter(Boolean).join('\n'),
-      statut: [model?.title || 'Tâches à actualiser', model?.detail, model?.otherActionsCount > 0 ? `${model.otherActionsCount} autre${model.otherActionsCount > 1 ? 's' : ''} tâche${model.otherActionsCount > 1 ? 's' : ''} en parallèle` : ''].filter(Boolean).join('\n'),
+      statut: [model?.title || 'Tâches à actualiser', model?.detail, model?.otherActionsCount > 0 ? parallelTasksLabel(model.otherActionsCount) : ''].filter(Boolean).join('\n'),
       statusLabel: model?.statusLabel || 'Statut à vérifier', paymentState: model?.payment?.stateLabel || 'À vérifier',
       optimizedDimensions: model?.optimized ? (model.optimizedDimensions || []).join('\n') : '',
       optimizedWeight: model?.optimized ? model.optimizedWeight ?? '' : '',
@@ -380,9 +405,9 @@ export function buildDossierTableExportRows(dossiers, clients, models, view, col
       sentAt: formatDossierTableDate(model?.payment?.sentAt),
       departure: model?.departure?.label || 'À prévoir', destination: model?.departure?.destination || 'À renseigner',
       packages: model?.departure?.packagesLabel || 'À préparer', readiness: model?.departure?.readinessLabel || 'À vérifier',
-      consentState: consent ? [consent.label, consentWaitLabel(consent.until)].filter(Boolean).join(' · ') : '',
-      consentRequestedAt: formatDossierTableDate(dossier.demandeFeuVertEnvoyeeAt),
-      lastRelanceAt: relance ? [formatDossierTableDate(relance.at), relance.deliveryLabel].filter(Boolean).join(' · ') : formatDossierTableDate(null),
+      consentState: consentSummary(consent),
+      consentRequestedAt: consentRequestLabel(dossier),
+      lastRelanceAt: relance ? [formatDossierTableDate(relance.at), relance.deliveryLabel].filter(Boolean).join(' · ') : NO_RELANCE_LABEL,
     };
     return Object.fromEntries(selected.map(column => {
       if (column.priceKind !== 'quote') return [column.label, values[column.key]];
@@ -390,4 +415,66 @@ export function buildDossierTableExportRows(dossiers, clients, models, view, col
       return [column.label, price === null ? state || 'À calculer' : state ? `${price.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} € · ${state}` : price];
     }));
   });
+}
+
+// ── « Accords clients »: what an empty request or relance column says ──────
+export const REQUEST_NOT_SENT_LABEL = 'Pas encore envoyée';
+export const NO_RELANCE_LABEL = 'Aucune relance';
+/** « 02/10/2026 », the confirmed delivery of the consent request, or « Pas encore envoyée ». */
+export function consentRequestLabel(dossier) {
+  return dateTime(dossier?.demandeFeuVertEnvoyeeAt) === null ? REQUEST_NOT_SENT_LABEL : formatDossierTableDate(dossier.demandeFeuVertEnvoyeeAt);
+}
+
+/** A card shows a fact only when it has something to say: no « Poids final »
+ * or « Dimensions finales » before the optimisation. */
+export function dossierFactHasValue(column, model = {}) {
+  if (column?.key === 'optimizedWeight') return model?.optimizedWeight != null;
+  if (column?.key === 'optimizedDimensions') return Boolean(model?.optimized) && (model?.optimizedDimensions || []).length > 0;
+  if (column?.key === 'consentState') return Boolean(model?.consent);
+  return true;
+}
+
+// ── Bulk status changes ─────────────────────────────────────────────────────
+/** The transport chain after the departure, in its order. `from` mirrors the
+ * database guard fn_valider_transition_statut; `permission` mirrors
+ * guard_colis_permissions. « Expédié » is only reached by confirming the
+ * loading of the departure (guard_colis_departure refuses a direct change):
+ * it is never a bulk write, the list points to the departure instead. */
+export const BULK_STATUS_STEPS = Object.freeze([
+  Object.freeze({ statut: 'expedie', label: 'Expédié', from: Object.freeze(['paye']), permission: 'perm_colis_expedier', viaDeparture: true }),
+  Object.freeze({ statut: 'transit', label: 'En transit', from: Object.freeze(['expedie']), permission: 'perm_colis_changer_statut_expedition' }),
+  Object.freeze({ statut: 'dedouanement', label: 'Dédouanement', from: Object.freeze(['transit']), permission: 'perm_colis_changer_statut_expedition' }),
+  Object.freeze({ statut: 'arrive', label: 'Arrivé', from: Object.freeze(['transit', 'dedouanement']), permission: 'perm_colis_changer_statut_expedition' }),
+  Object.freeze({ statut: 'livraison', label: 'En livraison', from: Object.freeze(['arrive']), permission: 'perm_colis_changer_statut_expedition' }),
+  Object.freeze({ statut: 'livre', label: 'Livré', from: Object.freeze(['livraison']), permission: 'perm_colis_changer_statut_expedition' }),
+]);
+const AFTER_DEPARTURE = new Set(['expedie', 'transit', 'dedouanement', 'arrive', 'livraison', 'livre']);
+export const BULK_STATUS_REASONS = Object.freeze({
+  departure: '« Expédié » se confirme au chargement de leur départ.',
+  beforeDeparture: 'Avant le départ, un dossier avance par son parcours : pas de statut groupé.',
+  delivered: 'Dossiers livrés : aucune étape ne suit.',
+  mixed: 'Étapes différentes : sélectionnez des dossiers au même statut pour les faire avancer ensemble.',
+});
+/** What a bulk status change can do for these dossiers: the steps that are a
+ * valid next status for EVERY one of them, in the order of the chain
+ * (`choices`); otherwise why none applies (`reason`) and whether the departure
+ * confirms the next step (`departure`). Permissions are the caller's. */
+export function bulkStatusPlan(dossiers = []) {
+  const list = (dossiers || []).filter(Boolean);
+  if (!list.length) return { choices: [], reason: null, departure: false };
+  const choices = BULK_STATUS_STEPS.filter(step => !step.viaDeparture && list.every(dossier => step.from.includes(dossier.statut)));
+  if (choices.length) return { choices, reason: null, departure: false };
+  if (list.every(dossier => dossier.statut === 'paye')) return { choices, reason: BULK_STATUS_REASONS.departure, departure: true };
+  if (list.some(dossier => !AFTER_DEPARTURE.has(dossier.statut) && dossier.statut !== 'paye')) return { choices, reason: BULK_STATUS_REASONS.beforeDeparture, departure: false };
+  if (list.every(dossier => dossier.statut === 'livre')) return { choices, reason: BULK_STATUS_REASONS.delivered, departure: false };
+  return { choices, reason: BULK_STATUS_REASONS.mixed, departure: false };
+}
+const statusName = statut => BULK_STATUS_STEPS.find(step => step.statut === statut)?.label || STATUTS[statut]?.label || statut;
+/** The server's refusal of one dossier, in plain words: a refused transition
+ * names both statuses, any other refusal keeps the server's own message. */
+export function bulkRefusalReason(error) {
+  const message = typeof error === 'string' ? error : error?.message;
+  const transition = typeof message === 'string' && message.match(/Transition invalide\s*:\s*([a-z_]+)\s*→\s*([a-z_]+)/);
+  if (transition) return `Passage de « ${statusName(transition[1])} » à « ${statusName(transition[2])} » refusé par le serveur.`;
+  return typeof message === 'string' && message.trim() ? message.trim() : 'Refusé par le serveur, sans motif précisé.';
 }

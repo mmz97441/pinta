@@ -16,7 +16,7 @@ export default function DossierTextSizeControl({ value, onChange, label = 'Texte
   return <div className="dossier-text-size" role="group" aria-label={`Régler la taille du texte des ${subject}`}>
     <label htmlFor={id}>{label}</label>
     <button type="button" className="dossier-text-size-step" aria-label={`Réduire le texte des ${subject}`} disabled={value <= min} onClick={() => onChange(value - 1)}>A−</button>
-    <input id={id} type="number" inputMode="numeric" min={min} max={max} step={1} aria-label={`Taille du texte des ${subject}`} aria-description="De 5 à 20 pixels. Appuyez sur Entrée pour appliquer." value={draft}
+    <input id={id} type="number" inputMode="numeric" min={min} max={max} step={1} aria-label={`Taille du texte des ${subject}`} aria-description={`De ${min} à ${max} pixels. Appuyez sur Entrée pour appliquer.`} value={draft}
       onChange={event => setDraft(event.target.value)} onBlur={commit}
       onKeyDown={event => {
         if (event.key === 'Enter') { event.preventDefault(); commit(); }

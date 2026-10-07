@@ -422,7 +422,8 @@ async function main() {
       await region.evaluate(node => { node.scrollLeft = 0; });
       // Readable at every text size: never under 12px, contrast kept.
       for (const part of await headingStyles(f)) { assert.ok(part.size >= 12, `${part.text}: ${part.size}px`); assert.ok(part.ratio >= 4.5, `${part.text}: ${part.ratio.toFixed(2)}:1`); }
-      await setTextSize(f, 5);
+      // The smallest size is now 11px; the headings never go under 12px.
+      await setTextSize(f, 11);
       for (const part of await headingStyles(f)) assert.ok(part.size >= 12, `At the smallest text size, ${part.text} stays at ${part.size}px.`);
       await setTextSize(f, 20);
       for (const part of await headingStyles(f)) assert.ok(part.size >= 20, `At the largest text size, ${part.text} grows with the rows (${part.size}px).`);
@@ -584,7 +585,11 @@ async function main() {
         // The client page may consume `completer` once its form is open: the navigation itself carries it.
         await f.page.waitForURL(url => url.pathname === `/clients/${client}` && url.searchParams.get('completer') === completer);
         assert.equal(new URL(f.page.url()).searchParams.get('returnTo'), from);
-        await f.page.getByRole('region', { name: 'Contact disponible', exact: true }).waitFor();
+        if (completer) {
+          // « Compléter la fiche » opens the client's contact form on the first missing field, focused.
+          const field = { prenom: 'prenom', nom: 'nom', email: 'email', telephone: 'tel', adresse: 'adresseLigne1', cp: 'cp', ville: 'ville' }[completer];
+          await f.page.waitForFunction(name => document.activeElement?.getAttribute('name') === name, field);
+        } else await f.page.getByRole('region', { name: 'Contact disponible', exact: true }).waitFor();
         if (id === DOSSIER.DEP002) await f.page.getByRole('button', { name: 'Inviter à l’espace client', exact: true }).waitFor();
         // The client page leads back to the dossier as it was displayed.
         await f.page.getByRole('button', { name: 'Retour au dossier', exact: true }).click();
@@ -757,6 +762,35 @@ async function main() {
       assert.deepEqual(f.requests.filter(request => ['POST', 'PATCH', 'DELETE'].includes(request.method) && request.path.startsWith('/rest/v1/') && !DOSSIER_READ_ONLY_RPCS.some(rpc => request.path.endsWith(rpc))), []);
       assert.equal(f.requests.some(request => /\/(queue_message|send-email|send-telegram|payplug-create)/.test(request.path)), false);
     }, { width, theme });
+
+    // ── Final review (P4a) ──────────────────────────────────────────────────
+    for (const width of [1440, 1280, 390]) for (const theme of ['light', 'dark']) await scenario(`a-dossier-without-departure-reads-a-choisir-like-its-departure-field-${width}-${theme}`, async f => {
+      await openList(f, 'table=departures');await f.page.waitForFunction(dark => document.documentElement.classList.contains('dark') === dark, theme === 'dark');
+      const departure = width < 768 ? f.page.locator(`[data-dossier-card="${DOSSIER.DEP009}"] [data-column="departure"] dd`) : f.page.locator(`tr[data-dossier-row="${DOSSIER.DEP009}"] > td[data-column="departure"]`);
+      assert.equal((await departure.innerText()).trim(), 'À choisir');
+      assert.equal(await f.page.getByText('À planifier', { exact: true }).count(), 0);
+      await noPageOverflow(f);await axe(f);
+      assertNoBusinessWrite(f);
+    }, { width, theme });
+
+    for (const width of [1440, 1280]) for (const theme of ['light', 'dark']) await scenario(`no-sliver-of-a-column-reads-beside-the-pinned-action-${width}-${theme}`, async f => {
+      // « Colis optim confir »: the strip of « Colis à expédier » left beside the pinned action is covered whole.
+      await openList(f, 'table=departures');await f.page.waitForFunction(dark => document.documentElement.classList.contains('dark') === dark, theme === 'dark');
+      const state = await f.page.evaluate(() => {
+        const scroll = document.getElementById('dossier-table-scroll'), action = document.querySelector('thead th[data-column="action"]'), boundary = action.getBoundingClientRect().left;
+        const cut = [...document.querySelectorAll('thead th[data-column]')].filter(th => !['select', 'action'].includes(th.dataset.column)).map(th => ({ key: th.dataset.column, rect: th.getBoundingClientRect() })).find(item => item.rect.left < boundary - .5 && item.rect.right > boundary + .5);
+        const cell = document.querySelector('tbody tr[data-dossier-row] td[data-column="action"]'), head = getComputedStyle(action, '::before');
+        return { key: cut?.key || null, visible: cut ? boundary - cut.rect.left : 0, cover: parseFloat(getComputedStyle(scroll).getPropertyValue('--dossier-edge-cover')), cell: parseFloat(getComputedStyle(cell, '::before').width), head: parseFloat(head.width), headBackground: head.backgroundImage };
+      });
+      if (state.visible > 0 && state.visible < 48) {
+        assert.ok(state.cover >= state.visible, `The ${Math.round(state.visible)}px strip of ${state.key} is covered (${state.cover}px).`);
+        assert.ok(state.cell >= state.visible && state.head >= state.visible, 'Rows and heading alike.');
+        assert.match(state.headBackground, /gradient/);
+      } else assert.ok(state.visible === 0 || state.cell >= 28, `${state.key}: a wide part fades out instead.`);
+      await f.page.screenshot({ path: `${output}/pinned-action-edge-${width}-${theme}.png` });
+      assertNoBusinessWrite(f);
+    }, { width, theme });
+
   } finally { await browser.close(); await fs.writeFile(`${output}/results.json`, JSON.stringify(results, null, 2)); }
 }
 module.exports = { fixture, CLIENT, DEPARTURE, DOSSIER, REF, NOW };

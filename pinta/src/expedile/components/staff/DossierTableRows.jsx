@@ -1,15 +1,17 @@
-import React, { useRef } from 'react';
-import { ArrowDown, ArrowUp, ArrowUpDown, ArrowRight, MessageCircle, Filter, AlertTriangle } from 'lucide-react';
+import React, { useRef, useState } from 'react';
+import { ArrowDown, ArrowUp, ArrowUpDown, ArrowRight, MessageCircle, Filter, AlertTriangle, RefreshCw } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import { getDestByCP, getSecteurByCP } from '../../constants';
 import { actionWaiting, canWorkAction, staffAvailable, workActionOpensClient } from '../../domain/personalWork';
 import { receptionCartonManifest } from '../../domain/reception';
 import { needsConversationAction } from '../../domain/conversations';
-import { TABLE_COLUMNS, dossierTableAmount, dossierTableAmountState, dossierTableMissingAmountLabel, formatDossierTableDate, isDossierTableColumnSortable, dossierTableSortDirectionLabel } from '../../domain/dossierTable';
+import { TABLE_COLUMNS, dossierTableAmount, dossierTableAmountState, dossierTableMissingAmountLabel, formatDossierTableDate, isDossierTableColumnSortable, dossierTableSortDirectionLabel, parallelTasksLabel, dossierFactHasValue, REQUEST_NOT_SENT_LABEL, NO_RELANCE_LABEL } from '../../domain/dossierTable';
 import { clampColumnWidth, columnWidthBounds } from '../../domain/dossierTablePreferences';
 import { consentTone, paymentTone, statusTone } from '../../domain/dossierTableTone';
 import { consentRelance, consentState, consentWaitLabel } from '../../domain/consentQueue';
+import { clientDisplayName } from '../../domain/clientGroups';
+import { SelectionCheckbox } from './DossierGroupHeader';
 import { dossierAlertsLabel } from '../../domain/dossierAlerts';
 import TaskTakeButton from '../workspace/TaskTakeButton';
 import InvoiceReviewIndicator from '../ui/InvoiceReviewIndicator';
@@ -38,12 +40,13 @@ function Pill({ tone, children }) {
 function Placeholder({ children }) {
   return <span className="dossier-table-placeholder">{children}</span>;
 }
-const PLACEHOLDERS = new Set(['Non renseigné', 'Non attribué', 'À renseigner', '—']);
+const PLACEHOLDERS = new Set(['Non renseigné', 'Non attribué', 'À renseigner', '—', REQUEST_NOT_SENT_LABEL, NO_RELANCE_LABEL]);
 const Fact = ({ children }) => PLACEHOLDERS.has(children) ? <Placeholder>{children}</Placeholder> : <span>{children}</span>;
-/** A saved instant on the table's calendar, or the quiet « Non renseigné ». */
-function TableDate({ value }) {
+/** A saved instant on the table's calendar, or a quiet `empty` wording
+ * (« Non renseigné » by default). */
+function TableDate({ value, empty = formatDossierTableDate(null) }) {
   return typeof value === 'string' && Number.isFinite(Date.parse(value))
-    ? <time dateTime={value}>{formatDossierTableDate(value)}</time> : <Fact>{formatDossierTableDate(null)}</Fact>;
+    ? <time dateTime={value}>{formatDossierTableDate(value)}</time> : <Fact>{empty}</Fact>;
 }
 
 function money(value, missingLabel) {
@@ -52,9 +55,8 @@ function money(value, missingLabel) {
 }
 
 function ClientIdentity({ client }) {
-  const name = client?.nomFamille
-    ? [client.nomFamille, client.prenom].filter(Boolean).join(' ')
-    : client?.nom || client?.prenom || 'Client non renseigné';
+  // « Payet Flavie », the same name as the client band of a grouped list.
+  const name = clientDisplayName(client) || 'Client non renseigné';
   // An absent or foreign postcode must not invent a Réunion destination.
   const knownDestination = /^(971|972|974|976)/.test(String(client?.cp || '').trim());
   const destination = knownDestination ? getDestByCP(client.cp) : null;
@@ -66,11 +68,30 @@ function ClientIdentity({ client }) {
   </div>;
 }
 
+/** « Le dossier a changé. Actualisez les tâches. »: the tasks are refreshed
+ * right there, with the same command as the page's own reload. */
+function RefreshTasksButton() {
+  const { refreshWork } = useApp();
+  const [state, setState] = useState('idle');
+  const refresh = async () => {
+    if (state === 'busy') return;
+    setState('busy');
+    try { await refreshWork(); setState('idle'); } catch { setState('error'); }
+  };
+  return <span className="dossier-table-refresh" onClick={stopPropagation}>
+    <button type="button" disabled={state === 'busy'} onClick={refresh}>
+      <RefreshCw size={14} aria-hidden="true" className={state === 'busy' ? 'animate-spin' : undefined} />{state === 'busy' ? 'Actualisation…' : 'Actualiser les tâches'}
+    </button>
+    {state === 'error' && <span role="alert" className="dossier-table-refresh-error">Les tâches n’ont pas pu être actualisées. Réessayez.</span>}
+  </span>;
+}
+
 function TaskSummary({ model, c, returnTo }) {
   return <div>
     <span className="dossier-table-task-title">{model.title || 'Consulter le dossier'}</span>
     {model.detail && <span className="dossier-table-secondary">{model.detail}</span>}
-    {model.otherActionsCount > 0 && <span className="dossier-table-secondary">{model.otherActionsCount} autre{model.otherActionsCount > 1 ? 's' : ''} tâche{model.otherActionsCount > 1 ? 's' : ''} en parallèle</span>}
+    {model.refreshable && <RefreshTasksButton />}
+    {model.otherActionsCount > 0 && <span className="dossier-table-secondary">{parallelTasksLabel(model.otherActionsCount)}</span>}
     <InvoiceReviewIndicator dossier={c} returnTo={returnTo} />
   </div>;
 }
@@ -88,7 +109,7 @@ function MainAction({ action, dossier, onOpen, title }) {
   // A task worked on another page says where it leads.
   const openLabel = workActionOpensClient(action, dossier) ? 'Ouvrir la fiche client' : canContinue ? 'Continuer' : 'Consulter';
   return <div className="dossier-table-action" onClick={stopPropagation}>
-    {title && <p className="dossier-table-action-title">{title}</p>}
+    {title && <p className="dossier-table-action-title" title={title}>{title}</p>}
     {canTake
       ? <TaskTakeButton action={action} onClaim={saved => onOpen?.(saved)} />
       : <button type="button" className={`dossier-table-open${canContinue ? ' dossier-table-open-primary' : ''}`} onClick={() => onOpen?.(action)}>
@@ -126,7 +147,10 @@ function CellContent({ column, c, client, model, alerts, onOpen, onOpenDossier, 
       const amount = dossierTableAmount(model, column), state = dossierTableAmountState(model, column);
       return <div><span className="dossier-table-money">{money(amount, state || dossierTableMissingAmountLabel(model.payment, 'requested'))}</span>{amount !== null && state && <span className="dossier-table-secondary">{state}</span>}</div>;
     }
-    case 'paid': return <span className="dossier-table-money">{money(model.payment?.paid, dossierTableMissingAmountLabel(model.payment, 'paid'))}</span>;
+    case 'paid':
+      // Nothing is due before the quote: no « 0,00 € » beside « À calculer ».
+      if (model.payment?.requested == null && model.payment?.paid === 0) return <Fact>—</Fact>;
+      return <span className="dossier-table-money">{money(model.payment?.paid, dossierTableMissingAmountLabel(model.payment, 'paid'))}</span>;
     case 'remaining': {
       const amount = money(model.payment?.remaining, dossierTableMissingAmountLabel(model.payment, 'remaining'));
       return <div><span className="dossier-table-money dossier-table-task-title">{amount}</span>{model.payment?.detailLabel && model.payment.detailLabel !== amount && <span className="dossier-table-secondary">{model.payment.detailLabel}</span>}</div>;
@@ -134,16 +158,19 @@ function CellContent({ column, c, client, model, alerts, onOpen, onOpenDossier, 
     case 'receivedAt': return <div>{model.reception?.lastReceivedAt ? <time dateTime={model.reception.lastReceivedAt}>{formatDossierTableDate(model.reception.lastReceivedAt)}</time> : <Fact>{formatDossierTableDate(null)}</Fact>}{model.reception && !model.reception.complete && <span className="dossier-table-secondary">{model.reception.knownCount} / {model.reception.totalCount} cartons datés</span>}</div>;
     case 'sentAt': return <TableDate value={model.payment?.sentAt} />;
     case 'consentState': {
-      const consent = consentState(c);
-      return consent && <div><Pill tone={consentTone(consent.stage)}>{consent.label}</Pill>{consent.until && <span className="dossier-table-secondary">{consentWaitLabel(consent.until)}</span>}</div>;
+      // A dated wait that has ended reads « Attente terminée · le 25/10 · à réexaminer ».
+      const consent = model.consent ?? consentState(c);
+      const end = consent && consentWaitLabel(consent.until, { over: consent.over });
+      return consent && <div><Pill tone={consent.over ? 'review' : consentTone(consent.stage)}>{consent.label}</Pill>{end && <span className="dossier-table-secondary">{end}</span>}</div>;
     }
-    case 'consentRequestedAt': return <TableDate value={c.demandeFeuVertEnvoyeeAt} />;
+    case 'consentRequestedAt': return <TableDate value={c.demandeFeuVertEnvoyeeAt} empty={REQUEST_NOT_SENT_LABEL} />;
     case 'lastRelanceAt': {
       // A relance not yet confirmed says where it stands, never reads as sent.
-      const relance = consentRelance(c);
-      return <div><TableDate value={relance?.at} />{relance?.deliveryLabel && <span className="dossier-table-secondary">{relance.deliveryLabel}</span>}</div>;
+      const relance = model.relance ?? consentRelance(c);
+      if (!relance) return <Fact>{NO_RELANCE_LABEL}</Fact>;
+      return <div><TableDate value={relance.at} />{relance.deliveryLabel && <span className="dossier-table-secondary">{relance.deliveryLabel}</span>}</div>;
     }
-    case 'departure': return <span>{model.departure?.label || 'À prévoir'}</span>;
+    case 'departure': return <span>{model.departure?.label || 'À choisir'}</span>;
     case 'destination': return <Fact>{model.departure?.destination || 'À renseigner'}</Fact>;
     case 'packages': return <span>{model.departure?.packagesLabel || 'À préparer'}</span>;
     case 'readiness': return <span>{model.departure?.readinessLabel || 'À vérifier'}</span>;
@@ -167,10 +194,11 @@ function ColumnResize({ column, width, onResize }) {
     onKeyDown={event => { const step = event.shiftKey ? 50 : 10; const value = { ArrowLeft: currentWidth - step, ArrowRight: currentWidth + step, Home: min, End: max, Enter: initial }[event.key]; if (value !== undefined) { event.preventDefault(); event.stopPropagation(); onResize(column, value); } }}><span aria-hidden="true" className="dossier-table-resize-line" /></button>;
 }
 
-export function DossierTableHead({ columns = TABLE_COLUMNS.daily, onSelectAll, allSelected, onSort, sortCol, sortDir, widths, onResize, filters = {}, onFilterColumn, openFilterKey = null }) {
+/** `selection` of the displayed dossiers: 'all', 'some' (a mixed checkbox) or 'none'. */
+export function DossierTableHead({ columns = TABLE_COLUMNS.daily, onSelectAll, selection = 'none', onSort, sortCol, sortDir, widths, onResize, filters = {}, onFilterColumn, openFilterKey = null }) {
   return <tr className="dossier-table-head">
     <th scope="col" className="dossier-table-select" data-column="select">
-      <label className="dossier-table-checkbox"><input type="checkbox" aria-label="Sélectionner tous les dossiers affichés" checked={Boolean(allSelected)} onChange={onSelectAll} /></label>
+      <label className="dossier-table-checkbox"><SelectionCheckbox aria-label="Sélectionner tous les dossiers affichés" selection={selection} onChange={onSelectAll} /></label>
     </th>
     {columns.map(column => <th key={column.key} scope="col" data-column={column.key} data-column-label={column.label}
       className={column.align === 'right' ? 'dossier-table-align-right' : undefined}
@@ -205,7 +233,8 @@ const HEADING_STATUS_KEYS = ['statusLabel', 'consentState'];
 
 export function DossierTableCard({ c, view, client, model = {}, alerts, columns = TABLE_COLUMNS.daily, checked, onCheck, onOpen, onOpenDossier, returnTo }) {
   const statusColumn = columns.find(column => HEADING_STATUS_KEYS.includes(column.key));
-  const facts = columns.filter(column => !['ref', 'client', 'statut', 'action', ...HEADING_STATUS_KEYS].includes(column.key) && (column.key !== 'optimizedDimensions' || model.optimized));
+  // A fact without value (no final weight before the optimisation) is left out.
+  const facts = columns.filter(column => !['ref', 'client', 'statut', 'action', ...HEADING_STATUS_KEYS].includes(column.key) && dossierFactHasValue(column, model));
   const showActionTitle = !columns.some(column => column.key === 'statut');
   return <article className="dossier-table-card dossier-list-item" aria-label={`Dossier ${c.ref}`} data-view={view || (columns === TABLE_COLUMNS.daily ? 'daily' : undefined)} data-dossier-card={c.id} data-dossier-row={c.id} data-selected={checked ? 'true' : 'false'}>
     <div className="dossier-table-card-heading">

@@ -6,16 +6,21 @@ import { clampColumnWidth, columnFilterChoices, columnFilterModes, columnWidthBo
 /** Native modal semantics keep keyboard focus here without covering the table
  * in another full-width toolbar. Position follows the actual trigger: from
  * 768px the dialog hangs under it, aligned on its left edge ('start') or its
- * right edge ('end'); on phones it is centred. The top layer also escapes the
- * scrolling page header that holds the triggers. */
-export function ColumnDialog({ title, anchor, focusKey, onClose, children, closeLabel = 'Fermer le filtre', id = 'dossier-column-dialog', titleId = 'dossier-column-title', testId = 'column-filter-dialog', className = '', align = 'start' }) {
+ * right edge ('end'); on phones, or without a trigger, it is centred. A
+ * `placement="sheet"` dialog rises from the bottom edge at full width; its
+ * heading (title and close button) stays in view while its content scrolls.
+ * The top layer also escapes the scrolling page header that holds the
+ * triggers. Closing returns focus to the trigger, or to `fallbackFocus` when
+ * the trigger is gone. */
+export function ColumnDialog({ title, anchor, focusKey, onClose, children, closeLabel = 'Fermer le filtre', id = 'dossier-column-dialog', titleId = 'dossier-column-title', testId = 'column-filter-dialog', className = '', align = 'start', placement = 'anchored', width: preferredWidth = 340, fallbackFocus = '[data-column-filters-button]' }) {
   const dialog = useRef(null);
   const initialTrigger = useRef(anchor || document.activeElement);
+  const fallback = useRef(fallbackFocus);
   const [position, setPosition] = useState({ left: 12, top: 12, maxHeight: 'calc(100dvh - 24px)' });
   useLayoutEffect(() => {
     const node = dialog.current;
     node.showModal();
-    return () => { node.close(); const trigger = initialTrigger.current?.isConnected ? initialTrigger.current : document.querySelector('[data-column-filters-button]'); trigger?.focus({ preventScroll: true }); };
+    return () => { node.close(); const trigger = initialTrigger.current?.isConnected ? initialTrigger.current : document.querySelector(fallback.current); trigger?.focus({ preventScroll: true }); };
   }, []);
   useLayoutEffect(() => {
     const node = dialog.current;
@@ -24,7 +29,15 @@ export function ColumnDialog({ title, anchor, focusKey, onClose, children, close
       const viewportHeight = viewport?.height || window.innerHeight;
       const viewportWidth = viewport?.width || window.innerWidth;
       const originX = viewport?.offsetLeft || 0, originY = viewport?.offsetTop || 0;
-      const gap = 12, width = Math.min(340, viewportWidth - gap * 2);
+      if (placement === 'sheet') {
+        // A strip of the page stays visible above the sheet, so it reads as one.
+        const maxHeight = Math.max(160, viewportHeight - 48);
+        const height = Math.min(node.getBoundingClientRect().height, maxHeight);
+        const left = originX, top = originY + viewportHeight - height, width = viewportWidth;
+        setPosition(previous => previous.left === left && previous.top === top && previous.width === width && previous.maxHeight === maxHeight ? previous : { left, top, width, maxHeight });
+        return;
+      }
+      const gap = 12, width = Math.min(preferredWidth, viewportWidth - gap * 2);
       const height = Math.min(node.getBoundingClientRect().height, viewportHeight - gap * 2);
       const rect = anchor?.isConnected ? anchor.getBoundingClientRect() : null;
       const desktop = window.innerWidth >= 768 && rect;
@@ -42,12 +55,12 @@ export function ColumnDialog({ title, anchor, focusKey, onClose, children, close
     window.visualViewport?.addEventListener('resize', place);
     window.visualViewport?.addEventListener('scroll', place);
     return () => { observer.disconnect(); window.removeEventListener('resize', place); window.removeEventListener('scroll', place, true); window.visualViewport?.removeEventListener('resize', place); window.visualViewport?.removeEventListener('scroll', place); };
-  }, [anchor, align]);
+  }, [anchor, align, placement, preferredWidth]);
   useLayoutEffect(() => {
     const target = dialog.current?.querySelector('[data-filter-focus]');
     target?.focus({ preventScroll: true });
   }, [focusKey]);
-  return createPortal(<dialog ref={dialog} id={id} aria-modal="true" aria-labelledby={titleId} data-testid={testId} className={className ? `dossier-column-options ${className}` : 'dossier-column-options'} style={position}
+  return createPortal(<dialog ref={dialog} id={id} aria-modal="true" aria-labelledby={titleId} data-testid={testId} data-placement={placement} className={className ? `dossier-column-options ${className}` : 'dossier-column-options'} style={position}
     onCancel={event => { event.preventDefault(); onClose(); }}
     onClick={event => { if (event.target !== event.currentTarget) return; const rect = event.currentTarget.getBoundingClientRect(); if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) onClose(); }}>
     <div className="dossier-column-dialog-heading"><h2 id={titleId}>{title}</h2><button type="button" className="dossier-column-close" aria-label={closeLabel} onClick={onClose}><X size={18} aria-hidden="true" /></button></div>
@@ -72,7 +85,8 @@ const DOSSIER_COLUMN_NOTES = [
 ];
 
 /** `required` is the column that identifies a row (the reference of a dossier,
- * the task in Mon travail); focus starts on the first column one may hide. */
+ * the task in Mon travail); focus starts on the first column one may hide.
+ * Without `onResize` (cards), no width is offered: widths belong to the table. */
 export function DossierColumnVisibility({ columns, visibleKeys, widths, anchor, required = 'ref', notes = DOSSIER_COLUMN_NOTES, onChange, onResize, onReset, onResetWidths, onClose }) {
   const firstChoice = columns.find(column => column.key !== required)?.key;
   return <ColumnDialog title="Colonnes affichées" closeLabel="Fermer les colonnes" anchor={anchor} onClose={onClose}>

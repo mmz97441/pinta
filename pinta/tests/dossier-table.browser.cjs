@@ -135,7 +135,7 @@ async function openVisibleColumns(f) {
 }
 async function exportFiltered(f,count) {
   const display=await openDisplay(f);const downloaded=f.page.waitForEvent('download');
-  await display.getByRole('button',{name:`Exporter ${count} dossiers filtrés`,exact:true}).click();
+  await display.getByRole('button',{name:count===1?'Exporter 1 dossier filtré':`Exporter ${count} dossiers filtrés`,exact:true}).click();
   const file=await downloaded;assert.equal(await file.failure(),null);
   assert.equal(await display.isVisible(),true,'Exporting keeps « Affichage » open.');await closeDisplay(f);
   const book=XLSX.read(await fs.readFile(await file.path()),{type:'buffer'});
@@ -428,6 +428,8 @@ async function main() {
       await clientResize.focus();await clientResize.press('Home');
       assert.equal(Number(await separator.getAttribute('aria-valuenow')),600);assert.equal(Number(await clientResize.getAttribute('aria-valuenow')),96);
       const table=f.page.getByRole('table',{name:'Dossiers d’expédition',exact:true});
+      // The list measures its new width after the resize (ResizeObserver): let React commit it first.
+      await f.page.waitForFunction(()=>document.querySelector('table.dossier-data-table')?.dataset.unpinRef==='true').catch(()=>{});
       assert.equal(await table.getAttribute('data-unpin-ref'),'true');assert.equal(await table.getAttribute('data-unpin-client'),'true');
       await scroller.evaluate(node=>{node.scrollLeft=0;});await f.page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(resolve)));
       const action=cell(f,P,'action'),wideBefore=[await ref.boundingBox(),await client.boundingBox(),await action.boundingBox()];
@@ -466,10 +468,20 @@ async function main() {
       await options.getByRole('button',{name:'Fermer',exact:true}).click();await options.waitFor({state:'hidden'});
       options=await filterColumn(f,'paymentState','is','Non payé');await waitIds(f,[P,P2,P3,P4].sort());
       assert.equal(await f.page.getByRole('table',{name:'Dossiers d’expédition',exact:true}).count(),0);
-      const width=options.getByLabel('Largeur de Paiement',{exact:true});await width.fill('300');await width.press('Enter');
+      // Cards have no column width: the filter offers none (it belongs to the table).
+      assert.equal(await options.getByLabel('Largeur de Paiement',{exact:true}).count(),0,'No table-only width in cards.');
+      assert.equal(await options.getByRole('button',{name:'Rétablir les largeurs',exact:true}).count(),0);
+      await options.getByRole('button',{name:'Fermer',exact:true}).click();await row(f,P4).waitFor();
+      // The phone sheet of Filtres closes before acting on the list behind it.
+      await f.page.getByRole('dialog',{name:'Filtres',exact:true}).getByRole('button',{name:'Fermer les filtres',exact:true}).click();
+      // With the table chosen on the same phone, the width editor is there and fits.
+      let display=await openDisplay(f);await display.getByRole('combobox',{name:'Affichage des dossiers',exact:true}).selectOption('table');await closeDisplay(f);
+      options=await openColumnFilter(f,'paymentState');const width=options.getByLabel('Largeur de Paiement',{exact:true});await width.fill('300');await width.press('Enter');
       assert.equal(await width.inputValue(),'300');await options.getByRole('button',{name:'Rétablir les largeurs',exact:true}).click();
       await f.page.waitForFunction(()=>document.querySelector('[aria-label="Largeur de Paiement"]')?.value==='140');assert.equal(await width.inputValue(),'140');
-      await options.getByRole('button',{name:'Fermer',exact:true}).click();await row(f,P4).waitFor();
+      const editor=await width.boundingBox();assert.ok(editor.x>=0&&editor.x+editor.width<=390,'The width editor fits the phone.');
+      await options.getByRole('button',{name:'Fermer',exact:true}).click();
+      display=await openDisplay(f);await display.getByRole('combobox',{name:'Affichage des dossiers',exact:true}).selectOption('auto');await closeDisplay(f);await row(f,P4).waitFor();
       assert.equal(await f.page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false);
       await f.page.screenshot({path:`${output}/mobile-column-filter-${dark?'dark':'light'}.png`,fullPage:true});
       await f.page.getByRole('button',{name:'Retirer les filtres',exact:true}).click();await waitIds(f,[P,P2,P3,P4,P5,P6]);
@@ -627,7 +639,7 @@ async function main() {
       assert.match(await row(f,P5).innerText(),/Prêt/);assert.match(await row(f,P5).innerText(),/Prévu le 03\/10\/2099/);
       assert.doesNotMatch(await row(f,P6).innerText(),/Prêt(?:\s|$)/);assert.match(await row(f,P6).innerText(),/Optimisation|mesur/i);
       assert.doesNotMatch(await row(f,P4).innerText(),/Prêt(?:\s|$)/);assert.match(await row(f,P4).innerText(),/Règlement|Paiement|paiement/);
-      assert.match(await row(f,P).innerText(),/À planifier/);assert.equal(f.claims.length,0);
+      assert.match(await row(f,P).innerText(),/À choisir/);assert.doesNotMatch(await row(f,P).innerText(),/À planifier/);assert.equal(f.claims.length,0);
     });
     await scenario('restricted-permission-cannot-take-reception-visible-in-all-dossiers',async f=>{
       await open(f);assert.equal(await take(f).count(),0);await selectScope(f,'À prendre','pool');
@@ -654,6 +666,8 @@ async function main() {
       assert.equal(await row(f,P).count(),0);assert.equal(f.claims.length,0);assert.deepEqual(businessWrites(f),[]);
     });
     for(const dark of [false,true])await scenario(`phone-bulk-status-is-chosen-then-applied-explicitly-${dark?'dark':'light'}`,async f=>{
+      // Two shipped dossiers: « En transit » is their one valid next step.
+      for(const id of [P4,P5])Object.assign(f.tables.colis.find(parcel=>parcel.id===id),{statut:'expedie',date_expedition:'2026-10-02T06:00:00Z'});
       await f.page.setViewportSize({width:390,height:844});await f.context.addInitScript(dark=>localStorage.setItem('expedile-theme',dark?'dark':'light'),dark);
       await open(f);await f.page.waitForFunction(dark=>document.documentElement.classList.contains('dark')===dark,dark);
       for(const [id,ref] of [[P4,'EXP-TAB004'],[P5,'EXP-TAB005']])await row(f,id).getByRole('checkbox',{name:`Sélectionner le dossier ${ref}`,exact:true}).check();
@@ -663,11 +677,21 @@ async function main() {
       const edge=await select.evaluate(node=>window.__pintaContrast.ink(node.parentElement,getComputedStyle(node).borderTopColor));assert.ok(edge>=3,`The status field keeps a 3:1 edge on the bar (${edge.toFixed(2)}).`);
       for(const control of [select,apply]){const box=await control.boundingBox();assert.ok(box.height>=44&&box.x>=0&&box.x+box.width<=391,'The picker fits the phone with 44px targets.');}
       const statusWrites=()=>f.requests.filter(request=>request.method==='PATCH'&&request.path==='/rest/v1/colis');
+      // Only the valid next step is offered, in the order of the chain.
+      assert.deepEqual(await select.locator('option').evaluateAll(options=>options.map(option=>option.value)),['','transit']);
       // A keystroke on the closed select (typeahead, arrows) changes its value: it must not run anything.
       await select.focus();await f.page.keyboard.press('a');await select.selectOption('transit');
       await f.page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
       assert.deepEqual(statusWrites(),[],'Choosing a status never changes a dossier.');assert.equal(await select.inputValue(),'transit');
-      await apply.click();await bar.waitFor({state:'hidden'});
+      // « Appliquer » asks to confirm, with the dossiers and the target status.
+      await apply.click();const confirm=f.page.getByRole('dialog',{name:'Passer à « En transit »',exact:true});await confirm.waitFor();
+      assert.deepEqual(await confirm.locator('[data-bulk-item] .dossier-bulk-ref').allTextContents(),['EXP-TAB004','EXP-TAB005']);
+      assert.deepEqual(statusWrites(),[],'Nothing is written before the confirmation.');
+      const frame=await confirm.boundingBox();assert.ok(frame.x>=0&&frame.x+frame.width<=391&&frame.y>=0&&frame.y+frame.height<=845,'The confirmation fits the phone.');
+      await confirm.getByRole('button',{name:'Passer à « En transit »',exact:true}).click();
+      await f.page.getByRole('dialog',{name:'Résultat du changement de statut',exact:true}).getByText('2 dossiers passés à « En transit ».',{exact:true}).waitFor();
+      await bar.waitFor({state:'hidden'});
+      await f.page.getByRole('dialog',{name:'Résultat du changement de statut',exact:true}).getByRole('button',{name:'Fermer',exact:true}).click();
       const writes=statusWrites();assert.equal(writes.length,2,'Exactly one update per selected dossier.');
       assert.deepEqual(writes.map(request=>request.input.statut),['transit','transit']);
       assert.deepEqual(f.tables.colis.filter(parcel=>parcel.statut==='transit').map(parcel=>parcel.id).sort(),[P4,P5].sort());
@@ -684,19 +708,55 @@ async function main() {
       f.failWork=false;await f.page.getByRole('button',{name:/Réessayer.*tâches|Actualiser.*tâches|Recharger les tâches|Réessayer/}).filter({visible:true}).first().click();
       await take(f).waitFor();assert.equal(f.claims.length,0);
     },{failWork:true});
-    await scenario('mobile-open-filters-leave-dossiers-clickable-and-keyboard-controls-visible',async f=>{
-      await f.page.setViewportSize({width:390,height:844});await open(f);
-      const toggle=filtersButton(f);assert.equal(await toggle.getAttribute('aria-expanded'),'false');await toggle.click();
-      assert.equal(await toggle.getAttribute('aria-expanded'),'true');assert.equal(await f.page.getByRole('dialog').count(),0,'The filters panel is inline, never modal.');
-      const close=f.page.getByRole('button',{name:'Fermer les filtres',exact:true});
-      await f.page.keyboard.press('Tab');await close.focus();
-      await close.evaluate(() => new Promise(resolve => requestAnimationFrame(resolve)));
-      const header=await close.locator('xpath=ancestor::header[1]').boundingBox();const control=await close.boundingBox();
-      assert.ok(header.height<=844*.55+2,'The open options cannot consume the whole mobile viewport.');
-      assert.ok(control.y>=header.y&&control.y+control.height<=header.y+header.height+1,'The last keyboard control can be brought into the visible header.');
+    for(const [width,height] of [[390,844],[844,390]])for(const dark of [false,true])await scenario(`mobile-filters-open-as-a-sheet-whose-close-stays-in-view-${width}x${height}-${dark?'dark':'light'}`,async f=>{
+      // On a phone, upright or on its side, « Filtres » rises as a sheet: its close button never leaves the screen.
+      await f.page.setViewportSize({width,height});await f.context.addInitScript(dark=>localStorage.setItem('expedile-theme',dark?'dark':'light'),dark);
+      await open(f);await f.page.waitForFunction(dark=>document.documentElement.classList.contains('dark')===dark,dark);
+      const toggle=filtersButton(f);assert.equal(await toggle.getAttribute('aria-expanded'),'false');assert.equal(await toggle.getAttribute('aria-haspopup'),'dialog');
+      const sheet=f.page.getByRole('dialog',{name:'Filtres',exact:true}),close=sheet.getByRole('button',{name:'Fermer les filtres',exact:true});
+      const assertCloseInView=async state=>{const box=await close.boundingBox();assert.ok(box&&box.width>=44&&box.height>=44&&box.y>=0&&box.y+box.height<=height&&box.x>=0&&box.x+box.width<=width,`${state}: the close button stays on screen (${JSON.stringify(box)}).`);};
+      await toggle.click();await sheet.waitFor();assert.equal(await toggle.getAttribute('aria-expanded'),'true');
+      const frame=await sheet.boundingBox();assert.ok(frame.y>=0&&Math.abs(frame.y+frame.height-height)<=1&&frame.x<=1&&frame.width>=width-1,'The sheet rises from the bottom edge at full width.');
+      await sheet.getByRole('group',{name:'Filtres des dossiers',exact:true}).waitFor();assert.equal(await sheet.getByRole('combobox').count(),4);
+      await assertCloseInView('open');
+      // Scrolled to its end, the heading and its close button stay in view.
+      await sheet.evaluate(node=>{node.scrollTop=node.scrollHeight;});await sheet.evaluate(()=>new Promise(resolve=>requestAnimationFrame(resolve)));
+      await assertCloseInView('scrolled');await sheet.getByRole('button',{name:/^Voir /}).scrollIntoViewIfNeeded();
+      if(height<500)assert.equal(await sheet.evaluate(node=>node.scrollHeight>node.clientHeight+1),true,'On its side the phone really needs the sheet to scroll.');
+      const axe=await new AxeBuilder({page:f.page}).include('[data-testid="filters-sheet"]').withTags(['wcag2a','wcag2aa','wcag21aa','wcag22aa']).analyze();
+      assert.deepEqual(axe.violations.map(item=>({id:item.id,nodes:item.nodes.map(node=>node.target)})),[]);
+      await f.page.screenshot({path:`${output}/filters-sheet-${width}x${height}-${dark?'dark':'light'}.png`});
+      // Escape, the backdrop, the close button and « Voir les … dossiers » each close it and give the focus back.
+      await f.page.keyboard.press('Escape');await sheet.waitFor({state:'hidden'});assert.equal(await toggle.evaluate(node=>node===document.activeElement),true,'Escape returns the focus to Filtres.');
+      await toggle.click();await sheet.waitFor();await f.page.mouse.click(Math.round(width/2),8);await sheet.waitFor({state:'hidden'});assert.equal(await toggle.evaluate(node=>node===document.activeElement),true,'The backdrop closes it.');
+      await toggle.click();await sheet.waitFor();await close.click();await sheet.waitFor({state:'hidden'});assert.equal(await toggle.getAttribute('aria-expanded'),'false');
+      await toggle.click();await sheet.waitFor();await sheet.getByRole('button',{name:'Voir les 6 dossiers',exact:true}).click();await sheet.waitFor({state:'hidden'});
+      // Closed, the dossiers stay a tap away.
       await row(f,P2).getByRole('button',{name:'EXP-TAB002',exact:true}).click();
       await f.page.getByTestId('dossier-task-header').waitFor();assert.equal(new URL(f.page.url()).pathname,`/colis/${P2}`);
       assert.equal(f.claims.length,0);assert.deepEqual(businessWrites(f),[]);
+    });
+    for(const [width,height] of [[390,844],[844,390]])for(const dark of [false,true])await scenario(`phone-header-scrolls-away-and-the-search-stays-pinned-${width}x${height}-${dark?'dark':'light'}`,async f=>{
+      for(let i=20;i<32;i++) f.tables.colis.push({...structuredClone(f.tables.colis[1]),id:parcelId(i),ref:`EXP-LONG${i}`});
+      await f.page.setViewportSize({width,height});await f.context.addInitScript(dark=>localStorage.setItem('expedile-theme',dark?'dark':'light'),dark);
+      await open(f);await f.page.waitForFunction(dark=>document.documentElement.classList.contains('dark')===dark,dark);
+      const page=f.page.locator('.dossier-list'),search=f.page.getByLabel('Rechercher ou scanner un colis',{exact:true}),title=f.page.getByRole('heading',{name:'Dossiers d’expédition',exact:true});
+      assert.equal(await page.evaluate(node=>getComputedStyle(node).overflowY),'auto','The whole list page scrolls on a phone.');
+      // On its side, « Automatique » shows cards too.
+      assert.equal(await f.page.getByRole('table',{name:'Dossiers d’expédition',exact:true}).isVisible(),false);await row(f,P).waitFor();
+      await page.evaluate(node=>{node.scrollTop=node.scrollHeight;});await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+      const top=(await page.boundingBox()).y,searchBox=await search.boundingBox(),titleBox=await title.boundingBox();
+      assert.ok(titleBox.y+titleBox.height<=top+1,'The title and the tabs scrolled away with the dossiers.');
+      assert.ok(searchBox.y>=top-1&&searchBox.y+searchBox.height<=height,'The search stays pinned at the top.');
+      assert.equal(await f.page.evaluate(([x,y])=>document.elementFromPoint(x,y)?.closest('input')?.getAttribute('aria-label'),[searchBox.x+searchBox.width/2,searchBox.y+searchBox.height/2]),'Rechercher ou scanner un colis','Nothing covers the pinned search.');
+      // The dossiers get most of the screen once the header is gone.
+      const pinned=await f.page.locator('.dossier-toolbar-bar').boundingBox();const listArea=(top+(await page.evaluate(node=>node.clientHeight)))-(pinned.y+pinned.height);
+      assert.ok(listArea>=(height<500?120:500),`The dossiers keep ${Math.round(listArea)}px of the screen.`);
+      await f.page.screenshot({path:`${output}/phone-header-scrolled-${width}x${height}-${dark?'dark':'light'}.png`});
+      await search.fill('EXP-LONG25');await row(f,parcelId(25)).waitFor();await noPageOverflow(f);
+      const axe=await new AxeBuilder({page:f.page}).withTags(['wcag2a','wcag2aa','wcag21aa','wcag22aa']).analyze();
+      assert.deepEqual(axe.violations.map(item=>({id:item.id,nodes:item.nodes.map(node=>node.target)})),[]);
+      assert.deepEqual(businessWrites(f),[]);
     });
     await scenario('unavailability-link-directly-opens-the-announced-preferences',async f=>{
       await open(f);await selectScope(f,'À prendre','pool');
@@ -783,10 +843,12 @@ async function main() {
       // aria-controls names the panel only while it exists (a dangling IDREF is invalid).
       assert.equal(await filters.getAttribute('aria-label'),'Filtres');assert.equal(await filters.getAttribute('aria-controls'),null);assert.equal(await filters.getAttribute('aria-expanded'),'false');
       assert.equal(await f.page.locator('#dossier-filters-panel').count(),0);
-      // « Filtres »: an inline panel with the work filters and the column-filter entry only.
+      // « Filtres »: the work filters and the column-filter entry only; inline on a
+      // computer, in a sheet on a phone (its close button never leaves the screen).
       await filters.click();assert.equal(await filters.getAttribute('aria-expanded'),'true');
       const panel=f.page.getByRole('group',{name:'Filtres des dossiers',exact:true});await panel.waitFor();assert.equal(await panel.getAttribute('id'),'dossier-filters-panel');assert.equal(await filters.getAttribute('aria-controls'),'dossier-filters-panel');
-      assert.equal(await f.page.getByRole('dialog').count(),0,'The filters panel is not modal.');
+      if(phone)assert.equal(await f.page.getByRole('dialog',{name:'Filtres',exact:true}).locator('#dossier-filters-panel').count(),1,'On a phone the panel is in its sheet.');
+      else assert.equal(await f.page.getByRole('dialog').count(),0,'The filters panel is not modal.');
       for(const name of ['File de travail','Étape','Responsable de la tâche','Destination'])assert.equal(await panel.getByRole('combobox',{name,exact:true}).count(),1,`${name} stays in Filtres.`);
       await panel.getByRole('button',{name:'Inclure les archives',exact:true}).waitFor();
       // A work queue never lists archives, so no toggle may claim to include them.
@@ -808,11 +870,11 @@ async function main() {
       await panel.getByRole('combobox',{name:'Responsable de la tâche',exact:true}).selectOption('mine');
       await f.page.getByRole('button',{name:'Filtres · 2',exact:true}).waitFor();assert.equal(await chips.count(),2,'The button count equals the active filter chips.');
       assert.equal((await filters.locator('.dossier-toolbar-badge').innerText()).trim(),'2');await assertCount();
-      // Clearing every filter also folds the panel, as before the redesign.
-      await active.getByRole('button',{name:'Retirer les filtres',exact:true}).click();
+      // Clearing every filter also folds the panel, as before the redesign (the sheet clears them from inside).
+      await (phone?panel.getByRole('button',{name:'Retirer tous les filtres',exact:true}):active.getByRole('button',{name:'Retirer les filtres',exact:true})).click();
       await f.page.getByRole('button',{name:'Filtres',exact:true}).waitFor();assert.equal(await filters.locator('.dossier-toolbar-badge').count(),0);await waitIds(f,[P,P2,P3,P4,P5,P6]);await assertCount();
       await panel.waitFor({state:'hidden'});assert.equal(await filters.getAttribute('aria-expanded'),'false');
-      await filters.click();await panel.getByRole('button',{name:'Fermer les filtres',exact:true}).click();await panel.waitFor({state:'hidden'});assert.equal(await filters.getAttribute('aria-expanded'),'false');
+      await filters.click();await f.page.getByRole('button',{name:'Fermer les filtres',exact:true}).click();await panel.waitFor({state:'hidden'});assert.equal(await filters.getAttribute('aria-expanded'),'false');
       // « Affichage »: a keyboard-operable dialog that holds every reading and organisation preference.
       assert.equal(await display.getAttribute('aria-haspopup'),'dialog');assert.equal(await display.getAttribute('aria-expanded'),'false');
       await display.focus();await f.page.keyboard.press('Enter');const dialog=displayDialog(f);await dialog.waitFor();
@@ -843,10 +905,12 @@ async function main() {
       await group.selectOption('statut');await f.page.waitForURL(url=>url.searchParams.get('view')==='statut');assert.equal(await dialog.isVisible(),true);
       await group.selectOption('none');await f.page.waitForURL(url=>url.searchParams.get('view')==='none');assert.equal(await dialog.isVisible(),true);
       // Escape first undoes a typed size, then closes and returns focus to the trigger.
-      await size.fill('17');await size.press('Escape');assert.equal(await size.inputValue(),'12');assert.equal(await dialog.isVisible(),true,'Escape in a dirty size field does not close Affichage.');
+      // The list opens at 12px on a computer and 14px below 1024px.
+      const defaultSize=width<1024?'14':'12';
+      await size.fill('17');await size.press('Escape');assert.equal(await size.inputValue(),defaultSize);assert.equal(await dialog.isVisible(),true,'Escape in a dirty size field does not close Affichage.');
       await size.press('Escape');await dialog.waitFor({state:'hidden'});
       assert.equal(await display.evaluate(node=>node===document.activeElement),true,'Escape returns focus to Affichage.');assert.equal(await display.getAttribute('aria-expanded'),'false');
-      assert.ok([null,'12'].includes(await f.page.evaluate(id=>localStorage.getItem(`expedile:table-text:v1:${id}:daily`),ids.A)),'An abandoned size is never saved.');
+      assert.ok([null,defaultSize].includes(await f.page.evaluate(id=>localStorage.getItem(`expedile:table-text:v1:${id}:daily`),ids.A)),'An abandoned size is never saved.');
       await display.click();await dialog.waitFor();await f.page.mouse.click(2,height-2);await dialog.waitFor({state:'hidden'});
       assert.equal(await display.evaluate(node=>node===document.activeElement),true,'A backdrop click returns focus to Affichage.');
       await display.click();await dialog.waitFor();
@@ -860,19 +924,21 @@ async function main() {
       assert.equal(await display.evaluate(node=>node===document.activeElement),true);
       await noPageOverflow(f);await assertNoBusinessChange(f,before);
     });
-    for(const width of [1440,320])for(const dark of [false,true])await scenario(`view-tabs-press-exactly-one-view-and-scroll-inside-their-strip-${width}-${dark?'dark':'light'}`,async f=>{
-      await f.page.setViewportSize({width,height:width===320?568:1000});await f.page.emulateMedia({reducedMotion:'reduce'});await f.context.addInitScript(dark=>localStorage.setItem('expedile-theme',dark?'dark':'light'),dark);
+    for(const width of [1440,390,320])for(const dark of [false,true])await scenario(`view-tabs-press-exactly-one-view-and-stay-visible-${width}-${dark?'dark':'light'}`,async f=>{
+      await f.page.setViewportSize({width,height:width===320?568:width===390?844:1000});await f.page.emulateMedia({reducedMotion:'reduce'});await f.context.addInitScript(dark=>localStorage.setItem('expedile-theme',dark?'dark':'light'),dark);
       await open(f);await f.page.waitForFunction(dark=>document.documentElement.classList.contains('dark')===dark,dark);
       const strip=f.page.locator('[aria-label="Vues du tableau"]');assert.equal(await strip.getAttribute('role'),'group');
-      if(width===320){const overflow=await strip.evaluate(node=>({style:getComputedStyle(node).overflowX,scrolls:node.scrollWidth>node.clientWidth+1}));assert.ok(['auto','scroll'].includes(overflow.style)&&overflow.scrolls,'At 320px the tabs really overflow and scroll inside their own strip.');}
+      // Every view is visible without scrolling the strip: on a phone the tabs wrap onto a second line.
+      assert.equal(await strip.evaluate(node=>node.scrollWidth>node.clientWidth+1),false,'No view hides past the edge of the strip.');
+      for(const tab of await strip.getByRole('button').all()){const t=await tab.boundingBox();assert.ok(t.x>=0&&t.x+t.width<=width&&t.height>=44,`${await tab.textContent()} is whole and touchable.`);assert.equal(await tab.evaluate(node=>node.scrollWidth>node.clientWidth+1),false);}
+      if(width<=390){const rows=new Set(await strip.getByRole('button').evaluateAll(nodes=>nodes.map(node=>Math.round(node.getBoundingClientRect().top))));assert.ok(rows.size>=2,'On a phone the four views wrap onto two lines.');}
       for(const [label,value] of [['Accords clients','accords'],['Départs','departures'],['Paiements','payments'],['Travail quotidien','daily']]) {
         await selectPreset(f,label,value);await settle(f);
         const states=await strip.getByRole('button').evaluateAll(buttons=>buttons.map(button=>({text:button.textContent,pressed:button.getAttribute('aria-pressed')})));
         assert.deepEqual(states.filter(item=>item.pressed==='true').map(item=>item.text),[label],'Exactly one view is pressed, and its text is the bare label.');
         assert.ok(states.every(item=>item.pressed==='true'||item.pressed==='false'));
         const tab=strip.getByRole('button',{name:label,exact:true}),t=await tab.boundingBox(),s=await strip.boundingBox();
-        assert.ok(t.x>=s.x-1&&t.x+t.width<=s.x+s.width+1,`${label}: the selected view is scrolled fully into its strip.`);
-        if(width===320&&value==='accords')assert.ok(await strip.evaluate(node=>node.scrollLeft)>0,'Selecting the last view scrolls the strip, not the page.');
+        assert.ok(t.x>=s.x-1&&t.x+t.width<=s.x+s.width+1,`${label}: the selected view is fully inside its strip.`);
         const underline=await tab.evaluate(node=>{const C=window.__pintaContrast,style=getComputedStyle(node);const color=/inset/.test(style.boxShadow)?style.boxShadow.match(/rgba?\([^)]*\)/)?.[0]:parseFloat(style.borderBottomWidth)>=2?style.borderBottomColor:null;return color?C.ink(node,color):0;});
         assert.ok(underline>=3,`${label}: the selected underline reaches 3:1 (${underline.toFixed(2)}).`);
         assert.ok(await tab.evaluate(node=>window.__pintaContrast.text(node))>=4.5);
@@ -963,6 +1029,312 @@ async function main() {
       await f.page.screenshot({path:`${output}/table-${width}-${dark?'dark':'light'}.png`,fullPage:true});
       if(width===1440){await selectPreset(f,'Travail quotidien','daily');await f.page.screenshot({path:`${output}/daily-${width}-${dark?'dark':'light'}.png`,fullPage:true});}
       assert.deepEqual(businessWrites(f),[]);
+    });
+    // ── Final review (P4a) ────────────────────────────────────────────────────
+    const theme = (f,dark)=>f.context.addInitScript(dark=>localStorage.setItem('expedile-theme',dark?'dark':'light'),dark);
+    const waitTheme = (f,dark)=>f.page.waitForFunction(dark=>document.documentElement.classList.contains('dark')===dark,dark);
+    const axeClean = async (f,include)=>{let builder=new AxeBuilder({page:f.page}).withTags(['wcag2a','wcag2aa','wcag21aa','wcag22aa']);if(include)builder=builder.include(include);const audit=await builder.analyze();assert.deepEqual(audit.violations.map(item=>({id:item.id,nodes:item.nodes.map(node=>node.target)})),[]);};
+    const sizeOf = width=>({width,height:width===390?844:width===1280?800:900});
+    for(const width of [1440,1280,390])for(const dark of [false,true])await scenario(`a-failed-dossier-load-shows-its-reason-and-a-retry-never-an-empty-list-${width}-${dark?'dark':'light'}`,async f=>{
+      f.failColis=true;
+      await f.context.route('**/rest/v1/colis?*',route=>f.failColis&&route.request().method()==='GET'?reply(route,{message:'Indisponibilité simulée'},503):route.fallback());
+      await f.page.setViewportSize(sizeOf(width));await theme(f,dark);
+      await f.page.goto(`${base}/colis`);await f.page.getByLabel('Rechercher ou scanner un colis',{exact:true}).waitFor();await waitTheme(f,dark);
+      const region=f.page.getByRole('region',{name:'Tableau des dossiers',exact:true});
+      const problem=region.getByRole('alert');await problem.waitFor();
+      assert.match(await problem.innerText(),/Les dossiers n’ont pas pu être chargés\./);assert.match(await problem.innerText(),/Motif : Indisponibilité simulée/);
+      // The application banner reads « Chargement impossible : … »; the list does not repeat it.
+      assert.doesNotMatch(await problem.innerText(),/Chargement impossible/);
+      // Never « 0 dossier » nor « Aucun dossier ne correspond à ces filtres »: the list is unknown.
+      assert.equal(await f.page.locator('.dossier-meta-count').count(),0,'No count while the dossiers are unknown.');
+      assert.equal(await f.page.getByText(/^0 dossier/).count(),0);assert.equal(await f.page.getByText(/Aucun dossier ne correspond/).count(),0);
+      // The stage filter does not count unknown dossiers either.
+      await f.page.getByRole('button',{name:/^Filtres/}).click();
+      assert.deepEqual(await f.page.getByRole('combobox',{name:'Étape',exact:true}).locator('option').evaluateAll(options=>options.filter(option=>/\(\d+\)/.test(option.textContent)).length),0);
+      await (width===390?f.page.getByRole('dialog',{name:'Filtres',exact:true}).getByRole('button',{name:'Fermer les filtres',exact:true}):f.page.getByRole('button',{name:'Fermer les filtres',exact:true})).click();
+      const retry=region.getByRole('button',{name:'Réessayer',exact:true});const box=await retry.boundingBox();assert.ok(box.height>=44&&box.width>=44);
+      const frame=await problem.boundingBox();assert.ok(frame.x>=15.5&&frame.x+frame.width<=sizeOf(width).width-15.5,`The message keeps its side margins (${JSON.stringify(frame)}).`);
+      await axeClean(f);await f.page.screenshot({path:`${output}/load-failed-${width}-${dark?'dark':'light'}.png`});
+      // The data come back: the list shows them, with their count.
+      f.failColis=false;await retry.click();await row(f,P).waitFor();
+      await f.page.getByRole('status').filter({hasText:/^6 dossiers$/}).waitFor();assert.equal(await region.getByRole('alert').count(),0);
+      assert.deepEqual(businessWrites(f),[]);
+    });
+    const shipped=(f,statuses)=>{for(const [id,statut] of Object.entries(statuses))Object.assign(f.tables.colis.find(parcel=>parcel.id===id),{statut,date_expedition:'2026-10-02T06:00:00Z'});f.tables.staff_work_actions=f.tables.staff_work_actions.filter(action=>!Object.keys(statuses).includes(action.colis_id));};
+    const bar=f=>f.page.getByRole('group',{name:'Actions sur la sélection',exact:true});
+    const check=(f,id,ref)=>row(f,id).getByRole('checkbox',{name:`Sélectionner le dossier ${ref}`,exact:true}).check();
+    const uncheck=(f,id,ref)=>row(f,id).getByRole('checkbox',{name:`Sélectionner le dossier ${ref}`,exact:true}).uncheck();
+    const offeredStatuses=f=>bar(f).getByRole('group',{name:'Passer la sélection à l’étape suivante',exact:true}).getByRole('button').allTextContents().catch(()=>[]);
+    for(const width of [1440,1280])for(const dark of [false,true])await scenario(`bulk-status-offers-only-the-valid-next-step-confirms-the-list-and-reports-each-refusal-${width}-${dark?'dark':'light'}`,async f=>{
+      // P4, P5 shipped; P6 in transit; P2 before its departure.
+      shipped(f,{[P4]:'expedie',[P5]:'expedie',[P6]:'transit'});
+      // The server mirrors the transition guard, and a colleague's version conflict.
+      const allowed={expedie:['transit'],transit:['dedouanement','arrive'],dedouanement:['arrive'],arrive:['livraison'],livraison:['livre']};f.refuse=null;f.patchUrls=[];
+      await f.context.route('**/rest/v1/colis?*',async route=>{
+        const request=route.request();if(request.method()!=='PATCH')return route.fallback();f.patchUrls.push(request.url());
+        const id=new URL(request.url()).searchParams.get('id')?.replace(/^eq\./,''),parcel=f.tables.colis.find(item=>item.id===id),input=request.postDataJSON();
+        if(f.refuse===id)return reply(route,{code:'P0001',message:`Transition invalide : ${parcel.statut} → ${input.statut}`},400);
+        if(input.statut&&!(allowed[parcel.statut]||[]).includes(input.statut))return reply(route,{code:'P0001',message:`Transition invalide : ${parcel.statut} → ${input.statut}`},400);
+        return route.fallback();
+      });
+      await f.page.setViewportSize(sizeOf(width));await theme(f,dark);await open(f);await waitTheme(f,dark);
+      // Shipped dossiers: « En transit », and nothing else.
+      await check(f,P4,'EXP-TAB004');await check(f,P5,'EXP-TAB005');await bar(f).getByText('2 dossiers sélectionnés',{exact:true}).waitFor();
+      assert.deepEqual(await offeredStatuses(f),['En transit']);
+      // Shipped + in transit: no common step, and the bar says why.
+      await check(f,P6,'EXP-TAB006');assert.deepEqual(await offeredStatuses(f),[]);
+      await bar(f).getByText('Étapes différentes : sélectionnez des dossiers au même statut pour les faire avancer ensemble.',{exact:true}).waitFor();
+      // Before the departure: never a bulk status.
+      await uncheck(f,P4,'EXP-TAB004');await uncheck(f,P5,'EXP-TAB005');assert.deepEqual(await offeredStatuses(f),['Dédouanement','Arrivé'],'In the order of the chain.');
+      await check(f,P2,'EXP-TAB002');assert.deepEqual(await offeredStatuses(f),[]);
+      await bar(f).getByText('Avant le départ, un dossier avance par son parcours : pas de statut groupé.',{exact:true}).waitFor();
+      await bar(f).getByRole('button',{name:'Désélectionner tout',exact:true}).click();
+      // Confirm first: the dossiers and the target status; cancelling writes nothing.
+      await check(f,P4,'EXP-TAB004');await check(f,P5,'EXP-TAB005');
+      await bar(f).getByRole('button',{name:'En transit',exact:true}).click();
+      const dialog=f.page.getByRole('dialog',{name:'Passer à « En transit »',exact:true});await dialog.waitFor();
+      assert.match(await dialog.innerText(),/Ces 2 dossiers passeront à « En transit » :/);
+      assert.deepEqual(await dialog.locator('[data-bulk-item] .dossier-bulk-ref').allTextContents(),['EXP-TAB004','EXP-TAB005']);
+      assert.equal(await dialog.getByRole('button',{name:'Annuler',exact:true}).evaluate(node=>node===document.activeElement),true,'The safe choice has the focus.');
+      await axeClean(f,'[data-testid="bulk-status-dialog"]');
+      await f.page.screenshot({path:`${output}/bulk-confirm-${width}-${dark?'dark':'light'}.png`});
+      for(const close of ['Escape','backdrop','X','Annuler']){
+        if(close!=='Escape'||await dialog.isHidden())await bar(f).getByRole('button',{name:'En transit',exact:true}).click();await dialog.waitFor();
+        if(close==='Escape')await f.page.keyboard.press('Escape');else if(close==='backdrop')await f.page.mouse.click(4,4);
+        else if(close==='X')await dialog.getByRole('button',{name:'Fermer sans changer le statut',exact:true}).click();else await dialog.getByRole('button',{name:'Annuler',exact:true}).click();
+        await dialog.waitFor({state:'hidden'});
+      }
+      assert.deepEqual(f.patchUrls,[],'Closing the confirmation writes nothing.');
+      // Confirmed: one write after the other, each with its version; a refusal keeps its reason.
+      f.refuse=P5;const versions={[P4]:f.tables.colis.find(item=>item.id===P4).updated_at,[P5]:f.tables.colis.find(item=>item.id===P5).updated_at};
+      await bar(f).getByRole('button',{name:'En transit',exact:true}).click();await dialog.waitFor();
+      await dialog.getByRole('button',{name:'Passer à « En transit »',exact:true}).click();
+      const result=f.page.getByRole('dialog',{name:'Résultat du changement de statut',exact:true});await result.waitFor();
+      await result.getByText('1 dossier passé à « En transit » · 1 dossier non modifié, resté sélectionné.',{exact:true}).waitFor();
+      assert.equal(await result.locator(`[data-bulk-item="${P4}"] .dossier-bulk-result`).innerText(),'Passé à « En transit »');
+      assert.equal(await result.locator(`[data-bulk-item="${P5}"] .dossier-bulk-result`).innerText(),'Non modifié : Passage de « Expédié » à « En transit » refusé par le serveur.');
+      assert.deepEqual(f.patchUrls.map(url=>{const query=new URL(url).searchParams;return [query.get('id'),query.get('updated_at')];}),[[`eq.${P4}`,`eq.${versions[P4]}`],[`eq.${P5}`,`eq.${versions[P5]}`]],'One write after the other, each with the version the person confirmed.');
+      assert.deepEqual(f.requests.filter(request=>request.method==='PATCH'&&request.path==='/rest/v1/colis').map(request=>request.input),[{statut:'transit'}],'The refused write changed nothing.');
+      assert.equal(f.tables.colis.find(item=>item.id===P4).statut,'transit');assert.equal(f.tables.colis.find(item=>item.id===P5).statut,'expedie');
+      await axeClean(f,'[data-testid="bulk-status-dialog"]');await f.page.screenshot({path:`${output}/bulk-result-${width}-${dark?'dark':'light'}.png`});
+      await result.getByRole('button',{name:'Fermer',exact:true}).click();await result.waitFor({state:'hidden'});
+      // The refused dossier stays selected; the changed one is not.
+      await bar(f).getByText('1 dossier sélectionné',{exact:true}).waitFor();
+      assert.equal(await row(f,P5).getAttribute('data-selected'),'true');assert.equal(await row(f,P4).getAttribute('data-selected'),'false');
+      assert.equal(f.claims.length,0);
+    });
+    await scenario('bulk-status-with-many-dossiers-scrolls-inside-its-confirmation-and-paid-dossiers-point-to-the-departure',async f=>{
+      for(let i=40;i<70;i++) f.tables.colis.push({...structuredClone(f.tables.colis[4]),id:parcelId(i),ref:`EXP-SHIP${i}`,statut:'expedie',date_expedition:'2026-10-02T06:00:00Z'});
+      await f.page.setViewportSize({width:1280,height:700});await open(f);
+      // Paid dossiers: « Expédié » is confirmed from the departure, never a bulk write.
+      await check(f,P5,'EXP-TAB005');await check(f,P6,'EXP-TAB006');
+      assert.deepEqual(await offeredStatuses(f),[]);
+      await bar(f).getByText('« Expédié » se confirme au chargement de leur départ.',{exact:false}).waitFor();
+      await bar(f).getByRole('button',{name:'Ouvrir les départs',exact:true}).waitFor();
+      await bar(f).getByRole('button',{name:'Désélectionner tout',exact:true}).click();
+      await f.page.getByLabel('Rechercher ou scanner un colis',{exact:true}).fill('EXP-SHIP');await row(f,parcelId(45)).waitFor();
+      await f.page.getByRole('checkbox',{name:'Sélectionner tous les dossiers affichés',exact:true}).check();
+      await bar(f).getByText('30 dossiers sélectionnés',{exact:true}).waitFor();
+      await bar(f).getByRole('button',{name:'En transit',exact:true}).click();
+      const dialog=f.page.getByRole('dialog',{name:'Passer à « En transit »',exact:true});await dialog.waitFor();
+      assert.equal(await dialog.locator('[data-bulk-item]').count(),30);
+      const frame=await dialog.boundingBox();assert.ok(frame.y>=0&&frame.y+frame.height<=700,'The long confirmation fits the screen.');
+      assert.equal(await dialog.evaluate(node=>node.scrollHeight>node.clientHeight+1),true,'Its list scrolls inside.');
+      await dialog.evaluate(node=>{node.scrollTop=node.scrollHeight;});const close=await dialog.getByRole('button',{name:'Fermer sans changer le statut',exact:true}).boundingBox();assert.ok(close.y>=frame.y-1,'The close button stays in view.');
+      await f.page.screenshot({path:`${output}/bulk-confirm-long-1280.png`});
+      await f.page.keyboard.press('Escape');await dialog.waitFor({state:'hidden'});
+      assert.deepEqual(businessWrites(f),[]);
+    });
+    await scenario('bulk-status-is-not-offered-to-a-role-without-the-permission',async f=>{
+      shipped(f,{[P4]:'expedie',[P5]:'expedie'});
+      await open(f);await check(f,P4,'EXP-TAB004');await check(f,P5,'EXP-TAB005');await bar(f).getByText('2 dossiers sélectionnés',{exact:true}).waitFor();
+      assert.equal(await bar(f).getByRole('button',{name:'En transit',exact:true}).count(),0,'No status the role cannot use, not even disabled.');
+      assert.equal(await bar(f).getByRole('combobox',{name:'Changer le statut',exact:true}).count(),0);
+      assert.equal(await bar(f).locator('button:disabled').count(),0);
+      await bar(f).getByText('Aucune action groupée n’est ouverte à votre rôle.',{exact:true}).waitFor();
+      assert.deepEqual(businessWrites(f),[]);
+    },{restricted:true});
+    for(const width of [1440,1280,390])await scenario(`selecting-a-row-never-moves-the-rows-${width}`,async f=>{
+      await f.page.setViewportSize(sizeOf(width));await open(f);
+      // The first two dossiers on screen, the first one centred so no click needs to scroll.
+      const firstId=await rows(f).nth(0).evaluate(node=>node.dataset.dossierRow||node.dataset.dossierCard),secondId=await rows(f).nth(1).evaluate(node=>node.dataset.dossierRow||node.dataset.dossierCard);
+      const first=row(f,firstId).locator('input[type="checkbox"]'),second=row(f,secondId).locator('input[type="checkbox"]');
+      await first.evaluate(node=>node.scrollIntoView({block:'center'}));await f.page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+      const before=await second.boundingBox(),rowsBefore=await rows(f).evaluateAll(nodes=>nodes.map(node=>Math.round(node.getBoundingClientRect().top)));
+      await first.check();await bar(f).waitFor();
+      await f.page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+      assert.deepEqual(await rows(f).evaluateAll(nodes=>nodes.map(node=>Math.round(node.getBoundingClientRect().top))),rowsBefore,'Checking a row moves no row.');
+      // A quick second click lands on the dossier that was under the pointer. On a phone a card is
+      // taller than the space left above the bar: the same checkbox is clicked again.
+      const [probe,probeId,probeBox]=width===390?[first,firstId,await first.boundingBox()]:[second,secondId,before];
+      const target=await f.page.evaluate(([x,y])=>{const node=document.elementFromPoint(x,y);return node?.closest('[data-dossier-row]')?.dataset.dossierRow||node?.closest('[data-dossier-card]')?.dataset.dossierCard||null;},[probeBox.x+probeBox.width/2,probeBox.y+probeBox.height/2]);
+      assert.equal(target,probeId,'The point under the checkbox is still that dossier.');
+      await f.page.mouse.click(probeBox.x+probeBox.width/2,probeBox.y+probeBox.height/2);
+      if(width===390){assert.equal(await probe.isChecked(),false);await bar(f).waitFor({state:'hidden'});await first.check();await second.evaluate(node=>node.scrollIntoView({block:'center'}));await second.check();}
+      else assert.equal(await probe.isChecked(),true);
+      await bar(f).getByText('2 dossiers sélectionnés',{exact:true}).waitFor();
+      const area=await f.page.getByRole('region',{name:'Tableau des dossiers',exact:true}).boundingBox(),floating=await bar(f).boundingBox();
+      assert.ok(floating.x>=0&&floating.x+floating.width<=width&&floating.y+floating.height<=sizeOf(width).height,'The bar floats inside the screen.');
+      if(width>=1024)assert.ok(floating.y+floating.height<=area.y+area.height+1,'It floats over the list.');
+      // The last dossier can still be scrolled clear of the bar.
+      const scroller=width===390?f.page.locator('.dossier-list'):f.page.getByRole('region',{name:'Tableau des dossiers',exact:true});
+      await scroller.evaluate(node=>{node.scrollTop=node.scrollHeight;});await f.page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+      const last=await rows(f).last().boundingBox(),barNow=await bar(f).boundingBox();assert.ok(last.y+last.height<=barNow.y+1,`The last dossier ends above the bar (${last.y+last.height} <= ${barNow.y}).`);
+      await f.page.screenshot({path:`${output}/selection-floating-${width}.png`});
+      assert.deepEqual(businessWrites(f),[]);
+    });
+    for(const dark of [false,true])await scenario(`headers-read-whole-with-a-wide-fallback-font-in-every-tab-${dark?'dark':'light'}`,async f=>{
+      await theme(f,dark);
+      await f.context.addInitScript(()=>{const install=()=>{const style=document.createElement('style');style.textContent='body, body * { font-family: Verdana, "DejaVu Sans", sans-serif !important; }';document.head.appendChild(style);};if(document.head)install();else document.addEventListener('DOMContentLoaded',install);});
+      for(const width of [1440,1280]){
+        await f.page.setViewportSize(sizeOf(width));
+        for(const [label,view] of [['Travail quotidien','daily'],['Paiements','payments'],['Départs','departures'],['Accords clients','accords']]){
+          await f.page.goto(`${base}/colis?table=${view}`);await rows(f).first().waitFor();await waitTheme(f,dark);
+          const cut=await f.page.locator('table.dossier-data-table thead .dossier-table-heading-text').evaluateAll(nodes=>nodes.filter(node=>node.scrollWidth>node.clientWidth+1).map(node=>`${node.textContent} ${node.scrollWidth}>${node.clientWidth}`));
+          assert.deepEqual(cut,[],`${label} at ${width}px: every heading reads whole.`);
+          if(view==='daily'&&width===1440)await f.page.screenshot({path:`${output}/wide-font-headers-${dark?'dark':'light'}.png`});
+        }
+      }
+    });
+    for(const dark of [false,true])await scenario(`columns-sliding-under-the-pinned-action-are-covered-or-faded-1280-${dark?'dark':'light'}`,async f=>{
+      await f.page.setViewportSize({width:1280,height:800});await theme(f,dark);await open(f);await waitTheme(f,dark);
+      const scroller=f.page.getByRole('region',{name:'Tableau des dossiers',exact:true});
+      const edge=()=>f.page.evaluate(()=>{const scroll=document.getElementById('dossier-table-scroll'),action=document.querySelector('thead th[data-column="action"]');const boundary=action.getBoundingClientRect().left;
+        const cut=[...document.querySelectorAll('thead th[data-column]')].filter(th=>!['select','action'].includes(th.dataset.column)).map(th=>({key:th.dataset.column,rect:th.getBoundingClientRect()})).find(item=>item.rect.left<boundary-.5&&item.rect.right>boundary+.5);
+        const cell=document.querySelector('tbody tr[data-dossier-row] td[data-column="action"]'),before=getComputedStyle(cell,'::before');
+        return {visible:cut?Math.round(boundary-cut.rect.left):0,key:cut?.key,cover:parseFloat(getComputedStyle(scroll).getPropertyValue('--dossier-edge-cover')),width:parseFloat(before.width),content:before.content,shadow:getComputedStyle(cell).boxShadow};});
+      for(const [label,view] of [['Travail quotidien','daily'],['Paiements','payments'],['Départs','departures']]){
+        await selectPreset(f,label,view);await scroller.evaluate(node=>{node.scrollLeft=0;});await f.page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+        const state=await edge();
+        assert.notEqual(state.content,'none',`${label}: the pinned action marks the columns under it.`);assert.match(state.shadow,/rgba?\(/,`${label}: a shadow on its left edge.`);
+        // A sliver is covered whole (no header-less strip, no cut word); a wider part fades out.
+        if(state.visible>0&&state.visible<48)assert.ok(state.cover>=state.visible&&state.width>=state.visible,`${label}: the ${state.visible}px sliver of ${state.key} is covered (${state.cover}px).`);
+        else if(state.visible>=48)assert.ok(state.cover===0&&state.width>=28,`${label}: ${state.key} fades out (${state.width}px).`);
+        else assert.ok(state.width>=8,`${label}: a soft edge.`);
+        await f.page.screenshot({path:`${output}/edge-${view}-1280-${dark?'dark':'light'}.png`});
+        // Scrolled to the end, nothing is hidden any more.
+        await scroller.evaluate(node=>{node.scrollLeft=node.scrollWidth;});await f.page.waitForFunction(()=>document.querySelector('.dossier-list-main')?.dataset.moreRight===undefined);
+      }
+      assert.deepEqual(businessWrites(f),[]);
+    });
+    for(const width of [1440,1280,768])await scenario(`cards-fill-the-width-in-columns-and-leave-out-empty-facts-${width}`,async f=>{
+      await f.page.setViewportSize({width,height:900});await open(f);
+      const display=await openDisplay(f);await display.getByRole('combobox',{name:'Affichage des dossiers',exact:true}).selectOption('cards');await closeDisplay(f);
+      await f.page.locator(`[data-dossier-card="${P}"]`).waitFor();
+      const columns=await f.page.locator('.dossier-card-list').evaluate(node=>getComputedStyle(node).gridTemplateColumns.split(' ').length);
+      assert.equal(columns,width===1440?3:2,`${width}px: ${columns} columns of cards.`);
+      // Labels sit near their values in a card of normal width.
+      const card=await f.page.locator(`[data-dossier-card="${P}"]`).boundingBox();assert.ok(card.width<=620,`A card stays readable (${Math.round(card.width)}px).`);
+      // No « Poids final (kg) » before the optimisation; it shows once optimised.
+      assert.equal(await f.page.locator(`[data-dossier-card="${P}"] .dossier-table-card-facts [data-column="optimizedWeight"]`).count(),0);
+      assert.equal(await f.page.locator(`[data-dossier-card="${P}"] .dossier-table-card-facts [data-column="optimizedDimensions"]`).count(),0);
+      assert.equal(await f.page.locator(`[data-dossier-card="${P5}"] .dossier-table-card-facts [data-column="optimizedWeight"]`).count(),1);
+      for(const box of await f.page.locator('[data-dossier-card] .dossier-table-card-heading .dossier-table-checkbox').all()){const b=await box.boundingBox();assert.ok(b.width>=44&&b.height>=44,'Card checkboxes keep a 44 × 44 px target.');}
+      // « Cartes » is one choice for the whole list.
+      await selectPreset(f,'Départs','departures');await f.page.locator(`[data-dossier-card="${P}"]`).waitFor();assert.equal(await f.page.getByRole('table',{name:'Dossiers d’expédition',exact:true}).isVisible(),false);
+      await selectPreset(f,'Accords clients','accords');await f.page.locator(`[data-dossier-card="${P}"]`).waitFor();
+      await noPageOverflow(f);await axeClean(f);await f.page.screenshot({path:`${output}/cards-grid-${width}.png`});
+      assert.deepEqual(businessWrites(f),[]);
+    });
+    for(const dark of [false,true])await scenario(`a-task-the-dossier-outgrew-is-refreshed-from-its-cell-${dark?'dark':'light'}`,async f=>{
+      // A preparation task left on a paid dossier: « Le dossier a changé. Actualisez les tâches. »
+      f.tables.staff_work_actions.push({id:actionId(30),colis_id:P5,kind:'preparation',state:'ready',assignee_id:null,version:1,created_at:'2026-10-01T08:00:00Z',updated_at:'2026-10-01T08:00:00Z'});
+      f.tables.staff_work_actions=f.tables.staff_work_actions.filter(action=>!(action.colis_id===P5&&action.kind==='departure'));
+      await theme(f,dark);await open(f);await waitTheme(f,dark);
+      const cell=row(f,P5).locator('[data-column="statut"]');await cell.getByText('Le dossier a changé. Actualisez les tâches.',{exact:true}).waitFor();
+      const refresh=cell.getByRole('button',{name:'Actualiser les tâches',exact:true});const box=await refresh.boundingBox();assert.ok(box.height>=44);
+      await axeClean(f,`tr[data-dossier-row="${P5}"]`);
+      // The server drops the outgrown task: refreshing right there clears the message, without opening the dossier.
+      f.tables.staff_work_actions=f.tables.staff_work_actions.filter(action=>action.id!==actionId(30));
+      const reads=f.requests.filter(request=>request.path.includes('staff_work_actions')).length;
+      await refresh.click();await cell.getByText('Le dossier a changé. Actualisez les tâches.',{exact:true}).waitFor({state:'detached'});
+      assert.ok(f.requests.filter(request=>request.path.includes('staff_work_actions')).length>reads,'The tasks were really reloaded.');
+      assert.equal(new URL(f.page.url()).pathname,'/colis','The row did not open.');assert.equal(f.claims.length,0);assert.deepEqual(businessWrites(f),[]);
+    });
+    await scenario('the-sort-menu-has-no-duplicate-and-no-jargon',async f=>{
+      await open(f);
+      for(const [label,view] of [['Travail quotidien','daily'],['Paiements','payments'],['Accords clients','accords']]){
+        await selectPreset(f,label,view);const menu=(await openDisplay(f)).getByRole('combobox',{name:'Tri par défaut',exact:true});
+        const options=await menu.locator('option').evaluateAll(nodes=>nodes.map(node=>node.textContent));
+        assert.equal(options.some(text=>/FIFO|'/.test(text)),false,`${label}: no jargon, typographic apostrophes (${options.join(' | ')}).`);
+        const meaning=text=>text.replace(/[()·]/g,' ').replace(/\s+/g,' ').trim().toLocaleLowerCase('fr');
+        assert.equal(new Set(options.map(meaning)).size,options.length,`${label}: every order appears once.`);
+        assert.ok(options.includes('Plus ancien d’abord')&&options.includes('Plus récent d’abord'));
+        await closeDisplay(f);
+      }
+    });
+    for(const width of [1440,1280,390])for(const dark of [false,true])await scenario(`empty-lists-are-illustrated-and-say-what-hides-the-dossiers-${width}-${dark?'dark':'light'}`,async f=>{
+      await f.page.setViewportSize(sizeOf(width));await theme(f,dark);await open(f);await waitTheme(f,dark);
+      const region=f.page.getByRole('region',{name:'Tableau des dossiers',exact:true}),empty=region.locator('.dossier-empty');
+      // A search alone names the searched text.
+      await f.page.getByLabel('Rechercher ou scanner un colis',{exact:true}).fill('zzz-inconnu');
+      await empty.getByText('Aucun dossier ne correspond à « zzz-inconnu ».',{exact:true}).waitFor();
+      assert.equal(await empty.locator('svg').count(),1,'An illustrated empty state.');
+      assert.deepEqual(await empty.getByRole('button').allTextContents(),['Effacer la recherche']);
+      await axeClean(f);await f.page.screenshot({path:`${output}/empty-search-${width}-${dark?'dark':'light'}.png`});
+      await empty.getByRole('button',{name:'Effacer la recherche',exact:true}).click();await row(f,P).waitFor();
+      // « Mes tâches » shows in its own control only: no chip, no « Filtres 1 », one action.
+      f.tables.staff_work_actions=f.tables.staff_work_actions.map(action=>({...action,assignee_id:action.assignee_id===ids.A?B:action.assignee_id}));
+      await f.page.goto(`${base}/colis?tasks=mine`);await empty.getByText('Aucune tâche ne vous est attribuée dans cette sélection.',{exact:true}).waitFor();
+      assert.equal(await f.page.getByRole('group',{name:'Filtres actifs',exact:true}).count(),0,'The scope is not a filter chip.');
+      assert.equal(await filtersButton(f).getAttribute('aria-label'),'Filtres','Nor counted on Filtres.');
+      assert.deepEqual(await empty.getByRole('button').allTextContents(),['Voir tous les dossiers'],'One action, not repeated.');
+      await f.page.screenshot({path:`${output}/empty-mine-${width}-${dark?'dark':'light'}.png`});
+      await empty.getByRole('button',{name:'Voir tous les dossiers',exact:true}).click();await f.page.waitForURL(url=>!url.searchParams.has('tasks'));await row(f,P).waitFor();
+      assert.deepEqual(businessWrites(f),[]);
+    });
+    for(const dark of [false,true])await scenario(`payments-show-nothing-paid-before-a-quote-and-keep-rows-short-${dark?'dark':'light'}`,async f=>{
+      await theme(f,dark);await open(f,'table=payments');await waitTheme(f,dark);
+      // Nothing is due yet: no « 0,00 € » beside « À calculer ».
+      assert.equal((await cell(f,P,'requested').innerText()).trim(),'À calculer');assert.equal((await cell(f,P,'paid').innerText()).trim(),'—');
+      assert.match(await cell(f,P4,'paid').innerText(),/30,00/,'A recorded payment still shows.');
+      // The task above the button is one line: it never makes the amounts' row tall.
+      const title=row(f,P).locator('[data-column="action"] .dossier-table-action-title');
+      const lines=await title.evaluate(node=>Math.round(node.getBoundingClientRect().height/parseFloat(getComputedStyle(node).lineHeight)));assert.equal(lines,1);
+      assert.equal(await title.getAttribute('title'),(await title.textContent()).trim(),'Its full wording stays available.');
+      await axeClean(f);assert.deepEqual(businessWrites(f),[]);
+    });
+    for(const width of [1440,390])await scenario(`a-group-checkbox-shows-a-partial-selection-${width}`,async f=>{
+      await f.page.setViewportSize(sizeOf(width));await open(f,'view=statut');
+      const group=f.page.getByRole('checkbox',{name:'Sélectionner le groupe Payé',exact:true}).filter({visible:true});await group.waitFor();
+      await check(f,P5,'EXP-TAB005');
+      assert.equal(await group.evaluate(node=>node.indeterminate),true,'Part of the group: a mixed checkbox.');
+      assert.match(await group.ariaSnapshot(),/checked=mixed/);
+      if(width===1440){const all=f.page.getByRole('checkbox',{name:'Sélectionner tous les dossiers affichés',exact:true});assert.equal(await all.evaluate(node=>node.indeterminate),true);}
+      await group.click();assert.equal(await group.evaluate(node=>node.indeterminate),false);assert.equal(await group.isChecked(),true,'A click selects the whole group.');
+      for(const id of [P4,P5,P6])assert.equal(await row(f,id).getAttribute('data-selected'),'true');
+      await axeClean(f);assert.deepEqual(businessWrites(f),[]);
+    });
+    await scenario('touch-screens-read-at-14px-without-resize-grips-over-the-filters',async f=>{
+      // A touch tablet in landscape: Chromium's touch emulation sets pointer: coarse.
+      const cdp=await f.context.newCDPSession(f.page);await cdp.send('Emulation.setTouchEmulationEnabled',{enabled:true,maxTouchPoints:5});
+      await f.page.setViewportSize({width:1280,height:900});await open(f);
+      assert.equal(await f.page.evaluate(()=>matchMedia('(pointer: coarse)').matches),true);
+      const size=await (await openDisplay(f)).getByRole('spinbutton',{name:'Taille du texte des dossiers',exact:true}).inputValue();assert.equal(size,'14','A touch screen opens the list at 14px.');
+      assert.equal(await (await openDisplay(f)).getByRole('spinbutton',{name:'Taille du texte des dossiers',exact:true}).getAttribute('min'),'11');await closeDisplay(f);
+      assert.equal(await f.page.locator('.dossier-table-resize').evaluateAll(nodes=>nodes.filter(node=>getComputedStyle(node).display!=='none').length),0,'No resize grip under the fingers.');
+      // Every filter in view (left of the pinned action) answers the finger across its whole target.
+      const actionLeft=(await f.page.locator('thead th[data-column="action"]').boundingBox()).x;let checked=0;
+      for(const filter of await f.page.locator('thead .dossier-table-filter').all()){
+        const box=await filter.boundingBox();if(!box||box.x+box.width>actionLeft-1)continue;checked++;
+        const hit=await filter.evaluate(node=>{const r=node.getBoundingClientRect();const points=[r.left+2,r.right-2].map(x=>document.elementFromPoint(x,r.top+r.height/2));return points.every(point=>point===node||node.contains(point));});
+        assert.equal(hit,true,'The whole filter target answers the finger.');
+      }
+      assert.ok(checked>=4,`${checked} filters checked.`);
+      // Widths stay editable from « Colonnes ».
+      const display=await openDisplay(f);await display.getByRole('button',{name:'Colonnes',exact:true}).click();
+      await f.page.getByRole('dialog',{name:'Colonnes affichées',exact:true}).getByRole('spinbutton',{name:'Largeur de Client',exact:true}).waitFor();
+      assert.deepEqual(businessWrites(f),[]);
+    });
+    for(const dark of [false,true])await scenario(`a-phone-opens-the-list-at-14px-and-the-columns-dialog-of-cards-offers-no-width-${dark?'dark':'light'}`,async f=>{
+      await f.page.setViewportSize({width:390,height:844});await theme(f,dark);await open(f);await waitTheme(f,dark);
+      const display=await openDisplay(f);assert.equal(await display.getByRole('spinbutton',{name:'Taille du texte des dossiers',exact:true}).inputValue(),'14');
+      assert.ok(await row(f,P).locator('.dossier-table-client-name').evaluate(node=>parseFloat(getComputedStyle(node).fontSize))>=14);
+      await display.getByRole('button',{name:'Colonnes',exact:true}).click();const columns=f.page.getByRole('dialog',{name:'Colonnes affichées',exact:true});await columns.waitFor();
+      assert.equal(await columns.getByRole('spinbutton').count(),0,'Cards: no table-only width.');assert.equal(await columns.getByRole('button',{name:'Rétablir les largeurs',exact:true}).count(),0);
+      assert.match(await columns.innerText(),/informations affichées sur chaque carte/);
+      await axeClean(f,'[data-testid="column-filter-dialog"]');await f.page.screenshot({path:`${output}/columns-cards-390-${dark?'dark':'light'}.png`});
+      await columns.press('Escape');assert.deepEqual(businessWrites(f),[]);
     });
   } finally {await browser.close();await fs.writeFile(`${output}/results.json`,JSON.stringify(results,null,2));}
 }

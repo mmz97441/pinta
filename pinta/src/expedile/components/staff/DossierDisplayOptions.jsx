@@ -2,7 +2,7 @@ import React from 'react';
 import { ChevronRight } from 'lucide-react';
 import { ColumnDialog } from './DossierColumnOptions';
 import DossierTextSizeControl from './DossierTextSizeControl';
-import { dossierTableSortDirectionLabel } from '../../domain/dossierTable';
+import { countLabel, countWord, dossierTableSortDirectionLabel } from '../../domain/dossierTable';
 
 /** « Affichage »: every reading and organisation preference of the dossier
  * list behind one toolbar button. Each field's visible label is its accessible
@@ -23,7 +23,7 @@ export default function DossierDisplayOptions({
       <button type="button" data-filter-focus="" aria-haspopup="dialog" className="dossier-display-row" onClick={onOpenColumns}>
         <span>Colonnes</span><ChevronRight size={18} aria-hidden="true" />
       </button>
-      <p className="dossier-display-note">{visibleColumnCount} sur {columnCount} colonnes affichées</p>
+      <p className="dossier-display-note">{visibleColumnCount === 1 ? `1 colonne affichée sur ${columnCount}` : `${visibleColumnCount} sur ${columnCount} colonnes affichées`}</p>
     </div>
 
     <div className="dossier-display-section" role="group" aria-labelledby="dossier-display-reading">
@@ -32,6 +32,7 @@ export default function DossierDisplayOptions({
         {/* Visible label = accessible name (WCAG 2.5.3, voice control). */}
         <span>Affichage des dossiers</span>
         <select aria-label="Affichage des dossiers" value={layout} onChange={event => onLayoutChange(event.target.value)}>
+          {/* One choice for the four tabs of the list. */}
           <option value="auto">Automatique</option><option value="table">Tableau</option><option value="cards">Cartes</option>
         </select>
       </label>
@@ -63,7 +64,7 @@ export default function DossierDisplayOptions({
 
     {canExport && <div className="dossier-display-section" role="group" aria-labelledby="dossier-display-export">
       <h3 id="dossier-display-export" className="dossier-display-section-title">Export</h3>
-      <button type="button" className="dossier-display-action" disabled={exportBusy || !exportCount} onClick={onExport}>{exportBusy ? 'Export…' : `Exporter ${exportCount} dossiers filtrés`}</button>
+      <button type="button" className="dossier-display-action" disabled={exportBusy || !exportCount} onClick={onExport}>{exportBusy ? 'Export…' : `Exporter ${countLabel(exportCount, 'dossier')} ${countWord(exportCount, 'filtré', 'filtrés')}`}</button>
       {exportError && <p role="alert" className="dossier-display-error">{exportError}</p>}
     </div>}
   </ColumnDialog>;

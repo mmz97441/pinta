@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { TABLE_COLUMNS, buildDossierTableModel as model, buildDossierTableExportRows, dossierTableExportColumns, formatDossierTableDate, dossierTableMissingAmountLabel, sortDossierTableRows } from './dossierTable.js';
+import { TABLE_COLUMNS, buildDossierTableModel as model, buildDossierTableExportRows, dossierTableExportColumns, formatDossierTableDate, dossierTableMissingAmountLabel, sortDossierTableRows, BULK_STATUS_STEPS, BULK_STATUS_REASONS, bulkStatusPlan, bulkRefusalReason, dossierFactHasValue, countLabel, countWord, parallelTasksLabel, STALE_TASK_REASON, consentRequestLabel } from './dossierTable.js';
 import { actionWaiting, workActionUrl } from './personalWork.js';
 
 const now = Date.parse('2026-10-02T12:00:00Z');
@@ -180,7 +180,8 @@ test('optimisation is true only for complete saved packages with a current compo
 
 test('no assignment invents neither next departure nor a destination from another shipment', () => {
   const row = model(paid, { ...base, envois: [{ id: 'unrelated', date: '2026-10-10', destinationCode: '974' }] });
-  assert.equal(row.departure.label, 'À planifier'); assert.equal(row.departure.destination, 'Destination à préciser');
+  // Like the dossier's own Départ field (« Départ : à choisir »).
+  assert.equal(row.departure.label, 'À choisir'); assert.equal(row.departure.destination, 'Destination à préciser');
   assert.equal(row.departure.readinessLabel, 'Prêt à affecter');
   assert.equal(row.departure.packagesLabel, '1 colis après optimisation');
 });
@@ -451,7 +452,7 @@ test('« Accords clients » shows the consent, its request and last relance, wit
   // Cartons, Casier and Départ are the very columns of the other views.
   for (const key of ['casier', 'cartons']) assert.equal(TABLE_COLUMNS.accords.find(column => column.key === key), TABLE_COLUMNS.daily.find(column => column.key === key));
   assert.equal(TABLE_COLUMNS.accords.find(column => column.key === 'departure'), TABLE_COLUMNS.departures.find(column => column.key === 'departure'));
-  assert.deepEqual(TABLE_COLUMNS.accords.find(column => column.key === 'consentState').filter.choices, ['À soumettre', 'Réponse attendue', 'Le client attend']);
+  assert.deepEqual(TABLE_COLUMNS.accords.find(column => column.key === 'consentState').filter.choices, ['À soumettre', 'Réponse attendue', 'Le client attend', 'Attente terminée']);
   // Its dossiers are worked through their reception and consent task.
   const measured = { ...dossier, statut: 'mesure', feuVert: 'en_attente' };
   assert.equal(model(measured, { ...base, actions: [action('documents'), action('reception')], view: 'accords' }).action.kind, 'reception');
@@ -481,8 +482,8 @@ test('the accords export uses the screen wording and only the columns of this vi
   const exported = buildDossierTableExportRows(consentRows, [], models, 'accords', TABLE_COLUMNS.accords);
   assert.deepEqual(Object.keys(exported[0]), ['Référence', 'Client', 'Dernière réception', 'Accord', 'Demande envoyée le', 'Dernière relance', 'Cartons reçus', 'Casier', 'Départ prévu']);
   assert.deepEqual(exported.map(row => [row.Référence, row.Accord, row['Demande envoyée le'], row['Dernière relance'], row['Départ prévu']]), [
-    ['EXP-WAIT', 'Le client attend · jusqu’au 25/10', '30/09/2026', 'Non renseigné', 'À planifier'],
-    ['EXP-SUBMIT', 'À soumettre', 'Non renseigné', 'Non renseigné', 'À planifier'],
+    ['EXP-WAIT', 'Le client attend · jusqu’au 25/10', '30/09/2026', 'Aucune relance', 'À choisir'],
+    ['EXP-SUBMIT', 'À soumettre', 'Pas encore envoyée', 'Aucune relance', 'À choisir'],
     // The last relance failed: its date never reads as a sent relance.
     ['EXP-AWAIT', 'Réponse attendue', '01/10/2026', '02/10/2026 · Envoi non confirmé', 'Souhaité le 19/11/2026 · à créer'],
   ]);
@@ -490,4 +491,88 @@ test('the accords export uses the screen wording and only the columns of this vi
   // A column of another view never reaches this export.
   assert.deepEqual(dossierTableExportColumns('accords', TABLE_COLUMNS.daily).map(column => column.key), ['ref', 'client', 'receivedAt', 'casier', 'cartons']);
   assert.deepEqual(dossierTableExportColumns('daily', TABLE_COLUMNS.accords).map(column => column.key), ['ref', 'client', 'receivedAt', 'cartons', 'casier']);
+});
+
+test('an ended wait reads « Attente terminée », to re-examine, on screen and in the export, on the model’s clock', () => {
+  const after = Date.parse('2026-10-26T08:00:00Z');
+  const ended = model(consentRows[0], { ...base, now: after });
+  assert.deepEqual(ended.consent, { stage: 'client_waiting', label: 'Attente terminée', until: '2026-10-25T08:00:00Z', over: true });
+  assert.deepEqual(model(consentRows[0], base).consent.over, false, 'On 2 October the wait still runs.');
+  const exported = buildDossierTableExportRows([consentRows[0]], [], new Map([[consentRows[0].id, ended]]), 'accords', TABLE_COLUMNS.accords);
+  assert.equal(exported[0].Accord, 'Attente terminée le 25/10 · à réexaminer');
+  // The « Accord » column sorts and filters on that same wording.
+  const column = TABLE_COLUMNS.accords.find(item => item.key === 'consentState');
+  assert.equal(column.sort.value({ dossier: consentRows[0], model: ended }), 'Attente terminée');
+  assert.equal(column.sort.value({ dossier: consentRows[0] }), 'Le client attend', 'Without a model, the current clock decides.');
+  // Neither the request nor the relance is ever an empty « Non renseigné ».
+  assert.equal(consentRequestLabel(consentRows[1]), 'Pas encore envoyée');
+  assert.equal(consentRequestLabel(consentRows[0]), '30/09/2026');
+});
+
+test('a task the dossier has outgrown offers to refresh the tasks right in its cell', () => {
+  // A preparation task while the dossier is already paid: « Le dossier a changé. Actualisez les tâches. »
+  const stale = model(paid, { ...base, actions: [action('preparation')] });
+  assert.equal(stale.action.blocked_reason, STALE_TASK_REASON);
+  assert.equal(stale.refreshable, true);
+  assert.equal(model(dossier, { ...base, actions: [action('preparation')] }).refreshable, false, 'A task that still fits its dossier has nothing to refresh.');
+  assert.equal(model(paid, { ...base, actions: [action('preparation', { blocked_reason: 'Raison du serveur' })] }).refreshable, false, 'A reason given by the server stays as it is.');
+  assert.equal(model(paid, { ...base, workReady: false }).refreshable, undefined);
+});
+
+test('French counts: 0 and 1 in the singular, then the plural', () => {
+  assert.deepEqual([0, 1, 2, 12].map(count => countLabel(count, 'dossier')), ['0 dossier', '1 dossier', '2 dossiers', '12 dossiers']);
+  assert.equal(countLabel(1234, 'dossier'), `${new Intl.NumberFormat('fr-FR').format(1234)} dossiers`);assert.match(countLabel(1234, 'dossier'), /^1\D234 dossiers$/);
+  assert.equal(countWord(1, 'sélectionné', 'sélectionnés'), 'sélectionné');assert.equal(countWord(3, 'sélectionné', 'sélectionnés'), 'sélectionnés');
+  assert.equal(parallelTasksLabel(1), '1 autre tâche en parallèle');assert.equal(parallelTasksLabel(2), '2 autres tâches en parallèle');
+  const row = model(dossier, { ...base, actions: [action('preparation'), action('documents'), action('quote', { assignee_id: 'other' })] });
+  const exported = buildDossierTableExportRows([dossier], [], new Map([[dossier.id, row]]), 'daily', TABLE_COLUMNS.daily);
+  assert.match(exported[0]['Travail à faire'], /2 autres tâches en parallèle$/);
+  assert.doesNotMatch(JSON.stringify(exported), /\(s\)/);
+});
+
+test('a card leaves out the facts that have nothing to say yet', () => {
+  const weight = TABLE_COLUMNS.daily.find(column => column.key === 'optimizedWeight'), dimensions = TABLE_COLUMNS.daily.find(column => column.key === 'optimizedDimensions');
+  const before = model(dossier, base), after = model(prepared, base);
+  assert.equal(dossierFactHasValue(weight, before), false);assert.equal(dossierFactHasValue(dimensions, before), false);
+  assert.equal(dossierFactHasValue(weight, after), true);assert.equal(dossierFactHasValue(dimensions, after), true);
+  for (const column of TABLE_COLUMNS.daily.filter(item => !['optimizedWeight', 'optimizedDimensions'].includes(item.key))) assert.equal(dossierFactHasValue(column, before), true, column.key);
+});
+
+test('a bulk status change offers only the next steps valid for every selected dossier, in the order of the chain', () => {
+  const at = (...statuts) => statuts.map((statut, index) => ({ id: `d${index}`, statut }));
+  const offered = (...statuts) => bulkStatusPlan(at(...statuts)).choices.map(step => step.label);
+  // The order of the journey; « Expédié » first, but only ever through the departure.
+  assert.deepEqual(BULK_STATUS_STEPS.map(step => step.label), ['Expédié', 'En transit', 'Dédouanement', 'Arrivé', 'En livraison', 'Livré']);
+  // fn_valider_transition_statut: expedie → transit, transit → dedouanement | arrive, dedouanement → arrive, arrive → livraison, livraison → livre.
+  assert.deepEqual(offered('expedie', 'expedie'), ['En transit']);
+  assert.deepEqual(offered('transit'), ['Dédouanement', 'Arrivé']);
+  assert.deepEqual(offered('transit', 'dedouanement'), ['Arrivé'], 'Arrivé follows both steps.');
+  assert.deepEqual(offered('arrive'), ['En livraison']);
+  assert.deepEqual(offered('livraison', 'livraison'), ['Livré']);
+  // guard_colis_departure refuses a direct « Expédié »: the departure confirms it.
+  assert.deepEqual(bulkStatusPlan(at('paye', 'paye')), { choices: [], reason: BULK_STATUS_REASONS.departure, departure: true });
+  assert.deepEqual(bulkStatusPlan(at('expedie', 'transit')), { choices: [], reason: BULK_STATUS_REASONS.mixed, departure: false });
+  assert.deepEqual(bulkStatusPlan(at('paye', 'expedie')), { choices: [], reason: BULK_STATUS_REASONS.mixed, departure: false });
+  for (const statut of ['receptionne', 'mesure', 'attente_feu_vert', 'autorise', 'en_preparation', 'devis_envoye', 'attente_paiement', 'refuse_client', 'annule'])
+    assert.deepEqual(bulkStatusPlan(at(statut, 'transit')), { choices: [], reason: BULK_STATUS_REASONS.beforeDeparture, departure: false }, statut);
+  assert.deepEqual(bulkStatusPlan(at('livre', 'livre')), { choices: [], reason: BULK_STATUS_REASONS.delivered, departure: false });
+  assert.deepEqual(bulkStatusPlan([]), { choices: [], reason: null, departure: false });
+  // Every offered step is one the database accepts from each dossier.
+  const allowed = { paye: ['expedie'], expedie: ['transit'], transit: ['dedouanement', 'arrive'], dedouanement: ['arrive'], arrive: ['livraison'], livraison: ['livre'] };
+  for (const first of Object.keys(allowed)) for (const second of Object.keys(allowed))
+    for (const step of bulkStatusPlan(at(first, second)).choices) assert.ok(allowed[first].includes(step.statut) && allowed[second].includes(step.statut), `${first} + ${second} → ${step.statut}`);
+  assert.ok(BULK_STATUS_STEPS.filter(step => !step.viaDeparture).every(step => step.permission === 'perm_colis_changer_statut_expedition'));
+});
+
+test('a refused bulk change keeps the server’s reason, in plain words', () => {
+  assert.equal(bulkRefusalReason({ message: 'Transition invalide : livre → transit' }), 'Passage de « Livré » à « En transit » refusé par le serveur.');
+  assert.equal(bulkRefusalReason(new Error('Permission insuffisante pour ce changement de statut')), 'Permission insuffisante pour ce changement de statut');
+  assert.equal(bulkRefusalReason({ message: 'Ce dossier a été modifié par un collègue. Rechargez-le avant de réessayer.' }), 'Ce dossier a été modifié par un collègue. Rechargez-le avant de réessayer.');
+  for (const empty of [null, {}, { message: '  ' }]) assert.equal(bulkRefusalReason(empty), 'Refusé par le serveur, sans motif précisé.');
+});
+
+test('the client column sorts on the name the rows show, family name first', () => {
+  const column = TABLE_COLUMNS.daily.find(item => item.key === 'client');
+  assert.equal(column.sort.value({ client: { nom: 'Payet Flavie', nomFamille: 'Payet', prenom: 'Flavie' } }), 'Payet Flavie');
+  assert.equal(column.sort.value({ client: undefined }), null);
 });

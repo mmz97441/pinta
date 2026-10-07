@@ -13,6 +13,16 @@
   --dossier-scroll-track: #d9d3c7;
   /* Editable fields only: 3.5:1 on the elevated fill, 3.2:1 on the surface. */
   --dossier-field-border: #8c8579;
+  /* The shadow cast by the pinned action column over the columns under it. */
+  --dossier-edge-shadow: rgb(42 40 38 / .2);
+  /* A failed load: 8:1 text on its tint in both themes. */
+  --dossier-problem-bg: #fef2f2;
+  --dossier-problem-border: #f3b8b8;
+  --dossier-problem-text: #8f1d1d;
+  --dossier-problem-action-bg: #a61b1b;
+  --dossier-problem-action-text: #fff;
+  --dossier-success-text: #17633e;
+  --dossier-danger-text: #a61b1b;
 }
 html.dark .dossier-list,
 html.dark .dossier-data-table,
@@ -25,6 +35,14 @@ html.dark .dossier-column-options {
   --dossier-control-border: #4e4840;
   --dossier-scroll-track: #4a443c;
   --dossier-field-border: #7d766b;
+  --dossier-edge-shadow: rgb(0 0 0 / .55);
+  --dossier-problem-bg: #3a1f1d;
+  --dossier-problem-border: #7a3530;
+  --dossier-problem-text: #fcd4cf;
+  --dossier-problem-action-bg: #fcd4cf;
+  --dossier-problem-action-text: #3a1f1d;
+  --dossier-success-text: #b9e8ca;
+  --dossier-danger-text: #f6b9b3;
 }
 /* The sticky cells must paint the same opaque surface as their row in both themes. */
 .dossier-data-table { table-layout: fixed; border-collapse: separate; border-spacing: 0; font-size: var(--dossier-text-size, 16px); font-variant-numeric: tabular-nums; }
@@ -119,6 +137,27 @@ html.dark .dossier-table-card {
   box-shadow: -1px 0 0 var(--dossier-column-edge);
 }
 .dossier-table-head [data-column='action'] { z-index: 6; }
+/* Columns hidden under the pinned action: a shadow on its left edge, and over
+   the column sliding under it either an opaque cover (a sliver under 48px: no
+   header-less strip, no cut word) or a fade (DossierHorizontalScroll measures
+   it). Gone once the table is scrolled to its end. */
+.dossier-list-main[data-more-right='true'] .dossier-data-table:not([data-unpin-action='true']) .dossier-table-row > [data-column='action'],
+.dossier-list-main[data-more-right='true'] .dossier-data-table:not([data-unpin-action='true']) .dossier-table-head [data-column='action'] { box-shadow: -1px 0 0 var(--dossier-column-edge), -12px 0 14px -10px var(--dossier-edge-shadow); }
+.dossier-list-main[data-more-right='true'] .dossier-data-table:not([data-unpin-action='true']) .dossier-table-row > [data-column='action']::before,
+.dossier-list-main[data-more-right='true'] .dossier-data-table:not([data-unpin-action='true']) .dossier-table-head [data-column='action']::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 100%;
+  bottom: 0;
+  width: calc(var(--dossier-edge-cover, 0px) + var(--dossier-edge-fade, 8px));
+  pointer-events: none;
+  background: linear-gradient(to left, var(--dossier-table-row-bg) var(--dossier-edge-cover, 0px), transparent);
+}
+.dossier-list-main[data-more-right='true'] .dossier-data-table:not([data-unpin-action='true']) .dossier-table-head [data-column='action']::before { background: linear-gradient(to left, var(--bg-elevated) var(--dossier-edge-cover, 0px), transparent); }
+/* Without a pinned action, the scroller's right edge fades instead. */
+.dossier-scroll-fade { position: absolute; top: 0; right: 0; bottom: 0; z-index: 7; width: 40px; pointer-events: none; opacity: 0; background: linear-gradient(to right, transparent, var(--bg-canvas)); transition: opacity .2s ease-out; }
+.dossier-list-main[data-more-right='true'][data-action-pinned='false'] .dossier-scroll-fade { opacity: 1; }
 .dossier-data-table[data-unpin-action='true'] .dossier-table-row > [data-column='action'] { position: static; }
 .dossier-data-table[data-unpin-action='true'] .dossier-table-head [data-column='action'] { right: auto; z-index: 4; }
 /* Oversized identity cells must not cover every scrollable data column. */
@@ -225,6 +264,15 @@ html.dark .dossier-pill[data-tone='review'] { --pill-bg: #4a2d24; --pill-text: #
 .dossier-table-money { font-variant-numeric: tabular-nums; }
 .dossier-table-action { min-width: 0; }
 .dossier-table-action-title { font-size: var(--dossier-small-text-size, 14px); font-weight: 600; margin: 0 0 8px; }
+/* « Paiements »: one line for the task above its button (full text on hover),
+   so a long task never makes the amounts' row tall. */
+.dossier-data-table[data-view='payments'] .dossier-table-action-title { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; overflow-wrap: normal; }
+/* « Le dossier a changé » : the tasks are refreshed from the cell itself. */
+.dossier-table-refresh { display: block; margin-top: 2px; }
+.dossier-table-refresh button { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0; font-size: var(--dossier-small-text-size, 14px); font-weight: 600; color: var(--brand-text); text-decoration: underline; text-underline-offset: 3px; background: transparent; }
+.dossier-table-refresh button:disabled { opacity: .7; }
+.dossier-table-refresh button svg { flex-shrink: 0; }
+.dossier-table-refresh-error { display: block; font-size: var(--dossier-small-text-size, 14px); color: var(--dossier-danger-text); }
 .dossier-table-action button { white-space: normal; max-width: 100%; min-height: 44px; font-size: var(--dossier-text-size, 16px); transition: background-color .15s ease-out, color .15s ease-out, border-color .15s ease-out; }
 .dossier-table-action button:active:not(:disabled) { transform: translateY(1px); }
 .dossier-table-action button svg { flex-shrink: 0; }
@@ -284,7 +332,9 @@ html .dossier-table-action button[data-take-kind='claim']:hover:not(:disabled) {
   overflow-wrap: anywhere;
 }
 .dossier-table-card:focus-within { box-shadow: inset 0 0 0 2px var(--brand-text); }
-.dossier-table-card-heading { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 4px; margin-left: -12px; }
+.dossier-table-card-heading { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 4px; margin-left: -14px; }
+/* A 44 × 44 px target on every card. */
+.dossier-table-card-heading .dossier-table-checkbox { width: 44px; min-height: 44px; }
 .dossier-table-card-heading > [data-column='ref'] { min-width: 0; }
 .dossier-table-card-heading .dossier-table-checkbox { flex-shrink: 0; }
 .dossier-table-card-status { flex: 0 1 auto; max-width: 100%; margin-left: auto; text-align: right; }
@@ -347,16 +397,18 @@ html .dossier-table-action button[data-take-kind='claim']:hover:not(:disabled) {
 .dossier-group-row .dossier-group-header { position: sticky; left: 0; box-sizing: border-box; width: max-content; max-width: min(100%, var(--dossier-list-width, 100%)); padding: 2px 12px 4px 0; }
 /* Cards: a quiet heading line above the group's cards; its checkbox lines up
    with the cards' own checkboxes. */
-.dossier-card-group { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; min-width: 0; }
+.dossier-card-group { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); gap: 12px; min-width: 0; }
 .dossier-card-group + .dossier-card-group { margin-top: 8px; }
-.dossier-card-group > .dossier-group-header { padding: 0 4px 6px 5px; border-bottom: 1px solid var(--dossier-header-line); }
-.dossier-card-list { display: none; grid-template-columns: minmax(0, 1fr); gap: 12px; padding-bottom: 16px; }
+.dossier-card-group > .dossier-group-header { grid-column: 1 / -1; padding: 0 4px 6px 5px; border-bottom: 1px solid var(--dossier-header-line); }
+/* Cards fill the width in columns of at least 340px: one on a phone, two on
+   a tablet or a 1280px screen, three on a wide screen. A group spans them all. */
+.dossier-card-list { display: none; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); gap: 12px; padding-bottom: 16px; }
+.dossier-card-list > .dossier-card-group { grid-column: 1 / -1; }
 .dossier-list[data-layout='cards'] .dossier-data-table, .dossier-list[data-layout='cards'] .dossier-horizontal-scroll { display: none; }
 .dossier-list[data-layout='cards'] .dossier-card-list { display: grid; }
-@media (max-width: 767px) {
-  .dossier-list[data-layout='auto'] .dossier-data-table, .dossier-list[data-layout='auto'] .dossier-horizontal-scroll { display: none; }
-  .dossier-list[data-layout='auto'] .dossier-card-list { display: grid; }
-}
+/* « Automatique » shows cards on a phone, upright or on its side (data-compact). */
+.dossier-list[data-layout='auto'][data-compact='true'] .dossier-data-table, .dossier-list[data-layout='auto'][data-compact='true'] .dossier-horizontal-scroll { display: none; }
+.dossier-list[data-layout='auto'][data-compact='true'] .dossier-card-list { display: grid; }
 .dossier-column-options { position: fixed; box-sizing: border-box; margin: 0; width: 340px; max-width: calc(100vw - 24px); overflow-y: auto; overscroll-behavior: contain; border: 1px solid var(--border-subtle); border-radius: 16px; padding: 16px; color: var(--text-primary); background: var(--bg-surface); box-shadow: 0 12px 36px #0003; }
 .dossier-column-options::backdrop { background: #0001; }
 .dossier-column-dialog-heading { position: sticky; top: -16px; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; padding: 4px 0; background: var(--bg-surface); }
@@ -406,24 +458,25 @@ html.dark .dossier-column-options .dossier-column-apply { background: #c4dae5; b
 
 /* ── Page header: tabs, one toolbar row, inline filters, meta row ─────────── */
 /* The header width (not the viewport) decides the compact layout, so the
-   sidebar at 1024px behaves like any narrower screen. */
-.dossier-list-header { container: dossier-header / inline-size; background: var(--bg-elevated); border-bottom: 1px solid var(--border-subtle); }
+   sidebar at 1024px behaves like any narrower screen. Its parts are the
+   containers: on a phone the header itself dissolves into the page. */
+.dossier-list-header { background: var(--bg-elevated); border-bottom: 1px solid var(--border-subtle); }
+.dossier-toolbar-bar, .dossier-header-meta { container: dossier-header / inline-size; }
+.dossier-header-top, .dossier-header-meta { display: grid; gap: 12px; min-width: 0; }
 /* The space under the last row continues the rows' warm canvas. */
 #dossier-table-scroll { background: var(--bg-canvas); }
 
-/* View tabs: underline instead of pills; the strip scrolls on its own. */
+/* View tabs: underline instead of pills. On a narrow screen they wrap onto a
+   second line: every view stays visible, none hides past the edge. */
 .dossier-view-tabs {
   position: relative;
   display: flex;
-  gap: 20px;
+  flex-wrap: wrap;
+  gap: 0 20px;
   margin: 0 -16px;
   padding: 0 16px;
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
-  scrollbar-width: none;
   border-bottom: 1px solid var(--border-subtle);
 }
-.dossier-view-tabs::-webkit-scrollbar { display: none; }
 .dossier-view-tab {
   flex-shrink: 0;
   min-height: 44px;
@@ -442,7 +495,7 @@ html.dark .dossier-column-options .dossier-column-apply { background: #c4dae5; b
 .dossier-view-tab[aria-pressed='true'] { color: var(--brand-text); box-shadow: inset 0 -3px 0 var(--text-accent); }
 /* Drawn inside the button: the scrolling strip would clip an outer ring. */
 .dossier-view-tab:focus-visible { outline: 2px solid var(--brand-text); outline-offset: -2px; }
-@media (max-width: 359px) { .dossier-view-tabs { gap: 14px; } }
+@media (max-width: 359px) { .dossier-view-tabs { column-gap: 14px; } }
 
 /* One toolbar row: [search][scope][Filtres][Affichage], wrapping when needed. */
 .dossier-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
@@ -455,6 +508,8 @@ html.dark .dossier-column-options .dossier-column-apply { background: #c4dae5; b
   background-color: var(--bg-elevated);
 }
 .dossier-toolbar .dossier-toolbar-search input::placeholder { color: var(--text-muted); opacity: 1; }
+/* The list's own « Effacer la recherche » button is the only clear control. */
+.dossier-toolbar .dossier-toolbar-search input::-webkit-search-cancel-button { -webkit-appearance: none; appearance: none; display: none; }
 
 /* Scope: segmented control. The 44px button is the target; its inner pill is the look. */
 .dossier-scope { display: inline-flex; flex-shrink: 0; padding: 0 3px; border-radius: 10px; background: var(--bg-surface); }
@@ -627,7 +682,6 @@ html.dark .dossier-toolbar-badge { color: #122a36; background: #c4dae5; }
   .dossier-toolbar-icon-button { width: 44px; padding: 0; }
   .dossier-toolbar-button-text { display: none; }
   .dossier-toolbar-icon-button .dossier-toolbar-badge { position: absolute; top: -6px; right: -6px; min-width: 18px; height: 18px; padding: 0 5px; font-size: 11px; box-shadow: 0 0 0 2px var(--bg-elevated); }
-  .dossier-filters-actions .dossier-text-button { margin-left: 0; }
   .dossier-horizontal-scroll { flex-basis: 100%; max-width: none; }
 }
 
@@ -705,7 +759,35 @@ html .dossier-text-size input { border-color: var(--dossier-field-border); }
 .dossier-text-size input:focus-visible, .dossier-text-size-step:focus-visible { outline: 2px solid var(--brand-text); outline-offset: 2px; }
 
 /* ── Bulk selection bar ───────────────────────────────────────────────────── */
-.dossier-bulk-bar { display: flex; flex-shrink: 0; flex-wrap: wrap; align-items: center; gap: 8px; margin: 8px 16px; padding: 8px 12px; border: 1px solid var(--border-subtle); border-radius: 12px; background: var(--bg-surface); }
+/* It floats over the bottom of the list: checking a row never moves the rows.
+   While it shows, the list keeps room under its last row (--dossier-bulk-height). */
+.dossier-bulk-bar {
+  position: absolute;
+  left: 50%;
+  bottom: 16px;
+  z-index: 12;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  box-sizing: border-box;
+  width: max-content;
+  max-width: calc(100% - 32px);
+  margin: 0;
+  padding: 8px 12px;
+  border: 1px solid var(--dossier-control-border);
+  border-radius: 14px;
+  background: var(--bg-surface);
+  box-shadow: 0 12px 32px rgb(0 0 0 / .18);
+  transform: translateX(-50%);
+}
+html.dark .dossier-bulk-bar { box-shadow: 0 12px 32px rgb(0 0 0 / .55); }
+.dossier-list[data-selection='true'] #dossier-table-scroll { padding-bottom: calc(var(--dossier-bulk-height, 64px) + 32px); }
+/* Why no status is offered: an icon, then a short text that wraps beside it. */
+.dossier-bulk-note { display: flex; align-items: flex-start; gap: 8px; max-width: 28rem; margin: 0; font-size: 14px; line-height: 1.4; color: var(--text-secondary); }
+.dossier-bulk-note svg { flex-shrink: 0; margin-top: 2px; color: var(--brand-text); }
+.dossier-bulk-note .dossier-text-button { min-height: 0; padding: 0; font-size: 14px; }
+@media (pointer: coarse) { .dossier-bulk-note .dossier-text-button { min-height: 44px; } }
 .dossier-bulk-clear { margin-right: 8px; }
 /* Each status button wraps on its own; the phone layout swaps them for a select. */
 .dossier-bulk-statuses { display: contents; }
@@ -758,10 +840,76 @@ html .dossier-bulk-bar .dossier-bulk-status-select { border-color: var(--dossier
 .dossier-bulk-button:active:not(:disabled) { transform: translateY(1px); }
 .dossier-bulk-button:disabled { opacity: .5; }
 
+/* ── Bulk status confirmation ─────────────────────────────────────────────── */
+.dossier-bulk-dialog .dossier-bulk-intro, .dossier-bulk-dialog .dossier-bulk-summary { margin-bottom: 12px; font-size: 15px; color: var(--text-primary); }
+.dossier-bulk-list { display: grid; margin: 0 0 12px; padding: 0; list-style: none; border-top: 1px solid var(--border-subtle); }
+.dossier-bulk-list li { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: baseline; gap: 2px 12px; padding: 8px 0; border-bottom: 1px solid var(--border-subtle); font-size: 14px; line-height: 1.4; }
+.dossier-bulk-ref { font-weight: 700; color: var(--brand-text); font-variant-numeric: tabular-nums; }
+.dossier-bulk-client { min-width: 0; color: var(--text-secondary); overflow-wrap: anywhere; }
+.dossier-bulk-result { display: inline-flex; grid-column: 1 / -1; align-items: baseline; gap: 6px; font-weight: 600; overflow-wrap: anywhere; }
+.dossier-bulk-result svg { flex-shrink: 0; align-self: center; }
+.dossier-bulk-result[data-ok='true'] { color: var(--dossier-success-text); }
+.dossier-bulk-result[data-ok='false'] { color: var(--dossier-danger-text); }
+.dossier-column-options .dossier-bulk-progress { display: flex; align-items: center; gap: 8px; color: var(--text-primary); }
+
+/* ── « Filtres » sheet (phones) ────────────────────────────────────────────── */
+.dossier-column-options.dossier-filters-sheet { max-width: none; border-bottom: 0; border-radius: 16px 16px 0 0; padding-bottom: calc(16px + env(safe-area-inset-bottom)); box-shadow: 0 -12px 36px #0003; }
+.dossier-filters-sheet .dossier-filters-panel { padding: 0; border: 0; background: transparent; }
+.dossier-filters-sheet .dossier-filters-actions .dossier-text-button { margin-left: 0; }
+.dossier-filters-sheet-footer { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border-subtle); }
+.dossier-filters-sheet .dossier-filters-sheet-done { width: 100%; min-height: 48px; border: 1px solid var(--brand-navy); border-radius: 12px; font-size: 15px; font-weight: 700; color: #fff; background: var(--brand-navy); transition: background-color .2s ease-out; }
+.dossier-filters-sheet .dossier-filters-sheet-done:active { transform: scale(.98); }
+html.dark .dossier-filters-sheet .dossier-filters-sheet-done { color: #122a36; background: #c4dae5; border-color: #c4dae5; }
+
+/* « … » stays on one line: a guillemet never ends or starts a line alone. */
+.dossier-nowrap { white-space: nowrap; }
+
+/* ── Empty list and failed load ───────────────────────────────────────────── */
+.dossier-empty { display: flex; flex-direction: column; align-items: center; gap: 8px; max-width: 34rem; margin: 0 auto; padding: 40px 16px; text-align: center; }
+.dossier-empty-icon { display: inline-flex; align-items: center; justify-content: center; width: 56px; height: 56px; border-radius: 50%; color: var(--brand-text); background: var(--bg-surface); }
+.dossier-empty-title { margin: 4px 0 0; font-size: 16px; font-weight: 700; line-height: 1.4; color: var(--text-primary); overflow-wrap: anywhere; }
+.dossier-empty-text { margin: 0; font-size: 14px; line-height: 1.5; color: var(--text-secondary); }
+.dossier-empty-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 8px; }
+.dossier-empty-action { min-height: 44px; padding: 0 16px; border: 1px solid var(--dossier-control-border); border-radius: 10px; font-size: 15px; font-weight: 600; color: var(--text-primary); background: var(--bg-elevated); transition: background-color .2s ease-out, transform .2s ease-out; }
+.dossier-empty-action:hover { background: var(--bg-surface); }
+.dossier-empty-action[data-primary='true'] { color: #fff; background: var(--brand-navy); border-color: var(--brand-navy); }
+.dossier-empty-action[data-primary='true']:hover { background: var(--brand-navy-l); transform: translateY(-1px); }
+html.dark .dossier-empty-action[data-primary='true'] { color: #122a36; background: #c4dae5; border-color: #c4dae5; }
+.dossier-empty-action:active { transform: scale(.98); }
+.dossier-empty-action:focus-visible, .dossier-list-problem-retry:focus-visible { outline: 2px solid var(--brand-text); outline-offset: 2px; }
+.dossier-list-problem { display: flex; align-items: flex-start; gap: 12px; width: calc(100% - 32px); max-width: 40rem; margin: 32px auto; padding: 16px; border: 1px solid var(--dossier-problem-border); border-radius: 14px; color: var(--dossier-problem-text); background: var(--dossier-problem-bg); }
+.dossier-list-problem-icon { flex-shrink: 0; margin-top: 2px; }
+.dossier-list-problem-title { margin: 0; font-size: 15px; font-weight: 700; line-height: 1.4; }
+.dossier-list-problem-text { margin: 4px 0 0; font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
+.dossier-list-problem-retry { min-height: 44px; margin-top: 12px; padding: 0 16px; border-radius: 10px; font-size: 15px; font-weight: 700; color: var(--dossier-problem-action-text); background: var(--dossier-problem-action-bg); transition: transform .2s ease-out; }
+.dossier-list-problem-retry:active:not(:disabled) { transform: scale(.98); }
+.dossier-list-problem-retry:disabled { opacity: .7; }
+
+/* ── Phones (data-compact): the page scrolls as one ──────────────────────────
+   The title, the tabs and the count scroll away with the dossiers; the search
+   bar stays pinned at the top, and the floating selection bar sits above the
+   bottom navigation. */
+.dossier-list[data-compact='true'] { display: block; overflow-y: auto; overscroll-behavior-y: contain; scroll-padding-top: 136px; scroll-padding-bottom: 80px; }
+.dossier-list[data-compact='true'] > .dossier-list-header { display: contents; }
+.dossier-list[data-compact='true'] > .dossier-list-header > .dossier-header-top { padding: 16px 16px 0; background: var(--bg-elevated); }
+.dossier-list[data-compact='true'] > .dossier-list-header > .dossier-toolbar-bar { position: sticky; top: 0; z-index: 9; margin-top: 0; padding: 12px 16px; background: var(--bg-elevated); box-shadow: 0 1px 0 var(--border-subtle); }
+.dossier-list[data-compact='true'] > .dossier-list-header > .dossier-header-meta { margin-top: 0; padding: 0 16px 12px; background: var(--bg-elevated); border-bottom: 1px solid var(--border-subtle); }
+.dossier-list[data-compact='true'] > .dossier-list-main { display: block; }
+.dossier-list[data-compact='true'] #dossier-table-scroll { overflow: visible; }
+.dossier-list[data-compact='true'][data-layout='table'] #dossier-table-scroll { overflow-x: auto; overflow-y: hidden; }
+.dossier-list[data-compact='true'] .dossier-bulk-bar { position: fixed; left: 12px; right: 12px; bottom: calc(4.5rem + 8px + env(safe-area-inset-bottom)); z-index: 40; width: auto; max-width: none; transform: none; }
+
 /* Idle sort arrows appear on hover or focus only, so short headers stay whole.
    Touch screens keep them: there is no hover to reveal them. */
 @media (hover: hover) {
   .dossier-table-head th:not(:hover):not(:focus-within) .dossier-table-sort-idle { display: none; }
+}
+/* Touch screens: no resize grip (it covered the right of the 44px filter
+   targets; widths stay editable in « Colonnes »), and a heading wraps between
+   words rather than ending in an ellipsis nobody can hover. */
+@media (pointer: coarse) {
+  .dossier-table-resize { display: none; }
+  .dossier-table-heading-text { white-space: normal; overflow-wrap: normal; text-overflow: clip; }
 }
 
 /* Windows contrast themes drop box-shadows and repaint backgrounds: every state

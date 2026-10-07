@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { TABLE_COLUMNS, buildDossierTableModel, buildDossierTableExportRows, sortDossierTableRows } from './dossierTable.js';
-import { clampColumnWidth, columnWidthsStorageKey, columnVisibilityStorageKey, dossierTextSizeStorageKey, dossierLayoutStorageKey, sanitizeDossierTextSize, sanitizeDossierTableLayout, DOSSIER_TEXT_SIZE_BOUNDS, sanitizeHiddenColumns, readColumnFilters, filterDossierTableRows, sanitizeColumnFilter, columnFilterModes, sanitizeColumnWidths, dossierColumnSuggestions, requiredTableColumn, tableTextSizeInitial, DOSSIER_GROUPINGS, defaultDossierGrouping, sanitizeDossierGrouping, resolveDossierGrouping, dossierGroupingStorageKey, sanitizeNoDeparturePlacement, noDeparturePlacementStorageKey } from './dossierTablePreferences.js';
+import { clampColumnWidth, columnWidthBounds, columnWidthsStorageKey, columnVisibilityStorageKey, dossierTextSizeStorageKey, dossierLayoutStorageKey, sanitizeDossierTextSize, sanitizeDossierTableLayout, DOSSIER_TEXT_SIZE_BOUNDS, DOSSIER_TOUCH_TEXT_SIZE, sanitizeHiddenColumns, readColumnFilters, filterDossierTableRows, sanitizeColumnFilter, columnFilterModes, sanitizeColumnWidths, dossierColumnSuggestions, requiredTableColumn, tableTextSizeInitial, DOSSIER_GROUPINGS, defaultDossierGrouping, sanitizeDossierGrouping, resolveDossierGrouping, dossierGroupingStorageKey, sanitizeNoDeparturePlacement, noDeparturePlacementStorageKey } from './dossierTablePreferences.js';
 import { WORK_TABLE_CHOICES } from './workTable.js';
 
 const columns = TABLE_COLUMNS.daily;
@@ -134,11 +134,12 @@ test('hidden columns cannot filter or export values, while visible columns retai
   for (const label of ['Client', 'Action', 'Paiement', 'Dimensions finales']) assert.equal(Object.hasOwn(exported[0], label), false);
 });
 
-test('text size accepts every integer from 5 to 20, preserves legacy choices, and isolates each preference', () => {
-  assert.deepEqual(DOSSIER_TEXT_SIZE_BOUNDS, { min: 5, max: 20, initial: 12 });
-  for (let size = 5; size <= 20; size += 1) assert.equal(sanitizeDossierTextSize(size), size);
+test('text size accepts every integer from 11 to 20, preserves legacy choices, and isolates each preference', () => {
+  assert.deepEqual(DOSSIER_TEXT_SIZE_BOUNDS, { min: 11, max: 20, initial: 12 });
+  for (let size = 11; size <= 20; size += 1) assert.equal(sanitizeDossierTextSize(size), size);
   for (const previous of [14, 16, 18]) assert.equal(sanitizeDossierTextSize(previous), previous);
-  assert.equal(sanitizeDossierTextSize(0), 5);
+  // A size saved under the former 5px minimum now reads at 11px.
+  for (const tiny of [0, 5, 9, 10]) assert.equal(sanitizeDossierTextSize(tiny), 11);
   assert.equal(sanitizeDossierTextSize(100), 20);
   assert.equal(sanitizeDossierTextSize(12.2), 12);
   for (const invalid of [null, undefined, '', '18', {}, Infinity, NaN]) assert.equal(sanitizeDossierTextSize(invalid), 12);
@@ -151,12 +152,15 @@ test('text size accepts every integer from 5 to 20, preserves legacy choices, an
   assert.equal(dossierTextSizeStorageKey('one', 'unknown'), null);
 });
 
-test('automatic, table and card layouts are independently scoped and safely default to automatic', () => {
+test('cards or table is one choice for the whole dossier list, per person, and safely defaults to automatic', () => {
   for (const layout of ['auto', 'table', 'cards']) assert.equal(sanitizeDossierTableLayout(layout), layout);
   for (const invalid of ['grid', '', null, undefined, {}, 0]) assert.equal(sanitizeDossierTableLayout(invalid), 'auto');
   const key = dossierLayoutStorageKey('one', 'daily');
   assert.notEqual(key, dossierLayoutStorageKey('two', 'daily'));
-  assert.notEqual(key, dossierLayoutStorageKey('one', 'departures'));
+  // The four tabs share it; it is the key « Travail quotidien » always used, so an earlier choice stays.
+  for (const view of ['payments', 'departures', 'accords']) assert.equal(dossierLayoutStorageKey('one', view), key, view);
+  assert.equal(key, 'expedile:table-layout:v1:one:daily');
+  assert.notEqual(dossierLayoutStorageKey('one', 'work'), key, 'Mon travail keeps its own.');
   for (const other of [columnWidthsStorageKey, columnVisibilityStorageKey, dossierTextSizeStorageKey]) assert.notEqual(key, other('one', 'daily'));
   assert.equal(dossierLayoutStorageKey(null, 'daily'), null);
   assert.equal(dossierLayoutStorageKey('one', 'unknown'), null);
@@ -167,18 +171,24 @@ test('Mon travail keeps its own preferences, its task column required and a 15px
     assert.match(key('one', 'work'), /:work$/);
     assert.notEqual(key('one', 'work'), key('two', 'work'));
     for (const view of ['daily', 'payments', 'departures', 'accords']) assert.notEqual(key('one', 'work'), key('one', view));
-    // « Accords clients » keeps its own widths, columns, text size and layout.
-    assert.match(key('one', 'accords'), /:accords$/);assert.notEqual(key('one', 'accords'), key('one', 'daily'));
     assert.equal(key(null, 'work'), null);
     assert.equal(key('one', 'unknown'), null);
   }
+  // « Accords clients » keeps its own widths, columns and text size (the layout is one choice for the list).
+  for (const key of [dossierTextSizeStorageKey, columnWidthsStorageKey, columnVisibilityStorageKey]) { assert.match(key('one', 'accords'), /:accords$/);assert.notEqual(key('one', 'accords'), key('one', 'daily')); }
   assert.equal(requiredTableColumn('work'), 'task');
   for (const view of ['daily', 'payments', 'departures', 'unknown']) assert.equal(requiredTableColumn(view), 'ref');
   assert.deepEqual(sanitizeHiddenColumns(WORK_TABLE_CHOICES, ['task', 'casier', 'action', 'ref'], 'task'), ['ref', 'casier']);
   assert.deepEqual(sanitizeHiddenColumns(WORK_TABLE_CHOICES, WORK_TABLE_CHOICES.map(item => item.key), 'task'), ['due', 'ref', 'client', 'casier', 'cartons']);
   assert.deepEqual(sanitizeHiddenColumns(columns, ['ref', 'client']), ['client'], 'The dossier reference stays the default requirement.');
   assert.equal(tableTextSizeInitial('work'), 15);
-  for (const view of ['daily', 'payments', 'departures']) assert.equal(tableTextSizeInitial(view), DOSSIER_TEXT_SIZE_BOUNDS.initial);
+  // Without a browser (no touch, no narrow window) the computer size applies.
+  for (const view of ['daily', 'payments', 'departures', 'accords']) assert.equal(tableTextSizeInitial(view), DOSSIER_TEXT_SIZE_BOUNDS.initial);
+  // A touch screen or a window under 1024px opens the dossier list at 14px; Mon travail keeps 15px.
+  for (const view of ['daily', 'payments', 'departures', 'accords']) assert.equal(tableTextSizeInitial(view, { touch: true }), DOSSIER_TOUCH_TEXT_SIZE);
+  assert.equal(DOSSIER_TOUCH_TEXT_SIZE, 14);assert.equal(tableTextSizeInitial('work', { touch: true }), 15);
+  assert.equal(sanitizeDossierTextSize(undefined, tableTextSizeInitial('daily', { touch: true })), 14);
+  assert.equal(sanitizeDossierTextSize(9, tableTextSizeInitial('daily', { touch: true })), 11, 'A saved size wins over the default, within the bounds.');
   assert.equal(sanitizeDossierTextSize(undefined, tableTextSizeInitial('work')), 15);
   assert.equal(sanitizeDossierTextSize(18, tableTextSizeInitial('work')), 18);
   assert.equal(sanitizeDossierTextSize(40, tableTextSizeInitial('work')), 20);
@@ -241,4 +251,10 @@ test('« Accord » is filtered on one exact state, and the consent dates on thei
   assert.deepEqual(run({ lastRelanceAt: filter('filled') }), ['awaited']);
   assert.deepEqual(run({ lastRelanceAt: filter('contains', '03/10/2026') }), ['awaited']);
   assert.deepEqual(dossierColumnSuggestions(rows, consent, { models: new Map() }), ['À soumettre', 'Le client attend', 'Réponse attendue']);
+});
+
+test('the default widths keep every heading whole with a wide fallback font, a few pixels to spare', () => {
+  // Verdana at 12px measured 106, 70, 89 and 78px; a heading keeps 43px for its padding and filter button.
+  const room = key => columnWidthBounds({ key }).initial - 43;
+  for (const [key, text] of [['owner', 106], ['optimizedWeight', 70], ['sentAt', 89], ['destination', 78]]) assert.ok(room(key) >= text + 6, `${key}: ${room(key)} >= ${text + 6}`);
 });

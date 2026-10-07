@@ -7,10 +7,17 @@ export const CLIENT_GROUP_PREFIX = 'client:';
 export const UNKNOWN_CLIENT_GROUP_KEY = 'client:unknown';
 const UNKNOWN_CLIENT_LABEL = 'Client non renseigné';
 
-/** « Flavie Payet »: first name then family name, as the client is addressed. */
+/** « Payet Flavie »: the family name then the first name, as the dossier rows
+ * show the client (mapClient `nom`); null when the record names nobody. */
+export function clientDisplayName(client) {
+  const name = client?.nomFamille ? [client.nomFamille, client.prenom].filter(Boolean).join(' ') : client?.nom || client?.prenom;
+  return typeof name === 'string' && name.trim() ? name.trim() : null;
+}
+
+/** The title of a client band: the same name as its rows, so a band and its
+ * dossiers read alike. */
 export function clientGroupTitle(client) {
-  const name = client?.nomFamille || client?.prenom ? [client.prenom, client.nomFamille].filter(Boolean).join(' ') : client?.nom;
-  return typeof name === 'string' && name.trim() ? name.trim() : UNKNOWN_CLIENT_LABEL;
+  return clientDisplayName(client) || UNKNOWN_CLIENT_LABEL;
 }
 
 const compareKey = (left, right) => left < right ? -1 : left > right ? 1 : 0;
@@ -21,7 +28,8 @@ export function clientGroupDistinction(client) {
   return [client?.ref, client?.ville || client?.commune, client?.email].map(value => typeof value === 'string' ? value.trim() : '').find(Boolean) || null;
 }
 
-/** One band per client, keyed `client:<id>` (`client:unknown` without a client):
+/** One band per client, keyed `client:<id>` (`client:unknown` without a client),
+ * titled like its rows (« Payet Flavie »):
  * the client whose oldest dossier was received first leads, then by name.
  * `receivedAt(dossier)` gives a dossier's first reception (an ISO instant, or
  * null when unknown: such bands follow the dated ones). Each band keeps the

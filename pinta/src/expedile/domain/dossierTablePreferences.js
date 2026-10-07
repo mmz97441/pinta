@@ -1,15 +1,27 @@
 import { isDossierTableColumnSortable, formatDossierTableDate } from './dossierTable.js';
 
 export const COLUMN_FILTER_PREFIX = 'col.';
-const widths = { ref: 140, client: 180, statusLabel: 155, paymentState: 140, statut: 190, owner: 125, casier: 90, cartons: 100, receivedAt: 130, optimizedDimensions: 190, optimizedWeight: 110, requested: 130, paid: 115, remaining: 130, sentAt: 130, departure: 140, destination: 115, packages: 135, readiness: 195, consentState: 150, consentRequestedAt: 180, lastRelanceAt: 165, action: 140 };
+// Each heading reads whole at the default text size, even with a wide fallback
+// font (Verdana, DejaVu Sans): « Qui s’en occupe », « Poids (kg) », « Devis
+// envoyé » and « Destination » keep a few pixels to spare.
+const widths = { ref: 140, client: 180, statusLabel: 155, paymentState: 140, statut: 190, owner: 160, casier: 90, cartons: 100, receivedAt: 130, optimizedDimensions: 190, optimizedWeight: 120, requested: 130, paid: 115, remaining: 130, sentAt: 140, departure: 140, destination: 130, packages: 135, readiness: 195, consentState: 150, consentRequestedAt: 180, lastRelanceAt: 165, action: 140 };
 // Each dossier preset and Mon travail (`work`) keep their own reading choices.
 const PREFERENCE_VIEWS = ['daily', 'payments', 'departures', 'accords', 'work'];
 const preferenceView = view => PREFERENCE_VIEWS.includes(view);
-export const DOSSIER_TEXT_SIZE_BOUNDS = Object.freeze({ min: 5, max: 20, initial: 12 });
+// Never under 11px: a smaller size is not readable on any screen.
+export const DOSSIER_TEXT_SIZE_BOUNDS = Object.freeze({ min: 11, max: 20, initial: 12 });
+/** The dossier lists open at 14px on a touch screen or below 1024px. */
+export const DOSSIER_TOUCH_TEXT_SIZE = 14;
+const TOUCH_OR_NARROW = '(pointer: coarse), (max-width: 1023px)';
+/** A touch screen, or a window narrower than 1024px (phones and tablets). */
+export function touchOrNarrowScreen() {
+  try { return typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia(TOUCH_OR_NARROW).matches; }
+  catch { return false; }
+}
 /** Mon travail opens at a reading size close to its former text; the dossier
- * tables keep their compact 12px. */
-export function tableTextSizeInitial(view) {
-  return view === 'work' ? 15 : DOSSIER_TEXT_SIZE_BOUNDS.initial;
+ * tables keep their compact 12px on a computer and 14px on phones and tablets. */
+export function tableTextSizeInitial(view, { touch = touchOrNarrowScreen() } = {}) {
+  return view === 'work' ? 15 : touch ? DOSSIER_TOUCH_TEXT_SIZE : DOSSIER_TEXT_SIZE_BOUNDS.initial;
 }
 export function sanitizeDossierTextSize(value, initial = DOSSIER_TEXT_SIZE_BOUNDS.initial) {
   const { min, max } = DOSSIER_TEXT_SIZE_BOUNDS;
@@ -21,8 +33,12 @@ export function dossierTextSizeStorageKey(userId, view) {
 export function sanitizeDossierTableLayout(value) {
   return ['auto', 'table', 'cards'].includes(value) ? value : 'auto';
 }
+/** Cards or table is one choice for the whole dossier list (its four tabs):
+ * they share the key « Travail quotidien » always used, so a choice made there
+ * before stays. Mon travail keeps its own. */
 export function dossierLayoutStorageKey(userId, view) {
-  return userId && preferenceView(view) ? `expedile:table-layout:v1:${encodeURIComponent(userId)}:${view}` : null;
+  const scope = view === 'work' ? 'work' : 'daily';
+  return userId && preferenceView(view) ? `expedile:table-layout:v1:${encodeURIComponent(userId)}:${scope}` : null;
 }
 /** « Regrouper » of each dossier list tab: none, by stage, by departure or by
  * client. « Départs » opens grouped by departure, « Accords clients » by

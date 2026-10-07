@@ -1,7 +1,7 @@
 /* eslint-env node */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { groupDossiersByClient, clientGroupTitle, clientGroupDistinction, CLIENT_GROUP_PREFIX, UNKNOWN_CLIENT_GROUP_KEY } from './clientGroups.js';
+import { groupDossiersByClient, clientGroupTitle, clientDisplayName, clientGroupDistinction, CLIENT_GROUP_PREFIX, UNKNOWN_CLIENT_GROUP_KEY } from './clientGroups.js';
 
 // mapClient: `nom` is « Payet Flavie », `nomFamille` the family name.
 const CLIENTS = {
@@ -22,8 +22,8 @@ test('one band per client, the client whose oldest dossier arrived first leading
     dossier('h2', 'hoarau', '2026-09-14T08:00:00Z'), dossier('p3', 'payet', null),
   ];
   assert.deepEqual(shape(groupDossiersByClient(dossiers, { getClient, receivedAt })), [
-    { key: 'client:payet', title: 'Flavie Payet', dossiers: ['p1', 'p2', 'p3'] },
-    { key: 'client:hoarau', title: 'Lucas Hoarau', dossiers: ['h1', 'h2'] },
+    { key: 'client:payet', title: 'Payet Flavie', dossiers: ['p1', 'p2', 'p3'] },
+    { key: 'client:hoarau', title: 'Hoarau Lucas', dossiers: ['h1', 'h2'] },
     { key: 'client:lagon', title: 'Lagon Services', dossiers: ['l1'] },
   ], 'Each band keeps the incoming (sorted) order of its dossiers.');
   assert.equal(groupDossiersByClient(dossiers, { getClient, receivedAt })[0].client, CLIENTS.payet);
@@ -35,9 +35,9 @@ test('bands without a known reception follow the dated ones, ties go by name the
     dossier('a1', 'adam', null), dossier('h1', 'hoarau', 'pas une date'), dossier('p1', 'payet', '2026-09-30T08:00:00Z'),
     dossier('l1', 'lagon', '2026-09-30T08:00:00Z'),
   ], { getClient, receivedAt });
-  // « Flavie Payet » before « Lagon Services » on the same day; « Lucas Hoarau » before « Zoé Adam » without a date.
-  assert.deepEqual(groups.map(group => group.key), ['client:payet', 'client:lagon', 'client:hoarau', 'client:adam']);
-  assert.deepEqual(shape(groupDossiersByClient([dossier('x', 'payet', '2026-09-01T08:00:00Z')], { getClient })), [{ key: 'client:payet', title: 'Flavie Payet', dossiers: ['x'] }], 'Without dates, the order is by name.');
+  // « Lagon Services » before « Payet Flavie » on the same day; « Adam Zoé » before « Hoarau Lucas » without a date.
+  assert.deepEqual(groups.map(group => group.key), ['client:lagon', 'client:payet', 'client:adam', 'client:hoarau']);
+  assert.deepEqual(shape(groupDossiersByClient([dossier('x', 'payet', '2026-09-01T08:00:00Z')], { getClient })), [{ key: 'client:payet', title: 'Payet Flavie', dossiers: ['x'] }], 'Without dates, the order is by name.');
 });
 
 test('a dossier without a client, or a client the person cannot read, never joins another band', () => {
@@ -45,7 +45,7 @@ test('a dossier without a client, or a client the person cannot read, never join
   assert.deepEqual(shape(groups), [
     { key: UNKNOWN_CLIENT_GROUP_KEY, title: 'Client non renseigné', dossiers: ['n1', 'n2'] },
     { key: 'client:unreadable', title: 'Client non renseigné', dossiers: ['u1'] },
-    { key: 'client:payet', title: 'Flavie Payet', dossiers: ['p1'] },
+    { key: 'client:payet', title: 'Payet Flavie', dossiers: ['p1'] },
   ]);
   assert.equal(groups[0].client, null);assert.equal(groups[1].client, null);
   assert.deepEqual(groupDossiersByClient(), []);assert.deepEqual(groupDossiersByClient(null), []);
@@ -61,7 +61,7 @@ test('two clients with the same name get their reference as the bands’ seconda
   const groups = groupDossiersByClient([dossier('m1', 'marie1', '2026-09-10T08:00:00Z'), dossier('p1', 'payet', '2026-09-11T08:00:00Z'), dossier('m2', 'marie2', '2026-09-12T08:00:00Z'), dossier('m3', 'marie3', '2026-09-13T08:00:00Z')],
     { getClient: id => twins[id], receivedAt });
   assert.deepEqual(groups.map(group => [group.key, group.title, group.ref]), [
-    ['client:marie1', 'Marie Payet', 'CLI-0012'], ['client:payet', 'Flavie Payet', null], ['client:marie2', 'Marie Payet', 'CLI-0458'], ['client:marie3', 'Marie Payet', 'Le Port'],
+    ['client:marie1', 'Payet Marie', 'CLI-0012'], ['client:payet', 'Payet Flavie', null], ['client:marie2', 'Payet Marie', 'CLI-0458'], ['client:marie3', 'Payet Marie', 'Le Port'],
   ], 'Only the bands whose titles repeat carry a reference; without one, the town.');
   assert.equal(clientGroupDistinction({ email: 'marie@example.test' }), 'marie@example.test');
   assert.equal(clientGroupDistinction({ commune: 'Cilaos' }), 'Cilaos');
@@ -70,11 +70,17 @@ test('two clients with the same name get their reference as the bands’ seconda
   assert.deepEqual(groupDossiersByClient([dossier('n1', null, null), dossier('u1', 'unreadable', null)], { getClient: () => undefined }).map(group => group.ref), [null, null]);
 });
 
-test('the band title addresses the client by first name then family name', () => {
-  assert.equal(clientGroupTitle(CLIENTS.payet), 'Flavie Payet');
+test('the band title names the client as its rows do: family name, then first name', () => {
+  // mapClient builds `nom` as « Payet Flavie »: the band and its rows read alike.
+  assert.equal(clientGroupTitle(CLIENTS.payet), 'Payet Flavie');
+  assert.equal(clientGroupTitle(CLIENTS.payet), CLIENTS.payet.nom);
+  assert.equal(clientGroupTitle(CLIENTS.lagon), 'Lagon Services', 'A company without a first name keeps its name alone.');
   assert.equal(clientGroupTitle({ nom: 'Grondin Paul' }), 'Grondin Paul', 'A record without its parts keeps its name.');
   assert.equal(clientGroupTitle({ prenom: 'Nadia' }), 'Nadia');
+  assert.equal(clientGroupTitle({ nom: ' Nadia', nomFamille: '', prenom: 'Nadia' }), 'Nadia', 'mapClient without a family name: no leading space.');
   for (const unknown of [null, undefined, {}, { nom: '  ' }]) assert.equal(clientGroupTitle(unknown), 'Client non renseigné');
+  for (const unknown of [null, undefined, {}, { nom: '  ' }]) assert.equal(clientDisplayName(unknown), null, 'The row says « Client non renseigné » itself.');
+  assert.equal(clientDisplayName(CLIENTS.hoarau), 'Hoarau Lucas');
 });
 
 test('grouping is pure: the dossiers and the input order are untouched', () => {

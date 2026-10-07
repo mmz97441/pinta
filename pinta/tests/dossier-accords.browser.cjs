@@ -8,8 +8,9 @@
  *   in Paris;
  * - departures: Réunion 8 Oct (closes Wednesday 7 Oct, 17 h: within 48 hours),
  *   15, 22 and 29 Oct; Guadeloupe 15 and 22 Oct; Réunion 1 Oct (departed);
- * - clients: Flavie Payet (Réunion, portal + Telegram), Lucas Hoarau (Réunion,
- *   subscription until 18 Oct), Nadia Jacoby (Guadeloupe), Paul Grondin (Réunion);
+ * - clients: Payet Flavie (Réunion, portal + Telegram), Hoarau Lucas (Réunion,
+ *   subscription until 18 Oct), Jacoby Nadia (Guadeloupe), Grondin Paul (Réunion),
+ *   named as the rows and the client bands show them;
  * - dossiers EXP-ACC001…013, listed in fixture() with their status, client and
  *   departure. The consent states: ACC001 and ACC010 to submit (receptionne),
  *   ACC002, ACC006 and ACC012 to submit (mesure), ACC003 awaited (with
@@ -250,10 +251,10 @@ const fieldError = scope => scope.locator('.dossier-departure-picker [role="aler
 // whose oldest dossier arrived first leading (ACC001 on 11 September, ACC004 on
 // 14, ACC006 on 16, ACC010 on 20). The others are past consent, or archived (ACC011).
 const ACCORD_GROUPS = [
-  { key: `client:${CLIENT.payet}`, title: 'Flavie Payet', count: '3 dossiers', dossiers: [DOSSIER.ACC001, DOSSIER.ACC002, DOSSIER.ACC003] },
-  { key: `client:${CLIENT.hoarau}`, title: 'Lucas Hoarau', count: '3 dossiers', dossiers: [DOSSIER.ACC004, DOSSIER.ACC005, DOSSIER.ACC012] },
-  { key: `client:${CLIENT.grondin}`, title: 'Paul Grondin', count: '1 dossier', dossiers: [DOSSIER.ACC006] },
-  { key: `client:${CLIENT.jacoby}`, title: 'Nadia Jacoby', count: '1 dossier', dossiers: [DOSSIER.ACC010] },
+  { key: `client:${CLIENT.payet}`, title: 'Payet Flavie', count: '3 dossiers', dossiers: [DOSSIER.ACC001, DOSSIER.ACC002, DOSSIER.ACC003] },
+  { key: `client:${CLIENT.hoarau}`, title: 'Hoarau Lucas', count: '3 dossiers', dossiers: [DOSSIER.ACC004, DOSSIER.ACC005, DOSSIER.ACC012] },
+  { key: `client:${CLIENT.grondin}`, title: 'Grondin Paul', count: '1 dossier', dossiers: [DOSSIER.ACC006] },
+  { key: `client:${CLIENT.jacoby}`, title: 'Jacoby Nadia', count: '1 dossier', dossiers: [DOSSIER.ACC010] },
 ];
 const ACCORD_DOSSIERS = ACCORD_GROUPS.flatMap(group => group.dossiers);
 const ACCORD_COLUMNS = [['ref', 'Référence'], ['client', 'Client'], ['receivedAt', 'Dernière réception'], ['consentState', 'Accord'], ['consentRequestedAt', 'Demande envoyée le'],
@@ -1220,12 +1221,12 @@ async function main() {
       assert.deepEqual((await shownIds(f)).sort(), [...ACCORD_DOSSIERS].sort());
       await countStatus(f, 8).waitFor();
       assert.equal(await f.page.locator('[aria-label="Vues du tableau"] [aria-pressed="true"]').innerText(), 'Accords clients');
-      // « Flavie Payet », then « 3 dossiers »; the band folds by its name and selects every dossier.
+      // « Payet Flavie », as its rows read, then « 3 dossiers »; the band folds by its name and selects every dossier.
       const band = f.page.locator(`tr[data-dossier-group="client:${CLIENT.payet}"]`);
-      assert.equal((await band.innerText()).replace(/\s+/g, ' ').trim(), 'Flavie Payet 3 dossiers');
-      const toggle = band.getByRole('button', { name: 'Flavie Payet', exact: true });
+      assert.equal((await band.innerText()).replace(/\s+/g, ' ').trim(), 'Payet Flavie 3 dossiers');
+      const toggle = band.getByRole('button', { name: 'Payet Flavie', exact: true });
       assert.equal(await toggle.evaluate(node => (node.getAttribute('aria-describedby') || '').split(/\s+/).map(id => document.getElementById(id)?.textContent.trim()).join(' ')), '3 dossiers');
-      await band.getByRole('checkbox', { name: 'Sélectionner le groupe Flavie Payet', exact: true }).waitFor();
+      await band.getByRole('checkbox', { name: 'Sélectionner le groupe Payet Flavie', exact: true }).waitFor();
       assert.equal(await band.locator('svg.dossier-group-icon').count(), 1, 'A lucide icon, no emoji.');
       // Its columns, the action last; no status or payment column.
       assert.deepEqual(await f.page.locator('table.dossier-data-table thead th[data-column-label]').evaluateAll(nodes => nodes.map(node => [node.dataset.column, node.dataset.columnLabel])), ACCORD_COLUMNS);
@@ -1257,15 +1258,16 @@ async function main() {
         assert.deepEqual([cell.text, cell.placeholder], [text, false], REF[id]);
         assert.equal(await f.page.locator(`tr[data-dossier-row="${id}"] td[data-column="consentRequestedAt"] time`).getAttribute('datetime'), f.tables.colis.find(item => item.id === id).demande_feu_vert_envoyee_at);
       }
-      for (const id of [DOSSIER.ACC001, DOSSIER.ACC002, DOSSIER.ACC006]) assert.deepEqual(await tableCell(f, id, 'consentRequestedAt'), { text: 'Non renseigné', pill: null, tone: null, secondary: [], placeholder: true });
+      for (const id of [DOSSIER.ACC001, DOSSIER.ACC002, DOSSIER.ACC006]) assert.deepEqual(await tableCell(f, id, 'consentRequestedAt'), { text: 'Pas encore envoyée', pill: null, tone: null, secondary: [], placeholder: true });
       // « Dernière relance »: the latest relance of the current request; a draft never reads as sent.
       const relance = async id => { const cell = await tableCell(f, id, 'lastRelanceAt'); return [cell.text, cell.secondary, cell.placeholder]; };
       assert.deepEqual(await relance(DOSSIER.ACC003), ['05/10/2026', [], false]);
       assert.deepEqual(await relance(DOSSIER.ACC005), ['03/10/2026 Brouillon manuel', ['Brouillon manuel'], false]);
-      for (const id of [DOSSIER.ACC004, DOSSIER.ACC012, DOSSIER.ACC001]) assert.deepEqual(await relance(id), ['Non renseigné', [], true], `${REF[id]}: no relance of a current request.`);
+      for (const id of [DOSSIER.ACC004, DOSSIER.ACC012, DOSSIER.ACC001]) assert.deepEqual(await relance(id), ['Aucune relance', [], true], `${REF[id]}: no relance of a current request.`);
       // Cartons, Casier and the departure column with the desired day.
       assert.deepEqual([(await tableCell(f, DOSSIER.ACC001, 'cartons')).text, (await tableCell(f, DOSSIER.ACC001, 'casier')).text], ['2', 'C-001']);
-      for (const [id, text] of [[DOSSIER.ACC001, 'À planifier'], [DOSSIER.ACC002, 'Prévu le 08/10/2026'], [DOSSIER.ACC003, 'Prévu le 08/10/2026'], [DOSSIER.ACC006, 'Souhaité le 19/11/2026 · à créer']])
+      // « À choisir », as the dossier's own Départ field reads.
+      for (const [id, text] of [[DOSSIER.ACC001, 'À choisir'], [DOSSIER.ACC002, 'Prévu le 08/10/2026'], [DOSSIER.ACC003, 'Prévu le 08/10/2026'], [DOSSIER.ACC006, 'Souhaité le 19/11/2026 · à créer']])
         assert.equal((await tableCell(f, id, 'departure')).text, text, REF[id]);
       // The action names the work: the relance before the closing is work to take.
       const action = f.page.locator(`tr[data-dossier-row="${DOSSIER.ACC003}"] td[data-column="action"]`);
@@ -1343,7 +1345,8 @@ async function main() {
       assert.deepEqual(data[0], ACCORD_COLUMNS.filter(([key]) => key !== 'action').map(([, label]) => label));
       assert.deepEqual(data.slice(1).map(line => line[0]), bands.flatMap(group => [...group.dossiers].reverse().map(id => REF[id])));
       const line = id => data.find(item => item[0] === REF[id]);
-      assert.deepEqual(line(DOSSIER.ACC004).slice(3, 6), ['Le client attend · jusqu’au 25/10', '01/10/2026', 'Non renseigné']);
+      assert.deepEqual(line(DOSSIER.ACC004).slice(3, 6), ['Le client attend · jusqu’au 25/10', '01/10/2026', 'Aucune relance']);
+      assert.deepEqual(line(DOSSIER.ACC001).slice(3, 6), ['À soumettre', 'Pas encore envoyée', 'Aucune relance']);
       assert.deepEqual(line(DOSSIER.ACC003).slice(3, 9), ['Réponse attendue', '02/10/2026', '05/10/2026', 2, 'C-003', 'Prévu le 08/10/2026']);
       assert.equal(line(DOSSIER.ACC006)[8], 'Souhaité le 19/11/2026 · à créer');
       assertNoBusinessWrite(f);
@@ -1352,10 +1355,10 @@ async function main() {
     await scenario('grouping-by-client-is-offered-in-every-tab-and-remembered-per-tab', async f => {
       // Every dossier of the list (not the archived ACC011), one band per client.
       const daily = [
-        { key: `client:${CLIENT.payet}`, title: 'Flavie Payet', count: '5 dossiers', dossiers: [DOSSIER.ACC001, DOSSIER.ACC002, DOSSIER.ACC003, DOSSIER.ACC009, DOSSIER.ACC013] },
-        { key: `client:${CLIENT.hoarau}`, title: 'Lucas Hoarau', count: '3 dossiers', dossiers: [DOSSIER.ACC004, DOSSIER.ACC005, DOSSIER.ACC012] },
-        { key: `client:${CLIENT.grondin}`, title: 'Paul Grondin', count: '2 dossiers', dossiers: [DOSSIER.ACC006, DOSSIER.ACC008] },
-        { key: `client:${CLIENT.jacoby}`, title: 'Nadia Jacoby', count: '2 dossiers', dossiers: [DOSSIER.ACC007, DOSSIER.ACC010] },
+        { key: `client:${CLIENT.payet}`, title: 'Payet Flavie', count: '5 dossiers', dossiers: [DOSSIER.ACC001, DOSSIER.ACC002, DOSSIER.ACC003, DOSSIER.ACC009, DOSSIER.ACC013] },
+        { key: `client:${CLIENT.hoarau}`, title: 'Hoarau Lucas', count: '3 dossiers', dossiers: [DOSSIER.ACC004, DOSSIER.ACC005, DOSSIER.ACC012] },
+        { key: `client:${CLIENT.grondin}`, title: 'Grondin Paul', count: '2 dossiers', dossiers: [DOSSIER.ACC006, DOSSIER.ACC008] },
+        { key: `client:${CLIENT.jacoby}`, title: 'Jacoby Nadia', count: '2 dossiers', dossiers: [DOSSIER.ACC007, DOSSIER.ACC010] },
       ];
       await f.page.goto(`${base}/colis`);await countStatus(f, 12).waitFor();await assertGroups(f, []);
       let display = await openDisplay(f);
@@ -1403,7 +1406,7 @@ async function main() {
       await f.page.goto(`${base}/colis`);await countStatus(f, 12).waitFor();
       assert.ok((await orders()).includes('total_desc'), 'Where the quote price shows, amounts can order the list.');
       await selectTab(f, 'Accords clients', 'accords');
-      assert.deepEqual(await orders(), ['priority', 'date_desc', 'date_asc', 'ref_asc'], 'No amount here: the tab shows no price.');
+      assert.deepEqual(await orders(), ['priority', 'date_desc', 'date_asc'], 'No amount here: the tab shows no price (and the reference order is a column order).');
       await (await sortMenu()).selectOption('date_asc');
       await f.page.waitForFunction(key => localStorage.getItem(key) === 'date_asc', `expedile_default_sort_v2:${ids.A}:accords`);
       assert.equal(await storedSort(':accords'), 'date_asc');
@@ -1438,12 +1441,12 @@ async function main() {
     });
 
     await scenario('two-clients-with-the-same-name-are-told-apart-by-their-reference', async f => {
-      // Paul Grondin's record now reads « Flavie Payet » too.
+      // Paul Grondin's record now reads « Payet Flavie » too.
       Object.assign(f.tables.clients.find(client => client.id === CLIENT.grondin), { prenom: 'Flavie', nom: 'Payet' });
       await openAccords(f);
       await assertGroups(f, ACCORD_GROUPS.map(group => group.key === `client:${CLIENT.payet}` ? { ...group, ref: 'CLI-ACC-01' }
-        : group.key === `client:${CLIENT.grondin}` ? { ...group, title: 'Flavie Payet', ref: 'CLI-ACC-04' } : group));
-      for (const ref of ['CLI-ACC-01', 'CLI-ACC-04']) await f.page.getByRole('checkbox', { name: `Sélectionner le groupe Flavie Payet · ${ref}`, exact: true }).filter({ visible: true }).waitFor();
+        : group.key === `client:${CLIENT.grondin}` ? { ...group, title: 'Payet Flavie', ref: 'CLI-ACC-04' } : group));
+      for (const ref of ['CLI-ACC-01', 'CLI-ACC-04']) await f.page.getByRole('checkbox', { name: `Sélectionner le groupe Payet Flavie · ${ref}`, exact: true }).filter({ visible: true }).waitFor();
       await noPageOverflow(f);await axe(f);
       await f.page.screenshot({ path: `${output}/accords-same-name-1440.png` });
       assertNoBusinessWrite(f);
@@ -1465,7 +1468,7 @@ async function main() {
       assert.deepEqual(await f.page.locator('table.dossier-data-table thead .dossier-table-heading-text').evaluateAll(nodes => nodes.filter(node => node.scrollWidth > node.clientWidth + 1).map(node => node.textContent)), []);
       // Hovered and selected rows keep their pills readable.
       await f.page.locator(`tr[data-dossier-row="${DOSSIER.ACC004}"] td[data-column="client"]`).hover();await readable('hover');
-      await f.page.getByRole('checkbox', { name: 'Sélectionner le groupe Lucas Hoarau', exact: true }).filter({ visible: true }).check();
+      await f.page.getByRole('checkbox', { name: 'Sélectionner le groupe Hoarau Lucas', exact: true }).filter({ visible: true }).check();
       await f.page.getByRole('group', { name: 'Actions sur la sélection', exact: true }).getByText('3 dossiers sélectionnés', { exact: true }).waitFor();
       await f.page.mouse.move(0, 0);await readable('selected');
       await f.page.getByRole('button', { name: 'Désélectionner tout', exact: true }).click();
@@ -1486,17 +1489,17 @@ async function main() {
       const card = f.page.locator(`[data-dossier-card="${DOSSIER.ACC004}"]`);
       assert.equal((await card.locator('.dossier-table-card-heading [data-column="consentState"]').innerText()).replace(/\s+/g, ' ').trim(), 'Le client attend jusqu’au 25/10');
       assert.deepEqual(await card.locator('.dossier-table-card-facts > div').evaluateAll(nodes => nodes.map(node => [node.dataset.column, node.querySelector('dt').textContent.trim(), node.querySelector('dd').textContent.replace(/\s+/g, ' ').trim()])), [
-        ['receivedAt', 'Dernière réception', '16/09/2026'], ['consentRequestedAt', 'Demande envoyée le', '01/10/2026'], ['lastRelanceAt', 'Dernière relance', 'Non renseigné'],
-        ['cartons', 'Cartons reçus', '2'], ['casier', 'Casier', 'C-004'], ['departure', 'Départ prévu', 'À planifier'],
+        ['receivedAt', 'Dernière réception', '16/09/2026'], ['consentRequestedAt', 'Demande envoyée le', '01/10/2026'], ['lastRelanceAt', 'Dernière relance', 'Aucune relance'],
+        ['cartons', 'Cartons reçus', '2'], ['casier', 'Casier', 'C-004'], ['departure', 'Départ prévu', 'À choisir'],
       ]);
       await f.page.screenshot({ path: `${output}/accords-cards-390-${theme}.png`, fullPage: true });
       // A band folds and selects its dossiers, with 44px controls inside the phone.
-      const toggle = f.page.getByRole('button', { name: 'Lucas Hoarau', exact: true }).filter({ visible: true });
-      const checkbox = f.page.getByRole('checkbox', { name: 'Sélectionner le groupe Lucas Hoarau', exact: true }).filter({ visible: true });
+      const toggle = f.page.getByRole('button', { name: 'Hoarau Lucas', exact: true }).filter({ visible: true });
+      const checkbox = f.page.getByRole('checkbox', { name: 'Sélectionner le groupe Hoarau Lucas', exact: true }).filter({ visible: true });
       for (const target of [toggle, checkbox.locator('..')]) { const box = await target.boundingBox(); assert.ok(box.height >= 44 && box.x >= 0 && box.x + box.width <= 391, 'Band controls fit the phone with 44px targets.'); }
-      assert.equal(await f.page.getByRole('group', { name: 'Lucas Hoarau', exact: true }).count(), 1, 'The cards of a client are named by their band.');
+      assert.equal(await f.page.getByRole('group', { name: 'Hoarau Lucas', exact: true }).count(), 1, 'The cards of a client are named by their band.');
       await toggle.click();assert.equal(await toggle.getAttribute('aria-expanded'), 'false');
-      await assertGroups(f, ACCORD_GROUPS.map(group => group.title === 'Lucas Hoarau' ? { ...group, dossiers: [] } : group));
+      await assertGroups(f, ACCORD_GROUPS.map(group => group.title === 'Hoarau Lucas' ? { ...group, dossiers: [] } : group));
       await checkbox.check();
       await f.page.getByRole('group', { name: 'Actions sur la sélection', exact: true }).getByText('3 dossiers sélectionnés', { exact: true }).waitFor();
       await toggle.click();await assertGroups(f, ACCORD_GROUPS);
@@ -1510,6 +1513,67 @@ async function main() {
       await f.page.screenshot({ path: `${output}/accords-cards-folded-390-${theme}.png` });
       assertNoBusinessWrite(f);
     }, { width: 390, theme });
+
+    // ── Final review (P4a) ──────────────────────────────────────────────────
+    for (const width of [1440, 1280, 390]) for (const theme of ['light', 'dark']) await scenario(`every-client-band-reads-like-its-rows-${width}-${theme}`, async f => {
+      await openAccords(f);await waitTheme(f, theme);
+      // The band and every dossier under it name the client the same way.
+      const mismatches = await f.page.evaluate(() => {
+        const shown = node => node.getClientRects().length > 0;
+        const bands = [...document.querySelectorAll('[data-dossier-group]')].filter(shown);
+        return bands.flatMap(band => {
+          const title = band.querySelector('.dossier-group-title').textContent.trim();
+          const items = band.tagName === 'TR' ? (() => { const list = []; for (let next = band.nextElementSibling; next && !next.dataset.dossierGroup; next = next.nextElementSibling) list.push(next); return list; })() : [...band.querySelectorAll('[data-dossier-card]')];
+          return items.map(item => item.querySelector('.dossier-table-client-name')?.textContent.trim()).filter(name => name !== title).map(name => `${title} ≠ ${name}`);
+        });
+      });
+      assert.deepEqual(mismatches, []);
+      await assertGroups(f, ACCORD_GROUPS);
+      await noPageOverflow(f);await axe(f);
+      await f.page.screenshot({ path: `${output}/bands-like-rows-${width}-${theme}.png` });
+      assertNoBusinessWrite(f);
+    }, { width, theme });
+
+    for (const width of [1440, 1280, 390]) for (const theme of ['light', 'dark']) await scenario(`an-ended-wait-reads-attente-terminee-to-re-examine-and-a-cancelled-relance-never-awaits-delivery-${width}-${theme}`, async f => {
+      // ACC004's wait ended yesterday (5 October); a Telegram relance queued on 2 October was cancelled
+      // when the client chose to wait (3 October): the server never delivers it.
+      Object.assign(row(f, DOSSIER.ACC004), { attente_client_until: '2026-10-05T08:00:00Z' });
+      f.tables.messages.push({ id: uuid('b2000000', 300), colis_id: DOSSIER.ACC004, type: 'staff', auteur_nom: 'Camille', texte: 'Bonjour, votre accord est toujours attendu.', canal: 'telegram', template: 'relance_feu_vert', statut: 'envoi', lu: true, created_at: '2026-10-02T09:00:00Z' });
+      f.before = structuredClone(f.tables.colis);
+      await openAccords(f);await waitTheme(f, theme);
+      const card = width < 768;
+      const consent = card ? f.page.locator(`[data-dossier-card="${DOSSIER.ACC004}"] .dossier-table-card-heading [data-column="consentState"]`) : f.page.locator(`tr[data-dossier-row="${DOSSIER.ACC004}"] > td[data-column="consentState"]`);
+      assert.equal((await consent.innerText()).replace(/\s+/g, ' ').trim(), 'Attente terminée le 05/10 · à réexaminer');
+      assert.equal(await consent.locator('.dossier-pill').getAttribute('data-tone'), 'review', 'An ended wait asks for a review.');
+      assert.equal(await consent.getByText('Le client attend', { exact: true }).count(), 0);
+      const relanceCell = card ? f.page.locator(`[data-dossier-card="${DOSSIER.ACC004}"] [data-column="lastRelanceAt"] dd`) : f.page.locator(`tr[data-dossier-row="${DOSSIER.ACC004}"] > td[data-column="lastRelanceAt"]`);
+      assert.equal((await relanceCell.innerText()).replace(/\s+/g, ' ').trim(), '02/10/2026 Annulée · attente du client');
+      assert.equal(await f.page.getByText('En attente de livraison', { exact: true }).count(), 0, 'A cancelled relance never reads as awaiting delivery.');
+      // The other wait still runs, without a date.
+      const other = card ? f.page.locator(`[data-dossier-card="${DOSSIER.ACC005}"] .dossier-table-card-heading [data-column="consentState"]`) : f.page.locator(`tr[data-dossier-row="${DOSSIER.ACC005}"] > td[data-column="consentState"]`);
+      assert.equal((await other.innerText()).replace(/\s+/g, ' ').trim(), 'Le client attend');
+      // Its colours stay readable.
+      for (const part of await textStyles(f.page.locator(`${card ? `[data-dossier-card="${DOSSIER.ACC004}"]` : `tr[data-dossier-row="${DOSSIER.ACC004}"]`} [data-column="consentState"] .dossier-pill, ${card ? `[data-dossier-card="${DOSSIER.ACC004}"]` : `tr[data-dossier-row="${DOSSIER.ACC004}"]`} .dossier-table-secondary`).filter({ visible: true }))) {
+        assert.ok(part.size >= 12, `${part.text}: ${part.size}px`);assert.ok(part.ratio >= 4.5, `${part.text}: ${part.ratio.toFixed(2)}:1`);
+      }
+      if (width === 1440) {
+        // The « Accord » filter offers the ended wait, and keeps only it.
+        await filterColumn(f, 'consentState', 'is', 'Attente terminée');
+        await countStatus(f, 1).waitFor();assert.deepEqual(await shownIds(f), [DOSSIER.ACC004]);
+        // The export writes what the screen reads.
+        await f.page.getByRole('button', { name: 'Retirer les filtres', exact: true }).click();await countStatus(f, 8).waitFor();
+        const display = await openDisplay(f);const pending = f.page.waitForEvent('download');
+        await display.getByRole('button', { name: 'Exporter 8 dossiers filtrés', exact: true }).click();
+        const file = await pending;await closeDisplay(f);
+        const data = XLSX.utils.sheet_to_json(XLSX.read(await fs.readFile(await file.path()), { type: 'buffer' }).Sheets.Dossiers, { header: 1 });
+        const line = data.find(item => item[0] === 'EXP-ACC004');
+        assert.deepEqual(line.slice(3, 6), ['Attente terminée le 05/10 · à réexaminer', '01/10/2026', '02/10/2026 · Annulée · attente du client']);
+      }
+      await noPageOverflow(f);await axe(f);
+      await f.page.screenshot({ path: `${output}/ended-wait-${width}-${theme}.png`, fullPage: width < 768 });
+      assertNoBusinessWrite(f);
+    }, { width, theme });
+
   } finally { await browser.close(); await fs.writeFile(`${output}/results.json`, JSON.stringify(results, null, 2)); }
 }
 module.exports = {
