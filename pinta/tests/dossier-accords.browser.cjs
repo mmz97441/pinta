@@ -1483,9 +1483,10 @@ async function main() {
       await f.page.screenshot({ path: `${output}/departure-to-assign-${width}-${theme}.png`, fullPage: true });
       // « Affecter au départ » opens the Départ field; choosing that departure assigns it and the line goes.
       await band.getByRole('link', { name: 'Affecter au départ', exact: true }).click();
-      await combobox(overview(f)).waitFor();await listbox(overview(f)).waitFor();
+      // The calendar opens on the desired day's month: its planned departure day assigns at once.
+      await calendar(overview(f)).waitFor();
       await f.page.waitForURL(url => !url.searchParams.has('modifier'));
-      await option(overview(f), nov19).click();
+      await dayButton(overview(f), '2026-11-19').click();
       await f.page.waitForFunction(id => document.querySelector('[data-testid="dossier-overview"] .dossier-departure-line')?.dataset.envoi === id, nov19);
       assert.deepEqual(commands(f, 'assign_colis_departure'), [{ p_colis_id: DOSSIER.ACC006, p_envoi_id: nov19, p_expected_updated_at: f.before.find(item => item.id === DOSSIER.ACC006).updated_at }]);
       await band.getByText(TO_ASSIGN_19, { exact: true }).waitFor({ state: 'detached' });
@@ -1566,7 +1567,7 @@ async function main() {
       await openDossier(f, DOSSIER.ACC006);
       assert.deepEqual((await bandLines(f)).map(({ text, link }) => [text, link?.label]), [[TO_ASSIGN_19, 'Affecter au départ']]);
       await alertBand(f).getByRole('link', { name: 'Affecter au départ', exact: true }).click();
-      await combobox(overview(f)).waitFor();await listbox(overview(f)).waitFor();
+      await calendar(overview(f)).waitFor();
       await f.page.waitForURL(url => !url.searchParams.has('modifier'));
       assertNoBusinessWrite(f);
     }, { role: 'logisticien', permissions: { perm_colis_affecter_envoi: true, perm_envois_voir: true } });
