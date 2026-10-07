@@ -23,6 +23,9 @@ const NAVY = [27, 58, 75];
 const INK = [0, 0, 0];
 const MUTED = [90, 90, 90];
 const QR_SIZE = 32; // mm, the symbol itself; its quiet zone is the white around it
+// Where the QR code sits: four modules of white (6,1 mm for the 21 modules of these codes)
+// stay clear of the sender line above, of the left column and of the label's right edge.
+const QR_POSITION = { x: 61.8, y: 24.8 };
 const NUMBER = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 2 });
 const SENDER = 'EXPEDÎLE — 75001 PARIS, FRANCE · contact@expedile.fr';
 
@@ -231,7 +234,7 @@ function drawLabel(doc, label) {
   }
   write(doc, dimensions(label.parcel), MARGIN, 55, { size: 10, minSize: 8, maxWidth: column });
   write(doc, `Poids réel ${weight(label.parcel.poids)}`, MARGIN, 59.6, { size: 10, minSize: 8, maxWidth: column, bold: true });
-  drawQrCode(doc, label.code, { x: right - QR_SIZE - 2, y: 23, size: QR_SIZE });
+  drawQrCode(doc, label.code, { ...QR_POSITION, size: QR_SIZE });
 
   doc.setDrawColor(...INK);
   doc.setLineWidth(0.8);

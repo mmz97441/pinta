@@ -140,6 +140,7 @@ jobs:
           node tests/admin-simplicity.browser.cjs || failed_suites="$failed_suites admin-simplicity.browser.cjs"
           PINTA_CLIENT_PAGES_OUT=/tmp/pinta-client-pages node tests/client-pages.browser.cjs || failed_suites="$failed_suites client-pages.browser.cjs"
           PINTA_SETTINGS_DEVIS_OUT=/tmp/pinta-settings-devis node tests/settings-devis.browser.cjs || failed_suites="$failed_suites settings-devis.browser.cjs"
+          PINTA_PARCEL_LABELS_OUT=/tmp/pinta-parcel-labels node tests/parcel-labels.browser.cjs || failed_suites="$failed_suites parcel-labels.browser.cjs"
           if [ -n "$failed_suites" ]; then echo "Suites en échec :$failed_suites"; exit 1; fi
       - uses: actions/upload-artifact@v4
         if: always()
@@ -196,3 +197,4 @@ jobs:
             /tmp/pinta-admin-simplicity
             /tmp/pinta-client-pages
             /tmp/pinta-settings-devis
+            /tmp/pinta-parcel-labels

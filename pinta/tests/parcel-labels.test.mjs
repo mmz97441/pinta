@@ -55,25 +55,35 @@ function subpaths(data) {
   if (points.length) shapes.push(points);
   return shapes;
 }
-/** The page's text items (no-break spaces read as spaces) and each filled subpath as a rectangle, in millimetres from the top left. */
+/** A fill colour of pdf.js (« #rrggbb ») that a scanner reads as white: the light bands of the label. */
+const lightFill = hex => { const value = parseInt(String(hex).slice(1), 16); return ((value >> 16) & 255) + ((value >> 8) & 255) + (value & 255) > 3 * 160; };
+/**
+ * The page's text items (no-break spaces read as spaces), the box of each one (ascent 0,75 em, descent 0,25 em) and
+ * each filled subpath as a rectangle with its colour (`light`), in millimetres from the top left.
+ */
 async function readPage(pdf, number) {
   const page = await pdf.getPage(number);
-  const text = (await page.getTextContent()).items.map(item => item.str.replace(/\u00a0/g, ' ')).filter(item => item.trim());
-  const operators = await page.getOperatorList();
   const height = page.view[3];
+  const items = (await page.getTextContent()).items.filter(item => item.str.trim());
+  const text = items.map(item => item.str.replace(/\u00a0/g, ' '));
+  const boxes = items.map(item => ({ text: item.str, left: item.transform[4] / MM, right: (item.transform[4] + item.width) / MM,
+    top: (height - item.transform[5] - 0.75 * item.height) / MM, bottom: (height - item.transform[5] + 0.25 * item.height) / MM }));
+  const operators = await page.getOperatorList();
   const rects = [];
+  let fill = '#000000';
   operators.fnArray.forEach((fn, index) => {
+    if (fn === pdfjs.OPS.setFillRGBColor) { fill = operators.argsArray[index][0]; return; }
     if (fn !== pdfjs.OPS.constructPath) return;
     const [paint, [path]] = operators.argsArray[index];
     if (paint !== pdfjs.OPS.fill && paint !== pdfjs.OPS.eoFill) return;
     for (const points of subpaths(Array.from(path))) {
       const xs = points.map(([x]) => x), ys = points.map(([, y]) => y);
-      rects.push({ left: Math.min(...xs) / MM, right: Math.max(...xs) / MM, top: (height - Math.max(...ys)) / MM, bottom: (height - Math.min(...ys)) / MM });
+      rects.push({ left: Math.min(...xs) / MM, right: Math.max(...xs) / MM, top: (height - Math.max(...ys)) / MM, bottom: (height - Math.min(...ys)) / MM, light: lightFill(fill) });
     }
   });
-  return { view: page.view, text, rects };
+  return { view: page.view, text, boxes, rects };
 }
-/** The QR code's dark modules, sampled at each module's centre from the rectangles drawn in its area. */
+/** The QR code's dark modules, sampled at each module's centre from the rectangles drawn in its area, and its place. */
 function sampleQr(rects, size) {
   const area = rects.filter(rect => rect.left > 56 && rect.top > 20 && rect.bottom < 62);
   const left = Math.min(...area.map(rect => rect.left)), right = Math.max(...area.map(rect => rect.right));
@@ -84,7 +94,18 @@ function sampleQr(rects, size) {
     const x = left + (column + 0.5) * module, y = top + (row + 0.5) * module;
     matrix.push(area.some(rect => rect.left <= x && x <= rect.right && rect.top <= y && y <= rect.bottom) ? 1 : 0);
   }
-  return { matrix, width: right - left };
+  return { matrix, width: right - left, left, right, top, bottom: top + size * module, module };
+}
+/** The QR code's quiet zone, four modules wide, holds no text and no dark shape and stays on the label. */
+function assertQrQuietZone(page, qr) {
+  const margin = 4 * qr.module;
+  const zone = { left: qr.left - margin, right: qr.right + margin, top: qr.top - margin, bottom: qr.bottom + margin };
+  assert.ok(zone.left >= 0 && zone.right <= 100 && zone.top >= 0 && zone.bottom <= 150, `quiet zone on the label: ${JSON.stringify(zone)}`);
+  const overlaps = box => box.left < zone.right && zone.left < box.right && box.top < zone.bottom && zone.top < box.bottom;
+  // The PDF rounds its coordinates: the QR code's own modules may pass its edges by a hundredth of a millimetre.
+  const inside = box => box.left >= qr.left - 0.01 && box.right <= qr.right + 0.01 && box.top >= qr.top - 0.01 && box.bottom <= qr.bottom + 0.01;
+  assert.deepEqual(page.boxes.filter(overlaps).map(box => box.text), [], 'no text in the quiet zone of the QR code');
+  assert.deepEqual(page.rects.filter(rect => !rect.light && overlaps(rect) && !inside(rect)), [], 'no dark shape in the quiet zone of the QR code');
 }
 /** The barcode's text, decoded from the bars drawn under the recipient (an independent reading of the widths). */
 function decodeBars(rects) {
@@ -191,6 +212,7 @@ test('the PDF: a 100 × 150 mm page per parcel, its text, a QR code of the code 
     const qr = sampleQr(page.rects, expected.size);
     assert.deepEqual(qr.matrix, Array.from(expected.data, Number), `page ${label.index}: the QR code holds « ${label.code} »`);
     assert.ok(qr.width >= 30, `QR code ${qr.width.toFixed(1)} mm wide`);
+    assertQrQuietZone(page, qr);
     // The barcode: the same code, bars of at least 0.3 mm, and ten modules of clear space on each side.
     const bars = decodeBars(page.rects);
     assert.equal(bars.text, label.code);
@@ -208,6 +230,11 @@ test('long addresses, a company and a long name stay on the label, above the bar
   const page = await readPage(pdf, 1);
   assert.ok(page.text.includes('97400 SAINT-DENIS') && page.text.includes('LA RÉUNION') && page.text.includes('Tél. 0692 12 34 56 · 0262 41 22 33'), JSON.stringify(page.text));
   assert.equal(decodeBars(page.rects).text, 'EXP-2YE537-1-2');
+  // A long casier and parcel 10/12 stay out of the QR code's quiet zone.
+  const tenth = await readPage(await readPdf(buildParcelLabelsPdf(parcelLabels([prepared({ casier: 'B-12-HAUT-ALLÉE-NORD-RAYON-4',
+    finalPackages: Array.from({ length: 12 }, () => ({ dimL: 120.5, dimW: 80.25, dimH: 60.75, poids: 30.25 })), outgoingParcelCount: 12 })], { getClient: () => crowded }).labels.slice(9, 10)).doc), 1);
+  assert.ok(tenth.text.includes('Colis 10/12'), JSON.stringify(tenth.text));
+  assertQrQuietZone(tenth, sampleQr(tenth.rects, QRCode.create('EXP-2YE537-10-12', { errorCorrectionLevel: 'M' }).modules.size));
   // Every text of the recipient stays above the barcode's separator (113,5 mm).
   const content = await (await pdf.getPage(1)).getTextContent();
   const lowest = Math.max(...content.items.filter(item => item.str.trim() && item.str !== labels[0].codeText).map(item => (150 * MM - item.transform[5]) / MM));

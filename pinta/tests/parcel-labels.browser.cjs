@@ -1,7 +1,8 @@
 /* Outgoing parcel labels in the browser: « Imprimer les étiquettes (N colis) » once the optimisation is saved, with
  * the permission « Imprimer les étiquettes » and hidden without it; its reprint after payment; the « Étiquettes »
- * action of the /colis selection with the dossiers left out; the window opened by the click itself while the label
- * module loads (iPad Safari), the download when the window is refused, and a loading failure stated on screen.
+ * action of the /colis selection with the dossiers left out; an incomplete address, whose client record link is offered
+ * only to the people allowed to change it; the window opened by the click itself while the label module loads (iPad
+ * Safari), the download when the window is refused, and a loading failure stated on screen.
  * setup() mocks every request: nothing reaches Supabase, Telegram or PayPlug, and printing writes nothing.
  * The PDF a click creates is read back from its blob, checked with pdf.js, and its first page drawn to a PNG. */
 const { chromium } = require(process.env.PINTA_PLAYWRIGHT_MODULE || 'playwright');
@@ -37,6 +38,8 @@ async function fixture(browser, { role = 'directeur', permissions = null, width 
   await f.context.addInitScript(value => localStorage.setItem('expedile-theme', value), theme);
   await f.context.addInitScript(recordLabels);
   if (width < 768) await f.context.addInitScript(wideFonts);
+  // The address of the label module once the page has fetched it (labelModuleReady).
+  f.page.on('response', response => { if (LABEL_CHUNK.test(new URL(response.url()).pathname)) f.labelChunk = response.url(); });
   const parcel = f.tables.colis[0];
   parcel.ref = REF;
   if (state === 'empty') Object.assign(parcel, { final_packages: [], fin_l: null, fin_w: null, fin_h: null, fin_p: null, outgoing_parcel_count: null, final_measurements_version: null, final_measurements_at: null });
@@ -121,14 +124,26 @@ async function axe(f, selector) {
   const audit = await new AxeBuilder({ page: f.page }).include(selector).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
   assert.deepEqual(audit.violations.map(item => ({ id: item.id, nodes: item.nodes.map(node => node.target) })), []);
 }
+// The work queue refreshes itself every minute and on focus (AppContext): that call is not the print's.
+const BACKGROUND_REFRESH = '/rest/v1/rpc/refresh_staff_work_actions';
 /** Printing writes nothing: no request reaches the mocked backend between the click and its outcome. */
 async function printWithoutWrites(f, click, settled) {
   const before = f.requests.length;
   await click();
   await settled();
-  assert.deepEqual(f.requests.slice(before).filter(request => request.method !== 'GET'), [], 'printing labels writes nothing');
+  assert.deepEqual(f.requests.slice(before).filter(request => request.method !== 'GET' && request.path !== BACKGROUND_REFRESH), [], 'printing labels writes nothing');
 }
 async function closePopups(f) { for (const page of f.context.pages()) if (page !== f.page) await page.close(); }
+/** Waits until the label module that the button preloads is in memory: the next click opens the PDF itself. */
+async function labelModuleReady(f) {
+  for (let attempt = 0; attempt < 100 && !f.labelChunk; attempt += 1) await f.page.waitForTimeout(100);
+  assert.ok(f.labelChunk, 'the label button preloads its module');
+  // The same module, imported again, settles once it is evaluated; two frames let the button's own import settle too.
+  await f.page.evaluate(async url => {
+    await import(url);
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  }, f.labelChunk);
+}
 
 async function main() {
   await fs.mkdir(output, { recursive: true });
@@ -201,8 +216,12 @@ async function main() {
       await f.page.goto(`${base}/colis/${ids.P}?section=preparation`);
       const guidance = f.page.getByTestId('task-guidance');
       await guidance.getByRole('heading', { name: 'Préparation enregistrée', exact: true }).waitFor();
+      // Once the button's module is preloaded, the click builds the PDF and opens it itself (iPad Safari): no blank window first.
+      await labelModuleReady(f);
       await printWithoutWrites(f, () => guidance.getByRole('button', { name: 'Imprimer les étiquettes (1 colis)', exact: true }).click(),
         () => labelsBlock(f).getByRole('status').filter({ hasText: '1 étiquette ouverte dans un nouvel onglet.' }).waitFor());
+      const { opens, blobs } = await labelsState(f);
+      assert.deepEqual(opens, [[blobs[0], '_blank']], 'the PDF itself opened in the click');
       assertLabelPages(await pdfPages(await labelPdf(f, 1)), [{ index: 1, count: 1, size: '30 × 20 × 20 cm', weight: '3 kg' }]);
       await closePopups(f);
     });
@@ -255,6 +274,23 @@ async function main() {
       await f.page.waitForURL(url => url.pathname === `/clients/${ids.C}` && url.searchParams.get('completer') === 'adresse' && url.searchParams.get('returnTo') === `/colis/${ids.P}?section=preparation`);
     });
 
+    await scenario('an-incomplete-address-without-the-right-to-change-the-record-390-dark', { role: 'preparateur', width: 390, theme: 'dark',
+      permissions: { perm_colis_preparer: true, perm_envois_etiquettes: true, perm_clients_voir: true } }, async f => {
+      f.tables.clients[0].adresse_ligne1 = null;
+      await f.page.goto(`${base}/colis/${ids.P}?section=preparation`);
+      await waitTheme(f, 'dark');
+      await labelsButton(f, 1).click();
+      const alert = labelsBlock(f).getByRole('alert');
+      await alert.filter({ hasText: `Aucune étiquette. ${REF} : adresse du destinataire à compléter avant d’imprimer les étiquettes (adresse)` }).waitFor();
+      // Completing the record is offered only to the people allowed to change it.
+      assert.equal(await alert.getByRole('button').count(), 0, 'no « Compléter la fiche client » without perm_clients_modifier');
+      assert.deepEqual((await labelsState(f)).blobs, [], 'no document without the address');
+      await noOverflow(f);
+      await axe(f, '[data-testid="parcel-labels"]');
+      await labelsBlock(f).scrollIntoViewIfNeeded();
+      await f.page.screenshot({ path: path.join(output, 'incomplete-address-read-only-390-dark.png') });
+    });
+
     await scenario('a-click-before-the-module-opens-the-window-first-1440-light', {}, async f => {
       let release;
       const held = new Promise(resolve => { release = resolve; });
@@ -280,7 +316,7 @@ async function main() {
       const [download] = await Promise.all([f.page.waitForEvent('download'), button.click()]);
       assert.equal(download.suggestedFilename(), `etiquettes-${REF}.pdf`);
       assertLabelPages(await pdfPages(await fs.readFile(await download.path())), [{ index: 1, count: 1, size: '30 × 20 × 20 cm', weight: '3 kg' }]);
-      await labelsBlock(f).getByRole('status').filter({ hasText: `1 étiquette téléchargée (etiquettes-${REF}.pdf). Ouvrez le fichier pour les imprimer sur étiquettes 100 × 150 mm.` }).waitFor();
+      await labelsBlock(f).getByRole('status').filter({ hasText: `1 étiquette téléchargée (etiquettes-${REF}.pdf). Ouvrez le fichier pour l’imprimer sur étiquettes 100 × 150 mm.` }).waitFor();
       await noOverflow(f);
       await labelsBlock(f).scrollIntoViewIfNeeded();
       await f.page.screenshot({ path: path.join(output, 'refused-window-download-390-dark.png') });
@@ -290,7 +326,8 @@ async function main() {
       await f.context.route(LABEL_CHUNK, route => route.abort());
       await f.page.goto(`${base}/colis/${ids.P}?section=preparation`);
       await labelsButton(f, 1).click();
-      await labelsBlock(f).getByRole('alert').filter({ hasText: 'Les étiquettes n’ont pas pu être chargées. Vérifiez la connexion puis réessayez.' }).waitFor();
+      // Chrome keeps a failed module import until the page is reloaded: the message asks for the reload.
+      await labelsBlock(f).getByRole('alert').filter({ hasText: 'Les étiquettes n’ont pas pu être chargées. Vérifiez la connexion puis rechargez la page pour réessayer.' }).waitFor();
       assert.deepEqual((await labelsState(f)).opens, [['', '_blank']]);
       for (let attempt = 0; attempt < 50 && f.context.pages().length > 1; attempt += 1) await f.page.waitForTimeout(100);
       assert.equal(f.context.pages().length, 1, 'the waiting window is closed');

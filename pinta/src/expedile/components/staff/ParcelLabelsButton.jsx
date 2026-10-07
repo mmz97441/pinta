@@ -18,7 +18,8 @@ function loadLabels() {
   if (!labelsLoading) {
     labelsLoading = import('../../utils/exportParcelLabels').then(
       module => { labelsModule = module; return module; },
-      // A failed load is tried again by the next click, which reports its own failure.
+      // The next click asks again, but a browser such as Chrome keeps a failed module import
+      // until the page is reloaded: the message says so (failureMessage).
       error => { labelsLoading = null; throw error; },
     );
   }
@@ -39,7 +40,7 @@ function openWaitingWindow() {
 const LOAD_FAILURE = /dynamically imported module|Importing a module script failed|Failed to fetch/i;
 /** The failure as the person reads it; the technical detail goes to the console for the support. */
 function failureMessage(error) {
-  if (LOAD_FAILURE.test(String(error?.message))) return 'Les étiquettes n’ont pas pu être chargées. Vérifiez la connexion puis réessayez.';
+  if (LOAD_FAILURE.test(String(error?.message))) return 'Les étiquettes n’ont pas pu être chargées. Vérifiez la connexion puis rechargez la page pour réessayer.';
   console.error('[Expedîle] Étiquettes non préparées', error);
   return 'Les étiquettes n’ont pas pu être préparées. Réessayez ; si l’échec se répète, signalez-le avec la référence du dossier.';
 }
@@ -48,7 +49,7 @@ function failureMessage(error) {
 function outcomeText(result) {
   if (!result || !result.count) return '';
   const labels = plural(result.count, 'étiquette');
-  if (result.method === 'download') return `${labels} ${pluralWord(result.count, 'téléchargée')} (${result.filename}). Ouvrez le fichier pour les imprimer sur étiquettes 100 × 150 mm.`;
+  if (result.method === 'download') return `${labels} ${pluralWord(result.count, 'téléchargée')} (${result.filename}). Ouvrez le fichier pour ${result.count > 1 ? 'les imprimer' : 'l’imprimer'} sur étiquettes 100 × 150 mm.`;
   return `${labels} ${pluralWord(result.count, 'ouverte')} dans un nouvel onglet${result.dossiers > 1 ? ` pour ${plural(result.dossiers, 'dossier')}` : ''}. Imprimez sur étiquettes 100 × 150 mm.`;
 }
 
@@ -113,7 +114,8 @@ function DossierParcelLabels({ dossier }) {
   const preparing = state.phase === 'preparing';
   const result = state.phase === 'done' ? state.result : null;
   const skipped = result && !result.count ? result.skipped[0] : null;
-  const completeClient = skipped?.reason === 'address' && skipped.complete && skipped.clientId && can('perm_clients_voir')
+  // Completing the record needs the right to change it, as for the dossier's « Compléter la fiche ».
+  const completeClient = skipped?.reason === 'address' && skipped.complete && skipped.clientId && can('perm_clients_voir') && can('perm_clients_modifier')
     ? () => navigate(`/clients/${encodeURIComponent(skipped.clientId)}?${new URLSearchParams({ completer: skipped.complete, returnTo: location.pathname + location.search })}`)
     : null;
   return <div data-testid="parcel-labels" className="space-y-2">
