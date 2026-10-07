@@ -87,10 +87,12 @@ html.dark .loading-button--primary:hover:not(:disabled) { background: #d6e6ee; }
   }
 }
 
-/* The last answer: colour, icon and words; empty (and flat) until the first scan. */
+/* The last answer: colour, icon and words; empty (and flat) until the first scan. Never animated: with reduced
+   motion every change runs a 0.01 ms transition (brand.css), and the first answer's padding would still be 0 when
+   its dossier is placed under the bar, which takes the bar's height at that moment (LoadingScanPanel). */
 .loading-scan-feedback {
   display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border: 1px solid; border-radius: 12px;
-  font-size: .9375rem; line-height: 1.45; overflow-wrap: anywhere;
+  font-size: .9375rem; line-height: 1.45; overflow-wrap: anywhere; transition-property: none;
 }
 .loading-scan-feedback:empty { padding: 0; border-width: 0; }
 .loading-scan-feedback-icon { flex: none; margin-top: 1px; }

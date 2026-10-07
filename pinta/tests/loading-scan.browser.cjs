@@ -710,9 +710,11 @@ async function main() {
         const hit = document.elementFromPoint(name.left + 4, name.top + name.height / 2);
         // The first dossier of a group: its group's title, whole, above it.
         const title = row.previousElementSibling && row.previousElementSibling.classList.contains('loading-group-title') ? row.previousElementSibling.getBoundingClientRect() : null;
-        return { barBottom: Math.round(bar.bottom), nameTop: Math.round(name.top), nameBottom: Math.round(name.bottom), titleTop: title ? Math.round(title.top) : null, inView: name.bottom <= innerHeight, visible: Boolean(hit && row.contains(hit)) };
+        return { barBottom: Math.round(bar.bottom), rowTop: Math.round(row.getBoundingClientRect().top), nameTop: Math.round(name.top), nameBottom: Math.round(name.bottom), titleTop: title ? Math.round(title.top) : null, inView: name.bottom <= innerHeight, visible: Boolean(hit && row.contains(hit)) };
       }, id);
-      // Below the screen, then above it, then after a long answer (a stale label: three lines in the bar).
+      // Below the screen, then above it, then after a long answer (a stale label: three lines in the bar). The first
+      // answer of the loading fills the answer zone, empty until then: with reduced motion (this fixture), its
+      // padding is already there when the dossier is placed, so the highlighted dossier is whole under the bar.
       for (const [code, id, answer] of [
         ['EXP-0042', D.legacy, 'EXP-0042 · colis 1/1 vérifié'],
         ['EXP-2YE537-1-2', D.two, 'EXP-2YE537 · colis 1/2 vérifié'],
@@ -723,7 +725,7 @@ async function main() {
         await until(() => review(f).locator('.loading-pending').count(), 0, `${code} handled`);
         await settle(f);
         const where = await placement(id);
-        assert.ok(where.nameTop >= where.barBottom && where.inView && where.visible && (where.titleTop === null || where.titleTop >= where.barBottom), `${code}: the dossier under the bar, in view (${JSON.stringify(where)})`);
+        assert.ok(where.rowTop >= where.barBottom && where.nameTop >= where.barBottom && where.inView && where.visible && (where.titleTop === null || where.titleTop >= where.barBottom), `${code}: the dossier under the bar, in view (${JSON.stringify(where)})`);
       }
       await shot(f, 'phone-stale-label-dossier-under-the-bar-390');
     }, { width: 390 });

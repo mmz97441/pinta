@@ -337,10 +337,12 @@ export default function LoadingScanPanel({
       if (box.top < top || box.bottom > window.innerHeight) {
         const still = typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
         // Just under the bar, which stays at the top of the page: its height follows the length of the last answer.
-        // The first dossier of a group keeps the group's title above it, whole.
+        // The first dossier of a group keeps the group's title above it, whole. A browser that ignores scroll-margin
+        // (Safari 14.0) would put the dossier under the bar: it centres it instead, as before.
         const title = node.previousElementSibling && node.previousElementSibling.classList.contains('loading-group-title') ? node.previousElementSibling : null;
-        node.style.scrollMarginTop = `${Math.ceil((bar ? bar.offsetHeight : 0) + (title ? title.offsetHeight : 0)) + 8}px`;
-        node.scrollIntoView({ block: 'start', behavior: still ? 'auto' : 'smooth' });
+        const underBar = 'scrollMarginTop' in node.style;
+        if (underBar) node.style.scrollMarginTop = `${Math.ceil((bar ? bar.offsetHeight : 0) + (title ? title.offsetHeight : 0)) + 8}px`;
+        node.scrollIntoView({ block: underBar ? 'start' : 'center', behavior: still ? 'auto' : 'smooth' });
       }
     }
     const timer = setTimeout(() => setFlash((current) => (current && current.key === flash.key ? null : current)), FLASH_MS);
