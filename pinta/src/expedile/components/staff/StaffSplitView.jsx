@@ -27,6 +27,7 @@ import { consentQueueFilter } from '../../domain/consentQueue';
 import { clientDisplayName, groupDossiersByClient } from '../../domain/clientGroups';
 import { TABLE_VIEWS, TABLE_COLUMNS, DossierTableHead, DossierTableRow, DossierTableCard } from './DossierTableRows';
 import { DossierGroupRow, DossierCardGroup } from './DossierGroupHeader';
+import { SelectionParcelLabels } from './ParcelLabelsButton';
 
 // ── Pipeline cards (filters) ────────────────────────────────────────────────
 const PIPELINE = [
@@ -654,20 +655,8 @@ export default function StaffColisPage() {
             </>}
             {departureHint && <p className="dossier-bulk-note"><Plane size={16} aria-hidden="true" /><span>{keepQuotes(BULK_STATUS_REASONS.departure)}{can('perm_envois_voir') && <> <button type="button" className="dossier-text-button" onClick={() => navigate('/departs')}>Ouvrir les départs</button></>}</span></p>}
             {statusReason && <p className="dossier-bulk-note"><AlertCircle size={16} aria-hidden="true" /><span>{keepQuotes(statusReason)}</span></p>}
-            {canLabels && (
-              <button
-                type="button"
-                onClick={() => {
-                  const ids = [...selectedIds];
-                  const colisForLabels = ids.map((id) => data.find((c) => c.id === id)).filter(Boolean);
-                  if (colisForLabels.length === 0) return;
-                  import('../../utils/exportEtiquettes').then((mod) => mod.printEtiquettes(colisForLabels, clients, getClient));
-                }}
-                className="dossier-bulk-button"
-              >
-                Étiquettes
-              </button>
-            )}
+            {/* One label per outgoing parcel of the prepared dossiers; the others are listed with their reason. */}
+            {canLabels && <SelectionParcelLabels dossiers={selectedDossiers} />}
             {canExportView && (() => {
               const exportLabel = selectedIds.size === 1 ? 'Exporter le dossier sélectionné' : `Exporter les ${countLabel(selectedIds.size, 'dossier')} sélectionnés`;
               // The bar names the selection; the button shows « Exporter », and its

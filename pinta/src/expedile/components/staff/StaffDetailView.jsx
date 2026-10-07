@@ -34,6 +34,7 @@ import { canSeeDossierFinances } from '../../domain/dossierOverview';
 import { plural, pluralWord } from '../../domain/plural';
 import { clientPlan } from '../../domain/clientPlan';
 import DossierDeparture from '../detail/DossierDeparture';
+import ParcelLabelsButton from './ParcelLabelsButton';
 import '../detail/dossierActions.css';
 
 const receptionDrafts = new Map();
@@ -579,7 +580,7 @@ export default function StaffDetailView({ workspace = false, active = true, task
         actionLabel={nextUsefulTask !== 'reception' && canViewTask(nextUsefulTask) ? taskLinkLabels[nextUsefulTask] : null}
         onOpen={nextUsefulTask !== 'reception' && canViewTask(nextUsefulTask) ? () => chooseSection(nextUsefulTask) : null} />
       <details><summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-slate-600">Fournisseurs et suivis des cartons</summary><ReceivedCartons colis={sel} settings={settings} /></details>{continuation}</section>;
-    if (task === 'preparation' && (paymentRecorded || inTransport)) return guidance('Préparation terminée', 'Les mesures préparées sont conservées en lecture seule. Le dossier poursuit son règlement ou son transport.', nextUsefulTask, revisionEditor('preparation'));
+    if (task === 'preparation' && (paymentRecorded || inTransport)) return guidance('Préparation terminée', 'Les mesures préparées sont conservées en lecture seule. Le dossier poursuit son règlement ou son transport.', nextUsefulTask, <>{revisionEditor('preparation')}<ParcelLabelsButton dossier={sel} /></>);
     if (task === 'preparation' && sel.feuVert !== 'autorise') {
       const receiptNeeded = stage === 'receptionne';
       const message = receiptNeeded ? 'Enregistrez les mesures à réception, puis demandez l’accord du client avant de préparer.'
@@ -593,7 +594,7 @@ export default function StaffDetailView({ workspace = false, active = true, task
       {!measuresCurrent && <p role="status" className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">Les mesures de préparation ne sont pas confirmées pour les colis actuels. {canCorrect('perm_colis_preparer') ? 'Utilisez « Modifier » pour vérifier puis enregistrer les colis préparés. Le devis précédent devra être recalculé.' : 'Une personne autorisée à corriger la préparation doit les vérifier et les enregistrer avant le devis.'}</p>}{revisionEditor('preparation')}
       {measuresCurrent && <TaskGuidance title="Préparation enregistrée" message="Les mesures après optimisation sont disponibles pour le devis. Les factures peuvent être vérifiées par un autre membre de l’équipe."
         owner={nextUsefulTask !== task ? taskOwner(nextUsefulTask) : null} actionLabel={nextUsefulTask !== task && canViewTask(nextUsefulTask) ? taskLinkLabels[nextUsefulTask] : null}
-        onOpen={nextUsefulTask !== task && canViewTask(nextUsefulTask) ? () => chooseSection(nextUsefulTask) : null} />}{continuation}</section>;
+        onOpen={nextUsefulTask !== task && canViewTask(nextUsefulTask) ? () => chooseSection(nextUsefulTask) : null}><ParcelLabelsButton dossier={sel} /></TaskGuidance>}{continuation}</section>;
     if (task === 'devis' && !canQuoteWorkspace) return guidance('Devis réservé à l’équipe habilitée', 'Votre rôle ne permet pas de consulter ou d’établir le devis. Une personne chargée du devis doit poursuivre cette tâche.', nextUsefulTask === 'devis' ? null : nextUsefulTask);
     if (task === 'devis' && (paymentRecorded || inTransport)) return guidance('Devis enregistré', 'Ce devis est conservé en lecture seule après le paiement ou le départ.', nextUsefulTask, quoteSummary);
     if (task === 'devis' && ['autorise','en_preparation'].includes(stage) && !measuresCurrent) return guidance('Préparation à terminer avant le devis', `${sel.feuVert === 'autorise' ? 'L’accord du client est reçu. ' : ''}${savedWeights ? 'Les mesures visibles doivent être confirmées pour le nombre actuel de colis préparés.' : 'Il reste à enregistrer les mesures après optimisation et le nombre de colis préparés.'} Cette confirmation est nécessaire avant de calculer le devis.`, sel.feuVert === 'autorise' ? 'preparation' : 'accord');
@@ -757,6 +758,7 @@ export default function StaffDetailView({ workspace = false, active = true, task
           {!preparationEditing && !measuresChanged && savedWeights && measuresCurrent && <section ref={preparationFeedback} tabIndex={-1} aria-label="Relais après préparation" className="scroll-mt-56 space-y-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
             <p className="text-sm font-semibold text-emerald-800">Optimisation enregistrée · {savedFinalPackages(sel).length} colis {pluralWord(savedFinalPackages(sel).length, 'sortant')} · {kg(savedWeights.realWeight)}</p>{sel.finalMeasurementsAt && <p className="text-xs text-slate-600">Mesures enregistrées le {dateLabel(sel.finalMeasurementsAt)}</p>}
             <p className="text-sm text-slate-700">{savedFinalPackages(sel).map((box,index) => `Colis ${index + 1} : ${box.dimL} × ${box.dimW} × ${box.dimH} cm · ${kg(box.poids)}`).join(' ; ')}</p>
+            <ParcelLabelsButton dossier={sel} />
             <p className="text-sm text-slate-700">{nextUsefulTask === 'documents' ? 'Prochaine étape : vérifier les factures d’achat pour calculer le montant à payer.' : 'Prochaine étape : préparer le montant à payer par le client.'} {taskOwner(nextUsefulTask)}</p>
             {nextUsefulTask !== task && canViewTask(nextUsefulTask) && <BtnPrimary onClick={() => chooseSection(nextUsefulTask)}>{nextUsefulTask === 'documents' ? 'Vérifier les factures d’achat' : taskLinkLabels[nextUsefulTask]}</BtnPrimary>}
             {can('perm_colis_preparer') && !preparationBlock && !preparationEditing && <button className="min-h-11 text-sm font-semibold text-slate-700 underline" onClick={() => setPreparationEditing(true)}>Modifier les mesures</button>}
