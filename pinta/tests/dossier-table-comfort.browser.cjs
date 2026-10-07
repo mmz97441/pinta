@@ -76,8 +76,11 @@ async function main(){
    for(const n of [1,3]){assert.equal((await cell(f,n,'optimizedDimensions').innerText()).trim(),'');assert.equal((await cell(f,n,'optimizedWeight').innerText()).trim(),'');}
    const dimensions=await cell(f,2,'optimizedDimensions').innerText();assert.match(dimensions,/Colis 1 : 30 × 20 × 10 cm/);assert.match(dimensions,/Colis 2 : 50 × 40 × 30 cm/);
    assert.doesNotMatch(dimensions,/90 × 80|999/);assert.match(await cell(f,2,'optimizedWeight').innerText(),/3,75/);assert.doesNotMatch(await cell(f,2,'optimizedWeight').innerText(),/170|999/);
+   // Each parcel's volumetric weight (L × l × h ÷ 5000) and their total, beside the real weight.
+   assert.equal((await cell(f,2,'optimizedDimensions').innerText()).replace(/\u00a0/g,' ').trim(),'Colis 1 : 30 × 20 × 10 cm · 1,2 kg vol.\nColis 2 : 50 × 40 × 30 cm · 12 kg vol.\nTotal : 13,2 kg vol.');
    const data=await download(f),weight=data[0].indexOf('Poids final (kg)'),dims=data[0].indexOf('Dimensions finales');assert.ok(weight>=0&&dims>=0);
-   assert.equal(data.find(r=>r[0]==='EXP-CFT002')[weight],3.75);for(const n of [1,3]){const record=data.find(r=>r[0]===`EXP-CFT00${n}`);assert.equal(record[weight],'');assert.equal(record[dims],'');}
+   assert.equal(data.find(r=>r[0]==='EXP-CFT002')[weight],3.75);assert.match(data.find(r=>r[0]==='EXP-CFT002')[dims],/^Colis 1 : 30 × 20 × 10 cm · 1,2\skg vol\.\nColis 2 : 50 × 40 × 30 cm · 12\skg vol\.\nTotal : 13,2\skg vol\.$/);
+   for(const n of [1,3]){const record=data.find(r=>r[0]===`EXP-CFT00${n}`);assert.equal(record[weight],'');assert.equal(record[dims],'');}
   });
   for(const view of ['daily','departures'])await scenario(`quote-price-preserves-zero-draft-and-paid-snapshot-${view}`,async f=>{
    await open(f,view);assert.match(await cell(f,1,'requested').innerText(),/À calculer/);assert.doesNotMatch(await cell(f,1,'requested').innerText(),/0,00/);

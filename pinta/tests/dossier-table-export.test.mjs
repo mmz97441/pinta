@@ -6,6 +6,7 @@ import path from 'node:path';
 import * as fs from 'node:fs';
 import * as XLSX from 'xlsx';
 import { exportDossierTableExcel } from '../src/expedile/utils/exportExcel.js';
+import { buildDossierTableModel } from '../src/expedile/domain/dossierTable.js';
 
 XLSX.set_fs(fs);
 async function workbook(run) {
@@ -68,4 +69,15 @@ test('« Accords clients » exports its visible columns as text, with the consen
     { Référence: 'EXP-SUBMIT', Accord: 'À soumettre', 'Demande envoyée le': 'Pas encore envoyée', 'Dernière relance': 'Aucune relance', Casier: 'À renseigner', 'Départ prévu': 'Souhaité le 19/11/2026 · à créer' },
   ], 'No price or status column of another view reaches this export.');
   assert.equal(sheet.C2.t, 's');assert.doesNotMatch(JSON.stringify(XLSX.utils.sheet_to_json(sheet)), /private|999/);
+}));
+
+test('« Dimensions finales » exports the volumetric lines of the cell, its column as wide as the longest line', () => workbook(async filename => {
+  const dossier = { id: 'two', ref: 'EXP-2YE537', clientId: 'client', statut: 'en_preparation', preparationCompositionVersion: 1, finalMeasurementsVersion: 1, outgoingParcelCount: 2,
+    finalPackages: [{ dimL: 31, dimW: 22, dimH: 13, poids: 2 }, { dimL: 19.5, dimW: 17, dimH: 11, poids: 1 }] };
+  const models = new Map([['two', buildDossierTableModel(dossier, { settings: { diviseurVolumetrique: 5000 } })]]);
+  exportDossierTableExcel([dossier], [], models, 'daily', [{ key: 'ref', label: 'Référence' }, { key: 'optimizedDimensions', label: 'Dimensions finales' }, { key: 'optimizedWeight', label: 'Poids final (kg)' }], filename);
+  const sheet = XLSX.readFile(filename, { cellStyles: true }).Sheets.Dossiers;
+  const lines = ['Colis 1 : 31 × 22 × 13 cm · 1,77\u00a0kg vol.', 'Colis 2 : 19,5 × 17 × 11 cm · 0,73\u00a0kg vol.', 'Total : 2,5\u00a0kg vol.'];
+  assert.deepEqual(XLSX.utils.sheet_to_json(sheet), [{ Référence: 'EXP-2YE537', 'Dimensions finales': lines.join('\n'), 'Poids final (kg)': 3 }]);
+  assert.equal(sheet['!cols'][1].wch, lines[1].length + 2, 'The longest line, not the three lines end to end.');
 }));

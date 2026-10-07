@@ -6,7 +6,7 @@ import { getDestByCP, getSecteurByCP } from '../../constants';
 import { actionWaiting, canWorkAction, staffAvailable, workActionOpensClient } from '../../domain/personalWork';
 import { receptionCartonManifest } from '../../domain/reception';
 import { needsConversationAction } from '../../domain/conversations';
-import { TABLE_COLUMNS, dossierTableAmount, dossierTableAmountState, dossierTableMissingAmountLabel, formatDossierTableDate, isDossierTableColumnSortable, dossierTableSortDirectionLabel, parallelTasksLabel, dossierFactHasValue, REQUEST_NOT_SENT_LABEL, NO_RELANCE_LABEL } from '../../domain/dossierTable';
+import { TABLE_COLUMNS, dossierTableAmount, dossierTableAmountState, dossierTableMissingAmountLabel, formatDossierTableDate, isDossierTableColumnSortable, dossierTableSortDirectionLabel, parallelTasksLabel, dossierFactHasValue, volumetricWeightLabel, REQUEST_NOT_SENT_LABEL, NO_RELANCE_LABEL } from '../../domain/dossierTable';
 import { clampColumnWidth, columnWidthBounds } from '../../domain/dossierTablePreferences';
 import { consentTone, paymentTone, statusTone } from '../../domain/dossierTableTone';
 import { consentRelance, consentState, consentWaitLabel } from '../../domain/consentQueue';
@@ -127,6 +127,35 @@ function MainAction({ action, dossier, onOpen, title }) {
   </div>;
 }
 
+const DIVISOR_FORMAT = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 4 });
+
+/** « Dimensions finales »: one line per outgoing parcel, « 31 × 22 × 13 cm ·
+ * 1,77 kg vol. », then « Total : 2,5 kg vol. » when there are several. A line
+ * breaks between its parts (« Colis 2 : », the dimensions, the volumetric
+ * weight); a part wider than a very narrow column breaks after a « × » or before
+ * « vol. », never inside a number. Same text as the export (dossierDimensionsLines). */
+function OptimizedDimensions({ model }) {
+  const parcels = model.optimizedParcels;
+  if (!Array.isArray(parcels)) return <span className="dossier-table-dimensions">{(model.optimizedDimensions || []).map((dimensions, index) => <span key={index}>{dimensions}</span>)}</span>;
+  const total = parcels.length > 1 ? volumetricWeightLabel(model.optimizedVolumetricTotal) : null;
+  const divisor = model.optimizedVolumetricDivisor;
+  const title = divisor ? `Poids volumétrique : longueur × largeur × hauteur ÷ ${DIVISOR_FORMAT.format(divisor)}${model.optimizedVolumetricSource === 'quote' ? ', diviseur du devis enregistré' : ''}` : undefined;
+  return <span className="dossier-table-dimensions" title={title}>
+    {parcels.map((parcel, index) => {
+      const volumetric = volumetricWeightLabel(parcel.volumetricWeight);
+      // « 31 × », « 22 × », « 13 cm · »: the only places a too narrow column may break.
+      const segments = Array.isArray(parcel.sides) ? parcel.sides.map((side, position) => `${side} ${position < parcel.sides.length - 1 ? '×' : 'cm'}`) : [parcel.dimensions];
+      if (volumetric) segments[segments.length - 1] += ' ·';
+      return <span key={index} className="dossier-table-parcel">
+        {parcel.label && <><span className="dossier-table-keep">{parcel.label} :</span>{' '}</>}
+        <span className="dossier-table-keep">{segments.map((segment, position) => <React.Fragment key={position}>{position > 0 && ' '}<span className="dossier-table-nowrap">{segment}</span></React.Fragment>)}</span>
+        {volumetric && <>{' '}<span className="dossier-table-keep dossier-table-volumetric">{volumetric}</span></>}
+      </span>;
+    })}
+    {total && <span className="dossier-table-parcel dossier-table-volumetric-total"><span className="dossier-table-keep">Total :</span>{' '}<span className="dossier-table-keep">{total}</span></span>}
+  </span>;
+}
+
 /** Something is « À vérifier » on this dossier: the mark names it for
  * assistive technology and on hover; the dossier page shows each line with its
  * link. It is not a tab stop: the reference opens the dossier. */
@@ -146,7 +175,7 @@ function CellContent({ column, c, client, model, alerts, onOpen, onOpenDossier, 
     case 'client': return <ClientIdentity client={client} />;
     case 'statusLabel': return <Pill tone={statusTone(c, model)}>{model.statusLabel || 'Statut à vérifier'}</Pill>;
     case 'paymentState': return <Pill tone={paymentTone(model)}>{model.payment?.stateLabel || 'À vérifier'}</Pill>;
-    case 'optimizedDimensions': return model.optimized ? <span className="dossier-table-dimensions">{(model.optimizedDimensions || []).map((dimensions, index) => <span key={index}>{dimensions}</span>)}</span> : null;
+    case 'optimizedDimensions': return model.optimized ? <OptimizedDimensions model={model} /> : null;
     case 'optimizedWeight': return model.optimizedWeight == null ? null : <span>{Number(model.optimizedWeight).toLocaleString('fr-FR', { maximumFractionDigits: 2 })}</span>;
     case 'statut': return <TaskSummary model={model} c={c} returnTo={returnTo} />;
     case 'owner': return <Fact>{model.ownerName || 'Non attribué'}</Fact>;

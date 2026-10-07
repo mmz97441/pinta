@@ -22,6 +22,10 @@ test('optimized dimensions show every certified outgoing box, never received or 
   assert.equal(exported[0]['Dimensions finales'], '');
   assert.equal(exported[2]['Dimensions finales'], '');
   assert.match(exported[1]['Dimensions finales'], /Colis 2 : 40 × 50 × 60 cm/);
+  // The export carries the cell's volumetric weights (divisor 5000 by default) and their total.
+  assert.equal(exported[1]['Dimensions finales'], 'Colis 1 : 10,5 × 20 × 30 cm · 1,26\u00a0kg vol.\nColis 2 : 40 × 50 × 60 cm · 24\u00a0kg vol.\nTotal : 25,26\u00a0kg vol.');
+  // « Contient » finds the volumetric text shown in the cell.
+  assert.deepEqual(apply({ optimizedDimensions: filter('contains', '25,26 kg vol') }), ['prepared']);
   for (const direction of ['asc', 'desc']) assert.equal(sortDossierTableRows(data, { column: column('optimizedDimensions'), direction, models })[0].id, 'prepared');
 });
 

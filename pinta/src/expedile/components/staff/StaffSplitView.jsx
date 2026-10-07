@@ -217,10 +217,11 @@ export default function StaffColisPage() {
     }
     return map;
   }, [workActions]);
+  // `settings` give the volumetric divisor of the « Dimensions finales » column.
   const models = useMemo(() => new Map(data.map(dossier => [dossier.id, buildDossierTableModel(dossier, {
     actions: actionsByDossier.get(dossier.id) || [], client: getClient(dossier.clientId), me: auth?.u?.id, can, teamUsers, envois,
-    scope: taskScope, view: tableView, available, now, workReady, assigneeFilter: ownerFilter,
-  })])), [data, getClient, actionsByDossier, auth?.u?.id, can, teamUsers, envois, taskScope, tableView, available, now, workReady, ownerFilter]);
+    scope: taskScope, view: tableView, available, now, workReady, assigneeFilter: ownerFilter, settings,
+  })])), [data, getClient, actionsByDossier, auth?.u?.id, can, teamUsers, envois, taskScope, tableView, available, now, workReady, ownerFilter, settings]);
   // « À vérifier », marked next to each reference; the dossier page details it.
   const alertsByDossier = useMemo(() => {
     const envoiById = new Map(envois.map(envoi => [envoi.id, envoi]));

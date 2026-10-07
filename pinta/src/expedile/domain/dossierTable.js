@@ -9,6 +9,9 @@ import { parisCalendarDay } from './departureGroups.js';
 import { dossierDepartureWish, wishedDepartureLabel } from './departurePlanning.js';
 import { CONSENT_LABELS, consentRelance, consentState, consentSummary } from './consentQueue.js';
 import { clientDisplayName } from './clientGroups.js';
+import { volumetricDivisor } from './quote.js';
+import { parcelVolumetricWeight } from './quoteBreakdown.js';
+import { kg } from '../utils/format.js';
 
 const SORT_TYPES = new Set(['text', 'number', 'date']);
 
@@ -48,7 +51,8 @@ const clientColumn = defineDossierTableColumn({ key: 'client', label: 'Client', 
 const actionColumn = defineDossierTableColumn({ key: 'action', label: 'Action', kind: 'action' });
 const statusColumn = defineDossierTableColumn({ key: 'statusLabel', label: 'Statut du dossier', shortLabel: 'Statut', sort: { type: 'text', value: ({ model }) => model?.statusLabel } });
 const paymentStateColumn = defineDossierTableColumn({ key: 'paymentState', label: 'Paiement', filter: { choices: ['Payé', 'Non payé', 'À vérifier'] }, sort: { type: 'text', value: ({ model }) => model?.payment?.stateLabel } });
-const dimensionsColumn = defineDossierTableColumn({ key: 'optimizedDimensions', label: 'Dimensions finales', shortLabel: 'Dimensions', sort: { type: 'text', value: ({ model }) => model?.optimizedDimensions?.join(' · ') || null } });
+// « Contient » searches the text shown, volumetric weights included (« 1,77 kg vol. »).
+const dimensionsColumn = defineDossierTableColumn({ key: 'optimizedDimensions', label: 'Dimensions finales', shortLabel: 'Dimensions', filter: { text: ({ model }) => dossierDimensionsLines(model).join(' · ') || null }, sort: { type: 'text', value: ({ model }) => model?.optimizedDimensions?.join(' · ') || null } });
 const receptionDateColumn = defineDossierTableColumn({ key: 'receivedAt', label: 'Dernière réception', shortLabel: 'Réception', sort: { type: 'date', value: ({ model }) => model?.reception?.lastReceivedAt } });
 const finalWeightColumn = defineDossierTableColumn({ key: 'optimizedWeight', label: 'Poids final (kg)', shortLabel: 'Poids (kg)', align: 'right', sort: { type: 'number', value: ({ model }) => model?.optimizedWeight } });
 const financialColumn = (key, label, priceKind = 'payment', shortLabel) => defineDossierTableColumn({ key, label, ...(shortLabel ? { shortLabel } : {}), align: 'right', financial: true, priceKind, sort: { type: 'number', value: ({ model }) => priceKind === 'quote' ? model?.quotePrice?.amount : model?.payment?.[key] } });
@@ -284,13 +288,56 @@ function ownerName(action, me, teamUsers) {
   return [user?.prenom, user?.nom].filter(Boolean).join(' ').trim() || 'Membre de l’équipe';
 }
 
+// ── Volumetric weight of the outgoing parcels ───────────────────────────────
+const measured = value => (value === '' || value == null ? NaN : Number(value));
+const sameParcels = (saved, boxes) => saved.length > 0 && saved.length === boxes.length
+  && saved.every((box, index) => ['dimL', 'dimW', 'dimH', 'poids'].every(key => {
+    const left = measured(box?.[key]), right = measured(boxes[index]?.[key]);
+    return Number.isFinite(left) && left === right;
+  }));
+
+/** The divisor of the volumetric weights shown for these outgoing parcels: the
+ * saved quote's when it priced exactly these parcels (what was billed), otherwise
+ * the configured one (volumetricDivisor). Null when it is not a positive number:
+ * the list then shows the dimensions alone. */
+export function dossierVolumetricDivisor(dossier, boxes, settings) {
+  const inputs = dossier?.devisSnapshot?.inputs;
+  const quoted = measured(inputs?.volumetricDivisor);
+  if (Array.isArray(inputs?.finalPackages) && Array.isArray(boxes) && Number.isFinite(quoted) && quoted > 0 && sameParcels(inputs.finalPackages, boxes))
+    return { value: quoted, source: 'quote' };
+  const configured = volumetricDivisor(settings || {});
+  return Number.isFinite(configured) && configured > 0 ? { value: configured, source: 'settings' } : null;
+}
+
+/** « 1,77 kg vol. » (kg() formatting), or null without a volumetric weight. */
+export function volumetricWeightLabel(weight) {
+  return typeof weight === 'number' && Number.isFinite(weight) && weight >= 0 ? `${kg(weight)} vol.` : null;
+}
+
+/** « Dimensions finales » as the list shows and exports them, one line per
+ * outgoing parcel: « 31 × 22 × 13 cm · 1,77 kg vol. ». Several parcels are
+ * numbered (« Colis 1 : … ») and end with « Total : 2,5 kg vol. ». Without a
+ * valid divisor, the dimensions stand alone; before the optimisation, nothing. */
+export function dossierDimensionsLines(model) {
+  if (!model?.optimized) return [];
+  if (!Array.isArray(model.optimizedParcels)) return [...(model.optimizedDimensions || [])];
+  const parcels = model.optimizedParcels;
+  const lines = parcels.map(parcel => {
+    const volumetric = volumetricWeightLabel(parcel.volumetricWeight);
+    return `${parcel.label ? `${parcel.label} : ` : ''}${parcel.dimensions}${volumetric ? ` · ${volumetric}` : ''}`;
+  });
+  const total = parcels.length > 1 ? volumetricWeightLabel(model.optimizedVolumetricTotal) : null;
+  return total ? [...lines, `Total : ${total}`] : lines;
+}
+
 /** One dossier produces one row. The model never filters: a view changes the
  * presentation and the preferred task, never ownership filters, permissions or
  * availability. The one view that lists fewer dossiers, « Accords clients »,
  * restricts its rows before the model (consentQueueFilter).
  * `actions` may be pre-grouped by the caller; no global store or mutation here.
+ * `settings` (app_settings « business ») give the volumetric divisor.
  */
-export function buildDossierTableModel(dossier, { actions = [], me, can = () => false, teamUsers = [], envois = [], client = dossier.devisSnapshot?.inputs?.client || {}, scope = 'all', view = 'daily', available = true, now = Date.now(), workReady = true, assigneeFilter = '' } = {}) {
+export function buildDossierTableModel(dossier, { actions = [], me, can = () => false, teamUsers = [], envois = [], client = dossier.devisSnapshot?.inputs?.client || {}, scope = 'all', view = 'daily', available = true, now = Date.now(), workReady = true, assigneeFilter = '', settings = {} } = {}) {
   const optimized = hasCurrentPreparation(dossier);
   const payment = paymentModel(dossier, now);
   const departure = departureModel(dossier, envois, optimized, payment, now, client);
@@ -298,11 +345,22 @@ export function buildDossierTableModel(dossier, { actions = [], me, can = () => 
   const optimizedWeight = optimized ? Math.round((boxes.reduce((sum, box) => sum + Number(box.poids), 0) + Number.EPSILON) * 100) / 100 : null;
   const quotePrice = quotePriceModel(dossier, payment, optimized);
   const dimensions = value => Number(value).toLocaleString('fr-FR', { maximumFractionDigits: 4 });
-  const optimizedDimensions = boxes.map((box, index) => `${boxes.length > 1 ? `Colis ${index + 1} : ` : ''}${dimensions(box.dimL)} × ${dimensions(box.dimW)} × ${dimensions(box.dimH)} cm`);
+  // Each outgoing parcel with its volumetric weight (L × l × h ÷ divisor, unrounded);
+  // the total adds the unrounded weights, as the quote does (measureShipment).
+  const divisor = optimized ? dossierVolumetricDivisor(dossier, boxes, settings) : null;
+  const optimizedParcels = boxes.map((box, index) => {
+    const sides = [box.dimL, box.dimW, box.dimH].map(dimensions);
+    return { label: boxes.length > 1 ? `Colis ${index + 1}` : null, sides, dimensions: `${sides.join(' × ')} cm`,
+      volumetricWeight: divisor ? parcelVolumetricWeight(box, divisor.value) : null };
+  });
+  const optimizedVolumetricTotal = optimizedParcels.length && optimizedParcels.every(parcel => parcel.volumetricWeight !== null)
+    ? optimizedParcels.reduce((sum, parcel) => sum + parcel.volumetricWeight, 0) : null;
+  const optimizedDimensions = optimizedParcels.map(parcel => `${parcel.label ? `${parcel.label} : ` : ''}${parcel.dimensions}`);
   // A legacy status cannot turn an incomplete recorded payment into “Payé”.
   const statusLabel = dossier.statut === 'paye' && payment.stateLabel !== PAYMENT_STATE_LABELS.paid ? payment.detailLabel : STATUTS[dossier.statut]?.label || 'Statut à vérifier';
   // « Accords clients »: the consent and its last relance, on the same clock as the rest of the row.
   const base = { reception: receptionDateSummary(dossier, { now }), payment, quotePrice, departure, optimized, optimizedDimensions, optimizedWeight, statusLabel,
+    optimizedParcels, optimizedVolumetricTotal, optimizedVolumetricDivisor: divisor?.value ?? null, optimizedVolumetricSource: divisor?.source ?? null,
     consent: consentState(dossier, now), relance: consentRelance(dossier) };
   if (!workReady) return { ...base, action: null, title: 'Tâches à actualiser', detail: 'Actualisez les tâches pour retrouver leur attribution.', ownerName: '—', otherActionsCount: 0, matchesScope: scope === 'all' && !assigneeFilter };
   const rows = dossier.archive ? [] : sortWorkActions(actions.filter(action => action.colis_id === dossier.id && action.state !== 'done')
@@ -395,7 +453,8 @@ export function buildDossierTableExportRows(dossiers, clients, models, view, col
       client: [name, zone].filter(Boolean).join('\n'),
       statut: [model?.title || 'Tâches à actualiser', model?.detail, model?.otherActionsCount > 0 ? parallelTasksLabel(model.otherActionsCount) : ''].filter(Boolean).join('\n'),
       statusLabel: model?.statusLabel || 'Statut à vérifier', paymentState: model?.payment?.stateLabel || 'À vérifier',
-      optimizedDimensions: model?.optimized ? (model.optimizedDimensions || []).join('\n') : '',
+      // The cell's text, volumetric weights and total included.
+      optimizedDimensions: dossierDimensionsLines(model).join('\n'),
       optimizedWeight: model?.optimized ? model.optimizedWeight ?? '' : '',
       owner: model?.ownerName || '—',
       casier: dossier.casier || 'À renseigner',

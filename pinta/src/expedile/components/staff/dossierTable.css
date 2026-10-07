@@ -215,7 +215,16 @@ html:not(.dark) .dossier-table-filter[aria-pressed='true']::after { background: 
    keeps clear of that handle. */
 .dossier-table-resize-start { inset: 0 auto 0 0; justify-content: flex-start; }
 .dossier-table-head th[data-resize-edge='start'] { padding: 0 6px 0 12px; }
+/* « Dimensions finales »: one line per outgoing parcel. Each part of a line
+   (« Colis 2 : », « 19,5 × 17 × 11 cm · », « 0,73 kg vol. ») is kept whole, so a
+   line breaks between them. A part wider than a very narrow column breaks only
+   after a « × » or before « vol. », never inside a number. */
 .dossier-table-dimensions > span { display: block; }
+.dossier-table-dimensions > span + span { margin-top: 2px; }
+.dossier-table-keep { display: inline-block; max-width: 100%; }
+.dossier-table-nowrap { white-space: nowrap; }
+.dossier-table-volumetric { color: var(--text-secondary); }
+.dossier-table-volumetric-total { font-weight: 600; }
 .dossier-table-card-main-action { margin-top: 12px; }
 .dossier-table-align-right .dossier-table-sort { justify-content: flex-end; }
 .dossier-table-sort svg { flex-shrink: 0; }
@@ -356,7 +365,10 @@ html .dossier-table-action button[data-take-kind='claim']:hover:not(:disabled) {
    right-hand column. The action comes before the facts, so it stays in view. */
 .dossier-table-card[data-view='daily'] .dossier-table-card-facts { grid-template-columns: minmax(0, 1fr); row-gap: 8px; margin: 12px 0 0; }
 .dossier-table-card[data-view='daily'] .dossier-table-card-facts > div { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
-.dossier-table-card[data-view='daily'] .dossier-table-card-facts dt { flex-shrink: 1; max-width: 55%; overflow-wrap: anywhere; }
+/* A label wraps between its words and keeps its longest word whole beside a
+   long value (« Dimensions finales »): min-content, which break-word (unlike
+   anywhere) does not lower, overrides the global `* { min-width: 0 }`. */
+.dossier-table-card[data-view='daily'] .dossier-table-card-facts dt { flex-shrink: 1; max-width: 55%; min-width: min-content; overflow-wrap: break-word; }
 .dossier-table-card[data-view='daily'] .dossier-table-card-facts dd { min-width: 0; margin: 0; text-align: right; }
 /* Small embedded badges and grouped headings must remain readable as well. */
 .dossier-data-table [class*='text-xs'], .dossier-data-table [class*='text-sm'],

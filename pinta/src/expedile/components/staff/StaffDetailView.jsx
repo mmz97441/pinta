@@ -24,6 +24,7 @@ import TaskContinuation from '../workspace/TaskContinuation';
 import { staffName } from '../workspace/WorkActionRow';
 import TaskMessage from './TaskMessage';
 import QuoteCustomsPanel from './QuoteCustomsPanel';
+import SavedQuoteDetail from './SavedQuoteDetail';
 import ShipmentRevision from './ShipmentRevision';
 import TaskReopen from './TaskReopen';
 import TaskGuidance from './TaskGuidance';
@@ -556,12 +557,9 @@ export default function StaffDetailView({ workspace = false, active = true, task
     const inTransport = Boolean(sel.dateExpedition) || ['expedie','transit','dedouanement','arrive','livraison','livre'].includes(sel.statut);
     const paymentRecorded = Boolean(sel.paiementDate) || sel.paiementMontant != null || sel.statut === 'paye';
     const closed = sel.archive || sel.statut === 'annule';
-    const frozenLines = sel.devisSnapshot?.amounts?.taxLines || sel.devisSnapshot?.inputs?.lines || [];
-    const quoteSummary = Number(sel.devisTotal) > 0 ? <div aria-label="Devis enregistré" className="space-y-2 rounded-xl border border-slate-200 p-4 text-sm">
-      {sel.devisSnapshot?.amounts && <><Ligne label="Transport" value={eur(sel.devisSnapshot.amounts.transport)} /><Ligne label="Taxes" value={eur((sel.devisSnapshot.amounts.om || 0) + (sel.devisSnapshot.amounts.omr || 0) + (sel.devisSnapshot.amounts.tva || 0))} /><Ligne label="Frais" value={eur(sel.devisSnapshot.amounts.fees)} /></>}
-      <Ligne label="Total" value={eur(sel.devisTotal)} />
-      {frozenLines.length > 0 && <details aria-label="Articles et taux enregistrés"><summary className="min-h-11 cursor-pointer py-3 font-semibold">Articles et taux enregistrés ({frozenLines.length})</summary><ul className="divide-y divide-slate-200">{frozenLines.map((line, index) => <li key={line.id || index} className="space-y-1 py-3"><p className="font-semibold">{line.description}</p>{line.customDuty?.code && <p>{line.customDuty.code} · {line.customDuty.label}</p>}<p>{line.quantity} × {eur(line.unitPrice)} HT</p><p>OM : {line.rates?.om == null ? 'non renseigné' : `${line.rates.om} %`} · OMR : {line.rates?.omr == null ? 'non renseigné' : `${line.rates.omr} %`}</p>{line.customDuty?.overrideReason && <p>Motif de correction : {line.customDuty.overrideReason}</p>}</li>)}</ul><p className="py-2 text-slate-600">Valeurs conservées avec ce devis.</p></details>}
-    </div> : <p className="text-sm text-slate-600">Aucun devis en cours n’est enregistré dans ce dossier.</p>;
+    // The saved quote in detail, read from its frozen snapshot (SavedQuoteDetail).
+    const quoteSummary = Number(sel.devisTotal) > 0 ? <SavedQuoteDetail colis={sel} categories={categories} />
+      : <p className="text-sm text-slate-600">Aucun devis en cours n’est enregistré dans ce dossier.</p>;
     // Closed dossiers keep their data available without offering work to restart.
     // These guards precede task prerequisites so cancellation never looks like
     // an outstanding agreement, preparation or payment.

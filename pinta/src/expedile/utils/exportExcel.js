@@ -6,7 +6,9 @@ export function exportDossierTableExcel(dossiers, clients, models, view, columns
   if (!selected.length) throw new Error('Aucune colonne visible à exporter.');
   const rows = buildDossierTableExportRows(dossiers, clients, models, view, selected);
   const ws = XLSX.utils.json_to_sheet(rows, { header: selected.map(column => column.label) });
-  ws['!cols'] = selected.map(({ label }) => ({ wch: Math.min(60, rows.reduce((width, row) => Math.max(width, String(row[label] ?? '').length), label.length)) + 2 }));
+  // A cell of several lines (« Dimensions finales ») is as wide as its longest line.
+  const longestLine = value => String(value ?? '').split('\n').reduce((width, line) => Math.max(width, line.length), 0);
+  ws['!cols'] = selected.map(({ label }) => ({ wch: Math.min(60, rows.reduce((width, row) => Math.max(width, longestLine(row[label])), label.length)) + 2 }));
   selected.forEach((column, col) => {
     if (!['requested', 'paid', 'remaining'].includes(column.key)) return;
     rows.forEach((row, index) => {

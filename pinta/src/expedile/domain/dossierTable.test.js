@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { TABLE_COLUMNS, buildDossierTableModel as model, buildDossierTableExportRows, dossierTableExportColumns, formatDossierTableDate, dossierTableMissingAmountLabel, sortDossierTableRows, BULK_STATUS_STEPS, BULK_STATUS_REASONS, bulkStatusPlan, bulkRefusalReason, dossierFactHasValue, countLabel, countWord, parallelTasksLabel, STALE_TASK_REASON, consentRequestLabel } from './dossierTable.js';
+import { TABLE_COLUMNS, buildDossierTableModel as model, buildDossierTableExportRows, dossierTableExportColumns, formatDossierTableDate, dossierTableMissingAmountLabel, sortDossierTableRows, BULK_STATUS_STEPS, BULK_STATUS_REASONS, bulkStatusPlan, bulkRefusalReason, dossierFactHasValue, countLabel, countWord, parallelTasksLabel, STALE_TASK_REASON, consentRequestLabel, dossierDimensionsLines, volumetricWeightLabel } from './dossierTable.js';
 import { actionWaiting, workActionUrl } from './personalWork.js';
 import { STATUTS } from '../constants/index.js';
 
@@ -317,6 +317,67 @@ test('final weight sums only certified physical packages and does not use an old
     assert.equal(result.optimizedWeight, null); assert.deepEqual(result.optimizedDimensions, []);
   }
   assert.equal(model({ ...prepared, finalPackages: null, finL: 10, finW: 20, finH: 30, finP: 1.5 }, base).optimizedWeight, 1.5);
+});
+
+// The list of 7 October: EXP-2YE537, two outgoing parcels, the divisor of the app (5000).
+const twoParcels = { ...prepared, outgoingParcelCount: 2, finalPackages: [{ dimL: 31, dimW: 22, dimH: 13, poids: 2 }, { dimL: 19.5, dimW: 17, dimH: 11, poids: 1 }] };
+const nbsp = text => text.replace(/ kg/g, '\u00a0kg');
+
+test('each outgoing parcel shows its volumetric weight and several parcels add their total', () => {
+  const row = model(twoParcels, base);
+  assert.deepEqual(row.optimizedParcels.map(parcel => [parcel.label, parcel.sides, parcel.dimensions]), [['Colis 1', ['31', '22', '13'], '31 × 22 × 13 cm'], ['Colis 2', ['19,5', '17', '11'], '19,5 × 17 × 11 cm']]);
+  assert.deepEqual(row.optimizedParcels.map(parcel => parcel.volumetricWeight), [8866 / 5000, 3646.5 / 5000], 'Unrounded L × l × h ÷ divisor.');
+  assert.equal(row.optimizedVolumetricTotal, 8866 / 5000 + 3646.5 / 5000);
+  assert.deepEqual([row.optimizedVolumetricDivisor, row.optimizedVolumetricSource], [5000, 'settings']);
+  assert.deepEqual(dossierDimensionsLines(row), [nbsp('Colis 1 : 31 × 22 × 13 cm · 1,77 kg vol.'), nbsp('Colis 2 : 19,5 × 17 × 11 cm · 0,73 kg vol.'), nbsp('Total : 2,5 kg vol.')]);
+  assert.deepEqual(row.optimizedDimensions, ['Colis 1 : 31 × 22 × 13 cm', 'Colis 2 : 19,5 × 17 × 11 cm'], 'The geometric lines stay available.');
+  assert.equal(row.optimizedWeight, 3, '« Poids (kg) » keeps the real weight.');
+  // One parcel keeps no « Colis 1 : » and no total line.
+  const one = model({ ...twoParcels, outgoingParcelCount: 1, finalPackages: [twoParcels.finalPackages[0]] }, base);
+  assert.deepEqual(dossierDimensionsLines(one), [nbsp('31 × 22 × 13 cm · 1,77 kg vol.')]);
+  assert.equal(volumetricWeightLabel(8866 / 5000), nbsp('1,77 kg vol.'));
+  for (const value of [null, undefined, NaN, Infinity, -1, '2']) assert.equal(volumetricWeightLabel(value), null);
+});
+
+test('the volumetric divisor comes from the settings, or from the saved quote of exactly these parcels', () => {
+  assert.deepEqual(dossierDimensionsLines(model(twoParcels, { ...base, settings: { diviseurVolumetrique: 6000 } })), [nbsp('Colis 1 : 31 × 22 × 13 cm · 1,48 kg vol.'), nbsp('Colis 2 : 19,5 × 17 × 11 cm · 0,61 kg vol.'), nbsp('Total : 2,09 kg vol.')]);
+  assert.equal(model(twoParcels, { ...base, settings: { volumetricDivisor: '4000' } }).optimizedVolumetricDivisor, 4000);
+  // What was billed: the saved quote's divisor, while its parcels are the current ones.
+  const savedQuote = { inputs: { volumetricDivisor: 4000, finalPackages: [{ dimL: 31, dimW: 22, dimH: 13, poids: 2 }, { dimL: 19.5, dimW: 17, dimH: 11, poids: 1 }] }, amounts: { total: 50 } };
+  const quoted = model({ ...twoParcels, devisSnapshot: savedQuote }, { ...base, settings: { diviseurVolumetrique: 6000 } });
+  assert.deepEqual([quoted.optimizedVolumetricDivisor, quoted.optimizedVolumetricSource], [4000, 'quote']);
+  assert.deepEqual(dossierDimensionsLines(quoted), [nbsp('Colis 1 : 31 × 22 × 13 cm · 2,22 kg vol.'), nbsp('Colis 2 : 19,5 × 17 × 11 cm · 0,91 kg vol.'), nbsp('Total : 3,13 kg vol.')]);
+  // Stored as strings by an older version: same parcels.
+  assert.equal(model({ ...twoParcels, finalPackages: twoParcels.finalPackages.map(box => ({ ...box, dimL: String(box.dimL) })), devisSnapshot: savedQuote }, base).optimizedVolumetricSource, 'quote');
+  // Another parcel, another weight, another order or an invalid saved divisor: the settings apply.
+  for (const finalPackages of [[savedQuote.inputs.finalPackages[0], { dimL: 19.5, dimW: 17, dimH: 12, poids: 1 }], [savedQuote.inputs.finalPackages[0], { dimL: 19.5, dimW: 17, dimH: 11, poids: 1.5 }], [...savedQuote.inputs.finalPackages].reverse()])
+    assert.equal(model({ ...twoParcels, finalPackages, devisSnapshot: savedQuote }, { ...base, settings: { diviseurVolumetrique: 6000 } }).optimizedVolumetricDivisor, 6000);
+  assert.equal(model({ ...twoParcels, outgoingParcelCount: 1, finalPackages: [twoParcels.finalPackages[0]], devisSnapshot: savedQuote }, base).optimizedVolumetricSource, 'settings', 'One parcel left: the quote no longer matches.');
+  for (const volumetricDivisor of [0, -5000, 'x', null]) assert.equal(model({ ...twoParcels, devisSnapshot: { inputs: { ...savedQuote.inputs, volumetricDivisor } } }, base).optimizedVolumetricSource, 'settings');
+});
+
+test('an invalid divisor leaves the dimensions alone, never « NaN »', () => {
+  for (const settings of [{ diviseurVolumetrique: 0 }, { diviseurVolumetrique: -1 }, { diviseurVolumetrique: 'abc' }, { diviseurVolumetrique: '' }, { volumetricDivisor: null, diviseurVolumetrique: Infinity }]) {
+    const row = model(twoParcels, { ...base, settings });
+    assert.deepEqual(row.optimizedParcels.map(parcel => parcel.volumetricWeight), [null, null]);
+    assert.equal(row.optimizedVolumetricTotal, null); assert.equal(row.optimizedVolumetricDivisor, null);
+    assert.deepEqual(dossierDimensionsLines(row), ['Colis 1 : 31 × 22 × 13 cm', 'Colis 2 : 19,5 × 17 × 11 cm']);
+    assert.doesNotMatch(JSON.stringify(buildDossierTableExportRows([twoParcels], [], new Map([[twoParcels.id, row]]), 'daily', TABLE_COLUMNS.daily)), /NaN|undefined|null|vol\./);
+  }
+  // Before the optimisation: nothing, whatever the divisor.
+  const before = model(dossier, base);
+  assert.deepEqual([before.optimizedParcels, before.optimizedVolumetricTotal, before.optimizedVolumetricDivisor, dossierDimensionsLines(before)], [[], null, null, []]);
+});
+
+test('the export and the column filter carry the volumetric text of the cell', () => {
+  const row = model(twoParcels, base);
+  const [exported] = buildDossierTableExportRows([twoParcels], [], new Map([[twoParcels.id, row]]), 'daily', TABLE_COLUMNS.daily);
+  assert.equal(exported['Dimensions finales'], nbsp('Colis 1 : 31 × 22 × 13 cm · 1,77 kg vol.\nColis 2 : 19,5 × 17 × 11 cm · 0,73 kg vol.\nTotal : 2,5 kg vol.'));
+  assert.equal(exported['Poids final (kg)'], 3);
+  const column = TABLE_COLUMNS.daily.find(item => item.key === 'optimizedDimensions');
+  assert.match(column.filter.text({ model: row }), /0,73\u00a0kg vol\. · Total : 2,5\u00a0kg vol\.$/);
+  assert.equal(column.filter.text({ model: model(dossier, base) }), null);
+  assert.equal(column.sort.value({ model: row }), 'Colis 1 : 31 × 22 × 13 cm · Colis 2 : 19,5 × 17 × 11 cm', 'The sort order is unchanged.');
 });
 
 test('a known draft price stays separate from a payment request and uses stored amounts without tax recalculation', () => {

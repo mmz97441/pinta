@@ -1576,6 +1576,102 @@ async function main() {
       await result.getByRole('button',{name:'Fermer',exact:true}).click();await result.waitFor({state:'hidden'});
       assert.equal(await f.page.locator('[data-toast]').count(), 0, 'Nor once it is closed: the result was read in the dialog.');
     }, { device: { hasTouch: true, isMobile: true } });
+    // ── Volumetric weight in « Dimensions finales » ───────────────────────────
+    // P5: two outgoing parcels (31 × 22 × 13 cm and 19,5 × 17 × 11 cm); P4: one
+    // parcel of 30 × 20 × 20 cm. The app's divisor is 5000 unless said otherwise.
+    const twoParcels = f => Object.assign(f.tables.colis.find(item=>item.id===P5),{final_packages:[{dimL:31,dimW:22,dimH:13,poids:2},{dimL:19.5,dimW:17,dimH:11,poids:1}],outgoing_parcel_count:2});
+    const plain = value => String(value).replace(/[\u00a0\u202f]/g,' ').trim();
+    const dimensionsText = async (f,id) => plain(await cell(f,id,'optimizedDimensions').innerText());
+    const businessSettings = f => f.tables.app_settings.find(item=>item.key==='business').value;
+    const P5_DIMENSIONS = 'Colis 1 : 31 × 22 × 13 cm · 1,77 kg vol.\nColis 2 : 19,5 × 17 × 11 cm · 0,73 kg vol.\nTotal : 2,5 kg vol.';
+    // Where the parts of each line fall in a cell or a card: numbers cut across two
+    // lines, parts outside the box, and parts drawn on more than one line.
+    const dimensionsLayout = (f,selector) => f.page.locator(selector).first().evaluate(box => {
+      const lines = range => new Set([...range.getClientRects()].filter(rect => rect.width > 0).map(rect => Math.round(rect.top))).size;
+      const style = getComputedStyle(box), outer = box.getBoundingClientRect();
+      const left = outer.left + parseFloat(style.paddingLeft) - 1, right = outer.right - parseFloat(style.paddingRight) + 1;
+      const split = [], walker = document.createTreeWalker(box, NodeFilter.SHOW_TEXT);
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) for (const match of node.textContent.matchAll(/\d+(?:,\d+)?/g)) {
+        const range = document.createRange(); range.setStart(node, match.index); range.setEnd(node, match.index + match[0].length);
+        if (lines(range) > 1) split.push(match[0]);
+      }
+      const parts = [...box.querySelectorAll('.dossier-table-keep')].map(part => { const range = document.createRange(); range.selectNodeContents(part); const rect = part.getBoundingClientRect(); return { text: part.textContent, lines: lines(range), outside: rect.left < left || rect.right > right }; });
+      return { split, outside: parts.filter(part => part.outside).map(part => part.text), wrapped: parts.filter(part => part.lines > 1).map(part => part.text), parts: parts.length,
+        volumetricContrast: Math.min(...[...box.querySelectorAll('.dossier-table-volumetric')].map(part => window.__pintaContrast.text(part))) };
+    });
+    await scenario('dimensions-show-the-volumetric-weight-of-each-parcel-and-their-total-in-cells-and-export',async f=>{
+      twoParcels(f);const before=structuredClone(f.tables.colis);await open(f);
+      for(const [label,view] of [['Travail quotidien','daily'],['Départs','departures']]){
+        await selectPreset(f,label,view);
+        assert.equal(await dimensionsText(f,P5),P5_DIMENSIONS,'Each parcel: L × l × h ÷ 5000, then the total of the unrounded weights.');
+        assert.equal(await dimensionsText(f,P4),'30 × 20 × 20 cm · 2,4 kg vol.','One parcel keeps no « Colis 1 : » and no total.');
+        assert.equal(plain(await cell(f,P5,'optimizedWeight').innerText()),'3','« Poids (kg) » keeps the real weight.');
+        for(const id of [P,P2,P6])assert.equal(await dimensionsText(f,id),'','Before or after a stale preparation: still nothing.');
+      }
+      await selectPreset(f,'Travail quotidien','daily');
+      const data=await exportFiltered(f,6),dims=data[0].indexOf('Dimensions finales');
+      assert.equal(plain(data.find(record=>record[0]==='EXP-TAB005')[dims]),P5_DIMENSIONS,'The export carries the text of the cell.');
+      assert.equal(plain(data.find(record=>record[0]==='EXP-TAB004')[dims]),'30 × 20 × 20 cm · 2,4 kg vol.');
+      // « Contient » finds what the cell shows.
+      await filterColumn(f,'optimizedDimensions','contains','2,5 kg vol');await waitIds(f,[P5]);
+      await assertNoBusinessChange(f,before);
+    });
+    await scenario('the-volumetric-divisor-is-the-configured-one-or-the-one-of-the-saved-quote-of-these-parcels',async f=>{
+      twoParcels(f);businessSettings(f).diviseurVolumetrique=6000;
+      // P4's saved quote priced exactly its parcel with a divisor of 4000: that is what was billed.
+      const quoted=f.tables.colis.find(item=>item.id===P4);quoted.devis_snapshot={inputs:{volumetricDivisor:4000,finalPackages:[{dimL:30,dimW:20,dimH:20,poids:3}]},amounts:{total:100}};
+      await open(f);
+      assert.equal(await dimensionsText(f,P5),'Colis 1 : 31 × 22 × 13 cm · 1,48 kg vol.\nColis 2 : 19,5 × 17 × 11 cm · 0,61 kg vol.\nTotal : 2,09 kg vol.','The configured divisor (6000) without a saved quote.');
+      assert.equal(await dimensionsText(f,P4),'30 × 20 × 20 cm · 3 kg vol.','The saved quote’s divisor (4000) for the parcels it priced.');
+      assert.match(await cell(f,P4,'optimizedDimensions').locator('.dossier-table-dimensions').getAttribute('title'),/÷ 4\s?000, diviseur du devis enregistré$/);
+      // Another parcel than the quoted one: the configured divisor again.
+      quoted.devis_snapshot.inputs.finalPackages=[{dimL:30,dimW:20,dimH:21,poids:3}];await f.page.reload();await row(f,P4).waitFor();
+      await f.page.waitForFunction(id=>/ 2\skg vol\.$/.test(document.querySelector(`tr[data-dossier-row="${id}"] [data-column="optimizedDimensions"]`)?.innerText.trim()),P4);
+      assert.equal(await dimensionsText(f,P4),'30 × 20 × 20 cm · 2 kg vol.');
+      // An invalid divisor: the dimensions alone, never « NaN ».
+      businessSettings(f).diviseurVolumetrique=0;await f.page.reload();await row(f,P5).waitFor();
+      await f.page.waitForFunction(id=>{const node=document.querySelector(`tr[data-dossier-row="${id}"] [data-column="optimizedDimensions"]`);return Boolean(node?.innerText.trim())&&!node.innerText.includes('vol.');},P5);
+      assert.equal(await dimensionsText(f,P5),'Colis 1 : 31 × 22 × 13 cm\nColis 2 : 19,5 × 17 × 11 cm');
+      assert.equal(await dimensionsText(f,P4),'30 × 20 × 20 cm');
+      assert.doesNotMatch(await f.page.getByRole('table',{name:'Dossiers d’expédition',exact:true}).innerText(),/NaN|undefined|Infinity/);
+      assert.deepEqual(businessWrites(f),[]);
+    });
+    for(const dark of [false,true])await scenario(`dimensions-break-between-their-parts-never-inside-a-number-${dark?'dark':'light'}`,async f=>{
+      // Widths are checked with a wide fallback font, as the Linux CI draws them.
+      await f.context.addInitScript(()=>{const install=()=>{const style=document.createElement('style');style.textContent='body, body * { font-family: Verdana, "DejaVu Sans", sans-serif !important; }';document.head.appendChild(style);};if(document.head)install();else document.addEventListener('DOMContentLoaded',install);});
+      twoParcels(f);await theme(f,dark);const before=structuredClone(f.tables.colis);await open(f);await waitTheme(f,dark);
+      const resize=f.page.getByRole('separator',{name:'Redimensionner Dimensions finales',exact:true});
+      const size=await openDisplay(f).then(dialog=>dialog.getByRole('spinbutton',{name:'Taille du texte des dossiers',exact:true}));await closeDisplay(f);
+      const selector=`tr[data-dossier-row="${P5}"] td[data-column="optimizedDimensions"]`;
+      for(const text of [11,12,14,16,20])for(const width of [190,110]){
+        await openDisplay(f);await size.fill(String(text));await size.press('Enter');await closeDisplay(f);
+        await f.page.waitForFunction(text=>getComputedStyle(document.querySelector('.dossier-data-table')).fontSize===`${text}px`,text);
+        await resize.focus();await resize.press(width===110?'Home':'Enter');
+        await f.page.waitForFunction(width=>Math.round(document.querySelector('th[data-column="optimizedDimensions"]').getBoundingClientRect().width)===width,width);
+        const layout=await dimensionsLayout(f,selector);
+        assert.equal(layout.parts,8);assert.deepEqual(layout.split,[],`${text} px, ${width} px: no number is cut.`);assert.deepEqual(layout.outside,[],`${text} px, ${width} px: every part stays in its cell.`);
+        // The default width keeps each part whole up to 16 px; larger text or a narrower column may break a part after a « × » or before « vol. ».
+        if(width===190&&text<=16)assert.deepEqual(layout.wrapped,[],`${text} px in the default column: lines break only between their parts.`);
+        assert.ok(layout.volumetricContrast>=4.5,`The volumetric weights stay readable (${layout.volumetricContrast.toFixed(2)}:1).`);
+        if([12,20].includes(text))await f.page.locator(selector).screenshot({path:`${output}/dimensions-${text}px-${width}-${dark?'dark':'light'}.png`});
+      }
+      await resize.press('Enter');
+      // Phone cards: the same lines beside a whole « Dimensions finales » label.
+      await f.page.setViewportSize({width:390,height:844});const card=`[data-dossier-card="${P5}"] .dossier-table-card-facts [data-column="optimizedDimensions"]`;
+      for(const text of [14,20]){
+        await openDisplay(f);await size.fill(String(text));await size.press('Enter');await closeDisplay(f);
+        await f.page.locator(card).waitFor();await f.page.waitForFunction(text=>getComputedStyle(document.querySelector('.dossier-table-card')).fontSize===`${text}px`,text);
+        assert.equal(plain(await f.page.locator(`${card} dd`).innerText()),P5_DIMENSIONS);
+        const layout=await dimensionsLayout(f,`${card} dd`);assert.deepEqual(layout.split,[]);assert.deepEqual(layout.outside,[]);
+        const label=await f.page.locator(`${card} dt`).evaluate(node=>{const range=document.createRange(),text=node.firstChild;range.setStart(text,0);range.setEnd(text,'Dimensions'.length);return new Set([...range.getClientRects()].filter(rect=>rect.width>0).map(rect=>Math.round(rect.top))).size;});
+        assert.equal(label,1,`${text} px: « Dimensions » is never cut.`);await noPageOverflow(f);
+        // A viewport tall enough for the whole card: the list scrolls inside its own frame.
+        const whole=f.page.locator(`[data-dossier-card="${P5}"]`);await f.page.setViewportSize({width:390,height:Math.max(844,Math.ceil((await whole.boundingBox()).height)+400)});
+        await whole.scrollIntoViewIfNeeded();await whole.screenshot({path:`${output}/dimensions-card-${text}px-390-${dark?'dark':'light'}.png`});await f.page.setViewportSize({width:390,height:844});
+      }
+      await axeClean(f,`[data-dossier-card="${P5}"]`);
+      await assertNoBusinessChange(f,before);
+    });
   } finally {await browser.close();await fs.writeFile(`${output}/results.json`,JSON.stringify(results,null,2));}
 }
 main().catch(error=>{console.error(error);process.exitCode=1;});

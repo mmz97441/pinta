@@ -273,4 +273,70 @@ try{
   const requests=f.calls.filter(c=>c.kind==='suggest');assert.deepEqual(requests.map(c=>c.input.p_items.length),[50,1]);assert.equal(new Set(requests.flatMap(c=>c.input.p_items.map(item=>item.lineId))).size,51);
   assert.equal(await panel(f).getByRole('button',{name:/Utiliser la proposition/}).count(),51);assert.equal(await apply(f).count(),0);assert.equal(f.calls.filter(c=>c.kind==='save').length,0);assert.equal(f.tables.lignes.some(line=>line.custom_duty),false);assert.deepEqual(writes(f),[]);
  });
+ // ── « Devis enregistré » in detail: weights, taxes, fees and each article's share ──
+ // The quote of 7 October: one parcel of 40 × 35 × 10 cm and 1,9 kg, two articles (16,64 € classified
+ // 01012100 at OM 10 % / OMR 2,5 %; 9,92 € in a category coded 39241000 at OM 5 % / OMR 2,5 %), 25 € + 5 €/kg.
+ const plain=text=>String(text).replace(/[\u00a0\u202f]/g,' ').replace(/\s+/g,' ').trim();
+ const savedQuote=f=>f.page.getByRole('group',{name:'Devis enregistré',exact:true});
+ const amount=text=>Number(text.replace(/[^\d,]/g,'').replace(',','.'));
+ function sevenOctober(f,{fees=[]}={}){
+  Object.assign(f.tables.colis[0],{final_packages:[{dimL:40,dimW:35,dimH:10,poids:1.9}],fin_l:40,fin_w:35,fin_h:10,fin_p:1.9,frais_divers:fees});
+  f.tables.categories.push({id:'cat-vaisselle',label:'Vaisselle plastique',code_hs:'39241000',position:2});
+  f.tables.taux_categories.push({id:'rate-vaisselle',categorie_id:'cat-vaisselle',destination_code:'974',om:5,omr:2.5});
+  f.tables.factures[0].montant=26.56;const line=f.tables.lignes[0];
+  f.tables.lignes=[{...line,description:'Mini scelleuse',qte:1,prix_unitaire:16.64,custom_duty:mapped(catalog[0])},{...line,id:'55555555-5555-4555-8555-555555555556',description:'Organisateur évier',qte:1,prix_unitaire:9.92,categorie_id:'cat-vaisselle'}];
+ }
+ // The deliberate save of the draft, then the quote sent: the dossier shows its saved quote.
+ async function saveAndSend(f){
+  await f.login();await f.page.goto(`${base}/colis/${ids.P}?section=devis`);await mainSave(f).click();
+  await f.page.getByRole('button',{name:'Envoyer le devis au client',exact:true}).waitFor();assert.ok(f.tables.colis[0].devis_snapshot?.amounts);
+  Object.assign(f.tables.colis[0],{statut:'devis_envoye',devis_brouillon:false,devis_envoye_le:'2026-10-07T08:00:00Z'});
+  await f.page.reload();await f.page.getByRole('heading',{name:'Devis enregistré',exact:true}).waitFor();await savedQuote(f).waitFor();
+ }
+ for(const mobile of [false,true])for(const dark of [false,true])await scenario(`saved-quote-details-weights-taxes-fees-and-article-shares-${mobile?'390':'1440'}-${dark?'dark':'light'}`,{},async f=>{
+  // The computer view has a fee; the phone view has none.
+  sevenOctober(f,{fees:mobile?[]:[{libelle:'Emballage renforcé',montant:4}]});
+  await f.page.setViewportSize(mobile?{width:390,height:844}:{width:1440,height:1000});await f.context.addInitScript(dark=>localStorage.setItem('expedile-theme',dark?'dark':'light'),dark);
+  await saveAndSend(f);await f.page.waitForFunction(dark=>document.documentElement.classList.contains('dark')===dark,dark);
+  const group=savedQuote(f);
+  // Folded: the amounts only.
+  assert.match(plain(await group.innerText()),mobile?/^Transport 39,00 € Comprendre le calcul du transport Taxes 10,88 € Détail des taxes Frais convenus Aucun frais Total 49,88 € Articles et taux enregistrés \(2\)$/:/^Transport 39,00 € Comprendre le calcul du transport Taxes 10,88 € Détail des taxes Frais convenus 4,00 € Détail des frais Total 53,88 € Articles et taux enregistrés \(2\)$/);
+  assert.doesNotMatch(plain(await group.innerText()),/0,00 €/,'No « 0,00 € » line for a quote without fees.');
+  for(const summary of await group.locator('summary').all()){const box=await summary.boundingBox();assert.ok(box.height>=44,'Each detail opens from a 44 px target.');await summary.click();}
+  await f.page.waitForFunction(()=>[...document.querySelectorAll('[aria-label="Devis enregistré"] details')].every(node=>node.open));
+  const text=plain(await group.innerText());
+  for(const expected of [
+   'Transport 39,00 € Comprendre le calcul du transport Poids réel 1,9 kg Poids volumétrique 2,8 kg 40 × 35 × 10 cm · réel 1,9 kg · vol. 2,8 kg Poids volumétrique = longueur × largeur × hauteur ÷ 5 000 Poids retenu 2,8 kg (le plus lourd : volumétrique) Tarif : 25,00 € + 5,00 € par kg',
+   'Taxes 10,88 € Détail des taxes Octroi de mer 5,33 € Octroi de mer régional 1,64 € TVA 8,5 % 3,91 € sur 45,97 € (transport + octroi de mer)',
+   mobile?'Frais convenus Aucun frais Total 49,88 €':'Frais convenus 4,00 € Détail des frais Emballage renforcé 4,00 € Total 53,88 €',
+   'Articles et taux enregistrés (2) Le transport est réparti selon la valeur des articles (quantité × prix unitaire HT). Les montants sont arrondis au centime ; leur somme correspond aux totaux du devis.',
+   'Mini scelleuse Code SH 01012100 · Chevaux reproducteurs de race pure 1 × 16,64 € HT = 16,64 € Part de transport 24,43 € · Base OM / OMR 41,07 € OM 10 % : 4,11 € · OMR 2,5 % : 1,03 €',
+   'Organisateur évier Code SH 39241000 · Vaisselle plastique 1 × 9,92 € HT = 9,92 € Part de transport 14,57 € · Base OM / OMR 24,49 € OM 5 % : 1,22 € · OMR 2,5 % : 0,61 €',
+  ])assert.ok(text.includes(expected),`« ${expected} » in « ${text} »`);
+  // The shares shown add up exactly to the totals shown.
+  const sum=pattern=>Math.round([...text.matchAll(pattern)].reduce((total,match)=>total+amount(match[1]),0)*100)/100;
+  assert.equal(sum(/Part de transport ([\d,]+) €/g),39);assert.equal(sum(/OM [\d,]+ % : ([\d,]+) €/g),5.33);assert.equal(sum(/OMR [\d,]+ % : ([\d,]+) €/g),1.64);
+  assert.equal(await f.page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false);
+  const axe=await new AxeBuilder({page:f.page}).include('[aria-label="Devis enregistré"][role="group"]').withTags(['wcag2a','wcag2aa','wcag21aa']).analyze();assert.deepEqual(axe.violations.map(v=>v.id),[]);
+  // A viewport tall enough for the whole opened quote: the page scrolls inside its own frame.
+  const height=Math.ceil((await group.boundingBox()).height)+400;await f.page.setViewportSize(mobile?{width:390,height:Math.max(844,height)}:{width:1440,height:Math.max(1000,height)});
+  await group.scrollIntoViewIfNeeded();await group.screenshot({path:`${output}/saved-quote-${mobile?'390':'1440'}-${dark?'dark':'light'}.png`});
+  assert.equal(f.requests.filter(r=>r.path.endsWith('/save_quote')).length,1,'Reading the saved quote writes nothing.');
+ });
+ await scenario('saved-quote-of-a-professional-client-has-transport-and-fees-without-taxes',{},async f=>{
+  f.tables.clients[0].type='pro';Object.assign(f.tables.colis[0],{frais_divers:[{libelle:'Palette',montant:12}],mode_paiement_pro:'virement'});
+  await saveAndSend(f);const group=savedQuote(f);
+  for(const summary of await group.locator('summary').all())await summary.click();
+  const text=plain(await group.innerText());
+  assert.ok(text.includes('Transport 40,00 € Comprendre le calcul du transport Poids réel 3 kg Poids volumétrique 2,4 kg 30 × 20 × 20 cm · réel 3 kg · vol. 2,4 kg'),text);
+  assert.ok(text.includes('Poids retenu 3 kg (le plus lourd : réel)'),text);
+  assert.ok(text.includes('Devis professionnel : transport et frais, sans taxes. Frais convenus 12,00 € Détail des frais Palette 12,00 € Total 52,00 €'),text);
+  assert.doesNotMatch(text,/Taxes|Octroi|TVA|Articles et taux/);
+ });
+ await scenario('saved-quote-without-amounts-keeps-the-short-summary',{},async f=>{
+  Object.assign(f.tables.colis[0],{statut:'devis_envoye',devis_total:77,quote_version:1,devis_brouillon:false,devis_envoye_le:'2026-10-07T08:00:00Z',devis_snapshot:{inputs:{lines:[{id:ids.L,description:'Article vérifié',quantity:1,unitPrice:100,rates:{om:10,omr:2.5}}]}}});
+  await f.login();await f.page.goto(`${base}/colis/${ids.P}?section=devis`);await f.page.getByRole('heading',{name:'Devis enregistré',exact:true}).waitFor();
+  const group=savedQuote(f);await group.locator('summary').click();
+  assert.equal(plain(await group.innerText()),'Total 77,00 € Articles et taux enregistrés (1) Article vérifié 1 × 100,00 € HT OM : 10 % · OMR : 2,5 % Valeurs conservées avec ce devis.');
+ });
 }finally{await browser.close();await fs.writeFile(`${output}/results.json`,JSON.stringify(results,null,2));console.log(JSON.stringify(results,null,2));}})().catch(e=>{console.error(e);process.exitCode=1;});
