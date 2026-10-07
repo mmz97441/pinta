@@ -129,7 +129,7 @@ export function readScannedCode(text, dossiers = []) {
 }
 
 const reasonText = readiness => readiness.reasons.map(reason => reason.text.charAt(0).toLocaleLowerCase('fr') + reason.text.slice(1)).join(', ');
-const remainingLine = control => `Il reste ${plural(control.expected - control.checked, 'colis', 'colis')} à vérifier pour ce dossier.`;
+const remainingLine = remaining => `Il reste ${plural(remaining, 'colis', 'colis')} à vérifier pour ce dossier.`;
 const completeLine = dossier => {
   const readiness = departureReadiness(dossier);
   return readiness.eligible ? 'Tous ses colis sont vérifiés : expédition prête à partir.' : `Tous ses colis sont vérifiés ; à débloquer avant le départ : ${reasonText(readiness)}.`;
@@ -176,8 +176,14 @@ export function checkFeedback(scan, result, checks = [], { now = Date.now(), tea
     const who = check ? `Vérifié par ${checkerName(check, team)} ${checkMoment(check.checkedAt, { now })}. ` : '';
     return { tone: 'warning', title: `${title} déjà vérifié`, detail: `${who}Scannez un autre colis.` };
   }
+  // The server's counts when it gives them: the dossier may have been prepared again since this screen read it
+  // (a label « 1/3 » accepted while the screen still expects 2 parcels).
   const control = dossierControl(scan.dossier, checks);
-  return { tone: 'success', title: `${title} vérifié`, detail: control.complete ? completeLine(scan.dossier) : remainingLine(control) };
+  const fromServer = Number(result?.expected) > 0;
+  const expected = fromServer ? Number(result.expected) : control.expected;
+  const checked = fromServer ? Math.min(Number(result.checked) || 0, expected) : control.checked;
+  const complete = expected > 0 && checked >= expected;
+  return { tone: 'success', title: `${title} vérifié`, detail: complete ? completeLine(scan.dossier) : remainingLine(expected - checked) };
 }
 
 /** The answer of record_loading_count: « EXP-2YE537 · 2 colis comptés à la main ». */

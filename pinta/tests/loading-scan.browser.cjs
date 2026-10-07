@@ -108,7 +108,10 @@ const dossierRow = (f, id) => review(f).locator(`[data-loading-dossier="${id}"]`
 const normalize = text => String(text ?? '').replace(/[  ]/g, ' ').replace(/\s+/g, ' ').trim();
 const checksOf = (f, id) => f.tables.departure_loading_checks.filter(row => row.colis_id === id).map(row => [row.parcel_index, row.parcel_count, row.method]).sort((a, b) => a[0] - b[0]);
 const calls = (f, name) => f.requests.filter(request => request.path.endsWith(`/rpc/${name}`));
-const shot = (f, name) => f.page.screenshot({ path: path.join(output, `${name}.png`) });
+// Two frames before a picture: the page has painted its last state (with reduced motion, every change still runs a
+// 0.01 ms transition that a picture taken at once can catch at its start).
+const settle = f => f.page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+const shot = async (f, name) => { await settle(f); await f.page.screenshot({ path: path.join(output, `${name}.png`) }); };
 async function tallShot(f, name) {
   const viewport = f.page.viewportSize();
   const height = await f.page.evaluate(() => {
@@ -116,6 +119,7 @@ async function tallShot(f, name) {
     return scroller ? scroller.scrollHeight + (innerHeight - scroller.clientHeight) : document.documentElement.scrollHeight;
   });
   await f.page.setViewportSize({ width: viewport.width, height: Math.min(4000, Math.max(viewport.height, height)) });
+  await settle(f);
   await f.page.screenshot({ path: path.join(output, `${name}.png`) });
   await f.page.setViewportSize(viewport);
 }
@@ -288,6 +292,14 @@ async function main() {
       await until(() => review(f).getByRole('checkbox', { name: /EXP-7RT5WQ/ }).isChecked(), false, 'Unticked once cleared');
       assert.equal(normalize(await dossierRow(f, D.three).locator('.loading-progress-count').innerText()), 'Colis vérifiés 0/3');
       assert.equal(f.tables.audit_actions.filter(row => row.action === 'loading_checks_cleared').length, 1, 'The clearing is audited');
+      await until(() => focusedIsField(f), true, 'The scan field has the focus back after a clearing');
+      // « L’effacement reste inscrit dans l’historique du dossier »: named in words there.
+      if (width > 640) {
+        await f.page.goto(`${base}/colis/${D.three}`);
+        await f.page.getByRole('button', { name: 'Consulter l’historique du dossier', exact: true }).click();
+        const history = f.page.getByRole('dialog', { name: 'Contexte du dossier', exact: true }).getByTestId('dossier-history');
+        await history.getByText('Contrôle du chargement recommencé', { exact: true }).waitFor();
+      }
     }, { width });
 
     // ── 4. Automatic ticks, deferral and the confirmation after full checks ──
@@ -363,6 +375,33 @@ async function main() {
       assert.ok(reads >= 4, `Checks read regularly (${reads})`);
     });
 
+    // ── 5a. A dossier prepared again on another device (new labels) while the loading is open: the server's counts
+    // are shown, and the screen reads the dossier's preparation again for a scan or a count ──
+    await scenario('dossier-prepared-again-on-another-device', async f => {
+      await openLoading(f);
+      await scan(f, 'EXP-2YE537-1-2');
+      await until(() => checksOf(f, D.two), [[1, 2, 'scan']], 'A label of the former preparation');
+      // A parcel split on another device: three parcels, new labels; this screen still shows two.
+      Object.assign(f.tables.colis.find(row => row.id === D.two), { final_packages: [box(40, 30, 25, 5), box(30, 30, 20, 4), box(20, 20, 20, 4)], outgoing_parcel_count: 3, fin_p: 13, updated_at: '2026-10-07T12:31:00Z' });
+      await scan(f, 'EXP-2YE537-1-3');
+      await until(() => feedbackText(f), 'EXP-2YE537 · colis 1/3 vérifié Il reste 2 colis à vérifier pour ce dossier.', 'The answer counts the new preparation');
+      await until(() => dossierRow(f, D.two).locator('.loading-progress-count').innerText().then(normalize), 'Colis vérifiés 1/3', 'The dossier is read again with its three parcels');
+      assert.deepEqual(checksOf(f, D.two), [[1, 3, 'scan']], 'The check of the former label is replaced');
+      // Two parcels merged on another device: the count of the three parcels shown here is refused by the server,
+      // the dialog then shows the new number and accepts it.
+      Object.assign(f.tables.colis.find(row => row.id === D.three), { final_packages: [box(40, 30, 30, 9), box(40, 30, 25, 12)], outgoing_parcel_count: 2, updated_at: '2026-10-07T12:31:30Z' });
+      await dossierRow(f, D.three).getByRole('button', { name: 'Compter à la main les colis de EXP-7RT5WQ', exact: true }).click();
+      const dialog = f.page.getByRole('dialog', { name: 'Compter les colis de EXP-7RT5WQ', exact: true });
+      const count = dialog.getByLabel('Colis remis au transporteur', { exact: true });
+      await count.fill('3'); await count.press('Enter');
+      await dialog.getByRole('alert').filter({ hasText: 'Comptage différent : EXP-7RT5WQ compte 2 colis, vous en avez compté 3. Recomptez ses colis, ou reportez-le.' }).waitFor();
+      await until(() => dialog.locator('.loading-count-intro').innerText().then(normalize), 'Préparation : 2 colis. Comptez les colis de ce dossier réellement remis au transporteur.', 'The dialog shows the new preparation');
+      await count.fill('2'); await count.press('Enter');
+      await dialog.waitFor({ state: 'detached' });
+      assert.deepEqual(checksOf(f, D.three), [[1, 2, 'count'], [2, 2, 'count']]);
+      await until(() => review(f).getByRole('checkbox', { name: /EXP-7RT5WQ/ }).isChecked(), true, 'Counted on its new preparation: ticked');
+    });
+
     // ── 5b. Reading failures: a loading whose checks cannot be read does not open; a failed refresh says so ──
     await scenario('loading-without-its-checks-does-not-open', async f => {
       await f.context.route('**/rest/v1/rpc/get_loading_checks', route => route.fulfill({ status: 404, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify({ code: 'PGRST202', message: 'Could not find the function public.get_loading_checks(p_envoi_id) in the schema cache', details: null, hint: null }) }));
@@ -414,11 +453,15 @@ async function main() {
     // ── 7. Camera ──
     for (const [width, theme] of [[1440, 'light'], [390, 'dark']]) await scenario(`camera-refused-explains-and-closes-${width}-${theme}`, async f => {
       await openLoading(f);
+      // An answer given before the camera opens (a code typed with the scanner) is not repeated in the camera panel.
+      await scan(f, '1Z999AA10123456784');
+      await until(() => feedback(f).getAttribute('data-tone'), 'error', 'An answer before the camera');
       const button = review(f).getByRole('button', { name: 'Scanner avec la caméra', exact: true });
       await button.click();
       const dialog = f.page.getByRole('dialog', { name: 'Scanner avec la caméra', exact: true });
       await dialog.getByRole('alert').filter({ hasText: 'Accès à la caméra refusé. Autorisez la caméra pour ce site dans les réglages du navigateur, puis réessayez ; la douchette et la saisie restent disponibles.' }).waitFor();
       assert.equal(await dialog.getAttribute('data-state'), 'error');
+      assert.deepEqual([normalize(await dialog.locator('.loading-scan-feedback').innerText()), await dialog.locator('.loading-scan-feedback').getAttribute('data-tone')], ['', null], 'The camera panel shows only what the camera reads');
       assert.equal(f.assets.some(item => item.includes('cameraScanWorker')), false, 'No decoder loaded for a refused camera');
       await shot(f, `camera-refused-${width}-${theme}`); await axe(f, 'Camera refused');
       await f.page.keyboard.press('Escape');

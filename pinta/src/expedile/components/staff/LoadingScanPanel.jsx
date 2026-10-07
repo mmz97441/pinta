@@ -110,7 +110,9 @@ function CountDialog({ dossier, expected, envoiId, onClose, onSaved, onStale }) 
     } catch (failure) {
       setError(failure.message);
       setSaving(false);
-      if (failure.refresh) onStale();
+      // The count matched this screen's preparation before it was sent: a different count on the server means the
+      // dossier was prepared again meanwhile. Its preparation is read again, the dialog then shows the new number.
+      if (failure.refresh || failure.reason === 'count_mismatch') onStale();
       field.current?.focus();
     }
   };
@@ -164,7 +166,8 @@ export default function LoadingScanPanel({
   const [feedback, setFeedback] = useState(null);
   const [flash, setFlash] = useState(null);
   const [counting, setCounting] = useState(null);
-  const [camera, setCamera] = useState(false);
+  // The camera panel, open: the number of the last answer when it opened (it shows only the answers that follow).
+  const [camera, setCamera] = useState(null);
   const [pending, setPending] = useState(0);
   const barRef = useRef(null);
   const queue = useRef([]);
@@ -210,6 +213,9 @@ export default function LoadingScanPanel({
       const rows = result.check ? mergeLoadingCheck(latest.current.checks, result.check) : latest.current.checks;
       if (result.check) latest.current.onCheck(result.check);
       show({ ...checkFeedback(scan, result, rows, { team }), layout: scan.layoutCorrected }, scan.dossier.id);
+      // The server counts another number of parcels than this screen: the dossier was prepared again meanwhile
+      // (new labels). Its preparation is read again, so that its parcels and this check show.
+      if (result.expected > 0 && result.expected !== expectedParcelCount(scan.dossier)) reload();
     } catch (failure) {
       show({ ...refusedFeedback(scan, failure.message), layout: scan.layoutCorrected }, scan.dossier.id);
       if (failure.refresh) reload();
@@ -360,11 +366,11 @@ export default function LoadingScanPanel({
           </div>
           <button type="submit" className="loading-button loading-button--primary">Valider</button>
           {/* On a phone the icon alone: the bar stays short, the name stays « Scanner avec la caméra ». */}
-          <button type="button" className="loading-button loading-camera-button" onClick={() => { primeAudio(); setCamera(true); }}><Camera size={18} aria-hidden="true" className="shrink-0" /><span className="loading-camera-text">Scanner avec la caméra</span></button>
+          <button type="button" className="loading-button loading-camera-button" onClick={() => { primeAudio(); setCamera(sequence.current); }}><Camera size={18} aria-hidden="true" className="shrink-0" /><span className="loading-camera-text">Scanner avec la caméra</span></button>
         </div>
         <p id={`${fieldId}-help`} className="loading-help loading-scan-help">Douchette ou saisie : le code de l’étiquette (EXP-…-1-2), puis Entrée. Chaque colis vérifié est enregistré pour toute l’équipe.</p>
       </form>
-      <ScanFeedback feedback={feedback} live={!camera} />
+      <ScanFeedback feedback={feedback} live={camera === null} />
       {checksError && <p className="loading-warning"><AlertTriangle size={16} aria-hidden="true" className="shrink-0" /><span>Les contrôles des autres appareils n’ont pas pu être relus : ceux affichés datent de la dernière lecture. Nouvel essai toutes les 5 secondes.{checksError.reason !== 'network' && checksError.message ? ` ${checksError.message}` : ''}</span></p>}
       <p className="loading-totals"><span>Colis vérifiés {totals.checked}/{totals.expected}</span><span aria-hidden="true" className="loading-totals-dot">·</span><span>Expéditions prêtes {totals.ready}/{totals.total}</span>{pending > 0 && <span className="loading-pending"><Loader2 size={14} aria-hidden="true" className="animate-spin" />Enregistrement…</span>}</p>
     </div>
@@ -377,6 +383,7 @@ export default function LoadingScanPanel({
       </div>;
     })}
     {countingDossier && <CountDialog dossier={countingDossier} expected={expectedParcelCount(countingDossier)} envoiId={envoi.id} onClose={() => setCounting(null)} onSaved={(result) => counted(countingDossier, result)} onStale={reload} />}
-    {camera && <CameraScanner onClose={() => setCamera(false)} onCode={(text) => enqueue(text, 'camera')}><ScanFeedback feedback={feedback} /></CameraScanner>}
+    {/* An answer given before the camera opened (a code typed or scanned with the scanner) is not shown in it. */}
+    {camera !== null && <CameraScanner onClose={() => setCamera(null)} onCode={(text) => enqueue(text, 'camera')}><ScanFeedback feedback={feedback && feedback.key > camera ? feedback : null} /></CameraScanner>}
   </div>;
 }

@@ -210,13 +210,19 @@ export default function StaffDepartures({ embedded = false }) {
   // ── Loading review and manifest ──────────────────────────────────────
   // The dossiers the departure can take, the departure's version and its loading checks, read together: the
   // control is mandatory, so a loading whose checks cannot be read does not open.
-  const startReview = async (envoi) => {
+  const startReview = async (envoi, { reloading = false } = {}) => {
+    const sequence = checksSequence.current;
     const [all, envoiRows, checkRows] = await Promise.all([sb.fetchColis(null, { envoiId: envoi.id }), sb.fetchEnvois(), fetchLoadingChecks(envoi.id)]);
+    // Read again for the open loading: dropped once that loading was closed (confirmed) or replaced meanwhile.
+    if (reloading && reviewRef.current?.envoi.id !== envoi.id) return null;
     const latest = envoiRows.find((item) => item.id === envoi.id);
     if (!latest) throw new Error('Départ introuvable.');
     const dossiers = all.filter((item) => item.envoi === envoi.id && !NOT_LOADABLE.includes(item.statut) && !item.dateExpedition);
-    checksSequence.current += 1;
-    setChecks({ envoiId: envoi.id, rows: checkRows, error: null });
+    // Checks recorded or read since this reading began are newer than its own: they stay.
+    if (!reloading || sequence === checksSequence.current) {
+      checksSequence.current += 1;
+      setChecks({ envoiId: envoi.id, rows: checkRows, error: null });
+    }
     setReview({ envoi: latest, dossiers });
     setManifest(null);
     return dossiers;
@@ -224,7 +230,7 @@ export default function StaffDepartures({ embedded = false }) {
   /** The open loading read again (a scan of a dossier it does not list, a refusal of the server): its dossiers. */
   const reloadReview = async () => {
     const current = reviewRef.current;
-    return current ? startReview(current.envoi) : null;
+    return current ? startReview(current.envoi, { reloading: true }) : null;
   };
   /** The checks of every device, for the open loading. An answer older than the last change is dropped. */
   const loadChecks = useCallback(async (envoiId) => {
@@ -468,7 +474,7 @@ export default function StaffDepartures({ embedded = false }) {
       <div className="flex flex-wrap gap-2">
         {reviewCanConfirm && <button type="button" disabled={busy || scanPending > 0 || !reviewLoaded.length} onClick={() => run(confirm, 'review')} className={PRIMARY}><Check size={16} aria-hidden="true" />Confirmer le départ de {plural(reviewLoaded.length, 'expédition')}</button>}
         <button type="button" disabled={busy} className={BUTTON} onClick={closeReview}>Fermer le chargement</button>
-        <button type="button" className={BUTTON} disabled={busy} onClick={() => run(() => startReview(review.envoi), 'review')}>Actualiser le chargement</button>
+        <button type="button" className={BUTTON} disabled={busy} onClick={() => run(reloadReview, 'review')}>Actualiser le chargement</button>
       </div>
     </section>}
 

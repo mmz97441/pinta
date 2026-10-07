@@ -112,6 +112,15 @@ test('the sentences of a scan say what happened and what to do', () => {
   assert.equal(LAYOUT_NOTICE, 'La douchette est réglée en clavier anglais : passez-la en français (AZERTY).');
 });
 
+test('a scan answers with the server counts when the dossier was prepared again on another device', () => {
+  // The screen still holds 2 parcels; the server accepted a new label « 1/3 ».
+  const scan = readScannedCode('EXP-2YE537-1-3', [TWO]);
+  assert.equal(checkFeedback(scan, { status: 'recorded', checked: 1, expected: 3 }, [check('d-two', 1, 3)]).detail, 'Il reste 2 colis à vérifier pour ce dossier.');
+  assert.equal(checkFeedback(scan, { status: 'recorded', checked: 3, expected: 3 }, [check('d-two', 1, 3)]).detail, 'Tous ses colis sont vérifiés : expédition prête à partir.');
+  // Without counts (an older answer), the screen's own checks.
+  assert.equal(checkFeedback(readScannedCode('EXP-2YE537-1-2', [TWO]), { status: 'recorded' }, [check('d-two', 1, 2)]).detail, 'Il reste 1 colis à vérifier pour ce dossier.');
+});
+
 test('a parcel of another departure, of none, shipped or unknown is set aside with the reason', () => {
   const envois = [{ id: 'e-here', ref: 'ENV-2026-045', date: '2026-10-07' }, { id: 'e-other', ref: 'ENV-2026-052', date: '2026-10-22' }];
   const known = [
