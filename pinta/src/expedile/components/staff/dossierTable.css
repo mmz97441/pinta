@@ -930,3 +930,7 @@ html.dark .dossier-empty-action[data-primary='true'] { color: #122a36; backgroun
 /* Safari before 15.4 (no native <dialog>): the dialog element is shown as a fixed overlay. */
 .dossier-dialog-fallback-backdrop { position: fixed; inset: 0; z-index: 999; background: rgba(15, 23, 42, .45); }
 dialog.dossier-column-options[data-fallback-modal='true'] { display: block; position: fixed; z-index: 1000; margin: 0; }
+
+/* The offer badge (ui/PlanBadge) on the first line of the client's name. */
+.dossier-table-client-line { display: flex; align-items: baseline; gap: .45em; }
+.dossier-table-client-line > .dossier-table-client-name { flex: 1 1 auto; min-width: 0; }

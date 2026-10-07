@@ -3,7 +3,8 @@ import { createTelegramInvitation } from '../../services/telegramApi';
 import React, { useEffect, useRef, useState } from 'react';
 import { Edit3, ChevronDown, ChevronUp, ClipboardList, Camera, AlertTriangle } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { ABONNEMENTS } from '../../constants';
+import { clientPlan } from '../../domain/clientPlan';
+import PlanBadge from '../ui/PlanBadge';
 import { eur } from '../../utils';
 import ReceivedCartons from './ReceivedCartons';
 import CasierEditor, { casierEditable } from './CasierEditor';
@@ -65,33 +66,27 @@ export default function ColisInfo({ compact = false, onCompleteReception, casier
               </button>
             )}
             {cl.abonnement && (() => {
-              const abo = ABONNEMENTS[cl.abonnement];
-              const isFreemium = cl.abonnement === 'freemium';
-              const fin = cl.abonnementFin ? new Date(cl.abonnementFin) : null;
-              const now = new Date();
-              const joursRestants = fin ? Math.ceil((fin - now) / (1000 * 60 * 60 * 24)) : null;
-              const isExpired = joursRestants !== null && joursRestants <= 0;
-              const isWarning = joursRestants !== null && joursRestants > 0 && joursRestants <= 7;
+              // The end day is included, on Paris time, as in the dossier list and the departures.
+              const plan = clientPlan(cl);
+              const isExpired = plan.ended;
+              const isWarning = plan.paid && !plan.ended && plan.daysLeft !== null && plan.daysLeft <= 7;
               const isAnnuel = cl.abonnement === 'premium_annuel' || cl.abonnement === 'vip';
 
               return (
                 <div className="mt-1 space-y-1">
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${abo?.couleur || 'bg-gray-200 text-gray-600'}`}>
-                      {abo?.icon} {abo?.label || cl.abonnement}
+                    <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700">
+                      <PlanBadge plan={plan} decorative />Forfait {plan.label}
                     </span>
-                    {!isFreemium && fin && (
+                    {plan.paid && plan.endDay && (
                       <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
                         isExpired ? 'bg-red-100 text-red-700' : isWarning ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-500'
                       }`}>
-                        {isExpired
-                          ? 'Expiré'
-                          : `Fin : ${fin.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}`
-                        }
+                        {isExpired ? `Terminé le ${plan.endLabel}` : `Jusqu’au ${plan.endLabel}`}
                       </span>
                     )}
                   </div>
-                  {isStaff && isExpired && !isFreemium && (
+                  {isStaff && isExpired && (
                     <div className="flex items-start gap-1.5 p-2 rounded-lg bg-red-50 border border-red-200">
                       <AlertTriangle size={12} className="text-red-500 flex-shrink-0 mt-0.5" />
                       <p className="text-[10px] font-bold text-red-700">
@@ -100,11 +95,11 @@ export default function ColisInfo({ compact = false, onCompleteReception, casier
                       </p>
                     </div>
                   )}
-                  {isStaff && isWarning && !isFreemium && (
+                  {isStaff && isWarning && (
                     <div className="flex items-start gap-1.5 p-2 rounded-lg bg-amber-50 border border-amber-200">
                       <AlertTriangle size={12} className="text-amber-500 flex-shrink-0 mt-0.5" />
                       <p className="text-[10px] font-bold text-amber-700">
-                        Abonnement expire dans {joursRestants} jour{joursRestants > 1 ? 's' : ''}
+                        {plan.daysLeft === 0 ? 'Dernier jour d’abonnement aujourd’hui' : `Abonnement jusqu’au ${plan.endLabel}`}
                         {isAnnuel ? ' — penser à prévenir le client.' : '.'}
                       </p>
                     </div>

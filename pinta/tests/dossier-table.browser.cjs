@@ -259,6 +259,33 @@ async function main() {
       await options.getByRole('button',{name:'Effacer ce filtre',exact:true}).click();await options.waitFor({state:'hidden'});await waitIds(f,[P,P2,P3,P4,P5,P6]);
       await assertNoBusinessChange(f,before);
     });
+    // The client's offer before the name: « P » Premium, « F » Freemium, an ended Premium marked as such.
+    for(const width of [1440,390])for(const dark of [false,true])await scenario(`client-offer-reads-p-or-f-before-the-name-${width}-${dark?'dark':'light'}`,async f=>{
+      await f.page.setViewportSize({width,height:width===390?844:1000});await f.context.addInitScript(dark=>localStorage.setItem('expedile-theme',dark?'dark':'light'),dark);
+      const base=f.tables.clients[0];
+      Object.assign(base,{abonnement:'premium_annuel',abonnement_debut:'2026-01-01',abonnement_fin:'2099-12-31'});
+      const free={...structuredClone(base),id:'c1000000-0000-4000-8000-000000000002',ref:'CLI-FREE',nom:'Freemium',prenom:'Fanny',user_id:null,abonnement:'freemium',abonnement_debut:null,abonnement_fin:null};
+      const ended={...structuredClone(base),id:'c1000000-0000-4000-8000-000000000003',ref:'CLI-ENDED',nom:'Ancien',prenom:'Paul',user_id:null,abonnement:'premium_mensuel',abonnement_debut:'2019-01-01',abonnement_fin:'2020-01-31'};
+      f.tables.clients.push(free,ended);
+      f.tables.colis.find(item=>item.id===P2).client_id=free.id;f.tables.colis.find(item=>item.id===P3).client_id=ended.id;
+      const before=structuredClone(f.tables.colis);await open(f);
+      const badge=id=>row(f,id).locator('.plan-badge');
+      for(const [id,letter,name] of [[P,'P','Forfait Premium annuel'],[P2,'F','Forfait Freemium'],[P3,'P','Forfait Premium mensuel terminé le 31 janvier 2020']]){
+        await badge(id).waitFor();
+        assert.equal((await badge(id).textContent()).trim(),letter,`${id} reads ${letter}`);
+        assert.equal(await row(f,id).getByRole('img',{name,exact:true}).count(),1,`${id}: « ${name} » for screen readers and on hover`);
+        assert.equal(await badge(id).getAttribute('title'),name);
+      }
+      await settle(f);
+      for(const id of [P,P2,P3])assert.ok(await badge(id).evaluate(node=>window.__pintaContrast.text(node))>=4.5,`${id}: the letter keeps 4.5:1`);
+      // Before the name, on its first line.
+      const [b,n]=await Promise.all([badge(P).boundingBox(),row(f,P).locator('.dossier-table-client-name').boundingBox()]);
+      assert.ok(b.x<n.x,'The badge comes before the name.');
+      assert.ok(Math.abs(b.y-n.y)<12,'Badge and name share the first line.');
+      await noPageOverflow(f);
+      await f.page.screenshot({path:`${output}/client-offer-${width}-${dark?'dark':'light'}.png`});
+      await assertNoBusinessChange(f,before);
+    });
     for(const width of [1440,390])for(const dark of [false,true])await scenario(`compact-column-dialog-keyboard-focus-and-layout-${width}-${dark?'dark':'light'}`,async f=>{
       await f.page.setViewportSize({width,height:width===390?844:1000});await f.context.addInitScript(dark=>localStorage.setItem('expedile-theme',dark?'dark':'light'),dark);
       const before=structuredClone(f.tables.colis);await open(f);

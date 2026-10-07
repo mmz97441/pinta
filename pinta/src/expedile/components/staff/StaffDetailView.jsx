@@ -31,6 +31,7 @@ import { revisionLockedReason, shipmentRevisionBoxes } from '../../domain/shipme
 import { departureFieldEditable, departureIssue, plannedDeparturesFor } from '../../domain/departurePlanning';
 import { canSeeDossierFinances } from '../../domain/dossierOverview';
 import { plural, pluralWord } from '../../domain/plural';
+import { clientPlan } from '../../domain/clientPlan';
 import DossierDeparture from '../detail/DossierDeparture';
 import '../detail/dossierActions.css';
 
@@ -362,11 +363,10 @@ export default function StaffDetailView({ workspace = false, active = true, task
   const borderColor = statusBorderColor(sel.statut);
 
   // ── Subscription status ──────────────────────────────────────────────────
-  const isFreemium = !cl?.abonnement || cl.abonnement === 'freemium';
-  const subFin = cl?.abonnementFin ? new Date(cl.abonnementFin) : null;
-  const subJoursRestants = subFin ? Math.ceil((subFin - new Date()) / (1000 * 60 * 60 * 24)) : null;
-  const subExpired = !isFreemium && subJoursRestants !== null && subJoursRestants <= 0;
-  const subWarning = !isFreemium && subJoursRestants !== null && subJoursRestants > 0 && subJoursRestants <= 7;
+  // The end day is included, on Paris time: the list's « P » and the departures say the same.
+  const plan = clientPlan(cl);
+  const subExpired = plan.ended;
+  const subWarning = plan.paid && !plan.ended && plan.daysLeft !== null && plan.daysLeft <= 7;
 
   const correctionTarget = REVERT_TARGETS[sel.statut];
   const correctionLabel = STATUTS[correctionTarget]?.label || correctionTarget;
@@ -693,7 +693,7 @@ export default function StaffDetailView({ workspace = false, active = true, task
               {subWarning && (
                 <div className="flex items-center gap-2 p-2 rounded-lg bg-amber-50 border border-amber-200">
                   <AlertTriangle size={12} className="text-amber-500 flex-shrink-0" />
-                  <p className="text-[10px] font-semibold text-amber-700">Abo. expire dans {subJoursRestants}j</p>
+                  <p className="text-[10px] font-semibold text-amber-700">{plan.daysLeft === 0 ? 'Dernier jour d’abonnement aujourd’hui' : `Abonnement jusqu’au ${plan.endLabel}`}</p>
                 </div>
               )}
 
