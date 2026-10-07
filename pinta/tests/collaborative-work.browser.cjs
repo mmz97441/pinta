@@ -173,7 +173,11 @@ function noMessages(s){for(const f of s.fixtures){assert.equal(f.requests.some(r
       await s.first.page.getByRole('button',{name:'Retour à la liste de travail',exact:true}).click();await s.first.page.getByRole('navigation',{name:'Mes tâches',exact:true}).getByRole('button',{name:/À faire/}).click();
       const task=row(s.first,PREP),panel=s.first.page.locator(`[data-work-action-panel="${PREP}"]`);await task.getByRole('button',{name:'Options',exact:true}).click();await panel.getByRole('button',{name:'Remettre à disposition',exact:true}).click();
       await panel.getByRole('alert').filter({hasText:/Enregistrez ou annulez vos saisies/}).waitFor();assert.equal(s.commands.filter(c=>c.kind==='work').length,1);
-      await task.getByRole('button',{name:'Continuer',exact:true}).click();assert.equal(await s.first.page.getByLabel('Longueur · colis sortant 1 (cm)',{exact:true}).inputValue(),'32');
+      await task.getByRole('button',{name:'Continuer',exact:true}).click();
+      // The unsaved measures come back with the task (restored once the form is shown).
+      const length=s.first.page.getByLabel('Longueur · colis sortant 1 (cm)',{exact:true});await length.waitFor();
+      for(let attempt=0;attempt<50&&await length.inputValue()!=='32';attempt+=1)await s.first.page.waitForTimeout(100);
+      assert.equal(await length.inputValue(),'32');
       assert.deepEqual([s.first.tables.colis,s.first.tables.factures,s.first.tables.lignes,s.first.tables.messages],s.initialBusiness);
     });
     await scenario('handoff-keeps-owner-until-accepted-and-delivers-the-saved-instructions',async s=>{
