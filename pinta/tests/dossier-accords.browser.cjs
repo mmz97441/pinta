@@ -1801,7 +1801,10 @@ async function main() {
       const book = XLSX.read(await fs.readFile(await file.path()), { type: 'buffer' });
       const data = XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]], { header: 1 });
       assert.deepEqual(data[0], ACCORD_COLUMNS.filter(([key]) => key !== 'action').map(([, label]) => label));
-      assert.deepEqual(data.slice(1).map(line => line[0]), bands.flatMap(group => [...group.dossiers].reverse().map(id => REF[id])));
+      const listed = bands.flatMap(group => [...group.dossiers].reverse().map(id => REF[id]));
+      assert.deepEqual(data.slice(1, 1 + listed.length).map(line => line[0]), listed);
+      // « Cartons reçus » adds up: one empty row, then its « Total » (no band among the dossiers).
+      assert.deepEqual(data.slice(1 + listed.length).map(line => line.length ? line[0] : null), [null, 'Total']);
       const line = id => data.find(item => item[0] === REF[id]);
       assert.deepEqual(line(DOSSIER.ACC004).slice(3, 6), ['Le client attend · jusqu’au 25/10', '01/10/2026', 'Aucune relance']);
       assert.deepEqual(line(DOSSIER.ACC001).slice(3, 6), ['À soumettre', 'Pas encore envoyée', 'Aucune relance']);
@@ -1981,7 +1984,8 @@ async function main() {
         const bands = [...document.querySelectorAll('[data-dossier-group]')].filter(shown);
         return bands.flatMap(band => {
           const title = band.querySelector('.dossier-group-title').textContent.trim();
-          const items = band.tagName === 'TR' ? (() => { const list = []; for (let next = band.nextElementSibling; next && !next.dataset.dossierGroup; next = next.nextElementSibling) list.push(next); return list; })() : [...band.querySelectorAll('[data-dossier-card]')];
+          // The dossier rows under the band (its subtotal row, which closes it, is not a dossier).
+          const items = band.tagName === 'TR' ? (() => { const list = []; for (let next = band.nextElementSibling; next && !next.dataset.dossierGroup; next = next.nextElementSibling) if (next.dataset.dossierRow) list.push(next); return list; })() : [...band.querySelectorAll('[data-dossier-card]')];
           return items.map(item => item.querySelector('.dossier-table-client-name')?.textContent.trim()).filter(name => name !== title).map(name => `${title} ≠ ${name}`);
         });
       });

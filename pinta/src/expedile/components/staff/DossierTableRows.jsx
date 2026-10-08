@@ -6,7 +6,7 @@ import { getDestByCP, getSecteurByCP } from '../../constants';
 import { actionWaiting, canWorkAction, staffAvailable, workActionOpensClient } from '../../domain/personalWork';
 import { receptionCartonManifest } from '../../domain/reception';
 import { needsConversationAction } from '../../domain/conversations';
-import { TABLE_COLUMNS, dossierTableAmount, dossierTableAmountState, dossierTableMissingAmountLabel, formatDossierTableDate, isDossierTableColumnSortable, dossierTableSortDirectionLabel, parallelTasksLabel, dossierFactHasValue, volumetricWeightLabel, REQUEST_NOT_SENT_LABEL, NO_RELANCE_LABEL } from '../../domain/dossierTable';
+import { TABLE_COLUMNS, dossierTableAmount, dossierTableAmountState, dossierTableMissingAmountLabel, formatDossierTableDate, isDossierTableColumnSortable, dossierTableSortDirectionLabel, parallelTasksLabel, dossierFactHasValue, volumetricWeightLabel, REQUEST_NOT_SENT_LABEL, NO_RELANCE_LABEL, TAXES_PRO_LABEL } from '../../domain/dossierTable';
 import { clampColumnWidth, columnWidthBounds } from '../../domain/dossierTablePreferences';
 import { consentTone, paymentTone, statusTone } from '../../domain/dossierTableTone';
 import { consentRelance, consentState, consentWaitLabel } from '../../domain/consentQueue';
@@ -184,6 +184,12 @@ function CellContent({ column, c, client, model, alerts, onOpen, onOpenDossier, 
     case 'requested': {
       const amount = dossierTableAmount(model, column), state = dossierTableAmountState(model, column);
       return <div><span className="dossier-table-money">{money(amount, state || dossierTableMissingAmountLabel(model.payment, 'requested'))}</span>{amount !== null && state && <span className="dossier-table-secondary">{state}</span>}</div>;
+    }
+    case 'taxes': {
+      // The saved quote's own taxes, with the state of its price: never recalculated here.
+      const taxes = model.quoteTaxes || { amount: null, stateLabel: 'À calculer' };
+      const text = taxes.amount === null ? taxes.stateLabel || 'À calculer' : taxes.pro ? TAXES_PRO_LABEL : money(taxes.amount, taxes.stateLabel);
+      return <div><span className="dossier-table-money">{text}</span>{taxes.amount !== null && taxes.stateLabel && <span className="dossier-table-secondary">{taxes.stateLabel}</span>}</div>;
     }
     case 'paid':
       // Nothing is due before the quote: no « 0,00 € » beside « À calculer ».

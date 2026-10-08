@@ -51,12 +51,13 @@ const layoutSelect=async f=>(await openDisplay(f)).getByRole('combobox',{name:'A
 async function openVisibleColumns(f){const display=await openDisplay(f);await display.getByRole('button',{name:'Colonnes',exact:true}).click();await display.waitFor({state:'hidden'});const dialog=f.page.getByRole('dialog',{name:'Colonnes affichées',exact:true});await dialog.waitFor();return dialog;}
 async function openColumnChooser(f){await closeDisplay(f);const toggle=f.page.getByRole('button',{name:/^Filtres(?: · \d+)?$/});if(await toggle.getAttribute('aria-expanded')!=='true')await toggle.click();await f.page.getByRole('group',{name:'Filtres des dossiers',exact:true}).getByRole('button',{name:/^Filtres par colonne(?: · \d+)?$/}).click();const dialog=f.page.getByRole('dialog',{name:'Filtrer une colonne',exact:true});await dialog.waitFor();return dialog;}
 async function preset(f,view) {await closeDisplay(f);const button=f.page.locator('[aria-label="Vues du tableau"]').getByRole('button',{name:viewLabels[view],exact:true});await button.click();await f.page.waitForFunction(label=>document.querySelector(`[aria-label="Vues du tableau"] button[aria-pressed="true"]`)?.textContent===label,viewLabels[view]);}
-async function download(f) {
+async function downloadSheet(f) {
  const display=await openDisplay(f),controls=display.getByRole('button',{name:/^Exporter 6 dossiers filtrés$/});
  const pending=f.page.waitForEvent('download');await controls.click();const file=await pending;assert.equal(await file.failure(),null);await closeDisplay(f);
- const workbook=XLSX.read(await fs.readFile(await file.path()),{type:'buffer'});
- return XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]],{header:1,defval:''});
+ const workbook=XLSX.read(await fs.readFile(await file.path()),{type:'buffer',cellNF:true});
+ return workbook.Sheets[workbook.SheetNames[0]];
 }
+async function download(f) {return XLSX.utils.sheet_to_json(await downloadSheet(f),{header:1,defval:''});}
 async function setTextSize(f,value) {const input=await sizeInput(f);await input.fill(String(value));await input.press('Enter');await closeDisplay(f);}
 async function noGlobalOverflow(f) {assert.equal(await f.page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false);}
 async function noMutation(f) {assert.deepEqual(f.tables.colis,f.before);assert.deepEqual(businessWrites(f),[]);assert.equal(f.requests.some(r=>/\/(queue_message|send-email|send-telegram|payplug-create-payment)$/.test(r.path)),false);}
@@ -87,8 +88,13 @@ async function main(){
    assert.match(await cell(f,4,'requested').innerText(),/89,50/);assert.match(await cell(f,4,'requested').innerText(),/Brouillon/);
    assert.match(await cell(f,5,'requested').innerText(),/120,00/);assert.match(await cell(f,5,'requested').innerText(),/À revoir/);assert.doesNotMatch(await cell(f,5,'requested').innerText(),/999,99/);
    assert.match(await cell(f,6,'requested').innerText(),/0,00/);
-   const data=await download(f),price=data[0].indexOf('Prix du devis');assert.ok(price>=0);
-   assert.match(data.find(r=>r[0]==='EXP-CFT004')[price],/^89,50\s*€ · Brouillon$/);assert.match(data.find(r=>r[0]==='EXP-CFT005')[price],/^120,00\s*€ · À revoir$/);assert.match(data.find(r=>r[0]==='EXP-CFT006')[price],/^0,00\s*€ · Brouillon$/);assert.equal(data.find(r=>r[0]==='EXP-CFT001')[price],'À calculer');
+   const sheet=await downloadSheet(f),data=XLSX.utils.sheet_to_json(sheet,{header:1,defval:''}),price=data[0].indexOf('Prix du devis');assert.ok(price>=0);
+   // A shown amount stays a number Excel adds up; its format writes the state after it, as the cell does.
+   const exported=ref=>sheet[XLSX.utils.encode_cell({r:data.findIndex(r=>r[0]===ref),c:price})];
+   for(const [ref,amount,shown] of [['EXP-CFT004',89.5,/^89[.,]50\s*€ · Brouillon$/],['EXP-CFT005',120,/^120[.,]00\s*€ · À revoir$/],['EXP-CFT006',0,/^0[.,]00\s*€ · Brouillon$/]]){
+    const cell=exported(ref);assert.deepEqual([cell.t,cell.v],['n',amount],ref);assert.match(cell.w,shown,ref);assert.match(cell.z,/"€ · (Brouillon|À revoir)"$/,ref);
+   }
+   assert.equal(data.find(r=>r[0]==='EXP-CFT001')[price],'À calculer');assert.equal(exported('EXP-CFT001').t,'s');
    await preset(f,'payments');assert.doesNotMatch(await cell(f,4,'requested').innerText(),/89,50/,'A saved draft is not an amount already requested from the client.');assert.doesNotMatch(await cell(f,5,'requested').innerText(),/999,99|120,00/,'A conflicting ledger still requires checking in payment controls.');
   });
   await scenario('finance-denied-hides-price-from-cells-column-choices-filters-and-export',async f=>{

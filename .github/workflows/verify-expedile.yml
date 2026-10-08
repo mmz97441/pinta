@@ -89,6 +89,7 @@ jobs:
           node tests/dossier-list-contrast.browser.cjs || failed_suites="$failed_suites dossier-list-contrast.browser.cjs"
           node tests/dossier-table.browser.cjs || failed_suites="$failed_suites dossier-table.browser.cjs"
           node tests/dossier-table-comfort.browser.cjs || failed_suites="$failed_suites dossier-table-comfort.browser.cjs"
+          PINTA_DOSSIER_TOTALS_OUT=/tmp/pinta-dossier-totals node tests/dossier-totals.browser.cjs || failed_suites="$failed_suites dossier-totals.browser.cjs"
           PINTA_DOSSIER_DEPARTURES_OUT=/tmp/pinta-dossier-departures node tests/dossier-departures.browser.cjs || failed_suites="$failed_suites dossier-departures.browser.cjs"
           PINTA_DOSSIER_ACCORDS_OUT=/tmp/pinta-dossier-accords node tests/dossier-accords.browser.cjs || failed_suites="$failed_suites dossier-accords.browser.cjs"
           PINTA_DEPARTURES_PAGE_OUT=/tmp/pinta-departures-page node tests/departures-page.browser.cjs || failed_suites="$failed_suites departures-page.browser.cjs"
@@ -184,6 +185,7 @@ jobs:
             /tmp/pinta-dossier-list-contrast
             /tmp/pinta-dossier-table
             /tmp/pinta-dossier-table-comfort
+            /tmp/pinta-dossier-totals
             /tmp/pinta-dossier-departures
             /tmp/pinta-dossier-accords
             /tmp/pinta-departures-page

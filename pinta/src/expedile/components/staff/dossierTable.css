@@ -73,7 +73,8 @@ html.dark .dossier-table-card {
 .dossier-table-card:hover .dossier-pill:is(:not([data-tone]), [data-tone='neutral']),
 [data-selected='true'] .dossier-pill:is(:not([data-tone]), [data-tone='neutral']) { box-shadow: inset 0 0 0 1px var(--dossier-column-edge); }
 .dossier-table-row > td,
-.dossier-table-head th {
+.dossier-table-head th,
+.dossier-table-total-row > * {
   box-sizing: border-box;
   padding: 8px;
   text-align: left;
@@ -97,7 +98,8 @@ html.dark .dossier-table-card {
 }
 .dossier-table-row { cursor: pointer; }
 .dossier-table-row > [data-column='select'],
-.dossier-table-head [data-column='select'] {
+.dossier-table-head [data-column='select'],
+.dossier-table-total-row > [data-total-column='select'] {
   position: sticky;
   left: 0;
   width: 40px;
@@ -107,7 +109,8 @@ html.dark .dossier-table-card {
   z-index: 2;
 }
 .dossier-table-row > [data-column='ref'],
-.dossier-table-head [data-column='ref'] {
+.dossier-table-head [data-column='ref'],
+.dossier-table-total-row > [data-total-column='ref'] {
   position: sticky;
   left: 40px;
   width: var(--dossier-ref-width, 160px);
@@ -116,7 +119,8 @@ html.dark .dossier-table-card {
   z-index: 2;
 }
 .dossier-table-row > [data-column='client'],
-.dossier-table-head [data-column='client'] {
+.dossier-table-head [data-column='client'],
+.dossier-table-total-row > [data-total-column='client'] {
   position: sticky;
   left: var(--dossier-client-left, 200px);
   width: var(--dossier-client-width, 200px);
@@ -130,7 +134,8 @@ html.dark .dossier-table-card {
 .dossier-table-head [data-column='client'] { z-index: 5; }
 /* The main task remains directly available when extra facts require scrolling. */
 .dossier-table-row > [data-column='action'],
-.dossier-table-head [data-column='action'] {
+.dossier-table-head [data-column='action'],
+.dossier-table-total-row > [data-total-column='action'] {
   position: sticky;
   right: 0;
   z-index: 3;
@@ -142,8 +147,10 @@ html.dark .dossier-table-card {
    header-less strip, no cut word) or a fade (DossierHorizontalScroll measures
    it). Gone once the table is scrolled to its end. */
 .dossier-list-main[data-more-right='true'] .dossier-data-table:not([data-unpin-action='true']) .dossier-table-row > [data-column='action'],
+.dossier-list-main[data-more-right='true'] .dossier-data-table:not([data-unpin-action='true']) .dossier-table-total-row > [data-total-column='action'],
 .dossier-list-main[data-more-right='true'] .dossier-data-table:not([data-unpin-action='true']) .dossier-table-head [data-column='action'] { box-shadow: -1px 0 0 var(--dossier-column-edge), -12px 0 14px -10px var(--dossier-edge-shadow); }
 .dossier-list-main[data-more-right='true'] .dossier-data-table:not([data-unpin-action='true']) .dossier-table-row > [data-column='action']::before,
+.dossier-list-main[data-more-right='true'] .dossier-data-table:not([data-unpin-action='true']) .dossier-table-total-row > [data-total-column='action']::before,
 .dossier-list-main[data-more-right='true'] .dossier-data-table:not([data-unpin-action='true']) .dossier-table-head [data-column='action']::before {
   content: '';
   position: absolute;
@@ -167,7 +174,8 @@ html.dark .dossier-table-card {
 .dossier-data-table[data-unpin-ref='true'] .dossier-table-head [data-column='ref'] { left: auto; z-index: 4; }
 /* The colgroup owns every width. Identity offsets use the same saved widths. */
 .dossier-table-row > .dossier-table-align-right,
-.dossier-table-head .dossier-table-align-right { text-align: right; }
+.dossier-table-head .dossier-table-align-right,
+.dossier-table-total-row > .dossier-table-align-right { text-align: right; }
 .dossier-table-checkbox {
   display: flex;
   align-items: center;
@@ -434,6 +442,54 @@ html .dossier-table-action button[data-take-kind='claim']:hover:not(:disabled) {
 /* « Automatique » shows cards on a phone, upright or on its side (data-compact). */
 .dossier-list[data-layout='auto'][data-compact='true'] .dossier-data-table, .dossier-list[data-layout='auto'][data-compact='true'] .dossier-horizontal-scroll { display: none; }
 .dossier-list[data-layout='auto'][data-compact='true'] .dossier-card-list { display: grid; }
+
+/* ── Totals ───────────────────────────────────────────────────────────────────
+   Table: the subtotal closing each group, and the total of the displayed dossiers
+   (<tfoot>) pinned to the bottom of the list as the headings are to its top. One cell
+   per column on an opaque surface, the pinned columns pinned as in every row; not
+   dossiers: no hover, no selection, no command. */
+.dossier-table-total-row { --dossier-table-row-bg: var(--bg-canvas); color: var(--text-primary); cursor: default; }
+.dossier-table-total-row > * { vertical-align: top; font-weight: 600; }
+.dossier-table-total-row[data-total='subtotal'] > * { border-top: 1px solid var(--dossier-header-line); }
+.dossier-table-total-row[data-total='total'] { --dossier-table-row-bg: var(--bg-elevated); }
+.dossier-table-total-row[data-total='total'] > * { position: sticky; bottom: 0; z-index: 4; border-top: 1px solid var(--dossier-header-line); border-bottom: 0; font-weight: 700; }
+.dossier-table-total-row[data-total='total'] > [data-total-column='select'],
+.dossier-table-total-row[data-total='total'] > [data-total-column='ref'],
+.dossier-table-total-row[data-total='total'] > [data-total-column='client'] { z-index: 5; }
+.dossier-table-total-row[data-total='total'] > [data-total-column='action'] { z-index: 6; }
+/* Columns too wide to stay pinned scroll in these rows too: a subtotal like a dossier row,
+   the pinned total like the headings (still at the bottom). */
+.dossier-data-table[data-unpin-client='true'] .dossier-table-total-row[data-total='subtotal'] > [data-total-column='client'],
+.dossier-data-table[data-unpin-ref='true'] .dossier-table-total-row[data-total='subtotal'] > [data-total-column='ref'],
+.dossier-data-table[data-unpin-action='true'] .dossier-table-total-row[data-total='subtotal'] > [data-total-column='action'] { position: static; }
+.dossier-data-table[data-unpin-client='true'] .dossier-table-total-row[data-total='total'] > [data-total-column='client'],
+.dossier-data-table[data-unpin-ref='true'] .dossier-table-total-row[data-total='total'] > [data-total-column='ref'] { left: auto; z-index: 4; }
+.dossier-data-table[data-unpin-action='true'] .dossier-table-total-row[data-total='total'] > [data-total-column='action'] { right: auto; z-index: 4; }
+/* What is scrolled into view (the keyboard, a script) stops above the pinned total
+   (StaffSplitView measures its height); revealKeyboardFocus adds the focus ring's room. */
+#dossier-table-scroll { scroll-padding-bottom: var(--dossier-total-height, 0px); }
+/* While a selection shows its floating bar, the total ends the list instead: the list keeps
+   room under it (above the bar) rather than the bar covering it. */
+.dossier-list[data-selection='true'] .dossier-table-total-row[data-total='total'] > * { bottom: auto; }
+.dossier-table-total-label { text-align: left; font-weight: 700; }
+.dossier-table-total-row[data-total='subtotal'] > .dossier-table-total-label { font-weight: 600; color: var(--text-secondary); }
+/* A total over two lines: its value, then « 4 sur 6 dossiers » when some dossiers have none. */
+.dossier-table-total-value { display: block; font-variant-numeric: tabular-nums; }
+.dossier-table-total-note { display: block; margin-top: 2px; font-size: var(--dossier-small-text-size, 14px); font-weight: 400; color: var(--text-secondary); }
+.dossier-table-total-row .dossier-table-placeholder, .dossier-card-total .dossier-table-placeholder { font-weight: 400; }
+
+/* Cards: the subtotal of a group, one line under its count (wrapping between two
+   totals), and the block that ends the list. */
+.dossier-group-totals { flex: 1 0 100%; margin: 0 0 6px; font-size: max(12px, var(--dossier-small-text-size, 12px)); line-height: 1.5; color: var(--text-secondary); overflow-wrap: anywhere; }
+.dossier-group-total-figure { white-space: nowrap; }
+.dossier-group-total-value { font-weight: 700; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.dossier-card-list > .dossier-card-total { grid-column: 1 / -1; }
+.dossier-card-total { min-width: 0; margin-top: 4px; padding: 14px 16px; border: 1px solid var(--dossier-header-line); border-radius: 14px; color: var(--text-primary); background: var(--bg-surface); font-size: var(--dossier-text-size, 16px); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.dossier-card-total-title { margin: 0 0 8px; font-weight: 700; }
+.dossier-card-total-facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); gap: 8px 24px; margin: 0; }
+.dossier-card-total-facts > div { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; min-width: 0; padding-top: 8px; border-top: 1px solid var(--border-subtle); }
+.dossier-card-total-facts dt { flex-shrink: 1; max-width: 55%; min-width: min-content; font-size: var(--dossier-small-text-size, 14px); color: var(--text-secondary); overflow-wrap: break-word; }
+.dossier-card-total-facts dd { min-width: 0; margin: 0; text-align: right; font-weight: 700; }
 .dossier-column-options { position: fixed; box-sizing: border-box; margin: 0; width: 340px; max-width: calc(100vw - 24px); overflow-y: auto; overscroll-behavior: contain; border: 1px solid var(--border-subtle); border-radius: 16px; padding: 16px; color: var(--text-primary); background: var(--bg-surface); box-shadow: 0 12px 36px #0003; }
 .dossier-column-options::backdrop { background: #0001; }
 .dossier-column-dialog-heading { position: sticky; top: -16px; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; padding: 4px 0; background: var(--bg-surface); }

@@ -425,6 +425,8 @@ async function main() {
       await assertNoBusinessChange(f,before);
     });
     await scenario('every-data-column-has-a-usable-filter-from-its-heading',async f=>{
+      // P5's saved quote (OM, OMR, TVA): « Taxes calculées » has a value for it too.
+      Object.assign(f.tables.colis.find(item=>item.id===P5),{devis_snapshot:{version:1,amounts:{total:100,om:10,omr:5,tva:5},inputs:{client:{type:'particulier'}}}});
       const before=structuredClone(f.tables.colis);await open(f);
       for(const [label,view] of [['Travail quotidien','daily'],['Paiements','payments'],['Départs','departures']]) {
         await selectPreset(f,label,view);
@@ -461,7 +463,9 @@ async function main() {
       assert.equal(new URL(f.page.url()).searchParams.get('col.remaining'),JSON.stringify({mode:'min',value:'1'}));
       await f.page.reload();await row(f,P4).waitFor();await waitIds(f,[P4]);
       const data=await exportFiltered(f,1);
-      assert.equal(data.length,2);assert.equal(data[1][0],'EXP-TAB004');assert.equal(data[1][data[0].indexOf('Paiement')],'Non payé');
+      assert.equal(data.length,4);assert.equal(data[1][0],'EXP-TAB004');assert.equal(data[1][data[0].indexOf('Paiement')],'Non payé');
+      // The one dossier's amounts are also its total, after one empty row; its taxes are « À vérifier », so is not their total.
+      assert.deepEqual(data[2],[]);assert.deepEqual(['Total','Demandé','Taxes calculées','Payé','Reste à payer'].map((label,index)=>index?data[3][data[0].indexOf(label)]:data[3][0]),['Total',100,'Non renseigné',30,70]);
       await f.page.getByRole('button',{name:'Retirer les filtres',exact:true}).click();await waitIds(f,[P,P2,P3,P4,P5,P6]);
       assert.equal([...new URL(f.page.url()).searchParams.keys()].some(key=>key.startsWith('col.')),false);
       await assertNoBusinessChange(f,before);
@@ -870,7 +874,7 @@ async function main() {
     },{unavailable:true});
     await scenario('excel-download-matches-visible-preset-and-recorded-amounts',async f=>{
       await open(f);
-      const expected={daily:['Référence','Client','Dernière réception','Statut du dossier','Paiement','Travail à faire','Qui s’en occupe','Casier','Cartons reçus','Dimensions finales','Poids final (kg)','Prix du devis'],payments:['Référence','Client','Dernière réception','Statut du dossier','Paiement','Demandé','Payé','Reste à payer','Devis envoyé le'],departures:['Référence','Client','Dernière réception','Statut du dossier','Paiement','Départ prévu','Destination','Colis à expédier','Prêt à partir ?','Dimensions finales','Poids final (kg)','Prix du devis']};
+      const expected={daily:['Référence','Client','Dernière réception','Statut du dossier','Paiement','Travail à faire','Qui s’en occupe','Casier','Cartons reçus','Dimensions finales','Poids final (kg)','Prix du devis','Taxes calculées'],payments:['Référence','Client','Dernière réception','Statut du dossier','Paiement','Demandé','Taxes calculées','Payé','Reste à payer','Devis envoyé le'],departures:['Référence','Client','Dernière réception','Statut du dossier','Paiement','Départ prévu','Destination','Colis à expédier','Prêt à partir ?','Dimensions finales','Poids final (kg)','Prix du devis','Taxes calculées']};
       for(const [label,view] of [['Travail quotidien','daily'],['Paiements','payments'],['Départs','departures']]) {
         await selectPreset(f,label,view);
         const data=await exportFiltered(f,6);
@@ -879,7 +883,9 @@ async function main() {
         // Short visible headings never leak into the export: it keeps every full column label.
         const headings=await f.page.locator('thead th[data-column-label]:not([data-column="action"])').evaluateAll(nodes=>nodes.map(node=>({label:node.dataset.columnLabel,visible:node.querySelector('.dossier-table-sort')?.textContent.trim()})));
         assert.deepEqual(headings.map(item=>item.label),expected[view],`${view}: export headers equal the full labels of the visible columns, in order.`);
-        if(view==='daily')assert.ok(headings.some(item=>item.visible!==item.label),'The daily view really displays at least one short heading.');assert.deepEqual(data.slice(1).map(line=>line[0]),visibleReferences,'Excel follows the visible row order.');assert.equal(data.length,7);assert.equal(new Set(data.slice(1).map(line=>line[0])).size,6);
+        if(view==='daily')assert.ok(headings.some(item=>item.visible!==item.label),'The daily view really displays at least one short heading.');assert.deepEqual(data.slice(1,7).map(line=>line[0]),visibleReferences,'Excel follows the visible row order.');assert.equal(new Set(data.slice(1,7).map(line=>line[0])).size,6);
+        // The six dossiers, one empty row, then the « Total » of the numeric columns: nothing else.
+        assert.equal(data.length,9);assert.deepEqual(data[7],[]);assert.equal(data[8][0],'Total');
         if(view==='payments') {
           const unknown=data.find(line=>line[0]==='EXP-TAB001'),partial=data.find(line=>line[0]==='EXP-TAB004');
           assert.equal(unknown[data[0].indexOf('Demandé')],'À calculer');assert.deepEqual(['Demandé','Payé','Reste à payer'].map(label=>partial[data[0].indexOf(label)]),[100,30,70]);
@@ -1559,6 +1565,9 @@ async function main() {
       if(width===1440){const all=f.page.getByRole('checkbox',{name:'Sélectionner tous les dossiers affichés',exact:true});assert.equal(await all.evaluate(node=>node.indeterminate),true);}
       await group.click();assert.equal(await group.evaluate(node=>node.indeterminate),false);assert.equal(await group.isChecked(),true,'A click selects the whole group.');
       for(const id of [P4,P5,P6])assert.equal(await row(f,id).getAttribute('data-selected'),'true');
+      // Audited with the list at rest: scrolled to clear the total pinned to its bottom, the list leaves a group
+      // heading half under the pinned column headings, which axe would count as a target beside their checkbox.
+      await f.page.locator('#dossier-table-scroll').evaluate(node=>{node.scrollTop=0;});
       await axeClean(f);assert.deepEqual(businessWrites(f),[]);
     });
     await scenario('touch-screens-read-at-14px-without-resize-grips-over-the-filters',async f=>{
@@ -1654,8 +1663,10 @@ async function main() {
       const last = await f.page.evaluate(() => {
         const nav = document.querySelector('[data-staff-bottom-nav]'), floor = nav && getComputedStyle(nav).display !== 'none' ? nav.getBoundingClientRect().top : innerHeight;
         const list = document.querySelector('#dossier-table-scroll')?.getBoundingClientRect();
+        // The total pinned to the bottom of the list covers the rows passing under it.
+        const total = document.querySelector('tfoot th[scope="row"]'), pinned = total && getComputedStyle(total).position === 'sticky' && getComputedStyle(total).bottom !== 'auto' ? total.getBoundingClientRect().top : Infinity;
         const rows = [...document.querySelectorAll('tr[data-dossier-row]')].map(row => ({ id: row.dataset.dossierRow, box: row.getBoundingClientRect() }))
-          .filter(row => row.box.height && row.box.top >= (list?.top || 0) && row.box.bottom <= Math.min(floor, list?.bottom || innerHeight));
+          .filter(row => row.box.height && row.box.top >= (list?.top || 0) && row.box.bottom <= Math.min(floor, list?.bottom || innerHeight, pinned));
         const lowest = rows[rows.length - 1];
         const ref = lowest && document.querySelector(`tr[data-dossier-row="${lowest.id}"] [data-column="client"]`)?.getBoundingClientRect();
         return lowest && { id: lowest.id, x: ref.left + ref.width / 2, y: ref.top + ref.height / 2 };

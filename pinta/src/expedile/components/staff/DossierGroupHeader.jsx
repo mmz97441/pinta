@@ -16,8 +16,10 @@ export function SelectionCheckbox({ selection = 'none', ...props }) {
  * departure (« Départ du jeudi 15 octobre · Réunion », then its reference), a
  * stage or a client (« Payet Flavie », as its rows read), then its number of
  * dossiers. The title folds the group; the checkbox selects every dossier of
- * the group, folded or not, and shows when only part of it is selected. */
-function DossierGroupHeader({ group, titleId, collapsed, onToggle, selection = 'none', onToggleAll }) {
+ * the group, folded or not, and shows when only part of it is selected. Cards
+ * give `summary`, the group's subtotal, under the count (the table closes the
+ * group with its own subtotal row). */
+function DossierGroupHeader({ group, titleId, collapsed, onToggle, selection = 'none', onToggleAll, summary = null }) {
   const refId = useId(), countId = useId();
   const Icon = group.icon;
   return <div className="dossier-group-header">
@@ -33,6 +35,7 @@ function DossierGroupHeader({ group, titleId, collapsed, onToggle, selection = '
         {group.ref && <span id={refId} className="dossier-group-ref">{group.ref}</span>}
         <span id={countId} className="dossier-group-count">{dossierCountLabel(group.dossiers.length)}</span>
       </span>
+      {summary}
     </div>
   </div>;
 }

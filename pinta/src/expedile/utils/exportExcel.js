@@ -1,24 +1,57 @@
 import * as XLSX from 'xlsx';
-import { buildDossierTableExportRows, dossierTableExportColumns } from '../domain/dossierTable.js';
+import { buildDossierTableExport, dossierTableExportFormat } from '../domain/dossierTable.js';
+import { dossierTableTotals, TOTAL_UNKNOWN_LABEL } from '../domain/dossierTableTotals.js';
 
-export function exportDossierTableExcel(dossiers, clients, models, view, columns, filename = 'dossiers.xlsx') {
-  const selected = dossierTableExportColumns(view, columns);
+export const DOSSIER_TABLE_TOTAL_LABEL = 'Total';
+
+/** The « Dossiers » sheet: the dossiers in screen order under the visible
+ * columns, their numbers as numbers in their format; then one empty row and the
+ * « Total » row: SUBTOTAL(9, …) of each column that adds up, its value (the
+ * screen's total, dossierTableTotals) cached, so the total follows the filters
+ * applied in Excel. The header row carries the filter; no group row is inserted
+ * among the dossiers, so the sheet sorts as it is. */
+export function buildDossierTableWorkbook(dossiers, clients, models, view, columns) {
+  const { columns: selected, dossiers: exported, rows, formats } = buildDossierTableExport(dossiers, clients, models, view, columns);
   if (!selected.length) throw new Error('Aucune colonne visible à exporter.');
-  const rows = buildDossierTableExportRows(dossiers, clients, models, view, selected);
   const ws = XLSX.utils.json_to_sheet(rows, { header: selected.map(column => column.label) });
-  // A cell of several lines (« Dimensions finales ») is as wide as its longest line.
-  const longestLine = value => String(value ?? '').split('\n').reduce((width, line) => Math.max(width, line.length), 0);
-  ws['!cols'] = selected.map(({ label }) => ({ wch: Math.min(60, rows.reduce((width, row) => Math.max(width, longestLine(row[label])), label.length)) + 2 }));
-  selected.forEach((column, col) => {
-    if (!['requested', 'paid', 'remaining'].includes(column.key)) return;
-    rows.forEach((row, index) => {
-      const cell = ws[XLSX.utils.encode_cell({ r: index + 1, c: col })];
-      if (cell?.t === 'n') cell.z = '#,##0.00 "€"';
+  rows.forEach((row, index) => selected.forEach((column, col) => {
+    const cell = ws[XLSX.utils.encode_cell({ r: index + 1, c: col })];
+    const format = formats[index][column.label];
+    if (cell?.t === 'n' && format) cell.z = format;
+  }));
+  const totalTexts = {};
+  if (rows.length) {
+    const last = rows.length; // the header is row 0, the dossiers rows 1 to last
+    ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: last, c: selected.length - 1 } }) };
+    // « Dimensions finales » is text in the sheet: its volumetric total stays on screen.
+    const totals = dossierTableTotals(exported, selected, models).columns;
+    const totalRow = last + 2;
+    selected.forEach((column, col) => {
+      const total = totals[column.key];
+      if (!total || total.kind === 'volumetric') return;
+      const name = XLSX.utils.encode_col(col);
+      ws[XLSX.utils.encode_cell({ r: totalRow, c: col })] = total.value === null
+        ? { t: 's', v: TOTAL_UNKNOWN_LABEL }
+        : { t: 'n', v: total.value, f: `SUBTOTAL(9,${name}2:${name}${last + 1})`, z: dossierTableExportFormat(total.kind) };
+      totalTexts[column.label] = total.value === null ? TOTAL_UNKNOWN_LABEL : total.text;
     });
-  });
+    if (Object.keys(totalTexts).length) {
+      ws[XLSX.utils.encode_cell({ r: totalRow, c: 0 })] = { t: 's', v: DOSSIER_TABLE_TOTAL_LABEL };
+      ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: totalRow, c: selected.length - 1 } });
+    }
+  }
+  // A column is as wide as its longest text: a cell of several lines (« Dimensions finales ») by its
+  // longest line, a number as its format writes it (« 1,289.50 € · Brouillon »), never « ### ».
+  const longestLine = value => String(value ?? '').split('\n').reduce((width, line) => Math.max(width, line.length), 0);
+  const shown = (row, index, label) => typeof row[label] === 'number' && formats[index][label] ? XLSX.SSF.format(formats[index][label], row[label]) : row[label];
+  ws['!cols'] = selected.map(({ label }) => ({ wch: Math.min(60, [...rows.map((row, index) => shown(row, index, label)), totalTexts[label]].reduce((width, value) => Math.max(width, longestLine(value)), label.length)) + 2 }));
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Dossiers');
-  XLSX.writeFile(wb, filename);
+  return wb;
+}
+
+export function exportDossierTableExcel(dossiers, clients, models, view, columns, filename = 'dossiers.xlsx') {
+  XLSX.writeFile(buildDossierTableWorkbook(dossiers, clients, models, view, columns), filename);
 }
 
 export function exportColisExcel(colis, clients, columns, filename = 'export-colis.xlsx') {

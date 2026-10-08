@@ -27,6 +27,8 @@ import { consentQueueFilter } from '../../domain/consentQueue';
 import { clientDisplayName, groupDossiersByClient } from '../../domain/clientGroups';
 import { TABLE_VIEWS, TABLE_COLUMNS, DossierTableHead, DossierTableRow, DossierTableCard } from './DossierTableRows';
 import { DossierGroupRow, DossierCardGroup } from './DossierGroupHeader';
+import { DossierTotalRow, DossierGroupTotals, DossierCardTotal } from './DossierTableTotals';
+import { dossierTableTotals, hasDossierTableTotals, dossierTableTotalLabel, dossierTableSubtotalLabel, dossierCardTotalLabel } from '../../domain/dossierTableTotals';
 import { SelectionParcelLabels } from './ParcelLabelsButton';
 
 // ── Pipeline cards (filters) ────────────────────────────────────────────────
@@ -433,6 +435,25 @@ export default function StaffColisPage() {
   }, [grouping, sorted, envois, today, now, noDeparture, getClient, models]);
   // Exports follow the order on screen, group by group.
   const displayedRows = useMemo(() => grouped ? groups.flatMap(group => group.dossiers) : sorted, [grouped, groups, sorted]);
+  // The totals follow what is shown: the displayed dossiers (search, tab, work, owner and
+  // column filters applied; a folded group's included), and each group's own. A sort
+  // never changes them; a realtime update, a filter or the search recomputes them.
+  const totals = useMemo(() => dossierTableTotals(displayedRows, displayColumns, models), [displayedRows, displayColumns, models]);
+  const groupTotals = useMemo(() => new Map(grouped ? groups.map(group => [group.key, dossierTableTotals(group.dossiers, displayColumns, models)]) : []), [grouped, groups, displayColumns, models]);
+  const showTotals = hasDossierTableTotals(totals);
+  // The height of the total pinned to the bottom of the list: what is scrolled into view (the
+  // keyboard, a script) stops above it (scroll-padding-bottom, dossierTable.css).
+  const [totalRow, setTotalRow] = useState(null);
+  useLayoutEffect(() => {
+    const page = pageRef.current;
+    if (!page) return undefined;
+    if (!totalRow) { page.style.removeProperty('--dossier-total-height'); return undefined; }
+    const update = () => page.style.setProperty('--dossier-total-height', `${Math.ceil(totalRow.getBoundingClientRect().height)}px`);
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(totalRow);
+    return () => observer.disconnect();
+  }, [totalRow]);
 
   const tabCounts = useMemo(() => PIPELINE.reduce((all, phase) => {
     all[phase.key] = viewRows.filter((c) => phase.key === 'all' && (workFilter === 'messages' || ownerFilter || taskScope !== 'all') ? true : phase.filter(c)).length;
@@ -712,6 +733,11 @@ export default function StaffColisPage() {
               onToggle: () => setCollapsedGroups(previous => previous.includes(group.key) ? previous.filter(key => key !== group.key) : [...previous, group.key]),
               onToggleAll: () => toggleGroup(group),
             });
+            // « Total des 12 dossiers filtrés » under a search, a filter or a task scope.
+            const listFiltered = Boolean(search.trim()) || activeFilters.length > 0 || taskScope !== 'all';
+            const groupContext = group => group.ref ? `${group.title} · ${group.ref}` : group.title;
+            const subtotalRow = group => showTotals && <DossierTotalRow variant="subtotal" groupKey={group.key} columns={displayCols} totals={groupTotals.get(group.key)}
+              label={dossierTableSubtotalLabel(group.dossiers.length)} context={groupContext(group)} />;
             const card = c => <DossierTableCard view={tableView} key={c.id} c={c} client={getClient(c.clientId)} model={models.get(c.id)} alerts={alertsByDossier.get(c.id)} columns={displayCols} checked={selectedIds.has(c.id)} onCheck={() => toggleSelection(c.id)} onOpen={action => openTask(c.id, action)} onOpenDossier={() => openDossier(c.id)} returnTo={returnTo} />;
             const tableRow = c => <DossierTableRow key={c.id} c={c} client={getClient(c.clientId)} model={models.get(c.id)} alerts={alertsByDossier.get(c.id)} columns={displayCols} checked={selectedIds.has(c.id)} onCheck={() => toggleSelection(c.id)} onOpen={action => openTask(c.id, action)} onOpenDossier={() => openDossier(c.id)} returnTo={returnTo} />;
 
@@ -748,8 +774,10 @@ export default function StaffColisPage() {
 
             return <>
               <div className="dossier-card-list px-4">{grouped
-                ? groups.map(group => <DossierCardGroup key={group.key} {...headerProps(group)}>{!collapsed(group) && group.dossiers.map(card)}</DossierCardGroup>)
-                : sorted.map(card)}</div>
+                ? groups.map(group => <DossierCardGroup key={group.key} {...headerProps(group)} summary={showTotals ? <DossierGroupTotals totals={groupTotals.get(group.key)} columns={displayCols} /> : null}>{!collapsed(group) && group.dossiers.map(card)}</DossierCardGroup>)
+                : sorted.map(card)}
+                {showTotals && <DossierCardTotal totals={totals} columns={displayCols} label={dossierCardTotalLabel(totals.count, { filtered: listFiltered })} />}
+              </div>
               <table aria-label="Dossiers d’expédition" data-view={tableView} data-unpin-client={unpinClient ? 'true' : undefined} data-unpin-ref={unpinRef ? 'true' : undefined} data-unpin-action={listWidth < 768 ? 'true' : undefined} style={{ ...tableStyle, '--dossier-list-width': listWidth ? `${listWidth}px` : undefined }} className="dossier-data-table text-left">
                 <colgroup><col style={{ width: 40 }} />{displayCols.map(column => <col key={column.key} style={{ width: tableWidths[column.key] }} />)}</colgroup>
                 <thead>
@@ -778,9 +806,15 @@ export default function StaffColisPage() {
                     ? groups.map(group => <React.Fragment key={group.key}>
                       <DossierGroupRow colSpan={totalColspan} {...headerProps(group)} />
                       {!collapsed(group) && group.dossiers.map(tableRow)}
+                      {/* Closes the group, folded or not: folding every group leaves one line per group. */}
+                      {subtotalRow(group)}
                     </React.Fragment>)
                     : sorted.map(tableRow)}
                 </tbody>
+                {/* Pinned to the bottom of the list as the headings are to its top. */}
+                {showTotals && <tfoot>
+                  <DossierTotalRow variant="total" rowRef={setTotalRow} columns={displayCols} totals={totals} label={dossierTableTotalLabel(totals.count, { filtered: listFiltered })} />
+                </tfoot>}
               </table>
             </>;
           })()}
@@ -794,11 +828,12 @@ export default function StaffColisPage() {
   );
 }
 
-/** Keyboard focus is never left under the sticky heading row or under the pinned
- * columns (WCAG 2.4.11): the browser only brings a focused control inside the
- * scroller, which these cover. The table scrolls on, by what covers the control
- * and its ring, along each axis the control is not pinned on: a control of a
- * pinned column or of the heading row never moves the table along that axis.
+/** Keyboard focus is never left under the sticky heading row, under the total
+ * row pinned to the bottom or under the pinned columns (WCAG 2.4.11): the browser
+ * only brings a focused control inside the scroller, which these cover. The
+ * table scrolls on, by what covers the control and its ring, along each axis the
+ * control is not pinned on: a control of a pinned column or of the heading row
+ * never moves the table along that axis.
  * A mouse or touch focus never scrolls (the control was under the pointer), not
  * even a resize handle's, which its press focuses by script (data-pointer-focus:
  * :focus-visible may match it after a key); nor does a browser without
@@ -818,9 +853,14 @@ function revealKeyboardFocus(scroller, target) {
     if (style.top !== 'auto' || style.bottom !== 'auto') pinnedY = true;
   }
   // What covers the table: the heading cells (sticky one by one: the <thead> box itself scrolls
-  // away), the pinned identity columns on the left, the pinned Action on the right.
+  // away), the total row's cells pinned to the bottom (unpinned while a selection shows its bar),
+  // the pinned identity columns on the left, the pinned Action on the right.
   const view = scroller.getBoundingClientRect(), box = target.getBoundingClientRect();
-  let top = view.top, left = view.left, right = view.left + scroller.clientWidth;
+  let top = view.top, bottom = view.top + scroller.clientHeight, left = view.left, right = view.left + scroller.clientWidth;
+  for (const cell of table.querySelectorAll('tfoot td, tfoot th')) {
+    const style = getComputedStyle(cell);
+    if (style.position === 'sticky' && style.bottom !== 'auto') bottom = Math.min(bottom, cell.getBoundingClientRect().top);
+  }
   for (const th of table.querySelectorAll('thead th')) {
     const style = getComputedStyle(th), rect = th.getBoundingClientRect();
     if (style.position !== 'sticky') continue;
@@ -833,6 +873,7 @@ function revealKeyboardFocus(scroller, target) {
     }
   }
   if (!pinnedY && box.top < top + FOCUS_CLEARANCE) scroller.scrollTop -= top + FOCUS_CLEARANCE - box.top;
+  else if (!pinnedY && box.bottom > bottom - FOCUS_CLEARANCE) scroller.scrollTop += box.bottom - (bottom - FOCUS_CLEARANCE);
   if (pinnedX) return;
   if (box.left < left + FOCUS_CLEARANCE) scroller.scrollLeft -= left + FOCUS_CLEARANCE - box.left;
   else if (box.right > right - FOCUS_CLEARANCE) scroller.scrollLeft += box.right - (right - FOCUS_CLEARANCE);

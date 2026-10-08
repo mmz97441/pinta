@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { TABLE_COLUMNS, buildDossierTableModel as model, buildDossierTableExportRows, dossierTableExportColumns, formatDossierTableDate, dossierTableMissingAmountLabel, sortDossierTableRows, BULK_STATUS_STEPS, BULK_STATUS_REASONS, bulkStatusPlan, bulkRefusalReason, dossierFactHasValue, countLabel, countWord, parallelTasksLabel, STALE_TASK_REASON, consentRequestLabel, dossierDimensionsLines, volumetricWeightLabel } from './dossierTable.js';
+import { TABLE_COLUMNS, buildDossierTableModel as model, buildDossierTableExport, buildDossierTableExportRows, dossierTableExportColumns, formatDossierTableDate, dossierTableMissingAmountLabel, sortDossierTableRows, BULK_STATUS_STEPS, BULK_STATUS_REASONS, bulkStatusPlan, bulkRefusalReason, dossierFactHasValue, countLabel, countWord, parallelTasksLabel, STALE_TASK_REASON, consentRequestLabel, dossierDimensionsLines, volumetricWeightLabel, TAXES_PRO_LABEL, TAXES_UNVERIFIED_LABEL, dossierTableNumber, DOSSIER_TOTAL_KINDS } from './dossierTable.js';
 import { actionWaiting, workActionUrl } from './personalWork.js';
 import { STATUTS } from '../constants/index.js';
 
@@ -414,13 +414,15 @@ test('quote price columns are financial and preserve draft and review labels in 
     const columns = TABLE_COLUMNS[view].filter(column => ['optimizedWeight', 'requested'].includes(column.key));
     assert.equal(columns.find(column => column.key === 'requested').financial, true);
     assert.equal(columns.find(column => column.key === 'requested').priceKind, 'quote');
-    const rows = buildDossierTableExportRows(items, [], models, view, columns);
-    assert.equal(rows[0]['Prix du devis'], '83,47 € · Brouillon');
-    assert.equal(rows[1]['Prix du devis'], '100,00 € · À revoir');
-    assert.equal(rows[2]['Prix du devis'], 0);
-    assert.equal(rows[0]['Poids final (kg)'], 2);
+    const { rows, formats } = buildDossierTableExport(items, [], models, view, columns);
+    // A shown amount stays a number the spreadsheet adds up; its format writes its state after it.
+    assert.deepEqual(rows.map(row => row['Prix du devis']), [83.47, 100, 0]);
+    assert.deepEqual(formats.map(format => format['Prix du devis']), ['#,##0.00 "€ · Brouillon"', '#,##0.00 "€ · À revoir"', '#,##0.00 "€"']);
+    assert.equal(rows[0]['Poids final (kg)'], 2); assert.equal(formats[0]['Poids final (kg)'], '#,##0.00');
+    assert.deepEqual(buildDossierTableExportRows(items, [], models, view, columns), rows);
   }
-  for (const key of ['requested', 'paid', 'remaining']) assert.equal(TABLE_COLUMNS.payments.find(column => column.key === key).financial, true);
+  for (const key of ['requested', 'taxes', 'paid', 'remaining']) assert.equal(TABLE_COLUMNS.payments.find(column => column.key === key).financial, true);
+  for (const view of ['daily', 'departures']) assert.equal(TABLE_COLUMNS[view].find(column => column.key === 'taxes').financial, true);
 });
 
 test('short header labels keep the words of their full label, in order, and never reach exports', () => {
@@ -443,14 +445,14 @@ test('short header labels keep the words of their full label, in order, and neve
   assert.equal(shortened.has('payments/requested'), false, 'The payment “Demandé” column keeps its own label.');
   assert.deepEqual(Object.fromEntries([...shortened].map(([key, value]) => [key.split('/')[1], value])), {
     receivedAt: 'Réception', statusLabel: 'Statut', statut: 'Travail', cartons: 'Cartons', optimizedDimensions: 'Dimensions', optimizedWeight: 'Poids (kg)',
-    requested: 'Prix', remaining: 'Reste', sentAt: 'Devis envoyé', departure: 'Départ', packages: 'Colis', consentRequestedAt: 'Demande envoyée',
+    requested: 'Prix', taxes: 'Taxes', remaining: 'Reste', sentAt: 'Devis envoyé', departure: 'Départ', packages: 'Colis', consentRequestedAt: 'Demande envoyée',
   });
   for (const view of Object.keys(TABLE_COLUMNS)) {
     const exported = dossierTableExportColumns(view, TABLE_COLUMNS[view]);
     assert.deepEqual(exported.map(column => column.label), TABLE_COLUMNS[view].filter(column => exported.some(item => item.key === column.key)).map(column => column.label));
     assert.ok(exported.every(column => !('shortLabel' in column)));
   }
-  assert.deepEqual(dossierTableExportColumns('daily', TABLE_COLUMNS.daily).map(column => column.label), ['Référence', 'Client', 'Dernière réception', 'Statut du dossier', 'Paiement', 'Travail à faire', 'Qui s’en occupe', 'Casier', 'Cartons reçus', 'Dimensions finales', 'Poids final (kg)', 'Prix du devis']);
+  assert.deepEqual(dossierTableExportColumns('daily', TABLE_COLUMNS.daily).map(column => column.label), ['Référence', 'Client', 'Dernière réception', 'Statut du dossier', 'Paiement', 'Travail à faire', 'Qui s’en occupe', 'Casier', 'Cartons reçus', 'Dimensions finales', 'Poids final (kg)', 'Prix du devis', 'Taxes calculées']);
 });
 
 test('the server relance before the departure closing is work to do, not an awaited consent', () => {
@@ -639,4 +641,101 @@ test('the client column sorts on the name the rows show, family name first', () 
   const column = TABLE_COLUMNS.daily.find(item => item.key === 'client');
   assert.equal(column.sort.value({ client: { nom: 'Payet Flavie', nomFamille: 'Payet', prenom: 'Flavie' } }), 'Payet Flavie');
   assert.equal(column.sort.value({ client: undefined }), null);
+});
+
+// ── « Taxes calculées » ─────────────────────────────────────────────────────
+// The saved quote of 1 October: OM 10, OMR 5, TVA 5 on a total of 100.
+const savedQuote = (amounts, extra = {}) => ({ version: 1, amounts: { transport: 80, fees: 0, ...amounts }, inputs: { client: { type: 'particulier' } }, ...extra });
+const taxed = { ...quoted, devisSnapshot: savedQuote({ om: 10, omr: 5, tva: 5, total: 100 }) };
+const taxesOf = dossier => model(dossier, base).quoteTaxes;
+
+test('« Taxes calculées » adds OM, OMR and TVA of the saved quote whose price the list shows, in cents', () => {
+  assert.deepEqual(taxesOf(taxed), { amount: 20, stateLabel: '', pro: false });
+  assert.equal(model(taxed, base).quotePrice.amount, 100, 'The same quote gives the price.');
+  // 0,10 + 0,20 + 0,30 is 0,60, never 0.6000000000000001.
+  assert.equal(taxesOf({ ...taxed, devisTotal: 80.6, devisSnapshot: savedQuote({ om: 0.1, omr: 0.2, tva: 0.3, total: 80.6 }) }).amount, 0.6);
+  // Amounts stored as text by an older version are still the saved quote's.
+  assert.equal(taxesOf({ ...taxed, devisSnapshot: savedQuote({ om: '10', omr: '5', tva: '5.00', total: 100 }) }).amount, 20);
+  // Never the raw columns, never a recalculation: the frozen amounts only.
+  assert.equal(taxesOf({ ...taxed, devisOM: 99, devisOMR: 99, devisTVA: 99 }).amount, 20);
+});
+
+test('without a price the taxes repeat its state; a price with a state gives its taxes the same state', () => {
+  // No quote yet, or a quote to review: the taxes say what the price says.
+  assert.deepEqual(taxesOf(dossier), { amount: null, stateLabel: 'À calculer', pro: false });
+  assert.deepEqual(taxesOf({ ...taxed, quoteNeedsReview: true }), { amount: null, stateLabel: 'À revoir', pro: false });
+  assert.deepEqual(taxesOf({ ...taxed, statut: 'mesure' }), { amount: null, stateLabel: 'À revoir', pro: false });
+  // Another version of the quote: the price is to review, so are its taxes.
+  assert.deepEqual(taxesOf({ ...taxed, devisSnapshot: savedQuote({ om: 10, omr: 5, tva: 5, total: 100 }, { version: 2 }) }), { amount: null, stateLabel: 'À revoir', pro: false });
+  // A draft: its taxes are a draft too.
+  const draft = { ...prepared, devisTotal: 83.47, devisBrouillon: true, quoteVersion: 3, devisSnapshot: savedQuote({ om: 4.1, omr: 1.2, tva: 7.37, total: 83.47 }, { version: 3 }) };
+  assert.deepEqual(model(draft, base).quotePrice, { amount: 83.47, stateLabel: 'Brouillon' });
+  assert.deepEqual(taxesOf(draft), { amount: 12.67, stateLabel: 'Brouillon', pro: false });
+  // A paid quote whose raw total disagrees keeps its frozen price « À revoir »: its taxes too.
+  const disputed = { ...paid, devisTotal: 999, devisSnapshot: savedQuote({ om: 10, omr: 5, tva: 5, total: 100 }) };
+  assert.deepEqual(model(disputed, base).quotePrice, { amount: 100, stateLabel: 'À revoir' });
+  assert.deepEqual(taxesOf(disputed), { amount: 20, stateLabel: 'À revoir', pro: false });
+});
+
+test('a price without a usable saved quote behind it reads « À vérifier », never an invented amount', () => {
+  assert.equal(TAXES_UNVERIFIED_LABEL, 'À vérifier');
+  const unverified = { amount: null, stateLabel: TAXES_UNVERIFIED_LABEL, pro: false };
+  // A former dossier: a price, raw tax columns, no saved quote.
+  assert.deepEqual(taxesOf({ ...quoted, devisOM: 10, devisOMR: 5, devisTVA: 5 }), unverified);
+  assert.equal(model({ ...quoted, devisOM: 10, devisOMR: 5, devisTVA: 5 }, base).quotePrice.amount, 100);
+  for (const amounts of [{ om: 10, omr: 5, total: 100 }, { om: 10, omr: 5, tva: null, total: 100 }, { om: 10, omr: 5, tva: 'abc', total: 100 }, { om: 10, omr: 5, tva: Infinity, total: 100 },
+    { om: NaN, omr: 5, tva: 5, total: 100 }, { om: -10, omr: 5, tva: 5, total: 100 }, { om: 10, omr: '', tva: 5, total: 100 }])
+    assert.deepEqual(taxesOf({ ...taxed, devisSnapshot: savedQuote(amounts) }), unverified, JSON.stringify(amounts));
+  // A saved quote without its total cannot be told to be the one priced.
+  assert.deepEqual(taxesOf({ ...taxed, devisSnapshot: savedQuote({ om: 10, omr: 5, tva: 5, total: undefined }) }), unverified);
+  assert.deepEqual(taxesOf({ ...taxed, devisSnapshot: { version: 1 } }), unverified);
+});
+
+test('a professional quote without tax reads « Sans taxes (pro) »; a private quote with taxes proven zero reads 0,00 €', () => {
+  assert.equal(TAXES_PRO_LABEL, 'Sans taxes (pro)');
+  const pro = { ...taxed, devisTotal: 80, devisSnapshot: savedQuote({ om: 0, omr: 0, tva: 0, total: 80 }, { inputs: { client: { type: 'pro' } } }) };
+  assert.deepEqual(taxesOf(pro), { amount: 0, stateLabel: '', pro: true });
+  assert.deepEqual(taxesOf({ ...pro, devisSnapshot: savedQuote({ om: 0, omr: 0, tva: 0, total: 80 }) }), { amount: 0, stateLabel: '', pro: false });
+  // A professional quote that does carry taxes shows them.
+  assert.deepEqual(taxesOf({ ...pro, devisTotal: 100, devisSnapshot: savedQuote({ om: 10, omr: 5, tva: 5, total: 100 }, { inputs: { client: { type: 'pro' } } }) }), { amount: 20, stateLabel: '', pro: false });
+});
+
+test('the taxes column is financial, sorts as a number and sits after the price (after « Demandé » in « Paiements »)', () => {
+  const keys = view => TABLE_COLUMNS[view].map(column => column.key);
+  for (const view of ['daily', 'departures']) assert.equal(keys(view)[keys(view).indexOf('requested') + 1], 'taxes', view);
+  assert.equal(keys('payments')[keys('payments').indexOf('requested') + 1], 'taxes');
+  assert.equal(keys('accords').includes('taxes'), false);
+  const column = TABLE_COLUMNS.daily.find(item => item.key === 'taxes');
+  assert.deepEqual([column.label, column.shortLabel, column.align, column.financial, column.sort.type], ['Taxes calculées', 'Taxes', 'right', true, 'number']);
+  const rows = [{ ...taxed, id: 'twenty' }, { ...dossier, id: 'unknown' }, { ...taxed, id: 'six', devisTotal: 86, devisSnapshot: savedQuote({ om: 3, omr: 1, tva: 2, total: 86 }) }];
+  const models = new Map(rows.map(row => [row.id, model(row, base)]));
+  assert.deepEqual(sortDossierTableRows(rows, { column, models }).map(row => row.id), ['six', 'twenty', 'unknown']);
+  assert.deepEqual(sortDossierTableRows(rows, { column, models, direction: 'desc' }).map(row => row.id), ['twenty', 'six', 'unknown']);
+});
+
+test('the export writes the taxes as a number in its format, or the cell’s wording', () => {
+  const pro = { ...taxed, id: 'pro', devisTotal: 80, devisSnapshot: savedQuote({ om: 0, omr: 0, tva: 0, total: 80 }, { inputs: { client: { type: 'pro' } } }) };
+  const draft = { ...prepared, id: 'draft', devisTotal: 83.47, devisBrouillon: true, quoteVersion: 3, devisSnapshot: savedQuote({ om: 4.1, omr: 1.2, tva: 7.37, total: 83.47 }, { version: 3 }) };
+  const items = [{ ...taxed, id: 'taxed' }, pro, draft, { ...quoted, id: 'legacy' }, { ...dossier, id: 'new' }];
+  const models = new Map(items.map(row => [row.id, model(row, base)]));
+  for (const view of ['daily', 'payments', 'departures']) {
+    const { rows, formats } = buildDossierTableExport(items, [], models, view, TABLE_COLUMNS[view].filter(column => ['ref', 'taxes'].includes(column.key)));
+    assert.deepEqual(rows.map(row => row['Taxes calculées']), [20, 0, 12.67, 'À vérifier', 'À calculer'], view);
+    assert.deepEqual(formats.map(format => format['Taxes calculées']), ['#,##0.00 "€"', '#,##0.00 "€";-#,##0.00 "€";"Sans taxes (pro)"', '#,##0.00 "€ · Brouillon"', undefined, undefined], view);
+  }
+  assert.equal(dossierTableExportColumns('accords', TABLE_COLUMNS.daily).some(column => column.key === 'taxes'), false, 'No taxes in « Accords clients ».');
+});
+
+test('each column that adds up reads the number of its cell, null when the cell shows none', () => {
+  assert.deepEqual(Object.keys(DOSSIER_TOTAL_KINDS), ['cartons', 'packages', 'optimizedWeight', 'optimizedDimensions', 'requested', 'taxes', 'paid', 'remaining']);
+  const column = key => [...TABLE_COLUMNS.daily, ...TABLE_COLUMNS.payments, ...TABLE_COLUMNS.departures].find(item => item.key === key && (key !== 'requested' || item.priceKind === 'quote'));
+  const numbers = (row, keys) => keys.map(key => dossierTableNumber(column(key), { dossier: row, model: model(row, base) }));
+  const keys = ['cartons', 'packages', 'optimizedWeight', 'optimizedDimensions', 'requested', 'taxes'];
+  assert.deepEqual(numbers(taxed, keys), [3, 1, 2, 6000 / 5000, 100, 20]);
+  // Before the optimisation: the cartons received only, the rest to come.
+  assert.deepEqual(numbers(dossier, keys), [3, null, null, null, null, null]);
+  const payments = TABLE_COLUMNS.payments.filter(item => ['requested', 'paid', 'remaining'].includes(item.key));
+  assert.deepEqual(payments.map(item => dossierTableNumber(item, { dossier: paid, model: model({ ...paid, paiementMontant: 30 }, base) })), [100, 30, 70]);
+  assert.deepEqual(payments.map(item => dossierTableNumber(item, { dossier: paid, model: model({ ...paid, paiementDate: null }, base) })), [100, null, null], 'A payment to verify has no amount paid nor left.');
+  for (const key of ['ref', 'casier', 'receivedAt', 'statusLabel']) assert.equal(dossierTableNumber(column(key), { dossier: taxed, model: model(taxed, base) }), undefined, `${key} has no total.`);
 });

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { TABLE_COLUMNS, buildDossierTableModel, buildDossierTableExportRows, sortDossierTableRows } from './dossierTable.js';
-import { clampColumnWidth, columnWidthBounds, columnWidthsStorageKey, columnVisibilityStorageKey, dossierTextSizeStorageKey, dossierLayoutStorageKey, sanitizeDossierTextSize, sanitizeDossierTableLayout, DOSSIER_TEXT_SIZE_BOUNDS, DOSSIER_TOUCH_TEXT_SIZE, sanitizeHiddenColumns, readColumnFilters, filterDossierTableRows, sanitizeColumnFilter, columnFilterModes, sanitizeColumnWidths, dossierColumnSuggestions, requiredTableColumn, tableTextSizeInitial, DOSSIER_GROUPINGS, defaultDossierGrouping, sanitizeDossierGrouping, resolveDossierGrouping, dossierGroupingStorageKey, sanitizeNoDeparturePlacement, noDeparturePlacementStorageKey, HEADING_CHROME, headingWidthFloors, flooredColumnWidths } from './dossierTablePreferences.js';
+import { clampColumnWidth, columnWidthBounds, columnWidthsStorageKey, columnVisibilityStorageKey, dossierTextSizeStorageKey, dossierLayoutStorageKey, sanitizeDossierTextSize, sanitizeDossierTableLayout, DOSSIER_TEXT_SIZE_BOUNDS, DOSSIER_TOUCH_TEXT_SIZE, sanitizeHiddenColumns, readColumnFilters, filterDossierTableRows, sanitizeColumnFilter, columnFilterModes, sanitizeColumnWidths, dossierColumnSuggestions, requiredTableColumn, tableTextSizeInitial, DOSSIER_GROUPINGS, defaultDossierGrouping, sanitizeDossierGrouping, resolveDossierGrouping, dossierGroupingStorageKey, sanitizeNoDeparturePlacement, noDeparturePlacementStorageKey, HEADING_CHROME, headingWidthFloors, flooredColumnWidths, visibleTableColumnKeys } from './dossierTablePreferences.js';
 import { WORK_TABLE_CHOICES } from './workTable.js';
 
 const columns = TABLE_COLUMNS.daily;
@@ -292,4 +292,30 @@ test('a column is never drawn narrower than its heading: the words, the sort arr
   assert.equal(drawn.casier, 100); assert.equal(drawn.owner, 300); assert.equal(drawn.client, saved.client);
   assert.deepEqual(flooredColumnWidths(saved), saved);
   assert.equal(saved.casier, 64, 'The saved preference itself is unchanged.');
+});
+
+test('choices saved before « Taxes calculées » existed show it in its place until the person hides it', () => {
+  // What a person stored on 7 October: two hidden columns, their widths, no « taxes » anywhere.
+  const before = { daily: ['casier', 'owner'], payments: ['sentAt'], departures: ['destination', 'readiness'] };
+  const savedWidths = { ref: 200, requested: 160, cartons: 90 };
+  for (const [view, stored] of Object.entries(before)) {
+    const viewColumns = TABLE_COLUMNS[view];
+    const hidden = sanitizeHiddenColumns(viewColumns, JSON.parse(JSON.stringify(stored)));
+    assert.deepEqual([...hidden].sort(), [...stored].sort(), `${view}: the saved choices are kept.`);
+    const shown = visibleTableColumnKeys(viewColumns, hidden);
+    // After « Prix du devis », or after « Demandé » in « Paiements ».
+    assert.equal(shown[shown.indexOf('requested') + 1], 'taxes', `${view}: right after the price.`);
+    assert.deepEqual(shown, viewColumns.map(column => column.key).filter(key => !stored.includes(key)), `${view}: every other column keeps its order.`);
+    // Hidden afterwards, it stays hidden; shown again, it comes back in its place.
+    const hiddenAfter = sanitizeHiddenColumns(viewColumns, [...hidden, 'taxes']);
+    assert.equal(visibleTableColumnKeys(viewColumns, hiddenAfter).includes('taxes'), false);
+    assert.deepEqual(visibleTableColumnKeys(viewColumns, hiddenAfter.filter(key => key !== 'taxes')), shown);
+    // Saved widths are kept; the new column opens at its own width.
+    const widthsAfter = sanitizeColumnWidths(viewColumns, savedWidths);
+    assert.equal(widthsAfter.ref, 200); assert.equal(widthsAfter.requested, 160);
+    assert.equal(widthsAfter.taxes, columnWidthBounds({ key: 'taxes' }).initial);
+    assert.equal(widthsAfter.taxes, 130);
+  }
+  assert.equal(visibleTableColumnKeys(TABLE_COLUMNS.accords, []).includes('taxes'), false);
+  assert.deepEqual(visibleTableColumnKeys(null, null), []);
 });

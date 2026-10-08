@@ -57,6 +57,8 @@ const receptionDateColumn = defineDossierTableColumn({ key: 'receivedAt', label:
 const finalWeightColumn = defineDossierTableColumn({ key: 'optimizedWeight', label: 'Poids final (kg)', shortLabel: 'Poids (kg)', align: 'right', sort: { type: 'number', value: ({ model }) => model?.optimizedWeight } });
 const financialColumn = (key, label, priceKind = 'payment', shortLabel) => defineDossierTableColumn({ key, label, ...(shortLabel ? { shortLabel } : {}), align: 'right', financial: true, priceKind, sort: { type: 'number', value: ({ model }) => priceKind === 'quote' ? model?.quotePrice?.amount : model?.payment?.[key] } });
 const quotePriceColumn = financialColumn('requested', 'Prix du devis', 'quote', 'Prix');
+// OM + OMR + TVA of the saved quote whose price the list shows (quoteTaxesModel): financial like the price.
+const taxesColumn = defineDossierTableColumn({ key: 'taxes', label: 'Taxes calculées', shortLabel: 'Taxes', align: 'right', financial: true, sort: { type: 'number', value: ({ model }) => model?.quoteTaxes?.amount } });
 const casierColumn = defineDossierTableColumn({ key: 'casier', label: 'Casier', filter: { text: ({ dossier }) => dossier.casier || 'À renseigner' }, sort: { type: 'text', value: ({ dossier }) => dossier.casier } });
 const cartonsColumn = defineDossierTableColumn({ key: 'cartons', label: 'Cartons reçus', shortLabel: 'Cartons', sort: { type: 'number', value: ({ dossier }) => receptionCartonManifest(dossier).nbColis } });
 // A desired day without a departure (« Souhaité le … · à créer ») sorts on that day.
@@ -69,13 +71,13 @@ export const TABLE_COLUMNS = Object.freeze({
   daily: Object.freeze([refColumn, clientColumn, receptionDateColumn, statusColumn, paymentStateColumn,
     defineDossierTableColumn({ key: 'statut', label: 'Travail à faire', shortLabel: 'Travail', sort: { type: 'text', value: ({ model }) => model?.title === 'Tâches à actualiser' ? null : model?.title } }),
     defineDossierTableColumn({ key: 'owner', label: 'Qui s’en occupe', filter: { text: ({ model }) => model?.ownerName }, sort: { type: 'text', value: ({ model }) => ['—', 'Non attribué', 'Membre de l’équipe'].includes(model?.ownerName) ? null : model?.ownerName } }),
-    casierColumn, cartonsColumn, dimensionsColumn, finalWeightColumn, quotePriceColumn, actionColumn]),
-  payments: Object.freeze([refColumn, clientColumn, receptionDateColumn, statusColumn, paymentStateColumn, financialColumn('requested', 'Demandé'), financialColumn('paid', 'Payé'), financialColumn('remaining', 'Reste à payer', 'payment', 'Reste'),
+    casierColumn, cartonsColumn, dimensionsColumn, finalWeightColumn, quotePriceColumn, taxesColumn, actionColumn]),
+  payments: Object.freeze([refColumn, clientColumn, receptionDateColumn, statusColumn, paymentStateColumn, financialColumn('requested', 'Demandé'), taxesColumn, financialColumn('paid', 'Payé'), financialColumn('remaining', 'Reste à payer', 'payment', 'Reste'),
     defineDossierTableColumn({ key: 'sentAt', label: 'Devis envoyé le', shortLabel: 'Devis envoyé', sort: { type: 'date', value: ({ model }) => model?.payment?.sentAt } }), actionColumn]),
   departures: Object.freeze([refColumn, clientColumn, receptionDateColumn, statusColumn, paymentStateColumn, departureColumn,
     defineDossierTableColumn({ key: 'destination', label: 'Destination', sort: { type: 'text', value: ({ model }) => model?.departure?.destination === 'Destination à préciser' ? null : model?.departure?.destination } }),
     defineDossierTableColumn({ key: 'packages', label: 'Colis à expédier', shortLabel: 'Colis', sort: { type: 'number', value: ({ dossier, model }) => model?.optimized ? dossier.outgoingParcelCount : null } }),
-    defineDossierTableColumn({ key: 'readiness', label: 'Prêt à partir ?', sort: { type: 'text', value: ({ model }) => model?.departure?.readinessLabel } }), dimensionsColumn, finalWeightColumn, quotePriceColumn, actionColumn]),
+    defineDossierTableColumn({ key: 'readiness', label: 'Prêt à partir ?', sort: { type: 'text', value: ({ model }) => model?.departure?.readinessLabel } }), dimensionsColumn, finalWeightColumn, quotePriceColumn, taxesColumn, actionColumn]),
   // No status or payment column: every dossier here is before its quote.
   accords: Object.freeze([refColumn, clientColumn, receptionDateColumn, consentStateColumn, consentRequestColumn, consentRelanceColumn, cartonsColumn, casierColumn, departureColumn, actionColumn]),
 });
@@ -191,6 +193,29 @@ function quotePriceModel(dossier, payment, optimized) {
   const candidate = total ?? frozen;
   if (!(candidate > 0 || candidate === 0 && zeroProven)) return { amount: null, stateLabel: 'À calculer' };
   return { amount: candidate, stateLabel: dossier.devisBrouillon || ['autorise', 'en_preparation'].includes(dossier.statut) ? 'Brouillon' : '' };
+}
+
+/** « Taxes calculées » of a professional quote without any tax. */
+export const TAXES_PRO_LABEL = 'Sans taxes (pro)';
+/** A price whose saved quote cannot say its taxes (a former dossier, missing or invalid amounts, another total or version). */
+export const TAXES_UNVERIFIED_LABEL = 'À vérifier';
+const moneyCents = value => (typeof value === 'number' || typeof value === 'string' && value.trim()) && Number.isFinite(Number(value)) && Number(value) >= 0 ? Math.round(Number(value) * 100) : null;
+
+/** « Taxes calculées »: OM + OMR + TVA of the very saved quote whose price the
+ * list shows (devisSnapshot.amounts), added in cents. Nothing is recalculated
+ * here nor taken from the raw columns: without a price, the price's own state
+ * (« À calculer », « À revoir »…) is repeated; a price with a state (« Brouillon »,
+ * « À revoir ») gives its taxes the same state; a price without a usable saved
+ * quote behind it reads « À vérifier ». `pro`: a professional quote without tax. */
+function quoteTaxesModel(dossier, quotePrice) {
+  if (quotePrice.amount === null) return { amount: null, stateLabel: quotePrice.stateLabel || 'À calculer', pro: false };
+  const snapshot = dossier.devisSnapshot;
+  const parts = ['om', 'omr', 'tva'].map(key => moneyCents(snapshot?.amounts?.[key]));
+  const sameQuote = moneyCents(snapshot?.amounts?.total) === Math.round(quotePrice.amount * 100)
+    && (snapshot?.version == null || Number(snapshot.version) === Number(dossier.quoteVersion));
+  if (!sameQuote || parts.includes(null)) return { amount: null, stateLabel: TAXES_UNVERIFIED_LABEL, pro: false };
+  const cents = parts.reduce((sum, part) => sum + part, 0);
+  return { amount: cents / 100, stateLabel: quotePrice.stateLabel || '', pro: cents === 0 && snapshot?.inputs?.client?.type === 'pro' };
 }
 
 export function dossierTableAmount(model, column) {
@@ -344,6 +369,7 @@ export function buildDossierTableModel(dossier, { actions = [], me, can = () => 
   const boxes = optimized ? dossier.finalPackages ?? [{ dimL: dossier.finL, dimW: dossier.finW, dimH: dossier.finH, poids: dossier.finP }] : [];
   const optimizedWeight = optimized ? Math.round((boxes.reduce((sum, box) => sum + Number(box.poids), 0) + Number.EPSILON) * 100) / 100 : null;
   const quotePrice = quotePriceModel(dossier, payment, optimized);
+  const quoteTaxes = quoteTaxesModel(dossier, quotePrice);
   const dimensions = value => Number(value).toLocaleString('fr-FR', { maximumFractionDigits: 4 });
   // Each outgoing parcel with its volumetric weight (L × l × h ÷ divisor, unrounded);
   // the total adds the unrounded weights, as the quote does (measureShipment).
@@ -359,7 +385,7 @@ export function buildDossierTableModel(dossier, { actions = [], me, can = () => 
   // A legacy status cannot turn an incomplete recorded payment into “Payé”.
   const statusLabel = dossier.statut === 'paye' && payment.stateLabel !== PAYMENT_STATE_LABELS.paid ? payment.detailLabel : STATUTS[dossier.statut]?.label || 'Statut à vérifier';
   // « Accords clients »: the consent and its last relance, on the same clock as the rest of the row.
-  const base = { reception: receptionDateSummary(dossier, { now }), payment, quotePrice, departure, optimized, optimizedDimensions, optimizedWeight, statusLabel,
+  const base = { reception: receptionDateSummary(dossier, { now }), payment, quotePrice, quoteTaxes, departure, optimized, optimizedDimensions, optimizedWeight, statusLabel,
     optimizedParcels, optimizedVolumetricTotal, optimizedVolumetricDivisor: divisor?.value ?? null, optimizedVolumetricSource: divisor?.source ?? null,
     consent: consentState(dossier, now), relance: consentRelance(dossier) };
   if (!workReady) return { ...base, action: null, title: 'Tâches à actualiser', detail: 'Actualisez les tâches pour retrouver leur attribution.', ownerName: '—', otherActionsCount: 0, matchesScope: scope === 'all' && !assigneeFilter };
@@ -391,11 +417,56 @@ export function buildDossierTableModel(dossier, { actions = [], me, can = () => 
 }
 
 const exportKeys = {
-  daily: ['ref', 'client', 'receivedAt', 'statusLabel', 'paymentState', 'statut', 'owner', 'casier', 'cartons', 'optimizedDimensions', 'optimizedWeight', 'requested'],
-  payments: ['ref', 'client', 'receivedAt', 'statusLabel', 'paymentState', 'requested', 'paid', 'remaining', 'sentAt'],
-  departures: ['ref', 'client', 'receivedAt', 'statusLabel', 'paymentState', 'departure', 'destination', 'packages', 'readiness', 'optimizedDimensions', 'optimizedWeight', 'requested'],
+  daily: ['ref', 'client', 'receivedAt', 'statusLabel', 'paymentState', 'statut', 'owner', 'casier', 'cartons', 'optimizedDimensions', 'optimizedWeight', 'requested', 'taxes'],
+  payments: ['ref', 'client', 'receivedAt', 'statusLabel', 'paymentState', 'requested', 'taxes', 'paid', 'remaining', 'sentAt'],
+  departures: ['ref', 'client', 'receivedAt', 'statusLabel', 'paymentState', 'departure', 'destination', 'packages', 'readiness', 'optimizedDimensions', 'optimizedWeight', 'requested', 'taxes'],
   accords: ['ref', 'client', 'receivedAt', 'consentState', 'consentRequestedAt', 'lastRelanceAt', 'cartons', 'casier', 'departure'],
 };
+
+// ── Numbers of the list: the columns with a total ──────────────────────────
+/** The columns that add up, and how: counts, kilograms (« Poids final »), the
+ * volumetric weight of « Dimensions finales », and euros. No total for text or dates. */
+export const DOSSIER_TOTAL_KINDS = Object.freeze({
+  cartons: 'count', packages: 'count', optimizedWeight: 'weight', optimizedDimensions: 'volumetric',
+  requested: 'money', taxes: 'money', paid: 'money', remaining: 'money',
+});
+const finiteNumber = value => (typeof value === 'number' || typeof value === 'string' && value.trim()) && Number.isFinite(Number(value)) && Number(value) >= 0 ? Number(value) : null;
+/** The number a column with a total shows for one dossier, read from the same
+ * source as its cell: the cartons received, the outgoing parcels and the final
+ * weight once optimised, the volumetric total of « Dimensions finales », the
+ * quote price (or the requested amount in « Paiements »), the taxes, the amount
+ * paid and the rest to pay. Null when the cell shows no value (« À calculer »,
+ * « À vérifier », not measured yet); undefined for a column without a total.
+ * The screen totals and the spreadsheet both read it, so they add up the same cells. */
+export function dossierTableNumber(column, { dossier = {}, model } = {}) {
+  if (!Object.prototype.hasOwnProperty.call(DOSSIER_TOTAL_KINDS, column?.key)) return undefined;
+  if (column.key === 'cartons') return finiteNumber(receptionCartonManifest(dossier).nbColis);
+  if (column.key === 'taxes') return finiteNumber(model?.quoteTaxes?.amount);
+  if (['requested', 'paid', 'remaining'].includes(column.key)) return finiteNumber(dossierTableAmount(model, column));
+  if (!model?.optimized) return null;
+  return finiteNumber({ packages: dossier.outgoingParcelCount, optimizedWeight: model.optimizedWeight, optimizedDimensions: model.optimizedVolumetricTotal }[column.key]);
+}
+
+const EXPORT_COUNT_FORMAT = '0';
+const EXPORT_WEIGHT_FORMAT = '#,##0.00';
+/** The Excel format of a column's numbers (« 1 250,00 € », « 45,20 », « 12 »).
+ * An amount keeps its state after it (« 89,50 € · Brouillon ») and a
+ * professional quote's zero taxes read « Sans taxes (pro) », as in the cell:
+ * the number itself stays a number the spreadsheet adds up. */
+export function dossierTableExportFormat(kind, { state = '', zeroLabel = '' } = {}) {
+  if (kind === 'count') return EXPORT_COUNT_FORMAT;
+  if (kind === 'weight') return EXPORT_WEIGHT_FORMAT;
+  if (kind !== 'money') return null;
+  const suffix = state ? ` · ${state}` : '';
+  const amount = `#,##0.00 "€${suffix}"`;
+  return zeroLabel ? `${amount};-${amount};"${zeroLabel}${suffix}"` : amount;
+}
+function exportCellFormat(column, model) {
+  const kind = DOSSIER_TOTAL_KINDS[column.key];
+  if (kind !== 'money') return dossierTableExportFormat(kind);
+  if (column.key === 'taxes') return dossierTableExportFormat(kind, { state: model?.quoteTaxes?.stateLabel, zeroLabel: model?.quoteTaxes?.pro ? TAXES_PRO_LABEL : '' });
+  return dossierTableExportFormat(kind, { state: dossierTableAmountState(model, column) });
+}
 const tableDateFormatter = new Intl.DateTimeFormat('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'Indian/Reunion' });
 
 /** Shared by screen and spreadsheet; an explicit business timezone makes the
@@ -428,16 +499,31 @@ export function dossierTableExportColumns(view, columns) {
 /** Export precisely the supplied visible rows and descriptors, in their order.
  * The caller applies permissions/filters and passes the same models as the UI.
  * Financial values and task ownership NEVER fall back to raw dossier fields.
+ * `rows`: one object per dossier, its values under the column labels; a column
+ * with a total (dossierTableNumber) gives a number exactly when its cell shows
+ * one, otherwise the cell's wording. `formats`: the Excel format of each number.
  */
-export function buildDossierTableExportRows(dossiers, clients, models, view, columns) {
+export function buildDossierTableExport(dossiers, clients, models, view, columns) {
   const selected = dossierTableExportColumns(view, columns);
-  const clientById = new Map((clients || []).map(client => [client.id, client]));
   const seen = new Set();
-  return (dossiers || []).filter(dossier => {
+  const unique = (dossiers || []).filter(dossier => {
     const key = dossier.id || dossier.ref;
     if (!key || seen.has(key)) return false;
     seen.add(key); return true;
-  }).map(dossier => {
+  });
+  const rows = exportValues(unique, clients, models, selected);
+  const formats = unique.map((dossier, index) => Object.fromEntries(selected.filter(column => typeof rows[index][column.label] === 'number' && DOSSIER_TOTAL_KINDS[column.key])
+    .map(column => [column.label, exportCellFormat(column, models?.get?.(dossier.id))])));
+  return { columns: selected, dossiers: unique, rows, formats };
+}
+
+export function buildDossierTableExportRows(dossiers, clients, models, view, columns) {
+  return buildDossierTableExport(dossiers, clients, models, view, columns).rows;
+}
+
+function exportValues(dossiers, clients, models, selected) {
+  const clientById = new Map((clients || []).map(client => [client.id, client]));
+  return dossiers.map(dossier => {
     const client = clientById.get(dossier.clientId);
     const model = models?.get?.(dossier.id);
     const name = client?.nomFamille ? [client.nomFamille, client.prenom].filter(Boolean).join(' ') : client?.nom || client?.prenom || 'Client non renseigné';
@@ -461,6 +547,7 @@ export function buildDossierTableExportRows(dossiers, clients, models, view, col
       cartons: receptionCartonManifest(dossier).nbColis,
       receivedAt: formatDossierTableDate(model?.reception?.lastReceivedAt) + (model?.reception?.lastReceivedAt && !model.reception.complete ? ` · ${model.reception.knownCount}/${model.reception.totalCount} cartons datés` : ''),
       requested: amount('requested'), paid: amount('paid'), remaining: amount('remaining'),
+      taxes: model?.quoteTaxes?.stateLabel || 'À calculer',
       sentAt: formatDossierTableDate(model?.payment?.sentAt),
       departure: model?.departure?.label || 'À prévoir', destination: model?.departure?.destination || 'À renseigner',
       packages: model?.departure?.packagesLabel || 'À préparer', readiness: model?.departure?.readinessLabel || 'À vérifier',
@@ -469,9 +556,11 @@ export function buildDossierTableExportRows(dossiers, clients, models, view, col
       lastRelanceAt: relance ? [formatDossierTableDate(relance.at), relance.deliveryLabel].filter(Boolean).join(' · ') : NO_RELANCE_LABEL,
     };
     return Object.fromEntries(selected.map(column => {
-      if (column.priceKind !== 'quote') return [column.label, values[column.key]];
-      const price = dossierTableAmount(model, column), state = dossierTableAmountState(model, column);
-      return [column.label, price === null ? state || 'À calculer' : state ? `${price.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} € · ${state}` : price];
+      // « Dimensions finales » stays the text of its cell; its volumetric total is the screen's.
+      const number = column.key === 'optimizedDimensions' ? null : dossierTableNumber(column, { dossier, model });
+      if (typeof number === 'number') return [column.label, number];
+      if (column.priceKind === 'quote') return [column.label, dossierTableAmountState(model, column) || 'À calculer'];
+      return [column.label, values[column.key]];
     }));
   });
 }

@@ -6,7 +6,7 @@ export const COLUMN_FILTER_PREFIX = 'col.';
 // envoyé » and « Destination » keep a few pixels to spare. At any other text
 // size, on a touch screen or with a narrower saved width, the table draws the
 // column at least as wide as its heading needs (headingWidthFloors).
-const widths = { ref: 140, client: 180, statusLabel: 155, paymentState: 140, statut: 190, owner: 160, casier: 90, cartons: 100, receivedAt: 130, optimizedDimensions: 190, optimizedWeight: 120, requested: 130, paid: 115, remaining: 130, sentAt: 140, departure: 140, destination: 130, packages: 135, readiness: 195, consentState: 150, consentRequestedAt: 180, lastRelanceAt: 165, action: 140 };
+const widths = { ref: 140, client: 180, statusLabel: 155, paymentState: 140, statut: 190, owner: 160, casier: 90, cartons: 100, receivedAt: 130, optimizedDimensions: 190, optimizedWeight: 120, requested: 130, taxes: 130, paid: 115, remaining: 130, sentAt: 140, departure: 140, destination: 130, packages: 135, readiness: 195, consentState: 150, consentRequestedAt: 180, lastRelanceAt: 165, action: 140 };
 // Each dossier preset and Mon travail (`work`) keep their own reading choices.
 const PREFERENCE_VIEWS = ['daily', 'payments', 'departures', 'accords', 'work'];
 const preferenceView = view => PREFERENCE_VIEWS.includes(view);
@@ -111,6 +111,12 @@ export function requiredTableColumn(view) {
  * required column is the single mandatory datum, and foreign keys are ignored. */
 export function sanitizeHiddenColumns(columns, hidden, required = 'ref') {
   return Array.isArray(hidden) ? columns.filter(column => column.key !== required && hidden.includes(column.key)).map(column => column.key) : [];
+}
+/** The columns shown, in the order of the view: a column added since the
+ * person saved their choices (« Taxes calculées ») appears in its place, shown,
+ * until they hide it. */
+export function visibleTableColumnKeys(columns, hidden) {
+  return (columns || []).filter(column => !(hidden || []).includes(column.key)).map(column => column.key);
 }
 export function sanitizeColumnWidths(columns, values) {
   return Object.fromEntries(columns.map(column => [column.key, clampColumnWidth(column, values?.[column.key])]));

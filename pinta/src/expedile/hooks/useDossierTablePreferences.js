@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { clampColumnWidth, columnWidthsStorageKey, columnVisibilityStorageKey, dossierTextSizeStorageKey, dossierLayoutStorageKey, dossierGroupingStorageKey, noDeparturePlacementStorageKey, requiredTableColumn, sanitizeColumnWidths, sanitizeHiddenColumns, sanitizeDossierTextSize, sanitizeDossierTableLayout, sanitizeDossierGrouping, sanitizeNoDeparturePlacement, tableTextSizeInitial } from '../domain/dossierTablePreferences';
+import { clampColumnWidth, columnWidthsStorageKey, columnVisibilityStorageKey, dossierTextSizeStorageKey, dossierLayoutStorageKey, dossierGroupingStorageKey, noDeparturePlacementStorageKey, requiredTableColumn, sanitizeColumnWidths, sanitizeHiddenColumns, sanitizeDossierTextSize, sanitizeDossierTableLayout, sanitizeDossierGrouping, sanitizeNoDeparturePlacement, tableTextSizeInitial, visibleTableColumnKeys } from '../domain/dossierTablePreferences';
 
 function read(key) {
   try { return key ? JSON.parse(localStorage.getItem(key)) : null; }
@@ -58,7 +58,7 @@ export default function useDossierTablePreferences(userId, view, columns) {
       const noDeparture = sanitizeNoDeparturePlacement(value);
       setSaved({ ...current, noDeparture }); persist(noDepartureKey, noDeparture);
     },
-    visibleKeys: columns.filter(column => !current.hidden.includes(column.key)).map(column => column.key),
+    visibleKeys: visibleTableColumnKeys(columns, current.hidden),
     setColumnVisible: (columnKey, visible) => saveHidden(visible ? current.hidden.filter(key => key !== columnKey) : [...current.hidden, columnKey]),
     resetColumns: () => saveHidden([]),
     setWidth: (column, width) => saveWidths({ ...current.widths, [column.key]: clampColumnWidth(column, width) }),

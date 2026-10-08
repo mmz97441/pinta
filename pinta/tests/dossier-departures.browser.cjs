@@ -394,7 +394,10 @@ async function main() {
       const file = await pending;assert.equal(await file.failure(), null);await closeDisplay(f);
       const sheet = XLSX.read(await fs.readFile(await file.path()), { type: 'buffer' });
       const data = XLSX.utils.sheet_to_json(sheet.Sheets[sheet.SheetNames[0]], { header: 1 });
-      assert.deepEqual(data.slice(1).map(line => line[0]), descending.flatMap(group => group.dossiers.map(id => REF[id])), 'The export lists the dossiers group by group, as on screen.');
+      const listed = descending.flatMap(group => group.dossiers.map(id => REF[id]));
+      assert.deepEqual(data.slice(1, 1 + listed.length).map(line => line[0]), listed, 'The export lists the dossiers group by group, as on screen.');
+      // Then one empty row and the « Total » of the numeric columns: no group row, no subtotal among the dossiers.
+      assert.deepEqual(data.slice(1 + listed.length).map(line => line.length ? line[0] : null), [null, 'Total']);
       assertNoBusinessWrite(f);
     });
 
