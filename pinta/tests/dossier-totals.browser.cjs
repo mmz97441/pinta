@@ -485,6 +485,51 @@ async function main() {
       await f.page.screenshot({ path: `${output}/wide-font-departures-1280.png` });
     });
 
+    // ── A tablet shows the table too: at the largest text the pinned total is taller than the 80 px kept there
+    // for the bottom navigation, and what the browser scrolls into view (as for the focus) still stops above it. ──
+    await scenario('on-a-tablet-at-the-largest-text-what-is-scrolled-into-view-stops-above-the-pinned-total-768', async f => {
+      await f.page.setViewportSize({ width: 768, height: 1024 }); await open(f, 'table=departures'); await countStatus(f, 36).waitFor();
+      const size = (await openDisplay(f)).getByRole('spinbutton', { name: 'Taille du texte des dossiers', exact: true });
+      await size.fill('20'); await size.press('Enter'); await closeDisplay(f);
+      const pinned = () => f.page.evaluate(() => {
+        const scroll = document.getElementById('dossier-table-scroll'), label = document.querySelector('tfoot th[scope="row"]');
+        const view = scroll.getBoundingClientRect(), foot = label.getBoundingClientRect(), height = Math.round(foot.height);
+        return { tall: height > 80, room: parseFloat(getComputedStyle(scroll).scrollPaddingBottom) >= height, stuck: Math.abs(foot.bottom - (view.top + scroll.clientHeight)) <= 1 };
+      });
+      for (const until = Date.now() + 5000; Date.now() < until && !Object.values(await pinned()).every(Boolean);) await f.page.waitForTimeout(50);
+      assert.deepEqual(await pinned(), { tall: true, room: true, stuck: true });
+      const hidden = await f.page.evaluate(() => {
+        const scroll = document.getElementById('dossier-table-scroll'), under = [];
+        for (const box of [...document.querySelectorAll('tr[data-dossier-row] input[type="checkbox"]')].slice(3, 24)) {
+          scroll.scrollTop = 0;
+          box.scrollIntoView({ block: 'nearest' });
+          if (box.getBoundingClientRect().bottom > document.querySelector('tfoot th[scope="row"]').getBoundingClientRect().top + 1) under.push(box.getAttribute('aria-label'));
+        }
+        return under;
+      });
+      assert.deepEqual(hidden, [], 'No row scrolled into view under the pinned total.');
+      // The keyboard too: every control the Tab key reaches shows whole, above the total.
+      await f.page.locator(SCROLLER).evaluate(node => { node.scrollTop = 0; });
+      await f.page.locator(SCROLLER).focus();
+      const covered = [];
+      let rowStops = 0;
+      for (let i = 0; i < 120 && rowStops < 30; i++) {
+        await f.page.keyboard.press('Tab');
+        const stop = await f.page.evaluate(() => {
+          const scroll = document.getElementById('dossier-table-scroll'), el = document.activeElement;
+          if (!el || el === scroll || !scroll.contains(el) || el.closest('thead')) return el && scroll.contains(el) ? { skip: true } : null;
+          return { name: (el.getAttribute('aria-label') || el.innerText || '').trim().slice(0, 40), clear: el.getBoundingClientRect().bottom <= document.querySelector('tfoot th[scope="row"]').getBoundingClientRect().top - 7 };
+        });
+        if (!stop) break;
+        if (stop.skip) continue;
+        rowStops++;
+        if (!stop.clear) covered.push(stop.name);
+      }
+      assert.ok(rowStops >= 30, `${rowStops} stops in the rows.`);
+      assert.deepEqual(covered, []);
+      await f.page.screenshot({ path: `${output}/pinned-total-tablet-768-text-20.png` });
+    }, { more: 30, device: { hasTouch: true } });
+
     // ── Cards (phones): a subtotal under each group heading, a total block at the end ──────────
     for (const dark of [false, true]) await scenario(`cards-show-each-group-subtotal-and-end-with-the-total-390-${dark ? 'dark' : 'light'}`, async f => {
       await f.page.setViewportSize(sizeOf(390)); await theme(f, dark); await open(f, 'table=departures'); await waitTheme(f, dark);

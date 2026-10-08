@@ -908,9 +908,10 @@ html .dossier-bulk-bar .dossier-bulk-status-select { border-color: var(--dossier
   .dossier-bulk-picker { display: flex; flex-basis: 100%; align-items: center; gap: 8px; min-width: 0; }
   .dossier-bulk-picker .dossier-bulk-button { flex-shrink: 0; }
 }
-/* Focused or scrolled-to cards clear the fixed bottom navigation. */
+/* Focused or scrolled-to cards clear the fixed bottom navigation; on a tablet's table, rows
+   also clear the total pinned to the bottom, taller than that at a larger text size. */
 @media (max-width: 1023px) {
-  #dossier-table-scroll { scroll-padding-bottom: 80px; }
+  #dossier-table-scroll { scroll-padding-bottom: max(80px, var(--dossier-total-height, 0px)); }
 }
 .dossier-bulk-count { font-size: 15px; font-weight: 600; color: var(--text-primary); font-variant-numeric: tabular-nums; }
 .dossier-bulk-button {
