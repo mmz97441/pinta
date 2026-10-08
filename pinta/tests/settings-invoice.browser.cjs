@@ -363,7 +363,41 @@ async function checkKeyboard(f) {
   assert.equal(f.server.calls.length, 1);
 }
 
-// ── 6 · The stored storage rules are incomplete; the stored object cannot be read ──
+// ── 6 · Stockage et rappels and Facture commerciale save the same object: one never blocks the other ──
+async function openRubric(f, label) {
+  if (f.layout.mobile) await f.page.getByLabel('Rubrique', { exact: true }).selectOption({ label });
+  else await f.page.getByRole('navigation', { name: 'Paramètres', exact: true }).getByRole('button', { name: label, exact: true }).click();
+  await panelOf(f).getByRole('heading', { name: label, exact: true }).waitFor();
+}
+async function checkTwoPanels(f) {
+  await reset(f);
+  // A storage price typed first (its draft kept), then the invoice identity saved.
+  await f.page.goto(`${base}/settings?tab=metier`);
+  await panelOf(f).getByRole('heading', { name: 'Stockage et rappels', exact: true }).waitFor();
+  await f.page.getByLabel('Frais de stockage', { exact: true }).fill('2.5');
+  await openRubric(f, 'Facture commerciale');
+  await fill(exporter(f), EXPORTER);
+  await button(f, 'Enregistrer').click();
+  await panelOf(f).getByRole('status').filter({ hasText: SAVED }).waitFor();
+  const withIdentity = clone(stored(f));
+  // Back to Stockage et rappels: the typed price is still there and saves without a conflict, the identity kept.
+  await openRubric(f, 'Stockage et rappels');
+  assert.equal(await f.page.getByLabel('Frais de stockage', { exact: true }).inputValue(), '2.5');
+  await panelOf(f).getByRole('button', { name: 'Enregistrer les règles', exact: true }).click();
+  await panelOf(f).getByText('Règles enregistrées. Les devis déjà enregistrés conservent leur version.', { exact: true }).waitFor();
+  assert.deepEqual(f.server.calls[1], { p_key: 'business', p_value: { ...withIdentity, fraisStockage: 2.5, stockageGratuit: 14, diviseurVolumetrique: 5000 }, p_expected: withIdentity });
+  assert.deepEqual(stored(f).factureCommerciale, withIdentity.factureCommerciale);
+  // And the identity again, after the storage rules: saved without a conflict, the storage price kept.
+  await openRubric(f, 'Facture commerciale');
+  await field(exporter(f), 'telephone').fill('01 98 76 54 32');
+  await button(f, 'Enregistrer').click();
+  await panelOf(f).getByRole('status').filter({ hasText: SAVED }).waitFor();
+  assert.equal(f.server.calls.length, 3);
+  assert.equal(stored(f).fraisStockage, 2.5);
+  assert.equal(stored(f).factureCommerciale.expediteur.telephone, '01 98 76 54 32');
+}
+
+// ── 7 · The stored storage rules are incomplete; the stored object cannot be read ──
 async function checkBlockedAndUnreadable(f) {
   await reset(f);
   delete stored(f).fraisStockage;
@@ -391,7 +425,7 @@ async function checkBlockedAndUnreadable(f) {
   await axe(f, 'unreadable');
 }
 
-// ── 7 · Permissions ────────────────────────────────────────────────────────
+// ── 8 · Permissions ────────────────────────────────────────────────────────
 async function checkHiddenWithoutPermission(f) {
   await f.page.goto(`${base}/settings?tab=facture`);
   await f.page.getByRole('heading', { name: 'Modèles de messages', exact: true }).waitFor();
@@ -411,7 +445,7 @@ async function checkAllowedByPermission(f) {
   await axe(f, 'allowed by permission');
 }
 
-// ── 8 · Configuration that could not load ──────────────────────────────────
+// ── 9 · Configuration that could not load ──────────────────────────────────
 async function checkFailedLoad(f) {
   f.server.failRead = true;
   await f.login();
@@ -462,6 +496,7 @@ async function main() {
         ['save', checkSave],
         ['conflicts', checkConflicts],
         ['keyboard', checkKeyboard],
+        ['two-panels', checkTwoPanels],
       ]);
     }
     await session('blocked', LAYOUTS[0], [['blocked-unreadable', checkBlockedAndUnreadable]]);

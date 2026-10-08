@@ -58,6 +58,9 @@ const canonical = value => JSON.stringify(value ?? null, (key, item) => (item &&
 /** Two stored values are the same, whatever the order of their keys. */
 export const sameStoredValue = (a, b) => canonical(a) === canonical(b);
 
+/** Both objects hold the same three values of Stockage et rappels, as its form shows them. */
+export const sameBusinessValues = (a, b) => sameStoredValue(businessDraftValues(a), businessDraftValues(b));
+
 // ── Paramètres › Facture commerciale ───────────────────────────────────────
 // The identity printed at the top of the commercial invoice (invoiceIdentity.js),
 // stored under business.factureCommerciale.

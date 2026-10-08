@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { BUSINESS_FIELDS, INVOICE_IDENTITY_FIELD_ORDER, INVOICE_IDENTITY_NEEDS_BUSINESS, REMINDER_DEFAULTS, businessDraftValues, businessSettingsPayload, invoiceIdentityDraftValues, invoiceIdentitySettingsPayload, invoicePartyState, sameStoredValue, validateBusinessValues } from './businessSettings.js';
+import { BUSINESS_FIELDS, INVOICE_IDENTITY_FIELD_ORDER, INVOICE_IDENTITY_NEEDS_BUSINESS, REMINDER_DEFAULTS, businessDraftValues, businessSettingsPayload, invoiceIdentityDraftValues, invoiceIdentitySettingsPayload, invoicePartyState, sameBusinessValues, sameStoredValue, validateBusinessValues } from './businessSettings.js';
 import { CONSIGNEE_KEYS, PARTY_FIELDS, invoiceIdentity, validateInvoiceIdentity } from './invoiceIdentity.js';
 
 // The seed of app_settings.business (20260910000001_application_schema.sql) plus later keys.
@@ -127,4 +127,12 @@ test('stored values compare whatever the order of their keys (jsonb returns its 
   assert.equal(sameStoredValue({ destinataires: { 974: REUNION } }, { destinataires: { 974: { ...REUNION, complement: 'Bâtiment B' } } }), false);
   assert.equal(sameStoredValue(undefined, null), true);
   assert.equal(sameStoredValue(null, {}), false);
+});
+
+test('Stockage et rappels compares its three values only: an invoice identity saved meanwhile is no change of them', () => {
+  assert.equal(sameBusinessValues(STORED, { ...STORED, factureCommerciale: { expediteur: EXPORTER }, timezone: 'UTC' }), true);
+  assert.equal(sameBusinessValues(STORED, { ...STORED, fraisStockage: '2' }), false);
+  assert.equal(sameBusinessValues(STORED, { ...STORED, fraisStockage: 1.5 }), false, 'Compared as stored: « 1.50 » and 1.5 differ, the save then expects the version it started from.');
+  assert.equal(sameBusinessValues(null, STORED), false);
+  assert.equal(sameBusinessValues(null, {}), true);
 });

@@ -5,7 +5,7 @@ import { Send, Mail, AlertTriangle, RefreshCw, ArrowRight, Check, ChevronRight }
 import { useApp } from '../../context/AppContext';
 import { DESTINATIONS } from '../../constants';
 import usePersistentDraft from '../../hooks/usePersistentDraft';
-import { BUSINESS_FIELDS, INVOICE_IDENTITY_FIELD_ORDER, businessDraftValues, businessSettingsPayload, invoiceIdentityDraftValues, invoiceIdentitySettingsPayload, invoicePartyState, sameStoredValue, validateBusinessValues } from '../../domain/businessSettings';
+import { BUSINESS_FIELDS, INVOICE_IDENTITY_FIELD_ORDER, businessDraftValues, businessSettingsPayload, invoiceIdentityDraftValues, invoiceIdentitySettingsPayload, invoicePartyState, sameBusinessValues, sameStoredValue, validateBusinessValues } from '../../domain/businessSettings';
 import { CONSIGNEE_KEYS, PARTY_FIELDS, PARTY_LABELS, REQUIRED_PARTY_FIELDS, invoiceIdentity, normalizeParty, validateInvoiceIdentity } from '../../domain/invoiceIdentity';
 import { fetchSettings } from '../../lib/supabaseData';
 import { latestChannelEvent } from '../../domain/channelEvents';
@@ -94,7 +94,10 @@ function Business() {
     if (invalid) { setNotice(null); document.getElementById(`business-${invalid}`)?.focus(); return; }
     run(async () => {
       // Every stored key is kept (reminder cadences, time zone…): only these three values change.
-      const saved = await saveSettings(businessSettingsPayload(draft.baseline, checked.values), draft.baseline);
+      // Facture commerciale saves the same object: while these three values are still those this
+      // form started from, the save starts from the object as last read (its invoice identity kept).
+      const base = sameBusinessValues(draft.baseline, stored) ? stored : draft.baseline;
+      const saved = await saveSettings(businessSettingsPayload(base, checked.values), base);
       setDraft({ baseline: saved, values: businessDraftValues(saved) });
       setNotice({ text: 'Règles enregistrées. Les devis déjà enregistrés conservent leur version.' });
     });
