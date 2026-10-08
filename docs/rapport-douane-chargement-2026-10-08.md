@@ -105,7 +105,33 @@
 3. **Imprimante** : une imprimante d'étiquettes 100 × 150 mm, thermique 203 dpi ou mieux.
 4. **Colis déjà préparés** : imprimer leurs nouvelles étiquettes (page du dossier, ou « Étiquettes » de la sélection), ou les compter à la main au chargement.
 5. **Essais sur tes appareils** : iPad (permission de la caméra dans Safari), douchette Bluetooth, imprimante. Les essais ont été faits dans Chromium, sans Safari, sans appareils réels et sans imprimante réelle.
-6. **Trois points à confirmer** :
-   - **Expéditeur de la facture** : il reste « GROUPE DELIVREX, Roissy », comme avant.
-   - **Mode de transport** : il n'est pas enregistré sur les départs planifiés depuis la page. La facture n'affiche alors pas cette ligne.
-   - **Dossiers professionnels** : ils n'apparaissent sur la facture que si leurs articles sont saisis.
+6. **Mode de transport** : il n'est pas enregistré sur les départs planifiés depuis la page. La facture n'affiche alors pas cette ligne.
+
+## Complément du 8 octobre : expéditeur, destinataire et facture unique
+
+Tes réponses :
+- « l'expéditeur c'est Expedîle » ;
+- « l'adresse et le destinataire en haut doivent être configurables » ;
+- « une facture commerciale pour tous les colis du départ » ;
+- le destinataire de La Réunion, modifiable : « Expedîle, 5 Chemin Grand Canal, Immeuble Thales, 97490 Sainte-Clotilde ».
+
+Ce qui change :
+- **Paramètres › Facture commerciale** (groupe « Documents ») :
+  - l'expéditeur : Expedîle, adresse, contacts, SIRET, EORI, TVA ;
+  - le destinataire par défaut ;
+  - un destinataire par destination (La Réunion, Mayotte, Guadeloupe, Martinique). Vide, c'est le destinataire par défaut qui sert.
+  - Les erreurs s'affichent sous les champs. L'enregistrement relit la base et ne perd aucun autre réglage.
+- **Facture commerciale** :
+  - « GROUPE DELIVREX » n'apparaît plus.
+  - « EXPÉDITEUR » et « DESTINATAIRE » sont imprimés en haut, en PDF comme en Excel. Le destinataire est celui de la destination du départ, sinon celui par défaut.
+  - Avant le départ, une seule facture reprend tous les dossiers affectés au départ, sauf ceux annulés, archivés ou déjà expédiés. Un dossier sans devis, sans articles ou sans code SH la bloque : le message dit quoi compléter, ou propose de retirer le dossier du départ.
+  - Sans expéditeur complet ou sans destinataire, la facture est bloquée. La direction a un lien vers Paramètres ; les autres sont invités à demander à la direction.
+- **Étiquettes** : l'expéditeur imprimé vient des mêmes réglages. Tant que son adresse n'est pas réglée, elles affichent « Expedîle » seul.
+
+Mise en production le 8 octobre :
+- le site (main 2c727fe), sans changement de la base ;
+- le destinataire La Réunion, enregistré dans les réglages par le script `invoice_identity_reunion20261008.py`. Cet enregistrement figure dans l'historique et reste modifiable à l'écran.
+
+Reste de ton côté :
+- **Adresse d'Expedîle en métropole** (l'expéditeur) : à saisir dans Paramètres › Facture commerciale. Tant qu'elle manque, la facture est bloquée.
+- **Mayotte, Guadeloupe, Martinique** : leur destinataire, ou un destinataire par défaut, est à saisir avant leur premier départ.
