@@ -700,6 +700,37 @@ test('a professional quote without tax reads « Sans taxes (pro) »; a private q
   assert.deepEqual(taxesOf({ ...pro, devisTotal: 100, devisSnapshot: savedQuote({ om: 10, omr: 5, tva: 5, total: 100 }, { inputs: { client: { type: 'pro' } } }) }), { amount: 20, stateLabel: '', pro: false });
 });
 
+test('in « Paiements » the taxes go with « Demandé »: a draft or a quote to verify asks nothing, so neither do its taxes', () => {
+  const payments = { ...base, view: 'payments' };
+  const demanded = row => { const result = model(row, payments); return result.payment.requested ?? dossierTableMissingAmountLabel(result.payment, 'requested'); };
+  // A sent quote: « Demandé » is its price, the taxes are its own.
+  assert.equal(demanded(taxed), 100);
+  assert.deepEqual(model(taxed, payments).quoteTaxes, { amount: 20, stateLabel: '', pro: false });
+  // A draft: its price shows in « Travail quotidien » with its taxes; nothing is asked yet, so « Paiements » says « À calculer » twice.
+  const draft = { ...prepared, devisTotal: 83.47, devisBrouillon: true, quoteVersion: 3, devisSnapshot: savedQuote({ om: 4.1, omr: 1.2, tva: 7.37, total: 83.47 }, { version: 3 }) };
+  assert.deepEqual(taxesOf(draft), { amount: 12.67, stateLabel: 'Brouillon', pro: false });
+  assert.equal(demanded(draft), 'À calculer');
+  assert.deepEqual(model(draft, payments).quoteTaxes, { amount: null, stateLabel: 'À calculer', pro: false });
+  // A paid quote whose records disagree: « Demandé » reads « À vérifier », so do its taxes.
+  const disputed = { ...paid, devisTotal: 999, devisSnapshot: savedQuote({ om: 10, omr: 5, tva: 5, total: 100 }) };
+  assert.equal(demanded(disputed), 'À vérifier');
+  assert.deepEqual(model(disputed, payments).quoteTaxes, { amount: null, stateLabel: 'À vérifier', pro: false });
+  // The other rules hold beside « Demandé »: a former quote « À vérifier », a professional one « Sans taxes (pro) ».
+  assert.deepEqual(model({ ...quoted, devisOM: 10 }, payments).quoteTaxes, { amount: null, stateLabel: TAXES_UNVERIFIED_LABEL, pro: false });
+  const pro = { ...taxed, devisTotal: 80, devisSnapshot: savedQuote({ om: 0, omr: 0, tva: 0, total: 80 }, { inputs: { client: { type: 'pro' } } }) };
+  assert.deepEqual(model(pro, payments).quoteTaxes, { amount: 0, stateLabel: '', pro: true });
+  // The two columns add up the same dossiers: a tax amount only beside a requested amount.
+  const rows = [{ ...taxed, id: 'sent' }, { ...draft, id: 'draft' }, { ...disputed, id: 'disputed' }, { ...pro, id: 'pro' }, { ...dossier, id: 'new' }];
+  const models = new Map(rows.map(row => [row.id, model(row, payments)]));
+  const [requested, taxes] = ['requested', 'taxes'].map(key => TABLE_COLUMNS.payments.find(column => column.key === key));
+  const counted = column => rows.filter(row => dossierTableNumber(column, { dossier: row, model: models.get(row.id) }) !== null).map(row => row.id);
+  assert.deepEqual(counted(taxes), ['sent', 'pro']);
+  assert.ok(counted(taxes).every(id => counted(requested).includes(id)));
+  // The spreadsheet of « Paiements » says the same.
+  const { rows: exported } = buildDossierTableExport(rows, [], models, 'payments', TABLE_COLUMNS.payments);
+  assert.deepEqual(exported.map(row => [row['Demandé'], row['Taxes calculées']]), [[100, 20], ['À calculer', 'À calculer'], ['À vérifier', 'À vérifier'], [80, 0], ['À calculer', 'À calculer']]);
+});
+
 test('the taxes column is financial, sorts as a number and sits after the price (after « Demandé » in « Paiements »)', () => {
   const keys = view => TABLE_COLUMNS[view].map(column => column.key);
   for (const view of ['daily', 'departures']) assert.equal(keys(view)[keys(view).indexOf('requested') + 1], 'taxes', view);

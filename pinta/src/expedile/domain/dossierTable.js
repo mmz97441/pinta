@@ -57,7 +57,8 @@ const receptionDateColumn = defineDossierTableColumn({ key: 'receivedAt', label:
 const finalWeightColumn = defineDossierTableColumn({ key: 'optimizedWeight', label: 'Poids final (kg)', shortLabel: 'Poids (kg)', align: 'right', sort: { type: 'number', value: ({ model }) => model?.optimizedWeight } });
 const financialColumn = (key, label, priceKind = 'payment', shortLabel) => defineDossierTableColumn({ key, label, ...(shortLabel ? { shortLabel } : {}), align: 'right', financial: true, priceKind, sort: { type: 'number', value: ({ model }) => priceKind === 'quote' ? model?.quotePrice?.amount : model?.payment?.[key] } });
 const quotePriceColumn = financialColumn('requested', 'Prix du devis', 'quote', 'Prix');
-// OM + OMR + TVA of the saved quote whose price the list shows (quoteTaxesModel): financial like the price.
+// OM + OMR + TVA of the saved quote whose price the list shows beside them, « Demandé » in « Paiements »
+// (quoteTaxesModel): financial like the price.
 const taxesColumn = defineDossierTableColumn({ key: 'taxes', label: 'Taxes calculées', shortLabel: 'Taxes', align: 'right', financial: true, sort: { type: 'number', value: ({ model }) => model?.quoteTaxes?.amount } });
 const casierColumn = defineDossierTableColumn({ key: 'casier', label: 'Casier', filter: { text: ({ dossier }) => dossier.casier || 'À renseigner' }, sort: { type: 'text', value: ({ dossier }) => dossier.casier } });
 const cartonsColumn = defineDossierTableColumn({ key: 'cartons', label: 'Cartons reçus', shortLabel: 'Cartons', sort: { type: 'number', value: ({ dossier }) => receptionCartonManifest(dossier).nbColis } });
@@ -202,11 +203,13 @@ export const TAXES_UNVERIFIED_LABEL = 'À vérifier';
 const moneyCents = value => (typeof value === 'number' || typeof value === 'string' && value.trim()) && Number.isFinite(Number(value)) && Number(value) >= 0 ? Math.round(Number(value) * 100) : null;
 
 /** « Taxes calculées »: OM + OMR + TVA of the very saved quote whose price the
- * list shows (devisSnapshot.amounts), added in cents. Nothing is recalculated
- * here nor taken from the raw columns: without a price, the price's own state
- * (« À calculer », « À revoir »…) is repeated; a price with a state (« Brouillon »,
- * « À revoir ») gives its taxes the same state; a price without a usable saved
- * quote behind it reads « À vérifier ». `pro`: a professional quote without tax. */
+ * list shows beside them (devisSnapshot.amounts), added in cents. Nothing is
+ * recalculated here nor taken from the raw columns: without a price, the price's
+ * own state (« À calculer », « À revoir »…) is repeated; a price with a state
+ * (« Brouillon », « À revoir ») gives its taxes the same state; a price without a
+ * usable saved quote behind it reads « À vérifier ». `pro`: a professional quote
+ * without tax. `quotePrice`: « Prix du devis », or in « Paiements » « Demandé »
+ * (requestedPriceModel). */
 function quoteTaxesModel(dossier, quotePrice) {
   if (quotePrice.amount === null) return { amount: null, stateLabel: quotePrice.stateLabel || 'À calculer', pro: false };
   const snapshot = dossier.devisSnapshot;
@@ -216,6 +219,13 @@ function quoteTaxesModel(dossier, quotePrice) {
   if (!sameQuote || parts.includes(null)) return { amount: null, stateLabel: TAXES_UNVERIFIED_LABEL, pro: false };
   const cents = parts.reduce((sum, part) => sum + part, 0);
   return { amount: cents / 100, stateLabel: quotePrice.stateLabel || '', pro: cents === 0 && snapshot?.inputs?.client?.type === 'pro' };
+}
+/** « Paiements » puts the taxes beside « Demandé », the amount asked from the
+ * client: there they are that amount's taxes. A draft or a quote to verify asks
+ * nothing yet, so its taxes say what « Demandé » says (« À calculer »,
+ * « À vérifier ») and the two totals add up the same dossiers. */
+function requestedPriceModel(payment) {
+  return { amount: payment.requested, stateLabel: payment.requested === null ? dossierTableMissingAmountLabel(payment, 'requested') : '' };
 }
 
 export function dossierTableAmount(model, column) {
@@ -369,7 +379,7 @@ export function buildDossierTableModel(dossier, { actions = [], me, can = () => 
   const boxes = optimized ? dossier.finalPackages ?? [{ dimL: dossier.finL, dimW: dossier.finW, dimH: dossier.finH, poids: dossier.finP }] : [];
   const optimizedWeight = optimized ? Math.round((boxes.reduce((sum, box) => sum + Number(box.poids), 0) + Number.EPSILON) * 100) / 100 : null;
   const quotePrice = quotePriceModel(dossier, payment, optimized);
-  const quoteTaxes = quoteTaxesModel(dossier, quotePrice);
+  const quoteTaxes = quoteTaxesModel(dossier, view === 'payments' ? requestedPriceModel(payment) : quotePrice);
   const dimensions = value => Number(value).toLocaleString('fr-FR', { maximumFractionDigits: 4 });
   // Each outgoing parcel with its volumetric weight (L × l × h ÷ divisor, unrounded);
   // the total adds the unrounded weights, as the quote does (measureShipment).

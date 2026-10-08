@@ -231,9 +231,13 @@ async function main() {
       await f.page.waitForFunction(() => document.querySelector('.dossier-list-main')?.dataset.moreRight === undefined);
       await f.page.screenshot({ path: `${output}/total-daily-${width}-${dark ? 'dark' : 'light'}.png` });
       await selectTab(f, 'Paiements', 'payments');
-      await expectTotals(f, FOOT, { label: 'Total · 6 dossiers', requested: partial('310,00 €', 4, 6), taxes: partial('57,12 €', 4, 6), paid: value('120,00 €'), remaining: partial('190,00 €', 4, 6), sentAt: null });
+      // Beside « Demandé », the taxes of the amount asked: the draft EXP-TOT002 asks nothing yet, so its taxes read
+      // « À calculer » like its « Demandé », and both totals add up the same dossiers (EXP-TOT005: « À vérifier »).
+      await expectTotals(f, FOOT, { label: 'Total · 6 dossiers', requested: partial('310,00 €', 4, 6), taxes: partial('44,45 €', 3, 6), paid: value('120,00 €'), remaining: partial('190,00 €', 4, 6), sentAt: null });
       const paymentHeadings = await f.page.locator('thead th[data-column]').evaluateAll(nodes => nodes.map(node => node.dataset.column));
       assert.deepEqual(paymentHeadings.slice(paymentHeadings.indexOf('requested'), paymentHeadings.indexOf('requested') + 3), ['requested', 'taxes', 'paid'], '« Taxes » right after « Demandé ».');
+      assert.deepEqual(await Promise.all([1, 2, 3, 4, 5, 6].map(n => Promise.all(['requested', 'taxes'].map(key => dossierCell(f, n, key).innerText().then(plain))))),
+        [['100,00 €', '20,00 €'], ['À calculer', 'À calculer'], ['À calculer', 'À calculer'], ['120,00 €', '24,45 €'], ['50,00 €', 'À vérifier'], ['40,00 €', 'Sans taxes (pro)']]);
       await f.page.screenshot({ path: `${output}/total-payments-${width}-${dark ? 'dark' : 'light'}.png` });
       await selectTab(f, 'Accords clients', 'accords');
       await f.page.locator('thead th[data-column="consentState"]').waitFor();
