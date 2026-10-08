@@ -121,7 +121,9 @@ function Business() {
 // and replaces factureCommerciale only.
 const PARTY_INPUT = 'min-h-11 w-full rounded-xl border-2 border-gray-300 bg-transparent px-3 py-2 text-sm focus:border-blue-400 aria-[invalid=true]:border-red-400';
 // Six columns from 640 px, one on a phone: name, address and its complement, postcode and town, country and contacts, identifiers.
-const PARTY_SPANS = { nom: 'sm:col-span-6', adresse: 'sm:col-span-3', complement: 'sm:col-span-3', codePostal: 'sm:col-span-2', ville: 'sm:col-span-4', pays: 'sm:col-span-2', telephone: 'sm:col-span-2', email: 'sm:col-span-2', siret: 'sm:col-span-2', eori: 'sm:col-span-2', tva: 'sm:col-span-2' };
+// Postcode and town share the row equally until 1280 px: beside the rubric list (a tablet), a third of the row
+// is too narrow for « Code postal » and its « obligatoire », which then wrap and push the field below the town's.
+const PARTY_SPANS = { nom: 'sm:col-span-6', adresse: 'sm:col-span-3', complement: 'sm:col-span-3', codePostal: 'sm:col-span-3 xl:col-span-2', ville: 'sm:col-span-3 xl:col-span-4', pays: 'sm:col-span-2', telephone: 'sm:col-span-2', email: 'sm:col-span-2', siret: 'sm:col-span-2', eori: 'sm:col-span-2', tva: 'sm:col-span-2' };
 const PARTY_INPUTS = { codePostal: { inputMode: 'numeric' }, telephone: { type: 'tel' }, email: { type: 'email', spellCheck: false }, siret: { inputMode: 'numeric', spellCheck: false }, eori: { autoCapitalize: 'characters', spellCheck: false }, tva: { autoCapitalize: 'characters', spellCheck: false } };
 const PARTY_STATES = {
   set: { text: 'Réglé', tone: 'text-green-700', Icon: Check },

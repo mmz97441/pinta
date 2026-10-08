@@ -19,6 +19,8 @@ const LAYOUTS = [
   { width: 1440, height: 1000, theme: 'light' }, { width: 1440, height: 1000, theme: 'dark' },
   { width: 390, height: 844, theme: 'light' }, { width: 390, height: 844, theme: 'dark' },
 ];
+// A tablet, landscape and portrait: the panel is at its narrowest beside the rubric list.
+const TABLETS = [{ width: 1024, height: 768, theme: 'light' }, { width: 768, height: 1024, theme: 'dark' }];
 const tagOf = layout => `${layout.width}-${layout.theme}`;
 const flat = text => String(text).replace(/[  ]/g, ' ').replace(/\s+/g, ' ').trim();
 const clone = value => JSON.parse(JSON.stringify(value));
@@ -202,6 +204,22 @@ async function checkDefaultConsignee(f) {
   assert.equal(await warns(row('defaut')), true, 'The default consignee is needed again: it warns as Martinique does.');
   assert.equal(await warns(row('972')), true);
   assert.equal(f.server.calls.length, 0);
+}
+
+// ── 1c · The fields of a row line up: a label and its « obligatoire » never push a field below its neighbour ──
+async function checkRows(f) {
+  await reset(f); await open(f);
+  await openBlock(f, '974');
+  await field(consignee(f, 'Destinataire · La Réunion'), 'ville').waitFor();
+  const misaligned = await panelOf(f).locator('details[data-consignee="974"] .grid, [role="group"][aria-labelledby="invoice-expediteur-title"] .grid').evaluateAll(grids => grids.flatMap(grid => {
+    const boxes = [...grid.querySelectorAll('input')].filter(node => node.getClientRects().length).map(node => ({ id: node.id, box: node.getBoundingClientRect() }));
+    return boxes.flatMap((a, index) => boxes.slice(index + 1)
+      .filter(b => a.box.top < b.box.bottom && b.box.top < a.box.bottom && Math.abs(a.box.top - b.box.top) > 0.5)
+      .map(b => `${a.id} (${Math.round(a.box.top)}) / ${b.id} (${Math.round(b.box.top)})`));
+  }));
+  assert.deepEqual(misaligned, [], 'The fields of a row start at the same height.');
+  await noPageOverflow(f, 'rows');
+  if (TABLETS.some(layout => tagOf(layout) === f.layout.tag)) await tallShot(f, 'facture-tablet');
 }
 
 // ── 2 · Inline errors, nothing sent ────────────────────────────────────────
@@ -524,6 +542,7 @@ async function main() {
       await session('staff', layout, [
         ['panel', checkPanel],
         ['default-consignee', checkDefaultConsignee],
+        ['rows', checkRows],
         ['errors', checkErrors],
         ['save', checkSave],
         ['conflicts', checkConflicts],
@@ -531,6 +550,7 @@ async function main() {
         ['two-panels', checkTwoPanels],
       ]);
     }
+    for (const layout of TABLETS) await session('tablet', layout, [['rows', checkRows]]);
     await session('blocked', LAYOUTS[0], [['blocked-unreadable', checkBlockedAndUnreadable]]);
     await session('blocked', LAYOUTS[3], [['blocked-unreadable', checkBlockedAndUnreadable]]);
     // perm_admin_parametres opens the rubric (with Stockage et rappels and Canaux de contact); without it, hidden.
