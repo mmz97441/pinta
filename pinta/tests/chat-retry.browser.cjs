@@ -65,15 +65,17 @@ const navigate = (page, to) => page.evaluate(url => { window.history.pushState({
     await f.context.route('**/rest/v1/rpc/queue_message', async route => { entered(); await gate; return route.fallback(); });
     await f.login(); await f.page.goto(`${base}/conversations?ouvert=${second}`);
     const field = () => f.page.getByLabel('Votre réponse au client', { exact: true }); await field().fill('Brouillon du second dossier');
+    // A navigation renders the other conversation's composer a moment later: read it once it is there.
+    const composerValue = async expected => { let value; for (let wait = 0; wait < 60; wait++) { value = await field().inputValue(); if (value === expected) break; await f.page.waitForTimeout(50); } return value; };
     await navigate(f.page, `/conversations?ouvert=${ids.P}`); await field().fill('Envoi du premier dossier'); await field().press('Control+Enter'); await pending;
-    await navigate(f.page, `/conversations?ouvert=${second}`); assert.equal(await field().inputValue(), 'Brouillon du second dossier');
+    await navigate(f.page, `/conversations?ouvert=${second}`); assert.equal(await composerValue('Brouillon du second dossier'), 'Brouillon du second dossier');
     const attemptKey = `expedile:draft:v1:${encodeURIComponent(ids.A)}:${encodeURIComponent(`conversation-send:${ids.P}`)}`;
     assert.notEqual(await f.page.evaluate(key => sessionStorage.getItem(key), attemptKey), null, 'The first send is still pending before its response is released.');
     release();
     // Each opened conversation has its own composer, beside the list. The
     // second composer's enabled state says nothing about the first send finishing.
     await f.page.waitForFunction(key => sessionStorage.getItem(key) === null, attemptKey);
-    assert.equal(await field().inputValue(), 'Brouillon du second dossier'); await navigate(f.page, `/conversations?ouvert=${ids.P}`); assert.equal(await field().inputValue(), '');
+    assert.equal(await field().inputValue(), 'Brouillon du second dossier'); await navigate(f.page, `/conversations?ouvert=${ids.P}`); assert.equal(await composerValue(''), '');
   });
   // The client's own thread in the espace client: no team delivery state, « Vous » on the
   // right, a decision recorded by the team under the team member, a log scrollable by keyboard.

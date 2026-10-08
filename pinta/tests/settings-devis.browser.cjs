@@ -77,7 +77,14 @@ async function mockBusinessSave(f) {
   return calls;
 }
 
+/** Every finite animation or transition finished (never an endless spinner), at most 3 seconds. */
+const settle = f => f.page.evaluate(() => Promise.race([
+  Promise.all(document.getAnimations().filter(animation => animation.effect?.getComputedTiming().iterations !== Infinity).map(animation => animation.finished.catch(() => null))),
+  new Promise(resolve => setTimeout(resolve, 3000)),
+]));
 async function axe(f, label, include = null) {
+  // A page that just opened may still be fading in: its contrast is measured once it has arrived.
+  await settle(f);
   const builder = new AxeBuilder({ page: f.page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']);
   const audit = await (include ? builder.include(include) : builder).analyze();
   assert.deepEqual(audit.violations.map(item => ({ id: item.id, nodes: item.nodes.map(node => node.target) })), [], `axe · ${label}`);

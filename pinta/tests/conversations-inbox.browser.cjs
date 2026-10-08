@@ -1,6 +1,12 @@
 /* Conversations inbox: synthetic clients and messages only; every transport intercepted. */
 const { chromium } = require('playwright');
 const AxeBuilder = require('@axe-core/playwright').default;
+/** Every finite animation or transition finished (never an endless spinner), at most 3 seconds:
+ * axe measures contrast, and a control still fading or changing colour reads too pale. */
+const settle = f => f.page.evaluate(() => Promise.race([
+  Promise.all(document.getAnimations().filter(animation => animation.effect?.getComputedTiming().iterations !== Infinity).map(animation => animation.finished.catch(() => null))),
+  new Promise(resolve => setTimeout(resolve, 3000)),
+]));
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const { setup, base, ids } = require('./browser-regression.cjs');
@@ -332,18 +338,18 @@ async function main() {
       await f.context.addInitScript(theme => localStorage.setItem('expedile-theme', theme), dark ? 'dark' : 'light');
       await open(f, width >= 1024 ? `/conversations?ouvert=${ids.P}` : '/conversations', width, height);
       if (width >= 1024) await reply(f).fill('Brouillon pour la vérification');
-      const audit = await new AxeBuilder({ page: f.page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
+      const audit = await settle(f).then(() => new AxeBuilder({ page: f.page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze());
       assert.deepEqual(audit.violations.map(issue => ({ id: issue.id, nodes: issue.nodes.map(node => ({ target: node.target, reason: node.failureSummary })) })), []);
       await f.page.screenshot({ path: `${output}/conversations-${width}-${dark ? 'dark' : 'light'}.png` });
       if (width >= 1024) {
         await f.page.getByRole('button', { name: 'Autres actions sur la conversation', exact: true }).click();
-        const menu = await new AxeBuilder({ page: f.page }).include('#conversation-client').withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
+        const menu = await settle(f).then(() => new AxeBuilder({ page: f.page }).include('#conversation-client').withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze());
         assert.deepEqual(menu.violations.map(issue => issue.id), []);
         await f.page.keyboard.press('Escape');
       } else {
         await row(f, 'Pouvez-vous attendre mon dernier colis').click();
         await reply(f).waitFor();
-        const thread = await new AxeBuilder({ page: f.page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
+        const thread = await settle(f).then(() => new AxeBuilder({ page: f.page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze());
         assert.deepEqual(thread.violations.map(issue => ({ id: issue.id, nodes: issue.nodes.map(node => node.target) })), []);
         await f.page.screenshot({ path: `${output}/conversation-tab-${width}-${dark ? 'dark' : 'light'}.png` });
       }
@@ -370,7 +376,7 @@ async function main() {
       assert.equal(list.title, 'row', 'Name and reference share one line');
       assert.notEqual(list.since, 'absolute', '« depuis » stays readable');
       assert.ok(list.segments <= 52, `${width}px: the four segments hold on one row (${list.segments}px)`);
-      const audit = await new AxeBuilder({ page: f.page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
+      const audit = await settle(f).then(() => new AxeBuilder({ page: f.page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze());
       assert.deepEqual(audit.violations.map(issue => ({ id: issue.id, nodes: issue.nodes.map(node => node.target) })), []);
       await f.page.screenshot({ path: `${output}/list-${width}-${dark ? 'dark' : 'light'}.png` });
     });
@@ -455,7 +461,7 @@ async function main() {
       assert.ok(field.y >= 0 && send.y + send.height <= 500, `« Envoyer » is in view with the keyboard: ${JSON.stringify({ field, send })}`);
       await f.page.waitForFunction(() => getComputedStyle(document.querySelector('main')).paddingBottom === '0px', null, { timeout: 2000 }).catch(() => {});
       assert.equal(await f.page.locator('main').evaluate(node => getComputedStyle(node).paddingBottom), '0px', 'No space kept for the hidden bar');
-      const audit = await new AxeBuilder({ page: f.page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
+      const audit = await settle(f).then(() => new AxeBuilder({ page: f.page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze());
       assert.deepEqual(audit.violations.map(issue => ({ id: issue.id, nodes: issue.nodes.map(node => node.target) })), []);
       await f.page.screenshot({ path: `${output}/keyboard-390x500-${dark ? 'dark' : 'light'}.png` });
       // A press that takes the focus from the field (a mouse here; a finger on « Envoyer » in the
@@ -525,7 +531,7 @@ async function main() {
       assert.equal(state.reachable, true, 'Nothing covers « Envoyer ».');
       assert.equal(await reply(f).inputValue(), lines.join('\n'), 'The whole reply is kept.');
       await f.page.screenshot({ path: `${output}/long-reply-${width}x${keyboard}-${dark ? 'dark' : 'light'}.png` });
-      const audit = await new AxeBuilder({ page: f.page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
+      const audit = await settle(f).then(() => new AxeBuilder({ page: f.page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze());
       assert.deepEqual(audit.violations.map(issue => ({ id: issue.id, nodes: issue.nodes.map(node => node.target) })), []);
     });
 
@@ -546,7 +552,7 @@ async function main() {
       const frame = await failure.boundingBox(), list = await f.page.locator('.conversation-list').boundingBox();
       assert.ok(frame.x >= list.x + 15.5 && frame.x + frame.width <= list.x + list.width - 15.5, `The message keeps the list's side margins (${JSON.stringify({ frame, list })}).`);
       assert.equal(await overflow(f), false);
-      const audit = await new AxeBuilder({ page: f.page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
+      const audit = await settle(f).then(() => new AxeBuilder({ page: f.page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze());
       assert.deepEqual(audit.violations.map(issue => ({ id: issue.id, nodes: issue.nodes.map(node => node.target) })), []);
       await f.page.screenshot({ path: `${output}/load-failed-${width}-${dark ? 'dark' : 'light'}.png` });
     }, { setup: { failTable: 'colis' } });
