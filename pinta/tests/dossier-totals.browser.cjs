@@ -545,7 +545,12 @@ async function main() {
         { key: DEPARTURE.second, shown: 'Colis 2 · Dimensions 7,2 kg vol. · Poids 7 kg · Prix 170,00 € · Taxes 24,45 € (1 sur 2 dossiers)' },
         { key: 'none', shown: 'Non renseigné : colis, dimensions, poids, prix, taxes' },
       ]);
-      assert.equal((await lines())[1].spoken, 'Sous-total : Colis 2 Dimensions 7,2 kg vol. Poids 7 kg Prix 170,00 € Taxes 24,45 €, Total de 1 dossier sur 2 ; 1 sans valeur.');
+      // Read aloud, a comma parts two totals where the « · » shows (« Colis 4, Dimensions… », never « Colis 4 Dimensions »).
+      assert.deepEqual((await lines()).map(line => line.spoken), [
+        'Sous-total : Colis 4, Dimensions 18 kg vol., Poids 7,75 kg, Prix 223,47 €, Taxes 32,67 €',
+        'Sous-total : Colis 2, Dimensions 7,2 kg vol., Poids 7 kg, Prix 170,00 €, Taxes 24,45 €, Total de 1 dossier sur 2 ; 1 sans valeur.',
+        'Sous-total : Non renseigné : colis, dimensions, poids, prix, taxes',
+      ]);
       // The list ends with its total.
       const block = f.page.locator('[data-dossier-total]');
       assert.equal(await block.evaluate(node => node.parentElement.lastElementChild === node), true);
@@ -570,6 +575,14 @@ async function main() {
       await noPageOverflow(f);
       const outside = await f.page.evaluate(() => [...document.querySelectorAll('.dossier-group-totals, .dossier-card-total, .dossier-card-total dd, .dossier-group-total-figure')].filter(node => { const r = node.getBoundingClientRect(); return r.right > innerWidth + 0.5 || r.left < -0.5; }).map(node => node.textContent.slice(0, 30)));
       assert.deepEqual(outside, []);
+      // A line breaks between two totals, never before a « · »: each one ends the line of the total it follows.
+      const orphans = await f.page.evaluate(() => [...document.querySelectorAll('.dossier-group-total-separator')].filter(mark => {
+        let total = mark.previousElementSibling;
+        while (total && !total.classList.contains('dossier-group-total')) total = total.previousElementSibling;
+        const rects = [...total.getClientRects()], end = rects[rects.length - 1], box = mark.getBoundingClientRect(), middle = (box.top + box.bottom) / 2;
+        return middle < end.top || middle > end.bottom;
+      }).map(mark => mark.parentElement.textContent.slice(0, 40)));
+      assert.deepEqual(orphans, []);
       await list.evaluate(node => { node.scrollTop = 0; }); await f.page.waitForTimeout(200);
       await f.page.screenshot({ path: `${output}/cards-group-subtotal-20px-390-${dark ? 'dark' : 'light'}.png` });
       // Filtered: « Total du dossier filtré » / « Total des … dossiers filtrés ».

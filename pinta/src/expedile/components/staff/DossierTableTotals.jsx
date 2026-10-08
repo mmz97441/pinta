@@ -41,7 +41,9 @@ export function DossierTotalRow({ variant = 'total', columns, totals, label, con
 /** Cards: the one-line subtotal under a group heading, « Poids 45,2 kg · Prix
  * 1 250,00 € · Taxes 180,00 € », each incomplete total with its « 4 sur 6
  * dossiers »; the columns without any value close the line, « Non renseigné :
- * prix, taxes ». A line breaks between two totals, never before a « · ». */
+ * prix, taxes ». A line breaks between two totals, never before a « · ».
+ * Assistive technology hears a comma where the « · » shows: « Colis 4, Poids
+ * 7,75 kg », never « Colis 4 Poids ». */
 export function DossierGroupTotals({ totals, columns }) {
   const items = dossierTableTotalSummary(totals, columns);
   if (!items.length) return null;
@@ -55,7 +57,7 @@ export function DossierGroupTotals({ totals, columns }) {
   return <p className="dossier-group-totals" data-group-totals="">
     <span className="sr-only">Sous-total : </span>
     {parts.map((part, index) => <React.Fragment key={part.key}>
-      {index > 0 && <><span aria-hidden="true" className="dossier-group-total-separator">{'\u00a0·'}</span>{' '}</>}
+      {index > 0 && <><span className="sr-only">,</span><span aria-hidden="true" className="dossier-group-total-separator">{'\u00a0·'}</span>{' '}</>}
       {part}
     </React.Fragment>)}
   </p>;
