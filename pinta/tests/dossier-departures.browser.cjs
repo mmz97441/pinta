@@ -776,15 +776,19 @@ async function main() {
     for (const width of [1440, 1280]) for (const theme of ['light', 'dark']) await scenario(`no-sliver-of-a-column-reads-beside-the-pinned-action-${width}-${theme}`, async f => {
       // « Colis optim confir »: the strip of « Colis à expédier » left beside the pinned action is covered whole.
       await openList(f, 'table=departures');await f.page.waitForFunction(dark => document.documentElement.classList.contains('dark') === dark, theme === 'dark');
-      // The edge is measured again whenever a heading changes width: wait until it covers a cut strip before reading it.
+      // The edge is measured again, after rendering, whenever a heading changes width: wait until it
+      // covers a cut strip, or fades a wider part, before reading it (CI measured once too early).
       await f.page.waitForFunction(() => {
         const scroll = document.getElementById('dossier-table-scroll'), action = document.querySelector('thead th[data-column="action"]');
         if (!scroll || !action) return false;
         const boundary = action.getBoundingClientRect().left;
         const cut = [...document.querySelectorAll('thead th[data-column]')].filter(th => !['select', 'action'].includes(th.dataset.column)).map(th => th.getBoundingClientRect()).find(rect => rect.left < boundary - .5 && rect.right > boundary + .5);
         const visible = cut ? boundary - cut.left : 0;
-        return !(visible > 0 && visible < 48) || parseFloat(getComputedStyle(scroll).getPropertyValue('--dossier-edge-cover')) >= visible;
-      }, null, { timeout: 3000 }).catch(() => {});
+        if (!(visible > 0)) return true;
+        if (visible < 48) return parseFloat(getComputedStyle(scroll).getPropertyValue('--dossier-edge-cover')) >= visible;
+        const cell = document.querySelector('tbody tr[data-dossier-row] td[data-column="action"]');
+        return !!cell && parseFloat(getComputedStyle(cell, '::before').width) >= 28;
+      }, null, { timeout: 6000 }).catch(() => {});
       const state = await f.page.evaluate(() => {
         const scroll = document.getElementById('dossier-table-scroll'), action = document.querySelector('thead th[data-column="action"]'), boundary = action.getBoundingClientRect().left;
         const cut = [...document.querySelectorAll('thead th[data-column]')].filter(th => !['select', 'action'].includes(th.dataset.column)).map(th => ({ key: th.dataset.column, rect: th.getBoundingClientRect() })).find(item => item.rect.left < boundary - .5 && item.rect.right > boundary + .5);
