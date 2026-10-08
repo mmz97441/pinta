@@ -1,10 +1,13 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Send, Mail, AlertTriangle, RefreshCw, ArrowRight } from 'lucide-react';
+import { Send, Mail, AlertTriangle, RefreshCw, ArrowRight, Check, ChevronRight } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { DESTINATIONS } from '../../constants';
 import usePersistentDraft from '../../hooks/usePersistentDraft';
-import { BUSINESS_FIELDS, businessDraftValues, businessSettingsPayload, validateBusinessValues } from '../../domain/businessSettings';
+import { BUSINESS_FIELDS, INVOICE_IDENTITY_FIELD_ORDER, businessDraftValues, businessSettingsPayload, invoiceIdentityDraftValues, invoiceIdentitySettingsPayload, invoicePartyState, sameStoredValue, validateBusinessValues } from '../../domain/businessSettings';
+import { CONSIGNEE_KEYS, PARTY_FIELDS, PARTY_LABELS, REQUIRED_PARTY_FIELDS, invoiceIdentity, normalizeParty, validateInvoiceIdentity } from '../../domain/invoiceIdentity';
+import { fetchSettings } from '../../lib/supabaseData';
 import { latestChannelEvent } from '../../domain/channelEvents';
 import { parisDateTime } from '../../utils/format';
 import TemplateEditor from './TemplateEditor';
@@ -23,6 +26,7 @@ const PANELS = [
   ['categories', 'Catégories et taxes', 'Tarifs et règles', 'perm_admin_categories'],
   ['metier', 'Stockage et rappels', 'Tarifs et règles', 'perm_admin_parametres'],
   ['interdits', 'Produits interdits', 'Tarifs et règles', 'perm_admin_produits_interdits'],
+  ['facture', 'Facture commerciale', 'Documents', 'perm_admin_parametres'],
   ['telegram', 'Canaux de contact', 'Communication', 'perm_admin_parametres'],
   ['templates', 'Modèles de messages', 'Communication', 'perm_admin_templates'],
   ['users', 'Équipe et accès', 'Équipe', 'perm_admin_utilisateurs'],
@@ -107,6 +111,150 @@ function Business() {
     <div className="space-y-2 border-t border-gray-200 pt-5"><h3 className="font-bold">Rappels</h3><p className="text-sm text-gray-600">Fonctionnement actuel, sans réglage :</p><ul className="space-y-1 text-sm text-gray-700"><li><span className="font-semibold">Accord du client :</span> quand l’accord manque, la tâche de relance apparaît 48&nbsp;h avant la clôture du départ. Après une demande ou une relance, elle attend sa livraison au client puis 24&nbsp;h ; un envoi en échec ou annulé ne la retarde pas.</li><li><span className="font-semibold">Paiement :</span> les relances se font depuis le dossier.</li></ul><p className="text-sm text-gray-600">Aucune relance n’est envoyée automatiquement au client.</p></div>
   </section>;
 }
+// ── Facture commerciale ────────────────────────────────────────────────────
+// Who sends and who receives, printed at the top of each commercial invoice (domain/invoiceIdentity.js):
+// Expedîle as exporter, the consignee of the departure's destination or else the default one. Stored in
+// the business object with the storage rules: a save reads the stored object again, keeps all its keys
+// and replaces factureCommerciale only.
+const PARTY_INPUT = 'min-h-11 w-full rounded-xl border-2 border-gray-300 bg-transparent px-3 py-2 text-sm focus:border-blue-400 aria-[invalid=true]:border-red-400';
+// Six columns from 640 px, one on a phone: name, address and its complement, postcode and town, country and contacts, identifiers.
+const PARTY_SPANS = { nom: 'sm:col-span-6', adresse: 'sm:col-span-3', complement: 'sm:col-span-3', codePostal: 'sm:col-span-2', ville: 'sm:col-span-4', pays: 'sm:col-span-2', telephone: 'sm:col-span-2', email: 'sm:col-span-2', siret: 'sm:col-span-2', eori: 'sm:col-span-2', tva: 'sm:col-span-2' };
+const PARTY_INPUTS = { codePostal: { inputMode: 'numeric' }, telephone: { type: 'tel' }, email: { type: 'email', spellCheck: false }, siret: { inputMode: 'numeric', spellCheck: false }, eori: { autoCapitalize: 'characters', spellCheck: false }, tva: { autoCapitalize: 'characters', spellCheck: false } };
+const PARTY_STATES = {
+  set: { text: 'Réglé', tone: 'text-green-700', Icon: Check },
+  incomplete: { text: 'À compléter', tone: 'text-amber-700', Icon: AlertTriangle },
+  default: { text: 'Destinataire par défaut utilisé', tone: 'text-gray-600', Icon: null },
+  none: { text: 'Non réglé', tone: 'text-amber-700', Icon: AlertTriangle },
+  // The default consignee is optional when every destination has its own: not set is no warning.
+  optional: { text: 'Non réglé', tone: 'text-gray-600', Icon: null },
+};
+const partyFieldId = key => `invoice-${key.replace(/\./g, '-')}`;
+// The default consignee, then La Réunion, Mayotte, Guadeloupe and Martinique: the order of the form's fields (and of its errors).
+const CONSIGNEE_BLOCKS = CONSIGNEE_KEYS.map(key => (key === 'defaut'
+  ? { key, title: 'Destinataire par défaut', group: 'Destinataire par défaut', help: 'Utilisé pour toute destination sans destinataire propre.' }
+  : { key, title: DESTINATIONS[key].nom, group: `Destinataire · ${DESTINATIONS[key].nom}`, help: 'Laissez vide pour utiliser le destinataire par défaut.' }));
+function PartyState({ state, className = '' }) {
+  const { text, tone, Icon } = PARTY_STATES[state];
+  return <span data-party-state={state} className={`inline-flex shrink-0 items-center gap-1 text-xs font-semibold ${tone} ${className}`}>{Icon && <Icon size={12} aria-hidden="true" />}{text}</span>;
+}
+/** The fields of one party; `prefix` keys them as validateInvoiceIdentity keys its errors. */
+function PartyFields({ prefix, values, errors, required = false, onChange }) {
+  return <div className="grid gap-4 sm:grid-cols-6">{PARTY_FIELDS.map(field => {
+    const id = partyFieldId(`${prefix}.${field}`), error = errors[`${prefix}.${field}`], mandatory = REQUIRED_PARTY_FIELDS.includes(field);
+    return <div key={field} className={`min-w-0 ${PARTY_SPANS[field]}`}>
+      <div className="mb-1 flex flex-wrap items-baseline gap-x-2"><label htmlFor={id} className={LABEL}>{PARTY_LABELS[field]}</label>{mandatory && <span className="text-[11px] font-semibold" style={{ color: 'var(--text-accent)' }}>obligatoire</span>}</div>
+      <input id={id} autoComplete="off" className={PARTY_INPUT} value={values[field]} aria-required={required && mandatory ? 'true' : undefined} aria-invalid={error ? 'true' : undefined} aria-describedby={error ? `${id}-error` : undefined} onChange={event => onChange(field, event.target.value)} {...PARTY_INPUTS[field]} />
+      {error && <p id={`${id}-error`} className="mt-1 text-[11px] text-red-500">{error}</p>}
+    </div>;
+  })}</div>;
+}
+/** The stored object as the server holds it now: another administrator may have saved since this page loaded. */
+const readStoredBusiness = async () => (await fetchSettings()).settings.business ?? null;
+function InvoiceIdentitySettings() {
+  const { adminSettingsBaseline, saveSettings } = useApp();
+  const stored = adminSettingsBaseline.business ?? null;
+  // baseline: the stored identity the form started from; a save never writes over a different one.
+  const [draft, setDraft, { storageAvailable }] = usePersistentDraft('admin:invoice-identity', { baseline: stored?.factureCommerciale ?? null, values: invoiceIdentity(stored) });
+  const [errors, setErrors] = useState({});
+  const [conflict, setConflict] = useState(false);
+  const [pending, setPending] = useState(null);
+  const blocks = useRef({}), saveButton = useRef(null), reloadButton = useRef(null), focusAfter = useRef(null);
+  const { run, busy, notice, setNotice } = useOperation();
+  const values = invoiceIdentityDraftValues(draft.values), consignees = values.destinataires;
+  useEffect(() => {
+    // A save or a reload disables the fields while it runs: once it is over, keyboard focus goes back
+    // to the button that started it (or to its place) rather than staying on <body> (WCAG 2.4.3).
+    if (busy || !focusAfter.current) return undefined;
+    const candidates = focusAfter.current; focusAfter.current = null;
+    const frame = requestAnimationFrame(() => {
+      const active = document.activeElement;
+      if (active && active !== document.body && active.isConnected) return;
+      const target = candidates.find(element => element?.isConnected && !element.matches(':disabled') && element.getClientRects().length);
+      target?.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [busy]);
+  const change = party => (field, value) => {
+    setDraft(previous => {
+      const form = invoiceIdentityDraftValues(previous.values);
+      return { ...previous, values: party === 'expediteur' ? { ...form, expediteur: { ...form.expediteur, [field]: value } } : { ...form, destinataires: { ...form.destinataires, [party]: { ...form.destinataires[party], [field]: value } } } };
+    });
+    const key = party === 'expediteur' ? `expediteur.${field}` : `destinataires.${party}.${field}`;
+    setErrors(previous => (previous[key] ? { ...previous, [key]: undefined } : previous));
+  };
+  const save = () => {
+    // Checked before the operation locks the fields: the blocks holding an error open, and the first
+    // wrong field takes the focus once its message is in the page.
+    const checked = validateInvoiceIdentity(values);
+    const first = INVOICE_IDENTITY_FIELD_ORDER.find(key => checked.errors[key]);
+    if (first) {
+      flushSync(() => { setErrors(checked.errors); setConflict(false); setNotice(null); });
+      for (const [code, block] of Object.entries(blocks.current)) if (block && Object.keys(checked.errors).some(key => key.startsWith(`destinataires.${code}.`))) block.open = true;
+      const field = document.getElementById(partyFieldId(first));
+      field?.focus({ preventScroll: true }); field?.scrollIntoView({ block: 'center' });
+      return;
+    }
+    setErrors({}); setConflict(false); setPending('save');
+    focusAfter.current = [document.activeElement, saveButton.current];
+    run(async () => {
+      try {
+        const latest = await readStoredBusiness();
+        // Someone saved another identity since this form started from the stored one: never written over.
+        if (!sameStoredValue(draft.baseline ?? null, latest?.factureCommerciale ?? null)) { setConflict(true); return; }
+        const { payload, blocked } = invoiceIdentitySettingsPayload(latest, values);
+        if (blocked) throw new Error(blocked);
+        const saved = await saveSettings(payload, latest);
+        setDraft({ baseline: saved?.factureCommerciale ?? null, values: invoiceIdentity(saved) });
+        setNotice({ text: 'Réglages de la facture commerciale enregistrés. Ils s’appliquent aux prochaines factures commerciales et étiquettes imprimées.' });
+      } catch (error) {
+        if (error?.code === '40001') { setConflict(true); return; }
+        throw error;
+      } finally { setPending(null); }
+    });
+  };
+  const reload = () => {
+    setPending('reload');
+    focusAfter.current = [document.activeElement, reloadButton.current];
+    run(async () => {
+      try {
+        const latest = await readStoredBusiness();
+        setDraft({ baseline: latest?.factureCommerciale ?? null, values: invoiceIdentity(latest) });
+        setErrors({}); setConflict(false);
+        setNotice({ text: 'Valeurs enregistrées rechargées. Le brouillon a été abandonné.' });
+      } finally { setPending(null); }
+    });
+  };
+  const preview = party => { const value = normalizeParty(party); return [value.nom, [value.codePostal, value.ville].filter(Boolean).join(' ')].filter(Boolean).join(' · '); };
+  return <section className="space-y-5"><div className="space-y-1"><h2 className="text-lg font-bold">Facture commerciale</h2><DraftHelp storageAvailable={storageAvailable} /></div>
+    <fieldset disabled={busy} className="min-w-0 space-y-6">
+      <div role="group" aria-labelledby="invoice-expediteur-title" className="space-y-3">
+        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1"><h3 id="invoice-expediteur-title" className="font-bold">Expéditeur</h3><PartyState state={invoicePartyState(values.expediteur)} /></div>
+        <p className="text-sm text-gray-600">Imprimé en haut de chaque facture commerciale et comme expéditeur sur les étiquettes des colis.</p>
+        <PartyFields prefix="expediteur" values={values.expediteur} errors={errors} required onChange={change('expediteur')} />
+      </div>
+      <div className="space-y-3 border-t border-gray-200 pt-5">
+        <div className="space-y-1"><h3 className="font-bold">Destinataire</h3><p className="text-sm text-gray-600">Imprimé en haut de la facture commerciale d’un départ : le destinataire de sa destination, sinon le destinataire par défaut.</p></div>
+        <div className="divide-y divide-gray-200 border-y border-gray-200">{CONSIGNEE_BLOCKS.map(({ key, title, group, help }) => {
+          const shown = preview(consignees[key]);
+          const state = key === 'defaut' ? invoicePartyState(consignees.defaut).replace(/^none$/, 'optional') : invoicePartyState(consignees[key], { fallback: consignees.defaut });
+          return <details key={key} ref={node => { blocks.current[key] = node; }} data-consignee={key} className="group">
+            <summary className="block min-h-11 cursor-pointer list-none rounded-lg py-2.5 focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:[outline-color:var(--focus-ring)] [&::-webkit-details-marker]:hidden">
+              {/* The state goes under the name when the row is too narrow for both (a phone, wider fonts). */}
+              <span className="flex items-start gap-2"><ChevronRight size={16} aria-hidden="true" className="mt-1 shrink-0 transition-transform duration-200 ease-out group-open:rotate-90" /><span className="flex min-w-0 flex-1 flex-wrap items-start justify-between gap-x-3 gap-y-0.5"><span className="min-w-0"><span className="block font-semibold">{title}</span>{shown && <span className="block break-words text-xs text-gray-600">{shown}</span>}</span><PartyState state={state} className="mt-1" /></span></span>
+            </summary>
+            <div role="group" aria-label={group} className="space-y-3 pb-5 pt-1">
+              <p className="text-sm text-gray-600">{help}</p>
+              <PartyFields prefix={`destinataires.${key}`} values={consignees[key]} errors={errors} onChange={change(key)} />
+            </div>
+          </details>;
+        })}</div>
+      </div>
+      <div className="flex flex-wrap gap-2"><button ref={saveButton} type="button" className={`${BUTTON} brand-bg text-white`} onClick={save}>{pending === 'save' ? 'Enregistrement…' : 'Enregistrer'}</button><button ref={reloadButton} type="button" className={BUTTON} onClick={reload}>{pending === 'reload' ? 'Rechargement…' : 'Annuler et recharger'}</button></div>
+    </fieldset>
+    {conflict && <div role="alert" className="space-y-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800"><p>Ces réglages ont été modifiés entre-temps, par un collègue ou dans un autre onglet. Rien n’a été enregistré : rechargez les valeurs enregistrées, puis refaites vos modifications. Votre saisie reste affichée jusque-là.</p><button type="button" disabled={busy} className={`${BUTTON} inline-flex items-center gap-2 bg-white`} onClick={reload}><RefreshCw size={16} aria-hidden="true" />Recharger les valeurs enregistrées</button></div>}
+    <Feedback notice={notice} />
+  </section>;
+}
 function Forbidden() {
   const { produitsInterdits, setProduitsInterdits, ask } = useApp(); const [search, setSearch] = useState(''); const [value, setValue] = usePersistentDraft('admin:forbidden:new', ''); const { run, busy, notice, setNotice } = useOperation();
   return <section className="space-y-4"><h2 className="text-lg font-bold">Produits interdits</h2><p className="text-sm text-gray-600">Liste de contrôle utilisée lors de la préparation. Décrivez le produit et la raison lorsque c’est utile, par exemple « Aérosols — transport aérien interdit ».</p><label className="block text-sm">Rechercher un produit<input type="search" className={FIELD} value={search} onChange={e => setSearch(e.target.value)} /></label><form className="flex flex-wrap gap-2" onSubmit={e => { e.preventDefault(); run(async () => { if (!value.trim()) throw new Error('Indiquez le produit.'); if (produitsInterdits.some(v => v.toLowerCase() === value.trim().toLowerCase())) throw new Error('Ce produit figure déjà dans la liste.'); await setProduitsInterdits([...produitsInterdits, value.trim()]); setValue(''); setNotice({ text: 'Produit ajouté à la liste de contrôle.' }); }); }}><label className="flex-1 text-sm">Produit à ajouter<input className={FIELD} value={value} onChange={e => setValue(e.target.value)} /></label><button disabled={busy} className={`${BUTTON} self-end`}>Ajouter le produit</button></form><Feedback notice={notice} /><ul className="divide-y">{produitsInterdits.filter(v => v.toLowerCase().includes(search.toLowerCase())).map(value => <li key={value} className="flex items-center justify-between gap-3 py-2"><span className="break-words text-sm">{value}</span><button disabled={busy} className={`${BUTTON} shrink-0 text-red-700`} aria-label={`Retirer ${value}`} onClick={() => ask(`Retirer « ${value} » ?`, 'Ce produit ne figurera plus dans la liste de contrôle de préparation.', () => run(async () => { await setProduitsInterdits(produitsInterdits.filter(v => v !== value)); setNotice({ text: 'Produit retiré de la liste.' }); }), { danger: true })}>Retirer</button></li>)}</ul></section>;
@@ -136,5 +284,5 @@ export default function StaffSettings() {
   // The shell's rule (domain/dataLoad.js): nothing read → the failure here; a configuration loaded earlier
   // whose last load failed → read only, under the shell's banner (its reason and « Réessayer »).
   const load = staffDataState({ sbReady, dataLoading, dataError, hasData: holdsStaffData({ data, clients, envois }) }).state; const panels = PANELS.filter(([, , , perm]) => can(perm)); const wanted = params.get('tab'); const tab = panels.some(([key]) => key === wanted) ? wanted : panels[0]?.[0];
-  return <div className="mx-auto max-w-6xl space-y-5 pb-8"><header><h1 className="text-2xl font-bold">Paramètres</h1><p className="text-sm text-gray-600">Configuration partagée · <Link className="inline-flex min-h-11 items-center gap-1 underline underline-offset-4" to="/departs">Organiser les départs<ArrowRight size={14} aria-hidden="true" /></Link></p></header><div className="flex flex-col gap-6 md:flex-row"><nav aria-label="Paramètres" className="shrink-0 space-y-3 md:w-56"><label className="block text-sm md:hidden">Rubrique<select aria-label="Rubrique" className={FIELD} value={tab || ''} onChange={e => setParams({ tab: e.target.value })}>{panels.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label><div className="hidden space-y-4 md:block">{[...new Set(panels.map(p => p[2]))].map(group => <div key={group}><p className="px-3 text-xs font-semibold uppercase text-gray-500">{group}</p>{panels.filter(p => p[2] === group).map(([key, label]) => <button key={key} aria-current={tab === key ? 'page' : undefined} className={`${BUTTON} mt-1 w-full border-transparent text-left ${tab === key ? 'brand-bg text-white' : ''}`} onClick={() => setParams({ tab: key })}>{label}</button>)}</div>)}</div></nav><section data-testid="settings-panel" aria-label="Réglages de la rubrique" className="card min-w-0 flex-1 p-4 sm:p-6">{!sbReady && load !== 'stale' ? <ConfigurationState /> : !tab ? <p>Aucune rubrique de paramètres n’est autorisée pour votre compte.</p> : <fieldset disabled={!sbReady} className="min-w-0 space-y-4">{!sbReady && <p data-testid="settings-read-only" className="text-sm text-gray-600">Lecture seule : réessayez le chargement depuis le bandeau en haut de la page avant de modifier un réglage.</p>}{tab === 'tarifs' ? <Tariffs /> : tab === 'categories' ? <Categories /> : tab === 'metier' ? <Business /> : tab === 'interdits' ? <Forbidden /> : tab === 'telegram' ? <Channels /> : tab === 'templates' ? <TemplateEditor /> : <StaffPermissions />}</fieldset>}</section></div></div>;
+  return <div className="mx-auto max-w-6xl space-y-5 pb-8"><header><h1 className="text-2xl font-bold">Paramètres</h1><p className="text-sm text-gray-600">Configuration partagée · <Link className="inline-flex min-h-11 items-center gap-1 underline underline-offset-4" to="/departs">Organiser les départs<ArrowRight size={14} aria-hidden="true" /></Link></p></header><div className="flex flex-col gap-6 md:flex-row"><nav aria-label="Paramètres" className="shrink-0 space-y-3 md:w-56"><label className="block text-sm md:hidden">Rubrique<select aria-label="Rubrique" className={FIELD} value={tab || ''} onChange={e => setParams({ tab: e.target.value })}>{panels.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label><div className="hidden space-y-4 md:block">{[...new Set(panels.map(p => p[2]))].map(group => <div key={group}><p className="px-3 text-xs font-semibold uppercase text-gray-500">{group}</p>{panels.filter(p => p[2] === group).map(([key, label]) => <button key={key} aria-current={tab === key ? 'page' : undefined} className={`${BUTTON} mt-1 w-full border-transparent text-left ${tab === key ? 'brand-bg text-white' : ''}`} onClick={() => setParams({ tab: key })}>{label}</button>)}</div>)}</div></nav><section data-testid="settings-panel" aria-label="Réglages de la rubrique" className="card min-w-0 flex-1 p-4 sm:p-6">{!sbReady && load !== 'stale' ? <ConfigurationState /> : !tab ? <p>Aucune rubrique de paramètres n’est autorisée pour votre compte.</p> : <fieldset disabled={!sbReady} className="min-w-0 space-y-4">{!sbReady && <p data-testid="settings-read-only" className="text-sm text-gray-600">Lecture seule : réessayez le chargement depuis le bandeau en haut de la page avant de modifier un réglage.</p>}{tab === 'tarifs' ? <Tariffs /> : tab === 'categories' ? <Categories /> : tab === 'metier' ? <Business /> : tab === 'facture' ? <InvoiceIdentitySettings /> : tab === 'interdits' ? <Forbidden /> : tab === 'telegram' ? <Channels /> : tab === 'templates' ? <TemplateEditor /> : <StaffPermissions />}</fieldset>}</section></div></div>;
 }

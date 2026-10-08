@@ -953,7 +953,7 @@ async function main() {
     const settingsNav = f.page.getByRole('navigation', { name: 'Paramètres', exact: true });
     const settingsSection = settingsNav.getByLabel('Rubrique', { exact: true });
     const sections = await settingsSection.locator('option').evaluateAll(options => options.map(option => ({ value: option.value, label: option.textContent })));
-    assert.equal(sections.length, 7, 'All seven settings sections remain reachable on mobile');
+    assert.equal(sections.length, 8, 'All eight settings sections remain reachable on mobile');
     for (const section of sections) {
       await settingsSection.selectOption(section.value);
       await f.page.getByRole('heading', { name: section.label, exact: true }).waitFor();

@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { BUSINESS_FIELDS, REMINDER_DEFAULTS, businessDraftValues, businessSettingsPayload, validateBusinessValues } from './businessSettings.js';
+import { BUSINESS_FIELDS, INVOICE_IDENTITY_FIELD_ORDER, INVOICE_IDENTITY_NEEDS_BUSINESS, REMINDER_DEFAULTS, businessDraftValues, businessSettingsPayload, invoiceIdentityDraftValues, invoiceIdentitySettingsPayload, invoicePartyState, sameStoredValue, validateBusinessValues } from './businessSettings.js';
+import { CONSIGNEE_KEYS, PARTY_FIELDS, invoiceIdentity, validateInvoiceIdentity } from './invoiceIdentity.js';
 
 // The seed of app_settings.business (20260910000001_application_schema.sql) plus later keys.
 const STORED = { fraisStockage: '1.50', stockageGratuit: '14', relancesFeuVert: 'J+2,J+5,J+7', relancesPaiement: 'J+3,J+7,J+14', diviseurVolumetrique: '5000', timezone: 'Europe/Paris', relancesActivesDepuis: '2026-09-01T00:00:00Z', futureKey: { nested: [1, 2] } };
@@ -44,4 +45,86 @@ test('each invalid value gets its own message; nothing is saved from an invalid 
   assert.match(errors.diviseurVolumetrique, /supérieur à zéro/);
   for (const empty of ['', ' ', null, undefined, 'abc']) assert.ok(validateBusinessValues({ fraisStockage: empty, stockageGratuit: '1', diviseurVolumetrique: '5000' }).errors.fraisStockage, `« ${empty} » is refused`);
   assert.deepEqual(validateBusinessValues({ fraisStockage: '0', stockageGratuit: '0', diviseurVolumetrique: '1' }), { values: { fraisStockage: 0, stockageGratuit: 0, diviseurVolumetrique: 1 }, errors: {} }, 'Zero storage is explicit, not missing.');
+});
+
+// ── Paramètres › Facture commerciale ───────────────────────────────────────
+// The consignee of La Réunion as the user gave it on 2026-10-08; the exporter's address is not known
+// yet: the one below is a test value only.
+const REUNION = { nom: 'Expedîle', adresse: '5 Chemin Grand Canal', complement: 'Immeuble Thales', codePostal: '97490', ville: 'Sainte-Clotilde', pays: 'La Réunion (France)' };
+const EXPORTER = { nom: 'Expedîle', adresse: '10 allée de l’Essai', codePostal: '95700', ville: 'Roissy-en-France', pays: 'France', email: 'contact@exemple.fr', siret: '123 456 789 00012', eori: 'fr12345678900012' };
+const party = (values = {}) => Object.fromEntries(PARTY_FIELDS.map(key => [key, values[key] ?? '']));
+const form = ({ expediteur = EXPORTER, destinataires = { 974: REUNION } } = {}) => ({ expediteur: party(expediteur), destinataires: Object.fromEntries(CONSIGNEE_KEYS.map(key => [key, party(destinataires[key])])) });
+
+test('Facture commerciale: the save keeps every stored key and replaces factureCommerciale with the validated form', () => {
+  const { payload, errors, blocked } = invoiceIdentitySettingsPayload(STORED, form());
+  assert.deepEqual(errors, {}); assert.equal(blocked, null);
+  assert.deepEqual(payload, { ...STORED, factureCommerciale: {
+    expediteur: { ...party(EXPORTER), siret: '12345678900012', eori: 'FR12345678900012' },
+    destinataires: { 974: party(REUNION) },
+  } });
+  for (const key of Object.keys(STORED)) assert.deepEqual(payload[key], STORED[key], `${key} is kept as stored`);
+  assert.equal('factureCommerciale' in STORED, false, 'The stored object is not mutated.');
+  // The same identity is read back as the form showed it, so the form can show the saved values.
+  assert.deepEqual(invoiceIdentity(payload).destinataires['974'], party(REUNION));
+});
+
+test('Facture commerciale: an empty destination is not stored (the default consignee is used); other keys of the identity are kept', () => {
+  const stored = { ...STORED, factureCommerciale: { mentionsDouane: 'Selon contrat', expediteur: { nom: 'Expedîle' }, destinataires: { 976: { nom: 'Ancien transitaire', adresse: '1 rue du Port', codePostal: '97600', ville: 'Mamoudzou', pays: 'Mayotte' }, 973: { nom: 'Guyane (réglage futur)' } } } };
+  const fallback = { nom: 'Transitaire DOM (essai)', adresse: '1 rue de l’Essai', codePostal: '97400', ville: 'Saint-Denis', pays: 'La Réunion (France)' };
+  const { payload } = invoiceIdentitySettingsPayload(stored, form({ destinataires: { defaut: fallback, 974: REUNION, 976: {} } }));
+  assert.deepEqual(Object.keys(payload.factureCommerciale.destinataires).sort(), ['973', '974', 'defaut'], 'Mayotte emptied: removed; a destination the form does not show: kept.');
+  assert.deepEqual(payload.factureCommerciale.destinataires['973'], { nom: 'Guyane (réglage futur)' });
+  assert.equal(payload.factureCommerciale.mentionsDouane, 'Selon contrat');
+  assert.equal(invoiceIdentity(payload).destinataires['976'].nom, '', 'Mayotte now falls back on the default consignee.');
+});
+
+test('Facture commerciale: an invalid form sends nothing and names each wrong field', () => {
+  const { payload, errors } = invoiceIdentitySettingsPayload(STORED, form({ expediteur: { nom: 'Expedîle', email: 'contact', siret: '123', eori: '12' }, destinataires: { 971: { nom: 'Transit Antilles' } } }));
+  assert.equal(payload, null);
+  assert.deepEqual(Object.keys(errors).sort(), ['destinataires.971.adresse', 'destinataires.971.codePostal', 'destinataires.971.pays', 'destinataires.971.ville', 'expediteur.adresse', 'expediteur.codePostal', 'expediteur.email', 'expediteur.eori', 'expediteur.pays', 'expediteur.siret', 'expediteur.ville']);
+});
+
+test('Facture commerciale: the reminder cadences are completed; storage values missing block the save until Stockage et rappels is saved', () => {
+  const { payload } = invoiceIdentitySettingsPayload({ fraisStockage: 1.5, stockageGratuit: 14, diviseurVolumetrique: 5000 }, form());
+  assert.deepEqual([payload.relancesFeuVert, payload.relancesPaiement], [REMINDER_DEFAULTS.relancesFeuVert, REMINDER_DEFAULTS.relancesPaiement]);
+  for (const stored of [null, {}, { ...STORED, diviseurVolumetrique: '' }]) {
+    assert.deepEqual(invoiceIdentitySettingsPayload(stored, form()), { payload: null, errors: {}, blocked: INVOICE_IDENTITY_NEEDS_BUSINESS });
+  }
+  assert.match(INVOICE_IDENTITY_NEEDS_BUSINESS, /Stockage et rappels/);
+});
+
+test('Facture commerciale: the form keeps what is typed, spaces included, for every party and field', () => {
+  const draft = invoiceIdentityDraftValues({ expediteur: { adresse: '5 Chemin ', codePostal: 97490 }, destinataires: { 974: { nom: 'Expedîle' } } });
+  assert.equal(draft.expediteur.adresse, '5 Chemin ', 'A trailing space survives while typing.');
+  assert.equal(draft.expediteur.codePostal, '97490');
+  assert.deepEqual(Object.keys(draft.destinataires).sort(), [...CONSIGNEE_KEYS].sort());
+  for (const value of [draft.expediteur, ...Object.values(draft.destinataires)]) assert.deepEqual(Object.keys(value), PARTY_FIELDS);
+  assert.deepEqual(invoiceIdentityDraftValues(null), invoiceIdentityDraftValues({ expediteur: [], destinataires: 'x' }));
+  assert.equal(invoiceIdentityDraftValues(null).expediteur.nom, '');
+});
+
+test('Facture commerciale: each party says whether it is set, incomplete, or falls back on the default consignee', () => {
+  const fallback = party({ nom: 'Transitaire DOM (essai)', adresse: '1 rue de l’Essai', codePostal: '97400', ville: 'Saint-Denis', pays: 'La Réunion (France)' });
+  assert.equal(invoicePartyState(party(REUNION)), 'set');
+  assert.equal(invoicePartyState(party({ nom: 'Expedîle' })), 'incomplete');
+  assert.equal(invoicePartyState(party({ ville: '  ' })), 'none', 'Spaces alone fill nothing.');
+  assert.equal(invoicePartyState(party(), { fallback }), 'default');
+  assert.equal(invoicePartyState(party(), { fallback: party() }), 'none', 'No default consignee either.');
+  assert.equal(invoicePartyState(party({ nom: 'Expedîle' }), { fallback }), 'incomplete');
+});
+
+test('Facture commerciale: the fields are ordered as the form reads, keyed as the validation keys its errors', () => {
+  assert.equal(INVOICE_IDENTITY_FIELD_ORDER.length, PARTY_FIELDS.length * (1 + CONSIGNEE_KEYS.length));
+  assert.deepEqual(INVOICE_IDENTITY_FIELD_ORDER.slice(0, 3), ['expediteur.nom', 'expediteur.adresse', 'expediteur.complement']);
+  assert.deepEqual([...new Set(INVOICE_IDENTITY_FIELD_ORDER.slice(PARTY_FIELDS.length).map(key => key.split('.')[1]))], ['defaut', '974', '976', '971', '972']);
+  const { errors } = validateInvoiceIdentity(form({ expediteur: { email: 'x' }, destinataires: Object.fromEntries(CONSIGNEE_KEYS.map(key => [key, { email: 'x' }])) }));
+  for (const key of Object.keys(errors)) assert.ok(INVOICE_IDENTITY_FIELD_ORDER.includes(key), `${key} has a place in the form`);
+});
+
+test('stored values compare whatever the order of their keys (jsonb returns its own order)', () => {
+  assert.equal(sameStoredValue({ a: 1, b: { c: [1, 2], d: null } }, { b: { d: null, c: [1, 2] }, a: 1 }), true);
+  assert.equal(sameStoredValue({ a: [1, 2] }, { a: [2, 1] }), false);
+  assert.equal(sameStoredValue({ destinataires: { 974: REUNION } }, { destinataires: { 974: { ...REUNION, complement: 'Bâtiment B' } } }), false);
+  assert.equal(sameStoredValue(undefined, null), true);
+  assert.equal(sameStoredValue(null, {}), false);
 });
