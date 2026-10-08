@@ -748,11 +748,13 @@ test('the export writes the taxes as a number in its format, or the cell’s wor
   const pro = { ...taxed, id: 'pro', devisTotal: 80, devisSnapshot: savedQuote({ om: 0, omr: 0, tva: 0, total: 80 }, { inputs: { client: { type: 'pro' } } }) };
   const draft = { ...prepared, id: 'draft', devisTotal: 83.47, devisBrouillon: true, quoteVersion: 3, devisSnapshot: savedQuote({ om: 4.1, omr: 1.2, tva: 7.37, total: 83.47 }, { version: 3 }) };
   const items = [{ ...taxed, id: 'taxed' }, pro, draft, { ...quoted, id: 'legacy' }, { ...dossier, id: 'new' }];
-  const models = new Map(items.map(row => [row.id, model(row, base)]));
   for (const view of ['daily', 'payments', 'departures']) {
+    // Each view exports the models of its screen: in « Paiements » the draft asks nothing yet (« Demandé »).
+    const models = new Map(items.map(row => [row.id, model(row, { ...base, view })]));
     const { rows, formats } = buildDossierTableExport(items, [], models, view, TABLE_COLUMNS[view].filter(column => ['ref', 'taxes'].includes(column.key)));
-    assert.deepEqual(rows.map(row => row['Taxes calculées']), [20, 0, 12.67, 'À vérifier', 'À calculer'], view);
-    assert.deepEqual(formats.map(format => format['Taxes calculées']), ['#,##0.00 "€"', '#,##0.00 "€";-#,##0.00 "€";"Sans taxes (pro)"', '#,##0.00 "€ · Brouillon"', undefined, undefined], view);
+    const payments = view === 'payments';
+    assert.deepEqual(rows.map(row => row['Taxes calculées']), [20, 0, payments ? 'À calculer' : 12.67, 'À vérifier', 'À calculer'], view);
+    assert.deepEqual(formats.map(format => format['Taxes calculées']), ['#,##0.00 "€"', '#,##0.00 "€";-#,##0.00 "€";"Sans taxes (pro)"', payments ? undefined : '#,##0.00 "€ · Brouillon"', undefined, undefined], view);
   }
   assert.equal(dossierTableExportColumns('accords', TABLE_COLUMNS.daily).some(column => column.key === 'taxes'), false, 'No taxes in « Accords clients ».');
 });
