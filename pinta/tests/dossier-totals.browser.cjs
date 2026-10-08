@@ -286,6 +286,46 @@ async function main() {
       assert.equal(plain(await dossierCell(f, 5, 'taxes').innerText()), '7,50 €');
     });
 
+    // ── A refresh of the tasks (every minute, on focus) runs behind the loaded list ────────────
+    // No notice pushes the rows and their total down, and an empty « Mes tâches » never reads
+    // « indisponible » meanwhile; the refresh is held open to look at the list during it.
+    await scenario('a-background-refresh-of-the-tasks-never-moves-the-list', async f => {
+      await f.page.setViewportSize(sizeOf(1280)); await open(f); await countStatus(f, 6).waitFor();
+      const notice = f.page.getByRole('status').filter({ hasText: 'Chargement des tâches…' });
+      await notice.waitFor({ state: 'hidden' });
+      const hold = async () => {
+        let release, started = 0;
+        const held = new Promise(resolve => { release = resolve; });
+        await f.context.route('**/rest/v1/staff_work_actions?*', async route => { started++; await held; return route.fallback(); });
+        await f.page.evaluate(() => window.dispatchEvent(new Event('focus')));
+        for (let wait = 0; wait < 100 && !started; wait++) await f.page.waitForTimeout(50);
+        assert.ok(started > 0, 'The refresh of the tasks started.');
+        return async () => { release(); await f.context.unroute('**/rest/v1/staff_work_actions?*'); };
+      };
+      const row = f.page.locator(`tr[data-dossier-row="${T(1)}"]`), foot = f.page.locator(FOOT);
+      const place = () => Promise.all([row, foot].map(item => item.evaluate(element => Math.round(element.getBoundingClientRect().top))));
+      const before = await place();
+      let done = await hold();
+      for (let look = 0; look < 8; look++) {
+        assert.equal(await notice.count(), 0, 'No loading notice above the loaded list.');
+        assert.deepEqual(await place(), before, 'The rows and their total stay where they are.');
+        assert.equal(await f.page.getByText('Tâches à actualiser', { exact: true }).count(), 0, 'The rows keep their loaded tasks.');
+        await f.page.waitForTimeout(60);
+      }
+      await done();
+      // « Mes tâches » with nothing assigned: the empty state keeps its words during a refresh.
+      await f.page.goto(`${base}/colis?tasks=mine`);
+      const nothingMine = f.page.getByText('Aucune tâche ne vous est attribuée dans cette sélection.', { exact: true });
+      await nothingMine.waitFor(); await notice.waitFor({ state: 'hidden' });
+      done = await hold();
+      for (let look = 0; look < 8; look++) {
+        assert.equal(await nothingMine.count(), 1, 'Still « Aucune tâche… » while the tasks refresh.');
+        assert.equal(await f.page.getByText('La liste des tâches est indisponible pour le moment.', { exact: true }).count(), 0);
+        await f.page.waitForTimeout(60);
+      }
+      await done();
+    });
+
     // ── Grouped by departure: a subtotal closes each group, folded or not ──────────────────────
     const GROUPS = [
       { key: DEPARTURE.first, title: 'Départ du jeudi 15 octobre 2099 · Réunion', context: 'Départ du jeudi 15 octobre 2099 · Réunion · DEP-TOT-01', ids: [1, 2, 6],

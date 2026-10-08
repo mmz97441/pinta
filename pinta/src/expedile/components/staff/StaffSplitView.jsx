@@ -97,7 +97,7 @@ export default function StaffColisPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const returnTo = location.pathname + location.search;
-  const { data, clients, getClient, envois, upd, flash, can, auth, loadArchives, archivesLoaded, categories, tarifs, settings, teamUsers = [], workActions = [], workPreferences = [], workLoading, workError, refreshWork, dataError, dataLoading, sbReady, retryLoad } = useApp();
+  const { data, clients, getClient, envois, upd, flash, can, auth, loadArchives, archivesLoaded, categories, tarifs, settings, teamUsers = [], workActions = [], workPreferences = [], workLoading, workLoaded = false, workError, refreshWork, dataError, dataLoading, sbReady, retryLoad } = useApp();
   const compact = useMediaQuery(COMPACT_QUERY);
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [searchParams, setSearchParams] = useSearchParams();
@@ -215,7 +215,10 @@ export default function StaffColisPage() {
   const canExportView = can('perm_export_colis') && (tableView !== 'payments' || can('perm_finances_exporter'));
   const taskScope = ['mine', 'pool'].includes(searchParams.get('tasks')) ? searchParams.get('tasks') : 'all';
   const available = staffAvailable(workPreferences.find(item => item.staff_id === auth?.u?.id), now);
-  const workReady = !workError && !(workLoading && !workActions.length);
+  // Once the tasks are known, a refresh (every minute, on focus) keeps them: the list never
+  // jumps under a loading notice nor reads « indisponible » meanwhile.
+  const workKnown = workLoaded || workActions.length > 0;
+  const workReady = !workError && !(workLoading && !workKnown);
   const actionsByDossier = useMemo(() => {
     const map = new Map();
     for (const action of workActions) {
@@ -654,7 +657,7 @@ export default function StaffColisPage() {
       </ColumnDialog>}
 
       {workError && <div role="alert" className="dossier-list-notice shrink-0 border-b border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">Les tâches n’ont pas pu être actualisées. Les dossiers restent consultables.<button onClick={() => refreshWork().catch(() => {})} className="ml-3 min-h-11 font-semibold underline">Recharger les tâches</button></div>}
-      {workLoading && <p role="status" className="dossier-list-notice shrink-0 px-4 py-2 text-sm text-gray-600">Chargement des tâches…</p>}
+      {workLoading && !workKnown && <p role="status" className="dossier-list-notice shrink-0 px-4 py-2 text-sm text-gray-600">Chargement des tâches…</p>}
       {taskScope === 'pool' && !available && <p className="dossier-list-notice shrink-0 px-4 py-2 text-sm text-gray-700">Vous êtes indisponible. <button onClick={() => navigate('/?preferences=1')} className="min-h-11 font-semibold underline">Modifier ma disponibilité dans Mon travail</button></p>}
       {/* A failed refresh keeps the last loaded dossiers: the application banner says so. */}
 

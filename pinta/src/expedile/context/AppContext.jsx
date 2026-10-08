@@ -59,6 +59,8 @@ export function AppProvider({ children }) {
   const [workActions, setWorkActions] = useState([]);
   const [workPreferences, setWorkPreferences] = useState([]);
   const [workLoading, setWorkLoading] = useState(false);
+  // Tasks read at least once this session: later refreshes run quietly behind the loaded list.
+  const [workLoaded, setWorkLoaded] = useState(false);
   const [workError, setWorkError] = useState('');
   const workSequence = useRef(0);
   const [notificationTotal, setNotificationTotal] = useState(0);
@@ -189,7 +191,7 @@ export function AppProvider({ children }) {
     try {
       const result = await sb.fetchStaffWork();
       if (token !== generation.current || sequence !== workSequence.current) return;
-      setWorkActions(result.actions); setWorkPreferences(result.preferences); setWorkError('');
+      setWorkActions(result.actions); setWorkPreferences(result.preferences); setWorkError(''); setWorkLoaded(true);
       return result;
     } catch (error) {
       if (token === generation.current && sequence === workSequence.current) setWorkError(error.message);
@@ -331,7 +333,7 @@ export function AppProvider({ children }) {
         if (token !== generation.current) return;
         setInboxItems(inbox);
         setTeamUsers(team);
-        setWorkActions(work.actions); setWorkPreferences(work.preferences); setWorkError('');
+        setWorkActions(work.actions); setWorkPreferences(work.preferences); setWorkError(''); setWorkLoaded(true);
       } else setInboxItems([]);
       setSbReady(true);
     } catch (error) {
@@ -357,7 +359,7 @@ export function AppProvider({ children }) {
         setMessageTemplates({});
         setInboxItems([]);
         setTeamUsers([]);
-        setWorkActions([]); setWorkPreferences([]); setWorkError(''); setWorkLoading(false);
+        setWorkActions([]); setWorkPreferences([]); setWorkError(''); setWorkLoading(false); setWorkLoaded(false);
         setNotificationTotal(0); setUnreadNotifs(0); setNotificationsError(''); setNotificationsLoading(false);
         notificationLimit.current = 50;
         setCategories([]);
@@ -1478,6 +1480,7 @@ export function AppProvider({ children }) {
     workActions,
     workPreferences,
     workLoading,
+    workLoaded,
     workError,
     refreshWork,
     mutateWorkAction,
