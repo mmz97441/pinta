@@ -135,3 +135,32 @@ Mise en production le 8 octobre :
 Reste de ton côté :
 - **Adresse d'Expedîle en métropole** (l'expéditeur) : à saisir dans Paramètres › Facture commerciale. Tant qu'elle manque, la facture est bloquée.
 - **Mayotte, Guadeloupe, Martinique** : leur destinataire, ou un destinataire par défaut, est à saisir avant leur premier départ.
+
+## Complément du 8 octobre (soir) : sous-totaux et taxes dans le tableau des dossiers
+
+Ta demande : « les sous-totaux, et même lorsqu'il y a un tri ou un filtre » et « une colonne pour les taxes calculées ».
+
+Ce qui change dans « Dossiers d'expédition » :
+- **Colonne « Taxes calculées »** : l'octroi de mer, l'octroi de mer régional et la TVA du devis enregistré, jamais recalculés à l'écran.
+  - Elle se trouve après « Prix du devis » dans Travail quotidien et Départs, et après « Demandé » dans Paiements.
+  - Sans devis, elle affiche la même mention que le prix (« À calculer », « À revoir », « Brouillon »).
+  - Un ancien devis sans détail affiche « À vérifier », et un devis pro sans taxes « Sans taxes (pro) ».
+  - Elle suit les mêmes droits que les montants.
+- **Sous-totaux et total** : ils portent sur les dossiers affichés.
+  - Ils suivent la recherche, l'onglet et les filtres ; le tri ne les change pas.
+  - Colonnes totalisées : cartons, colis, poids, poids volumétrique, prix, taxes, demandé, payé et reste.
+  - Si des dossiers n'ont pas encore de valeur, le total le dit (« 4 sur 6 dossiers »), jamais un faux 0.
+  - **Tableau** : une ligne « Total · 12 dossiers » (« … filtrés » avec un filtre) reste épinglée en bas de la liste. Quand la liste est groupée par départ, statut ou client, chaque groupe se termine par son sous-total, visible même replié : en repliant tout, on lit une ligne par départ.
+  - **Téléphone et tablette en cartes** : un sous-total sous l'en-tête de chaque groupe, puis le total en fin de liste.
+- **Export Excel** : la colonne Taxes. Les montants, poids et quantités sont des nombres, et une ligne « Total » en formule SOUS.TOTAL suit aussi les filtres posés dans Excel.
+- **Correction au passage** : toutes les minutes, l'actualisation des tâches faisait apparaître « Chargement des tâches… » au-dessus de la liste. La liste sautait et les lignes affichaient un instant « Tâches à actualiser ». L'actualisation se fait désormais sans bouger la liste.
+
+Vérifications :
+- 705 tests unitaires et les 60 parcours navigateur, en local et sur la CI GitHub ;
+- un vérificateur des calculs : 300 listes tirées au hasard, centimes exacts, totaux identiques quel que soit le tri, droits et fichier Excel ;
+- un vérificateur de l'affichage : 320 à 1440 px, clair et sombre, texte agrandi, clavier, lecteur d'écran.
+
+Ce qui reste de ton côté :
+- **Essais sur tes appareils** : pas d'essai réel sur Safari ni sur iPad.
+- **Gros montants** : en texte agrandi au maximum, un total de 10 000 € ou plus passe sur deux lignes dans la largeur de colonne par défaut. Élargis la colonne si besoin.
+- **« Payé » d'un groupe sans devis** : le sous-total affiche « 0,00 € » alors que ses lignes affichent « — ».
