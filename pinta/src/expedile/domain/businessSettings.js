@@ -81,6 +81,18 @@ export function invoicePartyState(party, { fallback = null } = {}) {
   return fallback && partyFilled(normalizeParty(fallback)) ? 'default' : 'none';
 }
 
+/** The state of each consignee row of the form, keyed as CONSIGNEE_KEYS: a destination as
+ *  invoicePartyState with the default consignee as fallback; the default one as its own state,
+ *  except that, not set, it is 'optional' (no warning) only once every destination has a consignee
+ *  of its own — while one relies on it, its invoice is blocked and the default row says so ('none'). */
+export function invoiceConsigneeStates(destinataires) {
+  const consignees = plainObject(destinataires);
+  const states = Object.fromEntries(CONSIGNEE_KEYS.filter(key => key !== 'defaut').map(key => [key, invoicePartyState(consignees[key], { fallback: consignees.defaut })]));
+  const own = invoicePartyState(consignees.defaut);
+  const relied = Object.values(states).some(state => state === 'none');
+  return { defaut: own === 'none' && !relied ? 'optional' : own, ...states };
+}
+
 /** The form's fields in reading order (exporter, default consignee, then each destination),
  *  keyed as validateInvoiceIdentity keys its errors: the first wrong one takes the focus. */
 export const INVOICE_IDENTITY_FIELD_ORDER = Object.freeze([
@@ -89,7 +101,7 @@ export const INVOICE_IDENTITY_FIELD_ORDER = Object.freeze([
 ]);
 
 // save_admin_setting validates the whole object, storage values included: they come from Stockage et rappels.
-export const INVOICE_IDENTITY_NEEDS_BUSINESS = 'Les règles de « Stockage et rappels » ne sont pas complètes : enregistrez-les d’abord, la facture commerciale est enregistrée avec elles.';
+export const INVOICE_IDENTITY_NEEDS_BUSINESS = 'Les règles de « Stockage et rappels » sont incomplètes : enregistrez-les d’abord, car les réglages de la facture commerciale sont enregistrés avec elles.';
 
 /**
  * The object to save from Paramètres › Facture commerciale: { payload, errors, blocked }.

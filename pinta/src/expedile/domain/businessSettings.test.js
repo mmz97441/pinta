@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { BUSINESS_FIELDS, INVOICE_IDENTITY_FIELD_ORDER, INVOICE_IDENTITY_NEEDS_BUSINESS, REMINDER_DEFAULTS, businessDraftValues, businessSettingsPayload, invoiceIdentityDraftValues, invoiceIdentitySettingsPayload, invoicePartyState, sameBusinessValues, sameStoredValue, validateBusinessValues } from './businessSettings.js';
+import { BUSINESS_FIELDS, INVOICE_IDENTITY_FIELD_ORDER, INVOICE_IDENTITY_NEEDS_BUSINESS, REMINDER_DEFAULTS, businessDraftValues, businessSettingsPayload, invoiceConsigneeStates, invoiceIdentityDraftValues, invoiceIdentitySettingsPayload, invoicePartyState, sameBusinessValues, sameStoredValue, validateBusinessValues } from './businessSettings.js';
 import { CONSIGNEE_KEYS, PARTY_FIELDS, invoiceIdentity, validateInvoiceIdentity } from './invoiceIdentity.js';
 
 // The seed of app_settings.business (20260910000001_application_schema.sql) plus later keys.
@@ -111,6 +111,23 @@ test('Facture commerciale: each party says whether it is set, incomplete, or fal
   assert.equal(invoicePartyState(party(), { fallback }), 'default');
   assert.equal(invoicePartyState(party(), { fallback: party() }), 'none', 'No default consignee either.');
   assert.equal(invoicePartyState(party({ nom: 'Expedîle' }), { fallback }), 'incomplete');
+});
+
+test('Facture commerciale: the default consignee row warns while a destination relies on it, and only then', () => {
+  const fallback = party({ nom: 'Transitaire DOM (essai)', adresse: '1 rue de l’Essai', codePostal: '97400', ville: 'Saint-Denis', pays: 'La Réunion (France)' });
+  const own = code => party({ nom: `Transitaire ${code} (essai)`, adresse: '1 quai de l’Essai', codePostal: `${code}00`, ville: 'Ville (essai)', pays: 'France' });
+  // As seeded in production: La Réunion only. Mayotte, Guadeloupe and Martinique have no consignee: the default one is missing.
+  assert.deepEqual(invoiceConsigneeStates(form().destinataires), { defaut: 'none', 974: 'set', 976: 'none', 971: 'none', 972: 'none' });
+  // Every destination has its own: the default consignee is optional.
+  const everyOwn = form({ destinataires: { 974: REUNION, 976: own('976'), 971: own('971'), 972: own('972') } }).destinataires;
+  assert.deepEqual(invoiceConsigneeStates(everyOwn), { defaut: 'optional', 974: 'set', 976: 'set', 971: 'set', 972: 'set' });
+  // One of them only started: it does not rely on the default consignee (it must be completed).
+  assert.equal(invoiceConsigneeStates({ ...everyOwn, 972: party({ nom: 'Transit Martinique' }) }).defaut, 'optional');
+  assert.equal(invoiceConsigneeStates({ ...everyOwn, 972: party() }).defaut, 'none', 'Martinique emptied relies on it again.');
+  // Set, the default consignee says so, and the empty destinations use it.
+  assert.deepEqual(invoiceConsigneeStates(form({ destinataires: { defaut: fallback, 974: REUNION } }).destinataires), { defaut: 'set', 974: 'set', 976: 'default', 971: 'default', 972: 'default' });
+  assert.equal(invoiceConsigneeStates({ defaut: party({ nom: 'Transitaire' }) }).defaut, 'incomplete');
+  assert.deepEqual(invoiceConsigneeStates(null), { defaut: 'none', 974: 'none', 976: 'none', 971: 'none', 972: 'none' });
 });
 
 test('Facture commerciale: the fields are ordered as the form reads, keyed as the validation keys its errors', () => {

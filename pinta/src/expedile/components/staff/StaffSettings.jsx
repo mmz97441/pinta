@@ -5,7 +5,7 @@ import { Send, Mail, AlertTriangle, RefreshCw, ArrowRight, Check, ChevronRight }
 import { useApp } from '../../context/AppContext';
 import { DESTINATIONS } from '../../constants';
 import usePersistentDraft from '../../hooks/usePersistentDraft';
-import { BUSINESS_FIELDS, INVOICE_IDENTITY_FIELD_ORDER, businessDraftValues, businessSettingsPayload, invoiceIdentityDraftValues, invoiceIdentitySettingsPayload, invoicePartyState, sameBusinessValues, sameStoredValue, validateBusinessValues } from '../../domain/businessSettings';
+import { BUSINESS_FIELDS, INVOICE_IDENTITY_FIELD_ORDER, businessDraftValues, businessSettingsPayload, invoiceConsigneeStates, invoiceIdentityDraftValues, invoiceIdentitySettingsPayload, invoicePartyState, sameBusinessValues, sameStoredValue, validateBusinessValues } from '../../domain/businessSettings';
 import { CONSIGNEE_KEYS, PARTY_FIELDS, PARTY_LABELS, REQUIRED_PARTY_FIELDS, invoiceIdentity, normalizeParty, validateInvoiceIdentity } from '../../domain/invoiceIdentity';
 import { fetchSettings } from '../../lib/supabaseData';
 import { latestChannelEvent } from '../../domain/channelEvents';
@@ -128,7 +128,7 @@ const PARTY_STATES = {
   incomplete: { text: 'À compléter', tone: 'text-amber-700', Icon: AlertTriangle },
   default: { text: 'Destinataire par défaut utilisé', tone: 'text-gray-600', Icon: null },
   none: { text: 'Non réglé', tone: 'text-amber-700', Icon: AlertTriangle },
-  // The default consignee is optional when every destination has its own: not set is no warning.
+  // The default consignee once every destination has its own (invoiceConsigneeStates): not set is no warning.
   optional: { text: 'Non réglé', tone: 'text-gray-600', Icon: null },
 };
 const partyFieldId = key => `invoice-${key.replace(/\./g, '-')}`;
@@ -228,6 +228,7 @@ function InvoiceIdentitySettings() {
     });
   };
   const preview = party => { const value = normalizeParty(party); return [value.nom, [value.codePostal, value.ville].filter(Boolean).join(' ')].filter(Boolean).join(' · '); };
+  const consigneeStates = invoiceConsigneeStates(consignees);
   return <section className="space-y-5"><div className="space-y-1"><h2 className="text-lg font-bold">Facture commerciale</h2><DraftHelp storageAvailable={storageAvailable} /></div>
     <fieldset disabled={busy} className="min-w-0 space-y-6">
       <div role="group" aria-labelledby="invoice-expediteur-title" className="space-y-3">
@@ -238,8 +239,7 @@ function InvoiceIdentitySettings() {
       <div className="space-y-3 border-t border-gray-200 pt-5">
         <div className="space-y-1"><h3 className="font-bold">Destinataire</h3><p className="text-sm text-gray-600">Imprimé en haut de la facture commerciale d’un départ : le destinataire de sa destination, sinon le destinataire par défaut.</p></div>
         <div className="divide-y divide-gray-200 border-y border-gray-200">{CONSIGNEE_BLOCKS.map(({ key, title, group, help }) => {
-          const shown = preview(consignees[key]);
-          const state = key === 'defaut' ? invoicePartyState(consignees.defaut).replace(/^none$/, 'optional') : invoicePartyState(consignees[key], { fallback: consignees.defaut });
+          const shown = preview(consignees[key]), state = consigneeStates[key];
           return <details key={key} ref={node => { blocks.current[key] = node; }} data-consignee={key} className="group">
             <summary className="block min-h-11 cursor-pointer list-none rounded-lg py-2.5 focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:[outline-color:var(--focus-ring)] [&::-webkit-details-marker]:hidden">
               {/* The state goes under the name when the row is too narrow for both (a phone, wider fonts). */}

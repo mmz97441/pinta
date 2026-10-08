@@ -115,6 +115,10 @@ async function openBlock(f, key) { if (!await isOpen(f, key)) await block(f, key
 async function fill(group, values) { for (const [key, value] of Object.entries(values)) await field(group, key).fill(value); }
 async function values(group) { return Object.fromEntries(await Promise.all(PARTY_FIELDS.map(async key => [key, await field(group, key).inputValue()]))); }
 const stateOf = locator => locator.locator('[data-party-state]').first().evaluate(node => [node.dataset.partyState, node.textContent.trim()]);
+/** The state shows the warning sign (amber), not a check or a neutral grey text. */
+const warns = async locator => (await locator.locator('[data-party-state] svg.lucide-alert-triangle').count()) > 0;
+/** Waits for a row to reach a state (the page may take a moment to render it on a slower machine). */
+const reaches = (locator, state) => locator.locator(`[data-party-state="${state}"]`).first().waitFor();
 async function open(f) {
   await f.page.goto(`${base}/settings?tab=facture`);
   await panelOf(f).getByRole('heading', { name: 'Facture commerciale', exact: true }).waitFor();
@@ -151,11 +155,13 @@ async function checkPanel(f) {
   // The consignees: the default one, then each destination, collapsed, each saying whether it is set.
   await panel.getByText('Imprimé en haut de la facture commerciale d’un départ : le destinataire de sa destination, sinon le destinataire par défaut.', { exact: true }).waitFor();
   assert.deepEqual(await panel.locator('details[data-consignee]').evaluateAll(nodes => nodes.map(node => [node.dataset.consignee, node.open])), BLOCKS.map(([key]) => [key, false]));
-  const expectedStates = { defaut: ['optional', 'Non réglé'], 974: ['set', 'Réglé'], 976: ['none', 'Non réglé'], 971: ['none', 'Non réglé'], 972: ['none', 'Non réglé'] };
+  // Mayotte, Guadeloupe and Martinique have no consignee of their own: the default one is missing, and says so.
+  const expectedStates = { defaut: ['none', 'Non réglé'], 974: ['set', 'Réglé'], 976: ['none', 'Non réglé'], 971: ['none', 'Non réglé'], 972: ['none', 'Non réglé'] };
   for (const [key, title] of BLOCKS) {
     const summary = block(f, key).locator(':scope > summary');
     assert.equal(await summary.locator('.font-semibold').first().textContent(), title);
     assert.deepEqual(await stateOf(summary), expectedStates[key], `${title}: its state`);
+    assert.equal(await warns(summary), expectedStates[key][0] === 'none', `${title}: a warning when not set`);
   }
   assert.equal(flat(await block(f, '974').locator(':scope > summary').innerText()), 'La Réunion Expedîle · 97490 Sainte-Clotilde Réglé');
   // La Réunion opens on the stored consignee, editable; the destinations say how to fall back on the default one.
@@ -171,6 +177,31 @@ async function checkPanel(f) {
   assert.deepEqual(small, [], 'Touch targets of 44 px.');
   await noPageOverflow(f, 'panel'); await axe(f, 'panel');
   await tallShot(f, 'facture-panel');
+}
+
+// ── 1b · The default consignee warns while a destination relies on it, and only then ──
+const OWN_CONSIGNEES = {
+  976: { nom: 'Transitaire Mayotte (essai)', adresse: '1 rue du Port', codePostal: '97600', ville: 'Mamoudzou', pays: 'Mayotte (France)' },
+  971: { nom: 'Transitaire Guadeloupe (essai)', adresse: '1 quai de l’Essai', codePostal: '97110', ville: 'Pointe-à-Pitre', pays: 'Guadeloupe (France)' },
+  972: { nom: 'Transitaire Martinique (essai)', adresse: '2 quai de l’Essai', codePostal: '97200', ville: 'Fort-de-France', pays: 'Martinique (France)' },
+};
+async function checkDefaultConsignee(f) {
+  await reset(f);
+  stored(f).factureCommerciale.destinataires = { 974: REUNION, ...clone(OWN_CONSIGNEES) };
+  await open(f);
+  const row = key => block(f, key).locator(':scope > summary');
+  // Every destination has its own consignee: the default one is optional, without a warning.
+  for (const key of ['974', '976', '971', '972']) assert.deepEqual(await stateOf(row(key)), ['set', 'Réglé'], key);
+  assert.deepEqual(await stateOf(row('defaut')), ['optional', 'Non réglé']);
+  assert.equal(await warns(row('defaut')), false, 'No warning while no destination relies on the default consignee.');
+  // Martinique emptied relies on the default consignee again: both rows warn, before any save.
+  await openBlock(f, '972');
+  for (const key of PARTY_FIELDS) await field(consignee(f, 'Destinataire · Martinique'), key).fill('');
+  await reaches(row('972'), 'none'); await reaches(row('defaut'), 'none');
+  assert.deepEqual(await stateOf(row('defaut')), ['none', 'Non réglé']);
+  assert.equal(await warns(row('defaut')), true, 'The default consignee is needed again: it warns as Martinique does.');
+  assert.equal(await warns(row('972')), true);
+  assert.equal(f.server.calls.length, 0);
 }
 
 // ── 2 · Inline errors, nothing sent ────────────────────────────────────────
@@ -406,7 +437,7 @@ async function checkBlockedAndUnreadable(f) {
   await button(f, 'Enregistrer').click();
   const error = panelOf(f).getByRole('alert').filter({ hasText: 'Stockage et rappels' });
   await error.waitFor();
-  assert.equal(flat(await error.innerText()), 'Les règles de « Stockage et rappels » ne sont pas complètes : enregistrez-les d’abord, la facture commerciale est enregistrée avec elles. Votre saisie est conservée.');
+  assert.equal(flat(await error.innerText()), 'Les règles de « Stockage et rappels » sont incomplètes : enregistrez-les d’abord, car les réglages de la facture commerciale sont enregistrés avec elles. Votre saisie est conservée.');
   assert.equal(f.server.calls.length, 0, 'Nothing the server would refuse is sent.');
   // The stored object cannot be read again before the save: nothing is sent, the typed values stay.
   await reset(f); await open(f);
@@ -492,6 +523,7 @@ async function main() {
     for (const layout of LAYOUTS) {
       await session('staff', layout, [
         ['panel', checkPanel],
+        ['default-consignee', checkDefaultConsignee],
         ['errors', checkErrors],
         ['save', checkSave],
         ['conflicts', checkConflicts],
