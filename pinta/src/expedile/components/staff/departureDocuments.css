@@ -1,7 +1,7 @@
 /* « Documents du départ » (DepartureDocuments.jsx), inside a departure card of the
    « Départs » page: the manifest spreadsheets once the departure has left, and the
-   commercial invoice with what blocks it or what it leaves out. Colours from brand.css
-   and staffDepartures.css, with their html.dark values. */
+   commercial invoice with what blocks it. Colours from brand.css and staffDepartures.css,
+   with their html.dark values. */
 .departure-documents { display: grid; gap: 12px; padding-bottom: 4px; min-width: 0; }
 .departure-invoice { display: grid; gap: 8px; min-width: 0; }
 .departure-documents > * + .departure-invoice { padding-top: 12px; border-top: 1px solid var(--border-subtle); }
@@ -10,23 +10,16 @@
 .departure-invoice-title { font-size: .75rem; line-height: 1.3; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--text-secondary); }
 .departure-invoice-help { max-width: 46rem; font-size: .875rem; line-height: 1.45; color: var(--text-secondary); }
 
-/* A link to the dossier (or to the categories) in a list: 44 px high, read whole. */
+/* A link to the dossier (or to the categories, or to Paramètres › Facture commerciale) in a
+   list: 44 px high, read whole. */
 .departure-invoice-link {
   display: inline-flex; align-items: center; min-height: 44px; font-weight: 600; white-space: nowrap;
   color: inherit; text-decoration: underline; text-underline-offset: 3px;
 }
+/* The way to Paramètres › Facture commerciale is long for a phone: it wraps between its words. */
+.departure-invoice-link.departure-invoice-settings { white-space: normal; overflow-wrap: anywhere; }
 .departure-invoice-points { display: grid; gap: 2px; margin-top: 4px; }
 .departure-invoice-points li > .block { overflow-wrap: anywhere; }
-/* Instead of the link, for a step this person cannot open: who corrects the dossier. */
+/* Instead of the link, for a step or a setting this person cannot open: who corrects it. */
 .departure-invoice-restricted { display: block; margin: 4px 0; overflow-wrap: anywhere; }
 .departure-invoice-fix { margin-top: 6px; }
-
-/* Dossiers left out of the invoice before the departure, with what they wait for. */
-.departure-invoice-excluded { display: grid; gap: 2px; padding-top: 8px; border-top: 1px solid var(--border-subtle); }
-.departure-invoice-excluded li {
-  display: flex; flex-wrap: wrap; align-items: center; column-gap: 10px;
-  font-size: .875rem; line-height: 1.45; color: var(--text-secondary);
-}
-.departure-invoice-ref { font-weight: 700; white-space: nowrap; color: var(--text-primary); }
-.departure-invoice-reason { color: var(--attention-text); overflow-wrap: anywhere; }
-.departure-invoice-excluded .departure-invoice-link { color: var(--brand-text); }

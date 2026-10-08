@@ -1,6 +1,7 @@
 // The outgoing parcel labels: one label per prepared parcel, the dossiers left out and why, and the PDF itself,
-// built with the real jsPDF and read back with pdf.js: its pages, its text, the QR code sampled from the drawn
-// modules (it holds the parcel code and nothing else) and the barcode decoded from its bars.
+// built with the real jsPDF and read back with pdf.js: its pages, its text, the sender (the exporter of Paramètres ›
+// Facture commerciale), the QR code sampled from the drawn modules (it holds the parcel code and nothing else) and
+// the barcode decoded from its bars.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
@@ -21,7 +22,7 @@ const bundle = await build({ entryPoints: [path.join(directory, '../src/expedile
 } }] });
 const loaded = { exports: {} };
 new Function('module', 'exports', 'require', bundle.outputFiles[0].text)(loaded, loaded.exports, require);
-const { parcelLabels, buildParcelLabelsPdf, printParcelLabels, skippedLabelLines, skippedLabelGroups, LABEL_SKIP_MESSAGES } = loaded.exports;
+const { parcelLabels, buildParcelLabelsPdf, printParcelLabels, skippedLabelLines, skippedLabelGroups, labelSender, LABEL_SKIP_MESSAGES } = loaded.exports;
 const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
 const STANDARD_FONTS = path.join(path.dirname(require.resolve('pdfjs-dist/package.json')), 'standard_fonts') + path.sep;
 const MM = 72 / 25.4;
@@ -37,6 +38,11 @@ const prepared = (overrides = {}) => ({
   finalPackages: boxes, outgoingParcelCount: 2, preparationCompositionVersion: 3, finalMeasurementsVersion: 3, ...overrides,
 });
 const getClient = id => (id === client.id ? client : null);
+// app_settings.business with Paramètres › Facture commerciale: the exporter (a test address: the real one is not
+// known yet) and the consignee of La Réunion.
+const EXPORTER = { nom: 'Expedîle', adresse: '12 rue des Entrepôts', codePostal: '93290', ville: 'Tremblay-en-France', pays: 'France', email: 'contact@expedile.fr', siret: '12345678900012' };
+const settingsWith = expediteur => ({ diviseurVolumetrique: 5000, factureCommerciale: { expediteur, destinataires: { 974: { nom: 'Expedîle', adresse: '5 Chemin Grand Canal', complement: 'Immeuble Thales', codePostal: '97490', ville: 'Sainte-Clotilde', pays: 'La Réunion (France)' } } } });
+const SENDER_LINE = 'Expedîle — 93290 Tremblay-en-France, France · contact@expedile.fr';
 
 async function readPdf(doc) {
   return pdfjs.getDocument({ data: new Uint8Array(doc.output('arraybuffer')), useSystemFonts: false, isEvalSupported: false, standardFontDataUrl: STANDARD_FONTS }).promise;
@@ -216,6 +222,41 @@ test('the destination of the saved quote comes first, then the postcode; an unse
   assert.deepEqual([pro.recipient.company, pro.recipient.name, pro.recipient.phones], ['Ti Boutik SARL', 'PAYET Flavie', ['0692 12 34 56', '0262 41 22 33']]);
 });
 
+test('the sender is the exporter of Paramètres › Facture commerciale, its name alone until its address is set', () => {
+  assert.deepEqual(labelSender(settingsWith(EXPORTER)), { text: SENDER_LINE, short: 'Expedîle — 93290 Tremblay-en-France, France' });
+  // Nothing set yet: Expedîle alone, no address invented (never the former « 75001 PARIS »).
+  for (const settings of [undefined, {}, { diviseurVolumetrique: 5000 }, settingsWith({ email: 'contact@expedile.fr' })])
+    assert.deepEqual(labelSender(settings), { text: 'Expedîle', short: 'Expedîle' }, JSON.stringify(settings));
+  assert.deepEqual(labelSender(settingsWith({ ...EXPORTER, email: '', pays: '' })), { text: 'Expedîle — 93290 Tremblay-en-France', short: 'Expedîle — 93290 Tremblay-en-France' });
+  assert.equal(labelSender(settingsWith({ ...EXPORTER, nom: 'Expedîle SAS' })).short, 'Expedîle SAS — 93290 Tremblay-en-France, France');
+  // Each label carries it.
+  const { labels } = parcelLabels([prepared()], { getClient, settings: settingsWith(EXPORTER) });
+  assert.deepEqual(labels.map(label => label.sender.text), [SENDER_LINE, SENDER_LINE]);
+  assert.deepEqual(parcelLabels([prepared()], { getClient }).labels[0].sender, { text: 'Expedîle', short: 'Expedîle' });
+});
+
+test('the PDF prints that sender, at 7 pt at least, out of the QR code’s quiet zone', async () => {
+  const text = async (settings, label = 1) => readPage(await readPdf(buildParcelLabelsPdf(parcelLabels([prepared()], { getClient, settings }).labels).doc), label);
+  const set = await text(settingsWith(EXPORTER));
+  assert.ok(set.text.includes(SENDER_LINE), JSON.stringify(set.text));
+  const unset = await text({});
+  assert.ok(unset.text.includes('Expedîle'), JSON.stringify(unset.text));
+  for (const page of [set, unset]) {
+    assert.ok(!page.text.some(item => /75001|PARIS, FRANCE/.test(item)), 'never the former hard-coded sender');
+    const sender = page.boxes.find(box => box.text.startsWith('Expedîle'));
+    assert.ok(sender.size >= 6.99 && sender.top > 14.9 && sender.bottom < 19, `${sender.text}: ${sender.size.toFixed(2)} pt at ${sender.top.toFixed(1)}–${sender.bottom.toFixed(1)} mm`);
+    assertQrQuietZone(page, sampleQr(page.rects, QRCode.create('EXP-2YE537-1-2', { errorCorrectionLevel: 'M' }).modules.size));
+  }
+  // Too long for the label at 7 pt: the email goes first, then the end gives way to « … »; never a smaller font.
+  const long = await text(settingsWith({ ...EXPORTER, nom: 'Expedîle Réexpédition SAS', ville: 'Saint-Rémy-lès-Chevreuse', email: 'service.expeditions@expedile-reexpedition.example' }));
+  assert.ok(long.text.includes('Expedîle Réexpédition SAS — 93290 Saint-Rémy-lès-Chevreuse, France'), JSON.stringify(long.text));
+  assert.ok(!long.text.some(item => item.includes('service.expeditions')), 'the email is left out');
+  const longer = await text(settingsWith({ ...EXPORTER, nom: 'Expedîle Réexpédition Métropole et Outre-mer Société par actions simplifiée', ville: 'Saint-Rémy-lès-Chevreuse' }));
+  const cut = longer.boxes.find(box => box.text.startsWith('Expedîle'));
+  assert.ok(cut.text.endsWith('…') && cut.size >= 6.99 && cut.right <= 96.01, `${cut.text} (${cut.size.toFixed(2)} pt, ends at ${cut.right.toFixed(1)} mm)`);
+  for (const page of [long, longer]) assertQrQuietZone(page, sampleQr(page.rects, QRCode.create('EXP-2YE537-1-2', { errorCorrectionLevel: 'M' }).modules.size));
+});
+
 test('the PDF: a 100 × 150 mm page per parcel, its text, a QR code of the code only and the same code in Code 128', async () => {
   const { labels } = parcelLabels([prepared()], { getClient });
   const { doc, filename } = buildParcelLabelsPdf(labels);
@@ -288,7 +329,7 @@ test('printing opens the document in the window of the click, else in a new one,
     globalThis.document = { body: { appendChild() {} }, createElement: () => ({ click() { clicked.push({ href: this.href, download: this.download }); }, remove() {} }) };
     // The window opened by the click receives the PDF.
     const target = { closed: false, location: { replace(url) { this.url = url; } }, close() { this.closed = true; } };
-    const first = printParcelLabels([prepared()], { getClient, target });
+    const first = printParcelLabels([prepared()], { getClient, target, settings: settingsWith(EXPORTER) });
     assert.deepEqual([first.count, first.dossiers, first.method, first.filename, first.lines], [2, 1, 'window', 'etiquettes-EXP-2YE537.pdf', []]);
     assert.match(target.location.url, /^blob:/);
     assert.deepEqual(opened, []);

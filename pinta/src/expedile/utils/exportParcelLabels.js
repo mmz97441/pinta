@@ -1,6 +1,7 @@
 import jsPDF from 'jspdf';
 import QRCode from 'qrcode';
 import { getSecteurByCP } from '../constants/index.js';
+import { invoiceIdentity } from '../domain/invoiceIdentity.js';
 import { formatParcelCode, parcelCodeText, parseParcelCode } from '../domain/parcelCode.js';
 import { hasCurrentPreparation } from '../domain/preparationReadiness.js';
 import { legacySingleParcel } from '../domain/loadingControl.js';
@@ -13,7 +14,8 @@ import { pdfText } from './pdfFormat.js';
 // before the parcels were listed has its one parcel, « 1/1 », as the loading control expects). Each label
 // carries « EXP-2YE537-1-2 » as a QR code and as a Code 128 barcode — the reference,
 // the parcel's position and the dossier's parcel count, nothing personal — and the
-// recipient in plain text for the driver at destination.
+// recipient in plain text for the driver at destination. The sender is the exporter of
+// Paramètres › Facture commerciale, the same as the commercial invoice's (labelSender).
 //
 // The whole document is built synchronously (the QR code and the bars are drawn as
 // rectangles), so a click can open it in the same gesture: iPad Safari only lets a
@@ -31,7 +33,6 @@ const QR_SIZE = 32; // mm, the symbol itself; its quiet zone is the white around
 // stay clear of the sender line above, of the left column and of the label's right edge.
 const QR_POSITION = { x: 61.8, y: 24.8 };
 const NUMBER = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 2 });
-const SENDER = 'EXPEDÎLE — 75001 PARIS, FRANCE · contact@expedile.fr';
 
 /** Why a dossier gets no label, as the screens state it after its reference. */
 export const LABEL_SKIP_MESSAGES = Object.freeze({
@@ -48,6 +49,20 @@ const COMPLETER = { nom: 'nom', adresse: 'adresse', 'code postal': 'cp', ville: 
 const trim = value => String(value ?? '').trim();
 const textLines = value => String(value ?? '').split(/\r?\n/).map(line => line.trim()).filter(Boolean);
 const upper = value => trim(value).toLocaleUpperCase('fr-FR');
+
+/**
+ * The sender printed on the labels: the exporter of Paramètres › Facture commerciale (app_settings.business,
+ * invoiceIdentity), the same as the commercial invoice's: « Expedîle — 93290 Tremblay-en-France, France ·
+ * contact@expedile.fr » (name, postcode and town, country, email when set); its name alone while its postcode and
+ * town are not set: no address is invented. `short`: the line without the email, printed when the whole one would
+ * need a font under 7 pt.
+ */
+export function labelSender(settings) {
+  const { nom, codePostal, ville, pays, email } = invoiceIdentity(settings).expediteur;
+  if (!codePostal || !ville) return { text: nom, short: nom };
+  const short = `${nom} — ${codePostal} ${ville}${pays ? `, ${pays}` : ''}`;
+  return { text: email ? `${short} · ${email}` : short, short };
+}
 
 /** The saved outgoing parcels, as hasCurrentPreparation() certifies them (legacy NULL: the scalar totals, one
  * parcel, as for legacySingleParcel()). */
@@ -86,13 +101,15 @@ function labelRecipient(client, dossier) {
  * The labels of `dossiers`, in their order, one per outgoing parcel:
  * `{ labels, skipped }`. A label holds its dossier, `index`/`count`, the `code` of the QR
  * code and barcode (formatParcelCode), its readable `codeText` (parcelCodeText), the
- * recipient, the parcel's own measures and the casier. A dossier without labels is listed
- * in `skipped` with its `reason` (LABEL_SKIP_MESSAGES) and `message`; an incomplete address
- * also names the `missing` parts and the client field to `complete`.
+ * `sender` (labelSender of `settings`, app_settings.business), the recipient, the parcel's
+ * own measures and the casier. A dossier without labels is listed in `skipped` with its
+ * `reason` (LABEL_SKIP_MESSAGES) and `message`; an incomplete address also names the
+ * `missing` parts and the client field to `complete`.
  */
-export function parcelLabels(dossiers, { getClient } = {}) {
+export function parcelLabels(dossiers, { getClient, settings } = {}) {
   const labels = [];
   const skipped = [];
+  const sender = labelSender(settings);
   for (const dossier of Array.isArray(dossiers) ? dossiers : []) {
     if (!dossier) continue;
     const ref = trim(dossier.ref);
@@ -114,7 +131,7 @@ export function parcelLabels(dossiers, { getClient } = {}) {
       labels.push({
         dossierId: dossier.id ?? null, ref, index, count,
         code: formatParcelCode(ref, index, count), codeText: parcelCodeText(ref, index, count),
-        casier: trim(dossier.casier), recipient,
+        casier: trim(dossier.casier), sender, recipient,
         parcel: { dimL: Number(box.dimL), dimW: Number(box.dimW), dimH: Number(box.dimH), poids: Number(box.poids) },
       });
     });
@@ -222,9 +239,13 @@ function drawLabel(doc, label) {
   write(doc, 'Réexpédition Paris – DOM-TOM', brandX, 10, { size: 7.5, bold: true, color: PAPER, maxWidth: 40 });
   if (recipient.destination) write(doc, recipient.destination, right, 8, { size: 11, minSize: 7, bold: true, color: PAPER, maxWidth: W - brandX - 42, align: 'right' });
 
-  // Sender. No band and no rule under it: the QR code's quiet zone starts just below.
+  // Sender. No band and no rule under it: the QR code's quiet zone starts just below. Never under 7 pt: a line too
+  // long goes without its email, then ends with « … ».
   write(doc, 'EXPÉDITEUR', MARGIN, 14.9, { size: 7, bold: true });
-  write(doc, SENDER, MARGIN, 18, { size: 7, minSize: 6 });
+  const sender = label.sender || labelSender();
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7);
+  write(doc, doc.getTextWidth(pdfText(sender.text)) <= PAGE.width - 2 * MARGIN ? sender.text : sender.short, MARGIN, 18, { size: 7 });
 
   // The parcel: reference and position, large; casier and its own measures. The QR code on the right.
   const column = 50; // the QR code's quiet zone starts beyond it
@@ -294,14 +315,15 @@ export function buildParcelLabelsPdf(labels) {
 /**
  * Builds the labels of `dossiers` and opens them, inside the click that asked for them:
  * in `target` when the click already opened a window (window.open('', '_blank') before
- * loading this module), else in a new window, else as a download.
+ * loading this module), else in a new window, else as a download. `settings`
+ * (app_settings.business) gives the sender.
  * Returns `{ count, dossiers, skipped, lines, groups, method: 'window' | 'download' | null, filename }`
  * (`lines`: skippedLabelLines, `groups`: the same as skippedLabelGroups, for the screens to keep each
  * reference whole): nothing printable opens nothing (and closes `target`).
  * Throws when the document cannot be built.
  */
-export function printParcelLabels(dossiers, { getClient, target = null } = {}) {
-  const { labels, skipped } = parcelLabels(dossiers, { getClient });
+export function printParcelLabels(dossiers, { getClient, target = null, settings } = {}) {
+  const { labels, skipped } = parcelLabels(dossiers, { getClient, settings });
   const lines = skippedLabelLines(skipped);
   const groups = skippedLabelGroups(skipped);
   if (!labels.length) {

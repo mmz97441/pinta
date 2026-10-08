@@ -1,26 +1,53 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import {
-  COMMERCIAL_INVOICE_COLUMNS, COMMERCIAL_INVOICE_EXPORTER, COMMERCIAL_INVOICE_FOOTER, COMMERCIAL_INVOICE_NOTE,
+  COMMERCIAL_INVOICE_COLUMNS, COMMERCIAL_INVOICE_FOOTER, COMMERCIAL_INVOICE_NOTE, COMMERCIAL_INVOICE_PARTIES,
   commercialInvoiceBasis, commercialInvoiceFileName, invoiceDayLabel,
 } from '../domain/commercialInvoice.js';
+import { partyLines } from '../domain/invoiceIdentity.js';
 import { pdfMoney, pdfNumber, pdfText, pdfUnit } from './pdfFormat.js';
 
 // The commercial invoice of a departure (domain/commercialInvoice.js) as an A4 landscape
-// PDF: the exporter and the departure, the line saying which edition it is (before the
-// departure or from its manifest, and when), then one row per article with its share of
+// PDF: at the top, the exporter and the consignee side by side (Paramètres › Facture
+// commerciale) and the departure on the right; the line saying which edition it is (before
+// the departure or from its manifest, and when); then one row per article with its share of
 // the transport, the totals and the allocation rule. Every text goes through pdfText: the
 // standard font cannot draw a character outside WinAnsi.
 
 const NAVY = [27, 58, 75];
 const GREY = [96, 96, 96];
 const MARGIN = 14;
+// The two parties, side by side on the left of the departure (92 mm on the right, 12 mm apart).
+const PARTY_WIDTH = 78;
+const PARTY_GAP = 9;
+const DEPARTURE_WIDTH = 92;
+const PARTY_LINE = 8.5 * 1.35 * 25.4 / 72; // mm between two lines of 8,5 pt
 // Quantity and amounts: right-aligned, in the body, the header and the totals.
 const NUMERIC = new Set([4, 5, 6, 7, 8]);
 // A right-aligned figure is placed from its measured width: jsPDF measures a no-break space (« 1 189,50 € ») at
 // 0.53 em where Helvetica draws 0.28 em, so an amount of 1 000 € or more would stop short of the others in its
 // column. Its spaces are plain in the cells (the columns are wide enough for it never to wrap there).
 const cellNumber = text => text.replace(/\u00a0/g, ' ');
+
+/** A party under its label at (x, y): its name in bold, then its lines, each wrapped to `width` (never cut).
+ *  Returns the baseline of its last line. */
+function drawParty(doc, label, lines, x, y, width) {
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7.5);
+  doc.setTextColor(...GREY);
+  doc.text(pdfText(label), x, y);
+  let baseline = y + 4.5 - PARTY_LINE;
+  lines.forEach((line, index) => {
+    doc.setFont('helvetica', index === 0 ? 'bold' : 'normal');
+    doc.setFontSize(8.5);
+    doc.setTextColor(40, 40, 40);
+    for (const piece of doc.splitTextToSize(pdfText(line), width)) {
+      baseline += PARTY_LINE;
+      doc.text(piece, x, baseline);
+    }
+  });
+  return baseline;
+}
 
 /** The PDF document and its file name, « facture-commerciale-ENV-2026-036.pdf » from the manifest,
  *  « facture-commerciale-ENV-2026-036-avant-depart.pdf » before the departure (nothing is saved). */
@@ -32,18 +59,16 @@ export function buildCommercialInvoicePDF(invoice) {
   const height = doc.internal.pageSize.getHeight();
   const text = (value, ...rest) => doc.text(Array.isArray(value) ? value.map(pdfText) : pdfText(value), ...rest);
 
-  // Exporter
+  // The letterhead, then the exporter and the consignee of the departure, side by side.
   doc.setTextColor(...NAVY);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(16);
   text('EXPEDÎLE', MARGIN, 18);
-  doc.setFontSize(7.5);
-  doc.setTextColor(...GREY);
-  text('EXPORTATEUR', MARGIN, 25);
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8.5);
-  doc.setTextColor(40, 40, 40);
-  text(COMMERCIAL_INVOICE_EXPORTER, MARGIN, 29.5, { lineHeightFactor: 1.35 });
+  const [exporterLabel, consigneeLabel] = COMMERCIAL_INVOICE_PARTIES;
+  const partiesEnd = Math.max(
+    drawParty(doc, exporterLabel, partyLines(meta.exporter), MARGIN, 25, PARTY_WIDTH),
+    drawParty(doc, consigneeLabel, partyLines(meta.consignee), MARGIN + PARTY_WIDTH + PARTY_GAP, 25, PARTY_WIDTH),
+  ) + 1.5;
 
   // The departure
   doc.setTextColor(...NAVY);
@@ -57,13 +82,13 @@ export function buildCommercialInvoicePDF(invoice) {
     ['Destination', meta.destination || 'Non renseignée'],
     ...(meta.mode ? [['Mode de transport', meta.mode]] : []),
     ['Expéditions', String(meta.dossiers)],
-    ['Nombre de colis', String(meta.parcels)],
+    ['Nombre de colis', meta.parcels > 0 ? String(meta.parcels) : 'Non renseigné'],
     ['Poids brut total', meta.weight > 0 ? pdfUnit(meta.weight, 'kg') : 'Non renseigné'],
   ];
   autoTable(doc, {
     startY: 22,
-    margin: { left: width - MARGIN - 92, right: MARGIN },
-    tableWidth: 92,
+    margin: { left: width - MARGIN - DEPARTURE_WIDTH, right: MARGIN },
+    tableWidth: DEPARTURE_WIDTH,
     theme: 'plain',
     body: departure.map(row => row.map(pdfText)),
     styles: { fontSize: 8.5, cellPadding: { top: 0.7, bottom: 0.7, left: 0, right: 2 }, textColor: [40, 40, 40] },
@@ -75,7 +100,7 @@ export function buildCommercialInvoicePDF(invoice) {
   doc.setFontSize(9);
   doc.setTextColor(...NAVY);
   const basis = doc.splitTextToSize(pdfText(commercialInvoiceBasis(meta)), width - 2 * MARGIN);
-  const basisY = Math.max(doc.lastAutoTable.finalY, 46) + 6;
+  const basisY = Math.max(doc.lastAutoTable.finalY, partiesEnd, 46) + 6;
   doc.text(basis, MARGIN, basisY, { lineHeightFactor: 1.3 });
 
   // Articles

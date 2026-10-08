@@ -1,8 +1,9 @@
 // The commercial invoice of a departure, built with the real jsPDF and SheetJS and read back: the PDF with pdf.js
-// (A4 landscape, French amounts, every column, the transport of each article, the allocation rule and the
-// customs footer), the Excel sheet with SheetJS (numbers in euros, HS codes as text, totals as sums). Its two
-// editions (before the departure, from the manifest) say under their header what they were established from
-// and when, and never share a file name.
+// (A4 landscape, the exporter and the consignee side by side at the top, French amounts, every column, the
+// transport of each article, the allocation rule and the customs footer), the Excel sheet with SheetJS (the two
+// parties as a header block, numbers in euros, HS codes as text, totals as sums). Its two editions (before the
+// departure, from the manifest) say under their header what they were established from and when, and never share
+// a file name.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
@@ -11,6 +12,7 @@ import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 import * as XLSX from 'xlsx';
 import { calculateQuote } from '../src/expedile/domain/quote.js';
+import { invoiceIdentity } from '../src/expedile/domain/invoiceIdentity.js';
 import { buildCommercialInvoice, COMMERCIAL_INVOICE_COLUMNS } from '../src/expedile/domain/commercialInvoice.js';
 import { buildCommercialInvoiceWorkbook, COMMERCIAL_INVOICE_SHEET } from '../src/expedile/utils/exportFactureCommerciale.js';
 
@@ -60,25 +62,37 @@ const categories = [
 const flavie = { id: 'c-flavie', type: 'particulier', nom: 'Hoarau Flavie', nomFamille: 'Hoarau', prenom: 'Flavie', cp: '97400' };
 const lagon = { id: 'c-lagon', type: 'pro', nom: 'Payet Jean', nomFamille: 'Payet', prenom: 'Jean', raisonSociale: 'Lagon Services SARL', cp: '97410', methodePaiement: 'virement' };
 const line = (id, desc, qte, prix, cat) => ({ id, factureId: 'f1', desc, qte, prix, cat });
+// Paramètres › Facture commerciale: the exporter (its address is a test value: the real one is not known yet) and
+// the consignee of La Réunion the user gave on 8 October.
+const EXPORTER = { nom: 'Expedîle', adresse: '12 rue des Entrepôts', codePostal: '93290', ville: 'Tremblay-en-France', pays: 'France', email: 'contact@expedile.fr', siret: '12345678900012', eori: 'FR12345678900012' };
+const REUNION = { nom: 'Expedîle', adresse: '5 Chemin Grand Canal', complement: 'Immeuble Thales', codePostal: '97490', ville: 'Sainte-Clotilde', pays: 'La Réunion (France)' };
+const identity = invoiceIdentity({ diviseurVolumetrique: 5000, factureCommerciale: { expediteur: EXPORTER, destinataires: { 974: REUNION } } });
+const EXPORTER_LINES = ['Expedîle', '12 rue des Entrepôts', '93290 Tremblay-en-France', 'France', 'contact@expedile.fr', 'SIRET 12345678900012 · EORI FR12345678900012'];
+const CONSIGNEE_LINES = ['Expedîle', '5 Chemin Grand Canal', 'Immeuble Thales', '97490 Sainte-Clotilde', 'La Réunion (France)'];
 function paid(fields, client, tarif) {
-  const colis = { statut: 'en_preparation', fraisDivers: [], preparationCompositionVersion: 1, finalMeasurementsVersion: 1, factures: [{ id: 'f1', montant: 1, valide: true, fichierUrl: 'f1.pdf' }], ...fields };
+  const colis = { statut: 'en_preparation', envoi: 'env', fraisDivers: [], preparationCompositionVersion: 1, finalMeasurementsVersion: 1, factures: [{ id: 'f1', montant: 1, valide: true, fichierUrl: 'f1.pdf' }], ...fields };
   colis.outgoingParcelCount = colis.finalPackages.length;
   const quote = calculateQuote({ colis, client, destination: { code: '974', nom: 'La Réunion', tva: 8.5 }, tarif, categories, settings: { diviseurVolumetrique: 5000 }, mode: 'final' });
   assert.equal(quote.ok, true, JSON.stringify(quote.errors));
   return { ...colis, statut: 'paye', devisTotal: quote.amounts.total, devisSnapshot: quote.snapshot };
 }
-// Before the departure by default (the dossiers ready to load at 14 h 32 in Paris); `manifest`: the confirmed
-// manifest at 16 h 05 the same day.
-function invoice({ manifest = false } = {}) {
+const DEPARTURE = { id: 'env', ref: 'ENV-2026-036', date: '2026-10-15', destinationCode: '974', modeTransport: 'aerien' };
+/** The two dossiers of the departure: a particulier's (EXP-2YE537) and a professional's (EXP-PRO001). */
+function dossiers() {
   const scelleuse = paid({ id: 'p1', ref: 'EXP-2YE537', finalPackages: [{ dimL: 40, dimW: 35, dimH: 10, poids: 1.9 }], lignes: [line('l-1', 'Mini scelleuse', 1, 16.64, 'cat-cuir'), line('l-2', 'Organisateur évier', 1, 9.92, 'cat-plastique')] }, flavie, { base: 25, parKg: 5 });
   scelleuse.devisSnapshot.amounts.taxLines[0].customDuty = { code: '42050090', label: 'Ouvrages en cuir', overrideReason: null };
   const pro = paid({ id: 'p3', ref: 'EXP-PRO001', finalPackages: [{ dimL: 40, dimW: 30, dimH: 30, poids: 12 }, { dimL: 30, dimW: 30, dimH: 20, poids: 7.5 }], lignes: [line('lp-1', 'Café torréfié 1 kg', 4, 15, 'cat-cafe'), line('lp-2', 'Machine à expresso', 1, 1189.5, 'cat-machine')] }, lagon, { base: 20, parKg: 5 });
-  const result = buildCommercialInvoice({ envoi: { id: 'env', ref: 'ENV-2026-036', date: '2026-10-15', destinationCode: '974', modeTransport: 'aerien' }, items: [{ colis: pro, client: lagon }, { colis: scelleuse, client: flavie }], categories,
+  return [{ colis: pro, client: lagon }, { colis: scelleuse, client: flavie }];
+}
+// Before the departure by default (every dossier assigned to it at 14 h 32 in Paris); `manifest`: the confirmed
+// manifest at 16 h 05 the same day. `parties`: Paramètres › Facture commerciale.
+function invoice({ manifest = false, parties = identity } = {}) {
+  const result = buildCommercialInvoice({ envoi: DEPARTURE, items: dossiers(), categories, identity: parties,
     ...(manifest ? { issuedAt: '2026-10-07T14:05:00Z', confirmed: true } : { issuedAt: '2026-10-07T12:32:00Z' }) });
   assert.equal(result.ok, true, JSON.stringify(result.errors));
   return result;
 }
-const BEFORE_DEPARTURE = 'Établie avant la confirmation du départ, d’après les dossiers prêts à charger le 07/10/2026 à 14 h 32 (heure de Paris).';
+const BEFORE_DEPARTURE = 'Établie avant la confirmation du départ, d’après tous les dossiers affectés au départ le 07/10/2026 à 14 h 32 (heure de Paris).';
 const FROM_MANIFEST = 'Établie d’après le manifeste du départ confirmé le 07/10/2026 à 16 h 05 (heure de Paris).';
 
 test('the model: transport per article to the cent, the professional by its company name', () => {
@@ -102,8 +116,9 @@ test('the PDF: A4 landscape, every column, French amounts, the allocation rule a
   assert.equal(Math.round(pageWidth), 842, 'A4: 297 mm wide');
   const items = pages[0].items;
   const all = items.join('\n');
-  for (const expected of ['EXPEDÎLE', 'FACTURE COMMERCIALE', BEFORE_DEPARTURE, 'GROUPE DELIVREX', '95731 ROISSY CH DE GAULLE', 'N° de facture', 'ENV-2026-036', '07/10/2026', '15/10/2026', 'La Réunion', 'Aérien', 'Nombre de colis', '3', '21,4 kg'])
+  for (const expected of ['EXPEDÎLE', 'FACTURE COMMERCIALE', BEFORE_DEPARTURE, 'EXPÉDITEUR', ...EXPORTER_LINES, 'DESTINATAIRE', ...CONSIGNEE_LINES, 'N° de facture', 'ENV-2026-036', '07/10/2026', '15/10/2026', 'La Réunion', 'Aérien', 'Nombre de colis', '3', '21,4 kg'])
     assert.ok(items.includes(expected), `« ${expected} » in the header`);
+  for (const absent of ['DELIVREX', 'ROISSY', 'COPENHAGUE', 'EXPORTATEUR']) assert.ok(!all.includes(absent), `no « ${absent} »: the parties are those of Paramètres`);
   // The edition line sits under the header, above the articles.
   assert.ok(items.indexOf(BEFORE_DEPARTURE) > items.indexOf('21,4 kg') && items.indexOf(BEFORE_DEPARTURE) < items.indexOf('N° expédition'), 'under the header');
   for (const column of ['N° expédition', 'Destinataire', 'Code SH', 'Description', 'Qté', 'P.U. HT', 'Valeur HT', 'Total']) assert.ok(items.includes(column), `column « ${column} »`);
@@ -116,6 +131,48 @@ test('the PDF: A4 landscape, every column, French amounts, the allocation rule a
   assert.ok(items.includes('ENV-2026-036 · Page 1/1'));
   for (const absent of ['undefined', 'NaN', 'null', '\u0000', '?', 'rovisoire']) assert.ok(!all.includes(absent), `no « ${absent} »`);
   assert.ok(!items.some(text => /\d\.\d/.test(text)), 'no decimal point');
+});
+
+test('the PDF: the exporter and the consignee side by side at the top, left of the departure, each line whole in its column', async () => {
+  const [{ boxes }] = await readPdf(buildCommercialInvoicePDF(invoice()).doc);
+  const at = text => boxes.find(item => item.text === text);
+  const [exporter, consignee, departure] = [at('EXPÉDITEUR'), at('DESTINATAIRE'), at('N° de facture')];
+  assert.ok(Math.abs(exporter.y - consignee.y) < 0.5, 'The two labels on one line.');
+  assert.ok(consignee.x > exporter.x + 150, `The consignee beside the exporter (${exporter.x.toFixed(0)} pt, ${consignee.x.toFixed(0)} pt).`);
+  // Each party's lines, in order under its label, start at its label and end before the next column.
+  const column = (label, lines, end) => {
+    const placed = lines.map(text => boxes.filter(item => item.text === text && Math.abs(item.x - label.x) < 0.5 && item.y < label.y).sort((a, b) => b.y - a.y)[0]);
+    placed.forEach((item, index) => assert.ok(item, `« ${lines[index]} » under ${label.text}`));
+    assert.deepEqual(placed.map(item => item.y), [...placed.map(item => item.y)].sort((a, b) => b - a), `${label.text}: its lines in order`);
+    for (const item of placed) assert.ok(item.right < end - 5, `« ${item.text} » ends at ${item.right.toFixed(1)} pt, before ${end.toFixed(1)} pt`);
+    return placed;
+  };
+  const exporterLines = column(exporter, EXPORTER_LINES, consignee.x);
+  const consigneeLines = column(consignee, CONSIGNEE_LINES, departure.x);
+  // The basis line comes under both parties and the departure.
+  const basis = at(BEFORE_DEPARTURE);
+  assert.ok([...exporterLines, ...consigneeLines].every(item => item.y > basis.y + 8), 'The parties end above the basis line.');
+  assert.ok(basis.y < at('21,4 kg').y, 'The departure too.');
+});
+
+test('the PDF: long parties wrap in their column, and the parcels unknown are said, never a partial total', async () => {
+  const long = invoiceIdentity({ factureCommerciale: {
+    expediteur: { ...EXPORTER, nom: 'Expedîle Réexpédition Métropole Outre-mer SAS', adresse: 'Zone logistique des Entrepôts du Nord, bâtiment C, quai 12', telephone: '01 23 45 67 89', tva: 'FR12123456789' },
+    destinataires: { 974: { ...REUNION, complement: 'Immeuble Thales, deuxième étage, porte gauche, accueil marchandises' } } } });
+  const model = invoice({ parties: long });
+  const [{ boxes }] = await readPdf(buildCommercialInvoicePDF({ ...model, meta: { ...model.meta, parcels: null, weight: null } }).doc);
+  const at = text => boxes.find(item => item.text === text);
+  const [exporter, consignee, departure] = [at('EXPÉDITEUR'), at('DESTINATAIRE'), at('N° de facture')];
+  const under = label => boxes.filter(item => Math.abs(item.x - label.x) < 0.5 && item.y < label.y && item.y > at(BEFORE_DEPARTURE).y);
+  const words = items => items.sort((a, b) => b.y - a.y).map(item => item.text).join(' ');
+  assert.ok(under(exporter).length > 6, `The exporter's 6 lines wrap: ${under(exporter).length} lines drawn`);
+  for (const text of ['Expedîle Réexpédition Métropole Outre-mer SAS', 'Zone logistique des Entrepôts du Nord, bâtiment C, quai 12', 'Tél. 01 23 45 67 89 · contact@expedile.fr', 'SIRET 12345678900012 · EORI FR12345678900012 · TVA FR12123456789'])
+    assert.ok(words(under(exporter)).includes(text), `« ${text} », whole, in « ${words(under(exporter))} »`);
+  assert.ok(words(under(consignee)).includes('Immeuble Thales, deuxième étage, porte gauche, accueil marchandises'));
+  assert.ok(under(exporter).every(item => item.right < consignee.x - 5) && under(consignee).every(item => item.right < departure.x - 5), 'Nothing runs into the next column.');
+  assert.ok(under(exporter).every(item => item.y > at(BEFORE_DEPARTURE).y + 8), 'The basis line moves down under the longest party.');
+  const notSet = boxes.filter(item => item.text === 'Non renseigné').length;
+  assert.equal(notSet, 2, 'The number of parcels and the weight: « Non renseigné ».');
 });
 
 test('the PDF from the manifest: the same title and number, its own basis line and file name', async () => {
@@ -194,10 +251,15 @@ test('the Excel sheet: numbers in euros, HS codes as text, totals as sums of the
   assert.equal(COMMERCIAL_INVOICE_SHEET, 'Facture commerciale');
   const sheet = read.Sheets[COMMERCIAL_INVOICE_SHEET];
   const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: null });
-  assert.deepEqual(rows.slice(0, 11).map(row => row.slice(0, 2)), [
-    ['FACTURE COMMERCIALE', null], [BEFORE_DEPARTURE, null], ['N° de facture', 'ENV-2026-036'], ['Date', '07/10/2026'], ['Départ prévu', '15/10/2026'], ['Destination', 'La Réunion'],
-    ['Mode de transport', 'Aérien'], ['Expéditions', 2], ['Nombre de colis', 3], ['Poids brut total (kg)', 21.4], ['Exportateur', 'GROUPE DELIVREX, 5 RUE DE COPENHAGUE, ROISSY POLE BAT AERONEF CS 13918, 95731 ROISSY CH DE GAULLE'],
+  assert.deepEqual(rows.slice(0, 23).map(row => row.slice(0, 2)), [
+    ['FACTURE COMMERCIALE', null], [BEFORE_DEPARTURE, null],
+    ['EXPÉDITEUR', 'Expedîle'], [null, '12 rue des Entrepôts'], [null, '93290 Tremblay-en-France'], [null, 'France'], [null, 'contact@expedile.fr'], [null, 'SIRET 12345678900012 · EORI FR12345678900012'],
+    ['DESTINATAIRE', 'Expedîle'], [null, '5 Chemin Grand Canal'], [null, 'Immeuble Thales'], [null, '97490 Sainte-Clotilde'], [null, 'La Réunion (France)'],
+    [null, null],
+    ['N° de facture', 'ENV-2026-036'], ['Date', '07/10/2026'], ['Départ prévu', '15/10/2026'], ['Destination', 'La Réunion'],
+    ['Mode de transport', 'Aérien'], ['Expéditions', 2], ['Nombre de colis', 3], ['Poids brut total (kg)', 21.4], [null, null],
   ]);
+  assert.ok(!JSON.stringify(rows).includes('DELIVREX') && !JSON.stringify(rows).includes('Exportateur'), 'The parties are those of Paramètres.');
   const head = rows.findIndex(row => row[0] === 'N° expédition');
   assert.deepEqual(rows[head], [...COMMERCIAL_INVOICE_COLUMNS]);
   assert.deepEqual(rows.slice(head + 1, head + 5), model.rows.map(row => [row.ref, row.clientName, row.hsCode, row.description, row.quantity, row.unitPrice, row.value, row.transport, row.total]));
@@ -219,11 +281,25 @@ test('the Excel sheet from the manifest: the same header, its own basis line and
   const { book, filename } = buildCommercialInvoiceWorkbook(invoice({ manifest: true }));
   assert.equal(filename, 'facture-commerciale-ENV-2026-036.xlsx');
   const rows = XLSX.utils.sheet_to_json(book.Sheets[COMMERCIAL_INVOICE_SHEET], { header: 1, raw: true, defval: null });
-  assert.deepEqual(rows.slice(0, 4).map(row => row.slice(0, 2)), [['FACTURE COMMERCIALE', null], [FROM_MANIFEST, null], ['N° de facture', 'ENV-2026-036'], ['Date', '07/10/2026']]);
+  assert.deepEqual(rows.slice(0, 3).map(row => row.slice(0, 2)), [['FACTURE COMMERCIALE', null], [FROM_MANIFEST, null], ['EXPÉDITEUR', 'Expedîle']]);
+  const number = rows.findIndex(row => row[0] === 'N° de facture');
+  assert.deepEqual(rows.slice(number, number + 2).map(row => row.slice(0, 2)), [['N° de facture', 'ENV-2026-036'], ['Date', '07/10/2026']]);
+});
+
+test('the Excel sheet: the parcels unknown are said, never a partial total', () => {
+  const model = invoice();
+  const rows = XLSX.utils.sheet_to_json(buildCommercialInvoiceWorkbook({ ...model, meta: { ...model.meta, parcels: null, weight: null } }).book.Sheets[COMMERCIAL_INVOICE_SHEET], { header: 1, raw: true, defval: null });
+  const value = label => rows.find(row => row[0] === label)[1];
+  assert.deepEqual([value('Nombre de colis'), value('Poids brut total (kg)')], ['Non renseigné', 'Non renseigné']);
 });
 
 test('a blocked invoice is never exported', () => {
   const blocked = { ...invoice(), ok: false };
   assert.throws(() => buildCommercialInvoicePDF(blocked), /points à corriger/);
   assert.throws(() => buildCommercialInvoiceWorkbook(blocked), /points à corriger/);
+  // The parties not set: the same dossiers are blocked, nothing is built.
+  const unset = buildCommercialInvoice({ envoi: DEPARTURE, items: dossiers(), categories, issuedAt: '2026-10-07T12:32:00Z' });
+  assert.deepEqual([unset.ok, unset.rows.length, unset.errors.map(error => error.kind)], [false, 4, ['exporter', 'invoice-consignee']]);
+  assert.throws(() => buildCommercialInvoicePDF(unset), /points à corriger/);
+  assert.throws(() => buildCommercialInvoiceWorkbook(unset), /points à corriger/);
 });

@@ -16,12 +16,17 @@
  *   closed 29 Oct; EXP-SHIPPED on the 1 Oct departure; EXP-PRO-PAID paid at
  *   23:00 Paris on 30 September by a professional client;
  * - commercial invoice (commercialInvoiceFixture, added by its scenarios):
+ *   Paramètres › Facture commerciale sets the exporter Expedîle (a test address:
+ *   the real one is not known yet), the consignee of La Réunion (Expedîle,
+ *   5 Chemin Grand Canal, Immeuble Thales, 97490 Sainte-Clotilde) and a default
+ *   one (Guadeloupe, the departure that left, has none of its own);
  *   EXP-LOAD-1 gets a saved quote (two articles, 122,50 € of transport),
  *   EXP-LOAD-PRO (Lagon Services SARL, paid, one parcel of 8 kg, its own article
- *   lines, 65 € of transport) and EXP-LOAD-WAIT (awaiting payment) join the
- *   15 Oct departure; EXP-SHIPPED's frozen manifest carries the same quote. The
- *   invoice exported before the departure is dated by the clock (23 h 30 Paris),
- *   the manifest's by its confirmation (8 h Paris on 1 Oct). */
+ *   lines, 65 € of transport) and EXP-LOAD-WAIT (awaiting payment, the same
+ *   quote as EXP-LOAD-1) join the 15 Oct departure: one invoice with the three;
+ *   EXP-SHIPPED's frozen manifest carries the same quote. The invoice exported
+ *   before the departure is dated by the clock (23 h 30 Paris), the manifest's by
+ *   its confirmation (8 h Paris on 1 Oct). */
 const { chromium } = require('playwright');
 const AxeBuilder = require('@axe-core/playwright').default;
 const assert = require('node:assert/strict');
@@ -78,11 +83,23 @@ const only = (...granted) => Object.fromEntries(PERMISSIONS.map(key => [key, gra
 const ALL_PERMISSIONS = ['perm_colis_receptionner', 'perm_colis_mesurer', 'perm_colis_modifier_dims', 'perm_colis_demander_feuvert', 'perm_colis_valider_feuvert', 'perm_colis_preparer', 'perm_colis_calculer_devis', 'perm_colis_envoyer_devis', 'perm_colis_confirmer_paiement', 'perm_colis_affecter_envoi', 'perm_colis_expedier', 'perm_colis_changer_statut_expedition', 'perm_colis_annuler', 'perm_colis_revenir_arriere', 'perm_colis_archiver', 'perm_clients_voir', 'perm_clients_creer', 'perm_clients_modifier', 'perm_clients_supprimer', 'perm_clients_modifier_abonnement', 'perm_clients_voir_finances', 'perm_factures_voir', 'perm_factures_ajouter', 'perm_factures_valider', 'perm_factures_refuser', 'perm_factures_ocr', 'perm_factures_modifier_articles', 'perm_comm_telegram', 'perm_comm_email', 'perm_comm_demander_facture', 'perm_comm_message_libre', 'perm_comm_voir_chat_autres', 'perm_envois_voir', 'perm_envois_creer', 'perm_envois_modifier', 'perm_envois_reaffecter', 'perm_envois_etiquettes', 'perm_finances_voir_transport', 'perm_finances_voir_taxes', 'perm_finances_voir_total', 'perm_finances_voir_kpi', 'perm_finances_exporter', 'perm_finances_modifier_tarifs', 'perm_export_colis', 'perm_export_factures', 'perm_export_dau', 'perm_export_recap_pro', 'perm_admin_utilisateurs', 'perm_admin_categories', 'perm_admin_templates', 'perm_admin_produits_interdits', 'perm_admin_audit', 'perm_admin_parametres'];
 const LOGISTICIEN_DEFAULTS = Object.fromEntries(ALL_PERMISSIONS.map(key => [key, !key.startsWith('perm_admin_') && !['perm_clients_supprimer', 'perm_finances_voir_kpi', 'perm_clients_modifier_abonnement'].includes(key)]));
 // What each edition of the commercial invoice prints under its header (Paris time).
-const INVOICE_BEFORE_DEPARTURE = 'Établie avant la confirmation du départ, d’après les dossiers prêts à charger le 07/10/2026 à 23 h 30 (heure de Paris).';
+const INVOICE_BEFORE_DEPARTURE = 'Établie avant la confirmation du départ, d’après tous les dossiers affectés au départ le 07/10/2026 à 23 h 30 (heure de Paris).';
 const INVOICE_FROM_MANIFEST = 'Établie d’après le manifeste du départ confirmé le 01/10/2026 à 8 h (heure de Paris).';
 const DEFINITIVE_NOTE = 'Une fois le départ confirmé, la facture définitive est établie d’après son manifeste.';
+const ONE_INVOICE = 'Une seule facture avec tous les dossiers affectés au départ.';
 const ASK_THE_DIRECTION = 'Le code SH d’un article vient de sa catégorie : demandez à la direction de compléter son code douanier dans Paramètres › Catégories et taxes, puis relancez l’export.';
 const PORCELAINE_WITHOUT_CODE = 'EXP-LOAD-PRO : code SH manquant pour « Tasses en porcelaine » (catégorie « Porcelaine »)';
+// Paramètres › Facture commerciale (app_settings.business.factureCommerciale). The exporter's address is a test value.
+const EXPORTER = { nom: 'Expedîle', adresse: '12 rue des Entrepôts', codePostal: '93290', ville: 'Tremblay-en-France', pays: 'France', email: 'contact@expedile.fr', siret: '12345678900012', eori: 'FR12345678900012' };
+const REUNION_CONSIGNEE = { nom: 'Expedîle', adresse: '5 Chemin Grand Canal', complement: 'Immeuble Thales', codePostal: '97490', ville: 'Sainte-Clotilde', pays: 'La Réunion (France)' };
+const DEFAULT_CONSIGNEE = { nom: 'Transit Caraïbes Océan Indien', adresse: '2 quai des Douanes', codePostal: '97110', ville: 'Pointe-à-Pitre', pays: 'Guadeloupe (France)' };
+const EXPORTER_LINES = ['Expedîle', '12 rue des Entrepôts', '93290 Tremblay-en-France', 'France', 'contact@expedile.fr', 'SIRET 12345678900012 · EORI FR12345678900012'];
+const REUNION_LINES = ['Expedîle', '5 Chemin Grand Canal', 'Immeuble Thales', '97490 Sainte-Clotilde', 'La Réunion (France)'];
+const DEFAULT_LINES = ['Transit Caraïbes Océan Indien', '2 quai des Douanes', '97110 Pointe-à-Pitre', 'Guadeloupe (France)'];
+const EXPORTER_TO_COMPLETE = 'Complétez l’expéditeur dans Paramètres › Facture commerciale : adresse, code postal, ville, pays.';
+const REUNION_CONSIGNEE_TO_SET = 'Renseignez le destinataire de la facture pour La Réunion (ou le destinataire par défaut) dans Paramètres › Facture commerciale.';
+const ASK_THE_DIRECTION_FOR_THE_PARTIES = 'Demandez à la direction de compléter Paramètres › Facture commerciale, puis relancez l’export.';
+const WAIT_WITHOUT_QUOTE = 'EXP-LOAD-WAIT : devis non enregistré : enregistrez son devis ou retirez-le du départ.';
 const box = (dimL, dimW, dimH, poids) => ({ dimL, dimW, dimH, poids });
 const OLD_WORDINGS = /Sans horaire de clôture|aucune urgence horaire|Horaire de clôture à préciser|heure locale|Aucun départ dans cette vue/;
 
@@ -683,7 +700,8 @@ async function main() {
     }, { role: 'logisticien', permissions: only('perm_envois_voir', 'perm_export_colis') });
 
     // ── 9b. Commercial invoice ──────────────────────────────────────────
-    // Before the departure: its dossiers ready to load, read again at each export; the others listed.
+    // Before the departure: one invoice with every dossier assigned to it (the one awaiting payment too), read again
+    // at each export; at its top, the exporter and the consignee of La Réunion of Paramètres › Facture commerciale.
     for (const [width, theme] of [[1440, 'light'], [390, 'dark']]) await scenario(`commercial-invoice-before-departure-pdf-and-excel-${width}-${theme}`, async f => {
       await openPage(f);
       const target = card(f, 'ENV-2026-045');
@@ -692,6 +710,7 @@ async function main() {
         const height = await element.evaluate(node => node.getBoundingClientRect().height);
         assert.ok(height >= 44, `${label}: ${height}px`);
       }
+      assert.equal(normalize(await invoice.locator('.departure-invoice-help').first().textContent()), ONE_INVOICE);
       // The departure's own dossiers (envoi_id filter): a background refresh of the whole list does not count.
       const reads = () => f.requests.filter(request => request.method === 'GET' && request.path.endsWith('/rest/v1/colis') && /envoi_id=eq\./.test(request.search || '')).length;
       // Under the buttons: the definitive invoice comes from the manifest; the buttons are described by it.
@@ -705,38 +724,37 @@ async function main() {
       assert.equal(file.name, 'facture-commerciale-ENV-2026-045-avant-depart.pdf', 'The edition before the departure never takes the manifest’s file name.');
       assert.ok(reads() > before, 'The dossiers are read again from the server at the export.');
       const items = await pdfItems(file.path);
-      for (const expected of ['FACTURE COMMERCIALE', INVOICE_BEFORE_DEPARTURE, 'GROUPE DELIVREX', 'ENV-2026-045', '07/10/2026', '15/10/2026', 'La Réunion', 'Aérien', '27,5 kg',
+      for (const expected of ['FACTURE COMMERCIALE', INVOICE_BEFORE_DEPARTURE, 'EXPÉDITEUR', ...EXPORTER_LINES, 'DESTINATAIRE', ...REUNION_LINES,
+        'ENV-2026-045', '07/10/2026', '15/10/2026', 'La Réunion', 'Aérien', '47 kg',
         'N° expédition', 'Destinataire', 'Code SH', 'Description', 'Qté', 'P.U. HT', 'Valeur HT',
         'EXP-LOAD-1', 'Hoarau Flavie', '42050090', 'Mini scelleuse', '16,64 €', '76,75 €', '93,39 €', '39241000', 'Organisateur évier', '45,75 €', '55,67 €',
         'EXP-LOAD-PRO', 'Lagon Services SARL', '0901210000', 'Café torréfié 1 kg', '15,00 €', '60,00 €', '37,14 €', '97,14 €', '6911100000', 'Tasses en porcelaine', '27,86 €', '72,86 €',
-        '131,56 €', '187,50 €', '319,06 €',
+        'EXP-LOAD-WAIT', '158,12 €', '310,00 €', '468,12 €',
         'Transport réparti au prorata de la valeur des articles (quantité × prix unitaire HT). Valeurs en euros.', 'Document généré par Expedîle — usage douanier uniquement'])
         assert.ok(items.includes(expected), `PDF: « ${expected} »`);
-      for (const absent of ['EXP-LOAD-WAIT', 'Ancienne commande remplacée', 'undefined', 'NaN', 'rovisoire']) assert.ok(!items.join('\n').includes(absent), `PDF: no « ${absent} »`);
-      // What the invoice leaves out, with what it waits for.
-      const excluded = invoice.locator('.departure-invoice-excluded');
-      await excluded.getByRole('heading', { name: 'Non inclus (1)', exact: true }).waitFor();
-      assert.equal(normalize(await excluded.locator('.departure-invoice-ref').textContent()), 'EXP-LOAD-WAIT');
-      assert.equal(normalize(await excluded.locator('.departure-invoice-reason').textContent()), 'Paiement non confirmé');
-      const payment = excluded.getByRole('link', { name: 'Vérifier le paiement EXP-LOAD-WAIT', exact: true });
-      const link = new URL(await payment.getAttribute('href'), base);
-      assert.deepEqual([link.pathname, link.searchParams.get('section'), link.searchParams.get('returnTo')], [`/colis/${DOSSIER.loadWait}`, 'paiement', '/departs']);
-      assert.ok(await payment.evaluate(node => node.getBoundingClientRect().height) >= 44, 'The link is a 44 px target.');
+      for (const absent of ['DELIVREX', 'ROISSY', 'Ancienne commande remplacée', 'undefined', 'NaN', 'rovisoire']) assert.ok(!items.join('\n').includes(absent), `PDF: no « ${absent} »`);
+      // Every assigned dossier is in the invoice, the one awaiting payment too: nothing is listed apart.
+      assert.equal(await invoice.getByText(/Non inclus|prêts à charger/).count(), 0);
       const sheet = await downloadOf(f, excel, `invoice-before-${width}-${theme}`);
       assert.equal(sheet.name, 'facture-commerciale-ENV-2026-045-avant-depart.xlsx');
       const book = XLSX.readFile(sheet.path, { cellNF: true });
       assert.deepEqual(book.SheetNames, ['Facture commerciale']);
       const rows = XLSX.utils.sheet_to_json(book.Sheets['Facture commerciale'], { header: 1, raw: true, defval: null });
       assert.deepEqual(rows.slice(0, 2).map(row => row[0]), ['FACTURE COMMERCIALE', INVOICE_BEFORE_DEPARTURE]);
-      assert.deepEqual(rows.slice(2, 10).map(row => row.slice(0, 2)), [['N° de facture', 'ENV-2026-045'], ['Date', '07/10/2026'], ['Départ prévu', '15/10/2026'], ['Destination', 'La Réunion'], ['Mode de transport', 'Aérien'], ['Expéditions', 2], ['Nombre de colis', 3], ['Poids brut total (kg)', 27.5]]);
+      // The two parties as a header block: the label beside the first line, one line per row.
+      const party = (label, lines) => lines.map((line, index) => [index ? null : label, line]);
+      assert.deepEqual(rows.slice(2, 14).map(row => row.slice(0, 2)), [...party('EXPÉDITEUR', EXPORTER_LINES), ...party('DESTINATAIRE', REUNION_LINES), [null, null]]);
+      assert.deepEqual(rows.slice(14, 22).map(row => row.slice(0, 2)), [['N° de facture', 'ENV-2026-045'], ['Date', '07/10/2026'], ['Départ prévu', '15/10/2026'], ['Destination', 'La Réunion'], ['Mode de transport', 'Aérien'], ['Expéditions', 3], ['Nombre de colis', 5], ['Poids brut total (kg)', 47]]);
       const head = rows.findIndex(row => row[0] === 'N° expédition');
-      assert.deepEqual(rows.slice(head, head + 6), [
+      assert.deepEqual(rows.slice(head, head + 8), [
         ['N° expédition', 'Destinataire', 'Code SH', 'Description', 'Qté', 'P.U. HT', 'Valeur HT', 'Transport affecté', 'Total'],
         ['EXP-LOAD-1', 'Hoarau Flavie', '42050090', 'Mini scelleuse', 1, 16.64, 16.64, 76.75, 93.39],
         ['EXP-LOAD-1', 'Hoarau Flavie', '39241000', 'Organisateur évier', 1, 9.92, 9.92, 45.75, 55.67],
         ['EXP-LOAD-PRO', 'Lagon Services SARL', '0901210000', 'Café torréfié 1 kg', 4, 15, 60, 37.14, 97.14],
         ['EXP-LOAD-PRO', 'Lagon Services SARL', '6911100000', 'Tasses en porcelaine', 6, 7.5, 45, 27.86, 72.86],
-        ['Total', null, null, null, null, null, 131.56, 187.5, 319.06],
+        ['EXP-LOAD-WAIT', 'Hoarau Flavie', '42050090', 'Mini scelleuse', 1, 16.64, 16.64, 76.75, 93.39],
+        ['EXP-LOAD-WAIT', 'Hoarau Flavie', '39241000', 'Organisateur évier', 1, 9.92, 9.92, 45.75, 55.67],
+        ['Total', null, null, null, null, null, 158.12, 310, 468.12],
       ]);
       const code = book.Sheets['Facture commerciale'][XLSX.utils.encode_cell({ r: head + 3, c: 2 })];
       assert.deepEqual([code.t, code.v], ['s', '0901210000'], 'The HS code stays text, with its leading zero.');
@@ -768,7 +786,7 @@ async function main() {
         assert.equal(normalize(await alert.locator('.departure-invoice-fix').textContent()), 'Le code SH d’un article vient de sa catégorie : complétez son code douanier dans Paramètres › Catégories et taxes, puis relancez l’export. Compléter les catégories');
         assert.equal(await alert.getByRole('link', { name: 'Compléter les catégories', exact: true }).getAttribute('href'), '/settings?tab=categories');
         for (const element of [open, alert.getByRole('link', { name: 'Compléter les catégories', exact: true })]) assert.ok(await element.evaluate(node => node.getBoundingClientRect().height) >= 44);
-        await invoice.getByRole('heading', { name: 'Non inclus (1)', exact: true }).waitFor();
+        assert.equal(await invoice.getByText(/Non inclus/).count(), 0, 'One invoice for the departure: nothing listed apart.');
       }
       assert.deepEqual(downloads, [], 'Nothing is downloaded while a code is missing.');
       noWrite(f);
@@ -805,8 +823,6 @@ async function main() {
       // The category code is the only fix: the direction is asked, the dossier needs nobody else.
       assert.equal(normalize(await alert.innerText()), `Facture non générée : 1 point à corriger. ${PORCELAINE_WITHOUT_CODE} ${ASK_THE_DIRECTION}`);
       assert.equal(await alert.getByRole('link').count(), 0);
-      // The payment step opens for the whole team: its link stays in « Non inclus ».
-      await invoice.getByRole('link', { name: 'Vérifier le paiement EXP-LOAD-WAIT', exact: true }).waitFor();
       // A category to choose in the dossier's invoices: who can do it, instead of a link.
       f.tables.lignes.find(row => row.id === 'l-inv-p2').categorie_id = null;
       await pdf.click();
@@ -869,16 +885,19 @@ async function main() {
       assert.equal(manifests(), beforeManifests + 1, 'Read from the confirmed manifest');
       assert.equal(colisReads(), beforeReads, 'never from the current dossiers');
       const items = await pdfItems(file.path);
-      for (const expected of ['FACTURE COMMERCIALE', INVOICE_FROM_MANIFEST, 'ENV-2026-034', '01/10/2026', 'Guadeloupe', 'Aérien', '19,5 kg', 'EXP-SHIPPED', 'Hoarau Flavie', '42050090', '39241000', '76,75 €', '45,75 €', '26,56 €', '122,50 €', '149,06 €'])
+      // Guadeloupe has no consignee of its own: the default one is printed.
+      for (const expected of ['FACTURE COMMERCIALE', INVOICE_FROM_MANIFEST, 'EXPÉDITEUR', ...EXPORTER_LINES, 'DESTINATAIRE', ...DEFAULT_LINES, 'ENV-2026-034', '01/10/2026', 'Guadeloupe', 'Aérien', '19,5 kg', 'EXP-SHIPPED', 'Hoarau Flavie', '42050090', '39241000', '76,75 €', '45,75 €', '26,56 €', '122,50 €', '149,06 €'])
         assert.ok(items.includes(expected), `PDF: « ${expected} »`);
+      assert.ok(!items.includes('5 Chemin Grand Canal'), 'Not the consignee of La Réunion.');
       assert.ok(!items.includes(INVOICE_BEFORE_DEPARTURE));
       const sheet = await downloadOf(f, excel, `invoice-manifest-${width}-${theme}`);
       assert.equal(sheet.name, 'facture-commerciale-ENV-2026-034.xlsx');
       const rows = XLSX.utils.sheet_to_json(XLSX.readFile(sheet.path).Sheets['Facture commerciale'], { header: 1, raw: true, defval: null });
-      assert.deepEqual(rows.slice(0, 3).map(row => row.slice(0, 2)), [['FACTURE COMMERCIALE', null], [INVOICE_FROM_MANIFEST, null], ['N° de facture', 'ENV-2026-034']]);
+      assert.deepEqual(rows.slice(0, 3).map(row => row.slice(0, 2)), [['FACTURE COMMERCIALE', null], [INVOICE_FROM_MANIFEST, null], ['EXPÉDITEUR', 'Expedîle']]);
+      assert.deepEqual(rows.find(row => row[0] === 'DESTINATAIRE').slice(0, 2), ['DESTINATAIRE', 'Transit Caraïbes Océan Indien']);
+      assert.deepEqual(rows.find(row => row[0] === 'N° de facture').slice(0, 2), ['N° de facture', 'ENV-2026-034']);
       const head = rows.findIndex(row => row[0] === 'N° expédition');
       assert.deepEqual(rows.slice(head + 1, head + 4).map(row => [row[0], row[2], row[7], row[8]]), [['EXP-SHIPPED', '42050090', 76.75, 93.39], ['EXP-SHIPPED', '39241000', 45.75, 55.67], ['Total', null, 122.5, 149.06]]);
-      assert.equal(await invoice.locator('.departure-invoice-excluded').count(), 0, 'Nothing is left out of a confirmed manifest.');
       noWrite(f);
       await left.screenshot({ path: path.join(output, `commercial-invoice-manifest-${width}-${theme}.png`) });
       await axe(f, `commercial invoice manifest ${width} ${theme}`);
@@ -888,21 +907,83 @@ async function main() {
       await openPage(f, `?envoi=${DEPARTURE.reunion15}`);
       const target = card(f, 'ENV-2026-045');
       const before = await openInvoice(f, target);
-      assert.equal((await downloadOf(f, before.pdf, 'invoice-cleared')).name, 'facture-commerciale-ENV-2026-045-avant-depart.pdf');
-      await before.invoice.getByRole('heading', { name: 'Non inclus (1)', exact: true }).waitFor();
-      // A colleague confirms the loading (EXP-LOAD-1 leaves); « Actualiser » reads the departure again.
+      // EXP-LOAD-WAIT has no quote yet: the invoice of the whole departure is blocked.
+      await before.pdf.click();
+      await before.invoice.getByRole('alert').filter({ hasText: WAIT_WITHOUT_QUOTE }).waitFor();
+      // A colleague confirms the loading (EXP-LOAD-1 leaves, the others wait); « Actualiser » reads the departure again.
       Object.assign(f.tables.envois.find(row => row.id === DEPARTURE.reunion15), { ...f.left, updated_at: '2026-10-07T21:00:00Z' });
       Object.assign(f.tables.colis.find(row => row.id === DOSSIER.load), { statut: 'expedie', date_expedition: f.left.departed_at });
       await page(f).getByRole('button', { name: 'Actualiser', exact: true }).click();
       await target.getByRole('button', { name: 'Voir le manifeste', exact: true }).waitFor();
-      assert.equal(await target.locator('.departure-invoice-excluded').count(), 0, 'The « Non inclus » list of the loading is gone.');
+      assert.equal(await target.getByText(WAIT_WITHOUT_QUOTE).count(), 0, 'What blocked the invoice before the departure is gone.');
       const after = await openInvoice(f, target);
       await after.invoice.getByText('Depuis le manifeste confirmé', { exact: false }).waitFor();
       assert.equal(await after.invoice.getByRole('alert').count(), 0);
       assert.equal(await after.invoice.getByText(DEFINITIVE_NOTE, { exact: true }).count(), 0, 'Once it has left, the invoice is the manifest’s.');
       assert.equal((await downloadOf(f, after.pdf, 'invoice-cleared-after')).name, 'facture-commerciale-ENV-2026-045.pdf');
       noWrite(f);
-    }, { before: f => commercialInvoiceFixture(f) });
+    }, { before: async f => { await commercialInvoiceFixture(f); f.tables.colis.find(row => row.id === DOSSIER.loadWait).devis_snapshot = null; } });
+    // Paramètres › Facture commerciale not set yet: nothing is downloaded; who sets the parameters is taken there,
+    // the others ask the direction.
+    for (const [role, width, theme] of [['directeur', 1440, 'light'], ['directeur', 390, 'dark'], ['logisticien', 390, 'light'], ['logisticien', 1440, 'dark']]) await scenario(`commercial-invoice-blocked-until-the-parties-are-set-${role}-${width}-${theme}`, async f => {
+      const downloads = [];
+      f.page.on('download', item => downloads.push(item.suggestedFilename()));
+      await openPage(f);
+      const { documents, invoice, pdf, excel } = await openInvoice(f, card(f, 'ENV-2026-045'));
+      const alert = invoice.getByRole('alert').filter({ hasText: 'Facture non générée : 2 points à corriger.' });
+      for (const button of [pdf, excel]) {
+        await Promise.all([
+          f.page.waitForResponse(response => response.url().includes('/rest/v1/colis?') && response.request().method() === 'GET'),
+          button.click(),
+        ]);
+        await alert.waitFor();
+        if (role === 'directeur') {
+          assert.equal(normalize(await alert.innerText()), `Facture non générée : 2 points à corriger. ${EXPORTER_TO_COMPLETE} ${REUNION_CONSIGNEE_TO_SET} Ouvrir Paramètres › Facture commerciale`);
+          const settings = alert.getByRole('link', { name: 'Ouvrir Paramètres › Facture commerciale', exact: true });
+          assert.equal(await settings.getAttribute('href'), '/settings?tab=facture');
+          assert.ok(await settings.evaluate(node => node.getBoundingClientRect().height) >= 44, 'The link is a 44 px target.');
+        } else {
+          assert.equal(normalize(await alert.innerText()), `Facture non générée : 2 points à corriger. ${EXPORTER_TO_COMPLETE} ${REUNION_CONSIGNEE_TO_SET} ${ASK_THE_DIRECTION_FOR_THE_PARTIES}`);
+          assert.equal(await alert.getByRole('link').count(), 0, 'No link to a Paramètres page this person cannot open.');
+        }
+      }
+      assert.deepEqual(downloads, [], 'Nothing is downloaded while a party is missing.');
+      noWrite(f);
+      await documents.screenshot({ path: path.join(output, `commercial-invoice-parties-missing-${role}-${width}-${theme}.png`) });
+      await axe(f, `commercial invoice parties missing ${role} ${width} ${theme}`);
+    }, { role, width, theme, permissions: role === 'logisticien' ? LOGISTICIEN_DEFAULTS : null, before: f => commercialInvoiceFixture(f, { parties: null }) });
+    // An assigned dossier without its quote blocks the invoice of the whole departure until its quote is saved
+    // (read again at the next click); the dossier opens on its quote.
+    for (const [width, theme] of [[390, 'light'], [1440, 'dark']]) await scenario(`commercial-invoice-blocked-by-an-assigned-dossier-without-quote-${width}-${theme}`, async f => {
+      await openPage(f);
+      const { documents, invoice, pdf } = await openInvoice(f, card(f, 'ENV-2026-045'));
+      await pdf.click();
+      const alert = invoice.getByRole('alert').filter({ hasText: 'Facture non générée : 1 point à corriger.' });
+      await alert.waitFor();
+      assert.equal(normalize(await alert.innerText()), `Facture non générée : 1 point à corriger. ${WAIT_WITHOUT_QUOTE} Ouvrir EXP-LOAD-WAIT`);
+      const open = new URL(await alert.getByRole('link', { name: 'Ouvrir EXP-LOAD-WAIT', exact: true }).getAttribute('href'), base);
+      assert.deepEqual([open.pathname, open.searchParams.get('section'), open.searchParams.get('returnTo')], [`/colis/${DOSSIER.loadWait}`, 'devis', '/departs']);
+      await documents.screenshot({ path: path.join(output, `commercial-invoice-without-quote-${width}-${theme}.png`) });
+      await axe(f, `commercial invoice without quote ${width} ${theme}`);
+      // Its quote saved meanwhile: the next export reads it and includes the dossier.
+      f.tables.colis.find(row => row.id === DOSSIER.loadWait).devis_snapshot = f.tables.colis.find(row => row.id === DOSSIER.load).devis_snapshot;
+      const file = await downloadOf(f, pdf, `invoice-without-quote-${width}-${theme}`);
+      assert.equal(file.name, 'facture-commerciale-ENV-2026-045-avant-depart.pdf');
+      assert.ok((await pdfItems(file.path)).includes('EXP-LOAD-WAIT'));
+      assert.equal(await invoice.getByRole('alert').count(), 0, 'The blocking point is gone with the download.');
+      noWrite(f);
+    }, { width, theme, before: async f => { await commercialInvoiceFixture(f); f.tables.colis.find(row => row.id === DOSSIER.loadWait).devis_snapshot = null; } });
+    // After the departure: a destination without its own consignee and no default one is named.
+    await scenario('commercial-invoice-after-departure-blocked-without-a-consignee-for-its-destination', async f => {
+      await openPage(f, '?vue=partis');
+      const { invoice, pdf } = await openInvoice(f, card(f, 'ENV-2026-034'));
+      await pdf.click();
+      const alert = invoice.getByRole('alert').filter({ hasText: 'Facture non générée : 1 point à corriger.' });
+      await alert.waitFor();
+      assert.equal(normalize(await alert.innerText()), 'Facture non générée : 1 point à corriger. Renseignez le destinataire de la facture pour la Guadeloupe (ou le destinataire par défaut) dans Paramètres › Facture commerciale. Ouvrir Paramètres › Facture commerciale');
+      await axe(f, 'commercial invoice manifest without consignee');
+      noWrite(f);
+    }, { before: f => commercialInvoiceFixture(f, { parties: 'reunion' }) });
 
     // ── 10. French numbers ──────────────────────────────────────────────
     await scenario('weights-in-french-in-loading-review-and-manifest', async f => {
@@ -1128,8 +1209,12 @@ async function trackAssignments(f) {
 /** The commercial invoice's data (see the header): HS codes on the categories, EXP-LOAD-1's
  * saved quote, a professional and a dossier awaiting payment on the 15 Oct departure, and
  * EXP-SHIPPED's frozen manifest with the same quote, whose plastic category had no HS code
- * at the confirmation. `missingCode`: the porcelain category has none either. */
-async function commercialInvoiceFixture(f, { missingCode = false } = {}) {
+ * at the confirmation. `missingCode`: the porcelain category has none either. `parties`:
+ * Paramètres › Facture commerciale, 'all' (the exporter, La Réunion's consignee and the
+ * default one), 'reunion' (no default consignee) or null (nothing set yet). */
+async function commercialInvoiceFixture(f, { missingCode = false, parties = 'all' } = {}) {
+  const business = f.tables.app_settings.find(row => row.key === 'business').value;
+  if (parties) business.factureCommerciale = { expediteur: EXPORTER, destinataires: { 974: REUNION_CONSIGNEE, ...(parties === 'all' ? { defaut: DEFAULT_CONSIGNEE } : {}) } };
   f.tables.categories.push(
     { id: 'cat-cuir', label: 'Cuir', code_hs: '4205', position: 2 },
     { id: 'cat-plastique', label: 'Vaisselle plastique', code_hs: '39241000', position: 3 },

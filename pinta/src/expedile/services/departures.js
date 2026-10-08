@@ -1,5 +1,4 @@
 import { buildCommercialInvoice } from '../domain/commercialInvoice';
-import { loadableDossiers } from '../domain/departureBoard';
 import { departureReadiness } from '../domain/departureReadiness';
 import { supabase } from '../lib/supabase';
 import { fetchColis, mapColis, mapClient, mapEnvoi, mapLigne, mapFact } from '../lib/supabaseData';
@@ -52,30 +51,32 @@ export async function exportDeparture(envoiId, type) {
   }
 }
 
-/** The commercial invoice before the departure (domain/commercialInvoice.js): its dossiers
- *  read again from the server, like the loading review; those ready to load are included,
- *  the others listed with their reason. It says so, with the instant of the export
- *  (meta.basis 'loading', meta.issuedAt), and its files end with « -avant-depart ». */
-export async function loadingCommercialInvoice(envoi, { clients = [], categories = [], issuedAt = Date.now() } = {}) {
-  const dossiers = loadableDossiers(envoi, await fetchColis(null, { envoiId: envoi.id }));
+/** The commercial invoice before the departure (domain/commercialInvoice.js): one invoice
+ *  with every dossier assigned to the departure, read again from the server like the loading
+ *  review, paid and prepared or not (the cancelled, archived and shipped ones are left out by
+ *  the invoice itself); `identity`: its exporter and consignee, invoiceIdentity(settings) of
+ *  Paramètres › Facture commerciale. It says so, with the instant of the export (meta.basis
+ *  'loading', meta.issuedAt), and its files end with « -avant-depart ». */
+export async function loadingCommercialInvoice(envoi, { clients = [], categories = [], identity = null, issuedAt = Date.now() } = {}) {
+  const dossiers = await fetchColis(null, { envoiId: envoi.id });
   return buildCommercialInvoice({
-    envoi, categories, issuedAt,
+    envoi, categories, identity, issuedAt,
     items: dossiers.map((colis) => ({ colis, client: clients.find((client) => client.id === colis.clientId) || null })),
   });
 }
 
 /** The commercial invoice of a departure that left, from its confirmed manifest: the loaded
  *  dossiers, their clients, articles and quotes as frozen at the confirmation, dated at that
- *  instant (meta.basis 'manifest'). A category that had no HS code then takes the one
- *  completed since in the categories (decision D33: a missing code is completed there, never
- *  invented). */
-export async function manifestCommercialInvoice(envoiId, { categories = [] } = {}) {
+ *  instant (meta.basis 'manifest'), with the parties of Paramètres › Facture commerciale
+ *  (`identity`). A category that had no HS code then takes the one completed since in the
+ *  categories (decision D33: a missing code is completed there, never invented). */
+export async function manifestCommercialInvoice(envoiId, { categories = [], identity = null } = {}) {
   const manifest = await departureManifest(envoiId);
   const current = new Map(categories.map((category) => [category.id, category]));
   const frozen = manifest.categories.map((category) => ({ ...category, codeHs: category.codeHs || current.get(category.id)?.codeHs || '' }));
   const known = new Set(frozen.map((category) => category.id));
   return buildCommercialInvoice({
-    envoi: manifest.envoi, issuedAt: manifest.confirmedAt, confirmed: true,
+    envoi: manifest.envoi, identity, issuedAt: manifest.confirmedAt, confirmed: true,
     items: manifest.colis.map((colis) => ({ colis, client: manifest.clients.find((client) => client.id === colis.clientId) || null })),
     categories: [...frozen, ...categories.filter((category) => !known.has(category.id))],
   });

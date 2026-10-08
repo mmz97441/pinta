@@ -85,12 +85,13 @@ function LeftOut({ result }) {
 }
 
 /**
- * `print(dossiers)` builds and opens their labels; `state.phase` is idle, preparing (module
- * loading), done (`state.result`: count, method, the dossiers left out as `lines` and `groups`)
- * or error (`state.message`).
+ * `print(dossiers)` builds and opens their labels, with the sender of Paramètres › Facture
+ * commerciale (the settings); `state.phase` is idle, preparing (module loading), done
+ * (`state.result`: count, method, the dossiers left out as `lines` and `groups`) or error
+ * (`state.message`).
  */
 export function useParcelLabels() {
-  const { getClient } = useApp();
+  const { getClient, settings } = useApp();
   const [state, setState] = useState({ phase: 'idle' });
   const busy = useRef(false);
   const mounted = useRef(true);
@@ -106,7 +107,7 @@ export function useParcelLabels() {
     if (busy.current) return;
     const id = ++attempt.current;
     if (labelsModule) {
-      try { settle(id, { phase: 'done', result: labelsModule.printParcelLabels(dossiers, { getClient }) }); }
+      try { settle(id, { phase: 'done', result: labelsModule.printParcelLabels(dossiers, { getClient, settings }) }); }
       catch (error) { settle(id, { phase: 'error', message: failureMessage(error) }); }
       return;
     }
@@ -114,13 +115,13 @@ export function useParcelLabels() {
     const target = openWaitingWindow();
     settle(id, { phase: 'preparing' });
     loadLabels()
-      .then(module => settle(id, { phase: 'done', result: module.printParcelLabels(dossiers, { getClient, target }) }))
+      .then(module => settle(id, { phase: 'done', result: module.printParcelLabels(dossiers, { getClient, target, settings }) }))
       .catch(error => {
         if (target && !target.closed) target.close();
         settle(id, { phase: 'error', message: failureMessage(error) });
       })
       .finally(() => { busy.current = false; });
-  }, [getClient, settle]);
+  }, [getClient, settings, settle]);
   // A print under way keeps its outcome: the window it opened belongs to it.
   const reset = useCallback(() => { if (busy.current) return; attempt.current += 1; if (mounted.current) setState({ phase: 'idle' }); }, []);
   return { state, print, reset };

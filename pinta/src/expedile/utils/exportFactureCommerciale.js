@@ -1,38 +1,46 @@
 import * as XLSX from 'xlsx';
 import {
-  COMMERCIAL_INVOICE_COLUMNS, COMMERCIAL_INVOICE_EXPORTER, COMMERCIAL_INVOICE_FOOTER, COMMERCIAL_INVOICE_NOTE,
+  COMMERCIAL_INVOICE_COLUMNS, COMMERCIAL_INVOICE_FOOTER, COMMERCIAL_INVOICE_NOTE, COMMERCIAL_INVOICE_PARTIES,
   commercialInvoiceBasis, commercialInvoiceFileName, invoiceDayLabel,
 } from '../domain/commercialInvoice.js';
+import { partyLines } from '../domain/invoiceIdentity.js';
 
 // The commercial invoice of a departure (domain/commercialInvoice.js) as an Excel sheet
 // « Facture commerciale »: the title and the line saying which edition it is (before the
-// departure or from its manifest, and when), the departure, then the same columns as the
-// PDF. Amounts are numbers shown in euros (« 1 234,50 € » in French Excel), HS codes stay
-// text (leading zeros), the totals are sums of the article rows.
+// departure or from its manifest, and when), the exporter and the consignee (Paramètres ›
+// Facture commerciale: the label in column A, one printed line per row in column B), the
+// departure, then the same columns as the PDF. Amounts are numbers shown in euros
+// (« 1 234,50 € » in French Excel), HS codes stay text (leading zeros), the totals are sums
+// of the article rows.
 
 export const COMMERCIAL_INVOICE_SHEET = 'Facture commerciale';
 const MONEY_FORMAT = '#,##0.00 "€"';
 const MONEY_COLUMNS = [5, 6, 7, 8];
 const TOTAL_COLUMNS = [6, 7, 8];
 const cell = (sheet, r, c) => sheet[XLSX.utils.encode_cell({ r, c })];
+/** A party as rows: its label beside its first line, then one line per row. */
+const partyRows = (label, party) => partyLines(party).map((line, index) => [index === 0 ? label : null, line]);
 
 /** The workbook and its file name, « facture-commerciale-ENV-2026-036.xlsx » from the manifest,
  *  « facture-commerciale-ENV-2026-036-avant-depart.xlsx » before the departure (nothing is written). */
 export function buildCommercialInvoiceWorkbook(invoice) {
   if (!invoice?.ok) throw new Error('La facture commerciale comporte des points à corriger : aucun document n’est généré.');
   const { meta, rows, totals } = invoice;
+  const [exporterLabel, consigneeLabel] = COMMERCIAL_INVOICE_PARTIES;
   const header = [
     ['FACTURE COMMERCIALE'],
     [commercialInvoiceBasis(meta)],
+    ...partyRows(exporterLabel, meta.exporter),
+    ...partyRows(consigneeLabel, meta.consignee),
+    [],
     ['N° de facture', meta.number || 'Non renseigné'],
     ['Date', invoiceDayLabel(meta.date) || 'Non renseignée'],
     ['Départ prévu', invoiceDayLabel(meta.departureDate) || 'Non renseigné'],
     ['Destination', meta.destination || 'Non renseignée'],
     ...(meta.mode ? [['Mode de transport', meta.mode]] : []),
     ['Expéditions', meta.dossiers],
-    ['Nombre de colis', meta.parcels],
+    ['Nombre de colis', meta.parcels > 0 ? meta.parcels : 'Non renseigné'],
     ['Poids brut total (kg)', meta.weight > 0 ? meta.weight : 'Non renseigné'],
-    ['Exportateur', COMMERCIAL_INVOICE_EXPORTER.join(', ')],
     [],
   ];
   const columnsRow = header.length;

@@ -1,16 +1,22 @@
 import { DESTINATIONS } from '../constants/index.js';
 import { clientDisplayName } from './clientGroups.js';
+import { loadableDossiers } from './departureBoard.js';
 import { isoCalendarDay, parisCalendarDay } from './departureGroups.js';
 import { departureReadiness } from './departureReadiness.js';
 import { excludedInvoiceIds } from './invoiceDocuments.js';
+import { consigneeFor, invoiceIdentity, missingPartyFields } from './invoiceIdentity.js';
 import { parisDateTimeInput } from './parisTime.js';
 import { roundMoney } from './quote.js';
 import { allocateCents, savedQuoteBreakdown } from './quoteBreakdown.js';
 
 // The commercial invoice of a departure, handed to customs with the shipment (PDF and
-// Excel: utils/exportFactureCommerciPDF.js and utils/exportFactureCommerciale.js). One row
-// per article of each dossier: the dossier's EXP reference, the person it goes to, the
-// article's HS code, its value and the part of the dossier's transport it carries.
+// Excel: utils/exportFactureCommerciPDF.js and utils/exportFactureCommerciale.js). One
+// invoice per departure (decided with the user on 2026-10-08): at its top, the exporter
+// (Expedîle) and the consignee of the departure's destination, as set in Paramètres ›
+// Facture commerciale (domain/invoiceIdentity.js; a party is never invented: an incomplete
+// exporter or no consignee blocks the document); then one row per article of each dossier:
+// the dossier's EXP reference, the person it goes to, the article's HS code, its value and
+// the part of the dossier's transport it carries.
 //
 // Nothing is recalculated. A particulier's articles and transport shares are those of the
 // saved quote (quoteBreakdown.js), whose rules are quote.js and save_quote: the billed
@@ -20,15 +26,18 @@ import { allocateCents, savedQuoteBreakdown } from './quoteBreakdown.js';
 // article lines are used, without those of rejected, replaced or duplicate invoices (as
 // the quote does), and the quote's transport is shared the same way. A missing HS code
 // blocks the document: a code is never left empty nor invented (decision D33).
-// Two editions share the departure's number: before the departure, from the dossiers
-// ready to load at the export (basis 'loading', file « …-avant-depart »); once it has
-// left, from its confirmed manifest (basis 'manifest'). Each prints what it was
-// established from and when (commercialInvoiceBasis), the title stays « FACTURE
+// Two editions share the departure's number: before the departure, from every dossier
+// assigned to it at the export, paid and prepared or not, except the cancelled, archived
+// and shipped ones (as its loading: loadableDossiers; basis 'loading', file
+// « …-avant-depart »), each of them needing its saved quote, its articles and their HS
+// codes; once it has left, from its confirmed manifest (basis 'manifest'). Each prints what
+// it was established from and when (commercialInvoiceBasis), the title stays « FACTURE
 // COMMERCIALE ». Pure: no network; the issue instant is given by the caller (issuedAt).
 
 // The wording shared by the PDF and the Excel document.
 export const COMMERCIAL_INVOICE_COLUMNS = Object.freeze(['N° expédition', 'Destinataire', 'Code SH', 'Description', 'Qté', 'P.U. HT', 'Valeur HT', 'Transport affecté', 'Total']);
-export const COMMERCIAL_INVOICE_EXPORTER = Object.freeze(['GROUPE DELIVREX', '5 RUE DE COPENHAGUE', 'ROISSY POLE BAT AERONEF CS 13918', '95731 ROISSY CH DE GAULLE']);
+/** The two parties printed at the top of the documents: the exporter, then the consignee. */
+export const COMMERCIAL_INVOICE_PARTIES = Object.freeze(['EXPÉDITEUR', 'DESTINATAIRE']);
 export const COMMERCIAL_INVOICE_NOTE = 'Transport réparti au prorata de la valeur des articles (quantité × prix unitaire HT). Valeurs en euros.';
 export const COMMERCIAL_INVOICE_FOOTER = 'Document généré par Expedîle — usage douanier uniquement';
 
@@ -40,6 +49,36 @@ const isNumber = value => typeof value === 'number' && Number.isFinite(value);
 const toCents = value => Math.round(roundMoney(Number(value) || 0) * 100);
 const fromCents = value => value / 100;
 const quoted = text => `« ${text} »`;
+// « pour La Réunion », « pour la Guadeloupe »: the destination as a consignee of Paramètres › Facture commerciale.
+const FOR_DESTINATION = { 974: 'La Réunion', 976: 'Mayotte', 971: 'la Guadeloupe', 972: 'la Martinique' };
+const SETTINGS = 'Paramètres › Facture commerciale';
+// The points corrected in Paramètres › Facture commerciale rather than in a dossier.
+const IDENTITY_KINDS = new Set(['exporter', 'invoice-consignee']);
+
+/** The point is fixed in Paramètres › Facture commerciale (the exporter or the consignee), not in a dossier. */
+export const fixedInInvoiceSettings = error => IDENTITY_KINDS.has(error?.kind);
+
+/** What blocks the parties of the departure: an incomplete exporter, no consignee for the
+ *  destination nor a default one, or an incomplete consignee (never printed partly). */
+function identityErrors(exporter, consignee, destinationCode) {
+  const errors = [];
+  const point = (kind, message, extra = {}) => errors.push({ ref: null, colisId: null, kind, task: null, message, ...extra });
+  const missing = missingPartyFields(exporter);
+  if (missing.length) point('exporter', `Complétez l’expéditeur dans ${SETTINGS} : ${missing.join(', ')}.`, { missing });
+  const place = FOR_DESTINATION[destinationCode];
+  if (!consignee) {
+    point('invoice-consignee', place
+      ? `Renseignez le destinataire de la facture pour ${place} (ou le destinataire par défaut) dans ${SETTINGS}.`
+      : `Renseignez le destinataire de la facture par défaut dans ${SETTINGS}.`);
+    return errors;
+  }
+  const lacking = missingPartyFields(consignee);
+  if (lacking.length) {
+    const whose = consignee.source === 'destination' && place ? `le destinataire de la facture pour ${place}` : 'le destinataire de la facture par défaut';
+    point('invoice-consignee', `Complétez ${whose} dans ${SETTINGS} : ${lacking.join(', ')}.`, { missing: lacking });
+  }
+  return errors;
+}
 
 /** The name printed for a dossier: the company name of a professional, otherwise the
  *  person's (« Payet Flavie », clientDisplayName); null when the record names nobody. */
@@ -79,54 +118,69 @@ function dossierArticles(colis, lines, categoryById, transport) {
 
 /**
  * The commercial invoice of a departure:
- * `buildCommercialInvoice({ envoi, items: [{ colis, client, lignes }], categories, issuedAt, confirmed })`
- * → `{ ok, errors, excluded, rows, totals, meta }`.
- * - Before the departure (`confirmed` false), only the dossiers ready to load
- *   (departureReadiness) are included; the others are listed in `excluded` with their reason.
- *   After it (`confirmed`, the frozen manifest), every loaded dossier is included.
+ * `buildCommercialInvoice({ envoi, items: [{ colis, client, lignes }], categories, identity, issuedAt, confirmed })`
+ * → `{ ok, errors, rows, totals, meta }`.
+ * - `identity`: the parties set in Paramètres › Facture commerciale, invoiceIdentity(settings);
+ *   without it, nothing is set (the exporter has no address, there is no consignee).
+ * - Before the departure (`confirmed` false), every dossier assigned to it but the cancelled,
+ *   archived and shipped ones (loadableDossiers), paid and prepared or not. After it
+ *   (`confirmed`, the frozen manifest), every loaded dossier.
  * - `errors` (`{ ref, colisId, kind, task, message }`, « EXP-… : code SH manquant pour « … »
  *   (catégorie « … ») »): what blocks the document; `ok` is false and nothing may be
- *   exported. `kind` says what to fix ('hs-code', 'customs', 'article', 'articles',
- *   'transport', 'quote', 'consignee', 'empty'), `task` the dossier step that shows it. An
- *   'hs-code' point also carries `category`: the name of the category whose customs code is
- *   missing (completed in Paramètres › Catégories et taxes), null for an article without
- *   category (chosen with the dossier's invoices).
+ *   exported. `kind` says what to fix ('exporter' and 'invoice-consignee': the parties, in
+ *   Paramètres › Facture commerciale, see fixedInInvoiceSettings, with the `missing` fields;
+ *   for a dossier: 'hs-code', 'customs', 'article', 'articles', 'transport', 'quote',
+ *   'consignee'; 'empty'), `task` the dossier step that shows it. An 'hs-code' point also
+ *   carries `category`: the name of the category whose customs code is missing (completed
+ *   in Paramètres › Catégories et taxes), null for an article without category (chosen with
+ *   the dossier's invoices). The parties' points come first, then the dossiers'.
  * - `rows`: `{ ref, clientName, hsCode, description, quantity, unitPrice, value, transport, total }`,
  *   dossiers in reference order, articles in their quote order; amounts in euros, to the cent.
- * - `meta`: `{ number, date, departureDate, destination, mode, dossiers, parcels, weight, basis, issuedAt }`:
+ * - `meta`: `{ number, date, departureDate, destination, mode, exporter, consignee, dossiers, parcels, weight, basis, issuedAt }`:
  *   the departure's reference, the issue day (Paris), the departure day, its destination and
- *   transport mode (null when not recorded), the outgoing parcels and their real weight (kg),
- *   what the document was established from ('loading': the dossiers ready to load, before the
- *   departure; 'manifest': the confirmed manifest) and the instant it was (ISO, null when unknown).
+ *   transport mode (null when not recorded), the exporter (identity.expediteur) and the
+ *   consignee of its destination (consigneeFor: its own, else the default one, with its
+ *   `source`; null when none is set), the outgoing parcels and their real weight (kg; both
+ *   null when a dossier's prepared parcels are not known: never a partial total), what the
+ *   document was established from ('loading': the dossiers assigned to the departure, before
+ *   it leaves; 'manifest': the confirmed manifest) and the instant it was (ISO, null when unknown).
  * `lignes` is a dossier's article lines when they are not on `colis.lignes` (manifest).
  */
-export function buildCommercialInvoice({ envoi = null, items = [], categories = [], issuedAt = Date.now(), confirmed = false } = {}) {
-  const errors = [];
-  const excluded = [];
+export function buildCommercialInvoice({ envoi = null, items = [], categories = [], identity = null, issuedAt = Date.now(), confirmed = false } = {}) {
+  const parties = identity || invoiceIdentity({});
+  const exporter = parties.expediteur;
+  const consignee = consigneeFor(parties, envoi?.destinationCode);
+  const errors = identityErrors(exporter, consignee, envoi?.destinationCode);
   const rows = [];
   const categoryList = Array.isArray(categories) ? categories : [];
   const categoryById = new Map(categoryList.map(category => [category.id, category]));
-  const dossiers = (Array.isArray(items) ? items : []).filter(item => item?.colis)
+  const given = (Array.isArray(items) ? items : []).filter(item => item?.colis);
+  // Before the departure, the dossiers its loading can still take; once it has left, its manifest.
+  const assigned = confirmed ? null : new Set(loadableDossiers(envoi, given.map(item => item.colis)));
+  const dossiers = given.filter(item => !assigned || assigned.has(item.colis))
     .sort((left, right) => naturalOrder.compare(String(left.colis.ref ?? ''), String(right.colis.ref ?? '')));
-  let included = 0, parcels = 0, weight = 0;
+  let parcels = 0, weight = 0, measured = true;
+
+  if (!dossiers.length) {
+    errors.push({ ref: null, colisId: null, kind: 'empty', task: null, message: confirmed
+      ? 'Aucun dossier embarqué dans ce manifeste : aucun article à déclarer.'
+      : 'Aucun dossier affecté à ce départ : aucun article à déclarer.' });
+  }
 
   for (const { colis, client = null, lignes } of dossiers) {
     const ref = colis.ref || null;
     const readiness = departureReadiness(colis);
-    if (!confirmed && !readiness.eligible) {
-      excluded.push({ ref, colisId: colis.id || null, task: readiness.reasons[0]?.task || null, reason: readiness.reasons.map(reason => reason.text).join(' · ') });
-      continue;
-    }
-    included += 1;
     parcels += readiness.count;
     weight += readiness.weights?.realWeight || 0;
+    if (!(readiness.count > 0) || !readiness.weights) measured = false;
     const found = [];
     const fail = (kind, message, task, extra = {}) => found.push({ ref, colisId: colis.id || null, kind, task, message: `${ref || 'Dossier sans référence'} : ${message}`, ...extra });
 
     const clientName = invoiceConsigneeName(client);
     if (!clientName) fail('consignee', 'nom du destinataire manquant', 'reception');
     const breakdown = savedQuoteBreakdown(colis.devisSnapshot, { categories: categoryList });
-    if (!breakdown) { fail('quote', 'aucun devis enregistré', 'devis'); errors.push(...found); continue; }
+    // Before the departure, a dossier without its quote is quoted or taken off the departure.
+    if (!breakdown) { fail('quote', confirmed ? 'aucun devis enregistré' : 'devis non enregistré : enregistrez son devis ou retirez-le du départ.', 'devis'); errors.push(...found); continue; }
     // A quote saved without its transport (older record) never prints a transport of 0,00 €.
     if (!finite(colis.devisSnapshot.amounts.transport)) { fail('quote', 'montant du transport absent du devis enregistré', 'devis'); errors.push(...found); continue; }
     const professional = breakdown.professional || client?.type === 'pro';
@@ -161,11 +215,6 @@ export function buildCommercialInvoice({ envoi = null, items = [], categories = 
     }
   }
 
-  if (!included && !errors.length) {
-    errors.push({ ref: null, colisId: null, kind: 'empty', task: null, message: confirmed
-      ? 'Aucun dossier embarqué dans ce manifeste : aucun article à déclarer.'
-      : 'Aucun dossier prêt à charger : la facture reprend les dossiers payés et préparés de ce départ.' });
-  }
   const value = rows.reduce((sum, row) => sum + toCents(row.value), 0);
   const transport = rows.reduce((sum, row) => sum + toCents(row.transport), 0);
   // A calendar day alone gives no instant: no time is invented for it.
@@ -173,7 +222,6 @@ export function buildCommercialInvoice({ envoi = null, items = [], categories = 
   return {
     ok: errors.length === 0 && rows.length > 0,
     errors,
-    excluded,
     rows,
     totals: { value: fromCents(value), transport: fromCents(transport), total: fromCents(value + transport) },
     meta: {
@@ -182,9 +230,11 @@ export function buildCommercialInvoice({ envoi = null, items = [], categories = 
       departureDate: isoCalendarDay(envoi?.date),
       destination: DESTINATIONS[envoi?.destinationCode]?.nom || null,
       mode: TRANSPORT_MODES[envoi?.modeTransport] || null,
-      dossiers: included,
-      parcels,
-      weight: Math.round(weight * 100) / 100,
+      exporter,
+      consignee,
+      dossiers: dossiers.length,
+      parcels: measured ? parcels : null,
+      weight: measured ? Math.round(weight * 100) / 100 : null,
       basis: confirmed ? 'manifest' : 'loading',
       issuedAt: Number.isFinite(instant) ? new Date(instant).toISOString() : null,
     },
@@ -207,15 +257,15 @@ export function invoiceIssueLabel(value) {
 }
 
 /** The line printed under the header, saying which edition this is: « Établie avant la
- *  confirmation du départ, d’après les dossiers prêts à charger le 07/10/2026 à 14 h 32
- *  (heure de Paris). » or « Établie d’après le manifeste du départ confirmé le 07/10/2026 à
- *  16 h 05 (heure de Paris). »; without the instant when it is unknown. */
+ *  confirmation du départ, d’après tous les dossiers affectés au départ le 07/10/2026 à
+ *  14 h 32 (heure de Paris). » or « Établie d’après le manifeste du départ confirmé le
+ *  07/10/2026 à 16 h 05 (heure de Paris). »; without the instant when it is unknown. */
 export function commercialInvoiceBasis(meta) {
   const issued = invoiceIssueLabel(meta?.issuedAt);
   const at = issued ? ` le ${issued} (heure de Paris)` : '';
   return meta?.basis === 'manifest'
     ? `Établie d’après le manifeste du départ confirmé${at}.`
-    : `Établie avant la confirmation du départ, d’après les dossiers prêts à charger${at}.`;
+    : `Établie avant la confirmation du départ, d’après tous les dossiers affectés au départ${at}.`;
 }
 
 /** « facture-commerciale-ENV-2026-036 » from the confirmed manifest,

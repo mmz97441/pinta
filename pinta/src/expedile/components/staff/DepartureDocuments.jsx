@@ -2,15 +2,18 @@ import React, { useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { AlertTriangle, Download, FileSpreadsheet, FileText, Loader2 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import { fixedInInvoiceSettings } from '../../domain/commercialInvoice';
 import { countLabel } from '../../domain/departureBoard';
 import { dossierTaskUrl } from '../../domain/dossierTasks';
+import { invoiceIdentity } from '../../domain/invoiceIdentity';
 import { downloadCommercialInvoice, loadingCommercialInvoice, manifestCommercialInvoice } from '../../services/departures';
 import './departureDocuments.css';
 
 // Secondary buttons only (as on the « Départs » page): the surface colour under the pointer, in both themes.
 const BUTTON = 'min-h-11 inline-flex items-center justify-center gap-2 rounded-xl border border-gray-300 px-3 text-sm font-semibold transition-all duration-200 ease-out active:scale-[0.98] hover:bg-[var(--bg-surface)] disabled:opacity-50 disabled:active:scale-100 disabled:hover:bg-transparent';
 const FORMATS = [['pdf', 'PDF', FileText], ['xlsx', 'Excel', FileSpreadsheet]];
-const EXCLUDED_ACTIONS = { paiement: 'Vérifier le paiement', preparation: 'Vérifier la préparation' };
+// Paramètres › Facture commerciale: the exporter and the consignee of each destination (perm_admin_parametres).
+const INVOICE_SETTINGS_URL = '/settings?tab=facture';
 // The dossier steps that need a right to be opened, as the dossier page decides
 // (StaffDetailView canViewTask): its invoices and its quote. The other steps open for the team.
 const TASK_PERMISSIONS = {
@@ -26,11 +29,12 @@ const canOpenTask = (task, can) => !TASK_PERMISSIONS[task] || TASK_PERMISSIONS[t
 // A missing code whose category is known is completed in the categories, not in the dossier.
 const fixedInCategories = error => error.kind === 'hs-code' && Boolean(error.category);
 
-/** The blocking points of one dossier together, in their order, with one link to it. */
+/** The blocking points of one dossier together, in their order, with one link to it; those of
+ *  the parties (exporter, consignee) together, with one way to Paramètres › Facture commerciale. */
 function byDossier(errors) {
   const groups = [];
   errors.forEach((error, index) => {
-    const key = error.colisId || `point-${index}`;
+    const key = error.colisId || (fixedInInvoiceSettings(error) ? 'settings' : `point-${index}`);
     const group = groups.find(item => item.key === key);
     if (group) group.errors.push(error);
     else groups.push({ key, ref: error.ref, colisId: error.colisId, errors: [error] });
@@ -50,21 +54,30 @@ function DossierAccess({ group, can, returnTo }) {
   return inDossier.length ? <span className="departure-invoice-restricted">{RESTRICTED_TASKS[inDossier[0].task]}</span> : null;
 }
 
+/** The exporter and the consignee are set in Paramètres › Facture commerciale: a link there for
+ *  the people allowed to set the parameters, otherwise who completes them. */
+function InvoiceSettingsAccess({ can }) {
+  if (can('perm_admin_parametres')) return <Link className="departure-invoice-link departure-invoice-settings" to={INVOICE_SETTINGS_URL}>Ouvrir Paramètres › Facture commerciale</Link>;
+  return <span className="departure-invoice-restricted">Demandez à la direction de compléter Paramètres › Facture commerciale, puis relancez l’export.</span>;
+}
+
 /**
  * « Documents du départ » on a departure card. Before the departure: its commercial invoice,
- * built from its dossiers ready to load (read again from the server at each export), dated
- * and named as such (« …-avant-depart »); the definitive one comes from the manifest. Once it
- * has left: the manifest spreadsheets (`exports`, run by the page through `onExport`) and the
- * commercial invoice of the frozen manifest. `running` is the page's action under way: for
- * `export:<departure>:<type>`, the spreadsheet button clicked on this card shows its progress.
- * A blocking point (an HS code missing…) is said inline with the dossier to open when this
- * person can open it, or who corrects it, and nothing is downloaded; the button clicked shows
- * its progress, then the download is its own feedback. The page keys it by the departure's
- * state: a result read before the departure (its « Non inclus » list) never stays under the
- * manifest once the departure has left.
+ * one for the whole departure with every dossier assigned to it (read again from the server
+ * at each export), dated and named as such (« …-avant-depart »); the definitive one comes
+ * from the manifest. Once it has left: the manifest spreadsheets (`exports`, run by the page
+ * through `onExport`) and the commercial invoice of the frozen manifest. Both print at their
+ * top the exporter and the consignee of Paramètres › Facture commerciale (the settings).
+ * `running` is the page's action under way: for `export:<departure>:<type>`, the spreadsheet
+ * button clicked on this card shows its progress. A blocking point (the exporter or the
+ * consignee to complete, a dossier without its quote, an HS code missing…) is said inline,
+ * with the way to Paramètres or the dossier to open when this person can open it, or who
+ * corrects it, and nothing is downloaded; the button clicked shows its progress, then the
+ * download is its own feedback. The page keys it by the departure's state: a result read
+ * before the departure never stays under the manifest once the departure has left.
  */
 export default function DepartureDocuments({ envoi, departed = false, dossierCount = 0, exports = [], busy = false, running = null, onExport }) {
-  const { can, clients, categories } = useApp();
+  const { can, clients, categories, settings } = useApp();
   const location = useLocation();
   const [state, setState] = useState({ working: null, invoice: null, failure: '' });
   const lock = useRef(false);
@@ -77,9 +90,11 @@ export default function DepartureDocuments({ envoi, departed = false, dossierCou
     lock.current = true;
     setState({ working: format, invoice: null, failure: '' });
     try {
+      // The parties as saved in Paramètres › Facture commerciale, read at the click.
+      const identity = invoiceIdentity(settings);
       const invoice = departed
-        ? await manifestCommercialInvoice(envoi.id, { categories })
-        : await loadingCommercialInvoice(envoi, { clients, categories, issuedAt: Date.now() });
+        ? await manifestCommercialInvoice(envoi.id, { categories, identity })
+        : await loadingCommercialInvoice(envoi, { clients, categories, identity, issuedAt: Date.now() });
       if (invoice.ok) await downloadCommercialInvoice(invoice, format);
       setState({ working: null, invoice, failure: '' });
     } catch (issue) {
@@ -95,7 +110,6 @@ export default function DepartureDocuments({ envoi, departed = false, dossierCou
   const titleId = `departure-invoice-${envoi.id}`;
   const basisId = `${titleId}-basis`;
   const blocked = invoice && !invoice.ok ? invoice.errors : [];
-  const excluded = invoice?.excluded || [];
   return <details className="departures-documents">
     <summary>Documents du départ</summary>
     <div className="departure-documents">
@@ -109,7 +123,7 @@ export default function DepartureDocuments({ envoi, departed = false, dossierCou
         <h3 id={titleId} className="departure-invoice-title">Facture commerciale</h3>
         <p className="departure-invoice-help">{departed
           ? 'Depuis le manifeste confirmé : chaque article avec son code SH, sa valeur et sa part du transport.'
-          : 'Dossiers prêts à charger : chaque article avec son code SH, sa valeur et sa part du transport.'}</p>
+          : 'Une seule facture avec tous les dossiers affectés au départ.'}</p>
         <div className="flex flex-wrap gap-2">{FORMATS.map(([format, label, Icon]) => <button type="button" key={format} disabled={disabled} aria-busy={working === format || undefined} className={BUTTON} aria-describedby={departed ? undefined : basisId} onClick={() => generate(format)}>
           {working === format ? <Loader2 size={15} aria-hidden="true" className="animate-spin" /> : <Icon size={15} aria-hidden="true" />}
           <span className="sr-only">Facture commerciale en </span>{label}
@@ -122,20 +136,12 @@ export default function DepartureDocuments({ envoi, departed = false, dossierCou
             <p className="font-semibold">Facture non générée : {countLabel(blocked.length, 'point à corriger', 'points à corriger')}.</p>
             <ul className="departure-invoice-points">{byDossier(blocked).map(group => <li key={group.key}>
               {group.errors.map((error, index) => <span key={index} className="block">{error.message}</span>)}
-              <DossierAccess group={group} can={can} returnTo={returnTo} />
+              {group.key === 'settings' ? <InvoiceSettingsAccess can={can} /> : <DossierAccess group={group} can={can} returnTo={returnTo} />}
             </li>)}</ul>
             {blocked.some(fixedInCategories) && (can('perm_admin_categories')
               ? <p className="departure-invoice-fix">Le code SH d’un article vient de sa catégorie : complétez son code douanier dans Paramètres › Catégories et taxes, puis relancez l’export. <Link className="departure-invoice-link" to="/settings?tab=categories">Compléter les catégories</Link></p>
               : <p className="departure-invoice-fix">Le code SH d’un article vient de sa catégorie : demandez à la direction de compléter son code douanier dans Paramètres › Catégories et taxes, puis relancez l’export.</p>)}
           </div>
-        </div>}
-        {excluded.length > 0 && <div className="departure-invoice-excluded">
-          <h4 className="departure-invoice-title">Non inclus ({excluded.length})</h4>
-          <ul>{excluded.map(item => <li key={item.colisId || item.ref}>
-            <span className="departure-invoice-ref">{item.ref}</span>
-            <span className="departure-invoice-reason">{item.reason}</span>
-            {item.colisId && canOpenTask(item.task, can) && <Link className="departure-invoice-link" to={dossierTaskUrl(item.colisId, item.task, returnTo)}>{EXCLUDED_ACTIONS[item.task] || 'Ouvrir le dossier'}<span className="sr-only"> {item.ref}</span></Link>}
-          </li>)}</ul>
         </div>}
       </section>}
     </div>

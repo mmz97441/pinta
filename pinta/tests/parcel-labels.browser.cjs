@@ -7,7 +7,9 @@
  * the window is refused, its file name whole; a loading failure stated on screen; and every outcome without a tab
  * brought into view above the bottom navigation.
  * setup() mocks every request: nothing reaches Supabase, Telegram or PayPlug, and printing writes nothing.
- * The PDF a click creates is read back from its blob, checked with pdf.js, and its first page drawn to a PNG. */
+ * The PDF a click creates is read back from its blob, checked with pdf.js, and its first page drawn to a PNG. Its sender
+ * is the exporter of Paramètres › Facture commerciale (app_settings.business): « Expedîle » alone while its address is
+ * not set, as in the shared fixture; its address and email once set (`sender`). */
 const { chromium } = require(process.env.PINTA_PLAYWRIGHT_MODULE || 'playwright');
 const AxeBuilder = require('@axe-core/playwright').default;
 const assert = require('node:assert/strict');
@@ -20,6 +22,9 @@ const REF = 'EXP-2YE537';
 const OTHER = { id: '88888888-8888-4888-8888-888888888888', ref: 'EXP-3HF210' };
 const boxes = [{ dimL: 40, dimW: 20, dimH: 10, poids: 2.5 }, { dimL: 25, dimW: 20, dimH: 15, poids: 1.25 }];
 const LABEL_CHUNK = /\/assets\/exportParcelLabels-[\w-]+\.js$/;
+// Paramètres › Facture commerciale: the exporter (a test address: the real one is not known yet) and its line on the label.
+const EXPORTER = { nom: 'Expedîle', adresse: '12 rue des Entrepôts', codePostal: '93290', ville: 'Tremblay-en-France', pays: 'France', email: 'contact@expedile.fr' };
+const SENDER_LINE = 'Expedîle — 93290 Tremblay-en-France, France · contact@expedile.fr';
 const PDFJS = path.dirname(require.resolve('pdfjs-dist/package.json'));
 let pdfjs;
 
@@ -33,8 +38,9 @@ function recordLabels() {
 }
 const wideFonts = () => { const apply = () => { const style = document.createElement('style'); style.textContent = 'body, body * { font-family: Verdana, "DejaVu Sans", sans-serif !important; }'; document.head.appendChild(style); }; if (document.head) apply(); else document.addEventListener('DOMContentLoaded', apply); };
 
-async function fixture(browser, { role = 'directeur', permissions = null, width = 1440, theme = 'light', state = 'prepared' } = {}) {
+async function fixture(browser, { role = 'directeur', permissions = null, width = 1440, theme = 'light', state = 'prepared', sender = null } = {}) {
   const f = await setup(browser, role);
+  if (sender) f.tables.app_settings.find(row => row.key === 'business').value.factureCommerciale = { expediteur: sender };
   f.page.setDefaultTimeout(10000);
   if (permissions) { const row = { id: 'labels-permissions', staff_id: ids.S, ...permissions }; f.tables.staff_permissions = [row]; f.tables.staff_users[0].staff_permissions = row; }
   await f.page.setViewportSize({ width, height: width < 768 ? 844 : 1000 });
@@ -90,13 +96,16 @@ async function pdfPages(buffer) {
   }
   return pages;
 }
-function assertLabelPages(pages, labels) {
+/** The pages of the labels, one per parcel; `sender`: the line under « EXPÉDITEUR » (Expedîle alone by default). */
+function assertLabelPages(pages, labels, sender = 'Expedîle') {
   assert.equal(pages.length, labels.length, 'one page per outgoing parcel');
   pages.forEach((page, index) => {
     const { index: position, count, size, weight } = labels[index];
     assert.ok(Math.abs(page.view[2] - 283.46) < 0.1 && Math.abs(page.view[3] - 425.2) < 0.1, 'a 100 × 150 mm page');
     for (const text of [`${REF} · Colis ${position}/${count}`, REF, `Colis ${position}/${count}`, 'CASIER A-03', size, `Poids réel ${weight}`, 'EXEMPLE Camille', '1 RUE EXEMPLE', '97400 SAINT-DENIS', 'LA RÉUNION', 'Tél. 0262 00 00 01'])
       assert.ok(page.text.includes(text), `page ${index + 1}: « ${text} » in ${JSON.stringify(page.text)}`);
+    assert.equal(page.text[page.text.indexOf('EXPÉDITEUR') + 1], sender, `page ${index + 1}: the sender of Paramètres › Facture commerciale`);
+    assert.ok(!page.text.some(text => /75001|PARIS, FRANCE/.test(text)), 'never the former hard-coded sender');
   });
 }
 /** The first page of the PDF drawn by pdf.js in a separate, offline page, saved as a PNG. */
@@ -245,7 +254,7 @@ async function main() {
       assert.equal(await labelsBlock(f).count(), 0);
     });
 
-    await scenario('labels-beside-the-saved-preparation-once-the-quote-is-sent-1440-light', { state: 'quoted' }, async f => {
+    await scenario('labels-beside-the-saved-preparation-once-the-quote-is-sent-1440-light', { state: 'quoted', sender: EXPORTER }, async f => {
       await f.page.goto(`${base}/colis/${ids.P}?section=preparation`);
       const guidance = f.page.getByTestId('task-guidance');
       await guidance.getByRole('heading', { name: 'Préparation enregistrée', exact: true }).waitFor();
@@ -259,17 +268,20 @@ async function main() {
         () => labelsBlock(f).getByRole('status').filter({ hasText: '1 étiquette ouverte dans un nouvel onglet.' }).waitFor());
       const { opens, blobs } = await labelsState(f);
       assert.deepEqual(opens, [[blobs[0], '_blank']], 'the PDF itself opened in the click');
-      assertLabelPages(await pdfPages(await labelPdf(f, 1)), [{ index: 1, count: 1, size: '30 × 20 × 20 cm', weight: '3 kg' }]);
+      assertLabelPages(await pdfPages(await labelPdf(f, 1)), [{ index: 1, count: 1, size: '30 × 20 × 20 cm', weight: '3 kg' }], SENDER_LINE);
       await closePopups(f);
     });
 
-    for (const [width, theme] of [[1440, 'dark'], [390, 'light']]) await scenario(`labels-reprinted-after-payment-${width}-${theme}`, { width, theme, state: 'paid' }, async f => {
+    // The exporter of Paramètres › Facture commerciale set: its address and email are the label's sender.
+    for (const [width, theme] of [[1440, 'dark'], [390, 'light']]) await scenario(`labels-reprinted-after-payment-${width}-${theme}`, { width, theme, state: 'paid', sender: EXPORTER }, async f => {
       await f.page.goto(`${base}/colis/${ids.P}?section=preparation`);
       const guidance = f.page.getByTestId('task-guidance');
       await guidance.getByRole('heading', { name: 'Préparation terminée', exact: true }).waitFor(); await waitTheme(f, theme);
       const button = guidance.getByRole('button', { name: 'Imprimer les étiquettes (1 colis)', exact: true });
       await printWithoutWrites(f, () => button.click(), () => labelsBlock(f).getByRole('status').filter({ hasText: '1 étiquette ouverte dans un nouvel onglet.' }).waitFor());
-      assertLabelPages(await pdfPages(await labelPdf(f, 1)), [{ index: 1, count: 1, size: '30 × 20 × 20 cm', weight: '3 kg' }]);
+      const reprint = await labelPdf(f, 1);
+      assertLabelPages(await pdfPages(reprint), [{ index: 1, count: 1, size: '30 × 20 × 20 cm', weight: '3 kg' }], SENDER_LINE);
+      if (width === 1440) await renderLabel(browser, reprint, path.join(output, `etiquette-${REF}-expediteur-parametres.png`));
       await closePopups(f);
       await noOverflow(f);
       await axe(f, '[data-testid="parcel-labels"]');
@@ -413,7 +425,8 @@ async function main() {
 
     // The window opened by the click reads like the app until the labels replace it: --bg-canvas and --text-primary.
     const WAITING = { light: { background: 'rgb(250, 250, 246)', color: 'rgb(42, 40, 38)', scheme: 'light' }, dark: { background: 'rgb(28, 26, 23)', color: 'rgb(232, 228, 220)', scheme: 'dark' } };
-    for (const [width, theme] of [[1440, 'light'], [390, 'dark']]) await scenario(`a-click-before-the-module-opens-the-window-first-${width}-${theme}`, { width, theme }, async f => {
+    // The click that loads the module (a waiting window first) prints the sender of Paramètres too.
+    for (const [width, theme] of [[1440, 'light'], [390, 'dark']]) await scenario(`a-click-before-the-module-opens-the-window-first-${width}-${theme}`, { width, theme, sender: EXPORTER }, async f => {
       let release;
       const held = new Promise(resolve => { release = resolve; });
       await f.context.route(LABEL_CHUNK, async route => { await held; await route.fallback(); });
@@ -439,7 +452,7 @@ async function main() {
       await waiting.screenshot({ path: path.join(output, `waiting-window-${width}-${theme}.png`) });
       release();
       await labelsBlock(f).getByRole('status').filter({ hasText: '1 étiquette ouverte dans un nouvel onglet.' }).waitFor();
-      assertLabelPages(await pdfPages(await labelPdf(f, 1)), [{ index: 1, count: 1, size: '30 × 20 × 20 cm', weight: '3 kg' }]);
+      assertLabelPages(await pdfPages(await labelPdf(f, 1)), [{ index: 1, count: 1, size: '30 × 20 × 20 cm', weight: '3 kg' }], SENDER_LINE);
       assert.equal((await labelsState(f)).opens.length, 1, 'the PDF went into that window, no second one');
       assert.equal(await button.getAttribute('aria-disabled'), null);
       assert.equal(await button.evaluate(node => document.activeElement === node), true, 'the focus is still on the button once the labels are opened');
