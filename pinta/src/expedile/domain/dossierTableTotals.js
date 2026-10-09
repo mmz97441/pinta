@@ -80,7 +80,8 @@ export function dossierCardTotalLabel(count, { filtered = false } = {}) {
 }
 
 /** The one-line subtotal under a group heading of the cards, in the order of the
- * columns, with their short labels: « Poids 45,2 kg · Prix 1 250,00 € · Taxes 180,00 € ».
+ * columns, with their short labels: « Poids 45,2 kg · Prix 1 250,00 € · Transport
+ * 1 070,00 € · Taxes 180,00 € ».
  * The weight takes its unit, which its column heading otherwise gives. */
 export function dossierTableTotalSummary(totals, columns) {
   return (columns || []).filter(column => totals?.columns?.[column.key]).map(column => {

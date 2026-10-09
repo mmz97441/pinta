@@ -39,9 +39,10 @@ export function DossierTotalRow({ variant = 'total', columns, totals, label, con
 }
 
 /** Cards: the one-line subtotal under a group heading, « Poids 45,2 kg · Prix
- * 1 250,00 € · Taxes 180,00 € », each incomplete total with its « 4 sur 6
- * dossiers »; the columns without any value close the line, « Non renseigné :
- * prix, taxes ». A line breaks between two totals, never before a « · ».
+ * 1 250,00 € · Transport 1 070,00 € · Taxes 180,00 € », each incomplete total
+ * with its « 4 sur 6 dossiers »; the columns without any value close the line,
+ * « Non renseigné : prix, transport, taxes ». A line breaks between two totals,
+ * never before a « · ».
  * Assistive technology hears a comma where the « · » shows: « Colis 4, Poids
  * 7,75 kg », never « Colis 4 Poids ». */
 export function DossierGroupTotals({ totals, columns }) {

@@ -425,8 +425,8 @@ async function main() {
       await assertNoBusinessChange(f,before);
     });
     await scenario('every-data-column-has-a-usable-filter-from-its-heading',async f=>{
-      // P5's saved quote (OM, OMR, TVA): « Taxes calculées » has a value for it too.
-      Object.assign(f.tables.colis.find(item=>item.id===P5),{devis_snapshot:{version:1,amounts:{total:100,om:10,omr:5,tva:5},inputs:{client:{type:'particulier'}}}});
+      // P5's saved quote (transport, OM, OMR, TVA): « Transport » and « Taxes calculées » have a value for it too.
+      Object.assign(f.tables.colis.find(item=>item.id===P5),{devis_snapshot:{version:1,amounts:{total:100,transport:80,om:10,omr:5,tva:5},inputs:{client:{type:'particulier'}}}});
       const before=structuredClone(f.tables.colis);await open(f);
       for(const [label,view] of [['Travail quotidien','daily'],['Paiements','payments'],['Départs','departures']]) {
         await selectPreset(f,label,view);
@@ -464,8 +464,10 @@ async function main() {
       await f.page.reload();await row(f,P4).waitFor();await waitIds(f,[P4]);
       const data=await exportFiltered(f,1);
       assert.equal(data.length,4);assert.equal(data[1][0],'EXP-TAB004');assert.equal(data[1][data[0].indexOf('Paiement')],'Non payé');
-      // The one dossier's amounts are also its total, after one empty row; its taxes are « À vérifier », so is not their total.
-      assert.deepEqual(data[2],[]);assert.deepEqual(['Total','Demandé','Taxes calculées','Payé','Reste à payer'].map((label,index)=>index?data[3][data[0].indexOf(label)]:data[3][0]),['Total',100,'Non renseigné',30,70]);
+      // Without a saved quote, its transport and taxes are « À vérifier » (never its raw transport of 80 €).
+      assert.deepEqual(['Transport','Taxes calculées'].map(label=>data[1][data[0].indexOf(label)]),['À vérifier','À vérifier']);
+      // The one dossier's amounts are also its total, after one empty row; its transport and taxes are « À vérifier », so is not their total.
+      assert.deepEqual(data[2],[]);assert.deepEqual(['Total','Demandé','Transport','Taxes calculées','Payé','Reste à payer'].map((label,index)=>index?data[3][data[0].indexOf(label)]:data[3][0]),['Total',100,'Non renseigné','Non renseigné',30,70]);
       await f.page.getByRole('button',{name:'Retirer les filtres',exact:true}).click();await waitIds(f,[P,P2,P3,P4,P5,P6]);
       assert.equal([...new URL(f.page.url()).searchParams.keys()].some(key=>key.startsWith('col.')),false);
       await assertNoBusinessChange(f,before);
@@ -652,9 +654,9 @@ async function main() {
     await scenario('mobile-sort-menu-offers-all-data-columns-in-every-view-and-both-directions',async f=>{
       await f.page.setViewportSize({width:390,height:844});const before=structuredClone(f.tables.colis);await open(f);
       for(const [label,view,keys] of [
-        ['Travail quotidien','daily',['ref','client','receivedAt','statusLabel','paymentState','statut','owner','casier','cartons','optimizedDimensions','optimizedWeight','requested']],
-        ['Paiements','payments',['ref','client','receivedAt','statusLabel','paymentState','requested','paid','remaining','sentAt']],
-        ['Départs','departures',['ref','client','receivedAt','statusLabel','paymentState','departure','destination','packages','readiness','optimizedDimensions','optimizedWeight','requested']],
+        ['Travail quotidien','daily',['ref','client','receivedAt','statusLabel','paymentState','statut','owner','casier','cartons','optimizedDimensions','optimizedWeight','requested','transport','taxes']],
+        ['Paiements','payments',['ref','client','receivedAt','statusLabel','paymentState','requested','transport','taxes','paid','remaining','sentAt']],
+        ['Départs','departures',['ref','client','receivedAt','statusLabel','paymentState','departure','destination','packages','readiness','optimizedDimensions','optimizedWeight','requested','transport','taxes']],
       ]) {
         await selectPreset(f,label,view);
         const menu=(await openDisplay(f)).getByRole('combobox',{name:'Tri par défaut',exact:true});
@@ -874,7 +876,7 @@ async function main() {
     },{unavailable:true});
     await scenario('excel-download-matches-visible-preset-and-recorded-amounts',async f=>{
       await open(f);
-      const expected={daily:['Référence','Client','Dernière réception','Statut du dossier','Paiement','Travail à faire','Qui s’en occupe','Casier','Cartons reçus','Dimensions finales','Poids final (kg)','Prix du devis','Taxes calculées'],payments:['Référence','Client','Dernière réception','Statut du dossier','Paiement','Demandé','Taxes calculées','Payé','Reste à payer','Devis envoyé le'],departures:['Référence','Client','Dernière réception','Statut du dossier','Paiement','Départ prévu','Destination','Colis à expédier','Prêt à partir ?','Dimensions finales','Poids final (kg)','Prix du devis','Taxes calculées']};
+      const expected={daily:['Référence','Client','Dernière réception','Statut du dossier','Paiement','Travail à faire','Qui s’en occupe','Casier','Cartons reçus','Dimensions finales','Poids final (kg)','Prix du devis','Transport','Taxes calculées'],payments:['Référence','Client','Dernière réception','Statut du dossier','Paiement','Demandé','Transport','Taxes calculées','Payé','Reste à payer','Devis envoyé le'],departures:['Référence','Client','Dernière réception','Statut du dossier','Paiement','Départ prévu','Destination','Colis à expédier','Prêt à partir ?','Dimensions finales','Poids final (kg)','Prix du devis','Transport','Taxes calculées']};
       for(const [label,view] of [['Travail quotidien','daily'],['Paiements','payments'],['Départs','departures']]) {
         await selectPreset(f,label,view);
         const data=await exportFiltered(f,6);

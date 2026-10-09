@@ -57,6 +57,9 @@ const receptionDateColumn = defineDossierTableColumn({ key: 'receivedAt', label:
 const finalWeightColumn = defineDossierTableColumn({ key: 'optimizedWeight', label: 'Poids final (kg)', shortLabel: 'Poids (kg)', align: 'right', sort: { type: 'number', value: ({ model }) => model?.optimizedWeight } });
 const financialColumn = (key, label, priceKind = 'payment', shortLabel) => defineDossierTableColumn({ key, label, ...(shortLabel ? { shortLabel } : {}), align: 'right', financial: true, priceKind, sort: { type: 'number', value: ({ model }) => priceKind === 'quote' ? model?.quotePrice?.amount : model?.payment?.[key] } });
 const quotePriceColumn = financialColumn('requested', 'Prix du devis', 'quote', 'Prix');
+// The transport of the saved quote whose price the list shows beside it, « Demandé » in « Paiements »
+// (quoteTransportModel): financial like the price. Its label is already short.
+const transportColumn = defineDossierTableColumn({ key: 'transport', label: 'Transport', align: 'right', financial: true, sort: { type: 'number', value: ({ model }) => model?.quoteTransport?.amount } });
 // OM + OMR + TVA of the saved quote whose price the list shows beside them, « Demandé » in « Paiements »
 // (quoteTaxesModel): financial like the price.
 const taxesColumn = defineDossierTableColumn({ key: 'taxes', label: 'Taxes calculées', shortLabel: 'Taxes', align: 'right', financial: true, sort: { type: 'number', value: ({ model }) => model?.quoteTaxes?.amount } });
@@ -72,13 +75,13 @@ export const TABLE_COLUMNS = Object.freeze({
   daily: Object.freeze([refColumn, clientColumn, receptionDateColumn, statusColumn, paymentStateColumn,
     defineDossierTableColumn({ key: 'statut', label: 'Travail à faire', shortLabel: 'Travail', sort: { type: 'text', value: ({ model }) => model?.title === 'Tâches à actualiser' ? null : model?.title } }),
     defineDossierTableColumn({ key: 'owner', label: 'Qui s’en occupe', filter: { text: ({ model }) => model?.ownerName }, sort: { type: 'text', value: ({ model }) => ['—', 'Non attribué', 'Membre de l’équipe'].includes(model?.ownerName) ? null : model?.ownerName } }),
-    casierColumn, cartonsColumn, dimensionsColumn, finalWeightColumn, quotePriceColumn, taxesColumn, actionColumn]),
-  payments: Object.freeze([refColumn, clientColumn, receptionDateColumn, statusColumn, paymentStateColumn, financialColumn('requested', 'Demandé'), taxesColumn, financialColumn('paid', 'Payé'), financialColumn('remaining', 'Reste à payer', 'payment', 'Reste'),
+    casierColumn, cartonsColumn, dimensionsColumn, finalWeightColumn, quotePriceColumn, transportColumn, taxesColumn, actionColumn]),
+  payments: Object.freeze([refColumn, clientColumn, receptionDateColumn, statusColumn, paymentStateColumn, financialColumn('requested', 'Demandé'), transportColumn, taxesColumn, financialColumn('paid', 'Payé'), financialColumn('remaining', 'Reste à payer', 'payment', 'Reste'),
     defineDossierTableColumn({ key: 'sentAt', label: 'Devis envoyé le', shortLabel: 'Devis envoyé', sort: { type: 'date', value: ({ model }) => model?.payment?.sentAt } }), actionColumn]),
   departures: Object.freeze([refColumn, clientColumn, receptionDateColumn, statusColumn, paymentStateColumn, departureColumn,
     defineDossierTableColumn({ key: 'destination', label: 'Destination', sort: { type: 'text', value: ({ model }) => model?.departure?.destination === 'Destination à préciser' ? null : model?.departure?.destination } }),
     defineDossierTableColumn({ key: 'packages', label: 'Colis à expédier', shortLabel: 'Colis', sort: { type: 'number', value: ({ dossier, model }) => model?.optimized ? dossier.outgoingParcelCount : null } }),
-    defineDossierTableColumn({ key: 'readiness', label: 'Prêt à partir ?', sort: { type: 'text', value: ({ model }) => model?.departure?.readinessLabel } }), dimensionsColumn, finalWeightColumn, quotePriceColumn, taxesColumn, actionColumn]),
+    defineDossierTableColumn({ key: 'readiness', label: 'Prêt à partir ?', sort: { type: 'text', value: ({ model }) => model?.departure?.readinessLabel } }), dimensionsColumn, finalWeightColumn, quotePriceColumn, transportColumn, taxesColumn, actionColumn]),
   // No status or payment column: every dossier here is before its quote.
   accords: Object.freeze([refColumn, clientColumn, receptionDateColumn, consentStateColumn, consentRequestColumn, consentRelanceColumn, cartonsColumn, casierColumn, departureColumn, actionColumn]),
 });
@@ -200,7 +203,19 @@ function quotePriceModel(dossier, payment, optimized) {
 export const TAXES_PRO_LABEL = 'Sans taxes (pro)';
 /** A price whose saved quote cannot say its taxes (a former dossier, missing or invalid amounts, another total or version). */
 export const TAXES_UNVERIFIED_LABEL = 'À vérifier';
+/** A price whose saved quote cannot say its transport: the same words as for its taxes. */
+export const TRANSPORT_UNVERIFIED_LABEL = TAXES_UNVERIFIED_LABEL;
 const moneyCents = value => (typeof value === 'number' || typeof value === 'string' && value.trim()) && Number.isFinite(Number(value)) && Number(value) >= 0 ? Math.round(Number(value) * 100) : null;
+
+/** The saved quote (devisSnapshot) that gives the price shown beside « Transport »
+ * and « Taxes calculées »: its frozen total is that very price and its version the
+ * dossier's. Null for a former dossier without one, or another quote. */
+function shownSavedQuote(dossier, quotePrice) {
+  const snapshot = dossier.devisSnapshot;
+  const sameQuote = moneyCents(snapshot?.amounts?.total) === Math.round(quotePrice.amount * 100)
+    && (snapshot?.version == null || Number(snapshot.version) === Number(dossier.quoteVersion));
+  return sameQuote ? snapshot : null;
+}
 
 /** « Taxes calculées »: OM + OMR + TVA of the very saved quote whose price the
  * list shows beside them (devisSnapshot.amounts), added in cents. Nothing is
@@ -212,18 +227,29 @@ const moneyCents = value => (typeof value === 'number' || typeof value === 'stri
  * (requestedPriceModel). */
 function quoteTaxesModel(dossier, quotePrice) {
   if (quotePrice.amount === null) return { amount: null, stateLabel: quotePrice.stateLabel || 'À calculer', pro: false };
-  const snapshot = dossier.devisSnapshot;
+  const snapshot = shownSavedQuote(dossier, quotePrice);
   const parts = ['om', 'omr', 'tva'].map(key => moneyCents(snapshot?.amounts?.[key]));
-  const sameQuote = moneyCents(snapshot?.amounts?.total) === Math.round(quotePrice.amount * 100)
-    && (snapshot?.version == null || Number(snapshot.version) === Number(dossier.quoteVersion));
-  if (!sameQuote || parts.includes(null)) return { amount: null, stateLabel: TAXES_UNVERIFIED_LABEL, pro: false };
+  if (!snapshot || parts.includes(null)) return { amount: null, stateLabel: TAXES_UNVERIFIED_LABEL, pro: false };
   const cents = parts.reduce((sum, part) => sum + part, 0);
-  return { amount: cents / 100, stateLabel: quotePrice.stateLabel || '', pro: cents === 0 && snapshot?.inputs?.client?.type === 'pro' };
+  return { amount: cents / 100, stateLabel: quotePrice.stateLabel || '', pro: cents === 0 && snapshot.inputs?.client?.type === 'pro' };
 }
-/** « Paiements » puts the taxes beside « Demandé », the amount asked from the
- * client: there they are that amount's taxes. A draft or a quote to verify asks
- * nothing yet, so its taxes say what « Demandé » says (« À calculer »,
- * « À vérifier ») and the two totals add up the same dossiers. */
+/** « Transport »: the transport of the very saved quote whose price the list
+ * shows beside it (devisSnapshot.amounts.transport), in cents, under the same
+ * rules as its taxes (quoteTaxesModel): never recalculated nor taken from the raw
+ * column; without a price, the price's state; a price with a state gives the
+ * transport that state; no usable saved quote behind the price, or a transport
+ * missing or invalid in it, « À vérifier »; a transport the quote sets at zero,
+ * 0. A professional quote has its own transport, shown like any other. */
+function quoteTransportModel(dossier, quotePrice) {
+  if (quotePrice.amount === null) return { amount: null, stateLabel: quotePrice.stateLabel || 'À calculer' };
+  const cents = moneyCents(shownSavedQuote(dossier, quotePrice)?.amounts?.transport);
+  if (cents === null) return { amount: null, stateLabel: TRANSPORT_UNVERIFIED_LABEL };
+  return { amount: cents / 100, stateLabel: quotePrice.stateLabel || '' };
+}
+/** « Paiements » puts the transport and the taxes beside « Demandé », the amount
+ * asked from the client: there they are that amount's. A draft or a quote to
+ * verify asks nothing yet, so its transport and taxes say what « Demandé » says
+ * (« À calculer », « À vérifier ») and the three totals add up the same dossiers. */
 function requestedPriceModel(payment) {
   return { amount: payment.requested, stateLabel: payment.requested === null ? dossierTableMissingAmountLabel(payment, 'requested') : '' };
 }
@@ -379,7 +405,10 @@ export function buildDossierTableModel(dossier, { actions = [], me, can = () => 
   const boxes = optimized ? dossier.finalPackages ?? [{ dimL: dossier.finL, dimW: dossier.finW, dimH: dossier.finH, poids: dossier.finP }] : [];
   const optimizedWeight = optimized ? Math.round((boxes.reduce((sum, box) => sum + Number(box.poids), 0) + Number.EPSILON) * 100) / 100 : null;
   const quotePrice = quotePriceModel(dossier, payment, optimized);
-  const quoteTaxes = quoteTaxesModel(dossier, view === 'payments' ? requestedPriceModel(payment) : quotePrice);
+  // The price the transport and the taxes go with: « Demandé » in « Paiements », « Prix du devis » elsewhere.
+  const shownPrice = view === 'payments' ? requestedPriceModel(payment) : quotePrice;
+  const quoteTransport = quoteTransportModel(dossier, shownPrice);
+  const quoteTaxes = quoteTaxesModel(dossier, shownPrice);
   const dimensions = value => Number(value).toLocaleString('fr-FR', { maximumFractionDigits: 4 });
   // Each outgoing parcel with its volumetric weight (L × l × h ÷ divisor, unrounded);
   // the total adds the unrounded weights, as the quote does (measureShipment).
@@ -395,7 +424,7 @@ export function buildDossierTableModel(dossier, { actions = [], me, can = () => 
   // A legacy status cannot turn an incomplete recorded payment into “Payé”.
   const statusLabel = dossier.statut === 'paye' && payment.stateLabel !== PAYMENT_STATE_LABELS.paid ? payment.detailLabel : STATUTS[dossier.statut]?.label || 'Statut à vérifier';
   // « Accords clients »: the consent and its last relance, on the same clock as the rest of the row.
-  const base = { reception: receptionDateSummary(dossier, { now }), payment, quotePrice, quoteTaxes, departure, optimized, optimizedDimensions, optimizedWeight, statusLabel,
+  const base = { reception: receptionDateSummary(dossier, { now }), payment, quotePrice, quoteTransport, quoteTaxes, departure, optimized, optimizedDimensions, optimizedWeight, statusLabel,
     optimizedParcels, optimizedVolumetricTotal, optimizedVolumetricDivisor: divisor?.value ?? null, optimizedVolumetricSource: divisor?.source ?? null,
     consent: consentState(dossier, now), relance: consentRelance(dossier) };
   if (!workReady) return { ...base, action: null, title: 'Tâches à actualiser', detail: 'Actualisez les tâches pour retrouver leur attribution.', ownerName: '—', otherActionsCount: 0, matchesScope: scope === 'all' && !assigneeFilter };
@@ -427,9 +456,9 @@ export function buildDossierTableModel(dossier, { actions = [], me, can = () => 
 }
 
 const exportKeys = {
-  daily: ['ref', 'client', 'receivedAt', 'statusLabel', 'paymentState', 'statut', 'owner', 'casier', 'cartons', 'optimizedDimensions', 'optimizedWeight', 'requested', 'taxes'],
-  payments: ['ref', 'client', 'receivedAt', 'statusLabel', 'paymentState', 'requested', 'taxes', 'paid', 'remaining', 'sentAt'],
-  departures: ['ref', 'client', 'receivedAt', 'statusLabel', 'paymentState', 'departure', 'destination', 'packages', 'readiness', 'optimizedDimensions', 'optimizedWeight', 'requested', 'taxes'],
+  daily: ['ref', 'client', 'receivedAt', 'statusLabel', 'paymentState', 'statut', 'owner', 'casier', 'cartons', 'optimizedDimensions', 'optimizedWeight', 'requested', 'transport', 'taxes'],
+  payments: ['ref', 'client', 'receivedAt', 'statusLabel', 'paymentState', 'requested', 'transport', 'taxes', 'paid', 'remaining', 'sentAt'],
+  departures: ['ref', 'client', 'receivedAt', 'statusLabel', 'paymentState', 'departure', 'destination', 'packages', 'readiness', 'optimizedDimensions', 'optimizedWeight', 'requested', 'transport', 'taxes'],
   accords: ['ref', 'client', 'receivedAt', 'consentState', 'consentRequestedAt', 'lastRelanceAt', 'cartons', 'casier', 'departure'],
 };
 
@@ -438,19 +467,21 @@ const exportKeys = {
  * volumetric weight of « Dimensions finales », and euros. No total for text or dates. */
 export const DOSSIER_TOTAL_KINDS = Object.freeze({
   cartons: 'count', packages: 'count', optimizedWeight: 'weight', optimizedDimensions: 'volumetric',
-  requested: 'money', taxes: 'money', paid: 'money', remaining: 'money',
+  requested: 'money', transport: 'money', taxes: 'money', paid: 'money', remaining: 'money',
 });
 const finiteNumber = value => (typeof value === 'number' || typeof value === 'string' && value.trim()) && Number.isFinite(Number(value)) && Number(value) >= 0 ? Number(value) : null;
 /** The number a column with a total shows for one dossier, read from the same
  * source as its cell: the cartons received, the outgoing parcels and the final
  * weight once optimised, the volumetric total of « Dimensions finales », the
- * quote price (or the requested amount in « Paiements »), the taxes, the amount
- * paid and the rest to pay. Null when the cell shows no value (« À calculer »,
- * « À vérifier », not measured yet); undefined for a column without a total.
- * The screen totals and the spreadsheet both read it, so they add up the same cells. */
+ * quote price (or the requested amount in « Paiements »), its transport and its
+ * taxes, the amount paid and the rest to pay. Null when the cell shows no value
+ * (« À calculer », « À vérifier », not measured yet); undefined for a column
+ * without a total. The screen totals and the spreadsheet both read it, so they
+ * add up the same cells. */
 export function dossierTableNumber(column, { dossier = {}, model } = {}) {
   if (!Object.prototype.hasOwnProperty.call(DOSSIER_TOTAL_KINDS, column?.key)) return undefined;
   if (column.key === 'cartons') return finiteNumber(receptionCartonManifest(dossier).nbColis);
+  if (column.key === 'transport') return finiteNumber(model?.quoteTransport?.amount);
   if (column.key === 'taxes') return finiteNumber(model?.quoteTaxes?.amount);
   if (['requested', 'paid', 'remaining'].includes(column.key)) return finiteNumber(dossierTableAmount(model, column));
   if (!model?.optimized) return null;
@@ -474,6 +505,7 @@ export function dossierTableExportFormat(kind, { state = '', zeroLabel = '' } = 
 function exportCellFormat(column, model) {
   const kind = DOSSIER_TOTAL_KINDS[column.key];
   if (kind !== 'money') return dossierTableExportFormat(kind);
+  if (column.key === 'transport') return dossierTableExportFormat(kind, { state: model?.quoteTransport?.stateLabel });
   if (column.key === 'taxes') return dossierTableExportFormat(kind, { state: model?.quoteTaxes?.stateLabel, zeroLabel: model?.quoteTaxes?.pro ? TAXES_PRO_LABEL : '' });
   return dossierTableExportFormat(kind, { state: dossierTableAmountState(model, column) });
 }
@@ -557,6 +589,7 @@ function exportValues(dossiers, clients, models, selected) {
       cartons: receptionCartonManifest(dossier).nbColis,
       receivedAt: formatDossierTableDate(model?.reception?.lastReceivedAt) + (model?.reception?.lastReceivedAt && !model.reception.complete ? ` · ${model.reception.knownCount}/${model.reception.totalCount} cartons datés` : ''),
       requested: amount('requested'), paid: amount('paid'), remaining: amount('remaining'),
+      transport: model?.quoteTransport?.stateLabel || 'À calculer',
       taxes: model?.quoteTaxes?.stateLabel || 'À calculer',
       sentAt: formatDossierTableDate(model?.payment?.sentAt),
       departure: model?.departure?.label || 'À prévoir', destination: model?.departure?.destination || 'À renseigner',

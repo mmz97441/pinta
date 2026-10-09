@@ -89,25 +89,27 @@ test('« Dimensions finales » exports the volumetric lines of the cell, its col
   assert.equal(sheet['!cols'][1].wch, lines[1].length + 2, 'The longest line, not the three lines end to end.');
 }));
 
-// ── « Taxes calculées », numbers and the « Total » row ──────────────────────
+// ── « Transport », « Taxes calculées », numbers and the « Total » row ───────
 const quote = (amounts, client = 'particulier', version = 1) => ({ version, amounts: { transport: 50, fees: 0, ...amounts }, inputs: { client: { type: client } } });
 const ready = { clientId: 'client', statut: 'devis_envoye', feuVert: 'autorise', devisBrouillon: false, quoteVersion: 1, devisEnvoyeLe: '2026-10-01T08:00:00Z', preparationCompositionVersion: 1, finalMeasurementsVersion: 1, outgoingParcelCount: 1, finalPackages: [{ dimL: 30, dimW: 20, dimH: 20, poids: 3 }] };
+// Transport + taxes = each saved total: a sent quote, a draft, a dossier received only, a former quote, a professional quote.
 const LIST = [
-  { ...ready, id: 'a', ref: 'EXP-A', nbColis: 2, devisTotal: 100, devisSnapshot: quote({ om: 10, omr: 5, tva: 5, total: 100 }) },
-  { ...ready, id: 'b', ref: 'EXP-B', nbColis: 1, statut: 'en_preparation', outgoingParcelCount: 2, finalPackages: [{ dimL: 30, dimW: 20, dimH: 10, poids: 1.25 }, { dimL: 50, dimW: 40, dimH: 30, poids: 2.5 }], devisTotal: 83.47, devisBrouillon: true, quoteVersion: 3, devisSnapshot: quote({ om: 4.1, omr: 1.2, tva: 7.37, total: 83.47 }, 'particulier', 3) },
+  { ...ready, id: 'a', ref: 'EXP-A', nbColis: 2, devisTotal: 100, devisSnapshot: quote({ transport: 80, om: 10, omr: 5, tva: 5, total: 100 }) },
+  { ...ready, id: 'b', ref: 'EXP-B', nbColis: 1, statut: 'en_preparation', outgoingParcelCount: 2, finalPackages: [{ dimL: 30, dimW: 20, dimH: 10, poids: 1.25 }, { dimL: 50, dimW: 40, dimH: 30, poids: 2.5 }], devisTotal: 83.47, devisBrouillon: true, quoteVersion: 3, devisSnapshot: quote({ transport: 70.8, om: 4.1, omr: 1.2, tva: 7.37, total: 83.47 }, 'particulier', 3) },
   { id: 'c', ref: 'EXP-C', clientId: 'client', statut: 'mesure', nbColis: 3 },
   { ...ready, id: 'd', ref: 'EXP-D', nbColis: 1, devisTotal: 50 },
-  { ...ready, id: 'e', ref: 'EXP-E', nbColis: 1, devisTotal: 40, devisSnapshot: quote({ om: 0, omr: 0, tva: 0, total: 40 }, 'pro') },
+  { ...ready, id: 'e', ref: 'EXP-E', nbColis: 1, devisTotal: 40, devisSnapshot: quote({ transport: 40, om: 0, omr: 0, tva: 0, total: 40 }, 'pro') },
 ];
 const LIST_MODELS = new Map(LIST.map(dossier => [dossier.id, buildDossierTableModel(dossier, { now: Date.parse('2026-10-03T12:00:00Z') })]));
 
-test('« Taxes calculées » and every column that adds up are numbers in their format; unknown values keep their wording', () => workbook(async filename => {
+test('« Transport », « Taxes calculées » and every column that adds up are numbers in their format; unknown values keep their wording', () => workbook(async filename => {
   exportDossierTableExcel(LIST, [], LIST_MODELS, 'departures', TABLE_COLUMNS.departures, filename);
   const sheet = XLSX.readFile(filename, { cellNF: true, cellStyles: true }).Sheets.Dossiers;
   const data = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null });
   const header = data[0], at = label => header.indexOf(label);
-  assert.deepEqual(header.slice(-6), ['Colis à expédier', 'Prêt à partir ?', 'Dimensions finales', 'Poids final (kg)', 'Prix du devis', 'Taxes calculées']);
+  assert.deepEqual(header.slice(-7), ['Colis à expédier', 'Prêt à partir ?', 'Dimensions finales', 'Poids final (kg)', 'Prix du devis', 'Transport', 'Taxes calculées']);
   const column = label => data.slice(1, 6).map(line => line[at(label)]);
+  assert.deepEqual(column('Transport'), [80, 70.8, 'À calculer', 'À vérifier', 40]);
   assert.deepEqual(column('Taxes calculées'), [20, 12.67, 'À calculer', 'À vérifier', 0]);
   assert.deepEqual(column('Prix du devis'), [100, 83.47, 'À calculer', 50, 40]);
   assert.deepEqual(column('Colis à expédier'), [1, 2, 'Colis après optimisation à confirmer', 1, 1]);
@@ -117,6 +119,10 @@ test('« Taxes calculées » and every column that adds up are numbers in their 
   assert.deepEqual([1, 2, 5].map(row => [shown(row, 'Taxes calculées').t, shown(row, 'Taxes calculées').w]), [['n', '20.00 €'], ['n', '12.67 € · Brouillon'], ['n', 'Sans taxes (pro)']]);
   assert.equal(shown(2, 'Prix du devis').w, '83.47 € · Brouillon');
   assert.equal(shown(3, 'Taxes calculées').t, 's');
+  // The transport: a number in the euro format, the draft's state in its format; a professional quote's like any other.
+  assert.deepEqual([1, 2, 5].map(row => [shown(row, 'Transport').t, shown(row, 'Transport').z, shown(row, 'Transport').w]), [['n', '#,##0.00 "€"', '80.00 €'], ['n', '#,##0.00 "€ · Brouillon"', '70.80 € · Brouillon'], ['n', '#,##0.00 "€"', '40.00 €']]);
+  assert.deepEqual([3, 4].map(row => [shown(row, 'Transport').t, shown(row, 'Transport').v]), [['s', 'À calculer'], ['s', 'À vérifier']]);
+  assert.ok(sheet['!cols'][at('Transport')].wch >= '70.80 € · Brouillon'.length + 2);
   assert.deepEqual([shown(1, 'Colis à expédier').z, shown(2, 'Poids final (kg)').z, shown(1, 'Prix du devis').z], ['0', '#,##0.00', '#,##0.00 "€"']);
   // A column is as wide as its numbers as Excel writes them, never « ### ».
   assert.ok(sheet['!cols'][at('Prix du devis')].wch >= '83.47 € · Brouillon'.length + 2);
@@ -136,30 +142,32 @@ test('after one empty row, « Total » adds up each numeric column with SUBTOTAL
   assert.deepEqual(sheet['!autofilter'], { ref: `A1:${XLSX.utils.encode_col(header.length - 1)}6` }, 'The filter covers the header and the dossiers, not the total.');
   const total = label => sheet[XLSX.utils.encode_cell({ r: 7, c: at(label) })];
   const range = label => { const name = XLSX.utils.encode_col(at(label)); return `SUBTOTAL(9,${name}2:${name}6)`; };
-  for (const [label, value, format] of [['Cartons reçus', 8, '0'], ['Poids final (kg)', 12.75, '#,##0.00'], ['Prix du devis', 273.47, '#,##0.00 "€"'], ['Taxes calculées', 32.67, '#,##0.00 "€"']]) {
+  for (const [label, value, format] of [['Cartons reçus', 8, '0'], ['Poids final (kg)', 12.75, '#,##0.00'], ['Prix du devis', 273.47, '#,##0.00 "€"'], ['Transport', 190.8, '#,##0.00 "€"'], ['Taxes calculées', 32.67, '#,##0.00 "€"']]) {
     assert.deepEqual([total(label).t, total(label).f, total(label).v, total(label).z], ['n', range(label), value, format], label);
   }
   // Text, dates and « Dimensions finales » (text in the sheet) have no total.
   for (const label of ['Client', 'Dernière réception', 'Casier', 'Dimensions finales']) assert.equal(total(label), undefined, label);
   // The cached value is what Excel computes over the numbers above it: the drafts count, the wording does not.
   const numbers = label => data.slice(1, 6).map(line => line[at(label)]).filter(value => typeof value === 'number');
-  for (const label of ['Cartons reçus', 'Poids final (kg)', 'Prix du devis', 'Taxes calculées']) assert.equal(Math.round(numbers(label).reduce((sum, value) => sum + value * 100, 0)) / 100, total(label).v, label);
+  for (const label of ['Cartons reçus', 'Poids final (kg)', 'Prix du devis', 'Transport', 'Taxes calculées']) assert.equal(Math.round(numbers(label).reduce((sum, value) => sum + value * 100, 0)) / 100, total(label).v, label);
+  // « Transport » sits between the price and the taxes, its total in the same « Total » row.
+  assert.deepEqual([header[at('Prix du devis') + 1], header[at('Transport') + 1]], ['Transport', 'Taxes calculées']);
 }));
 
 test('a column without any value totals « Non renseigné », never 0; no dossier, no total row', () => workbook(async filename => {
   const received = LIST.filter(dossier => dossier.id === 'c');
-  exportDossierTableExcel(received, [], LIST_MODELS, 'daily', TABLE_COLUMNS.daily.filter(column => ['ref', 'cartons', 'optimizedWeight', 'requested', 'taxes'].includes(column.key)), filename);
+  exportDossierTableExcel(received, [], LIST_MODELS, 'daily', TABLE_COLUMNS.daily.filter(column => ['ref', 'cartons', 'optimizedWeight', 'requested', 'transport', 'taxes'].includes(column.key)), filename);
   const data = XLSX.utils.sheet_to_json(XLSX.readFile(filename).Sheets.Dossiers, { header: 1, defval: null });
-  assert.deepEqual(data, [['Référence', 'Cartons reçus', 'Poids final (kg)', 'Prix du devis', 'Taxes calculées'], ['EXP-C', 3, '', 'À calculer', 'À calculer'], [null, null, null, null, null], ['Total', 3, 'Non renseigné', 'Non renseigné', 'Non renseigné']]);
+  assert.deepEqual(data, [['Référence', 'Cartons reçus', 'Poids final (kg)', 'Prix du devis', 'Transport', 'Taxes calculées'], ['EXP-C', 3, '', 'À calculer', 'À calculer', 'À calculer'], [null, null, null, null, null, null], ['Total', 3, 'Non renseigné', 'Non renseigné', 'Non renseigné', 'Non renseigné']]);
   exportDossierTableExcel([], [], LIST_MODELS, 'daily', TABLE_COLUMNS.daily, filename);
   assert.deepEqual(XLSX.utils.sheet_to_json(XLSX.readFile(filename).Sheets.Dossiers, { header: 1 }).length, 1, 'The header alone.');
 }));
 
-test('without the right to export amounts, the sheet has neither the taxes nor a financial total', () => workbook(async filename => {
+test('without the right to export amounts, the sheet has neither the transport, the taxes nor a financial total', () => workbook(async filename => {
   // The screen passes its visible columns minus the financial ones (perm_finances_exporter).
   exportDossierTableExcel(LIST, [], LIST_MODELS, 'daily', TABLE_COLUMNS.daily.filter(column => !column.financial), filename);
   const data = XLSX.utils.sheet_to_json(XLSX.readFile(filename).Sheets.Dossiers, { header: 1, defval: null });
-  assert.equal(data[0].includes('Taxes calculées'), false); assert.equal(data[0].includes('Prix du devis'), false);
-  assert.doesNotMatch(JSON.stringify(data), /273\.47|32\.67|83\.47/);
+  assert.equal(data[0].includes('Taxes calculées'), false); assert.equal(data[0].includes('Prix du devis'), false); assert.equal(data[0].includes('Transport'), false);
+  assert.doesNotMatch(JSON.stringify(data), /273\.47|32\.67|83\.47|190\.8|70\.8/);
   assert.equal(data.at(-1)[0], 'Total');
 }));

@@ -11,18 +11,18 @@ const prepared = { clientId: 'c', statut: 'en_preparation', feuVert: 'autorise',
 const quoted = { ...prepared, statut: 'devis_envoye', devisBrouillon: false, quoteVersion: 1, devisEnvoyeLe: '2026-10-01T08:00:00Z' };
 // Six dossiers of the list: what each cell shows is in the comment.
 const ROWS = [
-  // Prix 100,00 € · Taxes 20,00 € · Poids 3 · 1 colis · 2,4 kg vol. · 2 cartons
-  { ...quoted, id: 'A', ref: 'EXP-A', nbColis: 2, devisTotal: 100, devisSnapshot: savedQuote({ om: 10, omr: 5, tva: 5, total: 100 }) },
-  // Prix 83,47 € Brouillon · Taxes 12,67 € Brouillon · Poids 3,75 · 2 colis · 1,2 + 12 kg vol. · 1 carton
-  { ...prepared, id: 'B', ref: 'EXP-B', nbColis: 1, outgoingParcelCount: 2, finalPackages: [{ dimL: 30, dimW: 20, dimH: 10, poids: 1.25 }, { dimL: 50, dimW: 40, dimH: 30, poids: 2.5 }], devisTotal: 83.47, devisBrouillon: true, quoteVersion: 3, devisSnapshot: savedQuote({ om: 4.1, omr: 1.2, tva: 7.37, total: 83.47 }, 'particulier', 3) },
+  // Prix 100,00 € · Transport 80,00 € · Taxes 20,00 € · Poids 3 · 1 colis · 2,4 kg vol. · 2 cartons
+  { ...quoted, id: 'A', ref: 'EXP-A', nbColis: 2, devisTotal: 100, devisSnapshot: savedQuote({ transport: 80, om: 10, omr: 5, tva: 5, total: 100 }) },
+  // Prix 83,47 € Brouillon · Transport 70,80 € Brouillon · Taxes 12,67 € Brouillon · Poids 3,75 · 2 colis · 1,2 + 12 kg vol. · 1 carton
+  { ...prepared, id: 'B', ref: 'EXP-B', nbColis: 1, outgoingParcelCount: 2, finalPackages: [{ dimL: 30, dimW: 20, dimH: 10, poids: 1.25 }, { dimL: 50, dimW: 40, dimH: 30, poids: 2.5 }], devisTotal: 83.47, devisBrouillon: true, quoteVersion: 3, devisSnapshot: savedQuote({ transport: 70.8, om: 4.1, omr: 1.2, tva: 7.37, total: 83.47 }, 'particulier', 3) },
   // Received only: À calculer, nothing measured · 3 cartons
   { clientId: 'c', id: 'C', ref: 'EXP-C', statut: 'mesure', nbColis: 3 },
-  // A former quoted dossier: Prix 50,00 € · Taxes À vérifier · 1 carton
+  // A former quoted dossier: Prix 50,00 € · Transport and Taxes À vérifier · 1 carton
   { ...quoted, id: 'D', ref: 'EXP-D', nbColis: 1, devisTotal: 50 },
-  // Professional: Prix 40,00 € · Sans taxes (pro) · 1 carton
-  { ...quoted, id: 'E', ref: 'EXP-E', nbColis: 1, devisTotal: 40, devisSnapshot: savedQuote({ om: 0, omr: 0, tva: 0, total: 40 }, 'pro') },
-  // Paid 100,00 €: Prix 100,00 € · Taxes 0,10 + 0,20 + 0,30 · 4 cartons
-  { ...quoted, id: 'F', ref: 'EXP-F', nbColis: 4, statut: 'paye', devisTotal: 100, devisSnapshot: savedQuote({ om: 0.1, omr: 0.2, tva: 0.3, total: 100 }), paiementMontant: 100, paiementDate: '2026-10-02T08:00:00Z' },
+  // Professional: Prix 40,00 € · Transport 40,00 € · Sans taxes (pro) · 1 carton
+  { ...quoted, id: 'E', ref: 'EXP-E', nbColis: 1, devisTotal: 40, devisSnapshot: savedQuote({ transport: 40, om: 0, omr: 0, tva: 0, total: 40 }, 'pro') },
+  // Paid 100,00 €: Prix 100,00 € · Transport 99,40 € · Taxes 0,10 + 0,20 + 0,30 · 4 cartons
+  { ...quoted, id: 'F', ref: 'EXP-F', nbColis: 4, statut: 'paye', devisTotal: 100, devisSnapshot: savedQuote({ transport: 99.4, om: 0.1, omr: 0.2, tva: 0.3, total: 100 }), paiementMontant: 100, paiementDate: '2026-10-02T08:00:00Z' },
 ];
 const models = new Map(ROWS.map(row => [row.id, buildDossierTableModel(row, { now })]));
 const daily = TABLE_COLUMNS.daily, payments = TABLE_COLUMNS.payments;
@@ -31,10 +31,12 @@ const pick = (totals, key) => { const { value, known, missing, count, text, note
 test('the totals add up what the cells show, and say how many dossiers have no value', () => {
   const totals = dossierTableTotals(ROWS, daily, models);
   assert.equal(totals.count, 6);
-  assert.deepEqual(Object.keys(totals.columns), ['cartons', 'optimizedDimensions', 'optimizedWeight', 'requested', 'taxes'], 'Text and date columns have no total.');
+  assert.deepEqual(Object.keys(totals.columns), ['cartons', 'optimizedDimensions', 'optimizedWeight', 'requested', 'transport', 'taxes'], 'Text and date columns have no total.');
   assert.deepEqual(pick(totals, 'cartons'), { value: 12, known: 6, missing: 0, count: 6, text: '12', note: '', description: '' });
   // The price: 100 + 83,47 (a draft is shown, so it counts) + 50 + 40 + 100; « À calculer » is left out and counted.
   assert.deepEqual(pick(totals, 'requested'), { value: 373.47, known: 5, missing: 1, count: 6, text: nb('373,47 €'), note: '5 sur 6 dossiers', description: 'Total de 5 dossiers sur 6 ; 1 sans valeur.' });
+  // The transport: 80 + 70,80 (a draft) + 40 (pro: its own transport) + 99,40; « À vérifier » and « À calculer » left out.
+  assert.deepEqual(pick(totals, 'transport'), { value: 290.2, known: 4, missing: 2, count: 6, text: nb('290,20 €'), note: '4 sur 6 dossiers', description: 'Total de 4 dossiers sur 6 ; 2 sans valeur.' });
   // The taxes: 20 + 12,67 + 0 (pro) + 0,60; « À vérifier » and « À calculer » left out.
   assert.deepEqual(pick(totals, 'taxes'), { value: 33.27, known: 4, missing: 2, count: 6, text: nb('33,27 €'), note: '4 sur 6 dossiers', description: 'Total de 4 dossiers sur 6 ; 2 sans valeur.' });
   // Final weight: only the optimised dossiers (all but C), in hundredths as the cells round them.
@@ -47,7 +49,7 @@ test('the totals add up what the cells show, and say how many dossiers have no v
 
 test('totals follow the displayed dossiers: a column filter or a search changes them, a sort never does', () => {
   const all = dossierTableTotals(ROWS, daily, models);
-  for (const direction of ['asc', 'desc']) for (const key of ['ref', 'requested', 'taxes', 'optimizedWeight']) {
+  for (const direction of ['asc', 'desc']) for (const key of ['ref', 'requested', 'transport', 'taxes', 'optimizedWeight']) {
     const sorted = sortDossierTableRows(ROWS, { column: daily.find(column => column.key === key), direction, models });
     assert.deepEqual(dossierTableTotals(sorted, daily, models), all, `${key} ${direction}`);
   }
@@ -56,14 +58,21 @@ test('totals follow the displayed dossiers: a column filter or a search changes 
   assert.deepEqual(filtered.map(row => row.id), ['A', 'B', 'F']);
   const totals = dossierTableTotals(filtered, daily, models);
   assert.deepEqual([totals.count, totals.columns.requested.value, totals.columns.requested.note, totals.columns.taxes.value, totals.columns.cartons.value], [3, 283.47, '', 33.27, 7]);
+  assert.deepEqual([totals.columns.transport.value, totals.columns.transport.note], [250.2, '']);
+  // « Transport » at most 75 €: B and E; the totals follow that filter too.
+  const cheap = filterDossierTableRows(ROWS, { columns: daily, filters: { transport: { mode: 'max', value: '75' } }, models });
+  assert.deepEqual(cheap.map(row => row.id), ['B', 'E']);
+  assert.deepEqual([dossierTableTotals(cheap, daily, models).columns.transport.text, dossierTableTotals(cheap, daily, models).columns.requested.value], [nb('110,80 €'), 123.47]);
   // A search keeps EXP-C and EXP-D: nothing to add up in « Taxes », « Non renseigné », never 0.
   const searched = dossierTableTotals(ROWS.filter(row => ['EXP-C', 'EXP-D'].includes(row.ref)), daily, models);
   assert.deepEqual(pick(searched, 'taxes'), { value: null, known: 0, missing: 2, count: 2, text: TOTAL_UNKNOWN_LABEL, note: '', description: '' });
+  assert.deepEqual(pick(searched, 'transport'), { value: null, known: 0, missing: 2, count: 2, text: TOTAL_UNKNOWN_LABEL, note: '', description: '' });
   assert.equal(TOTAL_UNKNOWN_LABEL, 'Non renseigné');
   assert.deepEqual([searched.columns.requested.value, searched.columns.requested.note], [50, '1 sur 2 dossiers']);
   // A dossier updated in real time: its new model changes the total.
-  const updated = new Map(models).set('D', buildDossierTableModel({ ...ROWS[3], devisTotal: 50, devisSnapshot: savedQuote({ om: 2, omr: 1, tva: 1.5, total: 50 }) }, { now }));
+  const updated = new Map(models).set('D', buildDossierTableModel({ ...ROWS[3], devisTotal: 50, devisSnapshot: savedQuote({ transport: 45.5, om: 2, omr: 1, tva: 1.5, total: 50 }) }, { now }));
   assert.equal(dossierTableTotals(ROWS, daily, updated).columns.taxes.value, 37.77);
+  assert.deepEqual([dossierTableTotals(ROWS, daily, updated).columns.transport.value, dossierTableTotals(ROWS, daily, updated).columns.transport.known], [335.7, 5]);
 });
 
 test('money adds up in cents and weights in hundredths, never drifting', () => {
@@ -72,6 +81,11 @@ test('money adds up in cents and weights in hundredths, never drifting', () => {
   const totals = dossierTableTotals(cents, daily, centModels);
   assert.equal(totals.columns.requested.value, 1, 'Ten times 0,10 € is 1,00 €.');
   assert.equal(totals.columns.taxes.value, 1);
+  // Ten transports of 0,10 € (as text, the way an older version stored them) are 1,00 €, never 0.9999999999999999.
+  const transports = Array.from({ length: 10 }, (_, index) => ({ ...quoted, id: `t${index}`, devisTotal: 0.3, devisSnapshot: savedQuote({ transport: '0.1', om: 0.1, omr: 0.05, tva: 0.05, total: 0.3 }) }));
+  assert.notEqual(Array.from({ length: 10 }, () => 0.1).reduce((sum, value) => sum + value, 0), 1);
+  const transportTotals = dossierTableTotals(transports, daily, new Map(transports.map(row => [row.id, buildDossierTableModel(row, { now })])));
+  assert.deepEqual([transportTotals.columns.transport.value, transportTotals.columns.transport.text, transportTotals.columns.requested.value], [1, nb('1,00 €'), 3]);
   const weights = [1.1, 2.2].map((poids, index) => ({ ...prepared, id: `w${index}`, finalPackages: [{ dimL: 10, dimW: 10, dimH: 10, poids }] }));
   const weightTotals = dossierTableTotals(weights, daily, new Map(weights.map(row => [row.id, buildDossierTableModel(row, { now })])));
   assert.equal(weightTotals.columns.optimizedWeight.value, 3.3);
@@ -99,15 +113,17 @@ test('a role without the amounts gets no financial total: the totals cover the c
   const totals = dossierTableTotals(ROWS, shown, models);
   assert.deepEqual(Object.keys(totals.columns), ['cartons', 'optimizedDimensions', 'optimizedWeight']);
   // A column hidden by the person has no total either.
-  assert.deepEqual(Object.keys(dossierTableTotals(ROWS, daily.filter(column => column.key !== 'cartons'), models).columns), ['optimizedDimensions', 'optimizedWeight', 'requested', 'taxes']);
-  // « Paiements »: requested, taxes, paid and left to pay.
+  assert.deepEqual(Object.keys(dossierTableTotals(ROWS, daily.filter(column => column.key !== 'cartons'), models).columns), ['optimizedDimensions', 'optimizedWeight', 'requested', 'transport', 'taxes']);
+  assert.deepEqual(Object.keys(dossierTableTotals(ROWS, daily.filter(column => column.key !== 'transport'), models).columns), ['cartons', 'optimizedDimensions', 'optimizedWeight', 'requested', 'taxes']);
+  // « Paiements »: requested, its transport and taxes, paid and left to pay.
   const paymentTotals = dossierTableTotals(ROWS, payments, models);
-  assert.deepEqual(Object.keys(paymentTotals.columns), ['requested', 'taxes', 'paid', 'remaining']);
+  assert.deepEqual(Object.keys(paymentTotals.columns), ['requested', 'transport', 'taxes', 'paid', 'remaining']);
   // Requested: the sent quotes A, D, E and the paid F; paid: F's 100 € and nothing recorded elsewhere.
   assert.deepEqual([paymentTotals.columns.requested.value, paymentTotals.columns.requested.known, paymentTotals.columns.paid.value, paymentTotals.columns.remaining.value], [290, 4, 100, 190]);
   // No dossier, or no column that adds up: nothing to show.
   assert.equal(hasDossierTableTotals(dossierTableTotals([], daily, models)), false);
-  assert.equal(hasDossierTableTotals(dossierTableTotals(ROWS, daily.filter(column => !['cartons', 'optimizedDimensions', 'optimizedWeight', 'requested', 'taxes'].includes(column.key)), models)), false);
+  assert.equal(hasDossierTableTotals(dossierTableTotals(ROWS, daily.filter(column => !['cartons', 'optimizedDimensions', 'optimizedWeight', 'requested', 'transport', 'taxes'].includes(column.key)), models)), false);
+  assert.equal(hasDossierTableTotals(dossierTableTotals(ROWS, daily.filter(column => column.key === 'transport'), models)), true, 'The transport alone has a total.');
   assert.equal(hasDossierTableTotals(totalsOf(ROWS)), true);
 });
 const totalsOf = rows => dossierTableTotals(rows, daily, models);
@@ -129,10 +145,10 @@ test('the cards’ group subtotal: short labels in column order, the weight with
   const items = dossierTableTotalSummary(totalsOf(ROWS), daily);
   assert.deepEqual(items.map(item => [item.label, item.text, item.note]), [
     ['Cartons', '12', ''], ['Dimensions', nb('22,8 kg vol.'), '5 sur 6 dossiers'], ['Poids', nb('15,75 kg'), '5 sur 6 dossiers'],
-    ['Prix', nb('373,47 €'), '5 sur 6 dossiers'], ['Taxes', nb('33,27 €'), '4 sur 6 dossiers'],
+    ['Prix', nb('373,47 €'), '5 sur 6 dossiers'], ['Transport', nb('290,20 €'), '4 sur 6 dossiers'], ['Taxes', nb('33,27 €'), '4 sur 6 dossiers'],
   ]);
   const none = dossierTableTotalSummary(dossierTableTotals([ROWS[2]], daily, models), daily);
-  assert.deepEqual(none.filter(item => !item.known).map(item => [item.label, item.text]), [['Dimensions', TOTAL_UNKNOWN_LABEL], ['Poids', TOTAL_UNKNOWN_LABEL], ['Prix', TOTAL_UNKNOWN_LABEL], ['Taxes', TOTAL_UNKNOWN_LABEL]]);
+  assert.deepEqual(none.filter(item => !item.known).map(item => [item.label, item.text]), [['Dimensions', TOTAL_UNKNOWN_LABEL], ['Poids', TOTAL_UNKNOWN_LABEL], ['Prix', TOTAL_UNKNOWN_LABEL], ['Transport', TOTAL_UNKNOWN_LABEL], ['Taxes', TOTAL_UNKNOWN_LABEL]]);
 });
 
 test('the spreadsheet writes a number exactly where the totals count one', () => {

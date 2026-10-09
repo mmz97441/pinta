@@ -303,8 +303,8 @@ test('choices saved before « Taxes calculées » existed show it in its place u
     const hidden = sanitizeHiddenColumns(viewColumns, JSON.parse(JSON.stringify(stored)));
     assert.deepEqual([...hidden].sort(), [...stored].sort(), `${view}: the saved choices are kept.`);
     const shown = visibleTableColumnKeys(viewColumns, hidden);
-    // After « Prix du devis », or after « Demandé » in « Paiements ».
-    assert.equal(shown[shown.indexOf('requested') + 1], 'taxes', `${view}: right after the price.`);
+    // After « Prix du devis » and its transport, or after « Demandé » and its transport in « Paiements ».
+    assert.deepEqual(shown.slice(shown.indexOf('requested'), shown.indexOf('requested') + 3), ['requested', 'transport', 'taxes'], `${view}: right after the price and its transport.`);
     assert.deepEqual(shown, viewColumns.map(column => column.key).filter(key => !stored.includes(key)), `${view}: every other column keeps its order.`);
     // Hidden afterwards, it stays hidden; shown again, it comes back in its place.
     const hiddenAfter = sanitizeHiddenColumns(viewColumns, [...hidden, 'taxes']);
@@ -318,4 +318,29 @@ test('choices saved before « Taxes calculées » existed show it in its place u
   }
   assert.equal(visibleTableColumnKeys(TABLE_COLUMNS.accords, []).includes('taxes'), false);
   assert.deepEqual(visibleTableColumnKeys(null, null), []);
+});
+
+test('choices saved before « Transport » existed show it in its place, between the price and the taxes, until the person hides it', () => {
+  // What a person stored on 8 October: hidden columns (« Taxes calculées » among them in one view), widths, no « transport » anywhere.
+  const before = { daily: ['casier', 'owner'], payments: ['sentAt', 'taxes'], departures: ['destination', 'readiness'] };
+  const savedWidths = { ref: 200, requested: 160, taxes: 150, cartons: 90 };
+  for (const [view, stored] of Object.entries(before)) {
+    const viewColumns = TABLE_COLUMNS[view];
+    const hidden = sanitizeHiddenColumns(viewColumns, JSON.parse(JSON.stringify(stored)));
+    assert.deepEqual([...hidden].sort(), [...stored].sort(), `${view}: the saved choices are kept.`);
+    const shown = visibleTableColumnKeys(viewColumns, hidden);
+    assert.equal(shown[shown.indexOf('requested') + 1], 'transport', `${view}: right after the price.`);
+    assert.equal(shown.includes('taxes'), !stored.includes('taxes'), `${view}: hidden taxes stay hidden.`);
+    assert.deepEqual(shown, viewColumns.map(column => column.key).filter(key => !stored.includes(key)), `${view}: every other column keeps its order.`);
+    // Hidden afterwards, it stays hidden; shown again, it comes back in its place.
+    const hiddenAfter = sanitizeHiddenColumns(viewColumns, [...hidden, 'transport']);
+    assert.equal(visibleTableColumnKeys(viewColumns, hiddenAfter).includes('transport'), false);
+    assert.deepEqual(visibleTableColumnKeys(viewColumns, hiddenAfter.filter(key => key !== 'transport')), shown);
+    // Saved widths are kept; the new column opens at its own width.
+    const widthsAfter = sanitizeColumnWidths(viewColumns, savedWidths);
+    assert.deepEqual([widthsAfter.ref, widthsAfter.requested, widthsAfter.taxes], [200, 160, 150]);
+    assert.equal(widthsAfter.transport, columnWidthBounds({ key: 'transport' }).initial);
+    assert.equal(widthsAfter.transport, 130);
+  }
+  assert.equal(visibleTableColumnKeys(TABLE_COLUMNS.accords, []).includes('transport'), false);
 });

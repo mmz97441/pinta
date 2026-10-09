@@ -100,14 +100,17 @@ async function main(){
   await scenario('finance-denied-hides-price-from-cells-column-choices-filters-and-export',async f=>{
    for(const view of ['daily','departures']){
     await open(f,view);assert.equal(await f.page.locator('th[data-column="requested"]').count(),0);assert.equal(await cell(f,4,'requested').count(),0);
-    let dialog=await openVisibleColumns(f);assert.ok(await dialog.getByRole('checkbox',{name:/^Afficher /}).count()>0);assert.equal(await dialog.getByLabel('Afficher Prix du devis',{exact:true}).count(),0);await dialog.press('Escape');
-    dialog=await openColumnChooser(f);assert.ok(await dialog.locator('[data-column-choice]').count()>0);assert.equal(await dialog.locator('[data-column-choice="requested"]').count(),0);await dialog.press('Escape');
-    const data=await download(f);assert.equal(data[0].includes('Prix du devis'),false);assert.equal(JSON.stringify(data).includes('999.99'),false);assert.equal(JSON.stringify(data).includes('89.5'),false);
+    // « Transport » is an amount too: neither its column, nor its choice, nor its filter.
+    assert.equal(await f.page.locator('th[data-column="transport"]').count(),0);assert.equal(await cell(f,4,'transport').count(),0);
+    let dialog=await openVisibleColumns(f);assert.ok(await dialog.getByRole('checkbox',{name:/^Afficher /}).count()>0);assert.equal(await dialog.getByLabel('Afficher Prix du devis',{exact:true}).count(),0);assert.equal(await dialog.getByLabel('Afficher Transport',{exact:true}).count(),0);await dialog.press('Escape');
+    dialog=await openColumnChooser(f);assert.ok(await dialog.locator('[data-column-choice]').count()>0);assert.equal(await dialog.locator('[data-column-choice="requested"]').count(),0);assert.equal(await dialog.locator('[data-column-choice="transport"]').count(),0);await dialog.press('Escape');
+    const data=await download(f);assert.equal(data[0].includes('Prix du devis'),false);assert.equal(data[0].includes('Transport'),false);assert.equal(JSON.stringify(data).includes('999.99'),false);assert.equal(JSON.stringify(data).includes('89.5'),false);
    }
    await f.page.goto(`${base}/colis?table=daily&sort=requested&dir=desc&${new URLSearchParams({'col.requested':JSON.stringify({mode:'min',value:'1'})})}`);await row(f,1).waitFor();await f.page.waitForURL(url=>!url.searchParams.has('col.requested'));assert.equal(await f.page.locator('tr[data-dossier-row]').count(),6,'A forced financial filter cannot disclose or hide dossiers for a role without finance access.');
   },{restricted:true});
   await scenario('financial-read-permission-does-not-leak-prices-through-daily-or-departure-export',async f=>{
-   for(const view of ['daily','departures']){await open(f,view);assert.match(await cell(f,4,'requested').innerText(),/89,50/);const data=await download(f);assert.equal(data[0].includes('Prix du devis'),false);assert.equal(JSON.stringify(data).includes('89.5'),false);}
+   // Seen on screen, never exported without the right to export amounts: the transport neither.
+   for(const view of ['daily','departures']){await open(f,view);assert.match(await cell(f,4,'requested').innerText(),/89,50/);assert.equal(await cell(f,4,'transport').count(),1);const data=await download(f);assert.equal(data[0].includes('Prix du devis'),false);assert.equal(data[0].includes('Transport'),false);assert.equal(JSON.stringify(data).includes('89.5'),false);}
   },{restricted:true,readMoney:true});
   await scenario('weight-and-quote-price-support-real-numeric-sort-and-filter',async f=>{
    f.tables.colis[3].final_packages=[{dimL:10,dimW:10,dimH:10,poids:12}];f.tables.colis[3].outgoing_parcel_count=1;f.before=structuredClone(f.tables.colis);await open(f);

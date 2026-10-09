@@ -156,6 +156,16 @@ function OptimizedDimensions({ model }) {
   </span>;
 }
 
+/** « Transport » or « Taxes calculées »: that part of the saved quote whose price
+ * the row shows, never recalculated here. Without an amount, its state (« À
+ * calculer », « À vérifier »…); an amount keeps its price's state under it
+ * (« Brouillon », « À revoir »). `zeroLabel` words a zero (« Sans taxes (pro) »). */
+function SavedQuoteAmount({ part, zeroLabel = '' }) {
+  const value = part || { amount: null, stateLabel: 'À calculer' };
+  const text = value.amount === null ? value.stateLabel || 'À calculer' : value.amount === 0 && zeroLabel ? zeroLabel : money(value.amount, value.stateLabel);
+  return <div><span className="dossier-table-money">{text}</span>{value.amount !== null && value.stateLabel && <span className="dossier-table-secondary">{value.stateLabel}</span>}</div>;
+}
+
 /** Something is « À vérifier » on this dossier: the mark names it for
  * assistive technology and on hover; the dossier page shows each line with its
  * link. It is not a tab stop: the reference opens the dossier. */
@@ -185,12 +195,8 @@ function CellContent({ column, c, client, model, alerts, onOpen, onOpenDossier, 
       const amount = dossierTableAmount(model, column), state = dossierTableAmountState(model, column);
       return <div><span className="dossier-table-money">{money(amount, state || dossierTableMissingAmountLabel(model.payment, 'requested'))}</span>{amount !== null && state && <span className="dossier-table-secondary">{state}</span>}</div>;
     }
-    case 'taxes': {
-      // The saved quote's own taxes, with the state of its price: never recalculated here.
-      const taxes = model.quoteTaxes || { amount: null, stateLabel: 'À calculer' };
-      const text = taxes.amount === null ? taxes.stateLabel || 'À calculer' : taxes.pro ? TAXES_PRO_LABEL : money(taxes.amount, taxes.stateLabel);
-      return <div><span className="dossier-table-money">{text}</span>{taxes.amount !== null && taxes.stateLabel && <span className="dossier-table-secondary">{taxes.stateLabel}</span>}</div>;
-    }
+    case 'transport': return <SavedQuoteAmount part={model.quoteTransport} />;
+    case 'taxes': return <SavedQuoteAmount part={model.quoteTaxes} zeroLabel={model.quoteTaxes?.pro ? TAXES_PRO_LABEL : ''} />;
     case 'paid':
       // Nothing is due before the quote: no « 0,00 € » beside « À calculer ».
       if (model.payment?.requested == null && model.payment?.paid === 0) return <Fact>—</Fact>;

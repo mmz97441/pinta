@@ -1,4 +1,4 @@
-/* Totals and « Taxes calculées » of the « Dossiers d’expédition » list: synthetic data
+/* Totals, « Transport » and « Taxes calculées » of the « Dossiers d’expédition » list: synthetic data
  * only, every request intercepted; no provider, notification or production call. */
 const { chromium } = require('playwright');
 const AxeBuilder = require('@axe-core/playwright').default;
@@ -34,13 +34,13 @@ const savedQuote = (amounts, { client = 'particulier', version = 1 } = {}) => ({
 const box = (dimL, dimW, dimH, poids) => ({ dimL, dimW, dimH, poids });
 
 /**
- * Six dossiers, what their cells show (divisor 5000):
- *  T1 quote sent      2 cartons · 1 colis · 30×20×20 3 kg (2,4 kg vol.) · 100,00 € · taxes 20,00 €        · départ 1
- *  T2 draft           1 carton  · 2 colis · 1,25 + 2,5 kg (1,2 + 12 kg vol.) · 83,47 € Brouillon · 12,67 € Brouillon · départ 1
- *  T3 measured only   3 cartons · nothing optimised · À calculer · À calculer                         · no departure
- *  T4 paid            1 carton  · 1 colis · 40×30×20 5 kg (4,8 kg vol.) · 120,00 € · taxes 24,45 €        · départ 2
- *  T5 former quote    1 carton  · 1 colis · 30×20×20 2 kg (2,4 kg vol.) · 50,00 € · taxes À vérifier     · départ 2
- *  T6 professional    1 carton  · 1 colis · 30×20×20 1 kg (2,4 kg vol.) · 40,00 € · Sans taxes (pro)    · départ 1
+ * Six dossiers, what their cells show (divisor 5000; price = transport + taxes):
+ *  T1 quote sent      2 cartons · 1 colis · 30×20×20 3 kg (2,4 kg vol.) · 100,00 € · transport 80,00 € · taxes 20,00 € · départ 1
+ *  T2 draft           1 carton  · 2 colis · 1,25 + 2,5 kg (1,2 + 12 kg vol.) · 83,47 € · 70,80 € · 12,67 €, each « Brouillon » · départ 1
+ *  T3 measured only   3 cartons · nothing optimised · À calculer · À calculer · À calculer               · no departure
+ *  T4 paid            1 carton  · 1 colis · 40×30×20 5 kg (4,8 kg vol.) · 120,00 € · transport 95,55 € · taxes 24,45 € · départ 2
+ *  T5 former quote    1 carton  · 1 colis · 30×20×20 2 kg (2,4 kg vol.) · 50,00 € · transport and taxes À vérifier  · départ 2
+ *  T6 professional    1 carton  · 1 colis · 30×20×20 1 kg (2,4 kg vol.) · 40,00 € · transport 40,00 € · Sans taxes (pro) · départ 1
  */
 async function fixture(browser, options = {}) {
   const f = await setup(browser, options.restricted ? 'preparateur' : 'directeur', { device: options.device || {} });
@@ -59,13 +59,13 @@ async function fixture(browser, options = {}) {
     preparation_composition_version: 1, final_measurements_version: 1, outgoing_parcel_count: 1, final_packages: [box(30, 20, 20, 3)], fin_l: 30, fin_w: 20, fin_h: 20, fin_p: 3,
     paiement_montant: null, paiement_date: null, envoi_id: null, updated_at: '2026-10-02T08:00:00Z', ...changes });
   f.tables.colis = [
-    parcel(1, { nb_colis: 2, devis_total: 100, devis_snapshot: savedQuote({ om: 10, omr: 5, tva: 5, total: 100 }), envoi_id: DEPARTURE.first }),
-    parcel(2, { nb_colis: 1, statut: 'en_preparation', devis_brouillon: true, quote_version: 3, devis_envoye_le: null, devis_total: 83.47, devis_snapshot: savedQuote({ om: 4.1, omr: 1.2, tva: 7.37, total: 83.47 }, { version: 3 }),
+    parcel(1, { nb_colis: 2, devis_total: 100, devis_snapshot: savedQuote({ transport: 80, om: 10, omr: 5, tva: 5, total: 100 }), envoi_id: DEPARTURE.first }),
+    parcel(2, { nb_colis: 1, statut: 'en_preparation', devis_brouillon: true, quote_version: 3, devis_envoye_le: null, devis_total: 83.47, devis_snapshot: savedQuote({ transport: 70.8, om: 4.1, omr: 1.2, tva: 7.37, total: 83.47 }, { version: 3 }),
       outgoing_parcel_count: 2, final_packages: [box(30, 20, 10, 1.25), box(50, 40, 30, 2.5)], envoi_id: DEPARTURE.first }),
     parcel(3, { nb_colis: 3, statut: 'mesure', feu_vert: 'en_attente', quote_version: 0, devis_envoye_le: null, preparation_composition_version: null, final_measurements_version: null, outgoing_parcel_count: 0, final_packages: [], fin_l: null, fin_w: null, fin_h: null, fin_p: null }),
-    parcel(4, { nb_colis: 1, statut: 'paye', devis_total: 120, devis_snapshot: savedQuote({ om: 12, omr: 3, tva: 9.45, total: 120 }), paiement_montant: 120, paiement_date: '2026-10-03T08:00:00Z', final_packages: [box(40, 30, 20, 5)], envoi_id: DEPARTURE.second }),
+    parcel(4, { nb_colis: 1, statut: 'paye', devis_total: 120, devis_snapshot: savedQuote({ transport: 95.55, om: 12, omr: 3, tva: 9.45, total: 120 }), paiement_montant: 120, paiement_date: '2026-10-03T08:00:00Z', final_packages: [box(40, 30, 20, 5)], envoi_id: DEPARTURE.second }),
     parcel(5, { nb_colis: 1, devis_total: 50, final_packages: [box(30, 20, 20, 2)], envoi_id: DEPARTURE.second }),
-    parcel(6, { nb_colis: 1, client_id: PRO, devis_total: 40, devis_snapshot: savedQuote({ om: 0, omr: 0, tva: 0, total: 40 }, { client: 'pro' }), final_packages: [box(30, 20, 20, 1)], envoi_id: DEPARTURE.first }),
+    parcel(6, { nb_colis: 1, client_id: PRO, devis_total: 40, devis_snapshot: savedQuote({ transport: 40, om: 0, omr: 0, tva: 0, total: 40 }, { client: 'pro' }), final_packages: [box(30, 20, 20, 1)], envoi_id: DEPARTURE.first }),
   ];
   // A long working list: more measured dossiers, nothing to add up but their cartons.
   for (let n = 0; n < (options.more || 0); n++) f.tables.colis.push(parcel(100 + n, { ref: `EXP-LONG${100 + n}`, nb_colis: 1, statut: 'mesure', feu_vert: 'en_attente', quote_version: 0, devis_envoye_le: null, preparation_composition_version: null, final_measurements_version: null, outgoing_parcel_count: 0, final_packages: [], fin_l: null, fin_w: null, fin_h: null, fin_p: null }));
@@ -125,7 +125,7 @@ async function expectTotals(f, selector, expected) {
   assert.deepEqual(await read(), expected);
 }
 // What the six dossiers add up to (see the fixture).
-const DAILY_TOTAL = { label: 'Total · 6 dossiers', cartons: value('9'), optimizedDimensions: partial('25,2 kg vol.', 5, 6), optimizedWeight: partial('14,75', 5, 6), requested: partial('393,47 €', 5, 6), taxes: partial('57,12 €', 4, 6) };
+const DAILY_TOTAL = { label: 'Total · 6 dossiers', cartons: value('9'), optimizedDimensions: partial('25,2 kg vol.', 5, 6), optimizedWeight: partial('14,75', 5, 6), requested: partial('393,47 €', 5, 6), transport: partial('286,35 €', 4, 6), taxes: partial('57,12 €', 4, 6) };
 
 async function selectTab(f, label, view) {
   await f.page.locator('[aria-label="Vues du tableau"]').getByRole('button', { name: label, exact: true }).click();
@@ -193,15 +193,15 @@ async function main() {
     } finally { await f.context.close(); console.log(JSON.stringify(results.at(-1))); }
   }
   try {
-    // ── The total of the displayed dossiers, and « Taxes calculées » of each one ──────────────
-    for (const width of [1440, 1280]) for (const dark of [false, true]) await scenario(`the-total-row-adds-up-the-displayed-dossiers-and-each-dossier-shows-its-taxes-${width}-${dark ? 'dark' : 'light'}`, async f => {
+    // ── The total of the displayed dossiers, and « Transport » and « Taxes calculées » of each one ──
+    for (const width of [1440, 1280]) for (const dark of [false, true]) await scenario(`the-total-row-adds-up-the-displayed-dossiers-and-each-dossier-shows-its-transport-and-taxes-${width}-${dark ? 'dark' : 'light'}`, async f => {
       await f.page.setViewportSize(sizeOf(width)); await theme(f, dark); await open(f); await waitTheme(f, dark);
       await countStatus(f, 6).waitFor();
       await expectTotals(f, FOOT, DAILY_TOTAL);
       const row = await totalRow(f);
       // One cell per column, in the first column its label; nothing to select, open or take.
       assert.equal(row.labelColumn, 'ref');
-      assert.deepEqual(Object.keys(row.cells), ['client', 'receivedAt', 'statusLabel', 'paymentState', 'statut', 'owner', 'casier', 'cartons', 'optimizedDimensions', 'optimizedWeight', 'requested', 'taxes', 'action']);
+      assert.deepEqual(Object.keys(row.cells), ['client', 'receivedAt', 'statusLabel', 'paymentState', 'statut', 'owner', 'casier', 'cartons', 'optimizedDimensions', 'optimizedWeight', 'requested', 'transport', 'taxes', 'action']);
       for (const key of ['client', 'receivedAt', 'statusLabel', 'paymentState', 'statut', 'owner', 'casier', 'action']) assert.equal(row.cells[key], null, `${key}: no total for text or dates.`);
       assert.deepEqual([row.select, row.controls], ['', 0]);
       assert.equal(row.headingLike, 0, 'Its cells never pass for a heading or a dossier cell ([data-column]).');
@@ -212,10 +212,14 @@ async function main() {
         return !b || Math.abs(a.left - b.left) > 1 || Math.abs(a.width - b.width) > 1;
       }).map(th => th.dataset.column));
       assert.deepEqual(misaligned, []);
-      // « Taxes calculées » right after the price: the saved quote's own taxes, with the price's state.
+      // « Transport » then « Taxes calculées » right after the price: the saved quote's own transport and taxes, with the price's state.
       const headings = await f.page.locator('thead th[data-column]').evaluateAll(nodes => nodes.map(node => node.dataset.column));
-      assert.equal(headings[headings.indexOf('requested') + 1], 'taxes');
+      assert.deepEqual(headings.slice(headings.indexOf('requested'), headings.indexOf('requested') + 3), ['requested', 'transport', 'taxes']);
       assert.equal(await f.page.locator('thead th[data-column="taxes"]').getAttribute('data-column-label'), 'Taxes calculées');
+      assert.equal(await f.page.locator('thead th[data-column="transport"]').getAttribute('data-column-label'), 'Transport');
+      assert.equal(plain(await f.page.locator('thead th[data-column="transport"] .dossier-table-heading-text').innerText()), 'Transport');
+      const transport = n => dossierCell(f, n, 'transport').innerText().then(plain);
+      assert.deepEqual(await Promise.all([1, 2, 3, 4, 5, 6].map(transport)), ['80,00 €', '70,80 €\nBrouillon', 'À calculer', '95,55 €', 'À vérifier', '40,00 €']);
       const taxes = n => dossierCell(f, n, 'taxes').innerText().then(plain);
       assert.deepEqual(await Promise.all([1, 2, 3, 4, 5, 6].map(taxes)), ['20,00 €', '12,67 €\nBrouillon', 'À calculer', '24,45 €', 'À vérifier', 'Sans taxes (pro)']);
       assert.deepEqual(await Promise.all([1, 2, 3, 4, 5, 6].map(n => dossierCell(f, n, 'requested').innerText().then(plain))), ['100,00 €', '83,47 €\nBrouillon', 'À calculer', '120,00 €', '50,00 €', '40,00 €']);
@@ -223,6 +227,9 @@ async function main() {
       assert.equal(await f.page.locator('tfoot td[data-total-column="taxes"]').evaluate(node => getComputedStyle(node).textAlign), 'right');
       assert.equal(await f.page.locator('tfoot td[data-total-column="taxes"] .sr-only').textContent(), 'Total de 4 dossiers sur 6 ; 2 sans valeur.');
       assert.equal(await f.page.locator('tfoot td[data-total-column="taxes"] .dossier-table-total-note').getAttribute('aria-hidden'), 'true');
+      assert.equal(await f.page.locator('tfoot td[data-total-column="transport"]').evaluate(node => getComputedStyle(node).textAlign), 'right');
+      assert.equal(await f.page.locator('tfoot td[data-total-column="transport"] .sr-only').textContent(), 'Total de 4 dossiers sur 6 ; 2 sans valeur.');
+      assert.equal(await dossierCell(f, 1, 'transport').evaluate(node => getComputedStyle(node).textAlign), 'right', 'The amounts line up on the right.');
       await f.page.getByRole('rowheader', { name: 'Total · 6 dossiers', exact: true }).waitFor();
       const ink = await totalsInk(f);
       assert.ok(ink.count >= 6 && ink.contrast >= 4.5 && ink.size >= 11, `Readable totals: ${JSON.stringify(ink)}`);
@@ -231,43 +238,52 @@ async function main() {
       await f.page.waitForFunction(() => document.querySelector('.dossier-list-main')?.dataset.moreRight === undefined);
       await f.page.screenshot({ path: `${output}/total-daily-${width}-${dark ? 'dark' : 'light'}.png` });
       await selectTab(f, 'Paiements', 'payments');
-      // Beside « Demandé », the taxes of the amount asked: the draft EXP-TOT002 asks nothing yet, so its taxes read
-      // « À calculer » like its « Demandé », and both totals add up the same dossiers (EXP-TOT005: « À vérifier »).
-      await expectTotals(f, FOOT, { label: 'Total · 6 dossiers', requested: partial('310,00 €', 4, 6), taxes: partial('44,45 €', 3, 6), paid: value('120,00 €'), remaining: partial('190,00 €', 4, 6), sentAt: null });
+      // Beside « Demandé », the transport and taxes of the amount asked: the draft EXP-TOT002 asks nothing yet, so they read
+      // « À calculer » like its « Demandé », and the totals add up the same dossiers (EXP-TOT005: « À vérifier »).
+      await expectTotals(f, FOOT, { label: 'Total · 6 dossiers', requested: partial('310,00 €', 4, 6), transport: partial('215,55 €', 3, 6), taxes: partial('44,45 €', 3, 6), paid: value('120,00 €'), remaining: partial('190,00 €', 4, 6), sentAt: null });
       const paymentHeadings = await f.page.locator('thead th[data-column]').evaluateAll(nodes => nodes.map(node => node.dataset.column));
-      assert.deepEqual(paymentHeadings.slice(paymentHeadings.indexOf('requested'), paymentHeadings.indexOf('requested') + 3), ['requested', 'taxes', 'paid'], '« Taxes » right after « Demandé ».');
-      assert.deepEqual(await Promise.all([1, 2, 3, 4, 5, 6].map(n => Promise.all(['requested', 'taxes'].map(key => dossierCell(f, n, key).innerText().then(plain))))),
-        [['100,00 €', '20,00 €'], ['À calculer', 'À calculer'], ['À calculer', 'À calculer'], ['120,00 €', '24,45 €'], ['50,00 €', 'À vérifier'], ['40,00 €', 'Sans taxes (pro)']]);
+      assert.deepEqual(paymentHeadings.slice(paymentHeadings.indexOf('requested'), paymentHeadings.indexOf('requested') + 4), ['requested', 'transport', 'taxes', 'paid'], '« Transport » and « Taxes » right after « Demandé ».');
+      assert.deepEqual(await Promise.all([1, 2, 3, 4, 5, 6].map(n => Promise.all(['requested', 'transport', 'taxes'].map(key => dossierCell(f, n, key).innerText().then(plain))))),
+        [['100,00 €', '80,00 €', '20,00 €'], ['À calculer', 'À calculer', 'À calculer'], ['À calculer', 'À calculer', 'À calculer'], ['120,00 €', '95,55 €', '24,45 €'], ['50,00 €', 'À vérifier', 'À vérifier'], ['40,00 €', '40,00 €', 'Sans taxes (pro)']]);
       await f.page.screenshot({ path: `${output}/total-payments-${width}-${dark ? 'dark' : 'light'}.png` });
       await selectTab(f, 'Accords clients', 'accords');
       await f.page.locator('thead th[data-column="consentState"]').waitFor();
       assert.equal(await f.page.locator('thead th[data-column="taxes"]').count(), 0, 'No taxes in « Accords clients ».');
+      assert.equal(await f.page.locator('thead th[data-column="transport"], [data-total-column="transport"]').count(), 0, 'No transport in « Accords clients ».');
     });
 
     // ── What is displayed: filters, the search and the tabs change the totals; a sort never does ──
     await scenario('a-filter-the-search-and-a-step-change-the-totals-a-sort-never-does', async f => {
       await open(f); await expectTotals(f, FOOT, DAILY_TOTAL);
-      for (const [key, direction] of [['requested', 'desc'], ['ref', 'asc'], ['taxes', 'asc']]) {
+      for (const [key, direction] of [['requested', 'desc'], ['ref', 'asc'], ['taxes', 'asc'], ['transport', 'desc']]) {
         await f.page.goto(`${base}/colis?sort=${key}&dir=${direction}`);
         await f.page.locator(`th[data-column="${key}"][aria-sort="${direction === 'desc' ? 'descending' : 'ascending'}"]`).waitFor();
         await expectTotals(f, FOOT, DAILY_TOTAL);
       }
-      // Sorted on the price, the rows did move.
+      // Sorted on the price, the rows did move; sorted on the transport too, unknowns last.
       await f.page.goto(`${base}/colis?sort=requested&dir=desc`); await f.page.locator('th[data-column="requested"][aria-sort="descending"]').waitFor();
       assert.deepEqual(await f.page.locator('tr[data-dossier-row]').evaluateAll(nodes => nodes.map(node => node.dataset.dossierRow)), [T(4), T(1), T(2), T(5), T(6), T(3)]);
       await expectTotals(f, FOOT, DAILY_TOTAL);
+      await f.page.goto(`${base}/colis?sort=transport&dir=asc`); await f.page.locator('th[data-column="transport"][aria-sort="ascending"]').waitFor();
+      assert.deepEqual(await f.page.locator('tr[data-dossier-row]').evaluateAll(nodes => nodes.map(node => node.dataset.dossierRow)).then(order => order.slice(0, 4)), [T(6), T(2), T(1), T(4)]);
+      await expectTotals(f, FOOT, DAILY_TOTAL);
       // A column filter: the price from 60 €.
       await filterColumn(f, 'requested', 'min', '60'); await countStatus(f, 3).waitFor();
-      await expectTotals(f, FOOT, { label: 'Total des 3 dossiers filtrés', cartons: value('4'), optimizedDimensions: value('20,4 kg vol.'), optimizedWeight: value('11,75'), requested: value('303,47 €'), taxes: value('57,12 €') });
+      await expectTotals(f, FOOT, { label: 'Total des 3 dossiers filtrés', cartons: value('4'), optimizedDimensions: value('20,4 kg vol.'), optimizedWeight: value('11,75'), requested: value('303,47 €'), transport: value('246,35 €'), taxes: value('57,12 €') });
       await f.page.getByRole('button', { name: 'Retirer les filtres', exact: true }).click(); await countStatus(f, 6).waitFor();
       await expectTotals(f, FOOT, DAILY_TOTAL);
-      // The search: the professional client alone, whose quote has no tax.
+      // A filter on « Transport » itself: at most 75 € keeps the draft EXP-TOT002 and the professional EXP-TOT006.
+      await filterColumn(f, 'transport', 'max', '75'); await countStatus(f, 2).waitFor();
+      await expectTotals(f, FOOT, { label: 'Total des 2 dossiers filtrés', cartons: value('2'), optimizedDimensions: value('15,6 kg vol.'), optimizedWeight: value('4,75'), requested: value('123,47 €'), transport: value('110,80 €'), taxes: value('12,67 €') });
+      await f.page.getByRole('button', { name: 'Retirer les filtres', exact: true }).click(); await countStatus(f, 6).waitFor();
+      await expectTotals(f, FOOT, DAILY_TOTAL);
+      // The search: the professional client alone, whose quote has a transport and no tax.
       await f.page.getByLabel('Rechercher ou scanner un colis', { exact: true }).fill('Lagon'); await countStatus(f, 1).waitFor();
-      await expectTotals(f, FOOT, { label: 'Total du dossier filtré', cartons: value('1'), optimizedDimensions: value('2,4 kg vol.'), optimizedWeight: value('1'), requested: value('40,00 €'), taxes: value('0,00 €') });
+      await expectTotals(f, FOOT, { label: 'Total du dossier filtré', cartons: value('1'), optimizedDimensions: value('2,4 kg vol.'), optimizedWeight: value('1'), requested: value('40,00 €'), transport: value('40,00 €'), taxes: value('0,00 €') });
       await f.page.getByRole('button', { name: 'Effacer la recherche', exact: true }).click(); await countStatus(f, 6).waitFor();
       // A step of the journey: the quotes awaiting payment.
       await f.page.goto(`${base}/colis?tab=paiement`); await countStatus(f, 3).waitFor();
-      await expectTotals(f, FOOT, { label: 'Total des 3 dossiers filtrés', cartons: value('4'), requested: value('190,00 €'), taxes: partial('20,00 €', 2, 3) });
+      await expectTotals(f, FOOT, { label: 'Total des 3 dossiers filtrés', cartons: value('4'), requested: value('190,00 €'), transport: partial('120,00 €', 2, 3), taxes: partial('20,00 €', 2, 3) });
       // « Mes tâches » narrows the list too: nobody took a task here, so the list is empty, and so are the totals.
       await f.page.goto(`${base}/colis?tasks=mine`);
       await f.page.getByText('Aucune tâche ne vous est attribuée dans cette sélection.', { exact: true }).waitFor();
@@ -277,13 +293,20 @@ async function main() {
 
     await scenario('a-dossier-updated-meanwhile-changes-the-totals', async f => {
       await open(f); await expectTotals(f, FOOT, DAILY_TOTAL);
-      // EXP-TOT005's quote saved again by a colleague: its taxes are now known.
+      // EXP-TOT005's quote saved again by a colleague: its transport and taxes are now known.
       const updated = f.tables.colis.find(row => row.id === T(5));
-      Object.assign(updated, { devis_snapshot: savedQuote({ om: 4, omr: 1, tva: 2.5, total: 50 }), updated_at: '2026-10-08T09:00:00Z' });
+      Object.assign(updated, { devis_snapshot: savedQuote({ transport: 42.5, om: 4, omr: 1, tva: 2.5, total: 50 }), updated_at: '2026-10-08T09:00:00Z' });
       f.before = structuredClone(f.tables.colis);
       await f.page.evaluate(() => window.dispatchEvent(new Event('focus')));
-      await expectTotals(f, FOOT, { ...DAILY_TOTAL, taxes: partial('64,62 €', 5, 6) });
+      await expectTotals(f, FOOT, { ...DAILY_TOTAL, transport: partial('328,85 €', 5, 6), taxes: partial('64,62 €', 5, 6) });
       assert.equal(plain(await dossierCell(f, 5, 'taxes').innerText()), '7,50 €');
+      assert.equal(plain(await dossierCell(f, 5, 'transport').innerText()), '42,50 €');
+      // Saved once more with a transport set at zero: it reads « 0,00 € », a value the total counts (5 of 6).
+      Object.assign(updated, { devis_snapshot: savedQuote({ transport: 0, om: 20, omr: 10, tva: 20, total: 50 }), updated_at: '2026-10-08T10:00:00Z' });
+      f.before = structuredClone(f.tables.colis);
+      await f.page.evaluate(() => window.dispatchEvent(new Event('focus')));
+      await expectTotals(f, FOOT, { ...DAILY_TOTAL, transport: partial('286,35 €', 5, 6), taxes: partial('107,12 €', 5, 6) });
+      assert.equal(plain(await dossierCell(f, 5, 'transport').innerText()), '0,00 €');
     });
 
     // ── A refresh of the tasks (every minute, on focus) runs behind the loaded list ────────────
@@ -329,13 +352,13 @@ async function main() {
     // ── Grouped by departure: a subtotal closes each group, folded or not ──────────────────────
     const GROUPS = [
       { key: DEPARTURE.first, title: 'Départ du jeudi 15 octobre 2099 · Réunion', context: 'Départ du jeudi 15 octobre 2099 · Réunion · DEP-TOT-01', ids: [1, 2, 6],
-        totals: { label: 'Sous-total · 3 dossiers', packages: value('4'), optimizedDimensions: value('18 kg vol.'), optimizedWeight: value('7,75'), requested: value('223,47 €'), taxes: value('32,67 €') } },
+        totals: { label: 'Sous-total · 3 dossiers', packages: value('4'), optimizedDimensions: value('18 kg vol.'), optimizedWeight: value('7,75'), requested: value('223,47 €'), transport: value('190,80 €'), taxes: value('32,67 €') } },
       { key: DEPARTURE.second, title: 'Départ du jeudi 22 octobre 2099 · Réunion', context: 'Départ du jeudi 22 octobre 2099 · Réunion · DEP-TOT-02', ids: [4, 5],
-        totals: { label: 'Sous-total · 2 dossiers', packages: value('2'), optimizedDimensions: value('7,2 kg vol.'), optimizedWeight: value('7'), requested: value('170,00 €'), taxes: partial('24,45 €', 1, 2) } },
+        totals: { label: 'Sous-total · 2 dossiers', packages: value('2'), optimizedDimensions: value('7,2 kg vol.'), optimizedWeight: value('7'), requested: value('170,00 €'), transport: partial('95,55 €', 1, 2), taxes: partial('24,45 €', 1, 2) } },
       { key: 'none', title: 'Sans départ affecté', context: 'Sans départ affecté', ids: [3],
-        totals: { label: 'Sous-total · 1 dossier', packages: NONE, optimizedDimensions: NONE, optimizedWeight: NONE, requested: NONE, taxes: NONE } },
+        totals: { label: 'Sous-total · 1 dossier', packages: NONE, optimizedDimensions: NONE, optimizedWeight: NONE, requested: NONE, transport: NONE, taxes: NONE } },
     ];
-    const DEPARTURES_TOTAL = { label: 'Total · 6 dossiers', packages: partial('6', 5, 6), optimizedDimensions: partial('25,2 kg vol.', 5, 6), optimizedWeight: partial('14,75', 5, 6), requested: partial('393,47 €', 5, 6), taxes: partial('57,12 €', 4, 6) };
+    const DEPARTURES_TOTAL = { label: 'Total · 6 dossiers', packages: partial('6', 5, 6), optimizedDimensions: partial('25,2 kg vol.', 5, 6), optimizedWeight: partial('14,75', 5, 6), requested: partial('393,47 €', 5, 6), transport: partial('286,35 €', 4, 6), taxes: partial('57,12 €', 4, 6) };
     /** The body of the table in screen order: group headings, dossiers and subtotals. */
     const bodyOrder = f => f.page.evaluate(() => [...document.querySelector('table.dossier-data-table').tBodies[0].rows].map(row => row.dataset.dossierGroup ? `group:${row.dataset.dossierGroup}` : row.dataset.dossierRow ? `dossier:${row.dataset.dossierRow}` : row.dataset.dossierSubtotal ? `subtotal:${row.dataset.dossierSubtotal}` : 'other'));
     for (const dark of [false, true]) await scenario(`grouped-by-departure-a-subtotal-closes-each-group-and-stays-when-it-is-folded-1440-${dark ? 'dark' : 'light'}`, async f => {
@@ -370,7 +393,7 @@ async function main() {
       const folded = await bodyOrder(f);
       assert.deepEqual(folded.slice(0, 3), [`group:${GROUPS[0].key}`, `subtotal:${GROUPS[0].key}`, `group:${GROUPS[1].key}`]);
       await expectTotals(f, subtotalRow(GROUPS[0].key), GROUPS[0].totals);
-      // Every group folded: one line per departure with its weight, taxes and amounts; the total keeps every dossier.
+      // Every group folded: one line per departure with its weight, transport, taxes and amounts; the total keeps every dossier.
       for (const group of GROUPS.slice(1)) await f.page.getByRole('button', { name: group.title, exact: true }).click();
       await f.page.waitForFunction(() => !document.querySelector('tr[data-dossier-row]'));
       assert.deepEqual(await bodyOrder(f), GROUPS.flatMap(group => [`group:${group.key}`, `subtotal:${group.key}`]));
@@ -387,28 +410,36 @@ async function main() {
       assert.doesNotMatch(JSON.stringify(data), /Sous-total|Départ du jeudi/);
     });
 
-    // ── Permissions: without the amounts, no taxes column and no financial total ──────────────
-    await scenario('a-role-without-the-amounts-sees-no-taxes-column-and-no-financial-total', async f => {
+    // ── Permissions: without the amounts, no transport or taxes column and no financial total ──
+    await scenario('a-role-without-the-amounts-sees-no-transport-or-taxes-column-and-no-financial-total', async f => {
       await open(f);
       await expectTotals(f, FOOT, { label: 'Total · 6 dossiers', cartons: value('9'), optimizedDimensions: partial('25,2 kg vol.', 5, 6), optimizedWeight: partial('14,75', 5, 6) });
       const row = await totalRow(f);
-      assert.equal(Object.hasOwn(row.cells, 'requested') || Object.hasOwn(row.cells, 'taxes'), false);
-      assert.equal(await f.page.locator('th[data-column="taxes"], th[data-column="requested"], td[data-column="taxes"], [data-total-column="taxes"], [data-total-column="requested"]').count(), 0);
+      assert.equal(Object.hasOwn(row.cells, 'requested') || Object.hasOwn(row.cells, 'transport') || Object.hasOwn(row.cells, 'taxes'), false);
+      assert.equal(await f.page.locator('th[data-column="taxes"], th[data-column="requested"], th[data-column="transport"], td[data-column="taxes"], td[data-column="transport"], [data-total-column="taxes"], [data-total-column="requested"], [data-total-column="transport"]').count(), 0);
       assert.doesNotMatch(await f.page.locator('table.dossier-data-table').innerText(), /€/);
+      // The column chooser does not offer it either.
+      await openDisplay(f); await displayDialog(f).getByRole('button', { name: 'Colonnes', exact: true }).click();
+      const chooser = f.page.getByRole('dialog', { name: 'Colonnes affichées', exact: true }); await chooser.waitFor();
+      await chooser.getByLabel('Afficher Cartons reçus', { exact: true }).waitFor();
+      assert.equal(await chooser.getByLabel('Afficher Transport', { exact: true }).count(), 0);
+      await chooser.getByRole('button', { name: 'Terminer', exact: true }).click(); await chooser.waitFor({ state: 'hidden' });
       // A forced price filter or sort neither shows nor hides anything.
-      await f.page.goto(`${base}/colis?sort=taxes&dir=desc&${new URLSearchParams({ 'col.taxes': JSON.stringify({ mode: 'min', value: '1' }) })}`);
-      await f.page.waitForURL(url => !url.searchParams.has('col.taxes') && !url.searchParams.has('sort'));
-      await countStatus(f, 6).waitFor();
+      for (const key of ['taxes', 'transport']) {
+        await f.page.goto(`${base}/colis?sort=${key}&dir=desc&${new URLSearchParams({ [`col.${key}`]: JSON.stringify({ mode: 'min', value: '1' }) })}`);
+        await f.page.waitForURL(url => !url.searchParams.has(`col.${key}`) && !url.searchParams.has('sort'));
+        await countStatus(f, 6).waitFor();
+      }
       const sheet = await download(f, 6);
       const data = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null });
-      assert.equal(data[0].includes('Taxes calculées'), false); assert.equal(data[0].includes('Prix du devis'), false);
-      assert.equal(data[8][0], 'Total'); assert.doesNotMatch(JSON.stringify(data), /393|57\.12|83\.47/);
+      assert.equal(data[0].includes('Taxes calculées'), false); assert.equal(data[0].includes('Prix du devis'), false); assert.equal(data[0].includes('Transport'), false);
+      assert.equal(data[8][0], 'Total'); assert.doesNotMatch(JSON.stringify(data), /393|57\.12|83\.47|286\.35|95\.55|70\.8/);
     }, { restricted: true });
 
     // ── A long list: the total stays pinned at the bottom; the keyboard never lands under it ──
     for (const width of [1280, 1440]) await scenario(`the-total-stays-at-the-bottom-of-a-long-list-and-keyboard-focus-never-hides-under-it-${width}`, async f => {
       await f.page.setViewportSize(sizeOf(width)); await open(f); await countStatus(f, 36).waitFor();
-      await expectTotals(f, FOOT, { ...DAILY_TOTAL, label: 'Total · 36 dossiers', cartons: value('39'), optimizedDimensions: partial('25,2 kg vol.', 5, 36), optimizedWeight: partial('14,75', 5, 36), requested: partial('393,47 €', 5, 36), taxes: partial('57,12 €', 4, 36) });
+      await expectTotals(f, FOOT, { ...DAILY_TOTAL, label: 'Total · 36 dossiers', cartons: value('39'), optimizedDimensions: partial('25,2 kg vol.', 5, 36), optimizedWeight: partial('14,75', 5, 36), requested: partial('393,47 €', 5, 36), transport: partial('286,35 €', 4, 36), taxes: partial('57,12 €', 4, 36) });
       const scroller = f.page.locator(SCROLLER);
       const geometry = () => f.page.evaluate(() => {
         const scroll = document.getElementById('dossier-table-scroll'), view = scroll.getBoundingClientRect(), foot = document.querySelector('tfoot th[scope="row"]').getBoundingClientRect();
@@ -581,15 +612,20 @@ async function main() {
       }));
       await f.page.waitForFunction(() => document.querySelectorAll('.dossier-card-list [data-group-totals]').length === 3);
       assert.deepEqual((await lines()).map(({ key, shown }) => ({ key, shown })), [
-        { key: DEPARTURE.first, shown: 'Colis 4 · Dimensions 18 kg vol. · Poids 7,75 kg · Prix 223,47 € · Taxes 32,67 €' },
-        { key: DEPARTURE.second, shown: 'Colis 2 · Dimensions 7,2 kg vol. · Poids 7 kg · Prix 170,00 € · Taxes 24,45 € (1 sur 2 dossiers)' },
-        { key: 'none', shown: 'Non renseigné : colis, dimensions, poids, prix, taxes' },
+        { key: DEPARTURE.first, shown: 'Colis 4 · Dimensions 18 kg vol. · Poids 7,75 kg · Prix 223,47 € · Transport 190,80 € · Taxes 32,67 €' },
+        { key: DEPARTURE.second, shown: 'Colis 2 · Dimensions 7,2 kg vol. · Poids 7 kg · Prix 170,00 € · Transport 95,55 € (1 sur 2 dossiers) · Taxes 24,45 € (1 sur 2 dossiers)' },
+        { key: 'none', shown: 'Non renseigné : colis, dimensions, poids, prix, transport, taxes' },
       ]);
       // Read aloud, a comma parts two totals where the « · » shows (« Colis 4, Dimensions… », never « Colis 4 Dimensions »).
       assert.deepEqual((await lines()).map(line => line.spoken), [
-        'Sous-total : Colis 4, Dimensions 18 kg vol., Poids 7,75 kg, Prix 223,47 €, Taxes 32,67 €',
-        'Sous-total : Colis 2, Dimensions 7,2 kg vol., Poids 7 kg, Prix 170,00 €, Taxes 24,45 €, Total de 1 dossier sur 2 ; 1 sans valeur.',
-        'Sous-total : Non renseigné : colis, dimensions, poids, prix, taxes',
+        'Sous-total : Colis 4, Dimensions 18 kg vol., Poids 7,75 kg, Prix 223,47 €, Transport 190,80 €, Taxes 32,67 €',
+        'Sous-total : Colis 2, Dimensions 7,2 kg vol., Poids 7 kg, Prix 170,00 €, Transport 95,55 €, Total de 1 dossier sur 2 ; 1 sans valeur., Taxes 24,45 €, Total de 1 dossier sur 2 ; 1 sans valeur.',
+        'Sous-total : Non renseigné : colis, dimensions, poids, prix, transport, taxes',
+      ]);
+      // Each card shows its own transport, as its row would.
+      assert.deepEqual(await Promise.all([1, 2, 3, 4, 5, 6].map(n => f.page.locator(`[data-dossier-card="${T(n)}"] [data-column="transport"]`)
+        .evaluate(node => [node.querySelector('dt').textContent, node.querySelector('dd').innerText]).then(([label, text]) => [label, plain(text)]))), [
+        ['Transport', '80,00 €'], ['Transport', '70,80 €\nBrouillon'], ['Transport', 'À calculer'], ['Transport', '95,55 €'], ['Transport', 'À vérifier'], ['Transport', '40,00 €'],
       ]);
       // The list ends with its total.
       const block = f.page.locator('[data-dossier-total]');
@@ -597,7 +633,8 @@ async function main() {
       assert.equal(plain(await block.locator('.dossier-card-total-title').innerText()), 'Total des 6 dossiers');
       assert.deepEqual(await block.locator('dl > div').evaluateAll(items => items.map(item => [item.querySelector('dt').textContent,
         [...item.querySelectorAll('dd .dossier-table-total-value, dd .dossier-table-total-note, dd .dossier-table-placeholder')].map(node => node.textContent.replace(/[\u00a0\u202f]/g, ' ').trim()).join('\n')])), [
-        ['Colis à expédier', '6\n5 sur 6 dossiers'], ['Dimensions finales', '25,2 kg vol.\n5 sur 6 dossiers'], ['Poids final (kg)', '14,75\n5 sur 6 dossiers'], ['Prix du devis', '393,47 €\n5 sur 6 dossiers'], ['Taxes calculées', '57,12 €\n4 sur 6 dossiers'],
+        ['Colis à expédier', '6\n5 sur 6 dossiers'], ['Dimensions finales', '25,2 kg vol.\n5 sur 6 dossiers'], ['Poids final (kg)', '14,75\n5 sur 6 dossiers'], ['Prix du devis', '393,47 €\n5 sur 6 dossiers'],
+        ['Transport', '286,35 €\n4 sur 6 dossiers'], ['Taxes calculées', '57,12 €\n4 sur 6 dossiers'],
       ]);
       assert.equal(await f.page.locator('[data-dossier-card]').count(), 6, 'The total is not a card.');
       await noPageOverflow(f);
@@ -634,32 +671,81 @@ async function main() {
       await f.page.locator('[data-dossier-total]').waitFor();
       assert.equal(await f.page.locator('[data-group-totals]').count(), 0);
       assert.equal(plain(await f.page.locator('.dossier-card-total-title').innerText()), 'Total des 6 dossiers');
-      assert.deepEqual(await f.page.locator('[data-dossier-total] dt').allTextContents(), ['Cartons reçus', 'Dimensions finales', 'Poids final (kg)', 'Prix du devis', 'Taxes calculées']);
+      assert.deepEqual(await f.page.locator('[data-dossier-total] dt').allTextContents(), ['Cartons reçus', 'Dimensions finales', 'Poids final (kg)', 'Prix du devis', 'Transport', 'Taxes calculées']);
       await noPageOverflow(f);
     }, { device: { hasTouch: true, isMobile: true } });
 
-    // ── The spreadsheet: « Taxes calculées » and a « Total » row that follows Excel's filters ──
-    await scenario('the-export-has-the-taxes-and-a-subtotal-row-equal-to-the-screen-totals', async f => {
+    // ── The spreadsheet: « Transport », « Taxes calculées » and a « Total » row that follows Excel's filters ──
+    await scenario('the-export-has-the-transport-the-taxes-and-a-subtotal-row-equal-to-the-screen-totals', async f => {
       await open(f); await expectTotals(f, FOOT, DAILY_TOTAL);
       const sheet = await download(f, 6);
       const data = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null });
       const header = data[0], at = label => header.indexOf(label);
-      assert.equal(header[at('Prix du devis') + 1], 'Taxes calculées');
+      assert.deepEqual(header.slice(at('Prix du devis'), at('Prix du devis') + 3), ['Prix du devis', 'Transport', 'Taxes calculées']);
       assert.deepEqual(data.slice(1, 7).map(line => line[0]), await f.page.locator('tr[data-dossier-row] .dossier-table-reference').allTextContents(), 'The dossiers in screen order.');
       assert.ok(data[7].every(cell => cell === null), 'One empty row.');
       assert.equal(data[8][0], 'Total'); assert.equal(data.length, 9);
       const total = label => sheet[XLSX.utils.encode_cell({ r: 8, c: at(label) })];
-      for (const [label, cached] of [['Cartons reçus', 9], ['Poids final (kg)', 14.75], ['Prix du devis', 393.47], ['Taxes calculées', 57.12]]) {
+      for (const [label, cached] of [['Cartons reçus', 9], ['Poids final (kg)', 14.75], ['Prix du devis', 393.47], ['Transport', 286.35], ['Taxes calculées', 57.12]]) {
         const name = XLSX.utils.encode_col(at(label));
         assert.deepEqual([total(label).f, total(label).v], [`SUBTOTAL(9,${name}2:${name}7)`, cached], label);
       }
+      // The transport total: a number in the euro format, the screen's 286,35 € cached.
+      assert.deepEqual([total('Transport').t, total('Transport').z, total('Transport').w], ['n', '#,##0.00 "€"', '286.35 €']);
       assert.deepEqual(sheet['!autofilter'], { ref: `A1:${XLSX.utils.encode_col(header.length - 1)}7` });
-      const taxes = data.slice(1, 7).map(line => line[at('Taxes calculées')]);
-      const byRef = Object.fromEntries(data.slice(1, 7).map((line, index) => [line[0], taxes[index]]));
-      assert.deepEqual(byRef, { 'EXP-TOT001': 20, 'EXP-TOT002': 12.67, 'EXP-TOT003': 'À calculer', 'EXP-TOT004': 24.45, 'EXP-TOT005': 'À vérifier', 'EXP-TOT006': 0 });
+      const byRef = label => Object.fromEntries(data.slice(1, 7).map(line => [line[0], line[at(label)]]));
+      assert.deepEqual(byRef('Transport'), { 'EXP-TOT001': 80, 'EXP-TOT002': 70.8, 'EXP-TOT003': 'À calculer', 'EXP-TOT004': 95.55, 'EXP-TOT005': 'À vérifier', 'EXP-TOT006': 40 });
+      assert.deepEqual(byRef('Taxes calculées'), { 'EXP-TOT001': 20, 'EXP-TOT002': 12.67, 'EXP-TOT003': 'À calculer', 'EXP-TOT004': 24.45, 'EXP-TOT005': 'À vérifier', 'EXP-TOT006': 0 });
       const row = ref => data.findIndex(line => line[0] === ref);
-      assert.equal(sheet[XLSX.utils.encode_cell({ r: row('EXP-TOT006'), c: at('Taxes calculées') })].w, 'Sans taxes (pro)');
-      assert.equal(sheet[XLSX.utils.encode_cell({ r: row('EXP-TOT002'), c: at('Taxes calculées') })].w, '12.67 € · Brouillon');
+      const cell = (ref, label) => sheet[XLSX.utils.encode_cell({ r: row(ref), c: at(label) })];
+      assert.equal(cell('EXP-TOT006', 'Taxes calculées').w, 'Sans taxes (pro)');
+      assert.equal(cell('EXP-TOT002', 'Taxes calculées').w, '12.67 € · Brouillon');
+      // The draft's transport keeps its state in its format; the professional quote's transport reads like any other.
+      assert.deepEqual([cell('EXP-TOT002', 'Transport').t, cell('EXP-TOT002', 'Transport').w], ['n', '70.80 € · Brouillon']);
+      assert.deepEqual([cell('EXP-TOT006', 'Transport').t, cell('EXP-TOT006', 'Transport').w], ['n', '40.00 €']);
+      assert.equal(cell('EXP-TOT005', 'Transport').t, 's');
+    });
+
+    // ── Choices saved before « Transport » existed: it shows in its place until the person hides it ──
+    await scenario('choices-saved-before-the-transport-show-it-in-its-place-until-it-is-hidden-1440', async f => {
+      await f.page.setViewportSize(sizeOf(1440)); await open(f); await countStatus(f, 6).waitFor();
+      // What a person kept on 8 October: two hidden columns and three widths, nothing about « transport ».
+      const keys = await f.page.evaluate(id => {
+        const user = encodeURIComponent(id), keys = { hidden: `expedile:table-columns:v1:${user}:daily`, widths: `expedile:table-widths:v1:${user}:daily` };
+        localStorage.setItem(keys.hidden, JSON.stringify(['casier', 'owner']));
+        localStorage.setItem(keys.widths, JSON.stringify({ ref: 200, requested: 160, taxes: 150 }));
+        return keys;
+      }, ids.A);
+      await f.page.reload(); await countStatus(f, 6).waitFor();
+      const headings = () => f.page.locator('thead th[data-column]:not([data-column="select"])').evaluateAll(nodes => nodes.map(node => node.dataset.column));
+      const width = label => f.page.getByRole('separator', { name: `Redimensionner ${label}`, exact: true }).getAttribute('aria-valuenow').then(Number);
+      const shown = ['ref', 'client', 'receivedAt', 'statusLabel', 'paymentState', 'statut', 'cartons', 'optimizedDimensions', 'optimizedWeight', 'requested', 'transport', 'taxes', 'action'];
+      await f.page.waitForFunction(() => !document.querySelector('thead th[data-column="casier"]'));
+      assert.deepEqual(await headings(), shown, 'The saved choices are kept; « Transport » shows between the price and the taxes.');
+      assert.deepEqual(await Promise.all(['Référence', 'Prix du devis', 'Taxes calculées', 'Transport'].map(width)), [200, 160, 150, 130], 'The saved widths are kept; « Transport » opens at its own.');
+      assert.ok(Math.abs((await f.page.locator('thead th[data-column="transport"]').boundingBox()).width - 130) <= 1);
+      await expectTotals(f, FOOT, { label: 'Total · 6 dossiers', requested: partial('393,47 €', 5, 6), transport: partial('286,35 €', 4, 6), taxes: partial('57,12 €', 4, 6) });
+      // Hidden by the person, it stays hidden, with its total, after a reload.
+      const chooser = f.page.getByRole('dialog', { name: 'Colonnes affichées', exact: true });
+      const toggle = async visible => {
+        await openDisplay(f); await displayDialog(f).getByRole('button', { name: 'Colonnes', exact: true }).click(); await chooser.waitFor();
+        const box = chooser.getByRole('checkbox', { name: 'Afficher Transport', exact: true });
+        assert.equal(await box.isChecked(), !visible);
+        await box.setChecked(visible); await chooser.getByRole('button', { name: 'Terminer', exact: true }).click(); await chooser.waitFor({ state: 'hidden' });
+      };
+      await toggle(false);
+      await f.page.locator('thead th[data-column="transport"]').waitFor({ state: 'detached' });
+      assert.equal(await f.page.locator('[data-total-column="transport"], td[data-column="transport"]').count(), 0);
+      assert.deepEqual(await f.page.evaluate(key => JSON.parse(localStorage.getItem(key)), keys.hidden), ['owner', 'casier', 'transport']);
+      await f.page.reload(); await countStatus(f, 6).waitFor();
+      assert.deepEqual(await headings(), shown.filter(key => key !== 'transport'), 'Still hidden after a reload.');
+      await expectTotals(f, FOOT, { label: 'Total · 6 dossiers', requested: partial('393,47 €', 5, 6), taxes: partial('57,12 €', 4, 6) });
+      // Shown again, it comes back in its place with its total.
+      await toggle(true);
+      await f.page.locator('thead th[data-column="transport"]').waitFor();
+      assert.deepEqual(await headings(), shown);
+      await expectTotals(f, FOOT, { label: 'Total · 6 dossiers', requested: partial('393,47 €', 5, 6), transport: partial('286,35 €', 4, 6), taxes: partial('57,12 €', 4, 6) });
+      assert.deepEqual(await f.page.evaluate(key => JSON.parse(localStorage.getItem(key)), keys.hidden), ['owner', 'casier']);
     });
   } finally { await browser.close(); await fs.writeFile(`${output}/results.json`, JSON.stringify(results, null, 2)); }
 }
