@@ -172,6 +172,56 @@ const totalsInk = f => f.page.evaluate(() => {
     .filter(node => node.getClientRects().length && node.textContent.trim());
   return { count: parts.length, contrast: Math.min(...parts.map(node => window.__pintaInk(node))), size: Math.min(...parts.map(node => parseFloat(getComputedStyle(node).fontSize))) };
 });
+/** Cards: the totals of the group lines split over two lines. A line breaks between two totals,
+ * never inside one: a total that fits on a line with its « · » shows whole (never « Transport
+ * 95,55 € (1 sur 2 » then « dossiers) »); one wider than the line breaks only between its figure
+ * and its note, each kept whole. */
+const splitTotals = f => f.page.evaluate(async () => {
+  await document.fonts.ready;
+  const lines = node => {
+    const tops = new Set(), walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+    for (let text = walker.nextNode(); text; text = walker.nextNode()) {
+      if (!text.data.trim() || text.parentElement.closest('.sr-only')) continue;
+      const range = document.createRange(); range.selectNodeContents(text);
+      for (const rect of range.getClientRects()) if (rect.width > 0) tops.add(Math.round(rect.top));
+    }
+    return tops.size;
+  };
+  const split = [];
+  for (const line of document.querySelectorAll('[data-group-totals]')) {
+    const room = line.getBoundingClientRect().width;
+    for (const total of line.querySelectorAll('.dossier-group-total')) {
+      // Its width on one line, in its own fonts (the bold figure), with the « · » that follows it.
+      const mark = total.nextElementSibling?.nextElementSibling, shown = total.cloneNode(true);
+      shown.querySelectorAll('.sr-only').forEach(node => node.remove());
+      const text = shown.textContent.replace(/[\u00a0\u202f]/g, ' ').trim();
+      const probe = document.createElement('span');
+      probe.style.cssText = 'position: absolute; visibility: hidden; white-space: nowrap;';
+      probe.append(...shown.childNodes, mark?.classList.contains('dossier-group-total-separator') ? mark.textContent : '');
+      line.appendChild(probe); const width = probe.getBoundingClientRect().width; probe.remove();
+      if (width <= room) { if (lines(total) > 1) split.push(text); }
+      else for (const part of total.querySelectorAll('.dossier-group-total-figure, .dossier-group-total-note')) if (lines(part) > 1) split.push(`${text} (${part.className})`);
+    }
+  }
+  return split;
+});
+/** Waits until no total of the cards' group lines is split and no « · » left alone, then compares. */
+async function expectWholeTotals(f, context = '') {
+  const read = async () => ({ split: await splitTotals(f), orphans: await orphanSeparators(f) });
+  for (const until = Date.now() + 5000; Date.now() < until;) {
+    const now = await read();
+    if (!now.split.length && !now.orphans.length) break;
+    await f.page.waitForTimeout(50);
+  }
+  assert.deepEqual(await read(), { split: [], orphans: [] }, context);
+}
+/** Cards: a « · » that does not end the line of the total it follows. */
+const orphanSeparators = f => f.page.evaluate(() => [...document.querySelectorAll('.dossier-group-total-separator')].filter(mark => {
+  let total = mark.previousElementSibling;
+  while (total && !total.classList.contains('dossier-group-total')) total = total.previousElementSibling;
+  const rects = [...total.getClientRects()], end = rects[rects.length - 1], box = mark.getBoundingClientRect(), middle = (box.top + box.bottom) / 2;
+  return middle < end.top || middle > end.bottom;
+}).map(mark => mark.parentElement.textContent.slice(0, 40)));
 
 async function main() {
   await fs.mkdir(output, { recursive: true });
@@ -622,6 +672,8 @@ async function main() {
         'Sous-total : Colis 2, Dimensions 7,2 kg vol., Poids 7 kg, Prix 170,00 €, Transport 95,55 €, Total de 1 dossier sur 2 ; 1 sans valeur., Taxes 24,45 €, Total de 1 dossier sur 2 ; 1 sans valeur.',
         'Sous-total : Non renseigné : colis, dimensions, poids, prix, transport, taxes',
       ]);
+      // A line breaks between two totals, never inside one: « Transport 95,55 € (1 sur 2 dossiers) · » moves whole.
+      await expectWholeTotals(f);
       // Each card shows its own transport, as its row would.
       assert.deepEqual(await Promise.all([1, 2, 3, 4, 5, 6].map(n => f.page.locator(`[data-dossier-card="${T(n)}"] [data-column="transport"]`)
         .evaluate(node => [node.querySelector('dt').textContent, node.querySelector('dd').innerText]).then(([label, text]) => [label, plain(text)]))), [
@@ -652,20 +704,40 @@ async function main() {
       await noPageOverflow(f);
       const outside = await f.page.evaluate(() => [...document.querySelectorAll('.dossier-group-totals, .dossier-card-total, .dossier-card-total dd, .dossier-group-total-figure')].filter(node => { const r = node.getBoundingClientRect(); return r.right > innerWidth + 0.5 || r.left < -0.5; }).map(node => node.textContent.slice(0, 30)));
       assert.deepEqual(outside, []);
-      // A line breaks between two totals, never before a « · »: each one ends the line of the total it follows.
-      const orphans = await f.page.evaluate(() => [...document.querySelectorAll('.dossier-group-total-separator')].filter(mark => {
-        let total = mark.previousElementSibling;
-        while (total && !total.classList.contains('dossier-group-total')) total = total.previousElementSibling;
-        const rects = [...total.getClientRects()], end = rects[rects.length - 1], box = mark.getBoundingClientRect(), middle = (box.top + box.bottom) / 2;
-        return middle < end.top || middle > end.bottom;
-      }).map(mark => mark.parentElement.textContent.slice(0, 40)));
-      assert.deepEqual(orphans, []);
+      // A line breaks between two totals, never before a « · »: each one ends the line of the total it follows;
+      // a total wider than the screen breaks between its figure and its note, never inside them.
+      await expectWholeTotals(f, '20 px');
       await list.evaluate(node => { node.scrollTop = 0; }); await f.page.waitForTimeout(200);
       await f.page.screenshot({ path: `${output}/cards-group-subtotal-20px-390-${dark ? 'dark' : 'light'}.png` });
       // Filtered: « Total du dossier filtré » / « Total des … dossiers filtrés ».
       await f.page.getByLabel('Rechercher ou scanner un colis', { exact: true }).fill('Lagon'); await countStatus(f, 1).waitFor();
       await f.page.waitForFunction(() => document.querySelector('.dossier-card-total-title')?.textContent === 'Total du dossier filtré');
+      // « Paiements » grouped by departure: five totals on a line (Demandé, Transport, Taxes, Payé, Reste), each kept whole.
+      await f.page.goto(`${base}/colis?table=payments&view=envoi`);
+      await f.page.waitForFunction(() => document.querySelectorAll('.dossier-card-list [data-group-totals]').length === 3);
+      assert.deepEqual(await f.page.locator('[data-group-totals]').evaluateAll(items => items.map(item => { const copy = item.cloneNode(true); copy.querySelectorAll('.sr-only').forEach(node => node.remove()); return copy.textContent.replace(/[\u00a0\u202f]/g, ' ').replace(/\s+/g, ' ').trim(); })), [
+        'Demandé 140,00 € (2 sur 3 dossiers) · Transport 120,00 € (2 sur 3 dossiers) · Taxes 20,00 € (2 sur 3 dossiers) · Payé 0,00 € · Reste 140,00 € (2 sur 3 dossiers)',
+        'Demandé 170,00 € · Transport 95,55 € (1 sur 2 dossiers) · Taxes 24,45 € (1 sur 2 dossiers) · Payé 120,00 € · Reste 50,00 €',
+        'Payé 0,00 € · Non renseigné : demandé, transport, taxes, reste',
+      ]);
+      await expectWholeTotals(f, 'Paiements');
+      await noPageOverflow(f);
+      await f.page.screenshot({ path: `${output}/cards-payments-by-departure-390-${dark ? 'dark' : 'light'}.png` });
     }, { device: { hasTouch: true, isMobile: true } });
+    // A tablet showing cards (« Affichage des dossiers » : Cartes): the same group lines, wider, still whole totals.
+    await scenario('cards-on-a-tablet-keep-each-group-total-whole-768', async f => {
+      await f.page.setViewportSize({ width: 768, height: 1024 }); await open(f, 'table=departures');
+      const display = await openDisplay(f); await display.getByRole('combobox', { name: 'Affichage des dossiers', exact: true }).selectOption('cards'); await closeDisplay(f);
+      await f.page.waitForFunction(() => document.querySelectorAll('.dossier-card-list [data-group-totals]').length === 3);
+      for (const query of ['table=departures', 'table=payments&view=envoi']) {
+        await f.page.goto(`${base}/colis?${query}`);
+        await f.page.waitForFunction(() => document.querySelectorAll('.dossier-card-list [data-group-totals]').length === 3);
+        await expectWholeTotals(f, query);
+        await noPageOverflow(f);
+      }
+      await axeClean(f, '.dossier-card-list');
+      await f.page.screenshot({ path: `${output}/cards-payments-by-departure-768.png` });
+    }, { device: { hasTouch: true } });
     await scenario('cards-without-groups-end-with-the-total-only-390', async f => {
       await f.page.setViewportSize(sizeOf(390)); await open(f);
       await f.page.locator('[data-dossier-total]').waitFor();

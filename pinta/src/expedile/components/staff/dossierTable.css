@@ -481,6 +481,10 @@ html .dossier-table-action button[data-take-kind='claim']:hover:not(:disabled) {
 /* Cards: the subtotal of a group, one line under its count (wrapping between two
    totals), and the block that ends the list. */
 .dossier-group-totals { flex: 1 0 100%; margin: 0 0 6px; font-size: max(12px, var(--dossier-small-text-size, 12px)); line-height: 1.5; color: var(--text-secondary); overflow-wrap: anywhere; }
+/* A total and its « · » move to the next line whole (« Transport 95,55 € (1 sur 2
+   dossiers) · »), never split over two lines; only a total wider than the whole line
+   breaks inside, between its figure and its note (DossierGroupTotals). */
+.dossier-group-total-keep { display: inline-block; max-width: 100%; }
 .dossier-group-total-figure { white-space: nowrap; }
 .dossier-group-total-value { font-weight: 700; color: var(--text-primary); font-variant-numeric: tabular-nums; }
 .dossier-card-list > .dossier-card-total { grid-column: 1 / -1; }

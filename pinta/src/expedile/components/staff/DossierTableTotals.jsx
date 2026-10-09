@@ -42,7 +42,10 @@ export function DossierTotalRow({ variant = 'total', columns, totals, label, con
  * 1 250,00 € · Transport 1 070,00 € · Taxes 180,00 € », each incomplete total
  * with its « 4 sur 6 dossiers »; the columns without any value close the line,
  * « Non renseigné : prix, transport, taxes ». A line breaks between two totals,
- * never before a « · ».
+ * never inside one nor before a « · »: each total, with its « · », is kept whole
+ * (`.dossier-group-total-keep`); one wider than the whole line breaks between its
+ * figure and its note (« Transport 95,55 € », then « (1 sur 2 dossiers) · »),
+ * each kept whole as long as it fits on a line.
  * Assistive technology hears a comma where the « · » shows: « Colis 4, Poids
  * 7,75 kg », never « Colis 4 Poids ». */
 export function DossierGroupTotals({ totals, columns }) {
@@ -51,15 +54,18 @@ export function DossierGroupTotals({ totals, columns }) {
   const known = items.filter(item => item.known), unknown = items.filter(item => !item.known);
   const parts = [...known.map(item => <span key={item.key} className="dossier-group-total" data-total-key={item.key}>
     <span className="dossier-group-total-figure"><span className="dossier-group-total-label">{item.label}</span>{' '}<span className="dossier-group-total-value">{item.text}</span></span>
-    {item.note && <><span className="dossier-group-total-note" aria-hidden="true">{` (${item.note})`}</span><span className="sr-only">, {item.description}</span></>}
+    {item.note && <><span className="dossier-group-total-note" aria-hidden="true">{` (${item.note.replace(/ /g, '\u00a0')})`}</span><span className="sr-only">, {item.description}</span></>}
   </span>), ...(unknown.length ? [<span key="unknown" className="dossier-group-total dossier-table-placeholder" data-total-key="unknown">
     {TOTAL_UNKNOWN_LABEL}{'\u00a0: '}{unknown.map(item => item.label.toLocaleLowerCase('fr')).join(', ')}
   </span>] : [])];
   return <p className="dossier-group-totals" data-group-totals="">
     <span className="sr-only">Sous-total : </span>
     {parts.map((part, index) => <React.Fragment key={part.key}>
-      {index > 0 && <><span className="sr-only">,</span><span aria-hidden="true" className="dossier-group-total-separator">{'\u00a0·'}</span>{' '}</>}
-      {part}
+      {index > 0 && ' '}
+      <span className="dossier-group-total-keep">
+        {part}
+        {index < parts.length - 1 && <><span className="sr-only">,</span><span aria-hidden="true" className="dossier-group-total-separator">{'\u00a0·'}</span></>}
+      </span>
     </React.Fragment>)}
   </p>;
 }
