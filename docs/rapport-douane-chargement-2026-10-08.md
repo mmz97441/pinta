@@ -164,3 +164,33 @@ Ce qui reste de ton côté :
 - **Essais sur tes appareils** : pas d'essai réel sur Safari ni sur iPad.
 - **Gros montants** : en texte agrandi au maximum, un total de 10 000 € ou plus passe sur deux lignes dans la largeur de colonne par défaut. Élargis la colonne si besoin.
 - **« Payé » d'un groupe sans devis** : le sous-total affiche « 0,00 € » alors que ses lignes affichent « — ».
+
+## Complément du 9 octobre : colonne Transport
+
+Ta demande : « une colonne pour voir les frais de transport et aussi le sous-total de transport comme pour les autres colonnes ».
+
+- **Colonne « Transport »** : le transport du devis enregistré, jamais recalculé à l'écran.
+  - Elle se trouve entre « Prix du devis » et « Taxes calculées », ou entre « Demandé » et les taxes dans Paiements.
+  - Elle suit les mêmes règles que les taxes : sans devis, la mention du prix (« À calculer », « Brouillon »…) ; sans détail exploitable, « À vérifier ».
+  - Un client pro voit son transport comme les autres. Elle suit les mêmes droits que les montants.
+- **Totaux** : comme les autres colonnes, avec le total en bas, un sous-total par groupe (même replié), une ligne par groupe sur les cartes et une cellule SOUS.TOTAL dans l'export Excel.
+- **Cartes** : un sous-total de groupe ne se coupe plus au milieu d'un montant.
+
+**Mon travail à 1280 px** : avec des polices plus larges, le tableau pouvait déborder de quelques pixels quand une échéance était longue (« mercredi 7 octobre, 20 h 21 »). C'était aussi un test qui échouait certains jours.
+- L'échéance passe désormais à la ligne entre l'état, le jour, l'année et l'heure, sans jamais couper l'un d'eux.
+- Un motif de priorité long passe à la ligne entre ses mots.
+- Les tests se calent sur la date la plus longue possible, avec les polices de la CI.
+
+Vérifications :
+- 714 tests unitaires ;
+- en local, les parcours concernés (tableau des dossiers 138, totaux 20, Mon travail 83) ;
+- tous les parcours navigateur sur la CI GitHub ;
+- un vérificateur des calculs : 6 000 dossiers tirés au hasard et le fichier Excel relu, sans défaut ;
+- un vérificateur de l'affichage : un défaut des cartes, corrigé ;
+- un vérificateur de Mon travail, qui a testé plusieurs dates (lundi matin, vendredi soir, 1er du mois, changement d'heure) : deux autres cas corrigés.
+
+Le chantier a été interrompu par la mise en veille du Mac, puis repris sans perte.
+
+Ce qui reste de ton côté :
+- **Gros montants en texte agrandi** : en taille maximale, un montant à cinq chiffres peut se couper dans les colonnes Prix, Taxes, Payé et Reste. La colonne Transport tient jusqu'à cinq chiffres. Élargis la colonne si besoin.
+- **« À prendre » dans Mon travail** : avec une tâche en retard tombant sur le jour le plus long et des polices larges, le tableau peut encore défiler à 1280 px, à cause des deux boutons « Je m'en occupe » et « Options ». Avec les polices du Mac, il tient (33 px de marge). Le régler demande un choix : laisser passer les deux boutons à la ligne, ou séparer le jour de la date.
