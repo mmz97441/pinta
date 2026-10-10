@@ -313,6 +313,19 @@ SELECT ret_reject($q$UPDATE notification_outbox SET colis_id='b8300000-0000-4000
  'Le message, le destinataire, le dossier et le canal d’une sortie de message ne se modifient pas.','retention:notification_outbox');
 SELECT ret_reject($q$DELETE FROM notification_outbox WHERE id=(ret_outbox('ret-m2')).id$q$,'R6 a delivery is never deleted','23001',
  'Une sortie de message est conservée dans l’historique des envois : elle ne se supprime pas.','retention:notification_outbox');
+-- The team's UPDATE policy on messages covers the reading only: the delivery state is the dispatcher's (service key).
+SELECT ret_as('director');
+SELECT ret_reject($q$UPDATE messages SET statut='envoye' WHERE id=(ret_outbox('ret-m2')).message_id$q$,'R6 a team session cannot mark a failed message as sent','23001',
+ 'L’état d’envoi d’un message est enregistré par l’envoi lui-même : l’équipe peut seulement le marquer comme lu.','retention:messages');
+SELECT ret_reject($q$UPDATE messages SET telegram_msg_id='5999' WHERE id=(ret_outbox('ret-m1')).message_id$q$,'R6 nor rewrite the Telegram reference of a delivery','23001',
+ 'L’état d’envoi d’un message est enregistré par l’envoi lui-même : l’équipe peut seulement le marquer comme lu.','retention:messages');
+-- dispatchOutbox's catch after a send Telegram confirmed (a later write failed): the message stays sent, as its outbox
+-- row does, and never shows the « Réessayer » of a failed delivery.
+SELECT ret_as('service');
+SELECT ret_reject($q$UPDATE messages SET statut='echec' WHERE id=(ret_outbox('ret-m1')).message_id$q$,'R6 a delivery Telegram confirmed never turns into a failure, for the service key too','23001',
+ 'Un message dont l’envoi est confirmé le reste : son état ne revient ni à « en cours » ni à « échec ».','retention:messages');
+SELECT ret_reject($q$UPDATE notification_outbox SET status='failed' WHERE id=(ret_outbox('ret-m1')).id$q$,'R6 nor does its outbox row','23001',
+ 'Un envoi confirmé ou annulé est définitif : sa sortie ne se modifie plus.','retention:notification_outbox');
 
 -- ── R7. A client message without a dossier: kept, then attached once ──
 SELECT ret_as('service');

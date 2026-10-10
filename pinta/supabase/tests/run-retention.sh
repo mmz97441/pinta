@@ -66,6 +66,16 @@ print("PASS: the preflight refuses an orphan history row")' "$logs/orphan.json"
   grep -q 'client_inbox_colis_id_fkey' "$logs/orphan.log" || { cat "$logs/orphan.log"; exit 1; }
   # The team puts the message back to the inbox; then the reviewed baseline is accepted.
   sql -c "UPDATE client_inbox SET colis_id=NULL WHERE id='b9600000-0000-4000-8000-000000000001'"
+  # A trigger production would hold on a history table and the replay does not (here a BEFORE UPDATE that could stamp a
+  # column the messages guard freezes): the guards were never tested with it, the preflight refuses.
+  sql -c "CREATE FUNCTION ret_stray() RETURNS trigger LANGUAGE plpgsql AS \$\$ BEGIN RETURN NEW; END \$\$;
+   CREATE TRIGGER handle_updated_at BEFORE UPDATE ON messages FOR EACH ROW EXECUTE FUNCTION ret_stray();"
+  preflight stray
+  release 'import json
+problems=release.baseline_problems(json.load(open(sys.argv[2])))
+if problems!=["triggers of the history tables differ from the reviewed baseline: messages.handle_updated_at"]: sys.exit("FAIL: preflight with a stray trigger "+repr(problems))
+print("PASS: the preflight refuses a trigger of a history table the guards were not reviewed with")' "$logs/stray.json"
+  sql -c "DROP TRIGGER handle_updated_at ON messages; DROP FUNCTION ret_stray();"
   preflight before
   release 'import json;problems=release.baseline_problems(json.load(open(sys.argv[2])));print("\n".join(problems));sys.exit(1 if problems else 0)' "$logs/before.json"
   release 'import json

@@ -13,8 +13,10 @@ Operations, each run separately by the lead and only with the user's explicit go
   preflight  read-only, plain SELECTs with every predicate written in the query (the read-only role of the Management API
              cannot EXECUTE application functions): refuses when the version is registered, when an object of the release
              exists, when a writer whose transitions the guards encode differs from the reviewed repository baseline
-             (md5 of pg_get_functiondef, local replay up to 20261007000004 on PostgreSQL 17), when a table or a column is
-             missing, or when a history row points to a missing parent (the key added for it would fail). REPORTS,
+             (md5 of pg_get_functiondef, local replay up to 20261007000004 on PostgreSQL 17), when the triggers of a
+             history table differ from that replay's (one production added would run with guards never tested with it:
+             a BEFORE trigger changing NEW, an AFTER one rewriting history), when a table or a column is missing, or
+             when a history row points to a missing parent (the key added for it would fail). REPORTS,
              without changing them: the rows of each history table, every key of the history with its ON DELETE (those
              the release replaces or adds), the triggers already there, the API privileges it revokes, and what becomes
              protected (dossiers, clients and departures with history, checks of confirmed departures, paid links, final
@@ -67,7 +69,7 @@ ROW_GUARDS = {**{table: 27 for table in HISTORY if table != 'legacy_payplug_paym
 NEW_SOURCE = {
     '_retention_append_only()': '10e8ceb245165f336bc75d31d293c219',
     '_retention_payment_intent()': '3d2266f06eb678aaf44816bce406298a',
-    '_retention_message()': '2afda08ea5f0bff906cf6fa4248d4cfc',
+    '_retention_message()': '34627f78101deaf6d3c6425e237079cc',
     '_retention_outbox()': '77a0534396ea66ae51def50d506c4aad',
     '_retention_quote_withdrawal()': '53933827d7348a02342fe6b94afe8376',
     '_retention_client_inbox()': '5bb26b3c08eaf61c7773aa85d0ed8220',
@@ -118,6 +120,20 @@ UNCHANGED_SOURCE = {
     'guard_legacy_payplug_snapshot()': '45ea5b16a2a09fbcdf02aaa005f2bdf9',
     'invalidate_legacy_payplug()': '4a739949e0521b7984c7cbf57d1e75b2',
 }
+# The triggers of the history tables before the release (local replay up to 20261007000004): (table, name, tgtype,
+# enabled, function). The guards were reviewed and tested with exactly these; the release's own are left out.
+REVIEWED_TRIGGERS = sorted([
+    ('legacy_payplug_payments', 'guard_legacy_payplug_snapshot', 31, 'O', 'guard_legacy_payplug_snapshot()'),
+    ('messages', 'guard_message_workflow', 23, 'O', 'guard_message_workflow()'),
+    ('messages', 'reopen_customer_conversation', 5, 'O', 'reopen_customer_conversation()'),
+    ('messages', 'stamp_consent_request_version', 7, 'O', 'stamp_consent_request_version()'),
+    ('messages', 'z_sync_consent_request_failure', 17, 'O', 'trigger_sync_consent_followup()'),
+    ('messages', 'z_sync_consent_request_work', 5, 'O', 'trigger_sync_consent_followup()'),
+    ('notification_outbox', 'guard_reminder_queue', 23, 'O', 'guard_reminder_queue()'),
+    ('notification_outbox', 'z_sync_consent_delivery_queued', 5, 'O', 'trigger_sync_consent_followup()'),
+    ('notification_outbox', 'z_sync_consent_delivery_work', 17, 'O', 'trigger_sync_consent_followup()'),
+    ('quote_withdrawals', 'z_sync_quote_withdrawal_work', 21, 'O', 'trigger_sync_staff_work_actions()'),
+])
 # Columns the guards read.
 COLUMNS = {
     'payment_intents': ['id', 'colis_id', 'quote_version', 'amount_cents', 'currency', 'provider_is_live', 'created_at', 'updated_at', 'status',
@@ -391,6 +407,13 @@ def baseline_problems(current):
     for signature, expected in UNCHANGED_SOURCE.items():
         if not relied[signature]['present'] or relied[signature]['md5'] != expected:
             problems.append('production source differs from the reviewed baseline: ' + signature)
+    # regclass and regprocedure print the schema only when public is not on the search path.
+    bare = lambda name: name[len('public.'):] if name.startswith('public.') else name
+    triggers = sorted((bare(t['table']), t['name'], t['type'], t['enabled'], bare(t['function'])) for t in current['triggers']
+                      if bare(t['table']) in HISTORY and t['name'] not in ('retention_guard', 'retention_truncate'))
+    if triggers != REVIEWED_TRIGGERS:
+        problems.append('triggers of the history tables differ from the reviewed baseline: '
+                        + ', '.join(sorted({'.'.join(t[:2]) for t in set(triggers) ^ set(REVIEWED_TRIGGERS)})))
     missing = current['missing_tables'] + current['missing_columns'] + ([] if current['enum_values'] else ['statut_envoi parti/arrive'])
     if missing:
         problems.append('missing dependencies: ' + ', '.join(missing))

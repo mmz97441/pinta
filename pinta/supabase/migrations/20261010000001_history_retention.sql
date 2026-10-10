@@ -48,7 +48,9 @@
 --   RESTRICT. Writers: INSERT by queue_message, _apply_client_decision, customer_document_received, deposit_client_invoice,
 --   telegramIncoming (ON CONFLICT DO NOTHING), supabaseData.insertMessage and AppContext; UPDATE of lu (staff policy,
 --   updateMessageLu, markAllMessagesLu, conversationApi) and of statut and telegram_msg_id (Edge dispatchOutbox, echec
---   included after an ambiguous send). Rule: no DELETE; only lu, statut and telegram_msg_id change.
+--   included after an ambiguous send). Rule: no DELETE; only lu, statut and telegram_msg_id change; statut and
+--   telegram_msg_id only with the service key or as the owner (a team session marks read, nothing else); a delivery
+--   confirmed by Telegram (envoye) never returns to envoi or echec.
 -- notification_outbox — every delivery attempt. FKs message_id, client_id, colis_id NO ACTION. Writers: queue_message
 --   (INSERT pending, manual or sent), guard_reminder_queue (pending → blocked), Edge dispatchOutbox (pending|blocked →
 --   sending → sent|failed|cancelled|blocked|pending), relances-auto (stale sending → failed), send-telegram retry
@@ -194,6 +196,11 @@ END $$;
 CREATE TRIGGER retention_guard BEFORE UPDATE OR DELETE ON payment_intents FOR EACH ROW EXECUTE FUNCTION _retention_payment_intent();
 
 -- ── messages: delivery state and reading only ──
+-- The delivery state (statut, telegram_msg_id) is written by the outbox dispatcher with the service key (PostgREST runs
+-- it as service_role), or by a reviewed command running as the owner; a team session only marks a message read (its
+-- RLS policy lets it update the row). A delivery Telegram confirmed (envoye, or a later receipt) never goes back to envoi
+-- or echec, as its outbox row stays sent: dispatchOutbox's catch after a confirmed send can no longer show a delivered
+-- message as failed.
 CREATE FUNCTION _retention_message() RETURNS trigger LANGUAGE plpgsql SET search_path=public,pg_temp AS $$
 BEGIN
  IF TG_OP='DELETE' THEN
@@ -201,6 +208,13 @@ BEGIN
  END IF;
  IF (to_jsonb(NEW)-ARRAY['lu','statut','telegram_msg_id']) IS DISTINCT FROM (to_jsonb(OLD)-ARRAY['lu','statut','telegram_msg_id']) THEN
   RAISE EXCEPTION 'Le contenu d’un message enregistré ne se modifie pas : seuls son état d’envoi et sa lecture évoluent.' USING ERRCODE='23001',HINT='retention:messages';
+ END IF;
+ IF (NEW.statut,NEW.telegram_msg_id) IS DISTINCT FROM (OLD.statut,OLD.telegram_msg_id)
+  AND current_user NOT IN ('postgres','supabase_admin','service_role') THEN
+  RAISE EXCEPTION 'L’état d’envoi d’un message est enregistré par l’envoi lui-même : l’équipe peut seulement le marquer comme lu.' USING ERRCODE='23001',HINT='retention:messages';
+ END IF;
+ IF OLD.statut IN ('envoye','distribue','lu') AND NEW.statut IN ('envoi','echec') THEN
+  RAISE EXCEPTION 'Un message dont l’envoi est confirmé le reste : son état ne revient ni à « en cours » ni à « échec ».' USING ERRCODE='23001',HINT='retention:messages';
  END IF;
  RETURN NEW;
 END $$;
