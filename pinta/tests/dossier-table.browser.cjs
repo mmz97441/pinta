@@ -666,7 +666,10 @@ async function main() {
           await f.page.waitForURL(url=>url.searchParams.get('sort')===key&&url.searchParams.get('dir')===direction);
         }
         await menu.selectOption('column:ref:desc');await f.page.waitForURL(url=>url.searchParams.get('sort')==='ref'&&url.searchParams.get('dir')==='desc');
-        assert.deepEqual(await orderedIds(f),[P6,P5,P4,P3,P2,P],'Mobile cards follow the chosen descending order.');
+        // The address changes before the cards are drawn again: read them once they follow it (CI read the previous order once).
+        const descending=[P6,P5,P4,P3,P2,P];let order=await orderedIds(f);
+        for(let wait=0;wait<60&&JSON.stringify(order)!==JSON.stringify(descending);wait++){await f.page.waitForTimeout(50);order=await orderedIds(f);}
+        assert.deepEqual(order,descending,'Mobile cards follow the chosen descending order.');
         assert.equal(await f.page.getByRole('table',{name:'Dossiers d’expédition',exact:true}).count(),0);
         assert.equal(await f.page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false);
         await closeDisplay(f);
