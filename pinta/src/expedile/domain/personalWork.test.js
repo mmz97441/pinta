@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildPersonalWork, sortWorkActions, workTotals, availableMissions, workActionUrl, workActionOpensClient, staffAvailable, canWorkAction, personalSection, nextPersonalWorkAction, PERSONAL_SECTIONS, findDossierWorkAction, workLoad, teamWorkQueues, workDate, staffDisplayName } from './personalWork.js';
+import { buildPersonalWork, sortWorkActions, workTotals, availableMissions, workActionUrl, workActionOpensClient, staffAvailable, canWorkAction, personalSection, nextPersonalWorkAction, PERSONAL_SECTIONS, findDossierWorkAction, workLoad, teamWorkQueues, workDate, workDateParts, staffDisplayName } from './personalWork.js';
 const now = Date.parse('2026-09-12T12:00:00Z');
 const dossier = { id: 'parcel', clientId: 'client', ref: 'EXP-QA', nbColis: 3, responsibleStaffId: 'referent' };
 const base = { dossiers: [dossier], clients: [{ id: 'client', nom: 'Exemple' }], userId: 'worker', now, can: () => true };
@@ -218,6 +218,29 @@ test('deadlines read like the dossier Départ labels, on Paris time whatever the
  assert.equal(workDate('2026-10-05T23:30:00Z', { now: today }), 'mardi 6 octobre, 1 h 30');
  assert.equal(workDate('2027-01-01T08:00:00Z', { now: today }), 'vendredi 1er janvier 2027, 9 h');
  for (const missing of [null, undefined, '', 'demain']) assert.equal(workDate(missing, { now: today }), null);
+});
+
+test('a deadline splits only between its day, its year and its hour, and still reads as workDate', () => {
+ const today = Date.parse('2026-01-02T22:59:00Z');
+ // Another year is a piece of its own, so the widest piece is always a day.
+ assert.deepEqual(workDateParts('2025-12-31T22:59:00Z', { now: today }), ['mercredi 31 décembre', '2025,', '23 h 59']);
+ assert.deepEqual(workDateParts('2026-01-03T22:59:00Z', { now: today }), ['samedi 3 janvier,', '23 h 59']);
+ assert.deepEqual(workDateParts('2024-09-01T21:59:00Z', { now: Date.parse('2024-09-03T21:59:00Z') }), ['dimanche 1er septembre,', '23 h 59']);
+ assert.deepEqual(workDateParts('2027-01-01T08:00:00Z', { now: Date.parse('2026-10-05T10:00:00Z') }), ['vendredi 1er janvier', '2027,', '9 h']);
+ assert.deepEqual(workDateParts('2026-10-08T07:05:00Z', { now: Date.parse('2026-10-05T10:00:00Z') }), ['jeudi 8 octobre,', '9 h 05']);
+ for (const missing of [null, undefined, '', 'demain']) assert.equal(workDateParts(missing, { now: today }), null);
+ // Every day of three years, at hours and minutes that move each time, in winter and summer time.
+ const parisYear = new Intl.DateTimeFormat('fr-FR', { timeZone: 'Europe/Paris', year: 'numeric' });
+ for (let instant = Date.parse('2025-01-01T00:07:00Z'); instant < Date.parse('2028-01-01T00:00:00Z'); instant += 86400000 + 3600000 + 7 * 60000) {
+  const value = new Date(instant).toISOString();
+  const parts = workDateParts(value, { now: today });
+  assert.equal(parts.join(' '), workDate(value, { now: today }), value);
+  assert.ok(parts.length === 2 || parts.length === 3, value);
+  assert.match(parts[parts.length - 1], /^\d{1,2} h( \d{2})?$/, value);
+  assert.equal(parts.length === 3, parisYear.format(instant) !== '2026', `${value}: the year is a piece only when it is not the current one`);
+  if (parts.length === 3) assert.equal(parts[1], `${parisYear.format(instant)},`, value);
+  assert.ok(parts.every(part => part.trim() === part && part.length > 0), value);
+ }
 });
 
 test('a dossier task opens on its work area; a conversation and a client access do not', () => {

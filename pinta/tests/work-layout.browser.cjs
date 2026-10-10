@@ -1,11 +1,12 @@
 /* Mon travail, Tableau and Cartes: fictitious tasks, every remote request mocked.
-   Nothing is claimed, saved or sent: layout, display preferences and drafts only. */
+   Nothing is claimed, saved or sent: layout, display preferences and drafts only.
+   The suite runs at one fixed instant (NOW): its deadlines, and their width, never
+   depend on the day or the hour it runs. */
 const { chromium } = require('playwright');
 const AxeBuilder = require('@axe-core/playwright').default;
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
-const { pathToFileURL } = require('node:url');
 const { setup, base, ids } = require('./browser-regression.cjs');
 const output = process.env.PINTA_WORK_LAYOUT_OUT || '/tmp/pinta-work-layout';
 const B = '88888888-1111-4111-8111-111111111111';
@@ -16,10 +17,25 @@ const displayButton = f => f.page.getByRole('button', { name: 'Affichage', exact
 const displayDialog = f => f.page.getByRole('dialog', { name: 'Affichage', exact: true });
 // sortWorkActions: overdue, then work in progress (ties by id), then by deadline and age.
 const ORDER = ['quote', 'documents', 'reply', 'reception', 'prepare', 'departure'];
+// The page clock and the mocked server stand still at one instant and the deadlines are built
+// from it, whatever the day and the hour the suite runs. NOW, Friday 2 January 2026 at 23:59 in
+// Paris, gives the longest deadlines: the overdue quote reads « mercredi 31 décembre 2025,
+// 23 h 59 » (a long weekday, a two-digit day, a long month, another year, an hour with minutes).
+const NOW = Date.parse('2026-01-02T22:59:00Z');
+// WIDEST_DAY gives the widest part a deadline can have, « dimanche 1er septembre, »: the widest
+// weekday, « 1er » and the longest month (Tuesday 3 September 2024 at 23:59 in Paris).
+// Both instants are past: the fake session token, valid an hour from the real clock, stays valid.
+const WIDEST_DAY = Date.parse('2024-09-03T21:59:00Z');
+// Linux's wider fonts, those of the CI (DejaVu Sans), as the other suites set them.
+const WIDE_FONTS = 'body, body * { font-family: Verdana, "DejaVu Sans", sans-serif !important; }';
 
-async function fixture(browser, { dark = false, timezoneId, device } = {}) {
+async function fixture(browser, { dark = false, timezoneId, device, now = NOW, wideFonts = false } = {}) {
  const f = await setup(browser, 'directeur', { timezoneId, device });
  f.page.setDefaultTimeout(10000);
+ // Date stands still; the timers keep running (the minute's refresh, the toasts).
+ await f.page.clock.setFixedTime(now);
+ f.server.now = () => now;
+ if (wideFonts) await f.context.addInitScript(css => { const apply = () => { const style = document.createElement('style'); style.textContent = css; document.head.appendChild(style); }; if (document.head) apply(); else document.addEventListener('DOMContentLoaded', apply); }, WIDE_FONTS);
  // Screenshots never catch a tab underline halfway through its transition.
  await f.page.emulateMedia({ reducedMotion: 'reduce' });
  await f.context.addInitScript(theme => localStorage.setItem('expedile-theme', theme), dark ? 'dark' : 'light');
@@ -40,7 +56,7 @@ async function fixture(browser, { dark = false, timezoneId, device } = {}) {
  const [, q398, q412, q420, q355, q362, q341] = t.colis.map(item => item.id);
  // An invoice waiting for review shows its indicator on the document task.
  t.factures.push({ id: 'invoice-pending', colis_id: ids.P, vendeur: 'Boutique B', montant: 40, valide: false, fichier_url: ids.P + '/second.pdf', fichier_nom: 'second.pdf' });
- const day = 86400000, now = Date.now();
+ const day = 86400000;
  const mk = (id, colis_id, kind, changes = {}) => ({ id, colis_id, kind, state: 'ready', assignee_id: ids.A, version: 1, created_at: '2026-10-01T08:00:00Z', updated_at: '2026-10-01T08:00:00Z', ...changes });
  t.staff_work_actions = [
   mk('quote', q398, 'quote', { due_at: new Date(now - 2 * day).toISOString() }),
@@ -84,6 +100,18 @@ const pageOverflow = f => f.page.evaluate(() => {
   || Boolean(main && main.scrollWidth > main.clientWidth + 1)
   || Boolean(scroller && scroller.scrollWidth > scroller.clientWidth + 1);
 });
+// The default columns in view: the table is no wider than its frame, which then neither scrolls
+// nor pins « Action » (data-fits, set by WorkActionTable once laid out: polled). The widths
+// measured come with the answer.
+async function defaultColumnsFit(f) {
+ const frame = todo(f).locator('.work-table-frame');
+ await f.page.waitForFunction(() => document.querySelector('section[aria-label="À faire"] .work-table-frame')?.dataset.fits === 'true', null, { timeout: 2000 }).catch(() => {});
+ return frame.evaluate(node => {
+  const table = node.querySelector('table').getBoundingClientRect().width;
+  const columns = [...node.querySelectorAll('thead th')].map(th => `${th.dataset.workColumn} ${Math.round(th.getBoundingClientRect().width * 10) / 10}`);
+  return { fits: node.dataset.fits === 'true' && node.scrollWidth <= node.clientWidth + 1 && table <= node.clientWidth + 0.5, table: Math.round(table * 10) / 10, frame: node.clientWidth, font: getComputedStyle(node).fontFamily, columns };
+ });
+}
 async function display(f) { await displayButton(f).click(); await displayDialog(f).waitFor(); return displayDialog(f); }
 async function closeDisplay(f) { await displayDialog(f).getByRole('button', { name: 'Fermer l’affichage', exact: true }).click(); await displayDialog(f).waitFor({ state: 'hidden' }); }
 async function chooseLayout(f, value) { const dialog = await display(f); await dialog.getByLabel('Affichage des tâches', { exact: true }).selectOption(value); await closeDisplay(f); }
@@ -162,9 +190,11 @@ async function failColisLoad(f) {
    assert.equal(await table.locator('thead th').first().evaluate(node => getComputedStyle(node).position), 'sticky');
    const quote = row(f, 'quote');
    await quote.getByRole('link', { name: 'Ouvrir Établir le devis — EXP-2026-0398', exact: true }).waitFor();
-   await quote.getByRole('cell', { name: /^Dépassée · / }).waitFor();
+   // One sentence for a screen reader, whatever the lines of the cell.
+   const overdue = quote.getByRole('cell', { name: 'Dépassée · mercredi 31 décembre 2025, 23 h 59', exact: true });
+   await overdue.waitFor();
    assert.equal(await quote.locator('td').first().evaluate(node => getComputedStyle(node).boxShadow.includes('inset')), true, 'Urgent rows carry the amber edge');
-   assert.equal(await quote.getByRole('cell', { name: /^Dépassée · / }).locator('.work-due').evaluate(node => getComputedStyle(node).fontWeight), '700');
+   assert.equal(await overdue.locator('.work-due').evaluate(node => getComputedStyle(node).fontWeight), '700');
    assert.deepEqual(await quote.locator('td').allInnerTexts().then(cells => cells.slice(2, 6)), ['EXP-2026-0398', 'Jean-Marc Hoarau', 'B-12', '3']);
    // « Voir » only appears without a primary command; « Je m’en occupe » stays filled.
    assert.equal(await quote.getByRole('button', { name: 'Continuer', exact: true }).count(), 1);
@@ -174,10 +204,10 @@ async function failColisLoad(f) {
    assert.equal(await quote.getByText('À faire', { exact: true }).count(), 0, '« À faire » is not repeated on its own rows');
    assert.equal(await f.page.getByText(/Réalise la tâche : vous/).count(), 0);
    await row(f, 'documents').getByRole('link', { name: 'Facture reçue · À vérifier — EXP-TEST-001', exact: true }).waitFor();
-   await row(f, 'reception').getByRole('cell', { name: /^Prévue · / }).waitFor();
+   await row(f, 'reception').getByRole('cell', { name: 'Prévue · samedi 3 janvier, 23 h 59', exact: true }).waitFor();
    await f.page.getByRole('button', { name: 'En attente 1', exact: true }).click();
    // Beside its « En attente » pill the line gives the reason: « En attente » is said once.
-   await row(f, 'waiting').getByText(/^Raison : Vérification fournisseur · À revoir le /).waitFor();
+   await row(f, 'waiting').getByText('Raison : Vérification fournisseur · À revoir le lundi 5 janvier, 23 h 59', { exact: true }).waitFor();
    assert.equal((await row(f, 'waiting').innerText()).match(/En attente/g).length, 1);
    await row(f, 'waiting').getByRole('button', { name: 'Voir', exact: true }).waitFor();
    await f.page.getByRole('button', { name: 'À prendre 1', exact: true }).click();
@@ -211,7 +241,7 @@ async function failColisLoad(f) {
    const quote = row(f, 'quote');
    assert.equal(await quote.getByRole('heading', { level: 2 }).innerText(), 'Établir le devis');
    await quote.getByRole('link', { name: 'Ouvrir Établir le devis — EXP-2026-0398', exact: true }).waitFor();
-   await quote.getByText(/^Échéance dépassée · /).waitFor();
+   await quote.getByText('Échéance dépassée · mercredi 31 décembre 2025, 23 h 59', { exact: true }).waitFor();
    await quote.getByText('Casier B-12 · 3 cartons', { exact: true }).waitFor();
    await row(f, 'reply').getByText('En cours', { exact: true }).waitFor();
    assert.equal(await quote.evaluate(node => getComputedStyle(node).boxShadow.includes('inset')), true);
@@ -516,19 +546,33 @@ async function failColisLoad(f) {
    await row(f, 'prepare').getByRole('button', { name: 'Options', exact: true }).click();
    await f.page.locator('[data-work-action-panel="prepare"]').getByRole('button', { name: 'Réaffecter immédiatement', exact: true }).waitFor();
   });
+  // The longest deadlines, read from a device in Auckland in the CI's wider fonts: Paris time,
+  // each part whole on its line, the seven default columns in view.
   await scenario('deadlines-read-like-the-departure-labels-in-paris-time-and-keep-their-lines-at-1280', async f => {
-   const { workDate } = await import(pathToFileURL(path.join(__dirname, '../src/expedile/domain/personalWork.js')).href);
    const quote = f.tables.staff_work_actions.find(action => action.id === 'quote');
-   const expected = workDate(quote.due_at, { now: Date.now() });
-   assert.match(expected, /^(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche) \d{1,2}(er)? [a-zéû]+( \d{4})?, \d{1,2} h( \d{2})?$/);
-   assert.deepEqual(await row(f, 'quote').locator('.work-due-part').allInnerTexts(), ['Dépassée ·', expected], 'A device in Auckland still reads the Paris time');
+   // On the device the overdue quote falls on Thursday 1 January at 11:59: every part differs.
+   assert.deepEqual(await f.page.evaluate(due => { const date = new Date(due); return [Intl.DateTimeFormat().resolvedOptions().timeZone, date.getDate(), date.getMonth() + 1, date.getFullYear(), date.getHours(), date.getMinutes()]; }, quote.due_at), ['Pacific/Auckland', 1, 1, 2026, 11, 59]);
+   // Another year is a part of its own: a narrow column sets it on the hour's line.
+   assert.deepEqual(await row(f, 'quote').locator('.work-due-part').allInnerTexts(), ['Dépassée ·', 'mercredi 31 décembre', '2025,', '23 h 59'], 'A device in Auckland still reads the Paris time');
+   assert.deepEqual(await row(f, 'reception').locator('.work-due-part').allInnerTexts(), ['Prévue ·', 'samedi 3 janvier,', '23 h 59']);
+   await row(f, 'quote').getByRole('cell', { name: 'Dépassée · mercredi 31 décembre 2025, 23 h 59', exact: true }).waitFor();
    for (const id of ORDER) {
     for (const part of await row(f, id).locator('.work-due-part, .work-client').all()) assert.equal(await lineCount(part), 1, `${id}: « ${await part.innerText()} » on one line`);
    }
    assert.equal(await row(f, 'prepare').locator('.work-client').getAttribute('title'), 'Boutique Kréol SARL', 'A long name stays whole in its title');
-   assert.ok(await todo(f).locator('.work-table-frame').evaluate(node => node.scrollWidth <= node.clientWidth + 1), 'The default columns fit at 1280px');
+   const fit = await defaultColumnsFit(f);
+   assert.ok(fit.fits, `The default columns fit at 1280px: ${JSON.stringify(fit)}`);
    await shot(f, 'table-1280-light');
-  }, { viewport: { width: 1280, height: 900 }, timezoneId: 'Pacific/Auckland' });
+  }, { viewport: { width: 1280, height: 900 }, timezoneId: 'Pacific/Auckland', wideFonts: true });
+  // The widest part a deadline can show, in bold and the CI's wider fonts: the columns still fit.
+  await scenario('the-widest-deadline-day-keeps-the-default-columns-in-view-at-1280', async f => {
+   const parts = row(f, 'quote').locator('.work-due-part');
+   assert.deepEqual(await parts.allInnerTexts(), ['Dépassée ·', 'dimanche 1er septembre,', '23 h 59']);
+   for (const part of await parts.all()) assert.equal(await lineCount(part), 1, `« ${await part.innerText()} » on one line`);
+   const fit = await defaultColumnsFit(f);
+   assert.ok(fit.fits, `The default columns fit at 1280px: ${JSON.stringify(fit)}`);
+   await shot(f, 'table-1280-widest-day-light');
+  }, { viewport: { width: 1280, height: 900 }, now: WIDEST_DAY, wideFonts: true });
   await scenario('the-shell-gives-each-staff-page-one-main-landmark', async f => {
    for (const route of ['/', '/colis', `/colis/${ids.P}`, `/colis/${ids.P}?onglet=conversation`, '/conversations', '/equipe', '/departs', '/clients', '/devis', '/plus']) {
     await f.page.goto(base + route);
@@ -832,14 +876,15 @@ async function failColisLoad(f) {
    if (process.platform !== 'linux') assert.equal(label.lines, 1, '« Réceptionner des cartons » on one line');
    await shot(f, `sidebar-${width}`);
   }, { viewport: { width, height: 900 } });
+  // In the CI's wider fonts, with the longest deadlines.
   for (const width of [320, 390, 768, 1024, 1280, 1440, 1920]) await scenario(`no-page-overflow-at-${width}`, async f => {
    await f.page.getByRole('region', { name: 'À faire', exact: true }).locator('[data-work-action]').first().waitFor();
    assert.equal(await pageOverflow(f), false);
-   if (width >= 1280) assert.ok(await todo(f).locator('.work-table-frame').evaluate(node => node.scrollWidth <= node.clientWidth + 1), 'The default columns fit without scrolling');
+   if (width >= 1280) { const fit = await defaultColumnsFit(f); assert.ok(fit.fits, `The default columns fit without scrolling: ${JSON.stringify(fit)}`); }
    await f.page.locator('summary').filter({ hasText: /^Filtrer/ }).click();
    await f.page.getByLabel('Mission', { exact: true }).waitFor();
    assert.equal(await pageOverflow(f), false, 'Open filters fit too');
-  }, { viewport: { width, height: 900 } });
+  }, { viewport: { width, height: 900 }, wideFonts: true });
   for (const width of [1440, 390]) for (const dark of [false, true]) await scenario(`axe-${width}-${dark ? 'dark' : 'light'}`, async f => {
    assert.equal(await f.page.locator('html').evaluate(node => node.classList.contains('dark')), dark);
    await todo(f).locator('[data-work-action]').first().waitFor();
@@ -855,7 +900,7 @@ async function failColisLoad(f) {
   }, { dark, viewport: { width, height: width === 390 ? 844 : 900 } });
   // Review screenshots: the page scrolls inside the application frame, so a tall
   // viewport shows the whole list.
-  for (const width of [1440, 1024, 768, 390]) for (const dark of [false, true]) await scenario(`screenshots-${width}-${dark ? 'dark' : 'light'}`, async f => {
+  for (const width of [1440, 1280, 1024, 768, 390]) for (const dark of [false, true]) await scenario(`screenshots-${width}-${dark ? 'dark' : 'light'}`, async f => {
    await todo(f).locator('[data-work-action]').first().waitFor();
    await shot(f, `todo-${width}-${dark ? 'dark' : 'light'}`);
    await f.page.getByRole('button', { name: 'En attente 1', exact: true }).click();

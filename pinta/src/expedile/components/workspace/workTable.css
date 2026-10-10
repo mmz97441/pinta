@@ -141,11 +141,14 @@ html.dark .work-page .hover\:bg-slate-50:hover { background-color: var(--bg-surf
 .work-table tbody > tr:last-child > td:first-child { border-bottom-left-radius: 9px; }
 .work-table tbody > tr:last-child > td:last-child { border-bottom-right-radius: 9px; }
 .work-table .work-table-number { text-align: right; font-variant-numeric: tabular-nums; }
-/* The task title is the column that wraps, between whole words. */
-.work-table [data-work-column='task'] { min-width: 9em; }
-/* The deadline never breaks inside its state or its date: in a narrow column
-   the date takes its own line, whole. A client name reads on one line; a long
-   one ends with « … » and stays whole in its title. */
+/* The task title is the column that wraps, between whole words. Its 8em floor
+   leaves the seven default columns their room at 1280px, even with the widest
+   deadline day (« dimanche 1er septembre, ») in Linux's wider fonts. */
+.work-table [data-work-column='task'] { min-width: 8em; }
+/* The deadline never breaks inside its state, its day, its year or its hour: in
+   a narrow column each takes a line of its own, whole (« Dépassée · » /
+   « mercredi 31 décembre » / « 2025, 23 h 59 »). A client name reads on one
+   line; a long one ends with « … » and stays whole in its title. */
 .work-due-part { white-space: nowrap; }
 /* A casier code is read against the shelf: « C-002 » never splits at its hyphen
    (the table gives its column the code's whole width). */

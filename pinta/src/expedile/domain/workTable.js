@@ -1,4 +1,4 @@
-import { WORK_KINDS, WORK_STATES, actionPriority, workDate } from './personalWork.js';
+import { WORK_KINDS, WORK_STATES, actionPriority, workDate, workDateParts } from './personalWork.js';
 import { receptionCartonManifest } from './reception.js';
 import { plural } from './plural.js';
 
@@ -37,13 +37,18 @@ const clientName = client => (client?.nomFamille ? [client.prenom, client.nomFam
 
 /** The deadline keeps the priority wording. The table column is already named
  * « Échéance », so its cell (`text`) drops that word; a card keeps it (`label`).
- * `status` and `date` are the two halves of `text`, each kept whole on its line. */
-function workDue(priority, date) {
+ * `parts` are the pieces of `text` the cell keeps whole, each on a line of its
+ * own when the column is narrow: the state, then the day, its year and the hour
+ * (workDateParts). Joined with spaces they read exactly as `text`. */
+function workDue(priority, deadline) {
+  const date = deadline ? deadline.join(' ') : null;
   if (!priority.urgent && !date) return null;
-  if (priority.rank === 400) return { text: `Dépassée · ${date}`, label: `${priority.reason} · ${date}`, status: 'Dépassée', date, urgent: true };
-  if (!priority.urgent) return { text: `Prévue · ${date}`, label: `Échéance prévue · ${date}`, status: 'Prévue', date, urgent: false };
-  const text = date ? `${priority.reason} · ${date}` : priority.reason;
-  return { text, label: text, status: priority.reason, date: date || null, urgent: true };
+  const status = priority.rank === 400 ? 'Dépassée' : priority.urgent ? priority.reason : 'Prévue';
+  const parts = date ? [`${status} ·`, ...deadline] : [status];
+  const text = parts.join(' ');
+  if (priority.rank === 400) return { text, label: `${priority.reason} · ${date}`, parts, urgent: true };
+  if (!priority.urgent) return { text, label: `Échéance prévue · ${date}`, parts, urgent: false };
+  return { text, label: text, parts, urgent: true };
 }
 
 /** One task as the table row and the card show it. A row assigned to the
@@ -59,7 +64,7 @@ export function workRowModel(action, dossier, client, { now = Date.now(), meId }
     title: action.action_hint || WORK_KINDS[action.kind]?.label || 'Action à préciser',
     state,
     urgent: priority.urgent,
-    due: workDue(priority, workDate(action.due_at, { now })),
+    due: workDue(priority, workDateParts(action.due_at, { now })),
     ref: dossier?.ref || 'Dossier à consulter',
     client: clientName(client),
     casier: dossier?.casier || null,

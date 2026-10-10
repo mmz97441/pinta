@@ -27,6 +27,19 @@ export const workTime = value => value ? Date.parse(value) : NaN;
  * device: « mercredi 21 octobre, 17 h », « jeudi 8 octobre, 9 h 30 », with the
  * year when it is not the current one. */
 export const workDate = (value, { now = Date.now() } = {}) => value && Number.isFinite(Date.parse(value)) ? closingLabel(value, { today: now }) : null;
+// « mercredi 31 décembre 2025, 23 h 59 »: the day, its year when shown, the hour.
+const WORK_DATE_PIECES = /^(.+?)(?: (\d{4}))?, (\d{1,2} h(?: \d{2})?)$/;
+/** workDate in the pieces a narrow column may set on lines of their own, each
+ * read whole: the day, its year when shown, the hour — « mercredi 31 décembre »,
+ * « 2025, », « 23 h 59 ». Joined with spaces they read exactly as workDate. */
+export function workDateParts(value, options) {
+  const label = workDate(value, options);
+  if (!label) return null;
+  const pieces = WORK_DATE_PIECES.exec(label);
+  if (!pieces) return [label];
+  const [, day, year, hour] = pieces;
+  return year ? [day, `${year},`, hour] : [`${day},`, hour];
+}
 /** The name a staff member reads for themselves, in the sidebar as in Mon
  * travail: the first name, else the name on the account. */
 export function staffDisplayName(user) {
