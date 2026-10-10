@@ -924,6 +924,20 @@ Exemple : « Bonjour Flavie 👋 Votre expédition EXP-0123 est partie vers La R
 
 ### 6.2 Décisions internes à prendre
 
+**Décisions prises par la direction le 10 octobre 2026** (réponse « ok » aux recommandations ; elles tranchent les points 1, 3, 4, 6, 7, 9 et 12 ci-dessous) :
+
+| Point | Décision |
+|---|---|
+| 1. Taxes à destination | Régime « prix » : une ligne « Forfait importation à destination », exonérée comme le transport, tant que le montage douanier ne permet pas les débours. |
+| 3. Professionnels à terme | Ils partent sans règlement ; la facture est émise au départ, avec une échéance de 30 jours au plus. |
+| 4. Donnée de facturation manquante | Le dossier est reporté au départ suivant, avec le motif affiché, comme les autres motifs de report. |
+| 6. Numérotation | Une série pour les factures et les acomptes (préfixe `F-`), une série pour les avoirs (préfixe `AV-`). |
+| 7. Bascule | Le jour où PayPlug passe en réel. Les dossiers de professionnels partis avant la bascule sont facturés après coup ; pas de facture après coup pour les particuliers. |
+| 9. Remboursement | L'avoir d'abord, puis le remboursement dans PayPlug ou par virement, puis son enregistrement dans Evoliz. |
+| 12. Correction après paiement | Le gel du 4 octobre 2026 est maintenu : pas de correction du devis après paiement. |
+
+Restent ouverts : le point 2 (procédure de secours si Evoliz est indisponible un jour de départ), le point 5 (liste fermée des natures de frais), le point 8 (libellé « Factures Expedîle » proposé), le point 10 (la direction a écarté l'expert-comptable : l'attestation écrite d'Evoliz, question 3, devient la seule preuve externe) et le point 11 (calendrier de la facturation électronique).
+
 1. **Régime des taxes à destination** (I7). La proposition est « prix », avec le libellé « Forfait importation à destination », tant que le montage A n'est pas confirmé par rescrit. Le libellé du devis change avec lui (I16).
 2. **Sens de « payé »** : enregistré dans Evoliz (principe 6). Faut-il une procédure de secours si Evoliz est indisponible un jour de départ, par exemple un départ autorisé sur preuve PayPlug, journalisé et rattrapé ensuite ? Si oui, la facture n'est jamais créée avant l'enregistrement du paiement : la tâche `facture_depart` dépend de la tâche `acompte`, sinon la facture naîtrait sans acompte à déduire.
 3. **Départ sans règlement des professionnels à terme** (2.4), avec le plafond de 30 jours (F24) tant que Q6 et A19 restent ouverts.
