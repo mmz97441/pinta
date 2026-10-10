@@ -191,8 +191,12 @@ UPDATE notification_outbox SET status='sent',sent_at=now() WHERE idempotency_key
 SELECT crf_assert((SELECT state='waiting' AND blocked_reason='Accord client attendu' AND action_hint IS NULL AND due_at=now()+interval '24 hours' FROM crf_reception('cf300000-0000-4000-8000-000000000011'))
   AND crf_until('cf300000-0000-4000-8000-000000000011')=now()+interval '24 hours','S3 once delivered, the follow-up lasts 24 hours from the delivery');
 -- Two hours later (simulated), the team sends a relance: it is followed up in turn, held until it is delivered.
+-- Simulated time: a recorded message and a confirmed delivery are final since 20261010000001, so they are moved back
+-- with triggers off.
+SET LOCAL session_replication_role='replica';
 UPDATE messages SET created_at=now()-interval '2 hours' WHERE id=(SELECT message_id FROM notification_outbox WHERE idempotency_key='crf-q1-request');
 UPDATE notification_outbox SET sent_at=now()-interval '2 hours' WHERE idempotency_key='crf-q1-request';
+SET LOCAL session_replication_role='origin';
 SELECT crf_as('director');
 SELECT queue_message('cf300000-0000-4000-8000-000000000011','Bonjour Flavie, votre accord est toujours attendu.','relance_feu_vert','crf-q1-relance',NULL,'telegram');
 SELECT crf_as('postgres');
@@ -353,11 +357,15 @@ END $$;
 
 -- ── S5. Time passes (simulated): the refresh brings the relance back, then stays stable ──
 -- CRF-A1: 25 hours after the delivered request (its saved row still waits until its old due date): the stored hint differs.
+SET LOCAL session_replication_role='replica';
 UPDATE messages SET created_at=now()-interval '25 hours' WHERE colis_id='cf300000-0000-4000-8000-000000000021';
 UPDATE notification_outbox SET sent_at=now()-interval '25 hours' WHERE colis_id='cf300000-0000-4000-8000-000000000021';
+SET LOCAL session_replication_role='origin';
 -- CRF-A7: the due date has come: the waiting row is re-synced by its date.
+SET LOCAL session_replication_role='replica';
 UPDATE messages SET created_at=now()-interval '24 hours 1 minute' WHERE colis_id='cf300000-0000-4000-8000-000000000027';
 UPDATE notification_outbox SET sent_at=now()-interval '24 hours 1 minute' WHERE colis_id='cf300000-0000-4000-8000-000000000027';
+SET LOCAL session_replication_role='origin';
 UPDATE staff_work_actions SET due_at=now()-interval '1 minute' WHERE colis_id='cf300000-0000-4000-8000-000000000027' AND kind='reception';
 -- CRF-W6: a departure is planned on its desired day after the dossier was synced (no trigger re-syncs a desired day).
 SELECT crf_assert((SELECT action_hint IS NULL AND due_at IS NULL FROM crf_reception('cf300000-0000-4000-8000-000000000046')),'S5 a desired day without departure: no hint yet');

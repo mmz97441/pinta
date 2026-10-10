@@ -542,7 +542,10 @@ BEGIN
  result:=register_late_invoice_from_message((SELECT id FROM messages WHERE colis_id=o AND attachment_path=o||'/tg2.pdf'),'CHAT-IQR-A');
  PERFORM iqr_assert(result->>'status'='stale' AND NOT EXISTS(SELECT 1 FROM factures WHERE fichier_url=o||'/tg2.pdf') AND NOT EXISTS(SELECT 1 FROM quote_withdrawals WHERE colis_id=o),'T4 « Oui » on an unlocked dossier registers nothing');
  PERFORM iqr_as('postgres');
+ -- Simulated time: a recorded message is final since 20261010000001, so it is moved back with triggers off.
+ SET LOCAL session_replication_role='replica';
  UPDATE messages SET created_at=now()-interval '1 day' WHERE colis_id=d AND attachment_path=d||'/tg2.pdf';
+ SET LOCAL session_replication_role='origin';
  PERFORM iqr_as('service');
  result:=register_late_invoice_from_message((SELECT id FROM messages WHERE colis_id=d AND attachment_path=d||'/tg2.pdf'),'CHAT-IQR-A');
  PERFORM iqr_assert(result->>'status'='stale' AND NOT EXISTS(SELECT 1 FROM factures WHERE fichier_url=d||'/tg2.pdf'),'T4 « Oui » about a document older than the sent quote registers nothing');

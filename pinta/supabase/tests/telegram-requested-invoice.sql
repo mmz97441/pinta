@@ -92,10 +92,15 @@ BEGIN
  message_id:=invoice_fixture(media_type=>NULL);
  PERFORM invoice_assert((register_requested_invoice(message_id)).id IS NULL,'unknown media type requires explicit staff review');
  message_id:=invoice_fixture();
+ -- A recorded message keeps its channel and author type (20261010000001): the variant is set with triggers off.
+ SET LOCAL session_replication_role='replica';
  UPDATE messages SET canal='email' WHERE id=message_id;
+ SET LOCAL session_replication_role='origin';
  PERFORM invoice_assert((register_requested_invoice(message_id)).id IS NULL,'non Telegram message cannot use Telegram invoice intent');
  message_id:=invoice_fixture();
+ SET LOCAL session_replication_role='replica';
  UPDATE messages SET type='staff' WHERE id=message_id;
+ SET LOCAL session_replication_role='origin';
  PERFORM invoice_assert((register_requested_invoice(message_id)).id IS NULL,'staff attachments are not customer invoices');
 
  FOREACH state IN ARRAY ARRAY['paye','expedie','transit','dedouanement','arrive','livraison','livre','annule']::statut_colis[] LOOP

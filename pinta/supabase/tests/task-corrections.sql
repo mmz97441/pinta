@@ -57,7 +57,10 @@ SELECT correction_assert((SELECT (correct_colis_task(id,'reception',jsonb_build_
 SELECT correction_reject($q$SELECT save_preparation_measurements(id,final_packages,updated_at,preparation_composition_version) FROM colis WHERE id='ca300000-0000-4000-8000-000000000001'$q$,'legacy measurement save cannot withdraw quote bypassing correction','22023');
 SELECT correction_reject($q$SELECT revert_colis(id,updated_at) FROM colis WHERE id='ca300000-0000-4000-8000-000000000001'$q$,'legacy backwards transition cannot bypass correction','22023');
 RESET ROLE;
+-- Synthetic states of one link (a link only moves as its writers move it since 20261010000001): set with triggers off.
+SET LOCAL session_replication_role='replica';
 UPDATE payment_intents SET status='creating' WHERE provider_id='pay_task_old';
+SET LOCAL session_replication_role='origin';
 SET LOCAL ROLE authenticated;
 SELECT correction_reject($q$SELECT correct_colis_task(id,'reception','{"boxes":[{"dimL":40,"dimW":30,"dimH":20,"poids":5}]}',updated_at,'Correction poids') FROM colis WHERE id='ca300000-0000-4000-8000-000000000001'$q$,'payment creation race blocks correction','40001');
 RESET ROLE;
@@ -68,7 +71,9 @@ SET LOCAL ROLE authenticated;
 SELECT correction_reject($q$SELECT correct_colis_task(id,'reception','{"boxes":[{"dimL":40,"dimW":30,"dimH":20,"poids":5}]}',updated_at,'Correction poids') FROM colis WHERE id='ca300000-0000-4000-8000-000000000001'$q$,'failed orphan intent with provider ID still requires cancellation proof','22023');
 RESET ROLE;
 UPDATE colis SET payplug_payment_id='pay_task_old',payplug_payment_url='https://example.test/retired' WHERE id='ca300000-0000-4000-8000-000000000001';
+SET LOCAL session_replication_role='replica';
 UPDATE payment_intents SET status='pending',provider_is_live=false WHERE provider_id='pay_task_old';
+SET LOCAL session_replication_role='origin';
 SELECT set_config('request.jwt.claim.role','service_role',true);
 SELECT correction_assert(NOT has_function_privilege('authenticated','record_payplug_cancellation(uuid,text,jsonb)','EXECUTE'),'browser cannot forge provider cancellation proof');
 SELECT correction_reject($q$SELECT record_payplug_cancellation(colis_id,provider_id,jsonb_build_object('object','payment','id',provider_id,'is_paid',true,'failure',jsonb_build_object('code','aborted'),'currency','EUR','amount',amount_cents,'is_live',false,'metadata',jsonb_build_object('colis_id',colis_id,'intent_id',id,'quote_version',quote_version))) FROM payment_intents WHERE provider_id='pay_task_old'$q$,'paid provider resource is never cancellation evidence','22023');

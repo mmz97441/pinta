@@ -24,9 +24,13 @@ INSERT INTO payment_intents(id,colis_id,quote_version,provider_id,amount_cents,s
  ('ed500000-0000-4000-8000-000000000001','ed400000-0000-4000-8000-000000000001',1,'pay_returnFixture',4000,'pending',false,repeat('a',64),now()+interval '90 days');
 SELECT return_assert(NOT has_function_privilege('anon','get_payment_return(text,uuid,uuid)','EXECUTE') AND NOT has_function_privilege('authenticated','get_payment_return(text,uuid,uuid)','EXECUTE') AND has_function_privilege('service_role','get_payment_return(text,uuid,uuid)','EXECUTE'),'receipt RPC can only be called by verified Edge service');
 SELECT return_assert((SELECT provolatile='s' AND prosecdef AND proconfig @> ARRAY['search_path=public, pg_temp'] FROM pg_proc WHERE oid='get_payment_return(text,uuid,uuid)'::regprocedure),'receipt RPC is STABLE with hardened search path');
+-- The CHECK constraint itself: since 20261010000001 the retention guard refuses any rewrite of a link's token first,
+-- so the constraint is reached with triggers off. Below, the synthetic states of the ledger are set the same way.
+SET LOCAL session_replication_role='replica';
 SELECT return_reject($q$UPDATE payment_intents SET return_token_hash=NULL WHERE id='ed500000-0000-4000-8000-000000000001'$q$,'expiry without hash rejected','23514');
 SELECT return_reject($q$UPDATE payment_intents SET return_token_expires_at=NULL WHERE id='ed500000-0000-4000-8000-000000000001'$q$,'hash without expiry rejected','23514');
 SELECT return_reject($q$UPDATE payment_intents SET return_token_hash='short' WHERE id='ed500000-0000-4000-8000-000000000001'$q$,'weak malformed hash rejected','23514');
+SET LOCAL session_replication_role='origin';
 SELECT set_config('test.return_before',(SELECT jsonb_build_object('colis',(SELECT jsonb_agg(to_jsonb(c)) FROM colis c),'intents',(SELECT jsonb_agg(to_jsonb(i)) FROM payment_intents i),'payments',(SELECT jsonb_agg(to_jsonb(p)) FROM paiements p),'notifications',(SELECT jsonb_agg(to_jsonb(n)) FROM notifications n),'outbox',(SELECT jsonb_agg(to_jsonb(n)) FROM notification_outbox n))::text),true);
 SET LOCAL ROLE anon;
 SELECT return_reject($q$SELECT get_payment_return(repeat('a',64),NULL,NULL)$q$,'anonymous cannot call database receipt directly','42501');
@@ -46,9 +50,13 @@ SELECT return_assert(NOT (get_payment_return(repeat('a',64))::text LIKE '%Owner 
 SELECT return_assert(get_payment_return(NULL,'ed400000-0000-4000-8000-000000000002','ed100000-0000-4000-8000-000000000001')->>'status'='unavailable','dossier without PayPlug evidence is not declared paid');
 RESET ROLE;
 SELECT return_assert(current_setting('test.return_before')::jsonb=(SELECT jsonb_build_object('colis',(SELECT jsonb_agg(to_jsonb(c)) FROM colis c),'intents',(SELECT jsonb_agg(to_jsonb(i)) FROM payment_intents i),'payments',(SELECT jsonb_agg(to_jsonb(p)) FROM paiements p),'notifications',(SELECT jsonb_agg(to_jsonb(n)) FROM notifications n),'outbox',(SELECT jsonb_agg(to_jsonb(n)) FROM notification_outbox n))),'receipt and unauthorized reads do not mutate business data or notify anyone');
+SET LOCAL session_replication_role='replica';
 UPDATE payment_intents SET return_token_expires_at=now()-interval '1 second' WHERE id='ed500000-0000-4000-8000-000000000001';
+SET LOCAL session_replication_role='origin';
 SELECT return_reject($q$SELECT get_payment_return(repeat('a',64))$q$,'expired capability denied','P0410');
+SET LOCAL session_replication_role='replica';
 UPDATE payment_intents SET return_token_expires_at=now()+interval '90 days' WHERE id='ed500000-0000-4000-8000-000000000001';
+SET LOCAL session_replication_role='origin';
 UPDATE profiles SET actif=false WHERE id='ed100000-0000-4000-8000-000000000001';
 SELECT return_reject($q$SELECT get_payment_return(NULL,'ed400000-0000-4000-8000-000000000001','ed100000-0000-4000-8000-000000000001')$q$,'inactive client session rejected','P0403');
 UPDATE profiles SET actif=true WHERE id='ed100000-0000-4000-8000-000000000001';
@@ -57,13 +65,21 @@ UPDATE profiles SET actif=true WHERE id='ed100000-0000-4000-8000-000000000001';
 SELECT confirm_payplug_payment('pay_returnFixture','ed400000-0000-4000-8000-000000000001',1,4000,'EUR');
 SELECT return_assert(get_payment_return(repeat('a',64))->>'status'='paid' AND get_payment_return(repeat('a',64))->'isLive'='false'::jsonb AND get_payment_return(repeat('a',64))->>'paidAt' IS NOT NULL,'authoritative webhook resolves pending as a simulated payment');
 SELECT return_assert(get_payment_return(repeat('a',64))#>>'{shipment,departureDate}' IS NULL,'paid without assigned departure never promises a date');
+SET LOCAL session_replication_role='replica';
 UPDATE payment_intents SET provider_is_live=NULL WHERE id='ed500000-0000-4000-8000-000000000001';
+SET LOCAL session_replication_role='origin';
 SELECT return_assert(get_payment_return(repeat('a',64))->>'status'='unavailable','unknown payment mode never becomes a real receipt');
+SET LOCAL session_replication_role='replica';
 UPDATE payment_intents SET provider_is_live=true WHERE id='ed500000-0000-4000-8000-000000000001';
+SET LOCAL session_replication_role='origin';
 SELECT return_assert(get_payment_return(repeat('a',64))->>'status'='paid' AND get_payment_return(repeat('a',64))->'isLive'='true'::jsonb,'recorded live mode is returned explicitly');
+SET LOCAL session_replication_role='replica';
 UPDATE paiements SET montant=39 WHERE provider_id='pay_returnFixture';
+SET LOCAL session_replication_role='origin';
 SELECT return_assert(get_payment_return(repeat('a',64))->>'status'='unavailable','mismatched ledger amount is not a paid receipt');
+SET LOCAL session_replication_role='replica';
 UPDATE paiements SET montant=40 WHERE provider_id='pay_returnFixture';
+SET LOCAL session_replication_role='origin';
 INSERT INTO envois(id,ref,destination_code,statut,date_depart) VALUES('ed600000-0000-4000-8000-000000000001','DEP-RETURN','974','planifie',(now() AT TIME ZONE 'Europe/Paris')::date+1);
 UPDATE colis SET envoi_id='ed600000-0000-4000-8000-000000000001' WHERE id='ed400000-0000-4000-8000-000000000001';
 SELECT return_assert(get_payment_return(repeat('a',64))#>>'{shipment,departureDate}'=((now() AT TIME ZONE 'Europe/Paris')::date+1)::text,'only the actual assigned future departure is shown');
@@ -75,13 +91,21 @@ SELECT return_assert(get_payment_return(repeat('a',64))#>>'{shipment,departureDa
 ROLLBACK TO before_archive;
 UPDATE envois SET date_depart=(now() AT TIME ZONE 'Europe/Paris')::date+1,statut='planifie',loading_closes_at=now()-interval '1 second' WHERE id='ed600000-0000-4000-8000-000000000001';
 SELECT return_assert(get_payment_return(repeat('a',64))#>>'{shipment,departureDate}'=((now() AT TIME ZONE 'Europe/Paris')::date+1)::text,'loading closure does not erase the future departure of an already assigned parcel');
+SET LOCAL session_replication_role='replica';
 UPDATE payment_intents SET status='superseded' WHERE id='ed500000-0000-4000-8000-000000000001';
+SET LOCAL session_replication_role='origin';
 SELECT return_assert(get_payment_return(repeat('a',64))->>'status'='superseded' AND get_payment_return(repeat('a',64))#>>'{shipment,status}'='unavailable' AND get_payment_return(repeat('a',64))->>'paidAt' IS NULL,'obsolete token cannot claim a newer quote payment or shipment');
+SET LOCAL session_replication_role='replica';
 UPDATE payment_intents SET status='failed' WHERE id='ed500000-0000-4000-8000-000000000001';
+SET LOCAL session_replication_role='origin';
 SELECT return_assert(get_payment_return(repeat('a',64))->>'status'='unavailable','failed creation is not treated as payment or browser cancellation');
+SET LOCAL session_replication_role='replica';
 UPDATE payment_intents SET provider_cancelled_at=now() WHERE id='ed500000-0000-4000-8000-000000000001';
+SET LOCAL session_replication_role='origin';
 SELECT return_assert(get_payment_return(repeat('a',64))->>'status'='cancelled','recorded provider cancellation is explicit');
+SET LOCAL session_replication_role='replica';
 UPDATE payment_intents SET status='paid' WHERE id='ed500000-0000-4000-8000-000000000001';
+SET LOCAL session_replication_role='origin';
 SELECT return_assert(get_payment_return(repeat('a',64))->>'status'='paid','a confirmed receipt takes precedence over a cancellation marker');
 -- Read-only projection of historical completed shipment facts; this is not a
 -- test of departure validation, which has its own full manifest suite.

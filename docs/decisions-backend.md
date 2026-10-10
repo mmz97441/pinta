@@ -151,3 +151,39 @@ Un message dont l’envoi lève une exception n’est marqué `failed` que si sa
 - `supabase/tests/run-invoice-quote-rules.sh` : assertions SQL et sessions concurrentes réelles ;
 - les tests Edge `*.edge.test.cjs` ;
 - les suites navigateur `invoice-quote-withdrawal` et `client-late-invoice`.
+
+## Conservation des paiements et de l’historique — 10 octobre 2026
+
+Migration `20261010000001_history_retention.sql`, préparée et vérifiée localement, **non déployée**. Le script `pinta/scripts/deployment/retention20261010.py` (preflight, rehearse, apply, verify) est écrit et compilé ; aucune de ses opérations n’a été lancée. Comme pour les lots précédents, `run-retention.sh` en importe seulement le SQL pour le répéter sur une base locale jetable. L’en-tête de la migration contient l’inventaire complet : chaque table d’historique, ses clés, leur comportement à la suppression, ses écrivains (fonctions SQL, déclencheurs, fonctions Edge, `supabaseData.js`) et la règle retenue.
+
+**Pourquoi.** Le référentiel de conformité du 10 octobre 2026 (règles F18, F22, F23, C14, décision I2) impose de conserver dix ans, sans modification ni effacement, les paiements et les journaux de la piste d’audit ; une correction est une nouvelle écriture « plus / moins ». Avant cette migration, supprimer un dossier effaçait en cascade ses paiements, son historique de statuts, ses messages et ses reçus de réception (et son journal d’actions sur un rejeu vierge), détachait son journal de communications, et rien n’empêchait un `UPDATE` ou un `DELETE` direct.
+
+**Règles.**
+
+- Ajout seul, ni modification ni suppression : `paiements`, `quote_versions`, `audit_actions`, `logs_statut`, `departure_manifests`, `com_log`, `reception_append_receipts`. `legacy_payplug_payments` garde son garde de 2026-09-10.
+- Tables d’état encadrées, sans suppression : `payment_intents` (seules les transitions de ses écrivains ; montant, devis, mode et référence PayPlug figés ; un lien payé est définitif), `messages` (seuls `lu`, `statut` et `telegram_msg_id` évoluent), `notification_outbox` (références figées ; un envoi `sent` ou `cancelled` est définitif), `quote_withdrawals` (la demande et le retrait effectif sont figés, ses factures ne font que s’ajouter), `client_inbox` (le message reçu est figé, le dossier choisi est définitif), `departure_loading_checks` (figés dès que le départ est confirmé).
+- Clés : les `ON DELETE CASCADE` et `SET NULL` de l’historique deviennent `RESTRICT` ; une clé absente en production est ajoutée (le preflight refuse s’il existe une ligne orpheline). Les contrôles de chargement gardent leurs cascades : avant la confirmation, ils restent un état de travail (décision du 7 octobre).
+- Parents : un dossier qui porte un historique ne se supprime plus ; un client non plus s’il a des dossiers, des échanges, une invitation Telegram ou des paiements ; un départ non plus s’il est parti (y compris les départs antérieurs aux manifestes) ou s’il porte encore des dossiers.
+- `TRUNCATE` est refusé sur toutes ces tables. Les rôles API perdent `UPDATE`, `DELETE` et `TRUNCATE` sur les tables en ajout seul, `DELETE` et `TRUNCATE` sur les autres.
+- Chaque refus porte un message en français, le SQLSTATE `23001` et le HINT `retention:<table>`. Les déclencheurs s’appliquent à tous les rôles, propriétaire et commandes `SECURITY DEFINER` compris.
+
+**Choix des transitions encadrées.** Pour `payment_intents`, une réécriture en ajout seul aurait modifié sept écrivains et tous les lecteurs qui retrouvent un lien par sa référence (`get_payment_return`, `payplugCancel`, `_live_payment_link`, `_dossier_frozen_reason`). Les transitions existantes sont donc conservées, le montant étant figé, et le paiement lui-même reste dans le registre `paiements`, en ajout seul. Le passage `superseded → failed` reste admis sans référence PayPlug, car `payplug-create` marque un refus par identifiant. Les autres tables d’état suivent le même principe : seules les colonnes de traitement que leurs écrivains changent aujourd’hui restent modifiables.
+
+**Écran.** `deleteClient` et `deleteEnvoi` relisent la ligne supprimée. Le message du serveur s’affiche tel quel, et une suppression ignorée par la RLS n’est plus annoncée comme réussie (test unitaire `tests/retention-deletes.test.mjs`, deux scénarios de `tests/admin-simplicity.browser.cjs`, captures bureau et mobile vérifiées).
+
+**Tests adaptés.** Six suites SQL créaient leurs états de départ en réécrivant directement un lien, un message, une sortie ou un paiement, états qu’aucun écrivain ne produit. Ces fixtures passent désormais par `session_replication_role=replica`, sans changer leurs assertions : `task-corrections.sql`, `payment-return.sql`, `telegram-requested-invoice.sql`, `consent-reply.sql`, `consent-relance-followup.sql`, `invoice-quote-rules.sql`.
+
+**Vérification locale.** Les vérifications suivantes passent sur PostgreSQL 17 isolé (`--network none`), sans aucun accès distant :
+
+- `supabase/tests/run-retention.sh` : répétition de la mise en production avec le script, cascade d’`audit_actions`, clé manquante et ligne orpheline, `retention.sql` (116 assertions sur les écrivains réels, les refus, les cascades et les corrections), puis `regressions.sql`, `payment-return.sql` et `loading-checks.sql` sous des droits de type production ;
+- les 30 étapes SQL de la CI, `run-retention.sh` compris, sur des bases où toutes les migrations sont rejouées jusqu’à celle-ci ;
+- `npm run lint`, `npm test`, les tests Edge ;
+- la suite navigateur `admin-simplicity`.
+
+**Reste à décider ou à faire.**
+
+- Déploiement par le responsable : preflight, rehearse, apply, verify, après comparaison des fonctions Edge déployées (`compare_edge_sources.cjs`).
+- Les fichiers des buckets ne sont pas couverts par ces déclencheurs : une règle de conservation côté Storage reste à définir.
+- Le lien entre une écriture de correction et le paiement corrigé, le moyen de paiement normalisé et les factures émises relèvent du lot facturation (I2), qui devra garder ces gardes.
+- `tarifs` est mis à jour en place : sa version reste à traiter par la grille versionnée (I6).
+- Une migration future qui remplit une colonne ajoutée à une table en ajout seul doit désactiver explicitement le déclencheur dans sa propre transaction, après revue.
