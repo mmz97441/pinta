@@ -55,24 +55,37 @@ test('title, state pill, identity and physical facts', () => {
 test('the deadline reuses the priority wording; the table cell drops « Échéance »', () => {
   const overdue = '2026-10-03T10:00:00Z', planned = '2026-10-06T10:27:00Z';
   // The parts of the cell, each kept whole on its line: the state, the day, the hour.
-  assert.deepEqual(model({ due_at: overdue }).due, { text: `Dépassée · ${workDate(overdue, { now })}`, label: `Échéance dépassée · ${workDate(overdue, { now })}`, parts: ['Dépassée ·', 'samedi 3 octobre,', '12 h'], urgent: true });
+  assert.deepEqual(model({ due_at: overdue }).due, { text: `Dépassée · ${workDate(overdue, { now })}`, label: `Échéance dépassée · ${workDate(overdue, { now })}`, parts: ['Dépassée ·', 'samedi 3 octobre,', '12 h'], urgent: true, reasonWraps: false });
   assert.equal(model({ due_at: overdue }).due.text, 'Dépassée · samedi 3 octobre, 12 h', 'The deadline reads like the Départ labels, on Paris time.');
   assert.equal(model({ due_at: overdue }).urgent, true);
-  assert.deepEqual(model({ due_at: planned }).due, { text: `Prévue · ${workDate(planned, { now })}`, label: `Échéance prévue · ${workDate(planned, { now })}`, parts: ['Prévue ·', 'mardi 6 octobre,', '12 h 27'], urgent: false });
+  assert.deepEqual(model({ due_at: planned }).due, { text: `Prévue · ${workDate(planned, { now })}`, label: `Échéance prévue · ${workDate(planned, { now })}`, parts: ['Prévue ·', 'mardi 6 octobre,', '12 h 27'], urgent: false, reasonWraps: false });
   assert.equal(model({ due_at: planned, state: 'in_progress' }).due.text, `Prévue · ${workDate(planned, { now })}`, 'The « En cours » pill already says the work started.');
   assert.equal(model().due, null);
   assert.equal(model({ state: 'in_progress' }).due, null);
   const priority = { priority_reason: 'Client en partance', priority_until: '2026-10-06T00:00:00Z' };
-  assert.deepEqual(model(priority).due, { text: 'Client en partance', label: 'Client en partance', parts: ['Client en partance'], urgent: true });
+  // A reason written by the team no longer than the longest deadline day stays whole like it.
+  assert.deepEqual(model(priority).due, { text: 'Client en partance', label: 'Client en partance', parts: ['Client en partance'], urgent: true, reasonWraps: false });
   assert.equal(model({ ...priority, due_at: planned }).due.text, `Client en partance · ${workDate(planned, { now })}`);
   assert.deepEqual(model({ ...priority, due_at: planned }).due.parts, ['Client en partance ·', 'mardi 6 octobre,', '12 h 27']);
-  assert.deepEqual(model({ state: 'waiting', review_at: '2026-10-04T10:00:00Z' }).due, { text: 'Attente à réexaminer', label: 'Attente à réexaminer', parts: ['Attente à réexaminer'], urgent: true });
+  assert.equal(model({ ...priority, due_at: planned }).due.reasonWraps, false);
+  // A longer one (« Signaler une priorité » takes 500 characters) wraps between its words: it never
+  // widens the column. The longest day, « dimanche 1er septembre, », has 23 characters.
+  const reason = priority_reason => ({ ...priority, priority_reason });
+  assert.equal('dimanche 1er septembre,'.length, 23);
+  assert.equal(model(reason('Client en partance ce soir')).due.reasonWraps, true);
+  assert.equal(model(reason('Client parti samedi soir')).due.reasonWraps, true, '24 characters');
+  assert.equal(model(reason('Client parti samedi 9 h')).due.reasonWraps, false, '23 characters');
+  assert.equal(model({ ...reason('Client parti samedi 9 h'), due_at: planned }).due.reasonWraps, true, 'With « · », 25 characters');
+  assert.equal(model({ ...reason('Client parti samedi'), due_at: planned }).due.reasonWraps, false, 'With « · », 21 characters');
+  assert.deepEqual(model({ ...reason('Client en partance pour La Réunion samedi matin'), due_at: planned }).due, { text: `Client en partance pour La Réunion samedi matin · ${workDate(planned, { now })}`, label: `Client en partance pour La Réunion samedi matin · ${workDate(planned, { now })}`, parts: ['Client en partance pour La Réunion samedi matin ·', 'mardi 6 octobre,', '12 h 27'], urgent: true, reasonWraps: true });
+  assert.equal(model({ ...reason('Client en partance pour La Réunion samedi matin'), priority_until: '2026-10-04T00:00:00Z', due_at: overdue }).due.reasonWraps, false, 'An expired priority is no longer the state: « Dépassée » stays whole.');
+  assert.deepEqual(model({ state: 'waiting', review_at: '2026-10-04T10:00:00Z' }).due, { text: 'Attente à réexaminer', label: 'Attente à réexaminer', parts: ['Attente à réexaminer'], urgent: true, reasonWraps: false });
   assert.equal(model({ blocked_reason: 'Facture manquante', due_at: planned }).due.text, `Prévue · ${workDate(planned, { now })}`, 'A blocker is the waiting line, not the deadline.');
   // A deadline of another year: its year is a part of its own, so a narrow column never needs the
   // whole « mercredi 31 décembre 2025, » on one line.
   const newYear = Date.parse('2026-01-02T22:59:00Z');
   assert.deepEqual(workRowModel(action({ due_at: '2025-12-31T22:59:00Z' }), dossier, client, { now: newYear, meId: 'me' }).due,
-    { text: 'Dépassée · mercredi 31 décembre 2025, 23 h 59', label: 'Échéance dépassée · mercredi 31 décembre 2025, 23 h 59', parts: ['Dépassée ·', 'mercredi 31 décembre', '2025,', '23 h 59'], urgent: true });
+    { text: 'Dépassée · mercredi 31 décembre 2025, 23 h 59', label: 'Échéance dépassée · mercredi 31 décembre 2025, 23 h 59', parts: ['Dépassée ·', 'mercredi 31 décembre', '2025,', '23 h 59'], urgent: true, reasonWraps: false });
   for (const changes of [{ due_at: overdue }, { due_at: planned }, priority, { ...priority, due_at: planned }, { state: 'waiting', review_at: '2026-10-04T10:00:00Z' }]) {
     const due = model(changes).due;
     assert.equal(due.parts.join(' '), due.text, 'Read in order, the parts are the cell’s text.');

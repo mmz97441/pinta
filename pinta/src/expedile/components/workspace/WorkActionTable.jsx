@@ -23,8 +23,11 @@ function WorkTableRow({ action, dossier, client, columns, returnTo, now, notice 
       </div>;
       // The state, the day, its year and the hour never break inside: a narrow column sets
       // them on lines of their own, in reading order, and the cell still reads as one sentence.
+      // A long reason written by the team wraps between its words, its « · » kept with the last one.
       // The column is named « Échéance »: no clock icon beside each date.
-      case 'due': return model.due ? <span className="work-due" data-urgent={model.due.urgent ? 'true' : undefined}><span className="work-due-text">{model.due.parts.map((part, index) => <React.Fragment key={index}>{index > 0 && ' '}<span className="work-due-part">{part}</span></React.Fragment>)}</span></span> : <Placeholder />;
+      case 'due': return model.due ? <span className="work-due" data-urgent={model.due.urgent ? 'true' : undefined}><span className="work-due-text">{model.due.parts.map((part, index) => <React.Fragment key={index}>{index > 0 && ' '}{index === 0 && model.due.reasonWraps
+        ? <span className="work-due-part work-due-reason">{part.replace(/ ·$/, '\u00a0·')}</span>
+        : <span className="work-due-part">{part}</span>}</React.Fragment>)}</span></span> : <Placeholder />;
       case 'ref': return <span className="work-ref">{model.ref}</span>;
       // One line: a long name ends with « … » and stays whole in its title.
       case 'client': return <span className="work-client" title={model.client}>{model.client}</span>;

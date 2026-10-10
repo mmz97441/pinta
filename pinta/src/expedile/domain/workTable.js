@@ -35,20 +35,27 @@ export function cartonCount(count) {
 const STATE_PILLS = { in_progress: { label: WORK_STATES.in_progress, tone: 'current' }, waiting: { label: WORK_STATES.waiting, tone: 'waiting' } };
 const clientName = client => (client?.nomFamille ? [client.prenom, client.nomFamille].filter(Boolean).join(' ') : client?.nom) || 'Client';
 
+// The longest deadline day, « dimanche 1er septembre, »: the table makes room for it.
+const LONGEST_DAY = 23;
+
 /** The deadline keeps the priority wording. The table column is already named
  * « Échéance », so its cell (`text`) drops that word; a card keeps it (`label`).
  * `parts` are the pieces of `text` the cell keeps whole, each on a line of its
  * own when the column is narrow: the state, then the day, its year and the hour
- * (workDateParts). Joined with spaces they read exactly as `text`. */
+ * (workDateParts). Joined with spaces they read exactly as `text`.
+ * `reasonWraps`: the state is a reason written by the team (« Signaler une
+ * priorité », up to 500 characters) longer than the longest deadline day; the
+ * cell wraps it between its words instead of widening the column. A shorter one
+ * stays whole like the day. */
 function workDue(priority, deadline) {
   const date = deadline ? deadline.join(' ') : null;
   if (!priority.urgent && !date) return null;
   const status = priority.rank === 400 ? 'Dépassée' : priority.urgent ? priority.reason : 'Prévue';
   const parts = date ? [`${status} ·`, ...deadline] : [status];
   const text = parts.join(' ');
-  if (priority.rank === 400) return { text, label: `${priority.reason} · ${date}`, parts, urgent: true };
-  if (!priority.urgent) return { text, label: `Échéance prévue · ${date}`, parts, urgent: false };
-  return { text, label: text, parts, urgent: true };
+  if (priority.rank === 400) return { text, label: `${priority.reason} · ${date}`, parts, urgent: true, reasonWraps: false };
+  if (!priority.urgent) return { text, label: `Échéance prévue · ${date}`, parts, urgent: false, reasonWraps: false };
+  return { text, label: text, parts, urgent: true, reasonWraps: priority.rank === 500 && parts[0].length > LONGEST_DAY };
 }
 
 /** One task as the table row and the card show it. A row assigned to the

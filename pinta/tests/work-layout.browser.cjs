@@ -102,10 +102,11 @@ const pageOverflow = f => f.page.evaluate(() => {
 });
 // The default columns in view: the table is no wider than its frame, which then neither scrolls
 // nor pins « Action » (data-fits, set by WorkActionTable once laid out: polled). The widths
-// measured come with the answer.
-async function defaultColumnsFit(f) {
- const frame = todo(f).locator('.work-table-frame');
- await f.page.waitForFunction(() => document.querySelector('section[aria-label="À faire"] .work-table-frame')?.dataset.fits === 'true', null, { timeout: 2000 }).catch(() => {});
+// measured come with the answer. `region`: the list (« À faire », « À prendre ») or the narrower
+// « Urgences hors filtre ».
+async function defaultColumnsFit(f, region = 'À faire') {
+ const frame = f.page.getByRole('region', { name: region, exact: true }).locator('.work-table-frame');
+ await f.page.waitForFunction(region => document.querySelector(`section[aria-label="${region}"] .work-table-frame`)?.dataset.fits === 'true', region, { timeout: 2000 }).catch(() => {});
  return frame.evaluate(node => {
   const table = node.querySelector('table').getBoundingClientRect().width;
   const columns = [...node.querySelectorAll('thead th')].map(th => `${th.dataset.workColumn} ${Math.round(th.getBoundingClientRect().width * 10) / 10}`);
@@ -564,7 +565,8 @@ async function failColisLoad(f) {
    assert.ok(fit.fits, `The default columns fit at 1280px: ${JSON.stringify(fit)}`);
    await shot(f, 'table-1280-light');
   }, { viewport: { width: 1280, height: 900 }, timezoneId: 'Pacific/Auckland', wideFonts: true });
-  // The widest part a deadline can show, in bold and the CI's wider fonts: the columns still fit.
+  // The widest part a deadline can show, in bold and the CI's wider fonts: the columns still fit,
+  // in the list and in the « Urgences hors de ce filtre » box, 26px narrower.
   await scenario('the-widest-deadline-day-keeps-the-default-columns-in-view-at-1280', async f => {
    const parts = row(f, 'quote').locator('.work-due-part');
    assert.deepEqual(await parts.allInnerTexts(), ['Dépassée ·', 'dimanche 1er septembre,', '23 h 59']);
@@ -572,7 +574,55 @@ async function failColisLoad(f) {
    const fit = await defaultColumnsFit(f);
    assert.ok(fit.fits, `The default columns fit at 1280px: ${JSON.stringify(fit)}`);
    await shot(f, 'table-1280-widest-day-light');
+   await f.page.locator('summary').filter({ hasText: /^Filtrer/ }).click();
+   const mission = f.page.getByLabel('Mission', { exact: true });
+   await mission.selectOption('preparation');
+   const urgent = f.page.getByRole('region', { name: 'Urgences hors filtre', exact: true });
+   const urgentParts = urgent.locator('[data-work-action="quote"] .work-due-part');
+   await urgentParts.first().waitFor();
+   await mission.press('Escape');
+   await mission.waitFor({ state: 'hidden' });
+   assert.deepEqual(await urgentParts.allInnerTexts(), ['Dépassée ·', 'dimanche 1er septembre,', '23 h 59']);
+   for (const part of await urgentParts.all()) assert.equal(await lineCount(part), 1, `Urgences: « ${await part.innerText()} » on one line`);
+   const urgentFit = await defaultColumnsFit(f, 'Urgences hors filtre');
+   assert.ok(urgentFit.fits, `The urgencies outside the filter fit at 1280px too: ${JSON.stringify(urgentFit)}`);
+   await shot(f, 'table-1280-widest-day-urgent-light');
   }, { viewport: { width: 1280, height: 900 }, now: WIDEST_DAY, wideFonts: true });
+  // A reason written with « Signaler une priorité » (up to 500 characters) longer than the longest
+  // deadline day wraps between its words, its « · » kept with the last one; the date keeps its
+  // parts and the columns stay in view.
+  const REASON = 'Client en partance pour La Réunion samedi matin, à appeler avant midi';
+  for (const width of [1280, 1440]) await scenario(`a-written-priority-reason-wraps-between-its-words-and-the-columns-stay-in-view-${width}`, async f => {
+   const prepare = row(f, 'prepare');
+   await prepare.getByRole('cell', { name: `${REASON} · dimanche 4 janvier, 23 h 59`, exact: true }).waitFor();
+   const parts = prepare.locator('.work-due-part');
+   assert.deepEqual(await parts.allTextContents(), [`${REASON}\u00a0·`, 'dimanche 4 janvier,', '23 h 59']);
+   // Each piece between two spaces, « midi · » included, lies on one line; the reason takes several.
+   const reason = await parts.first().evaluate(node => {
+    const text = node.firstChild, tops = range => new Set([...range.getClientRects()].filter(rect => rect.width > 0).map(rect => Math.round(rect.top))).size;
+    const whole = document.createRange(); whole.selectNodeContents(node);
+    const split = [...text.data.matchAll(/[^ ]+/g)].filter(match => { const range = document.createRange(); range.setStart(text, match.index); range.setEnd(text, match.index + match[0].length); return tops(range) !== 1; }).map(match => match[0]);
+    return { lines: tops(whole), split };
+   });
+   assert.ok(reason.lines > 1, `The reason wraps instead of widening the column: ${reason.lines} line`);
+   assert.deepEqual(reason.split, [], 'No word, and never « · » away from « midi »');
+   for (const part of (await parts.all()).slice(1)) assert.equal(await lineCount(part), 1, `« ${await part.innerText()} » on one line`);
+   assert.equal(await lineCount(prepare.locator('.work-client')), 1);
+   const fit = await defaultColumnsFit(f);
+   assert.ok(fit.fits, `The default columns fit at ${width}px: ${JSON.stringify(fit)}`);
+   await shot(f, `table-${width}-written-reason-light`);
+  }, { viewport: { width, height: 900 }, wideFonts: true, before: f => Object.assign(f.tables.staff_work_actions.find(action => action.id === 'prepare'), { priority_reason: REASON, priority_until: new Date(NOW + 2 * 86400000).toISOString(), due_at: new Date(NOW + 2 * 86400000).toISOString() }) });
+  // A reason no longer than the longest deadline day stays whole like it, where the table is
+  // tightest too: a task to take and its « Je m’en occupe », at 1280px in the CI's wider fonts.
+  await scenario('a-short-written-reason-stays-whole-on-a-task-to-take-at-1280', async f => {
+   await f.page.getByRole('button', { name: 'À prendre 1', exact: true }).click();
+   const part = row(f, 'pool').locator('.work-due-part');
+   await row(f, 'pool').getByRole('button', { name: 'Je m’en occupe', exact: true }).waitFor();
+   assert.deepEqual(await part.allTextContents(), ['Client prioritaire']);
+   assert.equal(await lineCount(part), 1, '« Client prioritaire » on one line');
+   const fit = await defaultColumnsFit(f, 'À prendre');
+   assert.ok(fit.fits, `The default columns fit at 1280px: ${JSON.stringify(fit)}`);
+  }, { viewport: { width: 1280, height: 900 }, wideFonts: true, before: f => Object.assign(f.tables.staff_work_actions.find(action => action.id === 'pool'), { priority_reason: 'Client prioritaire', priority_until: new Date(NOW + 86400000).toISOString() }) });
   await scenario('the-shell-gives-each-staff-page-one-main-landmark', async f => {
    for (const route of ['/', '/colis', `/colis/${ids.P}`, `/colis/${ids.P}?onglet=conversation`, '/conversations', '/equipe', '/departs', '/clients', '/devis', '/plus']) {
     await f.page.goto(base + route);
