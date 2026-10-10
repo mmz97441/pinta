@@ -175,6 +175,10 @@ test('Facture commerciale: the legal mentions of the quote are the exporter’s 
   const wrong = validateInvoiceIdentity(form({ expediteur: { ...EXPORTER, capital: 'dix mille', rcsVille: 'RCS' } })).errors;
   assert.deepEqual(wrong, { 'expediteur.capital': 'Indiquez le capital social en euros, par exemple 10 000.', 'expediteur.rcsVille': 'Indiquez la ville du greffe, par exemple Paris.' });
   for (const value of ['0', '-5', '12,345', '10 000 000,001']) assert.ok(validateInvoiceIdentity(form({ expediteur: { ...EXPORTER, capital: value } })).errors['expediteur.capital'], `« ${value} » is refused`);
+  // The mention copied from a Kbis with its number: the quote would print the SIREN twice, so the town alone is asked for.
+  for (const value of ['RCS Paris B 123 456 789', 'Paris B 123456789', '123 456 789 RCS Paris'])
+    assert.equal(validateInvoiceIdentity(form({ expediteur: { ...EXPORTER, rcsVille: value } })).errors['expediteur.rcsVille'], 'Indiquez la ville du greffe seule, sans numéro : le devis ajoute lui-même le SIREN.', value);
+  for (const value of ['Paris', 'R.C.S. Créteil', 'Saint-Denis de La Réunion', 'Paris B']) assert.equal(validateInvoiceIdentity(form({ expediteur: { ...EXPORTER, rcsVille: value } })).errors['expediteur.rcsVille'], undefined, value);
   // A key stored on a party that this form does not show is kept (a later field, another version of the screen).
   const stored = { ...STORED, factureCommerciale: { expediteur: { ...EXPORTER, champFutur: 'gardé' }, destinataires: { 974: { ...REUNION, horaires: '8 h – 16 h' } } } };
   const saved = invoiceIdentitySettingsPayload(stored, form({ expediteur: { ...EXPORTER, formeJuridique: 'SAS' } })).payload.factureCommerciale;
@@ -202,6 +206,9 @@ test('the quote prints the issuer’s legal identity only when complete, from st
   assert.deepEqual(quoteIssuerIdentity(business({ ...EXPORTER, siret: '12345678900012' })).missing, ['forme juridique', 'capital social', 'ville du greffe (RCS)', 'numéro de TVA']);
   // A value that is not one counts as missing, never printed as is.
   assert.deepEqual(quoteIssuerIdentity(business({ ...LEGAL, siret: '123', capital: 'beaucoup' })).missing, ['capital social', 'SIRET']);
+  // A greffe written with its number (stored by another screen or version) is no town: never « RCS Paris B 123 456 789 123 456 789 ».
+  assert.deepEqual(quoteIssuerIdentity(business({ ...LEGAL, rcsVille: 'Pontoise B 123 456 789' })), { complete: false, missing: ['ville du greffe (RCS)'], lines: [] });
+  assert.equal(quoteIssuerIdentity(business({ ...LEGAL, rcsVille: 'RCS Pontoise' })).lines[2], 'RCS Pontoise 123 456 789 · SIRET 123 456 789 00012');
   // A seat outside France says its country; complement printed with the address.
   assert.equal(quoteIssuerIdentity(business({ ...LEGAL, complement: 'Bâtiment C', pays: 'Belgique' })).lines[1], 'Siège social\u00a0: 10 allée de l’Essai, Bâtiment C, 95700 Roissy-en-France, Belgique');
   assert.equal(quoteIssuerIdentity(business({ ...LEGAL, capital: '1500.5' })).lines[0], 'Expedîle France (essai), SAS au capital de 1\u202f500,50\u00a0€');

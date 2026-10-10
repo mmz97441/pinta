@@ -197,6 +197,8 @@ async function checkEstimate(f) {
   assert.doesNotMatch(summary, /TVA \(|(^|\n)(Octroi de mer|OMR?|TVA)\b/, 'Never a tax line of the price.');
   assert.doesNotMatch(summary, /\d\.\d\d €|\d\.\d+ kg/, 'No amount or weight keeps the English decimal point.');
   assert.deepEqual(await aside.locator('dd, [data-testid="estimate-total"]').evaluateAll(nodes => nodes.filter(node => node.getClientRects().length !== 1).map(node => node.textContent)), [], 'Each amount fits on one line.');
+  // … inside its own box: beside the long label of the import tax estimate, no amount is squeezed past the panel's edge.
+  assert.deepEqual(await aside.locator('dd').evaluateAll(nodes => nodes.filter(node => node.scrollWidth > node.clientWidth + 1).map(node => node.textContent)), [], 'Each amount keeps its width.');
   // 2 · The shared text: a readable layout, the first name, and the same text in the copy.
   await aside.locator('summary', { hasText: 'Aperçu du texte à partager' }).click();
   const preview = f.page.getByTestId('estimate-text');

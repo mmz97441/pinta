@@ -71,6 +71,9 @@ export function capitalValue(value) {
 }
 // « RCS Paris » typed in full keeps only the town: the PDF writes « RCS » itself.
 const tidyRcs = value => value.replace(/^R\.?\s*C\.?\s*S\.?(?:\s+|$)/i, '').trim();
+// The town alone: copied from a Kbis with its number (« Paris B 123 456 789 »), the quote would print the
+// SIREN twice (« RCS Paris B 123 456 789 123 456 789 »). A town never has a digit: such a value is no town.
+const rcsTown = value => { const town = tidyRcs(String(value ?? '')); return /\d/.test(town) ? '' : town; };
 
 function partyErrors(party, prefix, { required }) {
   const errors = {};
@@ -81,7 +84,8 @@ function partyErrors(party, prefix, { required }) {
   if (party.siret && !SIRET.test(party.siret.replace(/\s/g, ''))) errors[`${prefix}.siret`] = 'Un SIRET compte 14 chiffres.';
   if (party.eori && !EORI.test(party.eori.replace(/\s/g, '').toUpperCase())) errors[`${prefix}.eori`] = 'Un numéro EORI commence par deux lettres (FR…) suivies de 15 caractères au plus.';
   if (party.capital && !capitalValue(party.capital)) errors[`${prefix}.capital`] = 'Indiquez le capital social en euros, par exemple 10 000.';
-  if (party.rcsVille !== undefined && party.rcsVille && !tidyRcs(party.rcsVille)) errors[`${prefix}.rcsVille`] = 'Indiquez la ville du greffe, par exemple Paris.';
+  if (party.rcsVille && !tidyRcs(party.rcsVille)) errors[`${prefix}.rcsVille`] = 'Indiquez la ville du greffe, par exemple Paris.';
+  else if (party.rcsVille && !rcsTown(party.rcsVille)) errors[`${prefix}.rcsVille`] = 'Indiquez la ville du greffe seule, sans numéro : le devis ajoute lui-même le SIREN.';
   return errors;
 }
 
@@ -141,7 +145,7 @@ export function quoteIssuerIdentity(business) {
   const party = normalizeParty(plainObject(plainObject(business).factureCommerciale).expediteur, EXPORTER_FIELDS);
   const siret = party.siret.replace(/\s/g, '');
   const capital = capitalValue(party.capital);
-  const valid = { ...party, siret: SIRET.test(siret) ? siret : '', capital, rcsVille: tidyRcs(party.rcsVille) };
+  const valid = { ...party, siret: SIRET.test(siret) ? siret : '', capital, rcsVille: rcsTown(party.rcsVille) };
   const missing = QUOTE_IDENTITY_FIELDS.filter(key => !valid[key]).map(key => QUOTE_IDENTITY_NAMES[key]);
   if (missing.length) return { complete: false, missing, lines: [] };
   const seat = [valid.adresse, valid.complement, `${valid.codePostal} ${valid.ville}`, /^france$/i.test(valid.pays) ? '' : valid.pays].filter(Boolean).join(', ');

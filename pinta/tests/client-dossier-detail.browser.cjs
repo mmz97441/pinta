@@ -214,6 +214,8 @@ const STATES = [
     assert.match(text, /Transport optimisé\s+60,00 €[\s\S]*Estimation des taxes[\s\S]*Total\s+76,35 €/, 'transport, the estimate, then the total');
     // Each amount stays whole on its line, beside its label, at 390 px as at 1440 px.
     assert.deepEqual(await block.locator('.whitespace-nowrap').evaluateAll(nodes => nodes.filter(node => node.getClientRects().length !== 1).map(node => node.textContent)), []);
+    // … inside its own box, never squeezed past the edge of the detail by the long label beside it.
+    assert.deepEqual(await block.locator('.whitespace-nowrap').evaluateAll(nodes => nodes.filter(node => node.scrollWidth > node.clientWidth + 1).map(node => node.textContent)), []);
   } },
   { name: 'devis-sans-lien', state: { colis: { statut: 'devis_envoye', ...quote({ payplug_payment_url: null }) } }, async check(f) {
     const pending = f.page.getByTestId('payment-link-pending');
