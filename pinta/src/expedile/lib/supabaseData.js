@@ -1114,9 +1114,14 @@ export async function insertClient(clientData) {
   throw new Error('Impossible de générer une référence client unique');
 }
 
+// A refusal of the server (history kept ten years, for instance) arrives as an error carrying its French message.
+// RLS raises nothing for a row the session may not delete: the deleted row is read back, so that zero rows is never
+// reported as a deletion.
 export async function deleteClient(id) {
-  const { error } = await supabase.from('clients').delete().eq('id', id);
+  const { data, error } = await supabase.from('clients').delete().eq('id', id).select('id');
   if (error) throw error;
+  if (!data?.length)
+    throw new Error('Fiche non supprimée : seule la direction peut supprimer un client, ou la fiche a déjà été supprimée. Actualisez la liste pour vérifier.');
 }
 
 export async function insertEnvoi(envoiData) {
@@ -1157,9 +1162,12 @@ export async function updateEnvoi(id, changes, expectedUpdatedAt) {
   return mapEnvoi(data);
 }
 
+// Same contract as deleteClient: the server's French message, or zero rows reported as a refusal.
 export async function deleteEnvoi(id) {
-  const { error } = await supabase.from('envois').delete().eq('id', id);
+  const { data, error } = await supabase.from('envois').delete().eq('id', id).select('id');
   if (error) throw error;
+  if (!data?.length)
+    throw new Error('Départ non supprimé : seul un départ planifié, sans dossier, peut être supprimé avec le droit de modifier les départs. Actualisez le planning pour vérifier.');
 }
 
 // ── Share links CRUD ────────────────────────────────────────────────
