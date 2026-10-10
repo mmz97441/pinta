@@ -6,7 +6,7 @@ import { useApp } from '../../context/AppContext';
 import { DESTINATIONS } from '../../constants';
 import usePersistentDraft from '../../hooks/usePersistentDraft';
 import { BUSINESS_FIELDS, INVOICE_IDENTITY_FIELD_ORDER, businessDraftValues, businessSettingsPayload, invoiceConsigneeStates, invoiceIdentityDraftValues, invoiceIdentitySettingsPayload, invoicePartyState, sameBusinessValues, sameStoredValue, validateBusinessValues } from '../../domain/businessSettings';
-import { CONSIGNEE_KEYS, PARTY_FIELDS, PARTY_LABELS, REQUIRED_PARTY_FIELDS, invoiceIdentity, normalizeParty, validateInvoiceIdentity } from '../../domain/invoiceIdentity';
+import { CONSIGNEE_KEYS, LEGAL_FIELDS, PARTY_FIELDS, PARTY_LABELS, REQUIRED_PARTY_FIELDS, invoiceIdentity, normalizeParty, quoteIssuerIdentity, validateInvoiceIdentity } from '../../domain/invoiceIdentity';
 import { fetchSettings } from '../../lib/supabaseData';
 import { latestChannelEvent } from '../../domain/channelEvents';
 import { parisDateTime } from '../../utils/format';
@@ -123,8 +123,10 @@ const PARTY_INPUT = 'min-h-11 w-full rounded-xl border-2 border-gray-300 bg-tran
 // Six columns from 640 px, one on a phone: name, address and its complement, postcode and town, country and contacts, identifiers.
 // Postcode and town share the row equally until 1280 px: beside the rubric list (a tablet), a third of the row
 // is too narrow for « Code postal » and its « obligatoire », which then wrap and push the field below the town's.
-const PARTY_SPANS = { nom: 'sm:col-span-6', adresse: 'sm:col-span-3', complement: 'sm:col-span-3', codePostal: 'sm:col-span-3 xl:col-span-2', ville: 'sm:col-span-3 xl:col-span-4', pays: 'sm:col-span-2', telephone: 'sm:col-span-2', email: 'sm:col-span-2', siret: 'sm:col-span-2', eori: 'sm:col-span-2', tva: 'sm:col-span-2' };
-const PARTY_INPUTS = { codePostal: { inputMode: 'numeric' }, telephone: { type: 'tel' }, email: { type: 'email', spellCheck: false }, siret: { inputMode: 'numeric', spellCheck: false }, eori: { autoCapitalize: 'characters', spellCheck: false }, tva: { autoCapitalize: 'characters', spellCheck: false } };
+const PARTY_SPANS = { nom: 'sm:col-span-6', adresse: 'sm:col-span-3', complement: 'sm:col-span-3', codePostal: 'sm:col-span-3 xl:col-span-2', ville: 'sm:col-span-3 xl:col-span-4', pays: 'sm:col-span-2', telephone: 'sm:col-span-2', email: 'sm:col-span-2', siret: 'sm:col-span-2', eori: 'sm:col-span-2', tva: 'sm:col-span-2', formeJuridique: 'sm:col-span-3 xl:col-span-2', capital: 'sm:col-span-3 xl:col-span-2', rcsVille: 'sm:col-span-6 xl:col-span-2' };
+const PARTY_INPUTS = { codePostal: { inputMode: 'numeric' }, telephone: { type: 'tel' }, email: { type: 'email', spellCheck: false }, siret: { inputMode: 'numeric', spellCheck: false }, eori: { autoCapitalize: 'characters', spellCheck: false }, tva: { autoCapitalize: 'characters', spellCheck: false }, capital: { inputMode: 'decimal' } };
+// Under a legal mention: what it looks like, so that nothing is typed twice (« RCS », « € »).
+const PARTY_HELP = { formeJuridique: 'Par exemple SAS, SARL ou SASU.', capital: 'En euros, par exemple 10 000.', rcsVille: 'La ville seule : le devis écrit « RCS Paris ».' };
 const PARTY_STATES = {
   set: { text: 'Réglé', tone: 'text-green-700', Icon: Check },
   incomplete: { text: 'À compléter', tone: 'text-amber-700', Icon: AlertTriangle },
@@ -132,6 +134,9 @@ const PARTY_STATES = {
   none: { text: 'Non réglé', tone: 'text-amber-700', Icon: AlertTriangle },
   // The default consignee once every destination has its own (invoiceConsigneeStates): not set is no warning.
   optional: { text: 'Non réglé', tone: 'text-gray-600', Icon: null },
+  // The issuer's legal identity printed on the quote (quoteIssuerIdentity).
+  'legal-set': { text: 'Complètes', tone: 'text-green-700', Icon: Check },
+  'legal-missing': { text: 'À compléter', tone: 'text-amber-700', Icon: AlertTriangle },
 };
 const partyFieldId = key => `invoice-${key.replace(/\./g, '-')}`;
 // The default consignee, then La Réunion, Mayotte, Guadeloupe and Martinique: the order of the form's fields (and of its errors).
@@ -142,13 +147,15 @@ function PartyState({ state, className = '' }) {
   const { text, tone, Icon } = PARTY_STATES[state];
   return <span data-party-state={state} className={`inline-flex shrink-0 items-center gap-1 text-xs font-semibold ${tone} ${className}`}>{Icon && <Icon size={12} aria-hidden="true" />}{text}</span>;
 }
-/** The fields of one party; `prefix` keys them as validateInvoiceIdentity keys its errors. */
-function PartyFields({ prefix, values, errors, required = false, onChange }) {
-  return <div className="grid gap-4 sm:grid-cols-6">{PARTY_FIELDS.map(field => {
-    const id = partyFieldId(`${prefix}.${field}`), error = errors[`${prefix}.${field}`], mandatory = REQUIRED_PARTY_FIELDS.includes(field);
+/** The fields of one party (`fields`: the legal mentions of the exporter apart); `prefix` keys them as validateInvoiceIdentity keys its errors. */
+function PartyFields({ prefix, fields = PARTY_FIELDS, values, errors, required = false, onChange }) {
+  return <div className="grid gap-4 sm:grid-cols-6">{fields.map(field => {
+    const id = partyFieldId(`${prefix}.${field}`), error = errors[`${prefix}.${field}`], mandatory = REQUIRED_PARTY_FIELDS.includes(field), help = PARTY_HELP[field];
+    const described = [help && `${id}-help`, error && `${id}-error`].filter(Boolean).join(' ') || undefined;
     return <div key={field} className={`min-w-0 ${PARTY_SPANS[field]}`}>
       <div className="mb-1 flex flex-wrap items-baseline gap-x-2"><label htmlFor={id} className={LABEL}>{PARTY_LABELS[field]}</label>{mandatory && <span className="text-[11px] font-semibold" style={{ color: 'var(--text-accent)' }}>obligatoire</span>}</div>
-      <input id={id} autoComplete="off" className={PARTY_INPUT} value={values[field]} aria-required={required && mandatory ? 'true' : undefined} aria-invalid={error ? 'true' : undefined} aria-describedby={error ? `${id}-error` : undefined} onChange={event => onChange(field, event.target.value)} {...PARTY_INPUTS[field]} />
+      <input id={id} autoComplete="off" className={PARTY_INPUT} value={values[field] ?? ''} aria-required={required && mandatory ? 'true' : undefined} aria-invalid={error ? 'true' : undefined} aria-describedby={described} onChange={event => onChange(field, event.target.value)} {...PARTY_INPUTS[field]} />
+      {help && <p id={`${id}-help`} className="mt-0.5 text-[11px] text-gray-600">{help}</p>}
       {error && <p id={`${id}-error`} className="mt-1 text-[11px] text-red-500">{error}</p>}
     </div>;
   })}</div>;
@@ -210,7 +217,7 @@ function InvoiceIdentitySettings() {
         if (blocked) throw new Error(blocked);
         const saved = await saveSettings(payload, latest);
         setDraft({ baseline: saved?.factureCommerciale ?? null, values: invoiceIdentity(saved) });
-        setNotice({ text: 'Réglages de la facture commerciale enregistrés. Ils s’appliquent aux prochaines factures commerciales et étiquettes imprimées.' });
+        setNotice({ text: 'Réglages de la facture commerciale enregistrés. Ils s’appliquent aux prochaines factures commerciales, étiquettes et devis imprimés.' });
       } catch (error) {
         if (error?.code === '40001') { setConflict(true); return; }
         throw error;
@@ -231,12 +238,21 @@ function InvoiceIdentitySettings() {
   };
   const preview = party => { const value = normalizeParty(party); return [value.nom, [value.codePostal, value.ville].filter(Boolean).join(' ')].filter(Boolean).join(' · '); };
   const consigneeStates = invoiceConsigneeStates(consignees);
+  // What the quote PDF would print once these values are saved (never the stored defaults alone).
+  const legal = quoteIssuerIdentity({ factureCommerciale: { expediteur: values.expediteur } });
   return <section className="space-y-5"><div className="space-y-1"><h2 className="text-lg font-bold">Facture commerciale</h2><DraftHelp storageAvailable={storageAvailable} /></div>
     <fieldset disabled={busy} className="min-w-0 space-y-6">
       <div role="group" aria-labelledby="invoice-expediteur-title" className="space-y-3">
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1"><h3 id="invoice-expediteur-title" className="font-bold">Expéditeur</h3><PartyState state={invoicePartyState(values.expediteur)} /></div>
-        <p className="text-sm text-gray-600">Imprimé en haut de chaque facture commerciale et comme expéditeur sur les étiquettes des colis.</p>
+        <p className="text-sm text-gray-600">Imprimé en haut de chaque facture commerciale, comme expéditeur sur les étiquettes des colis et, avec les mentions légales ci-dessous, en haut des devis.</p>
         <PartyFields prefix="expediteur" values={values.expediteur} errors={errors} required onChange={change('expediteur')} />
+      </div>
+      {/* The quote's legal mentions (F10): the exporter's, set with it; the quote PDF prints them once complete. */}
+      <div role="group" aria-labelledby="invoice-legal-title" data-testid="invoice-legal" className="space-y-3 border-t border-gray-200 pt-5">
+        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1"><h3 id="invoice-legal-title" className="font-bold">Mentions légales des devis</h3><PartyState state={legal.complete ? 'legal-set' : 'legal-missing'} /></div>
+        <p className="text-sm text-gray-600">Imprimées en haut de chaque devis PDF avec le nom, l’adresse du siège, le SIRET et le numéro de TVA de l’expéditeur ci-dessus. Tant qu’une mention manque, le devis remis au client garde son en-tête actuel : aucune valeur n’est inventée.</p>
+        {!legal.complete && <p data-testid="invoice-legal-missing" className="text-sm font-semibold text-amber-800">À compléter : {legal.missing.join(', ')}.</p>}
+        <PartyFields prefix="expediteur" fields={LEGAL_FIELDS} values={values.expediteur} errors={errors} onChange={change('expediteur')} />
       </div>
       <div className="space-y-3 border-t border-gray-200 pt-5">
         <div className="space-y-1"><h3 className="font-bold">Destinataire</h3><p className="text-sm text-gray-600">Imprimé en haut de la facture commerciale d’un départ : le destinataire de sa destination, sinon le destinataire par défaut.</p></div>

@@ -4,6 +4,7 @@ import { messageEur as eur, getPrenom } from '../utils';
 import { receptionCartonManifest, hasCompleteReceptionMeasurements } from '../domain/reception';
 import { measureShipment, volumetricDivisor } from '../domain/quote';
 import { invoiceRequestText } from '../domain/invoiceRequest';
+import { importTaxMessage } from '../domain/importTaxes';
 
 /** The saved body is the actual body used by preview and delivery. Unknown variables fail visibly. */
 export function renderTemplate(body, { client, colis = {}, destination = {}, settings = {} }) {
@@ -56,6 +57,13 @@ export function renderTemplate(body, { client, colis = {}, destination = {}, set
     tva: eur(colis.devisTVA || 0),
     taux_tva: client.type === 'pro' ? '0%' : `${destination.tva ?? 0}%`,
     total: eur(colis.devisTotal || 0),
+    // The estimate of the import taxes, as the quote presents it to the client (domain/importTaxes.js);
+    // {{om}}, {{omr}}, {{taxes}}, {{tva}} and {{taux_tva}} stay for the templates saved before it.
+    estimation_taxes: importTaxMessage(
+      { om: colis.devisOM, omr: colis.devisOMR, tva: colis.devisTVA, total: colis.devisTotal },
+      destination,
+      { professional: client.type === 'pro', money: eur },
+    ),
     economie: eur(colis.economie || 0),
     frais_divers: (colis.fraisDivers || [])
       .map((f) => `${f.label || f.libelle || 'Frais'} : ${eur(f.montant)}`)

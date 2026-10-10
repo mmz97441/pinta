@@ -35,11 +35,16 @@ test('client active phase content matches every lifecycle state and frozen quote
   app.sel = { ...app.sel, statut: 'devis_envoye', devisSnapshot: { version: 2, inputs: { finalBox: {}, client: { type: 'pro' }, destination: { tva: 5 }, fees: [{ libelle: 'Emballage réutilisable', montant: 2 }], paymentTerms: { mode: 'fin_de_mois' } }, amounts: { transport: 30, tva: 1.5, total: 33.5 } } };
   const html = module.exports.render();
   assert.match(html, /Emballage réutilisable/);
-  // French rate with a no-break space before « % ».
-  assert.match(html, /TVA \(5\s%\)/);
+  // A professional quote has no taxes: neither a « TVA » nor an estimate (decision of 10 October 2026).
+  assert.doesNotMatch(html, /TVA|Estimation des taxes|[Oo]ctroi de mer/);
   assert.match(html, /Paiement en fin de mois/);
-  assert.doesNotMatch(html, /TVA \(8[.,]5\s?%\)/);
   assert.match(html, /version 2/);
+  // A particulier's frozen OM, OMR and « TVA »: an estimate of the import taxes of the destination, part of the price.
+  app.sel = { ...app.sel, devisSnapshot: { version: 3, inputs: { finalBox: {}, client: { type: 'particulier' }, destination: { code: '972', nom: 'Martinique', tva: 8.5 }, fees: [], paymentTerms: { mode: 'payplug' } }, amounts: { transport: 30, om: 4, omr: 1, tva: 3, total: 38 } } };
+  const quote = module.exports.render();
+  assert.match(quote, /Estimation des taxes à l’importation en Martinique.*\(payées à l’arrivée, comprises dans le prix\)/);
+  for (const line of ['dont estimation octroi de mer de la Martinique', 'dont estimation octroi de mer régional de la Martinique', 'dont estimation TVA à l’importation de la Martinique']) assert.match(quote, new RegExp(line));
+  assert.doesNotMatch(quote, /TVA \(|>Octroi de mer|>TVA/, 'never a tax line of Expedîle’s price');
   app.sel={...app.sel,statut:'mesure',devisTotal:null,devisBrouillon:true,devisEnvoyeLe:'2026-09-01',finalPackages:[{dimL:30,dimW:20,dimH:20,poids:3}],preparationCompositionVersion:1,finalMeasurementsVersion:1,outgoingParcelCount:1};
   const reopened=module.exports.render();
   assert.match(reopened,/réceptionné et mesuré/);assert.doesNotMatch(reopened,/en train de le mesurer/);

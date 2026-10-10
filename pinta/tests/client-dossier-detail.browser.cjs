@@ -167,7 +167,7 @@ const STATES = [
   { name: 'facture-attendue-apres-accord', state: { colis: { statut: 'autorise', feu_vert: 'autorise', feu_vert_date: '2026-10-01T18:20:00Z' }, factures: [] }, async check(f) {
     const text = await regionText(f);
     assert.match(text, /À vous · Transmettre mes factures/);
-    assert.equal(flat(await f.page.getByTestId('client-task-explanation').innerText()), 'Votre facture d’achat nous permet d’établir votre devis : elle justifie la valeur de vos achats pour le calcul de l’octroi de mer. Dès réception, notre équipe la vérifie puis prépare votre devis.');
+    assert.equal(flat(await f.page.getByTestId('client-task-explanation').innerText()), 'Votre facture d’achat nous permet d’établir votre devis : elle justifie la valeur de vos achats pour l’estimation des taxes à l’importation. Dès réception, notre équipe la vérifie puis prépare votre devis.');
     await f.page.getByRole('button', { name: 'Transmettre mes factures', exact: true }).waitFor();
     assert.equal(flat(await f.page.getByTestId('planned-departure').innerText()), 'Votre date de départ n’est pas encore fixée : elle s’affichera ici dès que notre équipe l’aura confirmée.');
     await openDetails(f);
@@ -196,6 +196,24 @@ const STATES = [
     assert.notEqual(surface.width, '0px', 'the PDF action keeps a visible button surface');
     assert.match(flat(await f.page.getByTestId('planned-departure').innerText()), /^Départ prévu : /);
     assert.match(await regionText(f), /Modalités convenues : Carte bancaire sécurisée\./);
+  } },
+  // Decision of 10 October 2026: the saved OM, OMR and « TVA » read as an estimate of La Réunion's import taxes,
+  // paid on arrival and part of the price, with their detail; never « TVA ( » nor an « Octroi de mer » line of the price.
+  { name: 'devis-detail-taxes', state: { colis: { statut: 'attente_paiement', ...quote({ devis_om: 8.2, devis_omr: 2.05, devis_tva: 6.1, devis_total: 76.35, devis_snapshot: { ...snapshot({ om: 8.2, omr: 2.05, tva: 6.1, total: 76.35 }), inputs: { ...snapshot().inputs, destination: { code: '974', nom: 'La Réunion', tva: 8.5 } } } }) } }, async check(f) {
+    const detail = f.page.locator('details', { hasText: 'Détail du devis' });
+    await detail.locator('summary').click();
+    const block = f.page.getByTestId('import-tax-estimate');
+    await block.waitFor();
+    assert.equal(await block.getAttribute('aria-label'), 'Estimation des taxes à l’importation à La Réunion (payées à l’arrivée, comprises dans le prix)');
+    assert.equal(flat(await block.innerText()).replace(/[ \t]*\n[ \t]*/g, '\n').trim(), [
+      'Estimation des taxes à l’importation à La Réunion', '(payées à l’arrivée, comprises dans le prix)', '16,35 €',
+      'dont estimation octroi de mer de La Réunion', '8,20 €', 'dont estimation octroi de mer régional de La Réunion', '2,05 €', 'dont estimation TVA à l’importation de La Réunion', '6,10 €',
+    ].join('\n'));
+    const text = flat(await detail.innerText());
+    assert.doesNotMatch(text, /TVA \(|(^|\n)\s*(Octroi de mer|OMR?|TVA)\b/, 'no tax line of Expedîle’s price');
+    assert.match(text, /Transport optimisé\s+60,00 €[\s\S]*Estimation des taxes[\s\S]*Total\s+76,35 €/, 'transport, the estimate, then the total');
+    // Each amount stays whole on its line, beside its label, at 390 px as at 1440 px.
+    assert.deepEqual(await block.locator('.whitespace-nowrap').evaluateAll(nodes => nodes.filter(node => node.getClientRects().length !== 1).map(node => node.textContent)), []);
   } },
   { name: 'devis-sans-lien', state: { colis: { statut: 'devis_envoye', ...quote({ payplug_payment_url: null }) } }, async check(f) {
     const pending = f.page.getByTestId('payment-link-pending');
@@ -421,6 +439,8 @@ async function main() {
     }, { theme });
     await scenario('pdf-devis', async (f) => {
       reset(f, { colis: { statut: 'attente_paiement', ...quote() } });
+      // Expedîle France's legal identity as set in Paramètres (test values): printed at the top of the quote (F10).
+      f.tables.app_settings[0].value.factureCommerciale = { expediteur: { nom: 'Expedîle France (essai)', formeJuridique: 'SAS', capital: '10000', adresse: '10 allée de l’Essai', codePostal: '95700', ville: 'Roissy-en-France', pays: 'France', siret: '12345678900012', rcsVille: 'Pontoise', tva: 'FR00123456789' } };
       await f.page.goto(`${base}/colis/${P}`);
       const download = f.page.waitForEvent('download');
       await f.page.getByRole('button', { name: 'Télécharger le devis (PDF)', exact: true }).click();
@@ -433,8 +453,15 @@ async function main() {
       const pdf = await pdfjs.getDocument({ data: new Uint8Array(await fs.readFile(target)), standardFontDataUrl, isEvalSupported: false }).promise;
       const items = (await (await pdf.getPage(1)).getTextContent()).items.map(item => flat(item.str)).filter(text => text.trim());
       assert.ok(items.includes('Expedîle — Service de réexpédition Paris – DOM-TOM'), 'readable footer');
-      assert.ok(items.includes('TOTAL : 87,50 €') && items.includes('60,00 €') && items.includes('Octroi de mer régional (OMR)'));
-      assert.ok(!items.some(text => /^TVA|(^|\s)0[,.]00 €/.test(text)), 'no zero tax row for a particulier');
+      assert.ok(items.includes('TOTAL : 87,50 €') && items.includes('60,00 €'));
+      // The estimate of the import taxes (8,20 + 2,05), never a tax line of the price.
+      assert.ok(items.includes('Estimation des taxes à l’importation à La Réunion') && items.includes('(payées à l’arrivée, comprises dans le prix)') && items.includes('10,25 €'), items.join(' | '));
+      assert.ok(items.includes('dont estimation octroi de mer régional de La Réunion') && items.includes('2,05 €'));
+      assert.ok(!items.some(text => /^TVA|^Octroi de mer|TVA \(|(^|\s)0[,.]00 €/.test(text)), 'no tax line of the price, no zero row for a particulier');
+      // The issuer's legal identity, as stored in Paramètres › Facture commerciale.
+      for (const line of ['Expedîle France (essai), SAS au capital de 10 000 €', 'Siège social : 10 allée de l’Essai, 95700 Roissy-en-France', 'RCS Pontoise 123 456 789 · SIRET 123 456 789 00012', 'N° de TVA intracommunautaire : FR00123456789'])
+        assert.ok(items.some(text => text.replace(/\s+/g, ' ') === line), line);
+      assert.ok(!items.some(text => /Paramètres|compléter/.test(text)), 'never an instruction for the team');
       // Rendered page 1 for the visual check (pdf.js served locally, no network).
       const viewer = await f.context.newPage();
       const pdfjsBuild = path.join(path.dirname(require.resolve('pdfjs-dist/package.json')), 'build');

@@ -294,7 +294,7 @@ test('a column is never drawn narrower than its heading: the words, the sort arr
   assert.equal(saved.casier, 64, 'The saved preference itself is unchanged.');
 });
 
-test('choices saved before « Taxes calculées » existed show it in its place until the person hides it', () => {
+test('choices saved before « Taxes à l’importation estimées » existed show it in its place until the person hides it', () => {
   // What a person stored on 7 October: two hidden columns, their widths, no « taxes » anywhere.
   const before = { daily: ['casier', 'owner'], payments: ['sentAt'], departures: ['destination', 'readiness'] };
   const savedWidths = { ref: 200, requested: 160, cartons: 90 };
@@ -321,7 +321,7 @@ test('choices saved before « Taxes calculées » existed show it in its place u
 });
 
 test('choices saved before « Transport » existed show it in its place, between the price and the taxes, until the person hides it', () => {
-  // What a person stored on 8 October: hidden columns (« Taxes calculées » among them in one view), widths, no « transport » anywhere.
+  // What a person stored on 8 October: hidden columns (« Taxes à l’importation estimées » among them in one view), widths, no « transport » anywhere.
   const before = { daily: ['casier', 'owner'], payments: ['sentAt', 'taxes'], departures: ['destination', 'readiness'] };
   const savedWidths = { ref: 200, requested: 160, taxes: 150, cartons: 90 };
   for (const [view, stored] of Object.entries(before)) {

@@ -156,7 +156,7 @@ function OptimizedDimensions({ model }) {
   </span>;
 }
 
-/** « Transport » or « Taxes calculées »: that part of the saved quote whose price
+/** « Transport » or « Taxes à l’importation estimées »: that part of the saved quote whose price
  * the row shows, never recalculated here. Without an amount, its state (« À
  * calculer », « À vérifier »…); an amount keeps its price's state under it
  * (« Brouillon », « À revoir »). `zeroLabel` words a zero (« Sans taxes (pro) »). */

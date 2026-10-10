@@ -1,7 +1,10 @@
 import React, { useState, useRef, useLayoutEffect } from 'react';
+import { AlertTriangle } from 'lucide-react';
 import usePersistentDraft from '../../hooks/usePersistentDraft';
 import { useApp } from '../../context/AppContext';
 import { DEFAULT_BODIES } from '../../services/messageDefaults';
+import { importTaxMessage, legacyTaxLines, savedTemplatesWithLegacyTaxes } from '../../domain/importTaxes';
+import { messageEur } from '../../utils/format';
 
 // ── Variables disponibles par groupe ──
 const VAR_GROUPS = [
@@ -39,11 +42,9 @@ const VAR_GROUPS = [
     label: 'Devis',
     vars: [
       { key: 'transport', label: 'Transport', ex: '36.25 €' },
-      { key: 'om', label: 'OM', ex: '30.20 €' },
-      { key: 'omr', label: 'OMR', ex: '15.40 €' },
-      { key: 'taxes', label: 'Taxes (OM+OMR)', ex: '45.60 €' },
-      { key: 'tva', label: 'TVA', ex: '6.96 €' },
-      { key: 'taux_tva', label: 'Taux TVA', ex: '8.5%' },
+      // The quote's taxes as the client reads them since 10 October 2026: an estimate of the import taxes,
+      // paid on arrival and included in the price (domain/importTaxes.js), with its two other versions.
+      { key: 'estimation_taxes', label: 'Estimation des taxes à l’importation', ex: importTaxMessage({ om: 30.2, omr: 15.4, tva: 6.96, total: 93.81 }, { code: '974' }, { money: messageEur }) },
       { key: 'total', label: 'Total', ex: '93.81 €' },
       { key: 'lien_paiement', label: 'Lien de paiement', ex: 'https://paiement.exemple.test/devis' },
       { key: 'modalite_paiement', label: 'Modalités pro', ex: 'par virement bancaire' },
@@ -63,8 +64,16 @@ const VAR_GROUPS = [
   },
 ];
 
+// The former tax variables: still rendered for the templates saved with them (never rewritten), no longer
+// offered for insertion. They present the amounts as taxes of the price (« TVA (8,5 %) »).
+const LEGACY_VARS = [
+  { key: 'om', ex: '30.20 €' }, { key: 'omr', ex: '15.40 €' }, { key: 'taxes', ex: '45.60 €' },
+  { key: 'tva', ex: '6.96 €' }, { key: 'taux_tva', ex: '8.5%' },
+];
+
 const ALL_EXAMPLES = {};
 VAR_GROUPS.forEach((g) => g.vars.forEach((v) => { ALL_EXAMPLES[v.key] = v.ex; }));
+LEGACY_VARS.forEach((v) => { ALL_EXAMPLES[v.key] = v.ex; });
 
 // ── Templates par défaut ── (labels only: plain text, no emoji; keys unchanged)
 const TEMPLATES = [
@@ -125,6 +134,10 @@ export default function TemplateEditor() {
     } catch (error) { setNotice({ key: target, error: true, text: `${error.message} Votre brouillon est conservé.` }); }
     finally { lock.current = false; setSaving(false); }
   };
+  // Saved templates (and the text shown) that still present the quote's taxes as taxes of the price:
+  // named here, never rewritten (decision of 10 October 2026, domain/importTaxes.js).
+  const legacy = savedTemplatesWithLegacyTaxes(messageTemplates, TEMPLATES.map(template => template.key));
+  const legacyLines = legacyTaxLines(body);
   const insert = key => { const field = textarea.current; const start = field?.selectionStart ?? body.length; const end = field?.selectionEnd ?? start; change(body.slice(0, start) + `{{${key}}}` + body.slice(end)); field?.focus(); };
   // The whole template stays readable without an inner scroll bar: the field follows its text (12 lines at least),
   // up to 85 % of the window, then it scrolls. Measured again when the text, the model, the channel or the width change.
@@ -141,8 +154,14 @@ export default function TemplateEditor() {
     return () => window.removeEventListener('resize', fit);
   }, [body]);
   return <section className="min-w-0 space-y-4"><header><h2 className="text-lg font-bold">Modèles de messages</h2><p className="mt-1 text-sm text-gray-600">Le message principal confirme la réception, demande l’accord et indique les factures manquantes. Les modèles signalés « Envoyé automatiquement » partent sans action de l’équipe ; l’équipe envoie elle-même tous les autres.</p></header>
+    {legacy.length > 0 && <section aria-labelledby="legacy-taxes-title" data-testid="legacy-tax-templates" className="space-y-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+      <h3 id="legacy-taxes-title" className="flex items-start gap-2 font-semibold"><AlertTriangle size={16} className="mt-0.5 shrink-0" aria-hidden="true" />{legacy.length === 1 ? 'Un modèle enregistré présente encore les taxes de l’ancienne façon' : `${legacy.length} modèles enregistrés présentent encore les taxes de l’ancienne façon`}</h3>
+      <p>Depuis le 10 octobre 2026, le devis présente l’octroi de mer, l’OMR et la TVA comme une estimation des taxes à l’importation, payées à l’arrivée et comprises dans le prix, jamais comme des taxes facturées par Expedîle. Ces modèles partent tels qu’ils ont été enregistrés : rien n’est modifié automatiquement. Ouvrez-les, remplacez les lignes signalées par l’information « Estimation des taxes à l’importation », puis enregistrez.</p>
+      <ul className="flex flex-wrap gap-2">{legacy.map(item => <li key={item.bodyKey}><button type="button" disabled={saving} aria-pressed={item.bodyKey === bodyKey} className="min-h-11 rounded-xl border border-amber-300 bg-white px-3 py-2 text-left font-semibold transition-all duration-200 ease-out active:scale-[0.98] disabled:opacity-50" onClick={() => { setSelKey(item.key); setCanal(item.canal); }}>{TEMPLATES.find(template => template.key === item.key)?.label || item.key} · {item.canal === 'email' ? 'Email' : 'Telegram'}</button></li>)}</ul>
+    </section>}
     <div className="grid gap-3 sm:grid-cols-2"><label className="text-sm">Message à modifier<select className={FIELD} value={selKey} disabled={saving} onChange={e => setSelKey(e.target.value)}>{[...TEMPLATES].sort((a, b) => (a.key === 'demande_feu_vert' ? -1 : b.key === 'demande_feu_vert' ? 1 : 0)).map(t => <option key={t.key} value={t.key}>{t.label}{['telegram', 'email'].some(c => drafts[`${t.key}_${c}`]) ? ' · brouillon' : ''}</option>)}</select></label><label className="text-sm">Canal<select className={FIELD} disabled={saving} value={canal} onChange={e => setCanal(e.target.value)}><option value="telegram">Telegram</option><option value="email">Email</option></select></label></div>
     {hint && <p className="text-sm text-gray-600">{hint}{canal === 'email' ? ' La version email reste un brouillon : aucun email n’est envoyé automatiquement.' : ''}</p>}
+    {legacyLines.length > 0 && <div role="note" aria-labelledby="legacy-tax-lines-title" data-testid="legacy-tax-lines" className="space-y-1 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"><p id="legacy-tax-lines-title" className="font-semibold">Ce texte présente encore ces montants comme des taxes du prix. Lignes à remplacer par l’information « Estimation des taxes à l’importation » :</p><ul className="list-disc space-y-0.5 pl-5">{legacyLines.map((line, index) => <li key={index} className="break-words font-mono">{line}</li>)}</ul></div>}
     <p className="text-sm text-gray-600">{dirty ? 'Modifications non enregistrées. ' : ''}Vos brouillons restent disponibles lorsque vous changez de modèle ou de rubrique.{!storageAvailable && ' Stockage du navigateur indisponible : gardez cet onglet ouvert.'}</p>
     <div className="grid min-w-0 gap-4 xl:grid-cols-2"><label className="min-w-0 text-sm">Texte du message<textarea ref={textarea} disabled={saving} rows={12} className={`${FIELD} mt-1 resize-y font-mono`} value={body} onChange={e => change(e.target.value)} /></label><section className="min-w-0 rounded-xl border bg-gray-50 p-4" aria-label="Aperçu du message"><h3 className="font-semibold">Aperçu avec des données fictives</h3><p className="mt-3 whitespace-pre-wrap break-words text-sm">{renderPreview(body)}</p></section></div>
     <details className="rounded-xl border p-3"><summary className="min-h-11 cursor-pointer font-semibold">Insérer une information du dossier</summary><div className="space-y-3">{VAR_GROUPS.map(group => <section key={group.label}><h3 className="text-sm font-semibold">{group.label}</h3><div className="mt-1 flex flex-wrap gap-2">{group.vars.map(v => <button key={v.key} disabled={saving} className={BUTTON} onClick={() => insert(v.key)}>{v.label}</button>)}</div></section>)}</div></details>

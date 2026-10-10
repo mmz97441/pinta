@@ -67,6 +67,7 @@ test('PDF reproduces the saved quote version when live customer, parcel, fees an
   class MockPDF {
     addPage() { captured.appendix = true; }
     setFontSize() {} setFont() {} setDrawColor() {} setLineWidth() {} line() {} setTextColor() {}
+    splitTextToSize(value) { return [value]; }
     text(value) { captured.texts.push(value); } save(filename) { captured.filename = filename; }
   }
   const module = { exports: {} };

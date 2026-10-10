@@ -2,6 +2,7 @@ const { chromium }=require('playwright');
 const assert=require('node:assert/strict');
 const fs=require('node:fs/promises');
 const {setup,base,ids}=require('./browser-regression.cjs');
+const AxeBuilder=require('@axe-core/playwright').default;
 const output=process.env.PINTA_ADMIN_OUT||'/tmp/pinta-admin-simplicity';
 (async()=>{await fs.mkdir(output,{recursive:true});const browser=await chromium.launch({headless:true});const reports=[];
 async function scenario(name,run,role='directeur') {const x=await setup(browser,role);x.page.setDefaultTimeout(10000);try {await run(x);assert.deepEqual(x.errors,[]);assert.deepEqual(x.networkDenied,[]);await x.page.screenshot({path:`${output}/${name}.png`,fullPage:true});reports.push({name,ok:true});console.log('PASS',name);}catch(e){await x.page.screenshot({path:`${output}/${name}-FAIL.png`,fullPage:true});reports.push({name,ok:false,error:e.message});console.error('FAIL',name,e.message); }finally{await x.context.close();}}
@@ -24,6 +25,41 @@ await scenario('template-labels-plain-and-whole-body-visible',async x=>{await go
  await x.page.setViewportSize({width:390,height:844});await x.page.getByLabel('Canal').selectOption('telegram');
  for(const key of ['demande_feu_vert','devis_final']){await select.selectOption(key);await x.page.waitForFunction(()=>{const element=document.querySelector('textarea');return element&&element.scrollHeight<=element.clientHeight+1;});}
  assert.equal(await x.page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false);assert.equal(x.requests.some(request=>request.path.endsWith('/save_message_template')),false,'reading the models saves nothing');});
+// Decision of 10 October 2026: a template saved with the former tax wording (« TVA ( », « Taxes : ») is named with its
+// lines and keeps being sent as saved; the new variable {{estimation_taxes}} is offered, the former ones are not.
+for(const [theme,width] of [['light',1440],['dark',390]])await scenario(`template-legacy-tax-wording-named-never-rewritten-${theme}-${width}`,async x=>{
+ const former='Bonjour {{prenom}} 👋\n\n🚀 Transport : {{transport}}\n🏛️ Taxes : {{taxes}}\n📊 TVA ({{taux_tva}}) : {{tva}}\n💰 TOTAL : {{total}}\n\nL’équipe Expedîle';
+ x.tables.message_templates.push({id:'tpl-legacy',key:'devis_final',canal:'telegram',body:former});
+ await x.context.addInitScript(value=>{try{localStorage.setItem('expedile-theme',value);}catch{/* storage blocked */}},theme);
+ await x.page.setViewportSize({width,height:width<1024?844:1000});
+ await go(x,'/settings?tab=templates');
+ const notice=x.page.getByTestId('legacy-tax-templates');await notice.waitFor();
+ assert.equal((await notice.getByRole('heading').innerText()).trim(),'Un modèle enregistré présente encore les taxes de l’ancienne façon');
+ assert.match(await notice.innerText(),/rien n’est modifié automatiquement/);
+ await notice.getByRole('button',{name:'Devis particulier · Telegram',exact:true}).click();
+ assert.equal(await x.page.getByLabel('Message à modifier').inputValue(),'devis_final');
+ const lines=x.page.getByTestId('legacy-tax-lines');await lines.waitFor();
+ assert.deepEqual(await lines.locator('li').allTextContents(),['🏛️ Taxes : {{taxes}}','📊 TVA ({{taux_tva}}) : {{tva}}']);
+ assert.equal(await x.page.getByLabel('Texte du message').inputValue(),former,'The saved text is shown as saved, never rewritten.');
+ const axe=await new AxeBuilder({page:x.page}).include('[data-testid="legacy-tax-templates"]').include('[data-testid="legacy-tax-lines"]').withTags(['wcag2a','wcag2aa','wcag21aa']).analyze();assert.deepEqual(axe.violations.map(v=>v.id),[]);
+ const small=await notice.getByRole('button').evaluateAll(nodes=>nodes.filter(node=>node.getBoundingClientRect().height<44).map(node=>node.textContent));assert.deepEqual(small,[],'44 px targets');
+ // The new variable is offered; the former ones keep working but are no longer offered.
+ await x.page.getByText('Insérer une information du dossier',{exact:true}).click();
+ await x.page.getByRole('button',{name:'Estimation des taxes à l’importation',exact:true}).waitFor();
+ for(const label of ['OM','OMR','TVA','Taux TVA','Taxes (OM+OMR)'])assert.equal(await x.page.getByRole('button',{name:label,exact:true}).count(),0,label);
+ // The default wording goes into a draft: no line left to replace, the preview shows the estimate; nothing saved yet.
+ await x.page.getByRole('button',{name:'Préparer le modèle par défaut',exact:true}).click();
+ await lines.waitFor({state:'detached'});
+ assert.match(await x.page.getByLabel('Texte du message').inputValue(),/🏛️ \{\{estimation_taxes\}\}/);
+ assert.match(await x.page.getByRole('region',{name:'Aperçu du message'}).innerText(),/Estimation des taxes à l’importation à La Réunion \(payées à l’arrivée, comprises dans le prix\) : 52\.56 €/);
+ assert.equal(x.requests.some(request=>request.path.endsWith('/save_message_template')),false,'Nothing is rewritten automatically.');
+ assert.equal(await x.page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false);
+ await x.page.screenshot({path:`${output}/template-legacy-tax-wording-${theme}-${width}.png`,fullPage:true});
+ // Saved by the team: the template no longer appears in the list.
+ await x.page.getByRole('button',{name:'Enregistrer le modèle',exact:true}).click();
+ await x.page.getByText('Modèle enregistré. Aucun message n’a été envoyé.',{exact:true}).waitFor();
+ await notice.waitFor({state:'detached'});
+});
 await scenario('isolated-admin-permission-has-own-tab',async x=>{const perms={staff_id:ids.S,perm_admin_templates:true};x.tables.staff_permissions=[perms];x.tables.staff_users[0].staff_permissions=[perms];await go(x,'/settings?tab=templates');await x.page.getByRole('heading',{name:'Modèles de messages',exact:true}).waitFor();assert.equal(await x.page.getByRole('button',{name:'Tarifs de transport',exact:true}).count(),0);assert.equal(await x.page.getByRole('button',{name:'Équipe et accès',exact:true}).count(),0);},'preparateur');
 await scenario('import-mapping-pages-and-local-duplicates',async x=>{await go(x,'/clients');await x.page.getByRole('button',{name:'Importer des clients',exact:true}).click();const csv='Nom;Prénom;Email;Téléphone;Adresse;Code postal;Ville\n'+Array.from({length:24},(_,i)=>`Client${i};Camille;${i===1?'client0':`client${i}`}@example.test;0693 00 00 ${String(i).padStart(2,'0')};${i} rue des Lilas;97400;Saint-Denis`).join('\n');await x.page.locator('input[type=file]').setInputFiles({name:'clients.csv',mimeType:'text/csv',buffer:Buffer.from(csv)});await x.page.getByText('23 clients sélectionnés sur 24 lignes valides',{exact:true}).waitFor();await x.page.getByRole('button',{name:'Suivant',exact:true}).click();await x.page.getByText('Ligne 25 · Camille Client23',{exact:true}).waitFor();assert.equal(x.requests.filter(r=>r.path==='/rest/v1/clients'&&r.method==='POST').length,0);await x.page.setViewportSize({width:390,height:844});assert.equal(await x.page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);});
 await scenario('import-stop-waits-current-write-only',async x=>{let release;const gate=new Promise(resolve=>release=resolve);let calls=0;await x.context.route('**/rest/v1/clients*',async route=>{if(route.request().method()!=='POST')return route.fallback();calls++;const payload=route.request().postDataJSON();await gate;return route.fulfill({status:201,contentType:'application/json',body:JSON.stringify({...payload,id:'abc00000-0000-4000-8000-000000000001',created_at:'2026-09-17T00:00:00Z'})});});await go(x,'/clients');await x.page.getByRole('button',{name:'Importer des clients',exact:true}).click();await x.page.locator('input[type=file]').setInputFiles({name:'clients.csv',mimeType:'text/csv',buffer:Buffer.from('Nom;Prénom;Email;Téléphone;Adresse;Code postal;Ville\nPremier;Paul;one@example.test;0693 00 00 01;1 rue des Lilas;97400;Saint-Denis\nSecond;Marie;two@example.test;0693 00 00 02;2 rue des Lilas;97400;Saint-Denis')});await x.page.getByRole('button',{name:'Importer 2 clients',exact:true}).click();await x.page.getByRole('button',{name:'Arrêter après le client en cours',exact:true}).click();assert.equal(calls,1);release();await x.page.getByRole('heading',{name:'Import arrêté',exact:true}).waitFor();await x.page.getByText('1 fiche créée, 0 non confirmée, 1 non traitée.',{exact:true}).waitFor();assert.equal(calls,1);});

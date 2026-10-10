@@ -1415,7 +1415,7 @@ export default function ColisModal({ open, onClose, initialColisId, initialClien
                     <div className="flex-1">
                       <p className="text-sm font-semibold text-gray-800">Facture d'origine</p>
                       <p className="text-xs text-gray-500 mt-0.5">
-                        Joindre la facture permet de calculer les taxes (Octroi de Mer) plus rapidement.
+                        Joindre la facture permet d’estimer plus rapidement les taxes à l’importation.
                       </p>
                     </div>
                   </div>

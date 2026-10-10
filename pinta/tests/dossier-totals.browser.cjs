@@ -1,4 +1,4 @@
-/* Totals, « Transport » and « Taxes calculées » of the « Dossiers d’expédition » list: synthetic data
+/* Totals, « Transport » and « Taxes à l’importation estimées » of the « Dossiers d’expédition » list: synthetic data
  * only, every request intercepted; no provider, notification or production call. */
 const { chromium } = require('playwright');
 const AxeBuilder = require('@axe-core/playwright').default;
@@ -243,7 +243,7 @@ async function main() {
     } finally { await f.context.close(); console.log(JSON.stringify(results.at(-1))); }
   }
   try {
-    // ── The total of the displayed dossiers, and « Transport » and « Taxes calculées » of each one ──
+    // ── The total of the displayed dossiers, and « Transport » and « Taxes à l’importation estimées » of each one ──
     for (const width of [1440, 1280]) for (const dark of [false, true]) await scenario(`the-total-row-adds-up-the-displayed-dossiers-and-each-dossier-shows-its-transport-and-taxes-${width}-${dark ? 'dark' : 'light'}`, async f => {
       await f.page.setViewportSize(sizeOf(width)); await theme(f, dark); await open(f); await waitTheme(f, dark);
       await countStatus(f, 6).waitFor();
@@ -262,10 +262,10 @@ async function main() {
         return !b || Math.abs(a.left - b.left) > 1 || Math.abs(a.width - b.width) > 1;
       }).map(th => th.dataset.column));
       assert.deepEqual(misaligned, []);
-      // « Transport » then « Taxes calculées » right after the price: the saved quote's own transport and taxes, with the price's state.
+      // « Transport » then « Taxes à l’importation estimées » right after the price: the saved quote's own transport and taxes, with the price's state.
       const headings = await f.page.locator('thead th[data-column]').evaluateAll(nodes => nodes.map(node => node.dataset.column));
       assert.deepEqual(headings.slice(headings.indexOf('requested'), headings.indexOf('requested') + 3), ['requested', 'transport', 'taxes']);
-      assert.equal(await f.page.locator('thead th[data-column="taxes"]').getAttribute('data-column-label'), 'Taxes calculées');
+      assert.equal(await f.page.locator('thead th[data-column="taxes"]').getAttribute('data-column-label'), 'Taxes à l’importation estimées');
       assert.equal(await f.page.locator('thead th[data-column="transport"]').getAttribute('data-column-label'), 'Transport');
       assert.equal(plain(await f.page.locator('thead th[data-column="transport"] .dossier-table-heading-text').innerText()), 'Transport');
       const transport = n => dossierCell(f, n, 'transport').innerText().then(plain);
@@ -482,7 +482,7 @@ async function main() {
       }
       const sheet = await download(f, 6);
       const data = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null });
-      assert.equal(data[0].includes('Taxes calculées'), false); assert.equal(data[0].includes('Prix du devis'), false); assert.equal(data[0].includes('Transport'), false);
+      assert.equal(data[0].includes('Taxes à l’importation estimées'), false); assert.equal(data[0].includes('Prix du devis'), false); assert.equal(data[0].includes('Transport'), false);
       assert.equal(data[8][0], 'Total'); assert.doesNotMatch(JSON.stringify(data), /393|57\.12|83\.47|286\.35|95\.55|70\.8/);
     }, { restricted: true });
 
@@ -686,7 +686,7 @@ async function main() {
       assert.deepEqual(await block.locator('dl > div').evaluateAll(items => items.map(item => [item.querySelector('dt').textContent,
         [...item.querySelectorAll('dd .dossier-table-total-value, dd .dossier-table-total-note, dd .dossier-table-placeholder')].map(node => node.textContent.replace(/[\u00a0\u202f]/g, ' ').trim()).join('\n')])), [
         ['Colis à expédier', '6\n5 sur 6 dossiers'], ['Dimensions finales', '25,2 kg vol.\n5 sur 6 dossiers'], ['Poids final (kg)', '14,75\n5 sur 6 dossiers'], ['Prix du devis', '393,47 €\n5 sur 6 dossiers'],
-        ['Transport', '286,35 €\n4 sur 6 dossiers'], ['Taxes calculées', '57,12 €\n4 sur 6 dossiers'],
+        ['Transport', '286,35 €\n4 sur 6 dossiers'], ['Taxes à l’importation estimées', '57,12 €\n4 sur 6 dossiers'],
       ]);
       assert.equal(await f.page.locator('[data-dossier-card]').count(), 6, 'The total is not a card.');
       await noPageOverflow(f);
@@ -743,22 +743,22 @@ async function main() {
       await f.page.locator('[data-dossier-total]').waitFor();
       assert.equal(await f.page.locator('[data-group-totals]').count(), 0);
       assert.equal(plain(await f.page.locator('.dossier-card-total-title').innerText()), 'Total des 6 dossiers');
-      assert.deepEqual(await f.page.locator('[data-dossier-total] dt').allTextContents(), ['Cartons reçus', 'Dimensions finales', 'Poids final (kg)', 'Prix du devis', 'Transport', 'Taxes calculées']);
+      assert.deepEqual(await f.page.locator('[data-dossier-total] dt').allTextContents(), ['Cartons reçus', 'Dimensions finales', 'Poids final (kg)', 'Prix du devis', 'Transport', 'Taxes à l’importation estimées']);
       await noPageOverflow(f);
     }, { device: { hasTouch: true, isMobile: true } });
 
-    // ── The spreadsheet: « Transport », « Taxes calculées » and a « Total » row that follows Excel's filters ──
+    // ── The spreadsheet: « Transport », « Taxes à l’importation estimées » and a « Total » row that follows Excel's filters ──
     await scenario('the-export-has-the-transport-the-taxes-and-a-subtotal-row-equal-to-the-screen-totals', async f => {
       await open(f); await expectTotals(f, FOOT, DAILY_TOTAL);
       const sheet = await download(f, 6);
       const data = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null });
       const header = data[0], at = label => header.indexOf(label);
-      assert.deepEqual(header.slice(at('Prix du devis'), at('Prix du devis') + 3), ['Prix du devis', 'Transport', 'Taxes calculées']);
+      assert.deepEqual(header.slice(at('Prix du devis'), at('Prix du devis') + 3), ['Prix du devis', 'Transport', 'Taxes à l’importation estimées']);
       assert.deepEqual(data.slice(1, 7).map(line => line[0]), await f.page.locator('tr[data-dossier-row] .dossier-table-reference').allTextContents(), 'The dossiers in screen order.');
       assert.ok(data[7].every(cell => cell === null), 'One empty row.');
       assert.equal(data[8][0], 'Total'); assert.equal(data.length, 9);
       const total = label => sheet[XLSX.utils.encode_cell({ r: 8, c: at(label) })];
-      for (const [label, cached] of [['Cartons reçus', 9], ['Poids final (kg)', 14.75], ['Prix du devis', 393.47], ['Transport', 286.35], ['Taxes calculées', 57.12]]) {
+      for (const [label, cached] of [['Cartons reçus', 9], ['Poids final (kg)', 14.75], ['Prix du devis', 393.47], ['Transport', 286.35], ['Taxes à l’importation estimées', 57.12]]) {
         const name = XLSX.utils.encode_col(at(label));
         assert.deepEqual([total(label).f, total(label).v], [`SUBTOTAL(9,${name}2:${name}7)`, cached], label);
       }
@@ -767,11 +767,11 @@ async function main() {
       assert.deepEqual(sheet['!autofilter'], { ref: `A1:${XLSX.utils.encode_col(header.length - 1)}7` });
       const byRef = label => Object.fromEntries(data.slice(1, 7).map(line => [line[0], line[at(label)]]));
       assert.deepEqual(byRef('Transport'), { 'EXP-TOT001': 80, 'EXP-TOT002': 70.8, 'EXP-TOT003': 'À calculer', 'EXP-TOT004': 95.55, 'EXP-TOT005': 'À vérifier', 'EXP-TOT006': 40 });
-      assert.deepEqual(byRef('Taxes calculées'), { 'EXP-TOT001': 20, 'EXP-TOT002': 12.67, 'EXP-TOT003': 'À calculer', 'EXP-TOT004': 24.45, 'EXP-TOT005': 'À vérifier', 'EXP-TOT006': 0 });
+      assert.deepEqual(byRef('Taxes à l’importation estimées'), { 'EXP-TOT001': 20, 'EXP-TOT002': 12.67, 'EXP-TOT003': 'À calculer', 'EXP-TOT004': 24.45, 'EXP-TOT005': 'À vérifier', 'EXP-TOT006': 0 });
       const row = ref => data.findIndex(line => line[0] === ref);
       const cell = (ref, label) => sheet[XLSX.utils.encode_cell({ r: row(ref), c: at(label) })];
-      assert.equal(cell('EXP-TOT006', 'Taxes calculées').w, 'Sans taxes (pro)');
-      assert.equal(cell('EXP-TOT002', 'Taxes calculées').w, '12.67 € · Brouillon');
+      assert.equal(cell('EXP-TOT006', 'Taxes à l’importation estimées').w, 'Sans taxes (pro)');
+      assert.equal(cell('EXP-TOT002', 'Taxes à l’importation estimées').w, '12.67 € · Brouillon');
       // The draft's transport keeps its state in its format; the professional quote's transport reads like any other.
       assert.deepEqual([cell('EXP-TOT002', 'Transport').t, cell('EXP-TOT002', 'Transport').w], ['n', '70.80 € · Brouillon']);
       assert.deepEqual([cell('EXP-TOT006', 'Transport').t, cell('EXP-TOT006', 'Transport').w], ['n', '40.00 €']);
@@ -794,7 +794,7 @@ async function main() {
       const shown = ['ref', 'client', 'receivedAt', 'statusLabel', 'paymentState', 'statut', 'cartons', 'optimizedDimensions', 'optimizedWeight', 'requested', 'transport', 'taxes', 'action'];
       await f.page.waitForFunction(() => !document.querySelector('thead th[data-column="casier"]'));
       assert.deepEqual(await headings(), shown, 'The saved choices are kept; « Transport » shows between the price and the taxes.');
-      assert.deepEqual(await Promise.all(['Référence', 'Prix du devis', 'Taxes calculées', 'Transport'].map(width)), [200, 160, 150, 130], 'The saved widths are kept; « Transport » opens at its own.');
+      assert.deepEqual(await Promise.all(['Référence', 'Prix du devis', 'Taxes à l’importation estimées', 'Transport'].map(width)), [200, 160, 150, 130], 'The saved widths are kept; « Transport » opens at its own.');
       assert.ok(Math.abs((await f.page.locator('thead th[data-column="transport"]').boundingBox()).width - 130) <= 1);
       await expectTotals(f, FOOT, { label: 'Total · 6 dossiers', requested: partial('393,47 €', 5, 6), transport: partial('286,35 €', 4, 6), taxes: partial('57,12 €', 4, 6) });
       // Hidden by the person, it stays hidden, with its total, after a reload.

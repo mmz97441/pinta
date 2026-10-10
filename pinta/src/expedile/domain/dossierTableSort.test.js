@@ -9,7 +9,7 @@ const models = values => new Map(Object.entries(values));
 
 test('every displayed data column declares a typed accessor, while actions have no sorting contract', () => {
   const data = [...columns.values()].filter(column => column.kind === 'data');
-  // 21 shared by the first three views (« Transport » and « Taxes calculées » included), then « Accords clients »: Accord, Demande envoyée le, Dernière relance.
+  // 21 shared by the first three views (« Transport » and « Taxes à l’importation estimées » included), then « Accords clients »: Accord, Demande envoyée le, Dernière relance.
   assert.equal(data.length, 24);
   for (const column of data) {
     assert.equal(isDossierTableColumnSortable(column), true, column.key);

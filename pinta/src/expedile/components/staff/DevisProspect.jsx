@@ -7,39 +7,11 @@ import { Link, useNavigate } from 'react-router-dom';
 import usePersistentDraft from '../../hooks/usePersistentDraft';
 import { calculateQuote } from '../../domain/quote';
 import { validDutyRates } from '../../domain/customs';
+import { importTaxEstimate } from '../../domain/importTaxes';
+import { estimateMessage, estimateMessageText as messageText } from '../../domain/prospectEstimate';
 
 const INPUT = 'min-h-11 w-full min-w-0 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-300';
-const NUMBER = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 2 });
-const decimal = value => NUMBER.format(Number(value));
 function Field({ label, children }) { return <label className="block text-xs font-semibold text-gray-500">{label}<div className="mt-1">{children}</div></label>; }
-
-/** The shared text, line by line: the preview shows these lines, the copy and the email join them. */
-function estimateMessage({ form, quote, destination, isPro }) {
-  if (!quote.ok) return null;
-  const name = (form.prenom || form.nom || '').trim();
-  const { amounts } = quote;
-  return [
-    [{ text: name ? `Bonjour ${name},` : 'Bonjour,' }],
-    [{ text: `Voici votre estimation pour une expédition vers ${destination.nom}.` }],
-    [
-      { label: 'Dimensions', value: `${decimal(form.dimL)} × ${decimal(form.dimW)} × ${decimal(form.dimH)} cm` },
-      { label: 'Poids réel', value: kg(form.poids) },
-      { label: 'Poids facturable', value: kg(amounts.billableWeight) },
-    ],
-    [
-      { label: 'Transport', value: eur(amounts.transport) },
-      ...(isPro ? [] : [
-        { label: 'Octroi de mer', value: eur(amounts.om) },
-        { label: 'Octroi de mer régional', value: eur(amounts.omr) },
-        { label: `TVA (${decimal(destination.tva)} %)`, value: eur(amounts.tva) },
-      ]),
-      { label: 'Total estimatif', value: eur(amounts.total), total: true },
-    ],
-    [{ text: 'Le montant définitif sera établi après réception, vérification des documents et mesure du colis. Les frais de services supplémentaires éventuellement convenus seront indiqués séparément.' }],
-    [{ text: 'L’équipe Expedîle' }],
-  ];
-}
-const messageText = message => message ? message.map(block => block.map(line => line.text ?? `${line.label} : ${line.value}`).join('\n')).join('\n\n') : '';
 
 export default function DevisProspect() {
   const { tarifs, categories, settings = {}, can } = useApp();
@@ -54,6 +26,8 @@ export default function DevisProspect() {
   const colis = { ref: 'ESTIMATION', finL: form.dimL, finW: form.dimW, finH: form.dimH, finP: form.poids, lignes: [{ desc: 'Marchandise déclarée', qte: 1, prix: form.valeurMarchandise, cat: form.categorie }] };
   const quote = calculateQuote({ colis, client, destination, tarif: tarifs[form.destination], categories, settings, mode: 'estimate' });
   const message = estimateMessage({ form, quote, destination, isPro });
+  // The destination taxes: an estimate of the import taxes, paid on arrival and part of the price (domain/importTaxes.js).
+  const taxes = quote.ok ? importTaxEstimate(quote.amounts, destination, { professional: isPro }) : null;
   const text = messageText(message);
   const configured = category => validDutyRates(category.taux?.[form.destination]);
   const missingCategories = !isPro && !categories.some(configured);
@@ -63,7 +37,8 @@ export default function DevisProspect() {
   };
   const download = async () => {
     setBusy(true); setNotice('');
-    try { const { exportDevisPDF } = await import('../../utils/exportDevisPDF'); exportDevisPDF({ ...colis, ...quote.patch, quoteSnapshot: quote.snapshot }, client, destination); }
+    // The team's own estimate: an issuer identity still to complete is named on it, never invented.
+    try { const { exportDevisPDF } = await import('../../utils/exportDevisPDF'); exportDevisPDF({ ...colis, ...quote.patch, quoteSnapshot: quote.snapshot }, client, destination, { business: settings, audience: 'staff' }); }
     catch (error) { setNotice(`Le PDF n’a pas pu être créé : ${error.message}`); }
     finally { setBusy(false); }
   };
@@ -86,11 +61,13 @@ export default function DevisProspect() {
       </div>
       <aside className="min-w-0 space-y-4 self-start rounded-2xl bg-slate-50 p-4">
         <h2 className="text-sm font-semibold text-slate-800">Votre estimation</h2>
-        {quote.ok ? <><p data-testid="estimate-total" className="whitespace-nowrap text-3xl font-bold tabular-nums" style={{ color: 'var(--brand-text)' }}>{eur(quote.amounts.total)}</p><dl className="space-y-2 text-sm">{[['Transport', quote.amounts.transport], ...(!isPro ? [['Octroi de mer', quote.amounts.om], ['Octroi de mer régional', quote.amounts.omr], [`TVA (${decimal(destination.tva)} %)`, quote.amounts.tva]] : [])].map(([label, amount]) => <div key={label} className="flex justify-between gap-2"><dt className="text-gray-500">{label}</dt><dd className="whitespace-nowrap font-semibold tabular-nums text-slate-700">{eur(amount)}</dd></div>)}</dl><p className="border-t border-gray-200 pt-3 text-xs text-gray-500">Poids facturable : <span className="whitespace-nowrap">{kg(quote.amounts.billableWeight)}</span>. {isPro ? 'Transport professionnel, hors taxes gérées séparément.' : 'Taxes calculées sur la catégorie sélectionnée.'}</p></> : form.dimL || form.dimW || form.dimH || form.poids ? <ul className="list-disc space-y-2 pl-4 text-xs text-gray-500">{quote.errors.map((error, index) => <li key={index}>{error.message}</li>)}</ul> : <p className="text-sm text-gray-600">Renseignez les mesures et le poids pour obtenir une estimation.</p>}
+        {quote.ok ? <><p data-testid="estimate-total" className="whitespace-nowrap text-3xl font-bold tabular-nums" style={{ color: 'var(--brand-text)' }}>{eur(quote.amounts.total)}</p><dl className="space-y-2 text-sm"><div className="flex justify-between gap-2"><dt className="text-gray-500">Transport</dt><dd className="whitespace-nowrap font-semibold tabular-nums text-slate-700">{eur(quote.amounts.transport)}</dd></div>
+          {taxes?.lines.length > 0 && <><div data-testid="estimate-import-taxes" className="flex justify-between gap-2"><dt className="min-w-0 text-gray-500">{taxes.heading}<span className="block text-xs">({taxes.note})</span></dt><dd className="whitespace-nowrap font-semibold tabular-nums text-slate-700">{eur(taxes.total)}</dd></div>
+            {taxes.lines.map(line => <div key={line.key} className="flex justify-between gap-2 border-l-2 border-slate-200 pl-3 text-xs"><dt className="min-w-0 text-gray-500">{line.label}</dt><dd className="whitespace-nowrap tabular-nums text-slate-600">{eur(line.amount)}</dd></div>)}</>}</dl><p className="border-t border-gray-200 pt-3 text-xs text-gray-500">Poids facturable : <span className="whitespace-nowrap">{kg(quote.amounts.billableWeight)}</span>. {isPro ? 'Transport professionnel, hors taxes gérées séparément.' : 'Taxes à l’importation estimées sur la catégorie sélectionnée.'}</p></> : form.dimL || form.dimW || form.dimH || form.poids ? <ul className="list-disc space-y-2 pl-4 text-xs text-gray-500">{quote.errors.map((error, index) => <li key={index}>{error.message}</li>)}</ul> : <p className="text-sm text-gray-600">Renseignez les mesures et le poids pour obtenir une estimation.</p>}
         <p className="text-xs text-gray-500">Estimation indicative, à confirmer après réception et vérification. Les frais supplémentaires ne sont ajoutés que s’ils sont convenus et renseignés.</p>
         <div className="space-y-3 border-t border-gray-200 pt-4"><p className="text-xs font-semibold text-slate-600">Destinataire (pour partager)</p><div className="grid grid-cols-2 gap-3"><Field label="Nom"><input value={form.nom} onChange={(event) => set('nom', event.target.value)} className={INPUT} /></Field><Field label="Prénom"><input value={form.prenom} onChange={(event) => set('prenom', event.target.value)} className={INPUT} /></Field></div><Field label="Email"><input type="email" value={form.email} onChange={(event) => set('email', event.target.value)} className={INPUT} /></Field></div>
         <details className="rounded-xl border border-gray-200 p-3"><summary className="min-h-11 cursor-pointer font-semibold">Aperçu du texte à partager</summary>
-          {message ? <div data-testid="estimate-text" className="mt-2 space-y-3 text-sm leading-relaxed text-slate-700">{message.map((block, index) => <p key={index}>{block.map((line, row) => <span key={row} className={`block ${line.total ? 'font-bold text-slate-800' : ''}`}>{line.text ?? <>{line.label} : <span className="whitespace-nowrap tabular-nums">{line.value}</span></>}</span>)}</p>)}</div>
+          {message ? <div data-testid="estimate-text" className="mt-2 space-y-3 text-sm leading-relaxed text-slate-700">{message.map((block, index) => <p key={index}>{block.map((line, row) => <span key={row} className={`block ${line.total ? 'font-bold text-slate-800' : ''}${line.detail ? ' pl-3' : ''}`}>{line.text ?? <>{line.label} : <span className="whitespace-nowrap tabular-nums">{line.value}</span></>}</span>)}</p>)}</div>
             : <p className="mt-2 text-sm text-gray-600">Complétez les informations pour préparer le texte.</p>}
         </details>
         <button disabled={!quote.ok || busy} onClick={download} className="brand-bg flex min-h-11 w-full items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-white disabled:opacity-40"><Download size={15} aria-hidden="true" />Télécharger l’estimation</button>

@@ -37,7 +37,10 @@ const ESTIMATE_TEXT = [
   'Bonjour Marie,', '',
   'Voici votre estimation pour une expédition vers La Réunion.', '',
   'Dimensions : 40 × 30 × 20 cm', 'Poids réel : 3 kg', 'Poids facturable : 4,8 kg', '',
-  'Transport : 49,00 €', 'Octroi de mer : 16,90 €', 'Octroi de mer régional : 4,22 €', 'TVA (8,5 %) : 5,96 €', 'Total estimatif : 76,08 €', '',
+  // Decision of 10 October 2026: OM, OMR and « TVA » read as an estimate of La Réunion's import taxes, part of the price.
+  'Transport : 49,00 €', 'Estimation des taxes à l’importation à La Réunion (payées à l’arrivée, comprises dans le prix) : 27,08 €',
+  '• dont estimation octroi de mer de La Réunion : 16,90 €', '• dont estimation octroi de mer régional de La Réunion : 4,22 €', '• dont estimation TVA à l’importation de La Réunion : 5,96 €',
+  'Total estimatif : 76,08 €', '',
   'Le montant définitif sera établi après réception, vérification des documents et mesure du colis. Les frais de services supplémentaires éventuellement convenus seront indiqués séparément.', '',
   'L’équipe Expedîle',
 ].join('\n');
@@ -189,7 +192,9 @@ async function checkEstimate(f) {
   // 3 · French amounts and weights, never split between two lines.
   const aside = f.page.locator('aside');
   const summary = flat(await aside.innerText());
-  for (const expected of [/Transport\s+49,00 €/, /Octroi de mer\s+16,90 €/, /Octroi de mer régional\s+4,22 €/, /TVA \(8,5 %\)\s+5,96 €/, /Poids facturable : 4,8 kg\./]) assert.match(summary, expected);
+  for (const expected of [/Transport\s+49,00 €/, /Estimation des taxes à l’importation à La Réunion\s+\(payées à l’arrivée, comprises dans le prix\)\s+27,08 €/, /dont estimation octroi de mer de La Réunion\s+16,90 €/,
+    /dont estimation octroi de mer régional de La Réunion\s+4,22 €/, /dont estimation TVA à l’importation de La Réunion\s+5,96 €/, /Poids facturable : 4,8 kg\. Taxes à l’importation estimées sur la catégorie sélectionnée\./]) assert.match(summary, expected);
+  assert.doesNotMatch(summary, /TVA \(|(^|\n)(Octroi de mer|OMR?|TVA)\b/, 'Never a tax line of the price.');
   assert.doesNotMatch(summary, /\d\.\d\d €|\d\.\d+ kg/, 'No amount or weight keeps the English decimal point.');
   assert.deepEqual(await aside.locator('dd, [data-testid="estimate-total"]').evaluateAll(nodes => nodes.filter(node => node.getClientRects().length !== 1).map(node => node.textContent)), [], 'Each amount fits on one line.');
   // 2 · The shared text: a readable layout, the first name, and the same text in the copy.
@@ -211,6 +216,23 @@ async function checkEstimate(f) {
     const text = flat(await preview.innerText());
     assert.equal(text.split('\n')[0], greeting); assert.doesNotMatch(text, /Bonjour ,/);
   }
+  // The estimate PDF (once, at 1440 px in light mode): the same estimate of the import taxes and, the legal
+  // identity of Expedîle France not being set in Paramètres, the team's note instead of an invented one (F10).
+  if (f.layout.tag !== '1440-light') return;
+  const download = f.page.waitForEvent('download');
+  await aside.getByRole('button', { name: 'Télécharger l’estimation', exact: true }).click();
+  const file = await download;
+  assert.equal(file.suggestedFilename(), 'estimation-ESTIMATION.pdf');
+  const target = `${output}/estimation-ESTIMATION.pdf`;
+  await file.saveAs(target);
+  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  const standardFontDataUrl = require('node:path').join(require('node:path').dirname(require.resolve('pdfjs-dist/package.json')), 'standard_fonts') + require('node:path').sep;
+  const pdf = await pdfjs.getDocument({ data: new Uint8Array(await fs.readFile(target)), standardFontDataUrl, isEvalSupported: false }).promise;
+  const items = (await (await pdf.getPage(1)).getTextContent()).items.map(item => flat(item.str)).filter(item => item.trim());
+  const all = items.join(' ').replace(/\s+/g, ' ');
+  assert.match(all, /Identité légale à compléter dans Paramètres › Facture commerciale : raison sociale, forme juridique, capital social, adresse du siège, code postal du siège, ville du siège, SIRET, ville du greffe \(RCS\), numéro de TVA\./);
+  for (const expected of ['Estimation des taxes à l’importation à La Réunion', '(payées à l’arrivée, comprises dans le prix)', '27,08 €', 'dont estimation octroi de mer de La Réunion', 'dont estimation TVA à l’importation de La Réunion', 'TOTAL : 76,08 €']) assert.ok(items.includes(expected), `${expected} in ${items.join(' | ')}`);
+  assert.ok(!items.some(item => /^TVA|^Octroi de mer|TVA \(/.test(item)), 'Never a tax line of the price.');
 }
 async function checkEstimateWithoutCategories(f) {
   const categories = structuredClone(f.tables.categories), rates = structuredClone(f.tables.taux_categories);

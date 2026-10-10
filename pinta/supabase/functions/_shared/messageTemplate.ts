@@ -1,4 +1,5 @@
 import { HttpError } from './http.ts';
+import { importTaxMessage } from './importTaxes.ts';
 export function renderMessage(body:string,client:any,colis:any,destination:any,settings:any,lines:any[]=[],invoices:any[]=[]) {
  const money=(n:unknown)=>typeof n==='number'||(typeof n==='string' && n!=='')?`${Number(n).toFixed(2)} €`:'À calculer';
  const divisor=Number(settings.volumetricDivisor ?? settings.diviseurVolumetrique ?? 5000);
@@ -20,7 +21,9 @@ export function renderMessage(body:string,client:any,colis:any,destination:any,s
   ref:colis.ref,desc:colis.desc_contenu||'',casier:colis.casier||'',nb_cartons:count,liste_cartons:cartons,
   dims_brutes:receivedDimensions,poids_brut:beforeReal!==null?`${beforeReal} kg`:'À peser',poids_vol_avant:beforeVolume!==null?`${beforeVolume.toFixed(2)} kg`:'À mesurer',
   dims_finales:dims(colis.fin_l,colis.fin_w,colis.fin_h),poids_vol_apres:volume(colis.fin_l,colis.fin_w,colis.fin_h),poids_facturable:colis.poids_facturable?`${colis.poids_facturable} kg`:'À calculer',
-  transport:money(colis.devis_transport),om:money(colis.devis_om),omr:money(colis.devis_omr),taxes:colis.devis_total?money(Number(colis.devis_om||0)+Number(colis.devis_omr||0)):'À calculer',tva:money(colis.devis_tva),taux_tva:client.type==='pro'?'0%':`${destination?.tva??0}%`,total:money(colis.devis_total),economie:money(colis.economie),
+  transport:money(colis.devis_transport),om:money(colis.devis_om),omr:money(colis.devis_omr),taxes:colis.devis_total?money(Number(colis.devis_om||0)+Number(colis.devis_omr||0)):'À calculer',tva:money(colis.devis_tva),taux_tva:client.type==='pro'?'0%':`${destination?.tva??0}%`,total:money(colis.devis_total),
+  // The estimate of the import taxes, as the quote presents it to the client (_shared/importTaxes.ts).
+  estimation_taxes:importTaxMessage({om:colis.devis_om,omr:colis.devis_omr,tva:colis.devis_tva,total:colis.devis_total},destination,client.type==='pro',money),economie:money(colis.economie),
   frais_divers:(colis.frais_divers||[]).map((f:any)=>`${f.libelle||f.label||'Frais'} : ${money(f.montant)}`).join('\n'),
   contenu_declare:lines.map((l)=>`${l.description} × ${l.qte} — ${money(l.qte*l.prix_unitaire)}`).join('\n'),
   date_expedition:colis.date_expedition?new Date(colis.date_expedition).toLocaleDateString('fr-FR',{timeZone:'Europe/Paris'}):'Voir le suivi',motif_rejet:invoices.find((f)=>f.rejet_motif)?.rejet_motif||'Document à vérifier',

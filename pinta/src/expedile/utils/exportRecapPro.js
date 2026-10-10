@@ -26,8 +26,13 @@ export function proRecapDossier(dossier) {
   const lines = snapshot?.inputs?.lines?.length ? snapshot.inputs.lines.map(line => ({ desc:line.description,qte:line.quantity,prix:line.unitPrice }))
     : (dossier.lignes || []).filter(line => !excluded.has(line.factureId || line.facture_id));
   const weight = Number(saved.poidsFact) > 0 ? Number(saved.poidsFact) : measureShipment(boxes, snapshot?.inputs?.volumetricDivisor || 5000)?.billableWeight;
-  return { ...saved, lines, packageCount:boxes.every(box => Number(box.poids)>0) ? boxes.length : null, billableWeight:weight ?? null, fees:(saved.fraisDivers || []).reduce((sum,fee)=>sum+Number(fee.montant||0),0) };
+  // OM + OMR + « TVA » of a former quote: an estimate of the import taxes, part of its price (a professional quote has none).
+  const importTaxes = roundMoney(Number(saved.devisOM||0)+Number(saved.devisOMR||0)+Number(saved.devisTVA||0));
+  return { ...saved, lines, importTaxes, packageCount:boxes.every(box => Number(box.poids)>0) ? boxes.length : null, billableWeight:weight ?? null, fees:(saved.fraisDivers || []).reduce((sum,fee)=>sum+Number(fee.montant||0),0) };
 }
+// The recap is handed to the professional client: never a « TVA », « OM » or « OMR » column read as Expedîle's
+// taxes, nor a « TTC » total (decision of 10 October 2026). The estimate appears only for a former quote that has one.
+const IMPORT_TAXES_LABEL = 'Estimation des taxes à l’importation (€)';
 function allocate(amount, lines) {
   const total = lines.reduce((sum,line)=>sum+Number(line.qte||0)*Number(line.prix||0),0);
   let allocated=0;
@@ -40,12 +45,13 @@ export function buildProRecapWorkbook(client,dossiers,month,year) {
   const filtered=monthlyProDossiers(client,dossiers,month,year).map(proRecapDossier);
   if(!filtered.length) return null;
   const money = value => new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR'}).format(Number(value||0));
-  const fields=[['Transport (€)','devisTransport'],['OM (€)','devisOM'],['OMR (€)','devisOMR'],['TVA (€)','devisTVA'],['Frais divers (€)','fees'],['Total TTC (€)','devisTotal']];
+  const withTaxes=filtered.some(c=>c.importTaxes>0);
+  const fields=[['Transport (€)','devisTransport'],...(withTaxes?[[IMPORT_TAXES_LABEL,'importTaxes']]:[]),['Frais divers (€)','fees'],['Total du devis (€)','devisTotal']];
   const recap=filtered.map(c=>({ 'Référence':c.ref,'Description':c.desc||'','Date réception':parisDateLabel(c.dateReception),'Date paiement':parisDateLabel(c.paiementDate),'Colis préparés':c.packageCount??'Non renseigné','Poids fact. (kg)':c.billableWeight==null?'Non renseigné':roundMoney(c.billableWeight),...Object.fromEntries(fields.map(([label,key])=>[label,Number(c[key]||0)])) }));
   const totals={'Référence':'TOTAL','Description':`${filtered.length} expédition(s)`,...Object.fromEntries(fields.map(([label,key])=>[label,roundMoney(filtered.reduce((sum,c)=>sum+Number(c[key]||0),0))]))};
   const articles=filtered.flatMap(c=>{
     const parts={transport:allocate(c.devisTransport,c.lines),taxes:allocate(Number(c.devisOM||0)+Number(c.devisOMR||0),c.lines),tva:allocate(c.devisTVA,c.lines),fees:allocate(c.fees,c.lines)};
-    return c.lines.map((line,i)=>({'Réf. expédition':c.ref,'Article':line.desc,'Qté':line.qte,'Prix achat unitaire (€)':Number(line.prix),'Prix achat total (€)':roundMoney(Number(line.qte)*Number(line.prix)),'Transport prorata (€)':parts.transport[i],'Taxes prorata (€)':parts.taxes[i],'TVA prorata (€)':parts.tva[i],'Frais prorata (€)':parts.fees[i],'COÛT DE REVIENT (€)':roundMoney(Number(line.qte)*Number(line.prix)+parts.transport[i]+parts.taxes[i]+parts.tva[i]+parts.fees[i])}));
+    return c.lines.map((line,i)=>({'Réf. expédition':c.ref,'Article':line.desc,'Qté':line.qte,'Prix achat unitaire (€)':Number(line.prix),'Prix achat total (€)':roundMoney(Number(line.qte)*Number(line.prix)),'Transport prorata (€)':parts.transport[i],...(withTaxes?{'Estimation des taxes à l’importation prorata (€)':roundMoney(parts.taxes[i]+parts.tva[i])}:{}),'Frais prorata (€)':parts.fees[i],'COÛT DE REVIENT (€)':roundMoney(Number(line.qte)*Number(line.prix)+parts.transport[i]+parts.taxes[i]+parts.tva[i]+parts.fees[i])}));
   });
   const dest=getDestByCP(client.cp);
   const period=new Date(Date.UTC(year,month,15)).toLocaleDateString('fr-FR',{month:'long',year:'numeric',timeZone:'UTC'});

@@ -136,7 +136,7 @@ export function clientTaskExplanation(colis, client = {}, task = clientWorkState
     if (task.action === 'Corriger une facture') return `Une de vos factures doit être corrigée${NB}: la raison est indiquée dans «${NB}Mes factures${NB}». Dès réception de la nouvelle version, notre équipe la vérifie.`;
     const why = client?.type === 'pro'
       ? 'Votre facture d’achat justifie la valeur de vos achats pour les formalités de douane.'
-      : `Votre facture d’achat nous permet d’établir votre devis${NB}: elle justifie la valeur de vos achats pour le calcul de l’octroi de mer.`;
+      : `Votre facture d’achat nous permet d’établir votre devis${NB}: elle justifie la valeur de vos achats pour l’estimation des taxes à l’importation.`;
     const after = ['receptionne', 'mesure'].includes(colis?.statut)
       ? `Dès réception, notre équipe la vérifie${NB}; vous recevrez aussi la demande d’accord pour préparer vos cartons.`
       : 'Dès réception, notre équipe la vérifie puis prépare votre devis.';

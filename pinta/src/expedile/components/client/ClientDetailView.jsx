@@ -14,7 +14,7 @@ import { plural, pluralWord } from '../../domain/plural';
 import {
   cartonManifest, clientJourney, clientWorkState, quotePresentation, PAYMENT_TERMS, outgoingTracking, latestShipmentNews,
   clientDate, clientDay, clientPhaseState, clientTaskExplanation, plannedDepartureMessage, plannedDepartureShown, cartonMeasures,
-  measureText, frenchNumber, firstWaitDay, waitUntilInstant,
+  measureText, firstWaitDay, waitUntilInstant,
 } from '../../domain/clientJourney';
 import { useApp } from '../../context/AppContext';
 import { SecureImage } from '../ui/SecureFile';
@@ -22,6 +22,8 @@ import { BRAND, PHASES_CLIENT, getPhaseIndex, getDestByCP } from '../../constant
 
 import { eur } from '../../utils';
 import { Ligne, ProgressBar } from '../ui';
+import ImportTaxLines from '../ui/ImportTaxLines';
+import { importTaxEstimate } from '../../domain/importTaxes';
 
 // ── Phase icons ────────────────────────────────────────────────────────────────
 const PHASE_ICONS = [Package, CheckCircle, Wrench, CreditCard, Plane, Shield, Warehouse, Truck];
@@ -112,7 +114,7 @@ function CartonMeasures({ colis, pendingText = '' }) {
 export default function ClientDetailView() {
   const navigate = useNavigate();
   const [, setParams] = useSearchParams();
-  const { sel, selDest, feuVert, ask, flash, authCl, envois = [], fetchPlannedDepartures, refreshColis } = useApp();
+  const { sel, selDest, feuVert, ask, flash, authCl, envois = [], fetchPlannedDepartures, refreshColis, settings } = useApp();
 
   const curPhaseIdx = sel ? getPhaseIndex(sel.statut) : 0;
   const [timeOpen, setTimeOpen] = useState(curPhaseIdx);
@@ -253,7 +255,8 @@ export default function ClientDetailView() {
     else openPanel('messages');
   };
   const downloadQuote = async () => {
-    try { const { exportDevisPDF } = await import('../../utils/exportDevisPDF'); await exportDevisPDF(sel, authCl, getDestByCP(authCl?.cp)); }
+    // The issuer's legal identity comes from the shared settings (Paramètres › Facture commerciale).
+    try { const { exportDevisPDF } = await import('../../utils/exportDevisPDF'); await exportDevisPDF(sel, authCl, getDestByCP(authCl?.cp), { business: settings, audience: 'client' }); }
     catch (error) { flash({ msg: 'Le PDF n’a pas pu être généré. ' + error.message, type: 'error' }); }
   };
 
@@ -430,6 +433,9 @@ export default function ClientDetailView() {
       const payLink = Boolean(sel.payplugPaymentUrl);
       const savings = Number(price.economie) > 0 ? Number(price.economie) : 0;
       const showQuote = hasDevis && !updating;
+      // The amounts saved as octroi de mer, OMR and « TVA »: an estimate of the import taxes of the destination,
+      // paid on arrival and part of the price (decision of 10 October 2026); none for a professional quote.
+      const taxes = importTaxEstimate({ om: price.devisOM, omr: price.devisOMR, tva: price.devisTVA }, published.destination, { professional: quotePro });
 
       return (
         <div className="max-w-xl space-y-3">
@@ -470,13 +476,8 @@ export default function ClientDetailView() {
                   </div>
                 )}
                 <Ligne label="Transport optimisé" value={eur(price.devisTransport)} />
-                {/* Taxes douanières par catégorie */}
-                {price.devisOM > 0 && <Ligne label="Octroi de mer" value={eur(price.devisOM)} />}
-                {price.devisOMR > 0 && <Ligne label="Octroi de mer régional" value={eur(price.devisOMR)} />}
+                {taxes?.lines.length > 0 && <ImportTaxLines estimate={taxes} />}
                 {(price.fraisDivers || []).filter((f) => Number(f.montant) > 0).map((f, i) => <Ligne key={i} label={f.libelle || f.label || f.nom || 'Frais complémentaires'} value={eur(f.montant)} />)}
-                {price.devisTVA != null && price.devisTVA > 0 && (
-                  <Ligne label={published.destination.tva == null ? 'TVA (taux historique non documenté)' : `TVA (${frenchNumber(published.destination.tva, '%')})`} value={eur(price.devisTVA)} />
-                )}
                 <div className="mt-2 border-t border-slate-200 pt-2">
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-black text-slate-900">Total</span>

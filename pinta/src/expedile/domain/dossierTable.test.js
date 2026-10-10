@@ -452,7 +452,7 @@ test('short header labels keep the words of their full label, in order, and neve
     assert.deepEqual(exported.map(column => column.label), TABLE_COLUMNS[view].filter(column => exported.some(item => item.key === column.key)).map(column => column.label));
     assert.ok(exported.every(column => !('shortLabel' in column)));
   }
-  assert.deepEqual(dossierTableExportColumns('daily', TABLE_COLUMNS.daily).map(column => column.label), ['Référence', 'Client', 'Dernière réception', 'Statut du dossier', 'Paiement', 'Travail à faire', 'Qui s’en occupe', 'Casier', 'Cartons reçus', 'Dimensions finales', 'Poids final (kg)', 'Prix du devis', 'Transport', 'Taxes calculées']);
+  assert.deepEqual(dossierTableExportColumns('daily', TABLE_COLUMNS.daily).map(column => column.label), ['Référence', 'Client', 'Dernière réception', 'Statut du dossier', 'Paiement', 'Travail à faire', 'Qui s’en occupe', 'Casier', 'Cartons reçus', 'Dimensions finales', 'Poids final (kg)', 'Prix du devis', 'Transport', 'Taxes à l’importation estimées']);
 });
 
 test('the server relance before the departure closing is work to do, not an awaited consent', () => {
@@ -643,13 +643,13 @@ test('the client column sorts on the name the rows show, family name first', () 
   assert.equal(column.sort.value({ client: undefined }), null);
 });
 
-// ── « Taxes calculées » ─────────────────────────────────────────────────────
+// ── « Taxes à l’importation estimées » ─────────────────────────────────────────────────────
 // The saved quote of 1 October: OM 10, OMR 5, TVA 5 on a total of 100.
 const savedQuote = (amounts, extra = {}) => ({ version: 1, amounts: { transport: 80, fees: 0, ...amounts }, inputs: { client: { type: 'particulier' } }, ...extra });
 const taxed = { ...quoted, devisSnapshot: savedQuote({ om: 10, omr: 5, tva: 5, total: 100 }) };
 const taxesOf = dossier => model(dossier, base).quoteTaxes;
 
-test('« Taxes calculées » adds OM, OMR and TVA of the saved quote whose price the list shows, in cents', () => {
+test('« Taxes à l’importation estimées » adds OM, OMR and TVA of the saved quote whose price the list shows, in cents', () => {
   assert.deepEqual(taxesOf(taxed), { amount: 20, stateLabel: '', pro: false });
   assert.equal(model(taxed, base).quotePrice.amount, 100, 'The same quote gives the price.');
   // 0,10 + 0,20 + 0,30 is 0,60, never 0.6000000000000001.
@@ -728,7 +728,7 @@ test('in « Paiements » the taxes go with « Demandé »: a draft or a quote to
   assert.ok(counted(taxes).every(id => counted(requested).includes(id)));
   // The spreadsheet of « Paiements » says the same.
   const { rows: exported } = buildDossierTableExport(rows, [], models, 'payments', TABLE_COLUMNS.payments);
-  assert.deepEqual(exported.map(row => [row['Demandé'], row['Taxes calculées']]), [[100, 20], ['À calculer', 'À calculer'], ['À vérifier', 'À vérifier'], [80, 0], ['À calculer', 'À calculer']]);
+  assert.deepEqual(exported.map(row => [row['Demandé'], row['Taxes à l’importation estimées']]), [[100, 20], ['À calculer', 'À calculer'], ['À vérifier', 'À vérifier'], [80, 0], ['À calculer', 'À calculer']]);
 });
 
 test('the taxes column is financial, sorts as a number and sits after the price and its transport (after « Demandé » in « Paiements »)', () => {
@@ -739,7 +739,7 @@ test('the taxes column is financial, sorts as a number and sits after the price 
   }
   assert.equal(keys('accords').includes('taxes'), false);
   const column = TABLE_COLUMNS.daily.find(item => item.key === 'taxes');
-  assert.deepEqual([column.label, column.shortLabel, column.align, column.financial, column.sort.type], ['Taxes calculées', 'Taxes', 'right', true, 'number']);
+  assert.deepEqual([column.label, column.shortLabel, column.align, column.financial, column.sort.type], ['Taxes à l’importation estimées', 'Taxes', 'right', true, 'number']);
   const rows = [{ ...taxed, id: 'twenty' }, { ...dossier, id: 'unknown' }, { ...taxed, id: 'six', devisTotal: 86, devisSnapshot: savedQuote({ om: 3, omr: 1, tva: 2, total: 86 }) }];
   const models = new Map(rows.map(row => [row.id, model(row, base)]));
   assert.deepEqual(sortDossierTableRows(rows, { column, models }).map(row => row.id), ['six', 'twenty', 'unknown']);
@@ -755,8 +755,8 @@ test('the export writes the taxes as a number in its format, or the cell’s wor
     const models = new Map(items.map(row => [row.id, model(row, { ...base, view })]));
     const { rows, formats } = buildDossierTableExport(items, [], models, view, TABLE_COLUMNS[view].filter(column => ['ref', 'taxes'].includes(column.key)));
     const payments = view === 'payments';
-    assert.deepEqual(rows.map(row => row['Taxes calculées']), [20, 0, payments ? 'À calculer' : 12.67, 'À vérifier', 'À calculer'], view);
-    assert.deepEqual(formats.map(format => format['Taxes calculées']), ['#,##0.00 "€"', '#,##0.00 "€";-#,##0.00 "€";"Sans taxes (pro)"', payments ? undefined : '#,##0.00 "€ · Brouillon"', undefined, undefined], view);
+    assert.deepEqual(rows.map(row => row['Taxes à l’importation estimées']), [20, 0, payments ? 'À calculer' : 12.67, 'À vérifier', 'À calculer'], view);
+    assert.deepEqual(formats.map(format => format['Taxes à l’importation estimées']), ['#,##0.00 "€"', '#,##0.00 "€";-#,##0.00 "€";"Sans taxes (pro)"', payments ? undefined : '#,##0.00 "€ · Brouillon"', undefined, undefined], view);
   }
   assert.equal(dossierTableExportColumns('accords', TABLE_COLUMNS.daily).some(column => column.key === 'taxes'), false, 'No taxes in « Accords clients ».');
 });
@@ -853,7 +853,7 @@ test('in « Paiements » the transport goes with « Demandé », as the taxes do
   assert.deepEqual(counted(transport), counted(taxes));
   // The spreadsheet of « Paiements » says the same.
   const { rows: exported } = buildDossierTableExport(rows, [], models, 'payments', TABLE_COLUMNS.payments);
-  assert.deepEqual(exported.map(row => [row['Demandé'], row.Transport, row['Taxes calculées']]), [[100, 80, 20], ['À calculer', 'À calculer', 'À calculer'], ['À vérifier', 'À vérifier', 'À vérifier'], [80, 75, 0], ['À calculer', 'À calculer', 'À calculer'], [100, 'À vérifier', 'À vérifier']]);
+  assert.deepEqual(exported.map(row => [row['Demandé'], row.Transport, row['Taxes à l’importation estimées']]), [[100, 80, 20], ['À calculer', 'À calculer', 'À calculer'], ['À vérifier', 'À vérifier', 'À vérifier'], [80, 75, 0], ['À calculer', 'À calculer', 'À calculer'], [100, 'À vérifier', 'À vérifier']]);
 });
 
 test('the transport column is financial, reads « Transport », sorts as a number and sits between the price and the taxes', () => {
@@ -885,5 +885,5 @@ test('the export writes the transport as a number in its format, or the cell’s
     assert.deepEqual(formats.map(format => format.Transport), ['#,##0.00 "€"', '#,##0.00 "€"', payments ? undefined : '#,##0.00 "€ · Brouillon"', undefined, undefined], view);
   }
   assert.equal(dossierTableExportColumns('accords', TABLE_COLUMNS.daily).some(column => column.key === 'transport'), false, 'No transport in « Accords clients ».');
-  assert.deepEqual(dossierTableExportColumns('payments', TABLE_COLUMNS.payments).map(column => column.label), ['Référence', 'Client', 'Dernière réception', 'Statut du dossier', 'Paiement', 'Demandé', 'Transport', 'Taxes calculées', 'Payé', 'Reste à payer', 'Devis envoyé le']);
+  assert.deepEqual(dossierTableExportColumns('payments', TABLE_COLUMNS.payments).map(column => column.label), ['Référence', 'Client', 'Dernière réception', 'Statut du dossier', 'Paiement', 'Demandé', 'Transport', 'Taxes à l’importation estimées', 'Payé', 'Reste à payer', 'Devis envoyé le']);
 });

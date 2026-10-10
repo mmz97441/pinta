@@ -1,6 +1,14 @@
 import { getDestByCP } from './index';
 // Message text: same amount format as the saved templates and the Edge renderer.
 import { messageEur as eur, trackStr, getPrenom, nbCartons, renderCartonsDetail } from '../utils';
+import { importTaxMessage } from '../domain/importTaxes';
+
+// The quote's taxes as the client reads them since 10 October 2026: an estimate of the import taxes, paid on
+// arrival and included in the price (domain/importTaxes.js), never « TVA (8,5 %) » or « Taxes douanières ».
+const taxEstimate = (c, colis, dest) => importTaxMessage(
+  { om: colis.devisOM, omr: colis.devisOMR, tva: colis.devisTVA, total: colis.devisTotal },
+  dest, { professional: c.type === 'pro', money: eur },
+);
 
 // Poids réel total + poids volumétrique total d'un colis, calculés à partir
 // des mesures par carton si dispo, sinon à partir des dims globales.
@@ -429,7 +437,6 @@ L'équipe Expedîle`,
     },
     telegram: (c, colis) => {
       const dest = getDestByCP(c.cp);
-      const taxes = (colis.devisOM || 0) + (colis.devisOMR || 0);
       const pf = colis.poidsFact || colis.finP || colis.poids || 0;
       const cartonsInfo = devisCartonsDetail(colis, 'telegram');
       // Poids vol. avant optimisation (somme des cartons)
@@ -450,9 +457,7 @@ ${colis.lignes?.length > 0 ? `\n📋 *Contenu déclaré :*\n${colis.lignes.map((
 💰 *DÉTAIL DU DEVIS*
 ━━━━━━━━━━━━━━━━
 🚀 Transport : *${eur(colis.devisTransport)}*
-🏛️ Taxes douanières : *${eur((colis.devisOM || 0) + (colis.devisOMR || 0))}*
-${(colis.devisOM > 0 || colis.devisOMR > 0) ? `   _(Octroi de Mer + Octroi de Mer Régional, calculés sur la valeur de vos articles)_\n` : ''}
-📊 TVA (${dest.tva}%) : *${eur(colis.devisTVA)}*
+🏛️ ${taxEstimate(c, colis, dest)}
 ${colis.fraisDivers?.length > 0 ? colis.fraisDivers.map((f) => `📎 ${f.libelle} : *${eur(f.montant)}*`).join('\n') + '\n' : ''}━━━━━━━━━━━━━━━━
 💰 *TOTAL : ${eur(colis.devisTotal)}*
 ━━━━━━━━━━━━━━━━
@@ -468,7 +473,6 @@ _L'équipe Expedîle — Paris → ${dest.nom}_`;
     },
     email: (c, colis) => {
       const dest = getDestByCP(c.cp);
-      const taxes = (colis.devisOM || 0) + (colis.devisOMR || 0);
       const pf = colis.poidsFact || colis.finP || colis.poids || 0;
       const cartonsInfo = devisCartonsDetail(colis, 'email');
       const pvAvant = colis.dimL ? ((colis.dimL * colis.dimW * colis.dimH) / 5000) : 0;
@@ -494,9 +498,7 @@ ${colis.lignes?.length > 0 ? `\nContenu déclaré :\n${colis.lignes.map((l) => `
 💰 DÉTAIL DU DEVIS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🚀 Transport ........................ ${eur(colis.devisTransport)}
-🏛️ Taxes douanières ................. ${eur((colis.devisOM || 0) + (colis.devisOMR || 0))}
-   (Octroi de Mer + Octroi de Mer Régional)
-📊 TVA (${dest.tva}%) ..................... ${eur(colis.devisTVA)}
+🏛️ ${taxEstimate(c, colis, dest)}
 ${colis.fraisDivers?.length > 0 ? colis.fraisDivers.map((f) => `📎 ${f.libelle} ..................... ${eur(f.montant)}`).join('\n') + '\n' : ''}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 💰 TOTAL                              ${eur(colis.devisTotal)}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

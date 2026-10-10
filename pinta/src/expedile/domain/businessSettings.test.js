@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { BUSINESS_FIELDS, INVOICE_IDENTITY_FIELD_ORDER, INVOICE_IDENTITY_NEEDS_BUSINESS, REMINDER_DEFAULTS, businessDraftValues, businessSettingsPayload, invoiceConsigneeStates, invoiceIdentityDraftValues, invoiceIdentitySettingsPayload, invoicePartyState, sameBusinessValues, sameStoredValue, validateBusinessValues } from './businessSettings.js';
-import { CONSIGNEE_KEYS, PARTY_FIELDS, invoiceIdentity, validateInvoiceIdentity } from './invoiceIdentity.js';
+import { CONSIGNEE_KEYS, EXPORTER_FIELDS, LEGAL_FIELDS, PARTY_FIELDS, invoiceIdentity, quoteIssuerIdentity, validateInvoiceIdentity } from './invoiceIdentity.js';
 
 // The seed of app_settings.business (20260910000001_application_schema.sql) plus later keys.
 const STORED = { fraisStockage: '1.50', stockageGratuit: '14', relancesFeuVert: 'J+2,J+5,J+7', relancesPaiement: 'J+3,J+7,J+14', diviseurVolumetrique: '5000', timezone: 'Europe/Paris', relancesActivesDepuis: '2026-09-01T00:00:00Z', futureKey: { nested: [1, 2] } };
@@ -52,14 +52,16 @@ test('each invalid value gets its own message; nothing is saved from an invalid 
 // yet: the one below is a test value only.
 const REUNION = { nom: 'Expedîle', adresse: '5 Chemin Grand Canal', complement: 'Immeuble Thales', codePostal: '97490', ville: 'Sainte-Clotilde', pays: 'La Réunion (France)' };
 const EXPORTER = { nom: 'Expedîle', adresse: '10 allée de l’Essai', codePostal: '95700', ville: 'Roissy-en-France', pays: 'France', email: 'contact@exemple.fr', siret: '123 456 789 00012', eori: 'fr12345678900012' };
-const party = (values = {}) => Object.fromEntries(PARTY_FIELDS.map(key => [key, values[key] ?? '']));
-const form = ({ expediteur = EXPORTER, destinataires = { 974: REUNION } } = {}) => ({ expediteur: party(expediteur), destinataires: Object.fromEntries(CONSIGNEE_KEYS.map(key => [key, party(destinataires[key])])) });
+const party = (values = {}, fields = PARTY_FIELDS) => Object.fromEntries(fields.map(key => [key, values[key] ?? '']));
+// The exporter also holds the legal mentions of the quote (forme juridique, capital, ville du greffe).
+const exporter = (values = {}) => party(values, EXPORTER_FIELDS);
+const form = ({ expediteur = EXPORTER, destinataires = { 974: REUNION } } = {}) => ({ expediteur: exporter(expediteur), destinataires: Object.fromEntries(CONSIGNEE_KEYS.map(key => [key, party(destinataires[key])])) });
 
 test('Facture commerciale: the save keeps every stored key and replaces factureCommerciale with the validated form', () => {
   const { payload, errors, blocked } = invoiceIdentitySettingsPayload(STORED, form());
   assert.deepEqual(errors, {}); assert.equal(blocked, null);
   assert.deepEqual(payload, { ...STORED, factureCommerciale: {
-    expediteur: { ...party(EXPORTER), siret: '12345678900012', eori: 'FR12345678900012' },
+    expediteur: { ...exporter(EXPORTER), siret: '12345678900012', eori: 'FR12345678900012' },
     destinataires: { 974: party(REUNION) },
   } });
   for (const key of Object.keys(STORED)) assert.deepEqual(payload[key], STORED[key], `${key} is kept as stored`);
@@ -98,7 +100,8 @@ test('Facture commerciale: the form keeps what is typed, spaces included, for ev
   assert.equal(draft.expediteur.adresse, '5 Chemin ', 'A trailing space survives while typing.');
   assert.equal(draft.expediteur.codePostal, '97490');
   assert.deepEqual(Object.keys(draft.destinataires).sort(), [...CONSIGNEE_KEYS].sort());
-  for (const value of [draft.expediteur, ...Object.values(draft.destinataires)]) assert.deepEqual(Object.keys(value), PARTY_FIELDS);
+  assert.deepEqual(Object.keys(draft.expediteur), EXPORTER_FIELDS, 'The exporter has its legal mentions too.');
+  for (const value of Object.values(draft.destinataires)) assert.deepEqual(Object.keys(value), PARTY_FIELDS, 'A consignee has no legal mention of the quote.');
   assert.deepEqual(invoiceIdentityDraftValues(null), invoiceIdentityDraftValues({ expediteur: [], destinataires: 'x' }));
   assert.equal(invoiceIdentityDraftValues(null).expediteur.nom, '');
 });
@@ -131,9 +134,10 @@ test('Facture commerciale: the default consignee row warns while a destination r
 });
 
 test('Facture commerciale: the fields are ordered as the form reads, keyed as the validation keys its errors', () => {
-  assert.equal(INVOICE_IDENTITY_FIELD_ORDER.length, PARTY_FIELDS.length * (1 + CONSIGNEE_KEYS.length));
+  assert.equal(INVOICE_IDENTITY_FIELD_ORDER.length, EXPORTER_FIELDS.length + PARTY_FIELDS.length * CONSIGNEE_KEYS.length);
   assert.deepEqual(INVOICE_IDENTITY_FIELD_ORDER.slice(0, 3), ['expediteur.nom', 'expediteur.adresse', 'expediteur.complement']);
-  assert.deepEqual([...new Set(INVOICE_IDENTITY_FIELD_ORDER.slice(PARTY_FIELDS.length).map(key => key.split('.')[1]))], ['defaut', '974', '976', '971', '972']);
+  assert.deepEqual(INVOICE_IDENTITY_FIELD_ORDER.slice(PARTY_FIELDS.length, EXPORTER_FIELDS.length), ['expediteur.formeJuridique', 'expediteur.capital', 'expediteur.rcsVille'], 'The legal mentions follow the exporter’s identifiers.');
+  assert.deepEqual([...new Set(INVOICE_IDENTITY_FIELD_ORDER.slice(EXPORTER_FIELDS.length).map(key => key.split('.')[1]))], ['defaut', '974', '976', '971', '972']);
   const { errors } = validateInvoiceIdentity(form({ expediteur: { email: 'x' }, destinataires: Object.fromEntries(CONSIGNEE_KEYS.map(key => [key, { email: 'x' }])) }));
   for (const key of Object.keys(errors)) assert.ok(INVOICE_IDENTITY_FIELD_ORDER.includes(key), `${key} has a place in the form`);
 });
@@ -152,4 +156,53 @@ test('Stockage et rappels compares its three values only: an invoice identity sa
   assert.equal(sameBusinessValues(STORED, { ...STORED, fraisStockage: 1.5 }), false, 'Compared as stored: « 1.50 » and 1.5 differ, the save then expects the version it started from.');
   assert.equal(sameBusinessValues(null, STORED), false);
   assert.equal(sameBusinessValues(null, {}), true);
+});
+
+// ── The issuer's legal identity on the quote (F10, decision of 10 October 2026) ──
+const LEGAL = { nom: 'Expedîle France (essai)', formeJuridique: 'SAS', capital: '10000', adresse: '10 allée de l’Essai', codePostal: '95700', ville: 'Roissy-en-France', pays: 'France', siret: '12345678900012', rcsVille: 'Pontoise', tva: 'FR00123456789' };
+
+test('Facture commerciale: the legal mentions of the quote are the exporter’s own fields, checked and tidied, every stored key kept', () => {
+  assert.deepEqual(LEGAL_FIELDS, ['formeJuridique', 'capital', 'rcsVille']);
+  assert.deepEqual(EXPORTER_FIELDS, [...PARTY_FIELDS, ...LEGAL_FIELDS]);
+  // « 10 000 € » and « RCS Pontoise » as typed: stored as digits and as the town alone.
+  const { payload, errors } = invoiceIdentitySettingsPayload(STORED, form({ expediteur: { ...EXPORTER, formeJuridique: 'SAS', capital: '10 000 €', rcsVille: 'RCS Pontoise' } }));
+  assert.deepEqual(errors, {});
+  assert.deepEqual([payload.factureCommerciale.expediteur.formeJuridique, payload.factureCommerciale.expediteur.capital, payload.factureCommerciale.expediteur.rcsVille], ['SAS', '10000', 'Pontoise']);
+  assert.equal(validateInvoiceIdentity(form({ expediteur: { ...EXPORTER, capital: '1 500,50' } })).value.expediteur.capital, '1500.50');
+  // Optional for the commercial invoice: empty mentions never block a save.
+  assert.deepEqual(validateInvoiceIdentity(form()).errors, {});
+  // A wrong capital or a lone « RCS » is refused under its field.
+  const wrong = validateInvoiceIdentity(form({ expediteur: { ...EXPORTER, capital: 'dix mille', rcsVille: 'RCS' } })).errors;
+  assert.deepEqual(wrong, { 'expediteur.capital': 'Indiquez le capital social en euros, par exemple 10 000.', 'expediteur.rcsVille': 'Indiquez la ville du greffe, par exemple Paris.' });
+  for (const value of ['0', '-5', '12,345', '10 000 000,001']) assert.ok(validateInvoiceIdentity(form({ expediteur: { ...EXPORTER, capital: value } })).errors['expediteur.capital'], `« ${value} » is refused`);
+  // A key stored on a party that this form does not show is kept (a later field, another version of the screen).
+  const stored = { ...STORED, factureCommerciale: { expediteur: { ...EXPORTER, champFutur: 'gardé' }, destinataires: { 974: { ...REUNION, horaires: '8 h – 16 h' } } } };
+  const saved = invoiceIdentitySettingsPayload(stored, form({ expediteur: { ...EXPORTER, formeJuridique: 'SAS' } })).payload.factureCommerciale;
+  assert.equal(saved.expediteur.champFutur, 'gardé');
+  assert.equal(saved.expediteur.formeJuridique, 'SAS');
+  assert.equal(saved.destinataires['974'].horaires, '8 h – 16 h');
+  // The commercial invoice reads the same identity: the mentions never reach a consignee.
+  assert.deepEqual(Object.keys(invoiceIdentity(payload).expediteur), EXPORTER_FIELDS);
+  assert.deepEqual(Object.keys(invoiceIdentity(payload).destinataires['974']), PARTY_FIELDS);
+});
+
+test('the quote prints the issuer’s legal identity only when complete, from stored values only', () => {
+  const business = expediteur => ({ ...STORED, factureCommerciale: { expediteur } });
+  assert.deepEqual(quoteIssuerIdentity(business(LEGAL)), { complete: true, missing: [], lines: [
+    'Expedîle France (essai), SAS au capital de 10\u202f000\u00a0€',
+    'Siège social\u00a0: 10 allée de l’Essai, 95700 Roissy-en-France',
+    'RCS Pontoise 123 456 789 · SIRET 123 456 789 00012',
+    'N° de TVA intracommunautaire\u00a0: FR00123456789',
+  ] });
+  // Nothing stored: every mention is named, nothing is printed (the name « Expedîle » the form proposes is not stored).
+  const none = quoteIssuerIdentity({});
+  assert.equal(none.complete, false); assert.deepEqual(none.lines, []);
+  assert.deepEqual(none.missing, ['raison sociale', 'forme juridique', 'capital social', 'adresse du siège', 'code postal du siège', 'ville du siège', 'SIRET', 'ville du greffe (RCS)', 'numéro de TVA']);
+  // The commercial invoice's exporter already set: only the three mentions and the VAT number are missing.
+  assert.deepEqual(quoteIssuerIdentity(business({ ...EXPORTER, siret: '12345678900012' })).missing, ['forme juridique', 'capital social', 'ville du greffe (RCS)', 'numéro de TVA']);
+  // A value that is not one counts as missing, never printed as is.
+  assert.deepEqual(quoteIssuerIdentity(business({ ...LEGAL, siret: '123', capital: 'beaucoup' })).missing, ['capital social', 'SIRET']);
+  // A seat outside France says its country; complement printed with the address.
+  assert.equal(quoteIssuerIdentity(business({ ...LEGAL, complement: 'Bâtiment C', pays: 'Belgique' })).lines[1], 'Siège social\u00a0: 10 allée de l’Essai, Bâtiment C, 95700 Roissy-en-France, Belgique');
+  assert.equal(quoteIssuerIdentity(business({ ...LEGAL, capital: '1500.5' })).lines[0], 'Expedîle France (essai), SAS au capital de 1\u202f500,50\u00a0€');
 });

@@ -1,4 +1,4 @@
-import { CONSIGNEE_KEYS, PARTY_FIELDS, missingPartyFields, normalizeParty, partyFilled, validateInvoiceIdentity } from './invoiceIdentity.js';
+import { CONSIGNEE_KEYS, EXPORTER_FIELDS, PARTY_FIELDS, missingPartyFields, normalizeParty, partyFilled, validateInvoiceIdentity } from './invoiceIdentity.js';
 
 /** app_settings.business as edited in Paramètres › Stockage et rappels and
  * Paramètres › Facture commerciale.
@@ -68,8 +68,8 @@ export const sameBusinessValues = (a, b) => sameStoredValue(businessDraftValues(
 /** The form's values: every party and field as a string, as typed (spaces kept until the save tidies them). */
 export function invoiceIdentityDraftValues(input) {
   const source = plainObject(input);
-  const party = value => Object.fromEntries(PARTY_FIELDS.map(key => [key, String(plainObject(value)[key] ?? '')]));
-  return { expediteur: party(source.expediteur), destinataires: Object.fromEntries(CONSIGNEE_KEYS.map(key => [key, party(plainObject(source.destinataires)[key])])) };
+  const party = (value, fields = PARTY_FIELDS) => Object.fromEntries(fields.map(key => [key, String(plainObject(value)[key] ?? '')]));
+  return { expediteur: party(source.expediteur, EXPORTER_FIELDS), destinataires: Object.fromEntries(CONSIGNEE_KEYS.map(key => [key, party(plainObject(source.destinataires)[key])])) };
 }
 
 /** What a party of the form amounts to: 'set' (complete), 'incomplete' (filled, a required field
@@ -96,7 +96,7 @@ export function invoiceConsigneeStates(destinataires) {
 /** The form's fields in reading order (exporter, default consignee, then each destination),
  *  keyed as validateInvoiceIdentity keys its errors: the first wrong one takes the focus. */
 export const INVOICE_IDENTITY_FIELD_ORDER = Object.freeze([
-  ...PARTY_FIELDS.map(field => `expediteur.${field}`),
+  ...EXPORTER_FIELDS.map(field => `expediteur.${field}`),
   ...CONSIGNEE_KEYS.flatMap(key => PARTY_FIELDS.map(field => `destinataires.${key}.${field}`)),
 ]);
 
@@ -116,6 +116,9 @@ export function invoiceIdentitySettingsPayload(stored, form) {
   if (Object.keys(validateBusinessValues(businessDraftValues(stored)).errors).length) return { payload: null, errors: {}, blocked: INVOICE_IDENTITY_NEEDS_BUSINESS };
   const previous = plainObject(plainObject(stored).factureCommerciale);
   const others = Object.fromEntries(Object.entries(plainObject(previous.destinataires)).filter(([key]) => !CONSIGNEE_KEYS.includes(key)));
-  const factureCommerciale = { ...previous, ...value, destinataires: { ...others, ...value.destinataires } };
+  // A party keeps the stored keys this form does not show (a field added later, by another screen or version).
+  const kept = (before, party) => ({ ...plainObject(before), ...party });
+  const destinataires = Object.fromEntries(Object.entries(value.destinataires).map(([key, party]) => [key, kept(plainObject(previous.destinataires)[key], party)]));
+  const factureCommerciale = { ...previous, ...value, expediteur: kept(previous.expediteur, value.expediteur), destinataires: { ...others, ...destinataires } };
   return { payload: { ...businessSettingsPayload(stored, {}), factureCommerciale }, errors: {}, blocked: null };
 }

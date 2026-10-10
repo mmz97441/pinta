@@ -30,6 +30,11 @@ const PARTY_FIELDS = ['nom', 'adresse', 'complement', 'codePostal', 'ville', 'pa
 const LABELS = { nom: 'Nom ou raison sociale', adresse: 'Adresse', complement: 'Complément d’adresse', codePostal: 'Code postal', ville: 'Ville', pays: 'Pays', telephone: 'Téléphone', email: 'Email', siret: 'SIRET', eori: 'Numéro EORI', tva: 'Numéro de TVA' };
 const REQUIRED = ['nom', 'adresse', 'codePostal', 'ville', 'pays'];
 const full = values => Object.fromEntries(PARTY_FIELDS.map(key => [key, values[key] ?? '']));
+// The quote's legal mentions (decision of 10 October 2026, F10): the exporter's own fields, in their own group.
+const LEGAL_FIELDS = ['formeJuridique', 'capital', 'rcsVille'];
+const LEGAL_LABELS = { formeJuridique: 'Forme juridique', capital: 'Capital social (€)', rcsVille: 'Ville du greffe (RCS)' };
+const LEGAL_HELP = { formeJuridique: 'Par exemple SAS, SARL ou SASU.', capital: 'En euros, par exemple 10 000.', rcsVille: 'La ville seule : le devis écrit « RCS Paris ».' };
+const exporterFull = values => ({ ...full(values), ...Object.fromEntries(LEGAL_FIELDS.map(key => [key, values[key] ?? ''])) });
 // The consignee of La Réunion the user gave on 2026-10-08, as it is seeded in production.
 const REUNION = { nom: 'Expedîle', adresse: '5 Chemin Grand Canal', complement: 'Immeuble Thales', codePostal: '97490', ville: 'Sainte-Clotilde', pays: 'La Réunion (France)' };
 // app_settings.business: the storage rules, keys no screen shows, and the identity stored so far.
@@ -40,7 +45,7 @@ const FALLBACK = { nom: 'Transitaire DOM (essai)', adresse: '1 rue de l’Essai'
 // The default consignee, then the destinations: [key, title, group name].
 const BLOCKS = [['defaut', 'Destinataire par défaut', 'Destinataire par défaut'], ['974', 'La Réunion', 'Destinataire · La Réunion'], ['976', 'Mayotte', 'Destinataire · Mayotte'], ['971', 'Guadeloupe', 'Destinataire · Guadeloupe'], ['972', 'Martinique', 'Destinataire · Martinique']];
 const DRAFT_HELP = 'Brouillon conservé lorsque vous changez de rubrique. Les changements ne s’appliquent qu’après enregistrement.';
-const SAVED = 'Réglages de la facture commerciale enregistrés. Ils s’appliquent aux prochaines factures commerciales et étiquettes imprimées.';
+const SAVED = 'Réglages de la facture commerciale enregistrés. Ils s’appliquent aux prochaines factures commerciales, étiquettes et devis imprimés.';
 const RELOADED = 'Valeurs enregistrées rechargées. Le brouillon a été abandonné.';
 const CONFLICT = 'Ces réglages ont été modifiés entre-temps, par un collègue ou dans un autre onglet. Rien n’a été enregistré : rechargez les valeurs enregistrées, puis refaites vos modifications. Votre saisie reste affichée jusque-là.';
 
@@ -143,7 +148,7 @@ async function checkPanel(f) {
   assert.equal(flat(await panel.getByText(/^Brouillon conservé/).innerText()), DRAFT_HELP);
   // The exporter: Expedîle by default, its address still to set (never invented).
   const sender = exporter(f);
-  await sender.getByText('Imprimé en haut de chaque facture commerciale et comme expéditeur sur les étiquettes des colis.', { exact: true }).waitFor();
+  await sender.getByText('Imprimé en haut de chaque facture commerciale, comme expéditeur sur les étiquettes des colis et, avec les mentions légales ci-dessous, en haut des devis.', { exact: true }).waitFor();
   assert.deepEqual(await sender.locator('input').evaluateAll(nodes => nodes.map(node => node.id)), PARTY_FIELDS.map(key => `invoice-expediteur-${key}`));
   assert.deepEqual(await sender.locator('label').allTextContents(), PARTY_FIELDS.map(key => LABELS[key]));
   assert.deepEqual(await values(sender), full({ nom: 'Expedîle' }));
@@ -211,7 +216,7 @@ async function checkRows(f) {
   await reset(f); await open(f);
   await openBlock(f, '974');
   await field(consignee(f, 'Destinataire · La Réunion'), 'ville').waitFor();
-  const misaligned = await panelOf(f).locator('details[data-consignee="974"] .grid, [role="group"][aria-labelledby="invoice-expediteur-title"] .grid').evaluateAll(grids => grids.flatMap(grid => {
+  const misaligned = await panelOf(f).locator('details[data-consignee="974"] .grid, [role="group"][aria-labelledby="invoice-expediteur-title"] .grid, [role="group"][aria-labelledby="invoice-legal-title"] .grid').evaluateAll(grids => grids.flatMap(grid => {
     const boxes = [...grid.querySelectorAll('input')].filter(node => node.getClientRects().length).map(node => ({ id: node.id, box: node.getBoundingClientRect() }));
     return boxes.flatMap((a, index) => boxes.slice(index + 1)
       .filter(b => a.box.top < b.box.bottom && b.box.top < a.box.bottom && Math.abs(a.box.top - b.box.top) > 0.5)
@@ -279,7 +284,7 @@ async function checkErrors(f) {
 
 // ── 3 · A save: the whole stored object, factureCommerciale replaced, then read back ──
 const SAVED_IDENTITY = {
-  expediteur: full({ nom: 'Expedîle', ...EXPORTER, siret: '12345678900012', eori: 'FR12345678900012' }),
+  expediteur: exporterFull({ nom: 'Expedîle', ...EXPORTER, siret: '12345678900012', eori: 'FR12345678900012' }),
   destinataires: { defaut: full(FALLBACK), 974: full({ ...REUNION, complement: 'Immeuble Thales, 1er étage' }) },
 };
 async function fillValidForm(f) {
@@ -322,7 +327,7 @@ async function checkSave(f) {
   await f.page.evaluate(() => { for (const key of Object.keys(sessionStorage)) if (key.startsWith('expedile:draft:')) sessionStorage.removeItem(key); });
   await f.page.reload();
   await panelOf(f).getByRole('heading', { name: 'Facture commerciale', exact: true }).waitFor();
-  assert.deepEqual(await values(exporter(f)), SAVED_IDENTITY.expediteur);
+  assert.deepEqual(await values(exporter(f)), full(SAVED_IDENTITY.expediteur));
   await openBlock(f, '974');
   assert.deepEqual(await values(consignee(f, 'Destinataire · La Réunion')), SAVED_IDENTITY.destinataires['974']);
   assert.equal(flat(await block(f, '976').locator(':scope > summary').innerText()), 'Mayotte Destinataire par défaut utilisé');
@@ -335,6 +340,59 @@ async function checkSave(f) {
   assert.equal(f.server.calls.length, 2);
   assert.deepEqual(f.server.calls[1].p_expected, expected);
   assert.deepEqual(stored(f), { ...BUSINESS, factureCommerciale: { ...SAVED_IDENTITY, destinataires: { defaut: full(FALLBACK) } } });
+}
+
+// ── 3b · The quote's legal mentions (F10): their own group, a state that says what is missing, checked and stored ──
+const legalGroup = f => panelOf(f).getByRole('group', { name: 'Mentions légales des devis', exact: true });
+async function checkLegal(f) {
+  await reset(f); await open(f);
+  const legal = legalGroup(f);
+  await legal.getByText('Imprimées en haut de chaque devis PDF avec le nom, l’adresse du siège, le SIRET et le numéro de TVA de l’expéditeur ci-dessus. Tant qu’une mention manque, le devis remis au client garde son en-tête actuel : aucune valeur n’est inventée.', { exact: true }).waitFor();
+  assert.deepEqual(await legal.locator('input').evaluateAll(nodes => nodes.map(node => node.id)), LEGAL_FIELDS.map(key => `invoice-expediteur-${key}`));
+  assert.deepEqual(await legal.locator('label').allTextContents(), LEGAL_FIELDS.map(key => LEGAL_LABELS[key]));
+  for (const key of LEGAL_FIELDS) {
+    const input = legal.getByLabel(LEGAL_LABELS[key], { exact: true });
+    assert.equal(await input.getAttribute('aria-required'), null, `${key}: optional for the commercial invoice`);
+    assert.equal(await f.page.locator(`#${await input.getAttribute('aria-describedby')}`).textContent(), LEGAL_HELP[key], `${key}: its example, announced with the field`);
+  }
+  // Nothing stored but the name the form proposes: the state says what the quote still lacks, in amber.
+  assert.deepEqual(await stateOf(legal), ['legal-missing', 'À compléter']);
+  assert.equal(await warns(legal), true);
+  assert.equal(flat(await legal.getByTestId('invoice-legal-missing').innerText()), 'À compléter : forme juridique, capital social, adresse du siège, code postal du siège, ville du siège, SIRET, ville du greffe (RCS), numéro de TVA.');
+  // The exporter, then the mentions as one would type them: complete before any save.
+  await fill(exporter(f), EXPORTER);
+  assert.equal(flat(await legal.getByTestId('invoice-legal-missing').innerText()), 'À compléter : forme juridique, capital social, ville du greffe (RCS).');
+  const mention = key => legal.getByLabel(LEGAL_LABELS[key], { exact: true });
+  await mention('formeJuridique').fill('SAS'); await mention('capital').fill('dix mille'); await mention('rcsVille').fill('RCS Pontoise');
+  assert.deepEqual(await stateOf(legal), ['legal-missing', 'À compléter'], 'A capital that is not an amount is still missing.');
+  // Saved as typed: the wrong capital is refused under its field, it takes the focus, nothing is sent.
+  await button(f, 'Enregistrer').click();
+  await f.page.locator('#invoice-expediteur-capital-error').waitFor();
+  assert.equal(await f.page.locator('#invoice-expediteur-capital-error').textContent(), 'Indiquez le capital social en euros, par exemple 10 000.');
+  assert.equal(await mention('capital').getAttribute('aria-describedby'), 'invoice-expediteur-capital-help invoice-expediteur-capital-error');
+  assert.equal(await f.page.evaluate(() => document.activeElement?.id), 'invoice-expediteur-capital');
+  assert.equal(f.server.calls.length, 0);
+  await noPageOverflow(f, 'legal error'); await axe(f, 'legal error');
+  await mention('capital').fill('10 000');
+  assert.deepEqual(await stateOf(legal), ['legal-set', 'Complètes']);
+  assert.equal(await warns(legal), false);
+  assert.equal(await legal.getByTestId('invoice-legal-missing').count(), 0);
+  await button(f, 'Enregistrer').click();
+  await panelOf(f).getByRole('status').filter({ hasText: SAVED }).waitFor();
+  // Stored with the exporter, tidied (digits, the town alone), every other key kept.
+  const expected = { ...BUSINESS, factureCommerciale: { ...BUSINESS.factureCommerciale, expediteur: exporterFull({ nom: 'Expedîle', ...EXPORTER, siret: '12345678900012', eori: 'FR12345678900012', formeJuridique: 'SAS', capital: '10000', rcsVille: 'Pontoise' }), destinataires: { 974: full(REUNION) } } };
+  assert.deepEqual(f.server.calls[0], { p_key: 'business', p_value: expected, p_expected: BUSINESS });
+  assert.deepEqual(stored(f), expected);
+  // Read back from the database: the stored mentions, complete.
+  await f.page.evaluate(() => { for (const key of Object.keys(sessionStorage)) if (key.startsWith('expedile:draft:')) sessionStorage.removeItem(key); });
+  await f.page.reload();
+  await panelOf(f).getByRole('heading', { name: 'Facture commerciale', exact: true }).waitFor();
+  assert.deepEqual(await Promise.all(LEGAL_FIELDS.map(key => legalGroup(f).getByLabel(LEGAL_LABELS[key], { exact: true }).inputValue())), ['SAS', '10000', 'Pontoise']);
+  assert.deepEqual(await stateOf(legalGroup(f)), ['legal-set', 'Complètes']);
+  const small = await legalGroup(f).locator('input').evaluateAll(nodes => nodes.filter(node => node.getBoundingClientRect().height < 44).map(node => node.id));
+  assert.deepEqual(small, [], 'Touch targets of 44 px.');
+  await noPageOverflow(f, 'legal'); await axe(f, 'legal');
+  await tallShot(f, 'facture-legal');
 }
 
 // ── 4 · Reload and conflicts: a colleague's save is never written over ─────
@@ -389,8 +447,9 @@ async function checkConflicts(f) {
 async function checkKeyboard(f) {
   await reset(f); await open(f);
   const summary = key => block(f, key).locator(':scope > summary');
-  // From the exporter's last field, Tab reaches the first consignee row; Enter opens it, Tab enters it.
+  // From the exporter's last field, its legal mentions, then the first consignee row; Enter opens it, Tab enters it.
   await f.page.locator('#invoice-expediteur-tva').focus();
+  for (const key of LEGAL_FIELDS) { await f.page.keyboard.press('Tab'); assert.equal(await f.page.evaluate(() => document.activeElement?.id), `invoice-expediteur-${key}`); }
   await f.page.keyboard.press('Tab');
   assert.equal(await summary('defaut').evaluate(node => node === document.activeElement), true, 'Tab reaches the default consignee row.');
   const ring = await summary('defaut').evaluate(node => { const style = getComputedStyle(node); return [style.outlineStyle, style.outlineWidth]; });
@@ -545,6 +604,7 @@ async function main() {
         ['rows', checkRows],
         ['errors', checkErrors],
         ['save', checkSave],
+        ['legal', checkLegal],
         ['conflicts', checkConflicts],
         ['keyboard', checkKeyboard],
         ['two-panels', checkTwoPanels],

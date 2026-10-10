@@ -113,7 +113,7 @@ export function sanitizeHiddenColumns(columns, hidden, required = 'ref') {
   return Array.isArray(hidden) ? columns.filter(column => column.key !== required && hidden.includes(column.key)).map(column => column.key) : [];
 }
 /** The columns shown, in the order of the view: a column added since the
- * person saved their choices (« Taxes calculées », « Transport ») appears in its place, shown,
+ * person saved their choices (« Taxes à l’importation estimées », « Transport ») appears in its place, shown,
  * until they hide it. */
 export function visibleTableColumnKeys(columns, hidden) {
   return (columns || []).filter(column => !(hidden || []).includes(column.key)).map(column => column.key);

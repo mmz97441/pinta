@@ -15,7 +15,7 @@ test('pro export includes active articles only, grouped prepared weight and exac
 test('saved quote remains authoritative for weight, amounts and article allocation totals',()=>{
  const snapshot={inputs:{finalPackages:[box(2),box(5)],lines:[{description:'A',quantity:1,unitPrice:1},{description:'B',quantity:1,unitPrice:1},{description:'C',quantity:1,unitPrice:1}],volumetricDivisor:5000,fees:[]},amounts:{transport:10,om:0,omr:0,tva:0,total:10,billableWeight:7}};
  const result=buildProRecapWorkbook(client,[{...parcel,poidsFact:999,devisTotal:999,devisSnapshot:snapshot}],8,2026);
- const recap=XLSX.utils.sheet_to_json(result.workbook.Sheets['Récap colis']);assert.equal(recap[0]['Poids fact. (kg)'],7);assert.equal(recap[0]['Total TTC (€)'],10);
+ const recap=XLSX.utils.sheet_to_json(result.workbook.Sheets['Récap colis']);assert.equal(recap[0]['Poids fact. (kg)'],7);assert.equal(recap[0]['Total du devis (€)'],10);
  const articles=XLSX.utils.sheet_to_json(result.workbook.Sheets['Coût de revient']);assert.equal(articles.reduce((sum,l)=>sum+Math.round(l['Transport prorata (€)']*100),0),1000);
 });
 test('billing period excludes unpaid, other clients and other months',()=>{assert.equal(buildProRecapWorkbook(client,[{...parcel,statut:'devis_envoye'}],8,2026),null);assert.equal(buildProRecapWorkbook(client,[parcel],7,2026),null);assert.equal(clientPaymentLabel({methodePaiement:'30_jours'}),'Paiement à 30 jours');assert.equal(clientPaymentLabel({modePaiement:'fin_mois'}),'Paiement en fin de mois');});
@@ -44,4 +44,20 @@ test('the billing month is the Paris calendar month, whatever the device time zo
    assert.equal(summary.find(r=>r.Champ==='Période').Valeur,'septembre 2026',zone);
   }
  }finally{if(previous===undefined)delete process.env.TZ;else process.env.TZ=previous;}
+});
+// Decision of 10 October 2026: the recap handed to the professional client never shows « TVA », « OM » or « OMR »
+// as Expedîle's taxes, nor a « TTC » total; a former quote's taxes read as an estimate of the import taxes.
+test('the professional recap names no tax of the price: an estimate of the import taxes only when a former quote has one',()=>{
+ const headers=result=>Object.fromEntries(Object.entries(result.workbook.Sheets).map(([name,sheet])=>[name,XLSX.utils.sheet_to_json(sheet,{header:1})[0]]));
+ const legacy=buildProRecapWorkbook(client,[parcel],8,2026);
+ for(const [name,row] of Object.entries(headers(legacy)))for(const label of row)assert.doesNotMatch(String(label),/TVA|^OMR? |TTC|Octroi|^Taxes/,`${name}: ${label}`);
+ assert.ok(headers(legacy)['Récap colis'].includes('Estimation des taxes à l’importation (€)'));
+ const recap=XLSX.utils.sheet_to_json(legacy.workbook.Sheets['Récap colis']);assert.equal(recap[0]['Estimation des taxes à l’importation (€)'],7.76);assert.equal(recap[0]['Total du devis (€)'],17.77);
+ const articles=XLSX.utils.sheet_to_json(legacy.workbook.Sheets['Coût de revient']);assert.equal(articles[0]['Estimation des taxes à l’importation prorata (€)'],7.76);assert.equal(articles[0]['COÛT DE REVIENT (€)'],27.77,'The cost price is unchanged.');
+ const summary=XLSX.utils.sheet_to_json(legacy.workbook.Sheets['Résumé facturation']);assert.ok(summary.some(row=>row.Champ==='Estimation des taxes à l’importation (€)'));
+ for(const row of summary)assert.doesNotMatch(String(row.Champ),/TVA|TTC|Octroi|^OMR? /,row.Champ);
+ // A professional quote of today has no taxes: no estimate column at all, never a column of zeros.
+ const today=buildProRecapWorkbook(client,[{...parcel,devisOM:0,devisOMR:0,devisTVA:0,devisTotal:10.01}],8,2026);
+ for(const row of Object.values(headers(today)))assert.ok(!row.some(label=>/Estimation des taxes/.test(label)),row.join(', '));
+ assert.ok(!XLSX.utils.sheet_to_json(today.workbook.Sheets['Résumé facturation']).some(row=>/taxes/i.test(row.Champ)));
 });

@@ -61,8 +61,9 @@ const quotePriceColumn = financialColumn('requested', 'Prix du devis', 'quote', 
 // (quoteTransportModel): financial like the price. Its label is already short.
 const transportColumn = defineDossierTableColumn({ key: 'transport', label: 'Transport', align: 'right', financial: true, sort: { type: 'number', value: ({ model }) => model?.quoteTransport?.amount } });
 // OM + OMR + TVA of the saved quote whose price the list shows beside them, « Demandé » in « Paiements »
-// (quoteTaxesModel): financial like the price.
-const taxesColumn = defineDossierTableColumn({ key: 'taxes', label: 'Taxes calculées', shortLabel: 'Taxes', align: 'right', financial: true, sort: { type: 'number', value: ({ model }) => model?.quoteTaxes?.amount } });
+// (quoteTaxesModel): financial like the price. Named as what they are since 10 October 2026, an estimate of
+// the destination's import taxes included in the price (domain/importTaxes.js); the key stays « taxes ».
+const taxesColumn = defineDossierTableColumn({ key: 'taxes', label: 'Taxes à l’importation estimées', shortLabel: 'Taxes', align: 'right', financial: true, sort: { type: 'number', value: ({ model }) => model?.quoteTaxes?.amount } });
 const casierColumn = defineDossierTableColumn({ key: 'casier', label: 'Casier', filter: { text: ({ dossier }) => dossier.casier || 'À renseigner' }, sort: { type: 'text', value: ({ dossier }) => dossier.casier } });
 const cartonsColumn = defineDossierTableColumn({ key: 'cartons', label: 'Cartons reçus', shortLabel: 'Cartons', sort: { type: 'number', value: ({ dossier }) => receptionCartonManifest(dossier).nbColis } });
 // A desired day without a departure (« Souhaité le … · à créer ») sorts on that day.
@@ -199,7 +200,7 @@ function quotePriceModel(dossier, payment, optimized) {
   return { amount: candidate, stateLabel: dossier.devisBrouillon || ['autorise', 'en_preparation'].includes(dossier.statut) ? 'Brouillon' : '' };
 }
 
-/** « Taxes calculées » of a professional quote without any tax. */
+/** « Taxes à l’importation estimées » of a professional quote without any tax. */
 export const TAXES_PRO_LABEL = 'Sans taxes (pro)';
 /** A price whose saved quote cannot say its taxes (a former dossier, missing or invalid amounts, another total or version). */
 export const TAXES_UNVERIFIED_LABEL = 'À vérifier';
@@ -208,7 +209,7 @@ export const TRANSPORT_UNVERIFIED_LABEL = TAXES_UNVERIFIED_LABEL;
 const moneyCents = value => (typeof value === 'number' || typeof value === 'string' && value.trim()) && Number.isFinite(Number(value)) && Number(value) >= 0 ? Math.round(Number(value) * 100) : null;
 
 /** The saved quote (devisSnapshot) that gives the price shown beside « Transport »
- * and « Taxes calculées »: its frozen total is that very price and its version the
+ * and « Taxes à l’importation estimées »: its frozen total is that very price and its version the
  * dossier's. Null for a former dossier without one, or another quote. */
 function shownSavedQuote(dossier, quotePrice) {
   const snapshot = dossier.devisSnapshot;
@@ -217,7 +218,7 @@ function shownSavedQuote(dossier, quotePrice) {
   return sameQuote ? snapshot : null;
 }
 
-/** « Taxes calculées »: OM + OMR + TVA of the very saved quote whose price the
+/** « Taxes à l’importation estimées »: OM + OMR + TVA of the very saved quote whose price the
  * list shows beside them (devisSnapshot.amounts), added in cents. Nothing is
  * recalculated here nor taken from the raw columns: without a price, the price's
  * own state (« À calculer », « À revoir »…) is repeated; a price with a state

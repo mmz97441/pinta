@@ -425,7 +425,7 @@ async function main() {
       await assertNoBusinessChange(f,before);
     });
     await scenario('every-data-column-has-a-usable-filter-from-its-heading',async f=>{
-      // P5's saved quote (transport, OM, OMR, TVA): « Transport » and « Taxes calculées » have a value for it too.
+      // P5's saved quote (transport, OM, OMR, TVA): « Transport » and « Taxes à l’importation estimées » have a value for it too.
       Object.assign(f.tables.colis.find(item=>item.id===P5),{devis_snapshot:{version:1,amounts:{total:100,transport:80,om:10,omr:5,tva:5},inputs:{client:{type:'particulier'}}}});
       const before=structuredClone(f.tables.colis);await open(f);
       for(const [label,view] of [['Travail quotidien','daily'],['Paiements','payments'],['Départs','departures']]) {
@@ -465,9 +465,9 @@ async function main() {
       const data=await exportFiltered(f,1);
       assert.equal(data.length,4);assert.equal(data[1][0],'EXP-TAB004');assert.equal(data[1][data[0].indexOf('Paiement')],'Non payé');
       // Without a saved quote, its transport and taxes are « À vérifier » (never its raw transport of 80 €).
-      assert.deepEqual(['Transport','Taxes calculées'].map(label=>data[1][data[0].indexOf(label)]),['À vérifier','À vérifier']);
+      assert.deepEqual(['Transport','Taxes à l’importation estimées'].map(label=>data[1][data[0].indexOf(label)]),['À vérifier','À vérifier']);
       // The one dossier's amounts are also its total, after one empty row; its transport and taxes are « À vérifier », so is not their total.
-      assert.deepEqual(data[2],[]);assert.deepEqual(['Total','Demandé','Transport','Taxes calculées','Payé','Reste à payer'].map((label,index)=>index?data[3][data[0].indexOf(label)]:data[3][0]),['Total',100,'Non renseigné','Non renseigné',30,70]);
+      assert.deepEqual(data[2],[]);assert.deepEqual(['Total','Demandé','Transport','Taxes à l’importation estimées','Payé','Reste à payer'].map((label,index)=>index?data[3][data[0].indexOf(label)]:data[3][0]),['Total',100,'Non renseigné','Non renseigné',30,70]);
       await f.page.getByRole('button',{name:'Retirer les filtres',exact:true}).click();await waitIds(f,[P,P2,P3,P4,P5,P6]);
       assert.equal([...new URL(f.page.url()).searchParams.keys()].some(key=>key.startsWith('col.')),false);
       await assertNoBusinessChange(f,before);
@@ -879,7 +879,7 @@ async function main() {
     },{unavailable:true});
     await scenario('excel-download-matches-visible-preset-and-recorded-amounts',async f=>{
       await open(f);
-      const expected={daily:['Référence','Client','Dernière réception','Statut du dossier','Paiement','Travail à faire','Qui s’en occupe','Casier','Cartons reçus','Dimensions finales','Poids final (kg)','Prix du devis','Transport','Taxes calculées'],payments:['Référence','Client','Dernière réception','Statut du dossier','Paiement','Demandé','Transport','Taxes calculées','Payé','Reste à payer','Devis envoyé le'],departures:['Référence','Client','Dernière réception','Statut du dossier','Paiement','Départ prévu','Destination','Colis à expédier','Prêt à partir ?','Dimensions finales','Poids final (kg)','Prix du devis','Transport','Taxes calculées']};
+      const expected={daily:['Référence','Client','Dernière réception','Statut du dossier','Paiement','Travail à faire','Qui s’en occupe','Casier','Cartons reçus','Dimensions finales','Poids final (kg)','Prix du devis','Transport','Taxes à l’importation estimées'],payments:['Référence','Client','Dernière réception','Statut du dossier','Paiement','Demandé','Transport','Taxes à l’importation estimées','Payé','Reste à payer','Devis envoyé le'],departures:['Référence','Client','Dernière réception','Statut du dossier','Paiement','Départ prévu','Destination','Colis à expédier','Prêt à partir ?','Dimensions finales','Poids final (kg)','Prix du devis','Transport','Taxes à l’importation estimées']};
       for(const [label,view] of [['Travail quotidien','daily'],['Paiements','payments'],['Départs','departures']]) {
         await selectPreset(f,label,view);
         const data=await exportFiltered(f,6);

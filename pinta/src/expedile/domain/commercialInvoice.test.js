@@ -94,7 +94,8 @@ test('at the top, the exporter Expedîle and the consignee of the departure’s 
   const items = [{ colis: scelleuse(), client: flavie }];
   const reunion = build({ envoi, items, categories });
   assert.equal(reunion.ok, true, JSON.stringify(reunion.errors));
-  assert.deepEqual(reunion.meta.exporter, { nom: 'Expedîle', adresse: '12 rue des Entrepôts', complement: '', codePostal: '93290', ville: 'Tremblay-en-France', pays: 'France', telephone: '', email: 'contact@expedile.fr', siret: '12345678900012', eori: 'FR12345678900012', tva: '' });
+  // The exporter also carries the quote's legal mentions (empty here): the commercial invoice does not print them.
+  assert.deepEqual(reunion.meta.exporter, { nom: 'Expedîle', adresse: '12 rue des Entrepôts', complement: '', codePostal: '93290', ville: 'Tremblay-en-France', pays: 'France', telephone: '', email: 'contact@expedile.fr', siret: '12345678900012', eori: 'FR12345678900012', tva: '', formeJuridique: '', capital: '', rcsVille: '' });
   assert.deepEqual(reunion.meta.consignee, { nom: 'Expedîle', adresse: '5 Chemin Grand Canal', complement: 'Immeuble Thales', codePostal: '97490', ville: 'Sainte-Clotilde', pays: 'La Réunion (France)', telephone: '', email: '', siret: '', eori: '', tva: '', source: 'destination' },
     'La Réunion has its own consignee: Expedîle at Sainte-Clotilde.');
   // Mayotte has none of its own: the default consignee is printed, and said to be the default one.

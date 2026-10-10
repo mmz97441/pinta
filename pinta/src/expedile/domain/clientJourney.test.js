@@ -268,7 +268,8 @@ test('carton measures speak of cartons and never show a multi-carton dossier as 
 
 test('a requested document says why it is needed and what follows', () => {
   const particulier = clientTaskExplanation({ statut: 'autorise', factures: [] }, { type: 'particulier' });
-  assert.match(particulier, /établir votre devis/); assert.match(particulier, /octroi de mer/); assert.match(particulier, /notre équipe la vérifie puis prépare votre devis/);
+  // The invoice serves the estimate of the import taxes (decision of 10 October 2026), never « le calcul de l’octroi de mer ».
+  assert.match(particulier, /établir votre devis/); assert.match(particulier, /pour l’estimation des taxes à l’importation\./); assert.doesNotMatch(particulier, /octroi de mer/i); assert.match(particulier, /notre équipe la vérifie puis prépare votre devis/);
   assert.match(clientTaskExplanation({ statut: 'receptionne', factures: [] }, { type: 'particulier' }), /demande d’accord pour préparer vos cartons/);
   const pro = clientTaskExplanation({ statut: 'autorise', factures: [] }, { type: 'pro' });
   assert.match(pro, /formalités de douane/); assert.doesNotMatch(pro, /octroi de mer/);

@@ -74,17 +74,21 @@ function TransportPart({ weights, transport }) {
   </div>;
 }
 
+// The engine's octroi de mer, OMR and « TVA »: an estimate of the destination's import taxes, part of the
+// price (decision of 10 October 2026). The team keeps their detail; the client reads them as an estimate.
+const TAXES_LABEL = 'Taxes à l’importation estimées';
 function TaxesPart({ professional, taxes }) {
   if (professional) return <p className="py-3 text-slate-700">Devis professionnel : transport et frais, sans taxes.</p>;
   return <div className="py-2">
-    <Row label="Taxes" value={eur(taxes.om + taxes.omr + taxes.tva)} />
+    <Row label={TAXES_LABEL} value={eur(taxes.om + taxes.omr + taxes.tva)} />
     <details>
       <summary className={SUMMARY}>Détail des taxes</summary>
       <div className={DETAIL}>
         <Row label="Octroi de mer" value={eur(taxes.om)} />
         <Row label="Octroi de mer régional" value={eur(taxes.omr)} />
-        <Row label={taxes.tvaRate != null ? `TVA ${percent(taxes.tvaRate)}` : 'TVA'} value={eur(taxes.tva)} />
+        <Row label={taxes.tvaRate != null ? `TVA à l’importation ${percent(taxes.tvaRate)}` : 'TVA à l’importation'} value={eur(taxes.tva)} />
         <p className="text-slate-600">sur {eur(taxes.tvaBase)} (transport + octroi de mer + octroi de mer régional)</p>
+        <p className="text-slate-600">Comprises dans le prix. Le client les lit comme une estimation des taxes à l’importation, payées à l’arrivée.</p>
       </div>
     </details>
   </div>;
@@ -119,7 +123,7 @@ function ShortSummary({ colis }) {
   const amounts = colis.devisSnapshot?.amounts;
   const frozenLines = amounts?.taxLines || colis.devisSnapshot?.inputs?.lines || [];
   return <div role="group" aria-label="Devis enregistré" className="space-y-2 border-t border-slate-200 pt-3 text-sm">
-    {amounts && <><Ligne label="Transport" value={eur(amounts.transport)} /><Ligne label="Taxes" value={eur((amounts.om || 0) + (amounts.omr || 0) + (amounts.tva || 0))} /><Ligne label="Frais" value={eur(amounts.fees)} /></>}
+    {amounts && <><Ligne label="Transport" value={eur(amounts.transport)} /><Ligne label={TAXES_LABEL} value={eur((amounts.om || 0) + (amounts.omr || 0) + (amounts.tva || 0))} /><Ligne label="Frais" value={eur(amounts.fees)} /></>}
     <Ligne label="Total" value={eur(colis.devisTotal)} />
     {frozenLines.length > 0 && <details aria-label="Articles et taux enregistrés"><summary className="min-h-11 cursor-pointer py-3 font-semibold">Articles et taux enregistrés ({frozenLines.length})</summary><ul className="divide-y divide-slate-200">{frozenLines.map((line, index) => <li key={line.id || index} className="space-y-1 py-3"><p className="font-semibold">{line.description}</p>{line.customDuty?.code && <p>{line.customDuty.code} · {line.customDuty.label}</p>}<p>{line.quantity} × {eur(line.unitPrice)} HT</p><p>OM : {line.rates?.om == null ? 'non renseigné' : percent(line.rates.om)} · OMR : {line.rates?.omr == null ? 'non renseigné' : percent(line.rates.omr)}</p>{line.customDuty?.overrideReason && <p>Motif de correction : {line.customDuty.overrideReason}</p>}</li>)}</ul><p className="py-2 text-slate-600">Valeurs conservées avec ce devis.</p></details>}
   </div>;

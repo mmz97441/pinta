@@ -1,6 +1,8 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { quotePresentation, PAYMENT_TERMS, cartonManifest } from '../domain/clientJourney';
+import { importTaxEstimate, importTaxPlace } from '../domain/importTaxes';
+import { quoteIssuerIdentity } from '../domain/invoiceIdentity';
 import { pdfMoney as money, pdfNumber, pdfText, pdfUnit as unit } from './pdfFormat.js';
 
 // Text and French numbers shared with the commercial invoice (pdfFormat.js); pdfText stays exported from here.
@@ -9,10 +11,18 @@ export { pdfText } from './pdfFormat.js';
 const percent = value => value == null ? 'Non défini' : unit(value, '%');
 const size = box => pdfText(`${pdfNumber(box.dimL)} × ${pdfNumber(box.dimW)} × ${pdfNumber(box.dimH)}\u00a0cm`);
 const positive = value => Number(value) > 0;
-const cells = rows => rows.map(row => row.map(pdfText));
+const cells = rows => rows.map(row => row.map(cell => (cell && typeof cell === 'object' ? { ...cell, content: pdfText(cell.content) } : pdfText(cell))));
+// A detail line of the import tax estimate: indented, smaller and grey under its heading.
+const DETAIL = { fontSize: 8, textColor: [90, 90, 90], cellPadding: { top: 1.5, right: 3, bottom: 1.5, left: 9 } };
+const DETAIL_AMOUNT = { fontSize: 8, textColor: [90, 90, 90], fontStyle: 'normal', cellPadding: { top: 1.5, right: 3, bottom: 1.5, left: 3 } };
 
-/** The quote document from the saved snapshot. Returns the jsPDF document and its file name (nothing is saved). */
-export function buildDevisPDF(colis, client, destination) {
+/**
+ * The quote document from the saved snapshot. Returns the jsPDF document and its file name (nothing is saved).
+ * `business` (app_settings.business) gives the issuer's legal identity, printed once complete (F10). Until
+ * then, the team's own estimate (`audience: 'staff'`) says what to complete in Paramètres; the client's
+ * quote never shows that instruction.
+ */
+export function buildDevisPDF(colis, client, destination, { business = null, audience = 'client' } = {}) {
   const snapshot = colis.devisSnapshot || colis.quoteSnapshot;
   const isEstimate = snapshot?.mode === 'estimate';
   const version = snapshot?.version || colis.quoteVersion;
@@ -29,7 +39,7 @@ export function buildDevisPDF(colis, client, destination) {
   const doc = new jsPDF();
   const text = (value, ...rest) => doc.text(pdfText(value), ...rest);
 
-  // Header
+  // Header: the brand, then the issuer's legal identity (raison sociale, forme et capital, siège, RCS, SIRET, TVA).
   doc.setFontSize(18);
   doc.setFont('helvetica', 'bold');
   text('EXPEDÎLE', 14, 20);
@@ -37,7 +47,18 @@ export function buildDevisPDF(colis, client, destination) {
   doc.setFontSize(8);
   doc.setFont('helvetica', 'normal');
   text('Service de réexpédition DOM-TOM', 14, 26);
-  text('Paris, France', 14, 30);
+  const issuer = quoteIssuerIdentity(business);
+  let headerY = 26;
+  const headerLines = (lines) => { for (const line of lines) for (const part of doc.splitTextToSize(pdfText(line), 120)) { headerY += 4; doc.text(part, 14, headerY); } };
+  if (issuer.complete) headerLines(issuer.lines);
+  else if (audience === 'staff') {
+    // Never invented: the team sees what is missing before handing this document over.
+    doc.setTextColor(185, 28, 28);
+    headerLines([`Identité légale à compléter dans Paramètres › Facture commerciale\u00a0: ${issuer.missing.join(', ')}.`]);
+    doc.setTextColor(0, 0, 0);
+  } else headerLines(['Paris, France']);
+  // The client block starts under the taller of the two header columns (the quote's own block ends at 38).
+  const top = Math.max(headerY, 38) + 7;
 
   // Devis info
   doc.setFontSize(14);
@@ -53,17 +74,17 @@ export function buildDevisPDF(colis, client, destination) {
   // Client info
   doc.setFontSize(10);
   doc.setFont('helvetica', 'bold');
-  text('Client', 14, 45);
+  text('Client', 14, top);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
-  text(client?.nom || '—', 14, 51);
-  text(destination?.nom || '', 14, 56);
-  if (client?.email) text(client.email, 14, 61);
+  text(client?.nom || '—', 14, top + 6);
+  text(destination?.nom || '', 14, top + 11);
+  if (client?.email) text(client.email, 14, top + 16);
 
   // Colis details
   doc.setFontSize(10);
   doc.setFont('helvetica', 'bold');
-  text('Détails du colis', 14, 75);
+  text('Détails du colis', 14, top + 30);
 
   const colisDetails = [
     ['Contenu', colis.desc || '—'],
@@ -87,7 +108,7 @@ export function buildDevisPDF(colis, client, destination) {
   colisDetails.push(['Poids facturable', billable ? unit(billable, 'kg') : '—']);
 
   autoTable(doc, {
-    startY: 80,
+    startY: top + 35,
     body: cells(colisDetails),
     theme: 'plain',
     styles: { fontSize: 8, cellPadding: 2 },
@@ -104,10 +125,12 @@ export function buildDevisPDF(colis, client, destination) {
   text('Ventilation du devis', 14, devisY);
 
   const devisRows = [['Transport', money(colis.devisTransport)]];
-  if (!pro) {
-    if (positive(colis.devisOM)) devisRows.push(['Octroi de mer (OM)', money(colis.devisOM)]);
-    if (positive(colis.devisOMR)) devisRows.push(['Octroi de mer régional (OMR)', money(colis.devisOMR)]);
-    if (positive(colis.devisTVA)) devisRows.push([destination?.tva == null ? 'TVA (taux historique non documenté)' : `TVA (${percent(destination.tva)})`, money(colis.devisTVA)]);
+  // The amounts saved as octroi de mer, OMR and « TVA » are an estimate of the destination's import taxes, paid
+  // on arrival and part of the price (decision of 10 October 2026): never a tax line of Expedîle's price.
+  const taxes = importTaxEstimate({ om: colis.devisOM, omr: colis.devisOMR, tva: colis.devisTVA }, destination, { professional: pro });
+  if (taxes?.lines.length) {
+    devisRows.push([`${taxes.heading}\n(${taxes.note})`, money(taxes.total)]);
+    for (const line of taxes.lines) devisRows.push([{ content: line.label, styles: DETAIL }, { content: money(line.amount), styles: DETAIL_AMOUNT }]);
   }
   for (const fee of colis.fraisDivers || []) {
     if (positive(fee.montant)) devisRows.push([fee.libelle || fee.label || fee.nom || 'Frais complémentaires', money(fee.montant)]);
@@ -160,7 +183,7 @@ export function buildDevisPDF(colis, client, destination) {
     text('Classement douanier du devis', 14, 20);
     doc.setFontSize(9); doc.setFont('helvetica', 'normal');
     text(`${colis.ref}${version ? ` – version ${version}` : ''} – ${destination?.nom || ''}`, 14, 27);
-    text('Taux d’octroi de mer (OM) et d’octroi de mer régional (OMR) à l’importation.', 14, 34);
+    text(`Taux retenus pour l’estimation de l’octroi de mer (OM) et de l’octroi de mer régional (OMR) à l’importation ${importTaxPlace(destination).at}.`, 14, 34);
     autoTable(doc, {
       startY: 40,
       head: cells([['Article et désignation douanière', 'Code douanier', 'OM', 'OMR', 'Référence et correction']]),
@@ -178,7 +201,7 @@ export function buildDevisPDF(colis, client, destination) {
   return { doc, filename: `${isEstimate ? 'estimation' : 'devis'}-${colis.ref}${version ? `-v${version}` : ''}.pdf` };
 }
 
-export function exportDevisPDF(colis, client, destination) {
-  const { doc, filename } = buildDevisPDF(colis, client, destination);
+export function exportDevisPDF(colis, client, destination, options) {
+  const { doc, filename } = buildDevisPDF(colis, client, destination, options);
   doc.save(filename);
 }
