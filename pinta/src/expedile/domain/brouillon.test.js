@@ -2,9 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   ARRIVAL_NOTICE_STATES, BROUILLON_STAGES, COLIS_DEFAULT_SORT, COLIS_DEFAULT_TAB, COLIS_SORTS, COLIS_TABS, MEASURE_MISSING_LABEL, NO_ACTION_LABEL,
-  NOTICE_SEND_CHECK_MINUTES, arrivalNoticeState, arrivalNoticeSummary, brouillonAlerts, brouillonFiche, cartonVolumeM3, colisActionHref, colisRow,
-  colisSortKey, colisStage, colisTab, colisTabKey, colisTotals, filterColisRows, formatDimensions, formatKg, formatM3, groupColisRowsByDeparture,
-  orderValidationItems, pendingByClient, pendingByColis, receptionTarget, sortColisRows,
+  NOTICE_SEND_CHECK_MINUTES, PAID_TOTAL_STATE, actionAllowed, arrivalNoticeState, arrivalNoticeSummary, brouillonAlerts, brouillonFiche, cartonVolumeM3,
+  colisActionHref, colisRow, colisSortKey, colisStage, colisTab, colisTabKey, colisTotals, filterColisRows, formatDimensions, formatKg, formatM3,
+  groupColisRowsByDeparture, orderValidationItems, pendingByClient, pendingByColis, receptionTarget, sortColisRows,
 } from './brouillon.js';
 import { workspaceReturnPath } from './navigation.js';
 import { STATUTS } from '../constants/index.js';
@@ -59,6 +59,22 @@ const notice = (changes = {}) => ({
   outbox: { id: 'o-1', status: 'sent', attempts: 1, sentAt: '2026-10-27T10:00:05Z', lastError: null }, ...changes,
 });
 const stageOf = (dossier, changes) => colisStage(dossier, ctx(changes));
+// The rights each action carries, from the screen that does it, and what is said without them.
+const RECEIVE = { permissions: ['perm_colis_receptionner'], deniedReason: 'Réservé aux personnes autorisées à réceptionner.' };
+const CONSENT = { permissions: ['perm_colis_demander_feuvert'], deniedReason: 'Réservé aux personnes autorisées à demander l’accord.' };
+const QUOTE = { permissions: ['perm_colis_calculer_devis', 'perm_colis_envoyer_devis'], deniedReason: 'Réservé aux personnes autorisées à établir ou envoyer le devis.' };
+const PAYMENT = { permissions: ['perm_colis_confirmer_paiement', 'perm_comm_telegram', 'perm_comm_email', 'perm_comm_message_libre'], deniedReason: 'Réservé aux personnes autorisées à suivre les règlements.' };
+const DEPARTURE = { permissions: ['perm_envois_voir'], deniedReason: 'Réservé aux personnes ayant accès aux départs.' };
+const TRANSPORT = { permissions: ['perm_colis_changer_statut_expedition'], deniedReason: 'Réservé à l’équipe chargée du transport.' };
+const CONVERSATION = { permissions: ['perm_comm_message_libre', 'perm_comm_telegram', 'perm_comm_email', 'perm_comm_voir_chat_autres'], deniedReason: 'Réservé aux personnes autorisées à échanger avec les clients.' };
+const TELEGRAM = { permissions: ['perm_comm_telegram'], deniedReason: 'Réservé aux personnes autorisées à écrire sur Telegram.' };
+// What the complete calculation needs (useApp().tarifs and categories): a tariff of La Réunion and Mayotte, one category.
+const tarifs = { 974: { base: 10, parKg: 5 }, 976: { base: 12, parKg: 6 } };
+const categories = [{ id: 'cat-1', label: 'Vêtements', taux: { 974: { om: 10, omr: 2.5 } } }];
+const article = { id: 'l-1', desc: 'Robe', qte: 1, prix: 120, cat: 'cat-1', factureId: 'f-1' };
+const complete = { ...prepared, lignes: [article] };
+// A client's written message, as messages.type « client » records it.
+const clientMessage = (createdAt, changes = {}) => ({ id: `m-client-${createdAt}`, type: 'client', template: null, createdAt, statut: 'envoye', canal: 'telegram', texte: 'Oui c’est bon pour moi, vous pouvez préparer', ...changes });
 
 // ── Tabs and sorts ───────────────────────────────────────────────────────────
 test('each internal status belongs to exactly one tab; archived and cancelled dossiers to none', () => {
@@ -87,9 +103,10 @@ test('the four sorts, « Par nom » by default, « Par montant » marked financi
 // ── Brouillon steps ──────────────────────────────────────────────────────────
 test('the Brouillon steps are those of the specification, in their order', () => {
   assert.deepEqual(BROUILLON_STAGES.map(item => [item.key, item.label]), [
-    ['reception_a_valider', 'Réception à valider'], ['mesures_a_completer', 'Mesures à compléter'], ['accord_a_demander', 'Accord à demander'],
-    ['attend_client', 'Attend le client'], ['client_refuse', 'Le client refuse'], ['produit_interdit', 'Produit interdit à régler'],
-    ['a_preparer', 'À préparer'], ['facture_manquante', 'Facture manquante'], ['pret_pour_devis', 'Prêt pour le devis'],
+    ['reception_a_valider', 'Réception à valider'], ['mesures_a_completer', 'Mesures à compléter'], ['client_a_repondu', 'Le client a répondu'],
+    ['accord_a_demander', 'Accord à demander'], ['demande_a_verifier', 'Demande à vérifier'], ['attend_client', 'Attend le client'],
+    ['client_refuse', 'Le client refuse'], ['produit_interdit', 'Produit interdit à régler'], ['a_preparer', 'À préparer'],
+    ['facture_manquante', 'Facture manquante'], ['devis_a_completer', 'Devis à compléter'], ['pret_pour_devis', 'Prêt pour le devis'],
   ]);
   assert.equal(NO_ACTION_LABEL, 'Rien à faire');
 });
@@ -120,7 +137,7 @@ test('the first step that applies wins, from a reception to validate to the quot
 test('« Réception à valider » counts the cartons waiting and opens the validation of the client’s reception', () => {
   const one = stageOf(measured, { pending: pendingByColis([pendingEntry('d-1', [2])]) });
   assert.deepEqual(one, { key: 'reception_a_valider', label: 'Réception à valider', detail: '1 carton à valider · reçu le 27/10/2026', tone: 'current',
-    action: { key: 'valider_reception', label: 'Valider la réception', task: null, href: '/recevoir?client=c-flavie&valider=1' } });
+    action: { key: 'valider_reception', label: 'Valider la réception', task: null, ...RECEIVE, href: '/recevoir?client=c-flavie&valider=1' } });
   // The server's list itself is accepted too, and an index by dossier.
   const two = stageOf(measured, { pending: [pendingEntry('d-1', [2, 3], { receivedTo: '2026-10-28T06:00:00Z' }), pendingEntry('d-other', [1])] });
   assert.equal(two.detail, '2 cartons à valider · dernier reçu le 28/10/2026');
@@ -138,7 +155,7 @@ test('« Mesures à compléter » for a former carton received without its measu
 test('« Accord à demander » opens the consent request in place, never asked or to ask again after a new carton', () => {
   const first = stageOf(measured);
   assert.deepEqual(first, { key: 'accord_a_demander', label: 'Accord à demander', detail: 'Jamais demandé', tone: 'current',
-    action: { key: 'demander_accord', label: 'Demander l’accord', task: 'accord', panel: 'demande_feu_vert' } });
+    action: { key: 'demander_accord', label: 'Demander l’accord', task: 'accord', ...CONSENT, panel: 'demande_feu_vert' } });
   assert.equal(stageOf({ ...measured, consentRequestVersion: 2 }).detail, 'Nouvelle demande à envoyer');
   // A consent never recorded on a later status cannot be asked from the list: the dossier's accord task reopens it.
   const unrecorded = stageOf({ ...prepared, feuVert: 'en_attente' });
@@ -150,26 +167,140 @@ test('« Attend le client »: nothing to do while the request is followed up or 
   const read = dossier => { const step = stageOf(dossier); return [step.key, step.detail, step.action && step.action.key]; };
   // Delivered two hours ago: followed up for 24 hours.
   assert.deepEqual(read({ ...waiting, demandeFeuVertEnvoyeeAt: '2026-10-28T08:00:00Z', messages: [staffMessage('demande_feu_vert', '2026-10-28T08:00:00Z')] }), ['attend_client', 'Demandé le 28/10/2026', null]);
-  // Still to deliver: it holds until delivered.
-  assert.deepEqual(read({ ...waiting, messages: [staffMessage('demande_feu_vert', '2026-10-28T09:30:00Z', { statut: 'envoi', outboxStatus: 'pending', outboxSentAt: null })] }), ['attend_client', 'Demande en cours d’envoi', null]);
+  // Still to deliver for a few minutes: it holds until delivered (beyond 10 minutes it is to check, see below).
+  assert.deepEqual(read({ ...waiting, messages: [staffMessage('demande_feu_vert', '2026-10-28T09:55:00Z', { statut: 'envoi', outboxStatus: 'pending', outboxSentAt: null })] }), ['attend_client', 'Demande en cours d’envoi', null]);
   // Delivered two days ago without answer: the relance is due, it never leaves on its own.
   assert.deepEqual(read({ ...waiting, demandeFeuVertEnvoyeeAt: '2026-10-26T08:00:00Z', messages: [staffMessage('demande_feu_vert', '2026-10-26T08:00:00Z')] }), ['attend_client', 'Sans réponse · demandé le 26/10/2026', 'relancer']);
   const request = staffMessage('demande_feu_vert', '2026-10-25T08:00:00Z');
   assert.deepEqual(read({ ...waiting, messages: [request, staffMessage('relance_feu_vert', '2026-10-26T08:00:00Z')] }), ['attend_client', 'Sans réponse · relancé le 26/10/2026', 'relancer']);
   assert.deepEqual(read({ ...waiting, messages: [request, staffMessage('relance_feu_vert', '2026-10-28T07:00:00Z')] }), ['attend_client', 'Relancé le 28/10/2026', null]);
-  assert.deepEqual(read({ ...waiting, messages: [request, staffMessage('relance_feu_vert', '2026-10-28T07:00:00Z', { statut: 'envoi', outboxStatus: 'failed', outboxSentAt: null })] }),
-    ['attend_client', 'Sans réponse · relance du 28/10/2026 · Envoi non confirmé', 'relancer'], 'A relance that failed is due again and says so.');
+  assert.deepEqual(read({ ...waiting, messages: [request, staffMessage('relance_feu_vert', '2026-10-28T07:00:00Z', { statut: 'echec', outboxStatus: 'failed', outboxSentAt: null })] }),
+    ['demande_a_verifier', 'Relance du 28/10/2026 · Envoi non confirmé', 'verifier_envoi'], 'A relance that failed is checked, never relanced.');
+  // An e-mail relance stays a draft: the team acted, followed up 24 hours from its creation, then due again and says so.
+  const draft = staffMessage('relance_feu_vert', '2026-10-26T08:00:00Z', { canal: 'email', statut: 'envoi', outboxStatus: 'manual', outboxSentAt: null });
+  assert.deepEqual(read({ ...waiting, messages: [request, draft] }), ['attend_client', 'Sans réponse · relance du 26/10/2026 · Brouillon manuel', 'relancer']);
   // The wait the client chose: respected until its day, then to relance.
   assert.deepEqual(read({ ...waiting, attenteClientDate: '2026-10-27T10:00:00Z', attenteClientUntil: '2026-11-02T10:00:00Z' }), ['attend_client', 'Le client attend · jusqu’au 02/11', null]);
   const ended = { ...waiting, attenteClientDate: '2026-10-20T10:00:00Z', attenteClientUntil: '2026-10-27T10:00:00Z', messages: [staffMessage('demande_feu_vert', '2026-10-19T08:00:00Z')] };
   assert.deepEqual(read(ended), ['attend_client', 'Attente terminée le 27/10 · à réexaminer', 'redemander_accord']);
-  assert.deepEqual(stageOf(ended).action, { key: 'redemander_accord', label: 'Redemander l’accord', task: 'accord' }, 'After a chosen wait the accord is asked again in its task, not relanced.');
+  assert.deepEqual(stageOf(ended).action, { key: 'redemander_accord', label: 'Redemander l’accord', task: 'accord', permissions: ['perm_colis_demander_feuvert'],
+    requiresAll: ['perm_colis_revenir_arriere'], deniedReason: 'Réservé aux personnes autorisées à corriger le dossier et à demander l’accord.' }, 'After a chosen wait the accord is asked again in its task, not relanced.');
   assert.deepEqual(read({ ...ended, messages: [...ended.messages, staffMessage('relance_feu_vert', '2026-10-28T09:00:00Z')] }), ['attend_client', 'Relancé le 28/10/2026', null],
     'Once relanced after the wait, the relance is followed up like any other.');
   assert.deepEqual(read({ ...waiting, attenteClientDate: '2026-10-27T10:00:00Z' }), ['attend_client', 'Le client attend', null]);
   const relance = stageOf({ ...waiting, demandeFeuVertEnvoyeeAt: '2026-10-26T08:00:00Z', messages: [staffMessage('demande_feu_vert', '2026-10-26T08:00:00Z')] });
-  assert.deepEqual(relance.action, { key: 'relancer', label: 'Relancer', task: 'accord', panel: 'relance_feu_vert' });
+  assert.deepEqual(relance.action, { key: 'relancer', label: 'Relancer', task: 'accord', ...CONSENT, panel: 'relance_feu_vert' });
   assert.equal(relance.tone, 'waiting');
+});
+
+test('« Le client a répondu »: a written message to answer comes before any request or relance, never « Relancer »', () => {
+  const waiting = { ...measured, statut: 'attente_feu_vert', demandeFeuVertEnvoyeeAt: '2026-10-25T08:00:00Z' };
+  const request = staffMessage('demande_feu_vert', '2026-10-25T08:00:00Z');
+  // The reviewer's case: the request was delivered, the client answered in writing, the conversation is « À répondre ».
+  const replied = { ...waiting, conversationStatut: 'a_traiter', messages: [request, clientMessage('2026-10-27T18:00:00Z')] };
+  assert.deepEqual(stageOf(replied), { key: 'client_a_repondu', label: 'Le client a répondu', detail: 'Message du 27/10/2026 à lire', tone: 'current',
+    action: { key: 'lire_reponse', label: 'Lire la réponse', task: null, ...CONVERSATION, href: '/colis/d-1?onglet=conversation' } });
+  // Without a durable state, the rule of conversationState: a client's message that no delivered team message followed.
+  const unstated = { ...replied, conversationStatut: undefined };
+  assert.equal(stageOf(unstated).key, 'client_a_repondu');
+  assert.deepEqual([stageOf({ ...unstated, messages: [...unstated.messages, staffMessage('message_libre', '2026-10-27T19:00:00Z')] }).key,
+    stageOf({ ...unstated, messages: [...unstated.messages, staffMessage('message_libre', '2026-10-27T19:00:00Z')] }).action.key], ['attend_client', 'relancer'], 'Answered since.');
+  // Treated (its durable state), or a decision by button: no message to answer.
+  assert.deepEqual([stageOf({ ...replied, conversationStatut: 'termine' }).key, stageOf({ ...replied, conversationStatut: 'termine' }).action.key], ['attend_client', 'relancer']);
+  assert.equal(stageOf({ ...unstated, messages: [request, clientMessage('2026-10-27T18:00:00Z', { template: 'client_decision_wait' })] }).key, 'attend_client');
+  // Wherever a request or a relance would be offered: before asking the accord, during the client's wait and after it,
+  // before checking a relance that failed.
+  assert.equal(stageOf({ ...measured, conversationStatut: 'a_traiter', messages: [clientMessage('2026-10-27T18:00:00Z')] }).key, 'client_a_repondu', 'Instead of « Demander l’accord ».');
+  assert.equal(stageOf({ ...replied, attenteClientDate: '2026-10-27T10:00:00Z', attenteClientUntil: '2026-11-02T10:00:00Z' }).key, 'client_a_repondu');
+  assert.equal(stageOf({ ...replied, attenteClientDate: '2026-10-20T10:00:00Z', attenteClientUntil: '2026-10-27T10:00:00Z' }).key, 'client_a_repondu', 'Instead of « Redemander l’accord ».');
+  assert.equal(stageOf({ ...replied, messages: [request, staffMessage('relance_feu_vert', '2026-10-28T09:00:00Z', { statut: 'echec', outboxStatus: 'failed' }), clientMessage('2026-10-28T09:30:00Z')] }).key, 'client_a_repondu');
+  // « À payer »: while the payment is awaited (its task offers a relance), not when the payment is to check.
+  assert.equal(stageOf({ ...quoted, conversationStatut: 'a_traiter', messages: [clientMessage('2026-10-28T08:00:00Z')] }).key, 'client_a_repondu');
+  assert.equal(stageOf({ ...quoted, devisBrouillon: true, conversationStatut: 'a_traiter', messages: [clientMessage('2026-10-28T08:00:00Z')] }).key, 'paiement_a_verifier');
+  // The other steps keep their own action: the message waits in the conversations.
+  assert.equal(stageOf({ ...prepared, conversationStatut: 'a_traiter', messages: [clientMessage('2026-10-28T08:00:00Z')] }).key, 'pret_pour_devis');
+  assert.equal(stageOf({ ...measured, statut: 'receptionne', conversationStatut: 'a_traiter' }).key, 'mesures_a_completer');
+  assert.equal(stageOf({ ...replied, messages: [request, clientMessage(null)] }).detail, 'Message à lire', 'Without a readable date.');
+  // The conversation keeps the way back.
+  assert.equal(colisActionHref(colisRow(replied, ctx()), '/?onglet=brouillon'), '/colis/d-1?onglet=conversation&returnTo=%2F%3Fonglet%3Dbrouillon');
+  assert.equal(brouillonFiche(replied, ctx()).action.href, '/colis/d-1?onglet=conversation&returnTo=%2Fbrouillon%2Fd-1');
+});
+
+test('« Demande à vérifier »: a request or a relance that did not reach the client is checked in the conversation, never relanced', () => {
+  const waiting = { ...measured, statut: 'attente_feu_vert' };
+  const read = (messages, changes = {}) => { const step = stageOf({ ...waiting, messages, ...changes }); return [step.key, step.detail, step.tone, step.action && step.action.key]; };
+  const request = (createdAt, changes) => staffMessage('demande_feu_vert', createdAt, { statut: 'envoi', outboxSentAt: null, ...changes });
+  const minutesAgo = minutes => new Date(now - minutes * 60000).toISOString();
+  // The reviewer's case: the Telegram delivery of the request failed.
+  assert.deepEqual(stageOf({ ...waiting, messages: [request('2026-10-28T09:00:00Z', { statut: 'echec', outboxStatus: 'failed' })] }), {
+    key: 'demande_a_verifier', label: 'Demande à vérifier', detail: 'Demande du 28/10/2026 · Envoi non confirmé', tone: 'review',
+    action: { key: 'verifier_envoi', label: 'Vérifier l’envoi', task: null, ...TELEGRAM, href: '/colis/d-1?onglet=conversation' } });
+  assert.deepEqual(read([request('2026-10-28T09:00:00Z', { statut: 'echec', outboxStatus: null })]), ['demande_a_verifier', 'Demande du 28/10/2026 · Envoi non confirmé', 'review', 'verifier_envoi'], 'Without its outbox: the message « echec ».');
+  // On its way: for 10 minutes, then to check whatever the state of its outbox (the rule of the arrival notices).
+  assert.deepEqual(read([request(minutesAgo(9), { outboxStatus: 'pending' })]), ['attend_client', 'Demande en cours d’envoi', 'waiting', null]);
+  assert.deepEqual(read([request(minutesAgo(10), { outboxStatus: 'pending' })]), ['attend_client', 'Demande en cours d’envoi', 'waiting', null], 'Ten minutes exactly: still on its way.');
+  assert.deepEqual(read([request(minutesAgo(11), { outboxStatus: 'pending' })]), ['demande_a_verifier', 'Demande du 28/10/2026 · Toujours pas parti au bout de 10 minutes', 'review', 'verifier_envoi']);
+  assert.deepEqual(read([request(minutesAgo(60), { outboxStatus: 'sending' })]).slice(0, 2), ['demande_a_verifier', 'Demande du 28/10/2026 · Envoi commencé il y a plus de 10 minutes, sans confirmation']);
+  assert.deepEqual(read([request(minutesAgo(60), { outboxStatus: 'blocked' })]).slice(0, 2), ['demande_a_verifier', 'Demande du 28/10/2026 · Envoi retenu depuis plus de 10 minutes'], 'The reviewer’s case: held for an hour.');
+  assert.deepEqual(read([request(minutesAgo(60), { outboxStatus: null })]).slice(0, 2), ['demande_a_verifier', 'Demande du 28/10/2026 · Envoi sans confirmation depuis plus de 10 minutes']);
+  // A relance that failed, or that the server cancelled because the dossier changed: checked, never relanced.
+  const delivered = staffMessage('demande_feu_vert', '2026-10-25T08:00:00Z');
+  const relance = changes => staffMessage('relance_feu_vert', '2026-10-27T08:00:00Z', { statut: 'echec', outboxSentAt: null, ...changes });
+  assert.deepEqual(read([delivered, relance({ outboxStatus: 'failed' })]), ['demande_a_verifier', 'Relance du 27/10/2026 · Envoi non confirmé', 'review', 'verifier_envoi']);
+  assert.deepEqual(read([delivered, relance({ outboxStatus: 'cancelled' })]), ['demande_a_verifier', 'Relance du 27/10/2026 · Envoi annulé', 'review', 'verifier_envoi']);
+  // A relance the server postponed (one per client in 24 hours): the minutes count from its own time when the data layer gives it.
+  const postponed = changes => staffMessage('relance_feu_vert', '2026-10-28T07:00:00Z', { statut: 'envoi', outboxStatus: 'pending', outboxSentAt: null, ...changes });
+  assert.deepEqual(read([delivered, postponed({ outboxAvailableAt: '2026-10-28T20:00:00Z' })]), ['attend_client', 'Relance en cours d’envoi', 'waiting', null]);
+  assert.deepEqual(read([delivered, postponed({ outboxAvailableAt: '2026-10-28T09:30:00Z' })]).slice(0, 2), ['demande_a_verifier', 'Relance du 28/10/2026 · Toujours pas parti au bout de 10 minutes']);
+  assert.equal(read([delivered, postponed()])[0], 'demande_a_verifier', 'Without its own time: from its creation, as an arrival notice.');
+  // Cancelled because the client chose to wait: no failure; the wait is respected, then the accord is asked again.
+  const byWait = { attenteClientDate: '2026-10-27T09:00:00Z', attenteClientUntil: '2026-11-02T10:00:00Z' };
+  assert.deepEqual(read([delivered, relance({ outboxStatus: 'cancelled' })], byWait), ['attend_client', 'Le client attend · jusqu’au 02/11', 'waiting', null]);
+  assert.equal(read([delivered, relance({ outboxStatus: 'cancelled' })], { ...byWait, attenteClientUntil: '2026-10-28T08:00:00Z' })[3], 'redemander_accord');
+  assert.equal(read([delivered, relance({ statut: 'envoi', outboxStatus: null })], { ...byWait, attenteClientUntil: '2026-10-28T08:00:00Z' })[3], 'redemander_accord', 'Without its outbox, left « envoi » by the wait.');
+  // Only the latest message counts; an e-mail kept as a draft and a message of the client space are no failure.
+  assert.deepEqual(read([request('2026-10-27T08:00:00Z', { statut: 'echec', outboxStatus: 'failed' }), staffMessage('relance_feu_vert', '2026-10-28T08:00:00Z')]), ['attend_client', 'Relancé le 28/10/2026', 'waiting', null]);
+  assert.deepEqual(read([request('2026-10-28T08:00:00Z', { canal: 'email', outboxStatus: 'manual' })]), ['attend_client', 'Demandé le 28/10/2026', 'waiting', null]);
+  assert.deepEqual(read([request('2026-10-28T08:00:00Z', { canal: 'email', outboxStatus: null })]), ['attend_client', 'Demandé le 28/10/2026', 'waiting', null]);
+  assert.equal(read([staffMessage('demande_feu_vert', '2026-10-28T08:00:00Z', { canal: 'portal' })])[0], 'attend_client');
+  // The right of its channel: an e-mail is checked by whoever writes e-mails.
+  const email = stageOf({ ...waiting, messages: [request('2026-10-27T08:00:00Z', { canal: 'email', statut: 'echec', outboxStatus: 'failed' })] });
+  assert.deepEqual([email.key, email.action.permissions], ['demande_a_verifier', ['perm_comm_email']]);
+  // A message of the client is never a request.
+  assert.equal(stageOf({ ...waiting, conversationStatut: 'termine', demandeFeuVertEnvoyeeAt: '2026-10-26T08:00:00Z',
+    messages: [staffMessage('demande_feu_vert', '2026-10-26T08:00:00Z'), { ...request('2026-10-28T09:00:00Z', { statut: 'echec', outboxStatus: 'failed' }), type: 'client' }] }).key, 'attend_client');
+  // Its address keeps the way back.
+  const lost = colisRow({ ...waiting, messages: [request('2026-10-28T09:00:00Z', { statut: 'echec', outboxStatus: 'failed' })] }, ctx());
+  assert.equal(colisActionHref(lost, '/?onglet=brouillon&q=payet'), '/colis/d-1?onglet=conversation&returnTo=%2F%3Fonglet%3Dbrouillon%26q%3Dpayet');
+  assert.equal(colisActionHref(lost, 'https://evil.example/'), '/colis/d-1?onglet=conversation&returnTo=%2F', 'An outside way back is dropped.');
+});
+
+test('« Prêt pour le devis » only when the complete calculation would pass, otherwise « Devis à compléter » and its first gap', () => {
+  const full = changes => ({ tarifs, categories, ...changes });
+  const read = (dossier, changes) => { const step = stageOf(dossier, full(changes)); return [step.key, step.detail]; };
+  assert.deepEqual(stageOf(complete, full()), { key: 'pret_pour_devis', label: 'Prêt pour le devis', detail: 'Tout est prêt pour le devis', tone: 'current', action: { key: 'envoyer_devis', label: 'Envoyer le devis', task: 'devis', ...QUOTE } });
+  // The reviewer's case: no article, the taxes cannot be calculated.
+  assert.deepEqual(stageOf(prepared, full()), { key: 'devis_a_completer', label: 'Devis à compléter', detail: 'Articles et catégories à renseigner', tone: 'review',
+    action: { key: 'completer_devis', label: 'Compléter le devis', task: 'devis', ...QUOTE } });
+  // The reviewer's case: a client whose type is not set.
+  assert.deepEqual(read(complete, { getClient: () => ({ ...flavie, type: null }) }), ['devis_a_completer', 'Type de client à renseigner']);
+  assert.deepEqual(read(complete, { tarifs: { 976: tarifs[976] } }), ['devis_a_completer', 'Tarif de la destination à renseigner']);
+  assert.deepEqual(read(complete, { getClient: () => ({ ...flavie, cp: '75011' }) }), ['devis_a_completer', 'Destination du client à vérifier']);
+  assert.deepEqual(read({ ...complete, lignes: [{ ...article, cat: 'cat-inconnue' }] }), ['devis_a_completer', 'Article 1 à compléter']);
+  assert.deepEqual(read({ ...complete, lignes: [{ ...article, prix: 0 }] }), ['devis_a_completer', 'Valeur des articles à vérifier']);
+  assert.deepEqual(read({ ...complete, fraisDivers: [{ libelle: '', montant: 5 }] }), ['devis_a_completer', 'Frais divers à compléter']);
+  const customDuty = { stale: true, destination: '974', tariffId: 't-1', code: '6204430000', label: 'Robes', source: { id: 's-1' }, rates: { om: 10, omr: 2.5 }, baseRates: { om: 10, omr: 2.5 } };
+  assert.deepEqual(read({ ...complete, lignes: [{ ...article, customDuty }] }), ['devis_a_completer', 'Classement douanier de l’article 1 à vérifier']);
+  assert.deepEqual(read(complete, { getClient: () => null }), ['devis_a_completer', 'Fiche client à retrouver']);
+  // A professional client: transport and fees, no article needed; the tariff of their destination is.
+  assert.deepEqual(read({ ...prepared, clientId: pro.id, factures: [] }), ['pret_pour_devis', 'Tout est prêt pour le devis']);
+  assert.deepEqual(read({ ...prepared, clientId: pro.id, factures: [] }, { tarifs: { 974: tarifs[974] } }), ['devis_a_completer', 'Tarif de la destination à renseigner']);
+  // Without the tariffs and the categories nothing is claimed beyond the journey's own rules.
+  assert.equal(stageOf(prepared, { categories }).key, 'pret_pour_devis');
+  assert.equal(stageOf(prepared, { tarifs }).key, 'pret_pour_devis');
+  // The steps before keep their place.
+  assert.equal(stageOf({ ...prepared, factures: [] }, full()).key, 'facture_manquante');
+  assert.equal(stageOf({ ...prepared, preparationCompositionVersion: 4 }, full()).key, 'a_preparer');
 });
 
 test('« Le client refuse » and « Produit interdit à régler » open the dossier', () => {
@@ -202,7 +333,7 @@ test('« Facture manquante » follows the quote engine’s invoice rule, which a
 
 test('« Prêt pour le devis » sends the quote; its detail tells a saved draft or a withdrawn quote', () => {
   const ready = stageOf(prepared);
-  assert.deepEqual(ready, { key: 'pret_pour_devis', label: 'Prêt pour le devis', detail: 'Tout est prêt pour le devis', tone: 'current', action: { key: 'envoyer_devis', label: 'Envoyer le devis', task: 'devis' } });
+  assert.deepEqual(ready, { key: 'pret_pour_devis', label: 'Prêt pour le devis', detail: 'Tout est prêt pour le devis', tone: 'current', action: { key: 'envoyer_devis', label: 'Envoyer le devis', task: 'devis', ...QUOTE } });
   assert.equal(stageOf({ ...prepared, devisBrouillon: true, devisTotal: 95.06, devisSnapshot: snapshot, quoteVersion: 1 }).detail, 'Devis enregistré · à vérifier et envoyer');
   assert.equal(stageOf({ ...prepared, devisEnvoyeLe: '2026-10-20T10:00:00Z' }).detail, 'Ancien devis retiré · nouveau devis à envoyer');
 });
@@ -210,18 +341,29 @@ test('« Prêt pour le devis » sends the quote; its detail tells a saved draft 
 // ── Other tabs ───────────────────────────────────────────────────────────────
 test('« À payer » reads the payment model and opens the payment task; its amounts only with the right to see them', () => {
   const expected = stageOf(quoted);
-  assert.deepEqual(expected, { key: 'paiement_attendu', label: 'Paiement attendu', detail: 'Devis envoyé le 27/10/2026', tone: 'waiting', action: { key: 'suivre_paiement', label: 'Suivre le paiement', task: 'paiement' } });
+  assert.deepEqual(expected, { key: 'paiement_attendu', label: 'Paiement attendu', detail: 'Devis envoyé le 27/10/2026', tone: 'waiting', action: { key: 'suivre_paiement', label: 'Suivre le paiement', task: 'paiement', ...PAYMENT } });
   const partial = stageOf({ ...quoted, statut: 'attente_paiement', paiementMontant: 50, paiementDate: '2026-10-27T18:00:00Z' });
   assert.deepEqual([partial.key, partial.label, partial.detail, partial.tone], ['paiement_attendu', 'Paiement partiel', `Devis envoyé le 27/10/2026 · reste ${eur(45.06)}`, 'waiting']);
-  const hidden = stageOf({ ...quoted, statut: 'attente_paiement', paiementMontant: 50, paiementDate: '2026-10-27T18:00:00Z' }, { can: nothing });
-  assert.deepEqual([hidden.label, hidden.detail], ['Paiement attendu', 'Devis envoyé le 27/10/2026']);
   const withdrawn = stageOf({ ...quoted, devisBrouillon: true });
   assert.deepEqual([withdrawn.key, withdrawn.label, withdrawn.detail, withdrawn.tone, withdrawn.action.task], ['paiement_a_verifier', 'À recalculer', 'Devis retiré · à refaire', 'review', 'paiement']);
 });
 
+test('without the right to see amounts, « À payer » keeps its states, only the rest to pay is left out', () => {
+  const read = (dossier, label) => { const step = stageOf(dossier, { can: nothing }); return [step.key, step.label, step.detail, step.tone, step.action.key]; };
+  assert.deepEqual(read(quoted), ['paiement_attendu', 'Paiement attendu', 'Devis envoyé le 27/10/2026', 'waiting', 'suivre_paiement']);
+  assert.deepEqual(read({ ...quoted, statut: 'attente_paiement', paiementMontant: 50, paiementDate: '2026-10-27T18:00:00Z' }),
+    ['paiement_attendu', 'Paiement partiel', 'Devis envoyé le 27/10/2026', 'waiting', 'suivre_paiement'], 'Partial, without the amount left.');
+  assert.deepEqual(read({ ...quoted, devisBrouillon: true }), ['paiement_a_verifier', 'À recalculer', 'Devis retiré · à refaire', 'review', 'suivre_paiement']);
+  assert.deepEqual(read({ ...quoted, statut: 'attente_paiement', paiementMontant: 120, paiementDate: '2026-10-27T18:00:00Z' }),
+    ['paiement_a_verifier', 'Trop-perçu à vérifier', 'Devis envoyé le 27/10/2026', 'review', 'suivre_paiement']);
+  assert.deepEqual(read({ ...quoted, statut: 'attente_paiement', paiementMontant: 95.06 }),
+    ['paiement_a_verifier', 'Paiement à vérifier', 'Devis envoyé le 27/10/2026', 'review', 'suivre_paiement'], 'An amount without its date.');
+  assert.ok(!JSON.stringify(stageOf({ ...quoted, statut: 'attente_paiement', paiementMontant: 50, paiementDate: '2026-10-27T18:00:00Z' }, { can: nothing })).includes('€'));
+});
+
 test('« Prêt à partir » reads the departure readiness and prepares the departure', () => {
   const ready = stageOf(paid);
-  assert.deepEqual(ready, { key: 'pret_a_partir', label: 'Prêt pour ce départ', detail: 'Prévu le 29/10/2026', tone: 'current', action: { key: 'preparer_depart', label: 'Préparer le départ', task: 'expedition' } });
+  assert.deepEqual(ready, { key: 'pret_a_partir', label: 'Prêt pour ce départ', detail: 'Prévu le 29/10/2026', tone: 'current', action: { key: 'preparer_depart', label: 'Préparer le départ', task: 'expedition', ...DEPARTURE } });
   const unassigned = stageOf({ ...paid, envoi: null });
   assert.deepEqual([unassigned.label, unassigned.detail], ['Prêt à affecter', 'Départ à choisir']);
   const unprepared = stageOf({ ...paid, finalMeasurementsVersion: 2 });
@@ -230,7 +372,7 @@ test('« Prêt à partir » reads the departure readiness and prepares the depar
 
 test('« Parti » reads the status: the expedition, then the delivery, then nothing to do', () => {
   const flying = stageOf({ ...paid, statut: 'transit', envoi: 'e-gone', dateExpedition: '2026-10-15T06:00:00Z' });
-  assert.deepEqual(flying, { key: 'parti', label: 'En vol', detail: 'Départ du jeudi 15 octobre', tone: 'current', action: { key: 'suivre_expedition', label: 'Suivre l’expédition', task: 'expedition' } });
+  assert.deepEqual(flying, { key: 'parti', label: 'En vol', detail: 'Départ du jeudi 15 octobre', tone: 'current', action: { key: 'suivre_expedition', label: 'Suivre l’expédition', task: 'expedition', ...TRANSPORT } });
   const arrived = stageOf({ ...paid, statut: 'arrive', envoi: 'e-gone', dateExpedition: '2026-10-15T06:00:00Z' });
   assert.deepEqual([arrived.label, arrived.action.key, arrived.action.task], ['Arrivé destination', 'suivre_livraison', 'livraison']);
   const delivered = stageOf({ ...paid, statut: 'livre', envoi: 'e-gone', dateLivraison: '2026-10-20T08:00:00Z' });
@@ -241,6 +383,107 @@ test('archived and cancelled dossiers have no step to work on', () => {
   assert.deepEqual(stageOf({ ...measured, archive: true }), { key: 'archive', label: 'Dossier archivé', detail: 'Aucune action attendue', tone: 'neutral', action: null });
   assert.deepEqual(stageOf({ ...quoted, statut: 'annule' }), { key: 'annule', label: 'Dossier annulé', detail: 'Aucune action attendue', tone: 'neutral', action: null });
   assert.equal(stageOf({ ...measured, archive: true }, { pending: pendingByColis([pendingEntry('d-1', [2])]) }).key, 'archive');
+});
+
+// ── Rights and team tasks ────────────────────────────────────────────────────
+test('each action carries the rights of the screen that does it; actionAllowed needs one of them and every one of requiresAll', () => {
+  const action = (dossier, changes) => stageOf(dossier, changes).action;
+  const waiting = { ...measured, statut: 'attente_feu_vert', demandeFeuVertEnvoyeeAt: '2026-10-26T08:00:00Z', messages: [staffMessage('demande_feu_vert', '2026-10-26T08:00:00Z')] };
+  const actions = {
+    valider_reception: action(measured, { pending: pendingByColis([pendingEntry('d-1', [2])]) }),
+    completer_mesures: action({ ...measured, statut: 'receptionne' }),
+    demander_accord: action(measured),
+    relancer: action(waiting),
+    redemander_accord: action({ ...waiting, attenteClientDate: '2026-10-20T10:00:00Z', attenteClientUntil: '2026-10-27T10:00:00Z' }),
+    lire_reponse: action({ ...waiting, conversationStatut: 'a_traiter' }),
+    verifier_envoi: action({ ...waiting, messages: [staffMessage('demande_feu_vert', '2026-10-28T09:00:00Z', { statut: 'echec', outboxStatus: 'failed' })] }),
+    voir_dossier: action({ ...measured, statut: 'refuse_client', feuVert: 'refuse' }),
+    preparer: action({ ...measured, statut: 'autorise', feuVert: 'autorise' }),
+    ajouter_facture: action({ ...prepared, factures: [] }),
+    completer_devis: action(prepared, { tarifs, categories }),
+    envoyer_devis: action(prepared),
+    suivre_paiement: action(quoted),
+    preparer_depart: action(paid),
+    suivre_expedition: action({ ...paid, statut: 'transit', envoi: 'e-gone' }),
+    suivre_livraison: action({ ...paid, statut: 'arrive', envoi: 'e-gone' }),
+  };
+  assert.deepEqual(Object.fromEntries(Object.entries(actions).map(([key, value]) => [key, [value.key, value.permissions, value.requiresAll || null]])), {
+    valider_reception: ['valider_reception', ['perm_colis_receptionner'], null],
+    completer_mesures: ['completer_mesures', ['perm_colis_mesurer'], null],
+    demander_accord: ['demander_accord', ['perm_colis_demander_feuvert'], null],
+    relancer: ['relancer', ['perm_colis_demander_feuvert'], null],
+    redemander_accord: ['redemander_accord', ['perm_colis_demander_feuvert'], ['perm_colis_revenir_arriere']],
+    lire_reponse: ['lire_reponse', ['perm_comm_message_libre', 'perm_comm_telegram', 'perm_comm_email', 'perm_comm_voir_chat_autres'], null],
+    verifier_envoi: ['verifier_envoi', ['perm_comm_telegram'], null],
+    voir_dossier: ['voir_dossier', [], null],
+    preparer: ['preparer', ['perm_colis_preparer'], null],
+    ajouter_facture: ['ajouter_facture', ['perm_factures_ajouter', 'perm_factures_valider'], null],
+    completer_devis: ['completer_devis', ['perm_colis_calculer_devis', 'perm_colis_envoyer_devis'], null],
+    envoyer_devis: ['envoyer_devis', ['perm_colis_calculer_devis', 'perm_colis_envoyer_devis'], null],
+    suivre_paiement: ['suivre_paiement', ['perm_colis_confirmer_paiement', 'perm_comm_telegram', 'perm_comm_email', 'perm_comm_message_libre'], null],
+    preparer_depart: ['preparer_depart', ['perm_envois_voir'], null],
+    suivre_expedition: ['suivre_expedition', ['perm_colis_changer_statut_expedition'], null],
+    suivre_livraison: ['suivre_livraison', ['perm_colis_changer_statut_expedition'], null],
+  });
+  // Every action that needs a right says why it is refused; consulting the dossier needs none.
+  for (const value of Object.values(actions)) assert.equal(Boolean(value.deniedReason), value.permissions.length > 0, value.key);
+  const only = (...granted) => permission => granted.includes(permission);
+  assert.equal(actionAllowed(actions.voir_dossier, nothing), true);
+  assert.equal(actionAllowed(actions.voir_dossier, undefined), true);
+  assert.equal(actionAllowed(null, all), false);
+  assert.equal(actionAllowed(actions.demander_accord, only('perm_colis_demander_feuvert')), true);
+  assert.equal(actionAllowed(actions.demander_accord, nothing), false);
+  assert.equal(actionAllowed(actions.demander_accord, undefined), false);
+  assert.equal(actionAllowed(actions.redemander_accord, only('perm_colis_demander_feuvert')), false, 'The correction of the accord task needs both.');
+  assert.equal(actionAllowed(actions.redemander_accord, only('perm_colis_revenir_arriere')), false);
+  assert.equal(actionAllowed(actions.redemander_accord, only('perm_colis_demander_feuvert', 'perm_colis_revenir_arriere')), true);
+  assert.equal(actionAllowed(actions.envoyer_devis, only('perm_colis_calculer_devis')), true, 'One suffices: the quote is calculated or sent.');
+  assert.equal(actionAllowed(actions.ajouter_facture, only('perm_factures_valider')), true);
+  assert.equal(actionAllowed(actions.lire_reponse, only('perm_comm_voir_chat_autres')), true);
+  assert.equal(actionAllowed(actions.verifier_envoi, only('perm_comm_email')), false, 'A Telegram message is checked by whoever writes on Telegram.');
+  // The reviewer's case: a préparateur (perm_colis_preparer only) prepares; the quote and the consent are not theirs.
+  const preparateur = only('perm_colis_preparer', 'perm_clients_voir');
+  assert.deepEqual(Object.values(actions).filter(value => actionAllowed(value, preparateur)).map(value => value.key), ['voir_dossier', 'preparer']);
+  // The step is the same whatever the rights: the screen disables the action and says why.
+  assert.deepEqual(stageOf(prepared, { can: preparateur }), stageOf(prepared));
+});
+
+test('a task held by a colleague: the step says who, from the team’s tasks; without them nothing changes', () => {
+  const marie = { authId: 'u-marie', prenom: 'Marie', nom: 'Hoarau', actif: true };
+  const work = (kind, changes = {}) => ({ id: `w-${kind}`, colis_id: 'd-1', kind, state: 'in_progress', assignee_id: 'u-marie', created_at: '2026-10-28T08:00:00Z', ...changes });
+  const team = (actions, changes = {}) => ({ actions, me: { id: 'u-me' }, teamUsers: [marie, { authId: 'u-me', prenom: 'Camille', nom: 'Payet', actif: true }], ...changes });
+  // The reviewer's case: a colleague holds the reception task of a measured dossier; asking the accord is that task.
+  assert.deepEqual(stageOf(measured, team([work('reception')])), { ...stageOf(measured), heldBy: { id: 'u-marie', name: 'Marie Hoarau' } });
+  assert.deepEqual(colisRow(measured, ctx(team([work('reception', { state: 'ready' })]))).stage.heldBy, { id: 'u-marie', name: 'Marie Hoarau' });
+  assert.equal(brouillonFiche(measured, ctx(team([work('reception', { state: 'waiting' })]))).stage.heldBy.name, 'Marie Hoarau');
+  // Held by me, done, unassigned, by someone no longer active or unknown to the team, another dossier or another task: nothing.
+  for (const [label, changes] of [
+    ['mine', team([work('reception', { assignee_id: 'u-me' })])],
+    ['me as an id', team([work('reception', { assignee_id: 'u-me' })], { me: 'u-me' })],
+    ['done', team([work('reception', { state: 'done' })])],
+    ['unassigned', team([work('reception', { assignee_id: null })])],
+    ['inactive', team([work('reception')], { teamUsers: [{ ...marie, actif: false }] })],
+    ['unknown', team([work('reception', { assignee_id: 'u-gone' })])],
+    ['another dossier', team([work('reception', { colis_id: 'd-9' })])],
+    ['another task', team([work('preparation')])],
+  ]) assert.equal('heldBy' in stageOf(measured, changes), false, label);
+  // Without the tasks, the person or the team: the step is unchanged.
+  for (const missing of ['actions', 'me', 'teamUsers']) assert.deepEqual(stageOf(measured, { ...team([work('reception')]), [missing]: undefined }), stageOf(measured), missing);
+  // The task of each action: preparation, documents, quote, departure, conversation, the correction of a refusal.
+  const heldOn = (dossier, kind, changes) => stageOf(dossier, { ...team([work(kind)]), ...changes }).heldBy?.name || null;
+  assert.equal(heldOn({ ...measured, statut: 'autorise', feuVert: 'autorise' }, 'preparation'), 'Marie Hoarau');
+  assert.equal(heldOn({ ...prepared, factures: [] }, 'documents'), 'Marie Hoarau');
+  assert.equal(heldOn(prepared, 'quote'), 'Marie Hoarau');
+  assert.equal(heldOn(prepared, 'quote', { tarifs, categories }), 'Marie Hoarau', '« Compléter le devis » too.');
+  assert.equal(heldOn(paid, 'departure'), 'Marie Hoarau');
+  assert.equal(heldOn({ ...measured, statut: 'attente_feu_vert', conversationStatut: 'a_traiter' }, 'conversation'), 'Marie Hoarau', '« Lire la réponse »: the conversation.');
+  assert.equal(heldOn({ ...measured, statut: 'attente_feu_vert', conversationStatut: 'a_traiter' }, 'reception'), null);
+  assert.equal(heldOn({ ...measured, statut: 'refuse_client', feuVert: 'refuse' }, 'correction'), 'Marie Hoarau');
+  // No team task behind a reception to validate nor a payment to follow.
+  assert.equal(heldOn(measured, 'reception', { pending: pendingByColis([pendingEntry('d-1', [2])]) }), null);
+  assert.equal(heldOn(quoted, 'reception'), null);
+  // A member without a name, as the application writes it.
+  assert.equal(stageOf(measured, team([work('reception')], { teamUsers: [{ authId: 'u-marie', actif: true }] })).heldBy.name, 'Membre de l’équipe');
 });
 
 // ── Rows ─────────────────────────────────────────────────────────────────────
@@ -269,6 +512,36 @@ test('the total is the saved and current quote, with its state, and nothing with
   assert.deepEqual(colisRow({ ...quoted, quoteVersion: 2 }, ctx()).total, { visible: true, amount: null, state: 'À revoir', label: 'À revoir' }, 'Another version than the saved quote.');
   assert.deepEqual(colisRow(quoted, ctx({ can: nothing })).total, { visible: false, amount: null, state: null, label: null });
   assert.equal(colisRow(quoted, ctx({ can: permission => permission === 'perm_finances_voir_total' })).total.visible, true);
+});
+
+test('a paid dossier is « Payé », never to pay: the amount paid, else the quote’s total', () => {
+  assert.equal(PAID_TOTAL_STATE, 'paid');
+  assert.deepEqual(colisRow(paid, ctx()).total, { visible: true, amount: 95.06, state: 'paid', label: 'Payé' });
+  // « Payé » carries no amount: said without the right to see amounts, the amount left out.
+  assert.deepEqual(colisRow(paid, ctx({ can: nothing })).total, { visible: false, amount: null, state: 'paid', label: 'Payé' });
+  // « Parti »: paid before leaving; a former dossier without its payment recorded shows the quote's total.
+  assert.deepEqual(colisRow({ ...paid, statut: 'transit', envoi: 'e-gone' }, ctx()).total, { visible: true, amount: 95.06, state: 'paid', label: 'Payé' });
+  assert.deepEqual(colisRow({ ...paid, statut: 'livre', envoi: 'e-gone', paiementMontant: null, paiementDate: null }, ctx()).total.amount, 95.06);
+  assert.deepEqual(colisRow({ ...paid, paiementMontant: 100 }, ctx()).total.amount, 100, 'What was paid, even another amount.');
+  assert.deepEqual(colisRow({ ...measured, statut: 'expedie', envoi: 'e-gone' }, ctx()).total, { visible: true, amount: null, state: 'paid', label: 'Payé' }, 'Nothing known: no false zero.');
+  // A payment recorded in full before the status follows: paid too.
+  assert.deepEqual(colisRow({ ...quoted, statut: 'attente_paiement', paiementMontant: 95.06, paiementDate: '2026-10-27T18:00:00Z' }, ctx()).total, { visible: true, amount: 95.06, state: 'paid', label: 'Payé' });
+  assert.equal(colisRow({ ...quoted, statut: 'attente_paiement', paiementMontant: 50, paiementDate: '2026-10-27T18:00:00Z' }, ctx()).total.state, '', 'A partial payment is not paid.');
+  // The totals and the sort read the amounts paid.
+  const rows = [colisRow(paid, ctx()), colisRow({ ...paid, id: 'd-2', clientId: zoe.id, paiementMontant: 120, devisTotal: 120, devisSnapshot: { ...snapshot, amounts: { ...snapshot.amounts, total: 120 } } }, ctx())];
+  assert.deepEqual([colisTotals(rows).montantConnu, colisTotals(rows).labels.prixConnus], [215.06, '2 prix connus sur 2']);
+  assert.deepEqual(sortColisRows(rows, 'montant').map(row => row.id), ['d-2', 'd-1']);
+});
+
+test('the reviewer’s cases: a group mixing a known and an unknown price; « Par date d’envoi » keeps every row once', () => {
+  const draft = { ...prepared, id: 'd-4', devisTotal: 100, devisBrouillon: true, quoteVersion: 1, devisSnapshot: { version: 1, amounts: { total: 100, transport: 80, om: 10, omr: 5, tva: 5 }, inputs: { client: { type: 'particulier' } } } };
+  const totals = colisTotals([colisRow(draft, ctx()), colisRow({ ...prepared, id: 'd-5' }, ctx())]);
+  assert.deepEqual([totals.montantConnu, totals.prixConnus, totals.labels.montant, totals.labels.prixConnus], [100, 1, eur(100), '1 prix connu sur 2']);
+  const many = Array.from({ length: 6 }, (_, index) => colisRow({ ...measured, id: `d-g${index}`, envoi: index % 2 ? 'e-unknown' : null, departSouhaite: index === 4 ? '2026-11-12' : null }, ctx()));
+  const groups = groupColisRowsByDeparture(many, { now });
+  assert.deepEqual(groups.map(group => [group.key, group.label, group.rows.length]), [['wish:974:2026-11-12', 'Départ à créer du jeudi 12 novembre', 1], ['e-unknown', 'Départ à vérifier', 3], ['none', 'Départ à choisir', 2]]);
+  assert.deepEqual(groups.reduce((ids, group) => ids.concat(group.rows.map(row => row.id)), []).sort(), many.map(row => row.id).sort());
+  assert.equal(sortColisRows(many, 'depart', { now }).length, 6);
 });
 
 test('the departure of a row: assigned with its closing, desired, unreadable or to choose', () => {
@@ -570,7 +843,7 @@ test('the sheet: header, cartons received with those to validate, one action and
   assert.deepEqual(sheet.header, { ref: 'EXP-AAA111', clientName: 'PAYET Flavie', clientTypeLabel: 'Particulier', destinationLabel: 'Réunion', commune: 'Sainte-Clotilde',
     casier: 'B12', casierLabel: 'Casier B12', stage: sheet.stage });
   assert.equal(sheet.stage.key, 'reception_a_valider');
-  assert.deepEqual(sheet.action, { key: 'valider_reception', label: 'Valider la réception', task: null, href: '/recevoir?client=c-flavie&valider=1' });
+  assert.deepEqual(sheet.action, { key: 'valider_reception', label: 'Valider la réception', task: null, ...RECEIVE, href: '/recevoir?client=c-flavie&valider=1' });
   assert.deepEqual(sheet.received.cartons.map(carton => [carton.number, carton.supplierLabel, carton.trackingLabel, carton.dimensionsLabel, carton.poidsLabel, carton.volumeLabel, carton.receivedLabel, carton.pending]), [
     [1, 'Amazon', '6A 123 456 789 01', '40 × 30 × 20 cm', kg(2.5), '0,024\u00a0m³', '26/10/2026', false],
     [2, 'Zalando', 'CB998877665FR', '30 × 20 × 10 cm', kg(1.25), '0,006\u00a0m³', '27/10/2026', true],
@@ -637,6 +910,39 @@ test('without a saved quote the sheet says what the quote still needs; without t
   const review = brouillonFiche({ ...quoted, quoteVersion: 2 }, ctx()).price;
   assert.deepEqual([review.known, review.label, review.message], [false, 'À revoir', 'Le devis enregistré est à revoir dans le dossier.']);
   assert.deepEqual(brouillonFiche(quoted, ctx({ can: nothing })).price, { visible: false });
+});
+
+test('the sheet lists everything the quote still misses, for everyone, the complete calculation included', () => {
+  const full = changes => ctx({ tarifs, categories, ...changes });
+  assert.deepEqual(brouillonFiche(measured, full()).missing, ['Accord du client', 'Mesures après optimisation', 'Factures d’achat vérifiées', 'Articles et catégories à renseigner']);
+  const legacy = brouillonFiche(prepared, full({ getClient: () => ({ ...flavie, type: null }), tarifs: {} }));
+  assert.deepEqual(legacy.missing, ['Type de client à renseigner', 'Tarif de la destination à renseigner', 'Articles et catégories à renseigner']);
+  assert.deepEqual([legacy.stage.key, legacy.stage.detail, legacy.price.missing, legacy.price.message], ['devis_a_completer', 'Type de client à renseigner', legacy.missing, null]);
+  // The reviewer's case: no article; without the right to see amounts, the gaps are still listed (no amount in them).
+  const hidden = brouillonFiche(prepared, full({ can: nothing }));
+  assert.deepEqual([hidden.price, hidden.missing], [{ visible: false }, ['Articles et catégories à renseigner']]);
+  const ready = brouillonFiche(complete, full());
+  assert.deepEqual([ready.missing, ready.price.missing, ready.price.message], [[], [], 'Tout est prêt pour calculer le devis.']);
+  // Without the tariffs and categories: the journey's own rules only. A known price or a paid dossier misses nothing.
+  assert.deepEqual(brouillonFiche(prepared, ctx()).missing, []);
+  assert.deepEqual(brouillonFiche(measured, ctx()).missing, ['Accord du client', 'Mesures après optimisation', 'Factures d’achat vérifiées']);
+  assert.deepEqual([brouillonFiche(quoted, full()).missing, brouillonFiche(paid, full()).missing], [[], []]);
+});
+
+test('the sheet of a paid dossier says « Payé » with its amount, never « à payer »', () => {
+  const sheet = brouillonFiche(paid, ctx());
+  assert.deepEqual([sheet.price.visible, sheet.price.known, sheet.price.state, sheet.price.label, sheet.price.detailed, sheet.price.message], [true, true, 'paid', 'Payé', true, null]);
+  assert.deepEqual(sheet.price.total, { label: 'Payé', amount: 95.06, text: eur(95.06) });
+  assert.deepEqual([sheet.price.transport.amount, sheet.price.taxes.amount, sheet.price.fees.amount], [70, 20.06, 5], 'The detail of the quote paid.');
+  assert.ok(!/payer/i.test(JSON.stringify(sheet.price)));
+  assert.deepEqual(brouillonFiche({ ...paid, statut: 'livre', envoi: 'e-gone' }, ctx()).price.state, 'paid');
+  assert.deepEqual(brouillonFiche(paid, ctx({ can: nothing })).price, { visible: false, state: 'paid', label: 'Payé' });
+  // Paid at another amount than the quote: that amount, the detail in the dossier.
+  const other = brouillonFiche({ ...paid, paiementMontant: 100 }, ctx()).price;
+  assert.deepEqual([other.label, other.total, other.detailed, other.message], ['Payé', { label: 'Payé', amount: 100, text: eur(100) }, false, 'Le détail de ce devis est à consulter dans le dossier.']);
+  // Nothing known of the amount: no false zero.
+  assert.deepEqual(brouillonFiche({ ...measured, statut: 'expedie', envoi: 'e-gone' }, ctx()).price,
+    { visible: true, known: false, state: 'paid', label: 'Payé', missing: [], message: 'Le montant réglé est à consulter dans le dossier.' });
 });
 
 test('the sheet shows the latest arrival notice of the dossier and its state', () => {

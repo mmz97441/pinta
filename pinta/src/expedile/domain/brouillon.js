@@ -1,9 +1,11 @@
 import { DESTINATIONS, STATUTS } from '../constants/index.js';
 import { RECEPTION_APPEND_STATUSES, RECEPTION_MEASURES, hasCompleteReceptionMeasurements, receptionAppendBlockReason, receptionAppendImpact, receptionCartonManifest, receptionDateSummary } from './reception.js';
-import { PAYMENT_DETAIL_LABELS, TABLE_COLUMNS, TAXES_PRO_LABEL, buildDossierTableModel, formatDossierTableDate } from './dossierTable.js';
+import { PAYMENT_DETAIL_LABELS, PAYMENT_STATE_LABELS, TABLE_COLUMNS, TAXES_PRO_LABEL, buildDossierTableModel, formatDossierTableDate } from './dossierTable.js';
 import { statusTone } from './dossierTableTone.js';
-import { consentRelance, consentState, consentSummary } from './consentQueue.js';
+import { CANCELLED_SEND_LABEL, consentRelance, consentState, consentSummary } from './consentQueue.js';
 import { consentFollowUp } from './dossierAlerts.js';
+import { messageDeliveryLabel, needsConversationAction } from './conversations.js';
+import { findDossierWorkAction } from './personalWork.js';
 import { hasCurrentPreparation } from './preparationReadiness.js';
 import { savedQuoteBreakdown } from './quoteBreakdown.js';
 import { importTaxEstimate } from './importTaxes.js';
@@ -238,9 +240,13 @@ function factsOf(dossier, ctx = {}) {
   const client = clientOf(dossier, ctx || {});
   const envois = Array.isArray(ctx.envois) ? ctx.envois.filter(Boolean) : [];
   const can = typeof ctx.can === 'function' ? ctx.can : () => false;
+  const settings = ctx.settings || {};
   // A null client must not replace the model's own fallback (the saved quote's client).
-  const model = buildDossierTableModel(dossier, { client: client || undefined, envois, can, now, settings: ctx.settings || {} });
-  return { dossier, client, envois, can, now, model, tab: colisTab(dossier), finances: canSeeDossierFinances(can), pending: pendingEntry(ctx.pending, dossier.id), notices: ctx.notices };
+  const model = buildDossierTableModel(dossier, { client: client || undefined, envois, can, now, settings });
+  // The team's tasks (staff_work_actions), the person reading (auth.u) and the team: who holds a task.
+  const meId = typeof ctx.me === 'string' ? ctx.me : ctx.me?.id || null;
+  return { dossier, client, envois, can, now, settings, model, tab: colisTab(dossier), finances: canSeeDossierFinances(can), pending: pendingEntry(ctx.pending, dossier.id),
+    notices: ctx.notices, tarifs: ctx.tarifs, categories: ctx.categories, actions: ctx.actions, meId, teamUsers: ctx.teamUsers };
 }
 
 /** The existing rule of the quote engine (calculateQuote, errors of the field « factures »): the quote of a
@@ -251,45 +257,154 @@ function invoicesBlockQuote(dossier, client) {
   return calculateQuote({ colis: dossier, client: quoteClient, mode: 'final' }).errors.some(error => error.field === 'factures');
 }
 
+/** An error of calculateQuote in the team's plain words: what is still missing for the quote. */
+function quoteGap(error) {
+  const field = String(error?.field || ''), message = String(error?.message || '');
+  const article = /^(lignes|customs)\.(\d+)$/.exec(field);
+  if (article) return article[1] === 'customs' ? `Classement douanier de l’article ${Number(article[2]) + 1} à vérifier` : `Article ${Number(article[2]) + 1} à compléter`;
+  if (field.startsWith('dimensions')) return 'Mesures après optimisation';
+  if (field.startsWith('fraisDivers')) return 'Frais divers à compléter';
+  if (field === 'dossier') return /interdit/i.test(message) ? 'Produit interdit à régler' : /feu vert/i.test(message) ? 'Accord du client' : /archiv/i.test(message) ? 'Dossier archivé' : message;
+  return {
+    factures: 'Factures d’achat vérifiées',
+    client: 'Type de client à renseigner',
+    destination: /TVA/.test(message) ? 'Taux de TVA de la destination à renseigner' : 'Destination du client à vérifier',
+    settings: 'Diviseur volumétrique à régler',
+    tarif: 'Tarif de la destination à renseigner',
+    lignes: /valeur totale/i.test(message) ? 'Valeur des articles à vérifier' : 'Articles et catégories à renseigner',
+    total: 'Total du devis à vérifier',
+  }[field] || message;
+}
+
+/** What the complete quote still misses, as the « Prêts à chiffrer » queue checks it (workQueues, « ready »): the
+ * calculation with the client's destination, its tariff, the categories and the settings, its errors in plain words,
+ * without repeats. Null when the caller gives no `tarifs` and `categories` (nothing is claimed without them). */
+function quoteGaps(f) {
+  if (!f.tarifs || typeof f.tarifs !== 'object' || !Array.isArray(f.categories)) return null;
+  if (!f.client) return ['Fiche client à retrouver'];
+  const destination = DESTINATIONS[String(f.client.cp || '').slice(0, 3)];
+  const result = calculateQuote({ colis: f.dossier, client: f.client, destination, tarif: f.tarifs[destination?.code], categories: f.categories, settings: f.settings });
+  return [...new Set(result.errors.map(quoteGap).filter(Boolean))];
+}
+
 // ── Steps ────────────────────────────────────────────────────────────────────
-/** The steps of the Brouillon tab, in the order they are recognised: the first that applies wins. */
+/** The steps of the Brouillon tab, in the order they are recognised: the first that applies wins (« Le client a
+ * répondu » before any request or relance, « Demande à vérifier » before waiting for an answer). */
 export const BROUILLON_STAGES = Object.freeze([
   { key: 'reception_a_valider', label: 'Réception à valider' },
   { key: 'mesures_a_completer', label: 'Mesures à compléter' },
+  { key: 'client_a_repondu', label: 'Le client a répondu' },
   { key: 'accord_a_demander', label: 'Accord à demander' },
+  { key: 'demande_a_verifier', label: 'Demande à vérifier' },
   { key: 'attend_client', label: 'Attend le client' },
   { key: 'client_refuse', label: 'Le client refuse' },
   { key: 'produit_interdit', label: 'Produit interdit à régler' },
   { key: 'a_preparer', label: 'À préparer' },
   { key: 'facture_manquante', label: 'Facture manquante' },
+  { key: 'devis_a_completer', label: 'Devis à compléter' },
   { key: 'pret_pour_devis', label: 'Prêt pour le devis' },
 ].map(item => Object.freeze(item)));
 const STAGE_LABELS = Object.fromEntries(BROUILLON_STAGES.map(item => [item.key, item.label]));
 
 /** What a row without action says: the dossier waits for someone else. */
 export const NO_ACTION_LABEL = 'Rien à faire';
+
+// The rights of each action, as the screen that does it checks them: `permissions`, any one suffices (none: open to
+// all); `requiresAll`, every one is needed too (the correction of a task asks for perm_colis_revenir_arriere AND the
+// right of the task, as correct-colis-task does). `deniedReason`: what the screen says without them.
+const RIGHTS = Object.freeze({
+  // The reception page (/recevoir), App.jsx.
+  reception: { permissions: ['perm_colis_receptionner'], deniedReason: 'Réservé aux personnes autorisées à réceptionner.' },
+  // « Enregistrer les mesures de réception », StaffDetailView.
+  mesures: { permissions: ['perm_colis_mesurer'], deniedReason: 'Réservé aux personnes autorisées à mesurer les cartons.' },
+  // The request and the relance (TaskMessage, disabled without it), queue_message.
+  accord: { permissions: ['perm_colis_demander_feuvert'], deniedReason: 'Réservé aux personnes autorisées à demander l’accord.' },
+  // A new request after the client's wait: TaskReopen of the accord task (correct-colis-task).
+  nouvelAccord: { permissions: ['perm_colis_demander_feuvert'], requiresAll: ['perm_colis_revenir_arriere'], deniedReason: 'Réservé aux personnes autorisées à corriger le dossier et à demander l’accord.' },
+  // « Commencer la préparation », « Enregistrer l’optimisation », StaffDetailView.
+  preparation: { permissions: ['perm_colis_preparer'], deniedReason: 'Réservé aux personnes autorisées à préparer.' },
+  // InvoiceWorkspace: add a document, or verify one.
+  factures: { permissions: ['perm_factures_ajouter', 'perm_factures_valider'], deniedReason: 'Réservé aux personnes autorisées à ajouter ou vérifier les factures.' },
+  // « Enregistrer et vérifier le devis », « Envoyer le devis au client », StaffDetailView.
+  devis: { permissions: ['perm_colis_calculer_devis', 'perm_colis_envoyer_devis'], deniedReason: 'Réservé aux personnes autorisées à établir ou envoyer le devis.' },
+  // « Confirmer réception du paiement », or the payment relance (TaskMessage and its channels).
+  paiement: { permissions: ['perm_colis_confirmer_paiement', 'perm_comm_telegram', 'perm_comm_email', 'perm_comm_message_libre'], deniedReason: 'Réservé aux personnes autorisées à suivre les règlements.' },
+  // The departure field and « Vérifier le départ et son manifeste »: both need the departures.
+  depart: { permissions: ['perm_envois_voir'], deniedReason: 'Réservé aux personnes ayant accès aux départs.' },
+  // The transport steps, StaffDetailView.
+  transport: { permissions: ['perm_colis_changer_statut_expedition'], deniedReason: 'Réservé à l’équipe chargée du transport.' },
+  // The Conversation tab of the dossier, App.jsx.
+  conversation: { permissions: ['perm_comm_message_libre', 'perm_comm_telegram', 'perm_comm_email', 'perm_comm_voir_chat_autres'], deniedReason: 'Réservé aux personnes autorisées à échanger avec les clients.' },
+  // « Vérifier et réessayer » of a message not delivered, ChatPanel: the right of its channel.
+  telegram: { permissions: ['perm_comm_telegram'], deniedReason: 'Réservé aux personnes autorisées à écrire sur Telegram.' },
+  email: { permissions: ['perm_comm_email'], deniedReason: 'Réservé aux personnes autorisées à écrire par e-mail.' },
+  // Consulting the dossier asks for nothing more.
+  consultation: { permissions: [] },
+});
+
 // One action = one click. `task`: the dossier task it opens (dossierTaskUrl); `panel`: the message the screen opens
 // in place (TaskMessage template, as in StaffDetailView), no page; `href`: an address of its own.
-const action = (key, label, task, extra = {}) => ({ key, label, task: task || null, ...extra });
+const action = (key, label, task, rights, extra = {}) => ({
+  key, label, task: task || null, permissions: [...rights.permissions],
+  ...(rights.requiresAll ? { requiresAll: [...rights.requiresAll] } : {}),
+  ...(rights.deniedReason ? { deniedReason: rights.deniedReason } : {}),
+  ...extra,
+});
+/** « /colis/<id>?onglet=conversation »: the conversation of the dossier. */
+const conversationHref = dossier => dossier.id ? `/colis/${encodeURIComponent(dossier.id)}?${new URLSearchParams({ onglet: 'conversation' })}` : null;
 const ACTIONS = {
-  validerReception: dossier => action('valider_reception', 'Valider la réception', null, { href: receptionValidationHref(dossier.clientId) }),
-  completerMesures: () => action('completer_mesures', 'Compléter les mesures', 'reception'),
-  demanderAccord: () => action('demander_accord', 'Demander l’accord', 'accord', { panel: 'demande_feu_vert' }),
-  relancer: () => action('relancer', 'Relancer', 'accord', { panel: 'relance_feu_vert' }),
+  validerReception: dossier => action('valider_reception', 'Valider la réception', null, RIGHTS.reception, { href: receptionValidationHref(dossier.clientId) }),
+  completerMesures: () => action('completer_mesures', 'Compléter les mesures', 'reception', RIGHTS.mesures),
+  demanderAccord: () => action('demander_accord', 'Demander l’accord', 'accord', RIGHTS.accord, { panel: 'demande_feu_vert' }),
+  relancer: () => action('relancer', 'Relancer', 'accord', RIGHTS.accord, { panel: 'relance_feu_vert' }),
   // After a wait the client chose, the request is asked again (TaskReopen in the accord task, as StaffDetailView does).
-  redemanderAccord: () => action('redemander_accord', 'Redemander l’accord', 'accord'),
-  voirDossier: task => action('voir_dossier', 'Voir le dossier', task),
-  preparer: () => action('preparer', 'Préparer', 'preparation'),
-  ajouterFacture: () => action('ajouter_facture', 'Ajouter la facture', 'documents'),
-  envoyerDevis: () => action('envoyer_devis', 'Envoyer le devis', 'devis'),
-  suivrePaiement: () => action('suivre_paiement', DOSSIER_TASKS.paiement.title, 'paiement'),
-  preparerDepart: () => action('preparer_depart', 'Préparer le départ', 'expedition'),
-  suivreExpedition: () => action('suivre_expedition', DOSSIER_TASKS.expedition.title, 'expedition'),
-  suivreLivraison: () => action('suivre_livraison', DOSSIER_TASKS.livraison.title, 'livraison'),
+  redemanderAccord: () => action('redemander_accord', 'Redemander l’accord', 'accord', RIGHTS.nouvelAccord),
+  // The client wrote: their message is read and answered in the conversation, before anything is asked of them.
+  lireReponse: dossier => action('lire_reponse', 'Lire la réponse', null, RIGHTS.conversation, { href: conversationHref(dossier) }),
+  // A request or relance not delivered: the conversation shows it with « Vérifier et réessayer ».
+  verifierEnvoi: (dossier, canal) => action('verifier_envoi', 'Vérifier l’envoi', null, canal === 'telegram' ? RIGHTS.telegram : canal === 'email' ? RIGHTS.email : RIGHTS.conversation, { href: conversationHref(dossier) }),
+  voirDossier: task => action('voir_dossier', 'Voir le dossier', task, RIGHTS.consultation),
+  preparer: () => action('preparer', 'Préparer', 'preparation', RIGHTS.preparation),
+  ajouterFacture: () => action('ajouter_facture', 'Ajouter la facture', 'documents', RIGHTS.factures),
+  completerDevis: () => action('completer_devis', 'Compléter le devis', 'devis', RIGHTS.devis),
+  envoyerDevis: () => action('envoyer_devis', 'Envoyer le devis', 'devis', RIGHTS.devis),
+  suivrePaiement: () => action('suivre_paiement', DOSSIER_TASKS.paiement.title, 'paiement', RIGHTS.paiement),
+  preparerDepart: () => action('preparer_depart', 'Préparer le départ', 'expedition', RIGHTS.depart),
+  suivreExpedition: () => action('suivre_expedition', DOSSIER_TASKS.expedition.title, 'expedition', RIGHTS.transport),
+  suivreLivraison: () => action('suivre_livraison', DOSSIER_TASKS.livraison.title, 'livraison', RIGHTS.transport),
 };
+
+/** Whether this person may do this action: one of its `permissions` (none: open to all) and every one of its
+ * `requiresAll`. `can` is the permission check of the screen (useApp().can). False without an action. A task held
+ * by a colleague (`heldBy` on the step) is said apart. */
+export function actionAllowed(action, can) {
+  if (!action) return false;
+  const check = typeof can === 'function' ? can : () => false;
+  const any = Array.isArray(action.permissions) ? action.permissions : [];
+  const all = Array.isArray(action.requiresAll) ? action.requiresAll : [];
+  return (any.length === 0 || any.some(permission => check(permission))) && all.every(permission => check(permission));
+}
+
 // `tone`: the colour family of the dossier table (DOSSIER_TABLE_TONES): current (to do), waiting (someone else),
 // review (to check), done, neutral.
 const stage = (key, label, detail, tone, next) => ({ key, label, detail: detail || '', tone, action: next || null });
+
+// The team task an action works on, when it is not its dossier task: the conversation.
+const CONVERSATION_ACTIONS = new Set(['lire_reponse', 'verifier_envoi']);
+/** The colleague holding the team task of this action (staff_work_actions, as findDossierWorkAction finds it: the
+ * accord is the « reception » task, as _assert_staff_task_owner(id, 'reception') checks it on the server), when
+ * another active member of the team holds it and it is not done: `{ id, name }`, the name as the application writes
+ * it (first name and name, « Membre de l’équipe » otherwise). Null without the tasks, the person or the team. */
+function heldByOf(f, next) {
+  if (!next || !Array.isArray(f.actions) || !f.meId || !Array.isArray(f.teamUsers)) return null;
+  const task = CONVERSATION_ACTIONS.has(next.key) ? 'conversation' : next.task;
+  if (!task) return null;
+  const work = findDossierWorkAction(f.dossier, f.actions, task);
+  if (!work?.assignee_id || work.assignee_id === f.meId || work.state === 'done') return null;
+  const member = f.teamUsers.find(user => user?.authId === work.assignee_id);
+  if (!member || member.actif === false) return null;
+  return { id: work.assignee_id, name: [text(member.prenom), text(member.nom)].filter(Boolean).join(' ') || 'Membre de l’équipe' };
+}
 
 function receptionStage(f) {
   const count = f.pending.cartonCount;
@@ -298,12 +413,80 @@ function receptionStage(f) {
   return stage('reception_a_valider', STAGE_LABELS.reception_a_valider, `${countLabel(count, 'carton', 'cartons')} à valider${when}`, 'current', ACTIONS.validerReception(f.dossier));
 }
 
+// The client's decisions by button are no message to answer (conversationState leaves them aside too).
+const CLIENT_DECISIONS = new Set(['client_decision_approve', 'client_decision_wait']);
+/** « Le client a répondu »: their conversation is to answer (needsConversationAction). Nothing is asked of them
+ * before their message is read, never a relance. */
+function repliedStage(f) {
+  const latest = (Array.isArray(f.dossier.messages) ? f.dossier.messages : [])
+    .filter(message => message?.type === 'client' && !CLIENT_DECISIONS.has(message.template) && instantOf(message.createdAt) !== null)
+    .reduce((last, message) => !last || instantOf(message.createdAt) >= instantOf(last.createdAt) ? message : last, null);
+  const day = latest ? dateLabel(latest.createdAt) : null;
+  return stage('client_a_repondu', STAGE_LABELS.client_a_repondu, day ? `Message du ${day} à lire` : 'Message à lire', 'current', ACTIONS.lireReponse(f.dossier));
+}
+
+/** A message still on its way after this many minutes is to check (an arrival notice, a request or a relance of
+ * consent): its delivery no longer runs by itself (scheduled task stopped, missing token…) or its result is
+ * uncertain. Nothing is sent again on its own. */
+export const NOTICE_SEND_CHECK_MINUTES = 10;
+const SEND_CHECK_MS = NOTICE_SEND_CHECK_MINUTES * 60000;
+// Still to deliver (notification_outbox): queued, being sent, or held.
+const ON_ITS_WAY = new Set(['pending', 'sending', 'blocked']);
+// What a delivery still on its way after those minutes says, by the state of its outbox.
+const STUCK_SEND = Object.freeze({
+  pending: `Toujours pas parti au bout de ${NOTICE_SEND_CHECK_MINUTES} minutes`,
+  sending: `Envoi commencé il y a plus de ${NOTICE_SEND_CHECK_MINUTES} minutes, sans confirmation`,
+  blocked: `Envoi retenu depuis plus de ${NOTICE_SEND_CHECK_MINUTES} minutes`,
+  unknown: `Envoi sans confirmation depuis plus de ${NOTICE_SEND_CHECK_MINUTES} minutes`,
+});
+
+const CONSENT_MESSAGES = new Set(['demande_feu_vert', 'relance_feu_vert']);
+/** The latest request or relance of consent the team wrote, as consentFollowUp selects it (a message of the client
+ * never counts; equal instants by id). */
+function latestConsentMessage(dossier) {
+  return (Array.isArray(dossier.messages) ? dossier.messages : [])
+    .filter(message => (message?.type ?? 'staff') === 'staff' && CONSENT_MESSAGES.has(message.template) && instantOf(message.createdAt) !== null)
+    .reduce((last, message) => {
+      if (!last) return message;
+      const time = instantOf(message.createdAt), lastTime = instantOf(last.createdAt);
+      return time > lastTime || time === lastTime && String(message.id) > String(last.id) ? message : last;
+    }, null);
+}
+
+/** The latest request or relance of consent when it did not reach the client: failed (outbox « failed », or the
+ * message « echec » without a delivery in progress: « Envoi non confirmé »), cancelled other than by the client's own
+ * wait (« Envoi annulé »; client_decision('wait') cancels the queued relances, that is no failure), or still on its
+ * way after NOTICE_SEND_CHECK_MINUTES, the rule of the arrival notices. `{ message, wording }`, or null: delivered,
+ * an e-mail draft (outbox « manual »), or on its way for a few minutes. */
+function consentNotDelivered(dossier, now) {
+  const message = latestConsentMessage(dossier);
+  if (!message) return null;
+  const outbox = message.outboxStatus ?? null;
+  if (outbox === 'sent' || outbox === 'manual' || outbox === null && ['envoye', 'distribue', 'lu'].includes(message.statut)) return null;
+  const waitChosenAt = instantOf(dossier.attenteClientDate);
+  const byClientWait = waitChosenAt !== null && waitChosenAt >= instantOf(message.createdAt);
+  if (outbox === 'cancelled' || outbox === null && message.statut === 'envoi' && message.canal !== 'email' && byClientWait)
+    return byClientWait ? null : { message, wording: CANCELLED_SEND_LABEL };
+  if (outbox === 'failed' || message.statut === 'echec' && !ON_ITS_WAY.has(outbox)) return { message, wording: messageDeliveryLabel({ statut: 'echec' }) };
+  const onItsWay = ON_ITS_WAY.has(outbox) || outbox === null && message.statut === 'envoi' && message.canal !== 'email';
+  // A relance the server postponed (one relance per client in 24 hours, a conversation to answer first) leaves at its
+  // own time: when the data layer gives it (`outboxAvailableAt`, notification_outbox.available_at), the minutes count
+  // from then.
+  const since = Math.max(instantOf(message.createdAt), instantOf(message.outboxAvailableAt) ?? -Infinity);
+  return onItsWay && now - since > SEND_CHECK_MS ? { message, wording: STUCK_SEND[outbox] || STUCK_SEND.unknown } : null;
+}
+
 function waitingStage(f) {
   const { dossier, now } = f;
+  if (needsConversationAction(dossier)) return repliedStage(f);
   const consent = consentState(dossier, now);
   const waitChosen = consent?.stage === 'client_waiting';
   // A wait the client chose: nothing to do until its day has passed.
   if (waitChosen && !consent.over) return stage('attend_client', STAGE_LABELS.attend_client, consentSummary(consent), 'waiting', null);
+  // A request or relance that did not reach the client is checked in the conversation, never relanced.
+  const lost = consentNotDelivered(dossier, now);
+  if (lost) return stage('demande_a_verifier', STAGE_LABELS.demande_a_verifier, `${lost.message.template === 'relance_feu_vert' ? 'Relance' : 'Demande'} du ${dateLabel(lost.message.createdAt)} · ${lost.wording}`,
+    'review', ACTIONS.verifierEnvoi(dossier, lost.message.canal));
   // The latest request or relance is followed up (consentFollowUp): still to deliver, or delivered less than 24 h
   // ago. Also after a wait that has ended, once the team has relanced the client.
   const followUp = consentFollowUp(dossier, now);
@@ -313,8 +496,8 @@ function waitingStage(f) {
   // The wait has ended (« Attente terminée … à réexaminer »): the client answered « wait », so the accord is asked
   // again from the accord task (a new request version), never relanced on the old one.
   if (waitChosen) return stage('attend_client', STAGE_LABELS.attend_client, consentSummary(consent), 'waiting', ACTIONS.redemanderAccord());
-  // No follow-up running: the relance is due. It never leaves on its own (the server's reminders are manual).
-  // A relance that did not reach the client says so (« Envoi non confirmé », « Envoi annulé »…).
+  // No follow-up running: the relance is due. It never leaves on its own (the server's reminders are manual). An
+  // e-mail relance kept as a draft says so (« Brouillon manuel »).
   const requestedAt = dateLabel(dossier.demandeFeuVertEnvoyeeAt);
   const last = relance ? relance.delivered || !relance.deliveryLabel ? `relancé le ${dateLabel(relance.at)}` : `relance du ${dateLabel(relance.at)} · ${relance.deliveryLabel}`
     : requestedAt ? `demandé le ${requestedAt}` : '';
@@ -344,6 +527,7 @@ function brouillonStage(f) {
     return stage('mesures_a_completer', STAGE_LABELS.mesures_a_completer, missing ? `${countLabel(missing, 'carton', 'cartons')} sans mesures` : 'Mesures à enregistrer', 'current', ACTIONS.completerMesures());
   }
   if (dossier.statut === 'mesure') {
+    if (needsConversationAction(dossier)) return repliedStage(f);
     const again = Number(dossier.consentRequestVersion) > 0 || Boolean(dossier.demandeFeuVertEnvoyeeAt);
     return stage('accord_a_demander', STAGE_LABELS.accord_a_demander, again ? 'Nouvelle demande à envoyer' : 'Jamais demandé', 'current', ACTIONS.demanderAccord());
   }
@@ -365,6 +549,9 @@ function brouillonStage(f) {
     const progress = invoiceProgressSummary(invoiceBuckets(dossier.factures || [], { pendingAttachments: pendingInvoiceAttachments(dossier) }));
     return stage('facture_manquante', STAGE_LABELS.facture_manquante, progress.text, 'review', ACTIONS.ajouterFacture());
   }
+  // Ready only if the complete quote would be calculated (destination, tariff, articles and categories, type of client…).
+  const gaps = quoteGaps(f);
+  if (gaps?.length) return stage('devis_a_completer', STAGE_LABELS.devis_a_completer, gaps[0], 'review', ACTIONS.completerDevis());
   return stage('pret_pour_devis', STAGE_LABELS.pret_pour_devis, quoteReadyDetail(dossier), 'current', ACTIONS.envoyerDevis());
 }
 
@@ -374,11 +561,13 @@ function paymentStage(f) {
   const payment = f.model.payment;
   const sentDay = dateLabel(payment.sentAt);
   const sent = sentDay ? `Devis envoyé le ${sentDay}` : 'Devis envoyé';
-  if (!f.finances) return stage('paiement_attendu', PAYMENT_DETAIL_LABELS.expected, sent, 'waiting', ACTIONS.suivrePaiement());
   const withdrawn = payment.detailLabel === PAYMENT_DETAIL_LABELS.toRecalculate;
-  // Only an expected or partial payment is the normal wait of this tab; any other situation is checked.
+  // Only an expected or partial payment is the normal wait of this tab; any other situation is checked. The states
+  // carry no amount: everyone reads them; the rest to pay only with the right to see amounts.
   const review = ![PAYMENT_DETAIL_LABELS.expected, PAYMENT_DETAIL_LABELS.partial].includes(payment.detailLabel);
-  const remaining = payment.paid > 0 && payment.remaining > 0 ? ` · reste ${eur(payment.remaining)}` : '';
+  // While the payment is awaited, its task offers a relance: a client who wrote is read first.
+  if (!review && needsConversationAction(f.dossier)) return repliedStage(f);
+  const remaining = f.finances && payment.paid > 0 && payment.remaining > 0 ? ` · reste ${eur(payment.remaining)}` : '';
   return stage(review ? 'paiement_a_verifier' : 'paiement_attendu', payment.detailLabel, withdrawn ? 'Devis retiré · à refaire' : `${sent}${remaining}`, review ? 'review' : 'waiting', ACTIONS.suivrePaiement());
 }
 
@@ -403,7 +592,7 @@ function departedStage(f) {
     task === 'livraison' ? ACTIONS.suivreLivraison() : ACTIONS.suivreExpedition());
 }
 
-function stageOf(f) {
+function tabStage(f) {
   const { dossier } = f;
   if (dossier.archive) return stage('archive', 'Dossier archivé', 'Aucune action attendue', 'neutral', null);
   if (dossier.statut === 'annule') return stage('annule', 'Dossier annulé', 'Aucune action attendue', 'neutral', null);
@@ -414,12 +603,29 @@ function stageOf(f) {
   return stage('etat_a_verifier', 'État à vérifier', 'Statut du dossier inconnu', 'review', ACTIONS.voirDossier(dossierNextTask(dossier, () => true, f.client || {})));
 }
 
+/** The step, and `heldBy` when a colleague holds the task of its action. */
+function stageOf(f) {
+  const result = tabStage(f);
+  const heldBy = heldByOf(f, result.action);
+  return heldBy ? { ...result, heldBy } : result;
+}
+
 /**
- * Where the dossier is: `{ key, label, detail, tone, action }`, `action` = `{ key, label, task }` (plus `panel`
- * for « Demander l’accord » and « Relancer », opened in place, and `href` for « Valider la réception »), or null
- * for « Rien à faire ». Brouillon: the first step of BROUILLON_STAGES that applies. Other tabs: the payment, the
- * departure readiness or the status, with the paiement, expedition or livraison task.
- * `ctx` = { client, envois, settings, pending, notices, can, now } (`pending`: pendingByColis or the server's list).
+ * Where the dossier is: `{ key, label, detail, tone, action, heldBy? }`.
+ * - `action` = `{ key, label, task, permissions, requiresAll?, deniedReason?, panel?, href? }`, or null for « Rien à
+ *   faire »: `task` the dossier task it opens (null for an address of its own); `panel` the message opened in place
+ *   (« Demander l’accord », « Relancer »); `href` « Valider la réception » (its reception), « Lire la réponse » and
+ *   « Vérifier l’envoi » (the dossier's conversation; colisActionHref adds the way back). `permissions`: the rights
+ *   of the screen that does it, one suffices (none: open to all, « Voir le dossier »); `requiresAll`: needed too
+ *   (« Redemander l’accord »); `deniedReason`: what to say without them. actionAllowed(action, can) checks them.
+ * - `heldBy` = `{ id, name }`, only when `ctx.actions`, `ctx.me` and `ctx.teamUsers` show the team task of the
+ *   action held by another active member, not done (heldByOf).
+ * Brouillon: the first step of BROUILLON_STAGES that applies. Other tabs: the payment (« Le client a répondu »
+ * first while it is awaited), the departure readiness or the status, with the paiement, expedition or livraison task.
+ * `ctx` = { client, envois, settings, pending, notices, can, now, tarifs, categories, actions, me, teamUsers }
+ * (`pending`: pendingByColis or the server's list; `tarifs` and `categories` as useApp() gives them: without them
+ * « Prêt pour le devis » is not checked against the complete calculation; `actions`: useApp().workActions, `me`:
+ * auth.u or its id, `teamUsers`: useApp().teamUsers).
  */
 export function colisStage(dossier, ctx = {}) {
   return stageOf(factsOf(dossier || {}, ctx || {}));
@@ -473,7 +679,18 @@ function departureOf(f) {
   };
 }
 
+/** `total.state` of a paid dossier (the other states are the quote's own words: « À calculer », « À revoir »,
+ * « Brouillon » or ''). */
+export const PAID_TOTAL_STATE = 'paid';
+/** A paid dossier: the tabs « Prêt à partir » and « Parti » (paid before it leaves), or a payment recorded in full
+ * (the payment model: « Payé »). It is never presented as to pay. */
+const isPaid = f => f.tab === 'pret' || f.tab === 'parti' || f.model.payment.stateLabel === PAYMENT_STATE_LABELS.paid;
+/** What was paid: the amount recorded, otherwise the saved quote's total; null when neither is known. */
+const paidAmount = f => f.model.payment.paid > 0 ? f.model.payment.paid : finiteAmount(f.model.quotePrice.amount);
+
 function totalOf(f) {
+  // « Payé » carries no amount: it is said even without the right to see amounts, the amount only with it.
+  if (isPaid(f)) return { visible: f.finances, amount: f.finances ? paidAmount(f) : null, state: PAID_TOTAL_STATE, label: PAYMENT_STATE_LABELS.paid };
   if (!f.finances) return { visible: false, amount: null, state: null, label: null };
   const price = f.model.quotePrice;
   const state = price.stateLabel || '';
@@ -515,8 +732,10 @@ function rowOf(f) {
  * poidsLabel, volume, volumeLabel, lastReceivedAt, lastReceivedLabel, stage, action, total, departure, ficheHref,
  * searchText`. `poids`/`volume`: the received cartons, null unless every carton is measured. `total` =
  * `{ visible, amount, state, label }`: the saved and current quote (quotePrice), « À calculer » or its state
- * without one, never a false zero; nothing when canSeeDossierFinances is false. `departure` = `{ key, kind,
- * envoiId, ref, date, dateLabel, wishState, label, closing, closingLabel }`.
+ * without one, never a false zero; nothing when canSeeDossierFinances is false. A paid dossier (« Prêt à partir »,
+ * « Parti », or a payment recorded in full): `state` PAID_TOTAL_STATE (« paid »), `label` « Payé », `amount` the
+ * amount paid or else the quote's total (null and `visible` false without the right to see amounts). `departure` =
+ * `{ key, kind, envoiId, ref, date, dateLabel, wishState, label, closing, closingLabel }`.
  */
 export function colisRow(dossier, ctx = {}) {
   return rowOf(factsOf(dossier || {}, ctx || {}));
@@ -613,15 +832,24 @@ export function groupColisRowsByDeparture(rows = [], { now = Date.now() } = {}) 
   });
 }
 
-/** The address of a row's action when it opens a page: « Valider la réception » its reception, a task its
- * dossier task (with `returnTo`, a way back workspaceReturnPath accepts, otherwise « / »). Null for an action
- * opened in place (`panel`) and for « Rien à faire ». */
+/** The address of a row's action when it opens a page: « Valider la réception » its reception; « Lire la
+ * réponse » and « Vérifier l’envoi » the dossier's conversation, a task its dossier task, both with `returnTo` (a way
+ * back workspaceReturnPath accepts, otherwise « / »). Null for an action opened in place (`panel`) and for « Rien à
+ * faire ». */
 export function colisActionHref(row, returnTo = '/') {
   const next = row?.action;
   if (!next || !row?.id) return null;
   if (next.key === 'valider_reception') return next.href || receptionValidationHref(row.clientId);
-  if (next.panel || !next.task) return null;
+  if (next.panel) return null;
   const back = workspaceReturnPath(`?${new URLSearchParams({ returnTo: String(returnTo ?? '') })}`, '/');
+  if (next.href) {
+    const [path, query = ''] = String(next.href).split('?');
+    if (!path.startsWith('/colis/')) return next.href;
+    const params = new URLSearchParams(query);
+    params.set('returnTo', back);
+    return `${path}?${params}`;
+  }
+  if (!next.task) return null;
   return dossierTaskUrl(row.id, next.task, `?${new URLSearchParams({ returnTo: back })}`, { hash: 'dossier-work' });
 }
 
@@ -630,20 +858,15 @@ export const ARRIVAL_NOTICE_STATES = Object.freeze({
   sans_avis: 'Sans avis', en_cours: 'En cours d’envoi', a_verifier: 'Envoi à vérifier', envoye: 'Envoyé', remis: 'Remis', a_envoyer: 'À envoyer',
   non_remis: 'Non remis', annule: 'Annulé',
 });
-/** A notice still on its way after this many minutes is to check: its delivery no longer runs by itself (scheduled
- * task stopped, missing token…) or its result is uncertain. Nothing is sent again on its own. */
-export const NOTICE_SEND_CHECK_MINUTES = 10;
 const CANALS = Object.freeze({ telegram: 'Telegram', email: 'E-mail' });
-const TO_DELIVER = new Set(['pending', 'sending', 'blocked']);
 
-/** Why a notice still on its way is to check, by the state of its delivery (outbox). */
+/** Why a notice still on its way is to check, by the state of its delivery (outbox): the words of a request of
+ * consent in the same situation (STUCK_SEND), with what to do. */
 function sendToCheck(status, canal, lastError) {
-  const after = `${NOTICE_SEND_CHECK_MINUTES} minutes`;
-  if (status === 'sending') return canal === 'email' ? `Envoi commencé il y a plus de ${after}, sans confirmation du fournisseur d’e-mail.`
-    : `Envoi commencé il y a plus de ${after}, sans confirmation de Telegram : vérifiez dans Telegram si le message est arrivé.`;
-  if (status === 'pending') return `Toujours pas parti au bout de ${after} : l’envoi automatique ne l’a pas pris en charge.`;
-  if (status === 'blocked') return `Envoi retenu depuis plus de ${after}${lastError ? ` : ${lastError}` : ''}.`;
-  return `Envoi sans confirmation depuis plus de ${after} : vérifiez si le message est arrivé.`;
+  if (status === 'sending') return `${STUCK_SEND.sending} ${canal === 'email' ? 'du fournisseur d’e-mail.' : 'de Telegram : vérifiez dans Telegram si le message est arrivé.'}`;
+  if (status === 'pending') return `${STUCK_SEND.pending} : l’envoi automatique ne l’a pas pris en charge.`;
+  if (status === 'blocked') return `${STUCK_SEND.blocked}${lastError ? ` : ${lastError}` : ''}.`;
+  return `${STUCK_SEND.unknown} : vérifiez si le message est arrivé.`;
 }
 
 /** A notice of list_arrival_notices, or the result of validate_reception ({ validation, message, outbox }). */
@@ -682,11 +905,11 @@ export function arrivalNoticeState(notice, { now = Date.now() } = {}) {
     const day = dateLabel(outbox?.sentAt ?? outbox?.sent_at);
     return make('envoye', 'done', canal === 'telegram' ? `Telegram a confirmé l’envoi${day ? ` le ${day}` : ''}` : `Envoyé${day ? ` le ${day}` : ''}`);
   }
-  if (status === 'manual' || canal === 'email' && !TO_DELIVER.has(status)) return make('a_envoyer', 'current', 'E-mail à envoyer depuis votre messagerie : copiez le texte', { action: { key: 'copier_texte', label: 'Copier le texte' } });
+  if (status === 'manual' || canal === 'email' && !ON_ITS_WAY.has(status)) return make('a_envoyer', 'current', 'E-mail à envoyer depuis votre messagerie : copiez le texte', { action: { key: 'copier_texte', label: 'Copier le texte' } });
   // Still on its way: for a few minutes at most. Without a readable date, it stays « En cours d’envoi ».
   const since = instantOf(item.message?.createdAt ?? item.message?.created_at) ?? instantOf(item.createdAt);
   const at = instantOf(now) ?? Date.now();
-  if (since !== null && at - since > NOTICE_SEND_CHECK_MINUTES * 60000) {
+  if (since !== null && at - since > SEND_CHECK_MS) {
     const lastError = text(outbox?.lastError ?? outbox?.last_error) || null;
     // A Telegram notice never taken can be sent from the screen (send-telegram takes a pending or blocked one).
     const retry = canal === 'telegram' && (status === 'pending' || status === 'blocked');
@@ -815,22 +1038,33 @@ function quoteMissing(f) {
   return missing;
 }
 
-/** « Prix à payer », only from the saved quote (devisSnapshot) whose price the list shows. */
-function fichePrice(f) {
-  if (!f.finances) return { visible: false };
+/** Everything the quote still needs: the steps of the journey (quoteMissing), then what the complete calculation
+ * misses (quoteGaps), without repeats. Nothing once the price is known or the dossier paid. */
+function ficheMissing(f) {
+  if (isPaid(f) || finiteAmount(f.model.quotePrice.amount) !== null) return [];
+  return [...new Set([...quoteMissing(f), ...(quoteGaps(f) || [])])];
+}
+
+/** « Prix à payer », only from the saved quote (devisSnapshot) whose price the list shows; « Payé » once paid. */
+function fichePrice(f, missing) {
+  const paid = isPaid(f);
+  if (!f.finances) return paid ? { visible: false, state: PAID_TOTAL_STATE, label: PAYMENT_STATE_LABELS.paid } : { visible: false };
   const { dossier, model } = f;
   const price = model.quotePrice;
-  const state = price.stateLabel || '';
-  if (finiteAmount(price.amount) === null) {
+  const amount = paid ? paidAmount(f) : finiteAmount(price.amount);
+  const state = paid ? PAID_TOTAL_STATE : price.stateLabel || '';
+  if (amount === null) {
+    if (paid) return { visible: true, known: false, state, label: PAYMENT_STATE_LABELS.paid, missing: [], message: 'Le montant réglé est à consulter dans le dossier.' };
     const label = state || PAYMENT_DETAIL_LABELS.toCalculate;
-    const missing = quoteMissing(f);
     return { visible: true, known: false, state: label, label, missing,
       message: label === PAYMENT_DETAIL_LABELS.toCalculate ? missing.length ? null : 'Tout est prêt pour calculer le devis.' : 'Le devis enregistré est à revoir dans le dossier.' };
   }
-  const total = { label: 'Total', amount: price.amount, text: eur(price.amount) };
-  const known = { visible: true, known: true, state, label: state ? `${eur(price.amount)} · ${state}` : eur(price.amount), total };
-  // Transport and taxes are read from the very saved quote whose total is this price (quoteTransport, quoteTaxes).
-  const breakdown = finiteAmount(model.quoteTransport.amount) !== null && finiteAmount(model.quoteTaxes.amount) !== null ? savedQuoteBreakdown(dossier.devisSnapshot) : null;
+  const total = { label: paid ? PAYMENT_STATE_LABELS.paid : 'Total', amount, text: eur(amount) };
+  const known = { visible: true, known: true, state, label: paid ? PAYMENT_STATE_LABELS.paid : state ? `${eur(amount)} · ${state}` : eur(amount), total };
+  // Transport and taxes are read from the very saved quote whose total is this price (quoteTransport, quoteTaxes),
+  // and only when that total is the amount shown (a payment recorded at another amount keeps its detail in the dossier).
+  const sameTotal = finiteAmount(price.amount) !== null && Math.round(price.amount * 100) === Math.round(amount * 100);
+  const breakdown = sameTotal && finiteAmount(model.quoteTransport.amount) !== null && finiteAmount(model.quoteTaxes.amount) !== null ? savedQuoteBreakdown(dossier.devisSnapshot) : null;
   if (!breakdown) return { ...known, detailed: false, transport: null, taxes: null, fees: null, savings: null, message: 'Le détail de ce devis est à consulter dans le dossier.' };
   const billable = finiteAmount(breakdown.weights.billableWeight);
   const destination = dossier.devisSnapshot?.inputs?.destination || { code: dossierDestinationCode(dossier, f.client || {}) };
@@ -881,8 +1115,8 @@ function latestNotice(notices, colisId) {
 }
 
 /**
- * The Brouillon sheet of a dossier: `{ id, ref, header, stage, action, links, received, optimized, price, notice,
- * noticeLabel }`.
+ * The Brouillon sheet of a dossier: `{ id, ref, header, stage, action, links, received, optimized, price, missing,
+ * notice, noticeLabel }`.
  * - `header`: name, type of client, destination, commune, casier, step;
  * - `action`: the row's one action with its `href` (way back: this sheet), or null;
  * - `links`: « Tout le dossier » (/colis/:id?returnTo=/brouillon/:id) and « Ajouter un carton »
@@ -890,9 +1124,13 @@ function latestNotice(notices, colisId) {
  * - `received`: the cartons (number, vendor, tracking, dimensions, weight, volume, date, `pending` when it waits
  *   for its validation) and their totals;
  * - `optimized`: the parcels after optimisation, their totals and `volumeGain` ({ percent, label });
- * - `price`: `{ visible: false }` without the right to see amounts; otherwise, from the saved quote only,
- *   `known` with total, transport (billed weight), taxes (« Taxes à l’importation estimées », their estimate
- *   heading, note and detail lines), fees and saving, or `known: false` with its label and `missing`;
+ * - `price`: `{ visible: false }` without the right to see amounts (`state` « paid » and `label` « Payé » too for a
+ *   paid dossier); otherwise, from the saved quote only, `known` with total, transport (billed weight), taxes
+ *   (« Taxes à l’importation estimées », their estimate heading, note and detail lines), fees and saving, or
+ *   `known: false` with its label and `missing`. Paid: `state` « paid », `label` « Payé », `total` « Payé » with
+ *   the amount paid (else the quote's total), never « à payer »;
+ * - `missing`: what the quote still needs, for everyone (no amount): the journey's steps, then the gaps of the
+ *   complete calculation when `ctx.tarifs` and `ctx.categories` are given; [] once the price is known or paid;
  * - `notice`: the latest arrival notice of the dossier (arrivalNoticeSummary), or null with `noticeLabel`.
  */
 export function brouillonFiche(dossier, ctx = {}) {
@@ -906,6 +1144,7 @@ export function brouillonFiche(dossier, ctx = {}) {
   const id = source.id ? encodeURIComponent(source.id) : null;
   const blockedReason = receptionAppendBlockReason(source) || null;
   const latest = id ? latestNotice(f.notices, source.id) : null;
+  const missing = ficheMissing(f);
   return {
     id: source.id || null, ref: source.ref || null,
     header: { ref: row.ref, clientName: row.clientName, clientTypeLabel: row.clientTypeLabel, destinationLabel: row.destinationLabel, commune: row.commune,
@@ -919,7 +1158,8 @@ export function brouillonFiche(dossier, ctx = {}) {
     received: { count: cartons.length, countLabel: countLabel(cartons.length, 'carton', 'cartons'), cartons, ...receivedTotals,
       pendingCount, pendingLabel: pendingCount ? `${countLabel(pendingCount, 'carton', 'cartons')} à valider` : null },
     optimized: ficheOptimized(source, receivedTotals.volume),
-    price: fichePrice(f),
+    price: fichePrice(f, missing),
+    missing,
     notice: latest ? arrivalNoticeSummary(latest, { colisId: source.id, now: f.now }) : null,
     noticeLabel: latest ? null : 'Aucun avis d’arrivée',
   };
