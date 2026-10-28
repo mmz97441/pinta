@@ -313,6 +313,36 @@ async function shot(f, name, fullPage = true) {
   try { await f.page.screenshot({ path: path.join(output, `${name}.png`), fullPage }); }
   finally { if (fullPage) await unbox(false); }
 }
+/** The frame of a table (ScrollFrame): how much it hides, what its edges say, whether the page itself overflows. */
+function tableFrame(f, testId) {
+  return f.page.getByTestId(testId).evaluate(frame => {
+    const box = frame.querySelector('.colis-scroll-box');
+    const main = document.querySelector('main');
+    return { width: box.clientWidth, content: box.scrollWidth, moreLeft: frame.dataset.moreLeft, moreRight: frame.dataset.moreRight,
+      rightShade: getComputedStyle(frame, '::after').opacity,
+      pageOverflow: document.documentElement.scrollWidth > window.innerWidth + 1 || main.scrollWidth > main.clientWidth + 1 };
+  });
+}
+/** Waits until the shade of a frame's right edge has this opacity (it fades in and out). */
+function waitForShade(f, testId, opacity) {
+  return f.page.waitForFunction(([testId, opacity]) => getComputedStyle(document.querySelector(`[data-testid="${testId}"]`), '::after').opacity === opacity, [testId, opacity]);
+}
+/** Scrolls a frame sideways to `left` and reads where its first column, the next one and the header stand. */
+function scrollFrameTo(f, testId, left) {
+  return f.page.getByTestId(testId).evaluate(async (frame, left) => {
+    const box = frame.querySelector('.colis-scroll-box');
+    const first = frame.querySelector('tbody th[scope="row"]');
+    const second = first.nextElementSibling;
+    const header = frame.querySelector('thead th');
+    const at = () => ({ first: first.getBoundingClientRect().left, second: second.getBoundingClientRect().left, header: header.getBoundingClientRect().left });
+    const before = at();
+    box.scrollLeft = left;
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const style = getComputedStyle(first);
+    return { before, after: at(), position: style.position, background: style.backgroundColor, border: parseFloat(style.borderRightWidth), shadow: style.boxShadow,
+      headerBackground: getComputedStyle(header).backgroundColor, moreLeft: frame.dataset.moreLeft, moreRight: frame.dataset.moreRight, scrolled: box.scrollLeft };
+  }, left);
+}
 /** Waits until the reception photos of the sheet are loaded and decoded, so that a capture paints them, not their place. */
 async function photosShown(f, count) {
   await f.page.waitForFunction(count => [...document.querySelectorAll('.fiche-photos img')].filter(image => image.complete && image.naturalWidth === 48).length === count, count);
@@ -618,14 +648,14 @@ async function main() {
       await message.fill(`${await message.inputValue()}\nMerci de nous répondre avant vendredi.`);
       await assertReadable(f, 'phone consent sheet', '[role="dialog"]');
       await shot(f, 'colis-telephone-feuille-accord', false);
-      // Landscape: the cards become a table, the sheet keeps its message as written.
+      // Landscape: the whole table fits, the sheet keeps its message as written.
       await f.page.setViewportSize({ width: 844, height: 390 });
-      await f.page.locator('table.colis-table').waitFor();
+      await f.page.waitForFunction(() => document.querySelector('[data-testid="colis-liste"]')?.dataset.moreRight === 'false');
       assert.match(await message.inputValue(), /Merci de nous répondre avant vendredi\.$/);
       assert.equal(await f.page.getByRole('dialog').count(), 1);
       await assertReadable(f, 'landscape consent sheet', '[role="dialog"]');
       await f.page.setViewportSize({ width: 390, height: 844 });
-      await f.page.locator('ul.colis-cards').first().waitFor();
+      await f.page.waitForFunction(() => document.querySelector('[data-testid="colis-liste"]')?.dataset.moreRight === 'true');
       assert.match(await message.inputValue(), /Merci de nous répondre avant vendredi\.$/);
       // Its line leaves the list (another search, the browser's history): the sheet and its message stay.
       await f.page.evaluate(() => { history.pushState({}, '', '/?q=Boyer'); window.dispatchEvent(new PopStateEvent('popstate')); });
@@ -681,30 +711,100 @@ async function main() {
       f.tables.heldTask = heldTask(D.abdallah);
     } });
 
-    await scenario('phone-list-light-and-dark', async f => {
+    await scenario('phone-table-light-and-dark', async f => {
       for (const theme of ['light', 'dark']) {
         await setTheme(f, theme);
         await openHome(f);
-        // Four tabs on two lines, a menu to sort, one card per dossier.
+        // Four tabs on two lines, a menu to sort, and the tablet's table: same columns, same order.
         const boxes = await tabs(f).getByRole('link').evaluateAll(links => links.map(link => link.getBoundingClientRect()).map(rect => ({ top: Math.round(rect.top), height: rect.height })));
         assert.equal(new Set(boxes.map(item => item.top)).size, 2, 'Two lines of tabs.');
         const sort = f.page.getByLabel('Classer', { exact: true });
         assert.deepEqual(await sort.locator('option').allInnerTexts(), ['Par nom', 'Par date d’envoi', 'Par réception', 'Par montant']);
-        assert.equal(await f.page.getByRole('table').count(), 0, 'Cards on a phone.');
-        await rowOf(f, D.abdallah).getByRole('button', { name: 'Demander l’accord', exact: true }).waitFor();
-        await assertReadable(f, `phone list ${theme}`);
-        await assertAccessible(f, `phone list ${theme}`);
+        const table = f.page.getByRole('table', { name: 'Brouillon, classé par nom', exact: true });
+        assert.deepEqual((await table.locator('thead th').allInnerTexts()).map(text => text.trim().toLowerCase()), ['client', 'colis', 'où en est-on', 'total à payer', 'action']);
+        assert.match(await flat(rowOf(f, D.abdallah)), /^Abdallah Mohamed Mayotte · Mamoudzou 1 carton · casier D-04 2,1 kg · 0,012 m³ Accord à demander Jamais demandé À calculer Demander l’accord$/);
+        // The client's name opens the sheet.
+        assert.equal(await rowOf(f, D.payet).getByRole('link', { name: 'Payet Flavie', exact: true }).getAttribute('href'), `/brouillon/${D.payet}?returnTo=%2F`);
+        // The table scrolls in its frame; the page never does. Its right edge is shaded while columns hide there.
+        const frame = await tableFrame(f, 'colis-liste');
+        assert.ok(frame.content > frame.width + 200, JSON.stringify(frame));
+        assert.equal(frame.pageOverflow, false, 'No horizontal scroll of the page.');
+        assert.deepEqual([frame.moreLeft, frame.moreRight], ['false', 'true']);
+        await waitForShade(f, 'colis-liste', '1');
+        await assertReadable(f, `phone table ${theme}`);
+        await assertAccessible(f, `phone table ${theme}`);
         await shot(f, `colis-telephone-${theme === 'dark' ? 'sombre' : 'clair'}`);
+        // Scrolled: the client's column stays, opaque and set apart; the other columns pass under it.
+        const moved = await scrollFrameTo(f, 'colis-liste', 300);
+        assert.equal(moved.position, 'sticky');
+        assert.ok(Math.abs(moved.after.first - moved.before.first) < 1 && Math.abs(moved.after.header - moved.before.header) < 1, JSON.stringify(moved));
+        assert.ok(moved.before.second - moved.after.second > 250, JSON.stringify(moved));
+        assert.match(moved.background, /^rgb\(/, 'An opaque client column.');
+        assert.match(moved.headerBackground, /^rgb\(/, 'An opaque header cell.');
+        assert.ok(moved.border >= 1 && moved.shadow !== 'none', JSON.stringify(moved));
+        assert.deepEqual([moved.moreLeft, moved.moreRight], ['true', 'true']);
+        await shot(f, `colis-telephone-${theme === 'dark' ? 'sombre' : 'clair'}-defile`, false);
+        const end = await scrollFrameTo(f, 'colis-liste', 10000);
+        assert.deepEqual([end.moreLeft, end.moreRight], ['true', 'false']);
+        await waitForShade(f, 'colis-liste', '0'); // no shade once the last column is shown
+        // Every action is reached and readable, in the frame.
+        await rowOf(f, D.abdallah).getByRole('button', { name: 'Demander l’accord', exact: true }).click();
+        await f.page.getByRole('dialog', { name: 'Demander l’accord · Abdallah Mohamed', exact: true }).getByRole('button', { name: 'Fermer', exact: true }).click();
+        // Departures: lines across the same table, their heading kept in view while the table scrolls.
         await sort.selectOption('depart');
         await f.page.waitForURL(url => url.searchParams.get('classer') === 'depart');
-        await f.page.getByRole('heading', { level: 2, name: /^Départ à choisir/ }).waitFor();
-        assert.equal(await f.page.locator('.colis-group-section').count(), 4);
+        await f.page.locator('.colis-group-row').first().waitFor();
+        assert.equal(await f.page.locator('.colis-group-row').count(), 4);
+        await scrollFrameTo(f, 'colis-liste', 300);
+        const heading = await f.page.locator('.colis-group-row .colis-group-head').first().evaluate(element => {
+          const frame = element.closest('.colis-scroll-box').getBoundingClientRect(), box = element.getBoundingClientRect();
+          return { inside: box.left >= frame.left - 1 && box.right <= frame.right + 1, text: element.innerText.replace(/\s+/g, ' ').trim() };
+        });
+        assert.ok(heading.inside, JSON.stringify(heading));
+        assert.match(heading.text, /^Départ du .+ · Réunion ENV-TEST-01/);
+        assert.equal((await tableFrame(f, 'colis-liste')).pageOverflow, false);
         await assertReadable(f, `phone groups ${theme}`);
         await assertAccessible(f, `phone groups ${theme}`);
         await shot(f, `colis-telephone-${theme === 'dark' ? 'sombre' : 'clair'}-par-envoi`);
       }
       noSend(f);
     }, { device: PHONE });
+
+    await scenario('tables-at-every-width', async f => {
+      // Phone, tablet portrait (768, 820), tablet landscape, computer: a table with its headers, never a card, never
+      // a page that scrolls sideways; under the table's useful width, the table scrolls in its frame.
+      const widths = [[390, 844, true], [768, 1024, false], [820, 1180, false], [1024, 768, false], [1440, 900, false]];
+      const seen = [];
+      for (const [width, height, scrolls] of widths) {
+        await f.page.setViewportSize({ width, height });
+        await openHome(f, '?classer=depart');
+        const table = f.page.getByRole('table', { name: 'Brouillon, classé par date d’envoi', exact: true });
+        assert.deepEqual((await table.locator('thead th').allInnerTexts()).map(text => text.trim().toLowerCase()), ['client', 'colis', 'où en est-on', 'total à payer', 'action'], `${width}`);
+        assert.equal(await f.page.locator('.colis-group-row').count(), 4, `${width}: departures as lines of the table`);
+        assert.equal(await f.page.locator('[class*="colis-card"]').count(), 0, `${width}: no card`);
+        const frame = await tableFrame(f, 'colis-liste');
+        assert.equal(frame.pageOverflow, false, `${width}: the page never scrolls sideways`);
+        assert.equal(frame.content > frame.width + 1, scrolls, `${width}: ${JSON.stringify(frame)}`);
+        assert.equal(await f.page.locator('[data-testid="colis-liste"] tbody th[scope="row"]').first().evaluate(element => getComputedStyle(element).position), 'sticky');
+        await assertReadable(f, `list ${width}`);
+        // The Brouillon sheet: its rows of cartons and parcels are tables too.
+        await f.page.goto(`${base}/brouillon/${D.riviere}`);
+        await f.page.getByRole('heading', { level: 1, name: 'Rivière Marie-Claude', exact: true }).waitFor();
+        await f.page.getByTestId('fiche-recus').locator('tbody tr').first().waitFor();
+        for (const [id, headers] of [['fiche-recus', ['N°', 'Vendeur', 'N° de suivi', 'Dimensions', 'Poids', 'Volume']], ['fiche-optimise', ['Colis', 'Dimensions', 'Poids', 'Volume']]])
+          assert.deepEqual(await f.page.getByTestId(id).getByRole('table').locator('thead th').allInnerTexts(), headers, `${width} ${id}`);
+        assert.equal(await f.page.locator('[class*="colis-card"], .fiche-list').count(), 0, `${width}: no card in the sheet`);
+        const page = await f.page.evaluate(() => {
+          const main = document.querySelector('main');
+          return document.documentElement.scrollWidth > window.innerWidth + 1 || main.scrollWidth > main.clientWidth + 1;
+        });
+        assert.equal(page, false, `${width}: the sheet never scrolls sideways`);
+        await assertReadable(f, `sheet ${width}`);
+        seen.push(`${width}: ${frame.width} px shown of ${frame.content}`);
+      }
+      console.log(`Tables: ${seen.join(' · ')}`);
+      noSend(f);
+    });
 
     await scenario('brouillon-sheet-tablet-light-and-dark', async f => {
       for (const theme of ['light', 'dark']) {
@@ -770,12 +870,27 @@ async function main() {
       // On a phone: the total and the action, the parcels after optimisation, then the cartons received.
       const order = await sheet.locator('[data-testid^="fiche-"]').evaluateAll(sections => sections.map(section => section.dataset.testid).filter(id => ['fiche-action', 'fiche-optimise', 'fiche-recus', 'fiche-avis'].includes(id)));
       assert.deepEqual(order, ['fiche-action', 'fiche-optimise', 'fiche-recus', 'fiche-avis']);
-      assert.equal(await sheet.getByRole('table').count(), 0, 'Lists on a phone.');
-      assert.match(await flat(f.page.getByTestId('fiche-recus')), /3 · Amazon 4,5 kg 50 × 40 × 30 cm · 0,060 m³ 6A 123 456 789 01/);
-      // The carton photographed at the reception: its mark and its thumbnails, in the list too.
-      const photographed = f.page.getByTestId('fiche-recus').locator('li[data-photos="true"]');
+      // The tablet's tables, each scrolling in its frame when it needs to; the page never scrolls sideways.
+      const received = f.page.getByTestId('fiche-recus').getByRole('table');
+      const optimized = f.page.getByTestId('fiche-optimise').getByRole('table');
+      assert.deepEqual(await received.locator('thead th').allInnerTexts(), ['N°', 'Vendeur', 'N° de suivi', 'Dimensions', 'Poids', 'Volume']);
+      assert.deepEqual(await optimized.locator('thead th').allInnerTexts(), ['Colis', 'Dimensions', 'Poids', 'Volume']);
+      assert.match(await flat(received), /3 Amazon 6A 123 456 789 01 50 × 40 × 30 cm 4,5 kg 0,060 m³/);
+      assert.match(await flat(optimized), /Colis 1 50 × 40 × 30 cm 7,6 kg 0,060 m³/);
+      for (const id of ['fiche-recus', 'fiche-optimise']) {
+        const frame = await f.page.getByTestId(id).locator('.colis-scroll').evaluate(element => {
+          const box = element.querySelector('.colis-scroll-box'), main = document.querySelector('main');
+          return { width: box.clientWidth, content: box.scrollWidth, moreRight: element.dataset.moreRight, label: box.getAttribute('aria-label'),
+            pageOverflow: document.documentElement.scrollWidth > window.innerWidth + 1 || main.scrollWidth > main.clientWidth + 1 };
+        });
+        assert.equal(frame.pageOverflow, false, id);
+        assert.equal(frame.moreRight, String(frame.content > frame.width + 1), `${id}: shaded only when columns hide.`);
+        assert.ok(frame.label, `${id}: a frame the keyboard can scroll.`);
+      }
+      // The carton photographed at the reception: its mark and its thumbnails, in the table too.
+      const photographed = received.locator('tbody tr[data-photos="true"]');
       assert.equal(await photographed.count(), 1);
-      assert.match(await flat(photographed), /^4 · Zara .*ZARA-889 2 photos \d{2}\/\d{2}\/\d{4} · Camille Test/);
+      assert.match(await flat(photographed), /^4 2 photos Zara ZARA-889/);
       await photosShown(f, 2);
       await assertReadable(f, 'sheet phone');
       await assertAccessible(f, 'sheet phone');

@@ -14,6 +14,7 @@ import { SecureImage } from '../ui/SecureFile';
 import ColisAction from './ColisAction';
 import ConsentSheet from './ConsentSheet';
 import ArrivalNoticeBlock from './ArrivalNoticeBlock';
+import ScrollFrame from './ScrollFrame';
 import StagePill from './StagePill';
 import { dossierHref as wholeDossierHref, withReturnTo } from './colisLinks';
 import useConsentSheet from './useConsentSheet';
@@ -64,64 +65,48 @@ function CartonPhotos({ carton, photos }) {
 
 const PhotoMark = ({ count }) => <span className="colis-sub fiche-photo-mark"><Camera size={16} aria-hidden="true" />{photoCount(count)}</span>;
 
-function ReceivedCartons({ received, wide, photos, photosError, onRetryPhotos }) {
+function ReceivedCartons({ received, photos, photosError, onRetryPhotos }) {
   // The photos of each carton (1 = first), as the server lists them; none while they are unknown.
   const photosOf = number => (Array.isArray(photos) ? photos : []).filter(photo => photo.carton === number && photo.path);
   return <section className="fiche-section" aria-labelledby="fiche-recus" data-testid="fiche-recus">
     <div className="fiche-section-head"><h2 id="fiche-recus">Cartons reçus</h2><p>{measuresSummary(received)}</p></div>
     {received.pendingLabel && <p className="colis-alert m-0"><AlertTriangle size={18} aria-hidden="true" className="shrink-0" /><span className="text-[16px] font-bold">{received.pendingLabel}</span></p>}
     {photosError && photos === null && <p className="colis-quiet" data-testid="fiche-photos-erreur"><span>Les photos de réception n’ont pas pu être chargées ({photosError}).</span><button type="button" onClick={onRetryPhotos} className="colis-link-button">Réessayer</button></p>}
-    {!received.count ? <p className="m-0 text-[15px] colis-muted">Aucun carton enregistré.</p> : wide
-      ? <div className="colis-table-wrap"><table className="fiche-table">
-        <thead><tr><th scope="col">N°</th><th scope="col">Vendeur</th><th scope="col">N° de suivi</th><th scope="col">Dimensions</th><th scope="col" data-align="right">Poids</th><th scope="col" data-align="right">Volume</th></tr></thead>
-        <tbody>{received.cartons.map(carton => {
-          const shots = photosOf(carton.number);
-          return <React.Fragment key={carton.number}>
-            <tr data-pending={carton.pending ? 'true' : undefined} data-photos={shots.length ? 'true' : undefined}>
-              <th scope="row">{carton.number}{carton.pending && <span className="colis-sub">À valider</span>}{shots.length > 0 && <PhotoMark count={shots.length} />}</th>
-              <td>{carton.supplierLabel}</td>
-              <td><span className="keep-token">{carton.trackingLabel}</span></td>
-              <td>{carton.dimensionsLabel}</td>
-              <td data-align="right">{carton.poidsLabel}</td>
-              <td data-align="right">{carton.volumeLabel}</td>
-            </tr>
-            {shots.length > 0 && <tr className="fiche-photo-row" data-pending={carton.pending ? 'true' : undefined}><td colSpan={6}><CartonPhotos carton={carton} photos={shots} /></td></tr>}
-          </React.Fragment>;
-        })}</tbody>
-        <tfoot><tr><th scope="row" colSpan={4}>Total reçu · {received.countLabel}</th><td data-align="right">{received.poidsLabel}</td><td data-align="right">{received.volumeLabel}</td></tr></tfoot>
-      </table></div>
-      : <ul className="fiche-list" aria-label="Cartons reçus">
-        {received.cartons.map(carton => {
-          const shots = photosOf(carton.number);
-          return <li key={carton.number} data-pending={carton.pending ? 'true' : undefined} data-photos={shots.length ? 'true' : undefined}>
-            <div className="fiche-list-line"><span>{carton.number} · {carton.supplierLabel}</span><span>{carton.poidsLabel}</span></div>
-            <span className="colis-sub">{carton.dimensionsLabel === carton.volumeLabel ? carton.dimensionsLabel : `${carton.dimensionsLabel} · ${carton.volumeLabel}`}</span>
-            <span className="colis-sub"><span className="keep-token">{carton.trackingLabel}</span>{carton.pending ? ' · À valider' : ''}</span>
-            {shots.length > 0 && <><PhotoMark count={shots.length} /><CartonPhotos carton={carton} photos={shots} /></>}
-          </li>;
-        })}
-        <li data-total="true"><span>{received.countLabel} reçus</span><span>{[received.poidsLabel, received.volumeLabel].filter((part, index, list) => list.indexOf(part) === index).join(' · ')}</span></li>
-      </ul>}
+    {!received.count ? <p className="m-0 text-[15px] colis-muted">Aucun carton enregistré.</p>
+      : <ScrollFrame className="colis-table-wrap" label="Tableau des cartons reçus">
+        <table className="fiche-table">
+          <thead><tr><th scope="col">N°</th><th scope="col">Vendeur</th><th scope="col">N° de suivi</th><th scope="col">Dimensions</th><th scope="col" data-align="right">Poids</th><th scope="col" data-align="right">Volume</th></tr></thead>
+          <tbody>{received.cartons.map(carton => {
+            const shots = photosOf(carton.number);
+            return <React.Fragment key={carton.number}>
+              <tr data-pending={carton.pending ? 'true' : undefined} data-photos={shots.length ? 'true' : undefined}>
+                <th scope="row">{carton.number}{carton.pending && <span className="colis-sub">À valider</span>}{shots.length > 0 && <PhotoMark count={shots.length} />}</th>
+                <td>{carton.supplierLabel}</td>
+                <td><span className="keep-token">{carton.trackingLabel}</span></td>
+                <td>{carton.dimensionsLabel}</td>
+                <td data-align="right">{carton.poidsLabel}</td>
+                <td data-align="right">{carton.volumeLabel}</td>
+              </tr>
+              {shots.length > 0 && <tr className="fiche-photo-row" data-pending={carton.pending ? 'true' : undefined}><td colSpan={6}><div className="colis-keep-in-view"><CartonPhotos carton={carton} photos={shots} /></div></td></tr>}
+            </React.Fragment>;
+          })}</tbody>
+          <tfoot><tr><th scope="row" colSpan={4}><span className="colis-keep-in-view">Total reçu · {received.countLabel}</span></th><td data-align="right">{received.poidsLabel}</td><td data-align="right">{received.volumeLabel}</td></tr></tfoot>
+        </table>
+      </ScrollFrame>}
   </section>;
 }
 
-function OptimizedParcels({ optimized, received, wide }) {
+function OptimizedParcels({ optimized, received }) {
   return <section className="fiche-section" aria-labelledby="fiche-optimise" data-testid="fiche-optimise">
     <div className="fiche-section-head"><h2 id="fiche-optimise">Après optimisation</h2>{optimized.done && <p>{measuresSummary(optimized)}</p>}</div>
     {!optimized.done ? <p className="m-0 text-[15px] colis-muted">{optimized.summary}</p> : <>
-      {wide
-        ? <div className="colis-table-wrap"><table className="fiche-table">
+      <ScrollFrame className="colis-table-wrap" label="Tableau des colis à expédier">
+        <table className="fiche-table">
           <thead><tr><th scope="col">Colis</th><th scope="col">Dimensions</th><th scope="col" data-align="right">Poids</th><th scope="col" data-align="right">Volume</th></tr></thead>
           <tbody>{optimized.packages.map(parcel => <tr key={parcel.number}><th scope="row">Colis {parcel.number}</th><td>{parcel.dimensionsLabel}</td><td data-align="right">{parcel.poidsLabel}</td><td data-align="right">{parcel.volumeLabel}</td></tr>)}</tbody>
           <tfoot><tr><th scope="row" colSpan={2}>Total à expédier</th><td data-align="right">{optimized.poidsLabel}</td><td data-align="right">{optimized.volumeLabel}</td></tr></tfoot>
-        </table></div>
-        : <ul className="fiche-list" aria-label="Colis à expédier">
-          {optimized.packages.map(parcel => <li key={parcel.number}>
-            <div className="fiche-list-line"><span>Colis {parcel.number}</span><span>{parcel.poidsLabel}</span></div>
-            <span className="colis-sub">{parcel.dimensionsLabel === parcel.volumeLabel ? parcel.dimensionsLabel : `${parcel.dimensionsLabel} · ${parcel.volumeLabel}`}</span>
-          </li>)}
-          <li data-total="true"><span>{optimized.summary}</span><span>{[optimized.poidsLabel, optimized.volumeLabel].filter((part, index, list) => list.indexOf(part) === index).join(' · ')}</span></li>
-        </ul>}
+        </table>
+      </ScrollFrame>
       {optimized.volumeGain && <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <span className="colis-pill" data-tone={optimized.volumeGain.percent > 0 ? 'done' : 'neutral'}>{optimized.volumeGain.label}</span>
         <span className="text-[15px] colis-muted">{received.volumeLabel} reçus → {optimized.volumeLabel} à expédier</span>
@@ -188,7 +173,6 @@ export default function BrouillonFiche() {
   const { data = [], envois = [], settings = {}, tarifs, categories, sbReady, can, getClient, refreshColis, setSelId, auth, workActions = [], teamUsers = [] } = useApp();
   const outage = useShellLoadBanner();
   const now = useMinuteNow();
-  const wide = useMediaQuery('(min-width: 768px)');
   const twoColumns = useMediaQuery('(min-width: 1280px)');
   const validId = UUID.test(String(id || ''));
   const back = workspaceReturnPath(location.search, '/');
@@ -275,8 +259,8 @@ export default function BrouillonFiche() {
         </div>}
     </div>
   </section>;
-  const optimizedSection = <OptimizedParcels key="optimized" optimized={fiche.optimized} received={fiche.received} wide={wide} />;
-  const receivedSection = <ReceivedCartons key="received" received={fiche.received} wide={wide} photos={signals.photos} photosError={signals.photosError} onRetryPhotos={signals.retry} />;
+  const optimizedSection = <OptimizedParcels key="optimized" optimized={fiche.optimized} received={fiche.received} />;
+  const receivedSection = <ReceivedCartons key="received" received={fiche.received} photos={signals.photos} photosError={signals.photosError} onRetryPhotos={signals.retry} />;
   const noticeSection = <ArrivalNoticeBlock key="notice" fiche={fiche} raw={rawNotice} client={client} loading={signals.notices === null}
     error={signals.noticesError} onRetry={signals.retry} onChanged={signals.retry} />;
 

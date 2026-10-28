@@ -186,7 +186,18 @@ a.colis-alert:hover { border-color: var(--attention-text); }
 
 /* ── The table (tablet and wider) ──────────────────────────────────────── */
 .colis-table-wrap { overflow: hidden; border: 1px solid var(--colis-line); border-radius: 16px; background: var(--colis-surface); }
-.colis-table { width: 100%; table-layout: fixed; border-collapse: collapse; }
+/* Separate borders: a cell kept in place (sticky) keeps its own borders. */
+.colis-table { width: 100%; table-layout: fixed; border-collapse: separate; border-spacing: 0; }
+/* The columns, as a share of the table on a tablet (fixed widths on a phone, below). */
+.colis-table[data-finances='true'] .colis-col-client { width: 19%; }
+.colis-table[data-finances='true'] .colis-col-colis { width: 16.5%; }
+.colis-table[data-finances='true'] .colis-col-stage { width: 24.5%; }
+.colis-table[data-finances='true'] .colis-col-total { width: 13%; }
+.colis-table[data-finances='true'] .colis-col-action { width: 27%; }
+.colis-table[data-finances='false'] .colis-col-client { width: 23%; }
+.colis-table[data-finances='false'] .colis-col-colis { width: 19%; }
+.colis-table[data-finances='false'] .colis-col-stage { width: 30%; }
+.colis-table[data-finances='false'] .colis-col-action { width: 28%; }
 .colis-table thead th {
   padding: 8px 10px; background: var(--colis-head-bg); color: var(--colis-muted); font-size: 15px; font-weight: 700;
   letter-spacing: .03em; text-align: left; text-transform: uppercase;
@@ -198,7 +209,7 @@ a.colis-alert:hover { border-color: var(--attention-text); }
   display: inline-flex; align-items: center; min-height: 44px; color: var(--colis-name); font-size: 18px; font-weight: 700; line-height: 1.2;
   text-decoration: none; overflow-wrap: break-word;
 }
-.colis-table .colis-row-name:hover, .colis-card-name:hover { text-decoration: underline; text-underline-offset: 3px; }
+.colis-table .colis-row-name:hover { text-decoration: underline; text-underline-offset: 3px; }
 .colis-table .colis-row-name + .colis-sub { margin-top: 0; }
 .colis-amount { display: block; color: var(--colis-name); font-size: 18px; font-weight: 800; white-space: nowrap; }
 .colis-table .colis-amount { font-size: 17px; }
@@ -214,17 +225,41 @@ a.colis-alert:hover { border-color: var(--attention-text); }
 .colis-group-title span, .colis-group-totals { font-size: 15px; }
 .colis-group-totals { font-weight: 600; }
 
-/* ── Cards (phone) ─────────────────────────────────────────────────────── */
-.colis-cards { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
-.colis-card { display: grid; gap: 6px; padding: 12px 14px 14px; border: 1px solid var(--colis-line); border-radius: 14px; background: var(--colis-surface); }
-.colis-card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
-.colis-card-name { display: inline-flex; align-items: center; min-height: 44px; color: var(--colis-name); font-size: 18px; font-weight: 700; line-height: 1.2; text-decoration: none; word-break: break-word; overflow-wrap: anywhere; }
-.colis-card-total { flex-shrink: 0; padding-top: 10px; text-align: right; }
-.colis-card-line { margin: 0; font-size: 15px; line-height: 1.4; }
-.colis-card-stage { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
-.colis-group-section { display: grid; gap: 8px; }
-.colis-group-section > h2 { margin: 0; padding: 10px 12px; border-radius: 12px; background: var(--colis-group-bg); color: var(--colis-group-text); font-size: 16px; font-weight: 400; }
-.colis-group-section[data-none='true'] > h2 { background: var(--attention-bg); color: var(--attention-text); }
+/* ── A table wider than the screen (ScrollFrame): it scrolls in its frame, never the page ── */
+.colis-scroll { position: relative; min-width: 0; }
+.colis-scroll-box { overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch; overscroll-behavior-x: contain; }
+.colis-scroll-box:focus { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+.colis-scroll-box:focus:not(:focus-visible) { outline: none; }
+/* Columns hidden on the right: that edge is shaded. */
+.colis-scroll::after {
+  content: ''; position: absolute; top: 0; right: 0; bottom: 0; z-index: 3; width: 22px; pointer-events: none; opacity: 0;
+  background: linear-gradient(to left, rgba(15, 26, 34, .24), rgba(15, 26, 34, 0)); transition: opacity 200ms ease-out;
+}
+html.dark .colis-scroll::after { background: linear-gradient(to left, rgba(0, 0, 0, .6), rgba(0, 0, 0, 0)); }
+.colis-scroll[data-more-right='true']::after { opacity: 1; }
+
+/* ── Every width: under its useful width a table scrolls in its frame, the client's column kept in place ── */
+.colis-table[data-finances='true'] { min-width: 720px; }
+.colis-table[data-finances='false'] { min-width: 640px; }
+/* Kept in place and opaque; set apart by a line while the table overflows, and by a shadow once columns pass
+   under it. */
+.colis-table thead th:first-child, .colis-table tbody th[scope='row'] { position: -webkit-sticky; position: sticky; left: 0; z-index: 2; }
+.colis-table thead th:first-child { background: var(--colis-head-bg); }
+.colis-table tbody th[scope='row'] { background: var(--colis-surface); }
+.colis-scroll[data-more-left='true'] .colis-table thead th:first-child, .colis-scroll[data-more-right='true'] .colis-table thead th:first-child,
+.colis-scroll[data-more-left='true'] .colis-table tbody th[scope='row'], .colis-scroll[data-more-right='true'] .colis-table tbody th[scope='row'] { border-right: 1px solid var(--colis-line); }
+.colis-scroll[data-more-left='true'] .colis-table thead th:first-child,
+.colis-scroll[data-more-left='true'] .colis-table tbody th[scope='row'] { box-shadow: 8px 0 10px -8px rgba(15, 26, 34, .45); }
+html.dark .colis-scroll[data-more-left='true'] .colis-table thead th:first-child,
+html.dark .colis-scroll[data-more-left='true'] .colis-table tbody th[scope='row'] { box-shadow: 8px 0 10px -8px rgba(0, 0, 0, .8); }
+/* A line across the table (a departure, a carton's photos, a total) stays in view while the table scrolls: as wide
+   as the frame shows (--frame-width, ScrollFrame). */
+.colis-scroll[data-more-left='true'] .colis-keep-in-view, .colis-scroll[data-more-right='true'] .colis-keep-in-view {
+  position: -webkit-sticky; position: sticky; left: 12px; max-width: calc(var(--frame-width, 100vw) - 40px);
+}
+.fiche-table tfoot .colis-keep-in-view { display: inline-block; }
+/* The sheet's tables keep each value on one line, and scroll when they need to. */
+.fiche-table tr:not(.fiche-photo-row) > th, .fiche-table tr:not(.fiche-photo-row) > td { white-space: nowrap; }
 
 /* ── What the line says after an action, and who holds its task ────────── */
 .colis-confirmation { display: flex; align-items: flex-start; gap: 8px; margin: 0; padding: 8px 10px; border-radius: 12px; background: #eaf6ef; color: #145233; font-size: 15px; font-weight: 700; line-height: 1.35; }
@@ -289,13 +324,6 @@ html.dark .fiche-saving { background: #153d2c; color: #b9e8ca; }
 .fiche-table tfoot tr { border-top: 2px solid var(--colis-field-line); color: var(--colis-name); font-weight: 800; }
 .fiche-table [data-align='right'] { text-align: right; white-space: nowrap; }
 .fiche-table tr[data-pending='true'] { background: var(--attention-bg); }
-.fiche-list { margin: 0; padding: 0; overflow: hidden; border: 1px solid var(--colis-line); border-radius: 14px; background: var(--colis-surface); list-style: none; }
-.fiche-list > li { padding: 10px 14px; border-top: 1px solid var(--colis-line-soft); }
-.fiche-list > li:first-child { border-top: 0; }
-.fiche-list > li[data-pending='true'] { background: var(--attention-bg); }
-.fiche-list > li[data-total='true'] { display: flex; justify-content: space-between; gap: 8px; border-top: 2px solid var(--colis-field-line); background: var(--colis-head-bg); color: var(--colis-name); font-size: 15px; font-weight: 800; }
-.fiche-list-line { display: flex; justify-content: space-between; gap: 8px; font-size: 16px; font-weight: 700; }
-.fiche-list-line > span:last-child, .fiche-list > li[data-total='true'] > span:last-child { flex-shrink: 0; white-space: nowrap; }
 /* Reception photos of a carton received damaged or opened: thumbnails under its line. */
 .fiche-photo-mark { display: flex; align-items: center; gap: 4px; }
 .fiche-table tbody tr.fiche-photo-row { border-top: 0; }

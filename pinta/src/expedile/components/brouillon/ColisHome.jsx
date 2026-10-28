@@ -15,6 +15,7 @@ import { eur } from '../../utils/format';
 import WorkLoadError from '../workspace/WorkLoadError';
 import ColisAction from './ColisAction';
 import ConsentSheet from './ConsentSheet';
+import ScrollFrame from './ScrollFrame';
 import StagePill, { totalsParts } from './StagePill';
 import { withReturnTo } from './colisLinks';
 import useConsentSheet from './useConsentSheet';
@@ -25,7 +26,8 @@ import './colisHome.css';
 // « Colis » (/): the four tabs of the team, one line per dossier with its step and its one action
 // (docs/specification-brouillon-reception-2026-10-28.md, « Écrans Colis »). Everything shown comes from
 // domain/brouillon.js; this screen only lays it out, keeps its state in the address (?onglet=, ?classer=, ?q=)
-// and opens the action: a page, or the client's message in the page's sheet (ConsentSheet).
+// and opens the action: a page, or the client's message in the page's sheet (ConsentSheet). One table at every
+// width: on a phone it scrolls sideways in its frame (ScrollFrame), the client's column kept in place.
 
 const EMPTY_TABS = {
   brouillon: { title: 'Aucun colis en stock', text: 'Les cartons réceptionnés apparaissent ici jusqu’à l’envoi du devis.' },
@@ -56,10 +58,11 @@ function Total({ total }) {
 // The column of amounts: what is still to pay, then what was paid.
 const TOTAL_HEADERS = { brouillon: 'Total à payer', a_payer: 'Total à payer', pret: 'Total payé', parti: 'Total' };
 
+/** The heading of a departure group, a line of the table: on a phone it stays in view while the table scrolls. */
 function GroupHead({ group }) {
   const none = group.key === NO_DEPARTURE_GROUP_KEY;
   const Icon = none ? AlertCircle : Plane;
-  return <span className="colis-group-head">
+  return <span className="colis-group-head colis-keep-in-view">
     <span className="colis-group-title">
       <Icon size={20} aria-hidden="true" className="shrink-0" />
       <strong>{[group.label, group.destinationLabel].filter(Boolean).join(' · ')}</strong>
@@ -88,23 +91,6 @@ function TableRow({ row, finances, link, returnTo, can, sheetId, openId, confirm
     <td><ColisAction row={row} returnTo={returnTo} can={can} held={row.stage.heldBy} confirmation={confirmation}
       panelId={sheetId} panelOpen={openId === row.id} onOpenPanel={() => onOpenPanel(row)} /></td>
   </tr>;
-}
-
-function Card({ row, finances, link, returnTo, can, sheetId, openId, confirmation, onOpenPanel }) {
-  return <li className="colis-card" data-colis-row={row.id} data-stage={row.stage.key}>
-    <div className="colis-card-top">
-      <Link to={link(row)} className="colis-card-name" data-colis-name={row.id}>{row.clientName}</Link>
-      {finances && <div className="colis-card-total"><Total total={row.total} /></div>}
-    </div>
-    <p className="colis-card-line">{[row.cartonsLabel, measuresText(row), [row.destinationLabel, row.commune].filter(Boolean).join(', ')].join(' · ')}</p>
-    <div className="colis-card-stage">
-      <StagePill stage={row.stage} />
-      <span className="colis-muted text-[15px]">{row.casier ? <>Casier <span className="colis-code">{row.casier}</span></> : 'Casier à renseigner'}</span>
-    </div>
-    {row.stage.detail && <p className="colis-card-line colis-muted">{row.stage.detail}</p>}
-    <ColisAction row={row} returnTo={returnTo} can={can} held={row.stage.heldBy} confirmation={confirmation}
-      panelId={sheetId} panelOpen={openId === row.id} onOpenPanel={() => onOpenPanel(row)} className="mt-1" />
-  </li>;
 }
 
 export default function ColisHome() {
@@ -252,13 +238,13 @@ export default function ColisHome() {
   const empty = !rows.length ? EMPTY_TABS[tabKey] : null;
   const caption = `${tab.label}, classé ${sort.label.replace(/^Par/, 'par')}`;
 
-  const list = wide
-    ? <div className="colis-table-wrap">
-      <table className="colis-table">
+  // The same columns everywhere; their widths: CSS (a share of the table on a tablet, fixed on a phone).
+  const list = <ScrollFrame className="colis-table-wrap" testId="colis-liste">
+      <table className="colis-table" data-finances={finances ? 'true' : 'false'}>
         <caption className="sr-only">{caption}</caption>
         <colgroup>
-          <col style={{ width: finances ? '19%' : '23%' }} /><col style={{ width: finances ? '16.5%' : '19%' }} /><col style={{ width: finances ? '24.5%' : '30%' }} />
-          {finances && <col style={{ width: '13%' }} />}<col style={{ width: finances ? '27%' : '28%' }} />
+          <col className="colis-col-client" /><col className="colis-col-colis" /><col className="colis-col-stage" />
+          {finances && <col className="colis-col-total" />}<col className="colis-col-action" />
         </colgroup>
         <thead><tr>
           <th scope="col">Client</th><th scope="col">Colis</th><th scope="col">Où en est-on</th>
@@ -272,13 +258,7 @@ export default function ColisHome() {
           </tbody>)
           : <tbody>{sorted.map(row => <TableRow key={row.id} {...lineProps(row)} />)}</tbody>}
       </table>
-    </div>
-    : groups
-      ? <div className="grid gap-5">{groups.map(group => <section key={group.key} className="colis-group-section" data-none={group.key === NO_DEPARTURE_GROUP_KEY ? 'true' : undefined} aria-labelledby={`groupe-${group.key}`}>
-        <h2 id={`groupe-${group.key}`}><GroupHead group={group} /></h2>
-        <ul className="colis-cards" aria-label={group.label}>{group.rows.map(row => <Card key={row.id} {...lineProps(row)} />)}</ul>
-      </section>)}</div>
-      : <ul className="colis-cards" aria-label={caption}>{sorted.map(row => <Card key={row.id} {...lineProps(row)} />)}</ul>;
+    </ScrollFrame>;
 
   return <div className="colis-page mx-auto w-full max-w-[1280px] space-y-4 px-4 pb-10 pt-4 lg:px-5">
     <h1 className="sr-only">Colis</h1>
