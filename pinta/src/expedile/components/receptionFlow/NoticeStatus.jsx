@@ -59,14 +59,14 @@ export function NoticeActions({ notice, client, onChanged, compact = false, now 
 
   const buttons = [];
   if (action === 'reessayer' && notice.message?.id) {
-    if (can('perm_comm_telegram')) buttons.push(<button key="retry" type="button" onClick={retry} disabled={busy} className="rf-small-action inline-flex items-center gap-2"><RefreshCw size={18} aria-hidden="true" />{busy ? 'Envoi…' : 'Réessayer l’envoi'}</button>);
+    if (can('perm_comm_telegram')) buttons.push(<button key="retry" type="button" onClick={retry} disabled={busy} className="rf-small-action inline-flex items-center gap-2 whitespace-nowrap"><RefreshCw size={18} aria-hidden="true" />{busy ? 'Envoi…' : 'Réessayer l’envoi'}</button>);
   }
   if (action === 'copier_texte' && text) {
-    buttons.push(<button key="copy" type="button" onClick={copy} className="rf-small-action inline-flex items-center gap-2"><Copy size={18} aria-hidden="true" />Copier le texte</button>);
+    buttons.push(<button key="copy" type="button" onClick={copy} className="rf-small-action inline-flex items-center gap-2 whitespace-nowrap"><Copy size={18} aria-hidden="true" />Copier le texte</button>);
     const mailto = noticeMailto(client?.email, cartonCountOf(notice), text);
-    if (mailto) buttons.push(<a key="mail" href={mailto} className="rf-small-action inline-flex items-center gap-2"><Mail size={18} aria-hidden="true" />Préparer l’e-mail</a>);
+    if (mailto) buttons.push(<a key="mail" href={mailto} className="rf-small-action inline-flex items-center gap-2 whitespace-nowrap"><Mail size={18} aria-hidden="true" />Préparer l’e-mail</a>);
   }
-  if (action === 'corriger_adresse' && notice.clientId) buttons.push(<Link key="fix" to={`/clients/${encodeURIComponent(notice.clientId)}?completer=email`} className="rf-small-action inline-flex items-center gap-2">Corriger l’adresse</Link>);
+  if (action === 'corriger_adresse' && notice.clientId) buttons.push(<Link key="fix" to={`/clients/${encodeURIComponent(notice.clientId)}?completer=email`} className="rf-small-action inline-flex items-center gap-2 whitespace-nowrap">Corriger l’adresse</Link>);
 
   // A notice never taken by the automatic sending has not left: it can be sent now (once what holds it back, if
   // anything, is settled). A refused one may have arrived.
@@ -113,7 +113,7 @@ export function NoticeCard({ notice, client, delivery, onChanged, onRefresh, ref
     non_remis: `Raison : ${state.reason || state.detail}.`,
   };
   return <Note tone={TONES[state.key] || 'neutral'} role="status" title={titles[state.key] || state.label}
-    action={['en_cours', 'a_verifier'].includes(state.key) && onRefresh ? <button type="button" className="rf-small-action inline-flex items-center gap-2" onClick={onRefresh} disabled={refreshing}><RefreshCw size={18} aria-hidden="true" />{refreshing ? 'Actualisation…' : 'Actualiser'}</button> : null}>
+    action={['en_cours', 'a_verifier'].includes(state.key) && onRefresh ? <button type="button" className="rf-small-action inline-flex items-center gap-2 whitespace-nowrap" onClick={onRefresh} disabled={refreshing}><RefreshCw size={18} aria-hidden="true" />{refreshing ? 'Actualisation…' : 'Actualiser'}</button> : null}>
     {details[state.key] && <p>{details[state.key]}</p>}
     <div className={details[state.key] ? 'mt-2' : ''}><NoticeActions notice={notice} client={client} onChanged={onChanged} now={now} /></div>
   </Note>;

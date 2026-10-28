@@ -16,6 +16,7 @@ const only = process.env.PINTA_RECEPTION_FLOW_FILTER || '';
 const results = [];
 const PHONE = { name: 'telephone', viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true };
 const TABLET = { name: 'tablette', viewport: { width: 1024, height: 768 }, hasTouch: true, isMobile: true };
+const DESKTOP = { name: 'ordinateur', viewport: { width: 1440, height: 900 }, hasTouch: false, isMobile: false };
 const H = '88888888-8888-4888-8888-888888888888'; // a client without any dossier and without contact
 const E = '99999999-9999-4999-8999-999999999999'; // a client reached by e-mail
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
@@ -296,6 +297,34 @@ async function photoBucket(f) {
   });
   return uploads;
 }
+/** A reception of one carton of `clientId`, validated by the server (with its notice when `notify`). */
+function recordValidation(f, state, clientId, notify, text) {
+  const parcel = { id: crypto.randomUUID(), client_id: clientId, ref: `EXP-AV${f.tables.colis.length}`, statut: 'mesure', nb_colis: 1, casier: 'E-01', trackings: [], trackings_detail: [{ number: `TRK-${f.tables.colis.length}`, fournisseur: 'Fnac' }],
+    dims_par_colis: [{ dimL: 30, dimW: 20, dimH: 10, poids: 1 }], dim_l: 30, dim_w: 20, dim_h: 10, poids: 1, created_at: now(), updated_at: now(), reception_dates: [{ receivedAt: now(), source: 'server' }] };
+  f.tables.colis.push(parcel);
+  const client = f.tables.clients.find(row => row.id === clientId);
+  const canal = notify ? (client.telegram_chat_id ? 'telegram' : 'email') : null;
+  const [status, body] = validateReception(f.tables, state, { id: ids.A }, { p_client_id: clientId, p_items: [{ colisId: parcel.id, fromCarton: 1, throughCarton: 1 }], p_notify: notify, p_canal: canal,
+    p_template: notify ? 'arrivee_colis' : null, p_text: notify ? text : null, p_request_id: crypto.randomUUID() });
+  assert.equal(status, 200, JSON.stringify(body));
+  return body;
+}
+/** Five receptions validated (Camille on Telegram): a notice never taken by the automatic sending, half an hour ago (to
+ * check); a Telegram notice not delivered; an e-mail to send (Marie); a Telegram notice sent; one without notice. */
+function noticeHistory(f, state) {
+  const stale = recordValidation(f, state, ids.C, true, 'Bonjour Camille, votre colis est arrivé.');
+  f.tables.messages.find(item => item.id === stale.message.id).created_at = ago(30);
+  state.validations.find(item => item.id === stale.validation.id).created_at = ago(30);
+  state.telegram = 'fail';
+  const failed = recordValidation(f, state, ids.C, true, 'Bonjour Camille, vos colis sont arrivés.');
+  sendTelegram(f.tables, state, { colisId: failed.message.colis_id, messageId: failed.message.id });
+  recordValidation(f, state, E, true, 'Bonjour Marie,\n\nBonne nouvelle : nous avons reçu 1 colis pour vous.');
+  state.telegram = 'ok';
+  const delivered = recordValidation(f, state, ids.C, true, 'Bonjour Camille, un autre colis est arrivé.');
+  sendTelegram(f.tables, state, { colisId: delivered.message.colis_id, messageId: delivered.message.id });
+  recordValidation(f, state, H, false, null);
+  return { stale, failed, delivered };
+}
 /** A carton of P recorded earlier (the old /reception screen, or a colleague): it waits for its validation. */
 function earlierPendingCarton(f, { tracking = 'TBA30219911', fournisseur = 'Amazon' } = {}) {
   const parcel = f.tables.colis.find(row => row.id === ids.P);
@@ -319,18 +348,68 @@ async function fillCarton(page, { casier, tracking, vendor, measures }) {
 }
 async function chooseClient(page, query, name) {
   await page.getByLabel('Nom, téléphone ou numéro client').fill(query);
-  await page.getByRole('button', { name: new RegExp(`^${name}`) }).click();
+  await page.getByRole('table', { name: /^Clients trouvés/ }).getByRole('button', { name: `Choisir ${name}` }).click();
   await page.getByRole('heading', { level: 2, name: /^Le (premier )?carton$/ }).waitFor();
 }
+/** The row of a table whose header cell (first column) is `name`. */
+const rowOf = (scope, name) => scope.getByRole('row').filter({ has: scope.page().getByRole('rowheader', { name }) });
 async function addCarton(page) {
   await page.getByRole('button', { name: 'Ajouter ce carton', exact: true }).click();
   await page.getByRole('heading', { level: 2, name: /^Cette réception : \d+ cartons?$/ }).waitFor();
 }
 
-/** Text of 15 px or more, targets of 44 px or more (56 px for the reception's main buttons), no horizontal scroll,
- * no emoji in the interface, no accessibility violation (axe, WCAG 2.2 AA) in the screen. */
+/** Text of 15 px or more, targets of 44 px or more (56 px for the reception's main buttons), no horizontal scroll of
+ * the page, no emoji in the interface, rows of data in tables only (no list of cards), each table with its column
+ * headers, its first column pinned (opaque, an edge line, a shadow while the frame scrolls), its actions in its last
+ * column and its frame scrolling sideways when it overflows; no accessibility violation (axe, WCAG 2.2 AA). */
 async function checkScreen(f, label) {
   await settle(f.page);
+  const tables = await f.page.evaluate(() => {
+    const root = document.querySelector('.rf');
+    const opaque = color => { const match = /rgba?\(([^)]+)\)/.exec(color); if (!match) return false; const parts = match[1].split(',').map(part => part.trim()); return parts.length < 4 || Number(parts[3]) === 1; };
+    // The only lists left: the steps of the reception and the lockers shown in very large.
+    const lists = [...root.querySelectorAll('ul, ol')].filter(list => list.getAttribute('aria-label') !== 'Étapes de la réception' && !list.closest('.rf-casier'))
+      .map(list => (list.getAttribute('aria-label') || list.textContent).trim().slice(0, 40));
+    const problems = [];
+    const found = [...root.querySelectorAll('table')].filter(table => table.getBoundingClientRect().width > 0).map(table => {
+      const name = (table.querySelector('caption')?.textContent || '').trim();
+      const frame = table.closest('.rf-table-frame');
+      if (!frame || !['auto', 'scroll'].includes(getComputedStyle(frame).overflowX)) problems.push(`${name}: no scrolling frame`);
+      if (table.querySelectorAll('thead th[scope="col"]').length < 2) problems.push(`${name}: no column headers`);
+      const overflow = frame ? frame.scrollWidth > frame.clientWidth + 1 : false;
+      if (overflow && frame.getAttribute('tabindex') !== '0') problems.push(`${name}: a scrolling frame the keyboard cannot reach`);
+      for (const row of table.querySelectorAll('tr')) {
+        const first = row.firstElementChild, style = getComputedStyle(first);
+        if (style.position !== 'sticky' || style.left !== '0px') problems.push(`${name}: first column not pinned`);
+        if (!opaque(style.backgroundColor)) problems.push(`${name}: first column not opaque (${style.backgroundColor})`);
+        if (!(parseFloat(style.borderRightWidth) >= 1)) problems.push(`${name}: first column without its edge line`);
+        if (overflow && style.boxShadow === 'none') problems.push(`${name}: first column without its edge shadow`);
+        if (row.parentElement.tagName === 'TBODY') for (const control of row.querySelectorAll('button, a[href]'))
+          if (control.closest('td, th') !== row.lastElementChild) problems.push(`${name}: « ${control.textContent.trim().slice(0, 30)} » outside the last column`);
+      }
+      // A cell never breaks inside a word or a code (« Exe / mple »): its columns keep the room they need. (A line may
+      // still end at a hyphen of a sentence.) An action keeps its label on one line.
+      const lineCount = (node, start, end) => {
+        const range = document.createRange();
+        range.setStart(node, start); range.setEnd(node, end);
+        return new Set([...range.getClientRects()].filter(rect => rect.width > 0).map(rect => Math.round(rect.top))).size;
+      };
+      const walker = document.createTreeWalker(table.tBodies[0] || table, NodeFilter.SHOW_TEXT);
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        for (const match of node.textContent.matchAll(/[^\s\-‑]+/g))
+          if (lineCount(node, match.index, match.index + match[0].length) > 1) problems.push(`${name}: « ${match[0]} » broken across lines`);
+      }
+      for (const control of table.querySelectorAll('tbody button, tbody a[href]')) {
+        const range = document.createRange(); range.selectNodeContents(control);
+        const centers = [...range.getClientRects()].filter(rect => rect.width > 0 && rect.height > 0).map(rect => rect.top + rect.height / 2).sort((a, b) => a - b);
+        if (centers.some((center, index) => index > 0 && center - centers[index - 1] > 8)) problems.push(`${name}: « ${control.textContent.trim().slice(0, 30)} » on several lines`);
+      }
+      return { name, rows: table.querySelectorAll('tbody tr').length, overflow };
+    });
+    return { lists, problems: [...new Set(problems)], found };
+  });
+  assert.deepEqual(tables.lists, [], `${label}: rows of data in tables, no list of cards`);
+  assert.deepEqual(tables.problems, [], `${label}: tables at every width`);
   const report = await f.page.evaluate(() => {
     const root = document.querySelector('.rf');
     const shown = element => {
@@ -385,6 +464,33 @@ async function checkScreen(f, label) {
   assert.equal(report.overflowX, false, `${label}: no horizontal scroll`);
   const axe = await new AxeBuilder({ page: f.page }).include('.rf').withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
   assert.deepEqual(axe.violations.map(item => ({ id: item.id, nodes: item.nodes.map(node => node.target.join(' ')).slice(0, 4) })), [], `${label}: no accessibility violation`);
+  return tables.found;
+}
+/** Each table that overflows, scrolled to its end in its frame: the page does not move, the first column stays at the
+ * frame's left edge, the last column (its actions) comes into view; then back to the start. */
+async function scrollTables(f, label) {
+  const report = await f.page.evaluate(async () => {
+    const frame = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const results = [];
+    for (const element of document.querySelectorAll('.rf .rf-table-frame')) {
+      if (element.scrollWidth <= element.clientWidth + 1) continue;
+      const table = element.querySelector('table');
+      const name = (table.querySelector('caption')?.textContent || '').trim();
+      const pageX = window.scrollX, mainX = document.querySelector('main')?.scrollLeft || 0;
+      element.scrollLeft = element.scrollWidth;
+      await frame();
+      const box = element.getBoundingClientRect();
+      const first = table.querySelector('tbody tr > :first-child').getBoundingClientRect();
+      const last = table.querySelector('tbody tr > :last-child').getBoundingClientRect();
+      results.push({ name, scrolled: element.scrollLeft > 0, pinned: Math.abs(first.left - box.left - 1) <= 1.5, lastShown: last.right <= box.right + 1,
+        shell: element.parentElement.getAttribute('data-scrolled') === 'true', pageStill: window.scrollX === pageX && (document.querySelector('main')?.scrollLeft || 0) === mainX });
+      element.scrollLeft = 0;
+      await frame();
+    }
+    return results;
+  });
+  for (const item of report) assert.deepEqual({ ...item, name: undefined }, { name: undefined, scrolled: true, pinned: true, lastShown: true, shell: true, pageStill: true }, `${label}: ${item.name} scrolls in its frame`);
+  return report.length;
 }
 /** What the operator sees, then the whole screen (taller window, same width). */
 async function snap(f, name) {
@@ -546,13 +652,14 @@ async function scenario(browser, name, options, run) {
       await f.login();
       await f.page.goto(`${base}/recevoir`);
       await f.page.getByLabel('Nom, téléphone ou numéro client').fill('0692 11 22 33');
-      const result = f.page.getByRole('button', { name: /^Exemple Camille/ });
+      const result = rowOf(f.page.getByRole('table', { name: /^Clients trouvés/ }), /^Exemple Camille/);
       await result.waitFor();
       assert.match(await result.innerText(), /Brouillon en cours : 2 cartons · Casier A-03/);
       assert.match(await result.innerText(), /Le carton rejoint son brouillon/);
       await checkScreen(f, 'phone dark step 1');
       await snap(f, 'telephone-sombre-1-client');
-      await result.click();
+      // The whole line answers the tap, its action waiting on the right of the phone.
+      await result.getByRole('rowheader').click();
       await f.page.getByRole('heading', { level: 2, name: 'Le carton' }).waitFor();
       await f.page.getByText('Il faudra redemander l’accord du client et vérifier la préparation avec le nouveau carton.', { exact: false }).waitFor();
       assert.equal(await f.page.getByLabel(/^Casier/).count(), 0, 'the brouillon keeps its locker');
@@ -572,9 +679,10 @@ async function scenario(browser, name, options, run) {
       await f.page.getByText(/^En validant, l’e-mail pour Camille est préparé pour 1 colis/).waitFor();
       // The forbidden product is not in the notice: the team is reminded to tell the client from the conversation.
       const reminder = f.page.getByRole('note').filter({ hasText: 'À signaler à Camille vous-même' });
-      await reminder.getByText('Carton n° 3 : produit interdit signalé (Batteries lithium).').waitFor();
+      const flaggedRow = rowOf(reminder, 'Carton 3');
+      assert.match(await flaggedRow.innerText(), /EXP-TEST-001\s+Produit interdit : Batteries lithium\s+Ouvrir la conversation/);
       await reminder.getByText('L’avis d’arrivée n’en parle pas : prévenez Camille depuis la conversation du dossier.').waitFor();
-      assert.equal(await reminder.getByRole('link', { name: 'Ouvrir la conversation' }).getAttribute('href'),
+      assert.equal(await flaggedRow.getByRole('link', { name: 'Ouvrir la conversation du dossier EXP-TEST-001' }).getAttribute('href'),
         `/colis/${ids.P}?onglet=conversation&returnTo=${encodeURIComponent(`/recevoir?client=${ids.C}&valider=1`)}`);
       await checkScreen(f, 'phone dark step 3');
       await snap(f, 'telephone-sombre-3-validation-email');
@@ -583,7 +691,7 @@ async function scenario(browser, name, options, run) {
       const sent = requestsTo(f, '/rpc/validate_reception')[0].input;
       assert.deepEqual({ canal: sent.p_canal, template: sent.p_template, items: sent.p_items }, { canal: 'email', template: 'arrivee_colis', items: [{ colisId: ids.P, fromCarton: 3, throughCarton: 3 }] });
       assert.doesNotMatch(sent.p_text, /lithium|interdit/i, 'the notice says nothing of the forbidden product');
-      await f.page.getByRole('note').filter({ hasText: 'Pensez à prévenir Camille' }).getByText('Carton n° 3 : produit interdit signalé (Batteries lithium).').waitFor();
+      assert.match(await rowOf(f.page.getByRole('note').filter({ hasText: 'Pensez à prévenir Camille' }), 'Carton 3').innerText(), /Produit interdit : Batteries lithium/);
       assert.equal(requestsTo(f, '/functions/v1/send-telegram').length, 0, 'an e-mail is never sent through Telegram');
       await f.page.getByText('E-mail à envoyer à Camille · 1 colis').waitFor();
       await f.page.getByText('Camille avait donné son accord pour 2 cartons. Pour ce nouveau carton, son accord est à redemander : sa ligne passe à « Accord à demander » dans le Brouillon.').waitFor();
@@ -603,10 +711,10 @@ async function scenario(browser, name, options, run) {
       await f.login();
       await f.page.goto(`${base}/recevoir`);
       await f.page.getByLabel('Nom, téléphone ou numéro client').fill('CLI-HOARAU');
-      const result = f.page.getByRole('button', { name: /^Hoarau Jean/ });
+      const result = rowOf(f.page.getByRole('table', { name: /^Clients trouvés/ }), /^Hoarau Jean/);
       assert.match(await result.innerText(), /Aucun brouillon en cours/);
       assert.match(await result.innerText(), /Nouveau brouillon/);
-      await result.click();
+      await result.getByRole('button', { name: 'Choisir Hoarau Jean' }).click();
       await f.page.getByRole('heading', { level: 2, name: 'Le premier carton' }).waitFor();
       await f.page.getByText('Vous validerez ensuite la réception.', { exact: false }).waitFor();
       await fillCarton(f.page, { casier: 'C-12', measures: ['50', '40', '30', '6'] });
@@ -697,15 +805,16 @@ async function scenario(browser, name, options, run) {
 
       // Neither damage is in the notice: the validation reminds the team to tell the client.
       const reminder = f.page.getByRole('note').filter({ hasText: 'À signaler à Camille vous-même' });
-      await reminder.getByText('Carton n° 3 : abîmé ou ouvert ; produit interdit signalé (Aérosols).').waitFor();
-      await reminder.getByText('Carton n° 4 : abîmé ou ouvert.').waitFor();
+      assert.match(await rowOf(reminder, 'Carton 3').innerText(), /Abîmé ou ouvert\s+Produit interdit : Aérosols/);
+      assert.match(await rowOf(reminder, 'Carton 4').innerText(), /Abîmé ou ouvert/);
+      assert.doesNotMatch(await rowOf(reminder, 'Carton 4').innerText(), /Produit interdit/);
       await checkScreen(f, 'tablet light flagged cartons');
       await snap(f, 'tablette-clair-3-cartons-signales');
       await f.page.reload();
       await f.page.getByRole('heading', { name: 'Cette réception : 2 cartons' }).waitFor();
       await f.page.getByText('Carton n° 4 enregistré dans EXP-TEST-001.').waitFor();
       await f.page.getByText('COLISSIMO-778', { exact: true }).waitFor();
-      await reminder.getByText('Carton n° 4 : abîmé ou ouvert.').waitFor();
+      await rowOf(reminder, 'Carton 4').waitFor();
     });
 
     await scenario(browser, 'reponse-perdue-verifier-enregistrement-sans-doublon', { layout: TABLET, dark: true, expectedConsole: /Failed to load resource|ERR_FAILED/ }, async f => {
@@ -884,7 +993,9 @@ async function scenario(browser, name, options, run) {
       await f.page.goto(`${base}/recevoir?client=${ids.C}&valider=1`);
       await f.page.getByRole('heading', { name: 'Cette réception : 1 carton' }).waitFor();
       assert.equal(await f.page.evaluate(() => document.activeElement?.id), 'rf-step-title', 'the step title takes the focus');
-      await f.page.getByText(/enregistré .* pas encore validé/).waitFor();
+      // The carton recorded earlier: its dossier, its state and when it arrived, in the table of the reception.
+      const earlier = rowOf(f.page.getByRole('table', { name: /^Cartons à valider/ }), 'Carton 3');
+      assert.match(await earlier.innerText(), /TBA30219911[\s\S]*EXP-TEST-001\s+pas encore validé\s+(Aujourd’hui|Hier)\s+\d{1,2}\s*h\s*\d{2}/);
       await f.page.getByRole('button', { name: 'Valider la réception et prévenir Camille' }).click();
       const check = f.page.getByRole('button', { name: 'Vérifier la validation' });
       await check.waitFor();
@@ -1008,31 +1119,8 @@ async function scenario(browser, name, options, run) {
       const tag = `${layout.name}-${dark ? 'sombre' : 'clair'}`;
       await scenario(browser, `avis-arrivee-${tag}`, { layout, dark }, async f => {
         const state = fixtures(f, { telegram: true });
-        const user = { id: ids.A };
         const marie = f.tables.clients.find(row => row.id === E);
-        // Four receptions validated: Telegram not delivered, e-mail to send, Telegram sent, without notice.
-        const record = (clientId, notify, text) => {
-          const parcel = { id: crypto.randomUUID(), client_id: clientId, ref: `EXP-AV${f.tables.colis.length}`, statut: 'mesure', nb_colis: 1, casier: 'E-01', trackings: [], trackings_detail: [{ number: `TRK-${f.tables.colis.length}`, fournisseur: 'Fnac' }],
-            dims_par_colis: [{ dimL: 30, dimW: 20, dimH: 10, poids: 1 }], dim_l: 30, dim_w: 20, dim_h: 10, poids: 1, created_at: now(), updated_at: now(), reception_dates: [{ receivedAt: now(), source: 'server' }] };
-          f.tables.colis.push(parcel);
-          const client = f.tables.clients.find(row => row.id === clientId);
-          const canal = notify ? (client.telegram_chat_id ? 'telegram' : 'email') : null;
-          const [status, body] = validateReception(f.tables, state, user, { p_client_id: clientId, p_items: [{ colisId: parcel.id, fromCarton: 1, throughCarton: 1 }], p_notify: notify, p_canal: canal, p_template: notify ? 'arrivee_colis' : null, p_text: notify ? text : null, p_request_id: crypto.randomUUID() });
-          assert.equal(status, 200, JSON.stringify(body));
-          return body;
-        };
-        // A Telegram notice the automatic sending never took, recorded half an hour ago: to check, sent from the screen.
-        const stale = record(ids.C, true, 'Bonjour Camille, votre colis est arrivé.');
-        f.tables.messages.find(item => item.id === stale.message.id).created_at = ago(30);
-        state.validations.find(item => item.id === stale.validation.id).created_at = ago(30);
-        state.telegram = 'fail';
-        const failed = record(ids.C, true, 'Bonjour Camille, vos colis sont arrivés.');
-        sendTelegram(f.tables, state, { colisId: failed.message.colis_id, messageId: failed.message.id });
-        record(E, true, 'Bonjour Marie,\n\nBonne nouvelle : nous avons reçu 1 colis pour vous.');
-        state.telegram = 'ok';
-        const delivered = record(ids.C, true, 'Bonjour Camille, un autre colis est arrivé.');
-        sendTelegram(f.tables, state, { colisId: delivered.message.colis_id, messageId: delivered.message.id });
-        record(H, false, null);
+        const { stale, failed } = noticeHistory(f, state);
         earlierPendingCarton(f);
         assert.ok(marie.email);
         await f.context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: base });
@@ -1043,13 +1131,13 @@ async function scenario(browser, name, options, run) {
         await pending.waitFor();
         assert.equal(await pending.getAttribute('href'), `/recevoir?client=${ids.C}&valider=1`);
         await f.page.getByText(/^Exemple Camille$/).first().waitFor();
-        const list = f.page.getByRole('list', { name: 'Avis d’arrivée récents' });
+        const list = f.page.getByRole('table', { name: 'Avis d’arrivée récents' });
         await list.getByText('Non remis', { exact: true }).waitFor();
         await list.getByText('Raison : Telegram : chat introuvable').waitFor();
         await list.getByText('À envoyer', { exact: true }).waitFor();
         await list.getByText('Envoyé', { exact: true }).waitFor();
         await list.getByText('Sans avis', { exact: true }).waitFor();
-        const toCheck = list.locator('li', { hasText: 'Envoi à vérifier' });
+        const toCheck = list.locator('tbody tr', { hasText: 'Envoi à vérifier' });
         await toCheck.getByText('Toujours pas parti au bout de 10 minutes : l’envoi automatique ne l’a pas pris en charge.').waitFor();
         await toCheck.getByText('Il n’est jamais parti : vous pouvez l’envoyer maintenant.').waitFor();
         await f.page.getByText('1 envoi à vérifier', { exact: true }).waitFor();
@@ -1060,7 +1148,7 @@ async function scenario(browser, name, options, run) {
         assert.match(await f.page.evaluate(() => navigator.clipboard.readText()), /^Bonjour Marie/);
         assert.match(await list.getByRole('link', { name: 'Préparer l’e-mail' }).getAttribute('href'), /^mailto:marie\.grondin@example\.test\?subject=/);
         // Telegram not delivered: checked in Telegram, then sent again on purpose.
-        const notDelivered = list.locator('li', { hasText: 'Non remis' });
+        const notDelivered = list.locator('tbody tr', { hasText: 'Non remis' });
         await notDelivered.getByText('Avant de réessayer, vérifiez dans Telegram que le message n’est pas arrivé.').waitFor();
         await notDelivered.getByRole('button', { name: 'Réessayer l’envoi' }).click();
         await f.page.waitForFunction(() => !document.body.innerText.includes('Non remis'));
@@ -1129,6 +1217,47 @@ async function scenario(browser, name, options, run) {
       assert.equal(requestsTo(f, '/rpc/validate_reception')[0].input.p_notify, false);
     });
 
+    // Tables on every device (390 px phone, 768 and 820 px tablets upright, 1024 px tablet lying, 1440 px computer): the
+    // clients found, the cartons to validate and those to tell the client about, the receptions to validate and the
+    // notices; never a list of cards, never a page that scrolls sideways.
+    for (const [layout, dark, widths] of [[PHONE, false, [390, 768, 820, 1024]], [DESKTOP, false, [1024, 1440]], [PHONE, true, [390, 820]], [DESKTOP, true, [1440]]]) {
+      const theme = dark ? 'sombre' : 'clair';
+      await scenario(browser, `tableaux-${layout === DESKTOP ? 'ordinateur' : 'tactile'}-${theme}`, { layout, dark }, async f => {
+        const state = fixtures(f, { telegram: true });
+        noticeHistory(f, state);
+        earlierPendingCarton(f);
+        // Carton n° 3 arrived damaged: the validation recalls it, in a table of its own.
+        f.tables.colis.find(row => row.id === ids.P).notes_reception = 'Carton n° 3 (Amazon, TBA30219911) abîmé ou ouvert à la réception : coin enfoncé.';
+        await f.login();
+        for (const width of widths) {
+          await f.page.setViewportSize({ width, height: layout === DESKTOP ? 900 : 844 });
+          const tag = `${width}-${theme}`;
+          await f.page.goto(`${base}/recevoir`);
+          await f.page.getByLabel('Nom, téléphone ou numéro client').fill('a');
+          await f.page.getByRole('table', { name: /^Clients trouvés/ }).waitFor();
+          let found = await checkScreen(f, `${tag} clients`);
+          assert.ok(found.length === 1 && found[0].rows >= 2, `${tag}: the clients found in a table`);
+          await scrollTables(f, `${tag} clients`);
+          await snap(f, `tableaux-${tag}-1-clients`);
+
+          await f.page.goto(`${base}/recevoir?client=${ids.C}&valider=1`);
+          await f.page.getByRole('table', { name: /^Cartons à valider/ }).waitFor();
+          found = await checkScreen(f, `${tag} validation`);
+          assert.deepEqual(found.map(table => [table.name, table.rows]), [['Cartons à valider pour Exemple Camille', 1], ['Cartons signalés à la réception', 1]]);
+          await scrollTables(f, `${tag} validation`);
+          await snap(f, `tableaux-${tag}-3-validation`);
+
+          await f.page.goto(`${base}/avis`);
+          await f.page.getByRole('table', { name: 'Avis d’arrivée récents' }).waitFor();
+          found = await checkScreen(f, `${tag} avis`);
+          assert.deepEqual(found.map(table => [table.name, table.rows]), [['Réceptions à valider, par client', 1], ['Avis d’arrivée récents', 5]]);
+          const scrolled = await scrollTables(f, `${tag} avis`);
+          if (width === 390) assert.equal(scrolled, 2, 'on a phone both tables scroll in their frames');
+          await snap(f, `tableaux-${tag}-avis`);
+        }
+      });
+    }
+
     for (const [layout, dark] of [[PHONE, false], [TABLET, true]]) {
       const tag = `${layout.name}-${dark ? 'sombre' : 'clair'}`;
       await scenario(browser, `mise-en-page-${tag}`, { layout, dark }, async f => {
@@ -1136,7 +1265,7 @@ async function scenario(browser, name, options, run) {
         await f.login();
         await f.page.goto(`${base}/recevoir`);
         await f.page.getByLabel('Nom, téléphone ou numéro client').fill('Exemple');
-        await f.page.getByRole('button', { name: /^Exemple Camille/ }).waitFor();
+        await f.page.getByRole('button', { name: 'Choisir Exemple Camille' }).waitFor();
         await checkScreen(f, `${tag} step 1`);
         await snap(f, `${tag}-1-client`);
         await chooseClient(f.page, 'Exemple', 'Exemple Camille');

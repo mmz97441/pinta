@@ -6,15 +6,15 @@ import useDocumentTitle from '../../hooks/useDocumentTitle';
 import { fetchArrivalNotices, fetchPendingReceptions } from '../../lib/receptionValidation';
 import { arrivalNoticeState, arrivalNoticeSummary, pendingByClient } from '../../domain/brouillon';
 import { arrivalChannel } from '../../services/arrivalNotice';
-import { Note, SkeletonRows } from './ReceptionParts';
+import { Note, SkeletonRows, TableFrame } from './ReceptionParts';
 import { NoticeActions, NoticePill } from './NoticeStatus';
-import { count, parisMoment, parisWhen } from './receptionFlowModel';
+import { count, parisMoment } from './receptionFlowModel';
 import './receptionFlow.css';
 
-// « Avis d’arrivée » (/avis): the receptions still to validate, by client (« Valider et prévenir »), then the recent
-// notices with their state: « Réessayer » for a Telegram notice not delivered or never taken by the automatic sending
-// (« Envoi à vérifier », still on its way after ten minutes), the text to copy and the e-mail to prepare for an e-mail
-// to send by hand, the client's sheet when the address is at fault.
+// « Avis d’arrivée » (/avis), two tables at every width: the receptions still to validate, by client (« Valider et
+// prévenir »), then the recent notices with their state: « Réessayer » for a Telegram notice not delivered or never
+// taken by the automatic sending (« Envoi à vérifier », still on its way after ten minutes), the text to copy and the
+// e-mail to prepare for an e-mail to send by hand, the client's sheet when the address is at fault.
 const SUMMARY = [
   { keys: ['envoye', 'remis'], label: ['envoyé', 'envoyés'], pill: 'done' },
   { keys: ['a_envoyer'], label: ['à envoyer', 'à envoyer'], pill: 'todo' },
@@ -24,46 +24,52 @@ const SUMMARY = [
   { keys: ['sans_avis', 'annule'], label: ['sans avis', 'sans avis'], pill: 'neutral' },
 ];
 
-function PendingGroup({ group, client, canReceive }) {
-  const refs = group.dossiers.map(dossier => dossier.ref).filter(Boolean);
-  const when = parisWhen(group.receivedTo || group.receivedFrom);
-  const label = arrivalChannel(client) ? 'Valider et prévenir' : 'Valider la réception';
-  return <li className="rf-note rf-note--warning flex-wrap items-center">
-    <p className="min-w-0 flex-1 basis-64 text-[16px]">
-      <strong className="text-[17px]">{client?.nom || 'Client'}</strong> : {count(group.cartonCount, 'colis reçu', 'colis reçus')}{when ? ` ${when}` : ''}
-      {refs.length > 0 && <> · <Refs refs={refs} /></>}. Le client n’est pas encore prévenu.
-    </p>
-    {canReceive && group.href
-      ? <Link to={group.href} className="brand-bg inline-flex min-h-11 shrink-0 items-center rounded-xl px-4 text-[16px] font-bold text-white">{label}</Link>
-      : <span className="text-[15px]">À valider par un membre de l’équipe qui réceptionne.</span>}
-  </li>;
-}
-
 /** « EXP-AB12, EXP-CD34 », each reference kept whole. */
 function Refs({ refs }) {
   return refs.map((ref, index) => <React.Fragment key={ref}>{index > 0 && ', '}<span className="rf-code whitespace-nowrap">{ref}</span></React.Fragment>);
 }
 
-// On a phone, the date and the colis share the first line of the card (order); from 768 px, four aligned columns.
+/** « Aujourd’hui » over « 16 h 07 ». */
+function Moment({ value }) {
+  const moment = parisMoment(value);
+  if (!moment) return <span className="rf-muted">Date inconnue</span>;
+  return <><span className="block whitespace-nowrap">{moment.day}</span><span className="rf-muted block whitespace-nowrap text-[15px]">{moment.time}</span></>;
+}
+
+/** One client whose cartons wait for their validation: the client, the cartons, their dossiers, when they arrived,
+ * and « Valider et prévenir ». */
+function PendingRow({ group, client, canReceive }) {
+  const refs = group.dossiers.map(dossier => dossier.ref).filter(Boolean);
+  const label = arrivalChannel(client) ? 'Valider et prévenir' : 'Valider la réception';
+  return <tr>
+    <th scope="row"><span className="rf-cell-id rf-strong text-[17px] font-bold">{client?.nom || 'Client'}</span></th>
+    <td className="whitespace-nowrap font-semibold">{count(group.cartonCount, 'colis', 'colis')}</td>
+    <td className="min-w-[9rem]">{refs.length ? <Refs refs={refs} /> : <span className="rf-muted">Non renseigné</span>}</td>
+    <td><Moment value={group.receivedTo || group.receivedFrom} /></td>
+    <td className={canReceive && group.href ? '' : 'rf-cell-text'}>{canReceive && group.href
+      ? <Link to={group.href} className="brand-bg inline-flex min-h-11 items-center whitespace-nowrap rounded-xl px-4 text-[16px] font-bold text-white">{label}</Link>
+      : <span className="text-[15px]">À valider par un membre de l’équipe qui réceptionne.</span>}</td>
+  </tr>;
+}
+
+/** One notice: the client (its dossiers, who validated), when, the channel, the cartons, the state and its action. */
 function NoticeRow({ notice, client, onChanged, now }) {
   const state = arrivalNoticeState(notice, { now });
   const summary = arrivalNoticeSummary(notice, { now });
-  const moment = parisMoment(notice.createdAt);
-  return <li className="rf-notice-row rf-notice-grid flex flex-wrap items-baseline gap-x-2 gap-y-2 px-4 py-3">
-    <p className="rf-muted order-first text-[15px] md:order-none"><span className="sr-only">Validé </span>{moment ? <>{moment.day}<span className="md:block"><span className="sr-only">à</span> {moment.time}</span></> : 'Date inconnue'}</p>
-    <div className="min-w-0 basis-full md:basis-auto">
-      <p className="rf-strong text-[17px] font-bold">{summary.clientName || client?.nom || 'Client'}</p>
-      <p className="rf-muted text-[15px]">{summary.refs.length > 0 && <Refs refs={summary.refs} />}{summary.actorName ? `${summary.refs.length ? ' · ' : ''}par ${summary.actorName}` : ''}</p>
-    </div>
-    <p className="rf-muted order-first text-[15px] md:order-none">
-      <span className="md:hidden" aria-hidden="true">· </span>{count(summary.cartonCount, 'colis', 'colis')}{summary.canalLabel && <span className="md:block"><span className="md:hidden"> · </span>{summary.canalLabel}</span>}
-    </p>
-    <div className="min-w-0 basis-full space-y-1 md:basis-auto">
+  return <tr>
+    <th scope="row"><span className="rf-cell-id">
+      <span className="rf-strong block text-[17px] font-bold">{summary.clientName || client?.nom || 'Client'}</span>
+      <span className="rf-muted block text-[15px]">{summary.refs.length > 0 && <Refs refs={summary.refs} />}{summary.actorName ? `${summary.refs.length ? ' · ' : ''}par ${summary.actorName}` : ''}</span>
+    </span></th>
+    <td><Moment value={notice.createdAt} /></td>
+    <td className="whitespace-nowrap">{summary.canalLabel || <span className="rf-muted">Aucun</span>}</td>
+    <td className="whitespace-nowrap">{count(summary.cartonCount, 'colis', 'colis')}</td>
+    <td className="rf-cell-text space-y-1">
       <NoticePill state={state} />
-      <p className="rf-muted text-[15px]">{state.key === 'non_remis' ? `Raison : ${state.reason}` : state.detail}</p>
-    </div>
-    <div className="rf-notice-actions min-w-0 basis-full md:basis-auto"><NoticeActions notice={notice} client={client} onChanged={onChanged} now={now} compact /></div>
-  </li>;
+      <span className="rf-muted block text-[15px]">{state.key === 'non_remis' ? `Raison : ${state.reason}` : state.detail}</span>
+    </td>
+    <td className="rf-cell-wide"><NoticeActions notice={notice} client={client} onChanged={onChanged} now={now} compact /></td>
+  </tr>;
 }
 
 export default function ArrivalNotices() {
@@ -108,10 +114,19 @@ export default function ArrivalNotices() {
 
     <section aria-labelledby="rf-pending-title" className="space-y-3">
       <h2 id="rf-pending-title" className="rf-strong text-[21px] font-extrabold">Réceptions à valider</h2>
+      {groups.length > 0 && <p className="rf-muted text-[15px]">Ces clients ne sont pas encore prévenus de l’arrivée de leurs colis.</p>}
       {pendingError && <Note tone="danger" role="alert" action={<button type="button" className="rf-small-action" onClick={load}>Réessayer</button>}>{pendingError}</Note>}
       {pending === null && !pendingError && <SkeletonRows rows={1} label="Chargement des réceptions à valider…" />}
       {pending !== null && !groups.length && <p className="rf-muted text-[16px]">Aucune réception à valider : tous les cartons enregistrés ont été validés.</p>}
-      {groups.length > 0 && <ul className="space-y-2">{groups.map(group => <PendingGroup key={group.clientId} group={group} client={getClient(group.clientId)} canReceive={can('perm_colis_receptionner')} />)}</ul>}
+      {groups.length > 0 && <TableFrame label="Réceptions à valider">
+        <table className="rf-table">
+          <caption className="sr-only">Réceptions à valider, par client</caption>
+          <thead><tr>
+            <th scope="col">Client</th><th scope="col">Cartons</th><th scope="col">Dossiers</th><th scope="col">Reçus</th><th scope="col">Action</th>
+          </tr></thead>
+          <tbody>{groups.map(group => <PendingRow key={group.clientId} group={group} client={getClient(group.clientId)} canReceive={can('perm_colis_receptionner')} />)}</tbody>
+        </table>
+      </TableFrame>}
     </section>
 
     <section aria-labelledby="rf-notices-title" className="space-y-3">
@@ -124,12 +139,15 @@ export default function ArrivalNotices() {
           {totals.map(item => <span key={item.pill + item.label[0]} className={`rf-pill rf-pill--${item.pill}`}>{item.value} {item.value >= 2 ? item.label[1] : item.label[0]}</span>)}
           <span className="rf-muted text-[15px]">· {count(cartons, 'colis annoncé', 'colis annoncés')} en {count(notices.length, 'avis', 'avis')}</span>
         </div>
-        <div className="rf-card overflow-hidden rounded-2xl">
-          <div aria-hidden="true" className="rf-notice-grid rf-notice-head hidden px-4 py-2 text-[15px] font-bold uppercase tracking-wider md:grid">
-            <span>Validé</span><span>Client</span><span>Colis</span><span>État</span>
-          </div>
-          <ul aria-label="Avis d’arrivée récents">{notices.map(notice => <NoticeRow key={notice.id} notice={notice} client={getClient(notice.clientId)} onChanged={load} now={now} />)}</ul>
-        </div>
+        <TableFrame label="Avis d’arrivée récents">
+          <table className="rf-table">
+            <caption className="sr-only">Avis d’arrivée récents</caption>
+            <thead><tr>
+              <th scope="col">Client</th><th scope="col">Validé</th><th scope="col">Canal</th><th scope="col">Colis</th><th scope="col">État</th><th scope="col">Action</th>
+            </tr></thead>
+            <tbody>{notices.map(notice => <NoticeRow key={notice.id} notice={notice} client={getClient(notice.clientId)} onChanged={load} now={now} />)}</tbody>
+          </table>
+        </TableFrame>
       </>}
     </section>
   </div>;
