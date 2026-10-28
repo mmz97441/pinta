@@ -87,7 +87,10 @@ async function checkRing(page, locator, expected, label, samples) {
           samples.push({ state, ...sample }); return sample;
         }
         await f.page.mouse.move(0, 0); const normal = await check('normal');
-        await row().hover(); const hovered = await check('hover'); assert.notDeepEqual(hovered.background, normal.background, `${name}: perceptible hover`);
+        // The hover colour comes in through a short transition: measure once it has started (CI read the first frame once).
+        await row().hover();
+        for (const until = Date.now() + 2000; Date.now() < until;) { if (JSON.stringify((await measure(row())).background) !== JSON.stringify(normal.background)) break; await f.page.waitForTimeout(50); }
+        const hovered = await check('hover'); assert.notDeepEqual(hovered.background, normal.background, `${name}: perceptible hover`);
         await f.page.mouse.move(0, 0); await f.page.keyboard.press('Tab'); await row().getByRole('button', { name: 'EXP-TEST-001', exact: true }).focus(); await check('focus', true);
         // Select through the real checkbox of what the person sees: the table row, or the card on a phone (44 px box).
         await row().getByRole('checkbox', { name: 'Sélectionner le dossier EXP-TEST-001', exact: true }).check();
