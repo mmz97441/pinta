@@ -848,17 +848,23 @@ export function AppProvider({ children }) {
     [requireReady, flash, reportError],
   );
   const addNewClient = useCallback(
-    async (client, options) => {
+    async (client, options = {}) => {
+      // `quiet`: the calling screen states the outcome itself (the reception's client form), so no error toast.
+      const { quiet = false, ...insertOptions } = options || {};
       try {
         requireReady();
         const token = generation.current;
-        const saved = await sb.insertClient(client, options);
+        const saved = await sb.insertClient(client, insertOptions);
         if (token === generation.current) {
-          setClients((prev) => [...prev, saved]);
+          // A replayed creation (createId) returns the same client: merged by id, never listed twice.
+          setClients((prev) => (prev.some((item) => item.id === saved.id)
+            ? prev.map((item) => (item.id === saved.id ? saved : item))
+            : [...prev, saved]));
           flash('Client ajouté');
         }
         return saved.id;
       } catch (error) {
+        if (quiet) throw error;
         throw reportError(error);
       }
     },

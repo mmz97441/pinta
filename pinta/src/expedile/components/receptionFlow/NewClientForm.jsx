@@ -58,7 +58,7 @@ export default function NewClientForm({ values, createId, pending, onChange, onP
     savingRef.current = true; setSaving(mode); setFailure(null);
     let created = null;
     try {
-      created = await addNewClient(payload, { createId });
+      created = await addNewClient(payload, { createId, quiet: true });
       // A client read meanwhile (a page reloaded after the lost answer) is listed once.
       setClients(previous => [...new Map(previous.map(item => [item.id, item])).values()]);
     } catch (error) {

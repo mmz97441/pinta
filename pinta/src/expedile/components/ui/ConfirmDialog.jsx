@@ -84,10 +84,10 @@ export default function ConfirmDialog() {
           </button>
         </div>
         {/* A final error replaces the body: the action it describes will not happen. */}
-        {!inlineError?.final && <p className="text-sm text-gray-600 dark:text-gray-300 mb-6 whitespace-pre-line break-words">
+        {!inlineError?.final && <p className="text-base text-gray-600 dark:text-gray-300 mb-6 whitespace-pre-line break-words">
           {inlineError?.body || cfm.msg}
         </p>}
-        {inlineError && <p role="alert" data-testid="confirm-inline-error" data-final={inlineError.final ? 'true' : undefined} className={`text-red-600 text-sm mb-4 whitespace-pre-line break-words ${inlineError.final ? '' : '-mt-3'}`}>{inlineError.message}</p>}
+        {inlineError && <p role="alert" data-testid="confirm-inline-error" data-final={inlineError.final ? 'true' : undefined} className={`text-red-600 text-base mb-4 whitespace-pre-line break-words ${inlineError.final ? '' : '-mt-3'}`}>{inlineError.message}</p>}
         {/* Stacked on narrow screens so a long action label keeps the full width. */}
         <div className="flex flex-col-reverse gap-3 sm:flex-row">
           <button
