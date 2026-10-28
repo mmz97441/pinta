@@ -56,6 +56,14 @@ function analysisReason(colis, invoice, draft) {
   if (invoice.valide && !draft) return 'validated';
   return null;
 }
+// Request mocks added by a suite: mock({ url, method, input, tables, server, user }) returns [status, body] to
+// answer, or nothing to let the shared server answer. registerRequestMock returns its own removal.
+const extraRequestMocks = new Set();
+function registerRequestMock(mock) {
+  extraRequestMocks.add(mock);
+  return () => extraRequestMocks.delete(mock);
+}
+
 function fixtures(role) {
   return {
     profiles: [{ id: A, nom: 'Camille', role, actif: true }],
@@ -443,7 +451,11 @@ async function setup(browser, role, { failTable = null, timezoneId = null, devic
     const responseHeaders = { 'access-control-allow-origin': '*', 'access-control-expose-headers': 'content-range' };
     // Each request is one server write: the forget trigger and the cascades apply once it is handled (synchronously).
     const written = beforeWrite();
-    if (url.pathname.includes('/auth/v1/token')) body = session;
+    // Suites of the simplified screens (2026-10-28) mock their own commands with registerRequestMock:
+    // the first mock that answers [status, body] wins; the others fall through to the shared server.
+    const extra = [...extraRequestMocks].map(mock => mock({ url, method, input, tables, server, user })).find(Boolean);
+    if (extra) [status, body] = extra;
+    else if (url.pathname.includes('/auth/v1/token')) body = session;
     else if (url.pathname.includes('/auth/v1/user')) body = user;
     else if (url.pathname.includes('/auth/v1/logout')) {
       status = 204;
@@ -1211,5 +1223,5 @@ function scanLoading(f, envoiId, colisIds, method = 'scan') {
     return [colisId, answers.map(answer => answer.body)];
   }));
 }
-module.exports = { setup, fixtures, ids: { A, C, P, F, L, S }, base, invoiceLock, frozenReason, analysisReason, scanLoading, expectedParcels };
+module.exports = { setup, fixtures, ids: { A, C, P, F, L, S }, base, invoiceLock, frozenReason, analysisReason, scanLoading, expectedParcels, registerRequestMock };
 if (require.main === module) main();
