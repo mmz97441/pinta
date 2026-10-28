@@ -255,12 +255,15 @@ function formatMessageDate(isoStr) {
 // the embedded rows (client scope, or a message without outbox row).
 const OUTBOX_PRECEDENCE = ['failed', 'cancelled', 'pending', 'blocked', 'sending', 'sent', 'manual'];
 function mapOutboxDelivery(rows) {
-  if (!Array.isArray(rows)) return { outboxStatus: null, outboxSentAt: null };
+  if (!Array.isArray(rows)) return { outboxStatus: null, outboxSentAt: null, outboxAvailableAt: null, outboxLastError: null };
   const statuses = rows.map((outbox) => outbox?.status).filter(Boolean);
   const outboxStatus = OUTBOX_PRECEDENCE.find((status) => statuses.includes(status)) ?? statuses[0] ?? null;
   const outboxSentAt = rows.reduce((latest, outbox) => (outbox?.status === 'sent' && Number.isFinite(Date.parse(outbox.sent_at))
     && (!latest || Date.parse(outbox.sent_at) > Date.parse(latest)) ? outbox.sent_at : latest), null);
-  return { outboxStatus, outboxSentAt };
+  // The row that decides the status: when a delivery waits on purpose (24-hour rule, open conversation) its
+  // available_at is later than the message, so a waiting relance is not mistaken for a stuck one.
+  const deciding = rows.find((outbox) => outbox?.status === outboxStatus) || null;
+  return { outboxStatus, outboxSentAt, outboxAvailableAt: deciding?.available_at ?? null, outboxLastError: deciding?.last_error ?? null };
 }
 
 export function mapMessage(row) {
@@ -386,7 +389,7 @@ export async function fetchColis(colisId = null, { archived = false, clientId = 
         table,
         // Staff: each message also reads the state and confirmed delivery of its outbox row (a send
         // cancelled or failed in the database leaves messages.statut unchanged).
-        await fetchAllRows(table, (q) => q.in('colis_id', ids), 'id', table === 'messages' && !clientScope ? '*,notification_outbox(status,sent_at)' : '*'),
+        await fetchAllRows(table, (q) => q.in('colis_id', ids), 'id', table === 'messages' && !clientScope ? '*,notification_outbox(status,sent_at,available_at,last_error)' : '*'),
       ]),
     );
     await datesLoaded;
