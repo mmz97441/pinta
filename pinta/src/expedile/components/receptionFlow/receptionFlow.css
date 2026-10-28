@@ -1,0 +1,155 @@
+/* « Réceptionner des cartons » (/recevoir) and « Avis d’arrivée » (/avis): read standing, tablet in hand.
+   Colours: AA in both themes (text 4.5:1 or more, field edges 3:1 or more); the dark values follow brand.css. */
+.rf {
+  --rf-card: #FFFFFF;
+  --rf-text: #1F2D35;
+  --rf-strong: #1B3A4B;
+  --rf-muted: #4A5862;
+  --rf-line: #E2DDD2;
+  --rf-field-edge: #8C867A;
+  --rf-invalid: #B91C1C;
+  --rf-head: #F1EEE7;
+  --rf-join-bg: #DDF2E6; --rf-join-text: #145233;
+  --rf-new-bg: #FFF1CC; --rf-new-text: #6B4500;
+  --rf-info-bg: #E9EFF3; --rf-info-text: #1F4A63;
+  --rf-success-bg: #EAF6EF; --rf-success-text: #145233;
+  --rf-warning-bg: #FFF6DE; --rf-warning-text: #6B4500;
+  --rf-danger-bg: #FEF2F2; --rf-danger-text: #8A2410;
+  --rf-neutral-bg: #EEEAE2; --rf-neutral-text: #3F3B35;
+  --rf-step-next-bg: #E7E2D8;
+  --rf-gold: #E8B84B;
+  color: var(--rf-text);
+}
+html.dark .rf {
+  --rf-card: var(--bg-elevated);
+  --rf-text: var(--text-primary);
+  --rf-strong: #C4DAE5;
+  --rf-muted: var(--text-secondary);
+  --rf-line: var(--border-subtle);
+  --rf-field-edge: #8D8578;
+  --rf-invalid: #E59A9A;
+  --rf-head: #35312B;
+  --rf-join-bg: #203A2D; --rf-join-text: #B0DFC0;
+  --rf-new-bg: #3C3020; --rf-new-text: #F4CF8B;
+  --rf-info-bg: #23313A; --rf-info-text: #C4DAE5;
+  --rf-success-bg: #203A2D; --rf-success-text: #B0DFC0;
+  --rf-warning-bg: #3C3020; --rf-warning-text: #F4CF8B;
+  --rf-danger-bg: #44282A; --rf-danger-text: #F4B9B9;
+  --rf-neutral-bg: #3A3530; --rf-neutral-text: #E8E4DC;
+  --rf-step-next-bg: #3A3530;
+  --rf-gold: #D4A845;
+}
+
+.rf-strong { color: var(--rf-strong); }
+.rf-muted { color: var(--rf-muted); }
+.rf-card { background-color: var(--rf-card); border: 1px solid var(--rf-line); }
+.rf-line { border-color: var(--rf-line); }
+
+/* Header of the reception: title, steps, close. */
+.rf-header { background-color: var(--rf-card); border-bottom: 1px solid var(--rf-line); }
+.rf-step { display: flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 600; color: var(--rf-muted); }
+.rf-step[aria-current='step'] { color: var(--rf-strong); font-weight: 800; }
+.rf-step-mark { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 999px; font-size: 15px; flex: none;
+  background-color: var(--rf-step-next-bg); color: var(--rf-text); }
+.rf-step[aria-current='step'] .rf-step-mark { background-color: var(--rf-strong); color: var(--rf-card); }
+.rf-step--done .rf-step-mark { background-color: var(--rf-join-bg); color: var(--rf-join-text); }
+.rf-step-link { width: 28px; height: 2px; background-color: var(--rf-line); flex: none; }
+.rf-step-link--done { background-color: var(--rf-strong); }
+
+/* Fields: tall, large text, an edge of 3:1 or more. */
+.rf .rf-field {
+  width: 100%; min-height: 56px; padding: 0 14px; border: 2px solid var(--rf-field-edge); border-radius: 14px;
+  background-color: var(--rf-card); color: var(--rf-text); font-size: 18px;
+}
+.rf textarea.rf-field { min-height: 88px; padding: 12px 14px; line-height: 1.4; resize: vertical; }
+.rf .rf-field--code { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; letter-spacing: .02em; }
+.rf .rf-field--casier { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: 22px; font-weight: 700; text-transform: uppercase; }
+.rf .rf-field--measure { min-height: 60px; font-size: 24px; font-weight: 700; }
+.rf .rf-field--search { min-height: 64px; padding-left: 56px; font-size: 22px; border-color: var(--rf-strong); border-radius: 16px; }
+.rf .rf-field[aria-invalid='true'] { border-color: var(--rf-invalid); }
+.rf .rf-field:disabled { opacity: .7; }
+.rf-label { display: block; margin-bottom: 6px; font-size: 16px; font-weight: 700; color: var(--rf-text); }
+.rf-label-hint { font-weight: 500; color: var(--rf-muted); }
+.rf-error { margin-top: 6px; font-size: 15px; font-weight: 600; color: var(--rf-invalid); }
+html:not(.dark) .rf-error { color: #B91C1C; }
+
+/* Buttons: the navy primary of the brand (light navy with navy text in dark mode, brand.css), an outlined secondary. */
+.rf-primary { min-height: 64px; border-radius: 16px; font-size: 18px; font-weight: 800; line-height: 1.25; color: #FFFFFF; }
+@media (min-width: 640px) { .rf-primary { font-size: 20px; } }
+.rf-primary:disabled { opacity: .6; }
+.rf-secondary { min-height: 56px; border-radius: 16px; border: 2px solid var(--rf-strong); background-color: var(--rf-card); color: var(--rf-strong); font-size: 18px; font-weight: 700; }
+.rf-secondary:disabled { opacity: .6; }
+.rf-quiet { min-height: 44px; padding: 0 12px; color: var(--rf-muted); font-size: 16px; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+.rf-quiet:hover { color: var(--rf-strong); }
+.rf-small-action { min-height: 44px; padding: 0 14px; border-radius: 12px; border: 2px solid var(--rf-strong); background-color: var(--rf-card); color: var(--rf-strong); font-size: 17px; font-weight: 700; }
+.rf-small-action--invalid { border-color: var(--rf-invalid); }
+/* A file input hidden in its label: the label shows the keyboard focus. */
+label.rf-small-action:focus-within { outline: 3px solid var(--focus-ring); outline-offset: 3px; }
+.rf-primary, .rf-secondary, .rf-small-action { transition: transform .2s ease-out, opacity .2s ease-out; }
+.rf-primary:active:not(:disabled), .rf-secondary:active:not(:disabled), .rf-small-action:active:not(:disabled) { transform: scale(.98); }
+
+/* One line per client found: what will happen to the carton is said before the tap. */
+.rf-result { border: 1px solid var(--rf-line); background-color: var(--rf-card); border-radius: 16px; transition: border-color .2s ease-out, transform .2s ease-out; }
+.rf-result--join { border: 2px solid var(--rf-strong); }
+@media (hover: hover) { .rf-result:hover { border-color: var(--rf-strong); } }
+.rf-result:active { transform: scale(.99); }
+
+.rf-pill { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 999px; font-size: 15px; font-weight: 700; white-space: nowrap; }
+.rf-pill--join, .rf-pill--done { background-color: var(--rf-join-bg); color: var(--rf-join-text); }
+.rf-pill--new, .rf-pill--todo { background-color: var(--rf-new-bg); color: var(--rf-new-text); }
+.rf-pill--wait { background-color: var(--rf-info-bg); color: var(--rf-info-text); }
+.rf-pill--alert { background-color: var(--rf-danger-bg); color: var(--rf-danger-text); }
+.rf-pill--neutral { background-color: var(--rf-neutral-bg); color: var(--rf-neutral-text); }
+
+/* The client band above the carton and the validation. */
+.rf-band { border-radius: 14px; padding: 12px 18px; }
+.rf-band--join { background-color: var(--rf-info-bg); color: var(--rf-text); }
+.rf-band--new { background-color: var(--rf-warning-bg); color: var(--rf-text); }
+.rf-band--new .rf-band-detail { color: var(--rf-new-text); font-weight: 600; }
+
+/* Notes: information, success, attention, failure. */
+.rf-note { display: flex; align-items: flex-start; gap: 12px; border-radius: 14px; padding: 12px 18px; font-size: 17px; line-height: 1.4; }
+.rf-note--info { background-color: var(--rf-info-bg); color: var(--rf-info-text); }
+.rf-note--success { background-color: var(--rf-success-bg); color: var(--rf-success-text); }
+.rf-note--warning { background-color: var(--rf-warning-bg); color: var(--rf-warning-text); }
+.rf-note--danger { background-color: var(--rf-danger-bg); color: var(--rf-danger-text); }
+.rf-note--neutral { background-color: var(--rf-neutral-bg); color: var(--rf-neutral-text); }
+.rf-note .rf-note-link { color: inherit; font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
+
+/* Forbidden products on board: one toggle per product. */
+.rf-chip { min-height: 44px; display: inline-flex; align-items: center; gap: 6px; padding: 0 14px; border-radius: 999px; border: 2px solid var(--rf-field-edge);
+  background-color: var(--rf-card); color: var(--rf-text); font-size: 16px; font-weight: 600; }
+.rf-chip[aria-pressed='true'] { border-color: var(--rf-danger-text); background-color: var(--rf-danger-bg); color: var(--rf-danger-text); font-weight: 700; }
+
+/* A choice between two (particulier, professionnel): the chosen one in navy. */
+.rf-toggle { min-height: 52px; min-width: 150px; padding: 0 18px; border-radius: 14px; border: 2px solid var(--rf-field-edge); background-color: var(--rf-card); color: var(--rf-text); font-size: 17px; font-weight: 700; }
+.rf-toggle[aria-pressed='true'] { border-color: var(--rf-strong); background-color: var(--rf-strong); color: var(--rf-card); }
+
+/* « Carton abîmé ou ouvert ». */
+.rf-check { display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 0 14px; border: 2px solid var(--rf-field-edge); border-radius: 14px; background-color: var(--rf-card); cursor: pointer; }
+.rf-check input { width: 24px; height: 24px; margin: 0; accent-color: #1B3A4B; flex: none; }
+html.dark .rf-check input { accent-color: #C4DAE5; }
+
+/* The cartons of the reception. */
+.rf-carton-number { display: inline-flex; align-items: center; justify-content: center; min-width: 40px; height: 40px; padding: 0 8px; border-radius: 12px;
+  background-color: var(--rf-head); color: var(--rf-strong); font-size: 17px; font-weight: 800; flex: none; }
+.rf-code { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; overflow-wrap: anywhere; }
+
+/* The locker, in very large. */
+.rf-casier { border: 4px solid var(--rf-gold); border-radius: 22px; background-color: var(--rf-card); }
+.rf-casier-value { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-weight: 800; letter-spacing: 2px; line-height: 1.05; color: var(--rf-strong); overflow-wrap: anywhere; }
+
+.rf-skeleton { border-radius: 12px; background-color: var(--skeleton-bg, #ECE7DC); animation: pulse-soft 1.6s ease-in-out infinite; }
+
+/* The message as the client will read it. */
+.rf-message { white-space: pre-wrap; overflow-wrap: anywhere; font-family: inherit; font-size: 16px; line-height: 1.5; }
+
+/* Arrival notices: four aligned columns from 768 px (validated, client, colis, state), the actions on a line of their
+   own under the client and the state, so that two buttons never squeeze the text; one card per notice below. */
+.rf-notice-row { border-top: 1px solid var(--rf-line); }
+.rf-notice-head { background-color: var(--rf-head); color: var(--rf-muted); }
+@media (min-width: 768px) {
+  .rf .rf-notice-grid { display: grid; grid-template-columns: 120px minmax(0, 1fr) 96px minmax(0, 1.3fr); align-items: start; column-gap: 16px; row-gap: 8px; }
+  .rf .rf-notice-actions { grid-column: 2 / -1; }
+}
+.rf-notice-actions:empty { display: none; }
