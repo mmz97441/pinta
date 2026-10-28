@@ -36,18 +36,19 @@ INSERT INTO colis(id,client_id,ref,statut,nb_colis,trackings_detail,dims_par_col
  ('f2200000-0000-4000-8000-000000000001','f2100000-0000-4000-8000-000000000001','EXP-RV-RACE','mesure',1,'[{"number":"RACE-1"}]','[{"dimL":10,"dimW":20,"dimH":30,"poids":1}]'),
  ('f2200000-0000-4000-8000-000000000002','f2100000-0000-4000-8000-000000000001','EXP-RV-REPLAY','mesure',1,'[{"number":"REPLAY-1"}]','[{"dimL":10,"dimW":20,"dimH":30,"poids":1}]');
 COMMIT;
+INSERT INTO storage.objects(bucket_id,name) VALUES('photos-colis','f2200000-0000-4000-8000-000000000001/carton-abime.jpg');
 SQL
 race() {
  docker exec -i "$container" psql -q -U postgres -v ON_ERROR_STOP=1 -v VERBOSITY=verbose > "$logs/$1.log" 2>&1 <<SQL
 BEGIN;
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claim.role','authenticated',true),set_config('request.jwt.claim.sub','f2000000-0000-4000-8000-000000000001',true);
-SELECT validate_reception('f2100000-0000-4000-8000-000000000001','[{"colisId":"$2","throughCarton":1}]',true,'telegram','arrivee_colis','Bonjour Léa, votre colis est arrivé.','$3');
+SELECT validate_reception('f2100000-0000-4000-8000-000000000001','[{"colisId":"$2","fromCarton":1,"throughCarton":1}]',true,'telegram','arrivee_colis','Bonjour Léa, votre colis est arrivé.','$3');
 SELECT pg_sleep(0.2);
 COMMIT;
 SQL
 }
-# Two validations of the same carton: one commits, the other finds it validated.
+# Two validations of the same carton: one commits, the other finds it validated (40001: its list is out of date).
 race first f2200000-0000-4000-8000-000000000001 f2300000-0000-4000-8000-000000000001 & first=$!
 race second f2200000-0000-4000-8000-000000000001 f2300000-0000-4000-8000-000000000002 & second=$!
 set +e
@@ -55,13 +56,29 @@ wait "$first"; first_status=$?
 wait "$second"; second_status=$?
 set -e
 if ! { [ "$first_status" -eq 0 ] && [ "$second_status" -eq 3 ]; } && ! { [ "$first_status" -eq 3 ] && [ "$second_status" -eq 0 ]; }; then cat "$logs"/*.log; exit 1; fi
-if ! grep -q '22023:' "$logs/first.log" "$logs/second.log"; then cat "$logs"/*.log; exit 1; fi
+if ! grep -q '40001: Des cartons de ce dossier ont été validés entre-temps' "$logs/first.log" "$logs/second.log"; then cat "$logs"/*.log; exit 1; fi
 # The same request twice at once (a lost response retried): both succeed, the second reuses the first.
 race replay_first f2200000-0000-4000-8000-000000000002 f2300000-0000-4000-8000-000000000003 & first=$!
 race replay_second f2200000-0000-4000-8000-000000000002 f2300000-0000-4000-8000-000000000003 & second=$!
 wait "$first"
 wait "$second"
 if ! grep -q '"reused": true' "$logs/replay_first.log" "$logs/replay_second.log"; then cat "$logs"/replay_*.log; exit 1; fi
+# The same photo recorded twice at once (a lost answer retried): both succeed, one row, the second reuses the first.
+photo() {
+ docker exec -i "$container" psql -q -U postgres -v ON_ERROR_STOP=1 -v VERBOSITY=verbose > "$logs/$1.log" 2>&1 <<SQL
+BEGIN;
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claim.role','authenticated',true),set_config('request.jwt.claim.sub','f2000000-0000-4000-8000-000000000001',true);
+SELECT add_reception_photo('f2200000-0000-4000-8000-000000000001',1,'f2200000-0000-4000-8000-000000000001/carton-abime.jpg');
+SELECT pg_sleep(0.2);
+COMMIT;
+SQL
+}
+photo photo_first & first=$!
+photo photo_second & second=$!
+wait "$first"
+wait "$second"
+if ! grep -q '"reused": true' "$logs/photo_first.log" "$logs/photo_second.log"; then cat "$logs"/photo_*.log; exit 1; fi
 sql <<'SQL'
 DO $$ BEGIN
  IF (SELECT count(*) FROM reception_validation_items WHERE colis_id='f2200000-0000-4000-8000-000000000001')<>1
@@ -69,12 +86,16 @@ DO $$ BEGIN
   OR (SELECT count(*) FROM notification_outbox WHERE colis_id='f2200000-0000-4000-8000-000000000001')<>1
   OR (SELECT count(*) FROM audit_actions WHERE colis_id='f2200000-0000-4000-8000-000000000001' AND action='reception_validated')<>1 THEN
   RAISE EXCEPTION 'FAIL: concurrent validations of one carton recorded it twice or sent two notices'; END IF;
- RAISE NOTICE 'PASS: two concurrent validations of one carton: one commits with one notice, the other is refused (22023)';
+ RAISE NOTICE 'PASS: two concurrent validations of one carton: one commits with one notice, the other is refused (40001)';
  IF (SELECT count(*) FROM reception_validations WHERE request_id='f2300000-0000-4000-8000-000000000003')<>1
   OR (SELECT count(*) FROM reception_validation_items WHERE colis_id='f2200000-0000-4000-8000-000000000002')<>1
   OR (SELECT count(*) FROM messages WHERE colis_id='f2200000-0000-4000-8000-000000000002' AND template='arrivee_colis')<>1
   OR (SELECT count(*) FROM audit_actions WHERE colis_id='f2200000-0000-4000-8000-000000000002' AND action='reception_validated')<>1 THEN
   RAISE EXCEPTION 'FAIL: the same request sent twice at once was recorded twice'; END IF;
  RAISE NOTICE 'PASS: the same request sent twice at once: both succeed, one validation and one notice';
+ IF (SELECT count(*) FROM reception_photos WHERE colis_id='f2200000-0000-4000-8000-000000000001')<>1
+  OR (SELECT count(*) FROM audit_actions WHERE colis_id='f2200000-0000-4000-8000-000000000001' AND action='reception_photo_added')<>1 THEN
+  RAISE EXCEPTION 'FAIL: the same photo sent twice at once was recorded twice'; END IF;
+ RAISE NOTICE 'PASS: the same photo sent twice at once: both succeed, one photo and one journal entry';
 END $$;
 SQL
