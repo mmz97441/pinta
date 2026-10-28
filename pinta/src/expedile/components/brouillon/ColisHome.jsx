@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Link, Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { AlertCircle, AlertTriangle, ChevronRight, PackagePlus, Plane, Search, X } from 'lucide-react';
+import { AlertCircle, AlertTriangle, Check, ChevronRight, PackagePlus, Plane, Search, X } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { useMinuteNow } from '../../hooks/useMinuteNow';
 import useMediaQuery from '../../hooks/useMediaQuery';
@@ -10,19 +10,22 @@ import { holdsStaffData, staffDataState } from '../../domain/dataLoad';
 import { canSeeDossierFinances } from '../../domain/dossierOverview';
 import { dossierTaskUrl } from '../../domain/dossierTasks';
 import { NO_DEPARTURE_GROUP_KEY } from '../../domain/departureGroups';
-import { COLIS_SORTS, COLIS_TABS, brouillonAlerts, colisRow, colisSortKey, colisTab, colisTabKey, colisTotals, filterColisRows, groupColisRowsByDeparture, pendingByColis, sortColisRows } from '../../domain/brouillon';
+import { COLIS_SORTS, COLIS_TABS, PAID_TOTAL_STATE, brouillonAlerts, colisRow, colisSortKey, colisTab, colisTabKey, colisTotals, filterColisRows, groupColisRowsByDeparture, pendingByColis, sortColisRows } from '../../domain/brouillon';
 import { eur } from '../../utils/format';
 import WorkLoadError from '../workspace/WorkLoadError';
 import ColisAction from './ColisAction';
-import ConsentPanel from './ConsentPanel';
+import ConsentSheet from './ConsentSheet';
 import StagePill, { totalsParts } from './StagePill';
+import { withReturnTo } from './colisLinks';
+import useConsentSheet from './useConsentSheet';
 import useReceptionSignals from './useReceptionSignals';
+import useScanner from './useScanner';
 import './colisHome.css';
 
 // « Colis » (/): the four tabs of the team, one line per dossier with its step and its one action
 // (docs/specification-brouillon-reception-2026-10-28.md, « Écrans Colis »). Everything shown comes from
 // domain/brouillon.js; this screen only lays it out, keeps its state in the address (?onglet=, ?classer=, ?q=)
-// and opens the action: a page, or the client's message in place.
+// and opens the action: a page, or the client's message in the page's sheet (ConsentSheet).
 
 const EMPTY_TABS = {
   brouillon: { title: 'Aucun colis en stock', text: 'Les cartons réceptionnés apparaissent ici jusqu’à l’envoi du devis.' },
@@ -39,12 +42,19 @@ function measuresText(row) {
   return row.poidsLabel === row.volumeLabel ? row.poidsLabel : `${row.poidsLabel} · ${row.volumeLabel}`;
 }
 
-/** The total to pay: the saved quote's price (and its state), else what it is (« À calculer »), never a false zero. */
+/** The total: the saved quote's price and its state (« Payé » once paid), else what it is (« À calculer »), never
+ * a false zero. */
 function Total({ total }) {
   if (!total?.visible) return null;
-  if (total.amount !== null) return <><span className="colis-amount">{eur(total.amount)}</span>{total.state && <span className="colis-sub">{total.state === 'paid' ? total.label : total.state}</span>}</>;
+  if (total.state === PAID_TOTAL_STATE) return <>
+    {total.amount !== null && <span className="colis-amount">{eur(total.amount)}</span>}
+    <span className="colis-paid"><Check size={16} aria-hidden="true" />{total.label}</span>
+  </>;
+  if (total.amount !== null) return <><span className="colis-amount">{eur(total.amount)}</span>{total.state && <span className="colis-sub">{total.state}</span>}</>;
   return <span className="colis-muted text-[15px]">{total.label}</span>;
 }
+// The column of amounts: what is still to pay, then what was paid.
+const TOTAL_HEADERS = { brouillon: 'Total à payer', a_payer: 'Total à payer', pret: 'Total payé', parti: 'Total' };
 
 function GroupHead({ group }) {
   const none = group.key === NO_DEPARTURE_GROUP_KEY;
@@ -60,35 +70,27 @@ function GroupHead({ group }) {
   </span>;
 }
 
-function TableRow({ row, columns, finances, link, returnTo, can, panel, onTogglePanel, onClosePanel }) {
-  const panelId = `panneau-${row.id}`;
-  const open = panel?.id === row.id;
-  return <>
-    <tr data-colis-row={row.id} data-stage={row.stage.key}>
-      <th scope="row">
-        <Link to={link(row)} className="colis-row-name" data-colis-name={row.id}>{row.clientName}</Link>
-        <span className="colis-sub">{[row.destinationLabel, row.commune].filter(Boolean).join(' · ')}</span>
-      </th>
-      <td>
-        <span className="colis-strong">{row.cartonsLabel} · {row.casier ? <>casier <span className="colis-code">{row.casier}</span></> : 'casier à renseigner'}</span>
-        <span className="colis-sub">{measuresText(row)}</span>
-      </td>
-      <td>
-        <StagePill stage={row.stage} />
-        {row.stage.detail && <span className="colis-sub">{row.stage.detail}</span>}
-      </td>
-      {finances && <td data-align="right"><Total total={row.total} /></td>}
-      <td><ColisAction row={row} returnTo={returnTo} can={can} panelId={panelId} panelOpen={open} onTogglePanel={() => onTogglePanel(row)} /></td>
-    </tr>
-    {open && <tr className="colis-panel-row"><td colSpan={columns}>
-      <ConsentPanel id={panelId} dossierId={row.id} title={panel.title} returnHref={panel.returnHref} onClose={() => onClosePanel(row.id)} />
-    </td></tr>}
-  </>;
+function TableRow({ row, finances, link, returnTo, can, sheetId, openId, confirmation, onOpenPanel }) {
+  return <tr data-colis-row={row.id} data-stage={row.stage.key}>
+    <th scope="row">
+      <Link to={link(row)} className="colis-row-name" data-colis-name={row.id}>{row.clientName}</Link>
+      <span className="colis-sub">{[row.destinationLabel, row.commune].filter(Boolean).join(' · ')}</span>
+    </th>
+    <td>
+      <span className="colis-strong">{row.cartonsLabel} · {row.casier ? <>casier <span className="colis-code">{row.casier}</span></> : 'casier à renseigner'}</span>
+      <span className="colis-sub">{measuresText(row)}</span>
+    </td>
+    <td>
+      <StagePill stage={row.stage} />
+      {row.stage.detail && <span className="colis-sub">{row.stage.detail}</span>}
+    </td>
+    {finances && <td data-align="right"><Total total={row.total} /></td>}
+    <td><ColisAction row={row} returnTo={returnTo} can={can} held={row.stage.heldBy} confirmation={confirmation}
+      panelId={sheetId} panelOpen={openId === row.id} onOpenPanel={() => onOpenPanel(row)} /></td>
+  </tr>;
 }
 
-function Card({ row, finances, link, returnTo, can, panel, onTogglePanel, onClosePanel }) {
-  const panelId = `panneau-${row.id}`;
-  const open = panel?.id === row.id;
+function Card({ row, finances, link, returnTo, can, sheetId, openId, confirmation, onOpenPanel }) {
   return <li className="colis-card" data-colis-row={row.id} data-stage={row.stage.key}>
     <div className="colis-card-top">
       <Link to={link(row)} className="colis-card-name" data-colis-name={row.id}>{row.clientName}</Link>
@@ -100,13 +102,13 @@ function Card({ row, finances, link, returnTo, can, panel, onTogglePanel, onClos
       <span className="colis-muted text-[15px]">{row.casier ? <>Casier <span className="colis-code">{row.casier}</span></> : 'Casier à renseigner'}</span>
     </div>
     {row.stage.detail && <p className="colis-card-line colis-muted">{row.stage.detail}</p>}
-    <ColisAction row={row} returnTo={returnTo} can={can} panelId={panelId} panelOpen={open} onTogglePanel={() => onTogglePanel(row)} className="mt-1" />
-    {open && <ConsentPanel id={panelId} dossierId={row.id} title={panel.title} returnHref={panel.returnHref} onClose={() => onClosePanel(row.id)} />}
+    <ColisAction row={row} returnTo={returnTo} can={can} held={row.stage.heldBy} confirmation={confirmation}
+      panelId={sheetId} panelOpen={openId === row.id} onOpenPanel={() => onOpenPanel(row)} className="mt-1" />
   </li>;
 }
 
 export default function ColisHome() {
-  const { data = [], clients = [], envois = [], settings = {}, can, getClient, sbReady, dataLoading, dataError, retryLoad, setSelId } = useApp();
+  const { data = [], clients = [], envois = [], settings = {}, tarifs, categories, can, getClient, sbReady, dataLoading, dataError, retryLoad, setSelId, auth, workActions = [], teamUsers = [] } = useApp();
   const [params, setParams] = useSearchParams();
   const location = useLocation();
   const navigate = useNavigate();
@@ -139,7 +141,11 @@ export default function ColisHome() {
   const signals = useReceptionSignals({ limit: 50, enabled: !failed && !legacyWork, data });
   const pendingIndex = useMemo(() => pendingByColis(signals.pending || []), [signals.pending]);
   const notices = signals.notices;
-  const ctx = useMemo(() => ({ getClient, envois, settings, pending: pendingIndex, notices: notices || [], can, now }), [getClient, envois, settings, pendingIndex, notices, can, now]);
+  // `actions`, `me`, `teamUsers`: who holds each task (the step's `heldBy`). `tarifs` and `categories` once loaded
+  // only (empty while the data load runs or after it failed): « Devis à compléter » is checked against them.
+  const me = auth?.u || null;
+  const ctx = useMemo(() => ({ getClient, envois, settings, pending: pendingIndex, notices: notices || [], can, now, actions: workActions, me, teamUsers, ...(sbReady ? { tarifs, categories } : {}) }),
+    [getClient, envois, settings, pendingIndex, notices, can, now, workActions, me, teamUsers, sbReady, tarifs, categories]);
   const dossiersByTab = useMemo(() => {
     const byTab = new Map(COLIS_TABS.map(item => [item.key, []]));
     for (const dossier of data) { const key = colisTab(dossier); if (key) byTab.get(key).push(dossier); }
@@ -175,53 +181,53 @@ export default function ColisHome() {
   const returnTo = listUrl();
   const ficheLink = useCallback((row, back = returnTo) => `${row.ficheHref}?${new URLSearchParams({ returnTo: back })}`, [returnTo]);
 
-  // « Demander l’accord » and « Relancer »: one message panel at a time, on the selected dossier.
-  const [panel, setPanel] = useState(null);
-  const panelRef = useRef(null);
-  panelRef.current = panel;
-  const closePanel = useCallback(id => {
-    setPanel(null);
-    setSelId(current => current === id ? null : current);
-    requestAnimationFrame(() => {
-      const target = document.querySelector(`[data-colis-row="${id}"] [aria-controls], [data-colis-row="${id}"] button[data-action]`) || document.querySelector(`[data-colis-name="${id}"]`);
-      target?.focus();
-    });
-  }, [setSelId]);
-  const togglePanel = useCallback(row => {
-    if (panelRef.current?.id === row.id) { closePanel(row.id); return; }
-    setSelId(row.id);
-    setPanel({ id: row.id, title: `${row.action.label} · ${row.clientName}`,
-      returnHref: dossierTaskUrl(row.id, 'accord', `?${new URLSearchParams({ returnTo })}`, { hash: 'dossier-work' }) });
-  }, [closePanel, setSelId, returnTo]);
-  // Another tab closes the panel; leaving the page releases the selection it took.
+  // « Demander l’accord » and « Relancer »: the page's message sheet, on the selected dossier. It belongs to the
+  // page, not to the line: the line may leave the search, change group or become a card, the message stays.
+  const focusLine = useCallback(id => {
+    const target = document.querySelector(`[data-colis-row="${id}"] [data-action]:not([disabled])`) || document.querySelector(`[data-colis-name="${id}"]`);
+    target?.focus();
+  }, []);
+  const { sheet, open: openConsent, close: closeSheet, sent: sheetSent, confirmations } = useConsentSheet({ setSelId, focusAfter: focusLine });
+  const openSheet = useCallback(row => openConsent(row.id, `${row.action.label} · ${row.clientName}`), [openConsent]);
+  // Its dossier as it is now: the action and who holds the task decide what the sheet offers.
+  const sheetRow = useMemo(() => {
+    const dossier = sheet ? data.find(item => item.id === sheet.id) : null;
+    return dossier ? colisRow(dossier, ctx) : null;
+  }, [sheet, data, ctx]);
+  // Another tab (the browser's back button) closes it.
+  const shownTab = useRef(tabKey);
   useEffect(() => {
-    const open = panelRef.current;
-    if (!open) return;
-    setPanel(null);
-    setSelId(current => current === open.id ? null : current);
-  }, [tabKey, setSelId]);
-  useEffect(() => () => {
-    const open = panelRef.current;
-    if (open) setSelId(current => current === open.id ? null : current);
-  }, [setSelId]);
+    if (shownTab.current === tabKey) return;
+    shownTab.current = tabKey;
+    closeSheet();
+  }, [tabKey, closeSheet]);
 
-  // Enter (a scanner validates at once): the only dossier found opens its sheet; nothing found here but in one
-  // other tab: that tab. The text stays selected, so the next scan replaces it.
+  // Enter in the search, or a scan anywhere: the only dossier found opens its sheet; nothing found here but in one
+  // other tab: that tab.
+  const submitSearch = text => {
+    const query = String(text || '').trim();
+    if (!query) return;
+    const here = filterColisRows(rows, query);
+    const back = listUrl({ q: query });
+    if (here.length === 1) { navigate(ficheLink(here[0], back)); return; }
+    if (!here.length) {
+      const found = COLIS_TABS.filter(item => item.key !== tabKey).map(item => ({ key: item.key, rows: filterColisRows(rowsOf(item.key), query) })).filter(item => item.rows.length);
+      if (found.length === 1 && found[0].rows.length === 1) { navigate(ficheLink(found[0].rows[0], listUrl({ q: query, onglet: found[0].key }))); return; }
+      if (found.length === 1) setParam('onglet', found[0].key);
+    }
+  };
+  // The text stays selected, so the next scan replaces it.
   const onSearchKey = event => {
     if (event.key !== 'Enter') return;
     event.preventDefault();
-    const text = event.currentTarget.value;
-    if (!text.trim()) return;
-    const here = filterColisRows(rows, text);
-    const back = listUrl({ q: text });
-    if (here.length === 1) { navigate(ficheLink(here[0], back)); return; }
-    if (!here.length) {
-      const found = COLIS_TABS.filter(item => item.key !== tabKey).map(item => ({ key: item.key, rows: filterColisRows(rowsOf(item.key), text) })).filter(item => item.rows.length);
-      if (found.length === 1 && found[0].rows.length === 1) { navigate(ficheLink(found[0].rows[0], listUrl({ q: text, onglet: found[0].key }))); return; }
-      if (found.length === 1) setParam('onglet', found[0].key);
-    }
+    submitSearch(event.currentTarget.value);
     event.currentTarget.select();
   };
+  // A scanner used while no field has the focus fills the search, without focusing it (no keyboard on a tablet).
+  useScanner({
+    enabled: !sheet && !failed && !legacyWork,
+    onScan: text => { changeSearch(text.trim()); submitSearch(text); },
+  });
 
   const [retrying, setRetrying] = useState(false);
   const retry = async () => {
@@ -236,8 +242,9 @@ export default function ColisHome() {
     <WorkLoadError title="Les colis n’ont pas pu être chargés" reason={dataLoad.reason} note="Les dossiers enregistrés sont conservés. Les onglets, la liste et ses totaux s’afficheront dès que le chargement aura réussi." retrying={retrying} onRetry={retry} />
   </div>;
 
-  const columns = finances ? 5 : 4;
-  const rowProps = { finances, link: ficheLink, returnTo, can, panel, onTogglePanel: togglePanel, onClosePanel: closePanel };
+  const sheetId = 'feuille-message';
+  const rowProps = { finances, link: ficheLink, returnTo, can, sheetId, openId: sheet?.id || null, onOpenPanel: openSheet };
+  const lineProps = row => ({ row, confirmation: confirmations[row.id] || null, ...rowProps });
   const signalProblem = signals.pendingError && signals.noticesError
     ? `Les réceptions à valider et les avis d’arrivée n’ont pas pu être vérifiés (${signals.pendingError}).`
     : signals.pendingError ? `Les réceptions à valider n’ont pas pu être vérifiées (${signals.pendingError}).`
@@ -255,23 +262,23 @@ export default function ColisHome() {
         </colgroup>
         <thead><tr>
           <th scope="col">Client</th><th scope="col">Colis</th><th scope="col">Où en est-on</th>
-          {finances && <th scope="col" data-align="right">Total à payer</th>}
+          {finances && <th scope="col" data-align="right">{TOTAL_HEADERS[tabKey] || 'Total'}</th>}
           <th scope="col"><span className="sr-only">Action</span></th>
         </tr></thead>
         {groups
           ? groups.map(group => <tbody key={group.key}>
-            <tr className="colis-group-row" data-none={group.key === NO_DEPARTURE_GROUP_KEY ? 'true' : undefined}><th scope="rowgroup" colSpan={columns}><GroupHead group={group} /></th></tr>
-            {group.rows.map(row => <TableRow key={row.id} row={row} columns={columns} {...rowProps} />)}
+            <tr className="colis-group-row" data-none={group.key === NO_DEPARTURE_GROUP_KEY ? 'true' : undefined}><th scope="rowgroup" colSpan={finances ? 5 : 4}><GroupHead group={group} /></th></tr>
+            {group.rows.map(row => <TableRow key={row.id} {...lineProps(row)} />)}
           </tbody>)
-          : <tbody>{sorted.map(row => <TableRow key={row.id} row={row} columns={columns} {...rowProps} />)}</tbody>}
+          : <tbody>{sorted.map(row => <TableRow key={row.id} {...lineProps(row)} />)}</tbody>}
       </table>
     </div>
     : groups
       ? <div className="grid gap-5">{groups.map(group => <section key={group.key} className="colis-group-section" data-none={group.key === NO_DEPARTURE_GROUP_KEY ? 'true' : undefined} aria-labelledby={`groupe-${group.key}`}>
         <h2 id={`groupe-${group.key}`}><GroupHead group={group} /></h2>
-        <ul className="colis-cards" aria-label={group.label}>{group.rows.map(row => <Card key={row.id} row={row} {...rowProps} />)}</ul>
+        <ul className="colis-cards" aria-label={group.label}>{group.rows.map(row => <Card key={row.id} {...lineProps(row)} />)}</ul>
       </section>)}</div>
-      : <ul className="colis-cards" aria-label={caption}>{sorted.map(row => <Card key={row.id} row={row} {...rowProps} />)}</ul>;
+      : <ul className="colis-cards" aria-label={caption}>{sorted.map(row => <Card key={row.id} {...lineProps(row)} />)}</ul>;
 
   return <div className="colis-page mx-auto w-full max-w-[1280px] space-y-4 px-4 pb-10 pt-4 lg:px-5">
     <h1 className="sr-only">Colis</h1>
@@ -290,8 +297,9 @@ export default function ColisHome() {
     {/* Alerts only when something is to do; a failed check says so quietly, the list stays. */}
     {alerts.length > 0 && <div className="colis-alerts">
       {alerts.map(alert => {
-        const target = alert.action?.href || null;
-        const restricted = target?.startsWith('/recevoir') && !can('perm_colis_receptionner');
+        const reception = alert.action?.href?.startsWith('/recevoir');
+        const target = alert.action?.href ? reception ? withReturnTo(alert.action.href, returnTo) : alert.action.href : null;
+        const restricted = reception && !can('perm_colis_receptionner');
         const content = <><AlertTriangle size={20} aria-hidden="true" className="shrink-0" /><span>{alert.text}</span></>;
         // One alert, one click: the alert itself leads to what is to do.
         if (target && !restricted) return <Link key={alert.key} to={target} className="colis-alert" data-alert={alert.key}>
@@ -327,7 +335,7 @@ export default function ColisHome() {
     {matches.length > 0 ? list
       : empty ? <section className="colis-empty" aria-labelledby="colis-vide">
         <h2 id="colis-vide">{empty.title}</h2><p>{empty.text}</p>
-        {tabKey === 'brouillon' && can('perm_colis_receptionner') && <div className="colis-empty-actions"><Link to="/recevoir" className="colis-action w-auto px-5"><PackagePlus size={20} aria-hidden="true" />Réceptionner des cartons</Link></div>}
+        {tabKey === 'brouillon' && can('perm_colis_receptionner') && <div className="colis-empty-actions"><Link to={withReturnTo('/recevoir', returnTo)} className="colis-action w-auto px-5"><PackagePlus size={20} aria-hidden="true" />Réceptionner des cartons</Link></div>}
       </section>
         : <section className="colis-empty" aria-labelledby="colis-vide">
           <h2 id="colis-vide">Aucun dossier de l’onglet {tab.label} ne correspond à « {searchText.trim()} »</h2>
@@ -337,5 +345,10 @@ export default function ColisHome() {
             <button type="button" onClick={() => { changeSearch(''); searchField.current?.focus(); }} className="colis-secondary">Effacer la recherche</button>
           </div>
         </section>}
+
+    {sheet && <ConsentSheet key={sheet.id} id={sheetId} dossierId={sheet.id} title={sheet.title} action={sheetRow?.action || null} held={sheetRow?.stage?.heldBy || null}
+      returnHref={dossierTaskUrl(sheet.id, 'accord', `?${new URLSearchParams({ returnTo })}`, { hash: 'dossier-work' })}
+      clientHref={sheetRow?.clientId && (can('perm_clients_voir') || can('perm_clients_creer')) ? `/clients/${encodeURIComponent(sheetRow.clientId)}` : null}
+      onClose={closeSheet} onSent={sheetSent} />}
   </div>;
 }
