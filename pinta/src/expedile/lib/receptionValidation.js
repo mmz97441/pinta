@@ -1,11 +1,12 @@
 // ══════════════════════════════════════════════════════════════════════
-// Validated reception and grouped arrival notice (migration 20261028000001_reception_validation.sql)
+// Validated reception, grouped arrival notice and reception photos (migration 20261028000001_reception_validation.sql)
 // ══════════════════════════════════════════════════════════════════════
 // The team records each carton as soon as it is entered, then validates the reception of a client at once; with a
-// notice, the server queues ONE message (Telegram, else e-mail) for all the cartons of that reception. The server
-// decides and checks everything (permissions, channel, pending cartons): these functions only shape the calls and
-// their answers. Errors follow lib/supabaseData.js: a server refusal is thrown as it is (code 42501, 22023 or 40001
-// and its French message); an argument the server would refuse is refused here with code 22023, without any call.
+// notice, the server queues ONE message (Telegram, else e-mail) for all the cartons of that reception. A carton
+// received damaged may carry several photos. The server decides and checks everything (permissions, channel, pending
+// cartons, stored photos): these functions only shape the calls and their answers. Errors follow lib/supabaseData.js:
+// a server refusal is thrown as it is (code 42501, 22023 or 40001 and its French message); an argument the server
+// would refuse is refused here with code 22023, without any call.
 import { supabase } from './supabase';
 import { randomId } from './randomId';
 
@@ -14,6 +15,10 @@ export const ARRIVAL_TEMPLATES = ['arrivee_colis', 'arrivee_colis_facture'];
 export const MAX_VALIDATION_DOSSIERS = 20;
 export const MAX_NOTICE_LENGTH = 4096;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// A carton number as the server reads it (1 to 999999).
+const cartonNumber = (value) => Number.isInteger(value) && value >= 1 && value <= 999999;
+// The path uploadDocument gives a photo: `<dossier id>/<file>`, an image (add_reception_photo checks the same).
+const PHOTO_PATH = /^[^/]+\/[^/]+\.(jpe?g|png|webp)$/i;
 
 const invalid = (message) => Object.assign(new Error(message), { code: '22023' });
 const trimmed = (value) => (typeof value === 'string' && value.trim() ? value.trim() : null);
@@ -150,39 +155,73 @@ export function normalizeArrivalNotices(data) {
   }));
 }
 
-/** The items of a validation, as the server accepts them: 1 to 20 distinct dossiers, each with the number of the
- *  last carton to validate (its pending cartons up to that one are validated). */
+/** The items of a validation, as the server accepts them: 1 to 20 distinct dossiers, each with its first pending
+ *  carton as the list showed it (fromCarton) and the last carton to validate (throughCarton). The server validates the
+ *  pending cartons from the one to the other; when its first pending carton is no longer fromCarton (a colleague
+ *  validated meanwhile), it refuses with 40001: the list is read again before a new attempt. */
 export function validationItems(items) {
   if (!Array.isArray(items) || items.length < 1 || items.length > MAX_VALIDATION_DOSSIERS) throw invalid('Validez de 1 à 20 dossiers à la fois.');
   const seen = new Set();
   return items.map((item) => {
     const colisId = typeof item?.colisId === 'string' ? item.colisId.trim() : '';
+    const fromCarton = item?.fromCarton;
     const throughCarton = item?.throughCarton;
-    if (!UUID.test(colisId) || !Number.isInteger(throughCarton) || throughCarton < 1)
-      throw invalid('Chaque dossier indique son identifiant et le numéro du dernier carton à valider.');
+    if (!UUID.test(colisId) || !cartonNumber(fromCarton) || !cartonNumber(throughCarton))
+      throw invalid('Chaque dossier indique son identifiant, le premier et le dernier carton à valider.');
+    if (fromCarton > throughCarton) throw invalid('Le premier carton à valider ne peut pas suivre le dernier.');
     if (seen.has(colisId.toLowerCase())) throw invalid('Un dossier ne figure qu’une fois dans une validation.');
     seen.add(colisId.toLowerCase());
-    return { colisId, throughCarton };
+    return { colisId, fromCarton, throughCarton };
   });
 }
 
 /** Every pending carton of the listed dossiers (the usual « Valider la réception »), in the order of the list. */
 export function pendingValidationItems(pending) {
-  return (pending || []).filter((row) => row?.colisId && Number.isInteger(row.lastCarton))
-    .map((row) => ({ colisId: row.colisId, throughCarton: row.lastCarton }));
+  return (pending || []).filter((row) => row?.colisId && Number.isInteger(row.firstCarton) && Number.isInteger(row.lastCarton))
+    .map((row) => ({ colisId: row.colisId, fromCarton: row.firstCarton, throughCarton: row.lastCarton }));
 }
 
 /** The cartons a validation of `items` records and its notice announces, exactly as the server snapshots them: the
- *  pending cartons of each dossier up to throughCarton, in the order of the items, then by carton number. */
+ *  pending cartons of each dossier from fromCarton to throughCarton, in the order of the items, then by number. */
 export function receptionCartonsFor(pending, items) {
   const byDossier = new Map((pending || []).map((row) => [String(row?.colisId || '').toLowerCase(), row]));
-  return validationItems(items).flatMap(({ colisId, throughCarton }) => {
+  return validationItems(items).flatMap(({ colisId, fromCarton, throughCarton }) => {
     const row = byDossier.get(colisId.toLowerCase());
     if (!row) return [];
-    return (row.cartons || []).filter((carton) => Number.isInteger(carton.carton) && carton.carton <= throughCarton)
+    return (row.cartons || []).filter((carton) => Number.isInteger(carton.carton) && carton.carton >= fromCarton && carton.carton <= throughCarton)
       .sort((a, b) => a.carton - b.carton)
       .map((carton) => ({ colisId: row.colisId, ref: row.ref, ...carton }));
   });
+}
+
+/** A reception photo: its carton (1 = first), its path in the private bucket photos-colis (to show through
+ *  signedFileUrl), when and by whom it was added. */
+export function normalizeReceptionPhoto(raw, colisId = null) {
+  return {
+    id: raw?.id || null,
+    colisId: raw?.colisId || colisId || null,
+    carton: integer(raw?.carton),
+    path: typeof raw?.path === 'string' && raw.path ? raw.path : null,
+    createdAt: isoDate(raw?.createdAt),
+    actor: { nom: trimmed(raw?.actor?.nom) },
+  };
+}
+
+/** list_reception_photos → the photos of a dossier, oldest first. */
+export function normalizeReceptionPhotos(data, colisId = null) {
+  if (!Array.isArray(data)) throw new Error('Les photos de réception n’ont pas pu être lues. Actualisez la page.');
+  return data.map((row) => normalizeReceptionPhoto(row, colisId));
+}
+
+/** The arguments of add_reception_photo: the dossier, the carton and the photo uploadDocument('photos-colis', …) stored
+ *  in the dossier's folder. */
+export function receptionPhotoRequest({ colisId, carton, path } = {}) {
+  const id = typeof colisId === 'string' ? colisId.trim() : '';
+  if (!UUID.test(id) || !Number.isInteger(carton) || carton < 1 || typeof path !== 'string')
+    throw invalid('Indiquez le dossier, le carton et la photo.');
+  if (!path.startsWith(`${id.toLowerCase()}/`) || path.includes('..') || path.length > 300 || !PHOTO_PATH.test(path))
+    throw invalid('La photo doit être une image JPEG, PNG ou WebP enregistrée dans le dossier.');
+  return { p_colis_id: id, p_carton: carton, p_path: path };
 }
 
 /** The arguments of validate_reception. Without notice, channel, template and text are not sent (the server refuses
@@ -232,4 +271,24 @@ export async function fetchArrivalNotices({ clientId = null, colisId = null, lim
   const { data, error } = await supabase.rpc('list_arrival_notices', { p_client_id: clientId || null, p_colis_id: colisId || null, p_limit: limit });
   if (error) throw error;
   return normalizeArrivalNotices(data);
+}
+
+/** Records one more photo of a carton received damaged or opened, once uploadDocument('photos-colis', colisId, file)
+ *  has stored it. Reception permission required (42501). Sending the same photo again (a lost answer retried) returns
+ *  the recorded one (reused: true); the dossier itself is not modified. */
+export async function addReceptionPhoto({ colisId, carton, path } = {}) {
+  const args = receptionPhotoRequest({ colisId, carton, path });
+  const { data, error } = await supabase.rpc('add_reception_photo', args);
+  if (error) throw error;
+  if (!data?.id) throw new Error('La photo n’a pas été confirmée. Actualisez le dossier avant de recommencer.');
+  return { ...normalizeReceptionPhoto(data, args.p_colis_id), reused: data.reused === true };
+}
+
+/** The reception photos of a dossier, oldest first. Team only (42501 otherwise). */
+export async function fetchReceptionPhotos(colisId) {
+  const id = typeof colisId === 'string' ? colisId.trim() : '';
+  if (!UUID.test(id)) throw invalid('Indiquez le dossier.');
+  const { data, error } = await supabase.rpc('list_reception_photos', { p_colis_id: id });
+  if (error) throw error;
+  return normalizeReceptionPhotos(data, id);
 }

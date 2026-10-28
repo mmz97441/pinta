@@ -1072,7 +1072,29 @@ function generateClientRef() {
   );
 }
 
-export async function insertClient(clientData) {
+// The creation UUID identifies one client form, even if the HTTP response is lost (the rule of insertColis): a client
+// stored under that id is recovered only when its identity, contact, address and terms are those sent. What happened
+// to it since (Telegram linked, points, portal account) is ignored. The server writes adresse and adresse_ligne1 alike
+// (client_delivery_address_consistency): the address compared is the one it keeps.
+export function sameClientCreation(stored, expected) {
+  const text = value => (value == null || String(value).trim() === '' ? null : String(value).trim());
+  const day = value => { const date = text(value); return date && /^\d{4}-\d{2}-\d{2}/.test(date) ? date.slice(0, 10) : date; };
+  const shape = row => ({
+    nom: text(row.nom), prenom: text(row.prenom), genre: text(row.genre), dateNaissance: day(row.date_naissance),
+    adresse: text(row.adresse_ligne1) ?? text(row.adresse), adresseLigne2: text(row.adresse_ligne2), commune: text(row.commune),
+    infosLivraison: text(row.infos_livraison), cp: text(row.cp), ville: text(row.ville), tel: text(row.tel), telFixe: text(row.tel_fixe),
+    email: text(row.email), canal: text(row.canal), type: text(row.type), modePaiement: text(row.mode_paiement), notes: text(row.notes),
+    telegramUsername: normalizeTelegramUsername(row.telegram_username) || null,
+    abonnement: text(row.abonnement), abonnementDebut: day(row.abonnement_debut), abonnementFin: day(row.abonnement_fin),
+    raisonSociale: text(row.raison_sociale), siret: text(row.siret), interlocuteur: text(row.interlocuteur),
+  });
+  return JSON.stringify(shape(stored)) === JSON.stringify(shape(expected));
+}
+
+// options.createId: the client's id, created once per form (randomId()) and kept when the creation is retried after a
+// lost answer. On an uncertain failure, or an id already taken (23505), the client stored under that id is read back:
+// the same client is returned, another content is refused (40001) and never overwritten.
+export async function insertClient(clientData, options = {}) {
   const row = {
     nom: clientData.nom || '',
     prenom: clientData.prenom || null,
@@ -1102,11 +1124,28 @@ export async function insertClient(clientData) {
     siret: clientData.siret || null,
     interlocuteur: clientData.interlocuteur || null,
   };
+  if (options.createId) {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(options.createId))
+      throw Object.assign(new Error('Identifiant de la fiche client invalide.'), { code: '22023' });
+    row.id = options.createId;
+  }
+  const recover = async () => {
+    const { data, error } = await supabase.from('clients').select('*').eq('id', row.id).maybeSingle();
+    if (error) throw error;
+    if (!data) return null;
+    if (!sameClientCreation(data, row))
+      throw Object.assign(new Error('Cette fiche client existe déjà et son contenu a changé. Ouvrez la fiche avant de continuer.'), { code: '40001' });
+    return mapClient(data);
+  };
 
-  // Retry with new ref on unique constraint violation
+  // Retry with new ref on unique constraint violation; the client's id, when given, is kept.
   for (let attempt = 0; attempt < 5; attempt++) {
     row.ref = generateClientRef();
     const { data, error } = await supabase.from('clients').insert(row).select().single();
+    if (error && row.id) {
+      const recovered = await recover();
+      if (recovered) return recovered;
+    }
     if (error && error.code === '23505') continue;
     if (error) throw error;
     return mapClient(data);

@@ -848,11 +848,11 @@ export function AppProvider({ children }) {
     [requireReady, flash, reportError],
   );
   const addNewClient = useCallback(
-    async (client) => {
+    async (client, options) => {
       try {
         requireReady();
         const token = generation.current;
-        const saved = await sb.insertClient(client);
+        const saved = await sb.insertClient(client, options);
         if (token === generation.current) {
           setClients((prev) => [...prev, saved]);
           flash('Client ajouté');
