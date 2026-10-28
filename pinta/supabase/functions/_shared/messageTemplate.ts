@@ -1,14 +1,17 @@
 import { HttpError } from './http.ts';
 import { importTaxMessage } from './importTaxes.ts';
 // {{nb_colis_recus}} and {{liste_colis_recus}} (arrival notice, 2026-10-28): the cartons of one validated reception, numbered in the
-// order given, written like {{liste_cartons}} and {{dims_brutes}}. Same text as the browser preview (services/messageTemplates.js).
-const filled=(value:unknown)=>String(value??'').trim();
+// order given, written like {{liste_cartons}}, with French numbers (« 35,5 × 28 × 18 cm — 2,45 kg »). Same text as the browser
+// preview (services/messageTemplates.js).
+const trimmed=(value:unknown)=>String(value??'').trim();
 const positiveMeasure=(value:unknown)=>value!=='' && value!=null && Number.isFinite(Number(value)) && Number(value)>0;
+// Decimal comma, two decimals at most (the reception records two at most), no thousands separator, never a false zero.
+const frenchNumber=(value:unknown)=>{const rounded=Number(Number(value).toFixed(2));return rounded===0?'< 0,01':String(rounded).replace('.',',');};
 function receivedCartonLine(carton:any,index:number):string {
  const item=carton||{};
- const size=['dimL','dimW','dimH'].every(key=>positiveMeasure(item[key]))?`${Number(item.dimL)}×${Number(item.dimW)}×${Number(item.dimH)} cm`:'dimensions à mesurer';
- const weight=positiveMeasure(item.poids)?`${Number(item.poids)} kg`:'poids à peser';
- return `${index+1}. ${[filled(item.fournisseur)||filled(item.vendeur),filled(item.number)||filled(item.tracking)||filled(item.numero)||'Sans numéro de suivi',size,weight].filter(Boolean).join(' — ')}`;
+ const size=['dimL','dimW','dimH'].every(key=>positiveMeasure(item[key]))?`${frenchNumber(item.dimL)} × ${frenchNumber(item.dimW)} × ${frenchNumber(item.dimH)} cm`:'dimensions à mesurer';
+ const weight=positiveMeasure(item.poids)?`${frenchNumber(item.poids)} kg`:'poids à peser';
+ return `${index+1}. ${[trimmed(item.fournisseur)||trimmed(item.vendeur),trimmed(item.number)||trimmed(item.tracking)||trimmed(item.numero)||'Sans numéro de suivi',size,weight].filter(Boolean).join(' — ')}`;
 }
 /** `reception` ({cartons:[{number,fournisseur,dimL,dimW,dimH,poids}]}, in the order of the reception) feeds {{nb_colis_recus}} and
  * {{liste_colis_recus}}; without it both are empty. Existing callers pass up to seven arguments and are unchanged. */

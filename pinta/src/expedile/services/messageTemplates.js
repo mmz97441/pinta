@@ -7,17 +7,23 @@ import { invoiceRequestText } from '../domain/invoiceRequest';
 import { importTaxMessage } from '../domain/importTaxes';
 
 // {{nb_colis_recus}} and {{liste_colis_recus}} (arrival notice, 2026-10-28): the cartons of one validated reception,
-// numbered in the order given, written like {{liste_cartons}} and {{dims_brutes}}. Same text as the Edge renderer.
-const filled = (value) => String(value ?? '').trim();
+// numbered in the order given, written like {{liste_cartons}}, with French numbers (« 35,5 × 28 × 18 cm — 2,45 kg »).
+// Same text as the Edge renderer.
+const trimmed = (value) => String(value ?? '').trim();
 const positiveMeasure = (value) => value !== '' && value != null && Number.isFinite(Number(value)) && Number(value) > 0;
+// Decimal comma, two decimals at most (the reception records two at most), no thousands separator, never a false zero.
+const frenchNumber = (value) => {
+  const rounded = Number(Number(value).toFixed(2));
+  return rounded === 0 ? '< 0,01' : String(rounded).replace('.', ',');
+};
 function receivedCartonLine(carton, index) {
   const item = carton || {};
   const size = ['dimL', 'dimW', 'dimH'].every((key) => positiveMeasure(item[key]))
-    ? `${Number(item.dimL)}×${Number(item.dimW)}×${Number(item.dimH)} cm`
+    ? `${frenchNumber(item.dimL)} × ${frenchNumber(item.dimW)} × ${frenchNumber(item.dimH)} cm`
     : 'dimensions à mesurer';
-  const weight = positiveMeasure(item.poids) ? `${Number(item.poids)} kg` : 'poids à peser';
-  const vendor = filled(item.fournisseur) || filled(item.vendeur);
-  const tracking = filled(item.number) || filled(item.tracking) || filled(item.numero) || 'Sans numéro de suivi';
+  const weight = positiveMeasure(item.poids) ? `${frenchNumber(item.poids)} kg` : 'poids à peser';
+  const vendor = trimmed(item.fournisseur) || trimmed(item.vendeur);
+  const tracking = trimmed(item.number) || trimmed(item.tracking) || trimmed(item.numero) || 'Sans numéro de suivi';
   return `${index + 1}. ${[vendor, tracking, size, weight].filter(Boolean).join(' — ')}`;
 }
 

@@ -31,8 +31,11 @@ const bundle = await build({
     builder.onLoad({ filter: /^supabase$/, namespace: 'message-test' }, () => ({ contents: 'export const supabase = null;', loader: 'js' }));
   } }],
 });
+const APP = 'https://example.test';
 const loaded = { exports: {} };
-vm.runInNewContext(bundle.outputFiles[0].text, { module: loaded, exports: loaded.exports, require: createRequire(import.meta.url), console, URL, Deno: { env: { get: () => 'https://example.test' } } });
+// {{lien_espace}}: the browser uses its own origin, the Edge function APP_URL; both are the same application here.
+vm.runInNewContext(bundle.outputFiles[0].text, { module: loaded, exports: loaded.exports, require: createRequire(import.meta.url), console, URL,
+  window: { location: { origin: APP } }, Deno: { env: { get: name => (name === 'APP_URL' ? APP : undefined) } } });
 const { renderTemplate, renderMessage, DEFAULT_BODIES, SERVER_DEFAULTS, arrivalChannel, arrivalTemplate, renderArrivalNotice, invoiceRequested, mapClient, mapColis, DESTINATIONS } = loaded.exports;
 // Objects built in the module's context: compared as JSON.
 const plain = value => JSON.parse(JSON.stringify(value));
@@ -53,35 +56,48 @@ const both = (body, reception) => [
 ];
 
 const THREE = [
-  { carton: 1, number: 'LP123456789FR', fournisseur: 'Amazon', dimL: 35, dimW: 28, dimH: 18, poids: 2.5 },
+  { carton: 1, number: 'LP123456789FR', fournisseur: 'Amazon', dimL: 35.5, dimW: 28, dimH: 18, poids: 2.45 },
   { carton: 2, number: 'SH789', fournisseur: 'SHEIN', dimL: '40', dimW: '30', dimH: '20', poids: '1.2' },
   { carton: 3, number: '', fournisseur: '', dimL: 20, dimW: 15, dimH: 10, poids: 0.8 },
 ];
-const THREE_LINES = '1. Amazon — LP123456789FR — 35×28×18 cm — 2.5 kg\n2. SHEIN — SH789 — 40×30×20 cm — 1.2 kg\n3. Sans numéro de suivi — 20×15×10 cm — 0.8 kg';
+const THREE_LINES = '1. Amazon — LP123456789FR — 35,5 × 28 × 18 cm — 2,45 kg\n2. SHEIN — SH789 — 40 × 30 × 20 cm — 1,2 kg\n3. Sans numéro de suivi — 20 × 15 × 10 cm — 0,8 kg';
 
 // [name, reception context, {{nb_colis_recus}}, {{liste_colis_recus}}]
 const CASES = [
   ['three cartons, numbers and strings', { cartons: THREE }, '3 colis', THREE_LINES],
-  ['one carton', { cartons: [{ number: 'ZR-55', fournisseur: 'Zara', dimL: 30, dimW: 20, dimH: 10, poids: 1 }] }, '1 colis', '1. Zara — ZR-55 — 30×20×10 cm — 1 kg'],
+  ['one carton', { cartons: [{ number: 'ZR-55', fournisseur: 'Zara', dimL: 30, dimW: 20, dimH: 10, poids: 1 }] }, '1 colis', '1. Zara — ZR-55 — 30 × 20 × 10 cm — 1 kg'],
   ['numbered in the order given, not by carton number', { cartons: [{ carton: 5, number: 'B-2', fournisseur: 'Fnac', dimL: 10, dimW: 10, dimH: 10, poids: 1 }, { carton: 2, number: 'A-1', fournisseur: 'Darty', dimL: 20, dimW: 20, dimH: 20, poids: 2 }] },
-    '2 colis', '1. Fnac — B-2 — 10×10×10 cm — 1 kg\n2. Darty — A-1 — 20×20×20 cm — 2 kg'],
+    '2 colis', '1. Fnac — B-2 — 10 × 10 × 10 cm — 1 kg\n2. Darty — A-1 — 20 × 20 × 20 cm — 2 kg'],
+  ['French numbers: decimal comma, two decimals at most, no thousands separator, never a false zero', { cartons: [
+    { number: 'D-1', dimL: 120.25, dimW: 0.5, dimH: 1000, poids: 2.456 },
+    { number: 'D-2', dimL: '99.999', dimW: '45.10', dimH: 7, poids: '3.10' },
+    { number: 'D-3', dimL: 10, dimW: 10, dimH: 10, poids: 0.004 },
+    { number: 'D-4', dimL: 0.001, dimW: 10, dimH: 10, poids: 1e-9 },
+  ] }, '4 colis', [
+    '1. D-1 — 120,25 × 0,5 × 1000 cm — 2,46 kg',
+    '2. D-2 — 100 × 45,1 × 7 cm — 3,1 kg',
+    '3. D-3 — 10 × 10 × 10 cm — < 0,01 kg',
+    '4. D-4 — < 0,01 × 10 × 10 cm — < 0,01 kg',
+  ].join('\n')],
   ['missing vendor, tracking, measures and weight', { cartons: [
     { number: null, fournisseur: '   ', dimL: 30, dimW: null, dimH: 10, poids: 0 },
     { number: '  ', fournisseur: 'Cdiscount', dimL: '12foo', dimW: 10, dimH: 10, poids: -1 },
     { number: 'K-7', dimL: 0, dimW: 10, dimH: 10, poids: '' },
     { number: 'K-8', fournisseur: 'Boulanger', dimL: 10, dimW: 10, dimH: 10, poids: Infinity },
+    { number: 'K-9', dimL: '45,5', dimW: 10, dimH: 10, poids: '2,4' },
     {},
     null,
-  ] }, '6 colis', [
+  ] }, '7 colis', [
     '1. Sans numéro de suivi — dimensions à mesurer — poids à peser',
     '2. Cdiscount — Sans numéro de suivi — dimensions à mesurer — poids à peser',
     '3. K-7 — dimensions à mesurer — poids à peser',
-    '4. Boulanger — K-8 — 10×10×10 cm — poids à peser',
-    '5. Sans numéro de suivi — dimensions à mesurer — poids à peser',
+    '4. Boulanger — K-8 — 10 × 10 × 10 cm — poids à peser',
+    '5. K-9 — dimensions à mesurer — poids à peser',
     '6. Sans numéro de suivi — dimensions à mesurer — poids à peser',
+    '7. Sans numéro de suivi — dimensions à mesurer — poids à peser',
   ].join('\n')],
   ['legacy names and surrounding spaces, like {{liste_cartons}}', { cartons: [{ vendeur: 'Fnac', tracking: ' FN-1 ', dimL: '35.0', dimW: 28, dimH: 18, poids: '2.50' }, { fournisseur: '  Darty  ', numero: 'N-9', dimL: 10, dimW: 10, dimH: 10, poids: 0.35 }] },
-    '2 colis', '1. Fnac — FN-1 — 35×28×18 cm — 2.5 kg\n2. Darty — N-9 — 10×10×10 cm — 0.35 kg'],
+    '2 colis', '1. Fnac — FN-1 — 35 × 28 × 18 cm — 2,5 kg\n2. Darty — N-9 — 10 × 10 × 10 cm — 0,35 kg'],
   ['no reception context', undefined, '', ''],
   ['a null context', null, '', ''],
   ['a context without cartons', {}, '', ''],
@@ -94,7 +110,7 @@ test('{{nb_colis_recus}} and {{liste_colis_recus}}: the preview and the delivere
     const [preview, delivered] = both(NEW_VARIABLES, reception);
     assert.equal(preview, delivered, `${name}: same text in the preview and the delivery`);
     assert.equal(preview, `${count}\n${list}`, name);
-    assert.doesNotMatch(preview, /undefined|null|NaN|Infinity|\[object/, `${name}: never a raw missing value`);
+    assert.doesNotMatch(preview, /undefined|null|NaN|Infinity|\[object|\d\.\d|\d×|×\d|\de[+-]?\d/, `${name}: French numbers, never a raw value`);
   }
 });
 
@@ -124,24 +140,29 @@ test('an unknown variable still stops both renderers, with or without the recept
   }
 });
 
-test('the four default bodies: mirrored in the Edge copy, plain text, signed, Telegram shorter than the email', () => {
+test('the four default bodies: mirrored in the Edge copy, plain text, signed, exact, Telegram shorter than the email', () => {
   const keys = Object.keys(DEFAULT_BODIES);
   assert.deepEqual(keys.slice(keys.indexOf(ARRIVAL_KEYS[0]), keys.indexOf(ARRIVAL_KEYS[0]) + 4), ARRIVAL_KEYS, 'The four keys, together and in this order.');
   assert.deepEqual(plain(Object.keys(SERVER_DEFAULTS)), plain(keys), 'The Edge copy holds the same keys in the same order.');
   for (const key of ARRIVAL_KEYS) {
     const body = DEFAULT_BODIES[key];
+    const invoice = key.startsWith('arrivee_colis_facture_');
     assert.equal(SERVER_DEFAULTS[key], body, `${key}: the Edge copy is the browser's`);
-    assert.deepEqual([...new Set([...body.matchAll(/\{\{(\w+)\}\}/g)].map(match => match[1]))].sort(), ['liste_colis_recus', 'nb_colis_recus', 'prenom'], `${key}: only variables known to both renderers`);
+    assert.deepEqual([...new Set([...body.matchAll(/\{\{(\w+)\}\}/g)].map(match => match[1]))].sort(),
+      key === 'arrivee_colis_facture_email' ? ['lien_espace', 'liste_colis_recus', 'nb_colis_recus', 'prenom'] : ['liste_colis_recus', 'nb_colis_recus', 'prenom'], `${key}: only variables known to both renderers`);
     // Telegram receives plain text: an underscore or an asterisk would reach the client literally.
     assert.doesNotMatch(body.replace(/\{\{\w+\}\}/g, ''), /[_*`#[\]]/, `${key}: no Markdown marker outside its variables`);
     assert.match(body, /\n\{\{liste_colis_recus\}\}\n\n/, `${key}: the list stands on its own lines`);
     // No price, date, delay or departure is promised; « accord » is never « préparation commencée ».
     assert.doesNotMatch(body, /\d|€|d[ée]part|livraison|aujourd|demain|bient[ôo]t|\bheures?\b|\bjours?\b|\bsemaines?\b|en cours de pr[ée]paration|pr[ée]paration (en cours|commenc)/i, `${key}: no date, price or started preparation`);
-    assert.match(body, /nous avons reçu \{\{nb_colis_recus\}\} pour vous à notre entrepôt de Paris\./, `${key}: the context`);
-    assert.match(body, /en sécurité/, `${key}: reassuring`);
+    // A carton may be damaged or hold a forbidden product (the team tells the client separately): nothing is promised
+    // about the cartons' condition, and the client is not told there is nothing (else) to do.
+    assert.doesNotMatch(body, /s[ée]curit|rien à faire|seule chose|bon [ée]tat|intact|aucun (probl|souci)|tout va bien/i, `${key}: no claim about the cartons' condition`);
+    assert.match(body, /^Bonjour \{\{prenom\}\}(?: 👋|,)\n\nBonne nouvelle : nous avons reçu \{\{nb_colis_recus\}\} pour vous à notre entrepôt de Paris\. Nous vous tenons au courant à chaque étape\.\n\n/u, `${key}: the context, warm and exact`);
     assert.match(body, /Prochaine étape : [^\n]*accord[^\n]*avant toute préparation|Prochaine étape : avant toute préparation, nous vous demanderons votre accord/, `${key}: the next step is the consent request`);
     assert.match(body, /vous recevrez (ensuite )?le devis/i, `${key}: the quote follows`);
-    assert.equal(/facture d’achat/.test(body), key.startsWith('arrivee_colis_facture_'), `${key}: only the invoice variant asks for the purchase invoice`);
+    assert.equal(/factures d’achat/.test(body), invoice, `${key}: only the invoice variant asks for the purchase invoices`);
+    assert.doesNotMatch(body, /votre facture|la facture/, `${key}: a reception often covers several sellers, « vos factures d’achat »`);
     if (key.endsWith('_telegram')) {
       assert.match(body, /^Bonjour \{\{prenom\}\} 👋\n\n[\s\S]+\n\nL’équipe Expedîle$/u, `${key}: greets by first name and is signed`);
       assert.ok(body.length < DEFAULT_BODIES[key.replace(/_telegram$/, '_email')].length, `${key}: shorter than the email`);
@@ -151,12 +172,12 @@ test('the four default bodies: mirrored in the Edge copy, plain text, signed, Te
     }
   }
   assert.doesNotMatch(DEFAULT_BODIES.arrivee_colis_telegram + DEFAULT_BODIES.arrivee_colis_email, /facture/, 'The standard notice never mentions an invoice.');
-  assert.match(DEFAULT_BODIES.arrivee_colis_telegram, /vous n’avez rien à faire pour l’instant/);
-  // How to send the invoice: the ways the existing texts give (feu_vert_recu_facture).
-  assert.match(DEFAULT_BODIES.arrivee_colis_facture_telegram, /nous envoyer votre facture d’achat, nécessaire pour établir le devis\. Envoyez-la en réponse à ce message \(photo ou PDF\) ou déposez-la dans votre espace client\./);
-  assert.match(DEFAULT_BODIES.arrivee_colis_facture_email, /nous envoyer votre facture d’achat, nécessaire pour établir le devis\. Déposez-la dans votre espace client \(photo ou PDF\)\./);
+  // How to send the invoices: on Telegram in reply to the notice (the server records it as the requested invoice) or in
+  // the client space; by email, the link of the dossier ({{lien_espace}}).
+  assert.match(DEFAULT_BODIES.arrivee_colis_facture_telegram, /\n\n📄 Pour établir votre devis, nous avons besoin de vos factures d’achat : envoyez-les en réponse à ce message \(photos ou PDF\) ou déposez-les dans votre espace client\.\n\nL’équipe Expedîle$/u);
+  assert.match(DEFAULT_BODIES.arrivee_colis_facture_email, /\n\nPour établir votre devis, nous avons besoin de vos factures d’achat\. Déposez-les dans les documents de votre dossier \(photos ou PDF\) : \{\{lien_espace\}\}\n\nCordialement,/);
   // The invoice reminder follows the next step, before the signature.
-  for (const key of ['arrivee_colis_facture_telegram', 'arrivee_colis_facture_email']) assert.ok(DEFAULT_BODIES[key].indexOf('facture d’achat') > DEFAULT_BODIES[key].indexOf('Prochaine étape'), key);
+  for (const key of ['arrivee_colis_facture_telegram', 'arrivee_colis_facture_email']) assert.ok(DEFAULT_BODIES[key].indexOf('factures d’achat') > DEFAULT_BODIES[key].indexOf('Prochaine étape'), key);
 });
 
 test('the default bodies render identically in the preview and the delivery, singular and plural', () => {
@@ -166,20 +187,35 @@ test('the default bodies render identically in the preview and the delivery, sin
       assert.equal(preview, delivered, `${key}, ${count}: same text`);
       assert.ok(preview.includes(`nous avons reçu ${count} pour vous`), `${key}, ${count}`);
       assert.ok(preview.startsWith(key.endsWith('_telegram') ? 'Bonjour Flavie 👋\n\n' : 'Bonjour Flavie,\n\n'), key);
-      assert.ok(preview.includes(`\n${cartons.length === 3 ? THREE_LINES : '1. Amazon — LP123456789FR — 35×28×18 cm — 2.5 kg'}\n\n`), `${key}, ${count}: the numbered list`);
+      assert.ok(preview.includes(`\n${cartons.length === 3 ? THREE_LINES : '1. Amazon — LP123456789FR — 35,5 × 28 × 18 cm — 2,45 kg'}\n\n`), `${key}, ${count}: the numbered list`);
       assert.doesNotMatch(preview, /\{\{|undefined|NaN/, key);
     }
   }
+  const [email] = both(DEFAULT_BODIES.arrivee_colis_facture_email, { cartons: THREE });
+  assert.ok(email.includes(`Déposez-les dans les documents de votre dossier (photos ou PDF) : ${APP}/colis/colis-1\n\nCordialement,`), 'The link of the dossier carrying the notice');
 });
 
-test('arrivalChannel: the rule of validate_reception on the clients of lib/supabaseData.js', () => {
+// The SQL rule of validate_reception: nullif(btrim(value),'') IS NOT NULL. btrim removes only U+0020 at both ends.
+const sqlFilled = value => value != null && String(value).replace(/^ +| +$/g, '') !== '';
+const CONTACT_VALUES = [null, undefined, '', ' ', '   ', '\t', '\n', ' \t ', ' ', ' ', '﻿', ' 7001 ', '7001'];
+
+test('arrivalChannel: exactly the rule of validate_reception, on the clients of lib/supabaseData.js', () => {
   const channel = row => arrivalChannel(mapClient({ ...clientRow, ...row }));
   assert.equal(channel({}), 'telegram', 'Telegram linked: Telegram, even with an email');
   assert.equal(channel({ email: null }), 'telegram');
   assert.equal(channel({ telegram_chat_id: null }), 'email', 'No Telegram: the email');
   assert.equal(channel({ telegram_chat_id: '' }), 'email', 'An empty chat is no Telegram link');
+  assert.equal(channel({ telegram_chat_id: '   ' }), 'email', 'Spaces only: no Telegram link, as btrim says');
   for (const email of [null, '', '   ']) assert.equal(channel({ telegram_chat_id: null, email }), null, `No Telegram and email ${JSON.stringify(email)}: no notice`);
   for (const client of [null, undefined, {}]) assert.equal(arrivalChannel(client), null);
+  // btrim keeps a tab or a no-break space: the server sees a value there, so the screen must too (else 40001 each time).
+  assert.equal(channel({ telegram_chat_id: '\t' }), 'telegram', 'A tab is a value for btrim: Telegram, as the server decides');
+  assert.equal(channel({ telegram_chat_id: ' ' }), 'telegram');
+  assert.equal(channel({ telegram_chat_id: null, email: '\t' }), 'email');
+  for (const value of CONTACT_VALUES) {
+    assert.equal(arrivalChannel({ telegramChatId: value, email: 'flavie@example.test' }), sqlFilled(value) ? 'telegram' : 'email', `chat ${JSON.stringify(value)}`);
+    assert.equal(arrivalChannel({ telegramChatId: null, email: value }), sqlFilled(value) ? 'email' : null, `email ${JSON.stringify(value)}`);
+  }
 });
 
 // A dossier of the reception with its loaded invoices (lib/supabaseData.js mapFact), and the same rows on the server.
@@ -217,16 +253,22 @@ test('renderArrivalNotice: channel, variant and the default body, as validate_re
   assert.equal(telegram.canal, 'telegram');
   assert.equal(telegram.template, 'arrivee_colis_facture', 'No invoice in the dossier yet');
   assert.equal(telegram.text, renderMessage(SERVER_DEFAULTS.arrivee_colis_facture_telegram, clientRow, colisRow, serverDestination, {}, [], [], { cartons: THREE }), 'The server would write the same text');
-  assert.ok(telegram.text.includes(`nous avons reçu 3 colis pour vous à notre entrepôt de Paris. Tout est en sécurité.\n\n📦 Le détail :\n${THREE_LINES}\n\n`));
+  assert.ok(telegram.text.includes(`nous avons reçu 3 colis pour vous à notre entrepôt de Paris. Nous vous tenons au courant à chaque étape.\n\n📦 Le détail :\n${THREE_LINES}\n\n`));
 
   const invoiced = mapColis({ ...colisRow, _factures: factures(INVOICE_CASES[1][1]) });
-  const email = notice({ client: mapClient({ ...clientRow, telegram_chat_id: null }), colisList: [invoiced], cartons: THREE.slice(1, 2) });
+  const emailClient = mapClient({ ...clientRow, telegram_chat_id: null });
+  const email = notice({ client: emailClient, colisList: [invoiced], cartons: THREE.slice(1, 2) });
   assert.deepEqual(plain(email), { canal: 'email', template: 'arrivee_colis', text: renderTemplate(DEFAULT_BODIES.arrivee_colis_email, { client: browserClient, colis: invoiced, destination, reception: { cartons: THREE.slice(1, 2) } }) });
-  assert.match(email.text, /^Bonjour Flavie,\n\nBonne nouvelle : nous avons reçu 1 colis pour vous à notre entrepôt de Paris\. Tout est rangé en sécurité : vous n’avez rien à faire pour l’instant\.\n\nLe détail :\n1\. SHEIN — SH789 — 40×30×20 cm — 1\.2 kg\n\n/);
+  assert.match(email.text, /^Bonjour Flavie,\n\nBonne nouvelle : nous avons reçu 1 colis pour vous à notre entrepôt de Paris\. Nous vous tenons au courant à chaque étape\.\n\nLe détail :\n1\. SHEIN — SH789 — 40 × 30 × 20 cm — 1,2 kg\n\n/);
   assert.doesNotMatch(email.text, /facture/);
+  // The invoice variant by email links the dossier that carries the notice (the first of the reception).
+  const second = mapColis({ ...colisRow, id: 'colis-2', ref: 'EXP-ARR002', _factures: [] });
+  const emailInvoice = notice({ client: emailClient, colisList: [second, invoiced] });
+  assert.equal(emailInvoice.template, 'arrivee_colis_facture');
+  assert.ok(emailInvoice.text.includes(`(photos ou PDF) : ${APP}/colis/colis-2\n\nCordialement,\nL’équipe Expedîle`));
 
   // No contact: nothing to render, the team validates without notice (before any other check).
-  for (const client of [mapClient({ ...clientRow, telegram_chat_id: null, email: null }), mapClient({ ...clientRow, telegram_chat_id: null, email: '  ' }), null])
+  for (const client of [mapClient({ ...clientRow, telegram_chat_id: null, email: null }), mapClient({ ...clientRow, telegram_chat_id: '  ', email: '  ' }), null])
     assert.deepEqual(plain(renderArrivalNotice({ client, colisList: [], cartons: [] })), { canal: null });
 });
 
@@ -255,7 +297,7 @@ test('renderArrivalNotice: refuses a notice without dossier, without carton, or 
   assert.throws(() => notice({ cartons: many }), /L’avis d’arrivée compte \d+ caractères, 4096 au plus : raccourcissez le modèle ou validez moins de colis à la fois\./);
   const fitting = notice({ cartons: many.slice(0, 30) });
   assert.ok(fitting.text.length > 3000 && fitting.text.length <= 4096, `${fitting.text.length} characters`);
-  assert.ok(fitting.text.includes('\n30. Un vendeur au nom assez long — TRACKING-NUMBER-00000000000000000029 — 100×100×100 cm — 30 kg\n'));
+  assert.ok(fitting.text.includes('\n30. Un vendeur au nom assez long — TRACKING-NUMBER-00000000000000000029 — 100 × 100 × 100 cm — 30 kg\n'));
   // A missing destination or settings never breaks the notice.
   assert.equal(notice({ destination: null, settings: null }).text, notice().text);
 });
@@ -265,6 +307,9 @@ test('the template editor offers both notices and the two variables, so they can
   assert.match(source, /\{ key: 'arrivee_colis', label: 'Avis d’arrivée'/);
   assert.match(source, /\{ key: 'arrivee_colis_facture', label: 'Avis d’arrivée, facture d’achat à envoyer'/);
   // The editor refuses to save a body with a variable it does not offer (Variables inconnues).
-  const offered = new Set([...source.matchAll(/\{ key: '(\w+)', label: '[^']*', ex: /g)].map(match => match[1]));
+  const offered = new Map([...source.matchAll(/\{ key: '(\w+)', label: '[^']*', ex: '([^']*)' \}/g)].map(match => [match[1], match[2].replace(/\\n/g, '\n')]));
   for (const key of ARRIVAL_KEYS) for (const [, variable] of DEFAULT_BODIES[key].matchAll(/\{\{(\w+)\}\}/g)) assert.ok(offered.has(variable), `${variable} is offered by the editor`);
+  // The editor's examples are what the renderers write.
+  const example = [{ number: 'LP123456789FR', fournisseur: 'Amazon', dimL: 35.5, dimW: 28, dimH: 18, poids: 2.45 }, { number: 'SH789', fournisseur: 'SHEIN', dimL: 40, dimW: 30, dimH: 20, poids: 1.2 }];
+  assert.deepEqual(both(NEW_VARIABLES, { cartons: example }), [`${offered.get('nb_colis_recus')}\n${offered.get('liste_colis_recus')}`, `${offered.get('nb_colis_recus')}\n${offered.get('liste_colis_recus')}`]);
 });

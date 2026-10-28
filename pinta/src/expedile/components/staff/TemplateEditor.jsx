@@ -32,7 +32,7 @@ const VAR_GROUPS = [
     label: 'Réception (avis d’arrivée)',
     vars: [
       { key: 'nb_colis_recus', label: 'Nb colis reçus', ex: '2 colis' },
-      { key: 'liste_colis_recus', label: 'Liste colis reçus', ex: '1. Amazon — LP123456789FR — 35×28×18 cm — 2.5 kg\n2. SHEIN — SH789 — 40×30×20 cm — 1.2 kg' },
+      { key: 'liste_colis_recus', label: 'Liste colis reçus', ex: '1. Amazon — LP123456789FR — 35,5 × 28 × 18 cm — 2,45 kg\n2. SHEIN — SH789 — 40 × 30 × 20 cm — 1,2 kg' },
     ],
   },
   {
