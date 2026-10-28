@@ -73,6 +73,32 @@ export function damageNote(form, number) {
   return `Carton n° ${number}${which ? ` (${which})` : ''} abîmé ou ouvert à la réception${remark ? ` : ${remark}` : ''}.`;
 }
 
+/** Whether the reception notes of a dossier say that its carton n° `number` arrived damaged or opened (damageNote). */
+export function notesSayDamaged(notes, number) {
+  if (!Number.isInteger(number) || number < 1) return false;
+  return new RegExp(`(^|\\n)Carton n°\\s?${number}(?!\\d)[^\\n]*abîmé ou ouvert`).test(String(notes || ''));
+}
+
+// The photo of a damaged carton: add_reception_photo keeps a JPEG, PNG or WebP image stored in the dossier's folder, and
+// uploadDocument names the stored file after the extension of the file's name (a photo taken by the camera may have none).
+const PHOTO_EXTENSIONS = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
+const MAX_PHOTO_BYTES = 20 * 1024 * 1024;
+
+/** Why this file cannot be the photo of the carton, or '' when it can. */
+export function photoProblem(file) {
+  if (!file) return '';
+  if (!PHOTO_EXTENSIONS[file.type]) return 'Cette image n’est pas au format JPEG, PNG ou WebP : reprenez la photo ou choisissez-en une autre.';
+  if (!(file.size <= MAX_PHOTO_BYTES)) return 'Cette photo dépasse 20 Mo : reprenez-la ou choisissez-en une plus légère.';
+  return '';
+}
+
+/** The photo as it is uploaded: its name ends with the extension of its type. */
+export function receptionPhotoFile(file) {
+  const extension = PHOTO_EXTENSIONS[file?.type];
+  if (!extension || /\.(jpe?g|png|webp)$/i.test(String(file.name || ''))) return file;
+  return new File([file], `photo.${extension}`, { type: file.type, lastModified: file.lastModified });
+}
+
 /** The new dossier of a first carton, as ColisModal builds it: measured, so « mesure » (the Brouillon would
  * otherwise show « Mesures à compléter »). insertColis(payload, { createId }) is replayed with the same values. */
 export function newDossierPayload(clientId, form, box) {
@@ -106,6 +132,27 @@ export function consentRenewal(dossier) {
 export function definiteRefusal(error) {
   const code = typeof error?.code === 'string' ? error.code : '';
   return /^[0-9A-Z]{5}$/.test(code) || /^PGRST/.test(code);
+}
+
+/** A refusal of the server without its advice to refresh (« … : actualisez la liste. », « Actualisez avant de
+ * valider. »), whatever its case: the screen reads the list again by itself and says so. */
+export function withoutRefreshAdvice(message) {
+  const said = String(message || '').replace(/\s*(?:[:;,.]\s*)?actualisez\b[^.]*\.?/gi, '.').replace(/\.{2,}/g, '.').trim();
+  return said === '.' ? '' : said;
+}
+
+/** What insertClient(payload, { createId }) receives from the quick creation of a client. The same values give the
+ * same payload: a creation whose answer was lost is replayed as it was sent. */
+export function newClientPayload(values) {
+  const field = key => text(values?.[key]);
+  const email = field('email');
+  const pro = values?.type === 'pro';
+  return {
+    nom: field('nom'), prenom: field('prenom'), tel: field('tel'), telFixe: field('telFixe'), email,
+    adresseLigne1: field('adresseLigne1'), cp: field('cp'), ville: field('ville'),
+    type: pro ? 'pro' : 'particulier', raisonSociale: pro ? field('raisonSociale') : '',
+    canal: email ? 'email' : 'telegram', modePaiement: 'colis', abonnement: 'freemium', points: 0,
+  };
 }
 
 // ── Names, places, counts ──────────────────────────────────────────────────

@@ -99,7 +99,8 @@ export default function ReceptionFlow() {
       {step === 'validation' && <ValidationStep key={client.id} client={client} session={session} update={update}
         onAddCarton={() => go({ client: client.id })} onResumeCarton={() => go({ client: client.id })}
         onValidated={id => go({ client: client.id, valide: id }, { replace: true })} />}
-      {step === 'done' && <RangementStep key={validationId} client={client} session={session} update={update} validationId={validationId} onNext={next} onBrouillon={brouillon} />}
+      {step === 'done' && <RangementStep key={validationId} client={client} session={session} update={update} validationId={validationId} onNext={next} onBrouillon={brouillon}
+        onValidateRest={() => go({ client: client.id, valider: '1' })} />}
     </div>
   </div>;
 }

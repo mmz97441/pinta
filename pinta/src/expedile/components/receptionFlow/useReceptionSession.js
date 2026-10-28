@@ -8,9 +8,11 @@ import { EMPTY_CARTON } from './receptionFlowModel';
 //
 // - target: { mode: 'append', dossierId } once a carton of this reception is saved (or chosen from a dossier);
 // - form: the carton being typed; intent: the carton save to check (lost answer);
-// - saved: the cartons saved during this reception [{ colisId, ref, number }]; lastSaved: the last of them;
+// - saved: the cartons saved during this reception [{ colisId, ref, number, abime, interdits }] (abime, interdits:
+//   what the team flagged, which the arrival notice does not say); lastSaved: the last of them;
 // - consent: by dossier, what the first addition changed for the client's consent (consentRenewal);
-// - validation: { args } of validateReception while its answer is unknown; done: what the rangement shows.
+// - validation: { args, rest, flagged } while the answer of validateReception is unknown (args: its request; rest: the
+//   cartons left for a next validation; flagged: the cartons to tell the client about); done: what the rangement shows.
 const VERSION = 1;
 export const FRESH_SESSION = Object.freeze({ v: VERSION, target: null, form: EMPTY_CARTON, intent: null, saved: [], lastSaved: null, consent: {}, validation: null, done: null });
 
@@ -27,10 +29,13 @@ export function useReceptionSession(clientId) {
   return { session, update, clear: store.clear, storageAvailable: store.storageAvailable };
 }
 
-// The search of the first step and the new client being typed.
+// The search of the first step and the new client being typed, with the identifier of its creation (createId, one per
+// form: insertClient recognises a creation replayed after a lost answer) and, while its answer is unknown, the very
+// payload sent (pendingCreation), replayed as it is by « Vérifier l’enregistrement ».
 export const EMPTY_NEW_CLIENT = Object.freeze({ type: 'particulier', raisonSociale: '', nom: '', prenom: '', tel: '', telFixe: '', email: '', adresseLigne1: '', cp: '', ville: '' });
 const START_VERSION = 1;
-const startOf = value => value && value.v === START_VERSION ? { q: '', creating: false, ...value, newClient: { ...EMPTY_NEW_CLIENT, ...(value.newClient || {}) } } : { v: START_VERSION, q: '', creating: false, newClient: EMPTY_NEW_CLIENT };
+const FRESH_START = Object.freeze({ v: START_VERSION, q: '', creating: false, newClient: EMPTY_NEW_CLIENT, createId: null, pendingCreation: null });
+const startOf = value => value && value.v === START_VERSION ? { ...FRESH_START, ...value, newClient: { ...EMPTY_NEW_CLIENT, ...(value.newClient || {}) } } : FRESH_START;
 
 export function useReceptionStart() {
   const [value, setValue, store] = usePersistentDraft('reception-flow:start', null);

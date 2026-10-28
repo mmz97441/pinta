@@ -99,6 +99,8 @@ label.rf-small-action:focus-within { outline: 3px solid var(--focus-ring); outli
 .rf-pill--new, .rf-pill--todo { background-color: var(--rf-new-bg); color: var(--rf-new-text); }
 .rf-pill--wait { background-color: var(--rf-info-bg); color: var(--rf-info-text); }
 .rf-pill--alert { background-color: var(--rf-danger-bg); color: var(--rf-danger-text); }
+/* « Envoi à vérifier »: the amber of attention, outlined (« À envoyer » is plain amber). */
+.rf-pill--check { background-color: var(--rf-warning-bg); color: var(--rf-warning-text); box-shadow: inset 0 0 0 2px currentColor; }
 .rf-pill--neutral { background-color: var(--rf-neutral-bg); color: var(--rf-neutral-text); }
 
 /* The client band above the carton and the validation. */
