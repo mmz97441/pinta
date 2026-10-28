@@ -7,7 +7,10 @@ import { invoiceRequestState } from '../domain/invoiceRequest.js';
 
 // validate_reception and Telegram accept 1 to 4096 characters.
 const MAX_TEXT = 4096;
-const filled = (value) => String(value ?? '').trim() !== '';
+// Exactly the SQL rule nullif(btrim(value),'') IS NOT NULL: btrim removes only the ASCII space (U+0020) at both ends,
+// so a value is filled as soon as it holds any other character, a tab or a no-break space included (String.trim()
+// would remove those and choose another channel than the server: 40001 on every attempt).
+const filled = (value) => value != null && /[^ ]/.test(String(value));
 
 /** The channel validate_reception decides, on a client of lib/supabaseData.js (mapClient): Telegram when the client
  * linked it (telegramChatId), otherwise e-mail when an address is known, otherwise none (null: validate without notice). */
