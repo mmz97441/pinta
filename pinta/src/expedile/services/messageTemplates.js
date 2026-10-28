@@ -6,8 +6,25 @@ import { measureShipment, volumetricDivisor } from '../domain/quote';
 import { invoiceRequestText } from '../domain/invoiceRequest';
 import { importTaxMessage } from '../domain/importTaxes';
 
-/** The saved body is the actual body used by preview and delivery. Unknown variables fail visibly. */
-export function renderTemplate(body, { client, colis = {}, destination = {}, settings = {} }) {
+// {{nb_colis_recus}} and {{liste_colis_recus}} (arrival notice, 2026-10-28): the cartons of one validated reception,
+// numbered in the order given, written like {{liste_cartons}} and {{dims_brutes}}. Same text as the Edge renderer.
+const filled = (value) => String(value ?? '').trim();
+const positiveMeasure = (value) => value !== '' && value != null && Number.isFinite(Number(value)) && Number(value) > 0;
+function receivedCartonLine(carton, index) {
+  const item = carton || {};
+  const size = ['dimL', 'dimW', 'dimH'].every((key) => positiveMeasure(item[key]))
+    ? `${Number(item.dimL)}×${Number(item.dimW)}×${Number(item.dimH)} cm`
+    : 'dimensions à mesurer';
+  const weight = positiveMeasure(item.poids) ? `${Number(item.poids)} kg` : 'poids à peser';
+  const vendor = filled(item.fournisseur) || filled(item.vendeur);
+  const tracking = filled(item.number) || filled(item.tracking) || filled(item.numero) || 'Sans numéro de suivi';
+  return `${index + 1}. ${[vendor, tracking, size, weight].filter(Boolean).join(' — ')}`;
+}
+
+/** The saved body is the actual body used by preview and delivery. Unknown variables fail visibly.
+ * `reception` ({ cartons: [{ number, fournisseur, dimL, dimW, dimH, poids }] }, in the order of the reception) feeds
+ * {{nb_colis_recus}} and {{liste_colis_recus}}; without it both are empty. */
+export function renderTemplate(body, { client, colis = {}, destination = {}, settings = {}, reception: receptionContext = null }) {
   const divisor = volumetricDivisor(settings);
   const volume = (l, w, h) =>
     l && w && h ? `${((l * w * h) / divisor).toFixed(2)} kg` : 'À mesurer';
@@ -20,6 +37,7 @@ export function renderTemplate(body, { client, colis = {}, destination = {}, set
         `${i + 1}. ${typeof item === 'string' ? item : [item.fournisseur || item.vendeur, item.number || item.tracking || item.numero || 'Sans numéro de suivi'].filter(Boolean).join(' — ')}`,
     )
     .join('\n');
+  const received = Array.isArray(receptionContext?.cartons) ? receptionContext.cartons : [];
   const vars = {
     prenom: getPrenom(client),
     nom_complet: client.nom,
@@ -42,6 +60,8 @@ export function renderTemplate(body, { client, colis = {}, destination = {}, set
     casier: colis.casier || '',
     nb_cartons: manifest.nbColis,
     liste_cartons: list,
+    nb_colis_recus: received.length ? `${received.length} colis` : '',
+    liste_colis_recus: received.map(receivedCartonLine).join('\n'),
     dims_brutes: receivedDimensions,
     poids_brut: reception ? `${reception.realWeight} kg` : 'À peser',
     poids_vol_avant: reception ? `${reception.volumetricWeight.toFixed(2)} kg` : 'À mesurer',

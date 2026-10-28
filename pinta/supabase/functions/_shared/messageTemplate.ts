@@ -1,6 +1,18 @@
 import { HttpError } from './http.ts';
 import { importTaxMessage } from './importTaxes.ts';
-export function renderMessage(body:string,client:any,colis:any,destination:any,settings:any,lines:any[]=[],invoices:any[]=[]) {
+// {{nb_colis_recus}} and {{liste_colis_recus}} (arrival notice, 2026-10-28): the cartons of one validated reception, numbered in the
+// order given, written like {{liste_cartons}} and {{dims_brutes}}. Same text as the browser preview (services/messageTemplates.js).
+const filled=(value:unknown)=>String(value??'').trim();
+const positiveMeasure=(value:unknown)=>value!=='' && value!=null && Number.isFinite(Number(value)) && Number(value)>0;
+function receivedCartonLine(carton:any,index:number):string {
+ const item=carton||{};
+ const size=['dimL','dimW','dimH'].every(key=>positiveMeasure(item[key]))?`${Number(item.dimL)}×${Number(item.dimW)}×${Number(item.dimH)} cm`:'dimensions à mesurer';
+ const weight=positiveMeasure(item.poids)?`${Number(item.poids)} kg`:'poids à peser';
+ return `${index+1}. ${[filled(item.fournisseur)||filled(item.vendeur),filled(item.number)||filled(item.tracking)||filled(item.numero)||'Sans numéro de suivi',size,weight].filter(Boolean).join(' — ')}`;
+}
+/** `reception` ({cartons:[{number,fournisseur,dimL,dimW,dimH,poids}]}, in the order of the reception) feeds {{nb_colis_recus}} and
+ * {{liste_colis_recus}}; without it both are empty. Existing callers pass up to seven arguments and are unchanged. */
+export function renderMessage(body:string,client:any,colis:any,destination:any,settings:any,lines:any[]=[],invoices:any[]=[],reception:any=null) {
  const money=(n:unknown)=>typeof n==='number'||(typeof n==='string' && n!=='')?`${Number(n).toFixed(2)} €`:'À calculer';
  const divisor=Number(settings.volumetricDivisor ?? settings.diviseurVolumetrique ?? 5000);
  const dims=(l:any,w:any,h:any)=>l&&w&&h?`${l}×${w}×${h} cm`:'À mesurer';
@@ -15,10 +27,12 @@ export function renderMessage(body:string,client:any,colis:any,destination:any,s
  const beforeReal=complete?boxes.reduce((sum:number,box:any)=>sum+Number(box.poids),0):null;
  const beforeVolume=complete?boxes.reduce((sum:number,box:any)=>sum+Number(box.dimL)*Number(box.dimW)*Number(box.dimH)/divisor,0):null;
  const receivedDimensions=complete?boxes.map((box:any,i:number)=>`${count>1?`Carton ${i+1} : `:''}${Number(box.dimL)}×${Number(box.dimW)}×${Number(box.dimH)} cm`).join('\n'):'À mesurer';
+ const received:any[]=Array.isArray(reception?.cartons)?reception.cartons:[];
  const docs=invoices.filter((f)=>!f.rejet_motif);const documents=client.type==='pro'?'Aucun justificatif bloquant pour le transport professionnel':!docs.length?'Facture(s) d’achat à joindre':docs.some((f)=>!f.valide)?'Facture(s) en cours de vérification':'Justificatifs reçus et vérifiés';
  const vars:Record<string,unknown>={
   prenom:client.prenom||client.nom,nom_complet:[client.prenom,client.nom].filter(Boolean).join(' '),destination:destination?.nom||'',destination_flag:destination?.flag||'',
   ref:colis.ref,desc:colis.desc_contenu||'',casier:colis.casier||'',nb_cartons:count,liste_cartons:cartons,
+  nb_colis_recus:received.length?`${received.length} colis`:'',liste_colis_recus:received.map(receivedCartonLine).join('\n'),
   dims_brutes:receivedDimensions,poids_brut:beforeReal!==null?`${beforeReal} kg`:'À peser',poids_vol_avant:beforeVolume!==null?`${beforeVolume.toFixed(2)} kg`:'À mesurer',
   dims_finales:dims(colis.fin_l,colis.fin_w,colis.fin_h),poids_vol_apres:volume(colis.fin_l,colis.fin_w,colis.fin_h),poids_facturable:colis.poids_facturable?`${colis.poids_facturable} kg`:'À calculer',
   transport:money(colis.devis_transport),om:money(colis.devis_om),omr:money(colis.devis_omr),taxes:colis.devis_total?money(Number(colis.devis_om||0)+Number(colis.devis_omr||0)):'À calculer',tva:money(colis.devis_tva),taux_tva:client.type==='pro'?'0%':`${destination?.tva??0}%`,total:money(colis.devis_total),

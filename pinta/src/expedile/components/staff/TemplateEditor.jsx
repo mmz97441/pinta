@@ -28,6 +28,14 @@ const VAR_GROUPS = [
     ],
   },
   {
+    // Filled by the arrival notice only (the cartons of the validated reception); empty in the other messages.
+    label: 'Réception (avis d’arrivée)',
+    vars: [
+      { key: 'nb_colis_recus', label: 'Nb colis reçus', ex: '2 colis' },
+      { key: 'liste_colis_recus', label: 'Liste colis reçus', ex: '1. Amazon — LP123456789FR — 35×28×18 cm — 2.5 kg\n2. SHEIN — SH789 — 40×30×20 cm — 1.2 kg' },
+    ],
+  },
+  {
     label: 'Dimensions',
     vars: [
       { key: 'dims_brutes', label: 'Dims réception', ex: '35×28×18 cm' },
@@ -77,6 +85,9 @@ LEGACY_VARS.forEach((v) => { ALL_EXAMPLES[v.key] = v.ex; });
 
 // ── Templates par défaut ── (labels only: plain text, no emoji; keys unchanged)
 const TEMPLATES = [
+  // Arrival notice (2026-10-28): one message per validated reception (services/arrivalNotice.js).
+  { key: 'arrivee_colis', label: 'Avis d’arrivée', hint: 'Envoyé quand l’équipe valide une réception et choisit de prévenir le client : un seul message annonce tous les colis de cette réception, sur Telegram si le client l’a relié, sinon par email.' },
+  { key: 'arrivee_colis_facture', label: 'Avis d’arrivée, facture d’achat à envoyer', hint: 'Remplace l’avis d’arrivée quand un dossier de la réception attend encore la facture d’achat du client (jamais pour un client professionnel).' },
   { key: 'reception', label: 'Réception seule (ancien modèle)' },
   { key: 'facture_manquante', label: 'Facture manquante' },
   { key: 'demande_feu_vert', label: 'Réception et demande d’accord' },
