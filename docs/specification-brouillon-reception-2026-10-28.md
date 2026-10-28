@@ -50,7 +50,7 @@ En haut de l'onglet : nombre de clients, de cartons, poids et volume du stock af
 |---|---|---|
 | Réception à valider | Des cartons enregistrés n'ont pas encore été validés | Valider la réception |
 | Accord à demander | Accord du client jamais demandé, ou à redemander après un nouveau carton | Demander l'accord |
-| Attend le client | Accord demandé, pas de réponse ; ou le client a choisi d'attendre | Rien à faire (relance automatique) |
+| Attend le client | Accord demandé, pas de réponse ; ou le client a choisi d'attendre | Rien à faire, puis « Relancer » quand la relance est due (aucune relance ne part seule) |
 | Le client refuse | Refus enregistré | Voir le dossier |
 | À préparer | Accord donné, préparation non terminée | Préparer |
 | Facture manquante | Préparé, facture d'achat absente ou à vérifier | Ajouter la facture |
@@ -154,6 +154,68 @@ Aucune commande existante n'est redéfinie : ni `queue_message`, ni `append_rece
 - Ton : prénom, contexte (vos colis sont arrivés à notre entrepôt), rassurance, liste, prochaine étape, rappel de la facture d'achat dans la variante, signature « L'équipe Expedîle ». Texte brut, sans mise en forme.
 - `src/expedile/services/arrivalNotice.js` : `arrivalChannel(client)` applique la même règle que le serveur ; `arrivalTemplate(colisList)` choisit la variante facture quand un dossier de la réception n'a pas de facture d'achat reçue, selon la règle déjà utilisée pour « facture manquante » ; `renderArrivalNotice({client, colisList, cartons, destination, settings, bodies})` rend `{canal, template, text}`, ou `{canal: null}` sans moyen de contact.
 
-### Logique Brouillon et écrans
+### Adresses et menu
 
-Complété après la cartographie de l'interface.
+| Adresse | Écran | Accès |
+|---|---|---|
+| `/` | Colis : onglets (`?onglet=brouillon|a_payer|pret|parti`), classement (`?classer=nom|depart|reception|montant`), recherche (`?q=`) | équipe |
+| `/brouillon/:id` | Fiche Brouillon du dossier `:id` | équipe |
+| `/recevoir` | Réception en quatre étapes (`?client=<id>`, `?dossier=<id>`, `?client=<id>&valider=1` ouvre directement la validation) | `perm_colis_receptionner` |
+| `/avis` | Avis d'arrivée : réceptions à valider et avis envoyés | équipe |
+| `/travail` | Mon travail (ancien accueil) | équipe |
+| `/colis`, `/colis/:id`, `/reception` | Inchangés : vue détaillée (« Dossiers », « Tout le dossier ») et ancien écran de réception | inchangé |
+
+Menu : « Réceptionner des cartons » (`/recevoir`), Colis (`/`), Départs, Clients ; « Plus » : Mon travail, Dossiers (`/colis`), Conversations, Équipe, Estimation, Avis d'arrivée, Paramètres. Les cartons enregistrés par l'ancien écran `/reception` ne sont pas validés : ils remontent dans l'alerte « Réception à valider », rien n'est perdu. `workspaceReturnPath` accepte aussi `/brouillon/<id>`, `/recevoir` et `/avis`.
+
+### Logique Brouillon (`src/expedile/domain/brouillon.js`)
+
+Module pur (imports avec extension `.js`, testé par `node --test`, compatible Safari 14 : ni `.at`, ni `findLast`, ni `Object.hasOwn`, ni `structuredClone`). Il réutilise les fonctions existantes au lieu de recalculer : `receptionCartonManifest`, `receptionDateSummary`, `receptionAppendBlockReason`, `RECEPTION_APPEND_STATUSES` (`domain/reception.js`) ; `buildDossierTableModel` et son `quotePrice` (`domain/dossierTable.js`) ; `consentState`, `consentRelance` (`domain/consentQueue.js`) et `consentFollowUp` (`domain/dossierAlerts.js`) ; `hasCurrentPreparation` (`domain/preparationReadiness.js`) ; `savedQuoteBreakdown` (`domain/quoteBreakdown.js`) et les libellés des taxes (`domain/importTaxes.js`) ; `dossierDestinationCode`, `departureClosing`, `closingLabel` (`domain/departurePlanning.js`) ; `dossierTaskUrl` (`domain/dossierTasks.js`) ; `canSeeDossierFinances` (`domain/dossierOverview.js`) ; `fuzzy` (`utils/index.js`), `clientSearchText`, `countLabel` (`utils/clientDisplay.js`).
+
+| Fonction | Rôle |
+|---|---|
+| `COLIS_TABS`, `colisTab(dossier)` | Onglet du dossier, ou `null` (archivé, annulé) |
+| `COLIS_SORTS` | Par nom, Par date d'envoi, Par réception, Par montant |
+| `pendingByColis(pendingList)` | Index des réceptions à valider (résultat de `fetchPendingReceptions`) par dossier |
+| `colisStage(dossier, ctx)` | `{key, label, detail, tone, action}` ; `action` = `{key, label, task}` ou `null` (« Rien à faire ») |
+| `colisRow(dossier, ctx)` | Ligne : `id, ref, clientId, clientName, clientType, destinationLabel, commune, cartons, casier, poids, volume, lastReceivedAt, stage, action, total:{amount, label, visible}, departure:{key, date, label, closingLabel}, searchText` |
+| `filterColisRows(rows, q)`, `sortColisRows(rows, key)` | Recherche (nom, référence, casier, numéros de suivi) et tri (dossiers sans prix ou sans date en dernier) |
+| `groupColisRowsByDeparture(rows)` | Groupes par départ, du plus proche au plus lointain, puis « Départ à choisir », chacun avec ses totaux |
+| `colisTotals(rows)` | `{clients, dossiers, cartons, poids, volume, montantConnu, prixConnus}` |
+| `brouillonFiche(dossier, ctx)` | En-tête, cartons reçus (et lesquels attendent la validation), colis après optimisation et gain de volume, prix depuis le devis enregistré seulement (ou ce qui manque), dernier avis, action |
+| `arrivalNoticeState(notice)` | `sans_avis` « Sans avis », `en_cours` « En cours d'envoi », `envoye` « Envoyé », `remis` « Remis », `a_envoyer` « À envoyer », `non_remis` « Non remis » (avec la raison), `annule` « Annulé » |
+| `brouillonAlerts({pending, notices})` | Alertes du haut de page : réceptions à valider, avis non remis |
+| `receptionTarget(clientId, dossiers)` | `{mode:'append', dossier}` (le plus récent dossier ouvert avant devis où l'ajout est permis) ou `{mode:'new'}` |
+| `colisActionHref(row, returnTo)` | Adresse des actions qui ouvrent un écran |
+| `cartonVolumeM3(box)`, `formatDimensions`, `formatKg`, `formatM3` | Mesures et affichage communs aux deux écrans |
+
+`ctx` = `{client, envois, settings, pending, notices, can, now}`. Sans droit de voir les montants (`canSeeDossierFinances`), `total.visible` est faux et la fiche ne montre aucun prix.
+
+**Étapes de l'onglet Brouillon**, dans cet ordre (la première qui s'applique gagne) :
+
+| Clé | Affiché | Condition | Action |
+|---|---|---|---|
+| `reception_a_valider` | Réception à valider | des cartons attendent la validation | `valider_reception` « Valider la réception » → `/recevoir?client=<id>&valider=1` |
+| `mesures_a_completer` | Mesures à compléter | `receptionne` (ancien carton non mesuré) | `completer_mesures` → tâche `reception` |
+| `accord_a_demander` | Accord à demander | `mesure` | `demander_accord` « Demander l'accord » (panneau d'envoi sur place) |
+| `attend_client` | Attend le client | `attente_feu_vert` | aucune ; `relancer` « Relancer » quand `consentFollowUp` la dit due ou que l'attente choisie est terminée (les relances ne partent jamais seules) |
+| `client_refuse` | Le client refuse | `refuse_client` | `voir_dossier` → tâche `accord` |
+| `produit_interdit` | Produit interdit à régler | produit interdit signalé et dossier accordé | `voir_dossier` → tâche `reception` |
+| `a_preparer` | À préparer | accord donné, préparation pas à jour | `preparer` → tâche `preparation` |
+| `facture_manquante` | Facture manquante | préparé, la règle existante des factures bloque encore le devis | `ajouter_facture` → tâche `documents` |
+| `pret_pour_devis` | Prêt pour le devis | sinon | `envoyer_devis` → tâche `devis` |
+
+Les étapes « Mesures à compléter » et « Produit interdit à régler » complètent le tableau des maquettes pour les anciens dossiers et les cas bloqués. Onglets À payer, Prêt à partir et Parti : l'étape vient des modèles existants (paiement, départ, statut) et l'action ouvre la tâche `paiement`, `expedition` ou `livraison`.
+
+### Écrans Colis (`src/expedile/components/brouillon/`)
+
+`ColisHome.jsx` (route `/`) et `BrouillonFiche.jsx` (route `/brouillon/:id`). Données : `useApp()` (`data`, `clients`, `envois`, `settings`, `can`), `fetchPendingReceptions`, `fetchArrivalNotices`. « Demander l'accord » et « Relancer » réutilisent `TaskMessage` exactement comme `StaffDetailView` (modèles `demande_feu_vert` / `relance_feu_vert`, `beforeSend` = `demanderFeuVert`). Liens « Tout le dossier » → `/colis/:id?returnTo=/brouillon/:id`, « Ajouter un carton » → `/recevoir?dossier=:id`. Tableau sur tablette, cartes sur téléphone. Référence visuelle : les maquettes « Brouillon » du canevas de conception.
+
+### Écrans Réception et avis (`src/expedile/components/receptionFlow/`)
+
+`ReceptionFlow.jsx` (route `/recevoir`) et `ArrivalNotices.jsx` (route `/avis`).
+
+- Enregistrement de chaque carton par les chemins existants, avec leurs garanties : premier carton d'un nouveau brouillon par `sb.insertColis(…, {createId})`, les suivants et l'ajout à un brouillon par `sb.appendReceptionCartons(id, [carton], {requestId, expectedUpdatedAt, casier, notesReception, checkInterdits})`. Même traitement des erreurs incertaines que `ColisModal` (identifiant stable par tentative, « Vérifier l'enregistrement »), brouillon de saisie conservé en `sessionStorage`. Contrôle des produits interdits proposé à chaque carton.
+- Validation : cartons de cette réception plus les autres cartons du client qui attendent leur validation ; `renderArrivalNotice` puis `validateReception` ; si Telegram, `deliverMessage(colisId, messageId)` aussitôt ; si e-mail, état « À envoyer » et texte à copier. Client sans moyen de contact : seul « Valider sans prévenir » est proposé, avec la raison.
+- Rangement : casier en très grand, nombre de cartons du brouillon, état de l'avis, rappel quand l'accord est à redemander ; « Client suivant », « Voir le Brouillon ».
+- Avis d'arrivée : réceptions à valider regroupées par client (« Valider et prévenir »), puis avis récents avec leur état ; « Réessayer » pour un Telegram non remis (`deliverMessage(…, {retryConfirmed: true})`), texte à copier pour un e-mail à envoyer.
+- Référence visuelle : les maquettes « Réception » et « Avis d'arrivée » du canevas de conception.
