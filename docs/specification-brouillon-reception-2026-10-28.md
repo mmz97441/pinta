@@ -103,4 +103,57 @@ Sur téléphone, l'ordre devient : total et action, colis après optimisation, c
 
 ## Contrats techniques
 
-Voir la section suivante, complétée après la cartographie du code.
+### Qui écrit quoi
+
+| Spécialité | Fichiers dont elle est seule responsable |
+|---|---|
+| Base de données | `supabase/migrations/20261028000001_reception_validation.sql`, `supabase/tests/reception-validation.sql`, `supabase/tests/run-reception-validation.sh`, la ligne de ce lanceur dans `.github/workflows/verify-expedile.yml`, `src/expedile/lib/receptionValidation.js` et son test |
+| Messages | `src/expedile/services/messageDefaults.js`, `supabase/functions/_shared/messageDefaults.ts`, `src/expedile/services/messageTemplates.js`, `supabase/functions/_shared/messageTemplate.ts`, `src/expedile/services/arrivalNotice.js` et son test, `src/expedile/components/staff/TemplateEditor.jsx`, `tests/arrival-notice-messages.test.mjs` |
+| Logique Brouillon | `src/expedile/domain/brouillon.js` et son test |
+| Écrans Colis | dossier `src/expedile/components/brouillon/` |
+| Écrans Réception et avis | dossier `src/expedile/components/receptionFlow/` |
+| Tests navigateur | nouvelles suites `tests/*.browser.cjs`, adaptation des suites existantes, lignes correspondantes de la CI |
+| Orchestration | `src/expedile/App.jsx` (menu, routes), cette spécification, intégration |
+
+Un fichier hors de sa liste ne se modifie qu'avec l'accord de l'orchestrateur.
+
+### Base de données : réception validée et avis d'arrivée
+
+Aucune commande existante n'est redéfinie : ni `queue_message`, ni `append_reception_cartons`, ni les fonctions et déclencheurs vérifiés par la mise en production de la conservation. Aucun déclencheur n'est ajouté sur `messages` ni `notification_outbox`. Les nouveaux déclencheurs ne s'appellent ni `retention_guard` ni `retention_truncate` (leur nombre exact est contrôlé).
+
+**Point de départ.** Table `reception_validation_settings` (une seule ligne, `started_at timestamptz` posé à l'exécution de la migration). Les cartons reçus avant cette date sont considérés comme validés : aucune alerte sur l'historique.
+
+**Tables, en ajout seul** (modification, suppression et vidage refusés, SQLSTATE 23001, `HINT 'retention:<table>'`) :
+
+- `reception_validations` : `id`, `request_id` unique, `client_id`, `actor_id`, `notify`, `canal` (`telegram` | `email`, nul sans avis), `template` (`arrivee_colis` | `arrivee_colis_facture`, nul sans avis), `message_id`, `outbox_id` (nuls sans avis), `cartons` (instantané, 1 à 100 éléments), `request_payload`, `created_at`.
+- `reception_validation_items` : `validation_id`, `colis_id`, `first_carton`, `last_carton` ; clé (`validation_id`, `colis_id`), unicité (`colis_id`, `first_carton`).
+- Clés étrangères en `RESTRICT`. RLS active, aucun droit direct pour `anon`, `authenticated` ni `service_role` : lecture et écriture par les fonctions ci-dessous seulement.
+
+**Carton en attente de validation.** Le carton n° i (1 = premier) d'un dossier attend sa validation si i dépasse le dernier carton déjà validé de ce dossier et si sa date de réception (`reception_dates`) est connue et postérieure ou égale à `started_at`. Les dossiers archivés ou annulés n'ont jamais de carton en attente.
+
+**`list_pending_receptions(p_client_id uuid DEFAULT NULL) RETURNS jsonb`** — équipe seulement (42501 sinon). Tableau de `{colisId, ref, clientId, statut, casier, firstCarton, lastCarton, cartonCount, receivedFrom, receivedTo, cartons:[{carton, number, fournisseur, dimL, dimW, dimH, poids, receivedAt}]}`.
+
+**`validate_reception(p_client_id uuid, p_items jsonb, p_notify boolean, p_canal text DEFAULT NULL, p_template text DEFAULT NULL, p_text text DEFAULT NULL, p_request_id uuid DEFAULT gen_random_uuid()) RETURNS jsonb`**
+
+- `p_items` : `[{"colisId": uuid, "throughCarton": int}]`, 1 à 20 dossiers distincts du même client. Valide, pour chaque dossier, les cartons en attente jusqu'à `throughCarton` inclus (un carton ajouté entre-temps par un collègue reste en attente).
+- Contrôles : `perm_colis_receptionner` (42501) ; avec avis, `perm_comm_telegram` ou `perm_comm_email` selon le canal (42501) ; dossiers verrouillés dans l'ordre des identifiants ; dossier d'un autre client, archivé, annulé, rien en attente, `throughCarton` hors des cartons en attente : 22023.
+- Canal décidé par le serveur : Telegram si `telegram_chat_id` est renseigné, sinon e-mail si `email` est renseigné, sinon 22023 « Ce client n'a ni Telegram ni e-mail : validez sans prévenir ». Un `p_canal` différent de cette décision : 40001 (le contact a changé, recharger).
+- Avec avis : `p_template` et `p_text` (1 à 4096 caractères) obligatoires. L'avis passe par `queue_message(<premier dossier>, p_text, p_template, 'arrival:'||<id de validation>, NULL, canal)` avant l'insertion de la validation (la table est en ajout seul). Telegram : envoi `pending`, expédié par l'écran puis, à défaut, par la tâche planifiée. E-mail : `manual` jusqu'au branchement du fournisseur.
+- Rejouer le même `p_request_id` avec la même demande rend le résultat enregistré (`reused: true`) ; avec une autre demande : 40001.
+- Une ligne `audit_actions` par dossier, action `reception_validated`.
+- Retour : `{validation:{id, requestId, clientId, notify, canal, template, createdAt, items:[{colisId, ref, firstCarton, lastCarton}], cartons:[…]}, message, outbox, reused}`.
+
+**`list_arrival_notices(p_client_id uuid DEFAULT NULL, p_colis_id uuid DEFAULT NULL, p_limit int DEFAULT 50) RETURNS jsonb`** — équipe seulement. Du plus récent au plus ancien, 1 à 200 : `{id, createdAt, clientId, client:{nom, prenom}, actor:{nom}, notify, canal, template, items, cartons, message:{id, statut, texte, createdAt}|null, outbox:{id, status, attempts, sentAt, lastError}|null}`.
+
+**Fonctions JavaScript** (`src/expedile/lib/receptionValidation.js`) : `fetchPendingReceptions({clientId})`, `validateReception({clientId, items, notify, canal, template, text, requestId})`, `fetchArrivalNotices({clientId, colisId, limit})`. Elles suivent les conventions d'erreur de `lib/supabaseData.js`.
+
+### Messages : l'avis d'arrivée
+
+- Modèles `arrivee_colis_telegram`, `arrivee_colis_email`, `arrivee_colis_facture_telegram`, `arrivee_colis_facture_email`, identiques dans les deux copies des textes par défaut et modifiables dans l'éditeur de modèles (« Avis d'arrivée », « Avis d'arrivée, facture d'achat à envoyer »).
+- Variables nouvelles, présentes dans les deux moteurs de rendu et couvertes par le test de parité : `{{nb_colis_recus}}` (« 1 colis », « 3 colis ») et `{{liste_colis_recus}}` (une ligne par colis de cette réception, numérotée dans l'ordre de la réception : vendeur, numéro de suivi, dimensions et poids). Elles se nourrissent d'un contexte `reception: {cartons:[…]}` ; sans ce contexte elles sont vides.
+- Ton : prénom, contexte (vos colis sont arrivés à notre entrepôt), rassurance, liste, prochaine étape, rappel de la facture d'achat dans la variante, signature « L'équipe Expedîle ». Texte brut, sans mise en forme.
+- `src/expedile/services/arrivalNotice.js` : `arrivalChannel(client)` applique la même règle que le serveur ; `arrivalTemplate(colisList)` choisit la variante facture quand un dossier de la réception n'a pas de facture d'achat reçue, selon la règle déjà utilisée pour « facture manquante » ; `renderArrivalNotice({client, colisList, cartons, destination, settings, bodies})` rend `{canal, template, text}`, ou `{canal: null}` sans moyen de contact.
+
+### Logique Brouillon et écrans
+
+Complété après la cartographie de l'interface.
