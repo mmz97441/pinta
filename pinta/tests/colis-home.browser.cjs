@@ -936,7 +936,7 @@ async function main() {
       await f.page.getByRole('heading', { level: 1, name: 'Fontaine Lucas', exact: true }).waitFor();
       const action = f.page.getByTestId('fiche-action');
       assert.equal(await action.getByRole('link', { name: 'Préparer le départ', exact: true }).getAttribute('href'), `/colis/${D.fontaine}?returnTo=%2Fbrouillon%2F${D.fontaine}&section=expedition#dossier-work`);
-      assert.match(await flat(action), /Total à payer 80,00 €/);
+      assert.match(await flat(action), /Total payé 80,00 €/);
       assert.equal(await action.getByRole('button', { name: 'Ajouter un carton', exact: true }).isDisabled(), true);
       await action.getByText('Le paiement est déjà enregistré. Un responsable doit vérifier ce dossier avant tout ajout.', { exact: true }).waitFor();
       await assertReadable(f, 'paid sheet');

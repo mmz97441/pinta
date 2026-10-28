@@ -131,7 +131,7 @@ function OptimizedParcels({ optimized, received, wide }) {
 /** « Prix à payer », from the saved quote only (brouillonFiche.price), or what the quote still needs. */
 function Price({ price }) {
   if (!price.known) return <>
-    <h2 id="fiche-prix">Prix à payer</h2>
+    <h2 id="fiche-prix">{price.state === 'paid' ? 'Prix payé' : 'Prix à payer'}</h2>
     <p className="m-0 text-[19px] font-bold colis-muted" data-testid="fiche-prix-etat">{price.label}</p>
     {price.missing?.length > 0 && <div className="grid gap-1">
       <p className="m-0 text-[15px]">Pour calculer le devis, il manque :</p>
@@ -139,8 +139,10 @@ function Price({ price }) {
     </div>}
     {price.message && <p className="m-0 text-[15px]">{price.message}</p>}
   </>;
+  // A paid dossier (Prêt à partir, Parti) never reads « à payer ».
+  const paid = price.state === 'paid';
   return <>
-    <h2 id="fiche-prix">Prix à payer</h2>
+    <h2 id="fiche-prix">{paid ? 'Prix payé' : 'Prix à payer'}</h2>
     {price.detailed && <>
       <div>
         <div className="fiche-line"><span>{price.transport.label}</span><span>{price.transport.text}</span></div>
@@ -161,8 +163,8 @@ function Price({ price }) {
       </>}
       <div className="fiche-rule" data-strong="true" />
     </>}
-    <div className="fiche-total" data-testid="fiche-total"><span>Total à payer</span><span>{price.total.text}</span></div>
-    {price.state && <p className="m-0 text-[15px] colis-muted">État du devis : {price.state}</p>}
+    <div className="fiche-total" data-testid="fiche-total"><span>{paid ? 'Total payé' : 'Total à payer'}</span><span>{price.total.text}</span></div>
+    {price.state && !paid && <p className="m-0 text-[15px] colis-muted">État du devis : {price.state}</p>}
     {price.savings && <p className="fiche-saving m-0">{price.savings.label} : {price.savings.text}</p>}
     {price.message && <p className="m-0 text-[15px]">{price.message}</p>}
   </>;

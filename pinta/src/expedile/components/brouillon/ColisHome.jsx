@@ -42,7 +42,7 @@ function measuresText(row) {
 /** The total to pay: the saved quote's price (and its state), else what it is (« À calculer »), never a false zero. */
 function Total({ total }) {
   if (!total?.visible) return null;
-  if (total.amount !== null) return <><span className="colis-amount">{eur(total.amount)}</span>{total.state && <span className="colis-sub">{total.state}</span>}</>;
+  if (total.amount !== null) return <><span className="colis-amount">{eur(total.amount)}</span>{total.state && <span className="colis-sub">{total.state === 'paid' ? total.label : total.state}</span>}</>;
   return <span className="colis-muted text-[15px]">{total.label}</span>;
 }
 
