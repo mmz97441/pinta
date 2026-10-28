@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
-import { AlertTriangle, ChevronLeft, FolderOpen, PackagePlus, RefreshCw } from 'lucide-react';
+import { AlertTriangle, Camera, ChevronLeft, FolderOpen, PackagePlus, RefreshCw } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { useMinuteNow } from '../../hooks/useMinuteNow';
 import useMediaQuery from '../../hooks/useMediaQuery';
@@ -9,6 +9,8 @@ import useShellLoadBanner from '../../hooks/useShellLoadBanner';
 import { workspaceReturnPath } from '../../domain/navigation';
 import { dossierTaskUrl } from '../../domain/dossierTasks';
 import { brouillonFiche, colisTab, pendingByColis } from '../../domain/brouillon';
+import { formatDossierTableDate } from '../../domain/dossierTable';
+import { SecureImage } from '../ui/SecureFile';
 import ColisAction from './ColisAction';
 import ConsentPanel from './ConsentPanel';
 import ArrivalNoticeBlock from './ArrivalNoticeBlock';
@@ -46,29 +48,56 @@ function measuresSummary(set) {
   return [set.countLabel || set.summary, set.poidsLabel, set.volumeLabel].filter(Boolean).filter((part, index, list) => list.indexOf(part) === index).join(' · ');
 }
 
-function ReceivedCartons({ received, wide }) {
+const photoCount = count => `${count} ${count > 1 ? 'photos' : 'photo'}`;
+
+/** The reception photos of a carton received damaged or opened: private thumbnails (SecureImage, signed on read). */
+function CartonPhotos({ carton, photos }) {
+  return <ul className="fiche-photos" aria-label={`Photos du carton ${carton.number}`}>
+    {photos.map(photo => <li key={photo.id || photo.path}>
+      <SecureImage src={photo.path} alt={`Carton ${carton.number} (${carton.supplierLabel}) à la réception`} className="fiche-photo" loading="lazy" />
+      <span className="fiche-photo-caption">{[photo.createdAt ? formatDossierTableDate(photo.createdAt) : null, photo.actor?.nom].filter(Boolean).join(' · ')}</span>
+    </li>)}
+  </ul>;
+}
+
+const PhotoMark = ({ count }) => <span className="colis-sub fiche-photo-mark"><Camera size={16} aria-hidden="true" />{photoCount(count)}</span>;
+
+function ReceivedCartons({ received, wide, photos, photosError, onRetryPhotos }) {
+  // The photos of each carton (1 = first), as the server lists them; none while they are unknown.
+  const photosOf = number => (Array.isArray(photos) ? photos : []).filter(photo => photo.carton === number && photo.path);
   return <section className="fiche-section" aria-labelledby="fiche-recus" data-testid="fiche-recus">
     <div className="fiche-section-head"><h2 id="fiche-recus">Cartons reçus</h2><p>{measuresSummary(received)}</p></div>
     {received.pendingLabel && <p className="colis-alert m-0"><AlertTriangle size={18} aria-hidden="true" className="shrink-0" /><span className="text-[16px] font-bold">{received.pendingLabel}</span></p>}
+    {photosError && photos === null && <p className="colis-quiet" data-testid="fiche-photos-erreur"><span>Les photos de réception n’ont pas pu être chargées ({photosError}).</span><button type="button" onClick={onRetryPhotos} className="colis-link-button">Réessayer</button></p>}
     {!received.count ? <p className="m-0 text-[15px] colis-muted">Aucun carton enregistré.</p> : wide
       ? <div className="colis-table-wrap"><table className="fiche-table">
         <thead><tr><th scope="col">N°</th><th scope="col">Vendeur</th><th scope="col">N° de suivi</th><th scope="col">Dimensions</th><th scope="col" data-align="right">Poids</th><th scope="col" data-align="right">Volume</th></tr></thead>
-        <tbody>{received.cartons.map(carton => <tr key={carton.number} data-pending={carton.pending ? 'true' : undefined}>
-          <th scope="row">{carton.number}{carton.pending && <span className="colis-sub">À valider</span>}</th>
-          <td>{carton.supplierLabel}</td>
-          <td><span className="keep-token">{carton.trackingLabel}</span></td>
-          <td>{carton.dimensionsLabel}</td>
-          <td data-align="right">{carton.poidsLabel}</td>
-          <td data-align="right">{carton.volumeLabel}</td>
-        </tr>)}</tbody>
+        <tbody>{received.cartons.map(carton => {
+          const shots = photosOf(carton.number);
+          return <React.Fragment key={carton.number}>
+            <tr data-pending={carton.pending ? 'true' : undefined} data-photos={shots.length ? 'true' : undefined}>
+              <th scope="row">{carton.number}{carton.pending && <span className="colis-sub">À valider</span>}{shots.length > 0 && <PhotoMark count={shots.length} />}</th>
+              <td>{carton.supplierLabel}</td>
+              <td><span className="keep-token">{carton.trackingLabel}</span></td>
+              <td>{carton.dimensionsLabel}</td>
+              <td data-align="right">{carton.poidsLabel}</td>
+              <td data-align="right">{carton.volumeLabel}</td>
+            </tr>
+            {shots.length > 0 && <tr className="fiche-photo-row" data-pending={carton.pending ? 'true' : undefined}><td colSpan={6}><CartonPhotos carton={carton} photos={shots} /></td></tr>}
+          </React.Fragment>;
+        })}</tbody>
         <tfoot><tr><th scope="row" colSpan={4}>Total reçu · {received.countLabel}</th><td data-align="right">{received.poidsLabel}</td><td data-align="right">{received.volumeLabel}</td></tr></tfoot>
       </table></div>
       : <ul className="fiche-list" aria-label="Cartons reçus">
-        {received.cartons.map(carton => <li key={carton.number} data-pending={carton.pending ? 'true' : undefined}>
-          <div className="fiche-list-line"><span>{carton.number} · {carton.supplierLabel}</span><span>{carton.poidsLabel}</span></div>
-          <span className="colis-sub">{carton.dimensionsLabel === carton.volumeLabel ? carton.dimensionsLabel : `${carton.dimensionsLabel} · ${carton.volumeLabel}`}</span>
-          <span className="colis-sub"><span className="keep-token">{carton.trackingLabel}</span>{carton.pending ? ' · À valider' : ''}</span>
-        </li>)}
+        {received.cartons.map(carton => {
+          const shots = photosOf(carton.number);
+          return <li key={carton.number} data-pending={carton.pending ? 'true' : undefined} data-photos={shots.length ? 'true' : undefined}>
+            <div className="fiche-list-line"><span>{carton.number} · {carton.supplierLabel}</span><span>{carton.poidsLabel}</span></div>
+            <span className="colis-sub">{carton.dimensionsLabel === carton.volumeLabel ? carton.dimensionsLabel : `${carton.dimensionsLabel} · ${carton.volumeLabel}`}</span>
+            <span className="colis-sub"><span className="keep-token">{carton.trackingLabel}</span>{carton.pending ? ' · À valider' : ''}</span>
+            {shots.length > 0 && <><PhotoMark count={shots.length} /><CartonPhotos carton={carton} photos={shots} /></>}
+          </li>;
+        })}
         <li data-total="true"><span>{received.countLabel} reçus</span><span>{[received.poidsLabel, received.volumeLabel].filter((part, index, list) => list.indexOf(part) === index).join(' · ')}</span></li>
       </ul>}
   </section>;
@@ -165,7 +194,7 @@ export default function BrouillonFiche() {
     return () => { active = false; };
   }, [id, validId, attempt, refreshColis]);
 
-  const signals = useReceptionSignals({ clientId: dossier?.clientId || null, colisId: validId ? id : null, limit: 50, enabled: inColis, data });
+  const signals = useReceptionSignals({ clientId: dossier?.clientId || null, colisId: validId ? id : null, limit: 50, photos: true, enabled: inColis, data });
   const pendingIndex = useMemo(() => pendingByColis(signals.pending || []), [signals.pending]);
   const fiche = useMemo(() => inColis ? brouillonFiche(dossier, { client, envois, settings, pending: pendingIndex, notices: signals.notices || [], can, now }) : null,
     [inColis, dossier, client, envois, settings, pendingIndex, signals.notices, can, now]);
@@ -230,7 +259,7 @@ export default function BrouillonFiche() {
     </div>
   </section>;
   const optimizedSection = <OptimizedParcels key="optimized" optimized={fiche.optimized} received={fiche.received} wide={wide} />;
-  const receivedSection = <ReceivedCartons key="received" received={fiche.received} wide={wide} />;
+  const receivedSection = <ReceivedCartons key="received" received={fiche.received} wide={wide} photos={signals.photos} photosError={signals.photosError} onRetryPhotos={signals.retry} />;
   const noticeSection = <ArrivalNoticeBlock key="notice" fiche={fiche} raw={rawNotice} client={client} loading={signals.notices === null}
     error={signals.noticesError} onRetry={signals.retry} onChanged={signals.retry} />;
 

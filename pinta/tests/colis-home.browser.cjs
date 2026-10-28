@@ -23,11 +23,41 @@ const PARIS_DAY = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Paris', y
 const parisDay = offset => PARIS_DAY.format(new Date(NOW + offset * 86400000));
 const uuid = n => `c0115000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const CLIENT = { abdallah: uuid(101), boyer: uuid(102), grondin: uuid(103), hoarau: uuid(104), payet: uuid(105), riviere: uuid(106), techer: uuid(107), lebon: uuid(108), fontaine: uuid(109), maillot: uuid(110), dupont: uuid(111) };
-const D = { abdallah: uuid(201), boyer: uuid(202), grondin: uuid(203), hoarau: uuid(204), payet: uuid(205), riviere: uuid(206), techer: uuid(207), lebon: uuid(208), fontaine: uuid(209), maillot: uuid(210), archive: uuid(211) };
+const D = { abdallah: uuid(201), boyer: uuid(202), grondin: uuid(203), hoarau: uuid(204), payet: uuid(205), riviere: uuid(206), techer: uuid(207), lebon: uuid(208), fontaine: uuid(209), maillot: uuid(210), archive: uuid(211), techer2: uuid(212) };
 const E = { past: uuid(300), soon: uuid(301), mayotte: uuid(302), later: uuid(303) };
 const NOTICE = { riviere: uuid(401), techer: uuid(402) };
 const MESSAGE = { riviere: uuid(501), techer: uuid(502) };
-const RIVIERE_TEXT = 'Bonjour Marie-Claude,\n\nBonne nouvelle : nous avons reçu 2 colis pour vous à notre entrepôt de Paris. Tout est rangé en sécurité : vous n’avez rien à faire pour l’instant.\n\nLe détail :\n1. Zara · ZARA-889 · 30 × 20 × 10 cm · 0,9 kg\n2. Amazon · TBA 3021 8876 5410 · 45 × 35 × 25 cm · 3,6 kg\n\nCordialement,\nL’équipe Expedîle';
+const RIVIERE_TEXT = 'Bonjour Marie-Claude,\n\nBonne nouvelle : nous avons reçu 2 colis pour vous à notre entrepôt de Paris. Nous vous tenons au courant à chaque étape.\n\nLe détail :\n1. Zara — ZARA-889 — 30 × 20 × 10 cm — 0,9 kg\n2. Amazon — TBA 3021 8876 5410 — 45 × 35 × 25 cm — 3,6 kg\n\nProchaine étape : avant toute préparation, nous vous demanderons votre accord. Vous pourrez alors autoriser la préparation ou choisir d’attendre vos autres achats. Après votre accord, notre équipe prépare et optimise votre envoi, puis vous recevrez le devis.\n\nCordialement,\nL’équipe Expedîle';
+
+// A 48 × 36 PNG (a carton-coloured gradient) served for the private reception photos.
+const zlib = require('node:zlib');
+function pngImage(width, height) {
+  const rows = Buffer.alloc((width * 3 + 1) * height);
+  for (let y = 0; y < height; y += 1) {
+    const row = y * (width * 3 + 1);
+    for (let x = 0; x < width; x += 1) rows.set([196 - y, 150 - (x >> 1), 92], row + 1 + x * 3);
+  }
+  const chunk = (type, data) => {
+    const body = Buffer.concat([Buffer.from(type), data]);
+    const size = Buffer.alloc(4); size.writeUInt32BE(data.length);
+    const crc = Buffer.alloc(4); crc.writeUInt32BE(zlib.crc32(body));
+    return Buffer.concat([size, body, crc]);
+  };
+  const header = Buffer.alloc(13); header.writeUInt32BE(width, 0); header.writeUInt32BE(height, 4); header.set([8, 2, 0, 0, 0], 8);
+  return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', header), chunk('IDAT', zlib.deflateSync(rows)), chunk('IEND', Buffer.alloc(0))]);
+}
+const PHOTO = pngImage(48, 36);
+/** Signed reading of the private bucket photos-colis, as Storage answers it: a signed URL, then the image itself. */
+async function servePhotos(f) {
+  f.photoReads = [];
+  await f.context.route('**/object/sign/photos-colis/**', route => {
+    const request = route.request();
+    const objectPath = decodeURIComponent(new URL(request.url()).pathname.split('/object/sign/photos-colis/')[1] || '');
+    if (request.method() === 'POST') return route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify({ signedURL: `/object/sign/photos-colis/${objectPath}?token=fictif` }) });
+    f.photoReads.push(objectPath);
+    return route.fulfill({ status: 200, contentType: 'image/png', headers: { 'access-control-allow-origin': '*' }, body: PHOTO });
+  });
+}
 
 const client = (id, nom, prenom, cp, ville, extra = {}) => ({ id, user_id: null, ref: `CLI-${nom.toUpperCase()}`, nom, prenom, cp, ville, commune: ville, type: 'particulier', abonnement: 'freemium', onboarded: true, created_at: ago(60), email: null, telegram_chat_id: null, ...extra });
 const box = (dimL, dimW, dimH, poids) => ({ dimL, dimW, dimH, poids });
@@ -112,6 +142,12 @@ function seed(tables) {
   // list_pending_receptions: the 2nd carton of Técher, recorded three hours ago and not validated.
   tables.pending_receptions = [{ colisId: D.techer, ref: 'EXP-TEST-107', clientId: CLIENT.techer, statut: 'mesure', casier: 'C-09', firstCarton: 2, lastCarton: 2, cartonCount: 1, receivedFrom: ago(0, 3), receivedTo: ago(0, 3),
     cartons: [{ carton: 2, number: 'TECH-0002', fournisseur: 'Cdiscount', dimL: 30, dimW: 20, dimH: 10, poids: 1.2, receivedAt: ago(0, 3) }] }];
+  // list_reception_photos: one photo of Técher's carton 2, two of Rivière's carton 4, oldest first.
+  tables.reception_photos = [
+    { id: uuid(1201), colisId: D.riviere, carton: 4, path: `${D.riviere}/carton-4-a.png`, createdAt: ago(1, 3), actor: { nom: 'Camille Test' } },
+    { id: uuid(1202), colisId: D.riviere, carton: 4, path: `${D.riviere}/carton-4-b.png`, createdAt: ago(1, 3), actor: { nom: 'Camille Test' } },
+    { id: uuid(1203), colisId: D.techer, carton: 2, path: `${D.techer}/carton-2.png`, createdAt: ago(0, 3), actor: { nom: 'Lucie Martin' } },
+  ];
   // list_arrival_notices, most recent first: Rivière's e-mail still to send, Técher's Telegram notice not delivered.
   tables.arrival_notices = [
     { id: NOTICE.riviere, createdAt: ago(1), clientId: CLIENT.riviere, client: { nom: 'Rivière', prenom: 'Marie-Claude' }, actor: { nom: 'Camille Test' }, notify: true, canal: 'email', template: 'arrivee_colis',
@@ -142,6 +178,11 @@ registerRequestMock(({ url, method, input, tables }) => {
     if (tables.failNotices) return [503, { message: 'Service des avis indisponible' }];
     return [200, tables.arrival_notices.filter(row => (!input?.p_client_id || row.clientId === input.p_client_id)
       && (!input?.p_colis_id || row.items.some(item => item.colisId === input.p_colis_id))).slice(0, input?.p_limit || 50)];
+  }
+  if (rpc === 'list_reception_photos') {
+    tables.signal_calls.push({ rpc, input, at: Date.now() });
+    if (tables.failPhotos) return [503, { message: 'Photos indisponibles' }];
+    return [200, tables.reception_photos.filter(row => row.colisId === input?.p_colis_id)];
   }
   if (rpc === 'queue_message') {
     tables.queue_calls.push(input);
@@ -251,6 +292,20 @@ async function shot(f, name, fullPage = true) {
   try { await f.page.screenshot({ path: path.join(output, `${name}.png`), fullPage }); }
   finally { if (fullPage) await unbox(false); }
 }
+/** Waits until the reception photos of the sheet are loaded and decoded, so that a capture paints them, not their place. */
+async function photosShown(f, count) {
+  await f.page.waitForFunction(count => [...document.querySelectorAll('.fiche-photos img')].filter(image => image.complete && image.naturalWidth === 48).length === count, count);
+  await f.page.locator('.fiche-photos').first().scrollIntoViewIfNeeded();
+  await f.page.evaluate(() => Promise.all([...document.querySelectorAll('.fiche-photos img')].map(image => image.decode().catch(() => {}))));
+}
+/** Waits until a condition on the mocked server's state holds. */
+async function until(condition, timeout = 10000) {
+  const end = Date.now() + timeout;
+  while (!condition()) {
+    if (Date.now() > end) throw new Error('Condition not reached in time.');
+    await new Promise(resolve => setTimeout(resolve, 50));
+  }
+}
 const noSend = f => assert.equal(f.requests.some(request => /\/(queue_message|send-telegram|send-email|validate_reception)$/.test(request.path)), false, 'Browsing never sends nor validates.');
 
 // ── Scenarios ─────────────────────────────────────────────────────────────────
@@ -262,6 +317,7 @@ async function main() {
     const f = await setup(browser, role, { device, failTable });
     f.page.setDefaultTimeout(10000);
     seed(f.tables);
+    await servePhotos(f);
     if (permissions) grant(f, permissions);
     if (prepare) await prepare(f);
     const consoleErrors = [];
@@ -530,7 +586,7 @@ async function main() {
         assert.equal(await action.getByRole('link', { name: 'Ajouter un carton', exact: true }).getAttribute('href'), `/recevoir?dossier=${D.riviere}`);
         // Cartons received, then after optimisation and the volume gained.
         const receivedTable = f.page.getByTestId('fiche-recus').getByRole('table');
-        assert.equal(await receivedTable.locator('tbody tr').count(), 5);
+        assert.equal(await receivedTable.locator('tbody tr:not(.fiche-photo-row)').count(), 5);
         assert.match(await flat(receivedTable), /3 Amazon 6A 123 456 789 01 50 × 40 × 30 cm 4,5 kg 0,060 m³/);
         assert.match(await flat(receivedTable.locator('tfoot')), /Total reçu · 5 cartons 12 kg 0,134 m³/);
         const optimized = f.page.getByTestId('fiche-optimise');
@@ -551,6 +607,7 @@ async function main() {
         }
         await assertReadable(f, `sheet tablet ${theme}`);
         await assertAccessible(f, `sheet tablet ${theme}`);
+        await photosShown(f, 2);
         await shot(f, `fiche-tablette-${theme === 'dark' ? 'sombre' : 'clair'}`);
         // The way back keeps the list as it was.
         await f.page.getByRole('link', { name: 'Colis', exact: true }).first().click();
@@ -569,6 +626,11 @@ async function main() {
       assert.deepEqual(order, ['fiche-action', 'fiche-optimise', 'fiche-recus', 'fiche-avis']);
       assert.equal(await sheet.getByRole('table').count(), 0, 'Lists on a phone.');
       assert.match(await flat(f.page.getByTestId('fiche-recus')), /3 · Amazon 4,5 kg 50 × 40 × 30 cm · 0,060 m³ 6A 123 456 789 01/);
+      // The carton photographed at the reception: its mark and its thumbnails, in the list too.
+      const photographed = f.page.getByTestId('fiche-recus').locator('li[data-photos="true"]');
+      assert.equal(await photographed.count(), 1);
+      assert.match(await flat(photographed), /^4 · Zara .*ZARA-889 2 photos \d{2}\/\d{2}\/\d{4} · Camille Test/);
+      await photosShown(f, 2);
       await assertReadable(f, 'sheet phone');
       await assertAccessible(f, 'sheet phone');
       await shot(f, 'fiche-telephone-clair');
@@ -578,6 +640,7 @@ async function main() {
       await f.page.getByTestId('fiche-avis').getByText('À envoyer', { exact: true }).waitFor();
       await assertReadable(f, 'sheet phone dark');
       await assertAccessible(f, 'sheet phone dark');
+      await photosShown(f, 2);
       await shot(f, 'fiche-telephone-sombre');
       noSend(f);
     }, { device: PHONE });
@@ -592,14 +655,16 @@ async function main() {
       assert.match(await flat(action), /Pour calculer le devis, il manque : Accord du client Mesures après optimisation/);
       const received = f.page.getByTestId('fiche-recus');
       await received.getByText('1 carton à valider', { exact: true }).waitFor();
-      assert.equal(await received.locator('tbody tr[data-pending="true"]').count(), 1);
-      assert.match(await flat(received.locator('tbody tr[data-pending="true"]')), /^2 À valider Cdiscount TECH-0002/);
+      const waiting = received.locator('tbody tr[data-pending="true"]:not(.fiche-photo-row)');
+      assert.equal(await waiting.count(), 1);
+      assert.match(await flat(waiting), /^2 À valider 1 photo Cdiscount TECH-0002/);
       // A Telegram notice not delivered: its reason, then « Réessayer » after the check asked by the confirmation.
       const notice = f.page.getByTestId('fiche-avis');
       await notice.getByText('Non remis', { exact: true }).waitFor();
       await notice.getByText('Raison : Le client a bloqué le bot Telegram', { exact: true }).waitFor();
       await assertReadable(f, 'sheet with a notice to retry');
       await assertAccessible(f, 'sheet with a notice to retry');
+      await photosShown(f, 1);
       await shot(f, 'fiche-tablette-avis-non-remis');
       await notice.getByRole('button', { name: 'Réessayer', exact: true }).click();
       const confirm = f.page.getByRole('dialog', { name: 'Réessayer l’avis d’arrivée', exact: true });
@@ -614,6 +679,106 @@ async function main() {
       await f.page.locator('[data-alert="reception_a_valider"]').waitFor();
       assert.equal(await f.page.locator('[data-alert="avis_non_remis"]').count(), 0);
     });
+
+    await scenario('sheet-shows-reception-photos-per-carton', async f => {
+      await f.page.goto(`${base}/brouillon/${D.riviere}`);
+      const received = f.page.getByTestId('fiche-recus');
+      // The carton photographed is marked, its photos are shown under it, signed on read from the private bucket.
+      const marked = received.locator('tbody tr[data-photos="true"]');
+      await marked.waitFor();
+      assert.equal(await marked.count(), 1);
+      assert.match(await flat(marked), /^4 2 photos Zara ZARA-889/);
+      const photos = received.getByRole('list', { name: 'Photos du carton 4', exact: true }).getByRole('img');
+      await photosShown(f, 2);
+      assert.equal(await photos.count(), 2);
+      assert.deepEqual(await photos.evaluateAll(images => images.map(image => image.alt)), ['Carton 4 (Zara) à la réception', 'Carton 4 (Zara) à la réception']);
+      assert.match(await flat(received.locator('.fiche-photos li').first()), /^\d{2}\/\d{2}\/\d{4} · Camille Test$/);
+      assert.deepEqual([...new Set(f.photoReads)].sort(), [`${D.riviere}/carton-4-a.png`, `${D.riviere}/carton-4-b.png`]);
+      assert.ok(f.tables.signal_calls.some(call => call.rpc === 'list_reception_photos' && call.input.p_colis_id === D.riviere));
+      await assertReadable(f, 'sheet with photos');
+      await assertAccessible(f, 'sheet with photos');
+      await shot(f, 'fiche-tablette-photos');
+      // No photo: no mark, no note.
+      await f.page.goto(`${base}/brouillon/${D.payet}`);
+      await f.page.getByRole('heading', { level: 1, name: 'Payet Flavie', exact: true }).waitFor();
+      await f.page.waitForFunction(() => document.querySelector('[data-testid="fiche-recus"] tbody tr'));
+      await until(() => f.tables.signal_calls.some(call => call.rpc === 'list_reception_photos' && call.input.p_colis_id === D.payet));
+      await f.page.waitForTimeout(300);
+      assert.equal(await f.page.locator('[data-photos="true"], [data-testid="fiche-photos-erreur"]').count(), 0);
+      // The photos cannot be read: the sheet stays, the cartons too, a quiet note offers « Réessayer ».
+      f.tables.failPhotos = true;
+      await f.page.goto(`${base}/brouillon/${D.techer}`);
+      const note = f.page.getByTestId('fiche-photos-erreur');
+      await note.waitFor();
+      assert.match(await flat(note), /^Les photos de réception n’ont pas pu être chargées \(Photos indisponibles\)\. Réessayer$/);
+      assert.equal(await f.page.getByTestId('fiche-recus').locator('tbody tr:not(.fiche-photo-row)').count(), 2);
+      f.tables.failPhotos = false;
+      await note.getByRole('button', { name: 'Réessayer', exact: true }).click();
+      await note.waitFor({ state: 'detached' });
+      assert.match(await flat(f.page.getByTestId('fiche-recus').locator('tbody tr[data-photos="true"]')), /^2 À valider 1 photo Cdiscount/);
+      await f.page.waitForFunction(() => [...document.querySelectorAll('.fiche-photos img')].some(image => image.complete && image.naturalWidth === 48));
+      noSend(f);
+    }, { failedRequests: true });
+
+    await scenario('notice-to-check-is-retried-on-the-dossier-that-carries-it', async f => {
+      // The list says both: one notice not delivered, one to check.
+      await openHome(f);
+      await f.page.getByRole('link', { name: '1 avis d’arrivée non remis, 1 à vérifier Voir les avis', exact: true }).waitFor();
+      await f.page.goto(`${base}/brouillon/${D.techer}`);
+      const notice = f.page.getByTestId('fiche-avis');
+      const pill = notice.locator('.colis-pill[data-notice="a_verifier"]');
+      await pill.getByText('Envoi à vérifier', { exact: true }).waitFor();
+      // Amber, as what is to check; « Non remis » keeps its own colour.
+      assert.equal(await pill.evaluate(element => getComputedStyle(element).backgroundColor), 'rgb(255, 241, 204)');
+      await notice.getByText('Toujours pas parti au bout de 10 minutes : l’envoi automatique ne l’a pas pris en charge.', { exact: true }).waitFor();
+      await assertReadable(f, 'notice to check');
+      await assertAccessible(f, 'notice to check');
+      await photosShown(f, 1);
+      await shot(f, 'fiche-tablette-avis-a-verifier');
+      await notice.getByRole('button', { name: 'Réessayer', exact: true }).click();
+      const confirm = f.page.getByRole('dialog', { name: 'Réessayer l’avis d’arrivée', exact: true });
+      await confirm.getByRole('button', { name: 'Réessayer l’envoi', exact: true }).click();
+      await notice.getByText('Envoyé', { exact: true }).waitFor();
+      // Sent from the dossier that carries the message, not from the first dossier of the reception.
+      assert.deepEqual(f.tables.telegram_calls, [{ colisId: D.techer2, messageId: MESSAGE.techer, retryConfirmed: true }]);
+    }, { prepare: f => {
+      // A second dossier of Técher, validated in the same reception, carries the notice (it still requested its invoice).
+      f.tables.colis.push(dossier(D.techer2, CLIENT.techer, 'EXP-TEST-112', 'mesure', [carton('TECH-0003', 'Fnac', 30, 30, 20, 2)], { casier: 'C-09', reception_dates: received([1], 2) }));
+      Object.assign(f.tables.arrival_notices.find(item => item.id === NOTICE.techer), {
+        items: [{ colisId: D.techer, ref: 'EXP-TEST-107', firstCarton: 1, lastCarton: 1 }, { colisId: D.techer2, ref: 'EXP-TEST-112', firstCarton: 1, lastCarton: 1 }],
+        cartons: [{ colisId: D.techer, ref: 'EXP-TEST-107', carton: 1 }, { colisId: D.techer2, ref: 'EXP-TEST-112', carton: 1 }],
+        createdAt: ago(0, 0.5),
+        message: { id: MESSAGE.techer, colisId: D.techer2, statut: 'envoi', texte: 'Bonjour Johnny 👋 …', createdAt: ago(0, 0.5) },
+        outbox: { id: uuid(902), status: 'pending', attempts: 0, sentAt: null, lastError: null },
+      });
+      // Abdallah: a notice not delivered.
+      f.tables.arrival_notices.push({ id: uuid(403), createdAt: ago(3), clientId: CLIENT.abdallah, client: { nom: 'Abdallah', prenom: 'Mohamed' }, actor: { nom: 'Camille Test' }, notify: true, canal: 'telegram', template: 'arrivee_colis',
+        items: [{ colisId: D.abdallah, ref: 'EXP-TEST-101', firstCarton: 1, lastCarton: 1 }], cartons: [{ colisId: D.abdallah, ref: 'EXP-TEST-101', carton: 1 }],
+        message: { id: uuid(503), colisId: D.abdallah, statut: 'echec', texte: 'Bonjour Mohamed 👋 …', createdAt: ago(3) }, outbox: { id: uuid(903), status: 'failed', attempts: 3, sentAt: null, lastError: 'Chat introuvable' } });
+    } });
+
+    await scenario('notice-on-its-way-becomes-to-check-after-ten-minutes', async f => {
+      // Five minutes after its validation, a notice on its way is no alert; ten minutes after, the screen says so by itself.
+      await rowOf(f, D.techer).waitFor();
+      await f.page.waitForTimeout(500);
+      assert.equal(await f.page.locator('[data-alert="avis_non_remis"]').count(), 0);
+      await f.page.clock.fastForward('06:00');
+      await f.page.getByRole('link', { name: '1 avis d’arrivée à vérifier Voir les avis', exact: true }).waitFor();
+      // Its sheet: a send started without confirmation is to check in Telegram, never sent again from here.
+      await rowOf(f, D.techer).getByRole('link', { name: 'Técher Johnny', exact: true }).click();
+      const notice = f.page.getByTestId('fiche-avis');
+      await notice.getByText('Envoi à vérifier', { exact: true }).waitFor();
+      await notice.getByText('Envoi commencé il y a plus de 10 minutes, sans confirmation de Telegram : vérifiez dans Telegram si le message est arrivé.', { exact: true }).waitFor();
+      assert.equal(await notice.getByRole('button', { name: 'Réessayer', exact: true }).count(), 0);
+      noSend(f);
+    }, { prepare: async f => {
+      await f.page.clock.install();
+      const fiveMinutesAgo = new Date(Date.now() - 5 * 60000).toISOString();
+      Object.assign(f.tables.arrival_notices.find(item => item.id === NOTICE.techer), {
+        createdAt: fiveMinutesAgo, message: { id: MESSAGE.techer, colisId: D.techer, statut: 'envoi', texte: 'Bonjour Johnny 👋 …', createdAt: fiveMinutesAgo },
+        outbox: { id: uuid(902), status: 'sending', attempts: 1, sentAt: null, lastError: null },
+      });
+    } });
 
     await scenario('sheet-dossier-not-found-or-archived', async f => {
       const missing = uuid(999);
@@ -800,6 +965,7 @@ async function main() {
       await f.page.getByRole('heading', { level: 1, name: 'Rivière Marie-Claude', exact: true }).waitFor();
       await f.page.getByTestId('fiche-avis').getByText('À envoyer', { exact: true }).waitFor();
       await assertReadable(f, 'sheet tablet portrait');
+      await photosShown(f, 2);
       await shot(f, 'fiche-tablette-portrait');
       noSend(f);
     }, { device: TABLET_PORTRAIT });
@@ -811,6 +977,7 @@ async function main() {
       const [received, action] = await Promise.all(['fiche-recus', 'fiche-action'].map(id => f.page.getByTestId(id).boundingBox()));
       assert.ok(action.x > received.x + received.width, 'Price and action beside the cartons.');
       await assertReadable(f, 'desktop sheet');
+      await photosShown(f, 2);
       await shot(f, 'fiche-bureau');
       await openHome(f);
       await shot(f, 'colis-bureau', false);
