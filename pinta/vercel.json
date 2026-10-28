@@ -6,7 +6,8 @@
   "outputDirectory": "dist",
   "headers": [
     { "source": "/paiement/:path*", "headers": [{ "key": "Referrer-Policy", "value": "no-referrer" }, { "key": "Cache-Control", "value": "no-store" }] },
-    { "source": "/colis/:path*", "headers": [{ "key": "Referrer-Policy", "value": "no-referrer" }] }
+    { "source": "/colis/:path*", "headers": [{ "key": "Referrer-Policy", "value": "no-referrer" }] },
+    { "source": "/brouillon/:path*", "headers": [{ "key": "Referrer-Policy", "value": "no-referrer" }] }
   ],
   "rewrites": [
     { "source": "/reception", "destination": "/index.html" },
@@ -16,6 +17,9 @@
     { "source": "/conversations", "destination": "/index.html" },
     { "source": "/departs", "destination": "/index.html" },
     { "source": "/plus", "destination": "/index.html" },
+    { "source": "/recevoir", "destination": "/index.html" },
+    { "source": "/avis", "destination": "/index.html" },
+    { "source": "/brouillon/:path*", "destination": "/index.html" },
     { "source": "/colis/:path*", "destination": "/index.html" },
     { "source": "/clients/:path*", "destination": "/index.html" },
     { "source": "/devis", "destination": "/index.html" },
