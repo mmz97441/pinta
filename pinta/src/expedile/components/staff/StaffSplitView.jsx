@@ -658,7 +658,7 @@ export default function StaffColisPage() {
 
       {workError && <div role="alert" className="dossier-list-notice shrink-0 border-b border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">Les tâches n’ont pas pu être actualisées. Les dossiers restent consultables.<button onClick={() => refreshWork().catch(() => {})} className="ml-3 min-h-11 font-semibold underline">Recharger les tâches</button></div>}
       {workLoading && !workKnown && <p role="status" className="dossier-list-notice shrink-0 px-4 py-2 text-sm text-gray-600">Chargement des tâches…</p>}
-      {taskScope === 'pool' && !available && <p className="dossier-list-notice shrink-0 px-4 py-2 text-sm text-gray-700">Vous êtes indisponible. <button onClick={() => navigate('/?preferences=1')} className="min-h-11 font-semibold underline">Modifier ma disponibilité dans Mon travail</button></p>}
+      {taskScope === 'pool' && !available && <p className="dossier-list-notice shrink-0 px-4 py-2 text-sm text-gray-700">Vous êtes indisponible. <button onClick={() => navigate('/travail?preferences=1')} className="min-h-11 font-semibold underline">Modifier ma disponibilité dans Mon travail</button></p>}
       {/* A failed refresh keeps the last loaded dossiers: the application banner says so. */}
 
       {/* While « Affichage » is open, its own alert reports the export failure. */}

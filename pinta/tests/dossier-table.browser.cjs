@@ -636,13 +636,16 @@ async function main() {
         await f.page.waitForURL(url=>url.searchParams.get('sort')===key&&url.searchParams.get('dir')===direction);
         assert.equal(await display.isVisible(),true,'Choosing a sort keeps « Affichage » open.');
       };
+      // The address changes before the rows are drawn again: read the first rows once they follow it (main read the
+      // previous order 2 times out of 5).
+      const firstRows=async expected=>{let ids=[];for(const until=Date.now()+5000;Date.now()<until;){ids=(await orderedIds(f)).slice(0,3);if(JSON.stringify(ids)===JSON.stringify(expected))break;await f.page.waitForTimeout(50);}return ids;};
       for(const [direction,expected] of [['asc',[P3,P,P2]],['desc',[P2,P,P3]]]) {
-        await sort('casier',direction);assert.deepEqual((await orderedIds(f)).slice(0,3),expected);
+        await sort('casier',direction);assert.deepEqual(await firstRows(expected),expected);
         assert.deepEqual((await orderedIds(f)).slice(3).sort(),[P4,P5,P6].sort());
       }
       await selectPreset(f,'Paiements','payments');
       for(const key of ['requested','sentAt'])for(const [direction,expected] of [['asc',[P5,P6,P4]],['desc',[P4,P6,P5]]]) {
-        await sort(key,direction);assert.deepEqual((await orderedIds(f)).slice(0,3),expected,`${key} sorts real numbers/dates, not their formatted labels`);
+        await sort(key,direction);assert.deepEqual(await firstRows(expected),expected,`${key} sorts real numbers/dates, not their formatted labels`);
         assert.deepEqual((await orderedIds(f)).slice(3).sort(),[P,P2,P3].sort(),`${key}: unknowns stay last even descending`);
       }
       await sort('sentAt','desc');await f.page.reload();await row(f,P4).waitFor();assert.deepEqual((await orderedIds(f)).slice(0,3),[P4,P6,P5]);
@@ -1645,9 +1648,9 @@ async function main() {
       return { placement: toast.dataset.placement, box: [box.left, box.top, box.width, box.height].map(Math.round), covered };
     });
     const toastSettled = f => f.page.locator('[data-toast]').evaluate(node => Promise.all(node.getAnimations().map(animation => animation.finished)));
-    for (const [width, dark, collapse] of [[1440, false, true], [1440, true, true], [1280, false, false], [768, false, false], [768, true, false]]) await scenario(`a-toast-never-hides-a-command-or-a-clickable-row-and-the-first-click-opens-the-dossier-${width}${collapse ? 'c' : ''}-${dark ? 'dark' : 'light'}`, async f => {
+    for (const [width, dark, collapse, height] of [[1440, false, true], [1440, true, true], [1280, false, false], [1280, false, false, 900], [768, false, false], [768, true, false]]) await scenario(`a-toast-never-hides-a-command-or-a-clickable-row-and-the-first-click-opens-the-dossier-${width}${height ? `x${height}` : ''}${collapse ? 'c' : ''}-${dark ? 'dark' : 'light'}`, async f => {
       await failArchives(f);
-      await f.page.setViewportSize(width === 768 ? { width, height: 1024 } : sizeOf(width));await theme(f,dark);await open(f);await waitTheme(f,dark);
+      await f.page.setViewportSize(width === 768 ? { width, height: 1024 } : height ? { width, height } : sizeOf(width));await theme(f,dark);await open(f);await waitTheme(f,dark);
       if (collapse) await f.page.getByRole('button',{name:'Réduire la navigation',exact:true}).click();
       await filtersButton(f).click();
       await f.page.getByRole('button',{name:'Inclure les archives',exact:true}).click();
@@ -1657,16 +1660,19 @@ async function main() {
       await f.page.getByRole('group',{name:'Filtres des dossiers',exact:true}).waitFor({state:'hidden'});
       await toastSettled(f);
       // Polled: the toast moves on the frame after the page changed (slower machines included).
-      const settled = state => state && state.covered.every(item => !item.centreHidden) && (!collapse || (state.placement === 'top-end' && !state.covered.length)) && (width !== 1280 || state.placement === 'rail');
+      const settled = state => state && state.covered.every(item => !item.centreHidden) && (!collapse || (state.placement === 'top-end' && !state.covered.length)) && (width !== 1280 || (height ? state.placement === 'rail' : ['rail', 'top-end'].includes(state.placement)));
       let cover;
       for (const until = Date.now() + 4000; Date.now() < until;) { cover = await toastCover(f); if (settled(cover)) break; await f.page.evaluate(() => new Promise(resolve => requestAnimationFrame(resolve))); }
       assert.ok(cover, 'The message is shown.');
       assert.deepEqual(cover.covered.filter(item => item.centreHidden), [], `No command, nor clickable row, has its centre under the toast (${JSON.stringify(cover)}).`);
       // Desktop, navigation folded: the corner beside the heading's text (a block heading is not its text).
       if (collapse) { assert.equal(cover.placement, 'top-end'); assert.deepEqual(cover.covered, [], 'Nothing at all under the toast.'); }
-      if (width === 1280) assert.equal(cover.placement, 'rail', 'The free space of the navigation column.');
+      // The navigation column now holds the team's entries and the « Plus » group (28 October 2026): on a 800 px high
+      // screen its free space can be shorter than the toast, which then takes the top corner, never a command.
+      if (width === 1280 && height) assert.equal(cover.placement, 'rail', 'The free space of the navigation column.');
+      if (width === 1280 && !height) assert.ok(['rail', 'top-end'].includes(cover.placement), `The navigation column or the top corner (${cover.placement}).`);
       await axeClean(f);
-      await f.page.screenshot({path:`${output}/toast-over-list-${width}${collapse ? 'c' : ''}-${dark?'dark':'light'}.png`});
+      await f.page.screenshot({path:`${output}/toast-over-list-${width}${height ? `x${height}` : ''}${collapse ? 'c' : ''}-${dark?'dark':'light'}.png`});
       // The first click on the lowest visible dossier (where a toast used to sit) opens it.
       const last = await f.page.evaluate(() => {
         const nav = document.querySelector('[data-staff-bottom-nav]'), floor = nav && getComputedStyle(nav).display !== 'none' ? nav.getBoundingClientRect().top : innerHeight;
