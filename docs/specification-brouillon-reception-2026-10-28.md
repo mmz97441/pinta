@@ -219,3 +219,16 @@ Les étapes « Mesures à compléter » et « Produit interdit à régler » com
 - Rangement : casier en très grand, nombre de cartons du brouillon, état de l'avis, rappel quand l'accord est à redemander ; « Client suivant », « Voir le Brouillon ».
 - Avis d'arrivée : réceptions à valider regroupées par client (« Valider et prévenir »), puis avis récents avec leur état ; « Réessayer » pour un Telegram non remis (`deliverMessage(…, {retryConfirmed: true})`), texte à copier pour un e-mail à envoyer.
 - Référence visuelle : les maquettes « Réception » et « Avis d'arrivée » du canevas de conception.
+
+## Changements après les relectures indépendantes (28-29 octobre)
+
+- **Tableaux partout.** Liste Colis, fiche Brouillon, réception et avis d'arrivée s'affichent en tableaux à toutes les largeurs (téléphone, tablette, ordinateur). Quand la largeur manque, le tableau défile dans son cadre avec la première colonne figée ; la page ne défile jamais sur le côté. Demande du client du 28 octobre.
+- **Validation exacte.** Chaque dossier d'une validation porte `{colisId, fromCarton, throughCarton}` ; le serveur refuse (40001) si le premier carton en attente n'est plus celui que l'écran a montré. Un avis n'annonce jamais deux fois un carton.
+- **Dossiers au dépôt seulement.** Un carton n'attend sa validation que si son dossier est encore au dépôt avant expédition (statuts du Brouillon et d'À payer, sans paiement enregistré, non archivé).
+- **Avis-facture.** L'avis est posé sur le premier dossier qui demande encore sa facture : une facture envoyée en réponse sur Telegram s'y enregistre (`register_telegram_document`).
+- **Photos par carton.** Table `reception_photos` en ajout seul, `add_reception_photo`, `list_reception_photos` ; la fiche Brouillon montre les photos de chaque carton.
+- **Création de client sans doublon.** `insertClient` et `addNewClient` acceptent un identifiant de création stable, rejoué après une réponse perdue.
+- **Gros lots.** Une réception dont l'avis dépasserait 4 096 caractères est validée en plusieurs fois.
+- **Étapes ajoutées.** « Le client a répondu » (lire la réponse, jamais relancer), « Demande à vérifier » (demande non remise ou bloquée plus de 10 minutes), « Devis à compléter » (ce qui manque pour calculer), « Envoi à vérifier » pour un avis bloqué. Les actions portent les droits qu'elles exigent ; « X s'en occupe » quand un collègue tient la tâche. Un dossier payé se lit « Payé ».
+- **Textes de l'avis.** Aucune promesse sur l'état des colis, factures d'achat au pluriel, lien de dépôt dans l'e-mail, nombres à la française.
+- **Restent ouverts.** Branchement d'un fournisseur d'e-mail (les avis par e-mail restent « À envoyer », texte à copier) ; taille globale des petits textes de l'application (l'ordre de chargement des styles ramène `.text-sm` à 14 px hors des nouveaux écrans) ; produits interdits enregistrés par dossier et non par carton.
