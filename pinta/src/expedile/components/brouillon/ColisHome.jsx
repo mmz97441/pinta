@@ -160,7 +160,8 @@ export default function ColisHome() {
   const groups = useMemo(() => sortKey === 'depart' ? groupColisRowsByDeparture(sortColisRows(matches, 'nom', { now }), { now }) : null, [matches, sortKey, now]);
   const sorted = useMemo(() => sortKey === 'depart' ? null : sortColisRows(matches, sortKey, { now }), [matches, sortKey, now]);
   const totals = useMemo(() => colisTotals(matches), [matches]);
-  const alerts = useMemo(() => brouillonAlerts({ pending: signals.pending || [], notices: notices || [] }), [signals.pending, notices]);
+  // Read at the screen's minute: a notice still on its way becomes « à vérifier » after ten minutes.
+  const alerts = useMemo(() => brouillonAlerts({ pending: signals.pending || [], notices: notices || [], now }), [signals.pending, notices, now]);
   const elsewhere = useMemo(() => searching && !matches.length
     ? COLIS_TABS.filter(item => item.key !== tabKey && counts[item.key] > 0).map(item => ({ ...item, count: counts[item.key] })) : [], [searching, matches.length, tabKey, counts]);
 

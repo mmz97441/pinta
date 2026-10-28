@@ -98,7 +98,8 @@ html.dark .colis-action:hover:not(:disabled) { background: #d6e6ee; color: #122a
 .colis-pill[data-stage='reception_a_valider'],
 .colis-pill[data-stage='mesures_a_completer'],
 .colis-pill[data-stage='accord_a_demander'],
-.colis-pill[data-notice='a_envoyer'] { --pill-bg: #fff1cc; --pill-text: #6b4500; --pill-line: transparent; }
+.colis-pill[data-notice='a_envoyer'],
+.colis-pill[data-notice='a_verifier'] { --pill-bg: #fff1cc; --pill-text: #6b4500; --pill-line: transparent; }
 html.dark .colis-pill { --pill-bg: #3a3530; --pill-text: #ece8e0; }
 html.dark .colis-pill[data-tone='current'] { --pill-bg: transparent; --pill-text: #c4dae5; --pill-line: #c4dae5; }
 html.dark .colis-pill[data-tone='waiting'] { --pill-bg: #1b365a; --pill-text: #c4deff; }
@@ -108,7 +109,8 @@ html.dark .colis-pill[data-stage='a_preparer'] { --pill-bg: #153d2c; --pill-text
 html.dark .colis-pill[data-stage='reception_a_valider'],
 html.dark .colis-pill[data-stage='mesures_a_completer'],
 html.dark .colis-pill[data-stage='accord_a_demander'],
-html.dark .colis-pill[data-notice='a_envoyer'] { --pill-bg: #44361b; --pill-text: #f7db97; --pill-line: transparent; }
+html.dark .colis-pill[data-notice='a_envoyer'],
+html.dark .colis-pill[data-notice='a_verifier'] { --pill-bg: #44361b; --pill-text: #f7db97; --pill-line: transparent; }
 
 /* ── Tabs ──────────────────────────────────────────────────────────────── */
 .colis-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
@@ -261,12 +263,23 @@ html.dark .fiche-saving { background: #153d2c; color: #b9e8ca; }
 .fiche-table [data-align='right'] { text-align: right; white-space: nowrap; }
 .fiche-table tr[data-pending='true'] { background: var(--attention-bg); }
 .fiche-list { margin: 0; padding: 0; overflow: hidden; border: 1px solid var(--colis-line); border-radius: 14px; background: var(--colis-surface); list-style: none; }
-.fiche-list li { padding: 10px 14px; border-top: 1px solid var(--colis-line-soft); }
-.fiche-list li:first-child { border-top: 0; }
-.fiche-list li[data-pending='true'] { background: var(--attention-bg); }
-.fiche-list li[data-total='true'] { display: flex; justify-content: space-between; gap: 8px; border-top: 2px solid var(--colis-field-line); background: var(--colis-head-bg); color: var(--colis-name); font-size: 15px; font-weight: 800; }
+.fiche-list > li { padding: 10px 14px; border-top: 1px solid var(--colis-line-soft); }
+.fiche-list > li:first-child { border-top: 0; }
+.fiche-list > li[data-pending='true'] { background: var(--attention-bg); }
+.fiche-list > li[data-total='true'] { display: flex; justify-content: space-between; gap: 8px; border-top: 2px solid var(--colis-field-line); background: var(--colis-head-bg); color: var(--colis-name); font-size: 15px; font-weight: 800; }
 .fiche-list-line { display: flex; justify-content: space-between; gap: 8px; font-size: 16px; font-weight: 700; }
-.fiche-list-line > span:last-child, .fiche-list li[data-total='true'] > span:last-child { flex-shrink: 0; white-space: nowrap; }
+.fiche-list-line > span:last-child, .fiche-list > li[data-total='true'] > span:last-child { flex-shrink: 0; white-space: nowrap; }
+/* Reception photos of a carton received damaged or opened: thumbnails under its line. */
+.fiche-photo-mark { display: flex; align-items: center; gap: 4px; }
+.fiche-table tbody tr.fiche-photo-row { border-top: 0; }
+.fiche-photo-row td { padding-top: 0; }
+.fiche-photos { display: flex; flex-wrap: wrap; gap: 10px; margin: 8px 0 2px; padding: 0; list-style: none; }
+.fiche-photos li { display: grid; gap: 4px; width: 152px; padding: 0; border: 0; }
+.fiche-photo { display: block; width: 152px; height: 114px; object-fit: cover; border: 1px solid var(--colis-line); border-radius: 10px; background: var(--colis-head-bg); }
+.fiche-photo-caption { font-size: 15px; line-height: 1.3; color: var(--colis-muted); }
+/* SecureImage while it signs the photo, or when the photo cannot be read: a thumbnail's place, readable in both themes. */
+.fiche-photos li > div[role='status'] { width: 152px; height: 114px; border-radius: 10px; background: var(--colis-head-bg); }
+.fiche-photos li > p[role='status'] { width: 152px; margin: 0; padding: 8px; font-size: 15px; line-height: 1.35; color: var(--colis-text); background: var(--colis-head-bg); border: 1px solid var(--colis-line); border-radius: 10px; }
 .fiche-notice-text {
   width: 100%; min-height: 9rem; padding: 10px 12px; border: 1px solid var(--colis-field-line); border-radius: 12px;
   background: var(--colis-head-bg); color: var(--colis-text); font-size: 15px; line-height: 1.45; white-space: pre-wrap; resize: vertical;

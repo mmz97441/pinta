@@ -46,8 +46,9 @@ function EmailToSend({ notice, client, clientsAllowed }) {
 function TelegramRetry({ notice, raw, onDone }) {
   const { can, ask, flash } = useApp();
   const messageId = raw?.message?.id || null;
-  // The notice is queued on the first dossier of its reception (validate_reception).
-  const colisId = raw?.items?.[0]?.colisId || null;
+  // The dossier that carries the notice (list_arrival_notices: message.colisId, the first dossier still requesting
+  // its invoice); the first dossier of the reception for an older answer without it.
+  const colisId = raw?.message?.colisId || raw?.items?.[0]?.colisId || null;
   const allowed = can('perm_comm_telegram');
   const reason = !allowed ? 'Réservé aux personnes autorisées à écrire sur Telegram.' : !messageId || !colisId ? 'Message introuvable : ouvrez l’écran Avis d’arrivée.' : '';
   const retry = () => ask('Réessayer l’avis d’arrivée', 'Vérifiez dans Telegram que le client n’a pas reçu cet avis, puis confirmez le renvoi.', async () => {
@@ -64,7 +65,7 @@ function TelegramRetry({ notice, raw, onDone }) {
 
 /** « Avis d’arrivée » of the sheet: the latest notice of the dossier and its state (arrivalNoticeSummary), with
  * what can be done from here: the e-mail to send (text, copy, draft), « Réessayer » for a Telegram notice not
- * delivered, « Corriger l’adresse » for an e-mail refused. */
+ * delivered or never taken (« Envoi à vérifier »), « Corriger l’adresse » for an e-mail refused. */
 export default function ArrivalNoticeBlock({ fiche, raw, client, loading, error, onRetry, onChanged }) {
   const { can } = useApp();
   const clientsAllowed = can('perm_clients_voir') || can('perm_clients_creer');
@@ -82,7 +83,7 @@ export default function ArrivalNoticeBlock({ fiche, raw, client, loading, error,
       </div>
       {state.detail && <p className="m-0 text-[15px] colis-muted">{state.key === 'non_remis' ? `Raison : ${state.detail}` : state.detail}</p>}
       {state.key === 'a_envoyer' && <EmailToSend notice={notice} client={client} clientsAllowed={clientsAllowed} />}
-      {state.key === 'non_remis' && state.action?.key === 'reessayer' && <TelegramRetry notice={notice} raw={raw} onDone={onChanged} />}
+      {['non_remis', 'a_verifier'].includes(state.key) && state.action?.key === 'reessayer' && <TelegramRetry notice={notice} raw={raw} onDone={onChanged} />}
       {state.key === 'non_remis' && state.action?.key === 'corriger_adresse' && (clientsAllowed && client?.id
         ? <div><Link to={`/clients/${encodeURIComponent(client.id)}`} className="colis-secondary">{state.action.label}</Link></div>
         : <p className="colis-reason">Une personne autorisée à modifier les clients doit corriger l’adresse.</p>)}

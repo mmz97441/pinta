@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { fetchArrivalNotices, fetchPendingReceptions } from '../../lib/receptionValidation';
+import { fetchArrivalNotices, fetchPendingReceptions, fetchReceptionPhotos } from '../../lib/receptionValidation';
 
 // The receptions waiting for their validation and the arrival notices, as the server lists them
 // (lib/receptionValidation.js), for « Colis » and the Brouillon sheet. Read at mount, when the window comes
@@ -11,17 +11,18 @@ const MIN_GAP = 5000;
 const AFTER_DATA = 1500;
 const AFTER_FOCUS = 250;
 const reasonOf = error => String(error?.message || error || '').trim().replace(/[.\s]+$/, '') || 'lecture impossible';
-const EMPTY = { pending: null, notices: null, pendingError: '', noticesError: '', loading: true };
+const EMPTY = { pending: null, notices: null, photos: null, pendingError: '', noticesError: '', photosError: '', loading: true };
 
 /**
- * `{ pending, notices, pendingError, noticesError, loading, retry }`: `pending` (fetchPendingReceptions, of
- * `clientId` or everyone) and `notices` (fetchArrivalNotices of `colisId`, or the latest `limit`) are null until
- * their first successful read. `enabled: false` reads nothing (a sheet whose dossier is not known yet).
+ * `{ pending, notices, photos, pendingError, noticesError, photosError, loading, retry }`: `pending`
+ * (fetchPendingReceptions, of `clientId` or everyone), `notices` (fetchArrivalNotices of `colisId`, or the latest
+ * `limit`) and, with `photos: true`, the reception photos of `colisId` (fetchReceptionPhotos) are null until their
+ * first successful read. `enabled: false` reads nothing (a sheet whose dossier is not known yet).
  */
-export default function useReceptionSignals({ clientId = null, colisId = null, limit = 50, enabled = true, data } = {}) {
+export default function useReceptionSignals({ clientId = null, colisId = null, limit = 50, photos = false, enabled = true, data } = {}) {
   const [state, setState] = useState(EMPTY);
-  const params = useRef({ clientId, colisId, limit, enabled });
-  params.current = { clientId, colisId, limit, enabled };
+  const params = useRef({ clientId, colisId, limit, photos, enabled });
+  params.current = { clientId, colisId, limit, photos, enabled };
   const control = useRef({ alive: false, running: false, again: false, timer: 0, lastStart: 0, generation: 0 });
   const runRef = useRef(null);
 
@@ -41,17 +42,20 @@ export default function useReceptionSignals({ clientId = null, colisId = null, l
     c.running = true; c.again = false; c.lastStart = Date.now();
     const generation = c.generation;
     setState(previous => previous.loading ? previous : { ...previous, loading: true });
-    const [pending, notices] = await Promise.allSettled([
+    const [pending, notices, pictures] = await Promise.allSettled([
       fetchPendingReceptions({ clientId: current.clientId }),
       fetchArrivalNotices({ colisId: current.colisId, limit: current.limit }),
+      current.photos && current.colisId ? fetchReceptionPhotos(current.colisId) : Promise.resolve(null),
     ]);
     c.running = false;
     if (!c.alive) return;
     if (generation === c.generation) setState(previous => ({
       pending: pending.status === 'fulfilled' ? pending.value : previous.pending,
       notices: notices.status === 'fulfilled' ? notices.value : previous.notices,
+      photos: pictures.status === 'fulfilled' ? pictures.value : previous.photos,
       pendingError: pending.status === 'rejected' ? reasonOf(pending.reason) : '',
       noticesError: notices.status === 'rejected' ? reasonOf(notices.reason) : '',
+      photosError: pictures.status === 'rejected' ? reasonOf(pictures.reason) : '',
       loading: false,
     }));
     // A read asked meanwhile, or for other parameters, follows at once.
@@ -66,7 +70,7 @@ export default function useReceptionSignals({ clientId = null, colisId = null, l
     setState(EMPTY);
     schedule(0, { immediate: true });
     return () => { clearTimeout(c.timer); };
-  }, [clientId, colisId, limit, enabled, schedule]);
+  }, [clientId, colisId, limit, photos, enabled, schedule]);
   useEffect(() => () => { control.current.alive = false; clearTimeout(control.current.timer); }, []);
 
   // The window comes back, or every minute while it is visible.
