@@ -155,7 +155,7 @@ export function workActionOpensClient(action, dossier) {
 }
 /** A dossier task opens on its work area (#dossier-work, which the dossier page
  * scrolls to and focuses): on a phone the form sits far below the overview. */
-export function workActionUrl(action, returnTo = '/', dossier) {
+export function workActionUrl(action, returnTo = '/travail', dossier) {
   const params = new URLSearchParams({ returnTo: safeWorkReturn(returnTo), action: action.id });
   if (workActionOpensClient(action, dossier)) return `/clients/${encodeURIComponent(dossier.clientId)}?${params}`;
   if (action.kind === 'conversation') return `/colis/${encodeURIComponent(action.colis_id)}?${new URLSearchParams({ onglet: 'conversation', action: action.id, returnTo: safeWorkReturn(returnTo) })}`;
@@ -165,9 +165,10 @@ export function workActionUrl(action, returnTo = '/', dossier) {
 
 /** Continuation is a suggestion, never a claim or change of responsibility.
  * Only the caller's personal list can supply its filter and mission scope. */
-export function nextPersonalWorkAction({ returnTo = '/', currentActionId, currentDossierId, currentKind, ...options }) {
+export function nextPersonalWorkAction({ returnTo = '/travail', currentActionId, currentDossierId, currentKind, ...options }) {
   const url = new URL(safeWorkReturn(returnTo), 'https://pinta.invalid');
-  if (!['/', '/travail'].includes(url.pathname)) return null;
+  // Only Mon travail suggests a next task; the Colis home (/) has its own list.
+  if (url.pathname !== '/travail') return null;
   const section = personalSection(url.searchParams.get('section'));
   if (section === 'waiting') return null;
   const mission = url.searchParams.get('mission') || '';

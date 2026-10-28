@@ -567,7 +567,9 @@ test('an ended wait reads « Attente terminée », to re-examine, on screen and 
   // The « Accord » column sorts and filters on that same wording.
   const column = TABLE_COLUMNS.accords.find(item => item.key === 'consentState');
   assert.equal(column.sort.value({ dossier: consentRows[0], model: ended }), 'Attente terminée');
-  assert.equal(column.sort.value({ dossier: consentRows[0] }), 'Le client attend', 'Without a model, the current clock decides.');
+  // Without a model, the current clock decides: the wait ends on 25 October 2026.
+  const nowLabel = Date.now() > Date.parse('2026-10-25T08:00:00Z') ? 'Attente terminée' : 'Le client attend';
+  assert.equal(column.sort.value({ dossier: consentRows[0] }), nowLabel, 'Without a model, the current clock decides.');
   // Neither the request nor the relance is ever an empty « Non renseigné ».
   assert.equal(consentRequestLabel(consentRows[1]), 'Pas encore envoyée');
   assert.equal(consentRequestLabel(consentRows[0]), '30/09/2026');

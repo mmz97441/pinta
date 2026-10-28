@@ -23,7 +23,7 @@ const formDrafts = new Map();
 /** State, guards and commands of one task. Buttons and panel (menu, forms,
  * conflict) render apart, so a table shows the panel in its own row; the drafts
  * live here and survive a background refresh of the same task. */
-export function useWorkActionControls(action, { returnTo = '/', inTask = false } = {}) {
+export function useWorkActionControls(action, { returnTo = '/travail', inTask = false } = {}) {
   const { auth, authRole, can, teamUsers = [], workPreferences = [], data = [], mutateWorkAction, refreshWork, flash } = useApp();
   const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
@@ -147,7 +147,7 @@ export function WorkActionPanel({ controls, compact = false }) {
   </>;
 }
 
-export function WorkActionControls({ action, returnTo = '/', compact = false, inTask = false, hideRedundantView = false }) {
+export function WorkActionControls({ action, returnTo = '/travail', compact = false, inTask = false, hideRedundantView = false }) {
   const controls = useWorkActionControls(action, { returnTo, inTask });
   if (action.state === 'done') return null;
   return <div className="space-y-2">

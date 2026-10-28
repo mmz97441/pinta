@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useLayoutEffect, useCallback, useRef, lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Link, useNavigate, useParams, useLocation, Navigate } from 'react-router-dom';
-import { Settings, Users, Contact, LogOut, LayoutDashboard, Package, ChevronLeft, ChevronRight, Plus, FileText, Key, AlertTriangle, MessageCircle, Plane, MoreHorizontal, RefreshCw } from 'lucide-react';
+import { Settings, Users, Contact, LogOut, LayoutDashboard, Package, ChevronLeft, ChevronRight, Plus, FileText, Key, AlertTriangle, MessageCircle, Plane, MoreHorizontal, RefreshCw, FolderOpen, BellRing } from 'lucide-react';
 import './brand.css';
 import './staffShell.css';
 import { getPrenom } from './utils';
@@ -25,6 +25,10 @@ import OnboardingOverlay from './components/client/OnboardingOverlay';
 const ReceptionPage = lazy(() => import('./components/staff/ReceptionPage'));
 const StaffColisPage = lazy(() => import('./components/staff/StaffSplitView'));
 const PersonalWorkView = lazy(() => import('./components/workspace/PersonalWorkView'));
+const ColisHome = lazy(() => import('./components/brouillon/ColisHome'));
+const BrouillonFiche = lazy(() => import('./components/brouillon/BrouillonFiche'));
+const ReceptionFlow = lazy(() => import('./components/receptionFlow/ReceptionFlow'));
+const ArrivalNotices = lazy(() => import('./components/receptionFlow/ArrivalNotices'));
 const TeamWorkView = lazy(() => import('./components/workspace/TeamWorkView'));
 const ConversationsView = lazy(() => import('./components/workspace/ConversationsView'));
 const StaffDepartures = lazy(() => import('./components/staff/StaffDepartures'));
@@ -506,29 +510,37 @@ function AppContent() {
   if (isStaff) {
     const currentPath = location.pathname;
 
+    // The team's entries (« Réceptionner des cartons » sits above them), then the rest under « Plus ».
     const NAV_ITEMS = [
-      { key: '/', label: 'Mon travail', icon: LayoutDashboard },
-      { key: '/colis', label: 'Dossiers d’expédition', icon: Package },
-      { key: '/conversations', label: 'Conversations', icon: MessageCircle, visible: can('perm_comm_message_libre') || can('perm_comm_telegram') || can('perm_comm_email') || can('perm_comm_voir_chat_autres') },
-      { key: '/equipe', label: 'Équipe', icon: Users },
+      { key: '/', label: 'Colis', icon: Package },
       { key: '/departs', label: 'Départs', icon: Plane, visible: can('perm_envois_voir') },
       { key: '/clients', label: 'Clients', icon: Contact, visible: can('perm_clients_voir') || can('perm_clients_creer') },
-      { key: '/devis', label: 'Estimation', icon: FileText, visible: can('perm_colis_calculer_devis') },
-      { key: '/settings', label: 'Paramètres', icon: Settings, visible: ['perm_admin_parametres', 'perm_admin_utilisateurs', 'perm_admin_templates', 'perm_finances_modifier_tarifs', 'perm_admin_categories', 'perm_admin_produits_interdits'].some(can) },
+      { key: '/travail', label: 'Mon travail', icon: LayoutDashboard, more: true },
+      { key: '/colis', label: 'Dossiers', icon: FolderOpen, more: true },
+      { key: '/conversations', label: 'Conversations', icon: MessageCircle, more: true, visible: can('perm_comm_message_libre') || can('perm_comm_telegram') || can('perm_comm_email') || can('perm_comm_voir_chat_autres') },
+      { key: '/equipe', label: 'Équipe', icon: Users, more: true },
+      { key: '/devis', label: 'Estimation', icon: FileText, more: true, visible: can('perm_colis_calculer_devis') },
+      { key: '/avis', label: 'Avis d’arrivée', icon: BellRing, more: true },
+      { key: '/settings', label: 'Paramètres', icon: Settings, more: true, visible: ['perm_admin_parametres', 'perm_admin_utilisateurs', 'perm_admin_templates', 'perm_finances_modifier_tarifs', 'perm_admin_categories', 'perm_admin_produits_interdits'].some(can) },
     ].filter((item) => item.visible !== false);
 
-    // A thread opened from Conversations stays under Conversations, on its dossier page too.
+    // A thread opened from Conversations stays under Conversations, on its dossier page too;
+    // a dossier opened from Colis (its list or a Brouillon sheet) stays under Colis.
     const search = new URLSearchParams(location.search);
     const conversationThread = currentPath.startsWith('/colis/') && (search.get('onglet') === 'conversation' || (search.get('returnTo') || '').startsWith('/conversations'));
+    const returnTo = search.get('returnTo') || '';
+    const fromColisHome = returnTo === '/' || returnTo.startsWith('/?') || returnTo.startsWith('/brouillon/');
     const activePath = conversationThread ? '/conversations'
+      : currentPath.startsWith('/brouillon/') || (currentPath.startsWith('/colis/') && fromColisHome) ? '/'
       : currentPath.startsWith('/colis') ? '/colis'
       : currentPath.startsWith('/clients') ? '/clients'
       : currentPath === '/devis' ? '/devis'
       : currentPath === '/settings' ? '/settings'
-      : ['/equipe', '/conversations', '/departs', '/plus', '/reception'].includes(currentPath) ? currentPath : '/';
-    const mobileItems = NAV_ITEMS.filter((item) => ['/', '/colis', '/conversations'].includes(item.key)).map((item) => ({ ...item, label: item.key === '/colis' ? 'Dossiers' : item.label }));
-    mobileItems.push({ key: '/plus', label: 'Plus', icon: MoreHorizontal });
-    const moreItems = NAV_ITEMS.filter((item) => !['/', '/colis', '/conversations'].includes(item.key));
+      : ['/equipe', '/conversations', '/departs', '/plus', '/reception', '/recevoir', '/avis', '/travail'].includes(currentPath) ? currentPath : '/';
+    const mainItems = NAV_ITEMS.filter((item) => !item.more);
+    const moreItems = NAV_ITEMS.filter((item) => item.more);
+    const mobileItems = [...mainItems, { key: '/plus', label: 'Plus', icon: MoreHorizontal }];
+    const conversationsInMore = moreItems.some((item) => item.key === '/conversations');
     const conversationDescription = `${plural(conversationCount, 'demande')} à traiter`;
     const displayName = staffDisplayName(auth.u);
     const fullName = [auth.u?.prenom, auth.u?.nom].filter(Boolean).join(' ') || displayName;
@@ -562,7 +574,7 @@ function AppContent() {
           {/* New colis button: its label holds on one line in the 220px sidebar. */}
           <div className="px-2 mb-2" hidden={!can('perm_colis_receptionner')}>
             <button
-              aria-label="Réceptionner des cartons" onClick={() => navigate(`/reception?${new URLSearchParams({ returnTo: location.pathname + location.search })}`)}
+              aria-label="Réceptionner des cartons" onClick={() => navigate('/recevoir')}
               className={`staff-sidebar-receive w-full min-h-11 flex items-center gap-1.5 rounded-xl px-2 text-left text-[13px] font-bold leading-tight tracking-[-0.02em] transition-all active:scale-95 ${sidebarCollapsed ? 'justify-center' : ''}`}
               style={{ background: `linear-gradient(135deg, ${BRAND.gold}, ${BRAND.goldD})`, color: BRAND.navyD }}
             >
@@ -574,10 +586,16 @@ function AppContent() {
           {/* Navigation */}
           {/* Its free space below the entries holds the toasts (ui/Toast.jsx). */}
           <nav data-toast-zone="" className="flex-1 px-3 space-y-1">
-            {NAV_ITEMS.filter((item) => item.key !== '/settings').map((item) => {
+            {NAV_ITEMS.filter((item) => item.key !== '/settings').map((item, index, items) => {
               const Icon = item.icon;
               const isActive = activePath === item.key;
+              // « Plus » heads the entries the team uses less, still one click away on a wide screen.
+              const firstMore = item.more && !items[index - 1]?.more;
               return (
+                <React.Fragment key={item.key}>
+                {firstMore && (sidebarCollapsed
+                  ? <div aria-hidden="true" className="mx-2 my-2 border-t border-white/10" />
+                  : <p className="px-3 pb-1 pt-4 text-[11px] font-bold uppercase tracking-wider text-gray-400">Plus</p>)}
                 <button
                   key={item.key}
                   onClick={() => navigate(item.key)}
@@ -595,6 +613,7 @@ function AppContent() {
                   )}
                   {item.key === '/conversations' && !sidebarCollapsed && conversationCount > 0 && <span aria-hidden="true" className="ml-auto rounded-full bg-white/15 px-2 text-xs text-white">{conversationCount}</span>}
                 </button>
+                </React.Fragment>
               );
             })}
           </nav>
@@ -639,10 +658,10 @@ function AppContent() {
               <button
                 key={item.key}
                 onClick={() => navigate(item.key)}
-                  aria-label={item.label} aria-description={item.key === '/conversations' ? conversationDescription : undefined} aria-current={isActive ? 'page' : undefined}
+                  aria-label={item.label} aria-description={item.key === '/plus' && conversationsInMore && conversationCount > 0 ? `Conversations : ${conversationDescription}` : undefined} aria-current={isActive ? 'page' : undefined}
                 className="staff-bottom-nav-item flex-1 min-w-max min-h-11 flex flex-col items-center justify-center gap-0.5 px-0.5 py-1"
               >
-                <span className="relative"><Icon size={20} aria-hidden="true" style={{ color: isActive ? 'var(--brand-text)' : '#9CA3AF' }} strokeWidth={isActive ? 2.5 : 2} />{item.key === '/conversations' && conversationCount > 0 && <span aria-hidden="true" className="absolute -right-5 -top-2 rounded-full bg-blue-800 px-1 text-xs font-bold text-white">{conversationCount > 99 ? '99+' : conversationCount}</span>}</span>
+                <span className="relative"><Icon size={20} aria-hidden="true" style={{ color: isActive ? 'var(--brand-text)' : '#9CA3AF' }} strokeWidth={isActive ? 2.5 : 2} />{item.key === '/plus' && conversationsInMore && conversationCount > 0 && <span aria-hidden="true" className="absolute -right-5 -top-2 rounded-full bg-blue-800 px-1 text-xs font-bold text-white">{conversationCount > 99 ? '99+' : conversationCount}</span>}</span>
                 {/* One line at 11px: a wrapped label would grow the bar over the space the pages
                     reserve for it. At 320px a longer label (« Conversations ») takes its width
                     from the shorter ones (min-w-max) rather than wrapping. */}
@@ -658,7 +677,7 @@ function AppContent() {
           <div data-toast-ceiling="" className="lg:hidden min-h-12 px-4 flex items-center justify-between border-b border-gray-200">
             <span className="font-black brand-t">EXPÉD<span className="brand-t-gold">ÎLE</span></span>
             {/* The logout lives in « Plus », away from the theme toggle. */}
-            <div className="flex items-center gap-2">{can('perm_colis_receptionner') && <button aria-label="Réceptionner des cartons" onClick={() => navigate(`/reception?${new URLSearchParams({ returnTo: location.pathname + location.search })}`)} className="min-h-11 inline-flex items-center gap-1 whitespace-nowrap rounded-xl px-2 text-xs font-bold brand-t"><Plus size={18} className="shrink-0" />Recevoir</button>}<ThemeToggle compact /></div>
+            <div className="flex items-center gap-2">{can('perm_colis_receptionner') && <button aria-label="Réceptionner des cartons" onClick={() => navigate('/recevoir')} className="min-h-11 inline-flex items-center gap-1 whitespace-nowrap rounded-xl px-2 text-xs font-bold brand-t"><Plus size={18} className="shrink-0" />Recevoir</button>}<ThemeToggle compact /></div>
           </div>
           {loadBanner}
           {/* The one <main> of every staff page: the pages render their content without their own.
@@ -671,8 +690,11 @@ function AppContent() {
               <Route path="/equipe" element={<TeamWorkView />} />
               <Route path="/conversations" element={<Permission allowed={can('perm_comm_message_libre') || can('perm_comm_telegram') || can('perm_comm_email') || can('perm_comm_voir_chat_autres')}><ConversationsView /></Permission>} />
               <Route path="/departs" element={<Permission allowed={can('perm_envois_voir')}><StaffDepartures /></Permission>} />
-              <Route path="/travail" element={<Navigate to="/" replace />} />
-              <Route path="/plus" element={<div className="mx-auto max-w-xl space-y-4 p-5"><h1 className="text-2xl font-bold brand-t">Votre espace</h1><nav aria-label="Autres rubriques" className="grid gap-3">{moreItems.map(({ key, label, icon: Icon }) => <button key={key} onClick={() => navigate(key)} className="flex min-h-14 items-center gap-3 rounded-xl border border-gray-200 bg-white p-4 text-left font-semibold text-gray-800"><Icon size={20} aria-hidden="true" />{label}<ChevronRight size={18} aria-hidden="true" className="ml-auto" /></button>)}</nav>
+              <Route path="/travail" element={<PersonalWorkView />} />
+              <Route path="/recevoir" element={<Permission allowed={can('perm_colis_receptionner')}><ReceptionFlow /></Permission>} />
+              <Route path="/avis" element={<ArrivalNotices />} />
+              <Route path="/brouillon/:id" element={<BrouillonFiche />} />
+              <Route path="/plus" element={<div className="mx-auto max-w-xl space-y-4 p-5"><h1 className="text-2xl font-bold brand-t">Votre espace</h1><nav aria-label="Autres rubriques" className="grid gap-3">{moreItems.map(({ key, label, icon: Icon }) => <button key={key} onClick={() => navigate(key)} aria-description={key === '/conversations' && conversationCount > 0 ? conversationDescription : undefined} className="flex min-h-14 items-center gap-3 rounded-xl border border-gray-200 bg-white p-4 text-left font-semibold text-gray-800"><Icon size={20} aria-hidden="true" />{label}{key === '/conversations' && conversationCount > 0 && <span aria-hidden="true" className="rounded-full bg-blue-800 px-2 text-xs font-bold text-white">{conversationCount > 99 ? '99+' : conversationCount}</span>}<ChevronRight size={18} aria-hidden="true" className="ml-auto" /></button>)}</nav>
                 {/* The account commands of the desktop sidebar, below 1024px. */}
                 <section aria-labelledby="plus-account-title" className="space-y-3 border-t border-gray-200 pt-4"><h2 id="plus-account-title" className="text-[11px] font-bold uppercase tracking-wider text-gray-600">Mon compte</h2><p className="text-sm text-gray-600">{fullName}</p>
                   <button onClick={() => navigate('/password', { state: { from: '/plus' } })} className="flex min-h-14 w-full items-center gap-3 rounded-xl border border-gray-200 bg-white p-4 text-left font-semibold text-gray-800"><Key size={20} aria-hidden="true" />Modifier le mot de passe<ChevronRight size={18} aria-hidden="true" className="ml-auto" /></button>
@@ -716,9 +738,7 @@ function AppContent() {
                   </div>
                 </div>
               } />
-              <Route path="/" element={
-                <PersonalWorkView />
-              } />
+              <Route path="/" element={<ColisHome />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
             </ScreenBoundary></Suspense>}

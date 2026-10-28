@@ -87,7 +87,7 @@ test('dossier claim targets the visible task, never a completed quote or another
 });
 test('pool continuation skips a wait even when its deadline makes it the highest priority', () => {
  const waiting = action('waiting', { assignee_id: null, state: 'waiting', blocked_reason: 'Accord client attendu', due_at: '2020-01-01' });
- const input = { ...base, returnTo: '/?section=pool', actions: [waiting, action('ready', { assignee_id: null })] };
+ const input = { ...base, returnTo: '/travail?section=pool', actions: [waiting, action('ready', { assignee_id: null })] };
  assert.equal(buildPersonalWork(input).sections.pool[0].id, 'ready');
  assert.equal(nextPersonalWorkAction(input)?.id, 'ready');
  assert.equal(nextPersonalWorkAction({ ...input, actions: [waiting] }), null);
@@ -153,15 +153,17 @@ test('receipt, consent and correction actions open the relevant dossier task dir
 });
 test('continuation uses the current personal filters and permissions without claiming work', () => {
  const actions = [action('finished'), action('foreign', { assignee_id: 'other' }), action('forbidden', { kind: 'quote' }), action('blocked', { blocked_reason: 'Accord requis' }), action('waiting', { state: 'waiting' }), action('next'), action('free', { assignee_id: null })];
- const input = { ...base, actions, currentActionId: 'finished', returnTo: '/?section=progress&mission=preparation&q=Exemple', can: permission => permission === 'perm_colis_preparer' };
+ const input = { ...base, actions, currentActionId: 'finished', returnTo: '/travail?section=progress&mission=preparation&q=Exemple', can: permission => permission === 'perm_colis_preparer' };
  const before = JSON.stringify(actions);
  assert.equal(nextPersonalWorkAction(input)?.id, 'next');
- assert.equal(nextPersonalWorkAction({ ...input, returnTo: '/?section=pool&mission=preparation' })?.id, 'free');
- assert.equal(nextPersonalWorkAction({ ...input, returnTo: '/?q=missing' }), null);
- assert.equal(nextPersonalWorkAction({ ...input, returnTo: '/?section=waiting' }), null);
+ assert.equal(nextPersonalWorkAction({ ...input, returnTo: '/travail?section=pool&mission=preparation' })?.id, 'free');
+ assert.equal(nextPersonalWorkAction({ ...input, returnTo: '/travail?q=missing' }), null);
+ assert.equal(nextPersonalWorkAction({ ...input, returnTo: '/travail?section=waiting' }), null);
  assert.equal(nextPersonalWorkAction({ ...input, returnTo: '/equipe?mission=preparation' }), null);
  assert.equal(nextPersonalWorkAction({ ...input, returnTo: '/colis?q=Exemple' }), null);
- assert.equal(nextPersonalWorkAction({ ...input, preference: { available: false }, returnTo: '/?section=pool' }), null);
+ // The Colis home (/) lists its own dossiers: a task opened there never chains into Mon travail.
+ assert.equal(nextPersonalWorkAction({ ...input, returnTo: '/?section=pool&mission=preparation' }), null);
+ assert.equal(nextPersonalWorkAction({ ...input, preference: { available: false }, returnTo: '/travail?section=pool' }), null);
  assert.equal(JSON.stringify(actions), before);
 });
 test('continuation never reopens the task just completed, including when no action was in the URL', () => {
@@ -169,7 +171,7 @@ test('continuation never reopens the task just completed, including when no acti
  assert.equal(nextPersonalWorkAction(input)?.id, 'documents');
  assert.equal(nextPersonalWorkAction({ ...input, currentKind: undefined }), null);
  assert.equal(nextPersonalWorkAction({ ...input, preference: { active_mission: 'preparation' } })?.id, 'documents');
- assert.equal(nextPersonalWorkAction({ ...input, preference: { active_mission: 'preparation' }, returnTo: '/?mission=' })?.id, 'documents');
+ assert.equal(nextPersonalWorkAction({ ...input, preference: { active_mission: 'preparation' }, returnTo: '/travail?mission=' })?.id, 'documents');
 });
 
 test('mission preferences never hide permitted assigned work, including when no new mission is selected', () => {

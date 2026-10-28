@@ -35,7 +35,7 @@ export function staffDataState({ sbReady = false, dataLoading = false, dataError
 // in place of their content): the shell's banner steps aside there, so the
 // same failure is never shown twice. The new-client form has nothing to put
 // in its place: the banner states the failure there.
-const OWN_FAILURE = new Set(['/', '/colis', '/departs', '/conversations', '/equipe', '/settings', '/clients']);
+const OWN_FAILURE = new Set(['/', '/travail', '/colis', '/departs', '/conversations', '/equipe', '/settings', '/clients']);
 const ownFailure = pathname => OWN_FAILURE.has(pathname) || (pathname.startsWith('/clients/') && pathname !== '/clients/new');
 
 /** Whether the shell shows its load banner on this route for this state. */
