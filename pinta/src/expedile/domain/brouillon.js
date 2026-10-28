@@ -14,6 +14,7 @@ import { canSeeDossierFinances } from './dossierOverview.js';
 import { calculateQuote } from './quote.js';
 import { invoiceBuckets, invoiceProgressSummary } from './invoiceProgress.js';
 import { pendingInvoiceAttachments } from './invoiceDocuments.js';
+import { invoiceRequestState } from './invoiceRequest.js';
 import { clientDisplayName } from './clientGroups.js';
 import { parseParcelCode } from './parcelCode.js';
 import { workspaceReturnPath } from './navigation.js';
@@ -24,7 +25,8 @@ import { eur, kg } from '../utils/format.js';
 // the tabs, one row per dossier with its step in the team's words and its one action, the sorts, the departure
 // groups and their totals, the Brouillon sheet, the arrival notices and the target of a reception. Every fact is
 // read with the existing rules (reception, consent, preparation, invoices, saved quote, departures, permissions):
-// nothing here recalculates a price, writes or sends. Pure: no React, no network, no clock (`now` is given).
+// nothing here recalculates a price, writes or sends. Pure: no React, no network; the clock only when the caller
+// gives no `now`.
 
 // ── Small readers ────────────────────────────────────────────────────────────
 const text = value => typeof value === 'string' ? value.trim() : '';
@@ -195,15 +197,20 @@ const receptionValidationHref = clientId => clientId ? `/recevoir?${new URLSearc
 
 /** The receptions to validate grouped by client, the longest waiting first: [{ clientId, dossiers, items,
  * cartonCount, receivedFrom, receivedTo, href }]. `items`: what validateReception takes to validate them all,
- * [{ colisId, throughCarton }] (the last carton waiting of each dossier); `href`: « Valider et prévenir ». */
+ * [{ colisId, fromCarton, throughCarton }]: the first and the last carton waiting of each dossier, as listed (the
+ * server refuses a validation whose first carton is no longer the one shown); orderValidationItems sets their order.
+ * `href`: « Valider et prévenir ». */
 export function pendingByClient(pending) {
   const groups = new Map();
   for (const entry of pendingByColis(pendingValues(pending)).values()) {
     if (!entry.clientId || !(entry.cartonCount > 0)) continue;
     const group = groups.get(entry.clientId) || { clientId: entry.clientId, dossiers: [], items: [], cartonCount: 0, receivedFrom: null, receivedTo: null, href: receptionValidationHref(entry.clientId) };
     group.dossiers.push(entry);
-    const through = Math.max(0, ...[entry.lastCarton, ...entry.cartons.map(carton => carton.carton)].map(wholeNumber).filter(value => value !== null));
-    if (through > 0) group.items.push({ colisId: entry.colisId, throughCarton: through });
+    // The cartons listed are those shown; without them, the range the server gave.
+    const shown = entry.cartons.map(carton => wholeNumber(carton.carton)).filter(value => value !== null);
+    const from = shown.length ? Math.min(...shown) : wholeNumber(entry.firstCarton);
+    const through = shown.length ? Math.max(...shown) : wholeNumber(entry.lastCarton);
+    if (from !== null && through !== null && through >= from) group.items.push({ colisId: entry.colisId, fromCarton: from, throughCarton: through });
     group.cartonCount += entry.cartonCount;
     group.receivedFrom = earliest(group.receivedFrom, entry.receivedFrom);
     group.receivedTo = latest(group.receivedTo, entry.receivedTo);
@@ -620,10 +627,24 @@ export function colisActionHref(row, returnTo = '/') {
 
 // ── Arrival notices ──────────────────────────────────────────────────────────
 export const ARRIVAL_NOTICE_STATES = Object.freeze({
-  sans_avis: 'Sans avis', en_cours: 'En cours d’envoi', envoye: 'Envoyé', remis: 'Remis', a_envoyer: 'À envoyer', non_remis: 'Non remis', annule: 'Annulé',
+  sans_avis: 'Sans avis', en_cours: 'En cours d’envoi', a_verifier: 'Envoi à vérifier', envoye: 'Envoyé', remis: 'Remis', a_envoyer: 'À envoyer',
+  non_remis: 'Non remis', annule: 'Annulé',
 });
+/** A notice still on its way after this many minutes is to check: its delivery no longer runs by itself (scheduled
+ * task stopped, missing token…) or its result is uncertain. Nothing is sent again on its own. */
+export const NOTICE_SEND_CHECK_MINUTES = 10;
 const CANALS = Object.freeze({ telegram: 'Telegram', email: 'E-mail' });
 const TO_DELIVER = new Set(['pending', 'sending', 'blocked']);
+
+/** Why a notice still on its way is to check, by the state of its delivery (outbox). */
+function sendToCheck(status, canal, lastError) {
+  const after = `${NOTICE_SEND_CHECK_MINUTES} minutes`;
+  if (status === 'sending') return canal === 'email' ? `Envoi commencé il y a plus de ${after}, sans confirmation du fournisseur d’e-mail.`
+    : `Envoi commencé il y a plus de ${after}, sans confirmation de Telegram : vérifiez dans Telegram si le message est arrivé.`;
+  if (status === 'pending') return `Toujours pas parti au bout de ${after} : l’envoi automatique ne l’a pas pris en charge.`;
+  if (status === 'blocked') return `Envoi retenu depuis plus de ${after}${lastError ? ` : ${lastError}` : ''}.`;
+  return `Envoi sans confirmation depuis plus de ${after} : vérifiez si le message est arrivé.`;
+}
 
 /** A notice of list_arrival_notices, or the result of validate_reception ({ validation, message, outbox }). */
 function noticeOf(notice) {
@@ -637,9 +658,13 @@ function noticeOf(notice) {
  * non_remis (outbox « failed » or message « echec », with its `reason`; « Réessayer » for Telegram, « Corriger
  * l’adresse » for an e-mail), annule (outbox « cancelled »), envoye (Telegram confirmed: outbox « sent » or
  * message « envoye »), a_envoyer (an e-mail kept « manual » until the provider is connected: « Copier le
- * texte »), en_cours (still to deliver). An uncertain send is never retried by itself. Null without a notice.
+ * texte »), en_cours (still to deliver: outbox « pending », « sending » or « blocked »), a_verifier once it has
+ * been so for more than NOTICE_SEND_CHECK_MINUTES since its message (else the validation) was recorded, at `now`:
+ * « Réessayer » for a Telegram notice never taken (pending, blocked), nothing for a send started without
+ * confirmation (sending: the server only sends again a failed one). An uncertain send is never retried by itself.
+ * Null without a notice.
  */
-export function arrivalNoticeState(notice) {
+export function arrivalNoticeState(notice, { now = Date.now() } = {}) {
   const item = noticeOf(notice);
   if (!item) return null;
   const canal = item.canal || item.message?.canal || null;
@@ -658,6 +683,15 @@ export function arrivalNoticeState(notice) {
     return make('envoye', 'done', canal === 'telegram' ? `Telegram a confirmé l’envoi${day ? ` le ${day}` : ''}` : `Envoyé${day ? ` le ${day}` : ''}`);
   }
   if (status === 'manual' || canal === 'email' && !TO_DELIVER.has(status)) return make('a_envoyer', 'current', 'E-mail à envoyer depuis votre messagerie : copiez le texte', { action: { key: 'copier_texte', label: 'Copier le texte' } });
+  // Still on its way: for a few minutes at most. Without a readable date, it stays « En cours d’envoi ».
+  const since = instantOf(item.message?.createdAt ?? item.message?.created_at) ?? instantOf(item.createdAt);
+  const at = instantOf(now) ?? Date.now();
+  if (since !== null && at - since > NOTICE_SEND_CHECK_MINUTES * 60000) {
+    const lastError = text(outbox?.lastError ?? outbox?.last_error) || null;
+    // A Telegram notice never taken can be sent from the screen (send-telegram takes a pending or blocked one).
+    const retry = canal === 'telegram' && (status === 'pending' || status === 'blocked');
+    return make('a_verifier', 'review', sendToCheck(status, canal, lastError), { reason: lastError, action: retry ? { key: 'reessayer', label: 'Réessayer' } : null });
+  }
   return make('en_cours', 'waiting', canal === 'telegram' ? 'Envoi Telegram en cours' : 'Envoi en cours');
 }
 
@@ -671,15 +705,15 @@ function cartonRangeLabel(first, last) {
 
 /** One arrival notice ready to show: `{ id, createdAt, dateLabel, clientName, actorName, canal, canalLabel,
  * cartonCount, cartonsLabel, refs, dossierCartonsLabel, state, text }` (`dossierCartonsLabel`: the cartons of
- * `colisId` it announced; `text`: the message, to copy for an e-mail). Null without a notice. */
-export function arrivalNoticeSummary(notice, { colisId = null } = {}) {
+ * `colisId` it announced; `text`: the message, to copy for an e-mail; `state` read at `now`). Null without a notice. */
+export function arrivalNoticeSummary(notice, { colisId = null, now = Date.now() } = {}) {
   const item = noticeOf(notice);
   if (!item) return null;
   const items = Array.isArray(item.items) ? item.items.filter(Boolean) : [];
   const cartonCount = Array.isArray(item.cartons) ? item.cartons.length
     : items.reduce((sum, entry) => sum + Math.max(0, (wholeNumber(entry.lastCarton) || 0) - (wholeNumber(entry.firstCarton) || 1) + 1), 0);
   const own = colisId ? items.find(entry => entry.colisId === colisId) : null;
-  const state = arrivalNoticeState(item);
+  const state = arrivalNoticeState(item, { now });
   return {
     id: item.id || null, createdAt: item.createdAt || null, dateLabel: dateLabel(item.createdAt) || 'Non renseigné',
     clientName: [text(item.client?.nom), text(item.client?.prenom)].filter(Boolean).join(' ') || null, actorName: text(item.actor?.nom) || null,
@@ -692,9 +726,10 @@ export function arrivalNoticeSummary(notice, { colisId = null } = {}) {
 /**
  * The alerts at the top of « Colis », only when something is to do: `reception_a_valider` (cartons recorded and
  * not validated: « Valider et prévenir » for one client, « Voir les réceptions » for several) and
- * `avis_non_remis` (notices not delivered). Each `{ key, tone, count, text, action: { label, href } }`.
+ * `avis_non_remis` (notices not delivered, `failed`, and sends to check, `toCheck`, at `now`; an e-mail « À
+ * envoyer » is no alert). Each `{ key, tone, count, text, action: { label, href } }`.
  */
-export function brouillonAlerts({ pending, notices } = {}) {
+export function brouillonAlerts({ pending, notices, now = Date.now() } = {}) {
   const alerts = [];
   const clients = pendingByClient(pending);
   const cartons = clients.reduce((sum, group) => sum + group.cartonCount, 0);
@@ -703,13 +738,35 @@ export function brouillonAlerts({ pending, notices } = {}) {
     text: `Réception à valider : ${countLabel(cartons, 'carton', 'cartons')}${clients.length > 1 ? ` de ${countLabel(clients.length, 'client', 'clients')}` : ''}`,
     action: clients.length === 1 ? { label: 'Valider et prévenir', href: clients[0].href } : { label: 'Voir les réceptions', href: '/avis' },
   });
-  const failed = (Array.isArray(notices) ? notices : []).filter(notice => arrivalNoticeState(notice)?.key === 'non_remis');
-  if (failed.length) alerts.push({
-    key: 'avis_non_remis', tone: 'review', count: failed.length,
-    text: countLabel(failed.length, 'avis d’arrivée non remis', 'avis d’arrivée non remis'),
+  const states = (Array.isArray(notices) ? notices : []).map(notice => arrivalNoticeState(notice, { now })?.key);
+  const failed = states.filter(key => key === 'non_remis').length;
+  const toCheck = states.filter(key => key === 'a_verifier').length;
+  // « 2 avis d’arrivée non remis », « 1 avis d’arrivée à vérifier », « 2 avis d’arrivée non remis, 1 à vérifier ».
+  const text = failed && toCheck ? `${countLabel(failed, 'avis d’arrivée non remis', 'avis d’arrivée non remis')}, ${toCheck} à vérifier`
+    : failed ? countLabel(failed, 'avis d’arrivée non remis', 'avis d’arrivée non remis') : countLabel(toCheck, 'avis d’arrivée à vérifier', 'avis d’arrivée à vérifier');
+  if (failed + toCheck > 0) alerts.push({
+    key: 'avis_non_remis', tone: 'review', count: failed + toCheck, failed, toCheck, text,
     action: { label: 'Voir les avis', href: '/avis' },
   });
   return alerts;
+}
+
+/**
+ * The dossiers of a validation in the order the server takes them: the notice is filed on the first one, and an
+ * invoice the client sends in reply is recorded on it. So the dossiers that still request their purchase invoice
+ * come first (invoiceRequestState(colis).requested, the rule of arrivalTemplate), then the others, each in its
+ * incoming order. `dossierById`: a Map, an object by id, a function or the list of dossiers; a dossier it does not
+ * know goes with the others. Returns a new list of the same items.
+ */
+export function orderValidationItems(items = [], dossierById) {
+  const list = (Array.isArray(items) ? items : []).filter(Boolean);
+  const byId = Array.isArray(dossierById) ? new Map(dossierById.filter(Boolean).map(dossier => [dossier.id, dossier])) : dossierById;
+  const lookup = typeof byId === 'function' ? byId : byId instanceof Map ? id => byId.get(id) : id => byId?.[id];
+  const asks = list.map(item => {
+    const dossier = item.colisId ? lookup(item.colisId) : null;
+    return Boolean(dossier) && invoiceRequestState(dossier).requested;
+  });
+  return [...list.filter((_, index) => asks[index]), ...list.filter((_, index) => !asks[index])];
 }
 
 // ── Reception target ─────────────────────────────────────────────────────────
@@ -863,7 +920,7 @@ export function brouillonFiche(dossier, ctx = {}) {
       pendingCount, pendingLabel: pendingCount ? `${countLabel(pendingCount, 'carton', 'cartons')} à valider` : null },
     optimized: ficheOptimized(source, receivedTotals.volume),
     price: fichePrice(f),
-    notice: latest ? arrivalNoticeSummary(latest, { colisId: source.id }) : null,
+    notice: latest ? arrivalNoticeSummary(latest, { colisId: source.id, now: f.now }) : null,
     noticeLabel: latest ? null : 'Aucun avis d’arrivée',
   };
 }
