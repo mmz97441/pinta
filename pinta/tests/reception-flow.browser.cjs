@@ -1,9 +1,9 @@
 /* « Réceptionner des cartons » (/recevoir) and « Avis d’arrivée » (/avis), docs/specification-brouillon-reception-2026-10-28.md:
  * the four steps of a reception, the grouped arrival notice and its states, phone and tablet, light and dark. The
  * server's commands are mocked here as the migrations write them (append_reception_cartons and its receipts,
- * list_pending_receptions, validate_reception, list_arrival_notices, send-telegram, the photo upload): nothing leaves
- * the machine. Screenshots go to PINTA_RECEPTION_FLOW_OUT; PINTA_RECEPTION_FLOW_FILTER runs the scenarios whose name
- * contains it. */
+ * list_pending_receptions, validate_reception and its first carton, list_arrival_notices, add_reception_photo,
+ * send-telegram, the photo bucket, the unique identifiers of clients and dossiers): nothing leaves the machine.
+ * Screenshots go to PINTA_RECEPTION_FLOW_OUT; PINTA_RECEPTION_FLOW_FILTER runs the scenarios whose name contains it. */
 const { chromium } = require(process.env.PINTA_PLAYWRIGHT_MODULE || 'playwright');
 const { default: AxeBuilder } = require('@axe-core/playwright');
 const assert = require('node:assert/strict');
@@ -23,7 +23,12 @@ const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR
 // ── The server's commands, as supabase/migrations/20261001000001_reception_append.sql and
 // 20261028000001_reception_validation.sql define them (the SQL suites test them in depth). ──
 const APPEND_STATUSES = ['receptionne', 'mesure', 'attente_feu_vert', 'autorise', 'en_preparation', 'devis_envoye', 'attente_paiement'];
+// _reception_validation_at_depot: the only dossiers whose cartons may wait for a validation.
+const DEPOT_STATUSES = ['receptionne', 'mesure', 'attente_feu_vert', 'autorise', 'en_preparation', 'refuse_client', 'devis_envoye', 'attente_paiement'];
+const atDepot = row => DEPOT_STATUSES.includes(row.statut) && !row.paiement_date && !row.archive;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const now = () => new Date().toISOString();
+const ago = minutes => new Date(Date.now() - minutes * 60000).toISOString();
 const cartonCount = row => Math.max(Number(row.nb_colis) || 0, (row.trackings_detail || []).length, (row.trackings || []).filter(Boolean).length, (row.dims_par_colis || []).length, 1);
 const allowed = (tables, permission) => ['directeur', 'vice_directeur'].includes(tables.staff_users[0]?.role) || (tables.staff_permissions || []).some(row => row[permission] === true);
 const refused = (status, code, message) => [status, { code, message, details: null, hint: null }];
@@ -31,8 +36,14 @@ const number = value => value == null || value === '' ? null : Number(value);
 
 function serverState(tables) {
   // reception_validation_settings.started_at: two hours ago (the fixture's cartons, received in September, are history).
-  if (!tables.reception_server) tables.reception_server = { startedAt: Date.now() - 7200000, validations: [], items: [], receipts: [], outbox: [], telegram: 'ok' };
+  if (!tables.reception_server) tables.reception_server = { startedAt: Date.now() - 7200000, validations: [], items: [], receipts: [], outbox: [], photos: [], objects: new Set(), telegram: 'ok' };
   return tables.reception_server;
+}
+/** _reception_validation_invoice_requested: no current invoice free of a rejection, or a current one rejected. */
+function invoiceRequested(tables, colisId) {
+  const invoices = (tables.factures || []).filter(invoice => invoice.colis_id === colisId && !invoice.duplicate_of_facture_id
+    && !(tables.factures || []).some(other => other.replaces_facture_id === invoice.id));
+  return !invoices.some(invoice => !invoice.rejet_motif) || invoices.some(invoice => invoice.rejet_motif);
 }
 /** stamp_reception_dates: every carton gets its arrival when it is recorded. */
 function stampReceptionDates(tables) {
@@ -51,7 +62,7 @@ function cartonOf(row, position) {
     dimL: number(box.dimL), dimW: number(box.dimW), dimH: number(box.dimH), poids: number(box.poids), receivedAt: row.reception_dates?.[position - 1]?.receivedAt || null };
 }
 function pendingOf(state, row) {
-  if (row.archive || row.statut === 'annule') return [];
+  if (!atDepot(row)) return [];
   const validated = Math.max(0, ...state.items.filter(item => item.colis_id === row.id).map(item => item.last_carton));
   const list = [];
   for (let position = validated + 1; position <= cartonCount(row); position += 1) {
@@ -72,41 +83,60 @@ function validationResult(tables, state, row, reused) {
 }
 function validateReception(tables, state, user, input) {
   if (!allowed(tables, 'perm_colis_receptionner')) return refused(403, '42501', 'Permission réception requise pour valider une réception.');
+  if (!input.p_request_id) return refused(400, '22023', 'Identifiant de validation requis.');
   const payload = JSON.stringify({ clientId: input.p_client_id, items: input.p_items, notify: input.p_notify, canal: input.p_canal ?? null, template: input.p_template ?? null, text: input.p_text ?? null });
   const recorded = state.validations.find(row => row.request_id === input.p_request_id);
   if (recorded) {
     if (recorded.actor_id !== user.id || recorded.payload !== payload) return refused(409, '40001', 'Cette validation a déjà été enregistrée avec un autre contenu. Actualisez la liste avant de continuer.');
     return [200, validationResult(tables, state, recorded, true)];
   }
+  const list = input.p_items;
+  if (!Array.isArray(list) || list.length < 1 || list.length > 20) return refused(400, '22023', 'Validez de 1 à 20 dossiers à la fois.');
+  const whole = value => Number.isInteger(value) && value >= 1 && value <= 999999;
+  if (list.some(item => !item || typeof item !== 'object' || !UUID.test(item.colisId || '') || !whole(item.fromCarton) || !whole(item.throughCarton)))
+    return refused(400, '22023', 'Chaque dossier indique son identifiant, le premier et le dernier carton à valider.');
+  if (list.some(item => item.fromCarton > item.throughCarton)) return refused(400, '22023', 'Le premier carton à valider ne peut pas suivre le dernier.');
+  if (new Set(list.map(item => item.colisId.toLowerCase())).size !== list.length) return refused(400, '22023', 'Un dossier ne figure qu’une fois dans une validation.');
   const client = tables.clients.find(row => row.id === input.p_client_id);
   if (!client) return refused(400, '22023', 'Client introuvable.');
   let channel = null;
   if (input.p_notify) {
-    channel = String(client.telegram_chat_id || '').trim() ? 'telegram' : String(client.email || '').trim() ? 'email' : null;
+    channel = /[^ ]/.test(client.telegram_chat_id || '') ? 'telegram' : /[^ ]/.test(client.email || '') ? 'email' : null;
     if (!channel) return refused(400, '22023', 'Ce client n’a ni Telegram ni e-mail : validez sans prévenir.');
     if (!['telegram', 'email'].includes(input.p_canal)) return refused(400, '22023', 'Précisez le canal de l’avis d’arrivée : telegram ou email.');
     if (input.p_canal !== channel) return refused(409, '40001', `Le contact du client a changé : l’avis partira par ${channel === 'telegram' ? 'Telegram' : 'e-mail'}. Actualisez avant de valider.`);
-    if (!allowed(tables, channel === 'email' ? 'perm_comm_email' : 'perm_comm_telegram')) return refused(403, '42501', 'Permission communication requise pour prévenir le client : validez sans prévenir ou confiez l’avis à un collègue.');
+    if (!allowed(tables, channel === 'email' ? 'perm_comm_email' : 'perm_comm_telegram')) return refused(403, '42501', `Permission communication requise pour prévenir le client par ${channel === 'telegram' ? 'Telegram' : 'e-mail'} : validez sans prévenir ou confiez l’avis à un collègue.`);
     if (!['arrivee_colis', 'arrivee_colis_facture'].includes(input.p_template)) return refused(400, '22023', 'Choisissez le modèle de l’avis d’arrivée : arrivee_colis ou arrivee_colis_facture.');
-    if (!String(input.p_text || '').trim() || input.p_text.length > 4096) return refused(400, '22023', 'Le texte de l’avis d’arrivée doit contenir de 1 à 4096 caractères.');
+    if (!String(input.p_text || '').trim() || Array.from(input.p_text).length > 4096) return refused(400, '22023', 'Le texte de l’avis d’arrivée doit contenir de 1 à 4096 caractères.');
   } else if (input.p_canal != null || input.p_template != null || input.p_text != null) return refused(400, '22023', 'Sans avis, ne transmettez ni canal, ni modèle, ni texte.');
   const items = [], cartons = [];
-  for (const item of input.p_items || []) {
+  for (const item of list) {
     const row = tables.colis.find(colis => colis.id === item.colisId);
     if (!row) return refused(400, '22023', 'Dossier introuvable : actualisez la liste.');
     if (row.client_id !== input.p_client_id) return refused(400, '22023', `Le dossier ${row.ref} n’appartient pas à ce client.`);
+    if (row.archive) return refused(400, '22023', `Le dossier ${row.ref} est archivé : sa réception ne se valide plus.`);
+    if (row.statut === 'annule') return refused(400, '22023', `Le dossier ${row.ref} est annulé : sa réception ne se valide plus.`);
+    if (!atDepot(row)) return refused(400, '22023', `Le dossier ${row.ref} n’est plus au dépôt avant expédition : sa réception ne se valide plus.`);
     const pending = pendingOf(state, row);
-    if (!pending.length) return refused(400, '22023', `Le dossier ${row.ref} n’a aucun carton en attente de validation : actualisez la liste.`);
+    // The first pending carton must be the one the screen listed first.
+    if (pending[0]?.carton !== item.fromCarton) {
+      if (pending.length || state.items.some(entry => entry.colis_id === row.id && entry.last_carton >= item.fromCarton))
+        return refused(409, '40001', 'Des cartons de ce dossier ont été validés entre-temps : actualisez la liste.');
+      return refused(400, '22023', `Le dossier ${row.ref} n’a aucun carton en attente de validation : actualisez la liste.`);
+    }
     if (!pending.some(carton => carton.carton === item.throughCarton)) return refused(400, '22023', `Le carton n° ${item.throughCarton} du dossier ${row.ref} n’est pas en attente de validation : actualisez la liste.`);
     const selected = pending.filter(carton => carton.carton <= item.throughCarton);
-    items.push({ colisId: row.id, ref: row.ref, firstCarton: selected[0].carton, lastCarton: item.throughCarton });
+    items.push({ colisId: row.id, ref: row.ref, firstCarton: item.fromCarton, lastCarton: item.throughCarton });
     cartons.push(...selected.map(carton => ({ colisId: row.id, ref: row.ref, ...carton })));
   }
+  if (cartons.length > 100) return refused(400, '22023', 'Validez au plus 100 cartons à la fois.');
   const id = crypto.randomUUID();
   let message = null, outbox = null;
   if (input.p_notify) {
-    // queue_message(<first dossier>, text, template, 'arrival:<id>', NULL, canal): « envoi », pending (Telegram) or manual (e-mail).
-    message = { id: crypto.randomUUID(), colis_id: items[0].colisId, type: 'staff', auteur_nom: 'Camille', texte: input.p_text, statut: 'envoi', canal: channel, template: input.p_template, created_at: now() };
+    // queue_message(<notice dossier>, text, template, 'arrival:<id>', NULL, canal): « envoi », pending (Telegram) or manual
+    // (e-mail). The notice dossier: the first one; for the invoice variant, the first one still requesting its invoice.
+    const noticeDossier = (input.p_template === 'arrivee_colis_facture' && items.find(item => invoiceRequested(tables, item.colisId))) || items[0];
+    message = { id: crypto.randomUUID(), colis_id: noticeDossier.colisId, type: 'staff', auteur_nom: 'Camille', texte: input.p_text, statut: 'envoi', canal: channel, template: input.p_template, created_at: now() };
     tables.messages.push(message);
     outbox = { id: crypto.randomUUID(), message_id: message.id, client_id: client.id, colis_id: message.colis_id, canal: channel, status: channel === 'email' ? 'manual' : 'pending', attempts: 0, sent_at: null, last_error: null, idempotency_key: `arrival:${id}` };
     state.outbox.push(outbox);
@@ -127,7 +157,7 @@ function listNotices(tables, state, input) {
       const outbox = state.outbox.find(item => item.id === row.outbox_id);
       return { id: row.id, createdAt: row.created_at, clientId: row.client_id, client: { nom: client.nom, prenom: client.prenom }, actor: { nom: 'Camille Test' },
         notify: row.notify, canal: row.canal, template: row.template, items: row.items, cartons: row.cartons,
-        message: message ? { id: message.id, statut: message.statut, texte: message.texte, createdAt: message.created_at } : null,
+        message: message ? { id: message.id, colisId: message.colis_id, statut: message.statut, texte: message.texte, createdAt: message.created_at } : null,
         outbox: outbox ? { id: outbox.id, status: outbox.status, attempts: outbox.attempts, sentAt: outbox.sent_at, lastError: outbox.last_error } : null };
     });
 }
@@ -196,16 +226,45 @@ function appendCartons(tables, state, user, input) {
   return [200, { colis: row, added: cartons.length, firstCarton: oldCount + 1, lastCarton: boxes.length }];
 }
 
+/** add_reception_photo: one more photo of a carton, already stored in the dossier's folder; its replay returns it. */
+function addPhoto(tables, state, user, input) {
+  if (!allowed(tables, 'perm_colis_receptionner')) return refused(403, '42501', 'Permission réception requise pour ajouter une photo de réception.');
+  const { p_colis_id: colisId, p_carton: carton, p_path: photoPath } = input;
+  if (!colisId || carton == null || !photoPath) return refused(400, '22023', 'Indiquez le dossier, le carton et la photo.');
+  if (!photoPath.startsWith(`${colisId}/`) || photoPath.includes('..') || photoPath.slice(37).includes('/') || photoPath.length > 300 || !/^[^/]+\/[^/]+\.(jpe?g|png|webp)$/.test(photoPath.toLowerCase()))
+    return refused(400, '22023', 'La photo doit être une image JPEG, PNG ou WebP enregistrée dans le dossier.');
+  const row = tables.colis.find(item => item.id === colisId);
+  if (!row) return refused(400, '22023', 'Dossier introuvable.');
+  if (row.archive) return refused(400, '22023', `Le dossier ${row.ref} est archivé : sa réception ne se complète plus.`);
+  if (carton < 1 || carton > cartonCount(row)) return refused(400, '22023', `Le dossier ${row.ref} n’a pas de carton n° ${carton}.`);
+  if (!state.objects.has(photoPath)) return refused(400, '22023', 'Photo introuvable dans le dossier : envoyez-la avant de l’enregistrer.');
+  const json = photo => ({ id: photo.id, carton: photo.carton, path: photo.path, createdAt: photo.created_at, actor: { nom: 'Camille Test' } });
+  const existing = state.photos.find(photo => photo.path === photoPath);
+  if (existing) {
+    if (existing.colis_id !== colisId || existing.carton !== carton) return refused(400, '22023', 'Cette photo est déjà enregistrée pour un autre carton.');
+    return [200, { ...json(existing), colisId, reused: true }];
+  }
+  const photo = { id: crypto.randomUUID(), colis_id: colisId, carton, path: photoPath, created_by: user.id, created_at: now() };
+  state.photos.push(photo);
+  return [200, { ...json(photo), colisId, reused: false }];
+}
+
 registerRequestMock(({ url, method, input, tables, user }) => {
   const state = serverState(tables);
   stampReceptionDates(tables);
   if (url.pathname.endsWith('/functions/v1/send-telegram')) return sendTelegram(tables, state, input || {});
+  // The primary keys: a client or a dossier created under an identifier already taken (a lost answer replayed) is refused.
+  const table = url.pathname.split('/').pop();
+  if (method === 'POST' && url.pathname.startsWith('/rest/v1/') && ['clients', 'colis'].includes(table)
+    && (Array.isArray(input) ? input : [input]).some(row => row?.id && tables[table].some(existing => existing.id === row.id)))
+    return refused(409, '23505', `duplicate key value violates unique constraint "${table}_pkey"`);
   if (!url.pathname.includes('/rest/v1/rpc/')) return undefined;
-  const rpc = url.pathname.split('/').pop();
-  if (rpc === 'list_pending_receptions') return [200, listPending(tables, state, input?.p_client_id || null)];
-  if (rpc === 'validate_reception') return validateReception(tables, state, user, input || {});
-  if (rpc === 'list_arrival_notices') return [200, listNotices(tables, state, input || {})];
-  if (rpc === 'append_reception_cartons') return appendCartons(tables, state, user, input || {});
+  if (table === 'list_pending_receptions') return [200, listPending(tables, state, input?.p_client_id || null)];
+  if (table === 'validate_reception') return validateReception(tables, state, user, input || {});
+  if (table === 'list_arrival_notices') return [200, listNotices(tables, state, input || {})];
+  if (table === 'append_reception_cartons') return appendCartons(tables, state, user, input || {});
+  if (table === 'add_reception_photo') return addPhoto(tables, state, user, input || {});
+  if (table === 'list_reception_photos') return [200, state.photos.filter(photo => photo.colis_id === input?.p_colis_id).map(photo => ({ id: photo.id, carton: photo.carton, path: photo.path, createdAt: photo.created_at, actor: { nom: 'Camille Test' } }))];
   return undefined;
 });
 
@@ -223,6 +282,19 @@ function fixtures(f, { telegram = false, email = true } = {}) {
   parcel.dims_par_colis = [{ dimL: 40, dimW: 30, dimH: 20, poids: 2 }, { dimL: 30, dimW: 20, dimH: 10, poids: 1 }];
   for (const row of f.tables.colis) row.reception_dates = Array.from({ length: cartonCount(row) }, () => ({ receivedAt: '2026-09-08T08:00:00.000Z', source: 'server' }));
   return serverState(f.tables);
+}
+/** The private photo bucket (a multipart upload, answered before the shared JSON server): each stored object is
+ * known to add_reception_photo. Returns the names stored, `<dossier>/<file>`. */
+async function photoBucket(f) {
+  const state = serverState(f.tables);
+  const uploads = [];
+  await f.context.route('**/storage/v1/object/photos-colis/**', route => {
+    const name = decodeURIComponent(new URL(route.request().url()).pathname.split('/storage/v1/object/photos-colis/')[1] || '');
+    uploads.push(name);
+    state.objects.add(name);
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ Key: `photos-colis/${name}`, Id: crypto.randomUUID() }) });
+  });
+  return uploads;
 }
 /** A carton of P recorded earlier (the old /reception screen, or a colleague): it waits for its validation. */
 function earlierPendingCarton(f, { tracking = 'TBA30219911', fournisseur = 'Amazon' } = {}) {
@@ -392,6 +464,10 @@ async function scenario(browser, name, options, run) {
       await f.page.getByRole('heading', { level: 2, name: 'Le premier carton' }).waitFor();
       const created = f.tables.clients.find(row => row.email === 'flavie.payet@example.test');
       assert.ok(created, 'the client is created through the API');
+      const creations = requestsTo(f, '/rest/v1/clients');
+      assert.equal(creations.length, 1);
+      assert.match(creations[0].input.id, /^[0-9a-f-]{36}$/, 'the client is created under the identifier of its form');
+      assert.equal(created.id, creations[0].input.id);
       assert.equal(new URL(f.page.url()).searchParams.get('client'), created.id);
       await f.page.getByText('Aucun brouillon en cours : ce carton en ouvre un nouveau.').waitFor();
       assert.equal(await f.page.evaluate(() => document.activeElement?.id), 'rf-casier', 'the locker of a new brouillon takes the focus');
@@ -444,10 +520,10 @@ async function scenario(browser, name, options, run) {
       assert.equal(validations.length, 1);
       const sent = validations[0].input;
       assert.deepEqual({ client: sent.p_client_id, items: sent.p_items, notify: sent.p_notify, canal: sent.p_canal, template: sent.p_template },
-        { client: created.id, items: [{ colisId: dossier.id, throughCarton: 2 }], notify: true, canal: 'telegram', template: 'arrivee_colis_facture' });
+        { client: created.id, items: [{ colisId: dossier.id, fromCarton: 1, throughCarton: 2 }], notify: true, canal: 'telegram', template: 'arrivee_colis_facture' });
       assert.match(sent.p_text, /^Bonjour Flavie/);
       assert.match(sent.p_text, /2 colis/);
-      assert.match(sent.p_text, /1\. Shein — LP00498821 — 45×32×20 cm — 2\.4 kg\n2\. Amazon — Sans numéro de suivi — 30×25×15 cm — 1\.1 kg/);
+      assert.match(sent.p_text, /1\. Shein — LP00498821 — 45 × 32 × 20 cm — 2,4 kg\n2\. Amazon — Sans numéro de suivi — 30 × 25 × 15 cm — 1,1 kg/);
       assert.equal(state.validations.length, 1);
       assert.equal(f.tables.messages.length, 1, 'one message for the two cartons');
       const deliveries = requestsTo(f, '/functions/v1/send-telegram');
@@ -494,12 +570,20 @@ async function scenario(browser, name, options, run) {
       assert.equal(f.tables.colis[0].produit_interdit, true, 'the forbidden product reaches the server');
       await f.page.getByText('Déjà en stock : 2 cartons · Casier A-03').waitFor();
       await f.page.getByText(/^En validant, l’e-mail pour Camille est préparé pour 1 colis/).waitFor();
+      // The forbidden product is not in the notice: the team is reminded to tell the client from the conversation.
+      const reminder = f.page.getByRole('note').filter({ hasText: 'À signaler à Camille vous-même' });
+      await reminder.getByText('Carton n° 3 : produit interdit signalé (Batteries lithium).').waitFor();
+      await reminder.getByText('L’avis d’arrivée n’en parle pas : prévenez Camille depuis la conversation du dossier.').waitFor();
+      assert.equal(await reminder.getByRole('link', { name: 'Ouvrir la conversation' }).getAttribute('href'),
+        `/colis/${ids.P}?onglet=conversation&returnTo=${encodeURIComponent(`/recevoir?client=${ids.C}&valider=1`)}`);
       await checkScreen(f, 'phone dark step 3');
       await snap(f, 'telephone-sombre-3-validation-email');
       await f.page.getByRole('button', { name: 'Valider la réception et prévenir Camille' }).click();
       await f.page.getByRole('heading', { level: 2, name: 'Réception validée : 1 colis ajouté au brouillon de Camille Exemple' }).waitFor();
       const sent = requestsTo(f, '/rpc/validate_reception')[0].input;
-      assert.deepEqual({ canal: sent.p_canal, template: sent.p_template, items: sent.p_items }, { canal: 'email', template: 'arrivee_colis', items: [{ colisId: ids.P, throughCarton: 3 }] });
+      assert.deepEqual({ canal: sent.p_canal, template: sent.p_template, items: sent.p_items }, { canal: 'email', template: 'arrivee_colis', items: [{ colisId: ids.P, fromCarton: 3, throughCarton: 3 }] });
+      assert.doesNotMatch(sent.p_text, /lithium|interdit/i, 'the notice says nothing of the forbidden product');
+      await f.page.getByRole('note').filter({ hasText: 'Pensez à prévenir Camille' }).getByText('Carton n° 3 : produit interdit signalé (Batteries lithium).').waitFor();
       assert.equal(requestsTo(f, '/functions/v1/send-telegram').length, 0, 'an e-mail is never sent through Telegram');
       await f.page.getByText('E-mail à envoyer à Camille · 1 colis').waitFor();
       await f.page.getByText('Camille avait donné son accord pour 2 cartons. Pour ce nouveau carton, son accord est à redemander : sa ligne passe à « Accord à demander » dans le Brouillon.').waitFor();
@@ -534,7 +618,16 @@ async function scenario(browser, name, options, run) {
       assert.equal(await f.page.getByRole('link', { name: 'Compléter sa fiche' }).getAttribute('href'), `/clients/${H}`);
       await checkScreen(f, 'phone light step 3 without contact');
       await snap(f, 'telephone-clair-3-validation-sans-contact');
+      // Validating without a notice is confirmed; « Annuler » sends nothing.
       await f.page.getByRole('button', { name: 'Valider sans prévenir', exact: true }).click();
+      const dialog = f.page.getByRole('dialog', { name: 'Valider sans prévenir Jean ?' });
+      await dialog.getByText('Aucun avis ne sera envoyé pour ces cartons.').waitFor();
+      await snap(f, 'telephone-clair-3-confirmation-sans-avis');
+      await dialog.getByRole('button', { name: 'Annuler' }).click();
+      await dialog.waitFor({ state: 'detached' });
+      assert.equal(requestsTo(f, '/rpc/validate_reception').length, 0, 'nothing is validated without the confirmation');
+      await f.page.getByRole('button', { name: 'Valider sans prévenir', exact: true }).click();
+      await dialog.getByRole('button', { name: 'Valider sans prévenir' }).click();
       await f.page.getByText('Réception validée sans avis : le client n’est pas prévenu').waitFor();
       const sent = requestsTo(f, '/rpc/validate_reception')[0].input;
       assert.deepEqual({ notify: sent.p_notify, canal: sent.p_canal, template: sent.p_template, text: sent.p_text }, { notify: false, canal: null, template: null, text: null });
@@ -544,14 +637,9 @@ async function scenario(browser, name, options, run) {
       await snap(f, 'telephone-clair-4-rangement-sans-avis');
     });
 
-    await scenario(browser, 'reprise-apres-rechargement-et-carton-abime-avec-photo', { layout: TABLET }, async f => {
-      fixtures(f);
-      // The private photo bucket (a multipart upload, answered before the shared JSON server).
-      const uploads = [];
-      await f.context.route('**/storage/v1/object/photos-colis/**', route => {
-        uploads.push(new URL(route.request().url()).pathname);
-        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ Key: 'photos-colis/carton.png', Id: crypto.randomUUID() }) });
-      });
+    await scenario(browser, 'reprise-apres-rechargement-et-cartons-abimes-avec-photos', { layout: TABLET }, async f => {
+      const state = fixtures(f);
+      const uploads = await photoBucket(f);
       await f.login();
       await f.page.goto(`${base}/recevoir?client=${ids.C}`);
       await f.page.getByRole('heading', { level: 2, name: 'Le carton' }).waitFor();
@@ -570,6 +658,9 @@ async function scenario(browser, name, options, run) {
       await f.page.getByRole('button', { name: 'Ajouter ce carton', exact: true }).click();
       await f.page.getByText('Prenez une photo du carton abîmé, ou décochez « Carton abîmé ou ouvert ».').waitFor();
       assert.equal(requestsTo(f, '/rpc/append_reception_cartons').length, 0, 'a damaged carton waits for its photo');
+      // An image the server would not keep is refused at once.
+      await f.page.locator('input[type="file"]').nth(1).setInputFiles({ name: 'carton.gif', mimeType: 'image/gif', buffer: Buffer.from('GIF89a') });
+      await f.page.getByText('Cette image n’est pas au format JPEG, PNG ou WebP : reprenez la photo ou choisissez-en une autre.').waitFor();
       await f.page.locator('#rf-photo-camera').setInputFiles({ name: 'carton.png', mimeType: 'image/png', buffer: PNG });
       await f.page.getByRole('img', { name: 'Photo du carton abîmé' }).waitFor();
       await checkScreen(f, 'tablet light damaged carton');
@@ -578,16 +669,43 @@ async function scenario(browser, name, options, run) {
       const append = requestsTo(f, '/rpc/append_reception_cartons')[0].input;
       assert.equal(append.p_notes_reception, 'Carton n° 3 (Zara, COLISSIMO-778) abîmé ou ouvert à la réception : Coin enfoncé.');
       assert.deepEqual(append.p_check_interdits, ['Aérosols']);
-      const photoPatch = f.requests.find(request => request.method === 'PATCH' && request.path === '/rest/v1/colis' && request.input?.photo_reception === true);
-      assert.ok(photoPatch, 'the photo is attached with the existing mechanism');
+      // The photo of carton n° 3: stored in the dossier's folder, then recorded with its carton.
       assert.equal(uploads.length, 1, 'one photo uploaded to the private bucket');
-      assert.match(uploads[0], new RegExp(`/storage/v1/object/photos-colis/${ids.P}/[0-9a-f-]{36}\\.png$`));
-      assert.match(photoPatch.input.photo_reception_url, new RegExp(`^${ids.P}/[0-9a-f-]{36}\\.png$`));
+      assert.match(uploads[0], new RegExp(`^${ids.P}/[0-9a-f-]{36}\\.png$`));
+      assert.deepEqual(requestsTo(f, '/rpc/add_reception_photo').map(request => request.input), [{ p_colis_id: ids.P, p_carton: 3, p_path: uploads[0] }]);
+      assert.deepEqual(state.photos.map(photo => [photo.carton, photo.path]), [[3, uploads[0]]]);
+      // The dossier had no photo yet: this one becomes its photo.
+      const photoPatches = () => f.requests.filter(request => request.method === 'PATCH' && request.path === '/rest/v1/colis' && request.input?.photo_reception === true);
+      assert.equal(photoPatches().length, 1);
+      assert.equal(photoPatches()[0].input.photo_reception_url, uploads[0]);
       await f.page.getByText(`Carton n° 3 enregistré dans EXP-TEST-001.`).waitFor();
+
+      // A second damaged carton, photographed by the camera (a file without extension): its own photo, the dossier's
+      // photo unchanged.
+      await f.page.getByRole('button', { name: 'Ajouter un autre carton pour Camille' }).click();
+      await f.page.getByRole('heading', { level: 2, name: 'Le carton' }).waitFor();
+      await fillCarton(f.page, { tracking: 'COLISSIMO-779', vendor: 'Zara', measures: ['40', '30', '20', '2'] });
+      await f.page.getByRole('checkbox', { name: /Carton abîmé ou ouvert/ }).check();
+      await f.page.locator('#rf-photo-camera').setInputFiles({ name: 'image', mimeType: 'image/jpeg', buffer: PNG });
+      await f.page.getByRole('img', { name: 'Photo du carton abîmé' }).waitFor();
+      await addCarton(f.page);
+      assert.equal(uploads.length, 2);
+      assert.match(uploads[1], new RegExp(`^${ids.P}/[0-9a-f-]{36}\\.jpg$`), 'the stored file is named after its type');
+      assert.deepEqual(requestsTo(f, '/rpc/add_reception_photo')[1].input, { p_colis_id: ids.P, p_carton: 4, p_path: uploads[1] });
+      assert.equal(photoPatches().length, 1, 'the dossier keeps its first photo');
+      assert.deepEqual(state.photos.map(photo => photo.carton), [3, 4], 'one photo per carton');
+
+      // Neither damage is in the notice: the validation reminds the team to tell the client.
+      const reminder = f.page.getByRole('note').filter({ hasText: 'À signaler à Camille vous-même' });
+      await reminder.getByText('Carton n° 3 : abîmé ou ouvert ; produit interdit signalé (Aérosols).').waitFor();
+      await reminder.getByText('Carton n° 4 : abîmé ou ouvert.').waitFor();
+      await checkScreen(f, 'tablet light flagged cartons');
+      await snap(f, 'tablette-clair-3-cartons-signales');
       await f.page.reload();
-      await f.page.getByRole('heading', { name: 'Cette réception : 1 carton' }).waitFor();
-      await f.page.getByText('Carton n° 3 enregistré dans EXP-TEST-001.').waitFor();
+      await f.page.getByRole('heading', { name: 'Cette réception : 2 cartons' }).waitFor();
+      await f.page.getByText('Carton n° 4 enregistré dans EXP-TEST-001.').waitFor();
       await f.page.getByText('COLISSIMO-778', { exact: true }).waitFor();
+      await reminder.getByText('Carton n° 4 : abîmé ou ouvert.').waitFor();
     });
 
     await scenario(browser, 'reponse-perdue-verifier-enregistrement-sans-doublon', { layout: TABLET, dark: true, expectedConsole: /Failed to load resource|ERR_FAILED/ }, async f => {
@@ -656,6 +774,100 @@ async function scenario(browser, name, options, run) {
       assert.equal(f.tables.colis.filter(row => row.client_id === H).length, 1, 'one brouillon');
     });
 
+    await scenario(browser, 'creation-reponse-perdue-brouillon-complete-entre-temps', { layout: PHONE, expectedConsole: /Failed to load resource|ERR_FAILED/ }, async f => {
+      fixtures(f);
+      let down = false, created = null;
+      await f.context.route('**/rest/v1/colis*', async route => {
+        const request = route.request();
+        if (request.method() === 'POST' && !created) {
+          // The brouillon is created, then the network drops before the answer and before the check.
+          created = { created_at: now(), updated_at: now(), ...request.postDataJSON() };
+          f.tables.colis.push(created);
+          down = true;
+          return route.abort('failed');
+        }
+        if (down) return route.abort('failed');
+        return route.fallback();
+      });
+      await f.login();
+      await f.page.goto(`${base}/recevoir?client=${H}`);
+      await f.page.getByRole('heading', { level: 2, name: 'Le premier carton' }).waitFor();
+      await fillCarton(f.page, { casier: 'D-05', tracking: 'UPS-1Z777', vendor: 'Fnac', measures: ['35', '25', '12', '1,8'] });
+      await f.page.getByRole('button', { name: 'Ajouter ce carton', exact: true }).click();
+      const check = f.page.getByRole('button', { name: 'Vérifier l’enregistrement' });
+      await check.waitFor();
+      // Meanwhile a colleague adds a carton to that brouillon: it is no longer the receipt sent (insertColis: 40001).
+      Object.assign(created, { nb_colis: 2, trackings: ['UPS-1Z777', 'COLLEGUE-1'], trackings_detail: [...created.trackings_detail, { number: 'COLLEGUE-1', fournisseur: 'Temu' }],
+        dims_par_colis: [...created.dims_par_colis, { dimL: 20, dimW: 20, dimH: 20, poids: 1 }], updated_at: now() });
+      down = false;
+      await check.click();
+      // The carton is recorded: the brouillon is opened, never « non enregistré ».
+      await f.page.getByRole('heading', { level: 2, name: 'Cette réception : 2 cartons' }).waitFor();
+      await f.page.getByText(`Carton n° 1 enregistré dans ${created.ref} (nouveau brouillon).`).waitFor();
+      await f.page.getByText('Ce brouillon a été complété depuis par un collègue : il reste ouvert, vos prochains cartons s’y ajoutent.').waitFor();
+      assert.equal(await f.page.getByText(/pas (été )?enregistré/).count(), 0, 'a recorded carton is never said not recorded');
+      assert.equal(f.tables.colis.filter(row => row.client_id === H).length, 1, 'one brouillon');
+      await checkScreen(f, 'phone light recorded in a brouillon changed meanwhile');
+      await snap(f, 'telephone-clair-3-brouillon-complete-entre-temps');
+      // The next carton joins that brouillon.
+      await f.page.getByRole('button', { name: 'Ajouter un autre carton pour Jean' }).click();
+      await f.page.getByRole('heading', { level: 2, name: 'Le carton' }).waitFor();
+      await f.page.getByText('Brouillon en cours : 2 cartons · Casier D-05').waitFor();
+    });
+
+    await scenario(browser, 'creation-client-reponse-perdue-verifier-enregistrement', { layout: PHONE, expectedConsole: /Failed to load resource|ERR_FAILED/ }, async f => {
+      fixtures(f);
+      let down = false, createId = null;
+      const posts = [];
+      await f.context.route('**/rest/v1/clients*', async route => {
+        const request = route.request();
+        if (request.method() === 'POST') {
+          posts.push(request.postDataJSON());
+          if (posts.length > 1) return route.fallback();
+          // The client is created, then the network drops before the answer and before the check.
+          createId = posts[0].id;
+          f.tables.clients.push({ created_at: now(), updated_at: now(), ...posts[0] });
+          down = true;
+          return route.abort('failed');
+        }
+        if (down && createId && request.url().includes(createId)) return route.abort('failed');
+        return route.fallback();
+      });
+      await f.login();
+      await f.page.goto(`${base}/recevoir`);
+      await f.page.getByLabel('Nom, téléphone ou numéro client').fill('Rivière');
+      await f.page.getByRole('button', { name: 'Créer un nouveau client' }).click();
+      const form = f.page.getByRole('form', { name: 'Nouveau client' });
+      await form.getByLabel('Prénom', { exact: true }).fill('Lucas');
+      await form.getByLabel('Téléphone mobile', { exact: true }).fill('0692 98 76 54');
+      await form.getByLabel('E-mail', { exact: true }).fill('lucas.riviere@example.test');
+      await form.getByLabel('Adresse de livraison', { exact: true }).fill('4 rue du Port');
+      await form.getByLabel('Code postal', { exact: true }).fill('97420');
+      await form.getByLabel('Ville', { exact: true }).fill('Le Port');
+      await form.getByRole('button', { name: 'Créer le client' }).click();
+      const verify = form.getByRole('button', { name: 'Vérifier l’enregistrement' });
+      await verify.waitFor();
+      await form.getByText('Création à vérifier').waitFor();
+      assert.equal(await form.getByRole('button', { name: 'Créer le client' }).count(), 0, '« Créer le client » waits for the check');
+      assert.equal(await form.getByLabel('E-mail', { exact: true }).isDisabled(), true, 'the client cannot change while its creation is checked');
+      await checkScreen(f, 'phone light client creation to check');
+      await snap(f, 'telephone-clair-1c-creation-client-a-verifier');
+      // The tablet is switched off and on: the creation is still to check, with its typing.
+      await f.page.reload();
+      await verify.waitFor();
+      assert.equal(await form.getByLabel('Nom', { exact: true }).inputValue(), 'Rivière');
+      assert.equal(await f.page.evaluate(() => document.activeElement?.textContent), 'Vérifier l’enregistrement', 'the check takes the focus');
+      down = false;
+      await verify.click();
+      await f.page.getByRole('heading', { level: 2, name: 'Le premier carton' }).waitFor();
+      assert.equal(posts.length, 2, 'the lost creation, then its check');
+      const { ref: _first, ...firstPost } = posts[0];
+      const { ref: _second, ...secondPost } = posts[1];
+      assert.deepEqual(secondPost, firstPost, 'the very same creation is replayed (its client number aside)');
+      assert.equal(f.tables.clients.filter(row => row.email === 'lucas.riviere@example.test').length, 1, 'one client');
+      assert.equal(new URL(f.page.url()).searchParams.get('client'), createId);
+    });
+
     await scenario(browser, 'validation-reponse-perdue-meme-requete-un-seul-avis', { layout: TABLET, expectedConsole: /Failed to load resource|ERR_FAILED/ }, async f => {
       const state = fixtures(f, { telegram: true });
       earlierPendingCarton(f);
@@ -708,6 +920,90 @@ async function scenario(browser, name, options, run) {
       assert.equal(validations[1].input.p_canal, 'telegram');
     });
 
+    await scenario(browser, 'validation-concurrente-premier-carton-change', { layout: TABLET, expectedConsole: /Failed to load resource/ }, async f => {
+      const state = fixtures(f, { telegram: true });
+      earlierPendingCarton(f);
+      await f.login();
+      await f.page.goto(`${base}/recevoir?client=${ids.C}&valider=1`);
+      await f.page.getByRole('heading', { name: 'Cette réception : 1 carton' }).waitFor();
+      await f.page.getByText('TBA30219911', { exact: true }).waitFor();
+      // Meanwhile a colleague validates carton n° 3, and carton n° 4 arrives.
+      const [colleague] = validateReception(f.tables, state, { id: 'collegue' }, { p_client_id: ids.C, p_items: [{ colisId: ids.P, fromCarton: 3, throughCarton: 3 }], p_notify: false, p_request_id: crypto.randomUUID() });
+      assert.equal(colleague, 200);
+      const parcel = f.tables.colis.find(row => row.id === ids.P);
+      Object.assign(parcel, { nb_colis: 4, trackings: [...parcel.trackings, 'DPD-0004'], trackings_detail: [...parcel.trackings_detail, { number: 'DPD-0004', fournisseur: 'Decathlon' }],
+        dims_par_colis: [...parcel.dims_par_colis, { dimL: 50, dimW: 40, dimH: 30, poids: 4 }], reception_dates: [...parcel.reception_dates, { receivedAt: ago(5), source: 'server' }] });
+      await f.page.getByRole('button', { name: 'Valider la réception et prévenir Camille' }).click();
+      // The first carton is no longer the one shown (40001): the list is read again, the refusal said once.
+      const failure = f.page.getByRole('alert').filter({ hasText: 'La réception n’est pas validée' });
+      await failure.getByText('Des cartons de ce dossier ont été validés entre-temps. La liste et le contact de Camille sont actualisés : vérifiez, puis validez à nouveau.').waitFor();
+      assert.doesNotMatch(await failure.innerText(), /actualisez la liste/i, 'the advice to refresh is not repeated');
+      await f.page.getByText('DPD-0004', { exact: true }).waitFor();
+      assert.equal(await f.page.getByText('TBA30219911', { exact: true }).count(), 0, 'the carton validated meanwhile is gone');
+      await checkScreen(f, 'tablet light validated meanwhile');
+      await snap(f, 'tablette-clair-3-valide-entre-temps');
+      await f.page.getByRole('button', { name: 'Valider la réception et prévenir Camille' }).click();
+      await f.page.getByText('Message Telegram envoyé à Camille · 1 colis').waitFor();
+      const validations = requestsTo(f, '/rpc/validate_reception');
+      assert.deepEqual(validations.map(request => request.input.p_items), [[{ colisId: ids.P, fromCarton: 3, throughCarton: 3 }], [{ colisId: ids.P, fromCarton: 4, throughCarton: 4 }]]);
+      assert.notEqual(validations[1].input.p_request_id, validations[0].input.p_request_id);
+      assert.equal(state.validations.length, 2, 'the colleague’s validation, then this one');
+    });
+
+    await scenario(browser, 'gros-lot-decoupe-au-texte-de-l-avis', { layout: TABLET }, async f => {
+      const state = fixtures(f);
+      // Marie (e-mail) has 90 cartons waiting in two brouillons: EXP-LOT-A, waiting longest, her invoice received;
+      // EXP-LOT-B, still requesting its invoice (it comes first: the notice is filed there).
+      const lot = (letter, size, minutes) => {
+        const id = crypto.randomUUID();
+        const boxes = Array.from({ length: size }, () => ({ dimL: 30, dimW: 20, dimH: 10, poids: 1.5 }));
+        const codes = boxes.map((_, index) => `TBA${letter}${String(index + 1).padStart(11, '0')}`);
+        f.tables.colis.push({ id, client_id: E, ref: `EXP-LOT-${letter}`, statut: 'mesure', casier: `F-0${letter === 'A' ? 1 : 2}`, nb_colis: size, desc_contenu: 'Commandes groupées',
+          trackings: codes, trackings_detail: codes.map(number => ({ number, fournisseur: 'Amazon' })), dims_par_colis: boxes, archive: false, feu_vert: 'en_attente',
+          created_at: ago(minutes), updated_at: ago(minutes - 1), date_reception: ago(minutes), reception_dates: boxes.map(() => ({ receivedAt: ago(minutes), source: 'server' })) });
+        return id;
+      };
+      const first = lot('A', 50, 90), second = lot('B', 40, 60);
+      f.tables.factures.push({ id: crypto.randomUUID(), colis_id: first, vendeur: 'Amazon', montant: 80, valide: true, fichier_url: `${first}/facture.pdf`, fichier_nom: 'facture.pdf' });
+      await f.login();
+      await f.page.goto(`${base}/recevoir?client=${E}&valider=1`);
+      const heading = f.page.getByRole('heading', { level: 2, name: /^Cette réception : \d+ cartons$/ });
+      await heading.waitFor();
+      const shown = Number((await heading.innerText()).match(/(\d+) cartons/)[1]);
+      assert.ok(shown > 40 && shown < 90, `the notice holds part of the 90 cartons (${shown})`);
+      await f.page.getByText(`Encore ${90 - shown} cartons à valider ensuite : un avis d’arrivée ne peut pas en annoncer davantage en un seul message.`).waitFor();
+      await checkScreen(f, 'tablet big batch');
+      await snap(f, 'tablette-clair-3-gros-lot');
+      await f.page.evaluate(() => document.querySelector('main.staff-main')?.scrollTo({ top: 1e6 }));
+      await settle(f.page);
+      await f.page.screenshot({ path: path.join(out, 'tablette-clair-3-gros-lot-bas.png') });
+      await f.page.getByRole('button', { name: 'Valider la réception et prévenir Marie' }).click();
+      await f.page.getByRole('heading', { level: 2, name: `Réception validée : ${shown} colis pour Marie Grondin` }).waitFor();
+      const sent = requestsTo(f, '/rpc/validate_reception')[0].input;
+      // The brouillon still requesting its invoice first, then the other one, cut where the text is full.
+      assert.deepEqual(sent.p_items, [{ colisId: second, fromCarton: 1, throughCarton: 40 }, { colisId: first, fromCarton: 1, throughCarton: shown - 40 }]);
+      assert.equal(sent.p_template, 'arrivee_colis_facture');
+      assert.ok(Array.from(sent.p_text).length <= 4096, 'the text holds in one message');
+      const lines = sent.p_text.split('\n').filter(line => /^\d+\. Amazon — /.test(line));
+      assert.equal(lines.length, shown, 'one line per carton validated');
+      assert.equal(lines[0], '1. Amazon — TBAB00000000001 — 30 × 20 × 10 cm — 1,5 kg');
+      assert.equal(lines[lines.length - 1], `${shown}. Amazon — TBAA${String(shown - 40).padStart(11, '0')} — 30 × 20 × 10 cm — 1,5 kg`);
+      const next = `${shown + 1}. Amazon — TBAA${String(shown - 39).padStart(11, '0')} — 30 × 20 × 10 cm — 1,5 kg`;
+      assert.ok(sent.p_text.length + next.length + 1 > 4096, 'one carton more would not hold');
+      assert.equal(f.tables.messages[0].colis_id, second, 'the notice is filed on the brouillon requesting its invoice');
+      // The rest: a next validation, with its own notice.
+      await f.page.getByText(`Encore ${90 - shown} cartons de Marie à valider`).waitFor();
+      await checkScreen(f, 'tablet big batch validated');
+      await snap(f, 'tablette-clair-4-gros-lot-reste');
+      await f.page.getByRole('button', { name: 'Valider les cartons restants' }).click();
+      await f.page.getByRole('heading', { level: 2, name: `Cette réception : ${90 - shown} cartons` }).waitFor();
+      assert.equal(await f.page.getByText(/^Encore \d+ cartons? à valider ensuite/).count(), 0, 'the rest holds in one notice');
+      await f.page.getByRole('button', { name: 'Valider la réception et prévenir Marie' }).click();
+      await f.page.getByRole('heading', { level: 2, name: `Réception validée : ${90 - shown} colis ajoutés au brouillon de Marie Grondin` }).waitFor();
+      assert.deepEqual(requestsTo(f, '/rpc/validate_reception')[1].input.p_items, [{ colisId: first, fromCarton: shown - 39, throughCarton: 50 }]);
+      assert.equal(state.validations.length, 2);
+    });
+
     for (const [layout, dark] of [[TABLET, true], [PHONE, false]]) {
       const tag = `${layout.name}-${dark ? 'sombre' : 'clair'}`;
       await scenario(browser, `avis-arrivee-${tag}`, { layout, dark }, async f => {
@@ -721,9 +1017,14 @@ async function scenario(browser, name, options, run) {
           f.tables.colis.push(parcel);
           const client = f.tables.clients.find(row => row.id === clientId);
           const canal = notify ? (client.telegram_chat_id ? 'telegram' : 'email') : null;
-          const [, body] = validateReception(f.tables, state, user, { p_client_id: clientId, p_items: [{ colisId: parcel.id, throughCarton: 1 }], p_notify: notify, p_canal: canal, p_template: notify ? 'arrivee_colis' : null, p_text: notify ? text : null, p_request_id: crypto.randomUUID() });
+          const [status, body] = validateReception(f.tables, state, user, { p_client_id: clientId, p_items: [{ colisId: parcel.id, fromCarton: 1, throughCarton: 1 }], p_notify: notify, p_canal: canal, p_template: notify ? 'arrivee_colis' : null, p_text: notify ? text : null, p_request_id: crypto.randomUUID() });
+          assert.equal(status, 200, JSON.stringify(body));
           return body;
         };
+        // A Telegram notice the automatic sending never took, recorded half an hour ago: to check, sent from the screen.
+        const stale = record(ids.C, true, 'Bonjour Camille, votre colis est arrivé.');
+        f.tables.messages.find(item => item.id === stale.message.id).created_at = ago(30);
+        state.validations.find(item => item.id === stale.validation.id).created_at = ago(30);
         state.telegram = 'fail';
         const failed = record(ids.C, true, 'Bonjour Camille, vos colis sont arrivés.');
         sendTelegram(f.tables, state, { colisId: failed.message.colis_id, messageId: failed.message.id });
@@ -748,6 +1049,10 @@ async function scenario(browser, name, options, run) {
         await list.getByText('À envoyer', { exact: true }).waitFor();
         await list.getByText('Envoyé', { exact: true }).waitFor();
         await list.getByText('Sans avis', { exact: true }).waitFor();
+        const toCheck = list.locator('li', { hasText: 'Envoi à vérifier' });
+        await toCheck.getByText('Toujours pas parti au bout de 10 minutes : l’envoi automatique ne l’a pas pris en charge.').waitFor();
+        await toCheck.getByText('Il n’est jamais parti : vous pouvez l’envoyer maintenant.').waitFor();
+        await f.page.getByText('1 envoi à vérifier', { exact: true }).waitFor();
         await checkScreen(f, `${tag} avis`);
         await snap(f, `${tag}-avis-arrivee`);
         // E-mail to send: the text to copy.
@@ -755,13 +1060,21 @@ async function scenario(browser, name, options, run) {
         assert.match(await f.page.evaluate(() => navigator.clipboard.readText()), /^Bonjour Marie/);
         assert.match(await list.getByRole('link', { name: 'Préparer l’e-mail' }).getAttribute('href'), /^mailto:marie\.grondin@example\.test\?subject=/);
         // Telegram not delivered: checked in Telegram, then sent again on purpose.
-        await list.getByText('Avant de réessayer, vérifiez dans Telegram que le message n’est pas arrivé.').waitFor();
-        await list.getByRole('button', { name: 'Réessayer l’envoi' }).click();
-        await list.getByText('Telegram a confirmé l’envoi.').waitFor();
+        const notDelivered = list.locator('li', { hasText: 'Non remis' });
+        await notDelivered.getByText('Avant de réessayer, vérifiez dans Telegram que le message n’est pas arrivé.').waitFor();
+        await notDelivered.getByRole('button', { name: 'Réessayer l’envoi' }).click();
+        await f.page.waitForFunction(() => !document.body.innerText.includes('Non remis'));
         const retry = requestsTo(f, '/functions/v1/send-telegram');
         assert.equal(retry.length, 1);
         assert.deepEqual(retry[0].input, { colisId: failed.message.colis_id, messageId: failed.message.id, retryConfirmed: true });
-        await f.page.waitForFunction(() => !document.body.innerText.includes('Non remis'));
+        await list.getByText('Telegram a confirmé l’envoi.').waitFor();
+        // The notice never taken: sent now (the message's own dossier, as list_arrival_notices names it).
+        await toCheck.getByRole('button', { name: 'Réessayer l’envoi' }).click();
+        await f.page.waitForFunction(() => !document.body.innerText.includes('Envoi à vérifier'));
+        const sends = requestsTo(f, '/functions/v1/send-telegram');
+        assert.equal(sends.length, 2);
+        assert.deepEqual(sends[1].input, { colisId: stale.message.colis_id, messageId: stale.message.id, retryConfirmed: true });
+        assert.equal(state.outbox.find(item => item.message_id === stale.message.id).status, 'sent');
         // An e-mail refused by the provider: the client's sheet, at its e-mail.
         state.outbox.find(item => item.canal === 'email').status = 'failed';
         state.outbox.find(item => item.canal === 'email').last_error = 'Adresse e-mail refusée';
@@ -803,11 +1116,15 @@ async function scenario(browser, name, options, run) {
       await f.page.getByLabel('Nom, téléphone ou numéro client').fill('Personne');
       await f.page.getByText('Aucun client ne correspond à « Personne ».').waitFor();
       assert.equal(await f.page.getByRole('button', { name: 'Créer un nouveau client' }).count(), 0, 'creating a client needs its permission');
+      await f.page.getByText('Demandez à un responsable de créer ce client.').waitFor();
+      await checkScreen(f, 'phone light step 1 without client creation');
+      await snap(f, 'telephone-clair-1-sans-creation-client');
       await f.page.goto(`${base}/recevoir?client=${ids.C}&valider=1`);
       await f.page.getByText('Votre accès ne permet pas de prévenir Camille par Telegram : validez sans prévenir, ou demandez à un collègue autorisé de valider la réception.').waitFor();
       assert.equal(await f.page.getByRole('button', { name: /prévenir Camille/ }).count(), 0);
       await checkScreen(f, 'phone light step 3 without telegram permission');
       await f.page.getByRole('button', { name: 'Valider sans prévenir', exact: true }).click();
+      await f.page.getByRole('dialog', { name: 'Valider sans prévenir Camille ?' }).getByRole('button', { name: 'Valider sans prévenir' }).click();
       await f.page.getByText('Réception validée sans avis : le client n’est pas prévenu').waitFor();
       assert.equal(requestsTo(f, '/rpc/validate_reception')[0].input.p_notify, false);
     });

@@ -1,5 +1,6 @@
 import React from 'react';
-import { AlertTriangle, Check, CheckCircle2, Info, X } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { AlertTriangle, Check, CheckCircle2, Info, MessageSquare, X } from 'lucide-react';
 
 // Pieces shared by the four steps of the reception and by the arrival notices.
 
@@ -79,6 +80,30 @@ export function Field({ id, label, hint, error, children, className = '' }) {
 
 /** The props of an input with an error: aria-invalid and its description. */
 export const invalidProps = (id, error) => error ? { 'aria-invalid': true, 'aria-describedby': `${id}-error` } : {};
+
+/** The permissions that open the conversation of a dossier (its « Conversation » tab). */
+export const CONVERSATION_PERMISSIONS = ['perm_comm_message_libre', 'perm_comm_telegram', 'perm_comm_email', 'perm_comm_voir_chat_autres'];
+
+/** The conversation of a dossier; « returnTo » brings back to the reception. */
+export const conversationHref = (dossierId, returnTo) => `/colis/${encodeURIComponent(dossierId)}?${new URLSearchParams({ onglet: 'conversation', ...(returnTo ? { returnTo } : {}) })}`;
+
+/** The cartons flagged at the reception (damaged or opened, forbidden product: [{ colisId, ref, carton, damaged,
+ * interdits }]), which the arrival notice does not mention: the team tells the client from the dossier's
+ * conversation. `notice`: an arrival notice is sent (or was). */
+export function FlaggedCartons({ flagged, name, title, returnTo, canOpen, notice = true }) {
+  if (!flagged?.length) return null;
+  const dossiers = [...new Map(flagged.map(item => [item.colisId, item.ref])).entries()];
+  const several = dossiers.length > 1;
+  const links = canOpen ? dossiers.map(([id, ref]) => <Link key={id} to={conversationHref(id, returnTo)} className="rf-small-action inline-flex items-center gap-2">
+    <MessageSquare size={18} aria-hidden="true" />{several ? <>Conversation <span className="rf-code whitespace-nowrap">{ref}</span></> : 'Ouvrir la conversation'}
+  </Link>) : null;
+  return <Note tone="warning" role="note" title={title} action={links}>
+    <ul className="space-y-0.5">{flagged.map(item => <li key={`${item.colisId}:${item.carton}`}>
+      Carton n°&nbsp;{item.carton}{several && <> (<span className="rf-code whitespace-nowrap">{item.ref}</span>)</>} : {[item.damaged ? 'abîmé ou ouvert' : '', item.interdits?.length ? `produit interdit signalé (${item.interdits.join(', ')})` : ''].filter(Boolean).join(' ; ')}.
+    </li>)}</ul>
+    <p className="mt-1">{notice ? 'L’avis d’arrivée n’en parle pas : ' : ''}{notice ? `prévenez ${name}` : `Prévenez ${name}`} depuis la conversation du dossier.{canOpen ? '' : ' Demandez à un collègue qui écrit aux clients de le faire.'}</p>
+  </Note>;
+}
 
 /** Neutral placeholders while a list loads, the shape of its rows. */
 export function SkeletonRows({ rows = 3, label }) {

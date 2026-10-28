@@ -3,19 +3,21 @@ import { AlertTriangle, ArrowRight, Camera, ImagePlus, RefreshCw } from 'lucide-
 import { useApp } from '../../context/AppContext';
 import * as sb from '../../lib/supabaseData';
 import { randomId } from '../../lib/randomId';
+import { addReceptionPhoto } from '../../lib/receptionValidation';
 import { PRODUITS_INTERDITS } from '../../constants';
 import { receptionCartonManifest } from '../../domain/reception';
 import { arrivalChannel } from '../../services/arrivalNotice';
 import { upperCaseInPlace } from '../detail/casierInput';
 import { Casier, ClientBand, Field, Note, invalidProps } from './ReceptionParts';
-import { EMPTY_CARTON, MEASURES, cartonFieldErrors, cartonMeasures, clientPlace, consentRenewal, count, damageNote, definiteRefusal, newDossierPayload, trackingOwner } from './receptionFlowModel';
+import { EMPTY_CARTON, MEASURES, cartonFieldErrors, cartonMeasures, clientPlace, consentRenewal, count, damageNote, definiteRefusal, newDossierPayload, photoProblem, receptionPhotoFile, trackingOwner } from './receptionFlowModel';
 
 // Step 2, « Le carton »: tracking number and vendor (optional), the four measures, « Carton abîmé ou ouvert »
 // (note and photo), the forbidden products, and the locker of a new brouillon. « Ajouter ce carton » records it at
 // once through the existing commands, with their guarantees: the first carton of a new brouillon by
 // insertColis(…, { createId }), the next ones by appendReceptionCartons(id, [carton], { requestId, expectedUpdatedAt,
 // … }). Each attempt keeps its identifier: after a lost answer, « Vérifier l’enregistrement » replays the very same
-// request, which the server recognises (no second carton).
+// request, which the server recognises (no second carton). The photo of a damaged carton is one more photo of that
+// carton (uploadDocument, then addReceptionPhoto).
 const ID = { casier: 'rf-casier', tracking: 'rf-tracking', fournisseur: 'rf-vendor', photo: 'rf-photo-camera', note: 'rf-damage-note', submit: 'rf-add-carton' };
 const MEASURE_ID = key => `rf-measure-${key}`;
 const FIELD_ORDER = ['casier', 'tracking', 'fournisseur', 'dimL', 'dimW', 'dimH', 'poids', 'photo'];
@@ -98,6 +100,9 @@ export default function CartonStep({ client, target, session, update, onSaved, o
   };
   const choosePhoto = file => {
     if (!file) return;
+    // Refused at once rather than after the carton is saved: a JPEG, PNG or WebP of 20 MB at most.
+    const problem = photoProblem(file);
+    if (problem) { setErrors(previous => ({ ...previous, photo: problem })); return; }
     setPhoto(file);
     setForm({ photoName: file.name || 'photo' });
     if (errors.photo) setErrors(previous => { const next = { ...previous }; delete next.photo; return next; });
@@ -110,13 +115,29 @@ export default function CartonStep({ client, target, session, update, onSaved, o
     if (savingRef.current) return;
     savingRef.current = true; setSaving(true); setFailure(null);
     setStatus('Enregistrement du carton…');
-    let saved;
+    let saved = null, changed = false, failed = null;
     try {
       saved = attempt.kind === 'create'
         ? await sb.insertColis(attempt.payload, { createId: attempt.createId })
         : await sb.appendReceptionCartons(attempt.dossierId, attempt.cartons, attempt.options);
     } catch (error) {
+      failed = error;
+      // The brouillon recorded under this attempt's own identifier exists, and a colleague changed it since: the carton
+      // IS recorded (carton n° 1). That brouillon is opened to add the next cartons.
+      if (attempt.kind === 'create' && error.code === '40001') {
+        saved = (await refreshColis(attempt.createId).catch(() => null)) || null;
+        changed = Boolean(saved);
+      }
+    }
+    if (!saved) {
+      const error = failed || new Error('Le carton n’a pas été enregistré.');
       savingRef.current = false; setSaving(false);
+      if (attempt.kind === 'create' && error.code === '40001') {
+        // Recorded, but its brouillon could not be read: the attempt stays to check, never « non enregistré ».
+        setStatus('Le carton est enregistré, mais son brouillon n’a pas pu être lu : touchez « Vérifier l’enregistrement ».');
+        setFailure({ uncertain: true, recorded: true });
+        return;
+      }
       if (!definiteRefusal(error)) {
         setStatus('Enregistrement à vérifier.');
         setFailure({ uncertain: true });
@@ -142,18 +163,26 @@ export default function CartonStep({ client, target, session, update, onSaved, o
     if (photo) {
       setStatus('Envoi de la photo…');
       try {
-        const uploaded = await sb.uploadDocument('photos-colis', saved.id, photo);
-        const withPhoto = await sb.updateColis(saved.id, { photoReception: true, photoReceptionUrl: uploaded.path }, saved.updatedAt);
-        const { factures: _f, lignes: _l, messages: _m, ...photoRow } = withPhoto;
-        setData(previous => previous.map(item => item.id === saved.id ? { ...item, ...photoRow } : item));
+        // One more photo of this carton (reception_photos); the dossier's own photo only while it has none.
+        const uploaded = await sb.uploadDocument('photos-colis', saved.id, receptionPhotoFile(photo));
+        await addReceptionPhoto({ colisId: saved.id, carton: attempt.number, path: uploaded.path });
+        if (!saved.photoReception && !saved.photoReceptionUrl) {
+          try {
+            const withPhoto = await sb.updateColis(saved.id, { photoReception: true, photoReceptionUrl: uploaded.path }, saved.updatedAt);
+            const { factures: _f, lignes: _l, messages: _m, ...photoRow } = withPhoto;
+            setData(previous => previous.map(item => item.id === saved.id ? { ...item, ...photoRow } : item));
+          } catch { /* The photo is kept with its carton: the dossier's own photo is a convenience. */ }
+        }
       } catch (error) {
         photoWarning = `Le carton est enregistré, mais la photo n’a pas été jointe (${String(error.message || 'erreur').replace(/[.\s]+$/, '')}). Ajoutez-la depuis le dossier ${saved.ref}.`;
       }
     } else if (attempt.photoName) photoWarning = `Le carton est enregistré. La photo prise avant le rechargement n’a pas été jointe : ajoutez-la depuis le dossier ${saved.ref}.`;
+    // What the team flagged on this carton, which the arrival notice does not say (recalled at the validation).
+    const flags = { abime: Boolean(attempt.flags?.abime), interdits: Array.isArray(attempt.flags?.interdits) ? attempt.flags.interdits : [] };
     update(previous => ({
       intent: null, form: { ...EMPTY_CARTON }, target: { mode: 'append', dossierId: saved.id },
-      saved: [...previous.saved.filter(item => !(item.colisId === saved.id && item.number === attempt.number)), { colisId: saved.id, ref: saved.ref, number: attempt.number }],
-      lastSaved: { colisId: saved.id, ref: saved.ref, number: attempt.number, created: attempt.kind === 'create', photoWarning },
+      saved: [...previous.saved.filter(item => !(item.colisId === saved.id && item.number === attempt.number)), { colisId: saved.id, ref: saved.ref, number: attempt.number, ...flags }],
+      lastSaved: { colisId: saved.id, ref: saved.ref, number: attempt.number, created: attempt.kind === 'create', changed, photoWarning },
       consent: attempt.consent && !previous.consent[saved.id] ? { ...previous.consent, [saved.id]: attempt.consent } : previous.consent,
     }));
     savingRef.current = false;
@@ -178,11 +207,12 @@ export default function CartonStep({ client, target, session, update, onSaved, o
       return;
     }
     const box = cartonMeasures(form);
+    const flags = { abime: Boolean(form.abime), interdits: [...form.interdits] };
     const attempt = newMode
-      ? { kind: 'create', createId: randomId(), payload: newDossierPayload(client.id, form, box), number: 1, photoName: form.abime ? form.photoName : '' }
+      ? { kind: 'create', createId: randomId(), payload: newDossierPayload(client.id, form, box), number: 1, flags, photoName: form.abime ? form.photoName : '' }
       : (() => {
         const number = receptionCartonManifest(dossier).nbColis + 1;
-        return { kind: 'append', dossierId: dossier.id, number, consent: consentRenewal(dossier), photoName: form.abime ? form.photoName : '',
+        return { kind: 'append', dossierId: dossier.id, number, consent: consentRenewal(dossier), flags, photoName: form.abime ? form.photoName : '',
           cartons: [{ ...box, fournisseur: String(form.fournisseur || '').trim(), tracking }],
           options: { requestId: randomId(), expectedUpdatedAt: dossier.updatedAt, casier: needsCasier ? form.casier.trim() : null,
             notesReception: form.abime ? damageNote(form, number) : null, checkInterdits: [...form.interdits] } };
@@ -203,8 +233,10 @@ export default function CartonStep({ client, target, session, update, onSaved, o
 
     {blocked ? <Note tone="danger" role="alert" title="Ce dossier ne peut pas recevoir de carton" action={<button type="button" className="rf-small-action" onClick={onChooseTarget}>Choisir le brouillon du client</button>}>{target.blockedReason}</Note> : <>
       {target.impact && <Note tone="warning">{target.impact}</Note>}
-      {intent && <Note tone="warning" role="alert" title="Enregistrement à vérifier" action={<button ref={verifyRef} type="button" className="rf-small-action inline-flex items-center gap-2" disabled={saving} onClick={() => run(intent)}><RefreshCw size={18} aria-hidden="true" />{saving ? 'Vérification…' : 'Vérifier l’enregistrement'}</button>}>
-        La connexion a été interrompue pendant l’enregistrement du carton : nous ne savons pas s’il a été enregistré. Votre saisie est conservée. Touchez «&nbsp;Vérifier l’enregistrement&nbsp;» quand le réseau revient : le carton ne sera pas enregistré deux fois.
+      {intent && <Note tone="warning" role="alert" title={failure?.recorded ? 'Carton enregistré, brouillon à ouvrir' : 'Enregistrement à vérifier'} action={<button ref={verifyRef} type="button" className="rf-small-action inline-flex items-center gap-2" disabled={saving} onClick={() => run(intent)}><RefreshCw size={18} aria-hidden="true" />{saving ? 'Vérification…' : 'Vérifier l’enregistrement'}</button>}>
+        {failure?.recorded
+          ? <>Ce carton est enregistré dans un brouillon qu’un collègue a complété depuis, mais ce brouillon n’a pas pu être lu. Touchez «&nbsp;Vérifier l’enregistrement&nbsp;» quand le réseau revient pour l’ouvrir : le carton ne sera pas enregistré deux fois.</>
+          : <>La connexion a été interrompue pendant l’enregistrement du carton : nous ne savons pas s’il a été enregistré. Votre saisie est conservée. Touchez «&nbsp;Vérifier l’enregistrement&nbsp;» quand le réseau revient : le carton ne sera pas enregistré deux fois.</>}
       </Note>}
 
       <fieldset disabled={lockedInput} className="min-w-0 space-y-4">

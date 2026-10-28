@@ -12,12 +12,14 @@ import { count, parisMoment, parisWhen } from './receptionFlowModel';
 import './receptionFlow.css';
 
 // « Avis d’arrivée » (/avis): the receptions still to validate, by client (« Valider et prévenir »), then the recent
-// notices with their state: « Réessayer » for a Telegram notice not delivered, the text to copy and the e-mail to
-// prepare for an e-mail to send by hand, the client's sheet when the address is at fault.
+// notices with their state: « Réessayer » for a Telegram notice not delivered or never taken by the automatic sending
+// (« Envoi à vérifier », still on its way after ten minutes), the text to copy and the e-mail to prepare for an e-mail
+// to send by hand, the client's sheet when the address is at fault.
 const SUMMARY = [
   { keys: ['envoye', 'remis'], label: ['envoyé', 'envoyés'], pill: 'done' },
   { keys: ['a_envoyer'], label: ['à envoyer', 'à envoyer'], pill: 'todo' },
   { keys: ['non_remis'], label: ['non remis', 'non remis'], pill: 'alert' },
+  { keys: ['a_verifier'], label: ['envoi à vérifier', 'envois à vérifier'], pill: 'check' },
   { keys: ['en_cours'], label: ['en cours d’envoi', 'en cours d’envoi'], pill: 'wait' },
   { keys: ['sans_avis', 'annule'], label: ['sans avis', 'sans avis'], pill: 'neutral' },
 ];
@@ -43,9 +45,9 @@ function Refs({ refs }) {
 }
 
 // On a phone, the date and the colis share the first line of the card (order); from 768 px, four aligned columns.
-function NoticeRow({ notice, client, onChanged }) {
-  const state = arrivalNoticeState(notice);
-  const summary = arrivalNoticeSummary(notice);
+function NoticeRow({ notice, client, onChanged, now }) {
+  const state = arrivalNoticeState(notice, { now });
+  const summary = arrivalNoticeSummary(notice, { now });
   const moment = parisMoment(notice.createdAt);
   return <li className="rf-notice-row rf-notice-grid flex flex-wrap items-baseline gap-x-2 gap-y-2 px-4 py-3">
     <p className="rf-muted order-first text-[15px] md:order-none"><span className="sr-only">Validé </span>{moment ? <>{moment.day}<span className="md:block"><span className="sr-only">à</span> {moment.time}</span></> : 'Date inconnue'}</p>
@@ -60,7 +62,7 @@ function NoticeRow({ notice, client, onChanged }) {
       <NoticePill state={state} />
       <p className="rf-muted text-[15px]">{state.key === 'non_remis' ? `Raison : ${state.reason}` : state.detail}</p>
     </div>
-    <div className="rf-notice-actions min-w-0 basis-full md:basis-auto"><NoticeActions notice={notice} client={client} onChanged={onChanged} compact /></div>
+    <div className="rf-notice-actions min-w-0 basis-full md:basis-auto"><NoticeActions notice={notice} client={client} onChanged={onChanged} now={now} compact /></div>
   </li>;
 }
 
@@ -72,6 +74,8 @@ export default function ArrivalNotices() {
   const [notices, setNotices] = useState(null);
   const [noticesError, setNoticesError] = useState('');
   const [refreshing, setRefreshing] = useState(false);
+  // The states are read at the moment of the last reading: the counters and the rows agree.
+  const [now, setNow] = useState(() => Date.now());
 
   const load = useCallback(async () => {
     setRefreshing(true);
@@ -80,6 +84,7 @@ export default function ArrivalNotices() {
     else setPendingError(pendingRead.reason?.message || 'Les réceptions à valider n’ont pas pu être lues.');
     if (noticesRead.status === 'fulfilled') { setNotices(noticesRead.value); setNoticesError(''); }
     else setNoticesError(noticesRead.reason?.message || 'Les avis d’arrivée n’ont pas pu être lus.');
+    setNow(Date.now());
     setRefreshing(false);
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -87,9 +92,9 @@ export default function ArrivalNotices() {
   const groups = useMemo(() => pendingByClient(pending || []), [pending]);
   const totals = useMemo(() => {
     const byState = {};
-    for (const notice of notices || []) { const key = arrivalNoticeState(notice)?.key; if (key) byState[key] = (byState[key] || 0) + 1; }
+    for (const notice of notices || []) { const key = arrivalNoticeState(notice, { now })?.key; if (key) byState[key] = (byState[key] || 0) + 1; }
     return SUMMARY.map(item => ({ ...item, value: item.keys.reduce((sum, key) => sum + (byState[key] || 0), 0) })).filter(item => item.value > 0);
-  }, [notices]);
+  }, [notices, now]);
   const cartons = (notices || []).reduce((sum, notice) => sum + (Array.isArray(notice.cartons) ? notice.cartons.length : 0), 0);
 
   return <div className="rf mx-auto w-full max-w-5xl space-y-6 px-4 pb-12 pt-5 sm:px-6">
@@ -123,7 +128,7 @@ export default function ArrivalNotices() {
           <div aria-hidden="true" className="rf-notice-grid rf-notice-head hidden px-4 py-2 text-[15px] font-bold uppercase tracking-wider md:grid">
             <span>Validé</span><span>Client</span><span>Colis</span><span>État</span>
           </div>
-          <ul aria-label="Avis d’arrivée récents">{notices.map(notice => <NoticeRow key={notice.id} notice={notice} client={getClient(notice.clientId)} onChanged={load} />)}</ul>
+          <ul aria-label="Avis d’arrivée récents">{notices.map(notice => <NoticeRow key={notice.id} notice={notice} client={getClient(notice.clientId)} onChanged={load} now={now} />)}</ul>
         </div>
       </>}
     </section>

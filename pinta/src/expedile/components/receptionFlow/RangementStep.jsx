@@ -6,7 +6,7 @@ import { fetchArrivalNotices } from '../../lib/receptionValidation';
 import { receptionCartonManifest } from '../../domain/reception';
 import { colisStage } from '../../domain/brouillon';
 import { dossierTaskUrl } from '../../domain/dossierTasks';
-import { Note, SkeletonRows } from './ReceptionParts';
+import { CONVERSATION_PERMISSIONS, FlaggedCartons, Note, SkeletonRows } from './ReceptionParts';
 import { NoticeCard } from './NoticeStatus';
 import { count, firstName } from './receptionFlowModel';
 
@@ -21,7 +21,7 @@ function consentReminder(kind, name, before, added, stageLabel) {
   return `L’accord de ${name} avait été demandé pour ${count(before, 'carton')}. Avec ${news}, il est à redemander${line}.`;
 }
 
-export default function RangementStep({ client, session, update, validationId, onNext, onBrouillon }) {
+export default function RangementStep({ client, session, update, validationId, onNext, onBrouillon, onValidateRest }) {
   const { data, envois, settings, can } = useApp();
   const done = session.done?.validationId === validationId ? session.done : null;
   const [notice, setNotice] = useState(done?.notice || null);
@@ -30,6 +30,7 @@ export default function RangementStep({ client, session, update, validationId, o
   const headingRef = useRef(null);
   const name = firstName(client);
   const fullName = [client.prenom, client.nomFamille].filter(Boolean).join(' ') || client.nom;
+  const here = `/recevoir?${new URLSearchParams({ client: client.id, valide: validationId })}`;
 
   // The notice as the server has it now (an e-mail to send, a Telegram message confirmed meanwhile…). An answer
   // arriving after « Client suivant » writes nothing: that reception's session is over.
@@ -98,7 +99,12 @@ export default function RangementStep({ client, session, update, validationId, o
     </div>
 
     <NoticeCard notice={notice} client={client} delivery={done?.delivery} onChanged={refresh} onRefresh={refresh} refreshing={loading} />
+    <FlaggedCartons flagged={done?.flagged} name={name} title={`Pensez à prévenir ${name}`} returnTo={here} canOpen={CONVERSATION_PERMISSIONS.some(can)} notice={notice.notify !== false} />
     {reminders.map(item => <Note key={item.id} tone="warning" role="note">{item.text}</Note>)}
+    {done?.rest > 0 && <Note tone="warning" title={`Encore ${count(done.rest, 'carton')} de ${name} à valider`}
+      action={<button type="button" className="rf-small-action" onClick={onValidateRest}>Valider les cartons restants</button>}>
+      Ils attendent leur validation{notice.notify !== false ? ', avec leur propre avis d’arrivée' : ''}.
+    </Note>}
 
     <div className="grid gap-3 pt-1 sm:grid-cols-2">
       <button type="button" onClick={onNext} className="rf-primary brand-bg flex items-center justify-center gap-2.5 px-4"><Plus size={22} aria-hidden="true" />Client suivant</button>

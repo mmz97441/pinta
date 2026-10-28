@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef } from 'react';
 import { ChevronRight, Plus, Search } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import { randomId } from '../../lib/randomId';
 import { searchClients } from '../../utils';
 import { receptionTarget } from '../../domain/brouillon';
 import { receptionCartonManifest } from '../../domain/reception';
@@ -36,16 +37,26 @@ export default function ClientStep({ start, updateStart, onChoose }) {
   const query = start.q || '';
   const canCreate = can('perm_clients_creer');
   useEffect(() => { if (!start.creating) searchRef.current?.focus(); }, [start.creating]);
+  // One creation identifier per form, kept with its typing (a session written before it had none).
+  useEffect(() => { if (start.creating && canCreate && !start.createId) updateStart(previous => previous.createId ? {} : { createId: randomId() }); }, [start.creating, start.createId, canCreate, updateStart]);
 
   const found = useMemo(() => query.trim() ? searchClients(clients, query).slice().sort((left, right) => collator.compare(left.nom || '', right.nom || '')) : [], [clients, query]);
   const shown = found.slice(0, MAX_RESULTS);
 
-  const openCreation = () => updateStart(previous => ({ creating: true, newClient: Object.values(previous.newClient || {}).some(value => value && value !== 'particulier') ? previous.newClient : newClientFromQuery(previous.q) }));
+  // The typing kept since the last opening (and its identifier), else what the search already says.
+  const openCreation = () => updateStart(previous => {
+    const typed = Boolean(previous.pendingCreation) || Object.entries(previous.newClient || {}).some(([key, value]) => key === 'type' ? value === 'pro' : Boolean(value));
+    return { creating: true, newClient: typed ? previous.newClient : newClientFromQuery(previous.q), createId: typed && previous.createId ? previous.createId : randomId() };
+  });
+  const created = id => { updateStart({ creating: false, newClient: { ...EMPTY_NEW_CLIENT }, q: '', createId: null, pendingCreation: null }); onChoose(id); };
+  // The client of a creation still to check, found by the search: that creation is resolved.
+  const choose = id => id && id === start.createId ? created(id) : onChoose(id);
 
   if (start.creating && canCreate) return <section aria-labelledby="rf-step-title" className="mx-auto w-full max-w-3xl space-y-5">
     <h2 id="rf-step-title" className="rf-strong text-[26px] font-extrabold sm:text-[30px]">Pour quel client ?</h2>
-    <NewClientForm values={start.newClient} onChange={newClient => updateStart({ newClient })}
-      onCancel={() => updateStart({ creating: false })} onCreated={id => { updateStart({ creating: false, newClient: { ...EMPTY_NEW_CLIENT }, q: '' }); onChoose(id); }} />
+    <NewClientForm values={start.newClient} createId={start.createId} pending={start.pendingCreation}
+      onChange={newClient => updateStart({ newClient })} onPending={pendingCreation => updateStart({ pendingCreation })}
+      onCancel={() => updateStart({ creating: false })} onCreated={created} />
   </section>;
 
   return <section aria-labelledby="rf-step-title" className="mx-auto w-full max-w-3xl space-y-4">
@@ -63,13 +74,15 @@ export default function ClientStep({ start, updateStart, onChoose }) {
         : found.length === 0 ? `Aucun client ne correspond à « ${query.trim()} ».`
           : found.length > MAX_RESULTS ? `${count(found.length, 'client trouvé', 'clients trouvés')} : les ${MAX_RESULTS} premiers sont affichés, précisez la recherche.`
             : count(found.length, 'client trouvé', 'clients trouvés')}
+      {/* Without the right to create a client, the way forward when the search finds nobody. */}
+      {!canCreate && query.trim() && found.length === 0 && <span className="rf-strong mt-1 block text-[17px] font-bold">Demandez à un responsable de créer ce client.</span>}
     </p>
     {shown.length > 0 && <ul aria-label="Clients trouvés" className="space-y-2.5">
       {shown.map(client => {
         const target = receptionTarget(client.id, data);
         const place = clientPlace(client);
         return <li key={client.id}>
-          <button type="button" onClick={() => onChoose(client.id)} className={`rf-result${target.mode === 'append' ? ' rf-result--join' : ''} flex min-h-[84px] w-full items-center gap-3 px-4 py-3 text-left sm:gap-4 sm:px-5`}>
+          <button type="button" onClick={() => choose(client.id)} className={`rf-result${target.mode === 'append' ? ' rf-result--join' : ''} flex min-h-[84px] w-full items-center gap-3 px-4 py-3 text-left sm:gap-4 sm:px-5`}>
             <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-4 gap-y-2">
               <span className="min-w-0 flex-1 basis-60">
                 <span className="rf-strong block text-[21px] font-extrabold leading-snug">{client.nom}<Place place={place} /></span>
