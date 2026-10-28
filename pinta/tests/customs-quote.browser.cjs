@@ -73,7 +73,8 @@ try{
   if(mobile){
    await reason.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
    const focused=await reason.evaluate(node=>{const r=node.getBoundingClientRect();return {top:r.top,bottom:r.bottom,visible:node.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2))};});
-   const nav=await f.page.getByRole('button',{name:'Dossiers',exact:true}).locator('..').boundingBox();
+   // The phone navigation bar (it held « Dossiers » until 2026-10-28; the bar itself is measured now).
+   const nav=await f.page.locator('[data-staff-bottom-nav]').boundingBox();
    assert.ok(focused.visible&&focused.top>=44&&focused.bottom<=nav.y,'The correction reason reached with Tab remains fully visible; the quote bar must not cover it.');
    await reason.press('Tab');await f.page.keyboard.press('Tab');
    assert.equal(await apply(f).evaluate(node=>document.activeElement===node),true,'Keyboard progression reaches the explicit apply action.');

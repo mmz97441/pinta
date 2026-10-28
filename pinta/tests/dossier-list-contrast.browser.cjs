@@ -4,7 +4,7 @@ const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
-const { setup, base, ids } = require('./browser-regression.cjs');
+const { setup, base, ids, RECEPTION_READ_RPCS } = require('./browser-regression.cjs');
 const output = process.env.PINTA_LIST_CONTRAST_OUT || '/tmp/pinta-dossier-list-contrast';
 const results = [];
 async function measure(locator) {
@@ -138,9 +138,9 @@ async function checkRing(page, locator, expected, label, samples) {
           await f.page.keyboard.press('Escape'); await dialog.waitFor({ state: 'hidden' });
         }
         assert.deepEqual(f.errors, []); assert.deepEqual(f.networkDenied, []);
-        // Loading the signed-in app synchronizes its work queue. No list
-        // interaction may issue an assignment, document or dossier write.
-        assert.deepEqual(f.requests.filter(request => ['POST', 'PATCH', 'DELETE'].includes(request.method) && request.path.startsWith('/rest/v1/') && !['/rest/v1/rpc/refresh_staff_work_actions','/rest/v1/rpc/get_reception_dates'].includes(request.path)).map(request => ({ path: request.path, input: request.input })), [], 'List interaction does not write business data');
+        // Loading the signed-in app synchronizes its work queue (and the Colis home, « / », reads its receptions and
+        // notices: reads sent by POST). No list interaction may issue an assignment, document or dossier write.
+        assert.deepEqual(f.requests.filter(request => ['POST', 'PATCH', 'DELETE'].includes(request.method) && request.path.startsWith('/rest/v1/') && !['/rest/v1/rpc/refresh_staff_work_actions','/rest/v1/rpc/get_reception_dates',...RECEPTION_READ_RPCS].includes(request.path)).map(request => ({ path: request.path, input: request.input })), [], 'List interaction does not write business data');
         assert.equal(await f.page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false);
         results.push({ name, pass: true, samples }); console.log('PASS', name);
       } catch (error) { results.push({ name, pass: false, error: error.stack }); process.exitCode = 1; await f.page.screenshot({ path: path.join(output, `${name}-failure.png`), fullPage: true }).catch(() => {}); console.error('FAIL', name, error.message); }

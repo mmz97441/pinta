@@ -31,7 +31,8 @@ async function completedFixture(browser, { manual = false, pending = false } = {
   return f;
 }
 async function open(f, invoice = null) {
-  const params = new URLSearchParams({ section: 'documents', returnTo: '/?mission=documents' });
+  // Opened from Mon travail filtered on documents: its address is /travail since 2026-10-28 (« / » is Colis).
+  const params = new URLSearchParams({ section: 'documents', returnTo: '/travail?mission=documents' });
   if (invoice) params.set('invoice', invoice);
   await f.page.goto(`${base}/colis/${ids.P}?${params}#quote-documents`);
   await invoicePanel(f).waitFor();
@@ -116,7 +117,7 @@ async function main() {
       assert.equal(await f.page.getByRole('button', { name: /^(Valider et passer à la suivante|Terminer la vérification)$/ }).count(), 0);
       await invoicePanel(f).getByRole('button', { name: 'Revenir au récapitulatif', exact: true }).click(); await complete(f); await noEditor(f);
       const url = new URL(f.page.url());
-      assert.equal(url.searchParams.has('invoice'), false); assert.equal(url.searchParams.get('section'), 'documents'); assert.equal(url.searchParams.get('returnTo'), '/?mission=documents');
+      assert.equal(url.searchParams.has('invoice'), false); assert.equal(url.searchParams.get('section'), 'documents'); assert.equal(url.searchParams.get('returnTo'), '/travail?mission=documents');
     });
     await scenario('explicit-consultation-keeps-validated-documents-readonly', {}, async f => {
       await open(f); await complete(f);

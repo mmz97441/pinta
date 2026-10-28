@@ -15,7 +15,9 @@ await scenario('template-mobile-draft-survives-navigation',async x=>{await go(x,
 // Template labels are plain text with the « accord » vocabulary; a whole default template is readable without an inner
 // scroll bar; the consent confirmations (lot 3b) are listed with when they are sent.
 await scenario('template-labels-plain-and-whole-body-visible',async x=>{await go(x,'/settings?tab=templates');const select=x.page.getByLabel('Message à modifier');await select.waitFor();
- const labels=await select.locator('option').allInnerTexts();assert.equal(labels.length,18);
+ // 20 since the two arrival notices of 2026-10-28 (« Avis d’arrivée », « Avis d’arrivée, facture d’achat à envoyer »).
+ const labels=await select.locator('option').allInnerTexts();assert.equal(labels.length,20);
+ for(const label of ['Avis d’arrivée','Avis d’arrivée, facture d’achat à envoyer'])assert.ok(labels.some(item=>item.replace(/ · brouillon$/,'')===label),label);
  for(const label of labels){assert.doesNotMatch(label,/\p{Extended_Pictographic}/u,`${label}: no emoji`);assert.doesNotMatch(label,/feu vert/i,`${label}: « accord » vocabulary`);}
  for(const label of ['Réception et demande d’accord','Relance de la demande d’accord','Accord enregistré (confirmation au client)','Accord enregistré, facture encore attendue','Choix « attendre d’autres colis » enregistré','Refus de préparation enregistré'])assert.ok(labels.some(item=>item.startsWith(label)),label);
  const field=x.page.getByLabel('Texte du message');const whole=()=>field.evaluate(element=>element.scrollHeight<=element.clientHeight+1);

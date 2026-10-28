@@ -74,7 +74,8 @@ async function fixture(browser,{mobile=false,readyQuote=false,holdAccept=false}=
   }
   return {first,second,fixtures,commands,errors,initialBusiness,saved,accepted,releaseAccept};
 }
-async function detail(f,section='preparation',action=PREP){await f.page.goto(`${base}/colis/${ids.P}?${new URLSearchParams({section,action,returnTo:'/?section=pool'})}`);await f.page.getByTestId('dossier-task-header').waitFor();}
+// Mon travail and its lists live at /travail since 2026-10-28 (« / » is Colis): a task opened from it returns there.
+async function detail(f,section='preparation',action=PREP){await f.page.goto(`${base}/colis/${ids.P}?${new URLSearchParams({section,action,returnTo:'/travail?section=pool'})}`);await f.page.getByTestId('dossier-task-header').waitFor();}
 async function browse(f){const summary=f.page.locator('summary').filter({hasText:'Parcourir les étapes'});if(await summary.count()&&!(await summary.locator('..').getAttribute('open')!==null))await summary.click();}
 async function fillMeasures(f){for(const[label,unit,value]of[['Longueur','cm',32],['Largeur','cm',21],['Hauteur','cm',18],['Poids réel','kg',2.7]])await f.page.getByLabel(`${label} · colis sortant 1 (${unit})`,{exact:true}).fill(String(value));}
 function noMessages(s){for(const f of s.fixtures){assert.equal(f.requests.some(r=>/\/(queue_message|client_decision|create-payment|confirm_departure)$/.test(r.path)),false);assert.deepEqual(f.networkDenied,[]);assert.deepEqual(f.errors,[]);}assert.deepEqual(s.errors,[]);assert.deepEqual(s.first.tables.messages,[]);}
@@ -101,7 +102,7 @@ function noMessages(s){for(const f of s.fixtures){assert.equal(f.requests.some(r
       assert.deepEqual([s.first.tables.colis,s.first.tables.factures,s.first.tables.lignes,s.first.tables.messages],s.initialBusiness);
     });
     await scenario('blocked-work-has-no-take-button-and-viewing-never-reserves',async s=>{
-      await s.first.page.goto(base+'/?section=pool');await row(s.first,PREP).waitFor();assert.equal(await row(s.first,QUOTE).count(),0);
+      await s.first.page.goto(base+'/travail?section=pool');await row(s.first,PREP).waitFor();assert.equal(await row(s.first,QUOTE).count(),0);
       await row(s.first,PREP).getByRole('link',{name:/^Ouvrir /}).click();await s.first.page.getByTestId('dossier-task-header').waitFor();assert.equal(s.commands.length,0);
       await detail(s.first,'devis',QUOTE);await owner(s.first).getByText(/Mesures et factures à vérifier/).waitFor();assert.equal(await owner(s.first).getByRole('button',{name:'Je m’en occupe',exact:true}).count(),0);
       assert.equal(s.commands.length,0);
@@ -118,7 +119,7 @@ function noMessages(s){for(const f of s.fixtures){assert.equal(f.requests.some(r
       await detail(s.first);await owner(s.first).getByRole('button',{name:'Je m’en occupe',exact:true}).click();await fillMeasures(s.first);await s.first.page.getByRole('button',{name:'Enregistrer l’optimisation',exact:true}).click();
       const after=s.first.page.getByRole('navigation',{name:'Après cette tâche',exact:true});await after.getByText(/devis/i).first().waitFor();await after.getByText(/prendre|disponible/i).first().waitFor();
       const quote=s.first.tables.staff_work_actions.find(a=>a.id===QUOTE);assert.equal(quote.state,'ready');assert.equal(quote.assignee_id,null);
-      await s.second.page.goto(base+'/?section=pool');await row(s.second,QUOTE).getByRole('button',{name:'Je m’en occupe',exact:true}).waitFor();assert.equal(s.commands.filter(c=>c.kind==='work').length,1);
+      await s.second.page.goto(base+'/travail?section=pool');await row(s.second,QUOTE).getByRole('button',{name:'Je m’en occupe',exact:true}).waitFor();assert.equal(s.commands.filter(c=>c.kind==='work').length,1);
     },{readyQuote:true});
     await scenario('team-priorities-separate-ready-work-waits-and-active-colleagues',async s=>{
       await s.first.page.goto(base+'/equipe');
@@ -188,7 +189,7 @@ function noMessages(s){for(const f of s.fixtures){assert.equal(f.requests.some(r
       await owner(s.first).getByLabel('Passer à').selectOption(B);await owner(s.first).getByLabel('Consigne pour la reprise').fill('Vérifier la protection du carton fragile avant fermeture.');
       await owner(s.first).getByRole('button',{name:'Proposer le relais',exact:true}).click();await owner(s.first).getByText(/Relais proposé à Madly/).waitFor();
       const task=s.first.tables.staff_work_actions.find(a=>a.id===PREP);assert.equal(task.assignee_id,ids.A);assert.equal(task.handoff_to,B);
-      await s.second.page.goto(base+'/?section=now');const relay=s.second.page.getByRole('region',{name:'Relais à accepter',exact:true});
+      await s.second.page.goto(base+'/travail?section=now');const relay=s.second.page.getByRole('region',{name:'Relais à accepter',exact:true});
       await relay.getByText(/Vérifier la protection du carton fragile/).waitFor();await relay.getByRole('button',{name:'Accepter et ouvrir',exact:true}).click();
       await s.second.page.waitForURL(url=>url.pathname===`/colis/${ids.P}`&&url.searchParams.get('section')==='preparation');
       await owner(s.second).getByText('Vous vous en occupez',{exact:true}).waitFor();await owner(s.second).getByText(/Vérifier la protection du carton fragile/).waitFor();
@@ -210,7 +211,7 @@ function noMessages(s){for(const f of s.fixtures){assert.equal(f.requests.some(r
     });
     await scenario('late-handoff-acceptance-never-pulls-operator-back-from-another-screen',async s=>{
       const task=s.first.tables.staff_work_actions.find(a=>a.id===PREP);Object.assign(task,{state:'in_progress',assignee_id:ids.A,handoff_to:B,handoff_note:'Consigne enregistrée à reprendre.'});
-      await s.second.page.goto(base+'/?section=now');await s.second.page.getByRole('region',{name:'Relais à accepter',exact:true}).getByRole('button',{name:'Accepter et ouvrir',exact:true}).click();await s.accepted;
+      await s.second.page.goto(base+'/travail?section=now');await s.second.page.getByRole('region',{name:'Relais à accepter',exact:true}).getByRole('button',{name:'Accepter et ouvrir',exact:true}).click();await s.accepted;
       const response=s.second.page.waitForResponse(response=>response.url().endsWith('/mutate_staff_work_action'));
       try{
         await s.second.page.getByRole('button',{name:'Clients',exact:true}).click();await s.second.page.getByRole('heading',{name:'Clients',exact:true}).waitFor();

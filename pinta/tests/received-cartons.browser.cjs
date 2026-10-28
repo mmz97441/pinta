@@ -3,7 +3,7 @@ const { openDetailsFor } = require('./ui-disclosure-helpers.cjs');
 /* Staff attachment visibility; all API traffic uses isolated fixtures, including reloads. */
 const { chromium } = require('playwright');
 const AxeBuilder = require('@axe-core/playwright').default;
-const { setup, ids, base } = require('./browser-regression.cjs');
+const { setup, ids, base, openFormerReception } = require('./browser-regression.cjs');
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
@@ -80,8 +80,10 @@ async function main() {
       assert.equal(await measures.getByRole('listitem').count(), 3, 'The saved carton remains visible after reload');
 
       // A receipt started from the general list must open its actual destination dossier.
+      // The former receipt screen, opened by its address from the list as its button did (the button opens the new
+      // reception, /recevoir, since 2026-10-28).
       await f.page.goto(`${base}/colis?sort=client&dir=desc`);
-      await f.page.getByRole('button', { name: 'Réceptionner des cartons', exact: true }).click();
+      await openFormerReception(f.page);
       await dialog.getByLabel('Client', { exact: true }).fill('Camille');
       await dialog.getByRole('button').filter({ hasText: /Exemple/ }).first().click();
       await dialog.getByRole('button').filter({ hasText: 'EXP-TEST-001' }).click();

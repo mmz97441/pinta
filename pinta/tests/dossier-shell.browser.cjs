@@ -18,7 +18,8 @@ const output = process.env.PINTA_DOSSIER_SHELL_OUT || '/tmp/pinta-dossier-shell'
         await f.page.setViewportSize(mobile ? { width: 390, height: 844 } : { width: 1440, height: 1000 });
         await f.login();
         if (mobile) await f.page.evaluate(() => localStorage.setItem('expedile-theme', 'dark'));
-        await f.page.goto(`${base}/colis/${ids.P}?section=preparation&returnTo=${encodeURIComponent('/?mission=preparation')}`);
+        // Opened from Mon travail filtered on preparation: its address is /travail since 2026-10-28 (« / » is Colis).
+        await f.page.goto(`${base}/colis/${ids.P}?section=preparation&returnTo=${encodeURIComponent('/travail?mission=preparation')}`);
         await f.page.getByTestId('dossier-task-header').waitFor();
         assert.equal(await f.page.getByRole('region', { name: 'Mesures des cartons', exact: true }).count(), 0, 'Receipt context does not occupy the task page.');
         assert.equal(await f.page.getByRole('log', { name: 'Messages avec le client', exact: true }).count(), 0, 'Conversation is closed until explicitly requested.');
@@ -61,9 +62,9 @@ const output = process.env.PINTA_DOSSIER_SHELL_OUT || '/tmp/pinta-dossier-shell'
         await close.click();
         await f.page.getByRole('tab', { name: 'Colis', exact: true }).click();
         await openTaskNavigation(f);await f.page.getByLabel('Tâche du dossier', { exact: true }).selectOption('documents');
-        assert.equal(new URL(f.page.url()).searchParams.get('returnTo'), '/?mission=preparation');
+        assert.equal(new URL(f.page.url()).searchParams.get('returnTo'), '/travail?mission=preparation');
         assert.equal(new URL(f.page.url()).searchParams.get('section'), 'documents');
-        await f.page.goto(`${base}/colis/${ids.P}?returnTo=%2F%3Fmission%3Dpreparation`);
+        await f.page.goto(`${base}/colis/${ids.P}?returnTo=%2Ftravail%3Fmission%3Dpreparation`);
         await f.page.waitForURL(url => url.searchParams.get('section') === 'devis');
         assert.deepEqual(f.errors, []);
         assert.deepEqual(f.networkDenied, []);

@@ -46,7 +46,8 @@ async function staffFixture(browser) {
   results.push({test:'measure-only save persists without documents and cannot publish an incomplete quote',pass:true});
   // A local draft retains the exact original version when another person changes the record.
   await f.page.getByLabel('Poids réel · colis sortant 1 (kg)',{exact:true}).fill('5');
-  await navigate(f.page,'/');await f.page.getByRole('heading',{name:'Mon travail',exact:true}).waitFor();
+  // Away to Mon travail, at /travail since 2026-10-28 (« / » is Colis), and back.
+  await navigate(f.page,'/travail');await f.page.getByRole('heading',{name:'Mon travail',exact:true}).waitFor();
   f.tables.colis[0].updated_at=new Date(Date.parse(f.tables.colis[0].updated_at)+60000).toISOString();f.tables.colis[0].final_packages[0].poids=9;f.tables.colis[0].fin_p=9;
   await navigate(f.page,`/colis/${ids.P}?section=preparation`);await f.page.getByRole('button',{name:'Recharger et remplacer mon brouillon'}).waitFor();
   assert.equal(await f.page.getByLabel('Poids réel · colis sortant 1 (kg)',{exact:true}).inputValue(),'5');

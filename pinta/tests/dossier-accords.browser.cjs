@@ -26,7 +26,7 @@ const AxeBuilder = require('@axe-core/playwright').default;
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const XLSX = require('xlsx');
-const { setup, base, ids } = require('./browser-regression.cjs');
+const { setup, base, ids, RECEPTION_READ_RPCS } = require('./browser-regression.cjs');
 const output = process.env.PINTA_DOSSIER_ACCORDS_OUT || '/tmp/pinta-dossier-accords';
 const results = [];
 
@@ -160,8 +160,8 @@ async function fixture(browser, { role = 'directeur', width = 1440, height = wid
 const extraDeparture = (id, ref, date, code, fields = {}) => ({ id, ref, date_depart: date, destination_code: code, statut: 'planifie', mode_transport: 'aerien', loading_closes_at: null, departed_at: null, manifest_version: 0, updated_at: '2026-10-01T08:00:00Z', ...fields });
 function addDepartures(f, ...rows) { f.tables.envois.push(...rows); f.envoisBefore = structuredClone(f.tables.envois); }
 
-// Reading writes nothing: only the read-only RPCs of loading and of the dossier page.
-const READ_ONLY_RPCS = ['/refresh_staff_work_actions', '/get_reception_dates', '/suggest_customs_tariffs', '/get_invoice_review_context'];
+// Reading writes nothing: only the read-only RPCs of loading, of the dossier page and of the Colis home (« / »).
+const READ_ONLY_RPCS = ['/refresh_staff_work_actions', '/get_reception_dates', '/suggest_customs_tariffs', '/get_invoice_review_context', ...RECEPTION_READ_RPCS];
 const DEPARTURE_COMMANDS = ['assign_colis_departure', 'set_colis_departure_wish', 'create_departure_for_colis'];
 const writes = f => f.requests.filter(request => ['POST', 'PATCH', 'DELETE'].includes(request.method) && request.path.startsWith('/rest/v1/') && !READ_ONLY_RPCS.some(rpc => request.path.endsWith(rpc)));
 const commands = (f, name) => f.requests.filter(request => request.path.endsWith(`/rpc/${name}`)).map(request => request.input);

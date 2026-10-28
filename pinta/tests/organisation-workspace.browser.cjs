@@ -60,7 +60,8 @@ const results = [];
    } else return route.fallback();
    return route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
   });
-  await f.login();
+  // Mon travail lives at /travail since 2026-10-28 (« / » is Colis); its links return there.
+  await f.login('/travail');
   await f.page.getByRole('heading', { name: 'Mon travail', exact: true }).waitFor();
   await f.page.getByRole('button', { name: 'À faire 3', exact: true }).waitFor();
   assert.equal(await f.page.getByRole('navigation', { name: 'Mes tâches', exact: true }).getByRole('button').count(), 2);
@@ -74,7 +75,7 @@ const results = [];
   await f.page.getByRole('button', { name: 'À faire 1', exact: true }).waitFor();
   await f.page.getByRole('region', { name: 'À faire', exact: true }).getByRole('link', { name: /^Ouvrir / }).first().click();
   await f.page.waitForURL('**/colis/' + P + '?*');
-  assert.equal(new URL(f.page.url()).searchParams.get('returnTo'), '/?mission=preparation');
+  assert.equal(new URL(f.page.url()).searchParams.get('returnTo'), '/travail?mission=preparation');
   results.push({ test: 'personal-permitted-mission-counts-and-exact-next-route', pass: true });
   await f.page.goto(base + '/equipe?mission=preparation');
   const prepare = f.page.locator('article').filter({ hasText: 'Optimiser les colis' });
@@ -167,7 +168,7 @@ const results = [];
   await f.page.locator('#staff-message-' + P2).waitFor();
   assert.equal(f.tables.client_inbox[0].assigned_colis_id, P2);
   results.push({ test: 'unassigned-message-shares-conversation-view-and-explicit-dossier-assignment', pass: true });
-  await f.page.goto(base + '/?section=pool');
+  await f.page.goto(base + '/travail?section=pool');
   await f.page.getByRole('button', { name: 'Mes missions et disponibilité', exact: true }).click();
   await f.page.getByLabel('Disponible pour prendre de nouvelles tâches').uncheck();
   await f.page.getByLabel('Absence jusqu’au (facultatif)').fill('2099-10-01T10:00');
@@ -188,7 +189,7 @@ const results = [];
   await f.page.getByRole('status').filter({ hasText: /^1 dossier$/ }).waitFor();
   assert.equal(await f.page.getByRole('button', { name: 'EXP-TEST-002', exact: true }).count(), 0);
   results.push({ test: 'departure-url-filter-count-and-rows-share-scope', pass: true });
-  await f.page.goto(base + '/?mission=preparation');
+  await f.page.goto(base + '/travail?mission=preparation');
   // The table opens Options in its own row, right under the task.
   const personalRow = f.page.locator('[data-work-action]').filter({ hasText: 'Optimiser les colis' });
   const personalPanel = f.page.locator('[data-work-action-panel="prepare"]');
@@ -211,7 +212,7 @@ const results = [];
   await f.page.goto(base + '/conversations?owner=unassigned');
   assert.equal(await f.page.getByRole('button').filter({ hasText: 'EXP-TEST-002' }).count(), 0);
   results.push({ test: 'closed-conversations-without-active-action-are-treated-not-unassigned', pass: true });
-  for (const width of [1440,390]) for (const dark of [false,true]) for (const [route,title] of [['/','Mon travail'],['/equipe','Équipe'],['/conversations?dossier=' + P,'Conversation']]) {
+  for (const width of [1440,390]) for (const dark of [false,true]) for (const [route,title] of [['/travail','Mon travail'],['/equipe','Équipe'],['/conversations?dossier=' + P,'Conversation']]) {
    await f.page.setViewportSize({ width, height: width === 390 ? 844 : 1000 });
    await f.page.goto(base + route);
    await f.page.getByRole('heading', { name: title, exact: true }).waitFor();
@@ -227,7 +228,8 @@ const results = [];
   assert.equal(f.errors.length, 0, f.errors.join('\n')); assert.equal(f.networkDenied.length, 0, f.networkDenied.join('\n'));
   await f.context.close();
   f = await setup(browser, 'directeur', { failTable: 'staff_work_actions' });
-  await f.login();
+  // The tasks that could not be read are stated by Mon travail (/travail).
+  await f.login('/travail');
   await f.page.getByRole('alert').filter({ hasText: 'Indisponibilité simulée' }).waitFor();
   await f.page.getByRole('button', { name: 'Réessayer', exact: true }).waitFor();
   results.push({ test: 'work-loading-failure-visible-with-retry', pass: true });

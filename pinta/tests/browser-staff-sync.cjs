@@ -20,7 +20,8 @@ const { setup } = require('./browser-regression.cjs');
     });
     await f.page.clock.install();
     await f.login();
-    await f.page.getByRole('button', { name: 'Dossiers d’expédition', exact: true }).click();
+    // The dossier list: « Dossiers », under « Plus » in the sidebar since 2026-10-28.
+    await f.page.locator('.staff-sidebar').getByRole('button', { name: 'Dossiers', exact: true }).click();
     await f.page.getByText('EXP-TEST-001', { exact: true }).filter({ visible: true }).first().waitFor();
     const client = { ...f.tables.clients[0], id: '77777777-0000-4000-8000-000000000001', nom: 'Collaboration', prenom: 'Synchro' };
     const colleagueParcel = { ...f.tables.colis[0], id: '88888888-0000-4000-8000-000000000001', client_id: client.id, ref: 'EXP-SYNC02', updated_at: new Date().toISOString() };

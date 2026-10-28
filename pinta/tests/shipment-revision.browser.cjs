@@ -123,7 +123,8 @@ async function invalidFieldVisible(f, element) {
     const f = await fixture(browser, options);
     try {
       await f.page.setViewportSize(options.mobile ? { width: 390, height: 844 } : { width: 1440, height: 1000 });
-      await f.login(); await f.page.getByRole('heading', { name: 'Mon travail', exact: true }).waitFor();
+      // Mon travail lives at /travail since 2026-10-28 (« / » is Colis).
+      await f.login('/travail'); await f.page.getByRole('heading', { name: 'Mon travail', exact: true }).waitFor();
       await run(f); noImplicitMutation(f);
       assert.equal(await f.page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false, 'The correction screen fits the viewport');
       results.push({ test: name, pass: true });

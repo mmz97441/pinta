@@ -104,8 +104,8 @@ async function fixture(browser, options={}) {
   }));
   return f;
 }
-async function open(f,task){await f.page.goto(`${base}/colis/${ids.P}?section=${task}&returnTo=%2F%3Fmission%3Ddocuments`);await workspace(f).waitFor();}
-async function fromWork(f,kind){action(f,kind);await f.page.goto(`${base}/?section=now`);const item=f.page.locator(`[data-work-action="${TASK}"]`);await item.waitFor();await item.getByRole('link').first().click();await workspace(f).waitFor();}
+async function open(f,task){await f.page.goto(`${base}/colis/${ids.P}?section=${task}&returnTo=%2Ftravail%3Fmission%3Ddocuments`);await workspace(f).waitFor();}
+async function fromWork(f,kind){action(f,kind);await f.page.goto(`${base}/travail?section=now`);const item=f.page.locator(`[data-work-action="${TASK}"]`);await item.waitFor();await item.getByRole('link').first().click();await workspace(f).waitFor();}
 async function capture(f,name,mobile){await f.page.evaluate(async()=>{await document.fonts.ready;window.scrollTo(0,0);});assert.equal(await f.page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false,`No horizontal overflow on ${name}`);await f.page.screenshot({path:`${output}/${mobile?'mobile':'desktop'}-${name}.png`,fullPage:true,animations:'disabled'});}
 async function allScreensReadOnly(f){const snapshot=JSON.stringify([f.tables.colis,f.tables.factures,f.tables.messages]),count=f.commands.length;for(const task of ['reception','accord','preparation','documents','devis','paiement','expedition','livraison']){await openTaskNavigation(f);await taskSelect(f).selectOption(task);await f.page.waitForURL(url=>url.searchParams.get('section')===task);}assert.equal(JSON.stringify([f.tables.colis,f.tables.factures,f.tables.messages]),snapshot);assert.equal(f.commands.length,count);}
 

@@ -5,7 +5,7 @@ const AxeBuilder = require('@axe-core/playwright').default;
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const XLSX = require('xlsx');
-const { setup, base, ids } = require('./browser-regression.cjs');
+const { setup, base, ids, RECEPTION_READ_RPCS } = require('./browser-regression.cjs');
 const output = process.env.PINTA_TABLE_COMFORT_OUT || '/tmp/pinta-dossier-table-comfort';
 const results = [];
 const parcelId = n => n === 1 ? ids.P : `93000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
@@ -13,7 +13,8 @@ const colleague = '94000000-1111-4111-8111-111111111111';
 const viewLabels = {daily:'Travail quotidien',payments:'Paiements',departures:'Départs'};
 const row = (f,n) => f.page.locator(`[data-dossier-row="${parcelId(n)}"]:visible`).first();
 const cell = (f,n,key) => row(f,n).locator(`[data-column="${key}"]`);
-const readonly = ['/refresh_staff_work_actions','/get_reception_dates'];
+// The reads sent by POST are no writes: the work queue's, the reception dates', and those of the Colis home (« / »).
+const readonly = ['/refresh_staff_work_actions','/get_reception_dates',...RECEPTION_READ_RPCS];
 const businessWrites = f => f.requests.filter(r => ['POST','PATCH','DELETE'].includes(r.method) && r.path.startsWith('/rest/v1/') && !readonly.some(s => r.path.endsWith(s)));
 const respond = (route,data) => route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(data)});
 async function fixture(browser,{restricted=false,readMoney=false}={}) {

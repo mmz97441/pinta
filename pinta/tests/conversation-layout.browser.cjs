@@ -3,7 +3,7 @@ const { chromium } = require('playwright');
 const AxeBuilder = require('@axe-core/playwright').default;
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
-const { setup, base, ids } = require('./browser-regression.cjs');
+const { setup, base, ids, RECEPTION_READ_RPCS } = require('./browser-regression.cjs');
 const output = process.env.PINTA_CONVERSATION_LAYOUT_OUT || '/tmp/pinta-conversation-layout';
 const results=[];
 const log=f=>f.page.getByRole('log',{name:'Messages avec le client',exact:true});
@@ -23,7 +23,8 @@ async function main(){
     if(process.env.PINTA_CONVERSATION_LAYOUT_FILTER&&!name.includes(process.env.PINTA_CONVERSATION_LAYOUT_FILTER))return;
     const f=await setup(browser,'directeur');f.page.setDefaultTimeout(12000);fixture(f);const before=structuredClone(f.tables.colis);
     try{await run(f);assert.deepEqual(f.tables.colis,f.expectedServerColis||before);assert.deepEqual(f.errors,[]);assert.deepEqual(f.networkDenied,[]);
-      const writes=f.requests.filter(r=>['POST','PATCH','DELETE'].includes(r.method)&&r.path.startsWith('/rest/v1/')&&!['/rest/v1/rpc/refresh_staff_work_actions','/rest/v1/rpc/get_invoice_review_context','/rest/v1/rpc/get_reception_dates','/rest/v1/messages'].includes(r.path));
+      // The reads of the Colis home (« / » since 2026-10-28) are sent by POST too.
+      const writes=f.requests.filter(r=>['POST','PATCH','DELETE'].includes(r.method)&&r.path.startsWith('/rest/v1/')&&!['/rest/v1/rpc/refresh_staff_work_actions','/rest/v1/rpc/get_invoice_review_context','/rest/v1/rpc/get_reception_dates','/rest/v1/messages',...RECEPTION_READ_RPCS].includes(r.path));
       assert.deepEqual(writes,[],'Reading, resizing and drafting never send, claim, notify or advance a task.');
       assert.equal(f.requests.some(r=>/\/(queue_message|send-email|send-telegram)$/.test(r.path)),false);results.push({test:name,pass:true});
     }catch(error){process.exitCode=1;results.push({test:name,pass:false,error:error.stack});await f.page.screenshot({path:`${output}/${name}-failure.png`,fullPage:true}).catch(()=>{});await fs.writeFile(`${output}/${name}-failure.txt`,await f.page.locator('body').innerText().catch(()=>''));}
@@ -40,7 +41,8 @@ async function main(){
       assert.ok(chatBox.height>=320,'Short screens retain the usable conversation minimum.');
       assert.ok(logBox.height>=96,'History keeps useful reading space.');assert.ok(sendBox.height>=44);
       if(width<640)assert.ok(replyBox.width>=chatBox.width*.8,'The phone composer has useful writing width.');
-      const bottom=width<1024?(await f.page.getByRole('button',{name:'Dossiers',exact:true}).locator('..').boundingBox()).y:height;
+      // The phone navigation bar (it held « Dossiers » until 2026-10-28; the bar itself is measured now).
+      const bottom=width<1024?(await f.page.locator('[data-staff-bottom-nav]').boundingBox()).y:height;
       const history=await panel.locator('summary').filter({hasText:'Ce qui a déjà été fait'}).boundingBox();
       assert.ok(replyBox.y>=0&&sendBox.y+sendBox.height<=bottom,`Composer and send action are above navigation (${sendBox.y+sendBox.height} <= ${bottom}).`);
       assert.ok(history.y+history.height<=bottom,'The collapsed dossier history remains reachable without covering the composer.');
@@ -65,8 +67,8 @@ async function main(){
       await reply(f).fill('Brouillon conservé sur un écran court.');
       const send=f.page.getByRole('button',{name:'Envoyer le message',exact:true});await send.focus();await send.scrollIntoViewIfNeeded();
       // While typing on a short phone the bottom bar steps aside: then the screen's own bottom is the limit.
-      const navButton=f.page.getByRole('button',{name:'Dossiers',exact:true});
-      const action=await send.boundingBox(),nav=await navButton.count()?await navButton.locator('..').boundingBox():{y:await f.page.evaluate(()=>innerHeight)};
+      const navBar=f.page.locator('[data-staff-bottom-nav]');
+      const action=await send.boundingBox(),nav=await navBar.isVisible()?await navBar.boundingBox():{y:await f.page.evaluate(()=>innerHeight)};
       const ancestors=await send.evaluate(node=>{const result=[];for(let p=node;p;p=p.parentElement){const r=p.getBoundingClientRect(),c=getComputedStyle(p);result.push({tag:p.tagName,id:p.id,class:p.className,y:r.y,height:r.height,scrollTop:p.scrollTop,client:p.clientHeight,total:p.scrollHeight,overflow:c.overflowY});}return result;});
       assert.ok(action.y>=48&&action.y+action.height<=nav.y,'The short-screen fallback scroll reaches the whole send button above navigation: '+JSON.stringify({action,nav,ancestors}));
       assert.equal(await send.isEnabled(),true);await reply(f).focus();await reply(f).scrollIntoViewIfNeeded();
