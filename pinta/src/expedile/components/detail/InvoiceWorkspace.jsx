@@ -292,7 +292,7 @@ export default function InvoiceWorkspace({ workspace = false, taskMode = false, 
   const choose = (id, nextTab) => {
     setSelectedId(id); setReviewExpanded(true); setRejecting(false); setReason(''); setRemovingDuplicate(false); setOriginalId('');
     if (nextTab) setTab(nextTab);
-    if (requestedId && requestedId !== id) {
+    if (alive.current && requestedId && requestedId !== id) {
       requestedTab.current = { id, tab: nextTab || 'document' };
       internalNavigation.current = true;
       const params = new URLSearchParams(location.search); params.set('invoice', id);
@@ -406,7 +406,9 @@ export default function InvoiceWorkspace({ workspace = false, taskMode = false, 
     const waiting = buckets.toCorrect.filter(invoice => invoice.id !== invoiceId).length;
     const remainder = left ? ` Il reste ${plural(left, 'facture', 'factures')} à vérifier.` : waiting ? ` ${plural(waiting, 'facture attend', 'factures attendent')} la correction du client.` : '';
     const refreshed = await afterCommit(invoiceId, confirm ? `Facture ${entry?.n || ''} sur ${buckets.total} · ${draft.vendeur.trim() || name(selected)} : facture et articles validés et enregistrés.${remainder}` : `Brouillon enregistré pour ${name(selected)}. Il sera disponible à la prochaine ouverture.`);
-    if (taskMode && confirm && refreshed) {
+    // The operator may have left the dossier while the refresh ran (« Retour à la liste de travail »): an unmounted
+    // workspace never navigates back to the next invoice.
+    if (alive.current && taskMode && confirm && refreshed) {
       const next = reviewQueue(invoiceBuckets(parcelRef.current.factures || [])).find(invoice => invoice.id !== invoiceId);
       if (next) chooseForReview(next.id); else closeReview();
     }
