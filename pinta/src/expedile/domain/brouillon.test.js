@@ -162,7 +162,8 @@ test('« Attend le client »: nothing to do while the request is followed up or 
   // The wait the client chose: respected until its day, then to relance.
   assert.deepEqual(read({ ...waiting, attenteClientDate: '2026-10-27T10:00:00Z', attenteClientUntil: '2026-11-02T10:00:00Z' }), ['attend_client', 'Le client attend · jusqu’au 02/11', null]);
   const ended = { ...waiting, attenteClientDate: '2026-10-20T10:00:00Z', attenteClientUntil: '2026-10-27T10:00:00Z', messages: [staffMessage('demande_feu_vert', '2026-10-19T08:00:00Z')] };
-  assert.deepEqual(read(ended), ['attend_client', 'Attente terminée le 27/10 · à réexaminer', 'relancer']);
+  assert.deepEqual(read(ended), ['attend_client', 'Attente terminée le 27/10 · à réexaminer', 'redemander_accord']);
+  assert.deepEqual(stageOf(ended).action, { key: 'redemander_accord', label: 'Redemander l’accord', task: 'accord' }, 'After a chosen wait the accord is asked again in its task, not relanced.');
   assert.deepEqual(read({ ...ended, messages: [...ended.messages, staffMessage('relance_feu_vert', '2026-10-28T09:00:00Z')] }), ['attend_client', 'Relancé le 28/10/2026', null],
     'Once relanced after the wait, the relance is followed up like any other.');
   assert.deepEqual(read({ ...waiting, attenteClientDate: '2026-10-27T10:00:00Z' }), ['attend_client', 'Le client attend', null]);

@@ -269,6 +269,8 @@ const ACTIONS = {
   completerMesures: () => action('completer_mesures', 'Compléter les mesures', 'reception'),
   demanderAccord: () => action('demander_accord', 'Demander l’accord', 'accord', { panel: 'demande_feu_vert' }),
   relancer: () => action('relancer', 'Relancer', 'accord', { panel: 'relance_feu_vert' }),
+  // After a wait the client chose, the request is asked again (TaskReopen in the accord task, as StaffDetailView does).
+  redemanderAccord: () => action('redemander_accord', 'Redemander l’accord', 'accord'),
   voirDossier: task => action('voir_dossier', 'Voir le dossier', task),
   preparer: () => action('preparer', 'Préparer', 'preparation'),
   ajouterFacture: () => action('ajouter_facture', 'Ajouter la facture', 'documents'),
@@ -301,8 +303,9 @@ function waitingStage(f) {
   const relance = consentRelance(dossier);
   if (followUp?.pending) return stage('attend_client', STAGE_LABELS.attend_client, `${relance ? 'Relance' : 'Demande'} en cours d’envoi`, 'waiting', null);
   if (followUp) return stage('attend_client', STAGE_LABELS.attend_client, `${relance ? 'Relancé' : 'Demandé'} le ${dateLabel(followUp.at)}`, 'waiting', null);
-  // The wait has ended (« Attente terminée … à réexaminer »): to relance.
-  if (waitChosen) return stage('attend_client', STAGE_LABELS.attend_client, consentSummary(consent), 'waiting', ACTIONS.relancer());
+  // The wait has ended (« Attente terminée … à réexaminer »): the client answered « wait », so the accord is asked
+  // again from the accord task (a new request version), never relanced on the old one.
+  if (waitChosen) return stage('attend_client', STAGE_LABELS.attend_client, consentSummary(consent), 'waiting', ACTIONS.redemanderAccord());
   // No follow-up running: the relance is due. It never leaves on its own (the server's reminders are manual).
   // A relance that did not reach the client says so (« Envoi non confirmé », « Envoi annulé »…).
   const requestedAt = dateLabel(dossier.demandeFeuVertEnvoyeeAt);

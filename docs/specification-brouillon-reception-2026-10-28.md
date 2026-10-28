@@ -197,7 +197,7 @@ Module pur (imports avec extension `.js`, testé par `node --test`, compatible S
 | `reception_a_valider` | Réception à valider | des cartons attendent la validation | `valider_reception` « Valider la réception » → `/recevoir?client=<id>&valider=1` |
 | `mesures_a_completer` | Mesures à compléter | `receptionne` (ancien carton non mesuré) | `completer_mesures` → tâche `reception` |
 | `accord_a_demander` | Accord à demander | `mesure` | `demander_accord` « Demander l'accord » (panneau d'envoi sur place) |
-| `attend_client` | Attend le client | `attente_feu_vert` | aucune ; `relancer` « Relancer » quand `consentFollowUp` la dit due ou que l'attente choisie est terminée (les relances ne partent jamais seules) |
+| `attend_client` | Attend le client | `attente_feu_vert` | aucune ; `relancer` « Relancer » (panneau d'envoi sur place) quand `consentFollowUp` la dit due ; `redemander_accord` « Redemander l'accord » → tâche `accord` quand l'attente choisie par le client est terminée (les relances ne partent jamais seules) |
 | `client_refuse` | Le client refuse | `refuse_client` | `voir_dossier` → tâche `accord` |
 | `produit_interdit` | Produit interdit à régler | produit interdit signalé et dossier accordé | `voir_dossier` → tâche `reception` |
 | `a_preparer` | À préparer | accord donné, préparation pas à jour | `preparer` → tâche `preparation` |
