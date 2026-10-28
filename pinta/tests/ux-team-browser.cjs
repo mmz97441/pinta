@@ -2,7 +2,9 @@ const { openSavedReception } = require('./reception-page.helper.cjs');
 /* Reuses the network-denying fixture harness; every mutation stays in memory. */
 const { chromium } = require('playwright');
 const { default: AxeBuilder } = require('@axe-core/playwright');
-const { setup, ids, base } = require('./browser-regression.cjs');
+// « Réceptionner des cartons » opens the new reception (/recevoir) since 2026-10-28: the former receipt screen tested
+// here is opened by its address, from the page shown, as the button did (openFormerReception).
+const { setup, ids, base, openFormerReception } = require('./browser-regression.cjs');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const assert = require('node:assert/strict');
@@ -69,7 +71,7 @@ async function run() {
       await f.page.screenshot({ path: path.join(out, `file-${mobile ? 'mobile' : 'desktop'}.png`), fullPage: true });
       if (mobile) await f.page.getByRole('dialog', { name: 'Filtres', exact: true }).getByRole('button', { name: 'Fermer les filtres', exact: true }).click();
       console.log('Filtres OK');
-      await f.page.getByRole('button', { name: 'Réceptionner des cartons', exact: true }).first().click();
+      await openFormerReception(f.page);
       const dialog = f.page.getByRole('region', { name: 'Réceptionner des cartons' });
       await dialog.getByPlaceholder('Rechercher un client…').fill('Camille');
       await dialog.getByRole('button').filter({ hasText: /Exemple/ }).first().click();
@@ -119,7 +121,7 @@ async function run() {
       assert.deepEqual(inserted?.input.check_interdits, ['Batteries lithium']);
       assert.ok(!f.requests.some(request => request.path.endsWith('/rpc/queue_message')), 'Without notification stays without notification');
       assert.deepEqual(f.errors, []);
-      await f.page.getByRole('button', { name: 'Réceptionner des cartons', exact: true }).first().click();
+      await openFormerReception(f.page);
       await f.page.getByRole('button', { name: 'Réceptionner pour un autre client', exact: true }).click();
       await dialog.getByPlaceholder('Rechercher un client…').fill('Nouveau test');
       await dialog.getByRole('button', { name: /Créer « Nouveau test/ }).click();
@@ -146,7 +148,7 @@ async function run() {
       // Attach a new physical carton with no known supplier/tracking: measurements identify it.
       const receiptNotice = f.page.getByText(/Colis .* réceptionné — casier C-01/);
       assert.equal(await receiptNotice.isVisible(), true, 'The reception notice is still displayed before the next action');
-      await f.page.getByRole('button', { name: 'Réceptionner des cartons', exact: true }).first().click();
+      await openFormerReception(f.page);
       await f.page.getByRole('button', { name: 'Réceptionner pour un autre client', exact: true }).click();
       await dialog.waitFor();
       assert.equal(await receiptNotice.isVisible(), true, 'The next receipt opens while the notice remains displayed, including over the mobile header');

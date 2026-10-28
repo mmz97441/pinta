@@ -10,7 +10,8 @@ const output = process.env.PINTA_TASK_BACK_OUT || '/tmp/pinta-task-back-navigati
 const results = [];
 const header = f => f.page.getByTestId('dossier-task-header');
 const snapshot = f => JSON.stringify({ parcels: f.tables.colis, invoices: f.tables.factures, articles: f.tables.lignes, messages: f.tables.messages });
-const returnTo = '/?section=progress&mission=documents&q=Exemple';
+// A task opened from Mon travail and its filters: /travail since 2026-10-28 (« / » is Colis).
+const returnTo = '/travail?section=progress&mission=documents&q=Exemple';
 async function open(f, task) {
  await f.page.goto(`${base}/colis/${ids.P}?${new URLSearchParams({ section: task, returnTo })}`);
  await header(f).waitFor();

@@ -108,7 +108,8 @@ async function main() {
     if (process.env.PINTA_TASK_CLAIM_FILTER && !name.includes(process.env.PINTA_TASK_CLAIM_FILTER)) return;
     const f = await fixture(browser, options);
     try {
-      await f.login();
+      // Mon travail lives at /travail since 2026-10-28 (« / » is Colis).
+      await f.login('/travail');
       await f.page.getByRole('heading', { name: 'Mon travail', exact: true }).waitFor();
       await run(f);
       assert.deepEqual(f.errors, [], 'No runtime errors');
@@ -127,7 +128,7 @@ async function main() {
   }
   try {
     await scenario('ready-unassigned-one-click-take-opens-work-and-removes-pool-entry', async f => {
-      await f.page.goto(`${base}/?section=pool`);
+      await f.page.goto(`${base}/travail?section=pool`);
       await f.page.getByRole('region', { name: 'À prendre', exact: true }).waitFor();
       await taskRow(f).waitFor();
       assert.equal(await claimButton(taskRow(f)).isEnabled(), true);
@@ -136,11 +137,11 @@ async function main() {
       assert.equal(new URL(f.page.url()).searchParams.get('action'), TASK);
       await ownership(f).getByText('Vous vous en occupez', { exact: true }).waitFor();
       assertPreserved(f);
-      await f.page.goto(`${base}/?section=now`);
+      await f.page.goto(`${base}/travail?section=now`);
       await taskRow(f).waitFor();
       await taskRow(f).getByText('En cours', { exact: true }).waitFor();
       assert.equal(await claimButton(taskRow(f)).count(), 0);
-      await f.page.goto(`${base}/?section=pool`);
+      await f.page.goto(`${base}/travail?section=pool`);
       assert.equal(await taskRow(f).count(), 0);
     });
 
@@ -159,7 +160,7 @@ async function main() {
     });
 
     await scenario('refresh-removes-pool-row-before-claim-response-without-losing-success', async f => {
-      await f.page.goto(`${base}/?section=pool`);
+      await f.page.goto(`${base}/travail?section=pool`);
       await taskRow(f).waitFor();
       await claimButton(taskRow(f)).click();
       await f.claimReceived;
@@ -216,13 +217,13 @@ async function main() {
     await scenario('reception-permission-required-even-when-dossier-is-visible', async f => {
       await openDetail(f);
       assert.equal(await claimButton(ownership(f)).count(), 0);
-      await f.page.goto(`${base}/?section=pool`);
+      await f.page.goto(`${base}/travail?section=pool`);
       assert.equal(await taskRow(f).count(), 0);
       assert.equal(f.claimCalls.length, 0);
     }, { restricted: true });
 
     await scenario('blocked-task-is-visible-as-wait-without-take-control', async f => {
-      await f.page.goto(`${base}/?section=pool`);
+      await f.page.goto(`${base}/travail?section=pool`);
       await f.page.getByRole('heading', { name: 'Mon travail', exact: true }).waitFor();
       assert.equal(await taskRow(f).count(), 0, 'Blocked work is not executable pool work');
       await openDetail(f);

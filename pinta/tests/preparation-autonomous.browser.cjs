@@ -53,7 +53,8 @@ async function main() {
       await f.page.setViewportSize(mobile ? { width: 390, height: 844 } : { width: 1440, height: 1000 });
       if (mobile) { await f.page.evaluate(() => localStorage.setItem('expedile-theme', 'dark')); }
       const reception = clone([f.tables.colis[0].nb_colis, f.tables.colis[0].trackings_detail, f.tables.colis[0].dim_l, f.tables.colis[0].poids]);
-      await open(f, `returnTo=${encodeURIComponent('/?mission=preparation')}`);
+      // Opened from Mon travail filtered on preparation: its address is /travail since 2026-10-28 (« / » is Colis).
+      await open(f, `returnTo=${encodeURIComponent('/travail?mission=preparation')}`);
       assert.equal(await f.page.getByRole('button', { name: 'Factures et devis', exact: true }).count(), 0);
       assert.equal(await f.page.getByTestId('quote-action-bar').count(), 0);
       assert.equal(await f.page.getByRole('region', { name: 'Factures d’achat', exact: true }).count(), 0);
@@ -76,7 +77,7 @@ async function main() {
       await section(f).scrollIntoViewIfNeeded();
       await f.page.screenshot({ path: path.join(output, `preparation-${mobile ? 'mobile-dark' : 'desktop-light'}.png`), fullPage: true });
       await section(f).getByRole('link', { name: 'Retour à ma liste', exact: true }).click();
-      await f.page.waitForURL(url => url.pathname === '/' && url.searchParams.get('mission') === 'preparation');
+      await f.page.waitForURL(url => url.pathname === '/travail' && url.searchParams.get('mission') === 'preparation');
       await open(f); assert.equal(await field(f, 'Longueur', 'cm').inputValue(), '40');
     });
     await scenario('agreement-starts-preparation-without-invoice-permission', { status: 'autorise' }, async f => {

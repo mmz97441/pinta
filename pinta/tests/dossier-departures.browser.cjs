@@ -17,7 +17,7 @@ const AxeBuilder = require('@axe-core/playwright').default;
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const XLSX = require('xlsx');
-const { setup, base, ids } = require('./browser-regression.cjs');
+const { setup, base, ids, RECEPTION_READ_RPCS } = require('./browser-regression.cjs');
 const output = process.env.PINTA_DOSSIER_DEPARTURES_OUT || '/tmp/pinta-dossier-departures';
 const results = [];
 
@@ -124,7 +124,8 @@ async function fixture(browser, { role = 'directeur', width = 1440, height = wid
 }
 
 // Reading the list never writes: only the two read-only RPCs of loading are allowed.
-const READ_ONLY_RPCS = ['/refresh_staff_work_actions', '/get_reception_dates'];
+// With the reads of the Colis home (« / » since 2026-10-28), sent by POST like the others.
+const READ_ONLY_RPCS = ['/refresh_staff_work_actions', '/get_reception_dates', ...RECEPTION_READ_RPCS];
 // Opening a dossier also asks for customs suggestions, a STABLE (read-only) RPC.
 const DOSSIER_READ_ONLY_RPCS = [...READ_ONLY_RPCS, '/suggest_customs_tariffs'];
 function assertNoBusinessWrite(f, readOnlyRpcs = READ_ONLY_RPCS) {
@@ -361,10 +362,11 @@ async function main() {
       await assertGroups(f, EXPECTED_GROUPS);
       assert.equal(await stored(f, 'table-group', 'daily'), '"envoi"');
       await closeDisplay(f);
-      // Leave through the menu, then come back through the menu: the URL has no view.
+      // Leave through the menu, then come back through the menu: the URL has no view. Since 2026-10-28 Mon travail
+      // lives at /travail and the list's entry reads « Dossiers », both under « Plus ».
       await f.page.getByRole('button', { name: 'Mon travail', exact: true }).filter({ visible: true }).click();
-      await f.page.waitForURL(url => url.pathname === '/');
-      await f.page.getByRole('button', { name: 'Dossiers d’expédition', exact: true }).filter({ visible: true }).click();
+      await f.page.waitForURL(url => url.pathname === '/travail');
+      await f.page.getByRole('button', { name: 'Dossiers', exact: true }).filter({ visible: true }).click();
       await f.page.waitForURL(url => url.pathname === '/colis' && !url.search);
       await assertGroups(f, EXPECTED_GROUPS);
       // Each tab has its own choice; coming back restores the remembered one.
@@ -653,7 +655,7 @@ async function main() {
       // Under the band, the reply stays reachable above the phone navigation.
       await replyField(f).scrollIntoViewIfNeeded();
       const reply = await replyField(f).boundingBox();
-      const bottom = width < 1024 ? (await f.page.getByRole('button', { name: 'Dossiers', exact: true }).locator('..').boundingBox()).y : 1000;
+      const bottom = width < 1024 ? (await f.page.locator('[data-staff-bottom-nav]').boundingBox()).y : 1000;
       assert.ok(reply.y >= 0 && reply.y + reply.height <= bottom, 'The reply field can be brought into view.');
       if (width < 640) {
         // A single alert never folds: its sentence and link stay in view.

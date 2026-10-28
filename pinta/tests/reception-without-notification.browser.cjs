@@ -2,7 +2,7 @@ const { openSavedReception } = require('./reception-page.helper.cjs');
 const { openDetailsFor } = require('./ui-disclosure-helpers.cjs');
 /* Staff receipt and later communication are separate; all providers are local fixtures. */
 const { chromium } = require('playwright');
-const { setup, base, ids } = require('./browser-regression.cjs');
+const { setup, base, ids, openFormerReception } = require('./browser-regression.cjs');
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
@@ -12,9 +12,12 @@ const oldBox = { dimL: 40, dimW: 30, dimH: 20, poids: 3 };
 async function measure(dialog, number) {
  for (const [label, unit, value] of [['Longueur','cm','20'],['Largeur','cm','30'],['Hauteur','cm','40'],['Poids','kg','2']]) await dialog.getByLabel(`${label} à réception (${unit}) · carton ${number}`, { exact: true }).fill(value);
 }
-async function open(f, list = '/?mission=reception', create = true) {
+// From Mon travail (/travail since 2026-10-28, « / » is Colis), the former receipt screen opened by its address as its
+// button did (the button opens the new reception, /recevoir, now): its return is the list.
+async function open(f, list = '/travail?mission=reception', create = true) {
  await f.page.goto(base + list);
- await f.page.getByRole('button', { name: 'Réceptionner des cartons', exact: true }).filter({ visible: true }).first().click();
+ await f.page.getByRole('heading', { name: 'Mon travail', exact: true }).waitFor();
+ await openFormerReception(f.page);
  const dialog = f.page.getByRole('region', { name: 'Réceptionner des cartons', exact: true });
  await dialog.getByPlaceholder('Rechercher un client…').fill('Camille');
  await dialog.getByRole('button').filter({ hasText: /Exemple/ }).first().click();
@@ -47,7 +50,7 @@ async function open(f, list = '/?mission=reception', create = true) {
    assert.ok(created); assert.match(created.ref, /^EXP-/); assert.equal(created.nb_colis, 1); assert.equal(created.statut, 'mesure');
    assert.deepEqual(created.dims_par_colis, [{ dimL: 20, dimW: 30, dimH: 40, poids: 2 }]);
    assert.equal(created.fin_l, undefined);
-   assert.equal(new URL(f.page.url()).searchParams.get('returnTo'), '/?mission=reception');
+   assert.equal(new URL(f.page.url()).searchParams.get('returnTo'), '/travail?mission=reception');
    assert.deepEqual(await f.page.evaluate(() => history.state.usr.receivedCarton), { colisId: created.id, index: 0 });
    assert.equal(f.requests.filter(request => request.method === 'POST' && request.path === '/rest/v1/colis').length, 1);
   });
@@ -79,14 +82,14 @@ async function open(f, list = '/?mission=reception', create = true) {
   for (const complete of [true, false]) await scenario(`attachment-keeps-reference-numbering-return-and-${complete ? 'agreement' : 'missing-receipt-measures'}`, async f => {
    await f.page.setViewportSize({ width: 390, height: 844 });
    Object.assign(f.tables.colis[0], { statut: 'autorise', dims_par_colis: complete ? [oldBox, oldBox] : [oldBox], nb_colis: 2, feu_vert: 'autorise' });
-   const dialog = await open(f, '/?section=pool&mission=reception', false);
+   const dialog = await open(f, '/travail?section=pool&mission=reception', false);
    await dialog.getByRole('button').filter({ hasText: 'EXP-TEST-001' }).click();
    await dialog.getByRole('heading', { name: 'Carton 3', exact: true }).waitFor();
    await measure(dialog, 3); await openDetailsFor(dialog.getByLabel('Numéro de suivi · carton 3', { exact: true })); await dialog.getByLabel('Numéro de suivi · carton 3', { exact: true }).fill('RECEIPT-ATTACH');
    await dialog.getByRole('button', { name: 'Terminer la réception', exact: true }).click();
    await dialog.waitFor({ state: 'hidden' }); await openSavedReception(f.page);
    await f.page.waitForURL(url => url.pathname === '/colis/' + ids.P && url.searchParams.get('section') === (complete ? 'accord' : 'reception'));
-   assert.equal(new URL(f.page.url()).searchParams.get('returnTo'), '/?section=pool&mission=reception');
+   assert.equal(new URL(f.page.url()).searchParams.get('returnTo'), '/travail?section=pool&mission=reception');
    assert.deepEqual(await f.page.evaluate(() => history.state.usr.receivedCarton), { colisId: ids.P, index: 2 });
    assert.equal(f.tables.colis.length, 1); assert.equal(f.tables.colis[0].ref, 'EXP-TEST-001'); assert.equal(f.tables.colis[0].nb_colis, 3);
    assert.equal(f.tables.colis[0].feu_vert, 'en_attente');

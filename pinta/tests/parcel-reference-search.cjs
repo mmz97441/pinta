@@ -53,7 +53,8 @@ const results = [];
       await route.fulfill({ status: 200, contentType: 'application/json', body }).catch(() => {});
     });
     await fixture.login();
-    await page.getByRole('button', { name: 'Dossiers d’expédition', exact: true }).click();
+    // The dossier list: « Dossiers », under « Plus » in the sidebar since 2026-10-28.
+    await page.locator('.staff-sidebar').getByRole('button', { name: 'Dossiers', exact: true }).click();
     const search = page.getByLabel('Rechercher ou scanner un colis', { exact: true });
     const panel = page.getByRole('region', { name: 'Recherche de référence dans tous les dossiers' });
     await search.fill('EXP-ZYX');

@@ -12,7 +12,8 @@ const output = process.env.PINTA_A11Y_OUT || path.resolve(__dirname, '../../docs
   for (const role of ['directeur', 'client']) {
    const f = await setup(browser, role);
    await f.login();
-   const routes = role === 'directeur' ? ['/', '/colis', '/colis/' + ids.P, '/clients', '/settings'] : ['/', '/colis/' + ids.P, '/profil'];
+   // The team's Mon travail, its home until 2026-10-28, lives at /travail since (the new Colis home has its own suite).
+   const routes = role === 'directeur' ? ['/travail', '/colis', '/colis/' + ids.P, '/clients', '/settings'] : ['/', '/colis/' + ids.P, '/profil'];
    for (const theme of ['light', 'dark']) {
     await f.page.evaluate(theme => localStorage.setItem('expedile-theme', theme), theme);
     for (const mobile of [false, true]) {

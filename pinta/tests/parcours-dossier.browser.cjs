@@ -108,7 +108,8 @@ async function main() {
     });
 
     await scenario('conversation-task-opens-conversation-not-another-list', async f => {
-      addConversation(f); await f.login();
+      // The task is listed by Mon travail, at /travail since 2026-10-28 (« / » is Colis).
+      addConversation(f); await f.login('/travail');
       const action = f.page.locator(`[data-work-action="${conversationId}"]`);
       await action.getByRole('button', { name: 'Continuer', exact: true }).click();
       await assertFullPage(f, { conversation: true });

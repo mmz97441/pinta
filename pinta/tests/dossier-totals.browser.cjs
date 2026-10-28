@@ -5,7 +5,7 @@ const AxeBuilder = require('@axe-core/playwright').default;
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const XLSX = require('xlsx');
-const { setup, base, ids } = require('./browser-regression.cjs');
+const { setup, base, ids, RECEPTION_READ_RPCS } = require('./browser-regression.cjs');
 const output = process.env.PINTA_DOSSIER_TOTALS_OUT || '/tmp/pinta-dossier-totals';
 const results = [];
 const parcelId = n => `96000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
@@ -14,8 +14,9 @@ const PRO = '97000000-2222-4222-8222-000000000001';
 const T = n => parcelId(n);
 // Spaces as Intl writes them (« 1 250,00 € »): compared as plain spaces.
 const plain = value => String(value ?? '').replace(/[\u00a0\u202f]/g, ' ').replace(/[ \t]+\n/g, '\n').trim();
+// The reads sent by POST are no writes: the work queue's, the reception dates', and those of the Colis home (« / »).
 const businessWrites = f => f.requests.filter(request => ['POST', 'PATCH', 'DELETE'].includes(request.method) && request.path.startsWith('/rest/v1/')
-  && !['/refresh_staff_work_actions', '/get_reception_dates'].some(rpc => request.path.endsWith(rpc)));
+  && !['/refresh_staff_work_actions', '/get_reception_dates', ...RECEPTION_READ_RPCS].some(rpc => request.path.endsWith(rpc)));
 const theme = (f, dark) => f.context.addInitScript(dark => localStorage.setItem('expedile-theme', dark ? 'dark' : 'light'), dark);
 const waitTheme = (f, dark) => f.page.waitForFunction(dark => document.documentElement.classList.contains('dark') === dark, dark);
 const sizeOf = width => ({ width, height: width === 390 ? 844 : width === 1280 ? 800 : 900 });

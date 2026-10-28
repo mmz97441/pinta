@@ -1,7 +1,7 @@
 const { openDetailsFor } = require('./ui-disclosure-helpers.cjs');
 /* Isolated fixture: a second receiver updates the dossier while the first form stays open. */
 const { chromium } = require('playwright');
-const { setup, ids } = require('./browser-regression.cjs');
+const { setup, ids, openFormerReception } = require('./browser-regression.cjs');
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
@@ -30,8 +30,11 @@ async function run() {
       if (request.method() === 'POST' && url.pathname.endsWith('/append_reception_cartons')) commandVersion = request.postDataJSON().p_expected_updated_at;
     });
     f.page.setDefaultTimeout(10000);
-    await f.login();
-    await f.page.getByRole('button', { name: 'Réceptionner des cartons', exact: true }).first().click();
+    // From Mon travail (/travail since 2026-10-28), the former receipt screen opened by its address as its button did
+    // (the button opens the new reception, /recevoir, now).
+    await f.login('/travail');
+    await f.page.getByRole('heading', { name: 'Mon travail', exact: true }).waitFor();
+    await openFormerReception(f.page);
     const dialog = f.page.getByRole('region', { name: 'Réceptionner des cartons' });
     await dialog.getByPlaceholder('Rechercher un client…').fill('Camille');
     await dialog.getByRole('button').filter({ hasText: /Exemple/ }).first().click();

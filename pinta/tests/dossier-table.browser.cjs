@@ -5,7 +5,7 @@ const AxeBuilder = require('@axe-core/playwright').default;
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const XLSX = require('xlsx');
-const { setup, base, ids } = require('./browser-regression.cjs');
+const { setup, base, ids, RECEPTION_READ_RPCS } = require('./browser-regression.cjs');
 const output = process.env.PINTA_DOSSIER_TABLE_OUT || '/tmp/pinta-dossier-table';
 const B = '88888888-1111-4111-8111-111111111111';
 const D = '88888888-2222-4222-8222-222222222222';
@@ -19,8 +19,9 @@ const row = (f, id) => f.page.locator(`[data-dossier-row="${id}"]:visible, [data
 const rows = f => f.page.locator('[data-dossier-row]:visible, [data-dossier-card]:visible');
 const cell = (f, id, column) => row(f, id).locator(`[data-column="${column}"]`);
 const take = f => row(f, P).getByRole('button', { name: 'Je m’en occupe', exact: true });
+// The reads sent by POST are no writes: the work queue's, the reception dates', and those of the Colis home (« / »).
 const businessWrites = f => f.requests.filter(request => ['POST', 'PATCH', 'DELETE'].includes(request.method)
-  && request.path.startsWith('/rest/v1/') && !['/refresh_staff_work_actions','/get_reception_dates'].some(rpc=>request.path.endsWith(rpc)));
+  && request.path.startsWith('/rest/v1/') && !['/refresh_staff_work_actions','/get_reception_dates',...RECEPTION_READ_RPCS].some(rpc=>request.path.endsWith(rpc)));
 const orderedIds = f => rows(f).evaluateAll(elements => elements.map(node => node.dataset.dossierRow || node.dataset.dossierCard));
 const allIds = async f => (await rows(f).evaluateAll(elements => elements.map(node => node.dataset.dossierRow || node.dataset.dossierCard))).sort();
 const reply = (route, body, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
@@ -872,7 +873,8 @@ async function main() {
     await scenario('unavailability-link-directly-opens-the-announced-preferences',async f=>{
       await open(f);await selectScope(f,'À prendre','pool');
       await f.page.getByRole('button',{name:'Modifier ma disponibilité dans Mon travail',exact:true}).click();
-      await f.page.waitForURL(url=>url.pathname==='/'&&url.searchParams.get('preferences')==='1');
+      // Mon travail, which holds the preferences, lives at /travail (« / » is Colis since 2026-10-28).
+      await f.page.waitForURL(url=>url.pathname==='/travail'&&url.searchParams.get('preferences')==='1');
       const preferences=f.page.getByRole('form',{name:'Mes missions et disponibilité',exact:true});await preferences.waitFor();
       assert.equal(await preferences.getByRole('checkbox',{name:'Disponible pour prendre de nouvelles tâches',exact:true}).isChecked(),false);
       assert.equal(f.claims.length,0);assert.deepEqual(businessWrites(f),[]);
@@ -937,7 +939,8 @@ async function main() {
         await f.page.addStyleTag({content:`.dossier-list { font-family: ${family}, sans-serif !important; }`});
         await f.page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
         const action=await row(f,P2).getByRole('button',{name:'Continuer',exact:true}).boundingBox();
-        const navigation=await f.page.getByRole('button',{name:'Dossiers',exact:true}).locator('..').boundingBox();
+        // The mobile navigation bar itself (« Dossiers » moved to « Plus » on 2026-10-28: the bar no longer holds it).
+        const navigation=await f.page.locator('[data-staff-bottom-nav]').boundingBox();
         assert.ok(action.y+action.height<=navigation.y-12,`${family} preserves at least 12px before the mobile navigation (${action.y+action.height} <= ${navigation.y-12}).`);
         assert.equal(await f.page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false);
       }
@@ -1103,7 +1106,7 @@ async function main() {
       for(const item of [ownTake,ownOpen,claim,consult]){assert.ok(item.ratio>=4.5,`Action text ${item.ratio.toFixed(2)}:1.`);assert.ok(item.height>=44);assert.equal(item.justify,'center');}
       await noPageOverflow(f);
       // The same TaskTakeButton keeps its own filled style in Mon travail.
-      await f.page.goto(`${base}/?section=pool`);const work=f.page.locator(`[data-work-action="${RECEIVE}"]`).getByRole('button',{name:'Je m’en occupe',exact:true});await work.waitFor();
+      await f.page.goto(`${base}/travail?section=pool`);const work=f.page.locator(`[data-work-action="${RECEIVE}"]`).getByRole('button',{name:'Je m’en occupe',exact:true});await work.waitFor();
       const workStyle=await probe(work);assert.equal(workStyle.kind,'claim');assert.equal(workStyle.alpha,1,'Mon travail keeps a filled claim button.');assert.equal(workStyle.border,0);assert.ok(workStyle.ratio>=4.5);
       await assertNoBusinessChange(f,before);
     });
@@ -1113,7 +1116,7 @@ async function main() {
       await row(f,P2).waitFor();assert.equal(await f.page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false);
       if(width===390){
         const action=await row(f,P2).getByRole('button',{name:'Continuer',exact:true}).boundingBox();
-        const bottomNav=await f.page.getByRole('button',{name:'Dossiers',exact:true}).locator('..').boundingBox();
+        const bottomNav=await f.page.locator('[data-staff-bottom-nav]').boundingBox();
         assert.ok(action.y>=0&&action.y+action.height<=bottomNav.y-12,`The first primary action is fully visible before scrolling, 12px above the navigation (${action.y+action.height} <= ${bottomNav.y-12}).`);
       }
       if(width===1440) {

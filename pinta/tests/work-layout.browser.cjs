@@ -155,7 +155,8 @@ async function failColisLoad(f) {
   try {
    if (options.viewport) await f.page.setViewportSize(options.viewport);
    if (options.before) await options.before(f);
-   await f.login(); await f.page.getByRole('heading', { name: 'Mon travail', exact: true }).waitFor();
+   // Mon travail lives at /travail since 2026-10-28 (« / » is Colis).
+   await f.login('/travail'); await f.page.getByRole('heading', { name: 'Mon travail', exact: true }).waitFor();
    await callback(f); assertNoMutation(f, options.writes); results.push({ test: name, pass: true });
   } catch (error) {
    process.exitCode = 1; results.push({ test: name, pass: false, error: error.stack });
@@ -624,7 +625,8 @@ async function failColisLoad(f) {
    assert.ok(fit.fits, `The default columns fit at 1280px: ${JSON.stringify(fit)}`);
   }, { viewport: { width: 1280, height: 900 }, wideFonts: true, before: f => Object.assign(f.tables.staff_work_actions.find(action => action.id === 'pool'), { priority_reason: 'Client prioritaire', priority_until: new Date(NOW + 86400000).toISOString() }) });
   await scenario('the-shell-gives-each-staff-page-one-main-landmark', async f => {
-   for (const route of ['/', '/colis', `/colis/${ids.P}`, `/colis/${ids.P}?onglet=conversation`, '/conversations', '/equipe', '/departs', '/clients', '/devis', '/plus']) {
+   // Mon travail, formerly « / », is /travail; the new Colis home has its own suite (colis-home.browser.cjs).
+   for (const route of ['/travail', '/colis', `/colis/${ids.P}`, `/colis/${ids.P}?onglet=conversation`, '/conversations', '/equipe', '/departs', '/clients', '/devis', '/plus']) {
     await f.page.goto(base + route);
     await f.page.locator('main h1').first().waitFor();
     assert.equal(await f.page.locator('main').count(), 1, `${route}: one <main>`);
@@ -633,7 +635,8 @@ async function failColisLoad(f) {
   });
   await scenario('a-thread-opened-from-conversations-keeps-conversations-current', async f => {
    const current = scope => f.page.locator(`${scope} [aria-current="page"]`);
-   for (const [route, expected] of [[`/colis/${ids.P}?onglet=conversation`, 'Conversations'], [`/colis/${ids.P}?returnTo=%2Fconversations%3Fstate%3Da_traiter`, 'Conversations'], [`/colis/${ids.P}?returnTo=%2Fcolis`, 'Dossiers d’expédition'], [`/colis/${ids.P}`, 'Dossiers d’expédition']]) {
+   // The dossier list's entry reads « Dossiers » since 2026-10-28.
+   for (const [route, expected] of [[`/colis/${ids.P}?onglet=conversation`, 'Conversations'], [`/colis/${ids.P}?returnTo=%2Fconversations%3Fstate%3Da_traiter`, 'Conversations'], [`/colis/${ids.P}?returnTo=%2Fcolis`, 'Dossiers'], [`/colis/${ids.P}`, 'Dossiers']]) {
     await f.page.goto(base + route);
     await f.page.getByTestId('dossier-task-header').waitFor();
     assert.equal(await current('.staff-sidebar').getAttribute('aria-label'), expected, route);
@@ -641,12 +644,14 @@ async function failColisLoad(f) {
    await f.page.setViewportSize({ width: 390, height: 844 });
    await f.page.goto(`${base}/colis/${ids.P}?onglet=conversation`);
    await f.page.getByTestId('dossier-task-header').waitFor();
-   assert.equal(await current('[data-staff-bottom-nav]').getAttribute('aria-label'), 'Conversations');
+   // On a phone Conversations lives in « Plus » since 2026-10-28: « Plus » is the current entry of the bar.
+   assert.equal(await current('[data-staff-bottom-nav]').getAttribute('aria-label'), 'Plus');
   });
   for (const width of [320, 390]) for (const dark of [false, true]) await scenario(`bottom-navigation-labels-read-at-11px-on-one-line-${width}-${dark ? 'dark' : 'light'}`, async f => {
    const nav = f.page.locator('[data-staff-bottom-nav]');
    const labels = await nav.locator('button').evaluateAll(buttons => buttons.map(button => { const label = button.lastElementChild, rect = label.getBoundingClientRect(), box = button.getBoundingClientRect(), style = getComputedStyle(label); return { text: label.textContent, size: parseFloat(style.fontSize), lines: Math.round(rect.height / parseFloat(style.lineHeight)), inside: rect.left >= box.left - 0.5 && rect.right <= box.right + 0.5, target: box.height }; }));
-   assert.deepEqual(labels.map(label => label.text), ['Mon travail', 'Dossiers', 'Conversations', 'Plus']);
+   // The bar of 2026-10-28: Colis, Départs, Clients, then « Plus » for the rest.
+   assert.deepEqual(labels.map(label => label.text), ['Colis', 'Départs', 'Clients', 'Plus']);
    for (const label of labels) {
     assert.ok(label.size >= 11, `${label.text}: ${label.size}px`);
     assert.equal(label.lines, 1, `${label.text} on one line`);

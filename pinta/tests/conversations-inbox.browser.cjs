@@ -573,7 +573,8 @@ async function main() {
       await send.focus();
       await f.page.locator('[data-staff-bottom-nav]').waitFor();
       await send.scrollIntoViewIfNeeded();
-      const action = await send.boundingBox(), nav = await f.page.getByRole('button', { name: 'Dossiers', exact: true }).locator('..').boundingBox();
+      // The phone navigation bar (it held « Dossiers » until 2026-10-28; the bar itself is measured now).
+      const action = await send.boundingBox(), nav = await f.page.locator('[data-staff-bottom-nav]').boundingBox();
       assert.ok(action.y >= 48 && action.y + action.height <= nav.y, `The send button is reachable above the navigation: ${JSON.stringify({ action, nav })}`);
       assert.equal(await send.isEnabled(), true);
       assert.equal(await overflow(f), false);

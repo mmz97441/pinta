@@ -17,10 +17,13 @@ const results = [];
   await f.page.screenshot({path:path.join(out,name+'.png'),fullPage:true});await f.context.close();
  }
  await scenario('mobile-task-visible-and-conversations-direct',async f=>{
-  await f.page.setViewportSize({width:390,height:844});await f.login();
+  // Mon travail lives at /travail since 2026-10-28 (« / » is Colis).
+  await f.page.setViewportSize({width:390,height:844});await f.login('/travail');
   const row=f.page.locator('[data-work-action="prepare"]');await row.waitFor();
   const box=await row.boundingBox(); assert.ok(box.y+box.height<780,`first complete task ends at ${box.y+box.height}`);
-  const conversation=f.page.getByRole('button',{name:'Conversations',exact:true});await conversation.click();
+  // On a phone Conversations is in « Plus » since 2026-10-28 (the bar holds Colis, Départs, Clients, Plus).
+  await f.page.locator('[data-staff-bottom-nav]').getByRole('button',{name:'Plus',exact:true}).click();
+  const conversation=f.page.getByRole('navigation',{name:'Autres rubriques',exact:true}).getByRole('button',{name:'Conversations',exact:true});await conversation.click();
   await f.page.waitForURL(/\/conversations/);assert.equal(f.requests.some(r=>r.path.endsWith('/mutate_staff_work_action')),false);
   assert.equal(await f.page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
  });
@@ -29,7 +32,8 @@ const results = [];
   await f.page.goto(`${base}/conversations?ouvert=${ids.P}`);
   let field=f.page.getByLabel('Votre réponse au client',{exact:true});await field.fill('Bonjour,\nVoici les informations.');await field.press('Enter');
   assert.equal(f.requests.filter(r=>r.path.endsWith('/queue_message')).length,0);
-  await f.page.goto(base+'/');await f.page.goto(`${base}/conversations?ouvert=${ids.P}`);
+  // Away to Mon travail (/travail since 2026-10-28, « / » is Colis) and back.
+  await f.page.goto(base+'/travail');await f.page.goto(`${base}/conversations?ouvert=${ids.P}`);
   field=f.page.getByLabel('Votre réponse au client',{exact:true});assert.match(await field.inputValue(),/Bonjour,\nVoici les informations\./);
   await f.page.reload();assert.match(await field.inputValue(),/Voici les informations/);
   await f.page.getByRole('button',{name:'Effacer le brouillon',exact:true}).click();

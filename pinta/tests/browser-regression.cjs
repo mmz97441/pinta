@@ -63,6 +63,10 @@ function registerRequestMock(mock) {
   extraRequestMocks.add(mock);
   return () => extraRequestMocks.delete(mock);
 }
+// Reads sent by POST (commands that write nothing) by the Colis home, the team's home « / » since 2026-10-28, the
+// Brouillon sheet and the reception (lib/receptionValidation.js). A suite counting the business writes once signed in
+// leaves them out.
+const RECEPTION_READ_RPCS = ['/rest/v1/rpc/list_pending_receptions', '/rest/v1/rpc/list_arrival_notices', '/rest/v1/rpc/list_reception_photos'];
 
 function fixtures(role) {
   return {
@@ -438,7 +442,11 @@ async function setup(browser, role, { failTable = null, timezoneId = null, devic
       url = new URL(req.url()),
       method = req.method();
     if (url.origin === base && !url.pathname.startsWith('/api/')) return route.continue();
-    const input = ['POST', 'PATCH', 'PUT'].includes(method) ? req.postDataJSON() : null;
+    // A body that is not JSON (a multipart photo upload, a raw file) carries no command input: `input` stays null.
+    let input = null;
+    if (['POST', 'PATCH', 'PUT'].includes(method)) {
+      try { input = req.postDataJSON(); } catch { input = null; }
+    }
     requests.push({ method, path: url.pathname, search: url.search, input });
     if (method === 'GET' && url.pathname.includes('/storage/v1/object/sign/')) {
       const { jsPDF } = require('jspdf');
@@ -658,6 +666,10 @@ async function setup(browser, role, { failTable = null, timezoneId = null, devic
       } else if (rpc === 'acquire_colis_lock')
         body = { staff_id: A, staff_nom: 'Camille', locked_at: new Date().toISOString() };
       else if (rpc === 'release_colis_lock') body = true;
+      // Read by the Colis home, the Brouillon sheet and the reception (2026-10-28, lib/receptionValidation.js), with or
+      // without p_client_id: nothing waiting for validation, no arrival notice and no reception photo by default. A suite
+      // seeds its own with registerRequestMock.
+      else if (['list_pending_receptions', 'list_arrival_notices', 'list_reception_photos'].includes(rpc)) body = [];
       else if (rpc === 'queue_message') {
         const message = {
           id: crypto.randomUUID(),
@@ -751,8 +763,10 @@ async function setup(browser, role, { failTable = null, timezoneId = null, devic
   });
   const page = await context.newPage();
   page.on('pageerror', (error) => errors.push(error.message));
-  const login = async () => {
-    await page.goto(base);
+  // `route`: the address to sign in on, the page shown once signed in (« /travail » for Mon travail, which
+  // the team's home « / » was before Colis, 2026-10-28); the home by default.
+  const login = async (route = '') => {
+    await page.goto(base + route);
     await page.getByLabel('Email', { exact: true }).fill('audit@example.test');
     await page.getByLabel('Mot de passe', { exact: true }).fill('test-password-long');
     await page.getByRole('button', { name: 'Se connecter', exact: true }).click();
@@ -788,7 +802,9 @@ async function main() {
   const browser = await chromium.launch({ headless: true });
   try {
     let f = await setup(browser, 'client');
-    await f.login();
+    // Signed in on Mon travail's address (the staff home « / » until 2026-10-28, /travail since): a client
+    // wrongly let into the staff space would see it there; a client is sent to the portal home.
+    await f.login('/travail');
     await f.page.waitForTimeout(400);
     assert.equal(
       await f.page.getByRole('heading', { name: 'Mon travail' }).count(),
@@ -835,7 +851,8 @@ async function main() {
     await f.context.close();
 
     f = await setup(browser, 'directeur');
-    await f.login();
+    // Mon travail lives at /travail since 2026-10-28 (« / » is Colis).
+    await f.login('/travail');
     await f.page.getByRole('heading', { name: 'Mon travail', exact: true }).waitFor();
     await f.page.screenshot({
       path: path.join(output, 'staff-dashboard-desktop.png'),
@@ -933,8 +950,11 @@ async function main() {
     await f.page.waitForURL(url => url.pathname === '/colis');
     assert.ok(!f.page.url().includes(P), 'Explicit return restores list without reopening dossier');
     observations.push({ test: 'mobile-full-page-detail-controls-and-return', pass: true });
-    await f.page.goto(base + '/');
-    const openReception = () => f.page.getByRole('button', { name: /Nouveau colis|Réceptionner/ }).first().click();
+    // The former full-page receipt, opened from Mon travail (/travail since 2026-10-28) as its button did: the button
+    // opens the new reception (/recevoir) now (openFormerReception).
+    await f.page.goto(base + '/travail');
+    await f.page.getByRole('heading', { name: 'Mon travail', exact: true }).waitFor();
+    const openReception = () => openFormerReception(f.page);
     await openReception();
     const reception = f.page.getByRole('region', { name: 'Réceptionner des cartons', exact: true });
     await reception.waitFor();
@@ -948,7 +968,7 @@ async function main() {
     const receiptWeight = reception.getByLabel('Poids à réception (kg) · carton 1', { exact: true });
     await receiptWeight.fill('2.75');
     await f.page.getByRole('button', { name: 'Retour à ma liste, conserver le brouillon', exact: true }).click();
-    await f.page.waitForURL(url => url.pathname === '/');
+    await f.page.waitForURL(url => url.pathname === '/travail');
     await openReception(); await receiptWeight.waitFor();
     assert.equal(await receiptWeight.inputValue(), '2.75', 'Explicit departure and reopening preserve the receipt draft.');
     await reception.getByRole('button', { name: 'Terminer la réception', exact: true }).scrollIntoViewIfNeeded();
@@ -974,7 +994,7 @@ async function main() {
     observations.push({ test: 'mobile-settings-labels-and-section-navigation', pass: true });
     await f.page.screenshot({ path: path.join(output, 'settings-mobile.png'), fullPage: true });
     await f.page.setViewportSize({ width: 1440, height: 1000 });
-    await f.page.goto(base + '/');
+    await f.page.goto(base + '/travail');
     await f.page.getByRole('heading', { name: 'Mon travail', exact: true }).waitFor();
     await f.page.getByRole('button', { name: 'Passer en mode sombre', exact: true }).click();
     await f.page.waitForTimeout(350);
@@ -1003,7 +1023,8 @@ async function main() {
     await f.context.close();
 
     f = await setup(browser, 'directeur', { failTable: 'factures' });
-    await f.login();
+    // On Mon travail, the staff home until 2026-10-28 (/travail since; the Colis home has its own suite).
+    await f.login('/travail');
     await f.page.getByRole('alert').filter({ hasText: 'Chargement impossible' }).waitFor();
     assert.equal(await f.page.getByText('EXP-TEST-001', { exact: true }).count(), 0);
     observations.push({ test: 'failed-related-data-no-demo-fallback', pass: true });
@@ -1053,7 +1074,7 @@ async function main() {
         const index = url.searchParams.get('select') === 'id,updated_at,client_id';
         return outage.all || (outage.index && index) ? route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ message: outage.all ? 'Indisponibilité simulée' : 'Actualisation refusée (essai)' }) }) : route.fallback();
       });
-      await f.login();
+      await f.login('/travail');
       await f.page.getByRole('heading', { name: 'Mon travail', exact: true }).waitFor();
       outage.index = true;
       await f.page.evaluate(() => window.dispatchEvent(new Event('focus')));
@@ -1223,5 +1244,18 @@ function scanLoading(f, envoiId, colisIds, method = 'scan') {
     return [colisId, answers.map(answer => answer.body)];
   }));
 }
-module.exports = { setup, fixtures, ids: { A, C, P, F, L, S }, base, invoiceLock, frozenReason, analysisReason, scanLoading, expectedParcels, registerRequestMock };
+/**
+ * Opens the former full-page receipt (/reception) in the application, from the page shown, as « Réceptionner des
+ * cartons » (« Recevoir » on a phone) did until 2026-10-28: once that button is shown, with that page as its return.
+ * Since then the button opens the new reception (/recevoir); the former screen keeps its address (and the dossier
+ * page's « Réceptionner un autre carton »).
+ */
+async function openFormerReception(page) {
+  await page.locator('button[aria-label="Réceptionner des cartons"]').filter({ visible: true }).first().waitFor();
+  await page.evaluate(() => {
+    history.pushState({}, '', `/reception?${new URLSearchParams({ returnTo: location.pathname + location.search })}`);
+    dispatchEvent(new PopStateEvent('popstate'));
+  });
+}
+module.exports = { setup, fixtures, ids: { A, C, P, F, L, S }, base, invoiceLock, frozenReason, analysisReason, scanLoading, expectedParcels, registerRequestMock, openFormerReception, RECEPTION_READ_RPCS };
 if (require.main === module) main();

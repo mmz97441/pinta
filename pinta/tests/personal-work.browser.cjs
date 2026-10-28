@@ -40,7 +40,8 @@ function assertNoMutation(f) {
  const browser = await chromium.launch({ headless: true });
  async function scenario(name, callback, restricted = false) {
   const f = await fixture(browser, restricted);
-  try { await f.login(); await f.page.getByRole('heading', { name: 'Mon travail', exact: true }).waitFor(); await callback(f); assertNoMutation(f); results.push({ test: name, pass: true }); }
+  // Mon travail lives at /travail since 2026-10-28 (« / » is Colis), and so do its lists and returns.
+  try { await f.login('/travail'); await f.page.getByRole('heading', { name: 'Mon travail', exact: true }).waitFor(); await callback(f); assertNoMutation(f); results.push({ test: name, pass: true }); }
   catch (error) { process.exitCode = 1; results.push({ test: name, pass: false, error: error.stack }); await f.page.screenshot({ path: path.join(output, name + '-failure.png'), fullPage: true }).catch(() => {}); await fs.writeFile(path.join(output, name + '-failure.txt'), await f.page.locator('body').innerText().catch(() => '')); }
   finally { await f.context.close(); }
  }
@@ -55,7 +56,7 @@ function assertNoMutation(f) {
    // The table names the column « Échéance »; its cell keeps the rest of the priority wording.
    await row(f, 'quote').getByRole('cell', { name: /^Dépassée · / }).waitFor();
    for (const [legacy, section, count] of [['progress','À faire',4],['now','À faire',4],['waiting','En attente',1],['pool','À prendre',1]]) {
-    await f.page.goto(base + '/?section=' + legacy);
+    await f.page.goto(base + '/travail?section=' + legacy);
     await f.page.getByRole('region', { name: section, exact: true }).waitFor();
     assert.equal(await f.page.getByRole('region', { name: section, exact: true }).locator('[data-work-action]').count(), count);
    }
@@ -94,7 +95,7 @@ function assertNoMutation(f) {
   });
   await scenario('unavailable-pool-explains-cause-and-opens-the-relevant-setting-without-saving', async f => {
    f.tables.staff_work_preferences[0].available = false;
-   await f.page.goto(base + '/?section=pool');
+   await f.page.goto(base + '/travail?section=pool');
    const empty = f.page.getByRole('region', { name: 'Pourquoi la liste est vide' });
    await empty.getByRole('heading', { name: 'Vous avez indiqué être indisponible' }).waitFor();
    await empty.getByRole('button', { name: 'Modifier ma disponibilité' }).click();
@@ -111,7 +112,7 @@ function assertNoMutation(f) {
    const work = f.page.getByRole('region', { name: 'À faire', exact: true });
    for (const id of ['quote','started','outside','prepare']) await work.locator(`[data-work-action="${id}"]`).waitFor();
    assert.deepEqual(f.tables.staff_work_preferences[0].missions, [], 'Display does not change saved preferences');
-   await f.page.goto(base + '/?section=pool');
+   await f.page.goto(base + '/travail?section=pool');
    const empty = f.page.getByRole('region', { name: 'Pourquoi la liste est vide' });
    await empty.getByRole('heading', { name: 'Choisissez les tâches que vous souhaitez prendre' }).waitFor();
    await empty.getByRole('button', { name: 'Choisir mes missions' }).click();
@@ -119,7 +120,7 @@ function assertNoMutation(f) {
   });
   await scenario('truly-empty-pool-offers-a-working-link-to-all-dossiers', async f => {
    f.tables.staff_work_actions = [];
-   await f.page.goto(base + '/?section=pool');
+   await f.page.goto(base + '/travail?section=pool');
    const empty = f.page.getByRole('region', { name: 'Pourquoi la liste est vide' });
    await empty.getByRole('heading', { name: 'Aucune tâche prête à prendre' }).waitFor();
    await empty.getByRole('link', { name: 'Voir les dossiers de l’équipe' }).click();
@@ -127,7 +128,7 @@ function assertNoMutation(f) {
    await f.page.getByRole('button', { name: 'EXP-AUTRE-EQUIPE', exact: true }).waitFor();
   });
   await scenario('consulting-an-owned-wait-does-not-resume-or-unblock-it', async f => {
-   await f.page.goto(base + '/?section=waiting');
+   await f.page.goto(base + '/travail?section=waiting');
    await row(f, 'documents').getByRole('button', { name: 'Voir', exact: true }).click();
    await f.page.waitForURL(url => url.searchParams.get('section') === 'documents');
    const action = f.tables.staff_work_actions.find(item => item.id === 'documents');
@@ -135,13 +136,13 @@ function assertNoMutation(f) {
    assert.equal(action.waiting_reason, 'Vérification fournisseur');
   });
   await scenario('each-task-opens-directly-and-retains-exact-list-filters-without-claim', async f => {
-   for (const [id, list, section] of [['prepare','/?section=progress&mission=preparation&q=Exemple','preparation'],['quote','/?mission=documents','devis'],['documents','/?section=waiting&mission=documents','documents'],['started','/?section=now&mission=departures','expedition']]) {
+   for (const [id, list, section] of [['prepare','/travail?section=progress&mission=preparation&q=Exemple','preparation'],['quote','/travail?mission=documents','devis'],['documents','/travail?section=waiting&mission=documents','documents'],['started','/travail?section=now&mission=departures','expedition']]) {
     await f.page.goto(base + list); const item = row(f, id);
     await item.getByRole('link', { name: /^Ouvrir / }).click();
     await f.page.waitForURL(url => url.pathname === '/colis/' + ids.P && url.searchParams.get('section') === section);
     const url = new URL(f.page.url()); assert.equal(url.searchParams.get('returnTo'), list); assert.equal(url.searchParams.get('action'), id);
    }
-   await f.page.goto(base + '/?section=pool');
+   await f.page.goto(base + '/travail?section=pool');
    const invitation = row(f, 'pool');
    // « Je m’en occupe » is offered: the title link alone consults without taking.
    await invitation.getByRole('button', { name: 'Je m’en occupe', exact: true }).waitFor();
@@ -151,19 +152,19 @@ function assertNoMutation(f) {
    assert.equal(f.tables.staff_work_actions.find(action => action.id === 'pool').assignee_id, null);
   });
   await scenario('permissions-remain-distinct-even-when-a-mission-is-requested-in-the-url', async f => {
-   await f.page.goto(base + '/?mission=documents');
+   await f.page.goto(base + '/travail?mission=documents');
    const exceptions = f.page.getByRole('region', { name: 'Tâches hors missions ou permissions', exact: true });
    await exceptions.locator('[data-work-action="quote"]').waitFor();
    assert.equal(await row(f, 'quote').getByRole('button', { name: 'Continuer', exact: true }).count(), 0);
    await row(f, 'quote').getByText('Permission modifiée : organisez un relais avec une personne habilitée.', { exact: true }).waitFor();
    assert.equal(await f.page.getByLabel('Mission', { exact: true }).locator('option[value="documents"]').count(), 0);
-   await f.page.goto(base + '/?mission=preparation');
+   await f.page.goto(base + '/travail?mission=preparation');
    await f.page.getByRole('region', { name: 'À faire', exact: true }).locator('[data-work-action="prepare"]').waitFor();
   }, true);
   await scenario('completed-task-offers-explicit-next-authorized-task-and-exact-return-without-claim', async f => {
    f.tables.staff_work_actions.find(action => action.id === 'prepare').state = 'done';
    f.tables.staff_work_actions.push({ ...f.tables.staff_work_actions.find(action => action.id === 'prepare'), id: 'prepare-next', colis_id: P2, state: 'ready' });
-   const returnTo = '/?section=progress&mission=preparation&q=Exemple';
+   const returnTo = '/travail?section=progress&mission=preparation&q=Exemple';
    await f.page.goto(`${base}/colis/${ids.P}?${new URLSearchParams({ section: 'preparation', action: 'prepare', returnTo })}`);
    const continuation = f.page.getByRole('navigation', { name: 'Après cette tâche', exact: true });
    await continuation.getByRole('link', { name: 'Passer à un autre dossier', exact: true }).waitFor();

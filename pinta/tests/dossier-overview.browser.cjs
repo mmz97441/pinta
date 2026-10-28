@@ -3,13 +3,14 @@ const { chromium } = require('playwright');
 const AxeBuilder = require('@axe-core/playwright').default;
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
-const { setup, base, ids } = require('./browser-regression.cjs');
+const { setup, base, ids, RECEPTION_READ_RPCS } = require('./browser-regression.cjs');
 const output = process.env.PINTA_DOSSIER_OVERVIEW_OUT || '/tmp/pinta-dossier-overview';
 const results = [];
 const overview = f => f.page.getByTestId('dossier-overview');
 const step = (f,id) => overview(f).locator(`[data-step="${id}"]`);
 // The invoice context RPC is SQL STABLE: its POST only reads review evidence.
-const readOnlyRpcs = new Set(['/rest/v1/rpc/refresh_staff_work_actions','/rest/v1/rpc/get_invoice_review_context','/rest/v1/rpc/get_reception_dates']);
+// The reads of the Colis home (« / » since 2026-10-28) are sent by POST too.
+const readOnlyRpcs = new Set(['/rest/v1/rpc/refresh_staff_work_actions','/rest/v1/rpc/get_invoice_review_context','/rest/v1/rpc/get_reception_dates',...RECEPTION_READ_RPCS]);
 const businessWrites = f => f.requests.filter(request => ['POST','PATCH','DELETE'].includes(request.method) && request.path.startsWith('/rest/v1/') && !readOnlyRpcs.has(request.path));
 const originals = f => ({colis:structuredClone(f.tables.colis),factures:structuredClone(f.tables.factures),lignes:structuredClone(f.tables.lignes)});
 function unchanged(f, before) { assert.deepEqual(originals(f),before); assert.deepEqual(businessWrites(f),[]); }

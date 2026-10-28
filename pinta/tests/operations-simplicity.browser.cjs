@@ -5,7 +5,9 @@ const { chromium } = require('playwright');
 const AxeBuilder = require('@axe-core/playwright').default;
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
-const { setup, base, ids } = require('./browser-regression.cjs');
+// Since 2026-10-28 Mon travail lives at /travail (« / » is Colis) and « Réceptionner des cartons » opens the new
+// reception (/recevoir): the former receipt screen tested here is opened by its address, as the button did.
+const { setup, base, ids, openFormerReception } = require('./browser-regression.cjs');
 const { fixture, B, C } = require('./invoice-workspace.cjs');
 const { waitForCurrentInvoice } = require('./invoice-list.helper.cjs');
 const output = process.env.PINTA_OPERATIONS_OUT || '/tmp/pinta-operations-simplicity';
@@ -13,7 +15,7 @@ const region = f => f.page.getByTestId('dossier-task-workspace');
 const mutations = f => f.requests.filter(request => /\/(save_quote|confirm_quote|queue_message|save_invoice_review|save_preparation_measurements|transition_colis|revert_colis|assign_colis_departure|mark_manual_payment)$/.test(request.path));
 const noNotification = f => assert.equal(f.requests.some(request => /\/(queue_message|send-telegram|send-email)$/.test(request.path)), false);
 const box = { dimL: 40, dimW: 30, dimH: 20, poids: 3 };
-async function open(f, task) { await f.page.goto(`${base}/colis/${ids.P}?section=${task}&returnTo=%2F%3Fmission%3Ddocuments`); await region(f).waitFor(); }
+async function open(f, task) { await f.page.goto(`${base}/colis/${ids.P}?section=${task}&returnTo=%2Ftravail%3Fmission%3Ddocuments`); await region(f).waitFor(); }
 async function measure(dialog, number) { for (const [label, unit, value] of [['Longueur','cm','20'],['Largeur','cm','30'],['Hauteur','cm','40'],['Poids','kg','2']]) await dialog.getByLabel(`${label} à réception (${unit}) · carton ${number}`, { exact: true }).fill(value); }
 async function audit(f, name, include = '[data-testid="dossier-task-workspace"]') {
  const result = await new AxeBuilder({ page: f.page }).include(include).withTags(['wcag2a','wcag2aa','wcag21aa']).analyze();
@@ -35,8 +37,8 @@ async function audit(f, name, include = '[data-testid="dossier-task-workspace"]'
   for (const mobile of [false,true]) await scenario(`receipt-measures-first-and-reference-${mobile?'mobile':'desktop'}`, async f => {
    await f.page.setViewportSize(mobile ? {width:390,height:844} : {width:1440,height:1000});
    Object.assign(f.tables.colis[0],{ statut:'autorise', nb_colis:2, dims_par_colis:[box,box] });
-   await f.page.goto(`${base}/?mission=reception`);
-   await f.page.getByRole('button',{name:'Réceptionner des cartons',exact:true}).filter({visible:true}).first().click();
+   await f.page.goto(`${base}/travail?mission=reception`);
+   await f.page.getByRole('heading',{name:'Mon travail',exact:true}).waitFor(); await openFormerReception(f.page);
    const dialog=f.page.getByRole('region',{name:'Réceptionner des cartons',exact:true});
    await dialog.getByPlaceholder('Rechercher un client…').fill('Camille');
    await dialog.getByRole('button').filter({hasText:/Exemple/}).first().click();
@@ -58,7 +60,7 @@ async function audit(f, name, include = '[data-testid="dossier-task-workspace"]'
    noNotification(f);
   });
   await scenario('receipt-photo-incident-and-scanner-controls-remain-reachable',async f=>{
-   await f.page.goto(base); await f.page.getByRole('button',{name:'Réceptionner des cartons',exact:true}).filter({visible:true}).first().click();
+   await f.page.goto(`${base}/travail`); await f.page.getByRole('heading',{name:'Mon travail',exact:true}).waitFor(); await openFormerReception(f.page);
    const dialog=f.page.getByRole('region',{name:'Réceptionner des cartons',exact:true});await dialog.getByPlaceholder('Rechercher un client…').fill('Camille');await dialog.getByRole('button').filter({hasText:/Exemple/}).first().click();
    await dialog.getByRole('button',{name:'Créer une nouvelle expédition (nouveau EXP)',exact:true}).click();
    await dialog.getByRole('button',{name:'+ Ajouter un carton',exact:true}).click();
@@ -127,7 +129,7 @@ async function audit(f, name, include = '[data-testid="dossier-task-workspace"]'
   await scenario('preparation-comment-draft-survives-leaving-task-without-saving',async f=>{
    await open(f,'preparation'); await region(f).locator('summary').filter({hasText:'Consignes facultatives'}).click();
    await region(f).getByLabel('Commentaire de préparation',{exact:true}).fill('Ne pas plier cet achat fragile');
-   await f.page.getByRole('button',{name:'Retour à la liste de travail',exact:true}).click(); await f.page.waitForURL(url=>url.pathname==='/');
+   await f.page.getByRole('button',{name:'Retour à la liste de travail',exact:true}).click(); await f.page.waitForURL(url=>url.pathname==='/travail');
    await f.page.goBack(); await region(f).waitFor(); await region(f).locator('summary').filter({hasText:'Consignes facultatives'}).click();
    assert.equal(await region(f).getByLabel('Commentaire de préparation',{exact:true}).inputValue(),'Ne pas plier cet achat fragile');
    assert.notEqual(f.tables.colis[0].commentaire_preparation,'Ne pas plier cet achat fragile'); assert.deepEqual(mutations(f),[]);
