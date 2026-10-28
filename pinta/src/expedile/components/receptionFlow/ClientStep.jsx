@@ -6,12 +6,12 @@ import { searchClients } from '../../utils';
 import { receptionTarget } from '../../domain/brouillon';
 import { receptionCartonManifest } from '../../domain/reception';
 import NewClientForm from './NewClientForm';
-import { Casier, Place } from './ReceptionParts';
+import { Casier, Place, TableFrame } from './ReceptionParts';
 import { EMPTY_NEW_CLIENT } from './useReceptionSession';
 import { clientPlace, count } from './receptionFlowModel';
 
-// Step 1, « Pour quel client ? »: the search (name, phone, client number) and, for each client found, what will
-// happen to the carton (receptionTarget): it joins the open brouillon, or opens a new one.
+// Step 1, « Pour quel client ? »: the search (name, phone, client number) and, in a table, each client found with what
+// will happen to the carton (receptionTarget): it joins the open brouillon, or opens a new one.
 const MAX_RESULTS = 8;
 const collator = new Intl.Collator('fr', { sensitivity: 'base', numeric: true });
 
@@ -77,24 +77,27 @@ export default function ClientStep({ start, updateStart, onChoose }) {
       {/* Without the right to create a client, the way forward when the search finds nobody. */}
       {!canCreate && query.trim() && found.length === 0 && <span className="rf-strong mt-1 block text-[17px] font-bold">Demandez à un responsable de créer ce client.</span>}
     </p>
-    {shown.length > 0 && <ul aria-label="Clients trouvés" className="space-y-2.5">
-      {shown.map(client => {
-        const target = receptionTarget(client.id, data);
-        const place = clientPlace(client);
-        return <li key={client.id}>
-          <button type="button" onClick={() => choose(client.id)} className={`rf-result${target.mode === 'append' ? ' rf-result--join' : ''} flex min-h-[84px] w-full items-center gap-3 px-4 py-3 text-left sm:gap-4 sm:px-5`}>
-            <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-4 gap-y-2">
-              <span className="min-w-0 flex-1 basis-60">
-                <span className="rf-strong block text-[21px] font-extrabold leading-snug">{client.nom}<Place place={place} /></span>
-                <span className="mt-1 block text-[16px]">{targetLine(target)}</span>
-              </span>
-              <span className={`rf-pill rf-pill--${target.mode === 'append' ? 'join' : 'new'}`}>{target.label}</span>
-            </span>
-            <ChevronRight size={24} aria-hidden="true" className="rf-strong shrink-0" />
-          </button>
-        </li>;
-      })}
-    </ul>}
+    {shown.length > 0 && <TableFrame label="Clients trouvés">
+      <table className="rf-table">
+        <caption className="sr-only">Clients trouvés pour « {query.trim()} »</caption>
+        <thead><tr><th scope="col">Client</th><th scope="col">Brouillon</th><th scope="col">Le carton</th><th scope="col">Action</th></tr></thead>
+        <tbody>{shown.map(client => {
+          const target = receptionTarget(client.id, data);
+          const join = target.mode === 'append';
+          // The whole line answers the tap (its action may wait on the right of a phone); the button is the action.
+          return <tr key={client.id} data-clickable="true" data-tone={join ? 'join' : undefined} onClick={event => { if (!event.target.closest('a, button')) choose(client.id); }}>
+            <th scope="row"><span className="rf-cell-id">
+              <span className="rf-strong block text-[17px] font-extrabold leading-snug">{client.nom}</span>
+              <Place place={clientPlace(client)} lead={false} className="block" />
+            </span></th>
+            <td className="rf-cell-text">{targetLine(target)}</td>
+            <td><span className={`rf-pill rf-pill--${join ? 'join' : 'new'}`}>{target.label}</span></td>
+            <td><button type="button" onClick={() => choose(client.id)} aria-label={`Choisir ${client.nom}`}
+              className="rf-small-action inline-flex items-center gap-1.5 whitespace-nowrap">Choisir<ChevronRight size={20} aria-hidden="true" /></button></td>
+          </tr>;
+        })}</tbody>
+      </table>
+    </TableFrame>}
     {canCreate && <div className="rf-line mt-2 flex flex-wrap items-center justify-between gap-3 border-t pt-4">
       <p className="rf-muted text-[17px]">Client introuvable ?</p>
       <button type="button" onClick={openCreation} className="rf-secondary inline-flex items-center gap-2 px-5"><Plus size={20} aria-hidden="true" />Créer un nouveau client</button>

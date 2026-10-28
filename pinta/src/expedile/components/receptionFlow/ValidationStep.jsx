@@ -9,8 +9,8 @@ import { receptionCartonManifest } from '../../domain/reception';
 import { formatDimensions, formatKg, orderValidationItems } from '../../domain/brouillon';
 import { arrivalChannel, renderArrivalNotice } from '../../services/arrivalNotice';
 import { deliverMessage } from '../../services/telegramApi';
-import { CONVERSATION_PERMISSIONS, Casier, ClientBand, FlaggedCartons, Note, SkeletonRows } from './ReceptionParts';
-import { clientPlace, count, definiteRefusal, firstName, notesSayDamaged, parisWhen, withoutRefreshAdvice } from './receptionFlowModel';
+import { CONVERSATION_PERMISSIONS, Casier, ClientBand, FlaggedCartons, Note, SkeletonRows, TableFrame } from './ReceptionParts';
+import { clientPlace, count, definiteRefusal, firstName, notesSayDamaged, parisMoment, withoutRefreshAdvice } from './receptionFlowModel';
 import { refreshClientRecord } from './receptionData';
 
 // Step 3, « Validation »: the cartons of this reception and the client's other cartons waiting for their validation
@@ -129,9 +129,6 @@ export default function ValidationStep({ client, session, update, onAddCarton, o
   const notice = batch.notice || { value: null, error: '' };
   const canNotify = Boolean(channel && allowed && notice.value?.canal && !notice.error);
   const savedKeys = new Set(session.saved.map(item => `${item.colisId}:${item.number}`));
-  const multiple = new Set(cartons.map(carton => carton.colisId)).size > 1;
-  const secondaryLine = carton => ({ ref: multiple ? carton.ref : '',
-    when: savedKeys.has(`${carton.colisId}:${carton.carton}`) ? '' : `enregistré ${parisWhen(carton.receivedAt) || 'plus tôt'}, pas encore validé` });
   const blockedBy = session.validation ? 'validation' : session.intent ? 'intent' : null;
 
   // The cartons flagged at the reception (damaged or opened, forbidden product): the notice does not mention them.
@@ -262,25 +259,36 @@ export default function ValidationStep({ client, session, update, onAddCarton, o
     {pending === null && !loadError && <SkeletonRows label="Chargement des cartons à valider…" />}
     {pending !== null && !cartons.length && !blockedBy && <Note tone="info">Aucun carton n’attend de validation pour {client.nom}. Ajoutez un carton, ou revenez au Brouillon.</Note>}
 
-    {cartons.length > 0 && <ul aria-label="Cartons à valider" className="rf-card divide-y divide-slate-200 rounded-2xl">
-      {cartons.map((carton, index) => {
-        // Its dossier (when there are several) and, unless it was recorded during this reception, when it was: said
-        // once for a run of cartons alike (a dossier received at once is not repeated carton by carton).
-        const { ref, when } = secondaryLine(carton);
-        const previous = index > 0 ? secondaryLine(cartons[index - 1]) : null;
-        const shown = Boolean(ref || when) && !(previous && previous.ref === ref && previous.when === when);
-        return <li key={`${carton.colisId}:${carton.carton}`} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3">
-          <span className="rf-carton-number"><span className="sr-only">Carton </span>{carton.carton}</span>
-          <span className="min-w-[8rem] flex-1 basis-40">
-            <span className="block text-[17px] font-bold">{carton.fournisseur || 'Vendeur non renseigné'}</span>
-            <span className="rf-code rf-muted block text-[15px]">{carton.number || 'Sans numéro de suivi'}</span>
-          </span>
-          <span className="text-[16px]">{formatDimensions(carton)}</span>
-          <span className="min-w-[5rem] text-right text-[16px] font-semibold">{formatKg(carton.poids)}</span>
-          {shown && <span className="rf-muted w-full text-[15px]">{ref ? <span className="rf-code whitespace-nowrap">{ref}</span> : null}{ref && when ? ' · ' : ''}{when}</span>}
-        </li>;
-      })}
-    </ul>}
+    {cartons.length > 0 && <TableFrame label="Cartons à valider">
+      <table className="rf-table">
+        <caption className="sr-only">Cartons à valider pour {client.nom}</caption>
+        <thead><tr>
+          <th scope="col">N°</th><th scope="col">Vendu par</th><th scope="col">Numéro de suivi</th>
+          <th scope="col">Dimensions</th><th scope="col" data-align="right">Poids</th><th scope="col">Dossier</th><th scope="col">Reçu</th>
+        </tr></thead>
+        <tbody>{cartons.map(carton => {
+          const mine = savedKeys.has(`${carton.colisId}:${carton.carton}`);
+          const moment = parisMoment(carton.receivedAt);
+          return <tr key={`${carton.colisId}:${carton.carton}`}>
+            <th scope="row"><span className="rf-carton-number"><span className="sr-only">Carton </span>{carton.carton}</span></th>
+            <td className="min-w-[7rem] text-[17px] font-bold">{carton.fournisseur || <span className="rf-muted font-semibold">Non renseigné</span>}</td>
+            <td className="whitespace-nowrap">{carton.number ? <span className="rf-code">{carton.number}</span> : <span className="rf-muted">Sans numéro de suivi</span>}</td>
+            <td className="whitespace-nowrap">{formatDimensions(carton)}</td>
+            <td className="whitespace-nowrap font-semibold" data-align="right">{formatKg(carton.poids)}</td>
+            {/* Every carton listed waits for its validation (its state); when it arrived tells those of this reception
+                from those recorded earlier, which the notice announces as well. */}
+            <td className="whitespace-nowrap">
+              <span className="rf-code block font-semibold">{carton.ref}</span>
+              <span className="rf-muted block text-[15px]">pas encore validé</span>
+            </td>
+            <td className="whitespace-nowrap">
+              {moment ? <><span className="block">{moment.day}</span><span className="rf-muted block text-[15px]">{moment.time}{mine ? ' · cette réception' : ''}</span></>
+                : <span className="rf-muted">{mine ? 'Cette réception' : 'Plus tôt'}</span>}
+            </td>
+          </tr>;
+        })}</tbody>
+      </table>
+    </TableFrame>}
     {batch.rest > 0 && cartons.length > 0 && <Note tone="info">{rest}</Note>}
     {cartons.length > 0 && <FlaggedCartons flagged={flagged} name={name} title={`À signaler à ${name} vous-même`} returnTo={here} canOpen={canOpenConversation} notice={canNotify} />}
 

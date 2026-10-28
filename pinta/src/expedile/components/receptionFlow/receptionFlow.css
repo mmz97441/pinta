@@ -18,6 +18,11 @@
   --rf-neutral-bg: #EEEAE2; --rf-neutral-text: #3F3B35;
   --rf-step-next-bg: #E7E2D8;
   --rf-gold: #E8B84B;
+  /* Tables: the edge of the pinned column, its shadow, the hovered row (opaque: the pinned cell paints it too). */
+  --rf-sticky-edge: #B3AC9F;
+  --rf-edge-shadow: rgb(42 40 38 / .18);
+  --rf-edge-shadow-strong: rgb(42 40 38 / .28);
+  --rf-row-hover: #F6F3EC;
   color: var(--rf-text);
 }
 html.dark .rf {
@@ -38,6 +43,10 @@ html.dark .rf {
   --rf-neutral-bg: #3A3530; --rf-neutral-text: #E8E4DC;
   --rf-step-next-bg: #3A3530;
   --rf-gold: #D4A845;
+  --rf-sticky-edge: #6B645A;
+  --rf-edge-shadow: rgb(0 0 0 / .45);
+  --rf-edge-shadow-strong: rgb(0 0 0 / .6);
+  --rf-row-hover: #35312B;
 }
 
 .rf-strong { color: var(--rf-strong); }
@@ -88,11 +97,38 @@ label.rf-small-action:focus-within { outline: 3px solid var(--focus-ring); outli
 .rf-primary, .rf-secondary, .rf-small-action { transition: transform .2s ease-out, opacity .2s ease-out; }
 .rf-primary:active:not(:disabled), .rf-secondary:active:not(:disabled), .rf-small-action:active:not(:disabled) { transform: scale(.98); }
 
-/* One line per client found: what will happen to the carton is said before the tap. */
-.rf-result { border: 1px solid var(--rf-line); background-color: var(--rf-card); border-radius: 16px; transition: border-color .2s ease-out, transform .2s ease-out; }
-.rf-result--join { border: 2px solid var(--rf-strong); }
-@media (hover: hover) { .rf-result:hover { border-color: var(--rf-strong); } }
-.rf-result:active { transform: scale(.99); }
+/* Tables at every width. The frame scrolls sideways when the columns need more room than the screen (never the page);
+   the first column stays: an opaque surface, an edge line, and a shadow at its edge while columns slide under it. */
+.rf-table-shell { position: relative; }
+.rf-table-frame { overflow-x: auto; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; border: 1px solid var(--rf-line); border-radius: 16px; background-color: var(--rf-card); }
+.rf-table-frame:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 2px; }
+/* More columns on the right: a shadow inside the frame's right edge (gone at the end of the table). */
+.rf-table-shell[data-more='true']::after { content: ''; position: absolute; top: 1px; right: 1px; bottom: 1px; width: 18px; border-radius: 0 15px 15px 0; pointer-events: none;
+  box-shadow: inset -14px 0 12px -10px var(--rf-edge-shadow-strong); }
+.rf-table { width: 100%; border-collapse: separate; border-spacing: 0; color: var(--rf-text); font-size: 16px; line-height: 1.4; font-variant-numeric: tabular-nums; }
+.rf-table th, .rf-table td { padding: 12px; text-align: left; vertical-align: middle; background-color: var(--rf-row-bg, var(--rf-card)); border-bottom: 1px solid var(--rf-line); }
+.rf-table thead th { padding-top: 10px; padding-bottom: 10px; background-color: var(--rf-head); color: var(--rf-muted); font-size: 15px; font-weight: 700; white-space: nowrap; vertical-align: bottom; }
+.rf-table tbody th { font-weight: inherit; }
+.rf-table tbody > tr:last-child > * { border-bottom: 0; }
+.rf-table [data-align='right'] { text-align: right; }
+.rf-table .rf-cell-text { min-width: 10rem; }
+.rf-table .rf-cell-wide { min-width: 13rem; }
+.rf-table tr > :first-child { position: -webkit-sticky; position: sticky; left: 0; z-index: 1; border-right: 1px solid var(--rf-sticky-edge); }
+.rf-table thead tr > :first-child { z-index: 2; }
+.rf-table-shell[data-overflow='true'] .rf-table tr > :first-child { box-shadow: 8px 0 10px -8px var(--rf-edge-shadow); }
+.rf-table-shell[data-scrolled='true'] .rf-table tr > :first-child { box-shadow: 10px 0 12px -8px var(--rf-edge-shadow-strong); }
+/* The identity in the first column: wide enough for a name (it breaks between words only), bounded on a phone so the
+   other columns stay readable beside it. */
+.rf-table .rf-cell-id { display: block; min-width: 9rem; max-width: 12rem; }
+@media (min-width: 768px) { .rf-table .rf-cell-id { max-width: 16rem; } }
+/* A row that opens its client: the whole line answers the tap, its button stays the action. */
+.rf-table tr[data-clickable='true'] { cursor: pointer; }
+@media (hover: hover) { .rf-table tr[data-clickable='true']:hover { --rf-row-bg: var(--rf-row-hover); } }
+.rf-table tr[data-tone='join'] > :first-child { box-shadow: inset 4px 0 0 var(--rf-join-text); }
+.rf-table-shell[data-overflow='true'] .rf-table tr[data-tone='join'] > :first-child { box-shadow: inset 4px 0 0 var(--rf-join-text), 8px 0 10px -8px var(--rf-edge-shadow); }
+.rf-table-shell[data-scrolled='true'] .rf-table tr[data-tone='join'] > :first-child { box-shadow: inset 4px 0 0 var(--rf-join-text), 10px 0 12px -8px var(--rf-edge-shadow-strong); }
+.rf-skeleton-head { height: 40px; background-color: var(--rf-head); }
+.rf-skeleton-row { display: flex; gap: 16px; padding: 14px; border-top: 1px solid var(--rf-line); }
 
 .rf-pill { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 999px; font-size: 15px; font-weight: 700; white-space: nowrap; }
 .rf-pill--join, .rf-pill--done { background-color: var(--rf-join-bg); color: var(--rf-join-text); }
@@ -145,13 +181,3 @@ html.dark .rf-check input { accent-color: #C4DAE5; }
 
 /* The message as the client will read it. */
 .rf-message { white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere; font-family: inherit; font-size: 16px; line-height: 1.5; }
-
-/* Arrival notices: four aligned columns from 768 px (validated, client, colis, state), the actions on a line of their
-   own under the client and the state, so that two buttons never squeeze the text; one card per notice below. */
-.rf-notice-row { border-top: 1px solid var(--rf-line); }
-.rf-notice-head { background-color: var(--rf-head); color: var(--rf-muted); }
-@media (min-width: 768px) {
-  .rf .rf-notice-grid { display: grid; grid-template-columns: 120px minmax(0, 1fr) 96px minmax(0, 1.3fr); align-items: start; column-gap: 16px; row-gap: 8px; }
-  .rf .rf-notice-actions { grid-column: 2 / -1; }
-}
-.rf-notice-actions:empty { display: none; }

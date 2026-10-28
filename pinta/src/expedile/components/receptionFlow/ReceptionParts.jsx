@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { AlertTriangle, Check, CheckCircle2, Info, MessageSquare, X } from 'lucide-react';
 
@@ -31,10 +31,50 @@ export function StepHeader({ step, onClose }) {
   </header>;
 }
 
-/** « · Réunion · Saint-Pierre »: each part kept whole (never « Saint- » at the end of a line). */
-export function Place({ place }) {
+/** « · Réunion · Saint-Pierre »: each part kept whole (never « Saint- » at the end of a line). `lead`: the separator
+ * before the first part, after a name on the same line. */
+export function Place({ place, lead = true, className = '' }) {
   if (!place) return null;
-  return <span className="rf-muted text-[15px] font-semibold">{place.split(' · ').map((part, index) => <React.Fragment key={index}> · <span className="whitespace-nowrap">{part}</span></React.Fragment>)}</span>;
+  return <span className={`rf-muted text-[15px] font-semibold ${className}`}>{place.split(' · ').map((part, index) => <React.Fragment key={index}>{lead || index > 0 ? ' · ' : ''}<span className="whitespace-nowrap">{part}</span></React.Fragment>)}</span>;
+}
+
+/**
+ * A table at every width (phone, tablet, computer): when the width runs short, it scrolls sideways in its own frame,
+ * never the page, its first column pinned (opaque, an edge line, and a shadow at its edge while columns slide under
+ * it or wait on the right). The frame is a region named `label`, which the keyboard can scroll while it overflows.
+ */
+export function TableFrame({ label, children, className = '' }) {
+  const frameRef = useRef(null);
+  const [edges, setEdges] = useState({ overflow: false, start: true, end: true });
+  useEffect(() => {
+    const frame = frameRef.current;
+    if (!frame) return undefined;
+    let pending = 0;
+    const measure = () => {
+      pending = 0;
+      const overflow = frame.scrollWidth > frame.clientWidth + 1;
+      const start = frame.scrollLeft <= 1;
+      const end = frame.scrollLeft + frame.clientWidth >= frame.scrollWidth - 1;
+      setEdges(previous => previous.overflow === overflow && previous.start === start && previous.end === end ? previous : { overflow, start, end });
+    };
+    const schedule = () => { if (!pending) pending = requestAnimationFrame(measure); };
+    measure();
+    frame.addEventListener('scroll', schedule, { passive: true });
+    window.addEventListener('resize', schedule);
+    // The table grows with its rows (a list read again, a notice sent): measured again.
+    const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(schedule) : null;
+    if (observer) { observer.observe(frame); if (frame.firstElementChild) observer.observe(frame.firstElementChild); }
+    return () => {
+      frame.removeEventListener('scroll', schedule);
+      window.removeEventListener('resize', schedule);
+      observer?.disconnect();
+      if (pending) cancelAnimationFrame(pending);
+    };
+  }, []);
+  return <div className={`rf-table-shell ${className}`} data-overflow={edges.overflow ? 'true' : undefined}
+    data-scrolled={edges.overflow && !edges.start ? 'true' : undefined} data-more={edges.overflow && !edges.end ? 'true' : undefined}>
+    <div ref={frameRef} className="rf-table-frame" role="region" aria-label={label} tabIndex={edges.overflow ? 0 : undefined}>{children}</div>
+  </div>;
 }
 
 /** « Casier A-03 », read against the parcel: never split. */
@@ -92,23 +132,37 @@ export const conversationHref = (dossierId, returnTo) => `/colis/${encodeURIComp
  * conversation. `notice`: an arrival notice is sent (or was). */
 export function FlaggedCartons({ flagged, name, title, returnTo, canOpen, notice = true }) {
   if (!flagged?.length) return null;
-  const dossiers = [...new Map(flagged.map(item => [item.colisId, item.ref])).entries()];
-  const several = dossiers.length > 1;
-  const links = canOpen ? dossiers.map(([id, ref]) => <Link key={id} to={conversationHref(id, returnTo)} className="rf-small-action inline-flex items-center gap-2">
-    <MessageSquare size={18} aria-hidden="true" />{several ? <>Conversation <span className="rf-code whitespace-nowrap">{ref}</span></> : 'Ouvrir la conversation'}
-  </Link>) : null;
-  return <Note tone="warning" role="note" title={title} action={links}>
-    <ul className="space-y-0.5">{flagged.map(item => <li key={`${item.colisId}:${item.carton}`}>
-      Carton n°&nbsp;{item.carton}{several && <> (<span className="rf-code whitespace-nowrap">{item.ref}</span>)</>} : {[item.damaged ? 'abîmé ou ouvert' : '', item.interdits?.length ? `produit interdit signalé (${item.interdits.join(', ')})` : ''].filter(Boolean).join(' ; ')}.
-    </li>)}</ul>
-    <p className="mt-1">{notice ? 'L’avis d’arrivée n’en parle pas : ' : ''}{notice ? `prévenez ${name}` : `Prévenez ${name}`} depuis la conversation du dossier.{canOpen ? '' : ' Demandez à un collègue qui écrit aux clients de le faire.'}</p>
+  return <Note tone="warning" role="note" title={title}>
+    <TableFrame label={`Cartons à signaler à ${name}`} className="mt-2">
+      <table className="rf-table">
+        <caption className="sr-only">Cartons signalés à la réception</caption>
+        <thead><tr>
+          <th scope="col">Carton</th><th scope="col">Dossier</th><th scope="col">Signalé</th>
+          {canOpen && <th scope="col">Action</th>}
+        </tr></thead>
+        <tbody>{flagged.map(item => <tr key={`${item.colisId}:${item.carton}`}>
+          <th scope="row"><span className="rf-carton-number"><span className="sr-only">Carton </span>{item.carton}</span></th>
+          <td><span className="rf-code whitespace-nowrap font-semibold">{item.ref}</span></td>
+          <td className="rf-cell-text">
+            {item.damaged && <span className="block">Abîmé ou ouvert</span>}
+            {item.interdits?.length > 0 && <span className="block">Produit interdit : {item.interdits.join(', ')}</span>}
+          </td>
+          {canOpen && <td><Link to={conversationHref(item.colisId, returnTo)} aria-label={`Ouvrir la conversation du dossier ${item.ref}`}
+            className="rf-small-action inline-flex items-center gap-2 whitespace-nowrap"><MessageSquare size={18} aria-hidden="true" />Ouvrir la conversation</Link></td>}
+        </tr>)}</tbody>
+      </table>
+    </TableFrame>
+    <p className="mt-2">{notice ? 'L’avis d’arrivée n’en parle pas : ' : ''}{notice ? `prévenez ${name}` : `Prévenez ${name}`} depuis la conversation du dossier.{canOpen ? '' : ' Demandez à un collègue qui écrit aux clients de le faire.'}</p>
   </Note>;
 }
 
-/** Neutral placeholders while a list loads, the shape of its rows. */
+/** Neutral placeholders while a table loads: its frame, its header and the shape of its rows. */
 export function SkeletonRows({ rows = 3, label }) {
   return <div role="status" aria-live="polite" aria-busy="true" className="space-y-3">
     <p className="rf-muted text-[16px] font-semibold">{label}</p>
-    <div aria-hidden="true" className="space-y-3">{Array.from({ length: rows }, (_, row) => <div key={row} className="rf-skeleton h-16 w-full" />)}</div>
+    <div aria-hidden="true" className="rf-table-frame">
+      <div className="rf-skeleton-head" />
+      {Array.from({ length: rows }, (_, row) => <div key={row} className="rf-skeleton-row"><div className="rf-skeleton h-6 w-1/4" /><div className="rf-skeleton h-6 flex-1" /></div>)}
+    </div>
   </div>;
 }
